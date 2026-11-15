@@ -17,7 +17,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data
+.PHONY: core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -96,6 +96,23 @@ gates:
 	LEVEL=merge ./gates.sh
 gate:
 	LEVEL=commit ./gates.sh
+
+# ------------------------------------------------------------------ sessions
+# The 3-stage demo (GAME_SPEC §17), headless, through the C API: every command,
+# then what was measured and the conservation totals.
+demo: core
+	$(BUILD_CORE)/chem_tool run data/sessions/demo.json
+demo-bench: core
+	$(BUILD_CORE)/chem_tool bench data/sessions/demo.json
+# The sessions' golden records (bench/sessions/*.jsonl: the state's digest after
+# every command). `sessions-check` replays against them (also ctest demo_session);
+# `sessions` re-records them: a changed record is a behaviour change, to be shown
+# and approved before it is committed.
+sessions-check: core
+	@for s in data/sessions/*.json; do $(BUILD_CORE)/chem_tool run $$s --quiet --check bench/sessions/$$(basename $$s .json).jsonl | tail -1 || exit 1; done
+sessions: core
+	@if [ "$(APPROVED)" != 1 ]; then echo "!! make sessions APPROVED=1: only after the user approved the change in behaviour"; exit 1; fi
+	@for s in data/sessions/*.json; do $(BUILD_CORE)/chem_tool run $$s --quiet --record bench/sessions/$$(basename $$s .json).jsonl | tail -1 || exit 1; done
 
 # ------------------------------------------------------------------ the Godot host
 test: native

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.7.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.8.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -528,28 +528,63 @@ then refraction and Fresnel as a separate stage.
 
 ## 13. Lab layer and interaction
 
-**Full design.** The engine-free game layer (`native/game`, namespace `lab`).
+The engine-free game layer (`native/game`, namespace `lab`): a bench of equipment over one closed
+world, driven by commands.
 
-- **Bench:** a grid on which equipment is placed. **Cabinet:** the inventory. **Outbox:** where
-  products are submitted. Each is backed by cells.
-- **Equipment** is data (`data/equipment.json`): a shape profile, its cells, its ports (mouth,
-  outlet, jacket in/out), and what may connect to each port.
-- **Connections** are rules matched by priority (flask on burner, balloon on mouth, condenser on
-  mouth, beaker under outlet). A connection creates edges; supports (tripod, stand, clamps) appear
-  automatically.
-- **Actions** are semantic events: place, connect, detach, set valve, pour (amount or rate), stir,
-  seal, decant, submit, set time acceleration, pause, step. A host maps input to events; a session
-  script is a list of events with step numbers.
-- **Refusals** carry a reason (a full vessel, a connection that would seal a rigid gas cell).
-- **Reports** are pure functions of state: contents of a vessel by species and phase, mass,
-  volume, temperature, purity, crystal count and mean size, world totals.
-- **Debug panel:** per cell state, active processes and rates, heat flows, the conservation totals,
-  per-system step time; pause, step, reset, export state.
-- **Save and load:** the full state including accumulators; a loaded game continues identically.
+**The bench** is data (`data/benches/*.json`, `chem-bench/1`): the room, and the items with what
+they hold. Every item exists from the start, as cells of the one world; nothing is created or
+destroyed in play. Items:
 
-**Demo subset:** burner, Erlenmeyer flask, balloon, acid bottle, stirring rod, condenser, beaker;
-the actions above; the debug panel.
-**Status:** *PLANNED, Stage 8 (layer), Stage 9 (Godot host).*
+- **vessel:** a rigid cell with a volume, a wall and a heat loss to the room. It starts open to
+  the room's air and full of it. One with a `coolant` is a condenser.
+- **balloon:** an elastic cell with a wall.
+- **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
+
+**Commands** are JSON objects with a `do`. They are everything a player can do; a host maps
+input to them, and a session script is a list of them.
+
+| `do` | Fields | Effect |
+|---|---|---|
+| `heat` | `burner`, `vessel` | puts the burner under the vessel (its valve as it is) |
+| `unheat` | `burner` | takes it away |
+| `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
+| `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
+| `pour` | `from`, `to`, `ml` or `all` | moves liquid, with what is dissolved in it in proportion, and its enthalpy |
+| `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
+| `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth: a gas connection, and the mouth closed to the room |
+| `detach` | `item` | takes it off: the vessel's mouth open to the room again; a balloon is then sealed |
+| `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6) |
+| `submit` | `item` | marks it handed in; it must not be joined to anything |
+| `wait` | `seconds` | advances time |
+| `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; fails at the timeout |
+
+- **Refusals.** A command that cannot be done is refused with its reason, and changes nothing: an
+  unknown item, the wrong kind of item, a mouth that is taken, more than a vessel holds, liquid
+  that does not fit, a connection that would seal a vessel (§6). One exception: a command that
+  changes connections takes effect at a step boundary, so it first takes the lab to the end of a
+  step in progress (at most one step, 1/60 s).
+- **Pouring and tipping are instantaneous**, along a handling connection that passes liquid and
+  solid and never gas.
+- **Invariants.** With checking on (the default) every invariant of §18 is checked on every
+  step. A failure stops the lab: it reports the invariant and takes no more commands.
+- **Reports** are functions of state: per item its temperature, the volume of its gas and of its
+  solids and liquids, and each species' amount, mass, particle count and size; and the world's
+  totals of every element, of mass and of energy, with whether they are what they were at the
+  start.
+- **The digest** is the SHA-256 of the whole state: every amount, energy and particle count, the
+  processes' carried remainders, the connections, the stirring, the step. Equal digests are equal
+  states.
+- **Sessions** (`data/sessions/*.json`, `chem-session/1`): a bench and a script. A session's
+  **record** (`bench/sessions/*.jsonl`) is the digest after each command; replaying the session
+  must reproduce it (invariant D4).
+
+**Full design, not yet built:** the bench as a grid with placement and snapping; the cabinet and
+the outbox as places; supports that appear with the glassware; pouring at a rate; a balloon's
+capacity and bursting; overflow into a spill tray; save and load; the debug panel.
+
+**Demo subset:** the bench of `data/benches/demo.json` and the commands above.
+**Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions.
+Placement, capacity, overflow and save/load are *PLANNED, Stage 8*; the Godot host, Stage 9.
 
 ## 14. C API and hosts
 
@@ -563,7 +598,16 @@ the actions above; the debug panel.
   (ctest `godot_adapter_includes`); the Godot project holds at most 300 lines of GDScript outside
   tests (ctest `gdscript_budget`).
 
-**Status:** Stage 0 implements the build identity, error and log plumbing.
+- **The lab through the C API:** `cg_lab_open` (a bench, as text: the library reads no files),
+  `cg_lab_command` (one command; `CG_ERR_REFUSED` or `CG_ERR_INVARIANT` with the reason in
+  `cg_last_error`), `cg_lab_advance`, `cg_lab_set_checking`, `cg_lab_step`, `cg_lab_report`,
+  `cg_lab_digest`.
+- **`chem_tool run SESSION`** plays a session through the C API with every invariant checked,
+  prints what was measured, and records (`--record`) or checks (`--check`) its digests.
+  **`chem_tool bench SESSION`** plays it unchecked and times it.
+
+**Status:** Stage 0 implements the build identity, error and log plumbing; Stage 1 the tables;
+Stage 7 the lab and the session tools.
 
 ## 15. Micro-view lens
 
@@ -586,32 +630,40 @@ spectrum probe of §12).
 
 ## 17. The demo
 
-Three stages on one bench. Quantities below are expectations computed from the data of
-`docs/DATA_SOURCES.md`; the game reports what it measures.
+Three stages on one bench (`data/benches/demo.json`). The script of `data/sessions/demo.json`
+plays them as a player would; the numbers below are what that run measures
+(`chem_tool run data/sessions/demo.json`), not targets.
 
-**Stage 1: gas from malachite.** Place the burner, the flask on it, 5 g of malachite in the flask,
-the balloon on the mouth. Open the burner valve. The powder decomposes appreciably from about
-300 °C, turning from green to black; the balloon fills with the flask's air, CO₂ and water vapour.
-Close the valve, seal and remove the balloon, submit it. Expected: about 1.0 g of CO₂; after
-cooling, about 0.77 L at roughly 65 mol% CO₂ with condensed water inside; 3.6 g of CuO left.
+**Stage 1: gas from malachite.** The burner under the flask, the jar's 5 g of malachite tipped
+in, the balloon on the mouth, the valve open. The powder decomposes from about 300 °C, green to
+black; the balloon takes the flask's air, then CO₂ and water vapour. After 229 s less than 5 mg
+of malachite is left: the balloon is taken off, which seals it, and handed in; the valve is
+closed. *Measured:* the balloon holds 0.896 g of CO₂ (64.8% of its gas) in 756 mL, with 0.354 g
+of water condensed inside. The other 0.099 g of CO₂ stayed in the flask or left through its open
+mouth afterwards.
 
-**Stage 2: copper sulfate solution.** Let the flask cool. Pour 1 M sulfuric acid onto the CuO
-(about 45 mL reacts completely with 3.6 g; the amount is the player's choice). The reaction is
-slow when cold and unstirred, faster with gentle heat and stirring. The black solid disappears and
-the liquid turns blue, deepening with concentration.
+**Stage 2: copper sulfate solution.** Once the flask is below 30 °C, 50 mL of the 1 M sulfuric
+acid is poured onto the oxide (about 45 mL would react it all), stirred, over a low flame. The
+black solid is gone in 219 s and the liquid is blue.
 
-**Stage 3: water and crystals.** Mount the condenser and place the beaker under its outlet. Boil:
-vapour condenses and drips into the beaker as pure water. When enough water is gone, close the
-valve; as the flask cools the solution passes saturation and blue pentahydrate crystals grow.
-Decant the remaining liquid. Submit the beaker and the flask. Heating the crystals too far, or
-boiling dry, dehydrates them to pale lower hydrates and finally to the white anhydrous salt.
-Excess acid from stage 2 never leaves the flask: it stays in the liquid, and is the reason to
-decant.
+**Stage 3: water and crystals.** The condenser on the flask, the beaker under its outlet, the
+valve open. The solution boils; vapour condenses and runs into the beaker. With 10 g of water
+left the valve is closed. As the flask cools the solution passes saturation and blue pentahydrate
+crystals grow. The liquor is poured off into the waste beaker; the beaker and the flask are
+handed in. *Measured:* 40.87 g of water in the beaker and nothing else but air; 8.935 g of
+CuSO₄·5H₂O in the flask, in 447,472 crystals of 0.26 mm, 79% of the copper. The flask's solids
+are 99.977% pentahydrate: the rest is the 2 mg of malachite that never decomposed.
+
+Heating the crystals too far, or boiling dry, turns them to the white anhydrous salt. Acid
+beyond what the oxide needs stays in the liquor, and is the reason to pour it off.
 
 **Done when** the outbox holds a sealed balloon containing CO₂, a beaker of pure water, and a
-flask whose only contents are solid CuSO₄·5H₂O, with its measured mass, crystal count and mean
-size reported, and the world totals of every element and of energy are the same integers as at the
-start.
+flask whose only solids and liquids are CuSO₄·5H₂O, with its measured mass, crystal count and
+size reported, and the world's totals of every element and of energy are the same integers as at
+the start. `lab: the demo session reproduces its golden record, and its results are what was
+measured` asserts each of these.
+
+**Status:** Stage 7: done headlessly, through the C API. Interactive play is Stages 9 to 12.
 
 ## 18. Invariant catalogue
 
@@ -626,20 +678,23 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
   and of energy is unchanged. **Tested as:** `C1`, `C2`, `C3`, `C4` on every step of
   `sweeps: conservation holds on every step of every random world`.
 - **UX2. Results are measurements.** A reported quantity is a pure function of the state.
-  *(PLANNED, Stage 8; `R1`.)*
+  **Tested as:** `R1`: the report is computed from the state alone (`Lab::report() const`), and
+  the demo's results are asserted from it.
 - **UX3. Speed does not change outcomes.** A session gives the same state at any time acceleration
-  and frame rate. *(PLANNED, Stage 8; `D1`.)*
+  and frame rate. **Tested as:** `D1`, `lab: the same commands give the same state, however the
+  steps are grouped and whether or not they are checked`.
 - **UX4. Colour tells the truth.** The displayed colour of a medium is the reference colour of its
   composition and path length within the §12.1 threshold. *(PLANNED, Stage 10; `O3`.)*
 - **UX5. A refusal explains itself.** A refused action reports its reason and leaves the state
-  untouched. *(PLANNED, Stage 8; `L1`.)*
+  untouched. **Tested as:** `L1`, `lab: a refused command says why and changes nothing` (19
+  refusals).
 - **UX6. Heat goes downhill.** Nothing warms above the hottest thing it touches without a reaction
   releasing heat. **Tested as:** `T1`, and the extremes of temperature on every step of
   `sweeps: heat flows downhill and entropy grows on every step of every random thermal world`.
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 6 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 7 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -662,16 +717,16 @@ later rows are *PLANNED*.
 | V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
-| D1 | Batching invariance: N steps give the same bits however grouped into frames | exact | 8 |
+| D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
 | D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
 | D3 | A world at rest is bit-identical, carried remainders included: thermal rest after 1e5 steps (Stage 2), chemical equilibrium after 5e4 (Stage 3) | exact | 2–3 |
-| D4 | A session replay reproduces its recorded digest | exact | 7 |
+| D4 | A session replay reproduces its record: the digest of the whole state after every command (`bench/sessions/demo.jsonl`; ctest `demo_session`) | exact | 7 |
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
 | K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
-| R1 | Reports are pure functions of state | exact | 8 |
-| L1 | A refused command leaves the state bit-identical | exact | 8 |
+| R1 | Reports are pure functions of state | exact | 7 |
+| L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1] | exact | 10 |
 | O2 | Output radiance ≤ input + emission, per sample | exact | 10 |
 | O3 | N-sample colour within the §12.1 threshold of the reference | tolerance | 10 |
@@ -687,8 +742,10 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
   0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
   balloon and two reservoirs; Stage 5: 2.5 µs for the distillation's four cells and three
-  reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`. Stage 6 added two
-  rate laws and the solution's activities and has not been re-measured.
+  reservoirs; trace built, checks off).
+- **Measured, Stage 7** (`chem_tool bench data/sessions/demo.json`): the whole demo, eight cells
+  and three reservoirs, 156,302 steps in 0.70 s: 4.5 µs a step, 3700 times real time, 2.7 ms a
+  frame at 600 steps a frame. Inside the budget, with little to spare.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -708,6 +765,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
+| Pouring and tipping are instantaneous | No stream, no splash, no rate to control |
+| The bench opens out of equilibrium | The acid's water wets the air above it and the condenser cools to its coolant in the first seconds |
 | Kinetic parameters calibrated for play | Times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C. The oxide's dissolution, the crystals' growth and nucleation, and the dehydration are calibrated outright (`docs/DATA_SOURCES.md`) |
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |

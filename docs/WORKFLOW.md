@@ -55,6 +55,7 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 | `chem_tests`, `lab_tests` | the core's and the lab layer's doctest cases |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
+| `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest |
 | `chem_tool_study_cooling`, `_decomposition`, `_balloon`, `_distillation`, `_dissolution`, `_crystals` | the studies run with every invariant checked on every step and end with the world's totals unchanged |
 | `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |
 | `*_no_engine` | core, lab, C API and headless host name no game engine |
@@ -65,6 +66,11 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 
 ## Goldens
 
-Files under `bench/` are committed evidence of behaviour (session records, reference values). The
-`goldens` gate fails while any differ from the index. Re-recording one is a behaviour change: show
-what changed and why, get the user's approval, then commit it.
+Files under `bench/` are committed evidence of behaviour. `bench/sessions/<name>.jsonl` is a
+session's record: one line per command with the step it ended on and the SHA-256 of the whole
+state. `make sessions-check` replays every session against its record; the `goldens` gate fails
+while a file under `bench/` differs from the index.
+
+Any change to the physics, the data or a session's script changes its record. Re-recording is a
+behaviour change: show what changed in the measured results (`make demo`) and why, get the user's
+approval, then `make sessions APPROVED=1` and commit the record with the change.

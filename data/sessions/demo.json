@@ -1,0 +1,35 @@
+{
+	"format": "chem-session/1",
+	"note": "The 3-stage demo, played by a script (GAME_SPEC §17). Each entry is one command; a wait_until is a player watching for something.",
+	"bench": "../benches/demo.json",
+	"script": [
+		{"note": "Stage 1: gas from malachite", "do": "heat", "burner": "burner", "vessel": "flask"},
+		{"do": "tip", "species": "malachite", "from": "jar", "to": "flask", "all": true},
+		{"do": "attach", "item": "balloon", "to": "flask"},
+		{"do": "valve", "burner": "burner", "to": 1},
+		{"do": "wait_until", "item": "flask", "species": "malachite", "below_g": 0.005, "timeout": 1800},
+		{"do": "detach", "item": "balloon"},
+		{"do": "submit", "item": "balloon"},
+		{"do": "valve", "burner": "burner", "to": 0},
+		{"do": "wait_until", "item": "flask", "below_c": 30, "timeout": 1800},
+
+		{"note": "Stage 2: copper sulfate solution", "do": "pour", "from": "acid", "to": "flask", "ml": 50},
+		{"do": "stir", "vessel": "flask", "on": true},
+		{"do": "valve", "burner": "burner", "to": 0.2},
+		{"do": "wait_until", "item": "flask", "species": "copper_oxide", "below_g": 0.001, "timeout": 3600},
+		{"do": "stir", "vessel": "flask", "on": false},
+
+		{"note": "Stage 3: water and crystals", "do": "attach", "item": "condenser", "to": "flask"},
+		{"do": "under", "item": "beaker", "of": "condenser"},
+		{"do": "valve", "burner": "burner", "to": 1},
+		{"do": "wait_until", "item": "flask", "species": "water", "below_g": 10, "timeout": 1800},
+		{"do": "valve", "burner": "burner", "to": 0},
+		{"do": "wait_until", "item": "flask", "below_c": 21, "timeout": 3600},
+		{"do": "wait", "seconds": 900},
+		{"do": "detach", "item": "condenser"},
+		{"do": "pour", "from": "flask", "to": "waste", "all": true},
+		{"do": "submit", "item": "beaker"},
+		{"do": "submit", "item": "flask"},
+		{"do": "wait", "seconds": 60}
+	]
+}

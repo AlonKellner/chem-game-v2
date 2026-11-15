@@ -59,6 +59,32 @@ int main(void) {
 		fprintf(stderr, "the first built-in reaction is not the malachite decomposition\n");
 		return 1;
 	}
+	/* Stage 7: a lab, a command, a report */
+	if (cg_lab_open("not a bench") != NULL || cg_last_error()[0] == '\0') {
+		fprintf(stderr, "a malformed bench was not refused\n");
+		return 1;
+	}
+	cg_lab *lab = cg_lab_open("{\"format\": \"chem-bench/1\", \"room\": {\"celsius\": 20}, \"items\": ["
+			"{\"id\": \"cup\", \"kind\": \"vessel\", \"volume_ml\": 100, \"wall\": \"glass\", \"wall_g\": 50, \"contents\": {\"water\": {\"g\": 20}}},"
+			"{\"id\": \"flame\", \"kind\": \"burner\", \"celsius\": 1900, \"conductance\": 0.2}]}");
+	if (lab == NULL) {
+		fprintf(stderr, "the lab did not open: %s\n", cg_last_error());
+		return 1;
+	}
+	if (cg_lab_command(lab, "{\"do\": \"heat\", \"burner\": \"flame\", \"vessel\": \"cup\"}") != CG_OK ||
+			cg_lab_command(lab, "{\"do\": \"valve\", \"burner\": \"flame\", \"to\": 1}") != CG_OK || cg_lab_advance(lab, 600) != CG_OK || cg_lab_step(lab) != 600) {
+		fprintf(stderr, "the lab did not run: %s\n", cg_last_error());
+		return 1;
+	}
+	if (cg_lab_command(lab, "{\"do\": \"dance\"}") != CG_ERR_REFUSED || strstr(cg_last_error(), "no command") == NULL) {
+		fprintf(stderr, "an unknown command was not refused\n");
+		return 1;
+	}
+	if (strstr(cg_lab_report(lab), "\"unchanged\":true") == NULL || strlen(cg_lab_digest(lab)) != 64) {
+		fprintf(stderr, "the report or the digest is not what a lab gives\n");
+		return 1;
+	}
+	cg_lab_close(lab);
 	printf("capi_c_smoke: %s\n", cg_build_name());
 	return 0;
 }
