@@ -14,8 +14,8 @@ saving a lab. It begins with the step cost that Stage 7 left at its budget.
 | 8.4 | Places: the cabinet, the bench's grid, on, under, the outbox; `place` and `stow` | Done |
 | 8.5 | Save and load (`chem-save/1`), through the C API too | Done |
 | 8.6 | Invariant D2; V2 with the spill cell | Done |
-| 8.7 | The demo's golden record re-recorded | **Needs the user's approval** |
-| 8.8 | The user's sign-off | Pending |
+| 8.7 | The demo's golden record re-recorded | Done; approved by the user (2026-11-16) |
+| 8.8 | The user's sign-off | Done (2026-11-16: "Approved, proceed") |
 
 ## The golden record changed
 
