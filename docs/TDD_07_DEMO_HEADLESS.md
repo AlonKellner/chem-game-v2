@@ -22,7 +22,7 @@ graphics.
 | 7.6 | `chem_tool run` and `bench`; sessions and their golden records | Done |
 | 7.7 | The demo's bench and script; the measured results | Done |
 | 7.8 | Invariants D1, D4, R1, L1; the step cost | Done |
-| 7.9 | The user's sign-off | Pending |
+| 7.9 | The user's sign-off | Done (2026-11-16: "Approved, proceed") |
 
 ## Decisions
 
