@@ -19,7 +19,7 @@ balloon inflates.
 | 4.5 | Invariants V1 and V3 with self-tests; T1 extended to gas | Done |
 | 4.6 | The sweep with volumes | Done |
 | 4.7 | `chem_tool study balloon`; step cost | Done |
-| 4.8 | The user's sign-off | Pending |
+| 4.8 | The user's sign-off | Done (2026-11-15: "Approved, proceed") |
 
 ## Decisions
 
