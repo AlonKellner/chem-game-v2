@@ -76,12 +76,15 @@ native-debug:
 	$(GODOT) --headless --import --path $(GODOT_PROJECT)
 
 # The tests under ASan+UBSan (no godot-cpp), Debug (assertions abort) at -O1.
+# The conservation sweep runs ASAN_SWEEP_WORLDS random worlds here (the
+# sanitizers want the code paths; the release ctest runs them all).
+ASAN_SWEEP_WORLDS ?= 300
 native-asan:
 	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O1" -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
 		-DCHEM_SANITIZE=address,undefined -DCHEM_BUILD_EXTENSION=OFF -DCHEM_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
-	$(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --output-on-failure
+	CHEM_SWEEP_WORLDS=$(ASAN_SWEEP_WORLDS) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --output-on-failure
 
 # the release ctest (build-core; `make core` first)
 ctest:

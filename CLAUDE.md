@@ -16,10 +16,11 @@ Layers with a strict dependency direction: core -> lab -> C API -> hosts. Everyt
 `engines/godot` is engine-free (ctest `*_no_engine`); the Godot host includes only `chem_api.h` (ctest
 `godot_adapter_includes`) and the Godot project holds at most 300 lines of GDScript outside tests (ctest `gdscript_budget`).
 
-- `native/core/include/chem/` — The simulation kernel, namespace `chem` (GAME_SPEC §3–§12): integer amounts and energy, cells, the two mutation primitives, processes, invariants. No engine, no C-library transcendentals (ctest `core_no_libm`).
+- `native/core/include/chem/` — The simulation kernel, namespace `chem` (GAME_SPEC §3–§12). `quantity.hpp`: integer amounts (1e-12 mol) and energy (1e-9 J). `species.hpp`: species tables and `Reaction`, which cannot be constructed unbalanced. `world.hpp`: cells with private state, edges, the two primitives `transfer` and `transform`, refusals, the ledger and `StepTrace`. `invariants.hpp`: the invariant kernel (`check_C1`…, `check_all`, `Totals`). No engine, no C-library transcendentals (ctest `core_no_libm`).
+- `native/datagen/` — `chem_datagen`: embeds `data/elements.json`, `species.json`, `reactions.json` in the core at build time, deriving atoms from formulas (`formula.hpp`) and refusing an unbalanced reaction (ctest `datagen_refuses_*`). Generated: `chem/builtin_ids.hpp` (species and reactions by name).
 - `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13): bench, equipment, connections, events, reports.
 - `native/capi/` — `chem_api.h`: the game behind a plain C ABI (size-prefixed structs, borrowed views, statuses).
-- `native/hosts/headless/` — `chem_tool`: the game without an engine (sessions, reports, benchmarks).
+- `native/hosts/headless/` — `chem_tool`: the game without an engine: `version`, `tables` (the built-in species and reactions).
 - `native/hosts/godot/` — The Godot host: `ChemLab`.
 - `engines/godot/` — The Godot project. `make native` builds the extension into `engines/godot/bin` and copies `data/` into `engines/godot/data`.
 - `data/` — Source-of-truth data (species, reactions, equipment, session scripts); `bench/` — committed goldens.
@@ -32,7 +33,7 @@ The protocol: `docs/WORKFLOW.md`.
 ```bash
 make check                      # the engine-free build, then every ctest entry
 make check AREA=core            # core | lab | all
-make check TC="conservation*"   # one doctest filter in chem_tests
+make check TC="sweeps*"         # one doctest filter in chem_tests (CHEM_SWEEP_WORLDS=n scales the conservation sweep)
 make quick                      # between commits: only what a change can affect (result cache)
 make gate                       # before every commit: core, ctest, the extension, the Godot suite, goldens unchanged
 SKIP_GODOT=1 make gate          # every engine-free gate
