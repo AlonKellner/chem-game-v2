@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.9.0 (2026-11-16, Stage 8)
+
+- §6: overflow into a world's spill cell; with one, a drain is not limited by what fits below.
+- §13: places (cabinet, bench grid, on, under, outbox) and the `place` and `stow` commands;
+  equipment is used on the bench; `submit` lifts a vessel off its burner; a balloon's capacity
+  and bursting; events; save and load; a pour leaves a step in progress.
+- §18: D2 implemented; V2 with the spill cell.
+- §19: the step cost after caching, and with Stage 8's additions.
+- **The demo's golden record changed** (`bench/sessions/demo.jsonl`): the bench gained its tray
+  (one more cell, 300 g of glass), and handing in the flask now takes one step to lift it off
+  the burner. Every measured result of the three items handed in is identical to Stage 7's.
+
 ## 0.8.0 (2026-11-16, Stage 7)
 
 - §13 rewritten around what is built: the bench as data, the twelve commands, refusals, reports,

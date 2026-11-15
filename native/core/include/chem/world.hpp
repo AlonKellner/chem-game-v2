@@ -148,6 +148,14 @@ public:
 		EdgeId add_edge(CellId a, CellId b, PhaseMask phases, double conductance = 0.0);
 		// a liquid edge down which `from`'s liquid runs into `to` each step
 		EdgeId add_drain(CellId from, CellId to);
+		// an edge exactly as given: closed, a drain, any conductance (for a saved world)
+		EdgeId add_edge_as(const Edge &edge);
+		// Where what overflows goes (GAME_SPEC §6): an elastic cell. With one,
+		// a rigid cell that holds more liquid than fits spills the excess into it.
+		Builder &set_spill(CellId cell);
+		Builder &set_mixing(CellId cell, double mixing);
+		// the step the world resumes at (a saved world)
+		Builder &set_step(uint64_t step);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
 		Builder &set_energy(CellId cell, Energy energy);
 		// how many particles a solid is in (default: one lump)
@@ -188,6 +196,8 @@ public:
 		std::vector<CellMeta> meta_;
 		std::vector<SetTemperature> temperatures_;
 		std::vector<Set> particles_; // amount: the count
+		CellId spill_;
+		uint64_t step_ = 0;
 		std::vector<Edge> edges_;
 		std::vector<Set> amounts_;
 		std::vector<SetEnergy> energies_;
@@ -209,9 +219,13 @@ public:
 	Snapshot snapshot() const { return Snapshot{ cells_ }; }
 	// true when a primitive has been applied since the last step closed
 	bool mid_step() const { return !ledger_.empty(); }
+	// changes whenever an edge is added, opened or closed (what is cached per topology is keyed on it)
+	uint64_t topology_version() const { return topology_version_; }
 	// one cell's state, to read (the processes derive temperatures from it)
 	const CellState &snapshot_cell(CellId cell) const { return cells_[static_cast<size_t>(cell.index)]; }
 	uint64_t step() const { return step_; }
+	// where what overflows goes, or an invalid id
+	CellId spill() const { return spill_; }
 
 	// Primitive 1. Moves `amounts` and `energy` from `from` to the other end of
 	// `edge`: one cell loses exactly what the other gains. `energy` may be
@@ -266,6 +280,8 @@ private:
 	std::vector<LedgerEntry> ledger_;
 	Snapshot before_;
 	uint64_t step_ = 0;
+	uint64_t topology_version_ = 0;
+	CellId spill_;
 };
 
 } // namespace chem

@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstring>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -28,7 +29,8 @@ constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
 // what a hand moves between two vessels: liquid with what is dissolved in it, and solids; never gas
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
-enum class Kind { Vessel, Bag, Burner };
+enum class Kind { Vessel, Bag, Burner, Tray };
+enum class Place { Cabinet, Bench, On, Under, Outbox }; // On: on a vessel's mouth. Under: a burner under a vessel
 
 struct Item {
 	std::string id;
@@ -45,7 +47,54 @@ struct Item {
 	int drains_to = -1; // a vessel: what stands under its outlet
 	bool stirred = false;
 	bool submitted = false;
+	Place place = Place::Cabinet;
+	int col = -1, row = -1; // on the bench
+	double capacity = 0.0; // a balloon: the volume at which it bursts, m^3
+	bool burst = false;
 };
+
+struct Event {
+	int64_t step = 0;
+	std::string what;
+	std::string item;
+};
+
+// a double as its bits, so that a save holds it exactly
+std::string bits(double v) {
+	static const char digits[] = "0123456789abcdef";
+	uint64_t u = 0;
+	static_assert(sizeof u == sizeof v);
+	std::memcpy(&u, &v, sizeof u);
+	std::string out = "f";
+	for (int shift = 60; shift >= 0; shift -= 4) {
+		out += digits[(u >> shift) & 0xf];
+	}
+	return out;
+}
+
+bool from_bits(const json &j, double &v) {
+	if (!j.is_string()) {
+		return false;
+	}
+	const std::string text = j.get<std::string>();
+	if (text.size() != 17 || text[0] != 'f') {
+		return false;
+	}
+	uint64_t u = 0;
+	for (size_t i = 1; i < text.size(); ++i) {
+		const char ch = text[i];
+		const int digit = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : -1;
+		if (digit < 0) {
+			return false;
+		}
+		u = u << 4 | static_cast<uint64_t>(digit);
+	}
+	std::memcpy(&v, &u, sizeof v);
+	return true;
+}
+
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray" };
+const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox" };
 
 double number(const json &j, const char *key, double fallback) {
 	return j.contains(key) && j.at(key).is_number() ? j.at(key).get<double>() : fallback;
@@ -63,11 +112,16 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 struct Lab::Impl {
 	std::optional<Simulation> sim;
 	std::vector<Item> items;
+	std::vector<Event> events;
+	int cols = 12, rows = 4; // the bench's grid
 	CellId air;
 	CellId room;
 	Totals genesis;
 	bool check = true;
 	bool broken = false;
+	// a command has moved matter since the last step ended: a step is in
+	// progress, and a change of connections waits for its end
+	bool mid_step = false;
 
 	const SpeciesTable &table() const { return sim->world().species(); }
 	World &world() { return sim->world(); }
@@ -84,22 +138,86 @@ struct Lab::Impl {
 
 	// one step; false when an invariant fails
 	bool step_once(std::string &why) {
+		mid_step = false;
 		if (!check) {
 			sim->advance();
-			return true;
+		} else {
+			const StepTrace trace = sim->step();
+			const Violations violations = check_all(table(), trace, sim->equilibria());
+			if (!violations.empty()) {
+				broken = true;
+				why = "an invariant failed: " + violations[0];
+				return false;
+			}
 		}
-		const StepTrace trace = sim->step();
-		const Violations violations = check_all(table(), trace, sim->equilibria());
-		if (!violations.empty()) {
-			broken = true;
-			why = "an invariant failed: " + violations[0];
+		burst_balloons();
+		return true;
+	}
+
+	// A balloon filled past its capacity bursts (GAME_SPEC §13): it comes off
+	// whatever it is on, and its gas is the room's. Between steps.
+	void burst_balloons() {
+		for (size_t i = 0; i < items.size(); ++i) {
+			Item &bag = items[i];
+			if (bag.kind != Kind::Bag || bag.burst || !(bag.capacity > 0.0)) {
+				continue;
+			}
+			const CellState &cell = world().snapshot_cell(bag.cell);
+			const double t = kelvin(bag.cell);
+			const Fill fill = fill_of(table(), cell, t);
+			if (!(fill.gas + fill.condensed > bag.capacity)) {
+				continue;
+			}
+			bag.burst = true;
+			events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", bag.id });
+			if (bag.on >= 0) {
+				Item &v = items[static_cast<size_t>(bag.on)];
+				world().connect(v.cell, air, PHASES_GAS, &v.mouth);
+				world().disconnect(bag.joint);
+				v.holds = -1;
+				bag.on = -1;
+				bag.joint = EdgeId{};
+				bag.place = Place::Bench;
+				bag.col = v.col;
+				bag.row = v.row;
+			}
+			std::vector<SpeciesAmount> gas;
+			for (size_t s = 0; s < cell.amount.size(); ++s) {
+				if (cell.amount[s] > 0 && table().species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+					gas.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ cell.amount[s] } });
+				}
+			}
+			EdgeId torn;
+			if (!gas.empty() && world().connect(bag.cell, air, PHASES_GAS, &torn) == Refusal::None) {
+				world().transfer(torn, bag.cell, gas, enthalpy_carried(table(), gas, t));
+				mid_step = true;
+			}
+		}
+	}
+
+	// the bench cell an item stands on, or -1
+	int standing_at(int col, int row) const {
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].place == Place::Bench && items[i].col == col && items[i].row == row) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+
+	// true when the item is on the bench, in use
+	bool on_bench(const Item &x, std::string &why) const {
+		if (x.place == Place::Cabinet || x.place == Place::Outbox) {
+			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : "in the outbox") + ", not on the bench";
 			return false;
 		}
 		return true;
 	}
 
+	json save() const;
+
 	// connections change at a step boundary: take the step in progress to its end
-	bool boundary(std::string &why) { return !world().mid_step() || step_once(why); }
+	bool boundary(std::string &why) { return !mid_step || step_once(why); }
 
 	double kelvin(CellId cell) const {
 		double t = 0.0;
@@ -122,7 +240,7 @@ struct Lab::Impl {
 			return false;
 		}
 		const Kind is = items[static_cast<size_t>(index)].kind;
-		const bool ok = kind == Kind::Vessel ? is != Kind::Burner : is == kind; // "vessel": anything that holds matter
+		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
 			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : "a vessel");
 			return false;
@@ -170,6 +288,7 @@ struct Lab::Impl {
 			why = refusal_text(refused);
 			return false;
 		}
+		mid_step = true;
 		return true;
 	}
 
@@ -212,9 +331,26 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		b.set_temperature(impl->air, room_kelvin);
 		b.add_edge(impl->air, impl->room, PHASES_NONE, 1000.0);
 
+		if (bench.contains("grid")) {
+			impl->cols = bench.at("grid").at(0).get<int>();
+			impl->rows = bench.at("grid").at(1).get<int>();
+			if (impl->cols < 1 || impl->rows < 1) {
+				why = "the bench's grid has at least one column and one row";
+				return nullptr;
+			}
+		}
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
+			if (j.contains("at")) {
+				item.place = Place::Bench;
+				item.col = j.at("at").at(0).get<int>();
+				item.row = j.at("at").at(1).get<int>();
+				if (item.col < 0 || item.col >= impl->cols || item.row < 0 || item.row >= impl->rows || impl->standing_at(item.col, item.row) >= 0) {
+					why = "item \"" + item.id + "\" stands off the bench's grid, or where something else stands";
+					return nullptr;
+				}
+			}
 			if (item.id.empty() || impl->find(item.id) >= 0) {
 				why = "an item's id is empty or used twice: \"" + item.id + "\"";
 				return nullptr;
@@ -232,6 +368,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				return nullptr;
 			}
 			item.kind = kind == "vessel" ? Kind::Vessel : Kind::Bag;
+			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
 			const double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
 			item.cell = item.kind == Kind::Vessel ? b.add_rigid_cell(item.id, volume) : b.add_cell(item.id);
 			const SpeciesId wall = table.find(j.at("wall").get<std::string>());
@@ -276,6 +413,20 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			}
 			impl->items.push_back(item);
 		}
+		// the tray under everything: where what overflows goes
+		Item tray;
+		tray.id = "tray";
+		tray.kind = Kind::Tray;
+		tray.place = Place::Bench;
+		if (impl->find(tray.id) >= 0) {
+			why = "\"tray\" is the bench's own";
+			return nullptr;
+		}
+		tray.cell = b.add_cell("tray");
+		b.set_amount(tray.cell, builtin::glass, amount(300.0 / 60.083)).set_temperature(tray.cell, room_kelvin);
+		b.add_edge(tray.cell, impl->room, PHASES_NONE, 2.0);
+		b.set_spill(tray.cell);
+		impl->items.push_back(tray);
 	} catch (const std::exception &e) {
 		why = std::string("the bench is malformed: ") + e.what();
 		return nullptr;
@@ -356,12 +507,71 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		return true;
 	}
+	if (what == "place") {
+		// from the cabinet onto the bench, or along it
+		int thing = -1;
+		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
+			why = "there is no such item to place";
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(thing)];
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0 || x.drains_to >= 0) {
+			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
+			return false;
+		}
+		for (const Item &other : items) {
+			if (other.under == thing || other.drains_to == thing) {
+				why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
+				return false;
+			}
+		}
+		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
+			why = "a place is \"at\" [column, row]";
+			return false;
+		}
+		const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+		if (col < 0 || col >= cols || row < 0 || row >= rows) {
+			why = "that is off the bench";
+			return false;
+		}
+		const int there = standing_at(col, row);
+		if (there >= 0 && there != thing) {
+			why = "\"" + items[static_cast<size_t>(there)].id + "\" stands there";
+			return false;
+		}
+		x.place = Place::Bench;
+		x.col = col;
+		x.row = row;
+		return true;
+	}
+	if (what == "stow") {
+		int thing = -1;
+		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
+			why = "there is no such item to stow";
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(thing)];
+		bool free = x.kind != Kind::Tray && x.place == Place::Bench && x.holds < 0 && x.drains_to < 0;
+		for (const Item &other : items) {
+			free = free && other.under != thing && other.drains_to != thing;
+		}
+		if (!free) {
+			why = "\"" + x.id + "\" cannot go back in the cabinet as it is";
+			return false;
+		}
+		x.place = Place::Cabinet;
+		x.col = x.row = -1;
+		return true;
+	}
 	if (what == "heat") {
 		int burner = -1, vessel = -1;
 		if (!item(c, "burner", Kind::Burner, burner, why) || !item(c, "vessel", Kind::Vessel, vessel, why)) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
+		if (!on_bench(flame, why) || !on_bench(items[static_cast<size_t>(vessel)], why)) {
+			return false;
+		}
 		if (flame.under >= 0) {
 			why = "\"" + flame.id + "\" is already under \"" + items[static_cast<size_t>(flame.under)].id + "\"";
 			return false;
@@ -371,6 +581,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		flame.under = vessel;
+		flame.place = Place::Under;
 		return true;
 	}
 	if (what == "unheat") {
@@ -387,6 +598,16 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		world().disconnect(flame.heats);
+		// it goes back beside the vessel if there is room, else to the cabinet
+		const Item &v = items[static_cast<size_t>(flame.under)];
+		flame.place = Place::Cabinet;
+		for (int col = 0; col < cols && flame.place == Place::Cabinet; ++col) {
+			if (standing_at(col, v.row) < 0) {
+				flame.place = Place::Bench;
+				flame.col = col;
+				flame.row = v.row;
+			}
+		}
 		flame.under = -1;
 		flame.heats = EdgeId{};
 		return true;
@@ -417,7 +638,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		const bool on = c.value("on", true);
-		if (!boundary(why)) {
+		if (!on_bench(items[static_cast<size_t>(at)], why) || !boundary(why)) {
 			return false;
 		}
 		world().set_mixing(items[static_cast<size_t>(at)].cell, on ? STIRRED : 1.0);
@@ -431,6 +652,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (from == to) {
 			why = "a vessel is not poured into itself";
+			return false;
+		}
+		if (items[static_cast<size_t>(from)].place == Place::Outbox || !on_bench(items[static_cast<size_t>(to)], why)) {
+			if (why.empty()) {
+				why = "\"" + items[static_cast<size_t>(from)].id + "\" has been handed in";
+			}
 			return false;
 		}
 		const CellState &source = world().snapshot_cell(items[static_cast<size_t>(from)].cell);
@@ -514,6 +741,16 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is already on \"" + items[static_cast<size_t>(x.on)].id + "\"";
 			return false;
 		}
+		if (x.burst) {
+			why = "\"" + x.id + "\" has burst";
+			return false;
+		}
+		if (x.place == Place::Outbox || !on_bench(v, why)) {
+			if (why.empty()) {
+				why = "\"" + x.id + "\" has been handed in";
+			}
+			return false;
+		}
 		if (v.holds >= 0 || v.mouth.index < 0) {
 			why = "the mouth of \"" + v.id + "\" is taken";
 			return false;
@@ -530,6 +767,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		x.on = to;
 		x.joint = joint;
+		x.place = Place::On;
+		x.col = x.row = -1;
 		v.holds = thing;
 		v.mouth = EdgeId{};
 		return true;
@@ -559,6 +798,15 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		v.holds = -1;
 		x.on = -1;
 		x.joint = EdgeId{};
+		// it is set down beside the vessel if there is room, else in the cabinet
+		x.place = Place::Cabinet;
+		for (int col = 0; col < cols && x.place == Place::Cabinet; ++col) {
+			if (standing_at(col, v.row) < 0) {
+				x.place = Place::Bench;
+				x.col = col;
+				x.row = v.row;
+			}
+		}
 		return true;
 	}
 	if (what == "under") {
@@ -567,6 +815,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &upper = items[static_cast<size_t>(of)];
+		if (!on_bench(items[static_cast<size_t>(thing)], why) || !on_bench(upper, why)) {
+			return false;
+		}
 		if (thing == of || upper.drains_to >= 0) {
 			why = "\"" + upper.id + "\" already has something under its outlet, or it is the same vessel";
 			return false;
@@ -588,7 +839,27 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is still joined to something";
 			return false;
 		}
+		if (x.place == Place::Cabinet) {
+			why = "\"" + x.id + "\" is in the cabinet";
+			return false;
+		}
+		// lifted off its burner, which stays where the vessel stood
+		for (Item &other : items) {
+			if (other.under == thing) {
+				if (!boundary(why)) {
+					return false;
+				}
+				world().disconnect(other.heats);
+				other.under = -1;
+				other.heats = EdgeId{};
+				other.place = Place::Bench;
+				other.col = x.col;
+				other.row = x.row;
+			}
+		}
 		x.submitted = true;
+		x.place = Place::Outbox;
+		x.col = x.row = -1;
 		return true;
 	}
 	why = "there is no command \"" + what + "\"";
@@ -653,13 +924,25 @@ std::string Lab::report() const {
 		j["id"] = item.id;
 		if (item.kind == Kind::Burner) {
 			j["kind"] = "burner";
+			j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+			if (item.place == Place::Bench) {
+				j["at"] = { item.col, item.row };
+			}
 			j["valve"] = item.valve;
 			j["under"] = item.under >= 0 ? json(m.items[static_cast<size_t>(item.under)].id) : json(nullptr);
 			j["given_j"] = 0.0 - m.world().energy(item.cell).joule();
 			items.push_back(j);
 			continue;
 		}
-		j["kind"] = item.kind == Kind::Vessel ? "vessel" : "balloon";
+		j["kind"] = KIND_NAME[static_cast<int>(item.kind)];
+		j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+		if (item.place == Place::Bench && item.kind != Kind::Tray) {
+			j["at"] = { item.col, item.row };
+		}
+		if (item.kind == Kind::Bag) {
+			j["burst"] = item.burst;
+			j["capacity_ml"] = item.capacity * 1e6;
+		}
 		j["submitted"] = item.submitted;
 		j["stirred"] = item.stirred;
 		j["on"] = item.on >= 0 ? json(m.items[static_cast<size_t>(item.on)].id) : json(nullptr);
@@ -693,6 +976,12 @@ std::string Lab::report() const {
 		items.push_back(j);
 	}
 	out["items"] = items;
+	out["grid"] = { m.cols, m.rows };
+	json events = json::array();
+	for (const Event &e : m.events) {
+		events.push_back({ { "step", e.step }, { "what", e.what }, { "item", e.item } });
+	}
+	out["events"] = events;
 	// the conservation laws, as integers
 	const Totals now = totals(table, m.world().snapshot());
 	json conserved;
@@ -738,6 +1027,237 @@ std::string Lab::digest() const {
 		}
 	}
 	return hash.hex();
+}
+
+} // namespace lab
+
+// ------------------------------------------------------------- save and load
+
+namespace lab {
+
+namespace {
+
+json doubles(const std::vector<double> &values) {
+	json out = json::array();
+	for (const double v : values) {
+		out.push_back(bits(v));
+	}
+	return out;
+}
+
+bool to_doubles(const json &j, std::vector<double> &out) {
+	if (!j.is_array()) {
+		return false;
+	}
+	out.clear();
+	for (const json &entry : j) {
+		double v = 0.0;
+		if (!from_bits(entry, v)) {
+			return false;
+		}
+		out.push_back(v);
+	}
+	return true;
+}
+
+} // namespace
+
+json Lab::Impl::save() const {
+	const World &w = world();
+	json out;
+	out["format"] = "chem-save/1";
+	out["build"] = build_name();
+	out["step"] = w.step();
+	out["species"] = w.species().species_count(); // a save is for the data it was made with
+	json cells = json::array();
+	for (int32_t c = 0; c < w.cell_count(); ++c) {
+		const CellId id{ c };
+		const CellMeta &meta = w.meta(id);
+		const CellState &state = w.snapshot_cell(id);
+		json cell;
+		cell["name"] = w.cell_name(id);
+		cell["reservoir"] = meta.reservoir;
+		cell["reservoir_temperature"] = bits(meta.reservoir_temperature);
+		cell["rigid"] = meta.rigid;
+		cell["volume"] = bits(meta.volume);
+		cell["mixing"] = bits(meta.mixing);
+		cell["amount"] = state.amount;
+		cell["energy"] = state.energy;
+		cell["particles"] = state.particles;
+		cells.push_back(cell);
+	}
+	out["cells"] = cells;
+	json edges = json::array();
+	for (const Edge &e : w.edges()) {
+		edges.push_back({ { "a", e.a.index }, { "b", e.b.index }, { "phases", e.phases }, { "open", e.open }, { "drain", e.drain }, { "conductance", bits(e.conductance) } });
+	}
+	out["edges"] = edges;
+	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
+	json bench;
+	bench["grid"] = { cols, rows };
+	bench["mid_step"] = mid_step;
+	bench["air"] = air.index;
+	bench["room"] = room.index;
+	json list = json::array();
+	for (const Item &item : items) {
+		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
+				{ "heats", item.heats.index }, { "under", item.under }, { "valve", bits(item.valve) }, { "on", item.on }, { "joint", item.joint.index }, { "holds", item.holds },
+				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
+				{ "row", item.row }, { "capacity", bits(item.capacity) }, { "burst", item.burst } });
+	}
+	bench["items"] = list;
+	json happened = json::array();
+	for (const Event &e : events) {
+		happened.push_back({ { "step", e.step }, { "what", e.what }, { "item", e.item } });
+	}
+	bench["events"] = happened;
+	out["bench"] = bench;
+	return out;
+}
+
+std::string Lab::save() const {
+	return impl_->save().dump();
+}
+
+std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
+	json saved;
+	try {
+		saved = json::parse(save_json, nullptr, true, true);
+	} catch (const std::exception &e) {
+		why = std::string("the save is not JSON: ") + e.what();
+		return nullptr;
+	}
+	if (!saved.is_object() || saved.value("format", "") != "chem-save/1") {
+		why = "the save's \"format\" is not \"chem-save/1\"";
+		return nullptr;
+	}
+	const SpeciesTable &table = builtin_species();
+	auto impl = std::make_unique<Impl>();
+	std::vector<double> heat, reaction, nucleation;
+	std::optional<World> world;
+	try {
+		if (saved.at("species").get<int>() != table.species_count()) {
+			why = "the save was made with other data: it counts a different number of species";
+			return nullptr;
+		}
+		World::Builder b(table);
+		const auto species = static_cast<size_t>(table.species_count());
+		for (const json &cell : saved.at("cells")) {
+			double reservoir_temperature = 0.0, volume = 0.0, mixing = 1.0;
+			if (!from_bits(cell.at("reservoir_temperature"), reservoir_temperature) || !from_bits(cell.at("volume"), volume) || !from_bits(cell.at("mixing"), mixing)) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			const std::string name = cell.at("name").get<std::string>();
+			const CellId id = cell.at("reservoir").get<bool>() ? b.add_reservoir(name, reservoir_temperature)
+					: cell.at("rigid").get<bool>() ? b.add_rigid_cell(name, volume) : b.add_cell(name);
+			const auto amount = cell.at("amount").get<std::vector<int64_t>>();
+			const auto particles = cell.at("particles").get<std::vector<int64_t>>();
+			if (amount.size() != species || particles.size() != species) {
+				why = "the save's cells do not match the species table";
+				return nullptr;
+			}
+			for (size_t s = 0; s < species; ++s) {
+				const SpeciesId sp{ static_cast<int32_t>(s) };
+				if (amount[s] != 0) {
+					b.set_amount(id, sp, Amount{ amount[s] });
+				}
+				if (particles[s] != 0) {
+					b.set_particles(id, sp, particles[s]);
+				}
+			}
+			b.set_energy(id, Energy{ cell.at("energy").get<int64_t>() });
+			b.set_mixing(id, mixing);
+		}
+		for (const json &e : saved.at("edges")) {
+			Edge edge;
+			edge.a = CellId{ e.at("a").get<int32_t>() };
+			edge.b = CellId{ e.at("b").get<int32_t>() };
+			edge.phases = e.at("phases").get<PhaseMask>();
+			edge.open = e.at("open").get<bool>();
+			edge.drain = e.at("drain").get<bool>();
+			if (!from_bits(e.at("conductance"), edge.conductance)) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			b.add_edge_as(edge);
+		}
+		b.set_step(saved.at("step").get<uint64_t>());
+		const json &bench = saved.at("bench");
+		impl->cols = bench.at("grid").at(0).get<int>();
+		impl->rows = bench.at("grid").at(1).get<int>();
+		impl->mid_step = bench.at("mid_step").get<bool>();
+		impl->air = CellId{ bench.at("air").get<int32_t>() };
+		impl->room = CellId{ bench.at("room").get<int32_t>() };
+		for (const json &j : bench.at("items")) {
+			Item item;
+			item.id = j.at("id").get<std::string>();
+			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
+			if (kind < 0 || kind > static_cast<int>(Kind::Tray) || place < 0 || place > static_cast<int>(Place::Outbox)) {
+				why = "the save names a kind of item or a place that there is not";
+				return nullptr;
+			}
+			item.kind = static_cast<Kind>(kind);
+			item.place = static_cast<Place>(place);
+			item.cell = CellId{ j.at("cell").get<int32_t>() };
+			item.mouth = EdgeId{ j.at("mouth").get<int32_t>() };
+			item.heats = EdgeId{ j.at("heats").get<int32_t>() };
+			item.joint = EdgeId{ j.at("joint").get<int32_t>() };
+			item.under = j.at("under").get<int>();
+			item.on = j.at("on").get<int>();
+			item.holds = j.at("holds").get<int>();
+			item.drains_to = j.at("drains_to").get<int>();
+			item.stirred = j.at("stirred").get<bool>();
+			item.submitted = j.at("submitted").get<bool>();
+			item.col = j.at("col").get<int>();
+			item.row = j.at("row").get<int>();
+			item.burst = j.at("burst").get<bool>();
+			if (!from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			if (item.kind == Kind::Tray) {
+				b.set_spill(item.cell);
+			}
+			impl->items.push_back(item);
+		}
+		for (const json &e : bench.at("events")) {
+			impl->events.push_back(Event{ e.at("step").get<int64_t>(), e.at("what").get<std::string>(), e.at("item").get<std::string>() });
+		}
+		const json &remainders = saved.at("remainders");
+		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {
+			why = "the save holds a number that is not one";
+			return nullptr;
+		}
+		world = b.build(&why);
+	} catch (const std::exception &e) {
+		why = std::string("the save is malformed: ") + e.what();
+		return nullptr;
+	}
+	if (!world) {
+		why = "the save cannot be restored: " + why;
+		return nullptr;
+	}
+	const auto cells = static_cast<int32_t>(world->cell_count());
+	const auto edge_count = static_cast<int32_t>(world->edges().size());
+	const auto item_count = static_cast<int>(impl->items.size());
+	for (const Item &item : impl->items) {
+		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count &&
+				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
+		if (!refs) {
+			why = "the save's items point outside the world";
+			return nullptr;
+		}
+	}
+	if (impl->air.index < 0 || impl->air.index >= cells || impl->room.index < 0 || impl->room.index >= cells) {
+		why = "the save's room is not in its world";
+		return nullptr;
+	}
+	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	impl->sim->set_checking(false);
+	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation));
+	impl->genesis = totals(table, impl->world().snapshot());
+	return std::unique_ptr<Lab>(new Lab(std::move(impl)));
 }
 
 } // namespace lab

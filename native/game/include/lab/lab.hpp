@@ -32,6 +32,13 @@ public:
 	// Advances whole steps of 1/60 s.
 	bool advance(int64_t steps, std::string &why);
 
+	// The whole lab as text ("chem-save/1"): every amount, energy and particle
+	// count, the connections, the processes' carried remainders, where
+	// everything stands. load() gives a lab that continues exactly as this one
+	// would have: the same digests, step for step (GAME_SPEC §18: D2).
+	std::string save() const;
+	static std::unique_ptr<Lab> load(std::string_view save_json, std::string &why);
+
 	// Every invariant on every step (GAME_SPEC §18). On by default.
 	void set_checking(bool on);
 	bool failed() const;

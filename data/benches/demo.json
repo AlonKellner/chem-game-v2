@@ -1,17 +1,18 @@
 {
 	"format": "chem-bench/1",
-	"note": "The demo's bench (GAME_SPEC §17). Every item is a cell of the one closed world; each vessel starts open to the room, full of air. loss: W/K to the room. A burner's conductance is with its valve fully open.",
+	"note": "The demo's bench (GAME_SPEC §17). Every item is a cell of the one closed world; each vessel starts open to the room, full of air. loss: W/K to the room. A burner's conductance is with its valve fully open. at: [column, row] on the bench's grid; an item without it starts in the cabinet. The bench adds its own tray, where what overflows goes.",
+	"grid": [12, 4],
 	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
-		{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.9},
-		{"id": "balloon", "kind": "balloon", "wall": "latex", "wall_g": 2, "loss": 0.5},
-		{"id": "condenser", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
-		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "loss": 0.5},
-		{"id": "waste", "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "loss": 0.5},
-		{"id": "jar", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 40, "loss": 0.3,
+		{"id": "flask", "at": [5, 1], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.9},
+		{"id": "balloon", "at": [4, 1], "kind": "balloon", "wall": "latex", "wall_g": 2, "loss": 0.5, "capacity_ml": 3000},
+		{"id": "condenser", "at": [6, 1], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
+		{"id": "beaker", "at": [7, 1], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "loss": 0.5},
+		{"id": "waste", "at": [8, 1], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "loss": 0.5},
+		{"id": "jar", "at": [2, 1], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 40, "loss": 0.3,
 			"contents": {"malachite": {"g": 5, "particles": 2500000}}},
-		{"id": "acid", "kind": "vessel", "volume_ml": 500, "wall": "glass", "wall_g": 250, "loss": 0.8,
+		{"id": "acid", "at": [3, 1], "kind": "vessel", "volume_ml": 500, "wall": "glass", "wall_g": 250, "loss": 0.8,
 			"contents": {"water": {"g": 240.5}, "sulfuric_acid_aq": {"mol": 0.25}}},
-		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}
+		{"id": "burner", "at": [5, 2], "kind": "burner", "celsius": 1927, "conductance": 0.25}
 	]
 }

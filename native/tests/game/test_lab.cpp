@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using json = nlohmann::json;
 
@@ -113,6 +114,12 @@ TEST_CASE("lab: a malformed bench is refused with a reason (Stage 7)") {
 		{"id": "a", "kind": "vessel", "volume_ml": 10, "wall": "water", "wall_g": 5}]})", why) == nullptr); // not a wall
 	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
 		{"id": "a", "kind": "balloon", "wall": "latex", "wall_g": 2}, {"id": "a", "kind": "balloon", "wall": "latex", "wall_g": 2}]})", why) == nullptr);
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "grid": [2, 1], "items": [
+		{"id": "a", "at": [0, 0], "kind": "balloon", "wall": "latex", "wall_g": 2}, {"id": "b", "at": [0, 0], "kind": "balloon", "wall": "latex", "wall_g": 2}]})", why) == nullptr); // one cell, two items
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "grid": [2, 1], "items": [
+		{"id": "a", "at": [5, 0], "kind": "balloon", "wall": "latex", "wall_g": 2}]})", why) == nullptr); // off the grid
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "tray", "kind": "balloon", "wall": "latex", "wall_g": 2}]})", why) == nullptr); // the bench's own name
 	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": []})", why) != nullptr); // an empty room is a bench
 }
 
@@ -143,6 +150,11 @@ TEST_CASE("lab: a refused command says why and changes nothing (Stage 7)") {
 		{ R"({"do": "unheat", "burner": "burner"})", "not under anything" },
 		{ R"({"do": "wait_until", "item": "flask", "below_g": 1})", "needs a \"species\"" },
 		{ R"({"do": "wait_until", "item": "flask", "species": "water", "above_g": 1, "timeout": 0.5})", "timeout" },
+		{ R"({"do": "place", "item": "flask", "at": [3, 1]})", "stands there" },
+		{ R"({"do": "place", "item": "flask", "at": [40, 1]})", "off the bench" },
+		{ R"({"do": "place", "item": "flask"})", "[column, row]" },
+		{ R"({"do": "place", "item": "tray", "at": [0, 0]})", "cannot be moved" },
+		{ R"({"do": "pour", "from": "acid", "to": "tray", "ml": 5})", "not a vessel" },
 	};
 	for (const auto &r : refused) {
 		CAPTURE(r.command);
@@ -287,4 +299,174 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 			CHECK(row.at("size_um").get<double>() > 50.0);
 		}
 	}
+}
+
+// ---------------------------------------------------------------- Stage 8
+
+namespace {
+
+// a small bench for the equipment's rules: everything in the cabinet but the flask
+const char *const SMALL = R"({"format": "chem-bench/1", "grid": [4, 2], "room": {"celsius": 20}, "items": [
+	{"id": "flask", "at": [1, 0], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.9, "contents": {"water": {"g": 60}}},
+	{"id": "cup", "kind": "vessel", "volume_ml": 20, "wall": "glass", "wall_g": 15, "loss": 0.3},
+	{"id": "tube", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
+	{"id": "bag", "kind": "balloon", "wall": "latex", "wall_g": 2, "loss": 0.5, "capacity_ml": 300},
+	{"id": "flame", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+
+std::unique_ptr<lab::Lab> small_bench() {
+	std::string why;
+	auto made = lab::Lab::open(SMALL, why);
+	REQUIRE_MESSAGE(made != nullptr, why);
+	return made;
+}
+
+} // namespace
+
+TEST_CASE("lab: equipment is used on the bench, and placed there from the cabinet (Stage 8)") {
+	auto lab = small_bench();
+	std::string why;
+	CHECK(item(json::parse(lab->report()), "cup").at("place") == "cabinet");
+	CHECK_FALSE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})", &why)); // the burner is in the cabinet
+	CHECK(why.find("in the cabinet") != std::string::npos);
+	CHECK_FALSE(run(*lab, R"({"do": "attach", "item": "bag", "to": "cup"})", &why));
+	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why));
+	CHECK_FALSE(run(*lab, R"({"do": "submit", "item": "cup"})", &why));
+	REQUIRE(run(*lab, R"({"do": "place", "item": "flame", "at": [0, 0]})"));
+	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [2, 0]})"));
+	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "bag", "at": [2, 0]})", &why)); // the cup stands there
+	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [3, 1]})")); // along the bench
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
+	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "flask", "at": [0, 1]})", &why)); // the burner depends on where it stands
+	CHECK_FALSE(run(*lab, R"({"do": "stow", "item": "flask"})", &why));
+	REQUIRE(run(*lab, R"({"do": "attach", "item": "bag", "to": "flask"})")); // from the cabinet straight onto the mouth
+	json report = json::parse(lab->report());
+	CHECK(item(report, "bag").at("place") == "on");
+	CHECK(item(report, "flame").at("place") == "under");
+	CHECK(item(report, "cup").at("at") == json::array({ 3, 1 }));
+	CHECK(report.at("grid") == json::array({ 4, 2 }));
+	REQUIRE(run(*lab, R"({"do": "detach", "item": "bag"})"));
+	CHECK(item(json::parse(lab->report()), "bag").at("place") == "bench"); // set down beside the flask
+	REQUIRE(run(*lab, R"({"do": "stow", "item": "bag"})"));
+	REQUIRE(run(*lab, R"({"do": "submit", "item": "flask"})")); // lifted off its burner
+	report = json::parse(lab->report());
+	CHECK(item(report, "flask").at("place") == "outbox");
+	CHECK(item(report, "flame").at("place") == "bench");
+	CHECK(item(report, "flame").at("under").is_null());
+	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why)); // handed in
+	CHECK(run(*lab, R"({"do": "wait", "seconds": 2})"));
+}
+
+TEST_CASE("lab: a balloon filled past its capacity bursts, and its gas is the room's (Stage 8)") {
+	auto lab = small_bench();
+	std::string why;
+	REQUIRE(run(*lab, R"({"do": "place", "item": "flame", "at": [0, 0]})"));
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "attach", "item": "bag", "to": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "valve", "burner": "flame", "to": 1})"));
+	// 60 g of water boiling into a 300 mL balloon in a 20 C room: steam condenses in
+	// it, but the flask's air and the steam on its way fill it
+	REQUIRE(run(*lab, R"({"do": "wait", "seconds": 400})", &why));
+	const json report = json::parse(lab->report());
+	REQUIRE(report.at("events").size() == 1);
+	CHECK(report.at("events")[0].at("what") == "burst");
+	CHECK(report.at("events")[0].at("item") == "bag");
+	const json bag = item(report, "bag");
+	CHECK(bag.at("burst").get<bool>());
+	CHECK(bag.at("on").is_null());
+	CHECK(bag.at("gas_ml").get<double>() == 0.0); // its gas went to the room
+	CHECK(bag.at("gas_ml").get<double>() + bag.at("condensed_ml").get<double>() <= 300.0);
+	CHECK(report.at("conserved").at("unchanged").get<bool>());
+	CHECK_FALSE(lab->failed()); // the flask was never sealed: its mouth opened as the balloon came off
+	CHECK_FALSE(run(*lab, R"({"do": "attach", "item": "bag", "to": "flask"})", &why));
+	CHECK(why.find("burst") != std::string::npos);
+}
+
+TEST_CASE("lab: a vessel filled past its brim overflows into the tray (Stage 8)") {
+	// 60 g of water distilled into a 20 mL cup
+	auto lab = small_bench();
+	std::string why;
+	REQUIRE(run(*lab, R"({"do": "place", "item": "flame", "at": [0, 0]})"));
+	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [3, 0]})"));
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "attach", "item": "tube", "to": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "under", "item": "cup", "of": "tube"})"));
+	REQUIRE(run(*lab, R"({"do": "valve", "burner": "flame", "to": 1})"));
+	REQUIRE_MESSAGE(run(*lab, R"({"do": "wait_until", "item": "flask", "species": "water", "below_g": 5, "timeout": 1200})", &why), why); // V2 on every step
+	const json report = json::parse(lab->report());
+	const json cup = item(report, "cup"), tray = item(report, "tray");
+	CHECK(cup.at("condensed_ml").get<double>() == doctest::Approx(20.0).epsilon(1e-6)); // full to the brim
+	CHECK(cup.at("gas_ml").get<double>() < 1e-6);
+	CHECK(grams(tray, "water") + grams(tray, "steam") > 30.0); // the rest ran over
+	CHECK(grams(cup, "water") + grams(tray, "water") + grams(tray, "steam") + grams(item(report, "flask"), "water") > 59.0); // nearly all accounted for as liquid
+	CHECK(tray.at("kind") == "tray");
+	CHECK(report.at("conserved").at("unchanged").get<bool>());
+}
+
+TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not saved (Stage 8)") {
+	// D2. The demo, saved after each of several commands, in the middle of each stage:
+	// the loaded lab reproduces the rest of the golden record.
+	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
+	std::vector<json> golden;
+	{
+		std::istringstream lines(read("bench/sessions/demo.jsonl"));
+		std::string line;
+		while (std::getline(lines, line)) {
+			golden.push_back(json::parse(line));
+		}
+	}
+	const auto command = [&](size_t i) {
+		json plain = session.at("script")[i];
+		plain.erase("note");
+		return plain.dump();
+	};
+	for (const size_t cut : { size_t{ 0 }, size_t{ 4 }, size_t{ 9 }, size_t{ 12 }, size_t{ 17 }, size_t{ 20 } }) {
+		CAPTURE(cut);
+		auto first = demo_bench();
+		std::string why;
+		for (size_t i = 0; i <= cut; ++i) {
+			REQUIRE_MESSAGE(first->command(command(i), why), why);
+		}
+		const std::string saved = first->save();
+		auto second = lab::Lab::load(saved, why);
+		REQUIRE_MESSAGE(second != nullptr, why);
+		CHECK(second->digest() == first->digest());
+		CHECK(second->step() == first->step());
+		CHECK(json::parse(second->report()) == json::parse(first->report()));
+		CHECK(second->save() == saved); // saving what was loaded gives the same text
+		for (size_t i = cut + 1; i < golden.size(); ++i) {
+			REQUIRE_MESSAGE(second->command(command(i), why), "command " << i << ": " << why);
+			REQUIRE_MESSAGE(second->digest() == golden[i].at("digest").get<std::string>(), "after loading at " << cut << ", command " << i << " departs from the record");
+		}
+	}
+}
+
+TEST_CASE("lab: a save that is not one is refused (Stage 8)") {
+	std::string why;
+	CHECK(lab::Lab::load("not json", why) == nullptr);
+	CHECK(lab::Lab::load(R"({"format": "chem-bench/1"})", why) == nullptr);
+	auto lab = small_bench();
+	json saved = json::parse(lab->save());
+	{
+		json other = saved;
+		other["species"] = 3; // made with other data
+		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
+		CHECK(why.find("other data") != std::string::npos);
+	}
+	{
+		json other = saved;
+		other["cells"][0]["mixing"] = "not bits";
+		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
+	}
+	{
+		json other = saved;
+		other["bench"]["items"][0]["cell"] = 99;
+		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
+		CHECK(why.find("outside") != std::string::npos);
+	}
+	{
+		json other = saved;
+		other.erase("edges");
+		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
+	}
+	CHECK(lab::Lab::load(saved.dump(), why) != nullptr);
 }

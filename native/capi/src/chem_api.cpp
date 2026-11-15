@@ -221,4 +221,37 @@ const char *cg_lab_digest(cg_lab *lab) {
 	return lab->text.c_str();
 }
 
+const char *cg_lab_save(cg_lab *lab) {
+	if (lab == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_save: null lab");
+		return nullptr;
+	}
+	try {
+		lab->text = lab->lab->save();
+		return lab->text.c_str();
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
+cg_lab *cg_lab_load(const char *save_json) {
+	if (save_json == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_load: null save");
+		return nullptr;
+	}
+	try {
+		std::string why;
+		std::unique_ptr<lab::Lab> made = lab::Lab::load(save_json, why);
+		if (!made) {
+			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+			return nullptr;
+		}
+		return new cg_lab{ std::move(made), {} };
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
 } // extern "C"

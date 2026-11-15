@@ -281,8 +281,10 @@ double affinity(const SpeciesTable &table, const CellState &cell, std::span<cons
 	return combine(standard, mixing, temperature, made_absent, consumed_absent);
 }
 
-AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) {
-	const Thermal thermal = thermal_state(table, cell);
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) :
+		AffinityProbe(table, cell, terms, thermal_state(table, cell)) {}
+
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal) {
 	if (!thermal.defined || !(thermal.temperature > 0.0) || terms.size() > parts_.size()) {
 		return;
 	}
