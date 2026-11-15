@@ -70,6 +70,10 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "species " + name + " has no atoms");
 			return std::nullopt;
 		}
+		if (!(s.molar_volume >= 0.0) || !(s.molar_volume - s.molar_volume == 0.0)) {
+			set_why(why, "species " + name + " has a molar volume that is negative or not finite");
+			return std::nullopt;
+		}
 		for (const double v : { s.hf, s.cp, s.s0 }) {
 			if (s.has_thermo && !(v - v == 0.0)) {
 				set_why(why, "species " + name + " has thermodynamic data that is not finite");
@@ -116,6 +120,10 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 		}
 		if (terms[i].nu == 0) {
 			set_why(why, "reaction " + name + " has a zero stoichiometric number");
+			return std::nullopt;
+		}
+		if (table.species(terms[i].species).wall) {
+			set_why(why, "reaction " + name + " names a wall species: a vessel's material does not react");
 			return std::nullopt;
 		}
 		for (size_t j = 0; j < i; ++j) {

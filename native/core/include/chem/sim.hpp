@@ -5,8 +5,9 @@
 #include <vector>
 
 // The simulation: a world advanced one fixed step at a time by its processes
-// (GAME_SPEC §4.5): reactions inside the cells (§7), then heat conduction along
-// the edges (§5). Every change goes through the world's two primitives. The
+// (GAME_SPEC §4.5): reactions inside the cells (§7), heat conduction along the
+// edges (§5), then gas flowing so that every rigid cell is exactly full (§6).
+// Every change goes through the world's two primitives. The
 // processes are applied in a fixed order, each from the state the last one
 // left; each application conserves exactly and runs down its own driving force.
 namespace chem {
@@ -47,11 +48,13 @@ public:
 private:
 	void react();
 	void conduct_heat();
+	void equalise_gas();
 
 	World world_;
 	std::vector<Reaction> reactions_;
 	std::vector<double> heat_remainder_;
 	std::vector<double> reaction_remainder_;
+	std::vector<uint8_t> starved_;
 	double step_seconds_ = STEP_SECONDS;
 	bool checking_;
 };

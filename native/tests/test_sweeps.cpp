@@ -216,7 +216,10 @@ namespace {
 // with the topology and the conductances changing between steps.
 // With `reactive`, the chemistry's reactions run too, with random rates: random
 // formation enthalpies and entropies make them spontaneous in either direction.
-void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = false, long long *transforms = nullptr) {
+// With `volumes`, about half the cells are rigid, the edges let gas through,
+// and gas flows to keep the rigid cells full.
+void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = false, long long *transforms = nullptr, bool volumes = false,
+		long long *gas_moves = nullptr) {
 	Rng rng(seed);
 	RandomChemistry chem;
 	make_chemistry(rng, chem);
@@ -231,22 +234,71 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		def.hf = static_cast<double>(rng.range(-2000000, 500000));
 		def.cp = static_cast<double>(rng.range(10, 300));
 		def.s0 = static_cast<double>(rng.range(1, 400));
+		if (volumes && (def.phase == Phase::Solid || def.phase == Phase::Liquid)) {
+			def.molar_volume = static_cast<double>(rng.range(5, 100)) * 1e-6;
+		}
+	}
+	if (volumes) {
+		// every vessel has a wall: a cell drained of its gas still has a temperature
+		SpeciesDef wall;
+		wall.id = "wall";
+		wall.formula = "wall";
+		wall.atoms[0] = 1;
+		wall.has_thermo = true;
+		wall.cp = static_cast<double>(rng.range(10, 300));
+		wall.wall = true;
+		species.push_back(wall);
 	}
 	std::string why;
 	const auto table = SpeciesTable::make(elements, species, &why);
 	REQUIRE_MESSAGE(table.has_value(), why);
+	const int contents = table->species_count() - (volumes ? 1 : 0); // the species a cell may be filled with
 
 	World::Builder builder(*table);
 	const int cells = static_cast<int>(rng.range(1, 6));
+	std::vector<int> rigid_cells;
 	for (int c = 0; c < cells; ++c) {
-		const CellId cell = builder.add_cell("cell" + std::to_string(c));
+		// what goes in it, decided first: a rigid cell's volume depends on it
 		const int kinds = static_cast<int>(rng.range(1, 3));
+		std::vector<SpeciesAmount> holds;
+		double gas_mol = 0.0, all_mol = 0.0;
 		for (int k = 0; k < kinds; ++k) {
 			// from a speck to hundreds of moles
 			const int64_t quanta = rng.chance(20) ? rng.range(1000, 1000000) : rng.range(1000000000, 300000000000000);
-			builder.set_amount(cell, SpeciesId{ static_cast<int32_t>(rng.range(0, table->species_count() - 1)) }, Amount{ quanta });
+			const SpeciesId id{ static_cast<int32_t>(rng.range(0, contents - 1)) };
+			holds.push_back(SpeciesAmount{ id, Amount{ quanta } }); // a species drawn twice: the last amount stands
 		}
-		builder.set_temperature(cell, static_cast<double>(rng.range(80, 3000)));
+		for (size_t k = 0; k < holds.size(); ++k) {
+			bool last = true;
+			for (size_t later = k + 1; later < holds.size(); ++later) {
+				last = last && !(holds[later].species == holds[k].species);
+			}
+			if (last) {
+				all_mol += holds[k].amount.mol();
+				gas_mol += table->species(holds[k].species).phase == Phase::Gas ? holds[k].amount.mol() : 0.0;
+			}
+		}
+		const double kelvin = static_cast<double>(rng.range(80, 3000));
+		CellId cell;
+		if (volumes && c > 0 && rng.chance(50)) {
+			// from half to twice what its gas needs, with room for whatever its solids may become
+			const double volume = gas_mol * 8.314462618 * kelvin / 101325.0 * static_cast<double>(rng.range(50, 200)) / 100.0 + all_mol * 2e-3 + 1e-9;
+			cell = builder.add_rigid_cell("cell" + std::to_string(c), volume);
+			rigid_cells.push_back(c);
+		} else {
+			cell = builder.add_cell("cell" + std::to_string(c));
+		}
+		for (const SpeciesAmount &h : holds) {
+			builder.set_amount(cell, h.species, h.amount);
+		}
+		if (volumes) {
+			builder.set_amount(cell, SpeciesId{ contents }, Amount{ rng.range(1000000, 1000000000000) });
+		}
+		builder.set_temperature(cell, kelvin);
+	}
+	// every rigid cell has a gas path to cell 0, which is elastic
+	for (const int c : rigid_cells) {
+		builder.add_edge(CellId{ c }, CellId{ 0 }, rng.chance(50) ? PHASES_GAS : PHASES_ALL, rng.chance(50) ? 0.0 : 1.0);
 	}
 	const int reservoirs = static_cast<int>(rng.range(0, 2));
 	for (int r = 0; r < reservoirs; ++r) {
@@ -261,7 +313,8 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		for (int e = 0; e < edges; ++e) {
 			const auto a = static_cast<int32_t>(rng.range(0, all - 1));
 			const auto b = static_cast<int32_t>((a + rng.range(1, all - 1)) % all);
-			builder.add_edge(CellId{ a }, CellId{ b }, PHASES_NONE, conductance());
+			const PhaseMask mask = volumes && a < cells && b < cells && rng.chance(50) ? PHASES_GAS : PHASES_NONE;
+			builder.add_edge(CellId{ a }, CellId{ b }, mask, conductance());
 		}
 	}
 	auto built = builder.build(&why);
@@ -316,6 +369,9 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		for (const LedgerEntry &entry : trace.ledger) {
 			if (entry.kind == LedgerEntry::Kind::Transfer) {
 				++transfers;
+				if (!entry.delta.empty() && gas_moves != nullptr) {
+					++*gas_moves;
+				}
 			} else if (transforms != nullptr) {
 				++*transforms;
 			}
@@ -323,8 +379,8 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		const Violations violations = check_all(*table, trace);
 		REQUIRE_MESSAGE(violations.empty(), "seed " << seed << ", step " << step << ": " << violations[0]);
 		REQUIRE_MESSAGE(totals(*table, trace.after) == genesis, "seed " << seed << ", step " << step << ": the world's totals moved");
-		if (reactive) {
-			continue; // a reaction's heat may take a cell past the others
+		if (reactive || volumes) {
+			continue; // a reaction's heat, or gas arriving, may take a cell past the others
 		}
 		// UX6: with no reaction, nothing gets hotter than the hottest or colder than the coldest
 		const double slack = 1e-9 * hi_before;
@@ -356,4 +412,16 @@ TEST_CASE("sweeps: reactions run down their affinity and entropy grows on every 
 	}
 	MESSAGE(worlds << " reacting worlds, " << worlds * 60 << " steps, " << transforms << " reaction steps, " << transfers << " heat transfers");
 	CHECK(transforms > worlds);
+}
+
+TEST_CASE("sweeps: rigid cells stay exactly full on every step of every random world with volumes (Stage 4)") {
+	const char *env = std::getenv("CHEM_SWEEP_WORLDS");
+	const long long worlds = env != nullptr ? std::atoll(env) : 2000;
+	long long transfers = 0, transforms = 0, gas_moves = 0;
+	for (long long w = 0; w < worlds; ++w) {
+		run_thermal_world(0x9a5000000ull + static_cast<uint64_t>(w), transfers, true, &transforms, true, &gas_moves);
+	}
+	MESSAGE(worlds << " worlds with volumes, " << worlds * 60 << " steps, " << gas_moves << " gas flows, " << transforms << " reaction steps, "
+				   << transfers - gas_moves << " heat transfers");
+	CHECK(gas_moves > worlds);
 }

@@ -1,5 +1,15 @@
 # GAME_SPEC version history
 
+## 0.5.0 (2026-11-15, Stage 4)
+
+- §4.1: wall species; molar volumes derived from densities.
+- §6 demo subset written out: elastic and rigid cells, the tree, expelling and drawing, the
+  enthalpy carried, the sealing rule and its refusal, starved cells.
+- §18: V1 and V3 implemented; T1 extended to gas; V2 moved to Stage 5 (it is about liquids).
+- §20: four simplifications declared (no partial vacuum, no gas diffusion, air as N₂ and O₂,
+  walls at their contents' temperature).
+- Data: densities of water, CuO, malachite and CuSO₄ verified; latex added as the balloon's wall.
+
 ## 0.4.0 (2026-11-15, Stage 3)
 
 - §4.5 rewritten: processes are applied in sequence, each from the state the last one left, each

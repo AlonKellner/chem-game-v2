@@ -76,7 +76,9 @@ Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
 // it was applied (the ledger replayed from the step's start). Heat flows from
 // the hotter cell to the colder: for a transfer of energy alone,
 // energy * (T_from - T_to) > 0. A reaction advances only while its affinity
-// is positive and retreats only while it is negative: extent * A > 0.
+// is positive and retreats only while it is negative: extent * A > 0. Gas
+// moves only out of a rigid cell that is over-full or into one that is
+// under-full.
 Violations check_T1(const SpeciesTable &table, const StepTrace &trace);
 // T2. The world's entropy does not decrease: the sum over the cells that
 // changed of (S_after - S_before) >= -(1e-9 J/K + 4e-16 * the sum of their |S|),
@@ -87,6 +89,14 @@ Violations check_T2(const SpeciesTable &table, const StepTrace &trace);
 Violations check_T3(const SpeciesTable &table, const StepTrace &trace);
 // S1. No NaN or infinity: every temperature and entropy of the trace is finite.
 Violations check_S1(const SpeciesTable &table, const StepTrace &trace);
+
+// V1. A rigid cell is exactly full: gas + solids and liquids = its volume,
+// within the volume of one quantum of each gas species plus 1e-9 of the cell's.
+// Under-full is allowed only where the trace marks the cell starved.
+Violations check_V1(const SpeciesTable &table, const StepTrace &trace);
+// V3. No rigid cell is sealed: each has a path, along open gas edges, to an
+// elastic cell.
+Violations check_V3(const SpeciesTable &table, const StepTrace &trace);
 
 // The change of the world's entropy over the step, in J/K (what T2 bounds).
 double entropy_change(const SpeciesTable &table, const StepTrace &trace);
