@@ -23,7 +23,7 @@ The repository, on the layout and conventions of `ricochet-game-v2`, with nothin
 | 0.7 | Gates: `make check`, `make gate`, `make gates`, the result cache | Done |
 | 0.8 | `GAME_SPEC.md` 0.1.0: every system in full with its demo subset; invariant catalogue | Done |
 | 0.9 | `docs/DATA_SOURCES.md`: the planning data, marked unverified | Done |
-| 0.10 | The user's sign-off | Pending |
+| 0.10 | The user's sign-off | Done (2026-11-15: "This looks good. Approved, proceed") |
 
 ## Decisions
 

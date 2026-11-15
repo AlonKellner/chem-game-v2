@@ -25,7 +25,7 @@ temperature or a rate.
 | 1.7 | Self-tests: every check fires on the corruption it exists to catch | Done |
 | 1.8 | The conservation sweep over random chemistries and worlds | Done |
 | 1.9 | C API and `chem_tool tables`: the built-in species and reactions | Done |
-| 1.10 | The user's sign-off | Pending |
+| 1.10 | The user's sign-off | Done (2026-11-15: "This looks good. Approved, proceed") |
 
 ## How conservation is baked in
 
