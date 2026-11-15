@@ -51,6 +51,13 @@ struct SpeciesDef {
 	double hf = 0.0; // standard enthalpy of formation, J/mol
 	double cp = 0.0; // molar heat capacity, J/mol/K (constant)
 	double s0 = 0.0; // standard entropy, J/mol/K
+	// A vessel's own material (glass, rubber): it holds heat, takes no room
+	// inside the vessel, never moves along an edge and never reacts.
+	bool wall = false;
+	// The volume of a mole of a condensed species, m^3 (derived from its
+	// density by the build); 0 when unknown. A condensed species without it
+	// cannot be in a rigid cell.
+	double molar_volume = 0.0;
 };
 
 struct SpeciesId {
@@ -159,7 +166,8 @@ class Reaction {
 public:
 	// Refuses (nullopt, the reason in *why): no terms or more than MAX_TERMS, an
 	// unknown or repeated species, a zero stoichiometric number, no reactant or
-	// no product, an element or the charge out of balance; kinetics whose `in`
+	// no product, an element or the charge out of balance, a wall species;
+	// kinetics whose `in`
 	// is not a reactant, or whose prefactor or activation energy is negative
 	// or not finite.
 	static std::optional<Reaction> make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why = nullptr,

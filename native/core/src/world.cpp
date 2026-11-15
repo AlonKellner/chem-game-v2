@@ -37,6 +37,10 @@ const char *refusal_text(Refusal r) {
 			return "a reservoir holds energy, never matter";
 		case Refusal::BadValue:
 			return "a conductance must be finite and not negative";
+		case Refusal::Wall:
+			return "a vessel's own material does not move";
+		case Refusal::WouldSeal:
+			return "a rigid cell would lose its last gas path to an elastic cell";
 	}
 	return "unknown refusal";
 }
@@ -54,15 +58,59 @@ bool good_conductance(double c) {
 
 } // namespace
 
+std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges) {
+	// flood from the elastic cells along the gas edges
+	std::vector<uint8_t> reached(meta.size(), 0);
+	std::vector<size_t> frontier;
+	for (size_t c = 0; c < meta.size(); ++c) {
+		if (!meta[c].reservoir && !meta[c].rigid) {
+			reached[c] = 1;
+			frontier.push_back(c);
+		}
+	}
+	while (!frontier.empty()) {
+		const size_t at = frontier.back();
+		frontier.pop_back();
+		for (const Edge &e : edges) {
+			if (!e.open || (e.phases & PHASES_GAS) == 0) {
+				continue;
+			}
+			const auto a = static_cast<size_t>(e.a.index);
+			const auto b = static_cast<size_t>(e.b.index);
+			if (a >= meta.size() || b >= meta.size() || (a != at && b != at)) {
+				continue;
+			}
+			const size_t other = a == at ? b : a;
+			if (!reached[other] && !meta[other].reservoir) {
+				reached[other] = 1;
+				frontier.push_back(other);
+			}
+		}
+	}
+	std::vector<CellId> sealed;
+	for (size_t c = 0; c < meta.size(); ++c) {
+		if (meta[c].rigid && !reached[c]) {
+			sealed.push_back(CellId{ static_cast<int32_t>(c) });
+		}
+	}
+	return sealed;
+}
+
 CellId World::Builder::add_cell(std::string name) {
 	names_.push_back(std::move(name));
 	meta_.push_back(CellMeta{});
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
+CellId World::Builder::add_rigid_cell(std::string name, double volume) {
+	names_.push_back(std::move(name));
+	meta_.push_back(CellMeta{ false, 0.0, true, volume });
+	return CellId{ static_cast<int32_t>(names_.size() - 1) };
+}
+
 CellId World::Builder::add_reservoir(std::string name, double temperature) {
 	names_.push_back(std::move(name));
-	meta_.push_back(CellMeta{ true, temperature });
+	meta_.push_back(CellMeta{ true, temperature, false, 0.0 });
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
@@ -172,6 +220,24 @@ std::optional<World> World::Builder::build(std::string *why) const {
 			}
 		}
 	}
+	for (size_t c = 0; c < world.cells_.size(); ++c) {
+		if (!meta_[c].rigid) {
+			continue;
+		}
+		if (!(meta_[c].volume > 0.0) || !(meta_[c].volume - meta_[c].volume == 0.0)) {
+			return refuse("a rigid cell's volume is positive and finite");
+		}
+		const Fill fill = fill_of(*table_, world.cells_[c], T0);
+		if (!fill.defined) {
+			return refuse("a rigid cell holds a condensed species whose molar volume is unknown");
+		}
+		if (fill.condensed > meta_[c].volume) {
+			return refuse("a rigid cell's solids and liquids do not fit in it");
+		}
+	}
+	if (!sealed_cells(meta_, edges_).empty()) {
+		return refuse("a rigid cell has no gas path to an elastic cell");
+	}
 	// The totals fit the integer range now, so they fit it forever: the
 	// primitives never change them.
 	if (!totals_fit(*table_, Snapshot{ world.cells_ })) {
@@ -240,6 +306,9 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 		}
 		if (reservoir) {
 			return Refusal::Reservoir;
+		}
+		if (table_->species(item.species).wall) {
+			return Refusal::Wall;
 		}
 		if ((e.phases & phase_bit(table_->species(item.species).phase)) == 0) {
 			return Refusal::PhaseNotAllowed;
@@ -351,6 +420,10 @@ Refusal World::disconnect(EdgeId edge) {
 		return Refusal::UnknownEdge;
 	}
 	edges_[static_cast<size_t>(edge.index)].open = false;
+	if (!sealed_cells(meta_, edges_).empty()) {
+		edges_[static_cast<size_t>(edge.index)].open = true;
+		return Refusal::WouldSeal;
+	}
 	return Refusal::None;
 }
 

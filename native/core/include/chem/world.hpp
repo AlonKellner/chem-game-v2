@@ -49,9 +49,17 @@ struct Edge {
 // What a cell is, beside its state. A reservoir is an energy account at a
 // fixed temperature (GAME_SPEC §4.2): it holds no matter, and its energy is
 // what it has received (negative: what it has given).
+//
+// A cell of matter is elastic or rigid (GAME_SPEC §6, the demo's subset: every
+// cell at one atmosphere). An elastic cell (a balloon, the open air) takes the
+// volume its contents need. A rigid cell (a flask) has a fixed volume: gas
+// leaves or enters it along its gas edges so that it is exactly full, and it
+// must always have a gas path to an elastic cell.
 struct CellMeta {
 	bool reservoir = false;
 	double reservoir_temperature = 0.0; // K
+	bool rigid = false;
+	double volume = 0.0; // m^3, of a rigid cell
 };
 
 struct SpeciesAmount {
@@ -82,6 +90,10 @@ struct StepTrace {
 	std::vector<Edge> edges; // the topology during the step
 	std::vector<CellMeta> meta; // one per cell
 	bool thermal = false; // the world has temperatures: the thermal invariants apply
+	// One per cell, set by the simulation: nonzero when a rigid cell was left
+	// under-full this step because the cells it draws from held no more gas (a
+	// partial vacuum, which the demo's subset does not model).
+	std::vector<uint8_t> starved;
 };
 
 // Why a call changed nothing.
@@ -100,8 +112,14 @@ enum class Refusal : int32_t {
 	SameCell, // an edge joins two different cells
 	Reservoir, // a reservoir holds energy, never matter
 	BadValue, // a conductance that is negative or not finite
+	Wall, // a vessel's own material does not move
+	WouldSeal, // a rigid cell would lose its last gas path to an elastic cell
 };
 const char *refusal_text(Refusal r);
+
+// The rigid cells that have no path, along open edges that let gas through,
+// to an elastic cell of matter (GAME_SPEC §6: V3). Empty when none is sealed.
+std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges);
 
 class World {
 public:
@@ -110,7 +128,9 @@ public:
 	class Builder {
 	public:
 		explicit Builder(const SpeciesTable &table);
-		CellId add_cell(std::string name);
+		CellId add_cell(std::string name); // elastic
+		// a cell of fixed volume, in m^3
+		CellId add_rigid_cell(std::string name, double volume);
 		// an energy account at a fixed temperature (K); makes the world thermal
 		CellId add_reservoir(std::string name, double temperature);
 		EdgeId add_edge(CellId a, CellId b, PhaseMask phases, double conductance = 0.0);
@@ -126,7 +146,9 @@ public:
 		// not positive and finite or set in a cell that cannot have one (a
 		// species without thermodynamic data, no heat capacity), totals that
 		// do not fit the integer range. In a thermal world every cell must
-		// have a temperature.
+		// have a temperature. A rigid cell: a volume that is not positive and
+		// finite, a condensed species of unknown molar volume, contents that do
+		// not fit, no gas path to an elastic cell.
 		std::optional<World> build(std::string *why = nullptr) const;
 
 	private:
@@ -184,6 +206,7 @@ public:
 
 	// The topology changes between steps only (GAME_SPEC §4.5, step 1).
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
+	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);
 

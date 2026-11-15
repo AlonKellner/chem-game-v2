@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.4.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.5.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -78,8 +78,11 @@ A species is a (formula, phase) pair: `H2O(l)` and `H2O(g)` are different specie
 - a molar mass, derived from the element counts and the standard atomic weights (never entered);
 - standard formation enthalpy `Hf`, standard entropy `S°`, and molar heat capacity `Cp`
   (constant in the demo; a polynomial in the full model, §10);
-- a molar volume for condensed phases;
+- a molar volume for condensed phases, derived by the build from its density;
 - optical data (§12).
+
+A **wall species** is a vessel's own material (glass, rubber). It holds heat, takes no room inside
+the vessel, never moves along an edge and never reacts.
 
 Molar enthalpy: `h_i(T) = Hf_i + Cp_i (T − T0)`, `T0 = 298.15 K`.
 Molar entropy: `s_i(T) = S°_i + Cp_i ln(T/T0)`, plus the mixing terms of §4.6.
@@ -268,13 +271,35 @@ equipment that needs them (Stage 8).
 - **Consequences:** sealed flasks that pressurise and burst, vacuum distillation, boiling points
   that move with pressure, heating by compression.
 
-**Demo subset (the isobaric limit).** Every cell is at 1 atm. Gas flow is not a rate: it is the
-algebraic condition that each rigid cell's gas fills exactly its free volume, solved over the tree
-of gas edges rooted at an elastic or ambient cell. This is the full model's limit of infinite
-conductance. A rigid cell that holds gas must have a gas path to an elastic or ambient cell; a
-command that would seal one is refused. The balloon is a slack membrane with a capacity. Pouring
-and dripping are kinematic (no gravitational energy).
-**Status:** *PLANNED, Stage 4 (demo subset).*
+**Demo subset (the isobaric limit).** Every cell is at 1 atm. A cell of matter is **elastic** (a
+balloon, the open air: it takes the volume its contents need, `n_gas R T / P` plus its solids and
+liquids) or **rigid** (a flask: a fixed volume).
+
+Gas flow is not a rate: it is the algebraic condition that each rigid cell is exactly full, gas
+plus solids and liquids equal to its volume. This is the full model's limit of infinite
+conductance. Each step, after the reactions and the heat:
+
+- The cells form a tree rooted at the elastic cells, breadth first along the open edges that pass
+  gas, in index order. Each rigid cell, deepest first, settles with its parent.
+- **Over-full:** it expels the excess fraction of its gas, at its own composition and
+  temperature. Its temperature does not change, so it is then exactly full.
+- **Under-full:** it draws gas of its parent's composition and temperature. The drawn gas warms or
+  cools on mixing with the cell (walls included), so the amount is the positive root of
+  `(n + x) R T(x) / P = free volume`, a quadratic.
+- Moving gas carries its enthalpy, `n · h(T of the giving cell)`.
+- A parent settles after its children, so one sweep leaves every rigid cell full.
+
+**No rigid cell is ever sealed:** each must have a gas path to an elastic cell. A world that breaks
+this is refused when built, and a disconnection that would break it is refused (`WouldSeal`).
+
+**Starved cells.** A rigid cell whose parent holds less gas than it needs draws all there is and
+stays under-full. In reality that is a partial vacuum; the demo's subset has no pressure below
+1 atm to give it, so the cell is flagged `starved` in the step's trace and treated as at 1 atm.
+
+Pouring and dripping are kinematic (no gravitational energy).
+**Status:** Stage 4 implements the demo subset for gas. A balloon's capacity and bursting come with
+the equipment (*PLANNED, Stage 8*); liquid transfer and overflow with the liquids
+(*PLANNED, Stages 5 and 8*).
 
 ## 7. Chemical kinetics
 
@@ -548,7 +573,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 3 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 4 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -562,13 +587,13 @@ later rows are *PLANNED*.
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
-| T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3) | sign-exact | 2–3 |
+| T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4) | sign-exact | 2–4 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
 | P1 | After projection: liquid present ⇒ vapour at saturation; absent ⇒ at or below it | tolerance | 5 |
-| V1 | Rigid cell: gas volume + condensed volume = vessel volume | tolerance | 4 |
-| V2 | No vessel holds more condensed volume than its capacity (excess is in the spill cell) | exact | 4 |
-| V3 | No rigid cell with gas is sealed (demo subset of §6) | exact | 4 |
+| V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
+| V2 | No vessel holds more solids and liquids than its volume (the excess is in the spill cell) | exact | 5 |
+| V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
 | X1 | Crystal count > 0 exactly when the solid's amount > 0 | exact | 6 |
 | D1 | Batching invariance: N steps give the same bits however grouped into frames | exact | 8 |
 | D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
@@ -593,8 +618,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 - 60 frames per second at 1920×1080.
 - Simulation: one step under 5 µs for the demo's world, so 600× acceleration costs under 3 ms per
   frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
-  0.43 µs for one cell, two reservoirs and the reaction table; trace built, checks off) and, from
-  Stage 7, `chem_tool bench`.
+  0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
+  balloon and two reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -612,3 +637,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Kinetic parameters calibrated for play | Decomposition and dissolution times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C |
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
+| No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |
+| Gas moves only by bulk flow; gases do not diffuse between cells | A flask and its balloon keep different compositions until gas flows between them |
+| Air is 79% N₂ and 21% O₂ | Argon (0.9%) and the rest are left out |
+| A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |

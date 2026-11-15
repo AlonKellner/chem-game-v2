@@ -70,6 +70,40 @@ double activity_in(const SpeciesDef &def, int64_t quanta, double gas) {
 
 } // namespace
 
+Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature) {
+	Fill out;
+	out.gas = gas_quanta(table, cell) * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / P_ATMOSPHERE;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] == 0) {
+			continue;
+		}
+		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		if (def.wall || def.phase == Phase::Gas || def.phase == Phase::Aqueous) {
+			continue;
+		}
+		if (!(def.molar_volume > 0.0)) {
+			return out;
+		}
+		out.condensed += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+	}
+	out.defined = true;
+	return out;
+}
+
+double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined) {
+	defined = false;
+	const Thermal thermal = thermal_state(table, cell);
+	if (!thermal.defined || !(thermal.temperature > 0.0)) {
+		return 0.0;
+	}
+	const Fill fill = fill_of(table, cell, thermal.temperature);
+	if (!fill.defined) {
+		return 0.0;
+	}
+	defined = true;
+	return fill.gas + fill.condensed - meta.volume;
+}
+
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
 	return activity_in(table.species(species), cell.amount[static_cast<size_t>(species.index)], gas_quanta(table, cell));
 }

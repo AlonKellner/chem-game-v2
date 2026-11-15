@@ -26,6 +26,23 @@ Thermal thermal_state(const SpeciesTable &table, const CellState &cell);
 // `ok` is false when a species present has no thermodynamic data.
 double enthalpy_at(const SpeciesTable &table, const CellState &cell, double temperature, bool &ok);
 
+struct Fill {
+	// false when the cell holds a condensed species (not a wall, not a solute)
+	// whose molar volume is unknown
+	bool defined = false;
+	double gas = 0.0; // m^3: n_gas R T / P, at one atmosphere
+	double condensed = 0.0; // m^3: sum of n_i v_i over its solids and liquids (walls take no room)
+};
+
+// The volume the cell's contents take at temperature T (GAME_SPEC §6). Solutes
+// take no room of their own until Stage 6.
+Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature);
+
+// How far a rigid cell is from exactly full, in m^3: gas + condensed - volume.
+// Positive: over-full, gas must leave. Negative: under-full, gas must enter.
+// `defined` is false when the cell has no temperature or no defined fill.
+double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined);
+
 // The activity of a species in the cell (GAME_SPEC §4.6): for a gas, its
 // partial pressure over the standard pressure, y_i * P / P°, with y_i its mole
 // fraction among the cell's gases and P one atmosphere; 1 for a solid or a

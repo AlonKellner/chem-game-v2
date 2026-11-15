@@ -3,6 +3,6 @@
 namespace chem {
 
 // GAME_SPEC.md's version (CHANGELOG.md): the behaviour this build implements.
-inline constexpr const char *SPEC_VERSION = "0.4.0";
+inline constexpr const char *SPEC_VERSION = "0.5.0";
 
 } // namespace chem

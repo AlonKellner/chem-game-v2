@@ -341,6 +341,26 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				}
 			}
 		}
+		if (transfer && !entry.delta.empty()) {
+			// gas alone: out of an over-full rigid cell, or into an under-full one
+			bool gas_only = true;
+			for (const SpeciesAmount &d : entry.delta) {
+				gas_only = gas_only && table.has(d.species) && table.species(d.species).phase == Phase::Gas;
+			}
+			const auto to = static_cast<size_t>(entry.to.index);
+			if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid)) {
+				bool from_defined = false, to_defined = false;
+				const double from_excess = trace.meta[from].rigid ? gas_excess(table, trace.meta[from], replay.cells[from], from_defined) : 0.0;
+				const double to_excess = trace.meta[to].rigid ? gas_excess(table, trace.meta[to], replay.cells[to], to_defined) : 0.0;
+				const bool pushed = from_defined && from_excess > 0.0;
+				const bool pulled = to_defined && to_excess < 0.0;
+				const bool unknown = (trace.meta[from].rigid && !from_defined) || (trace.meta[to].rigid && !to_defined);
+				if (!pushed && !pulled && !unknown && out.size() < MAX_MESSAGES) {
+					out.push_back(text("T1: step %lld: transfer %lld moves gas out of a cell that is not over-full, into one that is not under-full",
+							static_cast<long long>(trace.step), static_cast<long long>(i)));
+				}
+			}
+		}
 		if (!transfer && entry.extent != 0 && !trace.meta[from].reservoir) {
 			// the reaction's numbers back from its change: nu = delta / extent
 			std::array<Term, MAX_TERMS> terms{};
@@ -451,12 +471,63 @@ Violations check_S1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_V1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		const CellMeta &meta = trace.meta[c];
+		if (!meta.rigid) {
+			continue;
+		}
+		const Thermal thermal = thermal_state(table, trace.after.cells[c]);
+		if (!thermal.defined || !(thermal.temperature > 0.0)) {
+			continue; // T3 reports it
+		}
+		const Fill fill = fill_of(table, trace.after.cells[c], thermal.temperature);
+		if (!fill.defined) {
+			out.push_back(text("V1: step %lld: rigid cell %lld holds a condensed species whose molar volume is unknown", static_cast<long long>(trace.step),
+					static_cast<long long>(c)));
+			continue;
+		}
+		const double excess = fill.gas + fill.condensed - meta.volume;
+		const double tolerance = static_cast<double>(table.species_count() + 1) * MOL_PER_QUANTUM * GAS_CONSTANT * thermal.temperature / P_ATMOSPHERE + 1e-9 * meta.volume;
+		const bool starved = c < trace.starved.size() && trace.starved[c] != 0;
+		if (excess > tolerance || (excess < -tolerance && !starved)) {
+			char buffer[200];
+			std::snprintf(buffer, sizeof buffer, "V1: step %lld: rigid cell %lld of %.6g m^3 is %s by %.6g m^3", static_cast<long long>(trace.step),
+					static_cast<long long>(c), meta.volume, excess > 0.0 ? "over-full" : "under-full", excess > 0.0 ? excess : -excess);
+			out.push_back(buffer);
+		}
+	}
+	return out;
+}
+
+Violations check_V3(const SpeciesTable &, const StepTrace &trace) {
+	Violations out;
+	if (trace.meta.size() != trace.after.cells.size()) {
+		return out; // a world without cell kinds has no rigid cells
+	}
+	for (const Edge &e : trace.edges) {
+		if (!cell_in(trace, e.a) || !cell_in(trace, e.b)) {
+			return out; // C7's
+		}
+	}
+	for (const CellId cell : sealed_cells(trace.meta, trace.edges)) {
+		if (out.size() < MAX_MESSAGES) {
+			out.push_back(text("V3: step %lld: rigid cell %lld has no gas path to an elastic cell", static_cast<long long>(trace.step), static_cast<long long>(cell.index)));
+		}
+	}
+	return out;
+}
+
 Violations check_all(const SpeciesTable &table, const StepTrace &trace) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
 	}
 	Violations out;
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_S1 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_S1, check_V1, check_V3 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

@@ -301,3 +301,78 @@ TEST_CASE("invariants: a value that is not finite is detected: S1 (Stage 2)") {
 	u.meta.pop_back(); // and a thermal trace without its cells' kinds is malformed
 	CHECK(has(check_all(builtin_species(), u), "SHAPE"));
 }
+
+// ---------------------------------------------------------------------- gas
+
+namespace {
+
+// One honest gas step: a flask of air, suddenly at 500 K, pushes air into the open air.
+// cell 0: the flask (rigid), cell 1: the air (elastic)
+StepTrace clean_gas() {
+	bool ok = false;
+	World::Builder b(builtin_species());
+	const CellId flask = b.add_rigid_cell("flask", 250e-6);
+	const CellId air = b.add_cell("air");
+	b.add_edge(flask, air, PHASES_GAS);
+	b.set_amount(flask, builtin::nitrogen, amount_from_mol(0.0104, ok)).set_amount(flask, builtin::glass, amount_from_mol(1.0, ok));
+	b.set_temperature(flask, 500.0);
+	b.set_amount(air, builtin::nitrogen, amount_from_mol(10.0, ok)).set_temperature(air, 293.15);
+	auto world = b.build();
+	REQUIRE(world.has_value());
+	Simulation sim(std::move(*world));
+	return sim.step();
+}
+
+} // namespace
+
+TEST_CASE("invariants: an honest gas step violates nothing (Stage 4)") {
+	const StepTrace t = clean_gas();
+	REQUIRE(t.ledger.size() == 1);
+	CHECK(t.ledger[0].from == CellId{ 0 });
+	const Violations v = check_all(builtin_species(), t);
+	CHECK_MESSAGE(v.empty(), (v.empty() ? "" : v[0]));
+}
+
+TEST_CASE("invariants: a rigid cell that is not exactly full is detected: V1 (Stage 4)") {
+	const auto nitrogen = static_cast<size_t>(builtin::nitrogen.index);
+	{
+		StepTrace t = clean_gas(); // 1% more gas than fits
+		t.after.cells[0].amount[nitrogen] += t.after.cells[0].amount[nitrogen] / 100;
+		CHECK(has(check_all(builtin_species(), t), "V1"));
+	}
+	{
+		StepTrace t = clean_gas(); // 1% less, and nothing says it was starved
+		t.after.cells[0].amount[nitrogen] -= t.after.cells[0].amount[nitrogen] / 100;
+		CHECK(has(check_all(builtin_species(), t), "V1"));
+		t.starved[0] = 1; // marked starved, under-full is the model's declared limit
+		CHECK_FALSE(has(check_all(builtin_species(), t), "V1"));
+	}
+}
+
+TEST_CASE("invariants: a sealed rigid cell is detected: V3 (Stage 4)") {
+	StepTrace t = clean_gas();
+	t.edges[0].open = false;
+	CHECK(has(check_all(builtin_species(), t), "V3"));
+	StepTrace u = clean_gas();
+	u.edges[0].phases = PHASES_LIQUID; // open, but not to gas
+	CHECK(has(check_all(builtin_species(), u), "V3"));
+}
+
+TEST_CASE("invariants: gas flowing into a full flask is detected though everything is conserved: T1 (Stage 4)") {
+	StepTrace t = clean_gas();
+	// the transfer reversed, in the ledger and in the state: air pushed into the over-full flask
+	LedgerEntry &entry = t.ledger[0];
+	const auto nitrogen = static_cast<size_t>(builtin::nitrogen.index);
+	const int64_t n = entry.delta[0].amount.quanta;
+	const int64_t e = entry.energy.quanta;
+	std::swap(entry.from, entry.to);
+	t.after.cells[0].amount[nitrogen] += 2 * n;
+	t.after.cells[1].amount[nitrogen] -= 2 * n;
+	t.after.cells[0].energy += 2 * e;
+	t.after.cells[1].energy -= 2 * e;
+	const Violations v = check_all(builtin_species(), t);
+	CHECK(has(v, "T1"));
+	CHECK(has(v, "V1")); // and the flask is over-full
+	CHECK_FALSE(has(v, "C1"));
+	CHECK_FALSE(has(v, "C5"));
+}

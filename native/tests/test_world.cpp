@@ -108,7 +108,7 @@ TEST_CASE("world: a refused call names its reason and changes nothing (Stage 1)"
 	const StepTrace trace = t.world.close_step();
 	CHECK(trace.ledger.empty());
 	CHECK(check_all(builtin_species(), trace).empty());
-	for (int r = 0; r <= static_cast<int>(Refusal::BadValue); ++r) {
+	for (int r = 0; r <= static_cast<int>(Refusal::WouldSeal); ++r) {
 		CHECK(std::string(refusal_text(static_cast<Refusal>(r))) != "unknown refusal");
 	}
 }

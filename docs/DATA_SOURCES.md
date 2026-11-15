@@ -34,6 +34,22 @@ These rows are in `data/species.json` and used by the game. Sources:
 Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
 compilation's value); glass Cp is 48.07 (the draft guessed about 50).
 
+## Verified densities and walls
+
+Densities give the molar volumes of solids and liquids (GAME_SPEC §6). Retrieved 2026-11-15.
+
+| Species | Density (g/cm³) | Source |
+|---|---|---|
+| H2O(l) | 0.997048 at 25 °C, 1 atm | NIST Chemistry WebBook, fluid properties (Wagner and Pruss, IAPWS-95, J. Phys. Chem. Ref. Data 31, 387, 2002) |
+| CuSO4(s) | 3.603 at 25 °C | Merck, copper(II) sulfate anhydrous, product 102791 |
+| CuO(s) | 6.315 | Wikipedia's infobox for copper(II) oxide (no citation there); mineral references give tenorite 5.8–6.5. **Medium confidence.** The whole of the demo's CuO is 0.57 mL |
+| Cu2CO3(OH)2(s) | 3.8 | The middle of the 3.6–4.0 range for malachite (Handbook of Mineralogy, Mindat, Webmineral, as cited by Wikipedia's infobox). **Medium confidence.** 5 g is 1.3 mL of a 250 mL flask |
+| Glass (wall) | 2.23 | ISO 3585. Not used: a wall takes no room inside its vessel |
+
+| Wall | Cp (J/mol·K) | Source |
+|---|---|---|
+| Latex, as C5H8 (natural rubber, the isoprene unit, 68.119 g/mol) | 130.1 | 1.91 J/g·K, the low end of NETZSCH's 1.91–2.08 J/g·K for natural rubber (analyzing-testing.netzsch.com); another compilation gives 1.55. A 2 g balloon is 3.8 J/K. ΔHf° and S° are set to 0: a wall never reacts, so they cancel |
+
 Malachite's sources disagree on the enthalpy of formation from the oxides: −63.2 kJ/mol
 (Richardson and Brown, used here) against −52.5 ± 5.9 (Kiseleva et al., oxide-melt calorimetry).
 The difference moves the temperature above which decomposition is spontaneous by about 30 K and
@@ -71,9 +87,6 @@ recall is uncertain), **low** (estimate or game calibration).
 | CuSO4·5H2O(s) | 249.677 | −2279.7 | 280 | 300.4 | 2.286 | high | Stage 6 |
 | CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | Stage 6 |
 | CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | Stage 6 |
-
-Densities of the verified species (malachite 4.0, CuO 6.31, CuSO4 3.60, water 0.997 g/cm³) are also unverified;
-Stage 4 needs them.
 
 ### Oracles (test references, never inputs)
 

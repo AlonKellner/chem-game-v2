@@ -134,6 +134,89 @@ int decomposition() {
 	return genesis == end ? 0 : 1;
 }
 
+// Stage 4: the demo's first stage without its player. 5 g of malachite in a
+// 250 mL flask of air with a balloon on its mouth; twenty minutes over the
+// flame, then twenty with the burner off.
+int balloon() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const double volume = 250e-6;
+	const double malachite = 5.0 / 221.114;
+	World::Builder b(table);
+	const CellId flask = b.add_rigid_cell("flask", volume);
+	const CellId bag = b.add_cell("balloon");
+	const CellId flame = b.add_reservoir("flame", 2200.0);
+	const CellId room = b.add_reservoir("room", 293.15);
+	b.add_edge(flask, bag, PHASES_GAS);
+	const EdgeId burner = b.add_edge(flask, flame, PHASES_NONE, 0.2);
+	b.add_edge(flask, room, PHASES_NONE, 0.9);
+	b.add_edge(bag, room, PHASES_NONE, 0.5);
+	const double air = P_ATMOSPHERE * (volume - malachite * table.species(builtin::malachite).molar_volume) / (GAS_CONSTANT * 293.15);
+	b.set_amount(flask, builtin::malachite, amount_from_mol(malachite, ok));
+	b.set_amount(flask, builtin::glass, amount_from_mol(100.0 / 60.083, ok));
+	b.set_amount(flask, builtin::nitrogen, amount_from_mol(0.79 * air, ok));
+	b.set_amount(flask, builtin::oxygen, amount_from_mol(0.21 * air, ok));
+	b.set_temperature(flask, 293.15);
+	b.set_amount(bag, builtin::latex, amount_from_mol(2.0 / 68.119, ok));
+	b.set_temperature(bag, 293.15);
+	std::string why;
+	auto world = b.build(&why);
+	if (!world) {
+		std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+		return 1;
+	}
+	Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	sim.set_checking(true);
+	const Totals genesis = totals(table, sim.world().snapshot());
+	const auto mol = [&](CellId c, SpeciesId s) { return sim.world().amount(c, s).mol(); };
+	const auto celsius = [&](CellId c) {
+		double t = 0.0;
+		sim.world().temperature(c, t);
+		return t - 273.15;
+	};
+
+	std::printf("5 g of malachite in a 250 mL flask of air (100 g of glass), a 2 g balloon on its mouth\n");
+	std::printf("flame 2200 K through 0.2 W/K for 20 minutes, then off; the room at 20 C takes 0.9 W/K from the flask, 0.5 W/K from the balloon\n\n");
+	std::printf("%7s %8s %10s %12s %10s %8s %8s %8s %13s\n", "time s", "flask C", "balloon C", "malachite g", "balloon L", "CO2 %", "H2O %", "air %", "flask gas mol");
+	for (int step = 0; step <= 144000; ++step) {
+		if (step == 72000) {
+			sim.world().set_conductance(burner, 0.0);
+			std::printf("%7s burner off\n", "");
+		}
+		if (step % 7200 == 0) {
+			const double co2 = mol(bag, builtin::carbon_dioxide), h2o = mol(bag, builtin::steam);
+			const double n2o2 = mol(bag, builtin::nitrogen) + mol(bag, builtin::oxygen);
+			const double all = co2 + h2o + n2o2;
+			double t = 0.0;
+			sim.world().temperature(bag, t);
+			const double litres = fill_of(table, sim.world().snapshot_cell(bag), t).gas * 1e3;
+			const double flask_gas = mol(flask, builtin::carbon_dioxide) + mol(flask, builtin::steam) + mol(flask, builtin::nitrogen) + mol(flask, builtin::oxygen);
+			std::printf("%7.0f %8.2f %10.2f %12.6f %10.4f %8.2f %8.2f %8.2f %13.6f\n", step * STEP_SECONDS, celsius(flask), celsius(bag),
+					mol(flask, builtin::malachite) * 221.114, litres, all > 0 ? 100 * co2 / all : 0.0, all > 0 ? 100 * h2o / all : 0.0,
+					all > 0 ? 100 * n2o2 / all : 0.0, flask_gas);
+		}
+		sim.step();
+	}
+	const Totals end = totals(table, sim.world().snapshot());
+	std::printf("\nCO2 made: %.6f g; in the balloon: %.6f g; left in the flask: %.6f g\n",
+			(mol(bag, builtin::carbon_dioxide) + mol(flask, builtin::carbon_dioxide)) * 44.009, mol(bag, builtin::carbon_dioxide) * 44.009,
+			mol(flask, builtin::carbon_dioxide) * 44.009);
+	std::printf("the water is still vapour at 20 C here: condensation is Stage 5\n");
+	std::printf("every element, the mass and the energy %s; every invariant was checked on all 144001 steps\n",
+			genesis == end ? "are the same integers as at the start" : "MOVED");
+
+	Simulation timed(sim);
+	timed.set_checking(false);
+	const auto t0 = std::chrono::steady_clock::now();
+	const int steps = 200000;
+	for (int i = 0; i < steps; ++i) {
+		timed.step();
+	}
+	const double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count() / steps;
+	std::printf("step cost (two cells, two reservoirs, the reaction table; checks off, trace built): %.0f ns\n", ns);
+	return genesis == end ? 0 : 1;
+}
+
 } // namespace
 
 int run_study(const char *name) {
@@ -143,6 +226,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "decomposition") == 0) {
 		return decomposition();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition)\n", name);
+	if (std::strcmp(name, "balloon") == 0) {
+		return balloon();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon)\n", name);
 	return 2;
 }

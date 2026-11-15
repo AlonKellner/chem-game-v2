@@ -5,8 +5,10 @@
 #include "chem/math.hpp"
 #include "chem/thermo.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <utility>
+#include <vector>
 
 namespace chem {
 
@@ -79,16 +81,20 @@ void Simulation::react() {
 		if (world_.meta(cell).reservoir) {
 			continue;
 		}
+		const CellState &state = world_.snapshot_cell(cell);
+		Thermal thermal = thermal_state(table, state); // refreshed after each transform
 		for (size_t r = 0; r < reactions_.size(); ++r) {
 			const Reaction &reaction = reactions_[r];
 			const Kinetics &kinetics = reaction.kinetics();
 			double &remainder = reaction_remainder_[c * reactions_.size() + r];
-			const CellState &state = world_.snapshot_cell(cell);
-			const Thermal thermal = thermal_state(table, state);
-			bool defined = false;
-			const double a = thermal.defined && thermal.temperature > 0.0 ? affinity(table, state, reaction.terms(), thermal.temperature, defined) : 0.0;
 			const int64_t have = state.amount[static_cast<size_t>(kinetics.in.index)];
-			if (!defined || a == 0.0 || a != a || have == 0) {
+			if (have == 0 || !thermal.defined || !(thermal.temperature > 0.0)) {
+				remainder = 0.0;
+				continue;
+			}
+			bool defined = false;
+			const double a = affinity(table, state, reaction.terms(), thermal.temperature, defined);
+			if (!defined || a == 0.0 || a != a) {
 				remainder = 0.0;
 				continue;
 			}
@@ -125,6 +131,7 @@ void Simulation::react() {
 			if (whole != 0) {
 				const Refusal refused = world_.transform(cell, reaction, whole);
 				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+				thermal = thermal_state(table, state);
 			}
 		}
 	}
@@ -215,12 +222,183 @@ void Simulation::conduct_heat() {
 	}
 }
 
+namespace {
+
+// the enthalpy, in quanta, that these amounts carry at temperature T
+Energy carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature) {
+	double joule = 0.0;
+	for (const SpeciesAmount &a : amounts) {
+		const SpeciesDef &def = table.species(a.species);
+		joule += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * (def.hf + def.cp * (temperature - T0));
+	}
+	bool ok = false;
+	return energy_from_joule(joule, ok);
+}
+
+} // namespace
+
+// Gas (GAME_SPEC §6, the demo's subset: every cell at one atmosphere). Gas
+// flow is not a rate: each rigid cell must be exactly full, gas + solids and
+// liquids = its volume. The cells form a tree rooted at the elastic cells
+// (breadth first along the open gas edges, in index order); each rigid cell,
+// deepest first, settles with its parent:
+//
+//   over-full:  it expels the excess fraction of its gas, at its own
+//               composition and temperature (each species rounded up to a
+//               whole quantum). Its temperature does not change, so it is
+//               then exactly full.
+//   under-full: it draws gas of its parent's composition and temperature. The
+//               gas warms or cools on mixing, so the amount is the root of
+//               (n + x) R T(x) / P = free volume, a quadratic. If the
+//               parent holds less than that, it draws all there is and is
+//               marked starved.
+//
+// Moving gas carries its enthalpy, n h(T of the giving cell). A parent is
+// settled after its children, so one sweep leaves every cell full.
+void Simulation::equalise_gas() {
+	const SpeciesTable &table = world_.species();
+	const auto cells = static_cast<size_t>(world_.cell_count());
+	const std::span<const Edge> edges = world_.edges();
+	starved_.assign(cells, 0);
+
+	std::vector<int32_t> depth(cells, -1), parent(cells, -1), parent_edge(cells, -1);
+	std::vector<size_t> queue;
+	for (size_t c = 0; c < cells; ++c) {
+		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
+		if (!m.reservoir && !m.rigid) {
+			depth[c] = 0;
+			queue.push_back(c);
+		}
+	}
+	for (size_t head = 0; head < queue.size(); ++head) {
+		const size_t at = queue[head];
+		for (size_t i = 0; i < edges.size(); ++i) {
+			const Edge &e = edges[i];
+			if (!e.open || (e.phases & PHASES_GAS) == 0) {
+				continue;
+			}
+			const auto a = static_cast<size_t>(e.a.index);
+			const auto b = static_cast<size_t>(e.b.index);
+			if (a != at && b != at) {
+				continue;
+			}
+			const size_t other = a == at ? b : a;
+			if (depth[other] == -1 && !world_.meta(CellId{ static_cast<int32_t>(other) }).reservoir) {
+				depth[other] = depth[at] + 1;
+				parent[other] = static_cast<int32_t>(at);
+				parent_edge[other] = static_cast<int32_t>(i);
+				queue.push_back(other);
+			}
+		}
+	}
+	// the breadth-first order is by depth, then by discovery: settle it backwards
+	for (size_t k = queue.size(); k-- > 0;) {
+		const size_t c = queue[k];
+		const CellId cell{ static_cast<int32_t>(c) };
+		const CellMeta &meta = world_.meta(cell);
+		if (!meta.rigid) {
+			continue;
+		}
+		const CellState &state = world_.snapshot_cell(cell);
+		const Thermal thermal = thermal_state(table, state);
+		if (!thermal.defined || !(thermal.temperature > 0.0)) {
+			continue;
+		}
+		const Fill fill = fill_of(table, state, thermal.temperature);
+		if (!fill.defined) {
+			continue;
+		}
+		const double free = meta.volume - fill.condensed;
+		const double excess = fill.gas - free;
+		const CellId up{ parent[c] };
+		const EdgeId edge{ parent_edge[c] };
+		std::vector<SpeciesAmount> amounts;
+		if (excess > 0.0 && fill.gas > 0.0) {
+			const double fraction = excess < fill.gas ? excess / fill.gas : 1.0;
+			for (size_t s = 0; s < state.amount.size(); ++s) {
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				if (state.amount[s] > 0 && table.species(id).phase == Phase::Gas) {
+					// rounded up: the cell ends a fraction of a quantum under-full,
+					// which no draw can fill, so it is settled in this one step
+					const double share = static_cast<double>(state.amount[s]) * fraction;
+					auto out = static_cast<int64_t>(share);
+					out += static_cast<double>(out) < share ? 1 : 0;
+					amounts.push_back(SpeciesAmount{ id, Amount{ out < state.amount[s] ? out : state.amount[s] } });
+				}
+			}
+			if (!amounts.empty()) {
+				const Refusal refused = world_.transfer(edge, cell, amounts, carried(table, amounts, thermal.temperature));
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+		} else if (-excess > MOL_PER_QUANTUM * GAS_CONSTANT * thermal.temperature / P_ATMOSPHERE) {
+			// under-full by more than one quantum of gas would fill
+			const CellState &source = world_.snapshot_cell(up);
+			const Thermal source_thermal = thermal_state(table, source);
+			if (!source_thermal.defined) {
+				continue;
+			}
+			// the parent's gas, and its heat capacity per mole
+			double source_gas = 0.0, capacity = 0.0;
+			for (size_t s = 0; s < source.amount.size(); ++s) {
+				const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+				if (source.amount[s] > 0 && def.phase == Phase::Gas) {
+					const double mol = static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM;
+					source_gas += mol;
+					capacity += mol * def.cp;
+				}
+			}
+			if (!(source_gas > 0.0)) {
+				starved_[c] = 1;
+				continue;
+			}
+			capacity /= source_gas;
+			// this cell's gas, in mol
+			const double gas = fill.gas * P_ATMOSPHERE / (GAS_CONSTANT * thermal.temperature);
+			// Drawing x mol gives (gas + x) mol at T(x) = (C T + x c Ts) / (C + x c):
+			// the heat capacities weigh the two temperatures. Exactly full when
+			//   (gas + x) (C T + x c Ts) R / P = free (C + x c),
+			// a quadratic in x with one positive root (the cell is under-full).
+			const double g = GAS_CONSTANT / P_ATMOSPHERE;
+			const double ct = thermal.heat_capacity * thermal.temperature;
+			const double cts = capacity * source_thermal.temperature;
+			const double qa = g * cts;
+			const double qb = g * (ct + gas * cts) - free * capacity;
+			const double qc = g * gas * ct - free * thermal.heat_capacity; // < 0
+			const double root = std::sqrt(qb * qb - 4.0 * qa * qc);
+			const double fills = qb >= 0.0 ? 2.0 * qc / (-qb - root) : (-qb + root) / (2.0 * qa);
+			double draw = fills;
+			if (!(fills <= source_gas)) {
+				draw = source_gas; // all there is, and still under-full
+				starved_[c] = 1;
+			}
+			const double fraction = draw / source_gas;
+			for (size_t s = 0; s < source.amount.size(); ++s) {
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				if (source.amount[s] > 0 && table.species(id).phase == Phase::Gas) {
+					const auto in = static_cast<int64_t>(static_cast<double>(source.amount[s]) * fraction);
+					if (in > 0) {
+						amounts.push_back(SpeciesAmount{ id, Amount{ in < source.amount[s] ? in : source.amount[s] } });
+					}
+				}
+			}
+			if (!amounts.empty()) {
+				const Refusal refused = world_.transfer(edge, up, amounts, carried(table, amounts, source_thermal.temperature));
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+		}
+	}
+}
+
 StepTrace Simulation::step() {
 	if (world_.thermal()) {
 		react();
 		conduct_heat();
+		equalise_gas();
 	}
 	StepTrace trace = world_.close_step();
+	if (world_.thermal()) {
+		trace.starved = starved_;
+	}
 	if (checking_) {
 		const Violations violations = check_all(world_.species(), trace);
 		CHEM_ASSERT(violations.empty(), violations.empty() ? "" : violations[0].c_str());

@@ -111,6 +111,9 @@ struct SpeciesRow {
 	chem::Atoms atoms{};
 	bool has_thermo = false;
 	double hf = 0.0, cp = 0.0, s0 = 0.0; // J/mol, J/mol/K, J/mol/K
+	bool wall = false;
+	double density = 0.0; // g/cm^3; 0: none given
+	double molar_volume = 0.0; // m^3/mol, derived
 };
 
 struct ReactionRow {
@@ -173,6 +176,11 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		if (row.phase == nullptr) {
 			fail(species_file, "species " + row.id + ": phase \"" + phase + "\" is not s, l, g or aq");
 		}
+		row.wall = s.value("wall", false);
+		row.density = s.value("density", 0.0);
+		if (row.density < 0.0 || (row.density > 0.0 && (row.phase->phase == chem::Phase::Gas || row.phase->phase == chem::Phase::Aqueous))) {
+			fail(species_file, "species " + row.id + ": a density is positive, and only a solid or a liquid has one");
+		}
 		chemdata::AtomCounts counts;
 		std::string why;
 		if (!chemdata::parse_formula(row.formula, counts, why)) {
@@ -188,8 +196,16 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			}
 			row.atoms[e] = n;
 		}
+		if (row.density > 0.0) {
+			// molar mass (ug/mol -> g/mol) over density (g/cm^3), in m^3/mol
+			int64_t mass_ug = 0;
+			for (size_t e = 0; e < symbols.size(); ++e) {
+				mass_ug += row.atoms[e] * masses[e];
+			}
+			row.molar_volume = static_cast<double>(mass_ug) * 1e-6 / row.density * 1e-6;
+		}
 		const std::string key = row.formula + "(" + phase + ")";
-		if (!by_key.emplace(key, static_cast<int>(species.size())).second) {
+		if (!row.wall && !by_key.emplace(key, static_cast<int>(species.size())).second) {
 			fail(species_file, "species " + key + " is listed twice");
 		}
 		species.push_back(row);
@@ -202,7 +218,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 	std::vector<chem::SpeciesDef> species_defs;
 	for (const SpeciesRow &row : species) {
-		species_defs.push_back(chem::SpeciesDef{ row.id, row.formula, row.phase->phase, row.charge, row.atoms, row.has_thermo, row.hf, row.cp, row.s0 });
+		species_defs.push_back(chem::SpeciesDef{ row.id, row.formula, row.phase->phase, row.charge, row.atoms, row.has_thermo, row.hf, row.cp, row.s0, row.wall,
+				row.molar_volume });
 	}
 	std::string why;
 	const std::optional<chem::SpeciesTable> table = chem::SpeciesTable::make(element_defs, species_defs, &why);
@@ -275,8 +292,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			cpp << row.atoms[e] << (e + 1 < symbols.size() ? ", " : "");
 		}
 		// 17 significant digits: the double the data file's number rounds to, exactly
-		char thermo[128];
-		std::snprintf(thermo, sizeof thermo, ", %s, %.17g, %.17g, %.17g", row.has_thermo ? "true" : "false", row.hf, row.cp, row.s0);
+		char thermo[200];
+		std::snprintf(thermo, sizeof thermo, ", %s, %.17g, %.17g, %.17g, %s, %.17g", row.has_thermo ? "true" : "false", row.hf, row.cp, row.s0,
+				row.wall ? "true" : "false", row.molar_volume);
 		cpp << " } }" << thermo << " },\n";
 	}
 	cpp << "};\n\nconstexpr ReactionDef REACTIONS[] = {\n";
