@@ -69,6 +69,26 @@ Violations check_C7(const SpeciesTable &table, const StepTrace &trace);
 // C8. A transform's change is balanced in every element and in charge.
 Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
 
+// The thermal invariants: they apply to a trace of a world with temperatures
+// (trace.thermal), and return nothing otherwise.
+
+// T1. Heat flows from the hotter cell to the colder: for every transfer of
+// energy alone, energy * (T_from - T_to) >= 0, with the temperatures the cells
+// had when it was applied (the ledger replayed from the step's start).
+Violations check_T1(const SpeciesTable &table, const StepTrace &trace);
+// T2. The world's entropy does not decrease: the sum over the cells that
+// changed of (S_after - S_before) >= -(1e-9 J/K + 4e-16 * the sum of their |S|),
+// the bound of the float64 rounding in the sum.
+Violations check_T2(const SpeciesTable &table, const StepTrace &trace);
+// T3. Every cell has a temperature: thermodynamic data for every species it
+// holds, a positive heat capacity, and T > 0.
+Violations check_T3(const SpeciesTable &table, const StepTrace &trace);
+// S1. No NaN or infinity: every temperature and entropy of the trace is finite.
+Violations check_S1(const SpeciesTable &table, const StepTrace &trace);
+
+// The change of the world's entropy over the step, in J/K (what T2 bounds).
+double entropy_change(const SpeciesTable &table, const StepTrace &trace);
+
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
 Violations check_all(const SpeciesTable &table, const StepTrace &trace);

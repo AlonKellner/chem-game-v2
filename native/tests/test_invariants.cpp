@@ -1,7 +1,9 @@
 // The invariant kernel witnesses what the primitives guarantee (GAME_SPEC §18).
 // Each check is shown to fire on a trace corrupted in the way it exists to catch,
 // and to stay silent on the corruptions that are another check's.
+#include "chem/builtin_ids.hpp"
 #include "chem/invariants.hpp"
+#include "chem/sim.hpp"
 
 #include <doctest/doctest.h>
 
@@ -213,4 +215,89 @@ TEST_CASE("invariants: the mass total is exact past 64 bits (Stage 1)") {
 	ExactMass off = parts;
 	off.add(1, 1); // one quantum of the lightest thing is seen
 	CHECK_FALSE(off == big);
+}
+
+// ------------------------------------------------------------------ thermal
+
+namespace {
+
+// One honest thermal step: hot water (cell 0) warms cold water (cell 1) and the room (cell 2).
+StepTrace clean_thermal() {
+	bool ok = false;
+	World::Builder b(builtin_species());
+	const CellId hot = b.add_cell("hot");
+	const CellId cold = b.add_cell("cold");
+	const CellId room = b.add_reservoir("room", 293.15);
+	b.add_edge(hot, cold, PHASES_NONE, 5.0);
+	b.add_edge(hot, room, PHASES_NONE, 1.0);
+	b.set_amount(hot, builtin::water, amount_from_mol(1.0, ok)).set_temperature(hot, 360.0);
+	b.set_amount(cold, builtin::water, amount_from_mol(1.0, ok)).set_temperature(cold, 300.0);
+	auto world = b.build();
+	REQUIRE(world.has_value());
+	Simulation sim(std::move(*world));
+	return sim.step();
+}
+
+} // namespace
+
+TEST_CASE("invariants: an honest thermal step violates nothing (Stage 2)") {
+	const StepTrace t = clean_thermal();
+	REQUIRE(t.thermal);
+	REQUIRE(t.ledger.size() == 2);
+	const Violations v = check_all(builtin_species(), t);
+	CHECK_MESSAGE(v.empty(), (v.empty() ? "" : v[0]));
+	CHECK(entropy_change(builtin_species(), t) > 0.0);
+}
+
+TEST_CASE("invariants: heat flowing uphill is detected though energy is conserved: T1, T2 (Stage 2)") {
+	StepTrace t = clean_thermal();
+	// the first entry reversed, in the ledger and in the state: cold water heats hot water
+	const int64_t q = t.ledger[0].energy.quanta;
+	REQUIRE(q > 0);
+	t.ledger[0].energy.quanta = -q;
+	t.after.cells[0].energy += 2 * q;
+	t.after.cells[1].energy -= 2 * q;
+	const Violations v = check_all(builtin_species(), t);
+	CHECK(has(v, "T1"));
+	CHECK(has(v, "T2"));
+	CHECK_FALSE(has(v, "C3"));
+	CHECK_FALSE(has(v, "C5"));
+}
+
+TEST_CASE("invariants: entropy destroyed outside the ledger is detected: T2 (Stage 2)") {
+	StepTrace t = clean_thermal();
+	t.after.cells[0].energy += 500000000000; // 500 J from the cold cell to the hot one, unrecorded
+	t.after.cells[1].energy -= 500000000000;
+	const Violations v = check_all(builtin_species(), t);
+	CHECK(has(v, "T2"));
+	CHECK(has(v, "C5"));
+	CHECK_FALSE(has(v, "T1")); // every recorded transfer ran downhill
+	CHECK_FALSE(has(v, "C3"));
+}
+
+TEST_CASE("invariants: a cell without a temperature is detected: T3 (Stage 2)") {
+	{
+		StepTrace t = clean_thermal(); // a species without thermodynamic data appears
+		t.after.cells[1].amount[static_cast<size_t>(builtin::malachite.index)] = 1000;
+		CHECK(has(check_all(builtin_species(), t), "T3"));
+	}
+	{
+		StepTrace t = clean_thermal(); // a cell emptied: no heat capacity
+		t.after.cells[1].amount[static_cast<size_t>(builtin::water.index)] = 0;
+		CHECK(has(check_all(builtin_species(), t), "T3"));
+	}
+	{
+		StepTrace t = clean_thermal(); // far below absolute zero
+		t.after.cells[1].energy -= 1000000000000000;
+		CHECK(has(check_all(builtin_species(), t), "T3"));
+	}
+}
+
+TEST_CASE("invariants: a value that is not finite is detected: S1 (Stage 2)") {
+	StepTrace t = clean_thermal();
+	t.meta[2].reservoir_temperature = std::numeric_limits<double>::infinity();
+	CHECK(has(check_all(builtin_species(), t), "S1"));
+	StepTrace u = clean_thermal();
+	u.meta.pop_back(); // and a thermal trace without its cells' kinds is malformed
+	CHECK(has(check_all(builtin_species(), u), "SHAPE"));
 }

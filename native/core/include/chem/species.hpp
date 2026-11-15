@@ -44,6 +44,13 @@ struct SpeciesDef {
 	Phase phase = Phase::Solid;
 	int32_t charge = 0;
 	Atoms atoms{}; // count of each of the table's elements
+	// Thermodynamic data at 298.15 K and 1 bar (GAME_SPEC §4.1), present only
+	// once verified (docs/DATA_SOURCES.md). Without it the species cannot be
+	// in a cell that has a temperature.
+	bool has_thermo = false;
+	double hf = 0.0; // standard enthalpy of formation, J/mol
+	double cp = 0.0; // molar heat capacity, J/mol/K (constant)
+	double s0 = 0.0; // standard entropy, J/mol/K
 };
 
 struct SpeciesId {
@@ -107,7 +114,8 @@ public:
 	// Refuses (nullopt, the reason in *why): no or too many elements, a repeated
 	// symbol or id, a non-positive atomic mass, a negative atom count, a count
 	// for an element the table does not have, a species with no atoms, a molar
-	// mass of 2^30 ug/mol (about 1074 g/mol) or more.
+	// mass of 2^30 ug/mol (about 1074 g/mol) or more, thermodynamic data that
+	// is not finite.
 	static std::optional<SpeciesTable> make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why = nullptr);
 
 	int element_count() const { return static_cast<int>(elements_.size()); }

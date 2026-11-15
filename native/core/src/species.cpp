@@ -70,6 +70,12 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "species " + name + " has no atoms");
 			return std::nullopt;
 		}
+		for (const double v : { s.hf, s.cp, s.s0 }) {
+			if (s.has_thermo && !(v - v == 0.0)) {
+				set_why(why, "species " + name + " has thermodynamic data that is not finite");
+				return std::nullopt;
+			}
+		}
 		table.molar_mass_.push_back(mass);
 	}
 	table.elements_ = std::move(elements);

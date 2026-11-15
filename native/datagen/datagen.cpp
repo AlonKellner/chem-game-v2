@@ -109,6 +109,8 @@ struct SpeciesRow {
 	const PhaseName *phase = nullptr;
 	int charge = 0;
 	chem::Atoms atoms{};
+	bool has_thermo = false;
+	double hf = 0.0, cp = 0.0, s0 = 0.0; // J/mol, J/mol/K, J/mol/K
 };
 
 struct ReactionRow {
@@ -151,6 +153,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		row.id = s.at("id").get<std::string>();
 		row.formula = s.at("formula").get<std::string>();
 		row.charge = s.value("charge", 0);
+		if (s.contains("thermo")) {
+			const json &t = s.at("thermo");
+			row.has_thermo = true;
+			row.hf = t.at("hf_kj").get<double>() * 1000.0;
+			row.cp = t.at("cp").get<double>();
+			row.s0 = t.at("s0").get<double>();
+		}
 		if (!is_identifier(row.id)) {
 			fail(species_file, "species id \"" + row.id + "\" is not a lower-case identifier");
 		}
@@ -192,7 +201,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 	std::vector<chem::SpeciesDef> species_defs;
 	for (const SpeciesRow &row : species) {
-		species_defs.push_back(chem::SpeciesDef{ row.id, row.formula, row.phase->phase, row.charge, row.atoms });
+		species_defs.push_back(chem::SpeciesDef{ row.id, row.formula, row.phase->phase, row.charge, row.atoms, row.has_thermo, row.hf, row.cp, row.s0 });
 	}
 	std::string why;
 	const std::optional<chem::SpeciesTable> table = chem::SpeciesTable::make(element_defs, species_defs, &why);
@@ -250,7 +259,10 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t e = 0; e < symbols.size(); ++e) {
 			cpp << row.atoms[e] << (e + 1 < symbols.size() ? ", " : "");
 		}
-		cpp << " } } },\n";
+		// 17 significant digits: the double the data file's number rounds to, exactly
+		char thermo[128];
+		std::snprintf(thermo, sizeof thermo, ", %s, %.17g, %.17g, %.17g", row.has_thermo ? "true" : "false", row.hf, row.cp, row.s0);
+		cpp << " } }" << thermo << " },\n";
 	}
 	cpp << "};\n\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {

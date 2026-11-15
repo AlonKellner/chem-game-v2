@@ -112,7 +112,7 @@ chem_apply_flags(chem_capi_shared)
 # the headless host, on the C API alone
 file(GLOB CHEM_TOOL_SOURCES CONFIGURE_DEPENDS hosts/headless/*.cpp)
 add_executable(chem_tool ${CHEM_TOOL_SOURCES})
-target_link_libraries(chem_tool PRIVATE chem_capi)
+target_link_libraries(chem_tool PRIVATE chem_capi chem_lab) # the studies drive the core directly
 chem_apply_flags(chem_tool)
 
 # ---------------------------------------------------------------------- chem_gd
@@ -189,6 +189,7 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME capi_c_smoke COMMAND capi_c_smoke)
     add_test(NAME chem_tool_version COMMAND chem_tool version)
     add_test(NAME chem_tool_tables COMMAND chem_tool tables)
+    add_test(NAME chem_tool_study_cooling COMMAND chem_tool study cooling)
 
     # The engine-free layers name no game engine.
     foreach(layer core game capi hosts/headless)
