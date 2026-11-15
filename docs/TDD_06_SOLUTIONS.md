@@ -19,7 +19,7 @@ The crystals' state is tracked: how many, and how large.
 | 6.5 | Reactions: the oxide's dissolution, crystallisation, one-step dehydration | Done |
 | 6.6 | Invariants X1 and X2 with self-tests; the solubility oracle | Done |
 | 6.7 | `chem_tool study dissolution` and `study crystals`; calibration | Done |
-| 6.8 | The user's sign-off | Pending |
+| 6.8 | The user's sign-off | Done (2026-11-16: "Approved, proceed") |
 
 ## Decisions
 
