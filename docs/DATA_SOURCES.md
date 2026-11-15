@@ -28,10 +28,26 @@ These rows are in `data/species.json` and used by the game. Sources:
 | O2(g) | 0 | 205.152 ± 0.005 | 29.383 | NIST: CODATA; Cp from the fit (100–700 K) |
 | CuO(s) | −156.06 | 42.59 | 42.246 | NIST: Chase; Cp from the fit (298–2000 K) |
 | CuSO4(s) | −771.4 ± 1.2 | 109.2 ± 0.4 | 98.531 | NIST: CODATA (Chase lists −769.98 and 109.05); Cp from Chase's fit (298–2000 K) |
+| Cu2CO3(OH)2(s), malachite | −1053.95 ± 2.1 | 166.3 ± 2.5 | 154.3 ± 0.93 | ΔHf°: Richardson and Brown, *Enthalpy of Formation of Malachite*, U.S. Bureau of Mines RI 7851, 1974 (−251.9 ± 0.5 kcal/mol, HCl solution calorimetry). S° and Cp: Kiseleva, Ogorodova, Melchakova, Bisengalieva and Becturganov, Phys. Chem. Minerals 19, 322–333, 1992 (adiabatic calorimetry, 3.8–300 K) |
 | Glass, as SiO2 | −910.86 | 41.46 | 48.066 | ΔHf° and S° are quartz's (NIST: Chase; S° from its fit), a stand-in: the wall never reacts, so they cancel. Cp is ISO 3585's 0.8 kJ/kg·K × 60.083 g/mol |
 
 Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
 compilation's value); glass Cp is 48.07 (the draft guessed about 50).
+
+Malachite's sources disagree on the enthalpy of formation from the oxides: −63.2 kJ/mol
+(Richardson and Brown, used here) against −52.5 ± 5.9 (Kiseleva et al., oxide-melt calorimetry).
+The difference moves the temperature above which decomposition is spontaneous by about 30 K and
+does not change the demo.
+
+## Verified kinetics
+
+| Reaction | Law | Parameters | Source |
+|---|---|---|---|
+| Malachite decomposition | first order in malachite | Ea = 150 kJ/mol; prefactor 4.7e10 /s | Order about one and Ea 131–159 kJ/mol (31.4–38.1 kcal/mol) from thermogravimetry: *Canadian Mineralogist* 13, 127 (rruff.info/uploads/CM13_127.pdf). Ea is taken inside that range. **The prefactor is calibrated for play**, not measured: it gives rate constants of 1e-3 /s at 300 °C and 1.3e-2 /s at 350 °C, so 5 g decomposes in minutes over a burner |
+
+**Oracle checked in Stage 3:** from the table the decomposition absorbs 106.5 kJ/mol and makes
+321.5 J/mol·K, so it is spontaneous above about 58 °C with both gases at 1 bar: stable on the
+shelf, unstable well below red heat, as observed.
 
 **Oracle checked in Stage 2:** water's heat of vaporisation at 25 °C from the table,
 44.004 kJ/mol, against CODATA's 43.99 ± 0.07.
@@ -50,14 +66,13 @@ recall is uncertain), **low** (estimate or game calibration).
 
 | Species | M (g/mol) | ΔHf° (kJ/mol) | Cp (J/mol·K) | S° (J/mol·K) | ρ (g/cm³) | Confidence | Needed by |
 |---|---|---|---|---|---|---|---|
-| Cu2CO3(OH)2(s), malachite | 221.114 | −1054.0 (older tables −1051.4) | 154.3 | 166.3 (older 186.2) | 4.0 | medium | Stage 3 |
 | H2SO4(aq) | 98.072 | −909.3 (fully ionised) | to be chosen so 1 M solution is about 3.9 J/g·K | 20.1 | 1.060 (1 M solution) | H high; Cp, S low | Stage 6 |
 | CuSO4(aq) | 159.602 | −844.5 (infinite dilution); effective value fitted to solubility, about −836.5 | to be fitted | −79.5 (infinite dilution); effective value fitted | n/a | H medium; rest low | Stage 6 |
 | CuSO4·5H2O(s) | 249.677 | −2279.7 | 280 | 300.4 | 2.286 | high | Stage 6 |
 | CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | Stage 6 |
 | CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | Stage 6 |
 
-Densities of the verified species (CuO 6.31, CuSO4 3.60, water 0.997 g/cm³) are also unverified;
+Densities of the verified species (malachite 4.0, CuO 6.31, CuSO4 3.60, water 0.997 g/cm³) are also unverified;
 Stage 4 needs them.
 
 ### Oracles (test references, never inputs)
@@ -80,7 +95,6 @@ about 95.9 °C. Confidence medium.
 
 | Process | Form | Parameters | Confidence |
 |---|---|---|---|
-| Malachite decomposition | first order, Arrhenius | Ea = 150 kJ/mol (literature spans about 100–210), A = 4.7e10 /s | low |
 | CuO dissolution in dilute H2SO4 | `k(T) · f_stir · (c_acid / 1 M) · n0^(1/3) n^(2/3)` | Ea about 50 kJ/mol, k(25 °C) = 2e-3 /s, f_stir about 3 | low |
 
 ### Optics

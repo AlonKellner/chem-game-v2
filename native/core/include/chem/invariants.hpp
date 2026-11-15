@@ -72,9 +72,11 @@ Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
 // The thermal invariants: they apply to a trace of a world with temperatures
 // (trace.thermal), and return nothing otherwise.
 
-// T1. Heat flows from the hotter cell to the colder: for every transfer of
-// energy alone, energy * (T_from - T_to) >= 0, with the temperatures the cells
-// had when it was applied (the ledger replayed from the step's start).
+// T1. Every process runs down its own driving force, as the cells were when
+// it was applied (the ledger replayed from the step's start). Heat flows from
+// the hotter cell to the colder: for a transfer of energy alone,
+// energy * (T_from - T_to) > 0. A reaction advances only while its affinity
+// is positive and retreats only while it is negative: extent * A > 0.
 Violations check_T1(const SpeciesTable &table, const StepTrace &trace);
 // T2. The world's entropy does not decrease: the sum over the cells that
 // changed of (S_after - S_before) >= -(1e-9 J/K + 4e-16 * the sum of their |S|),

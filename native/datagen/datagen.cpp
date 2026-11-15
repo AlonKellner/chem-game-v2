@@ -116,6 +116,7 @@ struct SpeciesRow {
 struct ReactionRow {
 	std::string id;
 	std::vector<chem::Term> terms;
+	chem::Kinetics kinetics{};
 };
 
 std::string quoted(const std::string &s) {
@@ -236,7 +237,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			}
 			row.terms.push_back(chem::Term{ chem::SpeciesId{ found->second }, t.nu });
 		}
-		if (!chem::Reaction::make(*table, row.id, row.terms, &why)) {
+		if (r.contains("kinetics")) {
+			const json &k = r.at("kinetics");
+			if (k.at("law").get<std::string>() != "first_order") {
+				fail(reactions_file, "reaction " + row.id + ": the only kinetics law is first_order");
+			}
+			const auto found = by_key.find(k.at("in").get<std::string>());
+			if (found == by_key.end()) {
+				fail(reactions_file, "reaction " + row.id + ": kinetics names a species that is not in species.json");
+			}
+			row.kinetics.law = chem::Kinetics::Law::FirstOrder;
+			row.kinetics.in = chem::SpeciesId{ found->second };
+			row.kinetics.prefactor = k.at("prefactor").get<double>();
+			row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+		}
+		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
 			fail(reactions_file, "\"" + equation + "\": " + why);
 		}
 		reactions.push_back(row);
@@ -270,7 +285,11 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < row.terms.size(); ++i) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
-		cpp << " } }, " << row.terms.size() << " },\n";
+		char kinetics[160];
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g }",
+				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder" : "Kinetics::Law::None", row.kinetics.in.index,
+				row.kinetics.prefactor, row.kinetics.activation);
+		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
 	cpp << "};\n\n"
 		<< "// The compiler's own proof, independent of the generator's: no build holds an\n"
@@ -293,7 +312,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\t\tfor (const ReactionDef &def : REACTIONS) {\n"
 		<< "\t\t\tstd::string why;\n"
 		<< "\t\t\tstd::optional<Reaction> r = Reaction::make(builtin_species(), def.id,\n"
-		<< "\t\t\t\t\tstd::span<const Term>(def.terms.data(), static_cast<size_t>(def.term_count)), &why);\n"
+		<< "\t\t\t\t\tstd::span<const Term>(def.terms.data(), static_cast<size_t>(def.term_count)), &why, def.kinetics);\n"
 		<< "\t\t\tif (!r) {\n\t\t\t\tbroken(why);\n\t\t\t}\n"
 		<< "\t\t\tmade.push_back(*r);\n\t\t}\n"
 		<< "\t\treturn made;\n\t}();\n\treturn reactions;\n}\n\n"

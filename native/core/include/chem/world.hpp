@@ -70,6 +70,7 @@ struct LedgerEntry {
 	// Transform: the change of each species (signed: nu * extent).
 	std::vector<SpeciesAmount> delta;
 	Energy energy; // Transfer: the energy moved from -> to (signed)
+	int64_t extent = 0; // Transform: the extent applied (delta = nu * extent)
 };
 
 // One step as the invariants see it (chem/invariants.hpp).

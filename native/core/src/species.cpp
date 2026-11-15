@@ -92,7 +92,16 @@ SpeciesId SpeciesTable::find(std::string_view id) const {
 	return SpeciesId{};
 }
 
-std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why) {
+int32_t Reaction::nu(SpeciesId s) const {
+	for (const Term &t : terms()) {
+		if (t.species == s) {
+			return t.nu;
+		}
+	}
+	return 0;
+}
+
+std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why, Kinetics kinetics) {
 	const std::string name(id);
 	if (terms.empty() || terms.size() > static_cast<size_t>(MAX_TERMS)) {
 		set_why(why, "reaction " + name + " has 1 to " + std::to_string(MAX_TERMS) + " terms");
@@ -126,8 +135,24 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 		set_why(why, "reaction " + name + " does not balance in every element and in charge");
 		return std::nullopt;
 	}
+	if (kinetics.law == Kinetics::Law::FirstOrder) {
+		bool is_reactant = false;
+		for (const Term &t : terms) {
+			is_reactant = is_reactant || (t.species == kinetics.in && t.nu < 0);
+		}
+		if (!is_reactant) {
+			set_why(why, "reaction " + name + ": the species its rate is first order in is not one of its reactants");
+			return std::nullopt;
+		}
+		const bool finite = kinetics.prefactor - kinetics.prefactor == 0.0 && kinetics.activation - kinetics.activation == 0.0;
+		if (!finite || !(kinetics.prefactor > 0.0) || kinetics.activation < 0.0) {
+			set_why(why, "reaction " + name + ": a prefactor is positive, an activation energy is not negative, both are finite");
+			return std::nullopt;
+		}
+	}
 	Reaction r;
 	r.table_ = &table;
+	r.kinetics_ = kinetics;
 	r.id_ = name;
 	for (size_t i = 0; i < terms.size(); ++i) {
 		r.terms_[i] = terms[i];

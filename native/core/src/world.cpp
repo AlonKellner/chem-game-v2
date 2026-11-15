@@ -282,7 +282,7 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 	}
 	src.energy -= energy.quanta;
 	dst.energy += energy.quanta;
-	ledger_.push_back(LedgerEntry{ LedgerEntry::Kind::Transfer, edge, from, to, std::move(moved), energy });
+	ledger_.push_back(LedgerEntry{ LedgerEntry::Kind::Transfer, edge, from, to, std::move(moved), energy, 0 });
 	return Refusal::None;
 }
 
@@ -319,7 +319,7 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 	for (const SpeciesAmount &d : delta) {
 		state.amount[static_cast<size_t>(d.species.index)] += d.amount.quanta;
 	}
-	ledger_.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, cell, CellId{}, std::move(delta), Energy{} });
+	ledger_.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, cell, CellId{}, std::move(delta), Energy{}, extent });
 	return Refusal::None;
 }
 

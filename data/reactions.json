@@ -1,8 +1,8 @@
 {
 	"format": "chem-reactions/1",
-	"note": "Structure only (Stage 1): balanced equations over data/species.json. An equation that does not balance in every element and in charge fails the build. Rate laws enter with Stages 3-6.",
+	"note": "Balanced equations over data/species.json: one that does not balance in every element and in charge fails the build. kinetics (GAME_SPEC §7): law first_order: rate = prefactor * exp(-activation / RT) * amount of `in` * affinity factor; prefactor in 1/s, activation_kj in kJ/mol. A reaction without kinetics does not run on its own. Sources: docs/DATA_SOURCES.md.",
 	"reactions": [
-		{"id": "malachite_decomposition", "equation": "Cu2CO3(OH)2(s) -> 2 CuO(s) + CO2(g) + H2O(g)"},
+		{"id": "malachite_decomposition", "equation": "Cu2CO3(OH)2(s) -> 2 CuO(s) + CO2(g) + H2O(g)", "kinetics": {"law": "first_order", "in": "Cu2CO3(OH)2(s)", "prefactor": 4.7e10, "activation_kj": 150}},
 		{"id": "copper_oxide_dissolution", "equation": "CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)"},
 		{"id": "water_vaporization", "equation": "H2O(l) -> H2O(g)"},
 		{"id": "pentahydrate_crystallization", "equation": "CuSO4(aq) + 5 H2O(l) -> CuSO4.5H2O(s)"},

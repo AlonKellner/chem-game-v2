@@ -14,7 +14,8 @@ int usage() {
 	std::fprintf(stderr, "usage: chem_tool <command>\n"
 						 "  version    the build's name and the C API version\n"
 						 "  tables     the built-in species and reactions\n"
-						 "  study cooling   a flask cooling in a room, against Newton's law\n");
+						 "  study cooling         a flask cooling in a room, against Newton's law\n"
+						 "  study decomposition   malachite in a flask over a flame\n");
 	return 2;
 }
 

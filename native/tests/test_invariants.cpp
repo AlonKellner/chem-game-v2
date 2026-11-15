@@ -107,7 +107,7 @@ TEST_CASE("invariants: matter moved outside the primitives is detected by the le
 TEST_CASE("invariants: a created charge is detected though every atom balances: C4, C8 (Stage 1)") {
 	StepTrace t = clean();
 	// x -> x+ in A, recorded in the ledger and in the state: no atom is created
-	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, A, CellId{}, { { X, Amount{ -1 } }, { X_PLUS, Amount{ 1 } } }, Energy{} });
+	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, A, CellId{}, { { X, Amount{ -1 } }, { X_PLUS, Amount{ 1 } } }, Energy{}, 1 });
 	amount(t.after, A, X) -= 1;
 	amount(t.after, A, X_PLUS) += 1;
 	const Violations v = check_all(table(), t);
@@ -119,7 +119,7 @@ TEST_CASE("invariants: a created charge is detected though every atom balances: 
 
 TEST_CASE("invariants: an unbalanced transform is detected even when recorded: C8, C1 (Stage 1)") {
 	StepTrace t = clean();
-	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, A, CellId{}, { { X, Amount{ -1 } } }, Energy{} });
+	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, A, CellId{}, { { X, Amount{ -1 } } }, Energy{}, 1 });
 	amount(t.after, A, X) -= 1;
 	const Violations v = check_all(table(), t);
 	CHECK(has(v, "C8"));
@@ -130,7 +130,7 @@ TEST_CASE("invariants: an unbalanced transform is detected even when recorded: C
 TEST_CASE("invariants: a negative amount is detected: C6 (Stage 1)") {
 	StepTrace t = clean();
 	// 200 x from A to B, recorded, though A holds 95: the totals and the ledger agree
-	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transfer, EdgeId{ 0 }, A, B, { { X, Amount{ 200 } } }, Energy{} });
+	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transfer, EdgeId{ 0 }, A, B, { { X, Amount{ 200 } } }, Energy{}, 0 });
 	amount(t.after, A, X) -= 200;
 	amount(t.after, B, X) += 200;
 	const Violations v = check_all(table(), t);
@@ -278,7 +278,7 @@ TEST_CASE("invariants: entropy destroyed outside the ledger is detected: T2 (Sta
 TEST_CASE("invariants: a cell without a temperature is detected: T3 (Stage 2)") {
 	{
 		StepTrace t = clean_thermal(); // a species without thermodynamic data appears
-		t.after.cells[1].amount[static_cast<size_t>(builtin::malachite.index)] = 1000;
+		t.after.cells[1].amount[static_cast<size_t>(builtin::copper_sulfate_pentahydrate.index)] = 1000;
 		CHECK(has(check_all(builtin_species(), t), "T3"));
 	}
 	{

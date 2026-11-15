@@ -341,6 +341,30 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				}
 			}
 		}
+		if (!transfer && entry.extent != 0 && !trace.meta[from].reservoir) {
+			// the reaction's numbers back from its change: nu = delta / extent
+			std::array<Term, MAX_TERMS> terms{};
+			size_t count = 0;
+			bool whole = entry.delta.size() <= terms.size();
+			for (const SpeciesAmount &d : entry.delta) {
+				if (!whole || !table.has(d.species) || d.amount.quanta % entry.extent != 0) {
+					whole = false;
+					break;
+				}
+				terms[count++] = Term{ d.species, static_cast<int32_t>(d.amount.quanta / entry.extent) };
+			}
+			const Thermal thermal = thermal_state(table, replay.cells[from]);
+			if (whole && thermal.defined && thermal.temperature > 0.0) {
+				bool defined = false;
+				const double a = affinity(table, replay.cells[from], std::span<const Term>(terms.data(), count), thermal.temperature, defined);
+				if (defined && !((entry.extent > 0 && a > 0.0) || (entry.extent < 0 && a < 0.0)) && out.size() < MAX_MESSAGES) {
+					char buffer[200];
+					std::snprintf(buffer, sizeof buffer, "T1: step %lld: transform %lld runs %lld quanta against an affinity of %.6g J/mol at %.6g K",
+							static_cast<long long>(trace.step), static_cast<long long>(i), static_cast<long long>(entry.extent), a, thermal.temperature);
+					out.push_back(buffer);
+				}
+			}
+		}
 		// replay the entry
 		for (const SpeciesAmount &d : entry.delta) {
 			if (!table.has(d.species)) {
