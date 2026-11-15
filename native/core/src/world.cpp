@@ -124,6 +124,28 @@ EdgeId World::Builder::add_drain(CellId from, CellId to) {
 	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 }
 
+EdgeId World::Builder::add_edge_as(const Edge &edge) {
+	edges_.push_back(edge);
+	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+}
+
+World::Builder &World::Builder::set_spill(CellId cell) {
+	spill_ = cell;
+	return *this;
+}
+
+World::Builder &World::Builder::set_mixing(CellId cell, double mixing) {
+	if (cell.index >= 0 && static_cast<size_t>(cell.index) < meta_.size()) {
+		meta_[static_cast<size_t>(cell.index)].mixing = mixing;
+	}
+	return *this;
+}
+
+World::Builder &World::Builder::set_step(uint64_t step) {
+	step_ = step;
+	return *this;
+}
+
 World::Builder &World::Builder::set_temperature(CellId cell, double temperature) {
 	temperatures_.push_back(SetTemperature{ cell, temperature });
 	return *this;
@@ -275,6 +297,18 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	if (!sealed_cells(meta_, edges_).empty()) {
 		return refuse("a rigid cell has no gas path to an elastic cell");
 	}
+	if (spill_.index >= 0) {
+		if (!known_cell(spill_) || meta_[static_cast<size_t>(spill_.index)].rigid || meta_[static_cast<size_t>(spill_.index)].reservoir) {
+			return refuse("what overflows goes into an elastic cell");
+		}
+		world.spill_ = spill_;
+	}
+	for (const CellMeta &m : meta_) {
+		if (!good_conductance(m.mixing)) {
+			return refuse("a cell's mixing is negative or not finite");
+		}
+	}
+	world.step_ = step_;
 	// The totals fit the integer range now, so they fit it forever: the
 	// primitives never change them.
 	if (!totals_fit(*table_, Snapshot{ world.cells_ })) {
@@ -509,6 +543,7 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, doubl
 		return Refusal::SameCell;
 	}
 	edges_.push_back(Edge{ a, b, phases, true, conductance });
+	++topology_version_;
 	if (made != nullptr) {
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 	}
@@ -540,6 +575,7 @@ Refusal World::disconnect(EdgeId edge) {
 		edges_[static_cast<size_t>(edge.index)].open = true;
 		return Refusal::WouldSeal;
 	}
+	++topology_version_;
 	return Refusal::None;
 }
 

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.8.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.9.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -310,7 +310,12 @@ conductance. Each step, after the reactions and the heat:
 
 **Drains.** A drain is a liquid edge with a direction (a condenser's outlet over a beaker). Each
 step all of the upper cell's liquid, with what is dissolved in it, runs into the lower cell,
-carrying its enthalpy. A rigid lower cell takes only what fits; the rest stays above.
+carrying its enthalpy.
+
+**Overflow.** A world may name one elastic cell where spills go (the bench's tray). A rigid cell
+that holds more solids and liquids than its volume then spills the excess of its liquid, with
+what is dissolved in it, into that cell, at the end of the step: it is left full to the brim. In
+a world with no such cell, a drain gives a rigid cell only what fits and the rest stays above.
 
 **No rigid cell is ever sealed:** each must have a gas path to an elastic cell. A world that breaks
 this is refused when built, and a disconnection that would break it is refused (`WouldSeal`).
@@ -322,9 +327,8 @@ that is a partial vacuum; the demo's subset has no pressure below 1 atm to give 
 treated as at 1 atm. A cell is never left over-full.
 
 Pouring and dripping are kinematic (no rate, no gravitational energy).
-**Status:** Stage 4 implements the demo subset for gas, Stage 5 the drains. A balloon's capacity
-and bursting, pouring, and overflow into the spill tray come with the equipment
-(*PLANNED, Stage 8*): until then a rigid cell that receives more liquid than it holds violates V2.
+**Status:** Stage 4 implements the demo subset for gas, Stage 5 the drains, Stage 7 pouring,
+Stage 8 overflow and the balloon's capacity (§13).
 
 ## 7. Chemical kinetics
 
@@ -537,24 +541,32 @@ destroyed in play. Items:
 
 - **vessel:** a rigid cell with a volume, a wall and a heat loss to the room. It starts open to
   the room's air and full of it. One with a `coolant` is a condenser.
-- **balloon:** an elastic cell with a wall.
+- **balloon:** an elastic cell with a wall, and a capacity.
 - **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
+- **the tray:** the bench's own, under everything: where what overflows goes (§6).
+
+**Places.** The bench is a grid. An item is in the cabinet, on the bench at a grid cell (one
+item to a cell), on a vessel's mouth, under a vessel (a burner), or in the outbox. Equipment is
+used on the bench: a command on an item still in the cabinet, or handed in, is refused. A bench
+file gives each item its cell (`at`), or leaves it in the cabinet.
 
 **Commands** are JSON objects with a `do`. They are everything a player can do; a host maps
 input to them, and a session script is a list of them.
 
 | `do` | Fields | Effect |
 |---|---|---|
+| `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it; refused where something stands, off the grid, or while the item is joined to another |
+| `stow` | `item` | back into the cabinet |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel (its valve as it is) |
-| `unheat` | `burner` | takes it away |
+| `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
 | `pour` | `from`, `to`, `ml` or `all` | moves liquid, with what is dissolved in it in proportion, and its enthalpy |
 | `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
-| `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth: a gas connection, and the mouth closed to the room |
-| `detach` | `item` | takes it off: the vessel's mouth open to the room again; a balloon is then sealed |
+| `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
+| `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6) |
-| `submit` | `item` | marks it handed in; it must not be joined to anything |
+| `submit` | `item` | hands it in, to the outbox; it must not be joined to anything. A burner under it stays on the bench |
 | `wait` | `seconds` | advances time |
 | `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; fails at the timeout |
 
@@ -564,7 +576,15 @@ input to them, and a session script is a list of them.
   changes connections takes effect at a step boundary, so it first takes the lab to the end of a
   step in progress (at most one step, 1/60 s).
 - **Pouring and tipping are instantaneous**, along a handling connection that passes liquid and
-  solid and never gas.
+  solid and never gas. They leave a step in progress, so a change of connections after one takes
+  the lab to that step's end first.
+- **A balloon bursts** when its contents pass its capacity: it comes off the vessel it is on
+  (whose mouth opens to the room), its gas is the room's, and it cannot be used again. The report
+  lists it among the lab's events.
+- **Save and load.** A lab saves as text (`chem-save/1`): every amount, energy and particle
+  count, the connections, the processes' carried remainders, where each item stands, and whether
+  a step is in progress. Numbers that are not integers are saved as their bits. A loaded lab
+  continues exactly as the saved one would have (invariant D2).
 - **Invariants.** With checking on (the default) every invariant of §18 is checked on every
   step. A failure stops the lab: it reports the invariant and takes no more commands.
 - **Reports** are functions of state: per item its temperature, the volume of its gas and of its
@@ -578,13 +598,12 @@ input to them, and a session script is a list of them.
   **record** (`bench/sessions/*.jsonl`) is the digest after each command; replaying the session
   must reproduce it (invariant D4).
 
-**Full design, not yet built:** the bench as a grid with placement and snapping; the cabinet and
-the outbox as places; supports that appear with the glassware; pouring at a rate; a balloon's
-capacity and bursting; overflow into a spill tray; save and load; the debug panel.
+**Full design, not yet built:** items larger than one grid cell, and adjacency deciding what can
+join what; supports that appear with the glassware; pouring at a rate; the debug panel.
 
 **Demo subset:** the bench of `data/benches/demo.json` and the commands above.
-**Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions.
-Placement, capacity, overflow and save/load are *PLANNED, Stage 8*; the Godot host, Stage 9.
+**Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
+places, the tray, bursting and save/load. The Godot host is Stage 9.
 
 ## 14. C API and hosts
 
@@ -694,7 +713,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 7 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 8 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -713,12 +732,12 @@ later rows are *PLANNED*.
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
 | P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: 2 N R T / (the cell's gas in quanta), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5 |
 | V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
-| V2 | No vessel holds more solids and liquids than its volume (the excess is in the spill cell) | exact | 5 |
+| V2 | No rigid cell holds more solids and liquids than its volume. In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8 |
 | V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
-| D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
+| D2 | Save, load, continue equals the uninterrupted run: the demo saved at six points, one in the middle of a step, reproduces the rest of its record | exact | 8 |
 | D3 | A world at rest is bit-identical, carried remainders included: thermal rest after 1e5 steps (Stage 2), chemical equilibrium after 5e4 (Stage 3) | exact | 2–3 |
 | D4 | A session replay reproduces its record: the digest of the whole state after every command (`bench/sessions/demo.jsonl`; ctest `demo_session`) | exact | 7 |
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
@@ -743,9 +762,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
   balloon and two reservoirs; Stage 5: 2.5 µs for the distillation's four cells and three
   reservoirs; trace built, checks off).
-- **Measured, Stage 7** (`chem_tool bench data/sessions/demo.json`): the whole demo, eight cells
-  and three reservoirs, 156,302 steps in 0.70 s: 4.5 µs a step, 3700 times real time, 2.7 ms a
-  frame at 600 steps a frame. Inside the budget, with little to spare.
+- **Measured** (`chem_tool bench data/sessions/demo.json`): the whole demo. Stage 7: eight cells
+  and three reservoirs, 4.5 µs a step. Stage 8: the gas tree cached per topology and a cell's
+  thermal state derived once, 3.8 µs; with the tray, the bursting check and overflow added,
+  4.1 µs: 4050 times real time, 2.5 ms a frame at 600 steps a frame. The time is in the phase
+  equilibria themselves (the logarithms of each affinity).
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -776,5 +797,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Steam is an ideal gas with a constant heat capacity | Water boils at 100.44 °C at 1 atm (373.124 K is 99.97 °C); its saturation pressure is within 2% from 25 to 100 °C |
 | Fast phase change has no barrier | No superheating, no supercooling, no fog: vapour condenses the moment it is saturated |
 | A drain is instantaneous and takes all the liquid | A condenser never holds a film of liquid for more than a step |
-| No overflow yet | A beaker filled past its volume is an invariant violation (V2) until Stage 8 adds the spill tray |
+| A burst balloon's gas is the room's at once | No bang, no jet |
+| One item to a grid cell, and position decides nothing | A beaker "under" a condenser is a connection, not a place |
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |

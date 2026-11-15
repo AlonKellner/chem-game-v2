@@ -65,8 +65,12 @@ int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool
 class AffinityProbe {
 public:
 	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
+	// the same, given the cell's thermal state (as thermal_state() gives it)
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal);
 	// false when the cell has no temperature or a species named has no thermodynamic data
 	bool defined() const { return defined_; }
+	// the cell's temperature before any of the reaction, K
+	double temperature() const { return temperature_; }
 	// The affinity, J/mol, after `extent` quanta (see affinity() for its
 	// infinities). false when the cell would then have no positive temperature.
 	bool at(double extent, double &a) const;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chem/thermo.hpp"
 #include "chem/world.hpp"
 
 #include <vector>
@@ -7,7 +8,8 @@
 // The simulation: a world advanced one fixed step at a time by its processes
 // (GAME_SPEC §4.5): reactions inside the cells (§7, §9), heat conduction along the
 // edges (§5), liquids down the drains (§6), then every cell taken to its fast
-// equilibria (§8) and every rigid cell made exactly full (§6).
+// equilibria (§8) and every rigid cell made exactly full (§6), and what
+// overflows spilled.
 // Every change goes through the world's two primitives. The
 // processes are applied in a fixed order, each from the state the last one
 // left; each application conserves exactly and runs down its own driving force.
@@ -49,14 +51,23 @@ public:
 	const std::vector<double> &heat_remainders() const { return heat_remainder_; }
 	const std::vector<double> &reaction_remainders() const { return reaction_remainder_; }
 	const std::vector<double> &nucleation_remainders() const { return nucleation_remainder_; }
+	// puts back the remainders of a saved simulation, as the three above gave them
+	void restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation);
 	// the reactions of the equilibrium law (what invariant P1 is checked for)
 	const std::vector<Reaction> &equilibria() const { return equilibria_; }
 
 private:
+	void begin_step();
+	const Thermal &thermal(CellId cell);
+	Refusal transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy);
+	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
 	void react();
 	void conduct_heat();
 	void drain_liquids();
+	void overflow();
 	void settle();
+	void build_tree();
+	void settle_cells();
 	bool project(CellId cell);
 	bool fill(CellId cell, CellId up, EdgeId edge, bool may_draw = true);
 
@@ -65,10 +76,14 @@ private:
 	std::vector<Reaction> equilibria_; // of the equilibrium law
 	std::vector<int32_t> depth_, parent_, parent_edge_; // settle()'s tree, kept to spare the allocations
 	std::vector<size_t> order_;
+	bool tree_built_ = false;
+	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
 	std::vector<double> reaction_remainder_;
 	std::vector<double> nucleation_remainder_;
 	std::vector<uint8_t> starved_;
+	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
+	std::vector<uint8_t> thermal_valid_;
 	double step_seconds_ = STEP_SECONDS;
 	bool traced_ = true; // the last step was step(), not advance()
 	bool checking_;

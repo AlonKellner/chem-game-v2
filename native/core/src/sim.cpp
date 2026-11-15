@@ -50,11 +50,21 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 	}
 	double v_lo = 0.0, v_hi = 0.0;
 	value(0, v_lo);
-	bool ok_hi = value(most, v_hi);
+	// the usual case, a cell already at its equilibrium: one quantum is too many
+	bool ok_hi = value(1, v_hi);
+	if (!(ok_hi && v_hi >= 0.0)) {
+		return 0;
+	}
+	if (most == 1) {
+		return 1;
+	}
+	int64_t lo = 1;
+	v_lo = v_hi;
+	ok_hi = value(most, v_hi);
 	if (ok_hi && v_hi >= 0.0) {
 		return most;
 	}
-	int64_t lo = 0, hi = most;
+	int64_t hi = most;
 	for (int i = 0; hi - lo > 1; ++i) {
 		int64_t middle = lo + (hi - lo) / 2;
 		if (ok_hi && finite(v_lo) && finite(v_hi) && i % 3 != 2) {
@@ -113,12 +123,13 @@ void Simulation::react() {
 			double &nucleation_remainder = nucleation_remainder_[c * reactions_.size() + r];
 			const auto in = static_cast<size_t>(kinetics.in.index);
 			const int64_t have = state.amount[in];
-			if (have == 0 && !(surface && kinetics.nucleation > 0.0)) {
+			// nothing of the solid, and nothing to nucleate it from: no probe needed
+			if (have == 0 && !(surface && kinetics.nucleation > 0.0 && feasible_extent(state, reaction.terms(), true) > 0)) {
 				remainder = 0.0;
 				nucleation_remainder = 0.0;
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms());
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				remainder = 0.0;
@@ -126,8 +137,7 @@ void Simulation::react() {
 				continue;
 			}
 			const bool forward = a > 0.0;
-			const Thermal thermal = thermal_state(table, state);
-			const double rt = GAS_CONSTANT * thermal.temperature;
+			const double rt = GAS_CONSTANT * probe.temperature();
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
 			const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
 			double wanted = 0.0; // quanta of extent, in the direction of the affinity
@@ -196,7 +206,7 @@ void Simulation::react() {
 				const Term &term = reaction.terms()[t];
 				appears[t] = (forward ? term.nu > 0 : term.nu < 0) && state.amount[static_cast<size_t>(term.species.index)] == 0;
 			}
-			const Refusal refused = world_.transform(cell, reaction, forward ? size : -size);
+			const Refusal refused = transform(cell, reaction, forward ? size : -size);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (surface) {
 				const int64_t nuclei = born < size ? born : size;
@@ -234,7 +244,6 @@ void Simulation::react() {
 void Simulation::conduct_heat() {
 	const std::span<const Edge> edges = world_.edges();
 	heat_remainder_.resize(edges.size(), 0.0);
-	const SpeciesTable &table = world_.species();
 	for (size_t i = 0; i < edges.size(); ++i) {
 		const Edge edge = edges[i];
 		double &remainder = heat_remainder_[i];
@@ -244,11 +253,14 @@ void Simulation::conduct_heat() {
 		}
 		const CellMeta &ma = world_.meta(edge.a);
 		const CellMeta &mb = world_.meta(edge.b);
-		double ta = 0.0, tb = 0.0;
-		if (!world_.temperature(edge.a, ta) || !world_.temperature(edge.b, tb)) {
+		// each end's temperature and heat capacity, derived once
+		const Thermal state_a = ma.reservoir ? Thermal{ true, 0.0, ma.reservoir_temperature } : thermal(edge.a);
+		const Thermal state_b = mb.reservoir ? Thermal{ true, 0.0, mb.reservoir_temperature } : thermal(edge.b);
+		if (!state_a.defined || !state_b.defined) {
 			remainder = 0.0; // a cell without a temperature conducts nothing (T3 reports it)
 			continue;
 		}
+		const double ta = state_a.temperature, tb = state_b.temperature;
 		const double h = step_seconds_;
 		const double dt = ta - tb;
 		double heat = 0.0; // J, from a to b
@@ -257,8 +269,8 @@ void Simulation::conduct_heat() {
 		if (!bounded) {
 			heat = edge.conductance * dt * h;
 		} else {
-			const double ca = ma.reservoir ? 0.0 : thermal_state(table, world_.snapshot_cell(edge.a)).heat_capacity;
-			const double cb = mb.reservoir ? 0.0 : thermal_state(table, world_.snapshot_cell(edge.b)).heat_capacity;
+			const double ca = state_a.heat_capacity;
+			const double cb = state_b.heat_capacity;
 			const double ceff = ma.reservoir ? cb : mb.reservoir ? ca : ca * cb / (ca + cb);
 			equalising = ceff * dt;
 			heat = equalising * (1.0 - exp(-edge.conductance * h / ceff));
@@ -291,7 +303,7 @@ void Simulation::conduct_heat() {
 		if (whole != 0) {
 			// Overflow: an energy account at the end of the integer range takes
 			// no more; the heat stays where it is.
-			const Refusal refused = world_.transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, {}, Energy{ whole });
+			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, {}, Energy{ whole });
 			CHEM_ASSERT(refused == Refusal::None || refused == Refusal::Overflow, refusal_text(refused));
 			if (refused != Refusal::None) {
 				remainder = 0.0;
@@ -331,7 +343,7 @@ void Simulation::drain_liquids() {
 		}
 		double fraction = 1.0;
 		const CellMeta &below = world_.meta(edge.b);
-		if (below.rigid) {
+		if (below.rigid && world_.spill().index < 0) { // with nowhere to spill, the rest stays above
 			const Fill fill = fill_of(table, world_.snapshot_cell(edge.b), T0);
 			const double room = fill.defined ? below.volume - fill.condensed : 0.0;
 			fraction = room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0;
@@ -348,9 +360,70 @@ void Simulation::drain_liquids() {
 			}
 		}
 		if (!amounts.empty()) {
-			const Refusal refused = world_.transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, enthalpy_carried(table, amounts, thermal.temperature));
+			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		}
+	}
+}
+
+// Overflow (GAME_SPEC §6): a rigid cell that holds more solids and liquids
+// than its volume spills the excess of its liquid, with what is dissolved in
+// it, into the world's spill cell. After settling, which has by then pushed
+// out all its gas: it is left exactly full of liquid.
+void Simulation::overflow() {
+	const CellId spill = world_.spill();
+	if (spill.index < 0) {
+		return;
+	}
+	const SpeciesTable &table = world_.species();
+	for (int32_t c = 0; c < world_.cell_count(); ++c) {
+		const CellId cell{ c };
+		const CellMeta &meta = world_.meta(cell);
+		if (!meta.rigid) {
+			continue;
+		}
+		const CellState &state = world_.snapshot_cell(cell);
+		const Fill fill = fill_of(table, state, T0);
+		if (!fill.defined || !(fill.condensed > meta.volume)) {
+			continue;
+		}
+		double liquid = 0.0; // m^3
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (state.amount[s] > 0 && def.phase == Phase::Liquid && !def.wall) {
+				liquid += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
+		}
+		if (!(liquid > 0.0)) {
+			continue; // solids alone: nothing can run out (V2 reports it)
+		}
+		const double excess = fill.condensed - meta.volume;
+		const double fraction = excess < liquid ? excess / liquid : 1.0;
+		std::vector<SpeciesAmount> amounts;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const SpeciesDef &def = table.species(id);
+			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+				// rounded up: what is left fits
+				const double share = static_cast<double>(state.amount[s]) * fraction;
+				auto out = static_cast<int64_t>(share);
+				out += static_cast<double>(out) < share ? 1 : 0;
+				amounts.push_back(SpeciesAmount{ id, Amount{ out < state.amount[s] ? out : state.amount[s] } });
+			}
+		}
+		EdgeId edge;
+		const std::span<const Edge> edges = world_.edges();
+		for (size_t i = 0; i < edges.size(); ++i) {
+			const Edge &e = edges[i];
+			if (e.open && !e.drain && e.phases == PHASES_LIQUID && ((e.a == cell && e.b == spill) || (e.a == spill && e.b == cell))) {
+				edge = EdgeId{ static_cast<int32_t>(i) };
+			}
+		}
+		if (edge.index < 0 && world_.connect(cell, spill, PHASES_LIQUID, &edge) != Refusal::None) {
+			continue;
+		}
+		const Refusal refused = transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal(cell).temperature));
+		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 	}
 }
 
@@ -368,7 +441,10 @@ bool Simulation::project(CellId cell) {
 	for (int round = 0; round < 8; ++round) {
 		bool moved = false;
 		for (const Reaction &reaction : equilibria_) {
-			const AffinityProbe probe(table, state, reaction.terms());
+			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
+				continue; // none of what it would consume, either way
+			}
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				continue;
@@ -376,7 +452,7 @@ bool Simulation::project(CellId cell) {
 			const bool forward = a > 0.0;
 			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward));
 			if (size != 0) {
-				const Refusal refused = world_.transform(cell, reaction, forward ? size : -size);
+				const Refusal refused = transform(cell, reaction, forward ? size : -size);
 				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 				moved = true;
 			}
@@ -403,7 +479,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 	const auto c = static_cast<size_t>(cell.index);
 	const CellMeta &meta = world_.meta(cell);
 	const CellState &state = world_.snapshot_cell(cell);
-	const Thermal thermal = thermal_state(table, state);
+	const Thermal thermal = this->thermal(cell);
 	if (!thermal.defined || !(thermal.temperature > 0.0)) {
 		return false;
 	}
@@ -428,7 +504,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 			}
 		}
 		if (!amounts.empty()) {
-			const Refusal refused = world_.transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal.temperature));
+			const Refusal refused = transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		}
 		return false;
@@ -437,7 +513,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 		return false; // full, to within what one quantum of gas would fill
 	}
 	const CellState &source = world_.snapshot_cell(up);
-	const Thermal source_thermal = thermal_state(table, source);
+	const Thermal source_thermal = this->thermal(up);
 	if (!source_thermal.defined) {
 		return false;
 	}
@@ -487,7 +563,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 	if (amounts.empty()) {
 		return false;
 	}
-	const Refusal refused = world_.transfer(edge, up, amounts, enthalpy_carried(table, amounts, source_thermal.temperature));
+	const Refusal refused = transfer(edge, up, amounts, enthalpy_carried(table, amounts, source_thermal.temperature));
 	CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 	return true;
 }
@@ -508,8 +584,20 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 // equilibrium and full.
 void Simulation::settle() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
-	const std::span<const Edge> edges = world_.edges();
 	starved_.assign(cells, 0);
+	if (!tree_built_ || tree_version_ != world_.topology_version()) {
+		build_tree();
+	}
+	settle_cells();
+}
+
+// The gas tree: the cells breadth first from the elastic ones along the open
+// gas edges, in index order. It changes only when an edge does.
+void Simulation::build_tree() {
+	const auto cells = static_cast<size_t>(world_.cell_count());
+	const std::span<const Edge> edges = world_.edges();
+	tree_built_ = true;
+	tree_version_ = world_.topology_version();
 	depth_.assign(cells, -1);
 	parent_.assign(cells, -1);
 	parent_edge_.assign(cells, -1);
@@ -542,6 +630,9 @@ void Simulation::settle() {
 			}
 		}
 	}
+}
+
+void Simulation::settle_cells() {
 	// the breadth-first order is by depth, then by discovery: settle it backwards
 	for (size_t k = order_.size(); k-- > 0;) {
 		const size_t c = order_[k];
@@ -572,12 +663,50 @@ void Simulation::settle() {
 	}
 }
 
+// A cell's thermal state, derived once and kept until a primitive touches the
+// cell: the same value thermal_state() would give, many times cheaper.
+const Thermal &Simulation::thermal(CellId cell) {
+	const auto c = static_cast<size_t>(cell.index);
+	if (!thermal_valid_[c]) {
+		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell));
+		thermal_valid_[c] = 1;
+	}
+	return thermal_[c];
+}
+
+Refusal Simulation::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy) {
+	const Edge &e = world_.edges()[static_cast<size_t>(edge.index)];
+	thermal_valid_[static_cast<size_t>(e.a.index)] = 0;
+	thermal_valid_[static_cast<size_t>(e.b.index)] = 0;
+	return world_.transfer(edge, from, amounts, energy);
+}
+
+Refusal Simulation::transform(CellId cell, const Reaction &reaction, int64_t extent) {
+	thermal_valid_[static_cast<size_t>(cell.index)] = 0;
+	return world_.transform(cell, reaction, extent);
+}
+
+// what was derived before the step may be stale: a host may have changed the world between steps
+void Simulation::begin_step() {
+	const auto cells = static_cast<size_t>(world_.cell_count());
+	thermal_.resize(cells);
+	thermal_valid_.assign(cells, 0);
+}
+
+void Simulation::restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation) {
+	heat_remainder_ = std::move(heat);
+	reaction_remainder_ = std::move(reaction);
+	nucleation_remainder_ = std::move(nucleation);
+}
+
 void Simulation::advance() {
+	begin_step();
 	if (world_.thermal()) {
 		react();
 		conduct_heat();
 		drain_liquids();
 		settle();
+		overflow();
 	}
 	world_.skip_step();
 	traced_ = false;
@@ -588,11 +717,13 @@ StepTrace Simulation::step() {
 		world_.rebase(); // steps were skipped: this one's trace starts here
 		traced_ = true;
 	}
+	begin_step();
 	if (world_.thermal()) {
 		react();
 		conduct_heat();
 		drain_liquids();
 		settle();
+		overflow();
 	}
 	StepTrace trace = world_.close_step();
 	if (world_.thermal()) {

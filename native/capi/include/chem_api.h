@@ -96,8 +96,8 @@ typedef struct cg_lab cg_lab;
 CG_API cg_lab *cg_lab_open(const char *bench_json);
 CG_API void cg_lab_close(cg_lab *lab);
 
-/* One command: a JSON object with a "do" (heat, unheat, valve, stir, pour, tip,
- * attach, detach, under, submit, wait, wait_until). CG_ERR_REFUSED: nothing
+/* One command: a JSON object with a "do" (place, stow, heat, unheat, valve,
+ * stir, pour, tip, attach, detach, under, submit, wait, wait_until). CG_ERR_REFUSED: nothing
  * changed, except that a command which changes connections first takes the lab
  * to a step boundary (at most one step). */
 CG_API cg_status cg_lab_command(cg_lab *lab, const char *command_json);
@@ -117,6 +117,12 @@ CG_API const char *cg_lab_report(cg_lab *lab);
 /* SHA-256 of the whole state, 64 hex digits: equal digests are equal states.
  * Borrowed until the next call on this lab. */
 CG_API const char *cg_lab_digest(cg_lab *lab);
+
+/* The whole lab as text. Borrowed until the next call on this lab. A lab
+ * loaded from it continues exactly as this one would have. */
+CG_API const char *cg_lab_save(cg_lab *lab);
+/* NULL, with cg_last_error, when the text is not a save of this build's data. */
+CG_API cg_lab *cg_lab_load(const char *save_json);
 
 #ifdef __cplusplus
 }

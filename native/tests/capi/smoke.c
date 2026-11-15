@@ -65,8 +65,8 @@ int main(void) {
 		return 1;
 	}
 	cg_lab *lab = cg_lab_open("{\"format\": \"chem-bench/1\", \"room\": {\"celsius\": 20}, \"items\": ["
-			"{\"id\": \"cup\", \"kind\": \"vessel\", \"volume_ml\": 100, \"wall\": \"glass\", \"wall_g\": 50, \"contents\": {\"water\": {\"g\": 20}}},"
-			"{\"id\": \"flame\", \"kind\": \"burner\", \"celsius\": 1900, \"conductance\": 0.2}]}");
+			"{\"id\": \"cup\", \"at\": [1, 0], \"kind\": \"vessel\", \"volume_ml\": 100, \"wall\": \"glass\", \"wall_g\": 50, \"contents\": {\"water\": {\"g\": 20}}},"
+			"{\"id\": \"flame\", \"at\": [2, 0], \"kind\": \"burner\", \"celsius\": 1900, \"conductance\": 0.2}]}");
 	if (lab == NULL) {
 		fprintf(stderr, "the lab did not open: %s\n", cg_last_error());
 		return 1;
@@ -84,6 +84,21 @@ int main(void) {
 		fprintf(stderr, "the report or the digest is not what a lab gives\n");
 		return 1;
 	}
+	/* Stage 8: a saved lab, loaded, is the same lab */
+	const char *digest = cg_lab_digest(lab);
+	char before[65];
+	strncpy(before, digest, sizeof before - 1);
+	before[sizeof before - 1] = '\0';
+	cg_lab *again = cg_lab_load(cg_lab_save(lab));
+	if (again == NULL || strcmp(cg_lab_digest(again), before) != 0 || cg_lab_step(again) != cg_lab_step(lab)) {
+		fprintf(stderr, "a saved lab did not load as itself: %s\n", cg_last_error());
+		return 1;
+	}
+	if (cg_lab_load("{}") != NULL) {
+		fprintf(stderr, "a save that is not one was not refused\n");
+		return 1;
+	}
+	cg_lab_close(again);
 	cg_lab_close(lab);
 	printf("capi_c_smoke: %s\n", cg_build_name());
 	return 0;
