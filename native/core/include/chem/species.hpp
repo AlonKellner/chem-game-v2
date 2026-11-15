@@ -72,7 +72,9 @@ struct Term {
 	int32_t nu = 0;
 };
 
-// How fast a reaction runs on its own (GAME_SPEC §7). FirstOrder:
+// How a reaction runs on its own. Equilibrium (GAME_SPEC §8): it is fast
+// against the step, so each step takes it to its equilibrium in every cell
+// (boiling, condensation). FirstOrder (GAME_SPEC §7):
 //
 //   rate = prefactor * e^(-activation / RT) * n_in * affinity factor   [mol/s of `in`]
 //
@@ -80,7 +82,7 @@ struct Term {
 // [-1, 1], zero at equilibrium, and has the sign of the reaction's affinity, so
 // the reaction stops at its equilibrium and runs backwards past it.
 struct Kinetics {
-	enum class Law : uint8_t { None, FirstOrder };
+	enum class Law : uint8_t { None, FirstOrder, Equilibrium };
 	Law law = Law::None;
 	SpeciesId in;
 	double prefactor = 0.0; // 1/s

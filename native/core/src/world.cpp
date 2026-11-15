@@ -119,6 +119,11 @@ EdgeId World::Builder::add_edge(CellId a, CellId b, PhaseMask phases, double con
 	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 }
 
+EdgeId World::Builder::add_drain(CellId from, CellId to) {
+	edges_.push_back(Edge{ from, to, PHASES_LIQUID, true, 0.0, true });
+	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+}
+
 World::Builder &World::Builder::set_temperature(CellId cell, double temperature) {
 	temperatures_.push_back(SetTemperature{ cell, temperature });
 	return *this;
@@ -408,6 +413,19 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, doubl
 	edges_.push_back(Edge{ a, b, phases, true, conductance });
 	if (made != nullptr) {
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+	}
+	return Refusal::None;
+}
+
+Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {
+	EdgeId edge;
+	const Refusal refused = connect(from, to, PHASES_LIQUID, &edge);
+	if (refused != Refusal::None) {
+		return refused;
+	}
+	edges_[static_cast<size_t>(edge.index)].drain = true;
+	if (made != nullptr) {
+		*made = edge;
 	}
 	return Refusal::None;
 }

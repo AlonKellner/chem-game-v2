@@ -192,6 +192,7 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_study_cooling COMMAND chem_tool study cooling)
     add_test(NAME chem_tool_study_decomposition COMMAND chem_tool study decomposition)
     add_test(NAME chem_tool_study_balloon COMMAND chem_tool study balloon)
+    add_test(NAME chem_tool_study_distillation COMMAND chem_tool study distillation)
 
     # The engine-free layers name no game engine.
     foreach(layer core game capi hosts/headless)

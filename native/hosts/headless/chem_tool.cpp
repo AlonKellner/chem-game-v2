@@ -16,7 +16,8 @@ int usage() {
 						 "  tables     the built-in species and reactions\n"
 						 "  study cooling         a flask cooling in a room, against Newton's law\n"
 						 "  study decomposition   malachite in a flask over a flame\n"
-						 "  study balloon         the same flask with a balloon on its mouth\n");
+						 "  study balloon         the same flask with a balloon on its mouth\n"
+						 "  study distillation    water boiled through a condenser into a beaker\n");
 	return 2;
 }
 

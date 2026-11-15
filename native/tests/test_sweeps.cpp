@@ -8,6 +8,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdio>
 #include <cstdlib>
 #include <deque>
 #include <string>
@@ -328,7 +329,11 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 					composite = t.species;
 				}
 			}
-			const Kinetics kinetics{ Kinetics::Law::FirstOrder, composite, static_cast<double>(rng.range(1, 1000000)) / 1000.0, static_cast<double>(rng.range(0, 60000)) };
+			// one reaction of a world in three is fast: taken to equilibrium each step
+			Kinetics kinetics{ Kinetics::Law::FirstOrder, composite, static_cast<double>(rng.range(1, 1000000)) / 1000.0, static_cast<double>(rng.range(0, 60000)) };
+			if (reactions.empty() && rng.chance(33)) {
+				kinetics = Kinetics{ Kinetics::Law::Equilibrium, SpeciesId{}, 0.0, 0.0 };
+			}
 			auto made = Reaction::make(*table, "split", r.terms(), &why, kinetics);
 			REQUIRE_MESSAGE(made.has_value(), why);
 			reactions.push_back(*made);
@@ -376,7 +381,23 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 				++*transforms;
 			}
 		}
-		const Violations violations = check_all(*table, trace);
+		const Violations violations = check_all(*table, trace, sim.equilibria());
+		if (!violations.empty() && std::getenv("CHEM_SWEEP_DUMP") != nullptr) {
+			// CHEM_SWEEP_DUMP=1: the failing step's ledger and cells, to stderr
+			for (const LedgerEntry &e : trace.ledger) {
+				std::fprintf(stderr, "  %s cell %d -> %d, %zu species, energy %lld, extent %lld\n", e.kind == LedgerEntry::Kind::Transfer ? "transfer" : "transform",
+						e.from.index, e.to.index, e.delta.size(), static_cast<long long>(e.energy.quanta), static_cast<long long>(e.extent));
+			}
+			for (size_t c = 0; c < trace.meta.size(); ++c) {
+				double t = 0.0;
+				sim.world().temperature(CellId{ static_cast<int32_t>(c) }, t);
+				std::fprintf(stderr, "  cell %zu: %s volume %g, T %g, starved %d\n", c, trace.meta[c].reservoir ? "reservoir" : trace.meta[c].rigid ? "rigid" : "elastic",
+						trace.meta[c].volume, t, c < trace.starved.size() ? trace.starved[c] : 0);
+			}
+			for (const Edge &e : trace.edges) {
+				std::fprintf(stderr, "  edge %d - %d, phases %d, open %d\n", e.a.index, e.b.index, e.phases, e.open);
+			}
+		}
 		REQUIRE_MESSAGE(violations.empty(), "seed " << seed << ", step " << step << ": " << violations[0]);
 		REQUIRE_MESSAGE(totals(*table, trace.after) == genesis, "seed " << seed << ", step " << step << ": the world's totals moved");
 		if (reactive || volumes) {

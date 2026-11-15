@@ -201,7 +201,8 @@ int balloon() {
 	std::printf("\nCO2 made: %.6f g; in the balloon: %.6f g; left in the flask: %.6f g\n",
 			(mol(bag, builtin::carbon_dioxide) + mol(flask, builtin::carbon_dioxide)) * 44.009, mol(bag, builtin::carbon_dioxide) * 44.009,
 			mol(flask, builtin::carbon_dioxide) * 44.009);
-	std::printf("the water is still vapour at 20 C here: condensation is Stage 5\n");
+	std::printf("water condensed inside the balloon: %.6f g of the %.6f g made\n", mol(bag, builtin::water) * 18.015,
+			(mol(bag, builtin::water) + mol(bag, builtin::steam) + mol(flask, builtin::water) + mol(flask, builtin::steam)) * 18.015);
 	std::printf("every element, the mass and the energy %s; every invariant was checked on all 144001 steps\n",
 			genesis == end ? "are the same integers as at the start" : "MOVED");
 
@@ -217,6 +218,95 @@ int balloon() {
 	return genesis == end ? 0 : 1;
 }
 
+// Stage 5: the demo's third stage without its player or its salt. 100 g of
+// water in a flask over a flame, a condenser over a beaker, the open air.
+int distillation() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	World::Builder b(table);
+	const CellId flask = b.add_rigid_cell("flask", 250e-6);
+	const CellId condenser = b.add_rigid_cell("condenser", 50e-6);
+	const CellId beaker = b.add_rigid_cell("beaker", 250e-6);
+	const CellId air = b.add_cell("air");
+	const CellId flame = b.add_reservoir("flame", 2200.0);
+	const CellId coolant = b.add_reservoir("coolant", 288.15);
+	const CellId room = b.add_reservoir("room", 293.15);
+	b.add_edge(flask, condenser, PHASES_GAS);
+	b.add_edge(condenser, air, PHASES_GAS);
+	b.add_edge(beaker, air, PHASES_GAS);
+	b.add_drain(condenser, beaker);
+	b.add_edge(flask, flame, PHASES_NONE, 0.25);
+	b.add_edge(flask, room, PHASES_NONE, 0.9);
+	b.add_edge(condenser, coolant, PHASES_NONE, 10.0);
+	b.add_edge(beaker, room, PHASES_NONE, 0.5);
+	b.add_edge(air, room, PHASES_NONE, 1000.0);
+	const double liquid = 100.0 / 18.015;
+	const auto air_in = [&](CellId cell, double volume) {
+		const double n = P_ATMOSPHERE * volume / (GAS_CONSTANT * 293.15);
+		b.set_amount(cell, builtin::nitrogen, amount_from_mol(0.79 * n, ok)).set_amount(cell, builtin::oxygen, amount_from_mol(0.21 * n, ok));
+	};
+	b.set_amount(flask, builtin::water, amount_from_mol(liquid, ok)).set_amount(flask, builtin::glass, amount_from_mol(100.0 / 60.083, ok));
+	air_in(flask, 250e-6 - liquid * table.species(builtin::water).molar_volume);
+	b.set_temperature(flask, 293.15);
+	b.set_amount(condenser, builtin::glass, amount_from_mol(50.0 / 60.083, ok));
+	air_in(condenser, 50e-6);
+	b.set_temperature(condenser, 293.15);
+	b.set_amount(beaker, builtin::glass, amount_from_mol(80.0 / 60.083, ok));
+	air_in(beaker, 250e-6);
+	b.set_temperature(beaker, 293.15);
+	b.set_amount(air, builtin::nitrogen, amount_from_mol(790.0, ok)).set_amount(air, builtin::oxygen, amount_from_mol(210.0, ok));
+	b.set_temperature(air, 293.15);
+	std::string why;
+	auto world = b.build(&why);
+	if (!world) {
+		std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+		return 1;
+	}
+	Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	sim.set_checking(true);
+	const Totals genesis = totals(table, sim.world().snapshot());
+	const auto grams = [&](CellId c, SpeciesId s) { return sim.world().amount(c, s).mol() * 18.015; };
+	const auto celsius = [&](CellId c) {
+		double t = 0.0;
+		sim.world().temperature(c, t);
+		return t - 273.15;
+	};
+	const auto vapour = [&](CellId c) {
+		const double w = sim.world().amount(c, builtin::steam).mol();
+		const double all = w + sim.world().amount(c, builtin::nitrogen).mol() + sim.world().amount(c, builtin::oxygen).mol();
+		return all > 0.0 ? 100.0 * w / all : 0.0;
+	};
+
+	std::printf("100 g of water in a 250 mL flask; flame 2200 K through 0.25 W/K; a 50 mL condenser, coolant 15 C through 10 W/K; a beaker under its outlet\n\n");
+	std::printf("%7s %8s %14s %12s %12s %14s %10s %14s %16s\n", "time s", "flask C", "flask water g", "flask vap %", "condenser C", "condenser vap %", "beaker C", "beaker water g",
+			"vapour to air g");
+	for (int step = 0; step <= 46800; ++step) {
+		if (step % 3600 == 0) {
+			std::printf("%7.0f %8.2f %14.4f %12.2f %12.2f %14.2f %10.2f %14.4f %16.6f\n", step * STEP_SECONDS, celsius(flask), grams(flask, builtin::water), vapour(flask),
+					celsius(condenser), vapour(condenser), celsius(beaker), grams(beaker, builtin::water), grams(air, builtin::steam) + grams(air, builtin::water));
+		}
+		sim.step();
+	}
+	const Totals end = totals(table, sim.world().snapshot());
+	const double boiled = 100.0 - grams(flask, builtin::water) - grams(flask, builtin::steam);
+	std::printf("\nleft the flask: %.4f g; in the beaker as liquid: %.4f g (%.2f%%); the rest is vapour in the condenser, the beaker and the air\n", boiled,
+			grams(beaker, builtin::water), 100.0 * grams(beaker, builtin::water) / boiled);
+	std::printf("the coolant took %.1f kJ; the flame gave %.1f kJ\n", sim.world().energy(coolant).joule() / 1000.0, (0.0 - sim.world().energy(flame).joule()) / 1000.0);
+	std::printf("every element, the mass and the energy %s; every invariant (now with P1 and V2) was checked on all 46801 steps\n",
+			genesis == end ? "are the same integers as at the start" : "MOVED");
+
+	Simulation timed(sim);
+	timed.set_checking(false);
+	const auto t0 = std::chrono::steady_clock::now();
+	const int steps = 200000;
+	for (int i = 0; i < steps; ++i) {
+		timed.step();
+	}
+	const double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count() / steps;
+	std::printf("step cost (four cells, three reservoirs, the reaction table; checks off, trace built): %.0f ns\n", ns);
+	return genesis == end ? 0 : 1;
+}
+
 } // namespace
 
 int run_study(const char *name) {
@@ -229,6 +319,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "balloon") == 0) {
 		return balloon();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon)\n", name);
+	if (std::strcmp(name, "distillation") == 0) {
+		return distillation();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation)\n", name);
 	return 2;
 }

@@ -376,3 +376,67 @@ TEST_CASE("invariants: gas flowing into a full flask is detected though everythi
 	CHECK_FALSE(has(v, "C1"));
 	CHECK_FALSE(has(v, "C5"));
 }
+
+// ------------------------------------------------------------------- phases
+
+namespace {
+
+std::vector<Reaction> shipped_reactions() {
+	return std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end());
+}
+
+// One honest step of water under dry air: it evaporates to saturation.
+StepTrace clean_phase(std::vector<Reaction> &equilibria) {
+	bool ok = false;
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("cell");
+	b.set_amount(cell, builtin::water, amount_from_mol(1.0, ok)).set_amount(cell, builtin::nitrogen, amount_from_mol(1.0, ok));
+	b.set_temperature(cell, 298.15);
+	auto world = b.build();
+	REQUIRE(world.has_value());
+	Simulation sim(std::move(*world), shipped_reactions());
+	equilibria = sim.equilibria();
+	return sim.step();
+}
+
+} // namespace
+
+TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (Stage 5)") {
+	std::vector<Reaction> equilibria;
+	const StepTrace honest = clean_phase(equilibria);
+	REQUIRE(equilibria.size() == 1);
+	CHECK(check_all(builtin_species(), honest, equilibria).empty());
+	const auto water = static_cast<size_t>(builtin::water.index);
+	const auto steam = static_cast<size_t>(builtin::steam.index);
+	{
+		StepTrace t = honest; // a tenth of the vapour back in the liquid: the air is too dry
+		const int64_t n = t.after.cells[0].amount[steam] / 10;
+		t.after.cells[0].amount[steam] -= n;
+		t.after.cells[0].amount[water] += n;
+		const Violations v = check_all(builtin_species(), t, equilibria);
+		CHECK(has(v, "P1"));
+		CHECK_FALSE(has(v, "C1"));
+	}
+	{
+		StepTrace t = honest; // more vapour than the air can hold, over the liquid
+		const int64_t n = t.after.cells[0].amount[steam] / 10;
+		t.after.cells[0].amount[steam] += n;
+		t.after.cells[0].amount[water] -= n;
+		CHECK(has(check_all(builtin_species(), t, equilibria), "P1"));
+	}
+	{
+		StepTrace t = honest; // the step undone: liquid under dry air
+		t.after = t.before;
+		t.ledger.clear();
+		CHECK(has(check_all(builtin_species(), t, equilibria), "P1"));
+	}
+	CHECK_FALSE(has(check_all(builtin_species(), honest), "P1")); // not asked: no reactions given
+}
+
+TEST_CASE("invariants: more liquid than the vessel holds is detected: V2 (Stage 5)") {
+	StepTrace t = clean_gas();
+	t.after.cells[0].amount[static_cast<size_t>(builtin::water.index)] = 20000000000000; // 20 mol: 361 mL in 250
+	const Violations v = check_all(builtin_species(), t);
+	CHECK(has(v, "V2"));
+	CHECK(has(v, "V1"));
+}

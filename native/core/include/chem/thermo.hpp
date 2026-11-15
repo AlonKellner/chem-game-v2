@@ -3,6 +3,10 @@
 #include "chem/species.hpp"
 #include "chem/world.hpp"
 
+#include <array>
+#include <cstdint>
+#include <span>
+
 // What a cell's conserved state implies (GAME_SPEC §4.1, §4.2, §4.6): its heat
 // capacity, its temperature, its entropy. Derived, never stored.
 namespace chem {
@@ -42,6 +46,40 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 // Positive: over-full, gas must leave. Negative: under-full, gas must enter.
 // `defined` is false when the cell has no temperature or no defined fill.
 double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined);
+
+// The most a change can advance (forward) or retreat (!forward) before a
+// species it consumes runs out, in quanta of extent.
+int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool forward);
+
+// A reaction's affinity along its own extent, in one cell at fixed enthalpy:
+// what the affinity would be after `extent` quanta of it (negative: backwards).
+// The step and the invariants both ask this, with the same arithmetic.
+class AffinityProbe {
+public:
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
+	// false when the cell has no temperature or a species named has no thermodynamic data
+	bool defined() const { return defined_; }
+	// The affinity, J/mol, after `extent` quanta (see affinity() for its
+	// infinities). false when the cell would then have no positive temperature.
+	bool at(double extent, double &a) const;
+
+private:
+	struct Part {
+		double nu = 0.0;
+		double quanta = 0.0; // of the species, before
+		bool gas = false;
+		double hf = 0.0, cp = 0.0, s0 = 0.0;
+	};
+	std::array<Part, MAX_TERMS> parts_{};
+	size_t count_ = 0;
+	bool defined_ = false;
+	double temperature_ = 0.0; // before
+	double capacity_ = 0.0; // J/K, before
+	double capacity_step_ = 0.0; // J/K per quantum of extent
+	double formation_step_ = 0.0; // J per quantum of extent
+	double gas_ = 0.0; // quanta of gas, before
+	double gas_step_ = 0.0; // quanta of gas per quantum of extent
+};
 
 // The activity of a species in the cell (GAME_SPEC §4.6): for a gas, its
 // partial pressure over the standard pressure, y_i * P / P°, with y_i its mole

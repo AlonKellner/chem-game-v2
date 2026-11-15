@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.6.0 (2026-11-16, Stage 5)
+
+- §4.5: the step's order restated: rate reactions, heat, drains, then settling (fast equilibria
+  and volumes together, last).
+- §6: drains; settling takes a cell's equilibria again after it draws gas; a starved cell is now
+  also one whose fast reaction outruns eight fillings a step; a cell is never left over-full.
+- §8: the equilibrium law and its search; what follows from it.
+- §18: P1 and V2 implemented. P1's tolerance restated: it was "a few quanta of the reaction",
+  which does not bound the rounding of gas moved after the equilibrium is taken.
+- §20: four simplifications declared (ideal steam: water boils at 100.44 °C; no nucleation
+  barrier; instantaneous drains; no overflow yet).
+
 ## 0.5.0 (2026-11-15, Stage 4)
 
 - §4.1: wall species; molar volumes derived from densities.

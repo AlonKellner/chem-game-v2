@@ -61,6 +61,19 @@ does not change the demo.
 |---|---|---|---|
 | Malachite decomposition | first order in malachite | Ea = 150 kJ/mol; prefactor 4.7e10 /s | Order about one and Ea 131–159 kJ/mol (31.4–38.1 kcal/mol) from thermogravimetry: *Canadian Mineralogist* 13, 127 (rruff.info/uploads/CM13_127.pdf). Ea is taken inside that range. **The prefactor is calibrated for play**, not measured: it gives rate constants of 1e-3 /s at 300 °C and 1.3e-2 /s at 350 °C, so 5 g decomposes in minutes over a burner |
 
+**Oracle checked in Stage 5:** water's saturation properties, NIST Chemistry WebBook (IAPWS-95,
+Wagner and Pruss 2002), retrieved 2026-11-16, against what the table implies:
+
+| T (K) | NIST p_sat (kPa) | Table p_sat (kPa) | NIST ΔH_vap (kJ/mol) | Table ΔH_vap (kJ/mol) |
+|---|---|---|---|---|
+| 298.15 | 3.16993 | 3.167 | 43.99 | 44.00 |
+| 323.15 | 12.3519 | 12.31 | 42.91 | 42.96 |
+| 348.15 | 38.5954 | 38.27 | 41.81 | 41.91 |
+| 373.15 | 101.418 | 99.78 | 40.65 | 40.87 |
+
+Normal boiling point: NIST 373.1243 K; the table gives 373.586 K (100.44 °C). The difference is
+steam treated as an ideal gas with a constant heat capacity.
+
 **Oracle checked in Stage 3:** from the table the decomposition absorbs 106.5 kJ/mol and makes
 321.5 J/mol·K, so it is spontaneous above about 58 °C with both gases at 1 bar: stable on the
 shelf, unstable well below red heat, as observed.
@@ -89,10 +102,6 @@ recall is uncertain), **low** (estimate or game calibration).
 | CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | Stage 6 |
 
 ### Oracles (test references, never inputs)
-
-**Water saturation pressure, Antoine (mmHg, °C):** A = 8.07131, B = 1730.63, C = 233.426 for
-1–100 °C; A = 8.14019, B = 1810.94, C = 244.485 for 99–374 °C. Confidence high. The two sets
-differ by about 0.5% at 100 °C.
 
 **CuSO4 solubility (g anhydrous per 100 g water).** Confidence medium-high; sources differ by ±0.5.
 
