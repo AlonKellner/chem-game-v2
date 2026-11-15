@@ -452,6 +452,39 @@ Violations check_T3(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_X1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		const CellState &cell = trace.after.cells[c];
+		if (cell.particles.size() != cell.amount.size()) {
+			continue;
+		}
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			const bool counted = def.phase == Phase::Solid && !def.wall;
+			const bool wrong = counted ? (cell.amount[s] > 0) != (cell.particles[s] > 0) || cell.particles[s] < 0 : cell.particles[s] != 0;
+			if (wrong && out.size() < MAX_MESSAGES) {
+				out.push_back("X1: step " + std::to_string(trace.step) + ": cell " + std::to_string(c) + " holds " + std::to_string(cell.amount[s]) + " quanta of " +
+						std::string(def.id) + " in " + std::to_string(cell.particles[s]) + " particles");
+			}
+		}
+	}
+	return out;
+}
+
+Violations check_X2(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		if (dry_solute(table, trace.after.cells[c])) {
+			out.push_back(text("X2: step %lld: cell %lld holds a dissolved species and no liquid", static_cast<long long>(trace.step), static_cast<long long>(c)));
+		}
+	}
+	return out;
+}
+
 Violations check_S1(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
 	if (!trace.thermal) {
@@ -607,7 +640,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 		Violations v = check_V2(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_S1, check_V1, check_V3 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

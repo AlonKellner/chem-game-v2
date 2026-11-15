@@ -34,6 +34,51 @@ These rows are in `data/species.json` and used by the game. Sources:
 Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
 compilation's value); glass Cp is 48.07 (the draft guessed about 50).
 
+## Verified data for the solution and the crystals (Stage 6)
+
+**Atkins**: Atkins and Jones, *Chemical Principles*, Appendix 2A, "Thermodynamic data at 25 °C"
+(demo.webassign.net/question_assets/atjon6/supplemental_data.pdf), retrieved 2026-11-16. The
+appendix reproduces the NBS tables (Wagman et al. 1982).
+
+| Species | ΔHf° (kJ/mol) | S° (J/mol·K) | Cp (J/mol·K) | Source |
+|---|---|---|---|---|
+| CuSO4·5H2O(s) | −2279.7 | 300.4 | 280 | Atkins. Its ΔGf° there, −1879.7, is not used. Density 2.286 g/cm³: CRC Handbook, 92nd ed., p. 4.62, as cited by Wikipedia |
+| H2SO4(aq) | −909.27 | 20.1 | 138.9 (stand-in) | ΔHf° and S° are Atkins's SO4²⁻(aq) (with H⁺(aq) at zero: the acid fully ionised). **Cp is a stand-in**: Atkins's value for the pure liquid acid, since the game treats the acid as one neutral dissolved species |
+| CuSO4(aq) | −839.382 (fitted) | −10.095 (fitted) | −96.875 (chosen) | **Fitted, not tabulated.** See below. For reference, Atkins's ions give Cu²⁺(aq) + SO4²⁻(aq) = −844.50 kJ/mol and −79.5 J/mol·K |
+
+**The fit of CuSO4(aq).** The game treats the dissolved salt as one neutral species in an
+ideal-dilute solution. With the tabulated ionic values that model puts saturation near
+0.002 mol/kg; the real figure is 1.3. So the dissolved salt's enthalpy and entropy are the two
+numbers that make `CuSO4·5H2O(s) ⇌ CuSO4(aq) + 5 H2O(l)` reproduce the handbook's solubility: a
+least-squares line through `ln(m) − 5 M_w m` against `1/T` at the five temperatures below, giving
+a heat of solution of 11.168 kJ/mol and an entropy of solution of 39.255 J/mol·K. Its heat
+capacity is chosen so that dissolving changes no heat capacity (`280 − 5 × 75.375`).
+
+**Solubility of CuSO4** (g anhydrous per 100 g of water): CRC Handbook of Chemistry and Physics,
+as reproduced by the Sciencemadness wiki (66th ed.) and Wikipedia (99th ed., pp. 5–179, in g/L).
+**Medium confidence in the unit basis**: the two reproductions label the same numbers per 100 mL
+and per litre; per 100 g of water is the handbook's usual basis and is what is used.
+
+| °C | 0 | 10 | 20 | 60 | 100 |
+|---|---|---|---|---|---|
+| handbook, g | 14.3 | 17.2 | 20.5 | 39.5 | 75.4 |
+| the game, g | 14.21 | 17.20 | 20.61 | 39.82 | 74.69 |
+
+## Calibrated kinetics (Stage 6)
+
+None of these is measured. Each is chosen so the demo plays in minutes, and is labelled here and
+in GAME_SPEC §20.
+
+| Process | Law | Parameters | Gives |
+|---|---|---|---|
+| CuO dissolving in the acid | surface, driven by the acid's molality | 1.15e6 mol/m²/s, Ea 50 kJ/mol | 3.6 g in 2.5 million grains under 100 mL of 1 M acid: 99% gone in 37 min at 20 °C still, 11 min stirred (×3), 3 min warmed and stirred |
+| Pentahydrate growing and dissolving | surface | 3e-2 mol/m²/s, no activation energy | a crop finished about ten minutes after the burner goes off |
+| Pentahydrate nucleating | with the above | 2e6 per kg of water per second × (S − 1)³ | about 140,000 crystals of 0.3 mm from the demo's flask |
+| Pentahydrate losing its water | first order | 7.5e7 /s, Ea 80 kJ/mol | 1e-2 /s at 150 °C, 5e-4 /s at 100 °C, a half-life of nine hours at 60 °C |
+
+Dehydration temperatures in air, for comparison: two waters lost at 63 °C, two more at 109 °C,
+the last at 200 °C (Galwey and Green 1999; Wiberg 2001; as cited by Wikipedia).
+
 ## Verified densities and walls
 
 Densities give the molar volumes of solids and liquids (GAME_SPEC §6). Retrieved 2026-11-15.
@@ -95,19 +140,10 @@ recall is uncertain), **low** (estimate or game calibration).
 
 | Species | M (g/mol) | ΔHf° (kJ/mol) | Cp (J/mol·K) | S° (J/mol·K) | ρ (g/cm³) | Confidence | Needed by |
 |---|---|---|---|---|---|---|---|
-| H2SO4(aq) | 98.072 | −909.3 (fully ionised) | to be chosen so 1 M solution is about 3.9 J/g·K | 20.1 | 1.060 (1 M solution) | H high; Cp, S low | Stage 6 |
-| CuSO4(aq) | 159.602 | −844.5 (infinite dilution); effective value fitted to solubility, about −836.5 | to be fitted | −79.5 (infinite dilution); effective value fitted | n/a | H medium; rest low | Stage 6 |
-| CuSO4·5H2O(s) | 249.677 | −2279.7 | 280 | 300.4 | 2.286 | high | Stage 6 |
-| CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | Stage 6 |
-| CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | Stage 6 |
+| CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | after the demo: no source found yet; inert until then |
+| CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | after the demo: no source found yet; inert until then |
 
 ### Oracles (test references, never inputs)
-
-**CuSO4 solubility (g anhydrous per 100 g water).** Confidence medium-high; sources differ by ±0.5.
-
-| °C | 0 | 10 | 20 | 30 | 40 | 50 | 60 | 80 | 100 |
-|---|---|---|---|---|---|---|---|---|---|
-| g | 14.3 | 17.2 | 20.5 | 24.4 | 28.7 | 33.8 | 39.5 | 55.5 | 75.4 |
 
 **Hydrate dissociation:** 5→3 about 7.8 torr at 25 °C; in air, onsets near 63 °C (5→3), 110 °C
 (3→1), 200–250 °C (1→0). Pentahydrate/trihydrate transition in contact with saturated solution
@@ -117,7 +153,6 @@ about 95.9 °C. Confidence medium.
 
 | Process | Form | Parameters | Confidence |
 |---|---|---|---|
-| CuO dissolution in dilute H2SO4 | `k(T) · f_stir · (c_acid / 1 M) · n0^(1/3) n^(2/3)` | Ea about 50 kJ/mol, k(25 °C) = 2e-3 /s, f_stir about 3 | low |
 
 ### Optics
 

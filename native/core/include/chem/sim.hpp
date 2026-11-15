@@ -5,7 +5,7 @@
 #include <vector>
 
 // The simulation: a world advanced one fixed step at a time by its processes
-// (GAME_SPEC §4.5): reactions inside the cells (§7), heat conduction along the
+// (GAME_SPEC §4.5): reactions inside the cells (§7, §9), heat conduction along the
 // edges (§5), liquids down the drains (§6), then every cell taken to its fast
 // equilibria (§8) and every rigid cell made exactly full (§6).
 // Every change goes through the world's two primitives. The
@@ -45,6 +45,7 @@ public:
 	// holds them). Heat: one per edge. Reactions: one per cell and reaction.
 	const std::vector<double> &heat_remainders() const { return heat_remainder_; }
 	const std::vector<double> &reaction_remainders() const { return reaction_remainder_; }
+	const std::vector<double> &nucleation_remainders() const { return nucleation_remainder_; }
 	// the reactions of the equilibrium law (what invariant P1 is checked for)
 	const std::vector<Reaction> &equilibria() const { return equilibria_; }
 
@@ -63,6 +64,7 @@ private:
 	std::vector<size_t> order_;
 	std::vector<double> heat_remainder_;
 	std::vector<double> reaction_remainder_;
+	std::vector<double> nucleation_remainder_;
 	std::vector<uint8_t> starved_;
 	double step_seconds_ = STEP_SECONDS;
 	bool checking_;

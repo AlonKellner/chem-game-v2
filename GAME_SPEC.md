@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.6.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.7.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -196,18 +196,32 @@ conduction, relaxation toward a solved equilibrium for crystal growth.
 
 ### 4.6 Entropy
 
-Each species has an **activity** `a_i` in its cell: for a gas, its partial pressure over the
-standard pressure, `y_i P / P°` (`y_i` its mole fraction among the cell's gases, `P` the cell's
-pressure, `P°` = 1 bar); 1 for a solid or a liquid; for a solute, its molality, with water
-activity `a_w = n_w / (n_w + Σ n_solute)` *(solutes: PLANNED, Stage 6)*.
+Each species has an **activity** `a_i` in its cell:
+
+- **a gas:** its partial pressure over the standard pressure, `y_i P / P°` (`y_i` its mole
+  fraction among the cell's gases, `P` the cell's pressure, `P°` = 1 bar);
+- **a solid:** 1;
+- **a dissolved species:** its molality, counted per 55.51 mol of the cell's liquid (per kg of
+  water);
+- **a liquid:** the solvent of an ideal-dilute solution, `ln a = ln x_i − n_dissolved / n_liquid`
+  (`x_i` its fraction of the cell's liquids). With nothing dissolved in a single liquid this is 1.
+
+The solvent's form is not the mole fraction `n_w / (n_w + n_dissolved)` of an earlier draft: only
+`−n_dissolved / n_liquid` is consistent with solutes at their molality (the Gibbs-Duhem
+relation), and only a consistent pair makes the entropy a function of state. The random sweeps
+caught the inconsistent form as falling entropy.
+
+A dissolved species needs a liquid: a cell that holds one and no liquid is not a valid state
+(invariant X2). The dynamics cannot produce it: the last of the solvent has activity zero, so it
+never leaves.
 
 World entropy is the sum over cells of `Σ n_i (S°_i + Cp_i ln(T/T0) − R ln a_i)`, plus each
 reservoir's energy over its temperature.
 
 The **affinity** of a process is `A = −Σ ν_i μ_i`, with `μ_i = h_i(T) − T s_i(T, a_i)`. It is
 positive when the process is spontaneous as written, zero at equilibrium, negative when its reverse
-is spontaneous. A gas that is absent has activity 0: making it has infinite affinity, consuming it
-is impossible.
+is spontaneous. A gas or a dissolved species that is absent has activity 0: making it has
+infinite affinity, consuming it is impossible.
 
 Rates carry an **affinity factor** `f(A)`: `1 − e^(−A/RT)` for `A > 0`, `−(1 − e^(A/RT))` for
 `A < 0`. It lies in [−1, 1], has the sign of `A` and vanishes with it, so a process stops at
@@ -336,13 +350,25 @@ and bursting, pouring, and overflow into the spill tray come with the equipment
   the amount of one reactant, `r = k(T) · n_in · f(A)`. Over one step `h` the extent is the exact
   solution of that decay, `(n_in / |ν_in|)(1 − e^(−k |f| h))` in the direction of `f`: any rate is
   stable, and a reaction that could finish many times over in one step simply finishes.
+- **Surface law** (`"law": "surface"`): the reaction happens at the surface of one of its solids,
+  `in`, a reactant (it dissolves) or a product (it grows):
+  `r = k(T) · area · a_driver · mixing · f(A)`, with `k` in mol/m²/s.
+  - The **area** is that of the solid's particles as equal spheres:
+    `(36π)^(1/3) N^(1/3) (n v)^(2/3)`, from its amount `n`, molar volume `v` and particle count `N`
+    (§9).
+  - The **driver**, if any, is a dissolved reactant whose activity the rate is proportional to
+    (the acid, for an oxide dissolving in it).
+  - **Mixing** is the cell's stirring: 1 at rest. It multiplies this law's rates, which transport
+    limits, and nothing else.
+  - With this area the cube root of the amount moves linearly in time, so the step is exact: a
+    solid that would dissolve many times over in a step is simply gone.
 - A reaction runs in a cell only where every species it names has thermodynamic data.
 
 **Demo subset:** malachite decomposition `Cu2CO3(OH)2(s) → 2 CuO(s) + CO2(g) + H2O(g)`, first
 order in malachite; `CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` with a surface term and a stir
 factor.
-**Status:** Stage 3 implements the first-order law and the malachite decomposition. The surface
-law and the dissolution are *PLANNED, Stage 6.*
+**Status:** Stage 3 implements the first-order law and the malachite decomposition, Stage 6 the
+surface law, stirring and the oxide's dissolution.
 
 ## 8. Phase change
 
@@ -395,10 +421,26 @@ phase changes, melting and solute activity are *PLANNED* (solutes: Stage 6).
 - **Purity** of a solid product: inclusions and adhering mother liquor are amounts of other
   species in the same cell.
 
-**Demo subset:** CuSO₄ as a neutral ideal-dilute solute with effective `Hf` and `S°` fitted to the
-solubility curve; pentahydrate, trihydrate, monohydrate and anhydrous solids, converting by
-dehydration reactions; particle count from nucleation, mean size derived; decanting.
-**Status:** *PLANNED, Stage 6.*
+**Particles.** Each solid in a cell is in a number of particles: a powder's grains, a crop of
+crystals. The count is state, saved with the rest, but not a conserved quantity:
+
+- a solid that appears is one lump; one that is used up has none (invariant X1);
+- a solid made from a solid keeps its grains (the oxide from the malachite);
+- **nucleation** adds particles where the surface law makes a solid from a supersaturated
+  solution: `k_n · (kg of solvent) · (S − 1)^p` per second, `S = e^(A/RT)` the supersaturation.
+  Each nucleus begins as one quantum of the solid (a crystal of about 6 µm);
+- the mean size is derived: the solid's volume shared equally among its particles, as spheres.
+
+Growth and nucleation compete for the same supersaturation, so slow cooling gives few large
+crystals and fast cooling many small ones, without a rule saying so.
+
+**Demo subset:** CuSO₄ and H₂SO₄ as neutral ideal-dilute solutes; CuSO₄(aq)'s `Hf` and `S°`
+fitted to the solubility curve; the pentahydrate crystallising by the surface law with
+nucleation; the pentahydrate dehydrating in one step to the anhydrous salt (the trihydrate and
+the monohydrate have no verified data yet and are inert); dissolved species take no volume;
+particles as equal spheres, one count per solid per cell. Decanting comes with the equipment
+(*PLANNED, Stage 8*).
+**Status:** Stage 6 implements the demo subset.
 
 ## 10. Property models
 
@@ -597,7 +639,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 5 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 6 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -618,7 +660,8 @@ later rows are *PLANNED*.
 | V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No vessel holds more solids and liquids than its volume (the excess is in the spill cell) | exact | 5 |
 | V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
-| X1 | Crystal count > 0 exactly when the solid's amount > 0 | exact | 6 |
+| X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
+| X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same bits however grouped into frames | exact | 8 |
 | D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
 | D3 | A world at rest is bit-identical, carried remainders included: thermal rest after 1e5 steps (Stage 2), chemical equilibrium after 5e4 (Stage 3) | exact | 2–3 |
@@ -626,7 +669,7 @@ later rows are *PLANNED*.
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
-| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Later: hydrate dissociation pressures, solubility | data oracle | 2–6 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 8 |
 | L1 | A refused command leaves the state bit-identical | exact | 8 |
 | O1 | Transmittance is within [0, 1] | exact | 10 |
@@ -644,7 +687,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
   0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
   balloon and two reservoirs; Stage 5: 2.5 µs for the distillation's four cells and three
-  reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`.
+  reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`. Stage 6 added two
+  rate laws and the solution's activities and has not been re-measured.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -656,10 +700,15 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | No gravitational energy in the ledger | About 0.2 J per pour |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
-| Ideal gas; ideal-dilute solutions; CuSO₄ as a neutral solute with fitted `Hf`, `S°` | Solubility within about 6% of literature; no heat of dilution; concentrated acid outside the model |
-| Additive volumes | Under 1% for the demo's solutions |
+| Ideal-dilute solutions of neutral solutes; CuSO₄(aq)'s `Hf` and `S°` fitted to its solubility | Solubility within 1.5% of the handbook from 0 to 100 °C in water alone. No heat of dilution. No common-ion effect: acid left in the liquor lowers water's activity and so *raises* the salt's solubility in this model (2.1 mol/kg at 20 °C beside 4.6 mol/kg of acid, against 1.3 in water); in reality it lowers it |
+| The solution model is valid below about 11 mol/kg | Beyond it (a solution boiled almost dry) the model's solubility has a second, unphysical branch. Real saturation is 4.7 mol/kg at 100 °C |
+| Sulfuric acid is one neutral dissolved species that only reacts with the oxide | No dissociation, no pH, no vapour of its own; its heat capacity is the pure liquid's |
+| Dissolved species take no volume | The demo's solution is about 3% larger than modelled |
+| The pentahydrate loses its water in one step | The pale trihydrate and monohydrate are skipped: blue goes to white. In dry air this model's crystals are stable below about 46 °C (in reality the first two waters go near 63 °C) |
+| Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
+| A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
-| Kinetic parameters calibrated for play | Decomposition and dissolution times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C |
+| Kinetic parameters calibrated for play | Times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C. The oxide's dissolution, the crystals' growth and nucleation, and the dehydration are calibrated outright (`docs/DATA_SOURCES.md`) |
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
 | No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |

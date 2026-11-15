@@ -81,13 +81,37 @@ struct Term {
 // where `in` is one of the reactants. The affinity factor (chem/sim.hpp) is in
 // [-1, 1], zero at equilibrium, and has the sign of the reaction's affinity, so
 // the reaction stops at its equilibrium and runs backwards past it.
+//
+// Surface (GAME_SPEC §7, §9): the reaction happens at the surface of one of
+// its solids, `in`, a reactant (it dissolves) or a product (it grows):
+//
+//   rate = prefactor * e^(-activation / RT) * area * a_driver * mixing * affinity factor   [mol/s]
+//
+// The area is that of the solid's particles, equal spheres:
+// (36 pi)^(1/3) N^(1/3) (n v)^(2/3). `driver`, if any, is a dissolved reactant
+// whose activity the rate is proportional to. Where `in` is a product, new
+// particles form in a supersaturated solution, nucleation * (kg of solvent) *
+// (S - 1)^nucleation_order per second, S = e^(A/RT); each begins as one quantum.
 struct Kinetics {
-	enum class Law : uint8_t { None, FirstOrder, Equilibrium };
+	enum class Law : uint8_t { None, FirstOrder, Equilibrium, Surface };
 	Law law = Law::None;
 	SpeciesId in;
-	double prefactor = 0.0; // 1/s
+	double prefactor = 0.0; // FirstOrder: 1/s. Surface: mol/m^2/s
 	double activation = 0.0; // J/mol
+	SpeciesId driver; // Surface: a dissolved reactant, or none
+	double nucleation = 0.0; // Surface: 1/kg/s
+	double nucleation_order = 0.0;
 };
+
+constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {
+	return Kinetics{ Kinetics::Law::FirstOrder, in, prefactor, activation, SpeciesId{}, 0.0, 0.0 };
+}
+constexpr Kinetics equilibrium() {
+	return Kinetics{ Kinetics::Law::Equilibrium, SpeciesId{}, 0.0, 0.0, SpeciesId{}, 0.0, 0.0 };
+}
+constexpr Kinetics surface(SpeciesId in, double prefactor, double activation, SpeciesId driver = {}, double nucleation = 0.0, double nucleation_order = 0.0) {
+	return Kinetics{ Kinetics::Law::Surface, in, prefactor, activation, driver, nucleation, nucleation_order };
+}
 
 struct ReactionDef {
 	std::string_view id;
@@ -169,9 +193,9 @@ public:
 	// Refuses (nullopt, the reason in *why): no terms or more than MAX_TERMS, an
 	// unknown or repeated species, a zero stoichiometric number, no reactant or
 	// no product, an element or the charge out of balance, a wall species;
-	// kinetics whose `in`
-	// is not a reactant, or whose prefactor or activation energy is negative
-	// or not finite.
+	// kinetics that are malformed: a first-order `in` that is not a reactant; a
+	// surface `in` that is not one of its solids with a molar volume; a driver
+	// that is not a dissolved reactant; a number that is negative or not finite.
 	static std::optional<Reaction> make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why = nullptr,
 			Kinetics kinetics = {});
 

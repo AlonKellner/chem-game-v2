@@ -101,4 +101,12 @@ double log(double x) {
 	return dk * LN2_HI - ((hfsq - (s * (hfsq + r) + dk * LN2_LO)) - f);
 }
 
+double cbrt(double x) {
+	return x > 0.0 ? exp(log(x) / 3.0) : 0.0;
+}
+
+double pow(double x, double p) {
+	return x > 0.0 ? exp(p * log(x)) : 0.0;
+}
+
 } // namespace chem

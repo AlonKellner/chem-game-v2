@@ -269,6 +269,24 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 			const SpeciesId id{ static_cast<int32_t>(rng.range(0, contents - 1)) };
 			holds.push_back(SpeciesAmount{ id, Amount{ quanta } }); // a species drawn twice: the last amount stands
 		}
+		// a dissolved species needs a liquid to be dissolved in: without one, it is left out
+		bool has_liquid = false;
+		for (const SpeciesAmount &h : holds) {
+			has_liquid = has_liquid || table->species(h.species).phase == Phase::Liquid;
+		}
+		if (!has_liquid) {
+			std::erase_if(holds, [&](const SpeciesAmount &h) { return table->species(h.species).phase == Phase::Aqueous; });
+			if (holds.empty()) {
+				for (int s = 0; s < contents && holds.empty(); ++s) {
+					if (table->species(SpeciesId{ s }).phase != Phase::Aqueous) {
+						holds.push_back(SpeciesAmount{ SpeciesId{ s }, Amount{ rng.range(1000000000, 300000000000000) } });
+					}
+				}
+				if (holds.empty()) {
+					return; // a chemistry of dissolved species alone: no world to build
+				}
+			}
+		}
 		for (size_t k = 0; k < holds.size(); ++k) {
 			bool last = true;
 			for (size_t later = k + 1; later < holds.size(); ++later) {
@@ -330,9 +348,9 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 				}
 			}
 			// one reaction of a world in three is fast: taken to equilibrium each step
-			Kinetics kinetics{ Kinetics::Law::FirstOrder, composite, static_cast<double>(rng.range(1, 1000000)) / 1000.0, static_cast<double>(rng.range(0, 60000)) };
+			Kinetics kinetics = first_order(composite, static_cast<double>(rng.range(1, 1000000)) / 1000.0, static_cast<double>(rng.range(0, 60000)));
 			if (reactions.empty() && rng.chance(33)) {
-				kinetics = Kinetics{ Kinetics::Law::Equilibrium, SpeciesId{}, 0.0, 0.0 };
+				kinetics = equilibrium();
 			}
 			auto made = Reaction::make(*table, "split", r.terms(), &why, kinetics);
 			REQUIRE_MESSAGE(made.has_value(), why);

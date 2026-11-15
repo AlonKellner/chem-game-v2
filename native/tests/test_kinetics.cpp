@@ -46,7 +46,7 @@ std::vector<Reaction> shipped() {
 Reaction decomposition_with(double prefactor, double activation) {
 	std::string why;
 	auto r = Reaction::make(builtin_species(), "decomposition", decomposition().terms(), &why,
-			Kinetics{ Kinetics::Law::FirstOrder, builtin::malachite, prefactor, activation });
+			first_order(builtin::malachite, prefactor, activation));
 	REQUIRE_MESSAGE(r.has_value(), why);
 	return *r;
 }
@@ -89,7 +89,7 @@ TEST_CASE("kinetics: the data oracle: malachite's decomposition is endothermic a
 
 TEST_CASE("kinetics: affinity has the sign of the spontaneous direction (Stage 3)") {
 	const SpeciesTable &t = builtin_species();
-	CellState cell{ std::vector<int64_t>(static_cast<size_t>(t.species_count()), 0), 0 };
+	CellState cell{ std::vector<int64_t>(static_cast<size_t>(t.species_count()), 0), 0, {} };
 	const auto at = [&](SpeciesId s) -> int64_t & { return cell.amount[static_cast<size_t>(s.index)]; };
 	bool defined = false;
 	at(builtin::malachite) = 1000000;
@@ -109,19 +109,19 @@ TEST_CASE("kinetics: affinity has the sign of the spontaneous direction (Stage 3
 	CHECK(activity(t, cell, builtin::malachite) == 1.0);
 	CHECK(activity(t, cell, builtin::carbon_dioxide) == doctest::Approx(1e6 / (1e9 + 2e6) * 1.01325));
 	// a species without verified data: no affinity, so no reaction
-	const Reaction &crystallise = builtin_reactions()[static_cast<size_t>(builtin::reaction::pentahydrate_crystallization)];
-	affinity(t, cell, crystallise.terms(), 300.0, defined);
+	const Reaction &unverified = builtin_reactions()[static_cast<size_t>(builtin::reaction::trihydrate_dehydration)];
+	affinity(t, cell, unverified.terms(), 300.0, defined);
 	CHECK_FALSE(defined);
 }
 
 TEST_CASE("kinetics: malformed kinetics are refused (Stage 3)") {
 	std::string why;
 	const auto terms = decomposition().terms();
-	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, Kinetics{ Kinetics::Law::FirstOrder, builtin::copper_oxide, 1.0, 0.0 })); // a product
-	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, Kinetics{ Kinetics::Law::FirstOrder, builtin::malachite, 0.0, 0.0 }));
-	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, Kinetics{ Kinetics::Law::FirstOrder, builtin::malachite, 1.0, -5.0 }));
-	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, Kinetics{ Kinetics::Law::FirstOrder, builtin::malachite, std::nan(""), 1.0 }));
-	CHECK(Reaction::make(builtin_species(), "r", terms, &why, Kinetics{ Kinetics::Law::FirstOrder, builtin::malachite, 1.0, 0.0 }).has_value());
+	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, first_order(builtin::copper_oxide, 1.0, 0.0))); // a product
+	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, first_order(builtin::malachite, 0.0, 0.0)));
+	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, first_order(builtin::malachite, 1.0, -5.0)));
+	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, first_order(builtin::malachite, std::nan(""), 1.0)));
+	CHECK(Reaction::make(builtin_species(), "r", terms, &why, first_order(builtin::malachite, 1.0, 0.0)).has_value());
 }
 
 TEST_CASE("kinetics: at a held temperature malachite decays exponentially at its Arrhenius rate (Stage 3)") {

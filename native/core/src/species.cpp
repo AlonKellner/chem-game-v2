@@ -158,6 +158,33 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 			return std::nullopt;
 		}
 	}
+	if (kinetics.law == Kinetics::Law::Surface) {
+		bool names_solid = false;
+		bool driver_ok = !table.has(kinetics.driver);
+		for (const Term &t : terms) {
+			const SpeciesDef &def = table.species(t.species);
+			names_solid = names_solid || (t.species == kinetics.in && def.phase == Phase::Solid && def.molar_volume > 0.0);
+			driver_ok = driver_ok || (t.species == kinetics.driver && t.nu < 0 && def.phase == Phase::Aqueous);
+		}
+		if (!names_solid) {
+			set_why(why, "reaction " + name + ": the solid at whose surface it happens is not one of its solids with a molar volume");
+			return std::nullopt;
+		}
+		if (!driver_ok) {
+			set_why(why, "reaction " + name + ": the driver of its rate is not one of its dissolved reactants");
+			return std::nullopt;
+		}
+		for (const double v : { kinetics.prefactor, kinetics.activation, kinetics.nucleation, kinetics.nucleation_order }) {
+			if (!(v >= 0.0) || !(v - v == 0.0)) {
+				set_why(why, "reaction " + name + ": a rate's numbers are not negative and are finite");
+				return std::nullopt;
+			}
+		}
+		if (!(kinetics.prefactor > 0.0)) {
+			set_why(why, "reaction " + name + ": a prefactor is positive");
+			return std::nullopt;
+		}
+	}
 	Reaction r;
 	r.table_ = &table;
 	r.kinetics_ = kinetics;

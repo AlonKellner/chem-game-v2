@@ -279,7 +279,7 @@ TEST_CASE("gas: a rigid cell is never sealed, and a wall never moves or reacts (
 		const CellId flask = b.add_rigid_cell("flask", FLASK);
 		const CellId air = b.add_cell("air");
 		b.add_edge(flask, air, PHASES_GAS);
-		b.set_amount(flask, builtin::copper_sulfate_pentahydrate, mol(0.01));
+		b.set_amount(flask, builtin::copper_sulfate_trihydrate, mol(0.01));
 		CHECK_FALSE(b.build(&why));
 		CHECK(why.find("molar volume") != std::string::npos);
 	}

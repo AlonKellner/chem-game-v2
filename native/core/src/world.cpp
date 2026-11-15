@@ -36,7 +36,7 @@ const char *refusal_text(Refusal r) {
 		case Refusal::Reservoir:
 			return "a reservoir holds energy, never matter";
 		case Refusal::BadValue:
-			return "a conductance must be finite and not negative";
+			return "the value must be finite and not negative";
 		case Refusal::Wall:
 			return "a vessel's own material does not move";
 		case Refusal::WouldSeal:
@@ -104,13 +104,13 @@ CellId World::Builder::add_cell(std::string name) {
 
 CellId World::Builder::add_rigid_cell(std::string name, double volume) {
 	names_.push_back(std::move(name));
-	meta_.push_back(CellMeta{ false, 0.0, true, volume });
+	meta_.push_back(CellMeta{ false, 0.0, true, volume, 1.0 });
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
 CellId World::Builder::add_reservoir(std::string name, double temperature) {
 	names_.push_back(std::move(name));
-	meta_.push_back(CellMeta{ true, temperature, false, 0.0 });
+	meta_.push_back(CellMeta{ true, temperature, false, 0.0, 1.0 });
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
@@ -134,6 +134,11 @@ World::Builder &World::Builder::set_amount(CellId cell, SpeciesId species, Amoun
 	return *this;
 }
 
+World::Builder &World::Builder::set_particles(CellId cell, SpeciesId species, int64_t count) {
+	particles_.push_back(Set{ cell, species, Amount{ count } });
+	return *this;
+}
+
 World::Builder &World::Builder::set_energy(CellId cell, Energy energy) {
 	energies_.push_back(SetEnergy{ cell, energy });
 	return *this;
@@ -153,7 +158,8 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	world.table_ = table_;
 	world.names_ = names_;
 	world.meta_ = meta_;
-	world.cells_.assign(names_.size(), CellState{ std::vector<int64_t>(static_cast<size_t>(table_->species_count()), 0), 0 });
+	const auto species_count = static_cast<size_t>(table_->species_count());
+	world.cells_.assign(names_.size(), CellState{ std::vector<int64_t>(species_count, 0), 0, std::vector<int64_t>(species_count, 0) });
 	for (const Edge &e : edges_) {
 		if (!known_cell(e.a) || !known_cell(e.b)) {
 			return refuse("an edge names a cell the world does not have");
@@ -186,6 +192,25 @@ std::optional<World> World::Builder::build(std::string *why) const {
 			return refuse("an energy is set in a cell the world does not have");
 		}
 		world.cells_[static_cast<size_t>(s.cell.index)].energy = s.energy.quanta;
+	}
+	// particles: as set, else one lump of each solid that is there
+	for (CellState &cell : world.cells_) {
+		for (size_t s = 0; s < species_count; ++s) {
+			const SpeciesDef &def = table_->species(SpeciesId{ static_cast<int32_t>(s) });
+			cell.particles[s] = cell.amount[s] > 0 && def.phase == Phase::Solid && !def.wall ? 1 : 0;
+		}
+	}
+	for (const Set &s : particles_) {
+		if (!known_cell(s.cell) || !table_->has(s.species)) {
+			return refuse("a particle count is set for a cell or a species the world does not have");
+		}
+		const SpeciesDef &def = table_->species(s.species);
+		CellState &cell = world.cells_[static_cast<size_t>(s.cell.index)];
+		const bool there = cell.amount[static_cast<size_t>(s.species.index)] > 0;
+		if (def.phase != Phase::Solid || def.wall || (there ? s.amount.quanta < 1 : s.amount.quanta != 0)) {
+			return refuse("a particle count is for a solid, at least one where the solid is, none where it is not");
+		}
+		cell.particles[static_cast<size_t>(s.species.index)] = s.amount.quanta;
 	}
 	for (const CellMeta &m : meta_) {
 		if (m.reservoir) {
@@ -225,6 +250,13 @@ std::optional<World> World::Builder::build(std::string *why) const {
 			}
 		}
 	}
+	if (world.thermal_) {
+		for (const CellState &cell : world.cells_) {
+			if (dry_solute(*table_, cell)) {
+				return refuse("a cell holds a dissolved species and no liquid to hold it");
+			}
+		}
+	}
 	for (size_t c = 0; c < world.cells_.size(); ++c) {
 		if (!meta_[c].rigid) {
 			continue;
@@ -261,6 +293,43 @@ Amount World::amount(CellId cell, SpeciesId species) const {
 	return Amount{ cells_[static_cast<size_t>(cell.index)].amount[static_cast<size_t>(species.index)] };
 }
 
+int64_t World::particles(CellId cell, SpeciesId species) const {
+	if (!known(cell) || !table_->has(species)) {
+		return 0;
+	}
+	return cells_[static_cast<size_t>(cell.index)].particles[static_cast<size_t>(species.index)];
+}
+
+Refusal World::set_particles(CellId cell, SpeciesId species, int64_t count) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!table_->has(species)) {
+		return Refusal::UnknownSpecies;
+	}
+	const SpeciesDef &def = table_->species(species);
+	const bool there = cells_[static_cast<size_t>(cell.index)].amount[static_cast<size_t>(species.index)] > 0;
+	if (def.phase != Phase::Solid || def.wall || (there ? count < 1 : count != 0)) {
+		return Refusal::BadValue;
+	}
+	cells_[static_cast<size_t>(cell.index)].particles[static_cast<size_t>(species.index)] = count;
+	return Refusal::None;
+}
+
+Refusal World::set_mixing(CellId cell, double mixing) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!good_conductance(mixing)) {
+		return Refusal::BadValue;
+	}
+	meta_[static_cast<size_t>(cell.index)].mixing = mixing;
+	return Refusal::None;
+}
+
 Energy World::energy(CellId cell) const {
 	if (!known(cell)) {
 		return Energy{};
@@ -280,6 +349,21 @@ bool World::temperature(CellId cell, double &kelvin) const {
 	const Thermal t = thermal_state(*table_, cells_[static_cast<size_t>(cell.index)]);
 	kelvin = t.temperature;
 	return t.defined;
+}
+
+// Particle counts follow the solids (GAME_SPEC §9: X1): a solid that is gone
+// has no particles; one that appears is one lump until told otherwise.
+void World::tend_particles(CellState &cell, SpeciesId species) {
+	const SpeciesDef &def = table_->species(species);
+	if (def.phase != Phase::Solid || def.wall) {
+		return;
+	}
+	const auto s = static_cast<size_t>(species.index);
+	if (cell.amount[s] == 0) {
+		cell.particles[s] = 0;
+	} else if (cell.particles[s] == 0) {
+		cell.particles[s] = 1;
+	}
 }
 
 Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy) {
@@ -353,6 +437,8 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 		const auto s = static_cast<size_t>(m.species.index);
 		src.amount[s] -= m.amount.quanta;
 		dst.amount[s] += m.amount.quanta;
+		tend_particles(src, m.species);
+		tend_particles(dst, m.species);
 	}
 	src.energy -= energy.quanta;
 	dst.energy += energy.quanta;
@@ -392,6 +478,7 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 	}
 	for (const SpeciesAmount &d : delta) {
 		state.amount[static_cast<size_t>(d.species.index)] += d.amount.quanta;
+		tend_particles(state, d.species);
 	}
 	ledger_.push_back(LedgerEntry{ LedgerEntry::Kind::Transform, EdgeId{}, cell, CellId{}, std::move(delta), Energy{}, extent });
 	return Refusal::None;

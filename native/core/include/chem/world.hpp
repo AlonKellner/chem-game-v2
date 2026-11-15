@@ -29,6 +29,11 @@ struct EdgeId {
 struct CellState {
 	std::vector<int64_t> amount; // quanta of each species of the table
 	int64_t energy = 0; // quanta
+	// How many particles each solid is in (GAME_SPEC §9): a powder's grains, a
+	// crop of crystals. State, but not a conserved quantity: it changes by
+	// nucleation and when a solid is used up, outside the two primitives. One
+	// per species; empty in a state built by hand.
+	std::vector<int64_t> particles = {};
 	bool operator==(const CellState &) const = default;
 };
 
@@ -63,6 +68,9 @@ struct CellMeta {
 	double reservoir_temperature = 0.0; // K
 	bool rigid = false;
 	double volume = 0.0; // m^3, of a rigid cell
+	// How well the cell is stirred (GAME_SPEC §7): 1 at rest. It multiplies
+	// the rates that transport limits (the surface law), never an equilibrium.
+	double mixing = 1.0;
 };
 
 struct SpeciesAmount {
@@ -115,7 +123,7 @@ enum class Refusal : int32_t {
 	MidStep, // the topology changes at a step boundary only
 	SameCell, // an edge joins two different cells
 	Reservoir, // a reservoir holds energy, never matter
-	BadValue, // a conductance that is negative or not finite
+	BadValue, // a number that is negative or not finite, or a particle count for what is not a solid
 	Wall, // a vessel's own material does not move
 	WouldSeal, // a rigid cell would lose its last gas path to an elastic cell
 };
@@ -142,6 +150,8 @@ public:
 		EdgeId add_drain(CellId from, CellId to);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
 		Builder &set_energy(CellId cell, Energy energy);
+		// how many particles a solid is in (default: one lump)
+		Builder &set_particles(CellId cell, SpeciesId species, int64_t count);
 		// The cell's energy is the enthalpy of its amounts at this temperature
 		// (K), to the nearest quantum; makes the world thermal. Overrides
 		// set_energy for the cell.
@@ -152,7 +162,9 @@ public:
 		// not positive and finite or set in a cell that cannot have one (a
 		// species without thermodynamic data, no heat capacity), totals that
 		// do not fit the integer range. In a thermal world every cell must
-		// have a temperature. A rigid cell: a volume that is not positive and
+		// have a temperature, and a cell with a dissolved species a liquid. A
+		// particle count for a species that is not a solid, or less than one
+		// for a solid that is there. A rigid cell: a volume that is not positive and
 		// finite, a condensed species of unknown molar volume, contents that do
 		// not fit, no gas path to an elastic cell.
 		std::optional<World> build(std::string *why = nullptr) const;
@@ -175,6 +187,7 @@ public:
 		std::vector<std::string> names_;
 		std::vector<CellMeta> meta_;
 		std::vector<SetTemperature> temperatures_;
+		std::vector<Set> particles_; // amount: the count
 		std::vector<Edge> edges_;
 		std::vector<Set> amounts_;
 		std::vector<SetEnergy> energies_;
@@ -185,6 +198,7 @@ public:
 	const std::string &cell_name(CellId cell) const { return names_[static_cast<size_t>(cell.index)]; }
 	Amount amount(CellId cell, SpeciesId species) const;
 	Energy energy(CellId cell) const;
+	int64_t particles(CellId cell, SpeciesId species) const;
 	const CellMeta &meta(CellId cell) const { return meta_[static_cast<size_t>(cell.index)]; }
 	// true when the world has temperatures (a reservoir, or a temperature set when built)
 	bool thermal() const { return thermal_; }
@@ -216,6 +230,13 @@ public:
 	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);
+	// stirring: 1 at rest; between steps only
+	Refusal set_mixing(CellId cell, double mixing);
+	// A solid's particle count: not conserved, so not a primitive. The
+	// primitives keep it at least one where the solid is and zero where it is
+	// not; this sets how many. Refused (BadValue) for a species that is not a
+	// solid, less than one where the solid is, or other than zero where it is not.
+	Refusal set_particles(CellId cell, SpeciesId species, int64_t count);
 
 	// Ends the step: the trace of everything since the last close (or since
 	// the world was built), then the next step begins.
@@ -224,6 +245,7 @@ public:
 private:
 	World() = default;
 	bool known(CellId cell) const { return cell.index >= 0 && cell.index < cell_count(); }
+	void tend_particles(CellState &cell, SpeciesId species);
 
 	const SpeciesTable *table_ = nullptr;
 	std::vector<std::string> names_;

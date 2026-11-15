@@ -47,6 +47,14 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 // `defined` is false when the cell has no temperature or no defined fill.
 double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined);
 
+// The diameter, in m, of one particle of a solid in the cell: its volume
+// shared equally among its particles, as spheres. 0 when there is none.
+double particle_diameter(const SpeciesTable &table, const CellState &cell, SpeciesId species);
+
+// true when the cell holds a dissolved species and no liquid to hold it: not a
+// state a solution can be in (GAME_SPEC §9).
+bool dry_solute(const SpeciesTable &table, const CellState &cell);
+
 // The most a change can advance (forward) or retreat (!forward) before a
 // species it consumes runs out, in quanta of extent.
 int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool forward);
@@ -67,7 +75,7 @@ private:
 	struct Part {
 		double nu = 0.0;
 		double quanta = 0.0; // of the species, before
-		bool gas = false;
+		Phase phase = Phase::Solid;
 		double hf = 0.0, cp = 0.0, s0 = 0.0;
 	};
 	std::array<Part, MAX_TERMS> parts_{};
@@ -77,27 +85,32 @@ private:
 	double capacity_ = 0.0; // J/K, before
 	double capacity_step_ = 0.0; // J/K per quantum of extent
 	double formation_step_ = 0.0; // J per quantum of extent
-	double gas_ = 0.0; // quanta of gas, before
-	double gas_step_ = 0.0; // quanta of gas per quantum of extent
+	// the cell's mixtures before, and what a quantum of extent adds to each
+	double gas_ = 0.0, gas_step_ = 0.0; // quanta of gas
+	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
+	double solute_ = 0.0, solute_step_ = 0.0; // quanta dissolved
 };
 
-// The activity of a species in the cell (GAME_SPEC §4.6): for a gas, its
-// partial pressure over the standard pressure, y_i * P / P°, with y_i its mole
-// fraction among the cell's gases and P one atmosphere; 1 for a solid or a
-// liquid. (Solutes: Stage 6; until then 1.) 0 for a gas that is absent.
+// The activity of a species in the cell (GAME_SPEC §4.6). A gas: its partial
+// pressure over the standard pressure, y_i * P / P°, y_i its fraction of the
+// cell's gas, P one atmosphere. A solid: 1. A dissolved species: its molality
+// (mol per 55.51 mol of the cell's liquid: per kg of water). A liquid: the solvent of an ideal-dilute
+// solution, ln a = ln x_i - (dissolved) / (liquid), which is 1 when nothing is
+// dissolved in it. 0 for a gas or a solute that is absent.
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species);
 
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the
-// gases' mixing and pressure terms).
+// mixing terms of its gas and of its solution).
 double entropy(const SpeciesTable &table, const CellState &cell, double temperature);
 
 // The affinity of a change in the cell at temperature T, in J per mole of
 // extent: A = -sum of nu_i mu_i, with mu_i = h_i(T) - T s_i(T, a_i). Positive
 // when the change is spontaneous as written, zero at equilibrium, negative
-// when its reverse is spontaneous. +infinity when a gas it makes is absent,
-// -infinity when a gas it consumes is absent, 0 when both. `defined` is false
-// when a species it names has no thermodynamic data.
+// when its reverse is spontaneous. +infinity when a gas or a solute it makes
+// is absent, -infinity when one it consumes is absent, 0 when both. `defined`
+// is false when a species it names has no thermodynamic data, or is dissolved
+// in a cell with no liquid.
 double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined);
 
 } // namespace chem
