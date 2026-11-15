@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.5.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.6.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -155,13 +155,14 @@ with a reason; it never corrupts state.
 One step of simulated time, in this order:
 
 1. Apply the player's commands queued for this step boundary; log them.
-2. Reactions: in each cell, each reaction in the order of the reaction table (§7).
+2. Reactions with a rate: in each cell, each in the order of the reaction table (§7).
 3. Heat: each edge in index order (§5).
-4. Liquid transfers, then the projection sweep in flow order: receive inflow, solve liquid/vapour
-   equilibrium (§8), expel or draw gas to satisfy the volume or pressure condition (§6).
-   *(PLANNED, Stages 4–5.)*
-5. Update crystal populations (§9). *(PLANNED, Stage 6.)*
-6. Check invariants (every step in tests and in Debug builds; sampled in release builds).
+4. Drains: liquid runs down each drain edge in index order (§6).
+5. Settling: each cell, deepest in the gas tree first, is taken to its fast equilibria (§8) and,
+   if rigid, made exactly full (§6). This comes last, so a step ends with every cell at
+   equilibrium and full.
+6. Update crystal populations (§9). *(PLANNED, Stage 6.)*
+7. Check invariants (every step in tests and in Debug builds; sampled in release builds).
 
 **Sequential application.** Each process is evaluated from the state the previous one left and
 applied at once, through the two primitives. Each application:
@@ -287,19 +288,29 @@ conductance. Each step, after the reactions and the heat:
   cools on mixing with the cell (walls included), so the amount is the positive root of
   `(n + x) R T(x) / P = free volume`, a quadratic.
 - Moving gas carries its enthalpy, `n · h(T of the giving cell)`.
-- A parent settles after its children, so one sweep leaves every rigid cell full.
+- Expelling changes neither the cell's temperature nor its composition, so its fast equilibria
+  (§8) still hold. Drawing changes both: the equilibria are taken again and the volume again,
+  until the cell draws no more.
+- A parent settles after its children, and nothing a parent does afterwards changes a child, so
+  one sweep leaves every cell at equilibrium and every rigid cell full.
+
+**Drains.** A drain is a liquid edge with a direction (a condenser's outlet over a beaker). Each
+step all of the upper cell's liquid, with what is dissolved in it, runs into the lower cell,
+carrying its enthalpy. A rigid lower cell takes only what fits; the rest stays above.
 
 **No rigid cell is ever sealed:** each must have a gas path to an elastic cell. A world that breaks
 this is refused when built, and a disconnection that would break it is refused (`WouldSeal`).
 
-**Starved cells.** A rigid cell whose parent holds less gas than it needs draws all there is and
-stays under-full. In reality that is a partial vacuum; the demo's subset has no pressure below
-1 atm to give it, so the cell is flagged `starved` in the step's trace and treated as at 1 atm.
+**Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
+when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
+it consumes gas as fast as it arrives (it draws its fill at most eight times a step). In reality
+that is a partial vacuum; the demo's subset has no pressure below 1 atm to give it, so the cell is
+treated as at 1 atm. A cell is never left over-full.
 
-Pouring and dripping are kinematic (no gravitational energy).
-**Status:** Stage 4 implements the demo subset for gas. A balloon's capacity and bursting come with
-the equipment (*PLANNED, Stage 8*); liquid transfer and overflow with the liquids
-(*PLANNED, Stages 5 and 8*).
+Pouring and dripping are kinematic (no rate, no gravitational energy).
+**Status:** Stage 4 implements the demo subset for gas, Stage 5 the drains. A balloon's capacity
+and bursting, pouring, and overflow into the spill tray come with the equipment
+(*PLANNED, Stage 8*): until then a rigid cell that receives more liquid than it holds violates V2.
 
 ## 7. Chemical kinetics
 
@@ -350,9 +361,22 @@ law and the dissolution are *PLANNED, Stage 6.*
 - **Melting and freezing, sublimation, supercritical fluids** use the same construction with the
   corresponding species.
 
+- **The equilibrium law** (`data/reactions.json`, `"law": "equilibrium"`): each step, in each
+  cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
+  end of what the cell holds. The search is a secant step from the two ends with a bisection
+  every third, on the affinity along the reaction's own extent at fixed enthalpy.
+- Several fast equilibria that share a species in one cell are taken in turn, up to eight rounds.
+
+**What follows without being written:** water under dry air evaporates until its partial
+pressure is the saturation pressure, and cools doing it. A flask of boiling water sits at the
+boiling point and makes vapour exactly as fast as heat arrives. Vapour in a cool cell condenses
+and warms it. A condenser settles at the temperature where its coolant takes what the steam
+brings.
+
 **Demo subset:** water liquid/vapour projection in the flask, the balloon and the condenser;
 condensate drips to the beaker.
-**Status:** *PLANNED, Stage 5.*
+**Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium. Kinetic
+phase changes, melting and solute activity are *PLANNED* (solutes: Stage 6).
 
 ## 9. Solutions and crystallization
 
@@ -573,7 +597,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 4 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 5 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -590,7 +614,7 @@ later rows are *PLANNED*.
 | T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4) | sign-exact | 2–4 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
-| P1 | After projection: liquid present ⇒ vapour at saturation; absent ⇒ at or below it | tolerance | 5 |
+| P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: 2 N R T / (the cell's gas in quanta), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5 |
 | V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No vessel holds more solids and liquids than its volume (the excess is in the spill cell) | exact | 5 |
 | V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
@@ -602,7 +626,7 @@ later rows are *PLANNED*.
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
-| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Later: boiling point, saturation pressure, hydrate dissociation pressures, solubility | data oracle | 2–6 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Later: hydrate dissociation pressures, solubility | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 8 |
 | L1 | A refused command leaves the state bit-identical | exact | 8 |
 | O1 | Transmittance is within [0, 1] | exact | 10 |
@@ -619,7 +643,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 - Simulation: one step under 5 µs for the demo's world, so 600× acceleration costs under 3 ms per
   frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
   0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
-  balloon and two reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`.
+  balloon and two reservoirs; Stage 5: 2.5 µs for the distillation's four cells and three
+  reservoirs; trace built, checks off) and, from Stage 7, `chem_tool bench`.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -640,4 +665,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |
 | Gas moves only by bulk flow; gases do not diffuse between cells | A flask and its balloon keep different compositions until gas flows between them |
 | Air is 79% N₂ and 21% O₂ | Argon (0.9%) and the rest are left out |
+| Steam is an ideal gas with a constant heat capacity | Water boils at 100.44 °C at 1 atm (373.124 K is 99.97 °C); its saturation pressure is within 2% from 25 to 100 °C |
+| Fast phase change has no barrier | No superheating, no supercooling, no fog: vapour condenses the moment it is saturated |
+| A drain is instantaneous and takes all the liquid | A condenser never holds a film of liquid for more than a step |
+| No overflow yet | A beaker filled past its volume is an invariant violation (V2) until Stage 8 adds the spill tray |
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |

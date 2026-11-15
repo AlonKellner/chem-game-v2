@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -98,11 +99,24 @@ Violations check_V1(const SpeciesTable &table, const StepTrace &trace);
 // elastic cell.
 Violations check_V3(const SpeciesTable &table, const StepTrace &trace);
 
+// V2. No rigid cell holds more solids and liquids than its volume.
+Violations check_V2(const SpeciesTable &table, const StepTrace &trace);
+// P1. Every cell is at its fast equilibria. For each reaction of the
+// equilibrium law: nothing is left to go in the direction of its affinity
+// (liquid absent: its vapour at or below saturation; vapour absent: nothing
+// would condense), or the affinity is within what rounding leaves. Rounding:
+// gas moved after the equilibrium was taken is whole quanta, a quantum per
+// species (N = the table's species + 1), which shifts the affinity by up to
+// 2 N R T / (the cell's gas in quanta); or N quanta of the reaction itself
+// spend it.
+Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria);
+
 // The change of the world's entropy over the step, in J/K (what T2 bounds).
 double entropy_change(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
-Violations check_all(const SpeciesTable &table, const StepTrace &trace);
+// `equilibria`: the reactions of the equilibrium law the simulation runs (P1).
+Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria = {});
 
 } // namespace chem

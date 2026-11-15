@@ -2,6 +2,7 @@
 
 #include "chem/math.hpp"
 
+#include <cstdint>
 #include <limits>
 
 namespace chem {
@@ -102,6 +103,91 @@ double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellSta
 	}
 	defined = true;
 	return fill.gas + fill.condensed - meta.volume;
+}
+
+int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool forward) {
+	int64_t most = INT64_MAX;
+	for (const Term &t : terms) {
+		const int64_t per = forward ? -t.nu : t.nu; // > 0 for the species this direction consumes
+		if (per > 0) {
+			const int64_t can = cell.amount[static_cast<size_t>(t.species.index)] / per;
+			most = can < most ? can : most;
+		}
+	}
+	return most;
+}
+
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) {
+	const Thermal thermal = thermal_state(table, cell);
+	if (!thermal.defined || !(thermal.temperature > 0.0) || terms.size() > parts_.size()) {
+		return;
+	}
+	for (const Term &t : terms) {
+		if (!table.has(t.species) || !table.species(t.species).has_thermo) {
+			return;
+		}
+		const SpeciesDef &def = table.species(t.species);
+		Part &part = parts_[count_++];
+		part.nu = static_cast<double>(t.nu);
+		part.quanta = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]);
+		part.gas = def.phase == Phase::Gas;
+		part.hf = def.hf;
+		part.cp = def.cp;
+		part.s0 = def.s0;
+		capacity_step_ += part.nu * def.cp * MOL_PER_QUANTUM;
+		formation_step_ += part.nu * def.hf * MOL_PER_QUANTUM;
+		gas_step_ += part.gas ? part.nu : 0.0;
+	}
+	temperature_ = thermal.temperature;
+	capacity_ = thermal.heat_capacity;
+	gas_ = gas_quanta(table, cell);
+	defined_ = true;
+}
+
+bool AffinityProbe::at(double extent, double &a) const {
+	if (!defined_) {
+		return false;
+	}
+	// at fixed enthalpy, what the reaction takes as formation enthalpy it takes
+	// from the heat: C (T - T0) falls by extent * formation_step
+	double temperature = temperature_;
+	if (extent != 0.0) {
+		const double capacity = capacity_ + extent * capacity_step_;
+		if (!(capacity > 0.0)) {
+			return false;
+		}
+		temperature = T0 + (capacity_ * (temperature_ - T0) - extent * formation_step_) / capacity;
+		if (!(temperature > 0.0)) {
+			return false;
+		}
+	}
+	const double ln = log(temperature / T0);
+	const double gas = gas_ + extent * gas_step_;
+	double standard = 0.0;
+	double mixing = 0.0;
+	bool made_absent = false;
+	bool consumed_absent = false;
+	for (size_t i = 0; i < count_; ++i) {
+		const Part &part = parts_[i];
+		standard -= part.nu * (part.hf + part.cp * (temperature - T0) - temperature * (part.s0 + part.cp * ln));
+		if (part.gas) {
+			const double quanta = part.quanta + part.nu * extent;
+			if (quanta > 0.0 && gas > 0.0) {
+				mixing += part.nu * log(quanta / gas * (P_ATMOSPHERE / P_STANDARD));
+			} else if (part.nu > 0.0) {
+				made_absent = true;
+			} else {
+				consumed_absent = true;
+			}
+		}
+	}
+	if (made_absent || consumed_absent) {
+		constexpr double infinity = std::numeric_limits<double>::infinity();
+		a = made_absent && consumed_absent ? 0.0 : made_absent ? infinity : -infinity;
+	} else {
+		a = standard - GAS_CONSTANT * temperature * mixing;
+	}
+	return true;
 }
 
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species) {

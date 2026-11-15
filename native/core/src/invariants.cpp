@@ -373,14 +373,14 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				}
 				terms[count++] = Term{ d.species, static_cast<int32_t>(d.amount.quanta / entry.extent) };
 			}
-			const Thermal thermal = thermal_state(table, replay.cells[from]);
-			if (whole && thermal.defined && thermal.temperature > 0.0) {
-				bool defined = false;
-				const double a = affinity(table, replay.cells[from], std::span<const Term>(terms.data(), count), thermal.temperature, defined);
-				if (defined && !((entry.extent > 0 && a > 0.0) || (entry.extent < 0 && a < 0.0)) && out.size() < MAX_MESSAGES) {
+			if (whole) {
+				// the same probe the step asked, so the same sign
+				const AffinityProbe probe(table, replay.cells[from], std::span<const Term>(terms.data(), count));
+				double a = 0.0;
+				if (probe.at(0.0, a) && !((entry.extent > 0 && a > 0.0) || (entry.extent < 0 && a < 0.0)) && out.size() < MAX_MESSAGES) {
 					char buffer[200];
-					std::snprintf(buffer, sizeof buffer, "T1: step %lld: transform %lld runs %lld quanta against an affinity of %.6g J/mol at %.6g K",
-							static_cast<long long>(trace.step), static_cast<long long>(i), static_cast<long long>(entry.extent), a, thermal.temperature);
+					std::snprintf(buffer, sizeof buffer, "T1: step %lld: transform %lld runs %lld quanta against an affinity of %.6g J/mol",
+							static_cast<long long>(trace.step), static_cast<long long>(i), static_cast<long long>(entry.extent), a);
 					out.push_back(buffer);
 				}
 			}
@@ -522,11 +522,91 @@ Violations check_V3(const SpeciesTable &, const StepTrace &trace) {
 	return out;
 }
 
-Violations check_all(const SpeciesTable &table, const StepTrace &trace) {
+Violations check_V2(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (trace.meta.size() != trace.after.cells.size()) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		const CellMeta &meta = trace.meta[c];
+		if (!meta.rigid) {
+			continue;
+		}
+		const Fill fill = fill_of(table, trace.after.cells[c], T0);
+		if (fill.defined && fill.condensed > meta.volume * (1.0 + 1e-12)) {
+			char buffer[200];
+			std::snprintf(buffer, sizeof buffer, "V2: step %lld: rigid cell %lld of %.6g m^3 holds %.6g m^3 of solids and liquids", static_cast<long long>(trace.step),
+					static_cast<long long>(c), meta.volume, fill.condensed);
+			out.push_back(buffer);
+		}
+	}
+	return out;
+}
+
+Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	const int64_t slack = table.species_count() + 1; // quanta: what moving gas rounds by
+	for (size_t c = 0; c < trace.after.cells.size(); ++c) {
+		if (trace.meta[c].reservoir) {
+			continue;
+		}
+		const CellState &cell = trace.after.cells[c];
+		for (const Reaction &reaction : equilibria) {
+			if (reaction.table() != &table) {
+				continue;
+			}
+			const AffinityProbe probe(table, cell, reaction.terms());
+			double a = 0.0;
+			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
+				continue;
+			}
+			const bool forward = a > 0.0;
+			const int64_t most = feasible_extent(cell, reaction.terms(), forward);
+			if (most <= 0) {
+				continue; // nothing left to go that way: dry, or no vapour
+			}
+			// Gas moved after the equilibrium was taken is rounded to whole
+			// quanta, a quantum per species: that shifts every gas activity by
+			// up to slack / (the cell's gas, in quanta), and the affinity by RT
+			// times that.
+			double gas = 0.0;
+			for (size_t s = 0; s < cell.amount.size(); ++s) {
+				if (cell.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+					gas += static_cast<double>(cell.amount[s]);
+				}
+			}
+			const Thermal thermal = thermal_state(table, cell);
+			const double rounding = gas > 0.0 ? 2.0 * static_cast<double>(slack) / gas * GAS_CONSTANT * thermal.temperature : 0.0;
+			if ((forward ? a : -a) <= rounding) {
+				continue;
+			}
+			// otherwise, after the slack or all there is, the direction must be spent
+			const int64_t ahead = most < slack ? most : slack;
+			double beyond = 0.0;
+			const bool has = probe.at(static_cast<double>(forward ? ahead : -ahead), beyond);
+			if (has && (forward ? beyond > 0.0 : beyond < 0.0) && out.size() < MAX_MESSAGES) {
+				char buffer[240];
+				std::snprintf(buffer, sizeof buffer, "P1: step %lld: cell %lld is not at the equilibrium of %s: affinity %.6g J/mol, still %.6g after %lld quanta",
+						static_cast<long long>(trace.step), static_cast<long long>(c), std::string(reaction.id()).c_str(), a, beyond, static_cast<long long>(ahead));
+				out.push_back(buffer);
+			}
+		}
+	}
+	return out;
+}
+
+Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
 	}
-	Violations out;
+	Violations out = check_P1(table, trace, equilibria);
+	{
+		Violations v = check_V2(table, trace);
+		out.insert(out.end(), v.begin(), v.end());
+	}
 	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_S1, check_V1, check_V3 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());

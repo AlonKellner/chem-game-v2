@@ -44,6 +44,9 @@ struct Edge {
 	PhaseMask phases = PHASES_NONE;
 	bool open = true; // false once disconnected (ids are never reused)
 	double conductance = 0.0; // W/K (GAME_SPEC §5: UA); 0 conducts no heat
+	// A drain (GAME_SPEC §6): each step, the liquid of `a` and what is
+	// dissolved in it run down into `b` (a condenser's outlet over a beaker).
+	bool drain = false;
 };
 
 // What a cell is, beside its state. A reservoir is an energy account at a
@@ -91,8 +94,9 @@ struct StepTrace {
 	std::vector<CellMeta> meta; // one per cell
 	bool thermal = false; // the world has temperatures: the thermal invariants apply
 	// One per cell, set by the simulation: nonzero when a rigid cell was left
-	// under-full this step because the cells it draws from held no more gas (a
-	// partial vacuum, which the demo's subset does not model).
+	// under-full this step, because the cell it draws from held no more gas,
+	// or because a fast reaction in it consumed gas faster than eight fillings
+	// a step (a partial vacuum, which the demo's subset does not model).
 	std::vector<uint8_t> starved;
 };
 
@@ -134,6 +138,8 @@ public:
 		// an energy account at a fixed temperature (K); makes the world thermal
 		CellId add_reservoir(std::string name, double temperature);
 		EdgeId add_edge(CellId a, CellId b, PhaseMask phases, double conductance = 0.0);
+		// a liquid edge down which `from`'s liquid runs into `to` each step
+		EdgeId add_drain(CellId from, CellId to);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
 		Builder &set_energy(CellId cell, Energy energy);
 		// The cell's energy is the enthalpy of its amounts at this temperature
@@ -206,6 +212,7 @@ public:
 
 	// The topology changes between steps only (GAME_SPEC §4.5, step 1).
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
+	Refusal connect_drain(CellId from, CellId to, EdgeId *made = nullptr);
 	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);

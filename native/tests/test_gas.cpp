@@ -195,9 +195,12 @@ TEST_CASE("gas: malachite over a flame fills a balloon with its gases and the fl
 		sim.step();
 	}
 	CHECK(sim.world().amount(flask, builtin::malachite).mol() < 1e-4);
-	// every mole of gas is in the flask or the balloon: the air, and two per mole decomposed
+	// every mole made is in the flask or the balloon, as gas or as the water
+	// that condensed in the cool balloon: the air, and two per mole decomposed
 	const double made = 2.0 * (decomposes - sim.world().amount(flask, builtin::malachite).mol());
-	CHECK(gas_mol(sim.world(), flask) + gas_mol(sim.world(), balloon) == doctest::Approx(air + made).epsilon(1e-9));
+	const double condensed = sim.world().amount(flask, builtin::water).mol() + sim.world().amount(balloon, builtin::water).mol();
+	CHECK(gas_mol(sim.world(), flask) + gas_mol(sim.world(), balloon) + condensed == doctest::Approx(air + made).epsilon(1e-9));
+	CHECK(sim.world().amount(balloon, builtin::water).mol() > 0.5 * decomposes); // most of the steam condensed there
 	CHECK(volume(sim.world(), flask) == doctest::Approx(FLASK).epsilon(1e-9));
 	CHECK(sim.world().amount(balloon, builtin::carbon_dioxide).mol() > 0.85 * decomposes); // most of the CO2 was pushed out
 	CHECK(sim.world().amount(balloon, builtin::nitrogen).mol() > 0.0); // and the flask's air before it

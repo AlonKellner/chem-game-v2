@@ -256,17 +256,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		if (r.contains("kinetics")) {
 			const json &k = r.at("kinetics");
-			if (k.at("law").get<std::string>() != "first_order") {
-				fail(reactions_file, "reaction " + row.id + ": the only kinetics law is first_order");
+			const std::string law = k.at("law").get<std::string>();
+			if (law == "equilibrium") {
+				row.kinetics.law = chem::Kinetics::Law::Equilibrium;
+			} else if (law == "first_order") {
+				const auto found = by_key.find(k.at("in").get<std::string>());
+				if (found == by_key.end()) {
+					fail(reactions_file, "reaction " + row.id + ": kinetics names a species that is not in species.json");
+				}
+				row.kinetics.law = chem::Kinetics::Law::FirstOrder;
+				row.kinetics.in = chem::SpeciesId{ found->second };
+				row.kinetics.prefactor = k.at("prefactor").get<double>();
+				row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+			} else {
+				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order or equilibrium");
 			}
-			const auto found = by_key.find(k.at("in").get<std::string>());
-			if (found == by_key.end()) {
-				fail(reactions_file, "reaction " + row.id + ": kinetics names a species that is not in species.json");
-			}
-			row.kinetics.law = chem::Kinetics::Law::FirstOrder;
-			row.kinetics.in = chem::SpeciesId{ found->second };
-			row.kinetics.prefactor = k.at("prefactor").get<double>();
-			row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
 		}
 		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
 			fail(reactions_file, "\"" + equation + "\": " + why);
@@ -305,7 +309,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		char kinetics[160];
 		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g }",
-				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder" : "Kinetics::Law::None", row.kinetics.in.index,
+				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
+						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium" : "Kinetics::Law::None",
+				row.kinetics.in.index,
 				row.kinetics.prefactor, row.kinetics.activation);
 		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
