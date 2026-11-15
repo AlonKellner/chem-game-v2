@@ -1,0 +1,20 @@
+{
+	"format": "chem-species/1",
+	"note": "Structure only (Stage 1): formula, phase, charge. Element counts and molar masses are derived from the formula by the build. Thermodynamic values enter with Stage 2, once verified (docs/DATA_SOURCES.md).",
+	"species": [
+		{"id": "malachite", "formula": "Cu2CO3(OH)2", "phase": "s"},
+		{"id": "copper_oxide", "formula": "CuO", "phase": "s"},
+		{"id": "carbon_dioxide", "formula": "CO2", "phase": "g"},
+		{"id": "water", "formula": "H2O", "phase": "l"},
+		{"id": "steam", "formula": "H2O", "phase": "g"},
+		{"id": "nitrogen", "formula": "N2", "phase": "g"},
+		{"id": "oxygen", "formula": "O2", "phase": "g"},
+		{"id": "sulfuric_acid_aq", "formula": "H2SO4", "phase": "aq"},
+		{"id": "copper_sulfate_aq", "formula": "CuSO4", "phase": "aq"},
+		{"id": "copper_sulfate_pentahydrate", "formula": "CuSO4.5H2O", "phase": "s"},
+		{"id": "copper_sulfate_trihydrate", "formula": "CuSO4.3H2O", "phase": "s"},
+		{"id": "copper_sulfate_monohydrate", "formula": "CuSO4.H2O", "phase": "s"},
+		{"id": "copper_sulfate", "formula": "CuSO4", "phase": "s"},
+		{"id": "glass", "formula": "SiO2", "phase": "s"}
+	]
+}

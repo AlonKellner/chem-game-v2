@@ -5,6 +5,7 @@
 #   chem_capi   the C API (chem_api.h), static and shared                     capi/
 #   chem_gd     shared GDExtension: the Godot host on the C API               hosts/godot/ -> engines/godot/bin
 #   chem_tests / lab_tests   doctest executables, registered with ctest       tests/, tests/game/
+#   chem_datagen  embeds data/ in chem_core, refusing unbalanced reactions       datagen/
 #   chem_tool   the headless host                                             hosts/headless/
 #
 # Configure/build from the repo root (docs/WORKFLOW.md):
@@ -58,8 +59,26 @@ include(cmake/fp.cmake)
 
 # -------------------------------------------------------------------- chem_core
 file(GLOB CHEM_CORE_SOURCES CONFIGURE_DEPENDS core/src/*.cpp)
-add_library(chem_core STATIC ${CHEM_CORE_SOURCES})
-target_include_directories(chem_core PUBLIC core/include)
+
+# The game's data, embedded (data/elements.json, species.json, reactions.json):
+# chem_datagen derives the element counts from the formulas and builds the tables
+# through the core's own validation, so a reaction that does not balance in every
+# element and in charge fails the build (GAME_SPEC §4.3). The generated tables
+# repeat the proof as a static_assert.
+get_filename_component(CHEM_DATA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../data" ABSOLUTE)
+set(CHEM_GEN_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+add_executable(chem_datagen datagen/datagen.cpp core/src/species.cpp)
+target_include_directories(chem_datagen PRIVATE core/include datagen)
+target_include_directories(chem_datagen SYSTEM PRIVATE extern)
+chem_apply_flags(chem_datagen)
+add_custom_command(
+    OUTPUT "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/include/chem/builtin_ids.hpp"
+    COMMAND chem_datagen "${CHEM_DATA_DIR}" "${CHEM_GEN_DIR}"
+    DEPENDS chem_datagen "${CHEM_DATA_DIR}/elements.json" "${CHEM_DATA_DIR}/species.json" "${CHEM_DATA_DIR}/reactions.json"
+    COMMENT "Embedding the species and reactions (data/), every reaction balanced")
+
+add_library(chem_core STATIC ${CHEM_CORE_SOURCES} "${CHEM_GEN_DIR}/builtin_tables.cpp")
+target_include_directories(chem_core PUBLIC core/include "${CHEM_GEN_DIR}/include")
 set_target_properties(chem_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # CHEM_ASSERT policy (core/include/chem/error.hpp): abort in Debug, report through
 # the error sink and continue otherwise. PUBLIC so every consumer agrees with core.
@@ -138,7 +157,7 @@ if(CHEM_BUILD_TESTS)
     target_link_libraries(chem_tests PRIVATE chem_core)
     # vendored single headers: <doctest/doctest.h>, <nlohmann/json.hpp>
     target_include_directories(chem_tests SYSTEM PRIVATE extern)
-    target_include_directories(chem_tests PRIVATE tests/support)
+    target_include_directories(chem_tests PRIVATE tests/support datagen)
     target_compile_definitions(chem_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
     chem_apply_flags(chem_tests NO_CONVERSION)
     add_test(NAME chem_tests COMMAND chem_tests)
@@ -153,6 +172,14 @@ if(CHEM_BUILD_TESTS)
     chem_apply_flags(lab_tests NO_CONVERSION)
     add_test(NAME lab_tests COMMAND lab_tests)
 
+    # Data that breaks a conservation law does not build: chem_datagen refuses
+    # each of these (tests/data/bad_*), so the custom command above would fail.
+    foreach(bad unbalanced_element unbalanced_charge unknown_species bad_formula)
+        add_test(NAME datagen_refuses_${bad}
+            COMMAND chem_datagen ${CMAKE_SOURCE_DIR}/tests/data/bad_${bad} ${CMAKE_CURRENT_BINARY_DIR}/datagen_refused/${bad})
+        set_tests_properties(datagen_refuses_${bad} PROPERTIES WILL_FAIL TRUE)
+    endforeach()
+
     # the C API: a C11 host compiles against chem_api.h and links the shared library
     enable_language(C)
     add_executable(capi_c_smoke tests/capi/smoke.c)
@@ -161,6 +188,7 @@ if(CHEM_BUILD_TESTS)
     target_link_libraries(capi_c_smoke PRIVATE chem_capi_shared)
     add_test(NAME capi_c_smoke COMMAND capi_c_smoke)
     add_test(NAME chem_tool_version COMMAND chem_tool version)
+    add_test(NAME chem_tool_tables COMMAND chem_tool tables)
 
     # The engine-free layers name no game engine.
     foreach(layer core game capi hosts/headless)

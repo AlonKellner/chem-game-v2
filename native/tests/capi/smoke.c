@@ -36,6 +36,29 @@ int main(void) {
 		return 1;
 	}
 	cg_set_log(NULL, NULL);
+
+	/* Stage 1: the built-in tables */
+	cg_species_info info;
+	info.size = sizeof info;
+	if (cg_species_count() < 1 || cg_species_get(0, &info) != CG_OK || strcmp(info.id, "malachite") != 0 ||
+			strcmp(info.formula, "Cu2CO3(OH)2") != 0 || info.phase != CG_PHASE_SOLID || info.molar_mass < 221.113 || info.molar_mass > 221.115) {
+		fprintf(stderr, "the first built-in species is not malachite at 221.114 g/mol\n");
+		return 1;
+	}
+	if (cg_species_get(cg_species_count(), &info) != CG_ERR_INVALID_ARGUMENT) {
+		fprintf(stderr, "a species index past the end was not refused\n");
+		return 1;
+	}
+	info.size = 4;
+	if (cg_species_get(0, &info) != CG_ERR_INVALID_ARGUMENT) {
+		fprintf(stderr, "a struct without its size was not refused\n");
+		return 1;
+	}
+	if (cg_reaction_count() < 1 || strcmp(cg_reaction_id(0), "malachite_decomposition") != 0 ||
+			strcmp(cg_reaction_equation(0), "Cu2CO3(OH)2(s) -> 2 CuO(s) + CO2(g) + H2O(g)") != 0 || cg_reaction_equation(-1) != NULL) {
+		fprintf(stderr, "the first built-in reaction is not the malachite decomposition\n");
+		return 1;
+	}
 	printf("capi_c_smoke: %s\n", cg_build_name());
 	return 0;
 }

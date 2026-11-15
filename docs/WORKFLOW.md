@@ -27,13 +27,21 @@ summary table gives each gate's seconds and result, and the log directory.
 repo data (`data/`, `bench/`) hash the same as on a run where it passed is not run again. Lints
 always run. `make gates` never reads the cache. `make gate-clear-cache` empties it.
 
+## The conservation sweep
+
+`sweeps: conservation holds on every step of every random world` (in `chem_tests`) builds random
+species tables and worlds and drives them with random primitive calls, honest and dishonest.
+`CHEM_SWEEP_WORLDS=n` sets the number of worlds (default 2000; the sanitizer build runs
+`ASAN_SWEEP_WORLDS`, default 300). A failure names its seed.
+
 ## ctest entries
 
 | Entry | Checks |
 |---|---|
 | `chem_tests`, `lab_tests` | the core's and the lab layer's doctest cases |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
-| `chem_tool_version` | the headless host runs |
+| `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
+| `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |
 | `*_no_engine` | core, lab, C API and headless host name no game engine |
 | `core_no_libm` | the core calls no C-library transcendental function |
 | `godot_adapter_includes` | the Godot adapter includes only `chem_api.h`, godot-cpp, the standard library, its own headers |

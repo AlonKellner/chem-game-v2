@@ -1,5 +1,5 @@
 // chem_tool: the headless host -- the game without an engine, through the C API
-// alone (GAME_SPEC §14). Stage 0: `version`.
+// alone (GAME_SPEC §14). Stage 0: `version`. Stage 1: `tables`.
 #include "chem_api.h"
 
 #include <cstdio>
@@ -9,7 +9,8 @@ namespace {
 
 int usage() {
 	std::fprintf(stderr, "usage: chem_tool <command>\n"
-						 "  version    the build's name and the C API version\n");
+						 "  version    the build's name and the C API version\n"
+						 "  tables     the built-in species and reactions\n");
 	return 2;
 }
 
@@ -21,6 +22,24 @@ int main(int argc, char **argv) {
 	}
 	if (std::strcmp(argv[1], "version") == 0) {
 		std::printf("%s (C API %d)\n", cg_build_name(), cg_api_version());
+		return 0;
+	}
+	if (std::strcmp(argv[1], "tables") == 0) {
+		static const char *const PHASE[] = { "s", "l", "g", "aq" };
+		std::printf("%-30s %-14s %-5s %6s %12s\n", "species", "formula", "phase", "charge", "g/mol");
+		for (int32_t i = 0; i < cg_species_count(); ++i) {
+			cg_species_info info;
+			info.size = sizeof info;
+			if (cg_species_get(i, &info) != CG_OK) {
+				std::fprintf(stderr, "chem_tool: %s\n", cg_last_error());
+				return 1;
+			}
+			std::printf("%-30s %-14s %-5s %6d %12.3f\n", info.id, info.formula, PHASE[info.phase], info.charge, info.molar_mass);
+		}
+		std::printf("\n%-30s %s\n", "reaction", "equation (balanced in every element and in charge)");
+		for (int32_t i = 0; i < cg_reaction_count(); ++i) {
+			std::printf("%-30s %s\n", cg_reaction_id(i), cg_reaction_equation(i));
+		}
 		return 0;
 	}
 	return usage();

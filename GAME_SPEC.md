@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.1.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.2.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -70,8 +70,8 @@ solution, then recover pure water and grow copper sulfate crystals.
 A species is a (formula, phase) pair: `H2O(l)` and `H2O(g)` are different species. Phases: solid
 `(s)`, liquid `(l)`, gas `(g)`, aqueous solute `(aq)`. Each species has:
 
-- an element-count vector and a charge;
-- a molar mass, derived from the element counts (never entered);
+- an element-count vector, derived by the build from its formula (never entered), and a charge;
+- a molar mass, derived from the element counts and the standard atomic weights (never entered);
 - standard formation enthalpy `Hf`, standard entropy `S°`, and molar heat capacity `Cp`
   (constant in the demo; a polynomial in the full model, §10);
 - a molar volume for condensed phases;
@@ -98,6 +98,13 @@ heat are never added by hand: converting species at fixed `H` changes `Σ n_i Hf
 accounts that hold only energy (a burner's fuel). The **world** is the set of all cells. Its totals
 never change.
 
+Matter and energy enter a world only as its initial conditions (`World::Builder`). A world whose
+totals would not fit the integer range is refused when built; since the totals never change, they
+fit forever after.
+
+**Edges** join two different cells and say which phases may pass (gas; liquid with its solutes;
+any; none, which is heat only). The set of edges changes only at a step boundary.
+
 ### 4.3 The two primitives
 
 Cell state is private. Only two operations change it:
@@ -107,8 +114,16 @@ Cell state is private. Only two operations change it:
 - **`transform(cell, reaction, extent)`** applies `n += ν · extent` inside one cell, with `E`
   unchanged. `ν` is the reaction's integer stoichiometric vector.
 
-A reaction's `ν` is checked for element balance and charge balance when the data is embedded at
-build time; an unbalanced reaction fails the build.
+A `Reaction` value is balanced in every element and in charge: an unbalanced one cannot be
+constructed (`Reaction::make` refuses it). The game's reactions are data
+(`data/reactions.json`); the build embeds them through that same constructor, so an unbalanced
+equation fails the build (`chem_datagen`; ctest `datagen_refuses_*`), and the generated tables
+repeat the proof to the compiler as a `static_assert`.
+
+A primitive call that cannot be applied exactly is **refused**: it names its reason and changes
+nothing. Reasons: an unknown cell, edge or species; a cell that is not an end of the edge; a phase
+the edge does not pass; a negative amount; more than the cell holds; a result outside the integer
+range; a reaction of another species table.
 
 Every primitive call is appended to the step's **ledger**. The state change of a step equals the
 sum of its ledger entries (invariant C5).
@@ -155,7 +170,9 @@ terms. Rates have the form `kinetic(T, …) × (1 − e^(−A/RT))`, so a proces
 cannot proceed where `A < 0`.
 
 **Demo subset:** all of §4 except polynomial `Cp` and `U` cells.
-**Status:** *PLANNED, Stages 1–3.*
+**Status:** Stage 1 implements §4.1 (formula, phase, charge, derived atoms and molar mass), §4.2
+(amounts, energy, edges; temperature is Stage 2), §4.3 and the ledger. §4.5 and §4.6 are
+*PLANNED, Stages 2–3.*
 
 ## 5. Thermal
 
@@ -449,13 +466,16 @@ start.
 
 ## 18. Invariant catalogue
 
-Each invariant is a named pure check over a step trace (`chem/invariants.hpp`, *PLANNED, Stage 1*),
-with a self-test proving it fires on a corrupted trace, and is swept over random worlds.
+Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `check_<ID>`,
+`check_all`), with a self-test proving it fires on a corrupted trace
+(`native/tests/test_invariants.cpp`), and is swept over random worlds
+(`native/tests/test_sweeps.cpp`). A violation's message starts with its ID.
 
 ### Tier 1: player-facing
 
 - **UX1. Nothing appears or vanishes.** Whatever the player does, the world's total of each element
-  and of energy is unchanged. *(PLANNED, Stage 1; `C1`, `C3`.)*
+  and of energy is unchanged. **Tested as:** `C1`, `C2`, `C3`, `C4` on every step of
+  `sweeps: conservation holds on every step of every random world`.
 - **UX2. Results are measurements.** A reported quantity is a pure function of the state.
   *(PLANNED, Stage 8; `R1`.)*
 - **UX3. Speed does not change outcomes.** A session gives the same state at any time acceleration
@@ -469,15 +489,20 @@ with a self-test proving it fires on a corrupted trace, and is swept over random
 
 ### Tier 2: systemic
 
+The Stage column is where an invariant is implemented; rows of Stage 1 are implemented, later
+rows are *PLANNED*.
+
 | ID | Invariant | Kind | Stage |
 |---|---|---|---|
 | C1 | World total of each element is constant | exact | 1 |
-| C2 | World mass is constant (follows from C1; checked independently) | exact | 1 |
+| C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |
 | C6 | Every amount is non-negative | exact | 1 |
-| C7 | A transfer happens only along an existing edge and respects its phase filter | exact | 1 |
+| C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
+| C8 | A transform's change is balanced in every element and in charge | exact | 1 |
+| L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
 | T1 | Per process: flux × driving force ≥ 0 | sign-exact | 2 |
 | T2 | World entropy does not decrease, within 1e-9 J/K + 1e-12 · Σ\|ΔS_cell\| per step | tolerance | 2 |
 | T3 | Every thermal cell has positive heat capacity and a finite temperature above 0 K | exact | 2 |
@@ -500,7 +525,7 @@ with a self-test proving it fires on a corrupted trace, and is swept over random
 | O2 | Output radiance ≤ input + emission, per sample | exact | 10 |
 | O3 | N-sample colour within the §12.1 threshold of the reference | tolerance | 10 |
 | O4 | GPU image matches the CPU reference within 2/255 | tolerance | 10 |
-| S1 | No NaN or infinity in any output | exact | 1 |
+| S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
 
