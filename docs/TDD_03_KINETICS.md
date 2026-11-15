@@ -18,7 +18,7 @@ malachite decomposition of the demo's first stage happens for the first time.
 | 3.6 | The metamorphic invariants M1 (reference shift), M2 (scaling), M3 (convergence) | Done |
 | 3.7 | The reacting-world sweep | Done |
 | 3.8 | `chem_tool study decomposition`; step cost | Done |
-| 3.9 | The user's sign-off | Pending |
+| 3.9 | The user's sign-off | Done (2026-11-15: "Very good, approved, proceed") |
 
 ## Decisions
 
