@@ -1,0 +1,20 @@
+[configuration]
+
+entry_symbol = "chem_library_init"
+compatibility_minimum = "4.7"
+; Not hot-reloadable while the class set is still changing stage by stage: the
+; editor asks for a restart after a rebuild instead of swapping the library.
+reloadable = false
+
+[libraries]
+
+; File names are exactly what native/CMakeLists.txt produces:
+; libchem_gd${GODOTCPP_SUFFIX}.<ext>, written to engines/godot/bin (make native).
+macos.debug.arm64 = "res://bin/libchem_gd.macos.template_debug.arm64.dylib"
+macos.release.arm64 = "res://bin/libchem_gd.macos.template_release.arm64.dylib"
+macos.debug.x86_64 = "res://bin/libchem_gd.macos.template_debug.x86_64.dylib"
+macos.release.x86_64 = "res://bin/libchem_gd.macos.template_release.x86_64.dylib"
+linux.debug.x86_64 = "res://bin/libchem_gd.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://bin/libchem_gd.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://bin/libchem_gd.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/libchem_gd.windows.template_release.x86_64.dll"

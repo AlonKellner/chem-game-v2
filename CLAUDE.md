@@ -1,0 +1,77 @@
+# Chem Game v2
+
+A chemistry lab where simulated materials follow mechanical, physical and chemical laws, with
+conservation laws enforced as invariants. Design: `GAME_SPEC.md`.
+
+## Stack
+
+- **Game**: engine-free native C++20 (`native/core`, `native/game`) behind a C API (`native/capi/include/chem_api.h`)
+- **Engine host**: Godot 4.7 (`engines/godot`; the host is one GDExtension node, `native/hosts/godot`)
+- **Testing**: doctest/ctest (`chem_tests`, `lab_tests`); GUT 9.6.0 for the Godot host only
+- **IDE**: VSCode
+
+## Architecture
+
+Layers with a strict dependency direction: core -> lab -> C API -> hosts. Everything but `native/hosts/godot` and
+`engines/godot` is engine-free (ctest `*_no_engine`); the Godot host includes only `chem_api.h` (ctest
+`godot_adapter_includes`) and the Godot project holds at most 300 lines of GDScript outside tests (ctest `gdscript_budget`).
+
+- `native/core/include/chem/` — The simulation kernel, namespace `chem` (GAME_SPEC §3–§12): integer amounts and energy, cells, the two mutation primitives, processes, invariants. No engine, no C-library transcendentals (ctest `core_no_libm`).
+- `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13): bench, equipment, connections, events, reports.
+- `native/capi/` — `chem_api.h`: the game behind a plain C ABI (size-prefixed structs, borrowed views, statuses).
+- `native/hosts/headless/` — `chem_tool`: the game without an engine (sessions, reports, benchmarks).
+- `native/hosts/godot/` — The Godot host: `ChemLab`.
+- `engines/godot/` — The Godot project. `make native` builds the extension into `engines/godot/bin` and copies `data/` into `engines/godot/data`.
+- `data/` — Source-of-truth data (species, reactions, equipment, session scripts); `bench/` — committed goldens.
+- `docs/DATA_SOURCES.md` — every physical value with its source and confidence. A value is used only once its row is verified.
+
+## Testing
+
+The protocol: `docs/WORKFLOW.md`.
+
+```bash
+make check                      # the engine-free build, then every ctest entry
+make check AREA=core            # core | lab | all
+make check TC="conservation*"   # one doctest filter in chem_tests
+make quick                      # between commits: only what a change can affect (result cache)
+make gate                       # before every commit: core, ctest, the extension, the Godot suite, goldens unchanged
+SKIP_GODOT=1 make gate          # every engine-free gate
+make gates                      # before a merge or a stage close: uncached, plus ASan+UBSan
+make native                     # the Godot extension, data copy, import
+./run_tests_parallel.sh         # the Godot host's GUT suite
+make run                        # the game
+```
+
+- Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`.
+- Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`.
+- **Invariants over examples**: a property goes in the catalogue (GAME_SPEC §18) as a named check with a self-test that proves it fires on a corrupted trace.
+- **Regression policy**: after Stage N, all tests from Stages 0 through N pass before proceeding.
+
+## Stage Workflow
+
+1. Spec first: the stage's section of `GAME_SPEC.md`, its invariants, its rows of `docs/DATA_SOURCES.md` verified
+2. Tests, then the kernel green under `make check`; `make gate` before each commit (small green commits on a branch)
+3. The lab layer, the C API, the hosts, as the stage needs
+4. Goldens: a changed golden or session record is a behaviour change; bring the evidence and get the user's approval before re-recording
+5. Docs: the stage's TDD doc (`docs/TDD_NN_<TOPIC>.md`, phase table), CHANGELOG, GAME_SPEC's version; `make gates` closes the stage
+6. The user tests interactively (or reviews the headless report) and gives pass/fail feedback
+7. Failing interactive tests become automated tests; fix and re-run until all pass
+
+**No stage is complete without the user's sign-off.**
+
+Commits: `Stage N: <behaviour sentence>` on a branch; merged to `main` as `Merge Stage N: <summary> (GAME_SPEC x.y.z)`.
+
+## Code Style
+
+- C++20, tabs, short comments naming the GAME_SPEC section
+- Conserved quantities are integers (amounts in 1e-12 mol, energy in 1e-9 J); derived quantities are float64 in SI units
+- Cell state changes only through `transfer` and `transform` (GAME_SPEC §4.3)
+- Error handling: debug builds assert and abort on an invariant violation; release builds report and continue (`chem/error.hpp`; the C API returns statuses)
+
+## Key References
+
+- `GAME_SPEC.md` — the design: every system in full, each with the demo's subset; the invariant catalogue (§18)
+- `docs/WORKFLOW.md` — gates and build trees
+- `docs/DATA_SOURCES.md` — physical data and its sources
+- `docs/TDD_00_BOOTSTRAP.md` onward — one document per stage
+- Reference for conventions: the sibling repository `ricochet-game-v2`

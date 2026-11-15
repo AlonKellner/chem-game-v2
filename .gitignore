@@ -1,0 +1,34 @@
+# Godot
+.godot/
+*.uid
+.import/
+export.cfg
+export_credentials.cfg
+*.tmp
+*.translation
+.gut_editor_config.json
+*.log
+
+# IDE / OS
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# python
+__pycache__/
+.venv/
+
+# make perf reports (timing is evidence, not committed)
+build/
+
+# Native build outputs; native/godot-api/ is tracked on purpose
+native/build*/
+# The Godot project's build output and copied data (make native)
+engines/godot/bin/
+engines/godot/data/
+
+# Claude Code agent worktrees
+.claude/worktrees/
