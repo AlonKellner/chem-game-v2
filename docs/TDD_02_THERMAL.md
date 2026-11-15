@@ -19,7 +19,7 @@ temperature, edges conduct heat, and the second law joins the invariants.
 | 2.6 | Invariants T1, T2, T3, S1 with self-tests; D3; the first K1 oracle | Done |
 | 2.7 | The thermal sweep; UX6 (the extremes of temperature never widen) | Done |
 | 2.8 | `chem_tool study cooling` | Done |
-| 2.9 | The user's sign-off | Pending |
+| 2.9 | The user's sign-off | Done (2026-11-15: "Approved, proceed") |
 
 ## Decisions
 
