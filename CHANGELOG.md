@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.3.0 (2026-11-15, Stage 2)
+
+- §3: the core's own `exp` and `log` implemented and pinned; the per-step range limit stated.
+- §4.2: reservoirs are energy accounts at a fixed temperature, holding no matter; a world has
+  temperatures when built with one, and then every cell must have a temperature.
+- §4.5: heat conduction is relaxed pairwise in edge order, the declared exception to
+  frozen-state evaluation.
+- §5: the exact two-body relaxation and its quantisation rule (no overshoot, static at rest).
+- §18: T1, T2, T3, S1, D3 and the first K1 oracle implemented; T2's tolerance restated as the
+  rounding bound of its own sum (was a guess); UX6 tested.
+- Data: thermodynamic values for water, steam, CO₂, N₂, O₂, CuO, CuSO₄ and glass verified against
+  the NIST Chemistry WebBook and ISO 3585; the other species have none yet and cannot be in a
+  cell with a temperature.
+
 ## 0.2.0 (2026-11-15, Stage 1)
 
 - §4.1–§4.3 implemented: species with atoms and molar mass derived from the formula, cells that

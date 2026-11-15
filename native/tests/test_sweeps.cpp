@@ -3,6 +3,7 @@
 // After every step every invariant holds and the world's totals are the
 // integers it was built with; a refused call leaves the state bit-identical.
 #include "chem/invariants.hpp"
+#include "chem/sim.hpp"
 #include "rng.hpp"
 
 #include <doctest/doctest.h>
@@ -204,4 +205,117 @@ TEST_CASE("sweeps: conservation holds on every step of every random world (Stage
 	// the sweep exercises both paths
 	CHECK(counts.accepted > worlds);
 	CHECK(counts.refused > worlds);
+}
+
+// ------------------------------------------------------------------ thermal
+
+namespace {
+
+// Random thermal worlds: cells of random matter at random temperatures and
+// reservoirs, joined by edges of random conductance (zero, ordinary, enormous),
+// with the topology and the conductances changing between steps.
+void run_thermal_world(uint64_t seed, long long &transfers) {
+	Rng rng(seed);
+	RandomChemistry chem;
+	make_chemistry(rng, chem);
+	// give every species thermodynamic data
+	std::vector<ElementDef> elements;
+	for (int e = 0; e < chem.table->element_count(); ++e) {
+		elements.push_back(chem.table->element(e));
+	}
+	std::vector<SpeciesDef> species(chem.table->all_species().begin(), chem.table->all_species().end());
+	for (SpeciesDef &def : species) {
+		def.has_thermo = true;
+		def.hf = static_cast<double>(rng.range(-2000000, 500000));
+		def.cp = static_cast<double>(rng.range(10, 300));
+		def.s0 = static_cast<double>(rng.range(1, 400));
+	}
+	std::string why;
+	const auto table = SpeciesTable::make(elements, species, &why);
+	REQUIRE_MESSAGE(table.has_value(), why);
+
+	World::Builder builder(*table);
+	const int cells = static_cast<int>(rng.range(1, 6));
+	for (int c = 0; c < cells; ++c) {
+		const CellId cell = builder.add_cell("cell" + std::to_string(c));
+		const int kinds = static_cast<int>(rng.range(1, 3));
+		for (int k = 0; k < kinds; ++k) {
+			// from a speck to hundreds of moles
+			const int64_t quanta = rng.chance(20) ? rng.range(1000, 1000000) : rng.range(1000000000, 300000000000000);
+			builder.set_amount(cell, SpeciesId{ static_cast<int32_t>(rng.range(0, table->species_count() - 1)) }, Amount{ quanta });
+		}
+		builder.set_temperature(cell, static_cast<double>(rng.range(80, 3000)));
+	}
+	const int reservoirs = static_cast<int>(rng.range(0, 2));
+	for (int r = 0; r < reservoirs; ++r) {
+		builder.add_reservoir("reservoir" + std::to_string(r), static_cast<double>(rng.range(80, 3000)));
+	}
+	const int all = cells + reservoirs;
+	const auto conductance = [&rng] {
+		return rng.chance(15) ? 0.0 : rng.chance(15) ? 1e9 : static_cast<double>(rng.range(1, 50000)) / 1000.0;
+	};
+	if (all > 1) {
+		const int edges = static_cast<int>(rng.range(1, 8));
+		for (int e = 0; e < edges; ++e) {
+			const auto a = static_cast<int32_t>(rng.range(0, all - 1));
+			const auto b = static_cast<int32_t>((a + rng.range(1, all - 1)) % all);
+			builder.add_edge(CellId{ a }, CellId{ b }, PHASES_NONE, conductance());
+		}
+	}
+	auto built = builder.build(&why);
+	REQUIRE_MESSAGE(built.has_value(), why);
+	Simulation sim(std::move(*built));
+	sim.set_checking(false); // checked here, with the seed in the message
+	const Totals genesis = totals(*table, sim.world().snapshot());
+
+	const auto extremes = [&](double &lo, double &hi) {
+		lo = 1e300;
+		hi = -1e300;
+		for (int c = 0; c < all; ++c) {
+			double t = 0.0;
+			REQUIRE(sim.world().temperature(CellId{ c }, t));
+			lo = t < lo ? t : lo;
+			hi = t > hi ? t : hi;
+		}
+	};
+	for (int step = 0; step < 60; ++step) {
+		if (all > 1 && rng.chance(10)) {
+			const auto a = static_cast<int32_t>(rng.range(0, all - 1));
+			const auto b = static_cast<int32_t>((a + rng.range(1, all - 1)) % all);
+			sim.world().connect(CellId{ a }, CellId{ b }, PHASES_NONE, nullptr, conductance());
+		}
+		if (rng.chance(10)) {
+			const EdgeId edge{ static_cast<int32_t>(rng.range(0, static_cast<int64_t>(sim.world().edges().size()))) };
+			if (rng.chance(50)) {
+				sim.world().disconnect(edge);
+			} else {
+				sim.world().set_conductance(edge, conductance());
+			}
+		}
+		double lo_before = 0.0, hi_before = 0.0, lo_after = 0.0, hi_after = 0.0;
+		extremes(lo_before, hi_before);
+		const StepTrace trace = sim.step();
+		extremes(lo_after, hi_after);
+		transfers += static_cast<long long>(trace.ledger.size());
+		const Violations violations = check_all(*table, trace);
+		REQUIRE_MESSAGE(violations.empty(), "seed " << seed << ", step " << step << ": " << violations[0]);
+		REQUIRE_MESSAGE(totals(*table, trace.after) == genesis, "seed " << seed << ", step " << step << ": the world's totals moved");
+		// UX6: with no reaction, nothing gets hotter than the hottest or colder than the coldest
+		const double slack = 1e-9 * hi_before;
+		REQUIRE_MESSAGE(hi_after <= hi_before + slack, "seed " << seed << ", step " << step << ": the hottest cell warmed from " << hi_before << " to " << hi_after);
+		REQUIRE_MESSAGE(lo_after >= lo_before - slack, "seed " << seed << ", step " << step << ": the coldest cell cooled from " << lo_before << " to " << lo_after);
+	}
+}
+
+} // namespace
+
+TEST_CASE("sweeps: heat flows downhill and entropy grows on every step of every random thermal world (Stage 2)") {
+	const char *env = std::getenv("CHEM_SWEEP_WORLDS");
+	const long long worlds = env != nullptr ? std::atoll(env) : 2000;
+	long long transfers = 0;
+	for (long long w = 0; w < worlds; ++w) {
+		run_thermal_world(0x7e47000000ull + static_cast<uint64_t>(w), transfers);
+	}
+	MESSAGE(worlds << " thermal worlds, " << worlds * 60 << " steps, " << transfers << " heat transfers");
+	CHECK(transfers > worlds);
 }

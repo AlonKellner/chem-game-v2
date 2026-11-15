@@ -1,40 +1,66 @@
 # Data sources
 
-Every physical constant and material property used by the game, with its source and a confidence.
-A value enters `data/species.json` or `data/reactions.json` only with a row here (GAME_SPEC §2,
-principle 12).
+Every physical constant and material property used by the game, with its source. A value enters
+`data/species.json` or `data/reactions.json` only with a verified row here (GAME_SPEC §2,
+principle 12). Molar masses are derived by the build from the formulas and the standard atomic
+weights of `data/elements.json`.
 
-**Status of this file: unverified draft.** Every value below was written from memory during
-planning and has not yet been checked against a reference. The data stage of each system (Stages
-2–6) verifies its rows against the CRC Handbook, the NIST Chemistry WebBook or NBS tables, records
-the citation, and only then uses them. Until a row's "Verified" column is filled it must not be
-relied on.
+## Verified species data (298.15 K, 1 bar)
+
+These rows are in `data/species.json` and used by the game. Sources:
+
+- **NIST**: NIST Chemistry WebBook, SRD 69 (webbook.nist.gov), retrieved 2026-11-15.
+  - **CODATA**: Cox, Wagman and Medvedev, *CODATA Key Values for Thermodynamics*, 1984, as listed
+    there ("CODATA Review value").
+  - **Chase**: Chase, *NIST-JANAF Thermochemical Tables*, 4th ed., J. Phys. Chem. Ref. Data
+    Monograph 9, 1998, as listed there.
+- **Cp** is the Shomate fit of Chase 1998, as listed in the WebBook, evaluated at 298.15 K:
+  `Cp = A + B t + C t² + D t³ + E/t²`, `t = T/1000`. The game holds it constant (GAME_SPEC §20).
+- **ISO 3585**: borosilicate glass 3.3, mean specific heat 0.8 kJ/kg·K over 20–100 °C and density
+  2.23 g/cm³; the same figures are in SCHOTT's DURAN data sheet.
+
+| Species | ΔHf° (kJ/mol) | S° (J/mol·K) | Cp (J/mol·K) | Source |
+|---|---|---|---|---|
+| H2O(l) | −285.830 ± 0.040 | 69.95 ± 0.03 | 75.375 | NIST: CODATA; Cp from the liquid fit (298–500 K) |
+| H2O(g) | −241.826 ± 0.040 | 188.835 ± 0.010 | 33.590 | NIST: CODATA; Cp from the gas fit (500–1700 K) evaluated at 298.15 K, which equals the JANAF table's 33.590 |
+| CO2(g) | −393.51 ± 0.13 | 213.785 ± 0.010 | 37.130 | NIST: CODATA; Cp from the fit (298–1200 K) |
+| N2(g) | 0 | 191.609 ± 0.004 | 29.124 | NIST: CODATA; Cp from the fit (100–500 K) |
+| O2(g) | 0 | 205.152 ± 0.005 | 29.383 | NIST: CODATA; Cp from the fit (100–700 K) |
+| CuO(s) | −156.06 | 42.59 | 42.246 | NIST: Chase; Cp from the fit (298–2000 K) |
+| CuSO4(s) | −771.4 ± 1.2 | 109.2 ± 0.4 | 98.531 | NIST: CODATA (Chase lists −769.98 and 109.05); Cp from Chase's fit (298–2000 K) |
+| Glass, as SiO2 | −910.86 | 41.46 | 48.066 | ΔHf° and S° are quartz's (NIST: Chase; S° from its fit), a stand-in: the wall never reacts, so they cancel. Cp is ISO 3585's 0.8 kJ/kg·K × 60.083 g/mol |
+
+Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
+compilation's value); glass Cp is 48.07 (the draft guessed about 50).
+
+**Oracle checked in Stage 2:** water's heat of vaporisation at 25 °C from the table,
+44.004 kJ/mol, against CODATA's 43.99 ± 0.07.
+
+## Unverified draft
+
+Every value from here to the end of the file was written from memory during planning and has
+**not** been checked against a reference. None is used by code. The stage that needs a row
+verifies it against the CRC Handbook, the NIST Chemistry WebBook or NBS tables, records the
+citation above, and only then uses it.
 
 Confidence: **high** (well-known tabulated value), **medium** (tabulated, but sources differ or
 recall is uncertain), **low** (estimate or game calibration).
 
-## Species (298.15 K, 1 bar)
+### Species still to verify
 
-| Species | M (g/mol) | ΔHf° (kJ/mol) | Cp (J/mol·K) | S° (J/mol·K) | ρ (g/cm³) | Confidence | Verified |
+| Species | M (g/mol) | ΔHf° (kJ/mol) | Cp (J/mol·K) | S° (J/mol·K) | ρ (g/cm³) | Confidence | Needed by |
 |---|---|---|---|---|---|---|---|
-| Cu2CO3(OH)2(s), malachite | 221.114 | −1054.0 (older tables −1051.4) | 154.3 | 166.3 (older 186.2) | 4.0 | medium | |
-| CuO(s) | 79.545 | −157.3 | 42.3 | 42.6 | 6.31 | high | |
-| CO2(g) | 44.009 | −393.51 | 37.1 | 213.7 | ideal gas | high | |
-| H2O(l) | 18.015 | −285.83 | 75.3 | 69.9 | 0.997 | high | |
-| H2O(g) | 18.015 | −241.82 | 33.6 | 188.8 | ideal gas | high | |
-| N2(g) | 28.014 | 0 | 29.1 | 191.6 | ideal gas | high | |
-| O2(g) | 31.998 | 0 | 29.4 | 205.1 | ideal gas | high | |
-| H2SO4(aq) | 98.072 | −909.3 (fully ionised) | to be chosen so 1 M solution is about 3.9 J/g·K | 20.1 | 1.060 (1 M solution) | H high; Cp, S low | |
-| CuSO4(aq) | 159.602 | −844.5 (infinite dilution); effective value fitted to solubility, about −836.5 | to be fitted | −79.5 (infinite dilution); effective value fitted | n/a | H medium; rest low | |
-| CuSO4·5H2O(s) | 249.677 | −2279.7 | 280 | 300.4 | 2.286 | high | |
-| CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | |
-| CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | |
-| CuSO4(s) | 159.602 | −771.4 | 100 | 109.2 | 3.60 | high | |
-| Borosilicate glass (as SiO2) | 60.08 | inert | about 50 | about 41.5 | 2.23 | medium | |
+| Cu2CO3(OH)2(s), malachite | 221.114 | −1054.0 (older tables −1051.4) | 154.3 | 166.3 (older 186.2) | 4.0 | medium | Stage 3 |
+| H2SO4(aq) | 98.072 | −909.3 (fully ionised) | to be chosen so 1 M solution is about 3.9 J/g·K | 20.1 | 1.060 (1 M solution) | H high; Cp, S low | Stage 6 |
+| CuSO4(aq) | 159.602 | −844.5 (infinite dilution); effective value fitted to solubility, about −836.5 | to be fitted | −79.5 (infinite dilution); effective value fitted | n/a | H medium; rest low | Stage 6 |
+| CuSO4·5H2O(s) | 249.677 | −2279.7 | 280 | 300.4 | 2.286 | high | Stage 6 |
+| CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | Stage 6 |
+| CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | Stage 6 |
 
-Molar masses are derived by the build from the element counts; the column is a cross-check.
+Densities of the verified species (CuO 6.31, CuSO4 3.60, water 0.997 g/cm³) are also unverified;
+Stage 4 needs them.
 
-## Oracles (test references, never inputs)
+### Oracles (test references, never inputs)
 
 **Water saturation pressure, Antoine (mmHg, °C):** A = 8.07131, B = 1730.63, C = 233.426 for
 1–100 °C; A = 8.14019, B = 1810.94, C = 244.485 for 99–374 °C. Confidence high. The two sets
@@ -50,14 +76,14 @@ differ by about 0.5% at 100 °C.
 (3→1), 200–250 °C (1→0). Pentahydrate/trihydrate transition in contact with saturated solution
 about 95.9 °C. Confidence medium.
 
-## Kinetics (game-calibrated)
+### Kinetics (game-calibrated)
 
 | Process | Form | Parameters | Confidence |
 |---|---|---|---|
 | Malachite decomposition | first order, Arrhenius | Ea = 150 kJ/mol (literature spans about 100–210), A = 4.7e10 /s | low |
 | CuO dissolution in dilute H2SO4 | `k(T) · f_stir · (c_acid / 1 M) · n0^(1/3) n^(2/3)` | Ea about 50 kJ/mol, k(25 °C) = 2e-3 /s, f_stir about 3 | low |
 
-## Optics
+### Optics
 
 | Medium | Model | Confidence |
 |---|---|---|
@@ -70,4 +96,4 @@ about 95.9 °C. Confidence medium.
 
 ## Constants
 
-CODATA 2018: R = 8.314462618 J/mol·K; standard atmosphere 101325 Pa; T0 = 298.15 K.
+CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).

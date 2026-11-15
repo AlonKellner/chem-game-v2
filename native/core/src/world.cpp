@@ -1,6 +1,7 @@
 #include "chem/world.hpp"
 
 #include "chem/invariants.hpp"
+#include "chem/thermo.hpp"
 
 #include <utility>
 
@@ -32,6 +33,10 @@ const char *refusal_text(Refusal r) {
 			return "the topology changes at a step boundary only";
 		case Refusal::SameCell:
 			return "an edge joins two different cells";
+		case Refusal::Reservoir:
+			return "a reservoir holds energy, never matter";
+		case Refusal::BadValue:
+			return "a conductance must be finite and not negative";
 	}
 	return "unknown refusal";
 }
@@ -41,14 +46,34 @@ const char *refusal_text(Refusal r) {
 World::Builder::Builder(const SpeciesTable &table) :
 		table_(&table) {}
 
+namespace {
+
+bool good_conductance(double c) {
+	return c >= 0.0 && c - c == 0.0;
+}
+
+} // namespace
+
 CellId World::Builder::add_cell(std::string name) {
 	names_.push_back(std::move(name));
+	meta_.push_back(CellMeta{});
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
-EdgeId World::Builder::add_edge(CellId a, CellId b, PhaseMask phases) {
-	edges_.push_back(Edge{ a, b, phases, true });
+CellId World::Builder::add_reservoir(std::string name, double temperature) {
+	names_.push_back(std::move(name));
+	meta_.push_back(CellMeta{ true, temperature });
+	return CellId{ static_cast<int32_t>(names_.size() - 1) };
+}
+
+EdgeId World::Builder::add_edge(CellId a, CellId b, PhaseMask phases, double conductance) {
+	edges_.push_back(Edge{ a, b, phases, true, conductance });
 	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+}
+
+World::Builder &World::Builder::set_temperature(CellId cell, double temperature) {
+	temperatures_.push_back(SetTemperature{ cell, temperature });
+	return *this;
 }
 
 World::Builder &World::Builder::set_amount(CellId cell, SpeciesId species, Amount amount) {
@@ -74,6 +99,7 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	World world;
 	world.table_ = table_;
 	world.names_ = names_;
+	world.meta_ = meta_;
 	world.cells_.assign(names_.size(), CellState{ std::vector<int64_t>(static_cast<size_t>(table_->species_count()), 0), 0 });
 	for (const Edge &e : edges_) {
 		if (!known_cell(e.a) || !known_cell(e.b)) {
@@ -81,6 +107,9 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		}
 		if (e.a == e.b) {
 			return refuse("an edge joins two different cells");
+		}
+		if (!good_conductance(e.conductance)) {
+			return refuse("a conductance is negative or not finite");
 		}
 	}
 	world.edges_ = edges_;
@@ -94,6 +123,9 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		if (s.amount.quanta < 0) {
 			return refuse("a negative amount");
 		}
+		if (meta_[static_cast<size_t>(s.cell.index)].reservoir && s.amount.quanta != 0) {
+			return refuse("a reservoir holds energy, never matter");
+		}
 		world.cells_[static_cast<size_t>(s.cell.index)].amount[static_cast<size_t>(s.species.index)] = s.amount.quanta;
 	}
 	for (const SetEnergy &s : energies_) {
@@ -101,6 +133,44 @@ std::optional<World> World::Builder::build(std::string *why) const {
 			return refuse("an energy is set in a cell the world does not have");
 		}
 		world.cells_[static_cast<size_t>(s.cell.index)].energy = s.energy.quanta;
+	}
+	for (const CellMeta &m : meta_) {
+		if (m.reservoir) {
+			world.thermal_ = true;
+			if (!(m.reservoir_temperature > 0.0) || !(m.reservoir_temperature - m.reservoir_temperature == 0.0)) {
+				return refuse("a reservoir's temperature is positive and finite");
+			}
+		}
+	}
+	for (const SetTemperature &s : temperatures_) {
+		if (!known_cell(s.cell)) {
+			return refuse("a temperature is set in a cell the world does not have");
+		}
+		if (meta_[static_cast<size_t>(s.cell.index)].reservoir) {
+			return refuse("a reservoir's temperature is fixed when it is added");
+		}
+		if (!(s.temperature > 0.0) || !(s.temperature - s.temperature == 0.0)) {
+			return refuse("a temperature is positive and finite");
+		}
+		CellState &cell = world.cells_[static_cast<size_t>(s.cell.index)];
+		if (!thermal_state(*table_, cell).defined) {
+			return refuse("a temperature is set in a cell that cannot have one (a species without thermodynamic data, or no heat capacity)");
+		}
+		bool ok = false;
+		const double joule = enthalpy_at(*table_, cell, s.temperature, ok);
+		const Energy energy = energy_from_joule(joule, ok);
+		if (!ok) {
+			return refuse("a cell's enthalpy does not fit the integer range");
+		}
+		cell.energy = energy.quanta;
+		world.thermal_ = true;
+	}
+	if (world.thermal_) {
+		for (size_t c = 0; c < world.cells_.size(); ++c) {
+			if (!meta_[c].reservoir && !thermal_state(*table_, world.cells_[c]).defined) {
+				return refuse("in a world with temperatures every cell has one (a species without thermodynamic data, or no heat capacity)");
+			}
+		}
 	}
 	// The totals fit the integer range now, so they fit it forever: the
 	// primitives never change them.
@@ -127,6 +197,20 @@ Energy World::energy(CellId cell) const {
 	return Energy{ cells_[static_cast<size_t>(cell.index)].energy };
 }
 
+bool World::temperature(CellId cell, double &kelvin) const {
+	if (!known(cell)) {
+		return false;
+	}
+	const CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	if (m.reservoir) {
+		kelvin = m.reservoir_temperature;
+		return true;
+	}
+	const Thermal t = thermal_state(*table_, cells_[static_cast<size_t>(cell.index)]);
+	kelvin = t.temperature;
+	return t.defined;
+}
+
 Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy) {
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
 		return Refusal::UnknownEdge;
@@ -138,6 +222,7 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 	const CellId to = from == e.a ? e.b : e.a;
 	CellState &src = cells_[static_cast<size_t>(from.index)];
 	CellState &dst = cells_[static_cast<size_t>(to.index)];
+	const bool reservoir = meta_[static_cast<size_t>(from.index)].reservoir || meta_[static_cast<size_t>(to.index)].reservoir;
 
 	// Validate everything before changing anything. A species may be listed
 	// more than once: its amounts add up.
@@ -152,6 +237,9 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 		}
 		if (item.amount.quanta == 0) {
 			continue;
+		}
+		if (reservoir) {
+			return Refusal::Reservoir;
 		}
 		if ((e.phases & phase_bit(table_->species(item.species).phase)) == 0) {
 			return Refusal::PhaseNotAllowed;
@@ -205,6 +293,9 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 	if (reaction.table() != table_) {
 		return Refusal::ForeignReaction;
 	}
+	if (meta_[static_cast<size_t>(cell.index)].reservoir) {
+		return Refusal::Reservoir;
+	}
 	if (extent == 0) {
 		return Refusal::None;
 	}
@@ -232,9 +323,12 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 	return Refusal::None;
 }
 
-Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made) {
+Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, double conductance) {
 	if (!ledger_.empty()) {
 		return Refusal::MidStep;
+	}
+	if (!good_conductance(conductance)) {
+		return Refusal::BadValue;
 	}
 	if (!known(a) || !known(b)) {
 		return Refusal::UnknownCell;
@@ -242,7 +336,7 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made) {
 	if (a == b) {
 		return Refusal::SameCell;
 	}
-	edges_.push_back(Edge{ a, b, phases, true });
+	edges_.push_back(Edge{ a, b, phases, true, conductance });
 	if (made != nullptr) {
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 	}
@@ -260,6 +354,20 @@ Refusal World::disconnect(EdgeId edge) {
 	return Refusal::None;
 }
 
+Refusal World::set_conductance(EdgeId edge, double conductance) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	if (!good_conductance(conductance)) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].conductance = conductance;
+	return Refusal::None;
+}
+
 StepTrace World::close_step() {
 	StepTrace trace;
 	trace.step = step_;
@@ -267,6 +375,8 @@ StepTrace World::close_step() {
 	trace.after = Snapshot{ cells_ };
 	trace.ledger = std::move(ledger_);
 	trace.edges = edges_;
+	trace.meta = meta_;
+	trace.thermal = thermal_;
 	ledger_.clear();
 	before_ = trace.after;
 	++step_;

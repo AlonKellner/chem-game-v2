@@ -34,6 +34,10 @@ species tables and worlds and drives them with random primitive calls, honest an
 `CHEM_SWEEP_WORLDS=n` sets the number of worlds (default 2000; the sanitizer build runs
 `ASAN_SWEEP_WORLDS`, default 300). A failure names its seed.
 
+`sweeps: heat flows downhill and entropy grows on every step of every random thermal world` does
+the same for worlds with temperatures: random matter at 80–3000 K, reservoirs, conductances from
+zero to 1e9 W/K, the topology changing between steps.
+
 ## ctest entries
 
 | Entry | Checks |
@@ -41,6 +45,7 @@ species tables and worlds and drives them with random primitive calls, honest an
 | `chem_tests`, `lab_tests` | the core's and the lab layer's doctest cases |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
+| `chem_tool_study_cooling` | the cooling study runs with every invariant checked on every step and ends with the world's totals unchanged |
 | `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |
 | `*_no_engine` | core, lab, C API and headless host name no game engine |
 | `core_no_libm` | the core calls no C-library transcendental function |

@@ -37,12 +37,21 @@ struct Snapshot {
 	bool operator==(const Snapshot &) const = default;
 };
 
-// A connection between two cells: what may pass. Heat passes any open edge.
+// A connection between two cells: what may pass, and how well it conducts heat.
 struct Edge {
 	CellId a;
 	CellId b;
 	PhaseMask phases = PHASES_NONE;
 	bool open = true; // false once disconnected (ids are never reused)
+	double conductance = 0.0; // W/K (GAME_SPEC §5: UA); 0 conducts no heat
+};
+
+// What a cell is, beside its state. A reservoir is an energy account at a
+// fixed temperature (GAME_SPEC §4.2): it holds no matter, and its energy is
+// what it has received (negative: what it has given).
+struct CellMeta {
+	bool reservoir = false;
+	double reservoir_temperature = 0.0; // K
 };
 
 struct SpeciesAmount {
@@ -70,6 +79,8 @@ struct StepTrace {
 	Snapshot after;
 	std::vector<LedgerEntry> ledger;
 	std::vector<Edge> edges; // the topology during the step
+	std::vector<CellMeta> meta; // one per cell
+	bool thermal = false; // the world has temperatures: the thermal invariants apply
 };
 
 // Why a call changed nothing.
@@ -86,6 +97,8 @@ enum class Refusal : int32_t {
 	ForeignReaction, // a reaction of another species table
 	MidStep, // the topology changes at a step boundary only
 	SameCell, // an edge joins two different cells
+	Reservoir, // a reservoir holds energy, never matter
+	BadValue, // a conductance that is negative or not finite
 };
 const char *refusal_text(Refusal r);
 
@@ -97,12 +110,22 @@ public:
 	public:
 		explicit Builder(const SpeciesTable &table);
 		CellId add_cell(std::string name);
-		EdgeId add_edge(CellId a, CellId b, PhaseMask phases);
+		// an energy account at a fixed temperature (K); makes the world thermal
+		CellId add_reservoir(std::string name, double temperature);
+		EdgeId add_edge(CellId a, CellId b, PhaseMask phases, double conductance = 0.0);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
 		Builder &set_energy(CellId cell, Energy energy);
+		// The cell's energy is the enthalpy of its amounts at this temperature
+		// (K), to the nearest quantum; makes the world thermal. Overrides
+		// set_energy for the cell.
+		Builder &set_temperature(CellId cell, double temperature);
 		// Refuses (nullopt, the reason in *why): an unknown cell or species, a
-		// negative amount, an edge from a cell to itself, totals that do not
-		// fit the integer range.
+		// negative amount, an edge from a cell to itself, a conductance that is
+		// negative or not finite, matter in a reservoir, a temperature that is
+		// not positive and finite or set in a cell that cannot have one (a
+		// species without thermodynamic data, no heat capacity), totals that
+		// do not fit the integer range. In a thermal world every cell must
+		// have a temperature.
 		std::optional<World> build(std::string *why = nullptr) const;
 
 	private:
@@ -115,8 +138,14 @@ public:
 			CellId cell;
 			Energy energy;
 		};
+		struct SetTemperature {
+			CellId cell;
+			double temperature;
+		};
 		const SpeciesTable *table_;
 		std::vector<std::string> names_;
+		std::vector<CellMeta> meta_;
+		std::vector<SetTemperature> temperatures_;
 		std::vector<Edge> edges_;
 		std::vector<Set> amounts_;
 		std::vector<SetEnergy> energies_;
@@ -127,8 +156,16 @@ public:
 	const std::string &cell_name(CellId cell) const { return names_[static_cast<size_t>(cell.index)]; }
 	Amount amount(CellId cell, SpeciesId species) const;
 	Energy energy(CellId cell) const;
+	const CellMeta &meta(CellId cell) const { return meta_[static_cast<size_t>(cell.index)]; }
+	// true when the world has temperatures (a reservoir, or a temperature set when built)
+	bool thermal() const { return thermal_; }
+	// The cell's temperature in K: a reservoir's fixed one, else derived from
+	// its state (chem/thermo.hpp). false when it has none.
+	bool temperature(CellId cell, double &kelvin) const;
 	std::span<const Edge> edges() const { return edges_; }
 	Snapshot snapshot() const { return Snapshot{ cells_ }; }
+	// one cell's state, to read (the processes derive temperatures from it)
+	const CellState &snapshot_cell(CellId cell) const { return cells_[static_cast<size_t>(cell.index)]; }
 	uint64_t step() const { return step_; }
 
 	// Primitive 1. Moves `amounts` and `energy` from `from` to the other end of
@@ -145,8 +182,9 @@ public:
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
 
 	// The topology changes between steps only (GAME_SPEC §4.5, step 1).
-	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr);
+	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
 	Refusal disconnect(EdgeId edge);
+	Refusal set_conductance(EdgeId edge, double conductance);
 
 	// Ends the step: the trace of everything since the last close (or since
 	// the world was built), then the next step begins.
@@ -158,6 +196,8 @@ private:
 
 	const SpeciesTable *table_ = nullptr;
 	std::vector<std::string> names_;
+	std::vector<CellMeta> meta_;
+	bool thermal_ = false;
 	std::vector<CellState> cells_;
 	std::vector<Edge> edges_;
 	std::vector<LedgerEntry> ledger_;

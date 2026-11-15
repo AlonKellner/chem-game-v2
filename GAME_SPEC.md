@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.2.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.3.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -57,7 +57,11 @@ solution, then recover pure water and grow copper sulfate crystals.
 - **No fused multiply-add, no fast-math** on any target (`native/cmake/fp.cmake`; test
   `toolchain: a*b+c is two roundings`).
 - **No C-library transcendentals in the core** (`exp`, `log`, `pow` differ between libraries in the
-  last bit). The core computes its own (`chem/math.hpp`, *PLANNED, Stage 3*; lint `core_no_libm`).
+  last bit). The core computes its own from `+ − × ÷` (`chem/math.hpp`: `exp`, `log`, the fdlibm
+  algorithms, within one unit in the last place; lint `core_no_libm`). Their bits are pinned by
+  `math: the values are pinned, bit for bit, on every platform`.
+- **Range.** One step moves at most 1e18 energy quanta (1e9 J) along one edge, and an energy
+  account at the end of the integer range takes no more.
 - **No unordered iteration and no threads inside a step.**
 - **Decisions are not epsilon comparisons.** A branch that changes what happens (a phase appears,
   a reactant runs out, a vessel overflows) is taken on integer state or on the sign of a driving
@@ -94,9 +98,17 @@ heat capacity is positive even when it is otherwise empty.
 **Temperature** is derived: `T = T0 + (H − Σ n_i Hf_i) / Σ n_i Cp_i`. Heat of reaction and latent
 heat are never added by hand: converting species at fixed `H` changes `Σ n_i Hf_i`, and `T` moves.
 
-**Reservoirs** are cells so large their state does not visibly change (the room, the coolant), or
-accounts that hold only energy (a burner's fuel). The **world** is the set of all cells. Its totals
+A **reservoir** is an energy account at a fixed temperature (the room, a flame, the coolant): it
+holds no matter, its energy is what it has received (negative: what it has given), and its entropy
+is that energy over its temperature. A large body of matter whose temperature should drift (a
+water bath) is an ordinary cell. The **world** is the set of all cells and reservoirs. Its totals
 never change.
+
+A world **has temperatures** when it is built with a reservoir or with a cell's temperature set
+(the cell's energy is then the enthalpy of its amounts at that temperature, to the nearest
+quantum). In such a world every cell must have a temperature at every step: thermodynamic data for
+every species it holds, and a positive heat capacity (invariant T3). A species has thermodynamic
+data only once its row of `docs/DATA_SOURCES.md` is verified.
 
 Matter and energy enter a world only as its initial conditions (`World::Builder`). A world whose
 totals would not fit the integer range is refused when built; since the totals never change, they
@@ -155,6 +167,11 @@ One step of simulated time, in this order:
 Because rates are evaluated from one frozen state and limited together, the result does not depend
 on the order in which processes are listed.
 
+**Heat conduction is the exception.** Edges are relaxed pairwise in index order, each from the
+state the previous one left (§5). This is what makes any conductance, any number of edges on one
+cell and any step stable, and makes each application exactly second-law-safe; the price is a
+dependence on edge order of second order in the step.
+
 **Stable forms.** A fast process uses the exact solution of its own linear problem over the step
 instead of `rate × dt`: `n (1 − e^(−k h))` for first-order decay, exact two-body relaxation for
 conduction, relaxation toward a solved equilibrium for crystal growth.
@@ -171,15 +188,24 @@ cannot proceed where `A < 0`.
 
 **Demo subset:** all of §4 except polynomial `Cp` and `U` cells.
 **Status:** Stage 1 implements §4.1 (formula, phase, charge, derived atoms and molar mass), §4.2
-(amounts, energy, edges; temperature is Stage 2), §4.3 and the ledger. §4.5 and §4.6 are
-*PLANNED, Stages 2–3.*
+(amounts, energy, edges), §4.3 and the ledger. Stage 2 adds thermodynamic data, temperature,
+reservoirs, the step loop with heat conduction (`chem/sim.hpp`) and the thermal part of the
+entropy (`Σ n_i s_i(T)` and the reservoirs'; the mixing terms enter with the phases that mix,
+Stages 4–6). Rates, the limiter and affinities are *PLANNED, Stage 3.*
 
 ## 5. Thermal
 
 **Full design**
 
 - **Conduction** along a thermal edge: `Q̇ = UA (T_a − T_b)`, where `UA` is the edge's conductance
-  (wall material, thickness, wetted area). Integrated by exact two-body relaxation.
+  in W/K (wall material, thickness, wetted area). Integrated by exact two-body relaxation: over
+  one step `h`, `Q = C_eff (T_a − T_b)(1 − e^(−UA·h/C_eff))` with `C_eff = C_a C_b / (C_a + C_b)`
+  (against a reservoir, `C_eff` is the cell's capacity; between two reservoirs, `Q = UA ΔT h`).
+- **Quantisation.** `Q` becomes whole quanta through the edge's carried remainder. The remainder
+  is dropped when the temperature difference changes sign. A transfer never exceeds the whole
+  quanta of `C_eff (T_a − T_b)`, the heat that would equalise the pair, so heat never passes the
+  common temperature; below one quantum of that nothing moves and nothing is carried, so a world
+  at rest is static.
 - **Convection** to a fluid reservoir: a conductance that depends on the temperature difference
   (natural convection, Rayleigh-number correlation) or on forced flow.
 - **Radiation**: `Q̇ = ε σ A (T_a⁴ − T_b⁴)` between a surface and its surroundings.
@@ -193,7 +219,9 @@ cannot proceed where `A < 0`.
 **Demo subset:** conduction edges; a burner reservoir with a valve-scaled conductance; one combined
 convective and radiative loss edge from each vessel to the room; a coolant reservoir on the
 condenser.
-**Status:** *PLANNED, Stage 2.*
+**Status:** Stage 2 implements conduction, reservoirs and conductances that change at step
+boundaries. Temperature-dependent conductances (convection, radiation) are *PLANNED* with the
+equipment that needs them (Stage 8).
 
 ## 6. Pressure, gas and liquid transfer
 
@@ -485,12 +513,13 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 - **UX5. A refusal explains itself.** A refused action reports its reason and leaves the state
   untouched. *(PLANNED, Stage 8; `L1`.)*
 - **UX6. Heat goes downhill.** Nothing warms above the hottest thing it touches without a reaction
-  releasing heat. *(PLANNED, Stage 2; `T1`.)*
+  releasing heat. **Tested as:** `T1`, and the extremes of temperature on every step of
+  `sweeps: heat flows downhill and entropy grows on every step of every random thermal world`.
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stage 1 are implemented, later
-rows are *PLANNED*.
+The Stage column is where an invariant is implemented; rows of Stages 1 and 2 are implemented,
+later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
 |---|---|---|---|
@@ -503,9 +532,9 @@ rows are *PLANNED*.
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
-| T1 | Per process: flux × driving force ≥ 0 | sign-exact | 2 |
-| T2 | World entropy does not decrease, within 1e-9 J/K + 1e-12 · Σ\|ΔS_cell\| per step | tolerance | 2 |
-| T3 | Every thermal cell has positive heat capacity and a finite temperature above 0 K | exact | 2 |
+| T1 | Per process: flux × driving force ≥ 0. Stage 2: every transfer of heat alone runs from the hotter cell to the colder, with the temperatures they had when it was applied | sign-exact | 2 |
+| T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
+| T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
 | P1 | After projection: liquid present ⇒ vapour at saturation; absent ⇒ at or below it | tolerance | 5 |
 | V1 | Rigid cell: gas volume + condensed volume = vessel volume | tolerance | 4 |
 | V2 | No vessel holds more condensed volume than its capacity (excess is in the spill cell) | exact | 4 |
@@ -513,12 +542,12 @@ rows are *PLANNED*.
 | X1 | Crystal count > 0 exactly when the solid's amount > 0 | exact | 6 |
 | D1 | Batching invariance: N steps give the same bits however grouped into frames | exact | 8 |
 | D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
-| D3 | An equilibrated world is bit-identical after 1e5 steps | exact | 2 |
+| D3 | A world at rest is bit-identical, carried remainders included, after 1e5 steps | exact | 2 |
 | D4 | A session replay reproduces its recorded digest | exact | 7 |
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order) | convergence | 3 |
-| K1 | Table-derived boiling point, saturation pressure, hydrate dissociation pressures, solubility and reaction-enthalpy signs agree with literature within stated tolerances | data oracle | 2–6 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Later: boiling point, saturation pressure, hydrate dissociation pressures, solubility, reaction-enthalpy signs | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 8 |
 | L1 | A refused command leaves the state bit-identical | exact | 8 |
 | O1 | Transmittance is within [0, 1] | exact | 10 |
@@ -533,7 +562,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 
 - 60 frames per second at 1920×1080.
 - Simulation: one step under 5 µs for the demo's world, so 600× acceleration costs under 3 ms per
-  frame. Measured by `chem_tool bench`.
+  frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir, trace
+  built, checks off) and, from Stage 7, `chem_tool bench`.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 

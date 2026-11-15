@@ -1,5 +1,7 @@
 #include "chem/invariants.hpp"
 
+#include "chem/thermo.hpp"
+
 #include <cstdio>
 
 namespace chem {
@@ -32,7 +34,52 @@ bool well_formed(const SpeciesTable &table, const Snapshot &s) {
 }
 
 bool well_formed(const SpeciesTable &table, const StepTrace &trace) {
-	return trace.before.cells.size() == trace.after.cells.size() && well_formed(table, trace.before) && well_formed(table, trace.after);
+	return trace.before.cells.size() == trace.after.cells.size() && well_formed(table, trace.before) && well_formed(table, trace.after) &&
+			(!trace.thermal || trace.meta.size() == trace.after.cells.size());
+}
+
+bool finite(double v) {
+	return v - v == 0.0;
+}
+
+// A cell's temperature as the trace has it: a reservoir's fixed one, else
+// derived from the state. false when it has none.
+bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &kelvin) {
+	if (trace.meta[cell].reservoir) {
+		kelvin = trace.meta[cell].reservoir_temperature;
+		return true;
+	}
+	const Thermal t = thermal_state(table, state.cells[cell]);
+	kelvin = t.temperature;
+	return t.defined;
+}
+
+// A cell's entropy in J/K: a reservoir's is its energy over its temperature.
+// false when the cell has no positive finite temperature.
+bool entropy_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &s) {
+	double kelvin = 0.0;
+	if (!temperature_of(table, trace, state, cell, kelvin) || !(kelvin > 0.0) || !finite(kelvin)) {
+		return false;
+	}
+	s = trace.meta[cell].reservoir ? static_cast<double>(state.cells[cell].energy) * JOULE_PER_QUANTUM / kelvin : entropy(table, state.cells[cell], kelvin);
+	return true;
+}
+
+// sum of (S_after - S_before) and of |S| over the cells that changed
+void entropy_sums(const SpeciesTable &table, const StepTrace &trace, double &change, double &magnitude) {
+	change = 0.0;
+	magnitude = 0.0;
+	for (size_t c = 0; c < trace.after.cells.size(); ++c) {
+		if (trace.before.cells[c] == trace.after.cells[c]) {
+			continue;
+		}
+		double before = 0.0, after = 0.0;
+		if (!entropy_of(table, trace, trace.before, c, before) || !entropy_of(table, trace, trace.after, c, after)) {
+			continue; // T3 reports a cell without a temperature
+		}
+		change += after - before;
+		magnitude += (before < 0.0 ? -before : before) + (after < 0.0 ? -after : after);
+	}
 }
 
 bool cell_in(const StepTrace &trace, CellId c) {
@@ -266,12 +313,126 @@ Violations check_C8(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	Snapshot replay = trace.before;
+	for (size_t i = 0; i < trace.ledger.size(); ++i) {
+		const LedgerEntry &entry = trace.ledger[i];
+		const bool transfer = entry.kind == LedgerEntry::Kind::Transfer;
+		if (!cell_in(trace, entry.from) || (transfer && !cell_in(trace, entry.to))) {
+			continue; // C5 reports it
+		}
+		const auto from = static_cast<size_t>(entry.from.index);
+		if (transfer && entry.delta.empty() && entry.energy.quanta != 0) {
+			const auto to = static_cast<size_t>(entry.to.index);
+			double t_from = 0.0, t_to = 0.0;
+			if (temperature_of(table, trace, replay, from, t_from) && temperature_of(table, trace, replay, to, t_to)) {
+				const double drive = t_from - t_to;
+				if ((entry.energy.quanta > 0 && drive < 0.0) || (entry.energy.quanta < 0 && drive > 0.0) || drive == 0.0) {
+					if (out.size() < MAX_MESSAGES) {
+						char buffer[200];
+						std::snprintf(buffer, sizeof buffer, "T1: step %lld: transfer %lld moves %lld quanta of heat from a cell at %.9g K to one at %.9g K",
+								static_cast<long long>(trace.step), static_cast<long long>(i), static_cast<long long>(entry.energy.quanta), t_from, t_to);
+						out.push_back(buffer);
+					}
+				}
+			}
+		}
+		// replay the entry
+		for (const SpeciesAmount &d : entry.delta) {
+			if (!table.has(d.species)) {
+				continue;
+			}
+			const auto s = static_cast<size_t>(d.species.index);
+			if (transfer) {
+				replay.cells[from].amount[s] = wrap_add(replay.cells[from].amount[s], -d.amount.quanta);
+				auto &to_amount = replay.cells[static_cast<size_t>(entry.to.index)].amount[s];
+				to_amount = wrap_add(to_amount, d.amount.quanta);
+			} else {
+				replay.cells[from].amount[s] = wrap_add(replay.cells[from].amount[s], d.amount.quanta);
+			}
+		}
+		if (transfer) {
+			replay.cells[from].energy = wrap_add(replay.cells[from].energy, -entry.energy.quanta);
+			auto &to_energy = replay.cells[static_cast<size_t>(entry.to.index)].energy;
+			to_energy = wrap_add(to_energy, entry.energy.quanta);
+		}
+	}
+	return out;
+}
+
+double entropy_change(const SpeciesTable &table, const StepTrace &trace) {
+	double change = 0.0, magnitude = 0.0;
+	if (trace.thermal && well_formed(table, trace)) {
+		entropy_sums(table, trace, change, magnitude);
+	}
+	return change;
+}
+
+Violations check_T2(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	double change = 0.0, magnitude = 0.0;
+	entropy_sums(table, trace, change, magnitude);
+	const double tolerance = 1e-9 + 4e-16 * magnitude;
+	if (!(change >= -tolerance)) {
+		char buffer[200];
+		std::snprintf(buffer, sizeof buffer, "T2: step %lld: the world's entropy fell by %.6g J/K (tolerance %.3g)", static_cast<long long>(trace.step), -change, tolerance);
+		out.push_back(buffer);
+	}
+	return out;
+}
+
+Violations check_T3(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		if (trace.meta[c].reservoir) {
+			continue;
+		}
+		const Thermal t = thermal_state(table, trace.after.cells[c]);
+		if (!t.defined) {
+			out.push_back(text("T3: step %lld: cell %lld has no temperature (a species without thermodynamic data, or no heat capacity)",
+					static_cast<long long>(trace.step), static_cast<long long>(c)));
+		} else if (!(t.temperature > 0.0)) {
+			out.push_back(text("T3: step %lld: cell %lld is not above 0 K", static_cast<long long>(trace.step), static_cast<long long>(c)));
+		}
+	}
+	return out;
+}
+
+Violations check_S1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		double kelvin = 0.0;
+		if (!temperature_of(table, trace, trace.after, c, kelvin)) {
+			continue; // T3 reports it
+		}
+		double s = 0.0;
+		const bool has_entropy = entropy_of(table, trace, trace.after, c, s);
+		if (!finite(kelvin) || (has_entropy && !finite(s))) {
+			out.push_back(text("S1: step %lld: cell %lld has a temperature or an entropy that is not finite", static_cast<long long>(trace.step), static_cast<long long>(c)));
+		}
+	}
+	return out;
+}
+
 Violations check_all(const SpeciesTable &table, const StepTrace &trace) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
 	}
 	Violations out;
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_S1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
