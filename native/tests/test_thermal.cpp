@@ -46,7 +46,7 @@ TEST_CASE("thermal: the data oracle: water's heat of vaporisation at 25 C follow
 	// liquid water's heat capacity, 4.18 J/g/K
 	CHECK(def(builtin::water).cp / 18.015 == doctest::Approx(4.184).epsilon(0.002));
 	// the species the later stages still have to verify have no data yet
-	CHECK_FALSE(def(builtin::malachite).has_thermo);
+	CHECK_FALSE(def(builtin::copper_sulfate_pentahydrate).has_thermo);
 	CHECK(def(builtin::copper_oxide).has_thermo);
 }
 
@@ -69,7 +69,7 @@ TEST_CASE("thermal: worlds that cannot have temperatures are refused (Stage 2)")
 	{
 		World::Builder b(builtin_species()); // a species without verified data
 		const CellId c = b.add_cell("c");
-		b.set_amount(c, builtin::malachite, mol(0.02)).set_temperature(c, 300.0);
+		b.set_amount(c, builtin::copper_sulfate_pentahydrate, mol(0.02)).set_temperature(c, 300.0);
 		CHECK_FALSE(b.build(&why));
 		CHECK(why.find("thermodynamic data") != std::string::npos);
 	}

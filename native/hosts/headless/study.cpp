@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -75,12 +76,73 @@ int cooling() {
 	return genesis == end ? 0 : 1;
 }
 
+// Stage 3: 5 g of malachite in a 100 g glass flask of air over a flame. One
+// sealed cell: the gases stay in it (they leave for the balloon in Stage 4).
+int decomposition() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	World::Builder b(table);
+	const CellId flask = b.add_cell("flask");
+	const CellId flame = b.add_reservoir("flame", 2200.0);
+	const CellId room = b.add_reservoir("room", 293.15);
+	b.add_edge(flask, flame, PHASES_NONE, 0.2);
+	b.add_edge(flask, room, PHASES_NONE, 0.9);
+	b.set_amount(flask, builtin::malachite, amount_from_mol(5.0 / 221.114, ok));
+	b.set_amount(flask, builtin::glass, amount_from_mol(100.0 / 60.083, ok));
+	b.set_amount(flask, builtin::nitrogen, amount_from_mol(0.0080, ok));
+	b.set_amount(flask, builtin::oxygen, amount_from_mol(0.0022, ok));
+	b.set_temperature(flask, 293.15);
+	std::string why;
+	auto world = b.build(&why);
+	if (!world) {
+		std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+		return 1;
+	}
+	Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	sim.set_checking(true);
+	const Totals genesis = totals(table, sim.world().snapshot());
+	const auto grams = [&](SpeciesId s) { return sim.world().amount(flask, s).mol() * static_cast<double>(table.molar_mass_ug(s)) * 1e-6; };
+
+	std::printf("5 g of malachite in a 100 g glass flask of air; a 2200 K flame through 0.2 W/K, a 20 C room through 0.9 W/K\n");
+	std::printf("Cu2CO3(OH)2(s) -> 2 CuO(s) + CO2(g) + H2O(g), first order, Ea 150 kJ/mol\n\n");
+	std::printf("%7s %9s %12s %9s %9s %9s %14s %14s %12s\n", "time s", "flask C", "malachite g", "CuO g", "CO2 g", "H2O g", "from flame J", "to room J", "entropy J/K");
+	double entropy_made = 0.0;
+	for (int step = 0; step <= 72000; ++step) {
+		if (step % 3600 == 0) {
+			double t = 0.0;
+			sim.world().temperature(flask, t);
+			std::printf("%7.0f %9.2f %12.6f %9.6f %9.6f %9.6f %14.3f %14.3f %12.4f\n", step * STEP_SECONDS, t - 273.15, grams(builtin::malachite),
+					grams(builtin::copper_oxide), grams(builtin::carbon_dioxide), grams(builtin::steam), 0.0 - sim.world().energy(flame).joule(),
+					sim.world().energy(room).joule(), entropy_made);
+		}
+		entropy_made += entropy_change(table, sim.step());
+	}
+	const Totals end = totals(table, sim.world().snapshot());
+	std::printf("\nmass in the world: %.9f g at the start, %.9f g at the end; every element, the mass and the energy %s\n", genesis.mass.grams(), end.mass.grams(),
+			genesis == end ? "are the same integers" : "MOVED");
+	std::printf("every invariant (C1-C8, T1-T3, S1) was checked on all 72001 steps\n");
+
+	Simulation timed(sim);
+	timed.set_checking(false);
+	const auto t0 = std::chrono::steady_clock::now();
+	const int steps = 200000;
+	for (int i = 0; i < steps; ++i) {
+		timed.step();
+	}
+	const double ns = std::chrono::duration<double, std::nano>(std::chrono::steady_clock::now() - t0).count() / steps;
+	std::printf("step cost (this world: one cell, two reservoirs, seven reactions offered; checks off, trace built): %.0f ns\n", ns);
+	return genesis == end ? 0 : 1;
+}
+
 } // namespace
 
 int run_study(const char *name) {
 	if (std::strcmp(name, "cooling") == 0) {
 		return cooling();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling)\n", name);
+	if (std::strcmp(name, "decomposition") == 0) {
+		return decomposition();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition)\n", name);
 	return 2;
 }

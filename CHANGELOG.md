@@ -1,5 +1,21 @@
 # GAME_SPEC version history
 
+## 0.4.0 (2026-11-15, Stage 3)
+
+- §4.5 rewritten: processes are applied in sequence, each from the state the last one left, each
+  capped at its own equilibrium. The earlier design (every rate from one frozen state, competing
+  processes scaled together) is dropped, with the reason. Heat conduction is no longer an
+  exception; it is the rule.
+- §4.6: activities defined (gases now, solutes in Stage 6); the affinity factor made symmetric
+  and bounded, so a reverse rate cannot diverge.
+- §7: the first-order law and its exact step; a reaction needs thermodynamic data for every
+  species it names.
+- §18: T1 extended to reactions; D3 at chemical equilibrium; M1, M2, M3 and the malachite K1
+  oracle implemented.
+- §20: three simplifications declared (calibrated kinetics, the reverse rate's form, sequential
+  application).
+- Data: malachite verified (Richardson and Brown 1974; Kiseleva et al. 1992).
+
 ## 0.3.0 (2026-11-15, Stage 2)
 
 - §3: the core's own `exp` and `log` implemented and pinned; the per-step range limit stated.

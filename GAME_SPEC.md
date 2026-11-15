@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.3.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.4.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -152,25 +152,39 @@ with a reason; it never corrupts state.
 One step of simulated time, in this order:
 
 1. Apply the player's commands queued for this step boundary; log them.
-2. Derive per cell: `T`, volumes, molalities, activities, gas fractions.
-3. Evaluate every kinetic rate from that frozen state.
-4. Limit: cap each reversible process at its own equilibrium; where a species is demanded by
-   several processes beyond what exists, scale all of them by the same factor; convert to quanta
-   through the accumulators (an accumulator is cleared when its process is limited or its driving
-   force changes sign).
-5. Apply, in fixed index order: reactions, heat transfers, liquid transfers.
-6. Project, visiting cells in flow order: receive inflow, solve liquid/vapour equilibrium (§8),
-   expel or draw gas to satisfy the volume or pressure condition (§6).
-7. Update crystal populations (§9).
-8. Check invariants (every step in tests; sampled in release builds).
+2. Reactions: in each cell, each reaction in the order of the reaction table (§7).
+3. Heat: each edge in index order (§5).
+4. Liquid transfers, then the projection sweep in flow order: receive inflow, solve liquid/vapour
+   equilibrium (§8), expel or draw gas to satisfy the volume or pressure condition (§6).
+   *(PLANNED, Stages 4–5.)*
+5. Update crystal populations (§9). *(PLANNED, Stage 6.)*
+6. Check invariants (every step in tests and in Debug builds; sampled in release builds).
 
-Because rates are evaluated from one frozen state and limited together, the result does not depend
-on the order in which processes are listed.
+**Sequential application.** Each process is evaluated from the state the previous one left and
+applied at once, through the two primitives. Each application:
 
-**Heat conduction is the exception.** Edges are relaxed pairwise in index order, each from the
-state the previous one left (§5). This is what makes any conductance, any number of edges on one
-cell and any step stable, and makes each application exactly second-law-safe; the price is a
-dependence on edge order of second order in the step.
+- conserves exactly (it is a primitive call);
+- runs down its own driving force as the cell is at that moment (invariant T1), so it is
+  second-law-safe whatever came before it;
+- never passes its own equilibrium: the amount applied is capped at the last quantum before its
+  driving force would change sign, so it cannot overshoot and two processes cannot oscillate
+  against each other;
+- is limited to what the cell holds.
+
+The price is a dependence on the order of application, of first order in the step: at the game's
+step it amounts to a time shift of about one step (measured: 0.2% of the amount at the steepest
+moment of the malachite decomposition, `kinetics: halving the step halves the error`). The orders
+are fixed, so the result is deterministic.
+
+An earlier draft evaluated every rate from one frozen start-of-step state and scaled competing
+processes together. It was dropped: a process applied after another in the same cell would then
+run on a driving force that no longer exists, and T1 could not be exact.
+
+**Quantisation.** A process's amount for the step is a float64; it becomes whole quanta through
+that process's carried remainder (one per edge for heat, one per cell and reaction). The remainder
+is dropped when the direction changes or when the amount is capped. Where less than one quantum
+separates a process from its equilibrium, nothing moves and nothing is carried: a world at rest is
+static (D3).
 
 **Stable forms.** A fast process uses the exact solution of its own linear problem over the step
 instead of `rate × dt`: `n (1 − e^(−k h))` for first-order decay, exact two-body relaxation for
@@ -178,20 +192,28 @@ conduction, relaxation toward a solved equilibrium for crystal growth.
 
 ### 4.6 Entropy
 
-World entropy is the sum over cells of `Σ n_i s_i(T)` plus ideal mixing terms: `−R Σ n_i ln y_i`
-for the gas phase, and `−R ln m_i` per solute with water activity `a_w = n_w / (n_w + Σ n_solute)`
-for an ideal-dilute solution. A reservoir exchanging heat `Q` at `T_res` changes by `−Q / T_res`.
+Each species has an **activity** `a_i` in its cell: for a gas, its partial pressure over the
+standard pressure, `y_i P / P°` (`y_i` its mole fraction among the cell's gases, `P` the cell's
+pressure, `P°` = 1 bar); 1 for a solid or a liquid; for a solute, its molality, with water
+activity `a_w = n_w / (n_w + Σ n_solute)` *(solutes: PLANNED, Stage 6)*.
 
-The **affinity** of a process is `A = −Σ ν_i μ_i`, with `μ_i = h_i − T s_i` including the mixing
-terms. Rates have the form `kinetic(T, …) × (1 − e^(−A/RT))`, so a process stops where `A = 0` and
-cannot proceed where `A < 0`.
+World entropy is the sum over cells of `Σ n_i (S°_i + Cp_i ln(T/T0) − R ln a_i)`, plus each
+reservoir's energy over its temperature.
+
+The **affinity** of a process is `A = −Σ ν_i μ_i`, with `μ_i = h_i(T) − T s_i(T, a_i)`. It is
+positive when the process is spontaneous as written, zero at equilibrium, negative when its reverse
+is spontaneous. A gas that is absent has activity 0: making it has infinite affinity, consuming it
+is impossible.
+
+Rates carry an **affinity factor** `f(A)`: `1 − e^(−A/RT)` for `A > 0`, `−(1 − e^(A/RT))` for
+`A < 0`. It lies in [−1, 1], has the sign of `A` and vanishes with it, so a process stops at
+equilibrium and runs backwards past it.
 
 **Demo subset:** all of §4 except polynomial `Cp` and `U` cells.
 **Status:** Stage 1 implements §4.1 (formula, phase, charge, derived atoms and molar mass), §4.2
 (amounts, energy, edges), §4.3 and the ledger. Stage 2 adds thermodynamic data, temperature,
-reservoirs, the step loop with heat conduction (`chem/sim.hpp`) and the thermal part of the
-entropy (`Σ n_i s_i(T)` and the reservoirs'; the mixing terms enter with the phases that mix,
-Stages 4–6). Rates, the limiter and affinities are *PLANNED, Stage 3.*
+reservoirs, the step loop with heat conduction (`chem/sim.hpp`) and the entropy. Stage 3 adds
+reactions to the step, gas activities, affinity and the affinity factor.
 
 ## 5. Thermal
 
@@ -259,7 +281,7 @@ and dripping are kinematic (no gravitational energy).
 **Full design**
 
 - A **reaction** has an integer stoichiometric vector, the cell phase it runs in, and a rate law.
-- **Rate law:** `r = k(T) · Π a_j^{order_j} · geometry · (1 − e^(−A/RT))`.
+- **Rate law:** `r = k(T) · Π a_j^{order_j} · geometry · f(A)`, `f` the affinity factor of §4.6.
   - `k(T) = A_pre · e^(−Ea/RT)` (Arrhenius). Temperature enters once.
   - Activities `a_j`: molality for solutes, partial pressure for gases, 1 for pure solids/liquids.
   - Geometry: for a reaction at a solid's surface, the surface area, derived from the solid's
@@ -274,9 +296,17 @@ and dripping are kinematic (no gravitational energy).
 - **Unknown products** of harsh conditions (charring) are balanced pseudo-species with a declared
   composition.
 
-**Demo subset:** malachite decomposition `Cu2CO3(OH)2(s) → 2 CuO(s) + CO2(g) + H2O(g)`;
-`CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` with a surface term and a stir factor.
-**Status:** *PLANNED, Stage 3 (decomposition), Stage 6 (dissolution).*
+- **First-order law** (`data/reactions.json`, `"law": "first_order"`): the rate is proportional to
+  the amount of one reactant, `r = k(T) · n_in · f(A)`. Over one step `h` the extent is the exact
+  solution of that decay, `(n_in / |ν_in|)(1 − e^(−k |f| h))` in the direction of `f`: any rate is
+  stable, and a reaction that could finish many times over in one step simply finishes.
+- A reaction runs in a cell only where every species it names has thermodynamic data.
+
+**Demo subset:** malachite decomposition `Cu2CO3(OH)2(s) → 2 CuO(s) + CO2(g) + H2O(g)`, first
+order in malachite; `CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` with a surface term and a stir
+factor.
+**Status:** Stage 3 implements the first-order law and the malachite decomposition. The surface
+law and the dissolution are *PLANNED, Stage 6.*
 
 ## 8. Phase change
 
@@ -518,7 +548,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 and 2 are implemented,
+The Stage column is where an invariant is implemented; rows of Stages 1 to 3 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |
@@ -532,7 +562,7 @@ later rows are *PLANNED*.
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
-| T1 | Per process: flux × driving force ≥ 0. Stage 2: every transfer of heat alone runs from the hotter cell to the colder, with the temperatures they had when it was applied | sign-exact | 2 |
+| T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3) | sign-exact | 2–3 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
 | P1 | After projection: liquid present ⇒ vapour at saturation; absent ⇒ at or below it | tolerance | 5 |
@@ -542,12 +572,12 @@ later rows are *PLANNED*.
 | X1 | Crystal count > 0 exactly when the solid's amount > 0 | exact | 6 |
 | D1 | Batching invariance: N steps give the same bits however grouped into frames | exact | 8 |
 | D2 | Save, load, continue equals the uninterrupted run | exact | 8 |
-| D3 | A world at rest is bit-identical, carried remainders included, after 1e5 steps | exact | 2 |
+| D3 | A world at rest is bit-identical, carried remainders included: thermal rest after 1e5 steps (Stage 2), chemical equilibrium after 5e4 (Stage 3) | exact | 2–3 |
 | D4 | A session replay reproduces its recorded digest | exact | 7 |
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
-| M3 | Halving the step halves the error (first order) | convergence | 3 |
-| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Later: boiling point, saturation pressure, hydrate dissociation pressures, solubility, reaction-enthalpy signs | data oracle | 2–6 |
+| M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Later: boiling point, saturation pressure, hydrate dissociation pressures, solubility | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 8 |
 | L1 | A refused command leaves the state bit-identical | exact | 8 |
 | O1 | Transmittance is within [0, 1] | exact | 10 |
@@ -562,8 +592,9 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 
 - 60 frames per second at 1920×1080.
 - Simulation: one step under 5 µs for the demo's world, so 600× acceleration costs under 3 ms per
-  frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir, trace
-  built, checks off) and, from Stage 7, `chem_tool bench`.
+  frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
+  0.43 µs for one cell, two reservoirs and the reaction table; trace built, checks off) and, from
+  Stage 7, `chem_tool bench`.
 - Rendering: the optical pass under 2 ms on an integrated GPU.
 - Timing is evidence, recorded per stage; it is not a gate.
 
@@ -578,4 +609,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Ideal gas; ideal-dilute solutions; CuSO₄ as a neutral solute with fitted `Hf`, `S°` | Solubility within about 6% of literature; no heat of dilution; concentrated acid outside the model |
 | Additive volumes | Under 1% for the demo's solutions |
 | Complete decanting | Real crystals keep a film of liquid |
-| Kinetic parameters calibrated for play | Decomposition and dissolution times are plausible, not measured |
+| Kinetic parameters calibrated for play | Decomposition and dissolution times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C |
+| A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
+| Processes applied in sequence | A time shift of about one step |

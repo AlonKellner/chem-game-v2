@@ -190,6 +190,7 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_version COMMAND chem_tool version)
     add_test(NAME chem_tool_tables COMMAND chem_tool tables)
     add_test(NAME chem_tool_study_cooling COMMAND chem_tool study cooling)
+    add_test(NAME chem_tool_study_decomposition COMMAND chem_tool study decomposition)
 
     # The engine-free layers name no game engine.
     foreach(layer core game capi hosts/headless)

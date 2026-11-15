@@ -214,7 +214,9 @@ namespace {
 // Random thermal worlds: cells of random matter at random temperatures and
 // reservoirs, joined by edges of random conductance (zero, ordinary, enormous),
 // with the topology and the conductances changing between steps.
-void run_thermal_world(uint64_t seed, long long &transfers) {
+// With `reactive`, the chemistry's reactions run too, with random rates: random
+// formation enthalpies and entropies make them spontaneous in either direction.
+void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = false, long long *transforms = nullptr) {
 	Rng rng(seed);
 	RandomChemistry chem;
 	make_chemistry(rng, chem);
@@ -264,7 +266,22 @@ void run_thermal_world(uint64_t seed, long long &transfers) {
 	}
 	auto built = builder.build(&why);
 	REQUIRE_MESSAGE(built.has_value(), why);
-	Simulation sim(std::move(*built));
+	std::vector<Reaction> reactions;
+	if (reactive) {
+		for (const Reaction &r : chem.reactions) {
+			SpeciesId composite;
+			for (const Term &t : r.terms()) {
+				if (t.nu < 0) {
+					composite = t.species;
+				}
+			}
+			const Kinetics kinetics{ Kinetics::Law::FirstOrder, composite, static_cast<double>(rng.range(1, 1000000)) / 1000.0, static_cast<double>(rng.range(0, 60000)) };
+			auto made = Reaction::make(*table, "split", r.terms(), &why, kinetics);
+			REQUIRE_MESSAGE(made.has_value(), why);
+			reactions.push_back(*made);
+		}
+	}
+	Simulation sim(std::move(*built), reactions);
 	sim.set_checking(false); // checked here, with the seed in the message
 	const Totals genesis = totals(*table, sim.world().snapshot());
 
@@ -296,10 +313,19 @@ void run_thermal_world(uint64_t seed, long long &transfers) {
 		extremes(lo_before, hi_before);
 		const StepTrace trace = sim.step();
 		extremes(lo_after, hi_after);
-		transfers += static_cast<long long>(trace.ledger.size());
+		for (const LedgerEntry &entry : trace.ledger) {
+			if (entry.kind == LedgerEntry::Kind::Transfer) {
+				++transfers;
+			} else if (transforms != nullptr) {
+				++*transforms;
+			}
+		}
 		const Violations violations = check_all(*table, trace);
 		REQUIRE_MESSAGE(violations.empty(), "seed " << seed << ", step " << step << ": " << violations[0]);
 		REQUIRE_MESSAGE(totals(*table, trace.after) == genesis, "seed " << seed << ", step " << step << ": the world's totals moved");
+		if (reactive) {
+			continue; // a reaction's heat may take a cell past the others
+		}
 		// UX6: with no reaction, nothing gets hotter than the hottest or colder than the coldest
 		const double slack = 1e-9 * hi_before;
 		REQUIRE_MESSAGE(hi_after <= hi_before + slack, "seed " << seed << ", step " << step << ": the hottest cell warmed from " << hi_before << " to " << hi_after);
@@ -318,4 +344,16 @@ TEST_CASE("sweeps: heat flows downhill and entropy grows on every step of every 
 	}
 	MESSAGE(worlds << " thermal worlds, " << worlds * 60 << " steps, " << transfers << " heat transfers");
 	CHECK(transfers > worlds);
+}
+
+TEST_CASE("sweeps: reactions run down their affinity and entropy grows on every step of every random reacting world (Stage 3)") {
+	const char *env = std::getenv("CHEM_SWEEP_WORLDS");
+	const long long worlds = env != nullptr ? std::atoll(env) : 2000;
+	long long transfers = 0;
+	long long transforms = 0;
+	for (long long w = 0; w < worlds; ++w) {
+		run_thermal_world(0x4eac7000000ull + static_cast<uint64_t>(w), transfers, true, &transforms);
+	}
+	MESSAGE(worlds << " reacting worlds, " << worlds * 60 << " steps, " << transforms << " reaction steps, " << transfers << " heat transfers");
+	CHECK(transforms > worlds);
 }

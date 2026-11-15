@@ -65,10 +65,26 @@ struct Term {
 	int32_t nu = 0;
 };
 
+// How fast a reaction runs on its own (GAME_SPEC §7). FirstOrder:
+//
+//   rate = prefactor * e^(-activation / RT) * n_in * affinity factor   [mol/s of `in`]
+//
+// where `in` is one of the reactants. The affinity factor (chem/sim.hpp) is in
+// [-1, 1], zero at equilibrium, and has the sign of the reaction's affinity, so
+// the reaction stops at its equilibrium and runs backwards past it.
+struct Kinetics {
+	enum class Law : uint8_t { None, FirstOrder };
+	Law law = Law::None;
+	SpeciesId in;
+	double prefactor = 0.0; // 1/s
+	double activation = 0.0; // J/mol
+};
+
 struct ReactionDef {
 	std::string_view id;
 	std::array<Term, MAX_TERMS> terms{};
 	int32_t term_count = 0;
+	Kinetics kinetics{};
 };
 
 // Sum of nu * atoms over the terms is zero for every element, and the sum of
@@ -143,15 +159,22 @@ class Reaction {
 public:
 	// Refuses (nullopt, the reason in *why): no terms or more than MAX_TERMS, an
 	// unknown or repeated species, a zero stoichiometric number, no reactant or
-	// no product, an element or the charge out of balance.
-	static std::optional<Reaction> make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why = nullptr);
+	// no product, an element or the charge out of balance; kinetics whose `in`
+	// is not a reactant, or whose prefactor or activation energy is negative
+	// or not finite.
+	static std::optional<Reaction> make(const SpeciesTable &table, std::string_view id, std::span<const Term> terms, std::string *why = nullptr,
+			Kinetics kinetics = {});
 
 	std::string_view id() const { return id_; }
 	std::span<const Term> terms() const { return std::span<const Term>(terms_.data(), static_cast<size_t>(term_count_)); }
 	const SpeciesTable *table() const { return table_; }
+	const Kinetics &kinetics() const { return kinetics_; }
+	// the stoichiometric number of a species (0 when the reaction does not name it)
+	int32_t nu(SpeciesId s) const;
 
 private:
 	Reaction() = default;
+	Kinetics kinetics_{};
 	const SpeciesTable *table_ = nullptr;
 	std::string id_;
 	std::array<Term, MAX_TERMS> terms_{};
