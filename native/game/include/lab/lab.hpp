@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 // The engine-free lab layer (GAME_SPEC §13): a bench of equipment over one
 // closed world, driven by commands. Everything a player can do is a command;
@@ -13,6 +14,52 @@ namespace lab {
 
 // "chem-game-v2 <GAME_SPEC version>"
 std::string build_name();
+
+// What a host or the screen needs of one item, measured from the state (the
+// report as plain data).
+struct SubstanceView {
+	std::string species; // "water"
+	std::string formula; // "H2O"
+	char phase = 's'; // s, l, g; a for dissolved
+	bool wall = false;
+	double mol = 0.0;
+	double g = 0.0;
+	int64_t particles = 0;
+	double size_um = 0.0;
+};
+
+struct ItemView {
+	std::string id;
+	std::string kind; // vessel, balloon, burner, tray
+	std::string place; // cabinet, bench, on, under, outbox
+	int col = -1, row = -1; // on the bench
+	int on = -1; // index of the vessel whose mouth it is on
+	int under = -1; // a burner: index of the vessel over it
+	int holds = -1; // a vessel: index of what is on its mouth
+	int drains_to = -1; // a vessel: index of what stands under its outlet
+	bool condenser = false; // a vessel with a coolant
+	bool stirred = false;
+	bool submitted = false;
+	bool burst = false;
+	double valve = 0.0; // a burner
+	double celsius = 0.0;
+	double volume_ml = 0.0; // a vessel's own
+	double capacity_ml = 0.0; // a balloon's
+	double gas_ml = 0.0;
+	double condensed_ml = 0.0;
+	double liquid_ml = 0.0;
+	std::vector<SubstanceView> contents;
+};
+
+struct LabView {
+	int64_t step = 0;
+	int cols = 0, rows = 0;
+	bool conserved = true; // every total is what it was at the start
+	double mass_g = 0.0;
+	double energy_j = 0.0;
+	std::vector<ItemView> items;
+	std::vector<std::string> events; // "the balloon burst at 12.5 s"
+};
 
 class Lab {
 public:
@@ -44,6 +91,8 @@ public:
 	bool failed() const;
 
 	int64_t step() const;
+	// What is where, measured, as plain data.
+	LabView view() const;
 	// What is where, measured (JSON; GAME_SPEC §13: reports are functions of state).
 	std::string report() const;
 	// SHA-256 of the whole state: amounts, energies, particles, the processes'

@@ -3,10 +3,22 @@
 #include "chem/error.hpp"
 #include "chem/species.hpp"
 #include "lab/lab.hpp"
+#include "lab/ui.hpp"
 
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
+
+struct cg_ui {
+	std::unique_ptr<lab::Ui> ui;
+	std::string text; // the last report handed out
+};
+
+// the draw list crosses the boundary as it is
+static_assert(sizeof(cg_draw_command) == sizeof(lab::DrawCommand));
+static_assert(offsetof(cg_draw_command, x) == offsetof(lab::DrawCommand, x));
+static_assert(offsetof(cg_draw_command, first) == offsetof(lab::DrawCommand, first));
 
 struct cg_lab {
 	std::unique_ptr<lab::Lab> lab;
@@ -252,6 +264,94 @@ cg_lab *cg_lab_load(const char *save_json) {
 		fail(CG_ERR_INTERNAL, e.what());
 		return nullptr;
 	}
+}
+
+cg_ui *cg_ui_open(const char *bench_json) {
+	if (bench_json == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_open: null bench");
+		return nullptr;
+	}
+	try {
+		std::string why;
+		std::unique_ptr<lab::Ui> made = lab::Ui::open(bench_json, why);
+		if (!made) {
+			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+			return nullptr;
+		}
+		return new cg_ui{ std::move(made), {} };
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
+void cg_ui_close(cg_ui *ui) {
+	delete ui;
+}
+
+void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) {
+	if (ui == nullptr) {
+		return;
+	}
+	try {
+		ui->ui->pointer(x, y, down != 0);
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+void cg_ui_frame(cg_ui *ui, double seconds) {
+	if (ui == nullptr) {
+		return;
+	}
+	try {
+		ui->ui->frame(seconds);
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
+	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_draw: null argument, or the list's size is not set");
+	}
+	try {
+		const lab::DrawList &list = ui->ui->draw();
+		out->command_count = static_cast<int32_t>(list.commands.size());
+		out->commands = reinterpret_cast<const cg_draw_command *>(list.commands.data());
+		out->point_count = static_cast<int32_t>(list.points.size() / 2);
+		out->points = list.points.data();
+		out->text_size = static_cast<int32_t>(list.text.size());
+		out->text = list.text.c_str();
+		return CG_OK;
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+const char *cg_ui_message(cg_ui *ui) {
+	return ui != nullptr ? ui->ui->message().c_str() : "";
+}
+
+const char *cg_ui_report(cg_ui *ui) {
+	if (ui == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_report: null ui");
+		return nullptr;
+	}
+	try {
+		ui->text = ui->ui->lab().report();
+		return ui->text.c_str();
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
+int32_t cg_ui_locate(cg_ui *ui, const char *what, float *x, float *y) {
+	if (ui == nullptr || what == nullptr || x == nullptr || y == nullptr) {
+		return 0;
+	}
+	return ui->ui->locate(what, *x, *y) ? 1 : 0;
 }
 
 } // extern "C"

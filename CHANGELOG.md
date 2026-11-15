@@ -1,5 +1,13 @@
 # GAME_SPEC version history
 
+## 0.10.0 (2026-11-16, Stage 9)
+
+- §13.1 added: the screen, engine-free: its layout, its gestures and the commands they become,
+  the clock, the invariants shown, the readout, flat drawing.
+- §13: a burner goes under a vessel straight from the cabinet.
+- §14: the screen through the C API; the Godot host.
+- §18: UX7 (the demo is playable with the pointer alone).
+
 ## 0.9.0 (2026-11-16, Stage 8)
 
 - §6: overflow into a world's spill cell; with one, a drain is not limited by what fits below.

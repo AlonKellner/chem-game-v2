@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.9.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.10.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -557,7 +557,7 @@ input to them, and a session script is a list of them.
 |---|---|---|
 | `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it; refused where something stands, off the grid, or while the item is joined to another |
 | `stow` | `item` | back into the cabinet |
-| `heat` | `burner`, `vessel` | puts the burner under the vessel (its valve as it is) |
+| `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
@@ -598,12 +598,57 @@ input to them, and a session script is a list of them.
   **record** (`bench/sessions/*.jsonl`) is the digest after each command; replaying the session
   must reproduce it (invariant D4).
 
-**Full design, not yet built:** items larger than one grid cell, and adjacency deciding what can
-join what; supports that appear with the glassware; pouring at a rate; the debug panel.
+### 13.1 The screen
 
-**Demo subset:** the bench of `data/benches/demo.json` and the commands above.
+The screen is engine-free too (`lab/ui.hpp`): a lab, a pointer, and a draw list. A host forwards
+its pointer, calls a frame, and paints the list. Everything a player does on the screen becomes a
+lab command here, so it is the same on every host and is tested without one.
+
+**Layout** (1920 × 1080): the cabinet on the left; the bench's grid in the middle; the outbox
+under it; on the right the readout; on top the clock.
+
+**Gestures.** Everything is a drag or a click:
+
+| Gesture | Command |
+|---|---|
+| drag an item to a free cell of the bench | `place` |
+| drag an item to the cabinet | `stow` |
+| drag a burner onto a vessel | `heat` |
+| drag a balloon or a condenser onto a vessel | `attach` |
+| drag a vessel onto a condenser | `under` |
+| drag a vessel onto another vessel | opens the pour panel: a slider for how much liquid, `pour`; a button for each solid, `tip` |
+| drag an item to the outbox | `submit` |
+| drag something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the drop means |
+| drag the slider beside a burner | `valve` |
+| click a vessel's stir button | `stir` |
+
+A refusal's reason is shown in the readout, and nothing has changed. A click outside the pour
+panel closes it.
+
+**The clock:** pause; 1×, 10×, 60×, 600×; reset. A frame advances the lab by its real time times
+the speed, at most twenty simulated seconds a frame: beyond that the clock runs slow, never the
+picture.
+
+**Invariants on the screen.** One step of every frame is checked against every invariant; "check
+every step" checks them all. The readout's first line is the conservation laws: every element,
+mass and energy unchanged since the bench was opened, or not.
+
+**The readout** shows what the pointer is on: its temperature, the volume of its gas and of its
+solids and liquids, and each species' mass, particle count and size; then the lab's events and
+the last refusal.
+
+**Drawing** is flat in Stage 9: glass as lines, liquid as a level tinted by its dissolved copper,
+solids as a mound in their colour, a balloon as a disc of its volume, a flame by its valve.
+Stage 10 replaces the colours with the optics of §12.
+
+**Full design, not yet built:** items larger than one grid cell, and adjacency deciding what can
+join what; supports that appear with the glassware; pouring at a rate; a debug panel of the
+processes' rates and heat flows, single-stepping and exporting the state.
+
+**Demo subset:** the benches of `data/benches/` (`demo.json` for the scripted session, `lab.json`
+for play: everything in the cabinet), the commands and the screen above.
 **Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
-places, the tray, bursting and save/load. The Godot host is Stage 9.
+places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 
 ## 14. C API and hosts
 
@@ -625,8 +670,15 @@ places, the tray, bursting and save/load. The Godot host is Stage 9.
   prints what was measured, and records (`--record`) or checks (`--check`) its digests.
   **`chem_tool bench SESSION`** plays it unchecked and times it.
 
+- **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
+  (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
+  `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts).
+- **The Godot host** (`native/hosts/godot`: `ChemLab`, a `Node2D`): it reads the bench file,
+  forwards the mouse, calls a frame in `_process`, and paints the draw list in `_draw`. No game
+  logic, and no GDScript in play.
+
 **Status:** Stage 0 implements the build identity, error and log plumbing; Stage 1 the tables;
-Stage 7 the lab and the session tools.
+Stage 7 the lab and the session tools; Stage 9 the screen and the Godot host.
 
 ## 15. Micro-view lens
 
@@ -682,7 +734,9 @@ size reported, and the world's totals of every element and of energy are the sam
 the start. `lab: the demo session reproduces its golden record, and its results are what was
 measured` asserts each of these.
 
-**Status:** Stage 7: done headlessly, through the C API. Interactive play is Stages 9 to 12.
+**Status:** Stage 7: done headlessly, through the C API. Stage 9: playable in the Godot host,
+in flat colours; `ui: the three stages of the demo, played with the pointer alone` plays it
+through the screen. The optics are Stages 10 and 11.
 
 ## 18. Invariant catalogue
 
@@ -713,7 +767,10 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 
 ### Tier 2: systemic
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 8 are implemented,
+- **UX7. The demo is playable with the pointer alone.** Every action of §17 is a drag or a click.
+  **Tested as:** `ui: the three stages of the demo, played with the pointer alone`.
+
+The Stage column is where an invariant is implemented; rows of Stages 1 to 9 are implemented,
 later rows are *PLANNED*.
 
 | ID | Invariant | Kind | Stage |

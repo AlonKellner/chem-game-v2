@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <cstdio>
 #include <cstring>
 #include <optional>
 #include <utility>
@@ -122,6 +123,7 @@ struct Lab::Impl {
 	// a command has moved matter since the last step ended: a step is in
 	// progress, and a change of connections waits for its end
 	bool mid_step = false;
+	bool untraced = false; // the last step was unchecked
 
 	const SpeciesTable &table() const { return sim->world().species(); }
 	World &world() { return sim->world(); }
@@ -138,10 +140,16 @@ struct Lab::Impl {
 
 	// one step; false when an invariant fails
 	bool step_once(std::string &why) {
+		// A checked step needs its trace to start where the last one ended. After
+		// unchecked steps, with a pour already applied in this one, it cannot:
+		// this step runs unchecked and the next is checked.
+		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
-		if (!check) {
+		if (!check || !traceable) {
 			sim->advance();
+			untraced = true;
 		} else {
+			untraced = false;
 			const StepTrace trace = sim->step();
 			const Violations violations = check_all(table(), trace, sim->equilibria());
 			if (!violations.empty()) {
@@ -569,7 +577,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
-		if (!on_bench(flame, why) || !on_bench(items[static_cast<size_t>(vessel)], why)) {
+		if (!on_bench(items[static_cast<size_t>(vessel)], why)) {
 			return false;
 		}
 		if (flame.under >= 0) {
@@ -909,6 +917,88 @@ bool Lab::failed() const {
 
 int64_t Lab::step() const {
 	return static_cast<int64_t>(impl_->world().step());
+}
+
+LabView Lab::view() const {
+	const Impl &m = *impl_;
+	const SpeciesTable &table = m.table();
+	static const char PHASE[] = { 's', 'l', 'g', 'a' };
+	LabView out;
+	out.step = step();
+	out.cols = m.cols;
+	out.rows = m.rows;
+	for (const Item &item : m.items) {
+		ItemView v;
+		v.id = item.id;
+		v.kind = KIND_NAME[static_cast<int>(item.kind)];
+		v.place = PLACE_NAME[static_cast<int>(item.place)];
+		v.col = item.col;
+		v.row = item.row;
+		v.on = item.on;
+		v.under = item.under;
+		v.holds = item.holds;
+		v.drains_to = item.drains_to;
+		v.stirred = item.stirred;
+		v.submitted = item.submitted;
+		v.burst = item.burst;
+		v.valve = item.valve;
+		v.capacity_ml = item.capacity * 1e6;
+		if (item.kind != Kind::Burner) {
+			const double kelvin = m.kelvin(item.cell);
+			v.celsius = kelvin - 273.15;
+			const CellState &cell = m.world().snapshot_cell(item.cell);
+			const Fill fill = fill_of(table, cell, kelvin);
+			v.gas_ml = fill.gas * 1e6;
+			v.condensed_ml = fill.condensed * 1e6;
+			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
+			for (size_t s = 0; s < cell.amount.size(); ++s) {
+				if (cell.amount[s] == 0) {
+					continue;
+				}
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				const SpeciesDef &def = table.species(id);
+				SubstanceView row;
+				row.species = std::string(def.id);
+				row.formula = std::string(def.formula);
+				row.phase = PHASE[static_cast<int>(def.phase)];
+				row.wall = def.wall;
+				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
+				row.g = m.grams(item.cell, id);
+				if (def.phase == Phase::Solid && !def.wall) {
+					row.particles = cell.particles[s];
+					row.size_um = particle_diameter(table, cell, id) * 1e6;
+				}
+				if (def.phase == Phase::Liquid && !def.wall) {
+					v.liquid_ml += row.mol * def.molar_volume * 1e6;
+				}
+				v.contents.push_back(row);
+			}
+			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
+			for (const Edge &e : m.world().edges()) {
+				const CellId other = e.a == item.cell ? e.b : e.b == item.cell ? e.a : CellId{};
+				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room)) {
+					bool burner = false;
+					for (const Item &b : m.items) {
+						burner = burner || (b.kind == Kind::Burner && b.cell == other);
+					}
+					v.condenser = v.condenser || !burner;
+				}
+			}
+		} else {
+			v.celsius = m.world().meta(item.cell).reservoir_temperature - 273.15;
+		}
+		out.items.push_back(v);
+	}
+	const Totals now = totals(table, m.world().snapshot());
+	out.conserved = now == m.genesis;
+	out.mass_g = now.mass.grams();
+	out.energy_j = static_cast<double>(now.energy) * JOULE_PER_QUANTUM;
+	for (const Event &e : m.events) {
+		char when[48];
+		std::snprintf(when, sizeof when, " at %.1f s", static_cast<double>(e.step) * STEP_SECONDS);
+		out.events.push_back("the " + e.item + (e.what == "burst" ? " burst" : " " + e.what) + when);
+	}
+	return out;
 }
 
 std::string Lab::report() const {
