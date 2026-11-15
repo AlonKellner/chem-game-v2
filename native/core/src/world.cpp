@@ -435,6 +435,20 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 
 	for (const SpeciesAmount &m : moved) {
 		const auto s = static_cast<size_t>(m.species.index);
+		// a solid's particles go with it, in proportion: at least one with what
+		// moves, at least one left with what stays
+		const SpeciesDef &def = table_->species(m.species);
+		if (def.phase == Phase::Solid && !def.wall && src.particles[s] > 0) {
+			int64_t go = src.particles[s];
+			if (m.amount.quanta < src.amount[s]) {
+				go = static_cast<int64_t>(static_cast<double>(src.particles[s]) * (static_cast<double>(m.amount.quanta) / static_cast<double>(src.amount[s])));
+				go = go < 1 ? 1 : go;
+				src.particles[s] = src.particles[s] - go < 1 ? 1 : src.particles[s] - go;
+			} else {
+				src.particles[s] = 0;
+			}
+			dst.particles[s] += go;
+		}
 		src.amount[s] -= m.amount.quanta;
 		dst.amount[s] += m.amount.quanta;
 		tend_particles(src, m.species);
@@ -485,9 +499,6 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 }
 
 Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, double conductance) {
-	if (!ledger_.empty()) {
-		return Refusal::MidStep;
-	}
 	if (!good_conductance(conductance)) {
 		return Refusal::BadValue;
 	}
@@ -544,6 +555,15 @@ Refusal World::set_conductance(EdgeId edge, double conductance) {
 	}
 	edges_[static_cast<size_t>(edge.index)].conductance = conductance;
 	return Refusal::None;
+}
+
+void World::skip_step() {
+	ledger_.clear();
+	++step_;
+}
+
+void World::rebase() {
+	before_ = Snapshot{ cells_ };
 }
 
 StepTrace World::close_step() {

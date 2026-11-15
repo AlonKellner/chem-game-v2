@@ -134,7 +134,7 @@ TEST_CASE("world: the topology changes between steps only (Stage 1)") {
 	const SpeciesAmount n2[] = { { builtin::nitrogen, Amount{ 10 } } };
 	CHECK(t.world.transfer(t.mouth, t.flask, n2, Energy{}) == Refusal::None);
 	CHECK(t.world.disconnect(t.mouth) == Refusal::MidStep);
-	CHECK(t.world.connect(t.flask, t.room, PHASES_GAS) == Refusal::MidStep);
+	CHECK(t.world.connect(t.flask, t.room, PHASES_GAS) == Refusal::None); // adding an edge is allowed at any time
 	CHECK(check_all(builtin_species(), t.world.close_step()).empty());
 	CHECK(t.world.disconnect(t.mouth) == Refusal::None);
 	CHECK(t.world.disconnect(t.mouth) == Refusal::UnknownEdge);

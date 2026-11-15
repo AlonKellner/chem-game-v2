@@ -49,6 +49,16 @@ double enthalpy_at(const SpeciesTable &table, const CellState &cell, double temp
 	return h;
 }
 
+Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature) {
+	double joule = 0.0;
+	for (const SpeciesAmount &a : amounts) {
+		const SpeciesDef &def = table.species(a.species);
+		joule += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * (def.hf + def.cp * (temperature - T0));
+	}
+	bool ok = false;
+	return energy_from_joule(joule, ok);
+}
+
 namespace {
 
 constexpr double INFINITE = std::numeric_limits<double>::infinity();

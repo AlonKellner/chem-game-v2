@@ -4,8 +4,14 @@
 #include "chem/species.hpp"
 #include "lab/lab.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
+
+struct cg_lab {
+	std::unique_ptr<lab::Lab> lab;
+	std::string text; // the last report or digest handed out
+};
 
 namespace {
 
@@ -127,6 +133,92 @@ const char *cg_reaction_equation(int32_t index) {
 		return nullptr;
 	}
 	return table_text().reaction_equation[static_cast<size_t>(index)].c_str();
+}
+
+cg_lab *cg_lab_open(const char *bench_json) {
+	if (bench_json == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_open: null bench");
+		return nullptr;
+	}
+	try {
+		std::string why;
+		std::unique_ptr<lab::Lab> made = lab::Lab::open(bench_json, why);
+		if (!made) {
+			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+			return nullptr;
+		}
+		return new cg_lab{ std::move(made), {} };
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
+void cg_lab_close(cg_lab *lab) {
+	delete lab;
+}
+
+cg_status cg_lab_command(cg_lab *lab, const char *command_json) {
+	if (lab == nullptr || command_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_command: null argument");
+	}
+	try {
+		std::string why;
+		if (lab->lab->command(command_json, why)) {
+			return CG_OK;
+		}
+		return fail(lab->lab->failed() ? CG_ERR_INVARIANT : CG_ERR_REFUSED, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_lab_advance(cg_lab *lab, int64_t steps) {
+	if (lab == nullptr || steps < 0) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_advance: null lab or negative steps");
+	}
+	try {
+		std::string why;
+		if (lab->lab->advance(steps, why)) {
+			return CG_OK;
+		}
+		return fail(CG_ERR_INVARIANT, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+void cg_lab_set_checking(cg_lab *lab, int32_t on) {
+	if (lab != nullptr) {
+		lab->lab->set_checking(on != 0);
+	}
+}
+
+int64_t cg_lab_step(const cg_lab *lab) {
+	return lab != nullptr ? lab->lab->step() : 0;
+}
+
+const char *cg_lab_report(cg_lab *lab) {
+	if (lab == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_report: null lab");
+		return nullptr;
+	}
+	try {
+		lab->text = lab->lab->report();
+		return lab->text.c_str();
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return nullptr;
+	}
+}
+
+const char *cg_lab_digest(cg_lab *lab) {
+	if (lab == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_lab_digest: null lab");
+		return nullptr;
+	}
+	lab->text = lab->lab->digest();
+	return lab->text.c_str();
 }
 
 } // extern "C"

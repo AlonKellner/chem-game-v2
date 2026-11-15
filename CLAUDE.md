@@ -18,12 +18,12 @@ Layers with a strict dependency direction: core -> lab -> C API -> hosts. Everyt
 
 - `native/core/include/chem/` — The simulation kernel, namespace `chem` (GAME_SPEC §3–§12). `quantity.hpp`: integer amounts (1e-12 mol) and energy (1e-9 J). `species.hpp`: species tables and `Reaction`, which cannot be constructed unbalanced. `world.hpp`: cells with private state, edges, the two primitives `transfer` and `transform`, refusals, the ledger and `StepTrace`. `thermo.hpp`: what state implies (heat capacity, temperature, entropy, volume, activity, affinity). `math.hpp`: the core's own `exp` and `log`. `sim.hpp`: `Simulation`, the fixed-step loop and its processes, applied in sequence (reactions with first-order and surface kinetics, crystal nucleation, heat conduction, liquid down the drains, then settling: every cell to its fast equilibria such as boiling and condensation, every rigid cell exactly full). `invariants.hpp`: the invariant kernel (`check_C1`…`check_C8`, `check_T1`…`check_T3`, `check_S1`, `check_V1`…`check_V3`, `check_P1`, `check_X1`, `check_X2`, `check_all`, `Totals`). No engine, no C-library transcendentals (ctest `core_no_libm`).
 - `native/datagen/` — `chem_datagen`: embeds `data/elements.json`, `species.json`, `reactions.json` in the core at build time, deriving atoms from formulas (`formula.hpp`) and refusing an unbalanced reaction (ctest `datagen_refuses_*`). Generated: `chem/builtin_ids.hpp` (species and reactions by name).
-- `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13): bench, equipment, connections, events, reports.
+- `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13). `lab.hpp`: `Lab`, a bench of equipment over one closed world, driven by JSON commands (`heat`, `valve`, `stir`, `pour`, `tip`, `attach`, `detach`, `under`, `submit`, `wait`, `wait_until`), with reports and a SHA-256 digest of the whole state (`sha256.hpp`).
 - `native/capi/` — `chem_api.h`: the game behind a plain C ABI (size-prefixed structs, borrowed views, statuses).
-- `native/hosts/headless/` — `chem_tool`: the game without an engine: `version`, `tables` (the built-in species and reactions), `study <name>` (a stage's physics alone against its closed form, on the core directly: `cooling`, `decomposition`, `balloon`, `distillation`, `dissolution`, `crystals`).
+- `native/hosts/headless/` — `chem_tool`: the game without an engine: `version`, `tables` (the built-in species and reactions), `run SESSION [--record|--check FILE]` (a session script through the C API, every invariant checked, the measured results printed), `bench SESSION` (the same unchecked, timed), `study <name>` (a stage's physics alone against its closed form, on the core directly: `cooling`, `decomposition`, `balloon`, `distillation`, `dissolution`, `crystals`).
 - `native/hosts/godot/` — The Godot host: `ChemLab`.
 - `engines/godot/` — The Godot project. `make native` builds the extension into `engines/godot/bin` and copies `data/` into `engines/godot/data`.
-- `data/` — Source-of-truth data (species, reactions, equipment, session scripts); `bench/` — committed goldens.
+- `data/` — Source-of-truth data: `elements.json`, `species.json`, `reactions.json` (embedded at build), `benches/` (equipment and what it holds), `sessions/` (scripts). `bench/sessions/` — the sessions' golden records (a digest after every command).
 - `docs/DATA_SOURCES.md` — every physical value with its source and confidence. A value is used only once its row is verified.
 
 ## Testing
@@ -40,7 +40,10 @@ SKIP_GODOT=1 make gate          # every engine-free gate
 make gates                      # before a merge or a stage close: uncached, plus ASan+UBSan
 make native                     # the Godot extension, data copy, import
 ./run_tests_parallel.sh         # the Godot host's GUT suite
-make run                        # the game
+make run                        # the game (the Godot host)
+make demo                       # the 3-stage demo, headless: the commands and what was measured
+make demo-bench                 # its step cost
+make sessions-check             # the sessions against their golden records (make sessions re-records: a behaviour change)
 ```
 
 - Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`.

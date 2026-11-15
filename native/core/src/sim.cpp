@@ -300,21 +300,6 @@ void Simulation::conduct_heat() {
 	}
 }
 
-namespace {
-
-// the enthalpy, in quanta, that these amounts carry at temperature T
-Energy carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature) {
-	double joule = 0.0;
-	for (const SpeciesAmount &a : amounts) {
-		const SpeciesDef &def = table.species(a.species);
-		joule += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * (def.hf + def.cp * (temperature - T0));
-	}
-	bool ok = false;
-	return energy_from_joule(joule, ok);
-}
-
-} // namespace
-
 // Liquids run down the drains (GAME_SPEC §6): all of the upper cell's liquid,
 // with what is dissolved in it, into the lower cell, carrying its enthalpy. A
 // rigid lower cell takes only what fits; the rest stays above. Kinematic: no
@@ -363,7 +348,7 @@ void Simulation::drain_liquids() {
 			}
 		}
 		if (!amounts.empty()) {
-			const Refusal refused = world_.transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, carried(table, amounts, thermal.temperature));
+			const Refusal refused = world_.transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		}
 	}
@@ -443,7 +428,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 			}
 		}
 		if (!amounts.empty()) {
-			const Refusal refused = world_.transfer(edge, cell, amounts, carried(table, amounts, thermal.temperature));
+			const Refusal refused = world_.transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		}
 		return false;
@@ -502,7 +487,7 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 	if (amounts.empty()) {
 		return false;
 	}
-	const Refusal refused = world_.transfer(edge, up, amounts, carried(table, amounts, source_thermal.temperature));
+	const Refusal refused = world_.transfer(edge, up, amounts, enthalpy_carried(table, amounts, source_thermal.temperature));
 	CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 	return true;
 }
@@ -587,7 +572,22 @@ void Simulation::settle() {
 	}
 }
 
+void Simulation::advance() {
+	if (world_.thermal()) {
+		react();
+		conduct_heat();
+		drain_liquids();
+		settle();
+	}
+	world_.skip_step();
+	traced_ = false;
+}
+
 StepTrace Simulation::step() {
+	if (!traced_) {
+		world_.rebase(); // steps were skipped: this one's trace starts here
+		traced_ = true;
+	}
 	if (world_.thermal()) {
 		react();
 		conduct_heat();

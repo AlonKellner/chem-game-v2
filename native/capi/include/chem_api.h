@@ -12,6 +12,7 @@
  *
  * Stage 0: the build's identity and the error and log plumbing.
  * Stage 1: the built-in species and reactions.
+ * Stage 7: the lab, driven by commands.
  */
 #ifndef CHEM_API_H
 #define CHEM_API_H
@@ -32,7 +33,9 @@ typedef int32_t cg_status;
 enum {
 	CG_OK = 0,
 	CG_ERR_INVALID_ARGUMENT = 1,
-	CG_ERR_INTERNAL = 2
+	CG_ERR_INTERNAL = 2,
+	CG_ERR_REFUSED = 3, /* the command was refused; the lab is as it was (cg_last_error says why) */
+	CG_ERR_INVARIANT = 4 /* an invariant failed; the lab takes no more commands */
 };
 
 /* The C API's own version: bumped when a host must change to keep working. */
@@ -82,6 +85,38 @@ CG_API int32_t cg_reaction_count(void);
 CG_API const char *cg_reaction_id(int32_t index);
 /* "Cu2CO3(OH)2(s) -> 2 CuO(s) + CO2(g) + H2O(g)"; NULL for a bad index. */
 CG_API const char *cg_reaction_equation(int32_t index);
+
+/* ---- the lab (GAME_SPEC §13): a bench of equipment over one closed world,
+ * driven by commands. The library reads no files: the host passes the bench
+ * (a file of data/benches) as text. */
+
+typedef struct cg_lab cg_lab;
+
+/* NULL, with cg_last_error, when the text is not a bench that can be built. */
+CG_API cg_lab *cg_lab_open(const char *bench_json);
+CG_API void cg_lab_close(cg_lab *lab);
+
+/* One command: a JSON object with a "do" (heat, unheat, valve, stir, pour, tip,
+ * attach, detach, under, submit, wait, wait_until). CG_ERR_REFUSED: nothing
+ * changed, except that a command which changes connections first takes the lab
+ * to a step boundary (at most one step). */
+CG_API cg_status cg_lab_command(cg_lab *lab, const char *command_json);
+
+/* Advances whole steps of 1/60 s of simulated time. */
+CG_API cg_status cg_lab_advance(cg_lab *lab, int64_t steps);
+
+/* Every invariant on every step: on (nonzero) by default. Off runs the same
+ * states, bit for bit, several times faster. Set it before the first step. */
+CG_API void cg_lab_set_checking(cg_lab *lab, int32_t on);
+
+CG_API int64_t cg_lab_step(const cg_lab *lab);
+
+/* What is where, measured: JSON. Borrowed until the next call on this lab. */
+CG_API const char *cg_lab_report(cg_lab *lab);
+
+/* SHA-256 of the whole state, 64 hex digits: equal digests are equal states.
+ * Borrowed until the next call on this lab. */
+CG_API const char *cg_lab_digest(cg_lab *lab);
 
 #ifdef __cplusplus
 }

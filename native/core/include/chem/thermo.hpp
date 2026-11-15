@@ -99,6 +99,10 @@ private:
 // dissolved in it. 0 for a gas or a solute that is absent.
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species);
 
+// The enthalpy, in quanta, that these amounts carry at temperature T: what a
+// transfer of matter takes with it (GAME_SPEC §6).
+Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature);
+
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the
 // mixing terms of its gas and of its solution).

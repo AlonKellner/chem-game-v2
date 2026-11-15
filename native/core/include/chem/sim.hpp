@@ -30,6 +30,9 @@ public:
 	// Advances one step and returns its trace. With checking on, a violated
 	// invariant is a CHEM_ASSERT (abort in Debug, report and continue otherwise).
 	StepTrace step();
+	// Advances one step without building its trace or checking it: the same
+	// state, bit for bit, at a fraction of the cost.
+	void advance();
 
 	// Checking runs every invariant on every step. On by default where
 	// CHEM_ASSERT aborts (Debug and sanitizer builds), off otherwise.
@@ -67,6 +70,7 @@ private:
 	std::vector<double> nucleation_remainder_;
 	std::vector<uint8_t> starved_;
 	double step_seconds_ = STEP_SECONDS;
+	bool traced_ = true; // the last step was step(), not advance()
 	bool checking_;
 };
 

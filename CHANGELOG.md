@@ -1,5 +1,16 @@
 # GAME_SPEC version history
 
+## 0.8.0 (2026-11-16, Stage 7)
+
+- §13 rewritten around what is built: the bench as data, the twelve commands, refusals, reports,
+  the digest, sessions and their records. The full design's remaining parts are listed.
+- §14: the lab through the C API; `chem_tool run` and `bench`.
+- §17 rewritten with the measured run: every number there is what the demo session produces.
+- §18: D1, D4, R1 and L1 implemented; UX2, UX3 and UX5 tested. L1 states its one exception (a
+  command that changes connections first reaches a step boundary).
+- §19: the demo's measured step cost.
+- §4.2 (code): an edge may be added during a step; a solid's particles move with it.
+
 ## 0.7.0 (2026-11-16, Stage 6)
 
 - §4.6: activities of solvent and dissolved species. The solvent's is `−n_dissolved/n_liquid`,

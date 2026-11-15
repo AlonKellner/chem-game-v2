@@ -207,6 +207,8 @@ public:
 	bool temperature(CellId cell, double &kelvin) const;
 	std::span<const Edge> edges() const { return edges_; }
 	Snapshot snapshot() const { return Snapshot{ cells_ }; }
+	// true when a primitive has been applied since the last step closed
+	bool mid_step() const { return !ledger_.empty(); }
 	// one cell's state, to read (the processes derive temperatures from it)
 	const CellState &snapshot_cell(CellId cell) const { return cells_[static_cast<size_t>(cell.index)]; }
 	uint64_t step() const { return step_; }
@@ -224,7 +226,9 @@ public:
 	// is consumed and nothing overflows.
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
 
-	// The topology changes between steps only (GAME_SPEC §4.5, step 1).
+	// The topology changes between steps only (GAME_SPEC §4.5, step 1), except
+	// that an edge may be added at any time: a step's trace holds the edges as
+	// they are at its end, and one added during it is among them.
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
 	Refusal connect_drain(CellId from, CellId to, EdgeId *made = nullptr);
 	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
@@ -241,6 +245,12 @@ public:
 	// Ends the step: the trace of everything since the last close (or since
 	// the world was built), then the next step begins.
 	StepTrace close_step();
+	// Ends the step without building its trace (no copies of the state). The
+	// next close_step() after one of these must follow a rebase().
+	void skip_step();
+	// Makes the present state the start of the step in progress, for a trace
+	// after skipped steps. Only between steps.
+	void rebase();
 
 private:
 	World() = default;
