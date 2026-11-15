@@ -17,7 +17,7 @@ and paints.
 | 9.6 | The interactive bench, `data/benches/lab.json` | Done |
 | 9.7 | Tests: the demo played with the pointer alone; the host's suite | Done |
 | 9.8 | `make screenshots` | Done |
-| 9.9 | The user's interactive sign-off | Pending |
+| 9.9 | The user's interactive sign-off | Done (2026-11-16: "Approved, proceed") |
 
 ## Decisions
 
