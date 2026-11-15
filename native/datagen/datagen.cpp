@@ -268,8 +268,26 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				row.kinetics.in = chem::SpeciesId{ found->second };
 				row.kinetics.prefactor = k.at("prefactor").get<double>();
 				row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+			} else if (law == "surface") {
+				const auto found = by_key.find(k.at("in").get<std::string>());
+				if (found == by_key.end()) {
+					fail(reactions_file, "reaction " + row.id + ": kinetics names a species that is not in species.json");
+				}
+				row.kinetics.law = chem::Kinetics::Law::Surface;
+				row.kinetics.in = chem::SpeciesId{ found->second };
+				row.kinetics.prefactor = k.at("prefactor").get<double>();
+				row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+				if (k.contains("driver")) {
+					const auto driver = by_key.find(k.at("driver").get<std::string>());
+					if (driver == by_key.end()) {
+						fail(reactions_file, "reaction " + row.id + ": kinetics names a driver that is not in species.json");
+					}
+					row.kinetics.driver = chem::SpeciesId{ driver->second };
+				}
+				row.kinetics.nucleation = k.value("nucleation", 0.0);
+				row.kinetics.nucleation_order = k.value("nucleation_order", 0.0);
 			} else {
-				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order or equilibrium");
+				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
 			}
 		}
 		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
@@ -307,12 +325,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < row.terms.size(); ++i) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
-		char kinetics[160];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g }",
+		char kinetics[320];
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g }",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
-						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium" : "Kinetics::Law::None",
-				row.kinetics.in.index,
-				row.kinetics.prefactor, row.kinetics.activation);
+						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
+						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
+				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
+				row.kinetics.nucleation_order);
 		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
 	cpp << "};\n\n"

@@ -55,7 +55,7 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 | `chem_tests`, `lab_tests` | the core's and the lab layer's doctest cases |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
-| `chem_tool_study_cooling`, `_decomposition`, `_balloon`, `_distillation` | the studies run with every invariant checked on every step and end with the world's totals unchanged |
+| `chem_tool_study_cooling`, `_decomposition`, `_balloon`, `_distillation`, `_dissolution`, `_crystals` | the studies run with every invariant checked on every step and end with the world's totals unchanged |
 | `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |
 | `*_no_engine` | core, lab, C API and headless host name no game engine |
 | `core_no_libm` | the core calls no C-library transcendental function |

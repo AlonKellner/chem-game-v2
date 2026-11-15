@@ -13,4 +13,9 @@ double exp(double x);
 // The natural logarithm. NaN for x < 0, -infinity for x == 0.
 double log(double x);
 
+// The cube root of x >= 0, and x^p for x > 0 (0 for x == 0), through exp and
+// log: a few units in the last place, the same everywhere.
+double cbrt(double x);
+double pow(double x, double p);
+
 } // namespace chem

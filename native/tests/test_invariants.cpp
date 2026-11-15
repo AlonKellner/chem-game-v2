@@ -278,7 +278,7 @@ TEST_CASE("invariants: entropy destroyed outside the ledger is detected: T2 (Sta
 TEST_CASE("invariants: a cell without a temperature is detected: T3 (Stage 2)") {
 	{
 		StepTrace t = clean_thermal(); // a species without thermodynamic data appears
-		t.after.cells[1].amount[static_cast<size_t>(builtin::copper_sulfate_pentahydrate.index)] = 1000;
+		t.after.cells[1].amount[static_cast<size_t>(builtin::copper_sulfate_trihydrate.index)] = 1000;
 		CHECK(has(check_all(builtin_species(), t), "T3"));
 	}
 	{
@@ -439,4 +439,40 @@ TEST_CASE("invariants: more liquid than the vessel holds is detected: V2 (Stage 
 	const Violations v = check_all(builtin_species(), t);
 	CHECK(has(v, "V2"));
 	CHECK(has(v, "V1"));
+}
+
+// ---------------------------------------------------------------- solutions
+
+TEST_CASE("invariants: a solid without particles, or particles without a solid, is detected: X1 (Stage 6)") {
+	const auto oxide = static_cast<size_t>(builtin::copper_oxide.index);
+	const auto water = static_cast<size_t>(builtin::water.index);
+	StepTrace honest = clean_thermal();
+	REQUIRE(honest.after.cells[0].particles.size() == honest.after.cells[0].amount.size());
+	CHECK_FALSE(has(check_all(builtin_species(), honest), "X1"));
+	{
+		StepTrace t = honest; // particles of a solid that is not there
+		t.after.cells[0].particles[oxide] = 3;
+		CHECK(has(check_all(builtin_species(), t), "X1"));
+	}
+	{
+		StepTrace t = honest; // a solid in no particles
+		t.after.cells[0].amount[oxide] = 1000;
+		CHECK(has(check_all(builtin_species(), t), "X1"));
+		t.after.cells[0].particles[oxide] = 1;
+		CHECK_FALSE(has(check_all(builtin_species(), t), "X1"));
+	}
+	{
+		StepTrace t = honest; // particles of a liquid
+		t.after.cells[0].particles[water] = 1;
+		CHECK(has(check_all(builtin_species(), t), "X1"));
+	}
+}
+
+TEST_CASE("invariants: a dissolved species with no liquid is detected: X2 (Stage 6)") {
+	StepTrace t = clean_thermal();
+	t.after.cells[1].amount[static_cast<size_t>(builtin::copper_sulfate_aq.index)] = 1000000;
+	CHECK_FALSE(has(check_all(builtin_species(), t), "X2")); // it has water to be in
+	t.after.cells[1].amount[static_cast<size_t>(builtin::water.index)] = 0;
+	t.after.cells[1].amount[static_cast<size_t>(builtin::glass.index)] = 1000000000000; // still a temperature
+	CHECK(has(check_all(builtin_species(), t), "X2"));
 }

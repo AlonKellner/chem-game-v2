@@ -88,6 +88,11 @@ Violations check_T2(const SpeciesTable &table, const StepTrace &trace);
 // T3. Every cell has a temperature: thermodynamic data for every species it
 // holds, a positive heat capacity, and T > 0.
 Violations check_T3(const SpeciesTable &table, const StepTrace &trace);
+// X1. A solid has particles exactly when it is there: count > 0 where its
+// amount is > 0, 0 where it is 0 (states built by hand, with no counts, pass).
+Violations check_X1(const SpeciesTable &table, const StepTrace &trace);
+// X2. A cell that holds a dissolved species holds a liquid to hold it.
+Violations check_X2(const SpeciesTable &table, const StepTrace &trace);
 // S1. No NaN or infinity: every temperature and entropy of the trace is finite.
 Violations check_S1(const SpeciesTable &table, const StepTrace &trace);
 

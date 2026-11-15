@@ -17,7 +17,9 @@ int usage() {
 						 "  study cooling         a flask cooling in a room, against Newton's law\n"
 						 "  study decomposition   malachite in a flask over a flame\n"
 						 "  study balloon         the same flask with a balloon on its mouth\n"
-						 "  study distillation    water boiled through a condenser into a beaker\n");
+						 "  study distillation    water boiled through a condenser into a beaker\n"
+						 "  study dissolution     copper oxide under sulfuric acid: still, stirred, warmed\n"
+						 "  study crystals        the solution boiled down and left to cool\n");
 	return 2;
 }
 

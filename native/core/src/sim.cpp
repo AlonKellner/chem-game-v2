@@ -5,6 +5,7 @@
 #include "chem/math.hpp"
 #include "chem/thermo.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <utility>
@@ -18,7 +19,7 @@ Simulation::Simulation(World world, std::vector<Reaction> reactions) :
 		if (r.table() != &world_.species()) {
 			continue;
 		}
-		if (r.kinetics().law == Kinetics::Law::FirstOrder) {
+		if (r.kinetics().law == Kinetics::Law::FirstOrder || r.kinetics().law == Kinetics::Law::Surface) {
 			reactions_.push_back(std::move(r));
 		} else if (r.kinetics().law == Kinetics::Law::Equilibrium) {
 			equilibria_.push_back(std::move(r));
@@ -97,6 +98,7 @@ void Simulation::react() {
 	const SpeciesTable &table = world_.species();
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	reaction_remainder_.resize(cells * reactions_.size(), 0.0);
+	nucleation_remainder_.resize(cells * reactions_.size(), 0.0);
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
 		if (world_.meta(cell).reservoir) {
@@ -106,16 +108,21 @@ void Simulation::react() {
 		for (size_t r = 0; r < reactions_.size(); ++r) {
 			const Reaction &reaction = reactions_[r];
 			const Kinetics &kinetics = reaction.kinetics();
+			const bool surface = kinetics.law == Kinetics::Law::Surface;
 			double &remainder = reaction_remainder_[c * reactions_.size() + r];
-			const int64_t have = state.amount[static_cast<size_t>(kinetics.in.index)];
-			if (have == 0) {
+			double &nucleation_remainder = nucleation_remainder_[c * reactions_.size() + r];
+			const auto in = static_cast<size_t>(kinetics.in.index);
+			const int64_t have = state.amount[in];
+			if (have == 0 && !(surface && kinetics.nucleation > 0.0)) {
 				remainder = 0.0;
+				nucleation_remainder = 0.0;
 				continue;
 			}
 			const AffinityProbe probe(table, state, reaction.terms());
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				remainder = 0.0;
+				nucleation_remainder = 0.0;
 				continue;
 			}
 			const bool forward = a > 0.0;
@@ -123,14 +130,50 @@ void Simulation::react() {
 			const double rt = GAS_CONSTANT * thermal.temperature;
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
 			const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
-			const double wanted = static_cast<double>(have) / static_cast<double>(-reaction.nu(kinetics.in)) * (1.0 - exp(-rate * factor * step_seconds_));
+			double wanted = 0.0; // quanta of extent, in the direction of the affinity
+			int64_t born = 0; // new particles, each one quantum of the solid
+			if (!surface) {
+				wanted = static_cast<double>(have) / static_cast<double>(-reaction.nu(kinetics.in)) * (1.0 - exp(-rate * factor * step_seconds_));
+			} else {
+				const int32_t nu = reaction.nu(kinetics.in);
+				const double per = static_cast<double>(nu < 0 ? -nu : nu);
+				const bool consumed = forward == (nu < 0); // this direction uses the solid up
+				const SpeciesDef &solid = table.species(kinetics.in);
+				const double driver = table.has(kinetics.driver) ? activity(table, state, kinetics.driver) : 1.0;
+				// mol/m^2/s of the solid, at its surface
+				const double flux = rate * driver * world_.meta(cell).mixing * factor * per;
+				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
+				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
+				const double g = 4.835975862049409 * cbrt(static_cast<double>(state.particles[in])) * cbrt(solid.molar_volume * solid.molar_volume) * flux;
+				const double mol = static_cast<double>(have) * MOL_PER_QUANTUM;
+				const double root = cbrt(mol);
+				const double moved = g * step_seconds_ / 3.0;
+				const double after = consumed ? (root > moved ? root - moved : 0.0) : root + moved;
+				const double change = after * after * after - mol;
+				wanted = (change < 0.0 ? -change : change) / MOL_PER_QUANTUM / per;
+				// nucleation: where this direction makes the solid from a supersaturated solution
+				if (!consumed && kinetics.nucleation > 0.0 && nu == 1) {
+					double liquid = 0.0; // quanta of solvent
+					for (size_t s = 0; s < state.amount.size(); ++s) {
+						if (state.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid) {
+							liquid += static_cast<double>(state.amount[s]);
+						}
+					}
+					const double excess = a / rt < 700.0 ? exp(a / rt) - 1.0 : 1e300; // S - 1
+					const double nuclei = kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * pow(excess, kinetics.nucleation_order) * step_seconds_ + nucleation_remainder;
+					born = nuclei < 1e15 ? static_cast<int64_t>(nuclei) : 1000000000000000;
+					nucleation_remainder = nuclei < 1e15 ? nuclei - static_cast<double>(born) : 0.0;
+				} else {
+					nucleation_remainder = 0.0;
+				}
+			}
 			if ((remainder > 0.0) != forward) {
 				remainder = 0.0;
 			}
 			const double total = (forward ? wanted : -wanted) + remainder;
-			int64_t whole = static_cast<int64_t>(total); // toward zero; |total| <= have + 1
+			int64_t whole = total > -9.0e18 && total < 9.0e18 ? static_cast<int64_t>(total) : 0; // toward zero
 			remainder = total - static_cast<double>(whole);
-			int64_t size = forward ? whole : -whole;
+			int64_t size = (forward ? whole : -whole) + born;
 			const int64_t most = feasible_extent(state, reaction.terms(), forward);
 			if (size > most) {
 				size = most;
@@ -141,9 +184,32 @@ void Simulation::react() {
 				size = reached;
 				remainder = 0.0;
 			}
-			if (size != 0) {
-				const Refusal refused = world_.transform(cell, reaction, forward ? size : -size);
-				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			if (size == 0) {
+				continue;
+			}
+			// Particles (the world keeps a solid that appears as one lump): the
+			// new nuclei are particles, and a solid made from a solid keeps its
+			// grains (CuO from malachite).
+			const int64_t grains = table.species(kinetics.in).phase == Phase::Solid ? state.particles[in] : 0;
+			std::array<bool, MAX_TERMS> appears{};
+			for (size_t t = 0; t < reaction.terms().size(); ++t) {
+				const Term &term = reaction.terms()[t];
+				appears[t] = (forward ? term.nu > 0 : term.nu < 0) && state.amount[static_cast<size_t>(term.species.index)] == 0;
+			}
+			const Refusal refused = world_.transform(cell, reaction, forward ? size : -size);
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			if (surface) {
+				const int64_t nuclei = born < size ? born : size;
+				if (nuclei > 0 && state.amount[in] > 0) {
+					world_.set_particles(cell, kinetics.in, grains + nuclei);
+				}
+			} else if (grains > 0) {
+				for (size_t t = 0; t < reaction.terms().size(); ++t) {
+					const SpeciesDef &def = table.species(reaction.terms()[t].species);
+					if (appears[t] && def.phase == Phase::Solid && !def.wall) {
+						world_.set_particles(cell, reaction.terms()[t].species, grains);
+					}
+				}
 			}
 		}
 	}

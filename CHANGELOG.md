@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.7.0 (2026-11-16, Stage 6)
+
+- §4.6: activities of solvent and dissolved species. The solvent's is `−n_dissolved/n_liquid`,
+  not the mole fraction of the earlier draft, which is inconsistent with the solutes' and let
+  entropy fall. A solute needs a solvent (X2).
+- §7: the surface law, its exact step, the driver, stirring.
+- §9: particles, nucleation, the derived crystal size; the demo subset rewritten: one-step
+  dehydration (the lower hydrates' data is not verified), neutral solutes, no solute volume.
+- §18: X1 restated for particles; X2 added; the solubility oracle.
+- §20: seven simplifications declared, among them one that is wrong in sign: left-over acid
+  raises the salt's solubility in this model and lowers it in reality.
+- Data: the pentahydrate and the sulfate ion verified; CuSO₄(aq) fitted to the handbook's
+  solubility; four rate constants calibrated and labelled so.
+
 ## 0.6.0 (2026-11-16, Stage 5)
 
 - §4.5: the step's order restated: rate reactions, heat, drains, then settling (fast equilibria

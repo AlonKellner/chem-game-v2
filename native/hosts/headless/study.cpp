@@ -307,6 +307,173 @@ int distillation() {
 	return genesis == end ? 0 : 1;
 }
 
+std::vector<Reaction> shipped() {
+	return std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end());
+}
+
+double celsius_of(const World &world, CellId cell) {
+	double t = 0.0;
+	world.temperature(cell, t);
+	return t - 273.15;
+}
+
+// mol of a dissolved species per kg of the cell's water
+double molality(const World &world, CellId cell, SpeciesId solute) {
+	const double kg = world.amount(cell, builtin::water).mol() * 0.018015;
+	return kg > 0.0 ? world.amount(cell, solute).mol() / kg : 0.0;
+}
+
+// Stage 6: the demo's second stage without its player. 3.6 g of CuO powder
+// (the malachite's 2.5 million grains) under 100 mL of 1 M sulfuric acid, in
+// an open flask: cold and still, cold and stirred, warm and stirred.
+int dissolution() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	std::printf("3.597 g of CuO in 2.5 million grains under 100 mL of 1 M sulfuric acid (0.1 mol in 96.2 g of water), a 250 mL flask open to the air\n");
+	std::printf("CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l), at the oxide's surface, proportional to the acid's molality and to the stirring\n\n");
+	const struct {
+		const char *name;
+		double start, mixing, flame;
+	} runs[] = { { "20 C, still", 293.15, 1.0, 0.0 }, { "20 C, stirred (x3)", 293.15, 3.0, 0.0 }, { "gentle flame, stirred (x3)", 293.15, 3.0, 0.05 } };
+	int status = 0;
+	for (const auto &run : runs) {
+		World::Builder b(table);
+		const CellId flask = b.add_rigid_cell("flask", 250e-6);
+		const CellId air = b.add_cell("air");
+		const CellId flame = b.add_reservoir("flame", 2200.0);
+		const CellId room = b.add_reservoir("room", 293.15);
+		b.add_edge(flask, air, PHASES_GAS);
+		b.add_edge(flask, flame, PHASES_NONE, run.flame);
+		b.add_edge(flask, room, PHASES_NONE, 0.9);
+		b.add_edge(air, room, PHASES_NONE, 1000.0);
+		const double oxide = 3.597 / 79.545, water = 96.2 / 18.015;
+		b.set_amount(flask, builtin::copper_oxide, amount_from_mol(oxide, ok)).set_particles(flask, builtin::copper_oxide, 2500000);
+		b.set_amount(flask, builtin::water, amount_from_mol(water, ok)).set_amount(flask, builtin::sulfuric_acid_aq, amount_from_mol(0.1, ok));
+		b.set_amount(flask, builtin::glass, amount_from_mol(100.0 / 60.083, ok));
+		const double gas = P_ATMOSPHERE * (250e-6 - water * table.species(builtin::water).molar_volume - oxide * table.species(builtin::copper_oxide).molar_volume) /
+				(GAS_CONSTANT * run.start);
+		b.set_amount(flask, builtin::nitrogen, amount_from_mol(0.79 * gas, ok)).set_amount(flask, builtin::oxygen, amount_from_mol(0.21 * gas, ok));
+		b.set_temperature(flask, run.start);
+		b.set_amount(air, builtin::nitrogen, amount_from_mol(790.0, ok)).set_amount(air, builtin::oxygen, amount_from_mol(210.0, ok));
+		b.set_temperature(air, 293.15);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		world->set_mixing(flask, run.mixing);
+		Simulation sim(std::move(*world), shipped());
+		sim.set_checking(true);
+		const Totals genesis = totals(table, sim.world().snapshot());
+		std::printf("%s\n%8s %8s %10s %14s %14s %12s\n", run.name, "time s", "flask C", "CuO g", "CuSO4 mol/kg", "acid mol/kg", "grain um");
+		double half = 0.0, done = 0.0;
+		for (int step = 0; step <= 60 * 3600; ++step) {
+			const double left = sim.world().amount(flask, builtin::copper_oxide).mol() / oxide;
+			if (half == 0.0 && left <= 0.5) {
+				half = step * STEP_SECONDS;
+			}
+			if (done == 0.0 && left <= 0.01) {
+				done = step * STEP_SECONDS;
+			}
+			if (step % (60 * 300) == 0 && (done == 0.0 || step * STEP_SECONDS < done + 300.0)) {
+				std::printf("%8.0f %8.2f %10.5f %14.5f %14.5f %12.3f\n", step * STEP_SECONDS, celsius_of(sim.world(), flask), left * 3.597,
+						molality(sim.world(), flask, builtin::copper_sulfate_aq), molality(sim.world(), flask, builtin::sulfuric_acid_aq),
+						particle_diameter(table, sim.world().snapshot_cell(flask), builtin::copper_oxide) * 1e6);
+			}
+			sim.step();
+		}
+		std::printf("half dissolved at %.0f s, 99%% at %.0f s; totals %s\n\n", half, done, totals(table, sim.world().snapshot()) == genesis ? "unchanged" : "MOVED");
+		status |= totals(table, sim.world().snapshot()) == genesis ? 0 : 1;
+	}
+	return status;
+}
+
+// Stage 6: the demo's third stage without its player. The solution of stage 2
+// is boiled down through the condenser, then left to cool.
+int crystals() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	World::Builder b(table);
+	const CellId flask = b.add_rigid_cell("flask", 250e-6);
+	const CellId condenser = b.add_rigid_cell("condenser", 50e-6);
+	const CellId beaker = b.add_rigid_cell("beaker", 250e-6);
+	const CellId air = b.add_cell("air");
+	const CellId flame = b.add_reservoir("flame", 2200.0);
+	const CellId coolant = b.add_reservoir("coolant", 288.15);
+	const CellId room = b.add_reservoir("room", 293.15);
+	b.add_edge(flask, condenser, PHASES_GAS);
+	b.add_edge(condenser, air, PHASES_GAS);
+	b.add_edge(beaker, air, PHASES_GAS);
+	b.add_drain(condenser, beaker);
+	const EdgeId burner = b.add_edge(flask, flame, PHASES_NONE, 0.25);
+	b.add_edge(flask, room, PHASES_NONE, 0.9);
+	b.add_edge(condenser, coolant, PHASES_NONE, 10.0);
+	b.add_edge(beaker, room, PHASES_NONE, 0.5);
+	b.add_edge(air, room, PHASES_NONE, 1000.0);
+	// stage 2's flask: 0.0452 mol of CuO dissolved in 100 mL of 1 M acid
+	const double water = (96.2 + 0.8146) / 18.015, salt = 3.597 / 79.545, acid = 0.1 - salt;
+	const auto air_in = [&](CellId cell, double volume) {
+		const double n = P_ATMOSPHERE * volume / (GAS_CONSTANT * 293.15);
+		b.set_amount(cell, builtin::nitrogen, amount_from_mol(0.79 * n, ok)).set_amount(cell, builtin::oxygen, amount_from_mol(0.21 * n, ok));
+	};
+	b.set_amount(flask, builtin::water, amount_from_mol(water, ok)).set_amount(flask, builtin::copper_sulfate_aq, amount_from_mol(salt, ok));
+	b.set_amount(flask, builtin::sulfuric_acid_aq, amount_from_mol(acid, ok)).set_amount(flask, builtin::glass, amount_from_mol(100.0 / 60.083, ok));
+	air_in(flask, 250e-6 - water * table.species(builtin::water).molar_volume);
+	b.set_temperature(flask, 293.15);
+	b.set_amount(condenser, builtin::glass, amount_from_mol(50.0 / 60.083, ok));
+	air_in(condenser, 50e-6);
+	b.set_temperature(condenser, 293.15);
+	b.set_amount(beaker, builtin::glass, amount_from_mol(80.0 / 60.083, ok));
+	air_in(beaker, 250e-6);
+	b.set_temperature(beaker, 293.15);
+	b.set_amount(air, builtin::nitrogen, amount_from_mol(790.0, ok)).set_amount(air, builtin::oxygen, amount_from_mol(210.0, ok));
+	b.set_temperature(air, 293.15);
+	std::string why;
+	auto world = b.build(&why);
+	if (!world) {
+		std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+		return 1;
+	}
+	Simulation sim(std::move(*world), shipped());
+	sim.set_checking(true);
+	const Totals genesis = totals(table, sim.world().snapshot());
+	const auto grams = [&](CellId c, SpeciesId s) { return sim.world().amount(c, s).mol() * static_cast<double>(table.molar_mass_ug(s)) * 1e-6; };
+
+	std::printf("stage 2's flask: %.4f mol of CuSO4 and %.4f mol of sulfuric acid in %.1f g of water; flame 2200 K through 0.25 W/K; condenser and beaker\n", salt, acid,
+			water * 18.015);
+	std::printf("the burner goes off when 14 g of water is left in the flask\n\n");
+	std::printf("%7s %8s %13s %14s %13s %12s %12s %14s %12s\n", "time s", "flask C", "flask water g", "CuSO4 mol/kg", "crystals g", "crystals", "size um", "anhydrous g",
+			"beaker g");
+	bool lit = true;
+	for (int step = 0; step <= 60 * 3600; ++step) {
+		if (lit && grams(flask, builtin::water) < 14.0) {
+			sim.world().set_conductance(burner, 0.0);
+			lit = false;
+			std::printf("%7.0f burner off\n", step * STEP_SECONDS);
+		}
+		if (step % (60 * 180) == 0) {
+			std::printf("%7.0f %8.2f %13.4f %14.4f %13.5f %12lld %12.2f %14.5f %12.4f\n", step * STEP_SECONDS, celsius_of(sim.world(), flask), grams(flask, builtin::water),
+					molality(sim.world(), flask, builtin::copper_sulfate_aq), grams(flask, builtin::copper_sulfate_pentahydrate),
+					static_cast<long long>(sim.world().particles(flask, builtin::copper_sulfate_pentahydrate)),
+					particle_diameter(table, sim.world().snapshot_cell(flask), builtin::copper_sulfate_pentahydrate) * 1e6, grams(flask, builtin::copper_sulfate),
+					grams(beaker, builtin::water));
+		}
+		sim.step();
+	}
+	const Totals end = totals(table, sim.world().snapshot());
+	const double crop = grams(flask, builtin::copper_sulfate_pentahydrate);
+	std::printf("\ncrystals: %.4f g of CuSO4.5H2O in %lld crystals of %.1f um (%.1f%% of the copper); the most the copper could give is %.4f g\n", crop,
+			static_cast<long long>(sim.world().particles(flask, builtin::copper_sulfate_pentahydrate)),
+			particle_diameter(table, sim.world().snapshot_cell(flask), builtin::copper_sulfate_pentahydrate) * 1e6, 100.0 * crop / (salt * 249.677), salt * 249.677);
+	std::printf("mother liquor: %.4f g of water, %.4f mol/kg CuSO4, %.4f mol/kg sulfuric acid\n", grams(flask, builtin::water), molality(sim.world(), flask, builtin::copper_sulfate_aq),
+			molality(sim.world(), flask, builtin::sulfuric_acid_aq));
+	std::printf("beaker: %.4f g of water and no other liquid or solid\n", grams(beaker, builtin::water));
+	std::printf("every element, the mass and the energy %s; every invariant was checked on all %d steps\n", genesis == end ? "are the same integers as at the start" : "MOVED",
+			60 * 3600 + 1);
+	return genesis == end ? 0 : 1;
+}
+
 } // namespace
 
 int run_study(const char *name) {
@@ -322,6 +489,12 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "distillation") == 0) {
 		return distillation();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation)\n", name);
+	if (std::strcmp(name, "dissolution") == 0) {
+		return dissolution();
+	}
+	if (std::strcmp(name, "crystals") == 0) {
+		return crystals();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals)\n", name);
 	return 2;
 }
