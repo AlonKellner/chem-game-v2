@@ -19,7 +19,7 @@ in the condenser and runs into the beaker.
 | 5.7 | Invariants P1 and V2 with self-tests | Done |
 | 5.8 | Fast reactions in the random sweeps | Done |
 | 5.9 | `chem_tool study distillation`; the balloon study with condensation | Done |
-| 5.10 | The user's sign-off | Pending |
+| 5.10 | The user's sign-off | Done (2026-11-16: "Approved, proceed") |
 
 ## Decisions
 
