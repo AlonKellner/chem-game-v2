@@ -18,10 +18,10 @@ Layers with a strict dependency direction: core -> lab -> C API -> hosts. Everyt
 
 - `native/core/include/chem/` — The simulation kernel, namespace `chem` (GAME_SPEC §3–§12). `quantity.hpp`: integer amounts (1e-12 mol) and energy (1e-9 J). `species.hpp`: species tables and `Reaction`, which cannot be constructed unbalanced. `world.hpp`: cells with private state, edges, the two primitives `transfer` and `transform`, refusals, the ledger and `StepTrace`. `thermo.hpp`: what state implies (heat capacity, temperature, entropy, volume, activity, affinity). `math.hpp`: the core's own `exp` and `log`. `sim.hpp`: `Simulation`, the fixed-step loop and its processes, applied in sequence (reactions with first-order and surface kinetics, crystal nucleation, heat conduction, liquid down the drains, then settling: every cell to its fast equilibria such as boiling and condensation, every rigid cell exactly full). `invariants.hpp`: the invariant kernel (`check_C1`…`check_C8`, `check_T1`…`check_T3`, `check_S1`, `check_V1`…`check_V3`, `check_P1`, `check_X1`, `check_X2`, `check_all`, `Totals`). No engine, no C-library transcendentals (ctest `core_no_libm`).
 - `native/datagen/` — `chem_datagen`: embeds `data/elements.json`, `species.json`, `reactions.json` in the core at build time, deriving atoms from formulas (`formula.hpp`) and refusing an unbalanced reaction (ctest `datagen_refuses_*`). Generated: `chem/builtin_ids.hpp` (species and reactions by name).
-- `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13). `lab.hpp`: `Lab`, a bench of equipment over one closed world, driven by JSON commands (`place`, `stow`, `heat`, `unheat`, `valve`, `stir`, `pour`, `tip`, `attach`, `detach`, `under`, `submit`, `wait`, `wait_until`), with reports, events, a SHA-256 digest of the whole state (`sha256.hpp`), and save/load.
+- `native/game/include/lab/` — The engine-free lab layer, namespace `lab` (GAME_SPEC §13). `lab.hpp`: `Lab`, a bench of equipment over one closed world, driven by JSON commands (`place`, `stow`, `heat`, `unheat`, `valve`, `stir`, `pour`, `tip`, `attach`, `detach`, `under`, `submit`, `wait`, `wait_until`), with reports, events, a SHA-256 digest of the whole state (`sha256.hpp`), and save/load. `ui.hpp`: `Ui`, the screen (GAME_SPEC §13.1): a pointer in, lab commands and a draw list out; every gesture is decided here, not in a host.
 - `native/capi/` — `chem_api.h`: the game behind a plain C ABI (size-prefixed structs, borrowed views, statuses).
 - `native/hosts/headless/` — `chem_tool`: the game without an engine: `version`, `tables` (the built-in species and reactions), `run SESSION [--record|--check FILE]` (a session script through the C API, every invariant checked, the measured results printed), `bench SESSION` (the same unchecked, timed), `study <name>` (a stage's physics alone against its closed form, on the core directly: `cooling`, `decomposition`, `balloon`, `distillation`, `dissolution`, `crystals`).
-- `native/hosts/godot/` — The Godot host: `ChemLab`.
+- `native/hosts/godot/` — The Godot host: `ChemLab`, a `Node2D` that reads the bench, forwards the mouse, calls a frame and paints the draw list (`cg_ui_*`). No game logic.
 - `engines/godot/` — The Godot project. `make native` builds the extension into `engines/godot/bin` and copies `data/` into `engines/godot/data`.
 - `data/` — Source-of-truth data: `elements.json`, `species.json`, `reactions.json` (embedded at build), `benches/` (equipment and what it holds), `sessions/` (scripts). `bench/sessions/` — the sessions' golden records (a digest after every command).
 - `docs/DATA_SOURCES.md` — every physical value with its source and confidence. A value is used only once its row is verified.
@@ -41,13 +41,15 @@ make gates                      # before a merge or a stage close: uncached, plu
 make native                     # the Godot extension, data copy, import
 ./run_tests_parallel.sh         # the Godot host's GUT suite
 make run                        # the game (the Godot host)
+make screenshots                # five pictures of the host through the demo -> build/screenshots (opens a window for a few seconds)
 make demo                       # the 3-stage demo, headless: the commands and what was measured
 make demo-bench                 # its step cost
 make sessions-check             # the sessions against their golden records (make sessions re-records: a behaviour change)
 ```
 
 - Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`.
-- Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`.
+- Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`. The screen itself is tested natively (`native/tests/game/test_ui.cpp`), through `Ui::locate`.
+- **A script that runs on Godot's own thread never waits unbounded**: every loop in `engines/godot/tools/` has a limit, and a windowed Godot started from a shell is given a time limit (`perl -e 'alarm 90; exec @ARGV' godot …`). An unbounded wait froze the window once.
 - **Invariants over examples**: a property goes in the catalogue (GAME_SPEC §18) as a named check with a self-test that proves it fires on a corrupted trace.
 - **Regression policy**: after Stage N, all tests from Stages 0 through N pass before proceeding.
 

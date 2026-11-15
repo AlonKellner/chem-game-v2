@@ -13,6 +13,7 @@
  * Stage 0: the build's identity and the error and log plumbing.
  * Stage 1: the built-in species and reactions.
  * Stage 7: the lab, driven by commands.
+ * Stage 9: the screen: a pointer in, a draw list out.
  */
 #ifndef CHEM_API_H
 #define CHEM_API_H
@@ -123,6 +124,65 @@ CG_API const char *cg_lab_digest(cg_lab *lab);
 CG_API const char *cg_lab_save(cg_lab *lab);
 /* NULL, with cg_last_error, when the text is not a save of this build's data. */
 CG_API cg_lab *cg_lab_load(const char *save_json);
+
+/* ---- the screen (GAME_SPEC §13): a lab on a 1920 x 1080 screen. A host
+ * forwards its pointer, calls cg_ui_frame once a frame, and paints the draw
+ * list: everything a player does on the screen is decided here, the same on
+ * every host. */
+
+typedef struct cg_ui cg_ui;
+
+CG_API cg_ui *cg_ui_open(const char *bench_json); /* NULL, with cg_last_error, for a bench that cannot be built */
+CG_API void cg_ui_close(cg_ui *ui);
+
+/* The pointer, in screen pixels, and whether its button is down (nonzero). */
+CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down);
+/* A frame of real time, in seconds: the lab advances by it times the speed
+ * chosen on the screen. */
+CG_API void cg_ui_frame(cg_ui *ui, double seconds);
+
+enum {
+	CG_DRAW_RECT = 0, /* x, y, w, h: filled */
+	CG_DRAW_OUTLINE = 1, /* x, y, w, h; width */
+	CG_DRAW_LINE = 2, /* from (x, y) to (w, h); width */
+	CG_DRAW_POLYGON = 3, /* points[2 * first .. 2 * (first + count)): filled */
+	CG_DRAW_CIRCLE = 4, /* centre x, y; radius w: filled */
+	CG_DRAW_TEXT = 5 /* text + first, count bytes (also NUL-ended); baseline starts at x, y; size h */
+};
+
+typedef struct cg_draw_command {
+	int32_t type; /* CG_DRAW_* */
+	uint32_t color; /* 0xRRGGBBAA */
+	float width;
+	int32_t first;
+	int32_t count;
+	float x, y, w, h;
+} cg_draw_command;
+
+typedef struct cg_draw_list {
+	uint32_t size; /* sizeof(cg_draw_list), set by the caller */
+	int32_t command_count;
+	const cg_draw_command *commands; /* in painting order */
+	int32_t point_count; /* pairs */
+	const float *points; /* x, y, x, y, ... */
+	int32_t text_size;
+	const char *text;
+} cg_draw_list;
+
+/* What to paint now. Borrowed until the next call on this ui. */
+CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
+
+/* The last notice (a refusal's reason, a failed invariant), "" if none; the
+ * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */
+CG_API const char *cg_ui_message(cg_ui *ui);
+CG_API const char *cg_ui_report(cg_ui *ui);
+
+/* The centre of a named thing on the screen, for tests and scripted hosts:
+ * "item:flask", "cell:3,1", "cabinet", "outbox", "valve:burner@0.5",
+ * "stir:flask", "panel:pour", "panel:slider@0.25", "panel:tip:malachite",
+ * "panel:cancel", "pause", "speed:600", "check", "reset". 0 when it is not on
+ * the screen now. */
+CG_API int32_t cg_ui_locate(cg_ui *ui, const char *what, float *x, float *y);
 
 #ifdef __cplusplus
 }

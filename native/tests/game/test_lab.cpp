@@ -326,7 +326,7 @@ TEST_CASE("lab: equipment is used on the bench, and placed there from the cabine
 	auto lab = small_bench();
 	std::string why;
 	CHECK(item(json::parse(lab->report()), "cup").at("place") == "cabinet");
-	CHECK_FALSE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})", &why)); // the burner is in the cabinet
+	CHECK_FALSE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "cup"})", &why)); // the cup is in the cabinet
 	CHECK(why.find("in the cabinet") != std::string::npos);
 	CHECK_FALSE(run(*lab, R"({"do": "attach", "item": "bag", "to": "cup"})", &why));
 	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why));

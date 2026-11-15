@@ -17,7 +17,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check
+.PHONY: core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -120,3 +120,9 @@ test: native
 
 run:
 	$(GODOT) --path $(GODOT_PROJECT)
+
+# Five screenshots of the host through the demo -> build/screenshots (it opens
+# a window: a headless Godot paints nothing)
+screenshots: native
+	mkdir -p build/screenshots
+	$(GODOT) --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
