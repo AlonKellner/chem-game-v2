@@ -37,6 +37,11 @@ enum class Kind : uint8_t {
 };
 Kind kind(SpeciesId species);
 const Spectrum &spectrum(SpeciesId species); // zeros for Kind::None
+// A species' refractive index at 1 nm (GAME_SPEC §12.3): ones where none is
+// known; and its density in g/cm3 where its index carries one (glass: for a
+// wall's thickness), else 0.
+const Spectrum &refractive_index(SpeciesId species);
+double index_density(SpeciesId species);
 // An absorber's narrow lines, beside its 1 nm spectrum (GAME_SPEC §12.1): each a
 // Gaussian of the given full width at half maximum, read at the exact wavelength
 // a point falls on, never averaged over a nanometre.

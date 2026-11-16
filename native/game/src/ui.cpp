@@ -531,7 +531,35 @@ struct Ui::Impl {
 			r.y = py - grab_y;
 			add(drag, r);
 		}
-		optics_compose(scene, OpticsRoom{ ROOM.x, ROOM.y, ROOM.w, ROOM.h, WALL_RADIANCE, DARK_RADIANCE }, bodies);
+		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
+		OpticsRoom room;
+		room.x = ROOM.x;
+		room.y = ROOM.y;
+		room.w = ROOM.w;
+		room.h = ROOM.h;
+		room.bench = WALL_RADIANCE;
+		room.elsewhere = DARK_RADIANCE;
+		paint();
+		const auto radiance = [](uint32_t c) {
+			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+			return 0.2126 * lin(((c >> 24) & 0xff) / 255.0) + 0.7152 * lin(((c >> 16) & 0xff) / 255.0) + 0.0722 * lin(((c >> 8) & 0xff) / 255.0);
+		};
+		for (int i = 0; i < list.above; ++i) {
+			const DrawCommand &c = list.commands[static_cast<size_t>(i)];
+			const double r = radiance(c.color);
+			if (c.type == DrawCommand::Rect) {
+				room.shapes.push_back(OpticsShape{ c.x, c.y, c.w, c.h, r });
+			} else if (c.type == DrawCommand::Outline) {
+				room.shapes.push_back(OpticsShape{ c.x, c.y, c.w, c.width, r });
+				room.shapes.push_back(OpticsShape{ c.x, c.y + c.h - c.width, c.w, c.width, r });
+				room.shapes.push_back(OpticsShape{ c.x, c.y, c.width, c.h, r });
+				room.shapes.push_back(OpticsShape{ c.x + c.w - c.width, c.y, c.width, c.h, r });
+			} else if (c.type == DrawCommand::Line && (c.x == c.w || c.y == c.h)) { // straight across or up: a thin rectangle
+				const float x0 = std::min(c.x, c.w), y0 = std::min(c.y, c.h);
+				room.shapes.push_back(OpticsShape{ c.x == c.w ? x0 - c.width / 2 : x0, c.y == c.h ? y0 - c.width / 2 : y0, c.x == c.w ? c.width : std::fabs(c.w - c.x), c.y == c.h ? c.width : std::fabs(c.h - c.y), r });
+			}
+		}
+		optics_compose(scene, room, bodies);
 	}
 
 	void paint_readout() {

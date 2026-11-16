@@ -84,6 +84,9 @@ inline double sin(double a) {
 inline double cos(double a) {
 	return std::cos(a);
 }
+inline double asin(double a) {
+	return std::asin(a);
+}
 inline double atan(double y, double x) {
 	return std::atan2(y, x);
 }
@@ -187,6 +190,15 @@ int truth_shares(const OpticsScene &scene) {
 }
 
 } // namespace
+
+OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
+	if (!shader::ready(scene)) {
+		return OpticsBend{};
+	}
+	const shader::Use use(scene);
+	const shader::Bend b = shader::bend_at(shader::at(x, y), nm);
+	return OpticsBend{ b.x, b.pass, b.chord };
+}
 
 void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 0.0;
@@ -404,7 +416,11 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 	if (!shader::ready(scene)) {
 		return "O2: no scene";
 	}
-	const double most = std::max({ 1.0, static_cast<double>(scene.table[1]), static_cast<double>(scene.table[2]) });
+	// the brightest of the wall, the room's white, the room in front and what is drawn on the wall
+	double most = std::max({ 1.0, static_cast<double>(scene.table[1]), static_cast<double>(scene.table[2]), static_cast<double>(scene.table[2 * 4 + 1]) });
+	for (int k = 0; k < optics_layout::MAX_SHAPES; ++k) {
+		most = std::max(most, static_cast<double>(scene.table[static_cast<size_t>(optics_layout::SHAPE_BASE + 2 * k + 1) * 4]));
+	}
 	for (int k = 0; k <= 800; ++k) {
 		const double nm = 380.0 + 0.5 * k, t = optics_through(scene, x, y, nm);
 		if (!(t >= 0.0 && t <= most * (1.0 + 1e-12))) {

@@ -15,16 +15,22 @@ namespace lab {
 
 namespace optics_layout {
 inline constexpr int MAX_BODIES = 16;
-inline constexpr int HEADER_VECS = 2; // bodies, the backdrop on the bench and off it, lights; the bench's rectangle
-inline constexpr int BODY_VECS = 6;
-inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
-// within a body
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4;
+// bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
+// the vessels (cm), the radiance of the room in front, whether anything refracts (1 or 0), unused
+inline constexpr int HEADER_VECS = 3;
+inline constexpr int BODY_VECS = 7;
+// the drawn shapes behind the bodies (GAME_SPEC §12.3): two vec4s each, its rectangle and its radiance
+inline constexpr int MAX_SHAPES = 256;
+inline constexpr int SHAPE_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
+inline constexpr int SIZE_VECS = SHAPE_BASE + 2 * MAX_SHAPES;
+// within a body; REFRACT: its glass's thickness (cm), its first shape, how many, whether it refracts
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5;
 // each body's spectra, ROW values at 1 nm from 380 nm: its liquid's optical depth per centimetre
-// (natural), its solids' reflectance, its wall's optical depth at the reference thickness
+// (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
+// liquid's refractive index, its wall's
 inline constexpr int ROW = 401;
-inline constexpr int ROWS_PER_BODY = 3;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2;
+inline constexpr int ROWS_PER_BODY = 5;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4;
 inline constexpr int ROWS_SIZE = MAX_BODIES * ROWS_PER_BODY * ROW;
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
@@ -47,12 +53,22 @@ struct OpticsBody {
 	float x = 0, y = 0, w = 0, h = 0; // its rectangle, in pixels
 };
 
+// A shape drawn on the wall behind the bodies: a rectangle of a flat grey.
+struct OpticsShape {
+	float x = 0, y = 0, w = 0, h = 0;
+	double radiance = 0.0; // a share of the room's white
+};
+
 // The room: what is behind the bodies. The backdrop reflects evenly, so it is
-// one number: its radiance as a share of the room's white.
+// one number: its radiance as a share of the room's white; and what is drawn on it.
 struct OpticsRoom {
 	float x = 0, y = 0, w = 0, h = 0; // the bench's rectangle
 	double bench = 0.73; // its radiance
 	double elsewhere = 0.02;
+	bool refraction = true; // GAME_SPEC §12.3: glass and liquids bend the light
+	std::vector<OpticsShape> shapes; // in painting order
+	double wall_cm = 20.0; // how far behind the vessels' axes the wall stands
+	double front = 0.3; // the radiance of the room in front of the bench, which glass reflects
 };
 
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
@@ -69,6 +85,12 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 // backdrop's radiance times everything in the way); and how much a body covers.
 double optics_through(const OpticsScene &scene, int x, int y, double nm);
 double optics_cover(const OpticsScene &scene, int x, int y);
+// Where the pixel's view meets the wall at a wavelength (GAME_SPEC §12.3: bent by the vessel it looks
+// through, if any), on the screen; what the vessel's surfaces let through; the chord of liquid crossed (cm).
+struct OpticsBend {
+	double x = 0.0, pass = 1.0, chord = 0.0;
+};
+OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm);
 // The colour itself (every share of the light's energy its own band), linear
 // sRGB, glow included: what the pixel should show.
 void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]);

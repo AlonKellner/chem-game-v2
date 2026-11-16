@@ -19,10 +19,11 @@
 //   vec4 line_vec(int i)     narrow lines: centre (nm), full width at half maximum, depth per cm at the peak
 //   vec4 light_vec(int i)    the room light's energy table: nm - 380, and its colour up to there, X Y Z
 
-const int HEADER_VECS = 2;
-const int BODY_VECS = 6;
+const int HEADER_VECS = 3;
+const int BODY_VECS = 7;
+const int SHAPE_BASE = 3 + 16 * 7;
 const int ROW = 401;
-const int ROWS_PER_BODY = 3;
+const int ROWS_PER_BODY = 5;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
 const float WALL_MOST = 4.0; // a wall seen edge on is no thicker than this, in reference thicknesses
@@ -43,6 +44,7 @@ struct Layer {
 	float haze; // how much of the room's light its suspended solids turn back
 	float solid; // how much of the pixel a heap of solid fills
 	float wall; // the wall crossed, in reference thicknesses
+	float wet; // how much of the pixel is in its liquid
 };
 
 // the layers are four named fields, not an array: written at a runtime index, an array lives in a GPU's
@@ -57,6 +59,17 @@ struct Path {
 	float cover; // how much of the pixel a body covers
 	vec3 glow; // what hot solids emit, linear sRGB
 	vec4 key; // everything the pixel's colour depends on that can change
+	// where it looks from, and the vessel that bends its view (GAME_SPEC §12.3), if any
+	float x;
+	float y;
+	int refractor; // that body, or -1
+	float rd; // the view ray's distance from its axis (cm), signed
+	float rr; // its outer radius (cm)
+	float rt; // its glass's thickness (cm)
+	float raxis; // its axis on the screen (pixels)
+	float rcm; // centimetres a pixel
+	bool rliquid; // whether the ray meets its liquid (else air)
+	float rcover; // how much of the pixel it covers: what its surfaces turn away is in proportion
 };
 
 // a pixel's state between frames
@@ -75,6 +88,16 @@ Path path_of(vec2 p) {
 	q.cover = 0.0;
 	q.glow = vec3(0.0);
 	q.key = vec4(0.0);
+	q.x = p.x;
+	q.y = p.y;
+	q.refractor = -1;
+	q.rd = 0.0;
+	q.rr = 1.0;
+	q.rt = 0.0;
+	q.raxis = 0.0;
+	q.rcm = 1.0;
+	q.rliquid = false;
+	q.rcover = 0.0;
 	vec4 head = scene_vec(0);
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
@@ -126,6 +149,19 @@ Path path_of(vec2 p) {
 		l.haze = 1.0 - exp(-more.x * cm * wet);
 		l.solid = form.w > 0.0 ? clamp(p.y - (ground - heap) + 0.5, 0.0, 1.0) * cover : 0.0;
 		l.wall = wall * cover;
+		l.wet = wet;
+		vec4 bend = scene_vec(at + 5);
+		if (bend.w > 0.5 && q.refractor < 0) {
+			// a vessel bends the view: the first one the pixel looks through
+			q.refractor = i;
+			q.rd = from_axis * form.y;
+			q.rr = radius * form.y;
+			q.rt = bend.x;
+			q.raxis = rect.x + radius;
+			q.rcm = form.y;
+			q.rliquid = wet >= 0.5 * cover;
+			q.rcover = cover;
+		}
 		if (q.layers == 0) {
 			q.l0 = l;
 		} else if (q.layers == 1) {
@@ -188,10 +224,10 @@ float liquid_at(int body, float nm) {
 	return depth;
 }
 
-// what one body does to the light that reaches it, at nm
-float through_layer(Layer l, float seen_before, float nm) {
+// what one body does to the light that reaches it, at nm, through depth_cm of its liquid
+float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
 	int start = l.body * ROWS_PER_BODY * ROW;
-	float depth = liquid_at(l.body, nm) * l.depth_cm;
+	float depth = liquid_at(l.body, nm) * depth_cm;
 	float colour = row_at(start + ROW, nm);
 	// through the liquid (Beer-Lambert)
 	float seen = seen_before * exp(-depth);
@@ -203,20 +239,114 @@ float through_layer(Layer l, float seen_before, float nm) {
 	return seen * exp(-row_at(start + 2 * ROW, nm) * l.wall);
 }
 
-// the share of the room's light at nm that reaches the eye: off the backdrop, through every body in front of it
+// the unpolarised reflectance of a surface of radius r between indices n1 and n2, for a ray d from the axis
+// (its sine on each side is d / (n r)); 1 where it cannot pass
+float fresnel(float n1, float n2, float d, float r) {
+	if (n1 == n2) {
+		return 0.0; // no surface at all
+	}
+	float s1 = d / (n1 * r);
+	float s2 = d / (n2 * r);
+	if (s1 >= 1.0 || s2 >= 1.0) {
+		return 1.0;
+	}
+	float c1 = sqrt(1.0 - s1 * s1);
+	float c2 = sqrt(1.0 - s2 * s2);
+	float rs = (n1 * c1 - n2 * c2) / (n1 * c1 + n2 * c2);
+	float rp = (n1 * c2 - n2 * c1) / (n1 * c2 + n2 * c1);
+	return 0.5 * (rs * rs + rp * rp);
+}
+
+// the wall at (x, y): its radiance on the bench or off it, and the shapes drawn on it that a body's rays reach
+float backdrop(float x, float y, int body) {
+	vec4 head = scene_vec(0);
+	vec4 bench = scene_vec(1);
+	float seen = x >= bench.x && x < bench.x + bench.z && y >= bench.y && y < bench.y + bench.w ? head.y : head.z;
+	vec4 bend = scene_vec(HEADER_VECS + body * BODY_VECS + 5);
+	int first = int(bend.y);
+	int count = int(bend.z);
+	for (int k = 0; k < 32; k++) {
+		if (k >= count) {
+			break;
+		}
+		vec4 r = scene_vec(SHAPE_BASE + 2 * (first + k));
+		if (x >= r.x && x < r.x + r.z && y >= r.y && y < r.y + r.w) {
+			seen = scene_vec(SHAPE_BASE + 2 * (first + k) + 1).x;
+		}
+	}
+	return seen;
+}
+
+// what a vessel does to the view at nm (GAME_SPEC §12.3): where the bent ray meets the wall (x, on the
+// screen), what all its surfaces let through (pass, Fresnel), and the chord of its liquid the ray crosses (cm)
+struct Bend {
+	float x;
+	float pass;
+	float chord;
+};
+
+Bend bend_at(Path q, float nm) {
+	Bend b;
+	b.x = q.x;
+	b.pass = 1.0;
+	b.chord = 0.0;
+	if (q.refractor < 0) {
+		return b;
+	}
+	vec4 head = scene_vec(2);
+	int start = q.refractor * ROWS_PER_BODY * ROW;
+	float n_glass = row_at(start + 4 * ROW, nm);
+	float n_in = q.rliquid ? row_at(start + 3 * ROW, nm) : 1.0;
+	float d = abs(q.rd);
+	float ri = q.rr - q.rt;
+	float n_first = q.rt > 0.0 ? n_glass : n_in;
+	// in through the outer surface; on to the inner one if the ray reaches it and is not turned back there
+	float turn = asin(min(d / q.rr, 1.0)) - asin(min(d / (n_first * q.rr), 1.0));
+	float r_outer = fresnel(1.0, n_first, d, q.rr);
+	float r_inner = 0.0;
+	bool inner = q.rt > 0.0 && d < n_glass * ri && d < n_in * ri;
+	if (inner) {
+		turn = turn + asin(d / (n_glass * ri)) - asin(d / (n_in * ri));
+		r_inner = fresnel(n_glass, n_in, d, ri);
+	}
+	turn = 2.0 * turn;
+	b.pass = 1.0 - q.rcover * (1.0 - (1.0 - r_outer) * (1.0 - r_outer) * (1.0 - r_inner) * (1.0 - r_inner));
+	float r_in = q.rt > 0.0 ? ri : q.rr;
+	if (q.rliquid && (q.rt <= 0.0 || inner) && d < n_in * r_in) {
+		b.chord = 2.0 * sqrt(r_in * r_in - (d / n_in) * (d / n_in));
+	}
+	// it leaves on a line d from the axis, turned by `turn`, and meets the wall D behind the axis
+	float c = cos(turn);
+	float landed = c > 0.05 ? (d - head.x * sin(turn)) / c : -100000.0;
+	b.x = q.raxis + (q.rd < 0.0 ? -landed : landed) / q.rcm;
+	return b;
+}
+
+// the share of the room's light at nm that reaches the eye: off the backdrop, through every body in front of it;
+// a vessel bends the view: the wall is read where the bent ray lands, its liquid along the ray's own chord, and
+// what its surfaces turn away shows the room in front
 float through(Path q, float nm) {
 	float seen = q.back;
+	Bend b = bend_at(q, nm);
+	float chord = b.chord;
+	float pass = b.pass;
+	if (q.refractor >= 0) {
+		seen = backdrop(b.x, q.y, q.refractor);
+	}
 	if (q.layers > 0) {
-		seen = through_layer(q.l0, seen, nm);
+		seen = through_layer(q.l0, seen, nm, q.l0.body == q.refractor ? chord * q.l0.wet : q.l0.depth_cm);
 	}
 	if (q.layers > 1) {
-		seen = through_layer(q.l1, seen, nm);
+		seen = through_layer(q.l1, seen, nm, q.l1.body == q.refractor ? chord * q.l1.wet : q.l1.depth_cm);
 	}
 	if (q.layers > 2) {
-		seen = through_layer(q.l2, seen, nm);
+		seen = through_layer(q.l2, seen, nm, q.l2.body == q.refractor ? chord * q.l2.wet : q.l2.depth_cm);
 	}
 	if (q.layers > 3) {
-		seen = through_layer(q.l3, seen, nm);
+		seen = through_layer(q.l3, seen, nm, q.l3.body == q.refractor ? chord * q.l3.wet : q.l3.depth_cm);
+	}
+	if (q.refractor >= 0) {
+		seen = pass * seen + (1.0 - pass) * scene_vec(2).y;
 	}
 	return seen;
 }

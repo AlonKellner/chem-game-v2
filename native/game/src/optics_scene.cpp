@@ -79,8 +79,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(1, 1, room.y);
 	put(1, 2, room.w);
 	put(1, 3, room.h);
+	put(2, 0, room.wall_cm);
+	put(2, 1, room.front);
+	put(2, 2, room.refraction ? 1.0 : 0.0);
 
-	int count = 0, line_count = 0;
+	int count = 0, line_count = 0, shape_count = 0;
 	for (const OpticsBody &body : bodies) {
 		if (count == MAX_BODIES || body.item == nullptr || !(body.w > 0.0f) || !(body.h > 0.0f)) {
 			continue;
@@ -90,6 +93,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		float *liquid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_ROW) * ROW)];
 		float *solid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + SOLID_ROW) * ROW)];
 		float *wall = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_ROW) * ROW)];
+		float *liquid_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
+		float *wall_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
+		for (int i = 0; i < ROW; ++i) {
+			liquid_index[i] = wall_index[i] = 1.0f; // air
+		}
 		++count;
 		const bool ball = v.kind == "balloon";
 		const double bottom = static_cast<double>(body.y) + body.h;
@@ -102,12 +110,21 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 
 		// ---- what is in it, at 1 nm, and its liquid's narrow lines
 		Spectrum reflectance{};
-		double solid_g = 0.0, cross_section_cm2 = 0.0;
+		double solid_g = 0.0, cross_section_cm2 = 0.0, wall_g = 0.0, wall_density = 0.0;
 		const int first_line = line_count;
 		for (const SubstanceView &s : v.contents) {
 			const chem::SpeciesId id = chem::builtin_species().find(s.species);
 			const Kind kind = id.index >= 0 ? chem::optics::kind(id) : Kind::None;
 			if (s.wall) {
+				if (id.index >= 0 && chem::optics::index_density(id) > 0.0) {
+					// a wall with an index: glass (GAME_SPEC §12.3)
+					const Spectrum &n = chem::optics::refractive_index(id);
+					for (size_t i = 0; i < n.size(); ++i) {
+						wall_index[i] = static_cast<float>(n[i]);
+					}
+					wall_g += s.g;
+					wall_density = chem::optics::index_density(id);
+				}
 				if (kind == Kind::Transmit) {
 					const Spectrum &tr = chem::optics::spectrum(id);
 					for (size_t i = 0; i < tr.size(); ++i) {
@@ -147,6 +164,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		const double solid_ml = v.condensed_ml > v.liquid_ml ? v.condensed_ml - v.liquid_ml : 0.0;
+		if (v.liquid_ml > 0.0) {
+			// a liquid's index is water's: the solutes' share is not modelled (GAME_SPEC §20)
+			const Spectrum &n = chem::optics::refractive_index(chem::builtin_species().find("water"));
+			for (size_t i = 0; i < n.size(); ++i) {
+				liquid_index[i] = static_cast<float>(n[i]);
+			}
+		}
 
 		// ---- where it is
 		if (ball) {
@@ -168,6 +192,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const double cm_per_px = d_cm / body.w;
 			const double floor_cm2 = PI * d_cm * d_cm / 4.0;
 			put(at + FORM, 1, cm_per_px);
+			if (room.refraction && wall_g > 0.0 && wall_density > 0.0) {
+				// its glass: the wall's mass over its side and its floor, at most a fifth of its radius
+				const double h_cm = d_cm * aspect, area = PI * d_cm * h_cm + floor_cm2;
+				const double glass_cm = wall_g / wall_density / area;
+				put(at + REFRACT, 0, glass_cm < 0.2 * d_cm / 2.0 ? glass_cm : 0.2 * d_cm / 2.0);
+			}
+			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
 				put(at + FORM, 2, bottom - v.condensed_ml / floor_cm2 / cm_per_px);
 			}
@@ -192,9 +223,31 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + GLOW, c, rgb[c]);
 			}
 		}
-		// which body this is, and a signature of what it holds: a pixel's history follows them (GAME_SPEC §12.2)
+		// the drawn shapes its bent rays can reach: across it and some widths to each side, at its height
+		const int first_shape = shape_count;
+		if (room.refraction && !ball) {
+			for (const OpticsShape &sh : room.shapes) {
+				if (shape_count == MAX_SHAPES || shape_count - first_shape == 32) {
+					break;
+				}
+				const bool reach = sh.x < body.x + 4.0f * body.w && sh.x + sh.w > body.x - 3.0f * body.w && sh.y < body.y + body.h && sh.y + sh.h > body.y;
+				if (reach && sh.w * sh.h < 100000.0f) {
+					const int k = SHAPE_BASE + 2 * shape_count++;
+					put(k, 0, sh.x);
+					put(k, 1, sh.y);
+					put(k, 2, sh.w);
+					put(k, 3, sh.h);
+					put(k + 1, 0, sh.radiance);
+				}
+			}
+		}
+		put(at + REFRACT, 1, first_shape);
+		put(at + REFRACT, 2, shape_count - first_shape);
+		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
 		uint64_t h = fnv(liquid, ROWS_PER_BODY * ROW * sizeof(float));
+		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);
+		h = fnv(&t[static_cast<size_t>(SHAPE_BASE + 2 * first_shape) * 4], static_cast<size_t>(shape_count - first_shape) * 8 * sizeof(float), h);
 		h = fnv(&lines[static_cast<size_t>(first_line) * 4], static_cast<size_t>(line_count - first_line) * 4 * sizeof(float), h);
 		put(at + IDS, 1, tag(h));
 		put(at + IDS, 2, first_line);

@@ -22,6 +22,7 @@
 #include <map>
 #include <sstream>
 #include <stdexcept>
+#include <tuple>
 #include <string>
 #include <vector>
 
@@ -517,7 +518,90 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		optics << (line_list.empty() ? "" : " } };\n\n");
 		kinds.emplace_back(index, kind == "absorb" ? "Kind::Absorb" : kind == "reflect" ? "Kind::Reflect" : "Kind::Transmit");
 	}
+	// refractive indices at 1 nm, and the density of what has one (for a wall's thickness)
+	std::vector<std::tuple<int, std::vector<double>, double>> indices;
+	const json index_entries = media.value("indices", json::object()); // held: items() of a temporary would dangle
+	for (const auto &[name, m] : index_entries.items()) {
+		int index = -1;
+		for (size_t i = 0; i < species.size(); ++i) {
+			if (species[i].id == name) {
+				index = static_cast<int>(i);
+			}
+		}
+		if (index < 0) {
+			fail(media_file, "an index for \"" + name + "\", which is not a species");
+		}
+		std::vector<double> n(401, 0.0);
+		if (m.contains("sellmeier_um")) {
+			for (size_t i = 0; i < n.size(); ++i) {
+				const double um = (380.0 + static_cast<double>(i)) / 1000.0, l2 = um * um;
+				double sum = 1.0;
+				for (const json &term : m.at("sellmeier_um")) {
+					sum += term.at(0).get<double>() * l2 / (l2 - term.at(1).get<double>());
+				}
+				n[i] = std::sqrt(sum);
+			}
+		} else if (m.contains("table")) {
+			// least squares for n = A + B / l^2 + C / l^4 (l in micrometres): the normal equations, 3 x 3
+			double a[3][4] = {};
+			for (const json &row : m.at("table")) {
+				const double um = row.at(0).get<double>() / 1000.0, x[3] = { 1.0, 1.0 / (um * um), 1.0 / (um * um * um * um) }, y = row.at(1).get<double>();
+				for (int r = 0; r < 3; ++r) {
+					for (int c = 0; c < 3; ++c) {
+						a[r][c] += x[r] * x[c];
+					}
+					a[r][3] += x[r] * y;
+				}
+			}
+			for (int k = 0; k < 3; ++k) {
+				for (int r = k + 1; r < 3; ++r) {
+					const double f = a[r][k] / a[k][k];
+					for (int c = k; c < 4; ++c) {
+						a[r][c] -= f * a[k][c];
+					}
+				}
+			}
+			double coef[3];
+			for (int k = 2; k >= 0; --k) {
+				double v = a[k][3];
+				for (int c = k + 1; c < 3; ++c) {
+					v -= a[k][c] * coef[c];
+				}
+				coef[k] = v / a[k][k];
+			}
+			const auto cauchy = [&](double nm) { const double um = nm / 1000.0; return coef[0] + coef[1] / (um * um) + coef[2] / (um * um * um * um); };
+			for (const json &row : m.at("table")) {
+				if (std::fabs(cauchy(row.at(0).get<double>()) - row.at(1).get<double>()) > 2e-4) {
+					fail(media_file, "\"" + name + "\": the Cauchy fit misses its table by more than 2e-4");
+				}
+			}
+			for (size_t i = 0; i < n.size(); ++i) {
+				n[i] = cauchy(380.0 + static_cast<double>(i));
+			}
+		} else {
+			fail(media_file, "\"" + name + "\": an index is a sellmeier_um formula or a table");
+		}
+		for (const double v : n) {
+			if (!(v >= 1.0 && v < 3.0)) {
+				fail(media_file, "\"" + name + "\": an index outside [1, 3)");
+			}
+		}
+		emit(optics, ("INDEX_" + std::to_string(index)).c_str(), n);
+		indices.emplace_back(index, n, m.value("density_g_cm3", 0.0));
+	}
+	optics << "constexpr Spectrum ONES = [] {\n\tSpectrum s{};\n\tfor (double &v : s) {\n\t\tv = 1.0;\n\t}\n\treturn s;\n}();\n\n";
 	optics << "} // namespace\n\n"
+			<< "const Spectrum &refractive_index(SpeciesId species) {\n\tswitch (species.index) {\n";
+	for (const auto &[index, n, density] : indices) {
+		optics << "\t\tcase " << index << ":\n\t\t\treturn INDEX_" << index << ";\n";
+	}
+	optics << "\t\tdefault:\n\t\t\treturn ONES;\n\t}\n}\n\ndouble index_density(SpeciesId species) {\n\tswitch (species.index) {\n";
+	for (const auto &[index, n, density] : indices) {
+		char text[80];
+		std::snprintf(text, sizeof text, "\t\tcase %d:\n\t\t\treturn %.17g;\n", index, density);
+		optics << text;
+	}
+	optics << "\t\tdefault:\n\t\t\treturn 0.0;\n\t}\n}\n\n"
 		   << "const Spectrum &xbar() {\n\treturn XBAR;\n}\nconst Spectrum &ybar() {\n\treturn YBAR;\n}\nconst Spectrum &zbar() {\n\treturn ZBAR;\n}\n"
 		   << "const Spectrum &d65() {\n\treturn D65;\n}\n\nKind kind(SpeciesId species) {\n\tswitch (species.index) {\n";
 	for (const auto &[index, kind] : kinds) {

@@ -22,7 +22,15 @@ using lab::SubstanceView;
 namespace {
 
 constexpr double BACKDROP = 0.7305;
-const lab::OpticsRoom ROOM{ 0, 0, 1000, 1000, BACKDROP, 0.02 };
+// absorption, reflection and emission alone: nothing bends (refraction has its own tests, test_refraction.cpp)
+const lab::OpticsRoom ROOM = [] {
+	lab::OpticsRoom r;
+	r.w = r.h = 1000;
+	r.bench = BACKDROP;
+	r.elsewhere = 0.02;
+	r.refraction = false;
+	return r;
+}();
 // a 250 mL vessel drawn 90 wide: 6.338 cm across
 constexpr float X = 100, Y = 100, W = 90, H = 112.5f;
 const double DIAMETER_CM = std::cbrt(4.0 * 250.0 / (3.14159265358979323846 * 1.25));

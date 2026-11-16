@@ -811,6 +811,43 @@ is read back. **The reference** is the same file compiled as C++ in float64 (`op
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
 draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
 
+**Refraction and Fresnel** (*PLANNED, Stage 11*). A vessel is a glass cylinder around what it
+holds, and light bends at each of its surfaces:
+
+- **What is behind is drawn.** The room behind the bodies is the lit wall and what is drawn on it
+  (the bench's grid, the panels' edges: the draw list's first part), each a flat grey of its own
+  radiance. The scene carries, for each body, the drawn shapes its bent rays can reach, and a
+  point reads the wall where its ray lands. Outside a body the same shapes are the flat drawing,
+  so a vessel's rim meets the wall with no seam where nothing bends.
+- **The glass.** Each vessel's wall is borosilicate glass of the wall's mass: its thickness is the
+  mass over the density (2.23 g/cm³) and the area of the side and the floor. Its index is the
+  glass's `n(λ)` (a Cauchy fit to Schott's table for BOROFLOAT 33); the liquid's is water's (the
+  Sellmeier formula of Daimon and Masumura at 20 °C); above the liquid, air (1). Both are spectra
+  at 1 nm like any other, so a point bends by the index at its own wavelength (dispersion).
+- **The bend.** The camera looks straight in; the cylinder's axis is upright, so a ray bends only
+  across it. Through concentric cylinders the ray keeps its distance `d` from the axis times the
+  index (`n d` is constant), so at a surface of radius `r` between indices `n₁` outside and `n₂`
+  inside it meets the normal at `asin(d / (n₁ r))` and leaves it at `asin(d / (n₂ r))`. The ray's
+  total turn `δ` is twice the sum of those differences over the surfaces it crosses going in, and
+  it leaves on a line at distance `d` from the axis, turned by `δ`: on the wall, `D` behind the
+  axis, it lands at `(d − D sin δ) / cos δ` from it. `D` is the distance from the vessels to the
+  wall behind them (calibrated: 20 cm). A ray whose `d / n` misses an inner surface stays in the
+  glass.
+- **The chord.** Inside a medium the ray's distance from the axis is `d / n`, so the liquid's
+  chord is `2 sqrt(r² − (d / n)²)`, at each point's own wavelength: the path the light really
+  takes, which Beer-Lambert reads.
+- **Fresnel.** At each surface the unpolarised reflectance of the two angles (`R`, from Fresnel's
+  equations; at normal incidence `((n₁ − n₂)/(n₁ + n₂))²`) is turned away; what gets through all
+  four surfaces is `T = Π (1 − R)`. What is turned away shows the room in front of the bench,
+  whose radiance is calibrated (0.3 of the room's white): a vessel's rims, where light meets the
+  glass aslant, show more of the room and less of the wall, as glass on a bench does.
+- **What it does not bend:** a heap of solid (its surface is seen as it lies), the balloon (thin
+  rubber around gas), a pixel half under a liquid's surface (it takes the medium its centre is
+  in), anything up and down (the liquid's surface, the floor of the vessel).
+- **A pixel looks from its centre.** A drawn line seen through a vessel is sampled where the
+  pixel's central ray lands, not averaged over the pixel's width (the truth the GPU is held to,
+  `O4`, does the same).
+
 **Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
 (§12.3); every layer a texture with constant weights (the live composition, the powders by mass,
 the rubber, the lit wall); pure water's absorption; then refraction and Fresnel as a separate stage.
@@ -1107,10 +1144,12 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
-| O1 | Transmittance is within [0, 1]: in the renderer's table every optical depth is at least 0 and every reflectance within [0, 1] | exact | 10 |
-| O2 | No band of a pixel is brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
+| O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
+| O2 | No wavelength of a pixel comes out brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
 | O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
+| O5 | Where every index is 1, refraction changes nothing: each pixel's light is the light of the straight path, with nothing reflected; it fires on water's own index | tolerance (float64 rounding) | 11 |
+| O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.

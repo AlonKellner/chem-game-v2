@@ -167,6 +167,8 @@ about 95.9 °C. Confidence medium.
 | Planck's law: c₁ = 2hc² = 1.191042972e-16 W·m²/sr, c₂ = 0.014387769 m·K; 683.002 lm/W | CODATA 2018; the candela's definition | A black body at 2042 K comes out at 600,000 cd/m² within 3% (the old platinum standard of light): `optics: a hot solid glows` |
 | Pure water's absorption a and scattering b, 1/m (`water.csv`), 380–750 nm | NASA Ocean Optics Protocols, Rev. 4, Vol. IV, Table 1.1, Erratum 1 (Mueller 2003; oceandata.sci.gsfc.nasa.gov, read 2026-11-16): a from Sogandares and Fry (1997) at 380–390 nm, Pope and Fry (1997) 400–715 nm, Kou, Labrie and Chylek (1993) 720–750 nm; b of pure fresh water from Buiteveld et al. (1994) | 550 nm: a + b = 0.0579 /m and 700 nm: 0.6245 /m come back from the embedded spectrum; three metres look blue-green: `optics: pure water, as measured` |
 | Pure water's absorption, 755–780 nm | Kou, Labrie and Chylek (1993), Appl. Opt. 32, 3531, as tabulated by omlc.org (`kou93b`, 1/cm × 100); it meets the table above at 750 nm (2.848 against 2.857 /m) | b there extended by Morel's (1974) λ^−4.32 from 0.0004 /m at 750 nm; both far outside what the eye weighs |
+| Water's refractive index n(λ), 20 °C (`media.json`, `indices`) | Daimon and Masumura (2007), Appl. Opt. 46, 3811: a four-term Sellmeier formula, 182–1129 nm, as given by refractiveindex.info (read 2026-11-17) | n at 589.3 nm comes out 1.3330 (the handbook's 1.3330 at 20 °C): `refraction: the indices` |
+| Borosilicate glass 3.3 (lab glassware: DURAN, Pyrex, BOROFLOAT 33): refractive index at six wavelengths, 435.8–656.3 nm; density 2.23 g/cm³ (`media.json`, `indices`) | SCHOTT BOROFLOAT 33 technical details (schott.com, read 2026-11-17): n = 1.48015, 1.47676, 1.47311, 1.47133, 1.46953, 1.46916; nd 1.47140; νe 65.41 ("reference values, not guaranteed") | A Cauchy fit (n = A + B/λ² + C/λ⁴) at build, within 2e-4 of every tabulated value; nd and νe come back: `refraction: the indices` |
 | Water as an absorber | The coefficients above, summed (scattering counted as loss from the beam), over water's own 55.345 mol/L (997.05 g/L at 25 °C over 18.015 g/mol), as a decadic molar absorptivity: so a solution's water absorbs as much as there is of it | Not modelled: in-scattered light, the temperature dependence of a (at most 0.012 /m/°C, near 740 nm) |
 
 **Calibrated media** (`data/optics/media.json`). None of these spectra is measured: each is a
@@ -182,6 +184,11 @@ as literature are from memory and were not checked against a source.
 | CuSO₄ | Diffuse reflectance 0.82, flat | A white powder | low |
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
 | H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
+
+**Calibrated room for refraction (Stage 11):** the wall stands 20 cm behind the vessels' axes;
+the room in front of the bench, which the glass reflects, has a radiance of 0.3 of the room's white
+(darker than the lit wall: what a lab looks like from the bench). Both are chosen for a plausible
+bench, not measured. A solution's index is water's: the solutes' share is not modelled.
 
 **Calibrated geometry of solids:** a heap's angle of repose 35° and packing fraction 0.5 (typical
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).
