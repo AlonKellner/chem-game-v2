@@ -811,8 +811,8 @@ is read back. **The reference** is the same file compiled as C++ in float64 (`op
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
 draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
 
-**Refraction and Fresnel** (*PLANNED, Stage 11*). A vessel is a glass cylinder around what it
-holds, and light bends at each of its surfaces:
+**Refraction and Fresnel** (Stage 11). A vessel is a glass cylinder around what it holds, and
+light bends at each of its surfaces:
 
 - **What is behind is drawn.** The room behind the bodies is the lit wall and what is drawn on it
   (the bench's grid, the panels' edges: the draw list's first part), each a flat grey of its own
@@ -855,10 +855,12 @@ the rubber, the lit wall); pure water's absorption; then refraction and Fresnel 
 constant weights (the live composition, the powders by mass, the rubber, the lit wall) and line
 lists, the room's light in energy bands with moving points, each pixel's history kept by its
 content key and points by need, gamut mapping onto sRGB, and pure water as measured. The glow of a
-hot solid is its exact colour, added outside the history. *PLANNED, Stage 11:* refraction and
-Fresnel. The rest of the full design (lights besides the room's, image and gradient weights,
+hot solid is its exact colour, added outside the history. Stage 11 adds refraction and Fresnel
+through each vessel's glass and liquid, with dispersion, and the bench's drawing seen bent. The
+rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
-Mie auras, dispersion, adapted exposure, Display P3 output) is specified and not built.
+Mie auras, prisms and other flat-faced glass, light cast through glass onto a surface (caustics),
+adapted exposure, Display P3 output) is specified and not built.
 
 ## 13. Lab layer and interaction
 
@@ -1167,12 +1169,13 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   thermal state derived once, 3.8 µs; with the tray, the bursting check and overflow added,
   4.1 µs: 4050 times real time, 2.5 ms a frame at 600 steps a frame. The time is in the phase
   equilibria themselves (the logarithms of each affinity).
-- Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 10, `make
-  screenshots`, Apple M3 Pro, 1920×1080, as the slope of the frame time over extra passes, each
-  with its barrier): a settled pass 1.7 to 2.2 ms (the first fixed-band pass was 0.21 ms); a pass in
-  which every covered pixel's history starts at once (66,726 pixels, 72 points each) 11 ms. A pour
-  starts one vessel's pixels again, a few thousand. The first build measured 4.9 ms settled; a
-  pixel whose content is the same and which asks for nothing now does nothing.
+- Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 11, `make
+  screenshots`, Apple M3 Pro, 1920×1080, refraction on, as the slope of the frame time over extra
+  passes, each with its barrier; three runs): a settled pass about 0.1 ms, within the measurement's
+  noise; a pass in which every covered pixel's history starts at once (66,726 pixels, the fixed
+  estimate and 64 points each) 0.93 to 0.98 ms. Stage 10 recorded 1.9 and 11 ms: its runs' whole
+  frames took 70 ms against about 3 ms since, so the machine was busy with something else then, and
+  those numbers are withdrawn. The first fixed-band pass was 0.21 ms.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -1212,4 +1215,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
+| A pixel looks from its centre: a drawn line seen through glass is not averaged over the pixel's width; a pixel takes the vessel its centre is in, and the medium its centre is in (liquid or air); only the first vessel a pixel looks through bends its view; a ray turned back at an inner surface is treated as staying in the glass | Thin lines seen through a vessel's edge alias; a surface pixel bends as liquid or as air, not half each |
+| A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
+| The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
 | The room's is the only light; a hot solid's glow is its exact colour, added to what the pixel shows outside its history | No lamp or glowing gas lights the scene yet (§12.2 is built for them); the glow is not dimmed by what lies in front of the solid |
