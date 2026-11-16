@@ -28,6 +28,15 @@
   done after 4 frames and 128 points, never fewer than 16 in a frame); the budget a ceiling.
   Round 8's blind scene test: as good as or better than 16 points everywhere at a twelfth of the
   work. The measured table added.
+- Built (§12, §12.2, §12.3, §14): each light's energy table; absorbers' narrow lines; pure water as
+  measured (`data/optics/water.csv`); the eye metric, OKLCh gamut mapping onto sRGB; the scene as
+  spectra at 1 nm; one per-pixel source as the Godot host's compute shader and the C++ reference,
+  each pixel's state on the GPU. `cg_optics` gains the spectra, lines and light table; the Godot
+  host's pass is a compute shader shown by a `TextureRect`, with a budget property.
+- §18: O3 restated over 1,500 random spectra of twelve families on the eye metric; O4 restated as
+  the GPU's settled picture against the truth on the eye metric. §19: the pass's cost measured.
+  §20: water's scattering as loss only; gamut mapping onto sRGB; the room's the only light, a
+  glow added outside the history.
 
 ## 0.11.0 (2026-11-16, Stage 10)
 

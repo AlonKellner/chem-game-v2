@@ -527,9 +527,9 @@ revolution seen from the side.
 - **Colours no display has** (a spectral line, a deep copper blue, anything brighter than white)
   are brought into the display's gamut keeping their lightness and hue and giving up saturation:
   chroma reduced at constant lightness and hue in OKLCh, the method of CSS Color 4, onto the
-  display's own gamut (Display P3 where the display has it). Not clipped per channel, which shifts
-  both lightness and hue. (*PLANNED*; the user preferred mapping to clipping in the scene test,
-  and a check against real lights is offered.)
+  display's own gamut. Not clipped per channel, which shifts both lightness and hue. The user
+  preferred mapping to clipping in the scene test. *Built (Stage 10)* onto sRGB, which is what the
+  Godot host's 2D output is; onto Display P3 where a host can output it is *PLANNED*.
 
 **Pipeline.** The lab layer emits the scene: the bodies on the screen (profiles of revolution),
 each body's layers in the order light crosses them, each layer an effect with a spectral texture;
@@ -664,8 +664,8 @@ For each light:
 
 1. **Reference:** float64 integration at 1 nm over 380–780 nm against the CIE 1931 observer and
    the D65 illuminant (`chem/optics.hpp`; the tables are data, `data/optics/`).
-2. **What the screen shows:** reference and bands are both encoded to 8-bit sRGB, clipped and
-   rounded, as a display receives them, and compared there.
+2. **What the screen shows:** reference and method are both brought into the display's gamut
+   (above), encoded to 8-bit sRGB and rounded, as a display receives them, and compared there.
 3. **The eye metric**, fitted to the user's own marks in blind tests on their display: CIEDE2000
    with lightness weighted double (`kL = 0.5`), chroma a third (`kC = 3`) and hue a half
    (`kH = 2`), plus a term for a grey shown as a colour or a colour as a grey,
@@ -673,7 +673,8 @@ For each light:
    the 48 squares the user marked "not good enough" score above it, 30 of the 2,248 unmarked do.
 4. **The test set:** random spectra from eleven families (Gaussian bands in wavelength and in
    wavenumber, Lorentzian, skewed, narrow lines, edges, power laws, vibronic progressions, smooth
-   noise, interference ripple, flat) and mixtures of them, at random depths; through a liquid,
+   noise, interference ripple, flat), a twelfth of 3 to 40 lines a twentieth of a nanometre to two
+   wide, kept as lines, and mixtures of them, at random depths; through a liquid,
    under a liquid over a solid, behind a tinted wall, and printed pictures; and every colour of
    the shipped media. To tell methods apart, hard spectra are drawn more often.
 5. **Acceptance:** two blind tests, judged by the user on their display. A palette test: squares
@@ -684,11 +685,14 @@ For each light:
    glass of thin absorption lines), truth beside method; it judges motion.
 6. **Decision:** energy bands with moving points, weighted by the display's curves, each band
    read with its own colour; each pixel's history kept by its content key and the fixed estimate
-   (item 4); points by need, never fewer than 16 in a frame (item 5). A test of random spectra
-   holds the game to the user's threshold, settled and after a change, and a replay of a scene
-   holds the false negatives below (*PLANNED, Stage 10*).
+   (item 4); points by need, never fewer than 16 in a frame (item 5). *Built (Stage 10).* `O3`
+   holds it to the user's threshold over 1,500 random spectra: settled (16 moving points, 64
+   frames) none is visible, the worst 2.3 and the mean 0.11; the first frame after a change (64
+   points) is visible on 1 in 1,500. The reference's own frames hold a still scene, a dragged
+   body, a pour and a slow reaction to no pixel visibly wrong for 6 frames running (`optics: the
+   renderer's frames ...`), and `O4` holds the GPU's settled picture to the truth.
 
-**What the user's eye decided** (rounds 4 to 6; details in `docs/TDD_10_OPTICS.md`):
+**What the user's eye decided** (rounds 4 to 8; details in `docs/TDD_10_OPTICS.md`):
 
 - **Points that move every frame beat fixed bands.** With 8, 16 or 32 points and the last 16
   frames averaged, the user marked no square of a hard palette not good enough; fixed bands of
@@ -759,8 +763,9 @@ weighted by what the eye and the illuminant make of each nanometre:
 | **24** | **equal weight** | **0.80** | **0.19** |
 | 32 | equal weight | 0.49 | 0.11 |
 
-The game renders with these 24 bands (`chem::optics::game_bands`) until the decision above is
-built, with a threshold of worst ΔE₀₀ ≤ 1.0 and mean ≤ 0.5 over the demo's colours (`O3`).
+The game rendered with these 24 bands (`chem::optics::game_bands`) until the decision above was
+built, held to worst ΔE₀₀ ≤ 1.0 and mean ≤ 0.5 over the demo's colours (the first `O3`). The
+bands stay in the core for `chem_tool study spectrum`.
 
 ### 12.3 The optical pass of the demo
 
@@ -774,8 +779,9 @@ glowing body is measured against.
 - **A vessel is a cylinder** of its volume and of the proportions it is drawn with, seen from the
   side. At a pixel the path through it is the chord `2R·sqrt(1 − (x/R)²)`, in real centimetres.
 - **Its liquid** fills it to the height its condensed volume reaches, and dims the light behind
-  it by `exp(−Σ ε_i c_i L)` per band, with `c_i` the live concentration of each dissolved species
-  that has an absorption spectrum.
+  it by `exp(−Σ ε_i(λ) c_i L)` at each point's wavelength, with `c_i` the live concentration of
+  each liquid or dissolved species that has an absorption spectrum: water itself, as measured,
+  and the solutes, each with its narrow lines if it has any.
 - **Its solids at rest** are a heap at a powder's angle of repose (35°, packing 0.5): a cone until
   it reaches the wall. The heap is seen by the room's light: its reflectance (a mixture's by
   mass), and, under liquid, the liquid there and back, one chord.
@@ -790,11 +796,17 @@ glowing body is measured against.
 - **An edge covers a pixel by degrees:** depths are multiplied by the coverage (`T^coverage`), a
   solid is mixed in by it.
 
-**The table** (`lab/optics_scene.hpp`, `cg_ui_optics`): 378 vec4s: the room, each band's colour in
-linear sRGB, and 22 vec4s for each of at most 16 bodies. **The shader**
-(`native/game/shader/optics_pixel.gdshaderinc`, copied into the Godot project) is one function of
-the pixel and the table. **The reference** is the same file compiled as C++ in float64
-(`optics_transport`, `optics_pixel`, `optics_picture`, `optics_compare`).
+**The scene** (`lab/optics_scene.hpp`, `cg_ui_optics`): 98 vec4s (the room, and 6 for each of at
+most 16 bodies: its rectangle, form, haze and wall, glow, and identity, a signature of its
+contents and its lines); each body's three spectra at 1 nm (its liquid's optical depth per
+centimetre, its solids' reflectance, its wall's depth); up to 256 narrow lines; the room light's
+energy table (4,097 entries). **The renderer** (`native/game/shader/optics_pixel.glsl`, copied into
+the Godot project) is the method of §12.2 for one pixel: its path, what gets through at a
+wavelength, a batch of points, the fixed estimate, the frame's step and what it shows. The Godot
+host runs it as a compute shader over the whole screen each frame, each pixel's state in four
+float images on the GPU, the screen's total ask summed there for the next frame's budget; nothing
+is read back. **The reference** is the same file compiled as C++ in float64 (`optics_through`,
+`optics_truth`, `optics_pixel`, `optics_picture`, `OpticsFrames`, `optics_compare`).
 
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
 draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
@@ -802,13 +814,14 @@ draw list's second part (glass, labels, flames, a liquid's surface line, the rea
 **Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
 (§12.3); every layer a texture with constant weights (the live composition, the powders by mass,
 the rubber, the lit wall); pure water's absorption; then refraction and Fresnel as a separate stage.
-**Status:** Stage 10 implements §12.3 with the 24 bands of §12.2's first measurement. *PLANNED,
-Stage 10 (revision):* spectral textures as the scene's format (§12.1) with line lists, energy
-bands with moving points, each pixel's history kept by its content key and points by need (§12.2),
-gamut mapping, and pure water. *PLANNED, Stage 11:* refraction and Fresnel. The rest of the full
-design (image and
-gradient weights, Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum
-probe, Rayleigh and Mie auras, dispersion, adapted exposure) is specified and not built.
+**Status:** Stage 10 implements §12.3 by the method of §12.2: spectral textures (§12.1) with
+constant weights (the live composition, the powders by mass, the rubber, the lit wall) and line
+lists, the room's light in energy bands with moving points, each pixel's history kept by its
+content key and points by need, gamut mapping onto sRGB, and pure water as measured. The glow of a
+hot solid is its exact colour, added outside the history. *PLANNED, Stage 11:* refraction and
+Fresnel. The rest of the full design (lights besides the room's, image and gradient weights,
+Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
+Mie auras, dispersion, adapted exposure, Display P3 output) is specified and not built.
 
 ## 13. Lab layer and interaction
 
@@ -954,13 +967,16 @@ places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 - **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
   (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
   `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts).
-- **The optical pass through the C API:** `cg_ui_optics` (the table of §12.3, with a revision),
-  `cg_ui_optics_compare` (a host's picture of the pass against the reference: `O4`).
+- **The optical pass through the C API:** `cg_ui_optics` (the scene of §12.3: the table, each
+  body's spectra, the lines, the room light's energy table, with one revision),
+  `cg_ui_optics_compare` (a host's settled picture of the pass against the truth: `O4`).
 - **The Godot host** (`native/hosts/godot`: `ChemLab`, a `Node2D`): it reads the bench file,
   forwards the mouse, calls a frame in `_process`, paints the draw list's first part in `_draw`,
-  the optical pass by a shader on a child rectangle (`engines/godot/shaders/optics.gdshader`, its
-  one uniform the table), and the list's second part on another child. No game logic, and no
-  GDScript in play.
+  the optical pass by a compute shader over the screen (`native/hosts/godot/optics_compute.cpp`:
+  the per-pixel source of §12.3 in a wrapper that binds the scene's buffers and the pixels' state),
+  shown by a child `TextureRect`, and the list's second part on another child. The pass needs a
+  `RenderingDevice` (Forward+ or Mobile); headless it is off and says why. Its budget a pixel is a
+  property (`optics_budget`, 16). No game logic, and no GDScript in play.
 
 **Status:** Stage 0 implements the build identity, error and log plumbing; Stage 1 the tables;
 Stage 7 the lab and the session tools; Stage 9 the screen and the Godot host; Stage 10 the
@@ -1045,8 +1061,8 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 - **UX4. Colour tells the truth.** The displayed colour of a medium is the reference colour of its
   composition and path length within the §12.2 threshold. **Tested as:** `O3`, and `UX4: a
   solution's colour is that of its concentration and of the path through it` (the reference
-  renderer's pixel against the 1 nm colour, at five concentrations and two chords), with `O4`
-  holding the GPU to the reference renderer.
+  renderer's truth against the 1 nm colour, at five concentrations and two chords), the
+  renderer's frames settling on the truth, with `O4` holding the GPU's settled picture to it.
 - **UX5. A refusal explains itself.** A refused action reports its reason and leaves the state
   untouched. **Tested as:** `L1`, `lab: a refused command says why and changes nothing` (19
   refusals).
@@ -1093,8 +1109,8 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's table every optical depth is at least 0 and every reflectance within [0, 1] | exact | 10 |
 | O2 | No band of a pixel is brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
-| O3 | The game's bands show every colour of the demo within the §12.2 threshold of the 1 nm reference | tolerance | 10 |
-| O4 | The GPU's picture of the optical pass matches the reference renderer within 2/255 wherever a body covers at least a fiftieth of a pixel. It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
+| O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
+| O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -1113,8 +1129,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   4.1 µs: 4050 times real time, 2.5 ms a frame at 600 steps a frame. The time is in the phase
   equilibria themselves (the logarithms of each affinity).
 - Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 10, `make
-  screenshots`, Apple M3 Pro, 1920×1080): 0.21 ms a pass, as the slope of the frame time between
-  100 and 300 extra passes (one pass is too quick to time alone).
+  screenshots`, Apple M3 Pro, 1920×1080, as the slope of the frame time over extra passes, each
+  with its barrier): a settled pass 1.7 to 2.2 ms (the first fixed-band pass was 0.21 ms); a pass in
+  which every covered pixel's history starts at once (66,726 pixels, 72 points each) 11 ms. A pour
+  starts one vessel's pixels again, a few thousand. The first build measured 4.9 ms settled; a
+  pixel whose content is the same and which asks for nothing now does nothing.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -1149,8 +1168,9 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A vessel is a cylinder and a balloon a ball, whatever they are drawn as | Path lengths are those of a cylinder of the vessel's volume |
-| Glass, water, the acid and gases are perfectly clear, and nothing refracts (until Stage 11) | A clear liquid is shown by a drawn line at its surface |
+| Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is shown by a drawn line at its surface; metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
-| A colour outside sRGB is clipped, and exposure is fixed | Deep copper blue is drawn as the nearest blue the display has; a body past about 1200 K is drawn at the display's white |
+| A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
+| The room's is the only light; a hot solid's glow is its exact colour, added to what the pixel shows outside its history | No lamp or glowing gas lights the scene yet (§12.2 is built for them); the glow is not dimmed by what lies in front of the solid |

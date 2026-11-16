@@ -21,7 +21,13 @@ through it, computed per pixel on the GPU from the live composition and the real
 | 10.6 | The screen in three layers; the bench as a lit wall | Done |
 | 10.7 | The C API (`cg_ui_optics`, `cg_ui_optics_compare`) and the Godot host's shader pass | Done |
 | 10.8 | GPU against reference (`O4`) and the pass's cost, in `make screenshots` | Done |
-| 10.9 | The user's sign-off | Pending |
+| 10.9 | The user's first look: colours "may be slightly wrong"; tune to real displays, any spectrum, water | Done |
+| 10.10 | The revision's measurement: the display, the eye metric fitted to the user's blind marks, random spectra of every shape, rival representations; blind palette and scene tests, rounds 2 to 8 | Done |
+| 10.11 | Each light's energy table and the band estimate (`chem/optics.hpp`); absorbers' narrow lines; pure water as measured | Done |
+| 10.12 | The eye metric, OKLCh gamut mapping, what the screen shows (`lab/colour.hpp`); `O3` over random spectra | Done |
+| 10.13 | The scene as spectra at 1 nm; one per-pixel source (`optics_pixel.glsl`) for GPU and reference; each pixel's history by content key and fixed estimate; points by need; the reference's own frames | Done |
+| 10.14 | The C API's scene; the Godot host's compute pass; `O4` on the eye metric; the cost | Done |
+| 10.15 | The user's sign-off | Pending |
 
 ## The sample-count study
 
@@ -79,11 +85,76 @@ of the media, so a new substance gets the same treatment as copper; the shader s
 off by up to 4.1: the demo has none; the full design's line spectra will need narrower bands or
 the tilt, and the gate (`O3`) will say so when such a medium is added to the test set.
 
+## The revision (10.9 to 10.14)
+
+The user's first look at the fixed bands: the colours "may be slightly wrong"; the standard should
+be what a real display shows, for any spectrum; water should be blue in depth, as measured. What
+followed is in GAME_SPEC §12.2 in full; in short:
+
+- **The measure moved to the screen.** Truth and method are both gamut-mapped, encoded to 8-bit
+  sRGB and compared there, by an eye metric fitted to the user's own blind marks (CIEDE2000 with
+  lightness weighed double, chroma a third, hue a half, and a term for a grey shown as a colour):
+  above 8 is visible.
+- **The rival representations were measured** over random spectra of eleven families (fixed
+  bases, Gauss quadrature per band, exact tables, learned virtual samples, plain and adapted
+  bands); none both fit §12.1's spectral textures and beat bands.
+- **The user's blind tests decided the method** (palette rounds 2 to 6, scene rounds 6 to 8):
+  each light's energy in equal bands weighted by the display's curves, one moving point per band,
+  each pixel's frames averaged. An eagerness map was then measured by replaying the scene test on
+  the CPU against the truth: false positives (points spent where nothing changed and the colour was
+  already right) were 72 to 98% of all points, and false negatives came from three causes (any
+  motion reset a pixel's history; slow changes were not seen; batches under 16 points settle on a
+  wrong colour). The fix, built: a content key and a fixed estimate decide the history; points by
+  the pixel's own measured noise; never fewer than 16 in a batch. Round 8: "most of the time I
+  can't tell the difference" at a twelfth of the work.
+
+**What the build measures:**
+
+- `O3` (1,500 random spectra, 13 s with the rest): settled with 16 moving points over 64 frames,
+  none visible, worst 2.27 (a power law), mean 0.11; the first frame after a change (64 points),
+  mean 0.32, 1 visible. With 2-point batches it fires.
+- The reference's frames (`optics: the renderer's frames ...`): a solution over a heap settles to
+  a worst of 2.7 and a mean of 0.30 within 30 frames and then spends nothing; dragged a third of a
+  pixel a frame, none of 6,000 inside pixel-frames started again; poured, the liquid starts again
+  and is right within 8 frames; a slow reaction (2% more salt a frame) never shows a visible error;
+  at a budget of 0.5 points a pixel the frames spend 0.47.
+- `O4` (`make screenshots`, Apple M3 Pro, Metal): at all five moments of the demo the GPU's settled
+  picture is within 2 of the truth on the eye metric, no pixel visible:
+
+  | Moment | Pixels in bodies | Largest difference (eye metric) | Visible |
+  |---|---|---|---|
+  | Set up | 37,946 | 2 | 0 |
+  | Decomposing | 52,024 | 2 | 0 |
+  | The pour panel | 59,822 | 2 | 0 |
+  | Boiling | 66,726 | 2 | 0 |
+  | Crystals | 66,726 | 2 | 0 |
+
+- **Cost** (slope of the frame time over extra passes, each with its barrier): settled, 1.7 to
+  2.2 ms a pass at 1920×1080 (the fixed-band pass was 0.21 ms); every covered pixel starting again
+  at once, 11 ms. The budget (16 points a screen pixel) does not bind in the demo; it is the
+  setting for weaker hardware.
+
+**Found on the way:**
+
+- The first GPU build cost 4.9 ms settled: every covered pixel loaded and stored its whole state
+  and added its zero ask to one atomic counter. A pixel whose content is the same and which asked
+  for nothing now does nothing; asks of zero are not added; the path's four layers are named
+  fields, not an array written at a runtime index (which the GPU keeps in scratch memory).
+- A batch is never under 16 points, so the replay's rule (round any ask up to 16) spent more than
+  the budget allowed: 100,000 points a frame under a budget of 6,250. What a pixel asks is now what
+  its batch costs, and under a binding budget a batch is drawn with the chance that keeps to it.
+- The scene's mixed reflectance lost its normalisation by mass, so a hot solid's emissivity came
+  out as 1 − 6.3 × r: the 2042 K platinum check caught it (483,000 cd/m² against 600,000).
+- With water absorbing, "only c·L counts" is no longer exactly true: the same salt in twice the
+  water differs by 0.07 (CIEDE2000), the water's own absorption.
+- Pure water's tables: NASA's ocean optics protocol (Table 1.1, Erratum 1) joins Pope and Fry to
+  Kou et al. at 720 nm; Kou's own table continues to 780 nm.
+
 ## Decisions
 
-- **One source for the shader and the reference.** `optics_pixel.gdshaderinc` keeps to what GLSL
-  and C++ read alike (no swizzles, no `out` parameters). Godot compiles it as the fragment
-  shader; `optics_reference.cpp` includes the same file with `float` as `double` and a dozen
+- **One source for the shader and the reference.** The first build's `optics_pixel.gdshaderinc`
+  (now `optics_pixel.glsl`, the compute shader's body) keeps to what GLSL and C++ read alike (no
+  swizzles, no `out` parameters). Godot compiled it as the fragment shader; `optics_reference.cpp` includes the same file with `float` as `double` and a dozen
   small functions standing in for the shading language's. The GPU's picture is held to that
   build, so the tests of colour, path length, coverage, heaps, haze, glow and the balloon run
   without a GPU and still speak for the shader.
@@ -149,6 +220,15 @@ the tilt, and the gate (`O3`) will say so when such a medium is added to the tes
 ## Not done, and said so
 
 - Refraction and Fresnel: Stage 11.
-- Every medium's spectrum is calibrated to a known colour, not measured (`docs/DATA_SOURCES.md`).
+- Every medium's spectrum but water's is calibrated to a known colour, not measured
+  (`docs/DATA_SOURCES.md`).
 - No sheen on the balloon, no simulated flame, no fog; a mixture of powders is the mean of its
-  parts; colours outside sRGB are clipped (GAME_SPEC §20).
+  parts; colours outside sRGB keep lightness and hue, onto sRGB, not the display's own (P3)
+  gamut (GAME_SPEC §20).
+- One light: the room's. Lamps, glowing gases and fluorescence (§12) are built for (each light's
+  energy table, the bands share a pixel's points) but none is in the demo or the renderer yet.
+- The pass needs a `RenderingDevice`: on the Compatibility renderer it is off and says why.
+- The worst frame (every covered pixel starting again) costs 11 ms on this GPU; a budget that
+  binds there lowers that at the cost of a less accurate first frame.
+- The user has not yet looked at the game itself since the revision: the blind tests were in a
+  browser.
