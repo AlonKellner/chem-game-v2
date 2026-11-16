@@ -486,51 +486,270 @@ revolution seen from the side.
 
 **Full design**
 
-- **Spectral transport.** Light is a set of N wavelength samples in the visible band. N, the
-  wavelengths and their weights are chosen by measurement (§12.1).
-- **Absorption (Beer-Lambert):** `T(λ) = exp(−Σ ε_i(λ) c_i L)`, with concentrations from the live
-  state and `L` the chord through the body of revolution at that pixel. Partial coverage at an
-  edge is `T^coverage`.
-- **Absorption spectra:** sums of line shapes (Gaussian and Voigt, with Doppler and pressure
-  broadening for gases), a band-gap edge for solids, and solvent absorption.
+- **Spectral textures (§12.1).** Everything with an effect on light (a container's wall, its
+  contents, a solid, a label, the wall behind the bench, a light) describes that effect by a
+  spectral texture: spectral distributions mixed, point by point, by weights. The format of a
+  texture is independent of the effect it is given; the effect is assigned separately.
+- **Spectral transport (§12.2).** Each light's energy is cut into bands of equal energy, as the
+  display weighs it; each band keeps its exact energy and colour, and carries one point that reads
+  everything the light passes through at an exact wavelength. The points move every frame, and
+  each pixel averages its frames until its content changes. Energy is never lost, a spectral line
+  of any width is a share of a light's energy like any other, and every distribution, whatever
+  its effect, is read at the same points. The range is the visible, and the ultraviolet when a
+  light or a fluorescent material in the scene needs it.
+- **Absorption (Beer-Lambert):** `T(λ) = exp(−D(λ) ℓ)`, where `D` is the pixel's absorption
+  coefficient (a texture: for contents, `Σ ε_i(λ) c_i` with concentrations from the live state)
+  and `ℓ` the path through the layer at that pixel (for a vessel, the chord through the body of
+  revolution). Partial coverage at an edge is `T^coverage`.
+- **Absorption spectra:** sums of line shapes (Gaussian and Voigt, in wavenumber, with Doppler and
+  pressure broadening for gases), a band-gap edge for solids, and the solvent's own absorption:
+  pure water's measured spectrum, weak and rising toward the red, which leaves a beaker clear and
+  turns a column of metres blue, with its molecular scattering.
 - **Thermal emission:** Planck radiance times emissivity `1 − T(λ)` (Kirchhoff).
 - **Scattering:** Rayleigh and Mie extinction by suspended particles and droplets; scattered light
   returns as in-medium haze and as an aura around the medium.
-- **Reflection:** spectral diffuse reflectance of solids and powders under the room's illuminant.
+- **Reflection:** spectral diffuse reflectance of solids, powders and printed surfaces under the
+  light that reaches them.
 - **Refraction:** at each interface the view ray bends by Snell's law using the analytic surface
-  normal; the scene behind is sampled at the displaced position. Fresnel reflectance gives rim
-  highlights. Dispersion uses a wavelength-dependent index (Cauchy), one displacement per sample.
-  No ray tracing: one bend per interface, single bounce.
-- **Fluorescence:** absorbed excitation, integrated over the excitation band (including
-  ultraviolet), is re-emitted through an emission line shape times a quantum yield.
-- **Illumination modes:** daylight (D65), ultraviolet lamp, darkness (emission only).
-- **Spectrum probe:** the full-resolution spectrum under the cursor, plotted.
+  normal, with the index `n(λ)` a texture like any other (Cauchy for glass and water; it may vary
+  over an object). The scene behind is evaluated again at the displaced point, in the same pass;
+  no spectral picture of the scene is stored. Fresnel reflectance gives rim highlights.
+  Dispersion: each point bends by the index at its own wavelength, so the colour fringes settle
+  over frames like everything else. No ray tracing: one bend per interface, single bounce.
+- **Fluorescence:** light absorbed at the excitation wavelengths (the ultraviolet included) is
+  re-emitted as a light of its own: the emission line shape, holding the absorbed energy times a
+  quantum yield, with its own energy bands.
+- **Illumination modes:** daylight (D65), ultraviolet lamp, darkness (emission only). A mode is a
+  set of light textures.
+- **Spectrum probe:** the full-resolution spectrum under the cursor, computed at 1 nm on the CPU
+  from the same textures, and plotted.
 - **Exposure:** fixed, or adapted from a reduced-resolution luminance computed on the GPU.
+- **Colours no display has** (a spectral line, a deep copper blue, anything brighter than white)
+  are brought into the display's gamut keeping their lightness and hue and giving up saturation:
+  chroma reduced at constant lightness and hue in OKLCh, the method of CSS Color 4, onto the
+  display's own gamut (Display P3 where the display has it). Not clipped per channel, which shifts
+  both lightness and hue. (*PLANNED*; the user preferred mapping to clipping in the scene test,
+  and a check against real lights is offered.)
 
-**Pipeline.** The lab layer emits one table: the bodies on the screen (profiles of revolution) and
-what their contents do to light, band by band. One GPU pass computes each pixel: reject by bounding
-box, chord length, accumulate optical depth per band, add haze, reflection and emission, convert to
-a colour once. Refraction adds one pass (the scene behind is drawn to a texture first). Nothing is
-read back from the GPU, and the table is uploaded only when it changes. The per-pixel function is
-written once, in a subset that compiles both as shader and as C++; the C++ build is the reference.
+**Pipeline.** The lab layer emits the scene: the bodies on the screen (profiles of revolution),
+each body's layers in the order light crosses them, each layer an effect with a spectral texture;
+every texture's channels as 1 nm rows and line lists, its weights (constants in the scene, or
+images), and every light's energy tables. One GPU pass computes each pixel: reject by bounding
+box, find the path through each layer, and for each light's bands read the layers at the band's
+point (mixing each texture's channels by their weights there), add the band's colour times what
+gets through, and fold the frame into the pixel's history. Refraction stays in that pass: the
+scene behind a refracting surface is evaluated again at the displaced point. Nothing is read back
+from the GPU, and the scene is uploaded only when it changes. The per-pixel function is written
+once, in a subset that compiles both as shader and as C++; the C++ build is the reference, frame
+by frame (the points' sequence is deterministic).
 
-### 12.1 Choosing the spectral samples
+### 12.1 Spectral textures and effects
+
+**A spectral texture** has channels and weights:
+
+- **A channel** is one spectral distribution `D_c(λ)`: a continuum at 1 nm over the range
+  transport needs (a measured table, broad line shapes, an edge, a Planck curve, evaluated at 1 nm
+  by the lab layer), plus a list of lines (centre, width, shape, strength) for structure narrower
+  than a nanometre. Lines are read analytically at an exact wavelength, so a line of any width,
+  and any number of them, keeps its energy (in a light) or its effect (in an absorber). Nothing
+  about a line is special-cased: a narrow line and a broad band are the same kind of thing at
+  different widths.
+- **A weight** says how much of a channel there is at each point of the object: a constant, a
+  gradient (up the height of a vessel, across a layer, along a wall's thickness), an image (a
+  picture's colour separations), or a live quantity of the simulation (a concentration).
+- **At a point**, the texture's distribution is the weighted sum `D(λ) = Σ_c w_c D_c(λ)`. However
+  many channels made it, each pixel has exactly one spectral distribution per texture, and that
+  distribution is what takes effect.
+
+**An effect** is what that distribution does to the light. Any texture can be given any effect;
+the format does not change:
+
+| Effect | The distribution is | At a pixel |
+|---|---|---|
+| absorb | an absorption coefficient, per cm | multiplies the light by `exp(−D ℓ)`, `ℓ` the path through the layer |
+| reflect | a diffuse reflectance, 0 to 1 | returns `D` times the light falling on it |
+| emit | a radiance | adds `D` |
+| light | a light's spectral power | lights what reflects; the backdrop, the ambient light and a lamp are lights |
+| scatter | an extinction coefficient, with the fraction scattered | dims like absorb, and returns the scattered part as haze and aura |
+| fluoresce | a pair: an excitation and an emission distribution, with a quantum yield | moves absorbed light from the excitation bands to the emission bands |
+| refract | a refractive index | bends the view ray at the object's surfaces |
+
+**An object is a stack of layers**, each an effect with a texture, in the order light meets them.
+A flask of solution is: the glass (absorb, and refract), the contents (absorb: the composition;
+scatter: what is suspended; reflect: what lies on the bottom), the glass again. A container with
+several layers (two liquids that do not mix, a crust on the wall, a coating, a liquid stratified
+after a pour) adds layers, or gives one layer a gradient.
+
+**The live composition is a spectral texture.** A cell's species with optical spectra are its
+channels and their concentrations its weights, uniform over a homogeneous cell (§2, principle 8).
+Water is a channel like any other.
+
+**Example: a printed picture.** A label on a bottle, a poster on the wall, a page on the bench. It
+is two layers:
+
+1. **reflect**: the paper, one channel at weight 1;
+2. **absorb**, crossed twice (into the paper and back out): four channels, the absorption spectra
+   of the cyan, magenta, yellow and black inks; their weights are the picture's four separations,
+   one image (one RGBA texture holds all four), each scaled by its ink's thickness.
+
+At a pixel the eye receives `light(λ) · R_paper(λ) · exp(−2 Σ_c w_c(u, v) k_c(λ) t)`. The picture's
+colours come from real spectra, so the same print under daylight, by a flame's light, through a
+beaker of blue solution standing in front of it, or under the ultraviolet lamp (where the paper's
+optical brightener glows: a third, fluorescent layer) is computed, not tinted. This is a dye print,
+where inks add their absorption. A halftone print is the same format with the dots drawn in the
+weight images, or with the Neugebauer primaries (paper and each overprint of the inks) as the
+channels of a reflect texture, weighted by their area fractions.
+
+**More examples.** A dense solution poured under water before it mixes: one absorb texture whose
+channel weights fall with height. A tinted glass that is thicker at the base: one channel, its
+weight following the thickness. A pattern of light on the wall from a window: a light texture
+with an image weight.
+
+**On the GPU** a texture is its channels, each a 1 nm row of a table texture and a line list, and
+its weights: constants in the scene table, or images sampled at the pixel, four channels to an
+RGBA image. At a point's wavelength the pixel's distribution is the weighted sum of the channels
+there; then the effect. A texture given the light (or emit) effect also has its energy tables
+(§12.2), built on the CPU when it changes. Anything drawn as flat colour (the interface, labels of
+the interface) is not optics and stays in the draw list.
+
+The original prototype gave each material a palette of spectral textures (transmission, emission,
+reflection) and each shape a mask; this generalises it: any number of channels, any weights, and
+the effect assigned apart from the format.
+
+### 12.2 Spectral samples
+
+**Energy bands with moving points.** A pixel's light is a sum over the lights that reach it: the
+room's light off the wall or a print, a lamp, a glowing solid, a gas, a fluorescent re-emission.
+For each light:
+
+1. **Its energy bands.** The light's spectrum (continuum and lines), times what the display makes
+   of each wavelength (the magnitudes of the display's R, G and B matching curves summed), is cut
+   into `n` bands of equal energy. Each band's exact colour, the light's own XYZ over it, is known.
+   A light keeps two tables over its energy, built on the CPU at whatever resolution its lines need
+   (a line a hundredth of a nanometre wide is resolved): the wavelength at each share of the
+   energy, and the cumulative colour up to it. From them the GPU forms the `n` bands for any `n`.
+2. **One point per band.** Each band carries one point at an exact wavelength inside it, placed
+   by an offset that is the pixel's own and moves every frame (a golden-ratio step, so successive
+   frames fill the band evenly). At its point the band reads every layer between the light and
+   the eye: absorbers (continuum and lines), reflectances, inks, a gas's own reabsorption, the
+   refractive index.
+3. **The frame.** The pixel's colour this frame is the sum, over the lights and their bands, of
+   each band's exact colour times what gets through at its point. The light's energy is exact in
+   every band of every frame; only how its layers treat the inside of a band is estimated, and the
+   moving points settle that over frames.
+4. **The pixel's history.** Each pixel has a content key: everything its colour depends on that
+   can change (which bodies cover it and what they hold, its path through each, the mixture of
+   each, a reaction's progress, what lies behind). While the key is the same the history is valid.
+   When the key changes, a fixed estimate is taken again: 8 bands, each read at its middle, no
+   moving points. The history holds what the moving points add to the fixed estimate, so the
+   pixel shows the fixed estimate now plus its history's average. If the same bodies still cover
+   the pixel and the fixed estimate has moved by at most 4 on the eye metric since the history
+   began, the history is kept, aged by how far the estimate moved (half its weight per unit);
+   otherwise it starts again. A body moved by a pixel, a reaction a step further on, keep their
+   history; a jump, a pour, a body arriving or leaving start it again. A spectral line in a light
+   is just a share of its energy (one line with 30% of the energy owns 30% of the bands, however
+   narrow it is), so nothing is special-cased and nothing is lost.
+5. **The budget: points by need.** A pixel's points are shared among its lights by their
+   strength there, at least two each. How many points a pixel takes is its own: from the spread
+   of its frames on the eye metric it knows the noise of one point, and asks for as many more as
+   bring its average's expected error to 2. A pixel whose history has just started asks for 64; a
+   pixel that is done asks for none, but only after at least 4 frames and 128 points, so a lucky
+   early estimate cannot stop it. A pixel never takes fewer than 16 points in a frame (a smaller
+   batch of energy bands converges to a visibly wrong colour where a layer changes inside a
+   band). Asks above the frame's budget are scaled down by the screen's mean ask (a mipmap chain
+   on the GPU, nothing read back). The budget is a ceiling, the setting that trades speed for
+   accuracy on weaker hardware; a still scene costs almost nothing.
+
+**How the choice is measured:**
 
 1. **Reference:** float64 integration at 1 nm over 380–780 nm against the CIE 1931 observer and
    the D65 illuminant (`chem/optics.hpp`; the tables are data, `data/optics/`).
-2. **Test set:** every medium the game can show, over its reachable range of concentration and
-   path length; solids' reflectances, bare and under solution; blackbody emission; overlapping
-   media; synthetic narrow-band absorbers, reported apart.
-3. **Metric:** CIEDE2000 between reference and N-band colour (`lab/colour.hpp`).
-4. **Threshold:** maximum ΔE₀₀ ≤ 1.0 and mean ≤ 0.5 over the test set of shipped media.
-5. **Decision:** the smallest N meeting the threshold with cuts that are not fitted to the test
-   set; recorded with the measured table.
-6. **Gate:** a test recomputes the error for the chosen bands and fails above the threshold (`O3`).
+2. **What the screen shows:** reference and bands are both encoded to 8-bit sRGB, clipped and
+   rounded, as a display receives them, and compared there.
+3. **The eye metric**, fitted to the user's own marks in blind tests on their display: CIEDE2000
+   with lightness weighted double (`kL = 0.5`), chroma a third (`kC = 3`) and hue a half
+   (`kH = 2`), plus a term for a grey shown as a colour or a colour as a grey,
+   `8 |ln((C₂ + 8) / (C₁ + 8))|` (`C` the CIELAB chroma). Above 8 a difference is visible: 46 of
+   the 48 squares the user marked "not good enough" score above it, 30 of the 2,248 unmarked do.
+4. **The test set:** random spectra from eleven families (Gaussian bands in wavelength and in
+   wavenumber, Lorentzian, skewed, narrow lines, edges, power laws, vibronic progressions, smooth
+   noise, interference ripple, flat) and mixtures of them, at random depths; through a liquid,
+   under a liquid over a solid, behind a tinted wall, and printed pictures; and every colour of
+   the shipped media. To tell methods apart, hard spectra are drawn more often.
+5. **Acceptance:** two blind tests, judged by the user on their display. A palette test: squares
+   of the 1 nm truth beside the method, running live pixel by pixel and frame by frame, the
+   method's name hidden, with a control palette that is the truth on both halves; it judges
+   spectral accuracy, settled and in the first frames. A scene test: a live GPU scene (a printed
+   poster, vessels dragged, jumping, poured into and reacting, a sodium lamp, a glowing gas, a
+   glass of thin absorption lines), truth beside method; it judges motion.
+6. **Decision:** energy bands with moving points, weighted by the display's curves, each band
+   read with its own colour; each pixel's history kept by its content key and the fixed estimate
+   (item 4); points by need, never fewer than 16 in a frame (item 5). A test of random spectra
+   holds the game to the user's threshold, settled and after a change, and a replay of a scene
+   holds the false negatives below (*PLANNED, Stage 10*).
 
-**The measurement** (`chem_tool study spectrum`; the table is in `docs/TDD_10_OPTICS.md`). A
-sample is a **band**: a stretch of the spectrum carrying the band-average of each absorber's
-coefficient, weighted by what the eye and the illuminant make of each nanometre; a band's colour
-is the exact integral of the observer over it. Over the demo's 110 colours:
+**What the user's eye decided** (rounds 4 to 6; details in `docs/TDD_10_OPTICS.md`):
+
+- **Points that move every frame beat fixed bands.** With 8, 16 or 32 points and the last 16
+  frames averaged, the user marked no square of a hard palette not good enough; fixed bands of
+  the earlier kind (24) had four. At 32 points the user could not pick a worst square.
+- **Points must follow each light's energy, not the eye.** Spread by the eye under daylight, 16
+  points flicker on a lamp of spectral lines: 30 of 144 squares marked, "just terrible". Cut by
+  energy, the same 16 left none marked; with the display's curves as the weight, settled squares
+  average 0.51 on the eye metric, against 0.66 with the eye's X+Y+Z.
+- **Bands that keep each band's energy are also good** (24 of them: none marked), which is the
+  energy bands' inheritance; the moving points add the exact reading of thin lines and sharp
+  absorbers inside a band.
+- **Resetting a pixel's history on any change looked best in motion** ("movement is smooth,
+  settling is perfect"). History carried with moving objects by a tolerance, and pixels frozen
+  once settled, smeared and kept grain that never faded; they are not used.
+- **History kept by the fixed estimate, points by need, looked as good or better at a twelfth of
+  the work** (round 8: "most of the time I can't tell the difference, and when subtle differences
+  do happen, they are quickly fixed"). Each point weighted by its own colour (unbiased at any
+  number of points) looked "maybe slightly worse"; the band's colour is kept.
+
+**False positives and false negatives** (round 8's scene replayed on the CPU against the truth,
+every second pixel, 600 frames). A false positive is a point spent on a pixel whose colour did not
+change and was already right (eye metric 4 or less); a false negative is a pixel shown visibly
+wrong (above 8), persistent if for 6 frames or more.
+
+| Method | Points a pixel a frame | Of them wasted | Visible | Persistent |
+|---|---|---|---|---|
+| 16 points everywhere, reset on any change | 16.0 | 98% | 0.3% (moving bodies 11.7%) | 0.0% |
+| Eagerness, a mean of 16 | 9.0 | 93% | 0.1% | 0.0% |
+| Eagerness, a mean of 4 | 3.3 | 72% | 6.4% (a reacting tube 56%) | 5.9% |
+| Decided (item 4, item 5) | 1.3 | 61% | 0.0% (after a change 1.0%) | 0.0% |
+
+The eagerness map failed on three counts: converged pixels kept spending (the time term), any
+motion over a pixel reset it though its colour barely moved (93% of resets discarded a right
+colour), and small batches converged to wrong colours (8 points: visible on 3.5% of pixels for
+ever, 19.5% under a lamp of lines; 16: none, worst 3.1). The decided method's remaining waste is
+the fixed estimate taken again where a key changed but the colour did not, the cost of checking.
+Sharing a young pixel's history with its neighbours made moving bodies worse (1.2% to 3.5%) and
+is not used.
+
+**What was measured before** (the eye metric, 3,000 to 20,000 spectra):
+
+- **Fixed bases are no better than bands.** At 24 numbers a spectrum, the share of visible errors
+  is 0.77% for bands, 1.07% for piecewise-linear depth with knots adapted to the scene, 1.37% for
+  a mixture of Gaussians, 1.47% for PCA, 1.73% for a cosine (Fourier) series. Any basis smooths a
+  sharp feature of the optical depth before the exponential, and that is the error. Gaussians stay
+  the form spectra are written in (absorption bands are Gaussian in wavenumber).
+- **Two methods were more accurate and are not taken,** because they do not fit §12.1: an exact
+  colour-against-path-length table for each body (visible on 0.02% of spectra) settles a body's
+  colour as RGB, so nothing spectral can follow; learned virtual samples (correlated-k: 16 of them
+  beat 96 bands on a library of 67 spectra) have no wavelength, so neither refraction nor
+  fluorescence nor the ultraviolet can use them, and a texture's values would depend on its effect.
+- **Bands with three strengths each** (a Gauss quadrature of the band's absorption) are accurate
+  (16 bands: 0.04% visible), but the quadrature belongs to one spectrum and does not survive
+  mixing channels per pixel.
+- **Plain bands** need about 96 to reach the same quality on hard spectra (0.07% of random spectra
+  visible, 1.5% of hard ones); 24 leave 1.0% and 17%. Adapting the cuts to a body's spectra
+  roughly halves the error.
+
+**The first measurement** (Stage 10, superseded by the method above): CIEDE2000 on unclipped
+colours, over the demo's 110 colours. A band carried the average of each absorber's coefficient,
+weighted by what the eye and the illuminant make of each nanometre:
 
 | Bands | Cuts | Worst ΔE₀₀ | Mean |
 |---|---|---|---|
@@ -540,15 +759,10 @@ is the exact integral of the observer over it. Over the demo's 110 colours:
 | **24** | **equal weight** | **0.80** | **0.19** |
 | 32 | equal weight | 0.49 | 0.11 |
 
-**The game renders with 24 bands, cut so that each carries an equal share of what the eye sees**
-(`chem::optics::game_bands`). Fourteen bands meet the threshold when their cuts are fitted to the
-test colours, but cuts fitted to copper's spectrum promise nothing for the next substance; the
-24 are chosen without looking at any medium. Carrying each absorber's slope across the band as
-well reaches the threshold with 11 fitted bands, at the same cost per pixel as 22 plain ones, and
-was not taken. Where bands degrade: a 10 nm absorption line is off by up to ΔE₀₀ 4 at 24 bands;
-the demo has none, and the Voigt lines of the full design will need narrower bands or the tilt.
+The game renders with these 24 bands (`chem::optics::game_bands`) until the decision above is
+built, with a threshold of worst ΔE₀₀ ≤ 1.0 and mean ≤ 0.5 over the demo's colours (`O3`).
 
-### 12.2 The optical pass of the demo
+### 12.3 The optical pass of the demo
 
 **Light and backdrop.** The room is lit by D65. Behind the cabinet, the bench and the outbox is a
 wall that reflects evenly (radiance 0.73 of the room's white); what is in the glass is seen by
@@ -586,10 +800,15 @@ the pixel and the table. **The reference** is the same file compiled as C++ in f
 draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
 
 **Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
-(§12.2); then refraction and Fresnel as a separate stage.
-**Status:** Stage 10 implements §12.1 and §12.2. *PLANNED, Stage 11:* refraction and Fresnel.
-The rest of the full design (Voigt lines, band gaps, fluorescence, ultraviolet and dark modes,
-the spectrum probe, Rayleigh and Mie auras, dispersion, adapted exposure) is specified and not built.
+(§12.3); every layer a texture with constant weights (the live composition, the powders by mass,
+the rubber, the lit wall); pure water's absorption; then refraction and Fresnel as a separate stage.
+**Status:** Stage 10 implements §12.3 with the 24 bands of §12.2's first measurement. *PLANNED,
+Stage 10 (revision):* spectral textures as the scene's format (§12.1) with line lists, energy
+bands with moving points, each pixel's history kept by its content key and points by need (§12.2),
+gamut mapping, and pure water. *PLANNED, Stage 11:* refraction and Fresnel. The rest of the full
+design (image and
+gradient weights, Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum
+probe, Rayleigh and Mie auras, dispersion, adapted exposure) is specified and not built.
 
 ## 13. Lab layer and interaction
 
@@ -698,7 +917,7 @@ mass and energy unchanged since the bench was opened, or not.
 solids and liquids, and each species' mass, particle count and size; then the lab's events and
 the last refusal.
 
-**Drawing.** What is in a vessel, and a balloon, is the optical pass of §12.2. The draw list is
+**Drawing.** What is in a vessel, and a balloon, is the optical pass of §12.3. The draw list is
 flat and in two parts, one under that pass and one over it: the room and its grid under; glass as
 lines, a liquid's surface as a line (a clear liquid is otherwise invisible until Stage 11's
 refraction), a flame by its valve, labels, the readout and panels over.
@@ -735,7 +954,7 @@ places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 - **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
   (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
   `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts).
-- **The optical pass through the C API:** `cg_ui_optics` (the table of §12.2, with a revision),
+- **The optical pass through the C API:** `cg_ui_optics` (the table of §12.3, with a revision),
   `cg_ui_optics_compare` (a host's picture of the pass against the reference: `O4`).
 - **The Godot host** (`native/hosts/godot`: `ChemLab`, a `Node2D`): it reads the bench file,
   forwards the mouse, calls a frame in `_process`, paints the draw list's first part in `_draw`,
@@ -824,7 +1043,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
   and frame rate. **Tested as:** `D1`, `lab: the same commands give the same state, however the
   steps are grouped and whether or not they are checked`.
 - **UX4. Colour tells the truth.** The displayed colour of a medium is the reference colour of its
-  composition and path length within the §12.1 threshold. **Tested as:** `O3`, and `UX4: a
+  composition and path length within the §12.2 threshold. **Tested as:** `O3`, and `UX4: a
   solution's colour is that of its concentration and of the path through it` (the reference
   renderer's pixel against the 1 nm colour, at five concentrations and two chords), with `O4`
   holding the GPU to the reference renderer.
@@ -874,7 +1093,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's table every optical depth is at least 0 and every reflectance within [0, 1] | exact | 10 |
 | O2 | No band of a pixel is brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
-| O3 | The game's bands show every colour of the demo within the §12.1 threshold of the 1 nm reference | tolerance | 10 |
+| O3 | The game's bands show every colour of the demo within the §12.2 threshold of the 1 nm reference | tolerance | 10 |
 | O4 | The GPU's picture of the optical pass matches the reference renderer within 2/255 wherever a body covers at least a fiftieth of a pixel. It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 

@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-// Colour as seen (GAME_SPEC §12.1): CIE L*a*b* from XYZ, the CIEDE2000
+// Colour as seen (GAME_SPEC §12.2): CIE L*a*b* from XYZ, the CIEDE2000
 // difference between two colours, and sRGB for a display.
 namespace lab {
 
@@ -28,7 +28,7 @@ enum class BandModel {
 	Tilted, // its average and its slope across the band: the band's light is not dimmed evenly
 };
 
-// The error of a band set over the colours the game can show (GAME_SPEC §12.1).
+// The error of a band set over the colours the game can show (GAME_SPEC §12.2).
 struct BandError {
 	double worst = 0.0; // the largest CIEDE2000 difference from the 1 nm reference
 	double mean = 0.0;
@@ -38,7 +38,7 @@ struct BandError {
 };
 BandError band_error(const chem::optics::Bands &bands, BandModel model, bool detail = false);
 
-// what the game promises (GAME_SPEC §12.1)
+// what the game promises (GAME_SPEC §12.2)
 inline constexpr double BAND_ERROR_WORST = 1.0;
 inline constexpr double BAND_ERROR_MEAN = 0.5;
 

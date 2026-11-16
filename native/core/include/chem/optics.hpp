@@ -14,7 +14,7 @@ namespace chem::optics {
 inline constexpr int FIRST_NM = 380;
 inline constexpr int COUNT = 401; // 380 .. 780
 inline constexpr int MAX_BANDS = 32;
-inline constexpr int GAME_BANDS = 24; // what the renderer uses (GAME_SPEC §12.1)
+inline constexpr int GAME_BANDS = 24; // what the renderer uses (GAME_SPEC §12.2)
 
 using Spectrum = std::array<double, COUNT>;
 
@@ -75,7 +75,7 @@ Xyz colour_emitted(const Bands &bands, std::span<const double> radiance);
 
 // The bands the game renders with: chosen by `chem_tool study spectrum` as the
 // fewest that keep every colour the game can show within its threshold
-// (GAME_SPEC §12.1), and held there by a test.
+// (GAME_SPEC §12.2), and held there by a test.
 const Bands &game_bands();
 
 } // namespace chem::optics

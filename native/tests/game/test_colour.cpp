@@ -1,4 +1,4 @@
-// Colour as seen and the renderer's spectral bands (GAME_SPEC §12.1, O3).
+// Colour as seen and the renderer's spectral bands (GAME_SPEC §12.2, O3).
 #include "lab/colour.hpp"
 
 #include <doctest/doctest.h>

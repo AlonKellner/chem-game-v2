@@ -1,5 +1,34 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 10, revision)
+
+- §12: the full design restated around spectral textures: every distribution carried in the same
+  wavelength bands, which may follow the scene; refraction re-evaluates the scene behind in the
+  same pass, with the index a texture; fluorescence a matrix between bands; the probe at 1 nm on
+  the CPU; pure water's absorption and scattering.
+- §12.1 added: spectral textures (channels mixed by constant, gradient, image or live weights) and
+  effects (absorb, reflect, emit, light, scatter, fluoresce, refract) assigned apart from the
+  format; layered objects; the printed picture (CMYK) as the worked example.
+- §12.2 (was §12.1): spectral samples are bands; their cuts fixed or adapted to the scene; the
+  measurement moved to what the screen shows, judged by the eye metric fitted to the user's blind
+  marks, over random spectra of eleven families; the rival representations measured and why each
+  was taken or not; the band decision planned.
+- §12.3 (was §12.2): the demo's optical pass, unchanged.
+- §12, §12.2: the representation decided by the user's blind tests (rounds 4 to 6): each light's
+  energy in equal bands weighted by the display's curves, one point per band moved every frame,
+  each pixel's history started again when its content changes; the eagerness map planned as the
+  way a frame's budget of points is shared out. §12.1: a channel has a line list beside its 1 nm
+  continuum. §12: colours no display has are mapped keeping lightness and hue (OKLCh), onto the
+  display's own gamut; refraction disperses by each point's own index; fluorescence re-emits as a
+  light of its own.
+- §12.2: the eagerness map replaced after its false positives and negatives were measured on a
+  replay of the scene test: a pixel's history is kept by an exact content key and a fixed estimate
+  (8 bands at their middles), holding what the moving points add to it; points by need (the
+  pixel's own noise on the eye metric, an expected error of 2, 64 for a fresh pixel, none once
+  done after 4 frames and 128 points, never fewer than 16 in a frame); the budget a ceiling.
+  Round 8's blind scene test: as good as or better than 16 points everywhere at a twelfth of the
+  work. The measured table added.
+
 ## 0.11.0 (2026-11-16, Stage 10)
 
 - §12: the pipeline restated around one table; §12.1 with the measurement and its decision: 24

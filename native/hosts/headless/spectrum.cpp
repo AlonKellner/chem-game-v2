@@ -1,4 +1,4 @@
-// chem_tool study spectrum: how many bands the renderer needs (GAME_SPEC §12.1).
+// chem_tool study spectrum: how many bands the renderer needs (GAME_SPEC §12.2).
 // Every colour the demo can show, by the 1 nm reference and by n bands; the
 // CIEDE2000 difference, for several ways of cutting the spectrum and two ways
 // of carrying an absorber in a band.
