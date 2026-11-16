@@ -23,7 +23,9 @@ inline constexpr int BODY_VECS = 7;
 inline constexpr int MAX_SHAPES = 256;
 inline constexpr int SHAPE_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = SHAPE_BASE + 2 * MAX_SHAPES;
-// within a body; REFRACT: its glass's thickness (cm), its first shape, how many, whether it refracts
+// within a body; REFRACT: its glass's thickness (cm), its first shape, how many, whether it refracts.
+// A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
+// the eye), GLOW z its centre's offset from its rectangle's (pixels)
 inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5;
 // each body's spectra, ROW values at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
@@ -51,7 +53,12 @@ struct OpticsScene {
 struct OpticsBody {
 	const ItemView *item = nullptr;
 	float x = 0, y = 0, w = 0, h = 0; // its rectangle, in pixels
+	// a prism (an item of kind "prism", the prism demo): an equilateral triangle of flint glass PRISM_SIDE_CM
+	// on a side, w pixels on a side, turned by `turn` radians about its upright axis; its rectangle is centred
+	// on (x + w / 2) and recomputed as its silhouette
+	double turn = 0.0;
 };
+inline constexpr double PRISM_SIDE_CM = 5.0;
 
 // A shape drawn on the wall behind the bodies: a rectangle of a flat grey.
 struct OpticsShape {

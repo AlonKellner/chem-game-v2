@@ -396,8 +396,9 @@ std::string check_O1(const OpticsScene &scene) {
 			}
 		}
 		const size_t body = static_cast<size_t>(HEADER_VECS + i * BODY_VECS) * 4;
+		const bool prism = scene.table[body + static_cast<size_t>(FORM) * 4] > 1.5f; // its MORE holds its corners
 		const double extinction = scene.table[body + static_cast<size_t>(MORE) * 4], thickness = scene.table[body + static_cast<size_t>(MORE) * 4 + 1];
-		if (!(extinction >= 0.0) || !(thickness >= 0.0)) {
+		if (!prism && (!(extinction >= 0.0) || !(thickness >= 0.0))) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
 		}

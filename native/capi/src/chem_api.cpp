@@ -1,10 +1,9 @@
 #include "chem_api.h"
 
-#include <cmath>
-
 #include "chem/error.hpp"
 #include "chem/species.hpp"
 #include "lab/lab.hpp"
+#include "lab/prism_demo.hpp"
 #include "lab/ui.hpp"
 
 #include <cmath>
@@ -22,6 +21,10 @@ struct cg_ui {
 static_assert(sizeof(cg_draw_command) == sizeof(lab::DrawCommand));
 static_assert(offsetof(cg_draw_command, x) == offsetof(lab::DrawCommand, x));
 static_assert(offsetof(cg_draw_command, first) == offsetof(lab::DrawCommand, first));
+
+struct cg_demo {
+	std::unique_ptr<lab::PrismDemo> prism;
+};
 
 struct cg_lab {
 	std::unique_ptr<lab::Lab> lab;
@@ -327,6 +330,87 @@ cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 		out->text_size = static_cast<int32_t>(list.text.size());
 		out->text = list.text.c_str();
 		out->above = list.above;
+		return CG_OK;
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+namespace {
+
+void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
+	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
+	out->table = scene.table.data();
+	out->revision = scene.revision;
+	out->row_count = static_cast<int32_t>(scene.rows.size());
+	out->rows = scene.rows.data();
+	out->line_count = static_cast<int32_t>(scene.lines.size() / 4);
+	out->lines = scene.lines.data();
+	out->light_count = static_cast<int32_t>(scene.lights.size() / 4);
+	out->lights = scene.lights.data();
+}
+
+void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
+	out->command_count = static_cast<int32_t>(list.commands.size());
+	out->commands = reinterpret_cast<const cg_draw_command *>(list.commands.data());
+	out->point_count = static_cast<int32_t>(list.points.size() / 2);
+	out->points = list.points.data();
+	out->text_size = static_cast<int32_t>(list.text.size());
+	out->text = list.text.c_str();
+	out->above = list.above;
+}
+
+} // namespace
+
+cg_demo *cg_demo_open(const char *name) {
+	if (name == nullptr || std::string(name) != "prism") {
+		last_error() = "cg_demo_open: the only demo is \"prism\"";
+		return nullptr;
+	}
+	try {
+		auto demo = std::make_unique<cg_demo>();
+		demo->prism = std::make_unique<lab::PrismDemo>();
+		return demo.release();
+	} catch (const std::exception &e) {
+		last_error() = e.what();
+		return nullptr;
+	}
+}
+
+void cg_demo_close(cg_demo *demo) {
+	delete demo;
+}
+
+void cg_demo_pointer(cg_demo *demo, float x, float y, int32_t down) {
+	if (demo != nullptr) {
+		demo->prism->pointer(x, y, down != 0);
+	}
+}
+
+void cg_demo_turn(cg_demo *demo, float radians) {
+	if (demo != nullptr) {
+		demo->prism->turn(radians);
+	}
+}
+
+cg_status cg_demo_draw(cg_demo *demo, cg_draw_list *out) {
+	if (demo == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_demo_draw: null argument, or the list's size is not set");
+	}
+	try {
+		fill_draw(demo->prism->draw(), out);
+		return CG_OK;
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_demo_optics(cg_demo *demo, cg_optics *out) {
+	if (demo == nullptr || out == nullptr || out->size < sizeof(cg_optics)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_demo_optics: null argument, or the size is not set");
+	}
+	try {
+		fill_optics(demo->prism->optics(), out);
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());

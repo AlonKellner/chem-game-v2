@@ -4,6 +4,7 @@
 
 #include <array>
 #include <span>
+#include <string_view>
 
 // Light (GAME_SPEC §12). Spectra are tables at 1 nm from 380 to 780 nm. A
 // colour is CIE XYZ under the 1931 2-degree observer, with the D65 illuminant's
@@ -42,6 +43,8 @@ const Spectrum &spectrum(SpeciesId species); // zeros for Kind::None
 // wall's thickness), else 0.
 const Spectrum &refractive_index(SpeciesId species);
 double index_density(SpeciesId species);
+// An optical material that is no species (the prism demo's flint glass, "n_sf11"), or nullptr.
+const Spectrum *material_index(std::string_view name);
 // An absorber's narrow lines, beside its 1 nm spectrum (GAME_SPEC §12.1): each a
 // Gaussian of the given full width at half maximum, read at the exact wavelength
 // a point falls on, never averaged over a nanometre.

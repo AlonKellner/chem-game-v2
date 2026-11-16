@@ -70,6 +70,7 @@ struct Path {
 	float rcm; // centimetres a pixel
 	bool rliquid; // whether the ray meets its liquid (else air)
 	float rcover; // how much of the pixel it covers: what its surfaces turn away is in proportion
+	bool rprism; // a prism (flat faces), not a cylinder
 };
 
 // a pixel's state between frames
@@ -98,6 +99,7 @@ Path path_of(vec2 p) {
 	q.rcm = 1.0;
 	q.rliquid = false;
 	q.rcover = 0.0;
+	q.rprism = false;
 	vec4 head = scene_vec(0);
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
@@ -121,7 +123,10 @@ Path path_of(vec2 p) {
 		float within = 0.0; // pixels inside its outline
 		float chord = 0.0; // the path through it, in diameters
 		float wall = 0.0; // the wall crossed, in reference thicknesses
-		if (form.x < 0.5) {
+		if (form.x > 1.5) {
+			// a prism standing upright: seen from the side its silhouette is its rectangle
+			within = min(min(p.x - rect.x, rect.x + rect.z - p.x), min(p.y - rect.y, ground - p.y));
+		} else if (form.x < 0.5) {
 			// a cylinder seen from the side
 			within = min(radius * (1.0 - abs(dx)), min(p.y - rect.y, ground - p.y));
 			chord = sqrt(max(1.0 - dx * dx, 0.0));
@@ -142,11 +147,11 @@ Path path_of(vec2 p) {
 		float cm = 2.0 * radius * chord * form.y;
 		// a pixel half under the surface is half as deep in it: T^coverage
 		float wet = clamp(p.y - form.z + 0.5, 0.0, 1.0) * cover;
-		float heap = form.w * max(1.0 - abs(from_axis) / max(more.z, 0.001), 0.0);
+		float heap = form.x > 1.5 ? 0.0 : form.w * max(1.0 - abs(from_axis) / max(more.z, 0.001), 0.0);
 		Layer l;
 		l.body = i;
 		l.depth_cm = cm * wet;
-		l.haze = 1.0 - exp(-more.x * cm * wet);
+		l.haze = form.x > 1.5 ? 0.0 : 1.0 - exp(-more.x * cm * wet);
 		l.solid = form.w > 0.0 ? clamp(p.y - (ground - heap) + 0.5, 0.0, 1.0) * cover : 0.0;
 		l.wall = wall * cover;
 		l.wet = wet;
@@ -161,6 +166,12 @@ Path path_of(vec2 p) {
 			q.rcm = form.y;
 			q.rliquid = wet >= 0.5 * cover;
 			q.rcover = cover;
+			q.rprism = form.x > 1.5;
+			if (q.rprism) {
+				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // its centre, which its corners are given from
+				q.rd = (p.x - q.raxis) * form.y;
+				q.key.x = q.key.x + 0.37 * q.rd * (1.0 + 0.6180339887 * float(i)); // where the pixel looks through it
+			}
 		}
 		if (q.layers == 0) {
 			q.l0 = l;
@@ -172,7 +183,7 @@ Path path_of(vec2 p) {
 			q.l3 = l;
 		}
 		q.layers = q.layers + 1;
-		vec4 glow = scene_vec(at + 3);
+		vec4 glow = form.x > 1.5 ? vec4(0.0) : scene_vec(at + 3);
 		q.glow = mix(q.glow, vec3(glow.x, glow.y, glow.z), l.solid);
 		q.cover = max(q.cover, cover);
 		vec4 ids = scene_vec(at + 4);
@@ -285,6 +296,100 @@ struct Bend {
 	float chord;
 };
 
+// a prism (GAME_SPEC §12.3, the prism demo): the view ray traced through a triangle of glass seen from
+// above (x across, z away from the eye; its corners in centimetres from its centre), refracted at each face
+// it meets, turned back where it cannot pass, Fresnel at each, up to four meetings
+Bend prism_bend(Path q, float nm) {
+	Bend b;
+	b.x = q.x;
+	b.pass = 1.0;
+	b.chord = 0.0;
+	int at = HEADER_VECS + q.refractor * BODY_VECS;
+	vec4 m = scene_vec(at + 2);
+	vec4 g = scene_vec(at + 3);
+	float n = row_at(q.refractor * ROWS_PER_BODY * ROW + 4 * ROW, nm);
+	float ox = q.rd;
+	float oz = -1000.0;
+	float ux = 0.0;
+	float uz = 1.0;
+	bool inside = false;
+	int last = -1;
+	for (int k = 0; k < 4; k++) {
+		float best = 1.0e9;
+		int hit = -1;
+		float ex = 0.0;
+		float ez = 0.0;
+		for (int e = 0; e < 3; e++) {
+			if (e == last) {
+				continue;
+			}
+			float ax = e == 0 ? m.x : (e == 1 ? m.z : g.x);
+			float az = e == 0 ? m.y : (e == 1 ? m.w : g.y);
+			float bx = e == 0 ? m.z : (e == 1 ? g.x : m.x);
+			float bz = e == 0 ? m.w : (e == 1 ? g.y : m.y);
+			float dx = bx - ax;
+			float dz = bz - az;
+			float denom = ux * dz - uz * dx;
+			if (abs(denom) < 1.0e-9) {
+				continue;
+			}
+			float wx = ax - ox;
+			float wz = az - oz;
+			float t = (wx * dz - wz * dx) / denom;
+			float s = (wx * uz - wz * ux) / denom;
+			if (t > 1.0e-6 && s >= 0.0 && s <= 1.0 && t < best) {
+				best = t;
+				hit = e;
+				ex = dx;
+				ez = dz;
+			}
+		}
+		if (hit < 0) {
+			break;
+		}
+		ox = ox + best * ux;
+		oz = oz + best * uz;
+		last = hit;
+		// the face's normal, against the ray
+		float len = sqrt(ex * ex + ez * ez);
+		float nx = ez / len;
+		float nz = -ex / len;
+		if (nx * ux + nz * uz > 0.0) {
+			nx = -nx;
+			nz = -nz;
+		}
+		float n1 = inside ? n : 1.0;
+		float n2 = inside ? 1.0 : n;
+		float cos_i = -(nx * ux + nz * uz);
+		float eta = n1 / n2;
+		float sin2 = eta * eta * (1.0 - cos_i * cos_i);
+		if (sin2 >= 1.0) {
+			// turned back: all of it stays in the glass
+			ux = ux + 2.0 * cos_i * nx;
+			uz = uz + 2.0 * cos_i * nz;
+			continue;
+		}
+		float cos_t = sqrt(1.0 - sin2);
+		float rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
+		float rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+		b.pass = b.pass * (1.0 - 0.5 * (rs * rs + rp * rp));
+		ux = eta * ux + (eta * cos_i - cos_t) * nx;
+		uz = eta * uz + (eta * cos_i - cos_t) * nz;
+		inside = !inside;
+		if (!inside) {
+			break;
+		}
+	}
+	if (inside) {
+		b.pass = 0.0; // still in the glass after four meetings: nothing of the wall comes this way
+	}
+	vec4 head = scene_vec(2);
+	float landed = uz > 0.05 ? ox + ux * (head.x - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
+	b.x = q.raxis + landed / q.rcm;
+	b.pass = 1.0 - q.rcover * (1.0 - b.pass);
+	return b;
+}
+
 Bend bend_at(Path q, float nm) {
 	Bend b;
 	b.x = q.x;
@@ -292,6 +397,9 @@ Bend bend_at(Path q, float nm) {
 	b.chord = 0.0;
 	if (q.refractor < 0) {
 		return b;
+	}
+	if (q.rprism) {
+		return prism_bend(q, nm);
 	}
 	vec4 head = scene_vec(2);
 	int start = q.refractor * ROWS_PER_BODY * ROW;

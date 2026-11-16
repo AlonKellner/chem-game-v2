@@ -5,6 +5,7 @@
 #include "chem/species.hpp"
 #include "lab/colour.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace lab {
@@ -107,6 +108,57 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(at + RECT, 3, body.h);
 		put(at + FORM, 0, ball ? 1.0 : 0.0);
 		put(at + FORM, 2, bottom + 2.0); // no liquid: its surface is under the floor
+		if (v.kind == "prism") {
+			// an equilateral triangle of flint glass, turned; its rectangle is its silhouette
+			const double cm_per_px = PRISM_SIDE_CM / body.w, r = PRISM_SIDE_CM / std::sqrt(3.0);
+			double cx[3], cz[3], lo = 1e9, hi = -1e9;
+			for (int k = 0; k < 3; ++k) {
+				const double a = body.turn + PI / 2.0 + 2.0 * PI * k / 3.0;
+				cx[k] = r * std::cos(a);
+				cz[k] = r * std::sin(a);
+				lo = std::min(lo, cx[k]);
+				hi = std::max(hi, cx[k]);
+			}
+			const double centre = body.x + body.w / 2.0, left = centre + lo / cm_per_px, width = (hi - lo) / cm_per_px;
+			put(at + RECT, 0, left);
+			put(at + RECT, 2, width);
+			put(at + FORM, 0, 2.0);
+			put(at + FORM, 1, cm_per_px);
+			put(at + MORE, 0, cx[0]);
+			put(at + MORE, 1, cz[0]);
+			put(at + MORE, 2, cx[1]);
+			put(at + MORE, 3, cz[1]);
+			put(at + GLOW, 0, cx[2]);
+			put(at + GLOW, 1, cz[2]);
+			put(at + GLOW, 2, centre - (left + width / 2.0));
+			if (const Spectrum *n = chem::optics::material_index("n_sf11")) {
+				for (size_t i = 0; i < n->size(); ++i) {
+					wall_index[i] = static_cast<float>((*n)[i]);
+				}
+			}
+			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
+			const int first_shape = shape_count;
+			for (const OpticsShape &sh : room.shapes) {
+				if (shape_count == MAX_SHAPES || shape_count - first_shape == 32) {
+					break;
+				}
+				if (sh.y < body.y + body.h && sh.y + sh.h > body.y && sh.w * sh.h < 100000.0f) {
+					const int k = SHAPE_BASE + 2 * shape_count++;
+					put(k, 0, sh.x);
+					put(k, 1, sh.y);
+					put(k, 2, sh.w);
+					put(k, 3, sh.h);
+					put(k + 1, 0, sh.radiance);
+				}
+			}
+			put(at + REFRACT, 1, first_shape);
+			put(at + REFRACT, 2, shape_count - first_shape);
+			put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
+			uint64_t h = fnv(&t[static_cast<size_t>(at) * 4], static_cast<size_t>(BODY_VECS) * 4 * sizeof(float));
+			h = fnv(&t[static_cast<size_t>(SHAPE_BASE + 2 * first_shape) * 4], static_cast<size_t>(shape_count - first_shape) * 8 * sizeof(float), h);
+			put(at + IDS, 1, tag(h));
+			continue;
+		}
 
 		// ---- what is in it, at 1 nm, and its liquid's narrow lines
 		Spectrum reflectance{};

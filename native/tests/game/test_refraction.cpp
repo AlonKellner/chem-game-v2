@@ -269,3 +269,98 @@ TEST_CASE("refraction: the renderer's frames settle on a bent, dispersed view of
 	CHECK(worst < lab::EYE_VISIBLE);
 	CHECK(frames.points() == 0.0);
 }
+
+// ---- the prism (the prism demo): flint glass, flat faces
+
+namespace {
+
+OpticsScene prism_scene(double turn, double wall_cm, std::vector<lab::OpticsShape> shapes = {}) {
+	static ItemView prism = [] {
+		ItemView v;
+		v.id = "prism";
+		v.kind = "prism";
+		return v;
+	}();
+	lab::OpticsRoom r = room(true);
+	r.bench = r.elsewhere = r.front = 0.0;
+	r.wall_cm = wall_cm;
+	r.shapes = std::move(shapes);
+	lab::OpticsBody body{ &prism, 500.0f, 300.0f, 200.0f, 300.0f };
+	body.turn = turn;
+	OpticsScene scene;
+	lab::optics_compose(scene, r, { body });
+	REQUIRE(lab::check_O1(scene) == "");
+	return scene;
+}
+
+} // namespace
+
+TEST_CASE("refraction: a 60-degree prism of flint glass deviates light least by 2 asin(n sin 30) - 60 degrees (Stage 11)") {
+	const chem::optics::Spectrum *sf11 = chem::optics::material_index("n_sf11");
+	REQUIRE(sf11 != nullptr);
+	const double n = (*sf11)[209] * 0.7 + (*sf11)[210] * 0.3; // 589.3 nm
+	CHECK(n == doctest::Approx(1.78472).epsilon(5e-4)); // Schott's nd (587.6 nm) nearby
+	const double expected = 2.0 * std::asin(n * 0.5) - 3.14159265358979 / 3.0;
+	// at least deviation the ray meets the first face at asin(n sin 30): the prism turned by that much
+	// (the face toward the eye turns with it). Every ray that passes two faces then turns by the same angle;
+	// rays turned back inside a face leave by the third, at other angles.
+	const double incidence = std::asin(n * 0.5);
+	const auto deviation = [&](double turn, int x) {
+		const OpticsScene near = prism_scene(turn, 10.0), far = prism_scene(turn, 20.0);
+		const double cm_per_px = near.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
+		const lab::OpticsBend a = lab::optics_bend(near, x, 450, 589.3), b = lab::optics_bend(far, x, 450, 589.3);
+		if (lab::optics_cover(near, x, 450) <= 0.0 || a.pass <= 0.0 || std::fabs(a.x) > 1e4 || std::fabs(b.x) > 1e4) {
+			return -1.0; // turned back for good, or leaving almost sideways: it meets no wall
+		}
+		return std::atan(std::fabs(b.x - a.x) * cm_per_px / 10.0);
+	};
+	double closest = 10.0;
+	int at = -1;
+	double turn_at = 0.0;
+	for (const double turn : { incidence, -incidence }) {
+		for (int x = 480; x <= 720; x += 4) {
+			const double d = deviation(turn, x);
+			if (d >= 0.0 && std::fabs(d - expected) < std::fabs(closest - expected)) {
+				closest = d;
+				at = x;
+				turn_at = turn;
+			}
+		}
+	}
+	MESSAGE("at least deviation's turn: " << closest * 57.2957795 << " degrees; 2 asin(n sin 30) - 60 = " << expected * 57.2957795);
+	CHECK(closest == doctest::Approx(expected).epsilon(0.002));
+	// and it is the least: turned a little either way, the same ray turns further
+	CHECK(deviation(turn_at + 0.06, at) > closest);
+	CHECK(deviation(turn_at - 0.06, at) > closest);
+}
+
+TEST_CASE("refraction: through a prism a white slit spreads into its spectrum, violet bent furthest (Stage 11)") {
+	// at least deviation, every ray that passes two faces turns further in violet than in red
+	const chem::optics::Spectrum *sf11 = chem::optics::material_index("n_sf11");
+	const double n = (*sf11)[209] * 0.7 + (*sf11)[210] * 0.3, turn = std::asin(n * 0.5);
+	const double least = 2.0 * std::asin(n * 0.5) - 3.14159265358979 / 3.0;
+	const OpticsScene near = prism_scene(turn, 10.0), far = prism_scene(turn, 20.0);
+	const double cm_per_px = near.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
+	const auto deviation = [&](int x, double nm) {
+		const lab::OpticsBend a = lab::optics_bend(near, x, 450, nm), b = lab::optics_bend(far, x, 450, nm);
+		if (lab::optics_cover(near, x, 450) <= 0.0 || a.pass <= 0.0 || std::fabs(a.x) > 1e4 || std::fabs(b.x) > 1e4) {
+			return -1.0;
+		}
+		return std::atan(std::fabs(b.x - a.x) * cm_per_px / 10.0);
+	};
+	int ordered = 0, looked = 0;
+	double spread = 0.0;
+	for (int x = 480; x <= 720; x += 4) {
+		if (std::fabs(deviation(x, 589.3) - least) > 1e-6) {
+			continue; // not a two-face pass
+		}
+		const double violet = deviation(x, 410.0), red = deviation(x, 690.0);
+		++looked;
+		ordered += violet > red ? 1 : 0;
+		spread = violet - red;
+	}
+	MESSAGE("two-face passes: " << looked << "; violet turned " << spread * 57.2957795 << " degrees further than red");
+	CHECK(looked > 5);
+	CHECK(ordered == looked);
+	CHECK(spread * 57.2957795 > 4.0); // flint glass: several degrees between violet and red
+}

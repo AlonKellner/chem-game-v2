@@ -17,7 +17,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: prism prism-shots core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -119,6 +119,16 @@ sessions: core
 # ------------------------------------------------------------------ the Godot host
 test: native
 	SKIP_BUILD=1 ./run_tests_parallel.sh
+
+# The prism demo (GAME_SPEC §12.3): a prism of flint glass before a slit of white light in a dark room
+prism: native
+	$(GODOT) --path $(GODOT_PROJECT) res://scenes/prism.tscn
+
+# Three pictures of it -> build/screenshots/prism_*.png (headless first, then a window, time-limited)
+prism-shots: native
+	mkdir -p build/screenshots
+	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 60; exec @ARGV' $(GODOT) --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 
 run:
 	$(GODOT) --path $(GODOT_PROJECT)

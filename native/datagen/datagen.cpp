@@ -518,19 +518,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		optics << (line_list.empty() ? "" : " } };\n\n");
 		kinds.emplace_back(index, kind == "absorb" ? "Kind::Absorb" : kind == "reflect" ? "Kind::Reflect" : "Kind::Transmit");
 	}
-	// refractive indices at 1 nm, and the density of what has one (for a wall's thickness)
-	std::vector<std::tuple<int, std::vector<double>, double>> indices;
-	const json index_entries = media.value("indices", json::object()); // held: items() of a temporary would dangle
-	for (const auto &[name, m] : index_entries.items()) {
-		int index = -1;
-		for (size_t i = 0; i < species.size(); ++i) {
-			if (species[i].id == name) {
-				index = static_cast<int>(i);
-			}
-		}
-		if (index < 0) {
-			fail(media_file, "an index for \"" + name + "\", which is not a species");
-		}
+	// a refractive index at 1 nm from a Sellmeier formula (micrometres) or a table fitted by Cauchy's
+	const auto index_of = [&](const std::string &name, const json &m) {
 		std::vector<double> n(401, 0.0);
 		if (m.contains("sellmeier_um")) {
 			for (size_t i = 0; i < n.size(); ++i) {
@@ -586,6 +575,22 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				fail(media_file, "\"" + name + "\": an index outside [1, 3)");
 			}
 		}
+		return n;
+	};
+	// refractive indices at 1 nm, and the density of what has one (for a wall's thickness)
+	std::vector<std::tuple<int, std::vector<double>, double>> indices;
+	const json index_entries = media.value("indices", json::object()); // held: items() of a temporary would dangle
+	for (const auto &[name, m] : index_entries.items()) {
+		int index = -1;
+		for (size_t i = 0; i < species.size(); ++i) {
+			if (species[i].id == name) {
+				index = static_cast<int>(i);
+			}
+		}
+		if (index < 0) {
+			fail(media_file, "an index for \"" + name + "\", which is not a species");
+		}
+		const std::vector<double> n = index_of(name, m);
 		emit(optics, ("INDEX_" + std::to_string(index)).c_str(), n);
 		indices.emplace_back(index, n, m.value("density_g_cm3", 0.0));
 	}
@@ -601,7 +606,18 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		std::snprintf(text, sizeof text, "\t\tcase %d:\n\t\t\treturn %.17g;\n", index, density);
 		optics << text;
 	}
-	optics << "\t\tdefault:\n\t\t\treturn 0.0;\n\t}\n}\n\n"
+	optics << "\t\tdefault:\n\t\t\treturn 0.0;\n\t}\n}\n\n";
+	// optical materials that are no species: by name
+	const json material_entries = media.value("materials", json::object());
+	int material_count = 0;
+	std::string material_cases;
+	for (const auto &[name, m] : material_entries.items()) {
+		const std::vector<double> n = index_of(name, m);
+		emit(optics, ("MATERIAL_" + std::to_string(material_count)).c_str(), n);
+		material_cases += "\tif (name == \"" + name + "\") {\n\t\treturn &MATERIAL_" + std::to_string(material_count) + ";\n\t}\n";
+		++material_count;
+	}
+	optics << "const Spectrum *material_index(std::string_view name) {\n" << material_cases << "\treturn nullptr;\n}\n\n"
 		   << "const Spectrum &xbar() {\n\treturn XBAR;\n}\nconst Spectrum &ybar() {\n\treturn YBAR;\n}\nconst Spectrum &zbar() {\n\treturn ZBAR;\n}\n"
 		   << "const Spectrum &d65() {\n\treturn D65;\n}\n\nKind kind(SpeciesId species) {\n\tswitch (species.index) {\n";
 	for (const auto &[index, kind] : kinds) {
