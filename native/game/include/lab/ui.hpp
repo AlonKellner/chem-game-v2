@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lab/lab.hpp"
+#include "lab/optics_scene.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -31,6 +32,7 @@ struct DrawCommand {
 
 struct DrawList {
 	std::vector<DrawCommand> commands; // in painting order
+	int32_t above = 0; // the first command painted over the optical pass (§12); those before it are under it
 	std::vector<float> points; // x, y pairs
 	std::string text; // the strings, each ended by a NUL
 };
@@ -46,8 +48,11 @@ public:
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.
 	void frame(double seconds);
-	// What to paint now.
+	// What to paint now: the commands under the optical pass, the pass itself
+	// (what is in the vessels and the balloons, from optics()), the commands over it.
 	const DrawList &draw();
+	// What the optical pass shows now (GAME_SPEC §12).
+	const OpticsScene &optics();
 
 	Lab &lab();
 	// The last notice: a refusal's reason, a failed invariant.

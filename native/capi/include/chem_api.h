@@ -167,10 +167,48 @@ typedef struct cg_draw_list {
 	const float *points; /* x, y, x, y, ... */
 	int32_t text_size;
 	const char *text;
+	int32_t above; /* the first command painted over the optical pass; those before it are under it */
 } cg_draw_list;
 
 /* What to paint now. Borrowed until the next call on this ui. */
 CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
+
+/* The optical pass (GAME_SPEC §12, §12.2): what is in the vessels and the
+ * balloons, painted between the two parts of the draw list. The host runs the
+ * per-pixel source (native/game/shader/optics_pixel.glsl) over the whole screen
+ * every frame, each pixel keeping its own history; these are its inputs, laid
+ * out as lab/optics_scene.hpp says: the header and the bodies (vec_count
+ * vec4s), each body's spectra at 1 nm (row_count floats), narrow lines
+ * (line_count vec4s), and the room light's energy table (light_count vec4s). */
+typedef struct cg_optics {
+	uint32_t size; /* sizeof(cg_optics), set by the caller */
+	int32_t vec_count; /* the scene is 4 * vec_count floats */
+	const float *table;
+	uint64_t revision; /* moves when any of the four does: upload them then */
+	int32_t row_count;
+	const float *rows;
+	int32_t line_count;
+	const float *lines; /* 4 * line_count floats */
+	int32_t light_count;
+	const float *lights; /* 4 * light_count floats */
+} cg_optics;
+
+/* Borrowed until the next call on this ui. */
+CG_API cg_status cg_ui_optics(cg_ui *ui, cg_optics *out);
+
+/* A host's picture of the optical pass alone, the whole screen (width x height
+ * pixels of 4 bytes, red first, rows from the top), settled, held to the
+ * colour each pixel should show wherever a body is, on the eye metric (GAME_SPEC
+ * §18: O4). */
+typedef struct cg_optics_parity {
+	uint32_t size; /* sizeof(cg_optics_parity), set by the caller */
+	int32_t worst; /* the largest difference on the eye metric, rounded up */
+	int64_t covered; /* pixels a body covers */
+	int64_t over; /* of them, those visibly different (above 8 on the eye metric) */
+	int32_t worst_x, worst_y; /* where the largest difference is */
+} cg_optics_parity;
+
+CG_API cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, int32_t height, cg_optics_parity *out);
 
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */

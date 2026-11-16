@@ -100,6 +100,41 @@ int main(void) {
 	}
 	cg_lab_close(again);
 	cg_lab_close(lab);
+	/* Stages 9 and 10: the screen: a draw list in two parts, and the optical pass's table between them */
+	cg_ui *ui = cg_ui_open("{\"format\": \"chem-bench/1\", \"room\": {\"celsius\": 20}, \"grid\": [4, 1], \"items\": ["
+			"{\"id\": \"cup\", \"at\": [1, 0], \"kind\": \"vessel\", \"volume_ml\": 100, \"wall\": \"glass\", \"wall_g\": 50, \"contents\": {\"water\": {\"g\": 20}}}]}");
+	if (ui == NULL) {
+		fprintf(stderr, "the screen did not open: %s\n", cg_last_error());
+		return 1;
+	}
+	cg_ui_frame(ui, 1.0 / 60.0);
+	cg_draw_list list;
+	list.size = sizeof list;
+	cg_optics optics;
+	optics.size = sizeof optics;
+	if (cg_ui_draw(ui, &list) != CG_OK || list.command_count < 10 || list.above <= 0 || list.above >= list.command_count) {
+		fprintf(stderr, "the draw list is not in two parts around the optical pass\n");
+		return 1;
+	}
+	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 98 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 16 * 3 * 401 ||
+			optics.line_count != 256 || optics.light_count != 4097 || optics.rows == NULL || optics.lights == NULL || optics.lights[4 * 4096 + 2] < 0.99f) {
+		fprintf(stderr, "the optical pass's scene is not one vessel in 98 vectors, with its spectra, its lines and the room light's table\n");
+		return 1;
+	}
+	optics.size = 0;
+	if (cg_ui_optics(ui, &optics) != CG_ERR_INVALID_ARGUMENT) {
+		fprintf(stderr, "a table with no size was not refused\n");
+		return 1;
+	}
+	/* a picture of nothing differs from the reference wherever the cup is */
+	static uint8_t picture[64 * 36 * 4];
+	cg_optics_parity parity;
+	parity.size = sizeof parity;
+	if (cg_ui_optics_compare(ui, picture, 64, 36, &parity) != CG_OK || parity.covered != 0 || cg_ui_optics_compare(ui, NULL, 64, 36, &parity) != CG_ERR_INVALID_ARGUMENT) {
+		fprintf(stderr, "the comparison did not find the corner of the screen empty\n");
+		return 1;
+	}
+	cg_ui_close(ui);
 	printf("capi_c_smoke: %s\n", cg_build_name());
 	return 0;
 }

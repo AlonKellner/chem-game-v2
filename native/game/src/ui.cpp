@@ -26,10 +26,14 @@ constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 1120, 300 };
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 300 };
+constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 
 constexpr uint32_t BACKGROUND = 0x2a2a2aff, GRID = 0x444444ff, GLASS = 0xffffffcc, INK = 0xe6e6e6ff, DIM = 0x9a9a9aff, PANEL_FILL = 0x383838ff, BUTTON = 0x505050ff,
 				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff;
+// on the lit wall: what is in the glass is seen by the light that comes through it (§12)
+constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff, WALL_GLASS = 0x4a5662cc;
+constexpr double WALL_RADIANCE = 0.7305, DARK_RADIANCE = 0.0232; // the linear values of WALL and BACKGROUND
 
 uint32_t rgba(int r, int g, int b, int a = 255) {
 	return static_cast<uint32_t>(r) << 24 | static_cast<uint32_t>(g) << 16 | static_cast<uint32_t>(b) << 8 | static_cast<uint32_t>(a);
@@ -45,23 +49,6 @@ uint32_t mix(uint32_t a, uint32_t b, double t) {
 	return out;
 }
 
-// the flat colour of a solid (Stage 10 replaces these with its optics)
-uint32_t solid_colour(const std::string &species) {
-	if (species == "malachite") {
-		return rgba(70, 150, 110);
-	}
-	if (species == "copper_oxide") {
-		return rgba(30, 28, 28);
-	}
-	if (species == "copper_sulfate_pentahydrate") {
-		return rgba(35, 95, 200);
-	}
-	if (species == "copper_sulfate") {
-		return rgba(235, 235, 225);
-	}
-	return rgba(170, 170, 170);
-}
-
 std::string text_of(const char *format, double a = 0, double b = 0) {
 	char buffer[160];
 	std::snprintf(buffer, sizeof buffer, format, a, b);
@@ -75,6 +62,7 @@ struct Ui::Impl {
 	std::string bench; // to open it again
 	LabView view;
 	DrawList list;
+	OpticsScene scene;
 	std::string message;
 	double speed = 1.0;
 	bool paused = false;
@@ -429,48 +417,19 @@ struct Ui::Impl {
 				polygon({ r.cx() - 12, r.y, r.cx() + 12, r.y, r.cx(), r.y - flame }, mix(rgba(240, 200, 60), rgba(80, 140, 255), v.valve));
 			}
 		} else if (v.kind == "balloon") {
-			circle(r.cx(), r.cy(), r.w / 2, v.burst ? rgba(120, 60, 60) : rgba(220, 90, 90, 200));
-			if (v.condensed_ml > 0.01 && !v.burst) {
-				circle(r.cx(), r.y + r.h - 6, 4, rgba(150, 190, 235)); // the water that condensed in it
-			}
+			// all of it is the optical pass's: rubber, and what condensed inside
 		} else {
-			// what is in it: liquid up to its level, solids as a mound on the floor
-			double solid_ml = 0.0, salt = 0.0, water = 0.0, most = 0.0;
-			std::string solid;
-			for (const SubstanceView &s : v.contents) {
-				if (s.wall) {
-					continue;
-				}
-				if (s.phase == 's') {
-					solid_ml += s.g; // roughly a mL a gram: enough for a mound
-					if (s.g > most) {
-						most = s.g;
-						solid = s.species;
-					}
-				}
-				if (s.species == "copper_sulfate_aq") {
-					salt = s.mol;
-				}
-				if (s.species == "water") {
-					water = s.g;
-				}
-			}
-			const float level = static_cast<float>(std::fmin(1.0, v.condensed_ml / (v.volume_ml > 0.0 ? v.volume_ml : 1.0))) * r.h;
+			// what is in it is the optical pass's (§12); here, the glass: open at the top
 			if (v.liquid_ml > 0.05) {
-				const double molal = water > 0.0 ? salt / (water / 1000.0) : 0.0;
-				rect_fill(Rect{ r.x + 2, r.y + r.h - level, r.w - 4, level }, mix(rgba(120, 170, 220, 110), rgba(30, 90, 220, 220), molal / 1.5));
+				// and a liquid's surface, until refraction shows a clear one (Stage 11)
+				const float level = static_cast<float>(std::fmin(1.0, v.condensed_ml / (v.volume_ml > 0.0 ? v.volume_ml : 1.0))) * r.h;
+				line(r.x + 1, r.y + r.h - level, r.x + r.w - 1, r.y + r.h - level, rgba(74, 86, 98, 110), 1);
 			}
-			if (solid_ml > 0.01) { // a few milligrams are not a mound
-				const float mound = static_cast<float>(std::fmin(static_cast<double>(r.h) * 0.5, 9.0 * std::cbrt(solid_ml)));
-				polygon({ r.x + 4, r.y + r.h - 2, r.x + r.w - 4, r.y + r.h - 2, r.x + r.w * 0.7f, r.y + r.h - 2 - mound, r.x + r.w * 0.3f, r.y + r.h - 2 - mound }, solid_colour(solid));
-				line(r.x + r.w * 0.3f, r.y + r.h - 2 - mound, r.x + r.w * 0.7f, r.y + r.h - 2 - mound, rgba(150, 150, 150, 160), 1); // a dark solid on a dark bench
-			}
-			// the glass: open at the top
-			line(r.x, r.y, r.x, r.y + r.h, GLASS);
-			line(r.x, r.y + r.h, r.x + r.w, r.y + r.h, GLASS);
-			line(r.x + r.w, r.y + r.h, r.x + r.w, r.y, GLASS);
+			line(r.x, r.y, r.x, r.y + r.h, WALL_GLASS);
+			line(r.x, r.y + r.h, r.x + r.w, r.y + r.h, WALL_GLASS);
+			line(r.x + r.w, r.y + r.h, r.x + r.w, r.y, WALL_GLASS);
 			if (v.condenser) {
-				line(r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, GLASS); // its outlet
+				line(r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, WALL_GLASS); // its outlet
 			}
 		}
 		const std::string label = v.kind == "burner" ? v.id : v.id + text_of("  %.0f C", v.celsius);
@@ -478,14 +437,14 @@ struct Ui::Impl {
 			return;
 		}
 		if (v.place == "on") {
-			text(r.x, r.y - 8, label, DIM, 15);
+			text(r.x, r.y - 8, label, WALL_INK, 15);
 		} else if (v.place == "under") {
 			// under a vessel it needs no name: its valve is beside it
 		} else if (v.place == "bench") {
 			const Rect c = cell(v.col, v.row);
-			text(c.x + 8, c.y + c.h - 10, label, DIM, 15);
+			text(c.x + 8, c.y + c.h - 10, label, WALL_INK, 15);
 		} else {
-			text(r.x, r.y + r.h + 18, label, DIM, 15);
+			text(r.x, r.y + r.h + 18, label, WALL_INK, 15);
 		}
 	}
 
@@ -493,18 +452,22 @@ struct Ui::Impl {
 		list.commands.clear();
 		list.points.clear();
 		list.text.clear();
+		list.above = 0;
 		rect_fill(Rect{ 0, 0, 1920, 1080 }, BACKGROUND);
+		rect_fill(ROOM, WALL);
 		// the bench and its grid
 		for (int c = 0; c <= view.cols; ++c) {
-			line(BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y, BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y + static_cast<float>(view.rows) * cell_h(), GRID, 1);
+			line(BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y, BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y + static_cast<float>(view.rows) * cell_h(), WALL_GRID, 1);
 		}
 		for (int r = 0; r <= view.rows; ++r) {
-			line(BENCH.x, BENCH.y + static_cast<float>(r) * cell_h(), BENCH.x + static_cast<float>(view.cols) * cell_w(), BENCH.y + static_cast<float>(r) * cell_h(), GRID, 1);
+			line(BENCH.x, BENCH.y + static_cast<float>(r) * cell_h(), BENCH.x + static_cast<float>(view.cols) * cell_w(), BENCH.y + static_cast<float>(r) * cell_h(), WALL_GRID, 1);
 		}
-		outline(CABINET, GRID, 1);
-		text(CABINET.x + 16, CABINET.y + 24, "cabinet", DIM);
-		outline(OUTBOX, GRID, 1);
-		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop here to hand in", DIM);
+		outline(CABINET, WALL_GRID, 1);
+		outline(OUTBOX, WALL_GRID, 1);
+		// ---- the optical pass goes here: what is in the vessels and the balloons
+		list.above = static_cast<int32_t>(list.commands.size());
+		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop here to hand in", WALL_INK);
 		// the clock
 		button(pause_rect(), paused ? "play" : "pause", paused);
 		for (int i = 0; i < 4; ++i) {
@@ -533,7 +496,7 @@ struct Ui::Impl {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			if (v.drains_to >= 0) {
 				const Rect a = rect(i), b = rect(v.drains_to);
-				line(a.x + a.w + 26, a.y + a.h + 14, b.cx(), b.y, rgba(150, 190, 235, 160), 1);
+				line(a.x + a.w + 26, a.y + a.h + 14, b.cx(), b.y, rgba(70, 120, 190, 200), 1);
 			}
 		}
 		if (drag >= 0) {
@@ -546,6 +509,29 @@ struct Ui::Impl {
 		if (panel) {
 			paint_panel();
 		}
+	}
+
+	// the bodies the optical pass shows, as the screen places them: in painting order
+	void compose() {
+		std::vector<OpticsBody> bodies;
+		const auto add = [&](int i, const Rect &r) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.kind == "vessel" || v.kind == "balloon") {
+				bodies.push_back(OpticsBody{ &v, r.x, r.y, r.w, r.h });
+			}
+		};
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			if (i != drag) {
+				add(i, rect(i));
+			}
+		}
+		if (drag >= 0) {
+			Rect r = rect(drag);
+			r.x = px - grab_x;
+			r.y = py - grab_y;
+			add(drag, r);
+		}
+		optics_compose(scene, OpticsRoom{ ROOM.x, ROOM.y, ROOM.w, ROOM.h, WALL_RADIANCE, DARK_RADIANCE }, bodies);
 	}
 
 	void paint_readout() {
@@ -694,6 +680,11 @@ void Ui::frame(double seconds) {
 const DrawList &Ui::draw() {
 	impl_->paint();
 	return impl_->list;
+}
+
+const OpticsScene &Ui::optics() {
+	impl_->compose();
+	return impl_->scene;
 }
 
 Lab &Ui::lab() {

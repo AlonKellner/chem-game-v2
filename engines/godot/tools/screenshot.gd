@@ -2,11 +2,15 @@ extends SceneTree
 
 # Screenshots of the host at five moments of the demo, for looking at what a
 # player sees (make screenshots -> build/screenshots/*.png). It plays with the
-# pointer, as tests/test_host_smoke.gd does.
+# pointer, as tests/test_host_smoke.gd does. At each moment the optical pass
+# alone, settled, is held to what each pixel should show (GAME_SPEC §18: O4), and
+# at the end the GPU's time for one pass is measured.
 #
 #   godot --path engines/godot -s tools/screenshot.gd -- <output directory>
 
 var _lab: ChemLab
+var _view: SubViewport # the game's own 1920 x 1080, whatever the window is
+var _failed := false
 
 func _drag(what: String, to: String) -> void:
 	var a := _lab.locate(what)
@@ -46,22 +50,72 @@ func _watch(done: Callable, what: String) -> bool:
 	return false
 
 func _shoot(dir: String, name: String) -> void:
+	# the game is paused: the optical pass settles (each pixel's history), in a bounded number of frames
+	for i in 40:
+		await process_frame
+	if DisplayServer.get_name() == "headless": # it paints nothing
+		return
+	var image := _view.get_texture().get_image()
+	image.save_png(dir.path_join(name + ".png"))
+	_lab.set_flat_visible(false)
 	await process_frame
 	await process_frame
-	var image := root.get_texture().get_image()
-	if image != null: # a headless Godot paints nothing
-		image.save_png(dir.path_join(name + ".png"))
+	var alone := _view.get_texture().get_image()
+	alone.convert(Image.FORMAT_RGBA8)
+	var parity := _lab.optics_parity(alone.get_data())
+	_lab.set_flat_visible(true)
+	if parity.size() != 5 or parity[0] == 0 or parity[2] > 0:
+		_failed = true
+		push_error("screenshot.gd: O4: the GPU's settled picture is visibly not what it should be at " + name)
+	if parity.size() == 5:
+		print("O4 %s: %d pixels in bodies, the largest difference %d on the eye metric (at %d, %d), %d visible" % [name, parity[0], parity[1], parity[3], parity[4], parity[2]])
+		if parity[2] > 0:
+			alone.save_png(dir.path_join(name + "_optics_alone.png"))
+
+# The time of a frame with the optical pass run `extra` more times: one pass is
+# too quick to time alone, and a display hands frames out in whole refreshes,
+# so the cost of one is the slope between two heavy loads. The scene is still:
+# this is a settled pass's cost (each pixel finds its content unchanged and asks for nothing).
+func _time(extra: int) -> float:
+	_lab.set_optics_extra(extra)
+	for i in 5:
+		await process_frame
+	var start := Time.get_ticks_usec()
+	for i in 20:
+		await process_frame
+	var ms := float(Time.get_ticks_usec() - start) / 20000.0
+	_lab.set_optics_extra(0)
+	return ms
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
 	DirAccess.make_dir_recursive_absolute(dir)
+	_view = SubViewport.new()
+	_view.size = Vector2i(1920, 1080)
+	_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(_view)
 	_lab = ChemLab.new()
-	root.add_child(_lab)
+	_view.add_child(_lab)
+	var shown := TextureRect.new()
+	shown.texture = _view.get_texture()
+	shown.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(shown)
 	await process_frame
 	await _play(dir)
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		var few := await _time(10)
+		var many := await _time(30)
+		print("a frame with 10 more optical passes: %.2f ms; with 30: %.2f ms; one settled pass at 1920 x 1080: %.3f ms" % [few, many, (many - few) / 20.0])
+		_lab.set_optics_restarting(true) # the worst frame: every pixel's history starts again
+		few = await _time(2)
+		many = await _time(6)
+		_lab.set_optics_restarting(false)
+		print("every history starting again: a frame with 2 more passes: %.2f ms; with 6: %.2f ms; one such pass: %.3f ms" % [few, many, (many - few) / 4.0])
 	print("screenshot.gd: done, at step ", JSON.parse_string(_lab.report())["step"])
-	quit()
+	quit(1 if _failed else 0)
 
 func _play(dir: String) -> void:
 	_click("pause")

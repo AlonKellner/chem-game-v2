@@ -79,3 +79,19 @@ func test_the_engines_mouse_reaches_the_screen() -> void:
 	var paused_at: int = JSON.parse_string(_lab.report())["step"]
 	await wait_process_frames(5)
 	assert_eq(int(JSON.parse_string(_lab.report())["step"]), paused_at, "paused: the clock stands")
+
+func test_the_optical_pass_lies_between_the_two_flat_layers() -> void:
+	# (GAME_SPEC §12.2: a compute shader over the whole screen, which needs a GPU: headless it is
+	# off and says why; its settled picture against the truth: make screenshots)
+	assert_eq(_lab.get_child_count(), 2)
+	var optics := _lab.get_child(0) as TextureRect
+	assert_not_null(optics, "the optical pass is the first child")
+	assert_eq(optics.size, Vector2(1920, 1080))
+	if _lab.optics_running():
+		assert_not_null(optics.texture, "it shows what the pass computes")
+	else:
+		assert_ne(_lab.optics_why(), "", "off, and it says why")
+	assert_eq(_lab.optics_budget, 16.0, "at most 16 points a pixel a frame, by default")
+	_lab.optics_budget = 4.0
+	assert_eq(_lab.optics_budget, 4.0, "a setting: accuracy for speed")
+	assert_eq(_lab.optics_parity(PackedByteArray()).size(), 0, "a picture of the wrong size is not compared")

@@ -1,5 +1,58 @@
 # GAME_SPEC version history
 
+## 0.11.0 (2026-11-17, Stage 10)
+
+The revision, signed off by the user on 2026-11-17 ("LGTM, approved, proceed"):
+
+- §12: the full design restated around spectral textures: every distribution carried in the same
+  wavelength bands, which may follow the scene; refraction re-evaluates the scene behind in the
+  same pass, with the index a texture; fluorescence a matrix between bands; the probe at 1 nm on
+  the CPU; pure water's absorption and scattering.
+- §12.1 added: spectral textures (channels mixed by constant, gradient, image or live weights) and
+  effects (absorb, reflect, emit, light, scatter, fluoresce, refract) assigned apart from the
+  format; layered objects; the printed picture (CMYK) as the worked example.
+- §12.2 (was §12.1): spectral samples are bands; their cuts fixed or adapted to the scene; the
+  measurement moved to what the screen shows, judged by the eye metric fitted to the user's blind
+  marks, over random spectra of eleven families; the rival representations measured and why each
+  was taken or not; the band decision planned.
+- §12.3 (was §12.2): the demo's optical pass, unchanged.
+- §12, §12.2: the representation decided by the user's blind tests (rounds 4 to 6): each light's
+  energy in equal bands weighted by the display's curves, one point per band moved every frame,
+  each pixel's history started again when its content changes; the eagerness map planned as the
+  way a frame's budget of points is shared out. §12.1: a channel has a line list beside its 1 nm
+  continuum. §12: colours no display has are mapped keeping lightness and hue (OKLCh), onto the
+  display's own gamut; refraction disperses by each point's own index; fluorescence re-emits as a
+  light of its own.
+- §12.2: the eagerness map replaced after its false positives and negatives were measured on a
+  replay of the scene test: a pixel's history is kept by an exact content key and a fixed estimate
+  (8 bands at their middles), holding what the moving points add to it; points by need (the
+  pixel's own noise on the eye metric, an expected error of 2, 64 for a fresh pixel, none once
+  done after 4 frames and 128 points, never fewer than 16 in a frame); the budget a ceiling.
+  Round 8's blind scene test: as good as or better than 16 points everywhere at a twelfth of the
+  work. The measured table added.
+- Built (§12, §12.2, §12.3, §14): each light's energy table; absorbers' narrow lines; pure water as
+  measured (`data/optics/water.csv`); the eye metric, OKLCh gamut mapping onto sRGB; the scene as
+  spectra at 1 nm; one per-pixel source as the Godot host's compute shader and the C++ reference,
+  each pixel's state on the GPU. `cg_optics` gains the spectra, lines and light table; the Godot
+  host's pass is a compute shader shown by a `TextureRect`, with a budget property.
+- §18: O3 restated over 1,500 random spectra of twelve families on the eye metric; O4 restated as
+  the GPU's settled picture against the truth on the eye metric. §19: the pass's cost measured.
+  §20: water's scattering as loss only; gamut mapping onto sRGB; the room's the only light, a
+  glow added outside the history.
+
+### Stage 10's first build (2026-11-16), superseded by the revision where they differ
+
+- §12: the pipeline restated around one table; §12.1 with the measurement and its decision: 24
+  bands, each an equal share of what the eye sees, worst ΔE₀₀ 0.80 and mean 0.19 over the demo's
+  110 colours; §12.2 added: the demo's optical pass (the lit wall, bodies of revolution with real
+  path lengths, liquids, heaps, suspensions, glow, the balloon's rubber, coverage, the table, the
+  shared shader source and its reference build).
+- §13.1: drawing is in three layers; the bench is a lit wall; a liquid's surface is a drawn line.
+- §14: the optical pass through the C API; the host's shader pass.
+- §18: O1, O2, O3 and O4 implemented and restated as built; UX4 tested.
+- §19: the optical pass measured at 0.21 ms.
+- §20: the optics' declared simplifications.
+
 ## 0.10.0 (2026-11-16, Stage 9)
 
 - §13.1 added: the screen, engine-free: its layout, its gestures and the commands they become,

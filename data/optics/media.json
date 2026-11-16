@@ -1,0 +1,13 @@
+{
+	"format": "chem-optics/1",
+	"note": "What each species does to light, 380-780 nm (GAME_SPEC §12). absorb: molar absorptivity in L/mol/cm (decadic), a sum of Gaussian bands in wavenumber (centre and full width at half maximum in 1/cm), or a measured table of absorption and scattering coefficients in 1/m (water.csv) over the absorber's own concentration as a pure liquid; and narrow lines, kept as lines (lines: centre_nm, fwhm_nm, peak). reflect: diffuse reflectance, a base plus Gaussian bands in wavelength (exp(-((nm - centre) / width)^2)). transmit: the transmittance of a wall at its reference thickness, a base plus a logistic rise at an edge. Water's table is measured; every other number here is calibrated to the colour the substance has, not measured: docs/DATA_SOURCES.md.",
+	"media": {
+		"water": {"kind": "absorb", "table": "water.csv", "mol_per_litre": 55.345},
+		"copper_sulfate_aq": {"kind": "absorb", "bands": [{"centre_cm1": 12400, "fwhm_cm1": 4700, "peak": 12}]},
+		"malachite": {"kind": "reflect", "base": 0.06, "bands": [{"centre_nm": 525, "width_nm": 45, "peak": 0.42}]},
+		"copper_oxide": {"kind": "reflect", "base": 0.035, "bands": []},
+		"copper_sulfate_pentahydrate": {"kind": "reflect", "base": 0.05, "bands": [{"centre_nm": 465, "width_nm": 55, "peak": 0.5}]},
+		"copper_sulfate": {"kind": "reflect", "base": 0.82, "bands": []},
+		"latex": {"kind": "transmit", "base": 0.04, "rise": 0.9, "edge_nm": 600, "edge_width_nm": 18}
+	}
+}
