@@ -9,14 +9,14 @@
 // difference between two colours, and sRGB for a display.
 namespace lab {
 
-struct Lab {
+struct CieLab {
 	double l = 0.0, a = 0.0, b = 0.0;
 };
 
 // L*a*b* relative to the D65 illuminant's white.
-Lab to_lab(const chem::optics::Xyz &xyz);
+CieLab to_lab(const chem::optics::Xyz &xyz);
 // CIEDE2000 (Sharma, Wu and Dalal 2005): about 1 is a just-noticeable difference.
-double difference(const Lab &a, const Lab &b);
+double difference(const CieLab &a, const CieLab &b);
 // Linear sRGB (D65 white), not clamped.
 void to_linear_srgb(const chem::optics::Xyz &xyz, double rgb[3]);
 // The sRGB transfer function, a linear value in [0, 1] to an encoded one.

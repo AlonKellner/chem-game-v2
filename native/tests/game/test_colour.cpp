@@ -23,7 +23,7 @@ TEST_CASE("colour: the illuminant is white, on the page and on a display (Stage 
 	// D65's chromaticity
 	CHECK(white.x / (white.x + white.y + white.z) == doctest::Approx(0.3127).epsilon(1e-3));
 	CHECK(white.y / (white.x + white.y + white.z) == doctest::Approx(0.3290).epsilon(1e-3));
-	const lab::Lab l = lab::to_lab(white);
+	const lab::CieLab l = lab::to_lab(white);
 	CHECK(l.l == doctest::Approx(100.0));
 	CHECK(l.a == doctest::Approx(0.0).epsilon(1e-9));
 	CHECK(l.b == doctest::Approx(0.0).epsilon(1e-9));

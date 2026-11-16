@@ -37,12 +37,12 @@ double lab_f(double t) {
 
 } // namespace
 
-Lab to_lab(const Xyz &xyz) {
+CieLab to_lab(const Xyz &xyz) {
 	const double fx = lab_f(xyz.x / white().x), fy = lab_f(xyz.y / white().y), fz = lab_f(xyz.z / white().z);
-	return Lab{ 116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz) };
+	return CieLab{ 116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz) };
 }
 
-double difference(const Lab &p, const Lab &q) {
+double difference(const CieLab &p, const CieLab &q) {
 	const double c1 = std::hypot(p.a, p.b), c2 = std::hypot(q.a, q.b);
 	const double cbar7 = std::pow((c1 + c2) / 2.0, 7.0);
 	const double g = 0.5 * (1.0 - std::sqrt(cbar7 / (cbar7 + std::pow(25.0, 7.0))));
@@ -120,7 +120,7 @@ struct Sample {
 	bool glows = false;
 	Spectrum glow{};
 	double exposure = 1.0;
-	Lab reference;
+	CieLab reference;
 };
 
 // a glowing body: Planck's law, on an arbitrary scale
@@ -133,7 +133,7 @@ Spectrum blackbody(double kelvin) {
 	return s;
 }
 
-Lab reference_of(const std::vector<Layer> &layers) {
+CieLab reference_of(const std::vector<Layer> &layers) {
 	Spectrum factor;
 	factor.fill(1.0);
 	for (const Layer &layer : layers) {
@@ -270,7 +270,7 @@ void band_tilts(const Bands &bands, const Spectrum &s, std::span<double> out) {
 	}
 }
 
-Lab banded(const Bands &bands, BandModel model, const Sample &sample) {
+CieLab banded(const Bands &bands, BandModel model, const Sample &sample) {
 	using namespace chem::optics;
 	const auto n = static_cast<size_t>(bands.count);
 	std::array<double, MAX_BANDS> average{};
