@@ -165,6 +165,9 @@ about 95.9 °C. Confidence medium.
 | sRGB primaries and transfer function | IEC 61966-2-1 | White maps to (1, 1, 1) within 0.2% |
 | CIEDE2000 | Sharma, Wu and Dalal (2005) | Four of the paper's test pairs to four decimals: `colour: CIEDE2000 agrees with the published test pairs` |
 | Planck's law: c₁ = 2hc² = 1.191042972e-16 W·m²/sr, c₂ = 0.014387769 m·K; 683.002 lm/W | CODATA 2018; the candela's definition | A black body at 2042 K comes out at 600,000 cd/m² within 3% (the old platinum standard of light): `optics: a hot solid glows` |
+| Pure water's absorption a and scattering b, 1/m (`water.csv`), 380–750 nm | NASA Ocean Optics Protocols, Rev. 4, Vol. IV, Table 1.1, Erratum 1 (Mueller 2003; oceandata.sci.gsfc.nasa.gov, read 2026-11-16): a from Sogandares and Fry (1997) at 380–390 nm, Pope and Fry (1997) 400–715 nm, Kou, Labrie and Chylek (1993) 720–750 nm; b of pure fresh water from Buiteveld et al. (1994) | 550 nm: a + b = 0.0579 /m and 700 nm: 0.6245 /m come back from the embedded spectrum; three metres look blue-green: `optics: pure water, as measured` |
+| Pure water's absorption, 755–780 nm | Kou, Labrie and Chylek (1993), Appl. Opt. 32, 3531, as tabulated by omlc.org (`kou93b`, 1/cm × 100); it meets the table above at 750 nm (2.848 against 2.857 /m) | b there extended by Morel's (1974) λ^−4.32 from 0.0004 /m at 750 nm; both far outside what the eye weighs |
+| Water as an absorber | The coefficients above, summed (scattering counted as loss from the beam), over water's own 55.345 mol/L (997.05 g/L at 25 °C over 18.015 g/mol), as a decadic molar absorptivity: so a solution's water absorbs as much as there is of it | Not modelled: in-scattered light, the temperature dependence of a (at most 0.012 /m/°C, near 740 nm) |
 
 **Calibrated media** (`data/optics/media.json`). None of these spectra is measured: each is a
 simple shape placed so that the substance has the colour it is known to have. The numbers quoted
@@ -178,7 +181,7 @@ as literature are from memory and were not checked against a source.
 | CuSO₄·5H₂O | Diffuse reflectance 0.05 plus a Gaussian of 0.5 at 465 nm (width 55 nm) | Blue crystals | low |
 | CuSO₄ | Diffuse reflectance 0.82, flat | A white powder | low |
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
-| Water, H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
+| H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
 
 **Calibrated geometry of solids:** a heap's angle of repose 35° and packing fraction 0.5 (typical
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).

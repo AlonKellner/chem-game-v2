@@ -43,6 +43,10 @@ CieLab to_lab(const Xyz &xyz) {
 }
 
 double difference(const CieLab &p, const CieLab &q) {
+	return difference(p, q, 1.0, 1.0, 1.0);
+}
+
+double difference(const CieLab &p, const CieLab &q, double kl, double kc, double kh) {
 	const double c1 = std::hypot(p.a, p.b), c2 = std::hypot(q.a, q.b);
 	const double cbar7 = std::pow((c1 + c2) / 2.0, 7.0);
 	const double g = 0.5 * (1.0 - std::sqrt(cbar7 / (cbar7 + std::pow(25.0, 7.0))));
@@ -76,7 +80,97 @@ double difference(const CieLab &p, const CieLab &q) {
 	const double sl = 1.0 + 0.015 * (lbar - 50.0) * (lbar - 50.0) / std::sqrt(20.0 + (lbar - 50.0) * (lbar - 50.0));
 	const double sc = 1.0 + 0.045 * cbar, sh = 1.0 + 0.015 * cbar * t;
 	const double rt = -std::sin(radians(2.0 * dtheta)) * rc;
-	return std::sqrt((dl / sl) * (dl / sl) + (dc / sc) * (dc / sc) + (dhh / sh) * (dhh / sh) + rt * (dc / sc) * (dhh / sh));
+	const double l = dl / (kl * sl), c = dc / (kc * sc), h = dhh / (kh * sh);
+	const double sum = l * l + c * c + h * h + rt * c * h;
+	return std::sqrt(sum > 0.0 ? sum : 0.0);
+}
+
+double eye_difference(const CieLab &p, const CieLab &q) {
+	const double base = difference(p, q, 0.5, 3.0, 2.0);
+	const double neutral = 8.0 * std::fabs(std::log((std::hypot(q.a, q.b) + 8.0) / (std::hypot(p.a, p.b) + 8.0)));
+	return std::sqrt(base * base + neutral * neutral);
+}
+
+namespace {
+
+// OKLab (Ottosson 2020) from linear sRGB, and back
+void to_oklab(const double rgb[3], double lab[3]) {
+	const double l = std::cbrt(0.4122214708 * rgb[0] + 0.5363325363 * rgb[1] + 0.0514459929 * rgb[2]);
+	const double m = std::cbrt(0.2119034982 * rgb[0] + 0.6806995451 * rgb[1] + 0.1073969566 * rgb[2]);
+	const double s = std::cbrt(0.0883024619 * rgb[0] + 0.2817188376 * rgb[1] + 0.6299787005 * rgb[2]);
+	lab[0] = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
+	lab[1] = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
+	lab[2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
+}
+void from_oklab(const double lab[3], double rgb[3]) {
+	const double l = lab[0] + 0.3963377774 * lab[1] + 0.2158037573 * lab[2];
+	const double m = lab[0] - 0.1055613458 * lab[1] - 0.0638541728 * lab[2];
+	const double s = lab[0] - 0.0894841775 * lab[1] - 1.2914855480 * lab[2];
+	const double l3 = l * l * l, m3 = m * m * m, s3 = s * s * s;
+	rgb[0] = 4.0767416621 * l3 - 3.3077115913 * m3 + 0.2309699292 * s3;
+	rgb[1] = -1.2684380046 * l3 + 2.6097574011 * m3 - 0.3413193965 * s3;
+	rgb[2] = -0.0041960863 * l3 - 0.7034186147 * m3 + 1.7076147010 * s3;
+}
+bool in_gamut(const double rgb[3]) {
+	constexpr double E = 1e-6;
+	return rgb[0] >= -E && rgb[0] <= 1.0 + E && rgb[1] >= -E && rgb[1] <= 1.0 + E && rgb[2] >= -E && rgb[2] <= 1.0 + E;
+}
+
+} // namespace
+
+void gamut_map(double rgb[3]) {
+	// CSS Color 4: keep OKLab's lightness and hue, lower the chroma until clipping what is left is
+	// within a just-noticeable difference (0.02 in OKLab); a fixed sixteen halvings, as the shader does
+	if (in_gamut(rgb)) {
+		for (int c = 0; c < 3; ++c) {
+			rgb[c] = rgb[c] < 0.0 ? 0.0 : rgb[c] > 1.0 ? 1.0 : rgb[c];
+		}
+		return;
+	}
+	double lab[3];
+	to_oklab(rgb, lab);
+	if (lab[0] >= 1.0 || lab[0] <= 0.0) {
+		const double v = lab[0] >= 1.0 ? 1.0 : 0.0;
+		rgb[0] = rgb[1] = rgb[2] = v;
+		return;
+	}
+	const double chroma = std::hypot(lab[1], lab[2]);
+	double lo = 0.0, hi = chroma, clipped[3] = { lab[0], lab[0], lab[0] };
+	for (int i = 0; i < 16; ++i) {
+		const double mid = (lo + hi) / 2.0, scale = chroma > 0.0 ? mid / chroma : 0.0;
+		const double at[3] = { lab[0], lab[1] * scale, lab[2] * scale };
+		double candidate[3];
+		from_oklab(at, candidate);
+		for (int c = 0; c < 3; ++c) {
+			clipped[c] = candidate[c] < 0.0 ? 0.0 : candidate[c] > 1.0 ? 1.0 : candidate[c];
+		}
+		double back[3];
+		to_oklab(clipped, back);
+		const double e = std::sqrt((back[0] - at[0]) * (back[0] - at[0]) + (back[1] - at[1]) * (back[1] - at[1]) + (back[2] - at[2]) * (back[2] - at[2]));
+		(e < 0.02 ? lo : hi) = mid;
+	}
+	const double scale = chroma > 0.0 ? lo / chroma : 0.0, at[3] = { lab[0], lab[1] * scale, lab[2] * scale };
+	from_oklab(at, rgb);
+	for (int c = 0; c < 3; ++c) {
+		rgb[c] = rgb[c] < 0.0 ? 0.0 : rgb[c] > 1.0 ? 1.0 : rgb[c];
+	}
+}
+
+CieLab shown(const Xyz &xyz, int code[3]) {
+	double rgb[3];
+	to_linear_srgb(xyz, rgb);
+	gamut_map(rgb);
+	double lin[3];
+	for (int c = 0; c < 3; ++c) {
+		const int v = static_cast<int>(std::lround(srgb_encode(rgb[c]) * 255.0));
+		if (code != nullptr) {
+			code[c] = v;
+		}
+		const double e = v / 255.0;
+		lin[c] = e <= 0.04045 ? e / 12.92 : std::pow((e + 0.055) / 1.055, 2.4);
+	}
+	return to_lab(Xyz{ 0.4124564 * lin[0] + 0.3575761 * lin[1] + 0.1804375 * lin[2], 0.2126729 * lin[0] + 0.7151522 * lin[1] + 0.0721750 * lin[2],
+			0.0193339 * lin[0] + 0.1191920 * lin[1] + 0.9503041 * lin[2] });
 }
 
 void to_linear_srgb(const Xyz &xyz, double rgb[3]) {

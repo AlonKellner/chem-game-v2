@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -434,18 +435,57 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			fail(media_file, "\"" + name + "\" is not a species");
 		}
 		const std::string kind = m.at("kind").get<std::string>();
+		// a measured table (nm, coefficients per metre, summed): an absorber's coefficients over the
+		// concentration it has as a pure liquid, as a molar absorptivity (decadic, L/mol/cm)
+		std::vector<std::pair<double, double>> measured;
+		if (m.contains("table")) {
+			const std::string file = m.at("table").get<std::string>();
+			std::ifstream in(data / "optics" / file);
+			if (!in || kind != "absorb" || !m.contains("mol_per_litre")) {
+				fail(media_file, "\"" + name + "\": a table is an absorber's, named in data/optics, with its mol_per_litre");
+			}
+			std::string line;
+			while (std::getline(in, line)) {
+				if (line.empty() || line[0] == '#' || line[0] == 'n') {
+					continue;
+				}
+				std::vector<double> cells;
+				std::stringstream row(line);
+				std::string cell;
+				while (std::getline(row, cell, ',')) {
+					cells.push_back(std::stod(cell));
+				}
+				double sum = 0.0;
+				for (size_t c = 1; c < cells.size(); ++c) {
+					sum += cells[c];
+				}
+				if (cells.size() < 2 || (!measured.empty() && cells[0] <= measured.back().first)) {
+					fail(file, "is not a table of ascending wavelengths");
+				}
+				measured.emplace_back(cells[0], sum / 100.0 / std::log(10.0) / m.at("mol_per_litre").get<double>());
+			}
+			if (measured.empty() || measured.front().first > 380.0 || measured.back().first < 780.0) {
+				fail(file, "does not run from 380 to 780 nm");
+			}
+		}
 		std::vector<double> values(401, 0.0);
 		for (size_t i = 0; i < values.size(); ++i) {
 			const double nm = 380.0 + static_cast<double>(i);
 			double v = m.value("base", 0.0);
+			for (size_t k = 0; k + 1 < measured.size(); ++k) {
+				if (nm >= measured[k].first && nm <= measured[k + 1].first) {
+					v += measured[k].second + (measured[k + 1].second - measured[k].second) * (nm - measured[k].first) / (measured[k + 1].first - measured[k].first);
+					break;
+				}
+			}
 			if (kind == "absorb") {
 				const double wavenumber = 1e7 / nm;
-				for (const json &b : m.at("bands")) {
+				for (const json &b : m.value("bands", json::array())) {
 					const double d = (wavenumber - b.at("centre_cm1").get<double>()) / b.at("fwhm_cm1").get<double>();
 					v += b.at("peak").get<double>() * std::exp(-4.0 * std::log(2.0) * d * d);
 				}
 			} else if (kind == "reflect") {
-				for (const json &b : m.at("bands")) {
+				for (const json &b : m.value("bands", json::array())) {
 					const double d = (nm - b.at("centre_nm").get<double>()) / b.at("width_nm").get<double>();
 					v += b.at("peak").get<double>() * std::exp(-d * d);
 				}
@@ -460,6 +500,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			values[i] = v;
 		}
 		emit(optics, ("MEDIUM_" + std::to_string(index)).c_str(), values);
+		// narrow lines are kept as lines: read where each point falls, never averaged over a nanometre
+		std::vector<std::array<double, 3>> line_list;
+		for (const json &l : m.value("lines", json::array())) {
+			if (kind != "absorb" || !(l.at("fwhm_nm").get<double>() > 0.0) || !(l.at("peak").get<double>() >= 0.0)) {
+				fail(media_file, "\"" + name + "\": a line is an absorber's, with a width and a peak at least 0");
+			}
+			line_list.push_back({ l.at("centre_nm").get<double>(), l.at("fwhm_nm").get<double>(), l.at("peak").get<double>() });
+		}
+		optics << "constexpr std::array<Line, " << line_list.size() << "> LINES_" << index << (line_list.empty() ? "{};\n\n" : " = { {");
+		for (const auto &l : line_list) {
+			char text[120];
+			std::snprintf(text, sizeof text, "\n\t{ %.17g, %.17g, %.17g },", l[0], l[1], l[2]);
+			optics << text;
+		}
+		optics << (line_list.empty() ? "" : " } };\n\n");
 		kinds.emplace_back(index, kind == "absorb" ? "Kind::Absorb" : kind == "reflect" ? "Kind::Reflect" : "Kind::Transmit");
 	}
 	optics << "} // namespace\n\n"
@@ -472,7 +527,11 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	for (const auto &[index, kind] : kinds) {
 		optics << "\t\tcase " << index << ":\n\t\t\treturn MEDIUM_" << index << ";\n";
 	}
-	optics << "\t\tdefault:\n\t\t\treturn NOTHING;\n\t}\n}\n\n} // namespace chem::optics\n";
+	optics << "\t\tdefault:\n\t\t\treturn NOTHING;\n\t}\n}\n\nstd::span<const Line> lines(SpeciesId species) {\n\tswitch (species.index) {\n";
+	for (const auto &[index, kind] : kinds) {
+		optics << "\t\tcase " << index << ":\n\t\t\treturn LINES_" << index << ";\n";
+	}
+	optics << "\t\tdefault:\n\t\t\treturn {};\n\t}\n}\n\n} // namespace chem::optics\n";
 	std::ofstream(out / "builtin_optics.cpp") << optics.str();
 
 	std::ofstream(out / "builtin_tables.cpp") << cpp.str();

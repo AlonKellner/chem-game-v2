@@ -1,5 +1,10 @@
 #include "chem/optics.hpp"
 
+#include "chem/math.hpp"
+
+#include <algorithm>
+#include <vector>
+
 namespace chem::optics {
 
 namespace {
@@ -148,6 +153,105 @@ Xyz colour_emitted(const Bands &bands, std::span<const double> radiance) {
 		out.z += b.z * radiance[static_cast<size_t>(k)];
 	}
 	return out;
+}
+
+double line_at(const Line &line, double nm) {
+	const double d = (nm - line.centre_nm) / line.fwhm_nm;
+	return line.peak * chem::exp(-2.772588722239781 * d * d); // 4 ln 2
+}
+
+namespace {
+
+double lerp_table(const Spectrum &s, double nm) {
+	const double x = nm - FIRST_NM;
+	if (x <= 0.0) {
+		return s[0];
+	}
+	if (x >= COUNT - 1) {
+		return s[COUNT - 1];
+	}
+	const auto i = static_cast<size_t>(x);
+	const double f = x - static_cast<double>(i);
+	return s[i] * (1.0 - f) + s[i + 1] * f;
+}
+
+} // namespace
+
+Xyz observer_at(double nm) {
+	return Xyz{ lerp_table(xbar(), nm), lerp_table(ybar(), nm), lerp_table(zbar(), nm) };
+}
+
+double d65_at(double nm) {
+	return lerp_table(d65(), nm);
+}
+
+double display_weight(double nm) {
+	const Xyz o = observer_at(nm);
+	const auto mag = [](double v) { return v < 0.0 ? -v : v; };
+	// XYZ to linear sRGB (IEC 61966-2-1)
+	return mag(3.2404542 * o.x - 1.5371385 * o.y - 0.4985314 * o.z) + mag(-0.9692660 * o.x + 1.8760108 * o.y + 0.0415560 * o.z) +
+		   mag(0.0556434 * o.x - 0.2040259 * o.y + 1.0572252 * o.z);
+}
+
+EnergyEntry EnergyTable::at(double share) const {
+	const double x = (share < 0.0 ? 0.0 : share > 1.0 ? 1.0 : share) * ENERGY_STEPS;
+	auto j = static_cast<size_t>(x);
+	j = j > ENERGY_STEPS - 1 ? ENERGY_STEPS - 1 : j;
+	const double f = x - static_cast<double>(j);
+	const EnergyEntry &a = entry[j], &b = entry[j + 1];
+	return EnergyEntry{ a.nm + (b.nm - a.nm) * f, Xyz{ a.up_to.x + (b.up_to.x - a.up_to.x) * f, a.up_to.y + (b.up_to.y - a.up_to.y) * f, a.up_to.z + (b.up_to.z - a.up_to.z) * f } };
+}
+
+EnergyTable energy_table(const Spectrum &continuum, std::span<const Line> lines) {
+	// the wavelengths it is integrated over: a tenth of a nanometre, and an eighth of each line's width around it
+	std::vector<double> grid;
+	for (int k = 0; k <= 4000; ++k) {
+		grid.push_back(FIRST_NM + k * 0.1);
+	}
+	for (const Line &l : lines) {
+		const double step = l.fwhm_nm / 8.0;
+		for (double nm = l.centre_nm - 4.0 * l.fwhm_nm; nm <= l.centre_nm + 4.0 * l.fwhm_nm; nm += step) {
+			if (nm > FIRST_NM && nm < FIRST_NM + COUNT - 1) {
+				grid.push_back(nm);
+			}
+		}
+	}
+	std::sort(grid.begin(), grid.end());
+	const double w = white();
+	std::vector<double> energy{ 0.0 };
+	std::vector<Xyz> colour{ Xyz{} };
+	for (size_t i = 0; i + 1 < grid.size(); ++i) {
+		const double nm = (grid[i] + grid[i + 1]) / 2.0, width = grid[i + 1] - grid[i];
+		double radiance = lerp_table(continuum, nm);
+		for (const Line &l : lines) {
+			radiance += line_at(l, nm);
+		}
+		const Xyz o = observer_at(nm);
+		const Xyz &c = colour.back();
+		colour.push_back(Xyz{ c.x + o.x * radiance * width / w, c.y + o.y * radiance * width / w, c.z + o.z * radiance * width / w });
+		energy.push_back(energy.back() + radiance * width * display_weight(nm));
+	}
+	EnergyTable t;
+	t.total = colour.back();
+	const double total = energy.back();
+	size_t i = 1;
+	for (int j = 0; j <= ENERGY_STEPS; ++j) {
+		const double target = total * j / ENERGY_STEPS;
+		while (i < energy.size() - 1 && energy[i] < target) {
+			++i;
+		}
+		const double span = energy[i] - energy[i - 1];
+		double f = span > 0.0 ? (target - energy[i - 1]) / span : 0.0;
+		f = f < 0.0 ? 0.0 : f > 1.0 ? 1.0 : f;
+		const Xyz &a = colour[i - 1], &b = colour[i];
+		t.entry[static_cast<size_t>(j)] = EnergyEntry{ grid[i - 1] + (grid[i] - grid[i - 1]) * f, Xyz{ a.x + (b.x - a.x) * f, a.y + (b.y - a.y) * f, a.z + (b.z - a.z) * f } };
+	}
+	return t;
+}
+
+const EnergyTable &room_light() {
+	static const EnergyTable table = energy_table(d65());
+	return table;
 }
 
 const Bands &game_bands() {

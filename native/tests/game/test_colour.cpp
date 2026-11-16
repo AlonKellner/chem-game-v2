@@ -1,4 +1,4 @@
-// Colour as seen and the renderer's spectral bands (GAME_SPEC §12.2, O3).
+// Colour as seen and the first measurement's fixed bands (GAME_SPEC §12.2).
 #include "lab/colour.hpp"
 
 #include <doctest/doctest.h>
@@ -54,7 +54,7 @@ TEST_CASE("colour: the bands share out the whole spectrum (Stage 10)") {
 	}
 }
 
-TEST_CASE("O3: the game's bands show every colour of the demo within the threshold (Stage 10)") {
+TEST_CASE("colour: the first measurement: 24 fixed bands show the demo's colours within CIEDE2000 1 (Stage 10)") {
 	const Bands &bands = chem::optics::game_bands();
 	CHECK(bands.count == chem::optics::GAME_BANDS);
 	const lab::BandError e = lab::band_error(bands, lab::BandModel::Mean);
@@ -63,7 +63,7 @@ TEST_CASE("O3: the game's bands show every colour of the demo within the thresho
 	CHECK(e.mean <= lab::BAND_ERROR_MEAN);
 }
 
-TEST_CASE("O3: the check fires on too few bands (Stage 10)") {
+TEST_CASE("colour: the first measurement fires on too few bands (Stage 10)") {
 	const lab::BandError e = lab::band_error(chem::optics::bands_equal_weight(6), lab::BandModel::Mean);
 	CHECK(e.worst > lab::BAND_ERROR_WORST);
 	CHECK(e.mean > lab::BAND_ERROR_MEAN);

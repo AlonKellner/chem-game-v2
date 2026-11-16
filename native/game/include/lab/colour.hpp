@@ -17,6 +17,21 @@ struct CieLab {
 CieLab to_lab(const chem::optics::Xyz &xyz);
 // CIEDE2000 (Sharma, Wu and Dalal 2005): about 1 is a just-noticeable difference.
 double difference(const CieLab &a, const CieLab &b);
+// The same with its parametric weights for lightness, chroma and hue.
+double difference(const CieLab &a, const CieLab &b, double kl, double kc, double kh);
+// The eye metric (GAME_SPEC §12.2), fitted to the user's blind marks on their
+// display: CIEDE2000 with lightness weighed double, chroma a third, hue a half,
+// and a grey shown as a colour (or a colour as a grey) counted by chroma's ratio.
+// Above EYE_VISIBLE a difference is visible.
+double eye_difference(const CieLab &a, const CieLab &b);
+inline constexpr double EYE_VISIBLE = 8.0;
+// A colour no display has, brought into sRGB keeping its lightness and hue
+// (CSS Color 4: OKLCh chroma reduced until clipping is within 0.02): linear
+// sRGB in and out.
+void gamut_map(double rgb[3]);
+// What the screen shows of a colour: gamut-mapped, 8-bit sRGB (written to
+// `code` if given), and that back as L*a*b*.
+CieLab shown(const chem::optics::Xyz &xyz, int code[3] = nullptr);
 // Linear sRGB (D65 white), not clamped.
 void to_linear_srgb(const chem::optics::Xyz &xyz, double rgb[3]);
 // The sRGB transfer function, a linear value in [0, 1] to an encoded one.

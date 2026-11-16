@@ -139,7 +139,8 @@ TEST_CASE("optics: the blue deepens with concentration and with depth (Stage 10)
 	const OpticsScene scene = scene_of(v);
 	CHECK(seen(scene, X + 4, FLOOR - 10).l > seen(scene, X + 20, FLOOR - 10).l);
 	CHECK(seen(scene, X + 20, FLOOR - 10).l > seen(scene, MIDDLE, FLOOR - 10).l);
-	// the same amount of salt in a narrower vessel is as blue through the middle of a wider one: only c * L counts
+	// the same amount of salt in a narrower vessel is as blue through the middle of a wider one: only c * L
+	// of the salt counts; what differs is the water's own absorption over twice the path, far below sight
 	ItemView strong = solution(1.0), weak = solution(0.5);
 	OpticsScene a, b;
 	lab::optics_compose(a, ROOM, { lab::OpticsBody{ &strong, X, Y, W, H } });
@@ -147,7 +148,7 @@ TEST_CASE("optics: the blue deepens with concentration and with depth (Stage 10)
 	weak.liquid_ml = weak.condensed_ml = 800.0;
 	weak.contents = { substance("water", 'l', 44.0, 800.0), substance("copper_sulfate_aq", 'a', 0.4, 63.8) };
 	lab::optics_compose(b, ROOM, { lab::OpticsBody{ &weak, X, Y, W, H } });
-	CHECK(lab::difference(seen(a, MIDDLE, FLOOR - 5), seen(b, MIDDLE, FLOOR - 5)) < 1e-3);
+	CHECK(lab::difference(seen(a, MIDDLE, FLOOR - 5), seen(b, MIDDLE, FLOOR - 5)) < 0.2); // water: 0.07
 }
 
 TEST_CASE("optics: a surface and a rim are covered by degrees: T to the power of the coverage (Stage 10)") {

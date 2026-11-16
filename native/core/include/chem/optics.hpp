@@ -37,6 +37,15 @@ enum class Kind : uint8_t {
 };
 Kind kind(SpeciesId species);
 const Spectrum &spectrum(SpeciesId species); // zeros for Kind::None
+// An absorber's narrow lines, beside its 1 nm spectrum (GAME_SPEC §12.1): each a
+// Gaussian of the given full width at half maximum, read at the exact wavelength
+// a point falls on, never averaged over a nanometre.
+struct Line {
+	double centre_nm = 0.0, fwhm_nm = 1.0, peak = 0.0; // peak: as the spectrum's unit
+};
+std::span<const Line> lines(SpeciesId species);
+// A line's value at a wavelength.
+double line_at(const Line &line, double nm);
 
 // The reference: the colour of light whose spectrum is `factor` times the
 // illuminant's (a transmittance, a reflectance), integrated at 1 nm.
@@ -77,5 +86,66 @@ Xyz colour_emitted(const Bands &bands, std::span<const double> radiance);
 // fewest that keep every colour the game can show within its threshold
 // (GAME_SPEC §12.2), and held there by a test.
 const Bands &game_bands();
+
+// ---- energy bands with moving points (GAME_SPEC §12.2)
+
+// What a display makes of a nanometre: the magnitudes of its red, green and blue
+// matching curves (sRGB primaries), summed.
+double display_weight(double nm);
+// The observer at any wavelength, interpolated between the table's nanometres.
+Xyz observer_at(double nm);
+// The illuminant at any wavelength, likewise.
+double d65_at(double nm);
+
+// A light's energy table: its spectrum times the display's weight, cut by share
+// of that energy. Entry j (0 .. ENERGY_STEPS) is at share j / ENERGY_STEPS: the
+// wavelength there and the light's colour up to it, on the scale on which the
+// room's white is Y = 1. Built at whatever resolution its lines need: a line a
+// hundredth of a nanometre wide is resolved, and owns its share of the entries.
+inline constexpr int ENERGY_STEPS = 4096;
+struct EnergyEntry {
+	double nm = 0.0;
+	Xyz up_to;
+};
+struct EnergyTable {
+	std::array<EnergyEntry, ENERGY_STEPS + 1> entry{};
+	Xyz total; // the whole light's colour
+	EnergyEntry at(double share) const; // interpolated between entries
+};
+// `continuum` is radiance at 1 nm on the room's scale (d65() is the room's
+// white); `lines` add radiance (each line's peak in the same unit).
+EnergyTable energy_table(const Spectrum &continuum, std::span<const Line> lines = {});
+// The room's light: the illuminant itself.
+const EnergyTable &room_light();
+
+// One frame's estimate of the colour of `light` through `through(nm)` (a
+// factor, 0 .. 1), by n bands of equal energy, each its exact colour times what
+// gets through at one point in it; `offset` in [0, 1) places the points.
+template <class Through>
+Xyz estimate(const EnergyTable &light, int n, double offset, Through through) {
+	Xyz out, before = light.at(0.0).up_to;
+	for (int b = 0; b < n; ++b) {
+		const Xyz upto = light.at(static_cast<double>(b + 1) / n).up_to;
+		const double t = through(light.at((b + offset) / n).nm);
+		out.x += (upto.x - before.x) * t;
+		out.y += (upto.y - before.y) * t;
+		out.z += (upto.z - before.z) * t;
+		before = upto;
+	}
+	return out;
+}
+// The colour itself, to the table's resolution: every entry its own band, read at its middle.
+template <class Through>
+Xyz exact(const EnergyTable &light, Through through) {
+	Xyz out;
+	for (int j = 0; j < ENERGY_STEPS; ++j) {
+		const EnergyEntry &a = light.entry[static_cast<size_t>(j)], &b = light.entry[static_cast<size_t>(j) + 1];
+		const double t = through(light.at((j + 0.5) / ENERGY_STEPS).nm);
+		out.x += (b.up_to.x - a.up_to.x) * t;
+		out.y += (b.up_to.y - a.up_to.y) * t;
+		out.z += (b.up_to.z - a.up_to.z) * t;
+	}
+	return out;
+}
 
 } // namespace chem::optics
