@@ -27,7 +27,7 @@ through it, computed per pixel on the GPU from the live composition and the real
 | 10.12 | The eye metric, OKLCh gamut mapping, what the screen shows (`lab/colour.hpp`); `O3` over random spectra | Done |
 | 10.13 | The scene as spectra at 1 nm; one per-pixel source (`optics_pixel.glsl`) for GPU and reference; each pixel's history by content key and fixed estimate; points by need; the reference's own frames | Done |
 | 10.14 | The C API's scene; the Godot host's compute pass; `O4` on the eye metric; the cost | Done |
-| 10.15 | The user's sign-off | Pending |
+| 10.15 | The user's sign-off | Done (2026-11-17: "LGTM, approved, proceed") |
 
 ## The sample-count study
 

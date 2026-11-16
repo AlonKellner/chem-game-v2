@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 10, revision)
+## 0.11.0 (2026-11-17, Stage 10)
+
+The revision, signed off by the user on 2026-11-17 ("LGTM, approved, proceed"):
 
 - §12: the full design restated around spectral textures: every distribution carried in the same
   wavelength bands, which may follow the scene; refraction re-evaluates the scene behind in the
@@ -38,7 +40,7 @@
   §20: water's scattering as loss only; gamut mapping onto sRGB; the room's the only light, a
   glow added outside the history.
 
-## 0.11.0 (2026-11-16, Stage 10)
+### Stage 10's first build (2026-11-16), superseded by the revision where they differ
 
 - §12: the pipeline restated around one table; §12.1 with the measurement and its decision: 24
   bands, each an equal share of what the eye sees, worst ΔE₀₀ 0.80 and mean 0.19 over the demo's
