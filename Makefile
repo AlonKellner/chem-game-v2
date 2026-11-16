@@ -65,7 +65,8 @@ native:
 godot-data:
 	mkdir -p $(GODOT_PROJECT)/data
 	rsync -a --delete data/ $(GODOT_PROJECT)/data/
-	cp native/game/shader/optics_pixel.gdshaderinc $(GODOT_PROJECT)/shaders/optics_pixel.gdshaderinc
+	mkdir -p $(GODOT_PROJECT)/shaders
+	cp native/game/shader/optics_pixel.glsl $(GODOT_PROJECT)/shaders/optics_pixel.glslinc
 
 # Debug extension (CHEM_ASSERT aborts). Writes the same library name, so it
 # replaces the RelWithDebInfo one until the next `make native`.

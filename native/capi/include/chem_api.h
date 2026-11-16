@@ -173,28 +173,38 @@ typedef struct cg_draw_list {
 /* What to paint now. Borrowed until the next call on this ui. */
 CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
 
-/* The optical pass (GAME_SPEC §12): what is in the vessels and the balloons,
- * painted between the two parts of the draw list by one shader over the whole
- * screen (engines/godot/shaders/optics.gdshader). Its one input is this table,
- * the shader's `uniform vec4 scene[vec_count]`. */
+/* The optical pass (GAME_SPEC §12, §12.2): what is in the vessels and the
+ * balloons, painted between the two parts of the draw list. The host runs the
+ * per-pixel source (native/game/shader/optics_pixel.glsl) over the whole screen
+ * every frame, each pixel keeping its own history; these are its inputs, laid
+ * out as lab/optics_scene.hpp says: the header and the bodies (vec_count
+ * vec4s), each body's spectra at 1 nm (row_count floats), narrow lines
+ * (line_count vec4s), and the room light's energy table (light_count vec4s). */
 typedef struct cg_optics {
 	uint32_t size; /* sizeof(cg_optics), set by the caller */
-	int32_t vec_count; /* the table is 4 * vec_count floats */
+	int32_t vec_count; /* the scene is 4 * vec_count floats */
 	const float *table;
-	uint64_t revision; /* moves when the table does: upload it then */
+	uint64_t revision; /* moves when any of the four does: upload them then */
+	int32_t row_count;
+	const float *rows;
+	int32_t line_count;
+	const float *lines; /* 4 * line_count floats */
+	int32_t light_count;
+	const float *lights; /* 4 * light_count floats */
 } cg_optics;
 
 /* Borrowed until the next call on this ui. */
 CG_API cg_status cg_ui_optics(cg_ui *ui, cg_optics *out);
 
 /* A host's picture of the optical pass alone, the whole screen (width x height
- * pixels of 4 bytes, red first, rows from the top), held to the reference
- * renderer wherever a body is (GAME_SPEC §18: O4). */
+ * pixels of 4 bytes, red first, rows from the top), settled, held to the
+ * colour each pixel should show wherever a body is, on the eye metric (GAME_SPEC
+ * §18: O4). */
 typedef struct cg_optics_parity {
 	uint32_t size; /* sizeof(cg_optics_parity), set by the caller */
-	int32_t worst; /* the largest difference of any channel, in 8-bit steps */
+	int32_t worst; /* the largest difference on the eye metric, rounded up */
 	int64_t covered; /* pixels a body covers */
-	int64_t over; /* of them, those that differ by more than 2 steps */
+	int64_t over; /* of them, those visibly different (above 8 on the eye metric) */
 	int32_t worst_x, worst_y; /* where the largest difference is */
 } cg_optics_parity;
 

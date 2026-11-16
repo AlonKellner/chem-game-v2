@@ -1,15 +1,16 @@
 #include "chem_lab.hpp"
 
+#include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
-#include <godot_cpp/classes/resource_loader.hpp>
-#include <godot_cpp/classes/shader.hpp>
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
@@ -65,23 +66,20 @@ void ChemLab::_ready() {
 		godot::UtilityFunctions::push_error("ChemLab: ", godot::String::utf8(cg_last_error()));
 		return;
 	}
-	// the optical pass: one rectangle over the whole screen, under what is painted over it
-	const godot::Ref<godot::Shader> shader = godot::ResourceLoader::get_singleton()->load("res://shaders/optics.gdshader");
-	if (shader.is_valid()) {
-		material_.instantiate();
-		material_->set_shader(shader);
-		optics_ = memnew(godot::ColorRect);
-		optics_->set_size(godot::Vector2(1920.0f, 1080.0f));
-		optics_->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
-		optics_->set_material(material_);
-		add_child(optics_);
-	} else {
-		godot::UtilityFunctions::push_error("ChemLab: no optical pass: res://shaders/optics.gdshader did not load");
+	// the optical pass: a compute shader over the whole screen, shown under what is painted over it
+	optics_ = memnew(godot::TextureRect);
+	optics_->set_size(godot::Vector2(1920.0f, 1080.0f));
+	optics_->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
+	optics_->set_expand_mode(godot::TextureRect::EXPAND_IGNORE_SIZE);
+	add_child(optics_);
+	if (compute_.open(godot::FileAccess::get_file_as_string("res://shaders/optics_pixel.glslinc"), optics_why_)) {
+		optics_->set_texture(compute_.shown());
+	} else if (godot::DisplayServer::get_singleton() == nullptr || godot::DisplayServer::get_singleton()->get_name() != "headless") {
+		godot::UtilityFunctions::push_error("ChemLab: ", optics_why_);
 	}
 	overlay_ = memnew(godot::Node2D);
 	add_child(overlay_);
 	overlay_->connect("draw", godot::Callable(this, "_paint_over"));
-	upload();
 	set_process(true);
 	set_process_input(true);
 }
@@ -89,7 +87,9 @@ void ChemLab::_ready() {
 void ChemLab::_process(double delta) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, delta);
-		upload();
+		if (compute_.ready()) {
+			godot::RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ChemLab::optics_frame));
+		}
 		queue_redraw();
 		overlay_->queue_redraw();
 	}
@@ -123,7 +123,6 @@ void ChemLab::pointer(double x, double y, bool down) {
 void ChemLab::frame(double seconds) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, seconds);
-		upload();
 		queue_redraw();
 		overlay_->queue_redraw();
 	}
@@ -174,20 +173,48 @@ godot::PackedInt32Array ChemLab::optics_parity(const godot::PackedByteArray &rgb
 	return out;
 }
 
-// the shader's table, when it has changed
-void ChemLab::upload() {
+bool ChemLab::optics_running() const {
+	return compute_.ready();
+}
+
+godot::String ChemLab::optics_why() const {
+	return optics_why_;
+}
+
+void ChemLab::set_optics_budget(double points) {
+	optics_budget_ = points > 0.0 ? points : 0.0;
+}
+
+double ChemLab::get_optics_budget() const {
+	return optics_budget_;
+}
+
+void ChemLab::set_optics_extra(int passes) {
+	optics_extra_ = passes > 0 ? passes : 0;
+}
+
+void ChemLab::set_optics_restarting(bool on) {
+	optics_restarting_ = on;
+}
+
+// one frame of the optical pass: the scene's buffers when they have changed, then every pixel
+void ChemLab::optics_frame() {
 	cg_optics optics;
 	optics.size = sizeof optics;
-	if (material_.is_null() || cg_ui_optics(ui_, &optics) != CG_OK || optics.revision == uploaded_) {
+	if (ui_ == nullptr || cg_ui_optics(ui_, &optics) != CG_OK) {
 		return;
 	}
-	godot::PackedFloat32Array table;
-	table.resize(4 * optics.vec_count);
-	for (int32_t i = 0; i < 4 * optics.vec_count; ++i) {
-		table.set(i, optics.table[i]);
+	compute_.upload(optics);
+	if (optics_restarting_) {
+		compute_.restart();
 	}
-	material_->set_shader_parameter("scene", table);
-	uploaded_ = optics.revision;
+	compute_.run(optics_budget_);
+	for (int i = 0; i < optics_extra_; ++i) {
+		if (optics_restarting_) {
+			compute_.restart();
+		}
+		compute_.run(optics_budget_, true);
+	}
 }
 
 void ChemLab::_draw() {
@@ -259,6 +286,14 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_flat_visible", "on"), &ChemLab::set_flat_visible);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_visible", "on"), &ChemLab::set_optics_visible);
 	godot::ClassDB::bind_method(godot::D_METHOD("optics_parity", "rgba"), &ChemLab::optics_parity);
+	godot::ClassDB::bind_method(godot::D_METHOD("optics_running"), &ChemLab::optics_running);
+	godot::ClassDB::bind_method(godot::D_METHOD("optics_why"), &ChemLab::optics_why);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_budget", "points"), &ChemLab::set_optics_budget);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_optics_budget"), &ChemLab::get_optics_budget);
+	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT, "optics_budget"), "set_optics_budget", "get_optics_budget");
+	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_extra", "passes"), &ChemLab::set_optics_extra);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_restarting", "on"), &ChemLab::set_optics_restarting);
+	godot::ClassDB::bind_method(godot::D_METHOD("optics_frame"), &ChemLab::optics_frame);
 	godot::ClassDB::bind_method(godot::D_METHOD("_paint_over"), &ChemLab::paint_over);
 }
 

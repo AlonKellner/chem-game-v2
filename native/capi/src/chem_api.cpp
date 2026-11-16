@@ -1,10 +1,13 @@
 #include "chem_api.h"
 
+#include <cmath>
+
 #include "chem/error.hpp"
 #include "chem/species.hpp"
 #include "lab/lab.hpp"
 #include "lab/ui.hpp"
 
+#include <cmath>
 #include <cstddef>
 #include <memory>
 #include <string>
@@ -339,6 +342,14 @@ cg_status cg_ui_optics(cg_ui *ui, cg_optics *out) {
 		out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 		out->table = scene.table.data();
 		out->revision = scene.revision;
+		if (out->size >= sizeof(cg_optics)) {
+			out->row_count = static_cast<int32_t>(scene.rows.size());
+			out->rows = scene.rows.data();
+			out->line_count = static_cast<int32_t>(scene.lines.size() / 4);
+			out->lines = scene.lines.data();
+			out->light_count = static_cast<int32_t>(scene.lights.size() / 4);
+			out->lights = scene.lights.data();
+		}
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
@@ -351,7 +362,7 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	}
 	try {
 		const lab::OpticsParity parity = lab::optics_compare(ui->ui->optics(), rgba, width, height);
-		out->worst = parity.worst;
+		out->worst = static_cast<int32_t>(std::ceil(parity.worst));
 		out->covered = parity.covered;
 		out->over = parity.over;
 		out->worst_x = parity.worst_x;
