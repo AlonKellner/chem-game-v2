@@ -154,16 +154,35 @@ about 95.9 °C. Confidence medium.
 | Process | Form | Parameters | Confidence |
 |---|---|---|---|
 
-### Optics
+## Optics (Stage 10)
 
-| Medium | Model | Confidence |
+**Verified tables** (`data/optics/`, embedded at build):
+
+| Table | Source | Check |
 |---|---|---|
-| Cu²⁺(aq) | Gaussian in wavenumber, centre 12,350 cm⁻¹ (about 810 nm), FWHM about 5,000 cm⁻¹, peak ε about 12 /M·cm | peak medium, width low |
-| Malachite powder | reflectance, roughly sRGB (70, 150, 110) | low |
-| CuO | reflectance, roughly sRGB (30, 28, 28) | low |
-| CuSO4·5H2O | reflectance, roughly sRGB (35, 95, 200) | low |
-| CuSO4·3H2O, CuSO4·H2O | reflectance, roughly sRGB (190, 220, 235) | low |
-| CuSO4 anhydrous | reflectance, roughly sRGB (235, 235, 225) | low |
+| CIE 1931 2° colour-matching functions, 380–780 nm at 1 nm (`cie_1931_2deg.csv`) | CIE, as distributed by the Colour & Vision Research Laboratory (cvrl.org) | Σȳ and the white point below |
+| CIE standard illuminant D65, 380–780 nm at 1 nm (`d65.csv`) | CIE, as distributed by cvrl.org | Its chromaticity under the observer above comes out (0.3127, 0.3290): `colour: the illuminant is white` |
+| sRGB primaries and transfer function | IEC 61966-2-1 | White maps to (1, 1, 1) within 0.2% |
+| CIEDE2000 | Sharma, Wu and Dalal (2005) | Four of the paper's test pairs to four decimals: `colour: CIEDE2000 agrees with the published test pairs` |
+| Planck's law: c₁ = 2hc² = 1.191042972e-16 W·m²/sr, c₂ = 0.014387769 m·K; 683.002 lm/W | CODATA 2018; the candela's definition | A black body at 2042 K comes out at 600,000 cd/m² within 3% (the old platinum standard of light): `optics: a hot solid glows` |
+
+**Calibrated media** (`data/optics/media.json`). None of these spectra is measured: each is a
+simple shape placed so that the substance has the colour it is known to have. The numbers quoted
+as literature are from memory and were not checked against a source.
+
+| Medium | Model | Basis | Confidence |
+|---|---|---|---|
+| CuSO₄(aq) | One Gaussian in wavenumber: centre 12,400 cm⁻¹ (806 nm), FWHM 4,700 cm⁻¹, peak ε 12 L/mol/cm | The d–d band of Cu(H₂O)₆²⁺: maximum near 800–810 nm with ε about 12 | peak medium, width low |
+| Malachite | Diffuse reflectance 0.06 plus a Gaussian of 0.42 at 525 nm (width 45 nm) | A green mineral pigment | low |
+| CuO | Diffuse reflectance 0.035, flat | A black powder | low |
+| CuSO₄·5H₂O | Diffuse reflectance 0.05 plus a Gaussian of 0.5 at 465 nm (width 55 nm) | Blue crystals | low |
+| CuSO₄ | Diffuse reflectance 0.82, flat | A white powder | low |
+| Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
+| Water, H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
+
+**Calibrated geometry of solids:** a heap's angle of repose 35° and packing fraction 0.5 (typical
+of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).
+**The room:** its white is 100 cd/m² (a white page in ordinary indoor light).
 
 ## Constants
 

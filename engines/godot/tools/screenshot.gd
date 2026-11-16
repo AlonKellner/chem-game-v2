@@ -2,11 +2,15 @@ extends SceneTree
 
 # Screenshots of the host at five moments of the demo, for looking at what a
 # player sees (make screenshots -> build/screenshots/*.png). It plays with the
-# pointer, as tests/test_host_smoke.gd does.
+# pointer, as tests/test_host_smoke.gd does. At each moment the optical pass
+# alone is held to the reference renderer (GAME_SPEC §18: O4), and at the end
+# the GPU's time for a frame is measured with the pass and without it.
 #
 #   godot --path engines/godot -s tools/screenshot.gd -- <output directory>
 
 var _lab: ChemLab
+var _view: SubViewport # the game's own 1920 x 1080, whatever the window is
+var _failed := false
 
 func _drag(what: String, to: String) -> void:
 	var a := _lab.locate(what)
@@ -48,20 +52,70 @@ func _watch(done: Callable, what: String) -> bool:
 func _shoot(dir: String, name: String) -> void:
 	await process_frame
 	await process_frame
-	var image := root.get_texture().get_image()
-	if image != null: # a headless Godot paints nothing
-		image.save_png(dir.path_join(name + ".png"))
+	if DisplayServer.get_name() == "headless": # it paints nothing
+		return
+	var image := _view.get_texture().get_image()
+	image.save_png(dir.path_join(name + ".png"))
+	_lab.set_flat_visible(false)
+	await process_frame
+	await process_frame
+	var alone := _view.get_texture().get_image()
+	alone.convert(Image.FORMAT_RGBA8)
+	var parity := _lab.optics_parity(alone.get_data())
+	_lab.set_flat_visible(true)
+	if parity.size() != 5 or parity[0] == 0 or parity[2] > 0:
+		_failed = true
+		push_error("screenshot.gd: O4: the GPU's picture is not the reference's at " + name)
+	if parity.size() == 5:
+		print("O4 %s: %d pixels in bodies, the largest difference %d/255 (at %d, %d), %d over 2/255" % [name, parity[0], parity[1], parity[3], parity[4], parity[2]])
+		if parity[2] > 0:
+			alone.save_png(dir.path_join(name + "_optics_alone.png"))
+
+# The time of a frame with the optical pass painted `extra` more times over:
+# one pass is too quick to time alone, and a display hands frames out in
+# whole refreshes, so the cost of one is the slope between two heavy loads.
+func _time(extra: int) -> float:
+	var passes: Array[ColorRect] = []
+	for i in extra:
+		var again := ColorRect.new()
+		again.size = Vector2(1920, 1080)
+		again.material = (_lab.get_child(0) as ColorRect).material
+		_view.add_child(again)
+		passes.append(again)
+	for i in 5:
+		await process_frame
+	var start := Time.get_ticks_usec()
+	for i in 20:
+		await process_frame
+	var ms := float(Time.get_ticks_usec() - start) / 20000.0
+	for again in passes:
+		again.queue_free()
+	return ms
 
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
 	DirAccess.make_dir_recursive_absolute(dir)
+	_view = SubViewport.new()
+	_view.size = Vector2i(1920, 1080)
+	_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	root.add_child(_view)
 	_lab = ChemLab.new()
-	root.add_child(_lab)
+	_view.add_child(_lab)
+	var shown := TextureRect.new()
+	shown.texture = _view.get_texture()
+	shown.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	shown.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(shown)
 	await process_frame
 	await _play(dir)
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		var few := await _time(100)
+		var many := await _time(300)
+		print("a frame with 100 more optical passes: %.2f ms; with 300: %.2f ms; one pass at 1920 x 1080: %.3f ms" % [few, many, (many - few) / 200.0])
 	print("screenshot.gd: done, at step ", JSON.parse_string(_lab.report())["step"])
-	quit()
+	quit(1 if _failed else 0)
 
 func _play(dir: String) -> void:
 	_click("pause")

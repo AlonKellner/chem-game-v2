@@ -63,6 +63,20 @@ void optics_pixel(const OpticsScene &scene, double x, double y, double rgba[4]);
 // A rectangle of the screen, 8 bits a channel, rows from the top.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 
+// A picture of the whole screen from somewhere else (a GPU), held to the
+// reference where a body covers at least OPTICS_PARITY_COVER of the pixel (O4):
+// how many such pixels, the largest difference of any channel in 8-bit steps,
+// and how many pixels differ by more than `tolerance`.
+struct OpticsParity {
+	int64_t covered = 0;
+	int32_t worst = 0;
+	int64_t over = 0;
+	int32_t worst_x = -1, worst_y = -1; // where the largest difference is
+};
+inline constexpr int OPTICS_PARITY_TOLERANCE = 2;
+inline constexpr double OPTICS_PARITY_COVER = 0.02;
+OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h, int tolerance = OPTICS_PARITY_TOLERANCE);
+
 // ---- invariants (GAME_SPEC §18): "" or the failure, starting with its id
 
 // O1: nothing in the table can make light: every depth is at least 0, every reflectance within [0, 1].

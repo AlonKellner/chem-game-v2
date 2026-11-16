@@ -6,9 +6,12 @@
 #include <godot_cpp/classes/global_constants.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
+#include <godot_cpp/classes/resource_loader.hpp>
+#include <godot_cpp/classes/shader.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -62,6 +65,23 @@ void ChemLab::_ready() {
 		godot::UtilityFunctions::push_error("ChemLab: ", godot::String::utf8(cg_last_error()));
 		return;
 	}
+	// the optical pass: one rectangle over the whole screen, under what is painted over it
+	const godot::Ref<godot::Shader> shader = godot::ResourceLoader::get_singleton()->load("res://shaders/optics.gdshader");
+	if (shader.is_valid()) {
+		material_.instantiate();
+		material_->set_shader(shader);
+		optics_ = memnew(godot::ColorRect);
+		optics_->set_size(godot::Vector2(1920.0f, 1080.0f));
+		optics_->set_mouse_filter(godot::Control::MOUSE_FILTER_IGNORE);
+		optics_->set_material(material_);
+		add_child(optics_);
+	} else {
+		godot::UtilityFunctions::push_error("ChemLab: no optical pass: res://shaders/optics.gdshader did not load");
+	}
+	overlay_ = memnew(godot::Node2D);
+	add_child(overlay_);
+	overlay_->connect("draw", godot::Callable(this, "_paint_over"));
+	upload();
 	set_process(true);
 	set_process_input(true);
 }
@@ -69,7 +89,9 @@ void ChemLab::_ready() {
 void ChemLab::_process(double delta) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, delta);
+		upload();
 		queue_redraw();
+		overlay_->queue_redraw();
 	}
 }
 
@@ -101,7 +123,9 @@ void ChemLab::pointer(double x, double y, bool down) {
 void ChemLab::frame(double seconds) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, seconds);
+		upload();
 		queue_redraw();
+		overlay_->queue_redraw();
 	}
 }
 
@@ -121,8 +145,61 @@ godot::String ChemLab::message() const {
 	return ui_ != nullptr ? godot::String::utf8(cg_ui_message(ui_)) : godot::String();
 }
 
+void ChemLab::set_flat_visible(bool on) {
+	flat_visible_ = on;
+	queue_redraw();
+	if (overlay_ != nullptr) {
+		overlay_->queue_redraw();
+	}
+}
+
+void ChemLab::set_optics_visible(bool on) {
+	if (optics_ != nullptr) {
+		optics_->set_visible(on);
+	}
+}
+
+godot::PackedInt32Array ChemLab::optics_parity(const godot::PackedByteArray &rgba) const {
+	godot::PackedInt32Array out;
+	cg_optics_parity parity;
+	parity.size = sizeof parity;
+	if (ui_ == nullptr || rgba.size() != 1920 * 1080 * 4 || cg_ui_optics_compare(ui_, rgba.ptr(), 1920, 1080, &parity) != CG_OK) {
+		return out;
+	}
+	out.push_back(static_cast<int32_t>(parity.covered));
+	out.push_back(parity.worst);
+	out.push_back(static_cast<int32_t>(parity.over));
+	out.push_back(parity.worst_x);
+	out.push_back(parity.worst_y);
+	return out;
+}
+
+// the shader's table, when it has changed
+void ChemLab::upload() {
+	cg_optics optics;
+	optics.size = sizeof optics;
+	if (material_.is_null() || cg_ui_optics(ui_, &optics) != CG_OK || optics.revision == uploaded_) {
+		return;
+	}
+	godot::PackedFloat32Array table;
+	table.resize(4 * optics.vec_count);
+	for (int32_t i = 0; i < 4 * optics.vec_count; ++i) {
+		table.set(i, optics.table[i]);
+	}
+	material_->set_shader_parameter("scene", table);
+	uploaded_ = optics.revision;
+}
+
 void ChemLab::_draw() {
-	if (ui_ == nullptr) {
+	paint(this, false);
+}
+
+void ChemLab::paint_over() {
+	paint(overlay_, true);
+}
+
+void ChemLab::paint(godot::CanvasItem *on, bool above) {
+	if (ui_ == nullptr || on == nullptr || !flat_visible_) {
 		return;
 	}
 	cg_draw_list list;
@@ -131,18 +208,18 @@ void ChemLab::_draw() {
 		return;
 	}
 	const godot::Ref<godot::Font> font = godot::ThemeDB::get_singleton()->get_fallback_font();
-	for (int32_t i = 0; i < list.command_count; ++i) {
+	for (int32_t i = above ? list.above : 0; i < (above ? list.command_count : list.above); ++i) {
 		const cg_draw_command &c = list.commands[i];
 		const godot::Color color = colour(c.color);
 		switch (c.type) {
 			case CG_DRAW_RECT:
-				draw_rect(godot::Rect2(c.x, c.y, c.w, c.h), color, true);
+				on->draw_rect(godot::Rect2(c.x, c.y, c.w, c.h), color, true);
 				break;
 			case CG_DRAW_OUTLINE:
-				draw_rect(godot::Rect2(c.x, c.y, c.w, c.h), color, false, c.width);
+				on->draw_rect(godot::Rect2(c.x, c.y, c.w, c.h), color, false, c.width);
 				break;
 			case CG_DRAW_LINE:
-				draw_line(godot::Vector2(c.x, c.y), godot::Vector2(c.w, c.h), color, c.width);
+				on->draw_line(godot::Vector2(c.x, c.y), godot::Vector2(c.w, c.h), color, c.width);
 				break;
 			case CG_DRAW_POLYGON: {
 				godot::PackedVector2Array points;
@@ -150,15 +227,15 @@ void ChemLab::_draw() {
 				for (int32_t p = 0; p < c.count; ++p) {
 					points.set(p, godot::Vector2(list.points[2 * (c.first + p)], list.points[2 * (c.first + p) + 1]));
 				}
-				draw_colored_polygon(points, color);
+				on->draw_colored_polygon(points, color);
 				break;
 			}
 			case CG_DRAW_CIRCLE:
-				draw_circle(godot::Vector2(c.x, c.y), c.w, color);
+				on->draw_circle(godot::Vector2(c.x, c.y), c.w, color);
 				break;
 			case CG_DRAW_TEXT:
 				if (font.is_valid()) {
-					draw_string(font, godot::Vector2(c.x, c.y), godot::String::utf8(list.text + c.first, c.count), godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
+					on->draw_string(font, godot::Vector2(c.x, c.y), godot::String::utf8(list.text + c.first, c.count), godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
 							static_cast<int>(c.h), color);
 				}
 				break;
@@ -179,6 +256,10 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("locate", "what"), &ChemLab::locate);
 	godot::ClassDB::bind_method(godot::D_METHOD("report"), &ChemLab::report);
 	godot::ClassDB::bind_method(godot::D_METHOD("message"), &ChemLab::message);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_flat_visible", "on"), &ChemLab::set_flat_visible);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_visible", "on"), &ChemLab::set_optics_visible);
+	godot::ClassDB::bind_method(godot::D_METHOD("optics_parity", "rgba"), &ChemLab::optics_parity);
+	godot::ClassDB::bind_method(godot::D_METHOD("_paint_over"), &ChemLab::paint_over);
 }
 
 void register_host() {

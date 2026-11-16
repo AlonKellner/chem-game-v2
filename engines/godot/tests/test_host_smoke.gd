@@ -79,3 +79,21 @@ func test_the_engines_mouse_reaches_the_screen() -> void:
 	var paused_at: int = JSON.parse_string(_lab.report())["step"]
 	await wait_process_frames(5)
 	assert_eq(int(JSON.parse_string(_lab.report())["step"]), paused_at, "paused: the clock stands")
+
+func test_the_optical_pass_is_a_shader_between_the_two_flat_layers() -> void:
+	# (GAME_SPEC §12; its picture against the reference needs a GPU: make screenshots)
+	assert_eq(_lab.get_child_count(), 2)
+	var optics := _lab.get_child(0) as ColorRect
+	assert_not_null(optics, "the optical pass is the first child")
+	assert_eq(optics.size, Vector2(1920, 1080))
+	var material := optics.material as ShaderMaterial
+	assert_not_null(material)
+	assert_eq(material.shader.resource_path, "res://shaders/optics.gdshader")
+	var table: PackedFloat32Array = material.get_shader_parameter("scene")
+	assert_eq(table.size(), 378 * 4, "the shader has the scene's table")
+	assert_eq(table[0], 7.0, "five vessels, the jar and the balloon")
+	_drag("item:flask", "cell:3,1")
+	_lab.frame(1.0 / 60.0)
+	var moved: PackedFloat32Array = material.get_shader_parameter("scene")
+	assert_ne(moved, table, "and it follows the screen")
+	assert_eq(_lab.optics_parity(PackedByteArray()).size(), 0, "a picture of the wrong size is not compared")

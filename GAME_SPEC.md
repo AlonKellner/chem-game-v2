@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.10.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.11.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -507,28 +507,89 @@ revolution seen from the side.
 - **Spectrum probe:** the full-resolution spectrum under the cursor, plotted.
 - **Exposure:** fixed, or adapted from a reduced-resolution luminance computed on the GPU.
 
-**Pipeline.** The core emits a shape table (profiles of revolution) and a per-medium spectral
-table. One GPU pass computes each pixel: reject by bounding box, chord length, accumulate optical
-depth per sample, add emission and haze, add reflection, convert to XYZ then sRGB once. Refraction
-adds one pass (the scene behind is drawn to a texture first). Nothing is read back from the GPU,
-and a frame is redrawn only when the tables' revision changes. The per-pixel function is written
-once, in a subset that compiles both as shader and as C++; the C++ build is the reference.
+**Pipeline.** The lab layer emits one table: the bodies on the screen (profiles of revolution) and
+what their contents do to light, band by band. One GPU pass computes each pixel: reject by bounding
+box, chord length, accumulate optical depth per band, add haze, reflection and emission, convert to
+a colour once. Refraction adds one pass (the scene behind is drawn to a texture first). Nothing is
+read back from the GPU, and the table is uploaded only when it changes. The per-pixel function is
+written once, in a subset that compiles both as shader and as C++; the C++ build is the reference.
 
 ### 12.1 Choosing the spectral samples
 
 1. **Reference:** float64 integration at 1 nm over 380–780 nm against the CIE 1931 observer and
-   the D65 illuminant.
+   the D65 illuminant (`chem/optics.hpp`; the tables are data, `data/optics/`).
 2. **Test set:** every medium the game can show, over its reachable range of concentration and
-   path length; solids' reflectances; blackbody emission; overlapping media; synthetic narrow-band
-   absorbers.
-3. **Metric:** CIEDE2000 between reference and N-sample colour.
+   path length; solids' reflectances, bare and under solution; blackbody emission; overlapping
+   media; synthetic narrow-band absorbers, reported apart.
+3. **Metric:** CIEDE2000 between reference and N-band colour (`lab/colour.hpp`).
 4. **Threshold:** maximum ΔE₀₀ ≤ 1.0 and mean ≤ 0.5 over the test set of shipped media.
-5. **Decision:** the smallest N meeting the threshold; recorded with the measured table.
-6. **Gate:** a test recomputes the error for the chosen samples and fails above the threshold.
+5. **Decision:** the smallest N meeting the threshold with cuts that are not fitted to the test
+   set; recorded with the measured table.
+6. **Gate:** a test recomputes the error for the chosen bands and fails above the threshold (`O3`).
 
-**Demo subset:** absorption, thermal emission, analytic haze, reflection, daylight, fixed exposure;
-then refraction and Fresnel as a separate stage.
-**Status:** *PLANNED, Stage 10 (core optics), Stage 11 (refraction).*
+**The measurement** (`chem_tool study spectrum`; the table is in `docs/TDD_10_OPTICS.md`). A
+sample is a **band**: a stretch of the spectrum carrying the band-average of each absorber's
+coefficient, weighted by what the eye and the illuminant make of each nanometre; a band's colour
+is the exact integral of the observer over it. Over the demo's 110 colours:
+
+| Bands | Cuts | Worst ΔE₀₀ | Mean |
+|---|---|---|---|
+| 8 | equal weight | 4.9 | 1.0 |
+| 16 | equal weight | 2.5 | 0.46 |
+| 14 | fitted to the test set | 0.74 | 0.24 |
+| **24** | **equal weight** | **0.80** | **0.19** |
+| 32 | equal weight | 0.49 | 0.11 |
+
+**The game renders with 24 bands, cut so that each carries an equal share of what the eye sees**
+(`chem::optics::game_bands`). Fourteen bands meet the threshold when their cuts are fitted to the
+test colours, but cuts fitted to copper's spectrum promise nothing for the next substance; the
+24 are chosen without looking at any medium. Carrying each absorber's slope across the band as
+well reaches the threshold with 11 fitted bands, at the same cost per pixel as 22 plain ones, and
+was not taken. Where bands degrade: a 10 nm absorption line is off by up to ΔE₀₀ 4 at 24 bands;
+the demo has none, and the Voigt lines of the full design will need narrower bands or the tilt.
+
+### 12.2 The optical pass of the demo
+
+**Light and backdrop.** The room is lit by D65. Behind the cabinet, the bench and the outbox is a
+wall that reflects evenly (radiance 0.73 of the room's white); what is in the glass is seen by
+the light that comes through it from that wall. The room's white is 100 cd/m², which is what a
+glowing body is measured against.
+
+**A body** is a vessel or a balloon, as the screen places it, in painting order:
+
+- **A vessel is a cylinder** of its volume and of the proportions it is drawn with, seen from the
+  side. At a pixel the path through it is the chord `2R·sqrt(1 − (x/R)²)`, in real centimetres.
+- **Its liquid** fills it to the height its condensed volume reaches, and dims the light behind
+  it by `exp(−Σ ε_i c_i L)` per band, with `c_i` the live concentration of each dissolved species
+  that has an absorption spectrum.
+- **Its solids at rest** are a heap at a powder's angle of repose (35°, packing 0.5): a cone until
+  it reaches the wall. The heap is seen by the room's light: its reflectance (a mixture's by
+  mass), and, under liquid, the liquid there and back, one chord.
+- **Its solids stirred** are suspended: each particle shades its own cross-section twice over
+  (extinction efficiency 2), so the liquid's extinction is `2 N (π d²/4) / V`; light it removes is
+  replaced by the room's light off the solid, through half a chord of the liquid.
+- **A hot solid glows:** Planck's law times its emissivity `1 − reflectance`, integrated at 1 nm
+  in the lab layer, in units of the room's white.
+- **A balloon is a ball** of its volume. Its rubber is a wall crossed twice, aslant near the rim
+  (`2t / cos θ`, at most four reference thicknesses), and thinner the further it is stretched
+  (`t ∝ 1/R²`). What condensed inside lies at the bottom.
+- **An edge covers a pixel by degrees:** depths are multiplied by the coverage (`T^coverage`), a
+  solid is mixed in by it.
+
+**The table** (`lab/optics_scene.hpp`, `cg_ui_optics`): 378 vec4s: the room, each band's colour in
+linear sRGB, and 22 vec4s for each of at most 16 bodies. **The shader**
+(`native/game/shader/optics_pixel.gdshaderinc`, copied into the Godot project) is one function of
+the pixel and the table. **The reference** is the same file compiled as C++ in float64
+(`optics_transport`, `optics_pixel`, `optics_picture`, `optics_compare`).
+
+**The picture is in three layers:** the draw list's first part (the room), the optical pass, the
+draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
+
+**Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
+(§12.2); then refraction and Fresnel as a separate stage.
+**Status:** Stage 10 implements §12.1 and §12.2. *PLANNED, Stage 11:* refraction and Fresnel.
+The rest of the full design (Voigt lines, band gaps, fluorescence, ultraviolet and dark modes,
+the spectrum probe, Rayleigh and Mie auras, dispersion, adapted exposure) is specified and not built.
 
 ## 13. Lab layer and interaction
 
@@ -637,9 +698,10 @@ mass and energy unchanged since the bench was opened, or not.
 solids and liquids, and each species' mass, particle count and size; then the lab's events and
 the last refusal.
 
-**Drawing** is flat in Stage 9: glass as lines, liquid as a level tinted by its dissolved copper,
-solids as a mound in their colour, a balloon as a disc of its volume, a flame by its valve.
-Stage 10 replaces the colours with the optics of §12.
+**Drawing.** What is in a vessel, and a balloon, is the optical pass of §12.2. The draw list is
+flat and in two parts, one under that pass and one over it: the room and its grid under; glass as
+lines, a liquid's surface as a line (a clear liquid is otherwise invisible until Stage 11's
+refraction), a flame by its valve, labels, the readout and panels over.
 
 **Full design, not yet built:** items larger than one grid cell, and adjacency deciding what can
 join what; supports that appear with the glassware; pouring at a rate; a debug panel of the
@@ -673,12 +735,17 @@ places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 - **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
   (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
   `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts).
+- **The optical pass through the C API:** `cg_ui_optics` (the table of §12.2, with a revision),
+  `cg_ui_optics_compare` (a host's picture of the pass against the reference: `O4`).
 - **The Godot host** (`native/hosts/godot`: `ChemLab`, a `Node2D`): it reads the bench file,
-  forwards the mouse, calls a frame in `_process`, and paints the draw list in `_draw`. No game
-  logic, and no GDScript in play.
+  forwards the mouse, calls a frame in `_process`, paints the draw list's first part in `_draw`,
+  the optical pass by a shader on a child rectangle (`engines/godot/shaders/optics.gdshader`, its
+  one uniform the table), and the list's second part on another child. No game logic, and no
+  GDScript in play.
 
 **Status:** Stage 0 implements the build identity, error and log plumbing; Stage 1 the tables;
-Stage 7 the lab and the session tools; Stage 9 the screen and the Godot host.
+Stage 7 the lab and the session tools; Stage 9 the screen and the Godot host; Stage 10 the
+optical pass.
 
 ## 15. Micro-view lens
 
@@ -757,7 +824,10 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
   and frame rate. **Tested as:** `D1`, `lab: the same commands give the same state, however the
   steps are grouped and whether or not they are checked`.
 - **UX4. Colour tells the truth.** The displayed colour of a medium is the reference colour of its
-  composition and path length within the §12.1 threshold. *(PLANNED, Stage 10; `O3`.)*
+  composition and path length within the §12.1 threshold. **Tested as:** `O3`, and `UX4: a
+  solution's colour is that of its concentration and of the path through it` (the reference
+  renderer's pixel against the 1 nm colour, at five concentrations and two chords), with `O4`
+  holding the GPU to the reference renderer.
 - **UX5. A refusal explains itself.** A refused action reports its reason and leaves the state
   untouched. **Tested as:** `L1`, `lab: a refused command says why and changes nothing` (19
   refusals).
@@ -770,8 +840,7 @@ Each invariant is a named pure check over a step trace (`chem/invariants.hpp`: `
 - **UX7. The demo is playable with the pointer alone.** Every action of §17 is a drag or a click.
   **Tested as:** `ui: the three stages of the demo, played with the pointer alone`.
 
-The Stage column is where an invariant is implemented; rows of Stages 1 to 9 are implemented,
-later rows are *PLANNED*.
+The Stage column is where an invariant is implemented; every row is implemented.
 
 | ID | Invariant | Kind | Stage |
 |---|---|---|---|
@@ -803,10 +872,10 @@ later rows are *PLANNED*.
 | K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
-| O1 | Transmittance is within [0, 1] | exact | 10 |
-| O2 | Output radiance ≤ input + emission, per sample | exact | 10 |
-| O3 | N-sample colour within the §12.1 threshold of the reference | tolerance | 10 |
-| O4 | GPU image matches the CPU reference within 2/255 | tolerance | 10 |
+| O1 | Transmittance is within [0, 1]: in the renderer's table every optical depth is at least 0 and every reflectance within [0, 1] | exact | 10 |
+| O2 | No band of a pixel is brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
+| O3 | The game's bands show every colour of the demo within the §12.1 threshold of the 1 nm reference | tolerance | 10 |
+| O4 | The GPU's picture of the optical pass matches the reference renderer within 2/255 wherever a body covers at least a fiftieth of a pixel. It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -824,7 +893,9 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   thermal state derived once, 3.8 µs; with the tray, the bursting check and overflow added,
   4.1 µs: 4050 times real time, 2.5 ms a frame at 600 steps a frame. The time is in the phase
   equilibria themselves (the logarithms of each affinity).
-- Rendering: the optical pass under 2 ms on an integrated GPU.
+- Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 10, `make
+  screenshots`, Apple M3 Pro, 1920×1080): 0.21 ms a pass, as the slope of the frame time between
+  100 and 300 extra passes (one pass is too quick to time alone).
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -857,3 +928,10 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A burst balloon's gas is the room's at once | No bang, no jet |
 | One item to a grid cell, and position decides nothing | A beaker "under" a condenser is a connection, not a place |
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
+| Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
+| A vessel is a cylinder and a balloon a ball, whatever they are drawn as | Path lengths are those of a cylinder of the vessel's volume |
+| Glass, water, the acid and gases are perfectly clear, and nothing refracts (until Stage 11) | A clear liquid is shown by a drawn line at its surface |
+| A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
+| Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
+| A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
+| A colour outside sRGB is clipped, and exposure is fixed | Deep copper blue is drawn as the nearest blue the display has; a body past about 1200 K is drawn at the display's white |

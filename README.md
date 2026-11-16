@@ -12,8 +12,10 @@ The game is engine-free C++20 behind a C API, hosted by Godot 4.7 through one GD
 
 ## Status
 
-Stage 0 (bootstrap): the build, the gates and the specification. No simulation yet.
-The first deliverable is the 3-stage demo of GAME_SPEC §17.
+The 3-stage demo of GAME_SPEC §17 is playable with the pointer (`make run`) and by script
+(`make demo`), and what is in the glassware is drawn by a spectral GPU pass (GAME_SPEC §12).
+Still to come: refraction (Stage 11) and the demo's final sign-off (Stage 12). Each stage's notes
+are in `docs/TDD_NN_*.md`.
 
 ## Build
 

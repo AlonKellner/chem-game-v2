@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.11.0 (2026-11-16, Stage 10)
+
+- §12: the pipeline restated around one table; §12.1 with the measurement and its decision: 24
+  bands, each an equal share of what the eye sees, worst ΔE₀₀ 0.80 and mean 0.19 over the demo's
+  110 colours; §12.2 added: the demo's optical pass (the lit wall, bodies of revolution with real
+  path lengths, liquids, heaps, suspensions, glow, the balloon's rubber, coverage, the table, the
+  shared shader source and its reference build).
+- §13.1: drawing is in three layers; the bench is a lit wall; a liquid's surface is a drawn line.
+- §14: the optical pass through the C API; the host's shader pass.
+- §18: O1, O2, O3 and O4 implemented and restated as built; UX4 tested.
+- §19: the optical pass measured at 0.21 ms.
+- §20: the optics' declared simplifications.
+
 ## 0.10.0 (2026-11-16, Stage 9)
 
 - §13.1 added: the screen, engine-free: its layout, its gestures and the commands they become,

@@ -65,6 +65,7 @@ native:
 godot-data:
 	mkdir -p $(GODOT_PROJECT)/data
 	rsync -a --delete data/ $(GODOT_PROJECT)/data/
+	cp native/game/shader/optics_pixel.gdshaderinc $(GODOT_PROJECT)/shaders/optics_pixel.gdshaderinc
 
 # Debug extension (CHEM_ASSERT aborts). Writes the same library name, so it
 # replaces the RelWithDebInfo one until the next `make native`.
@@ -121,8 +122,12 @@ test: native
 run:
 	$(GODOT) --path $(GODOT_PROJECT)
 
-# Five screenshots of the host through the demo -> build/screenshots (it opens
-# a window: a headless Godot paints nothing)
-screenshots: native
+# Five screenshots of the host through the demo -> build/screenshots; at each,
+# the GPU's optical pass against the reference renderer (O4), and the GPU's
+# time for a frame. It opens a window for a few seconds (a headless Godot
+# paints nothing), played headless first and under a time limit: a script on
+# the engine's thread must never be able to hang a window.
+screenshots gpu-parity: native
 	mkdir -p build/screenshots
-	$(GODOT) --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 90; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots

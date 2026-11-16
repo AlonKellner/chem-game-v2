@@ -106,9 +106,8 @@ float encode(float v) {
 	return v <= 0.0031308 ? 12.92 * v : 1.055 * pow(v, 1.0 / 2.4) - 0.055;
 }
 
-// The pixel's colour, sRGB-encoded; alpha 0 where no body is.
-vec4 shade(vec2 p) {
-	Light l = transport(p);
+// The light as a colour, sRGB-encoded; alpha 0 where no body is.
+vec4 colour_of(Light l) {
 	vec4 rgb = l.glow;
 	for (int j = 0; j < BAND_VECS; j++) {
 		int k = 2 + 4 * j;
@@ -116,4 +115,8 @@ vec4 shade(vec2 p) {
 	}
 	rgb = clamp(rgb, vec4(0.0), vec4(1.0)); // fixed exposure; a colour no display has is clipped
 	return vec4(encode(rgb.x), encode(rgb.y), encode(rgb.z), l.cover > 0.0 ? 1.0 : 0.0);
+}
+
+vec4 shade(vec2 p) {
+	return colour_of(transport(p));
 }

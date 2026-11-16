@@ -167,10 +167,38 @@ typedef struct cg_draw_list {
 	const float *points; /* x, y, x, y, ... */
 	int32_t text_size;
 	const char *text;
+	int32_t above; /* the first command painted over the optical pass; those before it are under it */
 } cg_draw_list;
 
 /* What to paint now. Borrowed until the next call on this ui. */
 CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
+
+/* The optical pass (GAME_SPEC §12): what is in the vessels and the balloons,
+ * painted between the two parts of the draw list by one shader over the whole
+ * screen (engines/godot/shaders/optics.gdshader). Its one input is this table,
+ * the shader's `uniform vec4 scene[vec_count]`. */
+typedef struct cg_optics {
+	uint32_t size; /* sizeof(cg_optics), set by the caller */
+	int32_t vec_count; /* the table is 4 * vec_count floats */
+	const float *table;
+	uint64_t revision; /* moves when the table does: upload it then */
+} cg_optics;
+
+/* Borrowed until the next call on this ui. */
+CG_API cg_status cg_ui_optics(cg_ui *ui, cg_optics *out);
+
+/* A host's picture of the optical pass alone, the whole screen (width x height
+ * pixels of 4 bytes, red first, rows from the top), held to the reference
+ * renderer wherever a body is (GAME_SPEC §18: O4). */
+typedef struct cg_optics_parity {
+	uint32_t size; /* sizeof(cg_optics_parity), set by the caller */
+	int32_t worst; /* the largest difference of any channel, in 8-bit steps */
+	int64_t covered; /* pixels a body covers */
+	int64_t over; /* of them, those that differ by more than 2 steps */
+	int32_t worst_x, worst_y; /* where the largest difference is */
+} cg_optics_parity;
+
+CG_API cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, int32_t height, cg_optics_parity *out);
 
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */

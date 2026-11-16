@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 
 namespace lab {
 
@@ -128,6 +129,37 @@ std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int 
 			for (const double v : { c.x, c.y, c.z, c.w }) {
 				out[at++] = static_cast<uint8_t>(std::lround(v * 255.0));
 			}
+		}
+	}
+	return out;
+}
+
+OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h, int tolerance) {
+	shader::load(scene);
+	OpticsParity out;
+	for (int row = 0; row < h; ++row) {
+		for (int col = 0; col < w; ++col, rgba += 4) {
+			// Where a body covers less than a fiftieth of a pixel it is not held to
+			// account: whether such a pixel is in the body at all turns on the last
+			// bit of a sum, and float32 and float64 need not agree on it.
+			const shader::Light light = shader::transport(shader::vec2(col + 0.5, row + 0.5));
+			if (light.cover < OPTICS_PARITY_COVER) {
+				continue;
+			}
+			const shader::vec4 c = shader::colour_of(light);
+			++out.covered;
+			int worst = 0;
+			const double channels[3] = { c.x, c.y, c.z };
+			for (int k = 0; k < 3; ++k) {
+				const int d = std::abs(static_cast<int>(std::lround(channels[k] * 255.0)) - static_cast<int>(rgba[k]));
+				worst = d > worst ? d : worst;
+			}
+			if (worst > out.worst) {
+				out.worst = worst;
+				out.worst_x = col;
+				out.worst_y = row;
+			}
+			out.over += worst > tolerance ? 1 : 0;
 		}
 	}
 	return out;
