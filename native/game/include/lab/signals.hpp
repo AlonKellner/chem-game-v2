@@ -15,14 +15,18 @@
 // Engine-free, and pure: the lab measures and applies, these decide.
 namespace lab {
 
-enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2 };
-const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm"
+// A circuit holds other parts, circuits too, compactly on one square (§13.3);
+// it signals nothing itself: what is in it signals as it would out of it.
+enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3 };
+const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit"
 bool part_kind_of(std::string_view name, PartKind &kind);
 
 struct Part {
 	std::string id; // "monitor1"
 	PartKind kind = PartKind::Timer;
-	int col = -1, row = -1; // its square on the bench
+	int col = -1, row = -1; // its square: on the bench, or inside its circuit
+	std::string in; // the circuit it is in; "" on the bench
+	int inner_w = 0, inner_h = 0; // a circuit's own grid, in squares
 
 	// a monitor: what it watches, once set
 	bool watching = false;

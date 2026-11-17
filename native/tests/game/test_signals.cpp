@@ -520,3 +520,98 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 	CHECK(with - without < 3.0);
 #endif
 }
+
+TEST_CASE("signals: a circuit holds parts as they lie, and gives them back; what is in it signals as it would out of it (Stage 14)") {
+	const auto made = [](bool collapse) {
+		auto l = bench();
+		for (const char *c : { R"({"do": "heat", "burner": "burner", "vessel": "flask"})", R"({"do": "valve", "burner": "burner", "to": 0.4})",
+					 R"({"do": "part", "kind": "timer", "at": [3, 1]})", R"({"do": "set", "part": "timer1", "seconds": 2})",
+					 R"({"do": "part", "kind": "monitor", "at": [5, 2]})", R"({"do": "set", "part": "monitor1", "item": "flask", "what": "celsius", "compare": "above", "value": 30})",
+					 R"({"do": "part", "kind": "alarm", "at": [6, 3]})", R"({"do": "wire", "from": "timer1", "to": "monitor1"})", R"({"do": "wire", "from": "monitor1", "to": "alarm1"})",
+					 R"({"do": "rig", "from": "monitor1", "item": "burner", "control": "valve", "on": 0.1})" }) {
+			must(*l, c);
+		}
+		if (collapse) {
+			must(*l, R"({"do": "circuit", "parts": ["timer1", "monitor1"]})");
+		}
+		return l;
+	};
+	auto loose = made(false), kept = made(true);
+	lab::LabView v = kept->view();
+	CHECK(item(v, "circuit1").kind == "circuit");
+	CHECK(item(v, "circuit1").col == 3); // the free square nearest their top-left: the timer's, freed
+	CHECK(item(v, "circuit1").row == 1);
+	CHECK(item(v, "circuit1").part.inner_w == 6); // at least 6 x 4 inside
+	CHECK(item(v, "circuit1").part.inner_h == 4);
+	CHECK(item(v, "timer1").place == "circuit");
+	CHECK(item(v, "timer1").part.in == "circuit1");
+	CHECK(item(v, "monitor1").col == 2); // as they lay: two right, one down of the timer
+	CHECK(item(v, "monitor1").row == 1);
+	CHECK(kept->digest() == loose->digest()); // where parts are kept is not the world
+	std::string why;
+	for (int i = 0; i < 20; ++i) {
+		REQUIRE(loose->advance(30, why));
+		REQUIRE(kept->advance(30, why));
+		REQUIRE(kept->digest() == loose->digest());
+	}
+	CHECK(item(kept->view(), "alarm1").part.ringing); // through the circuit's monitor
+	CHECK(item(kept->view(), "burner").valve == 0.1);
+	// the bench sees the circuit's square only: the timer's old square is the circuit's, the monitor's free
+	must(*kept, R"({"do": "part", "kind": "alarm", "at": [5, 2]})");
+	CHECK(refused(*kept, R"({"do": "part", "kind": "alarm", "at": [3, 1]})").find("\"circuit1\" stands there") != std::string::npos);
+	// inside it: made, placed, refused
+	must(*kept, R"({"do": "part", "kind": "timer", "at": [5, 3], "in": "circuit1"})");
+	CHECK(item(kept->view(), "timer2").part.in == "circuit1");
+	CHECK(refused(*kept, R"({"do": "part", "kind": "timer", "at": [6, 0], "in": "circuit1"})").find("off the circuit's grid") != std::string::npos);
+	CHECK(refused(*kept, R"({"do": "place", "item": "timer2", "at": [2, 1]})").find("\"monitor1\" stands there") != std::string::npos);
+	must(*kept, R"({"do": "place", "item": "timer2", "at": [1, 3]})");
+	CHECK(refused(*kept, R"({"do": "move", "items": ["timer1"], "by": [1, 0]})").find("moves with it") != std::string::npos);
+	CHECK(refused(*kept, R"({"do": "wire", "from": "timer1", "to": "circuit1"})").find("open it") != std::string::npos);
+	CHECK(refused(*kept, R"({"do": "rig", "from": "circuit1", "item": "flask", "control": "stir", "on": true})").find("open it") != std::string::npos);
+	CHECK(refused(*kept, R"({"do": "part", "kind": "circuit", "at": [9, 0]})").find("made of parts") != std::string::npos);
+	CHECK(refused(*kept, R"({"do": "circuit", "parts": ["timer2"]})").find("on the bench") != std::string::npos);
+	// moved as one square; saved and loaded with all it holds
+	must(*kept, R"({"do": "move", "items": ["circuit1"], "by": [0, 3]})");
+	auto again = lab::Lab::load(kept->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(again->view().items.size() == kept->view().items.size());
+	CHECK(item(again->view(), "circuit1").part.inner_w == 6);
+	CHECK(item(again->view(), "timer2").part.in == "circuit1");
+	CHECK(again->digest() == kept->digest());
+	// given back: from its square, as they lay in it
+	must(*kept, R"({"do": "uncircuit", "circuit": "circuit1"})");
+	v = kept->view();
+	CHECK(item(v, "timer1").place == "bench");
+	CHECK(item(v, "timer1").col == 3);
+	CHECK(item(v, "timer1").row == 4);
+	CHECK(item(v, "monitor1").col == 5);
+	CHECK(item(v, "timer2").row == 7);
+	CHECK(std::none_of(v.items.begin(), v.items.end(), [](const lab::ItemView &i) { return i.kind == "circuit"; }));
+}
+
+TEST_CASE("signals: circuits in circuits, scrapped with all they hold, and given back only where there is room (Stage 14)") {
+	std::string why;
+	auto l = lab::Lab::open(R"({"format": "chem-bench/2", "grid": [4, 1], "room": {"celsius": 20}, "items": []})", why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "part", "kind": "alarm", "at": [1, 0]})", R"({"do": "wire", "from": "timer1", "to": "alarm1"})",
+				 R"({"do": "circuit", "parts": ["timer1", "alarm1"]})", R"({"do": "part", "kind": "monitor", "at": [1, 0]})", R"({"do": "circuit", "parts": ["circuit1", "monitor1"]})" }) {
+		must(*l, c);
+	}
+	lab::LabView v = l->view();
+	CHECK(item(v, "circuit2").col == 0);
+	CHECK(item(v, "circuit1").part.in == "circuit2");
+	CHECK(item(v, "timer1").part.in == "circuit1");
+	CHECK(refused(*l, R"({"do": "uncircuit", "circuit": "circuit1"})").find("open that one first") != std::string::npos);
+	must(*l, R"({"do": "uncircuit", "circuit": "circuit2"})"); // the inner circuit back on the bench, a circuit still
+	CHECK(item(l->view(), "circuit1").place == "bench");
+	// two squares in a row are needed for the timer and the alarm: none is left
+	must(*l, R"({"do": "part", "kind": "monitor", "at": [2, 0]})");
+	CHECK(refused(*l, R"({"do": "uncircuit", "circuit": "circuit1"})").find("no room") != std::string::npos);
+	CHECK(item(l->view(), "timer1").part.in == "circuit1");
+	// scrapped with all it holds, wires too
+	must(*l, R"({"do": "scrap", "part": "circuit1"})");
+	v = l->view();
+	CHECK(v.wires.empty());
+	CHECK(std::none_of(v.items.begin(), v.items.end(), [](const lab::ItemView &i) { return i.id == "timer1" || i.id == "alarm1" || i.id == "circuit1"; }));
+	CHECK(v.items.size() == 3); // the tray, and the two monitors
+}

@@ -14,12 +14,14 @@ const char *part_kind_name(PartKind kind) {
 			return "monitor";
 		case PartKind::Alarm:
 			return "alarm";
+		case PartKind::Circuit:
+			return "circuit";
 	}
 	return "?";
 }
 
 bool part_kind_of(std::string_view name, PartKind &kind) {
-	for (const PartKind k : { PartKind::Timer, PartKind::Monitor, PartKind::Alarm }) {
+	for (const PartKind k : { PartKind::Timer, PartKind::Monitor, PartKind::Alarm, PartKind::Circuit }) {
 		if (name == part_kind_name(k)) {
 			kind = k;
 			return true;
@@ -102,6 +104,9 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 				p.out = false;
 				break;
 			}
+			case PartKind::Circuit:
+				p.own = p.out = false; // what is in it signals
+				break;
 		}
 	}
 	// a rig is an input too: it reads its source's signal as it was at the end of the step before
