@@ -348,9 +348,9 @@ TEST_CASE("timers: a person boiling down at 600x stops at 10 g with a timer, and
 		CAPTURE(with_timer);
 		Player p("data/benches/lab.json");
 		// stages 1 and 2, quickly
-		p.drag("item:flask", "cell:3,1");
+		p.drag("item:flask", "square:11,12");
 		p.drag("item:burner", "item:flask");
-		p.drag("item:jar", "cell:1,1");
+		p.drag("item:jar", "square:4,13");
 		p.drag("item:jar", "item:flask");
 		p.click("panel:tip:malachite");
 		p.drag("item:balloon", "item:flask");
@@ -360,7 +360,7 @@ TEST_CASE("timers: a person boiling down at 600x stops at 10 g with a timer, and
 		p.drag("item:balloon", "outbox");
 		p.click("valve:burner@0");
 		p.watch([&] { return p.item("flask").celsius < 30.0; }, 1800);
-		p.drag("item:acid", "cell:2,1");
+		p.drag("item:acid", "square:7,12");
 		p.drag("item:acid", "item:flask");
 		p.click("panel:pour");
 		p.click("stir:flask");
@@ -368,7 +368,7 @@ TEST_CASE("timers: a person boiling down at 600x stops at 10 g with a timer, and
 		p.watch([&] { return p.grams("flask", "copper_oxide") < 0.001; }, 3600);
 		p.click("stir:flask");
 		p.drag("item:condenser", "item:flask");
-		p.drag("item:beaker", "cell:5,1");
+		p.drag("item:beaker", "square:19,12");
 		p.drag("item:beaker", "item:condenser");
 		// stage 3, as a person: paused while setting up, then the flame full and the clock at 600x
 		p.click("pause");

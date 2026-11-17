@@ -10,7 +10,7 @@
 			"text": "Drag the flask from the cabinet on the left onto a square of the bench.",
 			"why": "Everything happens in this 250 mL flask: first the gas, then the solution, then the crystals.",
 			"checks": [{"text": "the flask stands on the bench", "when": {"item": "flask", "place": "bench"}}],
-			"play": [{"drag": ["item:flask", "cell:3,1"]}]
+			"play": [{"drag": ["item:flask", "square:11,12"]}]
 		},
 		{
 			"title": "A burner under the flask",
@@ -24,7 +24,7 @@
 			"text": "Drag the jar from the cabinet onto a free square of the bench.",
 			"why": "The jar holds 5 g of malachite, a green copper carbonate mineral, as a powder.",
 			"checks": [{"text": "the jar stands on the bench", "when": {"item": "jar", "place": "bench"}}],
-			"play": [{"drag": ["item:jar", "cell:1,1"]}]
+			"play": [{"drag": ["item:jar", "square:4,13"]}]
 		},
 		{
 			"title": "Tip the malachite into the flask",
@@ -83,7 +83,7 @@
 			"text": "Drag the acid from the cabinet onto a free square of the bench.",
 			"why": "It is about 250 mL of 1 M sulfuric acid, H2SO4 in water.",
 			"checks": [{"text": "the acid stands on the bench", "when": {"item": "acid", "place": "bench"}}],
-			"play": [{"drag": ["item:acid", "cell:2,1"]}]
+			"play": [{"drag": ["item:acid", "square:7,12"]}]
 		},
 		{
 			"title": "Pour the acid onto the oxide",
@@ -137,7 +137,7 @@
 			"title": "A beaker for the water",
 			"text": "Drag the beaker from the cabinet onto a free square of the bench.",
 			"checks": [{"text": "the beaker stands on the bench", "when": {"item": "beaker", "place": "bench"}}],
-			"play": [{"drag": ["item:beaker", "cell:5,1"]}]
+			"play": [{"drag": ["item:beaker", "square:19,12"]}]
 		},
 		{
 			"title": "Under the outlet",
@@ -224,13 +224,13 @@
 			"title": "Take the condenser off",
 			"text": "Drag the condenser off the flask onto the bench. The beaker under its outlet keeps it beside the flask.",
 			"checks": [{"text": "the condenser is off the flask", "when": {"not": {"item": "condenser", "place": "on"}}}],
-			"play": [{"drag": ["item:condenser", "cell:6,0"]}]
+			"play": [{"drag": ["item:condenser", "square:23,3"]}]
 		},
 		{
 			"title": "A beaker for the liquor",
 			"text": "Drag the waste beaker from the cabinet onto a free square of the bench.",
 			"checks": [{"text": "the waste beaker stands on the bench", "when": {"item": "waste", "place": "bench"}}],
-			"play": [{"drag": ["item:waste", "cell:4,1"]}]
+			"play": [{"drag": ["item:waste", "square:23,12"]}]
 		},
 		{
 			"title": "Pour off the liquor",

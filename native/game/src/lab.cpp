@@ -49,7 +49,8 @@ struct Item {
 	bool stirred = false;
 	bool submitted = false;
 	Place place = Place::Cabinet;
-	int col = -1, row = -1; // on the bench
+	int col = -1, row = -1; // on the bench: its footprint's top-left square
+	int w = 1, h = 1; // its footprint, in squares (GAME_SPEC §13)
 	double capacity = 0.0; // a balloon: the volume at which it bursts, m^3
 	bool burst = false;
 };
@@ -108,13 +109,34 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 	return amount.at("g").get<double>() / (static_cast<double>(table.molar_mass_ug(id)) * 1e-6);
 }
 
+// An item's footprint on the bench, in squares of the grid (GAME_SPEC §13):
+// room for its body, what stands on its mouth starts above it, and a vessel's
+// stand over a burner. A bench may give its own ("size").
+void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
+	if (kind == "burner") {
+		w = h = 3; // the burner and its valve beside it
+	} else if (kind == "balloon") {
+		w = 4;
+		h = 5;
+	} else if (condenser) {
+		w = 2;
+		h = 5;
+	} else if (volume_ml < 100.0) {
+		w = 2;
+		h = 6;
+	} else {
+		w = 3;
+		h = 7;
+	}
+}
+
 } // namespace
 
 struct Lab::Impl {
 	std::optional<Simulation> sim;
 	std::vector<Item> items;
 	std::vector<Event> events;
-	int cols = 12, rows = 4; // the bench's grid
+	int cols = 28, rows = 15; // the bench's grid, in squares
 	CellId air;
 	CellId room;
 	Totals genesis;
@@ -203,14 +225,44 @@ struct Lab::Impl {
 		}
 	}
 
-	// the bench cell an item stands on, or -1
-	int standing_at(int col, int row) const {
+	// what stands on any of the squares of a footprint at (col, row), other
+	// than `except`; -1 for nothing
+	int standing_in(int col, int row, int w, int h, int except = -1) const {
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].place == Place::Bench && items[i].col == col && items[i].row == row) {
+			const Item &o = items[i];
+			if (static_cast<int>(i) == except || o.place != Place::Bench || o.col < 0) {
+				continue;
+			}
+			if (col < o.col + o.w && o.col < col + w && row < o.row + o.h && o.row < row + h) {
 				return static_cast<int>(i);
 			}
 		}
 		return -1;
+	}
+	bool on_grid(int col, int row, int w, int h) const { return col >= 0 && row >= 0 && col + w <= cols && row + h <= rows; }
+
+	// Sets an item down beside another (GAME_SPEC §13): on the first free
+	// footprint, rows by how far their foot is from the other's foot, then
+	// columns by how far from it, the left first. false when nowhere is free.
+	bool set_beside(int index, const Item &near) {
+		Item &x = items[static_cast<size_t>(index)];
+		const int foot = near.col >= 0 ? near.row + near.h : rows;
+		const int centre = near.col >= 0 ? near.col : 0;
+		for (int dr = 0; dr <= rows; ++dr) {
+			for (const int row : { foot - x.h - dr, foot - x.h + dr }) {
+				for (int dc = 0; dc <= cols; ++dc) {
+					for (const int col : { centre - dc, centre + dc }) {
+						if (on_grid(col, row, x.w, x.h) && standing_in(col, row, x.w, x.h, index) < 0) {
+							x.place = Place::Bench;
+							x.col = col;
+							x.row = row;
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 
 	// true when the item is on the bench, in use
@@ -315,11 +367,18 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		why = std::string("the bench is not JSON: ") + e.what();
 		return nullptr;
 	}
-	if (!bench.is_object() || bench.value("format", "") != "chem-bench/1") {
-		why = "the bench's \"format\" is not \"chem-bench/1\"";
+	const std::string format = bench.is_object() ? bench.value("format", "") : "";
+	if (format != "chem-bench/1" && format != "chem-bench/2") {
+		why = "the bench's \"format\" is not \"chem-bench/2\" (or \"chem-bench/1\")";
 		return nullptr;
 	}
+	// chem-bench/1: a grid of cells, every item on one; /2: squares, an item on a footprint of them
+	const bool squares = format == "chem-bench/2";
 	auto impl = std::make_unique<Impl>();
+	if (!squares) {
+		impl->cols = 12;
+		impl->rows = 4;
+	}
 	const SpeciesTable &table = builtin_species();
 	World::Builder b(table);
 	bool ok = true;
@@ -350,20 +409,31 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
-			if (j.contains("at")) {
-				item.place = Place::Bench;
-				item.col = j.at("at").at(0).get<int>();
-				item.row = j.at("at").at(1).get<int>();
-				if (item.col < 0 || item.col >= impl->cols || item.row < 0 || item.row >= impl->rows || impl->standing_at(item.col, item.row) >= 0) {
-					why = "item \"" + item.id + "\" stands off the bench's grid, or where something else stands";
-					return nullptr;
-				}
-			}
 			if (item.id.empty() || impl->find(item.id) >= 0) {
 				why = "an item's id is empty or used twice: \"" + item.id + "\"";
 				return nullptr;
 			}
 			const std::string kind = j.at("kind").get<std::string>();
+			if (squares) {
+				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h);
+			}
+			if (squares && j.contains("size")) {
+				item.w = j.at("size").at(0).get<int>();
+				item.h = j.at("size").at(1).get<int>();
+				if (item.w < 1 || item.h < 1) {
+					why = "item \"" + item.id + "\": a size is at least one square each way";
+					return nullptr;
+				}
+			}
+			if (j.contains("at")) {
+				item.place = Place::Bench;
+				item.col = j.at("at").at(0).get<int>();
+				item.row = j.at("at").at(1).get<int>();
+				if (!impl->on_grid(item.col, item.row, item.w, item.h) || impl->standing_in(item.col, item.row, item.w, item.h) >= 0) {
+					why = "item \"" + item.id + "\" stands off the bench's grid, or where something else stands";
+					return nullptr;
+				}
+			}
 			if (kind == "burner") {
 				item.kind = Kind::Burner;
 				item.cell = b.add_reservoir(item.id, j.at("celsius").get<double>() + 273.15);
@@ -538,12 +608,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
-		if (col < 0 || col >= cols || row < 0 || row >= rows) {
+		if (!on_grid(col, row, x.w, x.h)) {
 			why = "that is off the bench";
 			return false;
 		}
-		const int there = standing_at(col, row);
-		if (there >= 0 && there != thing) {
+		const int there = standing_in(col, row, x.w, x.h, thing);
+		if (there >= 0) {
 			why = "\"" + items[static_cast<size_t>(there)].id + "\" stands there";
 			return false;
 		}
@@ -607,15 +677,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		world().disconnect(flame.heats);
 		// it goes back beside the vessel if there is room, else to the cabinet
-		const Item &v = items[static_cast<size_t>(flame.under)];
+		const Item v = items[static_cast<size_t>(flame.under)];
 		flame.place = Place::Cabinet;
-		for (int col = 0; col < cols && flame.place == Place::Cabinet; ++col) {
-			if (standing_at(col, v.row) < 0) {
-				flame.place = Place::Bench;
-				flame.col = col;
-				flame.row = v.row;
-			}
-		}
+		flame.col = flame.row = -1;
+		set_beside(burner, v);
 		flame.under = -1;
 		flame.heats = EdgeId{};
 		return true;
@@ -808,13 +873,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.joint = EdgeId{};
 		// it is set down beside the vessel if there is room, else in the cabinet
 		x.place = Place::Cabinet;
-		for (int col = 0; col < cols && x.place == Place::Cabinet; ++col) {
-			if (standing_at(col, v.row) < 0) {
-				x.place = Place::Bench;
-				x.col = col;
-				x.row = v.row;
-			}
-		}
+		x.col = x.row = -1;
+		set_beside(thing, v);
 		return true;
 	}
 	if (what == "under") {
@@ -860,14 +920,18 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				world().disconnect(other.heats);
 				other.under = -1;
 				other.heats = EdgeId{};
-				other.place = Place::Bench;
-				other.col = x.col;
-				other.row = x.row;
 			}
 		}
+		const Item was = x;
 		x.submitted = true;
 		x.place = Place::Outbox;
 		x.col = x.row = -1;
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].kind == Kind::Burner && items[i].place == Place::Under && items[i].under < 0) {
+				items[i].place = Place::Cabinet;
+				set_beside(static_cast<int>(i), was); // where the vessel stood, or beside it
+			}
+		}
 		return true;
 	}
 	why = "there is no command \"" + what + "\"";
@@ -934,6 +998,8 @@ LabView Lab::view() const {
 		v.place = PLACE_NAME[static_cast<int>(item.place)];
 		v.col = item.col;
 		v.row = item.row;
+		v.w = item.w;
+		v.h = item.h;
 		v.on = item.on;
 		v.under = item.under;
 		v.holds = item.holds;
@@ -1193,7 +1259,7 @@ json Lab::Impl::save() const {
 		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
 				{ "heats", item.heats.index }, { "under", item.under }, { "valve", bits(item.valve) }, { "on", item.on }, { "joint", item.joint.index }, { "holds", item.holds },
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
-				{ "row", item.row }, { "capacity", bits(item.capacity) }, { "burst", item.burst } });
+				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst } });
 	}
 	bench["items"] = list;
 	json happened = json::array();
@@ -1301,6 +1367,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.submitted = j.at("submitted").get<bool>();
 			item.col = j.at("col").get<int>();
 			item.row = j.at("row").get<int>();
+			item.w = j.value("w", 1);
+			item.h = j.value("h", 1);
 			item.burst = j.at("burst").get<bool>();
 			if (!from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)) {
 				why = "the save holds a number that is not one";

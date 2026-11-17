@@ -76,7 +76,8 @@ public:
 	bool paused() const;
 
 	// The centre of a named thing on the screen, for tests and scripted hosts:
-	//   item:<id>   cell:<col>,<row>   cabinet   outbox
+	//   item:<id>   square:<col>,<row> (a drop there puts the square the item is
+	//   held by on it)   cabinet   outbox
 	//   valve:<burner>@<0..1>   stir:<vessel>
 	//   panel:pour  panel:slider@<0..1>  panel:tip:<species>  panel:cancel
 	//   pause   speed:<1|10|60|600>   check   reset

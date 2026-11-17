@@ -285,11 +285,11 @@ TEST_CASE("tutorial: the screen points at what the step asks for, and stops once
 		return n;
 	};
 	CHECK(guides() >= 4); // the flask, the cell, the arrow's line and its head
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	CHECK(p.tutorial().step == 1);
 	CHECK(p.drawn("A burner under the flask"));
 	p.drag("item:burner", "item:flask");
-	p.drag("item:jar", "cell:1,1");
+	p.drag("item:jar", "square:4,13");
 	p.drag("item:jar", "item:flask"); // the panel: now it points at the tip button
 	CHECK(p.tutorial().step == 3);
 	CHECK(guides() == 1);
@@ -314,27 +314,27 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 		CHECK(p.ui->lab().digest() == digest);
 	};
 	std::string before = p.ui->lab().digest();
-	p.drag("item:burner", "cell:3,1"); // the flask comes first
+	p.drag("item:burner", "square:11,12"); // the flask comes first
 	refused(before);
 	CHECK(p.item("burner").place == "cabinet");
 	p.drag("item:jar", "outbox");
 	refused(before);
 	p.drag("item:flask", "cabinet"); // the right item, the wrong place
 	refused(before);
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	CHECK(p.tutorial().step == 1);
 	CHECK(p.ui->message().empty());
 	before = p.ui->lab().digest();
-	p.drag("item:burner", "cell:5,1"); // onto the bench, not under the flask
+	p.drag("item:burner", "square:19,12"); // onto the bench, not under the flask
 	refused(before);
 	p.drag("item:burner", "item:flask");
-	p.drag("item:jar", "cell:1,1");
+	p.drag("item:jar", "square:4,13");
 	before = p.ui->lab().digest();
 	p.click("valve:burner@1"); // the malachite first
 	refused(before);
 	p.drag("item:jar", "item:flask");
 	p.click("panel:tip:malachite");
-	p.drag("item:acid", "cell:2,1"); // the acid's time is the second stage
+	p.drag("item:acid", "square:7,12"); // the acid's time is the second stage
 	refused(p.ui->lab().digest());
 	CHECK(p.item("acid").place == "cabinet");
 	p.drag("item:balloon", "item:flask");
@@ -385,7 +385,7 @@ TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {
 		return std::make_pair(std::move(l), std::move(t));
 	};
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "jar", "at": [1, 1]})", R"({"do": "submit", "item": "jar"})" });
+		auto [l, t] = played({ R"({"do": "place", "item": "jar", "at": [3, 9]})", R"({"do": "submit", "item": "jar"})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("Only the balloon") != std::string::npos);
 		CHECK(t->gestures().empty());
@@ -396,14 +396,14 @@ TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {
 		CHECK(t->view().step == 0);
 	}
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "flask", "at": [3, 1]})", R"({"do": "place", "item": "jar", "at": [1, 1]})",
-				R"({"do": "tip", "from": "jar", "to": "flask", "species": "malachite", "all": true})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+		auto [l, t] = played({ R"({"do": "place", "item": "flask", "at": [10, 8]})", R"({"do": "place", "item": "jar", "at": [3, 9]})",
+				R"({"do": "tip", "from": "jar", "to": "flask", "species": "malachite", "all": true})", R"({"do": "place", "item": "acid", "at": [6, 8]})",
 				R"({"do": "pour", "from": "acid", "to": "flask", "ml": 50})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("never gets hot enough") != std::string::npos);
 	}
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "beaker", "at": [5, 1]})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+		auto [l, t] = played({ R"({"do": "place", "item": "beaker", "at": [18, 8]})", R"({"do": "place", "item": "acid", "at": [6, 8]})",
 				R"({"do": "pour", "from": "acid", "to": "beaker", "ml": 50})", R"({"do": "submit", "item": "beaker"})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("more than water") != std::string::npos);

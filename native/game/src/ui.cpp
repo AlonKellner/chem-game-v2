@@ -98,6 +98,7 @@ struct Ui::Impl {
 	bool down = false;
 	int drag = -1; // the item in hand
 	float grab_x = 0, grab_y = 0; // where in it it was taken
+	int anchor_c = 0, anchor_r = 0; // the square of its footprint under the pointer
 	bool moved = false;
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
@@ -175,7 +176,7 @@ struct Ui::Impl {
 				continue;
 			}
 			const std::string &where = g.to;
-			if ((where.rfind("item:", 0) == 0 && target >= 0 && id(target) == where.substr(5)) || (where.rfind("cell:", 0) == 0 && target < 0 && BENCH.has(x, y)) ||
+			if ((where.rfind("item:", 0) == 0 && target >= 0 && id(target) == where.substr(5)) || (where.rfind("square:", 0) == 0 && target < 0 && BENCH.has(x, y)) ||
 					(where == "outbox" && OUTBOX.has(x, y)) || (where == "cabinet" && CABINET.has(x, y))) {
 				return true;
 			}
@@ -183,9 +184,20 @@ struct Ui::Impl {
 		return not_now();
 	}
 
-	float cell_w() const { return std::fmin(140.0f, BENCH.w / static_cast<float>(view.cols)); }
-	float cell_h() const { return std::fmin(300.0f, BENCH.h / static_cast<float>(view.rows)); }
-	Rect cell(int col, int row) const { return Rect{ BENCH.x + static_cast<float>(col) * cell_w(), BENCH.y + static_cast<float>(row) * cell_h(), cell_w(), cell_h() }; }
+	// the bench's squares (§13): 40 px on a bench of 28 x 15
+	float square() const { return std::fmin(BENCH.w / static_cast<float>(view.cols), BENCH.h / static_cast<float>(view.rows)); }
+	Rect square_rect(int col, int row) const { return Rect{ BENCH.x + static_cast<float>(col) * square(), BENCH.y + static_cast<float>(row) * square(), square(), square() }; }
+	// an item's footprint on the bench
+	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
+	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
+	// the square of an item's footprint its body's centre is on, as it would stand on the bench
+	void body_square(int index, int &c, int &r) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		float w = 0, h = 0;
+		size_of(v, w, h);
+		c = std::clamp(static_cast<int>(static_cast<float>(v.w) * square() / 2 / square()), 0, v.w - 1);
+		r = std::clamp(static_cast<int>((static_cast<float>(v.h) * square() - STAND - h / 2) / square()), 0, v.h - 1);
+	}
 
 	// how large an item is drawn
 	void size_of(const ItemView &v, float &w, float &h) const {
@@ -237,9 +249,9 @@ struct Ui::Impl {
 			const Rect vessel = rect(v.under);
 			return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h + 64, w, h };
 		}
-		// on the bench: standing on the cell's floor, raised when a burner is under it
-		const Rect c = cell(v.col, v.row);
-		float lift = 34;
+		// on the bench: standing on its footprint's floor, raised when a burner is under it
+		const Rect c = foot(v);
+		float lift = STAND;
 		for (const ItemView &other : view.items) {
 			if (other.kind == "burner" && other.under == index) {
 				lift = 34 + 94; // the burner, and its flame, under it
@@ -285,8 +297,8 @@ struct Ui::Impl {
 		if (v.kind != "vessel" || v.place != "bench" || !(v.liquid_ml > 0.0)) {
 			return false;
 		}
-		const Rect c = cell(v.col, v.row);
-		r = Rect{ c.x + 4, c.y + 6, 44, 24 }; // the cell's corner, clear of what stands on the vessel's mouth
+		const Rect c = foot(v);
+		r = Rect{ c.x + 4, c.y + 6, 44, 24 }; // the footprint's corner, clear of what stands on the vessel's mouth
 		return true;
 	}
 
@@ -371,9 +383,10 @@ struct Ui::Impl {
 			return;
 		}
 		if (BENCH.has(x, y)) {
-			const int col = static_cast<int>((x - BENCH.x) / cell_w()), row = static_cast<int>((y - BENCH.y) / cell_h());
-			if (col < view.cols && row < view.rows && !act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } }) && was_on &&
-					view.items[static_cast<size_t>(index)].drains_to >= 0) {
+			// the square under the pointer takes the square of the footprint it was held by, the whole of it on the bench
+			const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+			const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+			if (!act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } }) && was_on && view.items[static_cast<size_t>(index)].drains_to >= 0) {
 				message.clear(); // it came off, and stays beside the vessel: what stands under its outlet holds it there
 			}
 		}
@@ -514,6 +527,13 @@ struct Ui::Impl {
 			grab_x = x - r.x;
 			grab_y = y - r.y;
 			moved = false;
+			const ItemView &v = view.items[static_cast<size_t>(hit)];
+			if (v.place == "bench") { // held by the square under the pointer
+				anchor_c = std::clamp(static_cast<int>((x - BENCH.x) / square()) - v.col, 0, v.w - 1);
+				anchor_r = std::clamp(static_cast<int>((y - BENCH.y) / square()) - v.row, 0, v.h - 1);
+			} else { // held by its body, which lands under the pointer
+				body_square(hit, anchor_c, anchor_r);
+			}
 		}
 	}
 
@@ -903,8 +923,8 @@ struct Ui::Impl {
 		} else if (v.place == "under") {
 			// under a vessel it needs no name: its valve is beside it
 		} else if (v.place == "bench") {
-			const Rect c = cell(v.col, v.row);
-			text(c.x + 8, c.y + c.h - 10, label, WALL_INK, 15);
+			const Rect c = foot(v);
+			text(c.x + 4, c.y + c.h - 10, label, WALL_INK, 15);
 		} else {
 			text(r.x, r.y + r.h + 18, label, WALL_INK, 15);
 		}
@@ -918,11 +938,12 @@ struct Ui::Impl {
 		rect_fill(Rect{ 0, 0, 1920, 1080 }, BACKGROUND);
 		rect_fill(ROOM, WALL);
 		// the bench and its grid
+		const float sq = square();
 		for (int c = 0; c <= view.cols; ++c) {
-			line(BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y, BENCH.x + static_cast<float>(c) * cell_w(), BENCH.y + static_cast<float>(view.rows) * cell_h(), WALL_GRID, 1);
+			line(BENCH.x + static_cast<float>(c) * sq, BENCH.y, BENCH.x + static_cast<float>(c) * sq, BENCH.y + static_cast<float>(view.rows) * sq, WALL_GRID, 1);
 		}
 		for (int r = 0; r <= view.rows; ++r) {
-			line(BENCH.x, BENCH.y + static_cast<float>(r) * cell_h(), BENCH.x + static_cast<float>(view.cols) * cell_w(), BENCH.y + static_cast<float>(r) * cell_h(), WALL_GRID, 1);
+			line(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq, WALL_GRID, 1);
 		}
 		outline(CABINET, WALL_GRID, 1);
 		outline(OUTBOX, WALL_GRID, 1);
@@ -1208,8 +1229,8 @@ struct Ui::Impl {
 			r = OUTBOX;
 			return true;
 		}
-		if (what.substr(0, 5) == "cell:") {
-			r = cell(static_cast<int>((x - BENCH.x) / cell_w()), static_cast<int>((y - BENCH.y) / cell_h()));
+		if (what.substr(0, 7) == "square:") {
+			r = square_rect(static_cast<int>((x - BENCH.x) / square()), static_cast<int>((y - BENCH.y) / square()));
 			return true;
 		}
 		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@") {
@@ -1746,7 +1767,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const int i = index_of(rest);
 		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && centre(m.rect(i));
 	}
-	if (after("cell:", rest)) {
+	if (after("square:", rest)) {
 		const size_t comma = rest.find(',');
 		if (comma == std::string_view::npos) {
 			return false;
@@ -1755,9 +1776,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		if (col < 0 || col >= m.view.cols || row < 0 || row >= m.view.rows) {
 			return false;
 		}
-		const Rect c = m.cell(col, row);
+		const Rect c = m.square_rect(col, row);
 		x = c.cx();
-		y = c.y + 60; // above whatever stands in it
+		y = c.cy();
 		return true;
 	}
 	if (after("valve:", rest)) {

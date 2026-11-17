@@ -1,9 +1,9 @@
 {
-	"format": "chem-bench/1",
-	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes.",
+	"format": "chem-bench/2",
+	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size.",
 	"grid": [
-		8,
-		2
+		28,
+		15
 	],
 	"room": {
 		"celsius": 20,

@@ -150,7 +150,7 @@ TEST_CASE("lab: a refused command says why and changes nothing (Stage 7)") {
 		{ R"({"do": "unheat", "burner": "burner"})", "not under anything" },
 		{ R"({"do": "wait_until", "item": "flask", "below_g": 1})", "needs a \"species\"" },
 		{ R"({"do": "wait_until", "item": "flask", "species": "water", "above_g": 1, "timeout": 0.5})", "timeout" },
-		{ R"({"do": "place", "item": "flask", "at": [3, 1]})", "stands there" },
+		{ R"({"do": "place", "item": "flask", "at": [3, 5]})", "stands there" }, // over the acid's footprint
 		{ R"({"do": "place", "item": "flask", "at": [40, 1]})", "off the bench" },
 		{ R"({"do": "place", "item": "flask"})", "[column, row]" },
 		{ R"({"do": "place", "item": "tray", "at": [0, 0]})", "cannot be moved" },
@@ -354,6 +354,69 @@ TEST_CASE("lab: equipment is used on the bench, and placed there from the cabine
 	CHECK(item(report, "flame").at("under").is_null());
 	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why)); // handed in
 	CHECK(run(*lab, R"({"do": "wait", "seconds": 2})"));
+}
+
+TEST_CASE("lab: on a bench of squares, an item stands on a footprint of them, and nothing overlaps (Stage 13)") {
+	// chem-bench/2: the grid in squares; a footprint by kind and volume, or the bench's own "size"
+	const char *const SQUARES = R"({"format": "chem-bench/2", "grid": [12, 8], "room": {"celsius": 20}, "items": [
+		{"id": "flask", "at": [4, 1], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.9, "contents": {"water": {"g": 60}}},
+		{"id": "cup", "kind": "vessel", "volume_ml": 20, "wall": "glass", "wall_g": 15, "loss": 0.3},
+		{"id": "tube", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
+		{"id": "bag", "kind": "balloon", "wall": "latex", "wall_g": 2, "loss": 0.5, "capacity_ml": 300},
+		{"id": "slab", "kind": "vessel", "volume_ml": 20, "size": [5, 1], "wall": "glass", "wall_g": 15, "loss": 0.3},
+		{"id": "flame", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+	std::string why;
+	auto lab = lab::Lab::open(SQUARES, why);
+	REQUIRE_MESSAGE(lab != nullptr, why);
+	const auto size = [&](const char *id) {
+		for (const lab::ItemView &v : lab->view().items) {
+			if (v.id == id) {
+				return std::make_pair(v.w, v.h);
+			}
+		}
+		FAIL("no item " << id);
+		return std::make_pair(0, 0);
+	};
+	CHECK(size("flask") == std::make_pair(3, 7));
+	CHECK(size("cup") == std::make_pair(2, 6));
+	CHECK(size("tube") == std::make_pair(2, 5));
+	CHECK(size("bag") == std::make_pair(4, 5));
+	CHECK(size("flame") == std::make_pair(3, 3));
+	CHECK(size("slab") == std::make_pair(5, 1));
+	// the flask covers columns 4-6 and rows 1-7: any footprint over one of its squares is refused
+	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "cup", "at": [6, 2]})", &why));
+	CHECK(why.find("\"flask\" stands there") != std::string::npos);
+	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "slab", "at": [0, 7]})", &why)); // its last square is the flask's
+	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "cup", "at": [11, 2]})", &why)); // half off the grid
+	CHECK(why.find("off the bench") != std::string::npos);
+	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [7, 2]})")); // beside it, touching
+	REQUIRE(run(*lab, R"({"do": "place", "item": "slab", "at": [0, 0]})"));
+	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [7, 1]})")); // along the bench, over its own old squares
+	// set down beside: the first free footprint whose foot is level with the flask's, the nearest column first
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "unheat", "burner": "flame"})"));
+	lab::LabView view = lab->view();
+	CHECK(view.items[5].place == "bench");
+	CHECK(view.items[5].col == 1);
+	CHECK(view.items[5].row == 5); // its foot on row 7, the flask's
+	REQUIRE(run(*lab, R"({"do": "stow", "item": "flame"})"));
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
+	REQUIRE(run(*lab, R"({"do": "submit", "item": "flask"})")); // the burner stays where the flask stood
+	view = lab->view();
+	CHECK(view.items[5].place == "bench");
+	CHECK(view.items[5].col == 4);
+	CHECK(view.items[5].row == 5);
+	// a bench of one item per cell (chem-bench/1) is read as before: every footprint one square
+	auto cells = small_bench();
+	for (const lab::ItemView &v : cells->view().items) {
+		CHECK(v.w == 1);
+		CHECK(v.h == 1);
+	}
+	// a footprint is saved, and loaded
+	auto again = lab::Lab::load(lab->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(again->view().items[4].w == 5);
+	CHECK(again->view().items[4].col == 0);
 }
 
 TEST_CASE("lab: a balloon filled past its capacity bursts, and its gas is the room's (Stage 8)") {

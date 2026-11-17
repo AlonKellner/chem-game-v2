@@ -119,9 +119,9 @@ func _initialize() -> void:
 
 func _play(dir: String) -> void:
 	_click("pause")
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	_drag("item:burner", "item:flask")
-	_drag("item:jar", "cell:1,1")
+	_drag("item:jar", "square:4,13")
 	_drag("item:jar", "item:flask")
 	_click("panel:tip:malachite")
 	_drag("item:balloon", "item:flask")
@@ -140,7 +140,7 @@ func _play(dir: String) -> void:
 	if not _watch(func(): return _celsius("flask") < 30.0, "the flask to cool"):
 		return
 	_click("pause")
-	_drag("item:acid", "cell:2,1")
+	_drag("item:acid", "square:7,12")
 	_drag("item:acid", "item:flask")
 	await _shoot(dir, "3_pour_panel") # nothing is clicked while the panel is open: a click outside it closes it
 	_click("panel:pour")
@@ -151,7 +151,7 @@ func _play(dir: String) -> void:
 		return
 	_click("stir:flask")
 	_drag("item:condenser", "item:flask")
-	_drag("item:beaker", "cell:5,1")
+	_drag("item:beaker", "square:19,12")
 	_drag("item:beaker", "item:condenser")
 	# a timer on the flask's water, written as the tutorial asks (GAME_SPEC §13.3)
 	for what in ["item:flask", "timer:add", "timer:quantity:0", "timer:pick:water", "timer:compare:0:below", "timer:value:0:0"]:

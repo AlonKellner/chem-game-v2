@@ -46,7 +46,7 @@ func test_it_opens_the_bench_with_everything_in_the_cabinet() -> void:
 	assert_eq(_lab.message(), "")
 
 func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	assert_eq(_item("flask")["place"], "bench")
 	_drag("item:burner", "item:flask")
 	assert_eq(_item("burner")["under"], "flask")
@@ -68,9 +68,9 @@ func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 	assert_gt(t[2], 20)
 	_lab.frame(1.0)
 	assert_eq(int(JSON.parse_string(_lab.report())["step"]), 0, "the clock waits while it asks for a gesture")
-	_drag("item:burner", "cell:3,1")
+	_drag("item:burner", "square:11,12")
 	assert_string_contains(_lab.message(), "Not now", "anything but the step's gesture is refused")
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
 
 func _click(what: String) -> void:
@@ -81,7 +81,7 @@ func _click(what: String) -> void:
 	_lab.pointer(a.x, a.y, false)
 
 func test_a_timer_typed_in_fires_and_pauses_the_clock() -> void:
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	_click("item:flask")
 	_click("timer:add")
 	_click("timer:remove:0")

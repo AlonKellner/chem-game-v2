@@ -276,7 +276,7 @@ CG_API const char *cg_ui_message(cg_ui *ui);
 CG_API const char *cg_ui_report(cg_ui *ui);
 
 /* The centre of a named thing on the screen, for tests and scripted hosts:
- * "item:flask", "cell:3,1", "cabinet", "outbox", "valve:burner@0.5",
+ * "item:flask", "square:11,12", "cabinet", "outbox", "valve:burner@0.5",
  * "stir:flask", "panel:pour", "panel:slider@0.25", "panel:tip:malachite",
  * "panel:cancel", "pause", "speed:600", "check", "reset". 0 when it is not on
  * the screen now. */

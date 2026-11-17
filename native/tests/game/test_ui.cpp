@@ -111,33 +111,37 @@ void well_formed(const lab::DrawList &list) {
 TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, and back (Stage 9)") {
 	Player p;
 	CHECK(p.item("flask").place == "cabinet");
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12"); // its body lands under the pointer: a 3 x 7 footprint
 	CHECK(p.item("flask").place == "bench");
-	CHECK(p.item("flask").col == 3);
-	CHECK(p.item("flask").row == 1);
-	p.drag("item:flask", "cell:5,0");
-	CHECK(p.item("flask").col == 5);
-	p.drag("item:beaker", "cell:5,0"); // the flask stands there
+	CHECK(p.item("flask").col == 10);
+	CHECK(p.item("flask").row == 8);
+	CHECK(p.item("flask").w == 3);
+	CHECK(p.item("flask").h == 7);
+	p.drag("item:flask", "square:19,4"); // held by its body's square, (1, 4) of its footprint
+	CHECK(p.item("flask").col == 18);
+	CHECK(p.item("flask").row == 0);
+	p.drag("item:beaker", "square:17,1"); // a footprint over the flask's
+	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.ui->message().find("stands there") != std::string::npos);
 	p.drag("item:beaker", "item:flask"); // onto the flask itself: the pour panel, with nothing to pour
 	p.click("panel:cancel");
 	float x = 0, y = 0;
 	CHECK_FALSE(p.ui->locate("panel:cancel", x, y)); // closed
-	p.drag("item:beaker", "cell:6,0");
+	p.drag("item:beaker", "square:23,4");
 	CHECK(p.item("beaker").place == "bench");
 	p.drag("item:beaker", "cabinet");
 	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.ui->message().empty());
 	// a click without a drag moves nothing
 	p.click("item:flask");
-	CHECK(p.item("flask").col == 5);
+	CHECK(p.item("flask").col == 18);
 	well_formed(p.ui->draw());
 }
 
 TEST_CASE("ui: a refusal is shown, and nothing changes (Stage 9)") {
 	Player p;
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	p.drag("item:balloon", "item:flask");
 	CHECK(p.item("balloon").place == "on");
 	const std::string before = p.ui->lab().digest();
@@ -148,7 +152,7 @@ TEST_CASE("ui: a refusal is shown, and nothing changes (Stage 9)") {
 	CHECK(p.ui->message().find("joined") != std::string::npos);
 	CHECK(p.item("flask").place == "bench");
 	CHECK(p.ui->lab().digest() == before);
-	p.drag("item:balloon", "cell:1,0"); // off again, set down where it was dropped
+	p.drag("item:balloon", "square:3,4"); // off again, set down where it was dropped, held by its body
 	CHECK(p.item("balloon").place == "bench");
 	CHECK(p.item("balloon").col == 1);
 	CHECK(p.ui->message().empty());
@@ -181,10 +185,10 @@ TEST_CASE("ui: the clock: pause, speeds, and one checked step in every frame (St
 TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stage 9)") {
 	Player p;
 	// ---- stage 1: gas from malachite
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	p.drag("item:burner", "item:flask");
 	CHECK(p.item("burner").place == "under");
-	p.drag("item:jar", "cell:1,1");
+	p.drag("item:jar", "square:4,13");
 	p.drag("item:jar", "item:flask");
 	p.click("panel:tip:malachite");
 	CHECK(p.grams("flask", "malachite") == doctest::Approx(5.0).epsilon(1e-9));
@@ -200,7 +204,7 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	p.watch([&] { return p.item("flask").celsius < 30.0; }, 1800);
 
 	// ---- stage 2: copper sulfate solution
-	p.drag("item:acid", "cell:2,1");
+	p.drag("item:acid", "square:7,12");
 	p.drag("item:acid", "item:flask");
 	p.click("panel:pour"); // the panel opens at 50 mL
 	CHECK(p.item("flask").liquid_ml == doctest::Approx(50.0).epsilon(0.01));
@@ -214,7 +218,7 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 
 	// ---- stage 3: water and crystals
 	p.drag("item:condenser", "item:flask");
-	p.drag("item:beaker", "cell:5,1");
+	p.drag("item:beaker", "square:19,12");
 	p.drag("item:beaker", "item:condenser");
 	CHECK(p.item("condenser").drains_to >= 0);
 	p.click("valve:burner@1");
@@ -222,8 +226,8 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	p.click("valve:burner@0");
 	p.watch([&] { return p.item("flask").celsius < 21.0; }, 3600);
 	p.wait(900);
-	p.drag("item:condenser", "cell:6,0");
-	p.drag("item:waste", "cell:4,1");
+	p.drag("item:condenser", "square:23,3");
+	p.drag("item:waste", "square:23,12");
 	p.drag("item:flask", "item:waste");
 	p.click("panel:slider@1");
 	p.click("panel:pour");

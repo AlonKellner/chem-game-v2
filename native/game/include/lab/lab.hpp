@@ -32,7 +32,8 @@ struct ItemView {
 	std::string id;
 	std::string kind; // vessel, balloon, burner, tray
 	std::string place; // cabinet, bench, on, under, outbox
-	int col = -1, row = -1; // on the bench
+	int col = -1, row = -1; // on the bench: its footprint's top-left square
+	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
 	int under = -1; // a burner: index of the vessel over it
 	int holds = -1; // a vessel: index of what is on its mouth
@@ -53,7 +54,7 @@ struct ItemView {
 
 struct LabView {
 	int64_t step = 0;
-	int cols = 0, rows = 0;
+	int cols = 0, rows = 0; // the bench's grid, in squares
 	bool conserved = true; // every total is what it was at the start
 	double mass_g = 0.0;
 	double energy_j = 0.0;
