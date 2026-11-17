@@ -1212,8 +1212,14 @@ so the sessions' records are unchanged.
 
     It selects the watched item, and names the chain in the message: "alarm1 rang: monitor1,
     flask: H2O(l) (g) below 10.000 g (now 9.996 g)". Playing on answers it.
-- **A tutorial** restricts the drags out of the drawer and from ports, and the editor's "set", to
-  its step's gestures. The editor's other buttons, like the clock's, are the player's.
+- **A tutorial** restricts every gesture of the signals to its step's own:
+  - the drags out of the drawer and from ports;
+  - every button of the editor, its cancel and Escape included, so a part is never left half set;
+  - the keys: text is taken only while it is still the start of what the step asks to type.
+
+  When "set" is the step's last gesture, the command is first tried on a copy of the lab, and
+  refused unless the step's checks would then hold, with what the step still asks for. A wrong
+  setting cannot be set.
 
 **Demo subset:** all of the above. **Full design, not yet built:**
 - circuits (parts collected into one compact part, Stage 14);

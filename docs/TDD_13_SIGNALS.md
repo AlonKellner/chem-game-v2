@@ -50,7 +50,8 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
 | 13.5 | The screen: the drawer, parts and ports, wires and rigs drawn, the part editor (a monitor's, a timer's, a rig's), the readout's buttons, a ring | Done |
 | 13.6 | `cg_ui_signals`; pointer modifiers through `cg_ui_pointer`; the Godot host forwards Shift, Ctrl, Meta | Done |
 | 13.7 | The tutorial teaches a monitor rigged to the burner and wired to an alarm (35 steps); the screen's timers removed | Done |
-| 13.8 | The user plays it (`make run`) and signs off | Pending |
+| 13.8 | The user's first finding: the tutorial let a rig or a monitor be set wrong. Every editor gesture, key and "set" is now the step's own | Done |
+| 13.9 | The user plays it (`make run`) and signs off | Pending |
 
 ## Decisions
 
@@ -90,8 +91,16 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
   - The stir button moved to a vessel's foot, beside its name. At the footprint's top corner it
     floated far above the vessel, and over a condenser.
   - The part editor pauses the clock, as the timer editor did.
-  - A tutorial restricts drags from the drawer and from ports, and the editor's "set". The
-    editor's other buttons stay the player's.
+- **Under a tutorial the editor is the step's.** The user's finding:
+  > The tutorial does not instruct or limit actions in the rigging menus, it should not be
+  > possible to set a wrong rig in the tutorial (e.g value is not the expected 10 grams)
+  - Every button of the editor is taken only when the step names it. Cancel and Escape are
+    included: an editor closed half set would leave the step with no gesture to finish it.
+  - Keys are taken only while the field is still the start of the step's typed text.
+  - "Set", as a step's last gesture, is tried first on a copy of the lab (`Lab::save`, `load`, the
+    command). It is refused unless the step's checks would then hold (`Tutorial::would_pass`),
+    with the check that would not. This holds for any setting a step asks for, not only the
+    ones written today.
 
 ## Tests
 
@@ -134,7 +143,13 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
     the clock and names the chain, the watched flask is selected, playing on answers it.
 - **`test_tutorial.cpp`:**
   - both playthroughs, exact and at a person's pace, complete the 35 steps with the signals;
-  - purity, fill and any quantity compared, with their refusals.
+  - purity, fill and any quantity compared, with their refusals;
+  - in the part editor only the step's settings are taken:
+    - another comparison, a nudge, cancel and Escape refused;
+    - "15" stops at the 1;
+    - "set" with 1 g refused with what the step asks;
+    - a rig left on "leave", another row, another form refused;
+    - a typed 5 refused, 0 taken.
 - **The C smoke test and the Godot suite:** a timer out of the drawer, typed with keys, wired to
   an alarm; it rings at 2 s and pauses the clock.
 - **`make screenshots`:** O4 unchanged at every moment (worst 2, none visible). The monitor's

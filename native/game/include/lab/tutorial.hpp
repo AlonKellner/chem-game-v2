@@ -86,6 +86,11 @@ public:
 	// open is waited on. While a tutorial runs and is not waiting, the screen
 	// holds its clock: the lab's time passes only while there is nothing to do.
 	bool waiting() const;
+	// Whether the current step's checks that ask for a gesture would all hold
+	// in this view and screen; the first that would not, in `missing`. It
+	// changes nothing: the screen asks it before a command the step's last
+	// gesture makes, and refuses one that would leave the step undone (§13.2).
+	bool would_pass(const LabView &view, const TutorialScreen &screen, std::string &missing) const;
 	const std::string &title() const;
 
 private:

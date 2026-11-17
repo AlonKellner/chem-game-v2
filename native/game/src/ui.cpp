@@ -190,22 +190,26 @@ struct Ui::Impl {
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
 
 	void refresh() { view = lab->view(); }
+	// what a tutorial's checks read of the screen
+	TutorialScreen screen_now() const {
+		TutorialScreen screen;
+		screen.speed = speed;
+		screen.broken = lab->failed();
+		screen.paused = paused;
+		screen.selected = selected >= 0 ? id(selected) : std::string();
+		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose" };
+		screen.edit.editing = EDITING[draft.edit];
+		screen.edit.part = draft.part;
+		screen.edit.quantity = draft.quantity;
+		screen.edit.op = draft.op;
+		screen.edit.value = draft.text[0];
+		screen.edit.item = draft.item;
+		screen.edit.control = draft.control;
+		return screen;
+	}
 	void follow() {
 		if (tutorial) {
-			TutorialScreen screen;
-			screen.speed = speed;
-			screen.broken = lab->failed();
-			screen.paused = paused;
-			screen.selected = selected >= 0 ? id(selected) : std::string();
-			static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose" };
-			screen.edit.editing = EDITING[draft.edit];
-			screen.edit.part = draft.part;
-			screen.edit.quantity = draft.quantity;
-			screen.edit.op = draft.op;
-			screen.edit.value = draft.text[0];
-			screen.edit.item = draft.item;
-			screen.edit.control = draft.control;
-			tutorial->follow(view, screen);
+			tutorial->follow(view, screen_now());
 		}
 	}
 	void play() {
@@ -244,6 +248,40 @@ struct Ui::Impl {
 		return false;
 	}
 	bool allowed_click(const std::string &what) { return !guided() || asks_click(what) || not_now(); }
+	// The editor's command, as the step's last gesture: tried on a copy of the
+	// lab first, and refused if the step's checks would not then hold (§13.2):
+	// a tutorial cannot be left with a part or a rig set wrong.
+	bool guided_commit(const json &command) {
+		if (!guided() || tutorial->gestures().empty() || tutorial->gestures().back().what != "edit:set") {
+			return true;
+		}
+		std::string why;
+		std::unique_ptr<Lab> copy = Lab::load(lab->save(), why);
+		if (!copy || !copy->command(command.dump(), why)) {
+			return true; // refused by the lab itself: it says why
+		}
+		TutorialScreen after = screen_now();
+		after.edit = TutorialEdit{}; // set, the editor closes
+		std::string missing;
+		if (tutorial->would_pass(copy->view(), after, missing)) {
+			return true;
+		}
+		message = "Not that: the tutorial asks for " + missing + ". " + tutorial->view().text;
+		return false;
+	}
+	// what a step's typed gesture allows: text that is still the start of what it asks to type
+	bool allowed_text(const std::string &text) {
+		if (!guided()) {
+			return true;
+		}
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (!g.type.empty() && g.type.rfind(text, 0) == 0) {
+				return true;
+			}
+		}
+		message = "Not that: the tutorial asks you to type what its step says. " + tutorial->view().text;
+		return false;
+	}
 	// a drop where the step's drag goes: onto its item, into a free square, the outbox or the cabinet
 	bool guided_drop(int index, int target, float x, float y) {
 		if (!guided()) {
@@ -955,7 +993,7 @@ struct Ui::Impl {
 				message = "a value is not a number";
 				return;
 			}
-			if (act(c)) {
+			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
 		} else if (draft.edit == Draft::Timer) {
@@ -967,7 +1005,8 @@ struct Ui::Impl {
 				message = "the time is not a time: hh:mm:ss.mmm, mm:ss or seconds";
 				return;
 			}
-			if (act({ { "do", "set" }, { "part", draft.part }, { "seconds", seconds } })) {
+			const json c = { { "do", "set" }, { "part", draft.part }, { "seconds", seconds } };
+			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
 		} else if (draft.edit == Draft::Rig) {
@@ -983,7 +1022,7 @@ struct Ui::Impl {
 				}
 				c[SIDES[side]] = value;
 			}
-			if (act(c)) {
+			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
 		}
@@ -1002,7 +1041,7 @@ struct Ui::Impl {
 		if (draft.edit == Draft::Monitor && picking) {
 			const std::vector<Quantity> qs = pickable();
 			for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
-				if (pick_entry(i).has(x, y)) {
+				if (pick_entry(i).has(x, y) && allowed_click("edit:pick:" + qs[static_cast<size_t>(i)].what)) {
 					set_quantity(qs[static_cast<size_t>(i)]);
 				}
 			}
@@ -1010,7 +1049,9 @@ struct Ui::Impl {
 			return;
 		}
 		if (edit_cancel().has(x, y)) {
-			close_edit();
+			if (allowed_click("edit:cancel")) {
+				close_edit();
+			}
 			return;
 		}
 		if (draft.edit != Draft::Choose && edit_done().has(x, y)) {
@@ -1037,6 +1078,9 @@ struct Ui::Impl {
 			const std::vector<int> items = watchable();
 			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
 				if (edit_item(k).has(x, y)) {
+					if (!allowed_click("edit:item:" + id(items[static_cast<size_t>(k)]))) {
+						return;
+					}
 					const std::vector<Quantity> qs = quantities_of(view.items[static_cast<size_t>(items[static_cast<size_t>(k)])]);
 					if (!qs.empty()) {
 						set_quantity(qs.front());
@@ -1045,11 +1089,14 @@ struct Ui::Impl {
 				}
 			}
 			if (edit_quantity().has(x, y)) {
-				picking = true;
+				picking = allowed_click("edit:quantity");
 				return;
 			}
 			for (int k = 0; species_quantity() && k < 4; ++k) {
 				if (edit_measure(k).has(x, y)) {
+					if (!allowed_click(std::string("edit:measure:") + MEASURES[k])) {
+						return;
+					}
 					Quantity q = draft.quantity;
 					q.measure = MEASURES[k];
 					set_quantity(q);
@@ -1058,19 +1105,26 @@ struct Ui::Impl {
 			}
 			for (int k = 0; k < 7; ++k) {
 				if (edit_compare(k).has(x, y)) {
-					draft.op = OPS[k];
+					if (allowed_click(std::string("edit:compare:") + OP_KEYS[k])) {
+						draft.op = OPS[k];
+					}
 					return;
 				}
 			}
 			for (int f = 0; f < (two_values(draft.op) ? 2 : 1); ++f) {
 				if (edit_field(f).has(x, y)) {
-					focus = f;
-					fresh = true;
+					if (allowed_click("edit:value:" + std::to_string(f))) {
+						focus = f;
+						fresh = true;
+					}
 					return;
 				}
 			}
 			for (int k : { -3, -2, -1, 1, 2, 3 }) {
 				if (edit_nudge(k).has(x, y)) {
+					if (!allowed_click("edit:nudge:" + std::to_string(k))) {
+						return;
+					}
 					const int f = focus == 1 && two_values(draft.op) ? 1 : 0;
 					std::string &field = draft.text[static_cast<size_t>(f)];
 					double scale[3];
@@ -1088,12 +1142,17 @@ struct Ui::Impl {
 		}
 		if (draft.edit == Draft::Timer) {
 			if (preset_field().has(x, y)) {
-				focus = 2;
-				fresh = true;
+				if (allowed_click("edit:value")) {
+					focus = 2;
+					fresh = true;
+				}
 				return;
 			}
 			for (int k : { -3, -2, -1, 1, 2, 3 }) {
 				if (preset_nudge(k).has(x, y)) {
+					if (!allowed_click("edit:nudge:" + std::to_string(k))) {
+						return;
+					}
 					double t = 0.0;
 					if (!seconds_of(draft.preset, t)) {
 						t = 300.0;
@@ -1108,8 +1167,10 @@ struct Ui::Impl {
 		if (draft.edit == Draft::Rig) {
 			for (int f = 0; f < 2; ++f) {
 				if (form_button(f).has(x, y)) {
-					draft.change = f == 1;
-					focus = -1;
+					if (allowed_click(f == 1 ? "edit:form:change" : "edit:form:onoff")) {
+						draft.change = f == 1;
+						focus = -1;
+					}
 					return;
 				}
 			}
@@ -1117,6 +1178,9 @@ struct Ui::Impl {
 			for (const int side : sides()) {
 				for (int k = 0; k < static_cast<int>(options.size()); ++k) {
 					if (choice_rect(side, k).has(x, y)) {
+						if (!allowed_click(std::string("edit:") + SIDES[side] + ":" + options[static_cast<size_t>(k)].first)) {
+							return;
+						}
 						draft.setting[static_cast<size_t>(side)] = options[static_cast<size_t>(k)].second;
 						focus = -1;
 						return;
@@ -1126,6 +1190,9 @@ struct Ui::Impl {
 					continue;
 				}
 				if (percent_field(side).has(x, y)) {
+					if (!allowed_click(std::string("edit:") + SIDES[side] + ":value")) {
+						return;
+					}
 					focus = 3 + side;
 					fresh = true;
 					read_percent(side);
@@ -1133,6 +1200,9 @@ struct Ui::Impl {
 				}
 				for (int k : { -2, -1, 1, 2 }) {
 					if (percent_nudge(side, k).has(x, y)) {
+						if (!allowed_click(std::string("edit:") + SIDES[side] + ":nudge:" + std::to_string(k))) {
+							return;
+						}
 						std::string &field = draft.percent[static_cast<size_t>(side)];
 						const double v = std::clamp(std::atof(field.c_str()) + (k < 0 ? -1.0 : 1.0) * ((k == 2 || k == -2) ? 10.0 : 1.0), 0.0, 100.0);
 						field = text_of("%g", v);
@@ -1299,7 +1369,7 @@ struct Ui::Impl {
 		if (key == Ui::KeyEscape) {
 			if (picking) {
 				picking = false;
-			} else {
+			} else if (allowed_click("edit:cancel")) {
 				close_edit();
 			}
 			return;
@@ -1320,12 +1390,10 @@ struct Ui::Impl {
 			}
 			fresh = false;
 		} else if ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || (codepoint == '-' && focus < 2) || (codepoint == ':' && focus == 2)) {
-			if (fresh) {
-				field->clear();
-			}
-			fresh = false;
-			if (field->size() < 16) {
-				field->push_back(static_cast<char>(codepoint));
+			const std::string typed = (fresh ? std::string() : *field) + static_cast<char>(codepoint);
+			if (typed.size() <= 16 && allowed_text(typed)) {
+				*field = typed;
+				fresh = false;
 			}
 		}
 		if (focus >= 3) {

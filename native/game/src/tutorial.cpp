@@ -426,6 +426,21 @@ const std::vector<TutorialGesture> &Tutorial::gestures() const {
 	return m.no_gestures;
 }
 
+bool Tutorial::would_pass(const LabView &lv, const TutorialScreen &screen, std::string &missing) const {
+	const Impl &m = *impl_;
+	if (m.view.state != TutorialView::Running || m.view.step >= static_cast<int>(m.steps.size())) {
+		return true;
+	}
+	const CondContext x{ lv, screen.speed, screen.broken, screen.selected, &screen };
+	for (const Check &c : m.steps[static_cast<size_t>(m.view.step)].checks) {
+		if (!c.wait && !holds(c.when, x)) {
+			missing = c.text;
+			return false;
+		}
+	}
+	return true;
+}
+
 bool Tutorial::waiting() const {
 	const Impl &m = *impl_;
 	if (m.view.state != TutorialView::Running || m.view.step >= static_cast<int>(m.steps.size())) {

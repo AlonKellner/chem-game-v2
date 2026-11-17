@@ -549,3 +549,62 @@ TEST_CASE("conditions: purity and a balloon's fill are quantities, and any quant
 	refused(R"({"item": "flask", "quantity": {"what": "water", "measure": "taste"}, "compare": "above", "value": 1})", "\"purity\"");
 	refused(R"({"quantity": {"what": "water"}, "compare": "above", "value": 1})", "names no \"item\"");
 }
+
+TEST_CASE("tutorial: in the part editor only the step's own settings are taken, and a wrong one cannot be set (Stage 13)") {
+	Pupil p;
+	// played as the tutorial asks, up to the step titled `title`
+	const auto play_to = [&](const std::string &title) {
+		while (p.tutorial().title != title) {
+			REQUIRE(p.tutorial().state == TutorialView::Running);
+			const int step = p.tutorial().step;
+			for (const lab::TutorialGesture &g : std::vector<lab::TutorialGesture>(p.ui->tutorial()->gestures())) {
+				p.play(g);
+			}
+			p.watch([&] { return p.tutorial().step != step; }, 3600);
+		}
+	};
+	const auto editing = [&] {
+		float x = 0, y = 0;
+		return p.ui->locate("edit:set", x, y);
+	};
+	const auto monitor = [&] { return p.item("monitor1").part; };
+	play_to("Below 10 g");
+	REQUIRE(editing());
+	p.click("edit:compare:above"); // not what the step asks
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("edit:nudge:1");
+	p.click("edit:cancel");
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK(editing()); // it cannot be closed half set
+	p.click("edit:compare:below");
+	p.click("edit:value:0");
+	p.type("15"); // the 5 is not the step's 10
+	CHECK(p.ui->message().find("Not that") != std::string::npos);
+	p.click("edit:set"); // 1 g: the step's check would not hold
+	CHECK(p.ui->message().find("the monitor signals below 10 g of water") != std::string::npos);
+	CHECK(editing());
+	CHECK_FALSE(monitor().watching);
+	p.type("0");
+	p.click("edit:set");
+	CHECK(p.ui->message().empty());
+	CHECK(monitor().watching);
+	CHECK(monitor().comparison.a == 10.0);
+	CHECK(p.tutorial().title == "Rig it to the burner");
+	play_to("Close the valve when it signals");
+	REQUIRE(editing());
+	p.click("edit:set"); // "when on" left as it is: the valve would never close
+	CHECK(p.ui->message().find("the burner closes when the monitor signals") != std::string::npos);
+	CHECK(p.ui->lab().view().rigs.empty());
+	p.click("edit:off:value"); // the other row
+	p.click("edit:form:change");
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("edit:on:value");
+	p.type("5");
+	p.type("0");
+	p.click("edit:set");
+	REQUIRE(p.ui->lab().view().rigs.size() == 1);
+	const lab::Rig rig = p.ui->lab().view().rigs[0];
+	CHECK(*rig.on == 0.0);
+	CHECK_FALSE(rig.off.has_value());
+	CHECK(p.tutorial().title == "An alarm");
+}
