@@ -134,6 +134,43 @@ int main(void) {
 		fprintf(stderr, "the comparison did not find the corner of the screen empty\n");
 		return 1;
 	}
+	/* Stage 13: signals with the pointer and the keys: a timer of 2 s out of the drawer, an alarm, a wire between them */
+	float x = 0, y = 0, x1 = 0, y1 = 0;
+	const char *drags[][2] = { { "drawer:timer", "square:0,0" }, { "drawer:alarm", "square:3,0" } };
+	for (int i = 0; i < 2; ++i) {
+		if (!cg_ui_locate(ui, drags[i][0], &x, &y) || !cg_ui_locate(ui, drags[i][1], &x1, &y1)) {
+			fprintf(stderr, "not on the screen: %s or %s\n", drags[i][0], drags[i][1]);
+			return 1;
+		}
+		cg_ui_pointer(ui, x, y, CG_POINTER_DOWN);
+		cg_ui_pointer(ui, x1, y1, CG_POINTER_DOWN);
+		cg_ui_pointer(ui, x1, y1, 0);
+		if (i == 0) { /* the timer's editor opens: its preset typed */
+			if (!cg_ui_locate(ui, "edit:value", &x, &y)) {
+				fprintf(stderr, "the timer's editor did not open\n");
+				return 1;
+			}
+			cg_ui_pointer(ui, x, y, CG_POINTER_DOWN);
+			cg_ui_pointer(ui, x, y, 0);
+			cg_ui_key(ui, CG_KEY_TEXT, '2');
+			cg_ui_key(ui, CG_KEY_ENTER, 0);
+		}
+	}
+	if (!cg_ui_locate(ui, "port:timer1", &x, &y) || !cg_ui_locate(ui, "item:alarm1", &x1, &y1)) {
+		fprintf(stderr, "the timer's port or the alarm is not on the screen\n");
+		return 1;
+	}
+	cg_ui_pointer(ui, x, y, CG_POINTER_DOWN);
+	cg_ui_pointer(ui, x1, y1, CG_POINTER_DOWN);
+	cg_ui_pointer(ui, x1, y1, 0);
+	cg_ui_frame(ui, 2.5);
+	cg_signals signals;
+	signals.size = sizeof signals;
+	if (cg_ui_signals(ui, &signals) != CG_OK || signals.count != 2 || signals.wires != 1 || signals.ringing != 1 || signals.paused != 1 || strcmp(signals.parts[0].kind, "timer") != 0 ||
+			signals.parts[0].out != 1) {
+		fprintf(stderr, "the timer did not ring the alarm at 2 s and pause the clock: %s\n", cg_ui_message(ui));
+		return 1;
+	}
 	/* Stage 12: a tutorial over the screen, passed by a drag */
 	cg_tutorial tutorial;
 	tutorial.size = sizeof tutorial;

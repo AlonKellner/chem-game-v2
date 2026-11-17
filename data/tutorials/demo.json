@@ -10,7 +10,7 @@
 			"text": "Drag the flask from the cabinet on the left onto a square of the bench.",
 			"why": "Everything happens in this 250 mL flask: first the gas, then the solution, then the crystals.",
 			"checks": [{"text": "the flask stands on the bench", "when": {"item": "flask", "place": "bench"}}],
-			"play": [{"drag": ["item:flask", "cell:3,1"]}]
+			"play": [{"drag": ["item:flask", "square:11,12"]}]
 		},
 		{
 			"title": "A burner under the flask",
@@ -24,7 +24,7 @@
 			"text": "Drag the jar from the cabinet onto a free square of the bench.",
 			"why": "The jar holds 5 g of malachite, a green copper carbonate mineral, as a powder.",
 			"checks": [{"text": "the jar stands on the bench", "when": {"item": "jar", "place": "bench"}}],
-			"play": [{"drag": ["item:jar", "cell:1,1"]}]
+			"play": [{"drag": ["item:jar", "square:4,13"]}]
 		},
 		{
 			"title": "Tip the malachite into the flask",
@@ -83,7 +83,7 @@
 			"text": "Drag the acid from the cabinet onto a free square of the bench.",
 			"why": "It is about 250 mL of 1 M sulfuric acid, H2SO4 in water.",
 			"checks": [{"text": "the acid stands on the bench", "when": {"item": "acid", "place": "bench"}}],
-			"play": [{"drag": ["item:acid", "cell:2,1"]}]
+			"play": [{"drag": ["item:acid", "square:7,12"]}]
 		},
 		{
 			"title": "Pour the acid onto the oxide",
@@ -137,7 +137,7 @@
 			"title": "A beaker for the water",
 			"text": "Drag the beaker from the cabinet onto a free square of the bench.",
 			"checks": [{"text": "the beaker stands on the bench", "when": {"item": "beaker", "place": "bench"}}],
-			"play": [{"drag": ["item:beaker", "cell:5,1"]}]
+			"play": [{"drag": ["item:beaker", "square:19,12"]}]
 		},
 		{
 			"title": "Under the outlet",
@@ -145,6 +145,53 @@
 			"why": "What condenses runs down into the beaker.",
 			"checks": [{"text": "the condenser drains into the beaker", "when": {"item": "condenser", "drains_to": "beaker"}}],
 			"play": [{"drag": ["item:beaker", "item:condenser"]}]
+		},
+		{
+			"title": "A monitor",
+			"text": "Drag a monitor out of the parts drawer, beside the outbox, onto a free square of the bench. Its settings open.",
+			"why": "Boiling down is the step to watch: too far, and the crystals have nothing to grow from. A monitor watches a value for you while the clock runs fast.",
+			"checks": [{"text": "a monitor on the bench", "when": {"part": {"kind": "monitor"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}]
+		},
+		{
+			"title": "Watch the flask's water",
+			"text": "Click \"flask\", then the quantity it watches (the temperature), and choose H2O(l): the flask's liquid water.",
+			"checks": [{"text": "it watches the water in the flask", "when": {"editor": {"editing": "monitor", "item": "flask", "what": "water"}}}],
+			"play": [{"click": "edit:item:flask"}, {"click": "edit:quantity"}, {"click": "edit:pick:water"}]
+		},
+		{
+			"title": "Below 10 g",
+			"text": "Click \"below\". Then click the value, type 10, and click \"set\".",
+			"why": "From then on the monitor signals whenever less than 10 g of water is left: its lamp lights, and its port, on its right, sends the signal.",
+			"checks": [{"text": "the monitor signals below 10 g of water", "when": {"part": {"kind": "monitor", "item": "flask", "what": "water", "compare": "below", "value_at_least": 9, "value_at_most": 11}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "10"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "Rig it to the burner",
+			"text": "Drag from the monitor's port, the dot on its right, onto the burner. The rig's settings open.",
+			"why": "A rig sets a control when its signal changes: here, the burner's valve.",
+			"checks": [{"text": "a rig from the monitor to the burner's valve", "when": {"editor": {"editing": "rig", "item": "burner", "control": "valve"}}}],
+			"play": [{"drag": ["port:monitor1", "item:burner"]}]
+		},
+		{
+			"title": "Close the valve when it signals",
+			"text": "On the \"when on\" row, click the value and type 0. Leave \"when off\" as it is. Click \"rig\".",
+			"why": "When the water goes below 10 g, the valve closes itself, at any speed. Your own hand can still open it after: the control keeps whatever set it last.",
+			"checks": [{"text": "the burner closes when the monitor signals", "when": {"rig": {"from": "monitor", "item": "burner", "control": "valve", "on_at_most": 0.001, "off_leaves": true}}}],
+			"play": [{"click": "edit:on:value"}, {"type": "0"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "An alarm",
+			"text": "Drag an alarm out of the parts drawer onto a free square.",
+			"why": "An alarm stops the clock when its input turns on, and shows you what set it off.",
+			"checks": [{"text": "an alarm on the bench", "when": {"part": {"kind": "alarm"}}}],
+			"play": [{"drag": ["drawer:alarm", "square:3,1"]}]
+		},
+		{
+			"title": "Wire the monitor to it",
+			"text": "Drag from the monitor's port onto the alarm.",
+			"checks": [{"text": "the monitor wired into the alarm", "when": {"wire": {"from": "monitor", "to": "alarm"}}}],
+			"play": [{"drag": ["port:monitor1", "item:alarm1"]}]
 		},
 		{
 			"title": "Boil",
@@ -155,19 +202,22 @@
 		},
 		{
 			"title": "Boil it down, not dry",
-			"text": "Wait until about 10 g of water is left in the flask. Point at the flask to watch it fall.",
+			"text": "Speed up as you like: below 10 g of water the monitor closes the valve, and the alarm stops the clock.",
 			"why": "The crystals need water to grow from. Boiled dry, the salt loses its own water and turns white.",
-			"checks": [{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}}]
+			"checks": [
+				{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}},
+				{"text": "the rig closed the valve", "when": {"item": "burner", "valve_at_most": 0}},
+				{"text": "the alarm rang", "when": {"part": {"kind": "alarm", "rang": true}}}
+			]
 		},
 		{
-			"title": "Stop heating and let it cool",
-			"text": "Drag the burner's slider all the way down, then wait.",
+			"title": "Let it cool",
+			"text": "Press play (or a speed) to answer the alarm, and wait.",
 			"why": "Cold water dissolves less copper sulfate: as the solution cools, blue CuSO4.5H2O crystals grow out of it.",
 			"checks": [
 				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},
-				{"text": "the flask below 21 C", "wait": true, "when": {"item": "flask", "below_c": 21}}
-			],
-			"play": [{"click": "valve:burner@0"}]
+				{"text": "the flask below 21 C", "when": {"item": "flask", "below_c": 21}}
+			]
 		},
 		{
 			"title": "Let the crystals grow",
@@ -179,13 +229,13 @@
 			"title": "Take the condenser off",
 			"text": "Drag the condenser off the flask onto the bench. The beaker under its outlet keeps it beside the flask.",
 			"checks": [{"text": "the condenser is off the flask", "when": {"not": {"item": "condenser", "place": "on"}}}],
-			"play": [{"drag": ["item:condenser", "cell:6,0"]}]
+			"play": [{"drag": ["item:condenser", "square:23,3"]}]
 		},
 		{
 			"title": "A beaker for the liquor",
 			"text": "Drag the waste beaker from the cabinet onto a free square of the bench.",
 			"checks": [{"text": "the waste beaker stands on the bench", "when": {"item": "waste", "place": "bench"}}],
-			"play": [{"drag": ["item:waste", "cell:4,1"]}]
+			"play": [{"drag": ["item:waste", "square:23,12"]}]
 		},
 		{
 			"title": "Pour off the liquor",

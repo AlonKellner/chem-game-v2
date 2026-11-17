@@ -119,9 +119,9 @@ func _initialize() -> void:
 
 func _play(dir: String) -> void:
 	_click("pause")
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	_drag("item:burner", "item:flask")
-	_drag("item:jar", "cell:1,1")
+	_drag("item:jar", "square:4,13")
 	_drag("item:jar", "item:flask")
 	_click("panel:tip:malachite")
 	_drag("item:balloon", "item:flask")
@@ -140,7 +140,7 @@ func _play(dir: String) -> void:
 	if not _watch(func(): return _celsius("flask") < 30.0, "the flask to cool"):
 		return
 	_click("pause")
-	_drag("item:acid", "cell:2,1")
+	_drag("item:acid", "square:7,12")
 	_drag("item:acid", "item:flask")
 	await _shoot(dir, "3_pour_panel") # nothing is clicked while the panel is open: a click outside it closes it
 	_click("panel:pour")
@@ -151,8 +151,22 @@ func _play(dir: String) -> void:
 		return
 	_click("stir:flask")
 	_drag("item:condenser", "item:flask")
-	_drag("item:beaker", "cell:5,1")
+	_drag("item:beaker", "square:19,12")
 	_drag("item:beaker", "item:condenser")
+	# a monitor on the flask's water, rigged to close the valve and wired to an alarm, as the tutorial asks (GAME_SPEC §13.3)
+	_drag("drawer:monitor", "square:1,1")
+	for what in ["edit:item:flask", "edit:quantity", "edit:pick:water", "edit:compare:below", "edit:value:0"]:
+		_click(what)
+	for c in "10":
+		_lab.key(0, c.unicode_at(0))
+	await _shoot(dir, "6_monitor_editor")
+	_click("edit:set")
+	_drag("port:monitor1", "item:burner")
+	_click("edit:on:value")
+	_lab.key(0, "0".unicode_at(0))
+	_click("edit:set")
+	_drag("drawer:alarm", "square:3,1")
+	_drag("port:monitor1", "item:alarm1")
 	_click("valve:burner@1")
 	if not _watch(func(): return _grams("flask", "water") < 30.0, "the solution to boil down"):
 		return
@@ -161,7 +175,8 @@ func _play(dir: String) -> void:
 	_click("speed:600")
 	if not _watch(func(): return _grams("flask", "water") < 10.0, "the solution to boil down"):
 		return
-	_click("valve:burner@0")
+	if _lab.paused(): # the alarm stopped the clock at 10 g, and the rig closed the valve
+		_click("pause")
 	if not _watch(func(): return _celsius("flask") < 21.0, "the flask to cool"):
 		return
 	for i in 90:

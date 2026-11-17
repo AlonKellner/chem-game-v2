@@ -135,8 +135,16 @@ typedef struct cg_ui cg_ui;
 CG_API cg_ui *cg_ui_open(const char *bench_json); /* NULL, with cg_last_error, for a bench that cannot be built */
 CG_API void cg_ui_close(cg_ui *ui);
 
-/* The pointer, in screen pixels, and whether its button is down (nonzero). */
-CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down);
+/* The pointer, in screen pixels: `state` is whether its button is down
+ * (CG_POINTER_DOWN, or 1), with the keys held with it (§13.1: a click with one
+ * adds an item to the selection or takes it away). */
+enum {
+	CG_POINTER_DOWN = 1,
+	CG_POINTER_SHIFT = 2,
+	CG_POINTER_CTRL = 4,
+	CG_POINTER_META = 8
+};
+CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
 /* A frame of real time, in seconds: the lab advances by it times the speed
  * chosen on the screen. */
 CG_API void cg_ui_frame(cg_ui *ui, double seconds);
@@ -246,13 +254,40 @@ typedef struct cg_tutorial {
 
 CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
 
+/* A key for the screen's focused field (GAME_SPEC §13.3): CG_KEY_TEXT with
+ * the character's code point, or backspace, enter, escape. */
+enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3 };
+CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
+
+/* The signals on the bench (GAME_SPEC §13.3): timers, monitors and alarms.
+ * Borrowed until the next call on this ui. */
+typedef struct cg_part {
+	const char *id; /* "monitor1" */
+	const char *kind; /* "timer", "monitor", "alarm" */
+	int32_t col, row; /* its square */
+	int32_t out; /* it signals */
+	int32_t ringing; /* an alarm, until answered */
+	double left_s; /* a timer's time left */
+} cg_part;
+
+typedef struct cg_signals {
+	uint32_t size; /* sizeof(cg_signals), set by the caller */
+	int32_t count;
+	const cg_part *parts;
+	int32_t wires, rigs;
+	int32_t ringing; /* the alarms ringing */
+	int32_t paused; /* the screen's clock is paused */
+} cg_signals;
+
+CG_API cg_status cg_ui_signals(cg_ui *ui, cg_signals *out);
+
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */
 CG_API const char *cg_ui_message(cg_ui *ui);
 CG_API const char *cg_ui_report(cg_ui *ui);
 
 /* The centre of a named thing on the screen, for tests and scripted hosts:
- * "item:flask", "cell:3,1", "cabinet", "outbox", "valve:burner@0.5",
+ * "item:flask", "square:11,12", "cabinet", "outbox", "valve:burner@0.5",
  * "stir:flask", "panel:pour", "panel:slider@0.25", "panel:tip:malachite",
  * "panel:cancel", "pause", "speed:600", "check", "reset". 0 when it is not on
  * the screen now. */

@@ -15,6 +15,8 @@
 struct cg_ui {
 	std::unique_ptr<lab::Ui> ui;
 	std::string text; // the last report handed out
+	std::vector<cg_part> parts; // the last parts handed out, and their strings
+	std::vector<std::string> part_text;
 };
 
 // the draw list crosses the boundary as it is
@@ -284,7 +286,7 @@ cg_ui *cg_ui_open(const char *bench_json) {
 			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
 			return nullptr;
 		}
-		return new cg_ui{ std::move(made), {} };
+		return new cg_ui{ std::move(made), {}, {}, {} };
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 		return nullptr;
@@ -295,12 +297,13 @@ void cg_ui_close(cg_ui *ui) {
 	delete ui;
 }
 
-void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) {
+void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the state
 	if (ui == nullptr) {
 		return;
 	}
 	try {
-		ui->ui->pointer(x, y, down != 0);
+		const int mods = ((down & CG_POINTER_SHIFT) ? lab::Ui::ModShift : 0) | ((down & CG_POINTER_CTRL) ? lab::Ui::ModCtrl : 0) | ((down & CG_POINTER_META) ? lab::Ui::ModMeta : 0);
+		ui->ui->pointer(x, y, (down & CG_POINTER_DOWN) != 0, mods);
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 	}
@@ -455,6 +458,50 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
 	}
+}
+
+void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_ESCAPE) {
+		return;
+	}
+	try {
+		ui->ui->key(static_cast<lab::Ui::Key>(key), codepoint);
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_ui_signals(cg_ui *ui, cg_signals *out) {
+	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_signals)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_signals: null argument, or the size is not set");
+	}
+	const lab::LabView view = ui->ui->lab().view();
+	ui->part_text.clear();
+	ui->parts.clear();
+	for (const lab::ItemView &v : view.items) {
+		if (v.kind == "timer" || v.kind == "monitor" || v.kind == "alarm") {
+			ui->part_text.push_back(v.id);
+			ui->part_text.push_back(v.kind);
+			cg_part p{};
+			p.col = v.col;
+			p.row = v.row;
+			p.out = v.part.out ? 1 : 0;
+			p.ringing = v.part.ringing ? 1 : 0;
+			p.left_s = v.kind == "timer" ? static_cast<double>(v.part.left) / 60.0 : 0.0;
+			ui->parts.push_back(p);
+		}
+	}
+	for (size_t i = 0; i < ui->parts.size(); ++i) {
+		ui->parts[i].id = ui->part_text[2 * i].c_str();
+		ui->parts[i].kind = ui->part_text[2 * i + 1].c_str();
+	}
+	out->count = static_cast<int32_t>(ui->parts.size());
+	out->parts = ui->parts.data();
+	out->wires = static_cast<int32_t>(view.wires.size());
+	out->rigs = static_cast<int32_t>(view.rigs.size());
+	out->ringing = static_cast<int32_t>(view.ringing.size());
+	out->paused = ui->ui->paused() ? 1 : 0;
+	return CG_OK;
 }
 
 cg_status cg_ui_tutor(cg_ui *ui, const char *tutorial_json) {

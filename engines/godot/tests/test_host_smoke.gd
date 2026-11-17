@@ -46,7 +46,7 @@ func test_it_opens_the_bench_with_everything_in_the_cabinet() -> void:
 	assert_eq(_lab.message(), "")
 
 func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	assert_eq(_item("flask")["place"], "bench")
 	_drag("item:burner", "item:flask")
 	assert_eq(_item("burner")["under"], "flask")
@@ -68,10 +68,40 @@ func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 	assert_gt(t[2], 20)
 	_lab.frame(1.0)
 	assert_eq(int(JSON.parse_string(_lab.report())["step"]), 0, "the clock waits while it asks for a gesture")
-	_drag("item:burner", "cell:3,1")
+	_drag("item:burner", "square:11,12")
 	assert_string_contains(_lab.message(), "Not now", "anything but the step's gesture is refused")
-	_drag("item:flask", "cell:3,1")
+	_drag("item:flask", "square:11,12")
 	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
+
+func _click(what: String) -> void:
+	var a := _lab.locate(what)
+	assert_ne(a, Vector2(-1, -1), what + " is on the screen")
+	_lab.pointer(a.x, a.y, false)
+	_lab.pointer(a.x, a.y, true)
+	_lab.pointer(a.x, a.y, false)
+
+func test_a_timer_typed_in_rings_an_alarm_and_pauses_the_clock() -> void:
+	_drag("drawer:timer", "square:1,1")
+	_click("edit:value")
+	# the engine's own key events reach the editor's field
+	for c in "3":
+		var press := InputEventKey.new()
+		press.pressed = true
+		press.unicode = c.unicode_at(0)
+		get_viewport().push_input(press, true)
+	var enter := InputEventKey.new()
+	enter.pressed = true
+	enter.keycode = KEY_ENTER
+	get_viewport().push_input(enter, true)
+	await wait_process_frames(2)
+	_drag("drawer:alarm", "square:3,1")
+	_drag("port:timer1", "item:alarm1")
+	assert_eq(_lab.signals().size(), 2, "a timer and an alarm")
+	assert_false(_lab.paused(), "the clock plays on once the timer is set")
+	_lab.frame(3.5)
+	var alarm: Dictionary = _lab.signals()[1]
+	assert_true(alarm["ringing"], "the alarm rang when the timer reached zero")
+	assert_true(_lab.paused(), "the clock stopped when it rang")
 
 func test_frames_advance_the_clock_and_keep_every_total() -> void:
 	var before: int = JSON.parse_string(_lab.report())["step"]

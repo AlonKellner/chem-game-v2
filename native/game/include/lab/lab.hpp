@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lab/signals.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -30,9 +32,10 @@ struct SubstanceView {
 
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray
+	std::string kind; // vessel, balloon, burner, tray; a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox
-	int col = -1, row = -1; // on the bench
+	int col = -1, row = -1; // on the bench: its footprint's top-left square
+	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
 	int under = -1; // a burner: index of the vessel over it
 	int holds = -1; // a vessel: index of what is on its mouth
@@ -49,16 +52,22 @@ struct ItemView {
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;
 	std::vector<SubstanceView> contents;
+	Part part; // a signal part (§13.3): its settings and state
 };
 
 struct LabView {
 	int64_t step = 0;
-	int cols = 0, rows = 0;
+	int cols = 0, rows = 0; // the bench's grid, in squares
 	bool conserved = true; // every total is what it was at the start
 	double mass_g = 0.0;
 	double energy_j = 0.0;
-	std::vector<ItemView> items;
+	std::vector<ItemView> items; // the equipment, then the signal parts, in the order they were made
 	std::vector<std::string> events; // "the balloon burst at 12.5 s"
+	// signals (§13.3)
+	std::vector<Wire> wires;
+	std::vector<Rig> rigs; // in the order they were made
+	std::vector<ControlSetting> controls; // every control's last setting, and who made it
+	std::vector<std::string> ringing; // the alarms ringing
 };
 
 class Lab {
@@ -76,8 +85,9 @@ public:
 	// failed on the way: failed() is then true and the lab takes no more.
 	bool command(std::string_view command_json, std::string &why);
 
-	// Advances whole steps of 1/60 s.
-	bool advance(int64_t steps, std::string &why);
+	// Advances whole steps of 1/60 s; with `stop_on_ring`, it stops at the end
+	// of a step in which an alarm started ringing (§13.3).
+	bool advance(int64_t steps, std::string &why, bool stop_on_ring = false);
 
 	// The whole lab as text ("chem-save/1"): every amount, energy and particle
 	// count, the connections, the processes' carried remainders, where
@@ -91,6 +101,8 @@ public:
 	bool failed() const;
 
 	int64_t step() const;
+	// An alarm started ringing in the last step (§13.3).
+	bool rang() const;
 	// What is where, measured, as plain data.
 	LabView view() const;
 	// What is where, measured (JSON; GAME_SPEC §13: reports are functions of state).

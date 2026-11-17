@@ -52,6 +52,7 @@ endif()
 # so instrumented and uninstrumented code never mix in one binary.
 if(CHEM_SANITIZE)
     add_compile_options(-fsanitize=${CHEM_SANITIZE} -fno-omit-frame-pointer)
+    add_compile_definitions(CHEM_SANITIZED=1) # costs are measured there, not bounded
     add_link_options(-fsanitize=${CHEM_SANITIZE})
 endif()
 

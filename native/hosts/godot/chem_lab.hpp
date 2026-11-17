@@ -9,8 +9,10 @@
 #include "optics_compute.hpp"
 
 #include <godot_cpp/classes/input_event.hpp>
+#include <godot_cpp/classes/input_event_with_modifiers.hpp>
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/classes/texture_rect.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -32,13 +34,19 @@ public:
 	godot::String get_tutorial_path() const;
 	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps]
 	godot::PackedInt32Array tutorial() const;
+	// A key, as the engine's would be (GAME_SPEC §13.3): code 0 text (by its code point), 1 backspace, 2 enter, 3 escape.
+	void key(int code, int codepoint);
+	// The signal parts (§13.3): each {id, kind, out, ringing, left_s}; and whether the clock is paused.
+	godot::Array signals() const;
+	bool paused() const;
 
 	godot::String build_name() const;
 	// the library's self-check (cg_debug_report): the message reaches push_error
 	int debug_report(const godot::String &message);
 
 	// For tests and scripted play: what the mouse and the frame do.
-	void pointer(double x, double y, bool down);
+	// mods: CG_POINTER_SHIFT, _CTRL, _META (§13.1)
+	void pointer(double x, double y, bool down, int mods = 0);
 	void frame(double seconds);
 	// the centre of a named thing on the screen ("item:flask", "cell:3,1", ...), or (-1, -1)
 	godot::Vector2 locate(const godot::String &what) const;
@@ -80,6 +88,7 @@ private:
 
 	cg_ui *ui_ = nullptr;
 	bool down_ = false;
+	int32_t state_of(const godot::InputEventWithModifiers *event) const;
 	godot::TextureRect *optics_ = nullptr; // what the optical pass shows
 	godot::Node2D *overlay_ = nullptr; // what is painted over it
 	OpticsCompute compute_;

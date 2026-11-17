@@ -1,5 +1,6 @@
 // The tutorial (GAME_SPEC §13.2): the demo as steps with checks read from the
 // lab, played here with the pointer and nothing but its own gestures.
+#include "lab/conditions.hpp"
 #include "lab/tutorial.hpp"
 #include "lab/ui.hpp"
 
@@ -56,8 +57,21 @@ struct Pupil {
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);
 	}
+	void type(const std::string &text) {
+		for (const char c : text) {
+			ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+		}
+	}
+	// a paused clock (a timer fired) is played on, as the card says
+	void resume() {
+		if (ui->paused()) {
+			click("pause");
+		}
+	}
 	void play(const lab::TutorialGesture &g) {
-		if (g.drag) {
+		if (!g.type.empty()) {
+			type(g.type);
+		} else if (g.drag) {
 			drag(g.what, g.to);
 		} else {
 			click(g.what);
@@ -85,6 +99,7 @@ struct Pupil {
 	void watch(Done done, double seconds) {
 		const int64_t until = ui->lab().step() + static_cast<int64_t>(seconds * 60.0);
 		while (!done()) {
+			resume();
 			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title);
 			REQUIRE_MESSAGE((ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
 					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message());
@@ -119,6 +134,13 @@ struct Pupil {
 	}
 	void person(const lab::TutorialGesture &g) {
 		frames(90); // reading the card, finding the thing
+		if (!g.type.empty()) {
+			for (const char c : g.type) {
+				ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+				frames(12);
+			}
+			return;
+		}
 		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 		if (!g.drag && g.what.rfind("valve:", 0) == 0) {
 			// a slider: taken at its knob, where it is now, and dragged
@@ -230,6 +252,8 @@ TEST_CASE("tutorial: played as a person plays it, slowly, at the speed it asks f
 		step_limit = p.ui->lab().step() + 3600 * 60;
 		while (p.tutorial().step == step && p.tutorial().state == TutorialView::Running) {
 			REQUIRE_MESSAGE(p.ui->lab().step() < step_limit, "waited too long on step " << step + 1 << ": " << title);
+			p.frames(45); // reading the card
+			p.resume();
 			const int64_t before = p.ui->lab().step();
 			if (const char *keep = std::getenv("CHEM_TUTORIAL_SAVE")) { // the state before each half second, for a failure's diagnosis
 				std::ofstream(keep) << p.ui->lab().save();
@@ -262,11 +286,11 @@ TEST_CASE("tutorial: the screen points at what the step asks for, and stops once
 		return n;
 	};
 	CHECK(guides() >= 4); // the flask, the cell, the arrow's line and its head
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	CHECK(p.tutorial().step == 1);
 	CHECK(p.drawn("A burner under the flask"));
 	p.drag("item:burner", "item:flask");
-	p.drag("item:jar", "cell:1,1");
+	p.drag("item:jar", "square:4,13");
 	p.drag("item:jar", "item:flask"); // the panel: now it points at the tip button
 	CHECK(p.tutorial().step == 3);
 	CHECK(guides() == 1);
@@ -291,27 +315,27 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 		CHECK(p.ui->lab().digest() == digest);
 	};
 	std::string before = p.ui->lab().digest();
-	p.drag("item:burner", "cell:3,1"); // the flask comes first
+	p.drag("item:burner", "square:11,12"); // the flask comes first
 	refused(before);
 	CHECK(p.item("burner").place == "cabinet");
 	p.drag("item:jar", "outbox");
 	refused(before);
 	p.drag("item:flask", "cabinet"); // the right item, the wrong place
 	refused(before);
-	p.drag("item:flask", "cell:3,1");
+	p.drag("item:flask", "square:11,12");
 	CHECK(p.tutorial().step == 1);
 	CHECK(p.ui->message().empty());
 	before = p.ui->lab().digest();
-	p.drag("item:burner", "cell:5,1"); // onto the bench, not under the flask
+	p.drag("item:burner", "square:19,12"); // onto the bench, not under the flask
 	refused(before);
 	p.drag("item:burner", "item:flask");
-	p.drag("item:jar", "cell:1,1");
+	p.drag("item:jar", "square:4,13");
 	before = p.ui->lab().digest();
 	p.click("valve:burner@1"); // the malachite first
 	refused(before);
 	p.drag("item:jar", "item:flask");
 	p.click("panel:tip:malachite");
-	p.drag("item:acid", "cell:2,1"); // the acid's time is the second stage
+	p.drag("item:acid", "square:7,12"); // the acid's time is the second stage
 	refused(p.ui->lab().digest());
 	CHECK(p.item("acid").place == "cabinet");
 	p.drag("item:balloon", "item:flask");
@@ -362,7 +386,7 @@ TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {
 		return std::make_pair(std::move(l), std::move(t));
 	};
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "jar", "at": [1, 1]})", R"({"do": "submit", "item": "jar"})" });
+		auto [l, t] = played({ R"({"do": "place", "item": "jar", "at": [3, 9]})", R"({"do": "submit", "item": "jar"})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("Only the balloon") != std::string::npos);
 		CHECK(t->gestures().empty());
@@ -373,14 +397,14 @@ TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {
 		CHECK(t->view().step == 0);
 	}
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "flask", "at": [3, 1]})", R"({"do": "place", "item": "jar", "at": [1, 1]})",
-				R"({"do": "tip", "from": "jar", "to": "flask", "species": "malachite", "all": true})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+		auto [l, t] = played({ R"({"do": "place", "item": "flask", "at": [10, 8]})", R"({"do": "place", "item": "jar", "at": [3, 9]})",
+				R"({"do": "tip", "from": "jar", "to": "flask", "species": "malachite", "all": true})", R"({"do": "place", "item": "acid", "at": [6, 8]})",
 				R"({"do": "pour", "from": "acid", "to": "flask", "ml": 50})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("never gets hot enough") != std::string::npos);
 	}
 	{
-		auto [l, t] = played({ R"({"do": "place", "item": "beaker", "at": [5, 1]})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+		auto [l, t] = played({ R"({"do": "place", "item": "beaker", "at": [18, 8]})", R"({"do": "place", "item": "acid", "at": [6, 8]})",
 				R"({"do": "pour", "from": "acid", "to": "beaker", "ml": 50})", R"({"do": "submit", "item": "beaker"})" });
 		CHECK(t->view().state == TutorialView::Failed);
 		CHECK(t->view().failure.find("more than water") != std::string::npos);
@@ -469,4 +493,146 @@ TEST_CASE("tutorial: one the bench cannot follow is refused, with the reason (St
 	CHECK_MESSAGE(ui->tutor(read("data/tutorials/demo.json"), why), why);
 	// and not on a bench without its items
 	CHECK_FALSE(lab::Tutorial::open(read("data/tutorials/demo.json"), bench, why));
+}
+
+TEST_CASE("conditions: purity and a balloon's fill are quantities, and any quantity compares (Stage 13)") {
+	ItemView flask, balloon;
+	flask.id = "flask";
+	flask.kind = "vessel";
+	flask.place = "bench";
+	flask.contents = { { "malachite", "Cu2CO3(OH)2", 's', false, 0.01, 2.0, 1000, 10.0 },
+		{ "copper_sulfate_pentahydrate", "CuSO4.5H2O", 's', false, 0.03, 8.0, 5000, 200.0 },
+		{ "nitrogen", "N2", 'g', false, 0.003, 0.084, 0, 0.0 },
+		{ "carbon_dioxide", "CO2", 'g', false, 0.001, 0.044, 0, 0.0 },
+		{ "glass", "SiO2", 's', true, 1.0, 100.0, 0, 0.0 } };
+	balloon.id = "balloon";
+	balloon.kind = "balloon";
+	balloon.place = "bench";
+	balloon.capacity_ml = 3000.0;
+	balloon.gas_ml = 750.0;
+	const LabView bench = view_of({ flask, balloon });
+	using lab::Quantity;
+	// a solid's share of the solids and liquids by mass, the walls and the gas not counted
+	CHECK(*lab::measure(bench, Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }) == doctest::Approx(80.0));
+	// a gas's share of the gas by amount
+	CHECK(*lab::measure(bench, Quantity{ "flask", "carbon_dioxide", "purity" }) == doctest::Approx(25.0));
+	CHECK(*lab::measure(bench, Quantity{ "flask", "copper_oxide", "purity" }) == 0.0);
+	CHECK(*lab::measure(bench, Quantity{ "balloon", "fill", "g" }) == doctest::Approx(25.0));
+	CHECK_FALSE(lab::measure(bench, Quantity{ "flask", "fill", "g" })); // a vessel has no capacity
+	CHECK(lab::label(bench, Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }) == "flask: CuSO4.5H2O(s) purity (%)");
+	CHECK(lab::shown(Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }, 99.95) == "99.950 %");
+	CHECK(lab::quantities_of(bench.items[1]).back() == Quantity{ "balloon", "fill", "g" });
+
+	const auto passes = [&](const std::string &when) {
+		std::string why;
+		auto t = tutorial_of("\"steps\": [{\"title\": \"t\", \"text\": \"x\", \"checks\": [{\"text\": \"c\", \"when\": " + when + "}]}]", bench, why);
+		REQUIRE_MESSAGE(t != nullptr, why << " in " << when);
+		t->follow(bench, 60.0, false);
+		return t->view().state == TutorialView::Complete;
+	};
+	CHECK(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "purity"}, "compare": "at_least", "value": 80})"));
+	CHECK_FALSE(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "purity"}, "compare": "above", "value": 80.5})"));
+	CHECK(passes(R"({"quantity": {"item": "balloon", "what": "fill"}, "compare": "between", "values": [20, 30]})"));
+	CHECK(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "count"}, "compare": "outside", "values": [0, 4999]})"));
+	CHECK_FALSE(passes(R"({"quantity": {"item": "flask", "what": "fill"}, "compare": "below", "value": 100})")); // not a quantity of a vessel: never holds
+
+	const auto refused = [&](const std::string &when, const std::string &reason) {
+		std::string why;
+		const bool none = tutorial_of("\"steps\": [{\"title\": \"t\", \"text\": \"x\", \"checks\": [{\"text\": \"c\", \"when\": " + when + "}]}]", bench, why) == nullptr;
+		CHECK_MESSAGE(none, when);
+		CHECK_MESSAGE(why.find(reason) != std::string::npos, why);
+	};
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "value": 1})", "a comparison is");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "nearly", "value": 1})", "no comparison");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "between", "value": 1})", "values");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "between", "values": [3, 1]})", "low end");
+	refused(R"({"item": "flask", "quantity": {"what": "water", "measure": "taste"}, "compare": "above", "value": 1})", "\"purity\"");
+	refused(R"({"quantity": {"what": "water"}, "compare": "above", "value": 1})", "names no \"item\"");
+}
+
+TEST_CASE("tutorial: in the part editor only the step's own settings are taken, and a wrong one cannot be set (Stage 13)") {
+	Pupil p;
+	// played as the tutorial asks, up to the step titled `title`
+	const auto play_to = [&](const std::string &title) {
+		while (p.tutorial().title != title) {
+			REQUIRE(p.tutorial().state == TutorialView::Running);
+			const int step = p.tutorial().step;
+			for (const lab::TutorialGesture &g : std::vector<lab::TutorialGesture>(p.ui->tutorial()->gestures())) {
+				p.play(g);
+			}
+			p.watch([&] { return p.tutorial().step != step; }, 3600);
+		}
+	};
+	const auto editing = [&] {
+		float x = 0, y = 0;
+		return p.ui->locate("edit:set", x, y);
+	};
+	const auto monitor = [&] { return p.item("monitor1").part; };
+	// what the tutorial's pointer outlines: is `what` inside it
+	const auto pointed = [&](const std::string &what) {
+		float x = 0, y = 0;
+		REQUIRE(p.ui->locate(what, x, y));
+		int outlines = 0;
+		bool inside = false;
+		for (const lab::DrawCommand &c : p.ui->draw().commands) {
+			if (c.type == lab::DrawCommand::Outline && c.width == 3.0f && (c.color & 0xffffff00u) == 0xffc83c00u) {
+				++outlines;
+				inside = inside || (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h);
+			}
+		}
+		return outlines == 1 && inside;
+	};
+	play_to("Watch the flask's water");
+	CHECK(pointed("edit:quantity")); // the flask is already chosen: then its quantity
+	p.click("edit:quantity");
+	CHECK(pointed("edit:pick:water"));
+	p.click("edit:pick:water");
+	REQUIRE(p.tutorial().title == "Below 10 g");
+	REQUIRE(editing());
+	CHECK(pointed("edit:value:0")); // "below" is already chosen: the value, until it reads 10
+	p.click("edit:value:0");
+	p.type("1");
+	CHECK(pointed("edit:value:0"));
+	p.type("0");
+	CHECK(pointed("edit:set")); // only now the button
+	p.ui->key(lab::Ui::KeyBackspace);
+	CHECK(pointed("edit:value:0"));
+	p.click("edit:compare:above"); // not what the step asks: refused, below stays chosen
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("edit:nudge:1");
+	p.click("edit:cancel");
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK(editing()); // it cannot be closed half set
+	p.click("edit:value:0");
+	p.type("15"); // the 5 is not the step's 10
+	CHECK(p.ui->message().find("Not that") != std::string::npos);
+	p.click("edit:set"); // 1 g: the step's check would not hold
+	CHECK(p.ui->message().find("the monitor signals below 10 g of water") != std::string::npos);
+	CHECK(editing());
+	CHECK_FALSE(monitor().watching);
+	p.type("0");
+	p.click("edit:set");
+	CHECK(p.ui->message().empty());
+	CHECK(monitor().watching);
+	CHECK(monitor().comparison.a == 10.0);
+	CHECK(p.tutorial().title == "Rig it to the burner");
+	play_to("Close the valve when it signals");
+	REQUIRE(editing());
+	CHECK(pointed("edit:on:value")); // its row's value, until it is set to 0 %
+	p.click("edit:set"); // "when on" left as it is: the valve would never close
+	CHECK(p.ui->message().find("the burner closes when the monitor signals") != std::string::npos);
+	CHECK(p.ui->lab().view().rigs.empty());
+	p.click("edit:off:value"); // the other row
+	p.click("edit:form:change");
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("edit:on:value");
+	p.type("5");
+	p.type("0");
+	CHECK(pointed("edit:set"));
+	p.click("edit:set");
+	REQUIRE(p.ui->lab().view().rigs.size() == 1);
+	const lab::Rig rig = p.ui->lab().view().rigs[0];
+	CHECK(*rig.on == 0.0);
+	CHECK_FALSE(rig.off.has_value());
+	CHECK(p.tutorial().title == "An alarm");
 }
