@@ -19,7 +19,11 @@ front, and the bench's drawing behind a vessel is seen bent.
 | 11.5 | The per-pixel source: `bend_at` (where the ray lands, what passes, the chord), `backdrop`, Fresnel; the reference's `optics_bend` | Done |
 | 11.6 | Tests: the indices, O5, O6, the lens, the chord, the rims, the bench, the frames settling | Done |
 | 11.7 | The GPU: O4 with refraction; the cost remeasured | Done |
-| 11.8 | The user's sign-off | Pending |
+| 11.8 | The prism demo: flint glass traced through flat faces, a slit in a dark room (`lab::PrismDemo`, `cg_demo_*`, `ChemOpticsDemo`, `make prism`) | Done |
+| 11.9 | It fails: pixels that see the slit through a narrow window of wavelengths stop wrong, and stay stale when it turns | Found |
+| 11.10 | Band cuts where a pixel's light jumps (bent views crossing edges, route changes, narrow lines); the content key's geometry; `chem_tool study frames` | Done |
+| 11.11 | The scene test with a refracting ball (the replay and the published page, round 9) | Done |
+| 11.12 | The user's sign-off | Pending |
 
 ## Decisions
 
@@ -72,10 +76,61 @@ front, and the bench's drawing behind a vessel is seen bent.
 - A commit went in on a failing gate: the gate's output was piped through `tail`, which hid its
   status. Amended before any push; the gate's own status is checked since.
 
+## The prism, and the cuts
+
+The user asked for a prism to look through at a thin source of light in a dark room. Through a
+60° prism of N-SF11 (Schott: nd 1.78472, Vd 25.76) the least deviation comes out 2 asin(n sin 30°)
+− 60° = 66.3092° to every printed digit, and violet turns 9.4° further than red. The slit spreads
+into its spectrum, but the first build showed two failures, both from pixels whose light is a
+narrow window of wavelengths (the slit seen at 665.8–687.2 nm, 0.7% of the light's energy):
+
+- a pixel that missed the window in its first frames measured no noise and stopped for good, the
+  dark room where the truth is a dim red (11 of 95 pixels on a row, after 240 frames);
+- after a turn the fixed estimate, as blind to the window, said nothing had moved, so stale
+  histories were kept: stripes of wrong colours.
+
+A larger floor before stopping (512 points, 16 frames) left 2 of 95 stuck and did nothing for the
+turn. The fix, at the user's choice and made general at their request: cut a pixel's bands
+wherever its light is known to jump in wavelength (GAME_SPEC §12.2 item 6).
+
+The user asked that false positives and negatives be shown to fall on the prism, the scene and
+the palettes. `chem_tool study frames` (the reference's frames against the truth, every second to
+fourth pixel):
+
+| Scenario | Bands | Points a pixel a frame | Wasted | Visible | Persistent | Longest run |
+|---|---|---|---|---|---|---|
+| prism | no cuts | 15.26 | 7.25 | 24.78% | 23.05% | 240 |
+| prism | cuts | 1.55 | 0.80 | 0.00% | 0.00% | 8 |
+| bench | no cuts | 7.00 | 2.79 | 0.00% | 0.00% | 0 |
+| bench | cuts | 7.03 | 2.80 | 0.00% | 0.00% | 0 |
+| palettes | no cuts | 1.63 | 0.79 | 0.00% | 0.00% | 2 |
+| palettes | cuts | 1.74 | 0.86 | 0.00% | 0.00% | 0 |
+
+The bench (glass vessels dragged, jumping, poured into, reacting, before the grid) first showed
+1.23% visible with runs of 92 frames in both columns: a dragged vessel's pixels above its liquid
+kept their history, because nothing in the content key changed with where the view crossed the
+glass. The key now holds each layer's coverage and the glass's geometry; a test fails without it
+(21 pixels wrong) and passes with it.
+
+The scene test itself (the CPU replay of round 8's page, every third pixel, 600 frames), its
+dragged ball now a refracting glass sphere of water over the poster, the spot and the tube:
+
+| Method | Points a pixel a frame | Of them wasted | Visible behind the ball | Visible, all | Persistent |
+|---|---|---|---|---|---|
+| 16 points everywhere | 16.0 | 97.2% | 8.4% | 0.3% | 0.0% |
+| decided, no cuts | 1.6 | 43.8% | 0.0% | 0.0% | 0.0% |
+| decided, cuts | 1.6 | 43.8% | 0.0% | 0.0% | 0.0% |
+
+Water and glass bend too little for a view to cross an edge between wavelengths, so behind the
+ball the cuts change nothing; they cost nothing either. The published scene test (round 9) shows
+the same ball, with the three methods and the control, for the user's eye.
+
 ## Not done, and said so
 
-- Prisms and other flat-faced glass, and light cast through glass onto a surface (a rainbow on a
-  wall): not built (GAME_SPEC §12.3 status). A prism to look through is the next demo.
+- Light cast through glass onto a surface (a rainbow on a wall): not built (GAME_SPEC §12.3
+  status); it needs a light besides the room's and its light followed forwards.
+- The prism demo's slit is very bright in the red, where glass's index changes slowly and a
+  pixel sees many nanometres of it: with fixed exposure the red end is near the display's white.
 - A solution's index is water's; what lies in a vessel, the balloon and anything up and down bend
   nothing; only the first vessel a pixel looks through bends its view (GAME_SPEC §20).
 - The wall's distance and the room in front are calibrated, not measured.

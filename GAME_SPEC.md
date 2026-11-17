@@ -659,6 +659,19 @@ For each light:
    band). Asks above the frame's budget are scaled down by the screen's mean ask (a mipmap chain
    on the GPU, nothing read back). The budget is a ceiling, the setting that trades speed for
    accuracy on weaker hardware; a still scene costs almost nothing.
+6. **Cuts where a pixel's light jumps.** Wherever a pixel's light is known to jump or spike in
+   wavelength, its bands are cut there, each part its own exact colour and its own point, so a
+   narrow window of wavelengths is a band of its own and read every frame, by the moving points
+   and by the fixed estimate alike. Three things are known to make such jumps, for any body: a
+   view bent by glass crossing an edge of what is drawn behind it or of the bench (the landing
+   point moves with the wavelength smoothly, so each edge is bracketed between sixteen even shares
+   and bisected); the ray changing its route through the glass (turned back at a face, missing an
+   inner surface), found the same way; and each narrow absorption line in what the pixel looks
+   through (its core, a width and a half each side). A light's own lines need none: its energy
+   table gives each its share. Without the cuts, a pixel that sees a thin slit through a prism, a
+   window of 0.7% of the light's energy, can miss it in its first frames, measure no noise and stop
+   for good; and the fixed estimate, as blind, keeps a stale history when the prism turns.
+   The content key holds each layer's coverage and, through glass, where the ray crosses it.
 
 **How the choice is measured:**
 
@@ -691,6 +704,17 @@ For each light:
    points) is visible on 1 in 1,500. The reference's own frames hold a still scene, a dragged
    body, a pour and a slow reaction to no pixel visibly wrong for 6 frames running (`optics: the
    renderer's frames ...`), and `O4` holds the GPU's settled picture to the truth.
+
+**False positives and false negatives with cuts** (`chem_tool study frames`, the reference's own
+frames against the truth): the prism demo, opened, turned and moved: visible 24.8% to 0.00% of
+pixel-frames, persistent 23.1% to 0.00%, points a pixel a frame 15.3 to 1.55, wasted 7.25 to 0.80;
+a bench of glass vessels dragged, jumping, poured into and reacting: none visible either way (the
+content key's geometry took it from 1.23%, with runs of 92 frames, to none); sixteen glasses of
+random hard spectra with narrow lines: none visible either way, the longest visible run 2 frames
+to 0, wasted 0.79 to 0.86 (the lines' cuts cost a point each). The scene test replayed with its
+dragged ball a refracting glass sphere of water: behind the ball, 16 points everywhere shows 8.4%
+visible; the decided method, with or without cuts, none; water and glass bend too little for a
+view to cross an edge between wavelengths, so the cuts change nothing there.
 
 **What the user's eye decided** (rounds 4 to 8; details in `docs/TDD_10_OPTICS.md`):
 
@@ -856,10 +880,12 @@ constant weights (the live composition, the powders by mass, the rubber, the lit
 lists, the room's light in energy bands with moving points, each pixel's history kept by its
 content key and points by need, gamut mapping onto sRGB, and pure water as measured. The glow of a
 hot solid is its exact colour, added outside the history. Stage 11 adds refraction and Fresnel
-through each vessel's glass and liquid, with dispersion, and the bench's drawing seen bent. The
+through each vessel's glass and liquid, with dispersion, the bench's drawing seen bent, and the
+prism demo: a prism of flint glass (N-SF11) traced through its flat faces, before a slit of white
+light in a dark room (`make prism`). The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
-Mie auras, prisms and other flat-faced glass, light cast through glass onto a surface (caustics),
+Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
 adapted exposure, Display P3 output) is specified and not built.
 
 ## 13. Lab layer and interaction

@@ -13,6 +13,13 @@
 - §19: the pass's cost remeasured (0.1 ms settled, 0.95 ms with every history starting); Stage
   10's 1.9 and 11 ms withdrawn (a busy machine).
 - §20: what does not bend, and the calibrated room, declared.
+- §12.2 item 6: a pixel's bands cut where its light is known to jump in wavelength (a bent view
+  crossing a drawn edge, a change of route through the glass, a narrow absorption line); the
+  content key holds coverage and the geometry of the glass a view crosses. The false positives
+  and negatives measured with and without the cuts (`chem_tool study frames`), and on the scene
+  test replayed with a refracting ball.
+- §12.3: the prism demo: flint glass (N-SF11) traced through flat faces, a slit of white light,
+  a dark room.
 
 ## 0.11.0 (2026-11-17, Stage 10)
 
