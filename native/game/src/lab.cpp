@@ -5,6 +5,7 @@
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
 #include "chem/version.hpp"
+#include "lab/conditions.hpp"
 #include "lab/sha256.hpp"
 
 #include <nlohmann/json.hpp>
@@ -147,6 +148,13 @@ struct Lab::Impl {
 	// progress, and a change of connections waits for its end
 	bool mid_step = false;
 	bool untraced = false; // the last step was unchecked
+	// signals (GAME_SPEC §13.3)
+	std::vector<Part> parts;
+	std::vector<Wire> wires;
+	std::vector<Rig> rigs;
+	std::vector<ControlSetting> controls;
+	int64_t made[3] = { 0, 0, 0 }; // the parts made of each kind, for their names
+	bool rang = false; // an alarm started ringing in the last step
 
 	const SpeciesTable &table() const { return sim->world().species(); }
 	World &world() { return sim->world(); }
@@ -159,6 +167,282 @@ struct Lab::Impl {
 			}
 		}
 		return -1;
+	}
+
+	int find_part(const std::string &id) const {
+		for (size_t i = 0; i < parts.size(); ++i) {
+			if (parts[i].id == id) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// the name of what standing_in found: an item, or a part after the items
+	const std::string &name_of(int index) const {
+		return index < static_cast<int>(items.size()) ? items[static_cast<size_t>(index)].id : parts[static_cast<size_t>(index) - items.size()].id;
+	}
+
+	// ------------------------------------------------------------- signals (§13.3)
+
+	// a monitor's reading of one item, from what the view would show of it
+	std::optional<double> reading(const Quantity &q) const {
+		const int i = find(q.item);
+		if (i < 0) {
+			return std::nullopt;
+		}
+		LabView one;
+		one.items.push_back(item_view(items[static_cast<size_t>(i)]));
+		return measure(one, q);
+	}
+
+	// a control's value now; none when it is not one of the lab's
+	std::optional<double> control_now(const std::string &item_id, const std::string &control) const {
+		const int i = find(item_id);
+		if (control == "stir" && i >= 0 && items[static_cast<size_t>(i)].kind != Kind::Burner && items[static_cast<size_t>(i)].kind != Kind::Tray) {
+			return items[static_cast<size_t>(i)].stirred ? 1.0 : 0.0;
+		}
+		if (control == "valve" && i >= 0 && items[static_cast<size_t>(i)].kind == Kind::Burner) {
+			return items[static_cast<size_t>(i)].valve;
+		}
+		return std::nullopt;
+	}
+
+	void record(const std::string &item_id, const std::string &control, double value, const std::string &by) {
+		for (ControlSetting &c : controls) {
+			if (c.item == item_id && c.control == control) {
+				c = ControlSetting{ item_id, control, value, by, static_cast<int64_t>(world().step()) };
+				return;
+			}
+		}
+		controls.push_back(ControlSetting{ item_id, control, value, by, static_cast<int64_t>(world().step()) });
+	}
+
+	// a control set, at a step boundary, by a rig or by the player's command;
+	// false when it cannot be set now (a vessel off the bench is not stirred)
+	bool set_control(const std::string &item_id, const std::string &control, double value, const std::string &by) {
+		if (control == "reset") {
+			const int t = find_part(item_id);
+			if (t < 0 || parts[static_cast<size_t>(t)].kind != PartKind::Timer) {
+				return false;
+			}
+			reset(parts[static_cast<size_t>(t)]);
+			record(item_id, control, value, by);
+			return true;
+		}
+		const int i = find(item_id);
+		if (i < 0) {
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(i)];
+		if (control == "stir") {
+			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox) {
+				return false;
+			}
+			const bool on = value > 0.5;
+			world().set_mixing(x.cell, on ? STIRRED : 1.0);
+			x.stirred = on;
+			record(item_id, control, on ? 1.0 : 0.0, by);
+			return true;
+		}
+		if (control == "valve" && x.kind == Kind::Burner) {
+			if (x.under >= 0) {
+				world().set_conductance(x.heats, x.full * value);
+			}
+			x.valve = value;
+			record(item_id, control, value, by);
+			return true;
+		}
+		return false;
+	}
+
+	// the signals at a step's end; false when an invariant fails
+	bool signals_step(std::string &why) {
+		rang = false;
+		if (parts.empty()) {
+			return true;
+		}
+		const std::vector<Part> before = parts;
+		const SignalStep done = evaluate(parts, wires, rigs, [this](const Quantity &q) { return reading(q); }, static_cast<int64_t>(world().step()));
+		std::vector<std::string> failing;
+		if (check) {
+			failing = check_G2(parts, wires, before);
+		}
+		for (const RigAction &a : done.actions) {
+			const Rig &rig = rigs[a.rig];
+			set_control(rig.item, rig.control, a.value, rig.from);
+		}
+		rang = !done.rang.empty();
+		if (check && failing.empty()) {
+			failing = check_G1(controls, [this](const std::string &item_id, const std::string &control) { return control_now(item_id, control); });
+		}
+		if (!failing.empty()) {
+			broken = true;
+			why = "an invariant failed: " + failing[0];
+			return false;
+		}
+		return true;
+	}
+
+	// a rig's setting for its control, from a command: true or "stir"/false or "stop", a valve's 0 to 1, true or "reset"
+	static bool setting_of(const std::string &control, const json &j, std::optional<double> &out, std::string &why) {
+		if (j.is_null()) {
+			out.reset(); // leave it as it is
+			return true;
+		}
+		if (control == "stir" && (j.is_boolean() || (j.is_string() && (j == "stir" || j == "stop")))) {
+			out = (j.is_boolean() ? j.get<bool>() : j == "stir") ? 1.0 : 0.0;
+			return true;
+		}
+		if (control == "valve" && j.is_number() && j.get<double>() >= 0.0 && j.get<double>() <= 1.0) {
+			out = j.get<double>();
+			return true;
+		}
+		if (control == "reset" && ((j.is_boolean() && j.get<bool>()) || j == "reset")) {
+			out = 1.0;
+			return true;
+		}
+		why = "a " + control + " is set " + (control == "stir" ? "to true (stir) or false (stop)" : control == "valve" ? "between 0 and 1" : "to true (reset)") + ", or null to leave it";
+		return false;
+	}
+
+	// a part named by a command's field, of the kind wanted (any kind when none)
+	bool part(const json &c, const char *key, std::optional<PartKind> kind, int &index, std::string &why) const {
+		if (!c.contains(key) || !c.at(key).is_string()) {
+			why = std::string("the command needs \"") + key + "\"";
+			return false;
+		}
+		const std::string id = c.at(key).get<std::string>();
+		index = find_part(id);
+		if (index < 0) {
+			why = "there is no part \"" + id + "\" on the bench";
+			return false;
+		}
+		if (kind && parts[static_cast<size_t>(index)].kind != *kind) {
+			why = "\"" + id + "\" is not a " + part_kind_name(*kind);
+			return false;
+		}
+		return true;
+	}
+
+	// the signals as JSON: for a report (plain numbers), or a save (`exact`: numbers as their bits)
+	json signals_json(bool exact) const {
+		static const char *const OPS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
+		const auto num = [exact](double v) { return exact ? json(bits(v)) : json(v); };
+		const auto maybe = [&](const std::optional<double> &v) { return v ? num(*v) : json(nullptr); };
+		json out;
+		json list = json::array();
+		for (const Part &p : parts) {
+			json j{ { "id", p.id }, { "kind", part_kind_name(p.kind) }, { "at", { p.col, p.row } }, { "own", p.own }, { "out", p.out } };
+			if (p.kind == PartKind::Monitor) {
+				j["watching"] = p.watching;
+				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
+				j["compare"] = OPS[static_cast<int>(p.comparison.op)];
+				j["values"] = { num(p.comparison.a), num(p.comparison.b) };
+				j["last"] = maybe(p.last);
+			} else if (p.kind == PartKind::Timer) {
+				j["preset"] = p.preset;
+				j["left"] = p.left;
+			} else {
+				j["ringing"] = p.ringing;
+				j["rang_at"] = p.rang_at;
+			}
+			list.push_back(j);
+		}
+		out["parts"] = list;
+		json w = json::array();
+		for (const Wire &x : wires) {
+			w.push_back({ { "from", x.from }, { "to", x.to } });
+		}
+		out["wires"] = w;
+		json r = json::array();
+		for (const Rig &x : rigs) {
+			r.push_back({ { "from", x.from }, { "item", x.item }, { "control", x.control }, { "change", x.change }, { "on", maybe(x.on) }, { "off", maybe(x.off) }, { "any", maybe(x.any) },
+					{ "seen", x.seen } });
+		}
+		out["rigs"] = r;
+		json k = json::array();
+		for (const ControlSetting &x : controls) {
+			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
+		}
+		out["controls"] = k;
+		out["made"] = { made[0], made[1], made[2] };
+		return out;
+	}
+
+	// a save's signals, back
+	bool signals_from(const json &j, std::string &why) {
+		const auto exact = [&](const json &v, double &out) { return from_bits(v, out) || (why = "the save's signals hold a number that is not one", false); };
+		const auto maybe = [&](const json &v, std::optional<double> &out) {
+			if (v.is_null()) {
+				out.reset();
+				return true;
+			}
+			double d = 0.0;
+			if (!exact(v, d)) {
+				return false;
+			}
+			out = d;
+			return true;
+		};
+		for (const json &x : j.at("parts")) {
+			Part p;
+			p.id = x.at("id").get<std::string>();
+			if (!part_kind_of(x.at("kind").get<std::string>(), p.kind)) {
+				why = "the save holds a part of no kind";
+				return false;
+			}
+			p.col = x.at("at").at(0).get<int>();
+			p.row = x.at("at").at(1).get<int>();
+			p.own = x.at("own").get<bool>();
+			p.out = x.at("out").get<bool>();
+			if (p.kind == PartKind::Monitor) {
+				p.watching = x.at("watching").get<bool>();
+				const json &q = x.at("quantity");
+				p.quantity = Quantity{ q.at("item").get<std::string>(), q.at("what").get<std::string>(), q.at("measure").get<std::string>() };
+				if (!op_of(x.at("compare").get<std::string>(), p.comparison.op) || !exact(x.at("values").at(0), p.comparison.a) || !exact(x.at("values").at(1), p.comparison.b) ||
+						!maybe(x.at("last"), p.last)) {
+					why = why.empty() ? "the save holds a monitor that cannot be read" : why;
+					return false;
+				}
+			} else if (p.kind == PartKind::Timer) {
+				p.preset = x.at("preset").get<int64_t>();
+				p.left = x.at("left").get<int64_t>();
+			} else {
+				p.ringing = x.at("ringing").get<bool>();
+				p.rang_at = x.at("rang_at").get<int64_t>();
+			}
+			parts.push_back(p);
+		}
+		for (const json &x : j.at("wires")) {
+			wires.push_back(Wire{ x.at("from").get<std::string>(), x.at("to").get<std::string>() });
+		}
+		for (const json &x : j.at("rigs")) {
+			Rig r;
+			r.from = x.at("from").get<std::string>();
+			r.item = x.at("item").get<std::string>();
+			r.control = x.at("control").get<std::string>();
+			r.change = x.at("change").get<bool>();
+			r.seen = x.at("seen").get<bool>();
+			if (!maybe(x.at("on"), r.on) || !maybe(x.at("off"), r.off) || !maybe(x.at("any"), r.any)) {
+				return false;
+			}
+			rigs.push_back(r);
+		}
+		for (const json &x : j.at("controls")) {
+			ControlSetting k;
+			k.item = x.at("item").get<std::string>();
+			k.control = x.at("control").get<std::string>();
+			k.by = x.at("by").get<std::string>();
+			k.step = x.at("step").get<int64_t>();
+			if (!exact(x.at("value"), k.value)) {
+				return false;
+			}
+			controls.push_back(k);
+		}
+		for (int k = 0; k < 3; ++k) {
+			made[k] = j.at("made").at(static_cast<size_t>(k)).get<int64_t>();
+		}
+		return true;
 	}
 
 	// one step; false when an invariant fails
@@ -180,6 +464,9 @@ struct Lab::Impl {
 				why = "an invariant failed: " + violations[0];
 				return false;
 			}
+		}
+		if (!signals_step(why)) {
+			return false;
 		}
 		burst_balloons();
 		return true;
@@ -238,6 +525,13 @@ struct Lab::Impl {
 				return static_cast<int>(i);
 			}
 		}
+		for (size_t i = 0; i < parts.size(); ++i) {
+			const Part &o = parts[i];
+			const int index = static_cast<int>(items.size() + i);
+			if (index != except && col <= o.col && o.col < col + w && row <= o.row && o.row < row + h) {
+				return index;
+			}
+		}
 		return -1;
 	}
 	bool on_grid(int col, int row, int w, int h) const { return col >= 0 && row >= 0 && col + w <= cols && row + h <= rows; }
@@ -276,6 +570,74 @@ struct Lab::Impl {
 	}
 
 	json save() const;
+
+	ItemView item_view(const Item &item) const {
+		const Impl &m = *this;
+		const SpeciesTable &table = m.table();
+		static const char PHASE[] = { 's', 'l', 'g', 'a' };
+		ItemView v;
+		v.id = item.id;
+		v.kind = KIND_NAME[static_cast<int>(item.kind)];
+		v.place = PLACE_NAME[static_cast<int>(item.place)];
+		v.col = item.col;
+		v.row = item.row;
+		v.w = item.w;
+		v.h = item.h;
+		v.on = item.on;
+		v.under = item.under;
+		v.holds = item.holds;
+		v.drains_to = item.drains_to;
+		v.stirred = item.stirred;
+		v.submitted = item.submitted;
+		v.burst = item.burst;
+		v.valve = item.valve;
+		v.capacity_ml = item.capacity * 1e6;
+		if (item.kind != Kind::Burner) {
+			const double kelvin = m.kelvin(item.cell);
+			v.celsius = kelvin - 273.15;
+			const CellState &cell = m.world().snapshot_cell(item.cell);
+			const Fill fill = fill_of(table, cell, kelvin);
+			v.gas_ml = fill.gas * 1e6;
+			v.condensed_ml = fill.condensed * 1e6;
+			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
+			for (size_t s = 0; s < cell.amount.size(); ++s) {
+				if (cell.amount[s] == 0) {
+					continue;
+				}
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				const SpeciesDef &def = table.species(id);
+				SubstanceView row;
+				row.species = std::string(def.id);
+				row.formula = std::string(def.formula);
+				row.phase = PHASE[static_cast<int>(def.phase)];
+				row.wall = def.wall;
+				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
+				row.g = m.grams(item.cell, id);
+				if (def.phase == Phase::Solid && !def.wall) {
+					row.particles = cell.particles[s];
+					row.size_um = particle_diameter(table, cell, id) * 1e6;
+				}
+				if (def.phase == Phase::Liquid && !def.wall) {
+					v.liquid_ml += row.mol * def.molar_volume * 1e6;
+				}
+				v.contents.push_back(row);
+			}
+			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
+			for (const Edge &e : m.world().edges()) {
+				const CellId other = e.a == item.cell ? e.b : e.b == item.cell ? e.a : CellId{};
+				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room)) {
+					bool burner = false;
+					for (const Item &b : m.items) {
+						burner = burner || (b.kind == Kind::Burner && b.cell == other);
+					}
+					v.condenser = v.condenser || !burner;
+				}
+			}
+		} else {
+			v.celsius = m.world().meta(item.cell).reservoir_temperature - 273.15;
+		}
+		return v;
+	}
 
 	// connections change at a step boundary: take the step in progress to its end
 	bool boundary(std::string &why) { return !mid_step || step_once(why); }
@@ -541,6 +903,28 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		return true;
 	}
+	if (what == "wait_until" && c.contains("rings")) {
+		// until an alarm rings (§13.3)
+		int at = -1;
+		if (!part(c, "rings", PartKind::Alarm, at, why)) {
+			return false;
+		}
+		const std::string alarm = parts[static_cast<size_t>(at)].id;
+		const auto limit = static_cast<int64_t>(number(c, "timeout", 3600.0) * 60.0 + 0.5);
+		for (int64_t i = 0;; ++i) {
+			const int now = find_part(alarm);
+			if (now >= 0 && parts[static_cast<size_t>(now)].ringing) {
+				return true;
+			}
+			if (i >= limit) {
+				why = "the alarm did not ring before the wait's timeout";
+				return false;
+			}
+			if (!step_once(why)) {
+				return false;
+			}
+		}
+	}
 	if (what == "wait_until") {
 		int at = -1;
 		if (!item(c, "item", Kind::Vessel, at, why)) {
@@ -589,6 +973,23 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	if (what == "place") {
 		// from the cabinet onto the bench, or along it
 		int thing = -1;
+		if (c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) < 0 && find_part(c.at("item").get<std::string>()) >= 0) {
+			// a signal part, along the bench
+			Part &p = parts[static_cast<size_t>(find_part(c.at("item").get<std::string>()))];
+			if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
+				why = "a place is \"at\" [column, row]";
+				return false;
+			}
+			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+			const int there = standing_in(col, row, 1, 1, static_cast<int>(items.size()) + find_part(p.id));
+			if (!on_grid(col, row, 1, 1) || there >= 0) {
+				why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench";
+				return false;
+			}
+			p.col = col;
+			p.row = row;
+			return true;
+		}
 		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
 			why = "there is no such item to place";
 			return false;
@@ -615,7 +1016,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		const int there = standing_in(col, row, x.w, x.h, thing);
 		if (there >= 0) {
-			why = "\"" + items[static_cast<size_t>(there)].id + "\" stands there";
+			why = "\"" + name_of(there) + "\" stands there";
 			return false;
 		}
 		x.place = Place::Bench;
@@ -624,61 +1025,293 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		return true;
 	}
 	if (what == "move") {
-		// several items along the bench together, by the same offset: all of them or none (GAME_SPEC §13)
+		// several things along the bench together, by the same offset: all of them or none (GAME_SPEC §13);
+		// equipment and signal parts alike, numbered as standing_in numbers them
 		if (!c.contains("items") || !c.at("items").is_array() || c.at("items").empty() || !c.contains("by") || !c.at("by").is_array() || c.at("by").size() != 2) {
 			why = "a move is {\"items\": [...], \"by\": [columns, rows]}";
 			return false;
 		}
 		const int dc = c.at("by").at(0).get<int>(), dr = c.at("by").at(1).get<int>();
+		const int n = static_cast<int>(items.size());
 		std::vector<int> moving;
 		for (const json &name : c.at("items")) {
-			const int thing = name.is_string() ? find(name.get<std::string>()) : -1;
+			int thing = name.is_string() ? find(name.get<std::string>()) : -1;
+			if (thing < 0 && name.is_string() && find_part(name.get<std::string>()) >= 0) {
+				thing = n + find_part(name.get<std::string>());
+			}
 			if (thing < 0) {
 				why = "there is no such item to move: " + name.dump();
 				return false;
 			}
 			if (std::find(moving.begin(), moving.end(), thing) != moving.end()) {
-				why = "\"" + items[static_cast<size_t>(thing)].id + "\" is named twice";
+				why = "\"" + name_of(thing) + "\" is named twice";
 				return false;
 			}
 			moving.push_back(thing);
 		}
-		for (const int thing : moving) {
-			const Item &x = items[static_cast<size_t>(thing)];
-			if (x.kind == Kind::Tray || x.place != Place::Bench || x.holds >= 0 || x.drains_to >= 0) {
-				why = "\"" + x.id + "\" cannot be moved as it is: it is not on the bench, or it is joined to something";
-				return false;
+		const auto footprint = [&](int thing, int &col, int &row, int &w, int &h) {
+			if (thing >= n) {
+				const Part &p = parts[static_cast<size_t>(thing - n)];
+				col = p.col;
+				row = p.row;
+				w = h = 1;
+			} else {
+				const Item &x = items[static_cast<size_t>(thing)];
+				col = x.col;
+				row = x.row;
+				w = x.w;
+				h = x.h;
 			}
-			for (const Item &other : items) {
-				if (other.under == thing || other.drains_to == thing) {
-					why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
+		};
+		for (const int thing : moving) {
+			if (thing < n) {
+				const Item &x = items[static_cast<size_t>(thing)];
+				if (x.kind == Kind::Tray || x.place != Place::Bench || x.holds >= 0 || x.drains_to >= 0) {
+					why = "\"" + x.id + "\" cannot be moved as it is: it is not on the bench, or it is joined to something";
 					return false;
 				}
+				for (const Item &other : items) {
+					if (other.under == thing || other.drains_to == thing) {
+						why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
+						return false;
+					}
+				}
 			}
-			if (!on_grid(x.col + dc, x.row + dr, x.w, x.h)) {
-				why = "\"" + x.id + "\" would be off the bench";
+			int col = 0, row = 0, w = 0, h = 0;
+			footprint(thing, col, row, w, h);
+			if (!on_grid(col + dc, row + dr, w, h)) {
+				why = "\"" + name_of(thing) + "\" would be off the bench";
 				return false;
 			}
 		}
 		for (const int thing : moving) {
-			const Item &x = items[static_cast<size_t>(thing)];
-			for (size_t i = 0; i < items.size(); ++i) {
-				const Item &o = items[i];
-				const bool also = std::find(moving.begin(), moving.end(), static_cast<int>(i)) != moving.end();
-				if (also || o.place != Place::Bench || o.col < 0) {
+			int col = 0, row = 0, w = 0, h = 0;
+			footprint(thing, col, row, w, h);
+			for (int other = 0; other < n + static_cast<int>(parts.size()); ++other) {
+				if (std::find(moving.begin(), moving.end(), other) != moving.end() || (other < n && (items[static_cast<size_t>(other)].place != Place::Bench || items[static_cast<size_t>(other)].col < 0))) {
 					continue;
 				}
-				if (x.col + dc < o.col + o.w && o.col < x.col + dc + x.w && x.row + dr < o.row + o.h && o.row < x.row + dr + x.h) {
-					why = "\"" + o.id + "\" stands where \"" + x.id + "\" would go";
+				int oc = 0, orow = 0, ow = 0, oh = 0;
+				footprint(other, oc, orow, ow, oh);
+				if (col + dc < oc + ow && oc < col + dc + w && row + dr < orow + oh && orow < row + dr + h) {
+					why = "\"" + name_of(other) + "\" stands where \"" + name_of(thing) + "\" would go";
 					return false;
 				}
 			}
 		}
 		for (const int thing : moving) {
-			items[static_cast<size_t>(thing)].col += dc;
-			items[static_cast<size_t>(thing)].row += dr;
+			if (thing >= n) {
+				parts[static_cast<size_t>(thing - n)].col += dc;
+				parts[static_cast<size_t>(thing - n)].row += dr;
+			} else {
+				items[static_cast<size_t>(thing)].col += dc;
+				items[static_cast<size_t>(thing)].row += dr;
+			}
 		}
 		return true;
+	}
+	// ---- signals (§13.3)
+	if (what == "part") {
+		PartKind kind = PartKind::Timer;
+		if (!c.contains("kind") || !c.at("kind").is_string() || !part_kind_of(c.at("kind").get<std::string>(), kind)) {
+			why = "a part's \"kind\" is timer, monitor or alarm";
+			return false;
+		}
+		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
+			why = "a part is made \"at\" [column, row]";
+			return false;
+		}
+		const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+		const int there = standing_in(col, row, 1, 1);
+		if (!on_grid(col, row, 1, 1) || there >= 0) {
+			why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench";
+			return false;
+		}
+		Part p;
+		p.kind = kind;
+		p.col = col;
+		p.row = row;
+		int64_t &count = made[static_cast<int>(kind)];
+		p.id = c.value("id", std::string());
+		if (p.id.empty()) {
+			do {
+				p.id = std::string(part_kind_name(kind)) + std::to_string(++count);
+			} while (find(p.id) >= 0 || find_part(p.id) >= 0);
+		} else if (find(p.id) >= 0 || find_part(p.id) >= 0) {
+			why = "\"" + p.id + "\" is taken";
+			return false;
+		}
+		parts.push_back(p);
+		return true;
+	}
+	if (what == "scrap") {
+		int at = -1;
+		if (!part(c, "part", std::nullopt, at, why)) {
+			return false;
+		}
+		const std::string id = parts[static_cast<size_t>(at)].id;
+		std::erase_if(wires, [&](const Wire &w) { return w.from == id || w.to == id; });
+		std::erase_if(rigs, [&](const Rig &r) { return r.from == id || (r.control == "reset" && r.item == id); });
+		std::erase_if(controls, [&](const ControlSetting &s) { return s.item == id; });
+		parts.erase(parts.begin() + at);
+		return true;
+	}
+	if (what == "set") {
+		int at = -1;
+		if (!part(c, "part", std::nullopt, at, why)) {
+			return false;
+		}
+		Part &p = parts[static_cast<size_t>(at)];
+		if (p.kind == PartKind::Timer) {
+			const double seconds = number(c, "seconds", -1.0);
+			if (!(seconds > 0.0) || seconds > 360000.0) {
+				why = "a timer is set to \"seconds\", more than none and at most 100 hours";
+				return false;
+			}
+			p.preset = std::max<int64_t>(1, static_cast<int64_t>(seconds * 60.0 + 0.5));
+			reset(p);
+			return true;
+		}
+		if (p.kind != PartKind::Monitor) {
+			why = "an alarm has nothing to set";
+			return false;
+		}
+		Quantity q;
+		q.item = c.value("item", std::string());
+		q.what = c.value("what", std::string());
+		q.measure = c.value("measure", std::string("g"));
+		if (find(q.item) < 0 || items[static_cast<size_t>(find(q.item))].kind == Kind::Tray) {
+			why = "a monitor watches an item on the bench: there is no \"" + q.item + "\"";
+			return false;
+		}
+		if (!valid(q, why)) {
+			return false;
+		}
+		Comparison cmp;
+		if (!c.contains("compare") || !c.at("compare").is_string() || !op_of(c.at("compare").get<std::string>(), cmp.op)) {
+			why = "a monitor compares: \"compare\" is above, below, at_least, at_most, reaches, between or outside";
+			return false;
+		}
+		if (two_values(cmp.op)) {
+			if (!c.contains("values") || !c.at("values").is_array() || c.at("values").size() != 2 || !c.at("values")[0].is_number() || !c.at("values")[1].is_number()) {
+				why = "\"" + c.at("compare").get<std::string>() + "\" compares with \"values\": [low, high]";
+				return false;
+			}
+			cmp.a = c.at("values")[0].get<double>();
+			cmp.b = c.at("values")[1].get<double>();
+		} else {
+			if (!c.contains("value") || !c.at("value").is_number()) {
+				why = "\"" + c.at("compare").get<std::string>() + "\" compares with one \"value\"";
+				return false;
+			}
+			cmp.a = c.at("value").get<double>();
+		}
+		if (!valid(cmp, why)) {
+			return false;
+		}
+		p.watching = true;
+		p.quantity = q;
+		p.comparison = cmp;
+		p.last.reset(); // "reaches" starts again
+		return true;
+	}
+	if (what == "wire" || what == "unwire") {
+		int from = -1, to = -1;
+		if (!part(c, "from", std::nullopt, from, why) || !part(c, "to", std::nullopt, to, why)) {
+			return false;
+		}
+		const Wire w{ parts[static_cast<size_t>(from)].id, parts[static_cast<size_t>(to)].id };
+		const auto there = std::find(wires.begin(), wires.end(), w);
+		if (what == "unwire") {
+			if (there == wires.end()) {
+				why = "no wire runs from \"" + w.from + "\" to \"" + w.to + "\"";
+				return false;
+			}
+			wires.erase(there);
+			return true;
+		}
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm) {
+			why = "an alarm sends no signal: it has no output to wire";
+			return false;
+		}
+		if (there != wires.end()) {
+			why = "a wire already runs from \"" + w.from + "\" to \"" + w.to + "\"";
+			return false;
+		}
+		wires.push_back(w);
+		return true;
+	}
+	if (what == "rig" || what == "unrig") {
+		int from = -1;
+		if (!part(c, "from", std::nullopt, from, why)) {
+			return false;
+		}
+		Rig r;
+		r.from = parts[static_cast<size_t>(from)].id;
+		r.item = c.value("item", std::string());
+		r.control = c.value("control", std::string());
+		const auto same = [&](const Rig &o) { return o.from == r.from && o.item == r.item && o.control == r.control; };
+		const auto there = std::find_if(rigs.begin(), rigs.end(), same);
+		if (what == "unrig") {
+			if (there == rigs.end()) {
+				why = "no rig runs from \"" + r.from + "\" to the " + r.control + " of \"" + r.item + "\"";
+				return false;
+			}
+			rigs.erase(there);
+			return true;
+		}
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm) {
+			why = "an alarm sends no signal: it has no output to rig";
+			return false;
+		}
+		const bool targets = r.control == "reset" ? find_part(r.item) >= 0 && parts[static_cast<size_t>(find_part(r.item))].kind == PartKind::Timer
+								: control_now(r.item, r.control).has_value();
+		if (!targets) {
+			why = "there is no " + r.control + " on \"" + r.item + "\" to rig: a vessel's stir, a burner's valve, a timer's reset";
+			return false;
+		}
+		if (there != rigs.end()) {
+			why = "a rig already runs from \"" + r.from + "\" to the " + r.control + " of \"" + r.item + "\"";
+			return false;
+		}
+		r.change = c.contains("change");
+		if (r.change && (c.contains("on") || c.contains("off"))) {
+			why = "a rig acts on its signal's \"change\", or on its turning \"on\" and \"off\": not both";
+			return false;
+		}
+		if ((r.change && !setting_of(r.control, c.at("change"), r.any, why)) || (c.contains("on") && !setting_of(r.control, c.at("on"), r.on, why)) ||
+				(c.contains("off") && !setting_of(r.control, c.at("off"), r.off, why))) {
+			return false;
+		}
+		r.seen = parts[static_cast<size_t>(from)].out; // it acts from the source's next change
+		rigs.push_back(r);
+		return true;
+	}
+	if (what == "reset") {
+		int at = -1;
+		if (!part(c, "timer", PartKind::Timer, at, why)) {
+			return false;
+		}
+		set_control(parts[static_cast<size_t>(at)].id, "reset", 1.0, "player");
+		return true;
+	}
+	if (what == "ack") {
+		// the player answers ringing alarms: the one named, or all of them
+		if (c.contains("alarm")) {
+			int at = -1;
+			if (!part(c, "alarm", PartKind::Alarm, at, why)) {
+				return false;
+			}
+			parts[static_cast<size_t>(at)].ringing = false;
+			return true;
+		}
+		for (Part &p : parts) {
+			p.ringing = false;
+		}
+		return true;
+	}
+	if (what == "stow" && c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) < 0 && find_part(c.at("item").get<std::string>()) >= 0) {
+		return run(json{ { "do", "scrap" }, { "part", c.at("item") } }, why); // a part back in the drawer
 	}
 	if (what == "stow") {
 		int thing = -1;
@@ -761,6 +1394,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			world().set_conductance(flame.heats, flame.full * to);
 		}
 		flame.valve = to;
+		record(flame.id, "valve", to, "player");
 		return true;
 	}
 	if (what == "stir") {
@@ -774,6 +1408,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		world().set_mixing(items[static_cast<size_t>(at)].cell, on ? STIRRED : 1.0);
 		items[static_cast<size_t>(at)].stirred = on;
+		record(items[static_cast<size_t>(at)].id, "stir", on ? 1.0 : 0.0, "player");
 		return true;
 	}
 	if (what == "pour" || what == "tip") {
@@ -1016,7 +1651,7 @@ bool Lab::command(std::string_view command_json, std::string &why) {
 	}
 }
 
-bool Lab::advance(int64_t steps, std::string &why) {
+bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
 	if (impl_->broken) {
 		why = "an invariant failed earlier: the lab takes no more commands";
 		return false;
@@ -1024,6 +1659,9 @@ bool Lab::advance(int64_t steps, std::string &why) {
 	for (int64_t i = 0; i < steps; ++i) {
 		if (!impl_->step_once(why)) {
 			return false;
+		}
+		if (stop_on_ring && impl_->rang) {
+			break;
 		}
 	}
 	return true;
@@ -1044,75 +1682,29 @@ int64_t Lab::step() const {
 LabView Lab::view() const {
 	const Impl &m = *impl_;
 	const SpeciesTable &table = m.table();
-	static const char PHASE[] = { 's', 'l', 'g', 'a' };
 	LabView out;
 	out.step = step();
 	out.cols = m.cols;
 	out.rows = m.rows;
 	for (const Item &item : m.items) {
-		ItemView v;
-		v.id = item.id;
-		v.kind = KIND_NAME[static_cast<int>(item.kind)];
-		v.place = PLACE_NAME[static_cast<int>(item.place)];
-		v.col = item.col;
-		v.row = item.row;
-		v.w = item.w;
-		v.h = item.h;
-		v.on = item.on;
-		v.under = item.under;
-		v.holds = item.holds;
-		v.drains_to = item.drains_to;
-		v.stirred = item.stirred;
-		v.submitted = item.submitted;
-		v.burst = item.burst;
-		v.valve = item.valve;
-		v.capacity_ml = item.capacity * 1e6;
-		if (item.kind != Kind::Burner) {
-			const double kelvin = m.kelvin(item.cell);
-			v.celsius = kelvin - 273.15;
-			const CellState &cell = m.world().snapshot_cell(item.cell);
-			const Fill fill = fill_of(table, cell, kelvin);
-			v.gas_ml = fill.gas * 1e6;
-			v.condensed_ml = fill.condensed * 1e6;
-			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
-			for (size_t s = 0; s < cell.amount.size(); ++s) {
-				if (cell.amount[s] == 0) {
-					continue;
-				}
-				const SpeciesId id{ static_cast<int32_t>(s) };
-				const SpeciesDef &def = table.species(id);
-				SubstanceView row;
-				row.species = std::string(def.id);
-				row.formula = std::string(def.formula);
-				row.phase = PHASE[static_cast<int>(def.phase)];
-				row.wall = def.wall;
-				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
-				row.g = m.grams(item.cell, id);
-				if (def.phase == Phase::Solid && !def.wall) {
-					row.particles = cell.particles[s];
-					row.size_um = particle_diameter(table, cell, id) * 1e6;
-				}
-				if (def.phase == Phase::Liquid && !def.wall) {
-					v.liquid_ml += row.mol * def.molar_volume * 1e6;
-				}
-				v.contents.push_back(row);
-			}
-			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
-			for (const Edge &e : m.world().edges()) {
-				const CellId other = e.a == item.cell ? e.b : e.b == item.cell ? e.a : CellId{};
-				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room)) {
-					bool burner = false;
-					for (const Item &b : m.items) {
-						burner = burner || (b.kind == Kind::Burner && b.cell == other);
-					}
-					v.condenser = v.condenser || !burner;
-				}
-			}
-		} else {
-			v.celsius = m.world().meta(item.cell).reservoir_temperature - 273.15;
-		}
-		out.items.push_back(v);
+		out.items.push_back(m.item_view(item));
 	}
+	for (const Part &p : m.parts) {
+		ItemView v;
+		v.id = p.id;
+		v.kind = part_kind_name(p.kind);
+		v.place = "bench";
+		v.col = p.col;
+		v.row = p.row;
+		v.part = p;
+		out.items.push_back(v);
+		if (p.ringing) {
+			out.ringing.push_back(p.id);
+		}
+	}
+	out.wires = m.wires;
+	out.rigs = m.rigs;
+	out.controls = m.controls;
 	const Totals now = totals(table, m.world().snapshot());
 	out.conserved = now == m.genesis;
 	out.mass_g = now.mass.grams();
@@ -1196,6 +1788,7 @@ std::string Lab::report() const {
 		events.push_back({ { "step", e.step }, { "what", e.what }, { "item", e.item } });
 	}
 	out["events"] = events;
+	out["signals"] = m.signals_json(false);
 	// the conservation laws, as integers
 	const Totals now = totals(table, m.world().snapshot());
 	json conserved;
@@ -1238,6 +1831,45 @@ std::string Lab::digest() const {
 		hash.update_u64(carried->size());
 		for (const double v : *carried) {
 			hash.update_double(v);
+		}
+	}
+	// the signals, once there is a part (§13.3): what they will do is state too
+	if (!m.parts.empty()) {
+		const auto text = [&hash](const std::string &t) {
+			hash.update_u64(t.size());
+			hash.update(t.data(), t.size());
+		};
+		const auto maybe = [&hash](const std::optional<double> &v) {
+			hash.update_u64(v ? 1 : 0);
+			hash.update_double(v ? *v : 0.0);
+		};
+		for (const Part &p : m.parts) {
+			text(p.id);
+			hash.update_i64(static_cast<int64_t>(p.kind));
+			hash.update_u64((p.watching ? 1u : 0u) | (p.own ? 2u : 0u) | (p.out ? 4u : 0u) | (p.ringing ? 8u : 0u));
+			text(p.quantity.item);
+			text(p.quantity.what);
+			text(p.quantity.measure);
+			hash.update_i64(p.comparison.op);
+			hash.update_double(p.comparison.a);
+			hash.update_double(p.comparison.b);
+			hash.update_i64(p.preset);
+			hash.update_i64(p.left);
+			maybe(p.last);
+			hash.update_i64(p.rang_at);
+		}
+		for (const Wire &w : m.wires) {
+			text(w.from);
+			text(w.to);
+		}
+		for (const Rig &r : m.rigs) {
+			text(r.from);
+			text(r.item);
+			text(r.control);
+			hash.update_u64((r.change ? 1u : 0u) | (r.seen ? 2u : 0u));
+			maybe(r.on);
+			maybe(r.off);
+			maybe(r.any);
 		}
 	}
 	return hash.hex();
@@ -1325,6 +1957,7 @@ json Lab::Impl::save() const {
 		happened.push_back({ { "step", e.step }, { "what", e.what }, { "item", e.item } });
 	}
 	bench["events"] = happened;
+	bench["signals"] = signals_json(true);
 	out["bench"] = bench;
 	return out;
 }
@@ -1439,6 +2072,9 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		}
 		for (const json &e : bench.at("events")) {
 			impl->events.push_back(Event{ e.at("step").get<int64_t>(), e.at("what").get<std::string>(), e.at("item").get<std::string>() });
+		}
+		if (bench.contains("signals") && !impl->signals_from(bench.at("signals"), why)) {
+			return nullptr;
 		}
 		const json &remainders = saved.at("remainders");
 		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {

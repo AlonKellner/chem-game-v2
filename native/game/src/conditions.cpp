@@ -112,8 +112,8 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "valve") {
 		return v->kind == "burner" ? std::optional<double>(100.0 * v->valve) : std::nullopt;
 	}
-	if (v->kind == "burner" || v->kind == "tray") {
-		return std::nullopt;
+	if (v->kind == "burner" || v->kind == "tray" || v->kind == "timer" || v->kind == "monitor" || v->kind == "alarm") {
+		return std::nullopt; // a signal part holds no matter
 	}
 	if (q.what == "fill") {
 		return v->kind == "balloon" && v->capacity_ml > 0.0 ? std::optional<double>(100.0 * v->gas_ml / v->capacity_ml) : std::nullopt;
@@ -146,6 +146,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 
 std::vector<Quantity> quantities_of(const ItemView &item) {
 	std::vector<Quantity> out;
+	if (item.kind == "timer" || item.kind == "monitor" || item.kind == "alarm" || item.kind == "tray") {
+		return out;
+	}
 	if (item.kind == "burner") {
 		out.push_back(Quantity{ item.id, "valve", "g" });
 		return out;

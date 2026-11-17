@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lab/signals.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -30,7 +32,7 @@ struct SubstanceView {
 
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray
+	std::string kind; // vessel, balloon, burner, tray; a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox
 	int col = -1, row = -1; // on the bench: its footprint's top-left square
 	int w = 1, h = 1; // its footprint, in squares
@@ -50,6 +52,7 @@ struct ItemView {
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;
 	std::vector<SubstanceView> contents;
+	Part part; // a signal part (§13.3): its settings and state
 };
 
 struct LabView {
@@ -58,8 +61,13 @@ struct LabView {
 	bool conserved = true; // every total is what it was at the start
 	double mass_g = 0.0;
 	double energy_j = 0.0;
-	std::vector<ItemView> items;
+	std::vector<ItemView> items; // the equipment, then the signal parts, in the order they were made
 	std::vector<std::string> events; // "the balloon burst at 12.5 s"
+	// signals (§13.3)
+	std::vector<Wire> wires;
+	std::vector<Rig> rigs; // in the order they were made
+	std::vector<ControlSetting> controls; // every control's last setting, and who made it
+	std::vector<std::string> ringing; // the alarms ringing
 };
 
 class Lab {
@@ -77,8 +85,9 @@ public:
 	// failed on the way: failed() is then true and the lab takes no more.
 	bool command(std::string_view command_json, std::string &why);
 
-	// Advances whole steps of 1/60 s.
-	bool advance(int64_t steps, std::string &why);
+	// Advances whole steps of 1/60 s; with `stop_on_ring`, it stops at the end
+	// of a step in which an alarm started ringing (§13.3).
+	bool advance(int64_t steps, std::string &why, bool stop_on_ring = false);
 
 	// The whole lab as text ("chem-save/1"): every amount, energy and particle
 	// count, the connections, the processes' carried remainders, where
