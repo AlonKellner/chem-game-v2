@@ -1,5 +1,20 @@
 # GAME_SPEC version history
 
+## 0.16.0 (2026-11-17, Stage 15)
+
+Signed off by the user on 2026-11-17 ("Approved, proceed").
+
+- §13: drains are removable.
+  - A drain comes off when either of its vessels is placed elsewhere, moved apart from the other,
+    stowed or handed in. Moved together, the two stay joined.
+  - A condenser with a beaker under its outlet moves freely, and a beaker handed in is no longer
+    fed by the outlet.
+  - The screen's softened refusal of moving such a condenser is gone; the tutorial's step says
+    the outlet stops dripping.
+- The demo session's record, re-recorded with the user's approval: from the beaker's hand-in
+  (command 23), one step to a boundary (2545.0 s → 2545.1 s) and the drain closed. Every measured
+  result is unchanged (the beaker's 40.868202 g of water included).
+
 ## 0.15.0 (2026-11-17, Stage 14)
 
 Signed off by the user on 2026-11-17 ("Approved, proceed").

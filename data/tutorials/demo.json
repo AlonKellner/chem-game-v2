@@ -227,7 +227,7 @@
 		},
 		{
 			"title": "Take the condenser off",
-			"text": "Drag the condenser off the flask onto the bench. The beaker under its outlet keeps it beside the flask.",
+			"text": "Drag the condenser off the flask onto a free square of the bench. Moved away, its outlet no longer drips into the beaker.",
 			"checks": [{"text": "the condenser is off the flask", "when": {"not": {"item": "condenser", "place": "on"}}}],
 			"play": [{"drag": ["item:condenser", "square:23,3"]}]
 		},

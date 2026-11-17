@@ -744,9 +744,7 @@ struct Ui::Impl {
 			// the square under the pointer takes the square of the footprint it was held by, the whole of it on the bench
 			const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
 			const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
-			if (!act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } }) && was_on && view.items[static_cast<size_t>(index)].drains_to >= 0) {
-				message.clear(); // it came off, and stays beside the vessel: what stands under its outlet holds it there
-			}
+			act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } });
 		}
 	}
 

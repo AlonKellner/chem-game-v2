@@ -453,6 +453,34 @@ struct Lab::Impl {
 		return true;
 	}
 
+	// ---- drains (§6, §13): a vessel under another's outlet leaves it when either is moved
+	// away, stowed or handed in; the drain comes off at a step boundary
+	bool take_off_drains(int thing, std::string &why) {
+		for (size_t u = 0; u < items.size(); ++u) {
+			if (items[u].drains_to >= 0 && (static_cast<int>(u) == thing || items[u].drains_to == thing) && !take_off_drain(u, why)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	// the drain from one vessel's outlet
+	bool take_off_drain(size_t u, std::string &why) {
+		Item &upper = items[u];
+		const CellId lower = items[static_cast<size_t>(upper.drains_to)].cell;
+		const auto edges = world().edges();
+		for (size_t e = 0; e < edges.size(); ++e) {
+			if (edges[e].open && edges[e].drain && edges[e].a == upper.cell && edges[e].b == lower) {
+				if (!boundary(why)) {
+					return false;
+				}
+				world().disconnect(EdgeId{ static_cast<int32_t>(e) });
+				break;
+			}
+		}
+		upper.drains_to = -1;
+		return true;
+	}
+
 	// ---- circuits (§13.3)
 
 	// the part on a square of a circuit's own grid, other than `except`; -1 for none
@@ -1048,12 +1076,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
-		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0 || x.drains_to >= 0) {
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
 		for (const Item &other : items) {
-			if (other.under == thing || other.drains_to == thing) {
+			if (other.under == thing) {
 				why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
 				return false;
 			}
@@ -1070,6 +1098,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		const int there = standing_in(col, row, x.w, x.h, thing);
 		if (there >= 0) {
 			why = "\"" + name_of(there) + "\" stands there";
+			return false;
+		}
+		if (!take_off_drains(thing, why)) { // moved away from an outlet, or its outlet from what stood under it
 			return false;
 		}
 		x.place = Place::Bench;
@@ -1123,12 +1154,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		for (const int thing : moving) {
 			if (thing < n) {
 				const Item &x = items[static_cast<size_t>(thing)];
-				if (x.kind == Kind::Tray || x.place != Place::Bench || x.holds >= 0 || x.drains_to >= 0) {
+				if (x.kind == Kind::Tray || x.place != Place::Bench || x.holds >= 0) {
 					why = "\"" + x.id + "\" cannot be moved as it is: it is not on the bench, or it is joined to something";
 					return false;
 				}
 				for (const Item &other : items) {
-					if (other.under == thing || other.drains_to == thing) {
+					if (other.under == thing) {
 						why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
 						return false;
 					}
@@ -1154,6 +1185,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 					why = "\"" + name_of(other) + "\" stands where \"" + name_of(thing) + "\" would go";
 					return false;
 				}
+			}
+		}
+		// a drain whose two ends both move stays; one with one end moving comes off
+		const auto in_move = [&](int i) { return std::find(moving.begin(), moving.end(), i) != moving.end(); };
+		for (size_t u = 0; u < items.size() && (dc != 0 || dr != 0); ++u) {
+			const int lower = items[u].drains_to;
+			if (lower >= 0 && in_move(static_cast<int>(u)) != in_move(lower) && !take_off_drain(u, why)) {
+				return false;
 			}
 		}
 		for (const int thing : moving) {
@@ -1499,12 +1538,15 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
-		bool free = x.kind != Kind::Tray && x.place == Place::Bench && x.holds < 0 && x.drains_to < 0;
+		bool free = x.kind != Kind::Tray && x.place == Place::Bench && x.holds < 0;
 		for (const Item &other : items) {
-			free = free && other.under != thing && other.drains_to != thing;
+			free = free && other.under != thing;
 		}
 		if (!free) {
 			why = "\"" + x.id + "\" cannot go back in the cabinet as it is";
+			return false;
+		}
+		if (!take_off_drains(thing, why)) {
 			return false;
 		}
 		x.place = Place::Cabinet;
@@ -1781,6 +1823,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (x.place == Place::Cabinet) {
 			why = "\"" + x.id + "\" is in the cabinet";
+			return false;
+		}
+		if (!take_off_drains(thing, why)) { // away from the outlet it stood under
 			return false;
 		}
 		// lifted off its burner, which stays where the vessel stood
