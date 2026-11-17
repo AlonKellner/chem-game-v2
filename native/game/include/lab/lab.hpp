@@ -43,6 +43,7 @@ struct ItemView {
 	bool condenser = false; // a vessel with a coolant
 	bool stirred = false;
 	bool submitted = false;
+	int slot = 0; // in the outbox: its slot, 1 to 6 (§13.5)
 	bool burst = false;
 	double valve = 0.0; // a burner
 	double celsius = 0.0;
@@ -68,6 +69,25 @@ struct Notice {
 const char *level_name(Notice::Level level); // "detail", "event", "warning", "danger"
 bool level_of(std::string_view name, Notice::Level &level);
 
+// A goal (GAME_SPEC §13.5): what should be handed in to a slot of the outbox,
+// as terms on what is there; met while a slot holds an item and every term
+// holds of it, measured live.
+constexpr int OUTBOX_SLOTS = 6;
+struct GoalTerm {
+	Quantity quantity; // no item: whatever is handed in to the slot
+	Comparison comparison; // never "reaches": a goal is a state, not an event
+	bool operator==(const GoalTerm &) const = default;
+};
+struct Goal {
+	std::string id; // the bench's ("co2"), or "goal1" for the player's
+	std::string name;
+	int slot = 1; // 1 to 6
+	bool game = false; // the bench's: locked
+	std::vector<GoalTerm> terms;
+	bool met = false; // now
+	bool operator==(const Goal &) const = default;
+};
+
 struct LabView {
 	int64_t step = 0;
 	int cols = 0, rows = 0; // the bench's grid, in squares
@@ -82,6 +102,7 @@ struct LabView {
 	std::vector<ControlSetting> controls; // every control's last setting, and who made it
 	std::vector<std::string> ringing; // the alarms ringing
 	std::vector<Notice> notices; // oldest first (the last 2000)
+	std::vector<Goal> goals; // §13.5: in the order they were made, the bench's first
 };
 
 class Lab {

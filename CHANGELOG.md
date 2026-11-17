@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 17)
+
+- §13.5 added: goals on the outbox.
+  - **Slots:** the outbox is six slots, one item to a slot; `submit {item, slot}`, or a drop onto
+    a slot. With no slot, the first free one without a goal, so the sessions are unchanged.
+  - **Goals:** a name and terms on what is handed in to a slot, met live. The bench's are the
+    game's and locked: the interactive bench has three (CO₂ in the balloon, pure water in the
+    beaker, 99.9 % pure crystals). The player makes, changes and takes off their own with `goal`
+    and `ungoal`, or in the screen's goal editor.
+  - **Read by everything else:** met and no longer met are notices (an event, a warning); a
+    monitor reads a goal's `met`; a notice part hears one goal by its id; conditions read `goal`,
+    `goals_met` and an item's `slot`.
+  - **Saving:** saved and loaded, not digested; the sessions' records unchanged.
+- §13.2: the tutorial hands each item in onto its goal's slot, and its goal is the game goals met.
+  Its hand-in failures stay: what is handed in cannot be taken back.
+- §13.3: a notice part or a writer may name a goal.
+
 ## 0.17.0 (2026-11-18, Stage 16)
 
 Signed off by the user on 2026-11-18 ("LGTM, approved, proceed").

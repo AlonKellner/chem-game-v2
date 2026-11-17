@@ -942,7 +942,9 @@ input to them, and a session script is a list of them.
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
-| `submit` | `item` | hands it in, to the outbox; it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench |
+| `submit` | `item`, `slot` | hands it in, to a slot of the outbox (§13.5); it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench. With no `slot`, the first free slot without a goal, else the first free one; refused when the slot holds something, or none is free |
+| `goal` | `slot`, `name`, `terms` | the player's own goal for a slot (§13.5), made or changed; refused on a game goal's slot |
+| `ungoal` | `slot` | takes the player's goal off a slot; refused for a game goal |
 | `wait` | `seconds` | advances time |
 | `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; or until the alarm `rings`; fails at the timeout |
 | `part` | `kind`, `at` | a timer, monitor or alarm out of the drawer onto a free square (§13.3) |
@@ -1002,7 +1004,7 @@ top the clock.
 | drag a balloon or a condenser onto a vessel | `attach` |
 | drag a vessel onto a condenser | `under` |
 | drag a vessel onto another vessel | opens the pour panel: a slider for how much liquid, `pour`; a button for each solid, `tip` |
-| drag an item to the outbox | `submit` |
+| drag an item onto a slot of the outbox | `submit` to that slot (§13.5) |
 | drag something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the drop means |
 | drag the slider beside a burner | `valve` |
 | click a vessel's stir button | `stir` |
@@ -1069,6 +1071,8 @@ gestures, and a run with a tutorial is the same lab as one without.
     a wire (`wire`: from and to, by id or kind), a rig (`rig`: from, item, control, its
     settings).
   - The selection, and the part editor while it is open (`selected`, `editor`).
+  - The goals (§13.5): an item's `slot`; a goal met (`goal`: its id); every game goal met
+    (`goals_met`).
 
   Conditions combine with `all`, `any` and `not`. They are the shared module's
   (`lab/conditions.hpp`), as signals read them. A check is marked
@@ -1105,7 +1109,9 @@ gestures, and a run with a tutorial is the same lab as one without.
 Its failures: the balloon burst; acid poured before the malachite has broken down (in liquid it
 never gets hot enough); the crystals overheated to a lower hydrate or the anhydrous salt; the
 balloon handed in without the CO₂, the beaker with more than water, the flask with its liquor or
-without its crystals; anything else handed in. Its goal is §17's "done when". The Godot host opens
+without its crystals; anything else handed in. Its goal is the bench's three game goals met
+(§13.5, which carry §17's "done when"), and the totals unchanged; it hands each item in onto its
+goal's slot. The Godot host opens
 it by default (`tutorial_path`).
 **Status:** Stage 12. `tutorial: followed with its own gestures, step by step, it completes the
 demo` plays every step's gestures through the screen and waits for the lab. `tutorial: played as a
@@ -1317,6 +1323,46 @@ says. The player may silence any level.
   - The notices are the player's under a tutorial too, like the clock.
 
 **Demo subset:** all of the above; signed off by the user on 2026-11-18 (Stage 16).
+
+### 13.5 Goals
+
+The outbox is **six slots**, numbered 1 to 6, and a slot may hold a **goal**: what should be handed in there. A goal
+does not judge the player: it says what is wanted, and whether what is there meets it now.
+
+- **A goal** has an id, a name, its slot, and its **terms**: each a quantity of whatever is handed
+  in there (§13.3's quantities without an item: `{"quantity": {"what", "measure"}, "compare",
+  "value" | "values"}`), compared. It is **met** while a slot holds an item and every term holds
+  of it, measured live: what is handed in still changes (it cools, it reacts).
+- **The game's goals** come with the bench (`"goals"`, the same form, each with its `id`). They
+  are locked: the player cannot change or remove them. A tutorial's goal can name them.
+- **The player's goals** are made, changed and taken off with `goal {slot, name, terms}` and
+  `ungoal {slot}`, on any slot without a game goal (ids `goal1`, … never used again).
+- **Handing in** is to a slot (§13 `submit`): one item to a slot. A drop onto a slot on the screen
+  hands it in there. A submit with no slot keeps the scripts as they were: the first free slot
+  without a goal.
+- **Notices** (§13.4): a goal becoming met is an event, about the goal's id ("goal met: the
+  balloon holds carbon dioxide"); one no longer met, a warning. A notice part can hear one goal by
+  its id.
+- **Monitors** read a goal as a quantity: `{"item": <goal id>, "what": "met"}`, 1 while it is met
+  and 0 while it is not (a command; on the screen a notice part hears a goal by its id).
+- **Conditions** (§13.2) read them: `{"goal": <id>}` holds while that goal is met;
+  `{"goals_met": true}` while every game goal is.
+- **History, not state.** Goals and which slot holds what are saved and loaded, and are not in
+  the digest; the sessions' records are unchanged.
+- **On the screen** each slot shows its goal: the name, each term with its value now, a lamp lit
+  while it is met, and what was handed in there. A slot without a game goal has "+ goal" (or
+  "edit"), which opens the goal editor: a name, typed, and up to three terms, each a quantity
+  (any species, or the temperature, the liquid, the gas), a comparison and a value.
+
+**Demo subset:** the interactive bench's three game goals, in slots 1 to 3:
+- `co2`, "carbon dioxide in the balloon": CO₂ at least 0.5 g;
+- `water`, "pure water in the beaker": water at least 20 g, and at least 99.99 % of the solids
+  and liquids;
+- `crystals`, "copper sulfate crystals, 99.9 % pure": CuSO₄·5H₂O at least 5 g, and at least
+  99.9 % of the solids and liquids.
+
+The tutorial's goal is those three met, and the world's totals unchanged; its hand-in failures stay,
+since what is handed in cannot be taken back. **Status:** Stage 17.
 
 ## 14. C API and hosts
 

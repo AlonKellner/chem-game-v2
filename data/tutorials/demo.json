@@ -1,6 +1,6 @@
 {
 	"format": "chem-tutorial/1",
-	"note": "The demo as a tutorial (GAME_SPEC §13.2), on the interactive bench (data/benches/lab.json). Each step: what to do, why, and checks read from the lab; it is passed when all its checks hold. play: the gestures it asks for, named as Ui::locate names things (the screen points at the last it can find; lab_tests play them all). fails end the run until a reset; goal is checked once every step is passed.",
+	"note": "The demo as a tutorial (GAME_SPEC §13.2), on the interactive bench (data/benches/lab.json). Each step: what to do, why, and checks read from the lab; it is passed when all its checks hold. play: the gestures it asks for, named as Ui::locate names things (the screen points at the last it can find; lab_tests play them all). fails end the run until a reset; goal is checked once every step is passed: the bench's game goals met (GAME_SPEC §13.5), and the totals unchanged.",
 	"title": "Tutorial: copper from malachite",
 	"bench": "../benches/lab.json",
 	"steps": [
@@ -62,10 +62,10 @@
 		},
 		{
 			"title": "Hand in the balloon",
-			"text": "Drag the balloon to the outbox at the bottom.",
+			"text": "Drag the balloon onto slot 1 of the outbox, at the bottom: its goal is carbon dioxide in the balloon.",
 			"why": "Taking it off the flask seals it, with the carbon dioxide inside.",
-			"checks": [{"text": "the balloon is in the outbox", "when": {"item": "balloon", "submitted": true}}],
-			"play": [{"drag": ["item:balloon", "outbox"]}]
+			"checks": [{"text": "the balloon is in slot 1", "when": {"item": "balloon", "submitted": true, "slot": 1}}],
+			"play": [{"drag": ["item:balloon", "slot:1"]}]
 		},
 		{
 			"title": "Let the flask cool",
@@ -246,15 +246,15 @@
 		},
 		{
 			"title": "Hand in the water",
-			"text": "Drag the beaker to the outbox.",
-			"checks": [{"text": "the beaker is in the outbox", "when": {"item": "beaker", "submitted": true}}],
-			"play": [{"drag": ["item:beaker", "outbox"]}]
+			"text": "Drag the beaker onto slot 2: pure water in the beaker.",
+			"checks": [{"text": "the beaker is in slot 2", "when": {"item": "beaker", "submitted": true, "slot": 2}}],
+			"play": [{"drag": ["item:beaker", "slot:2"]}]
 		},
 		{
 			"title": "Hand in the crystals",
-			"text": "Drag the flask to the outbox. The burner stays on the bench.",
-			"checks": [{"text": "the flask is in the outbox", "when": {"item": "flask", "submitted": true}}],
-			"play": [{"drag": ["item:flask", "outbox"]}]
+			"text": "Drag the flask onto slot 3: the crystals. The burner stays on the bench.",
+			"checks": [{"text": "the flask is in slot 3", "when": {"item": "flask", "submitted": true, "slot": 3}}],
+			"play": [{"drag": ["item:flask", "slot:3"]}]
 		}
 	],
 	"fails": [
@@ -285,12 +285,9 @@
 			]}}
 	],
 	"goal": [
-		{"text": "the balloon holds carbon dioxide", "when": {"item": "balloon", "submitted": true, "species": "carbon_dioxide", "above_g": 0.5}},
-		{"text": "the beaker holds water and nothing else", "when": {"all": [
-			{"item": "beaker", "submitted": true, "species": "water", "above_g": 20},
-			{"item": "beaker", "holds_only": ["water", "steam", "nitrogen", "oxygen", "carbon_dioxide"]}
-		]}},
-		{"text": "the flask holds copper sulfate crystals, 99.9% pure", "when": {"item": "flask", "submitted": true, "species": "copper_sulfate_pentahydrate", "purity_above": 0.999}},
+		{"text": "goal met: carbon dioxide in the balloon (slot 1)", "when": {"goal": "co2"}},
+		{"text": "goal met: pure water in the beaker (slot 2)", "when": {"goal": "water"}},
+		{"text": "goal met: copper sulfate crystals, 99.9% pure (slot 3)", "when": {"goal": "crystals"}},
 		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
 	],
 	"results": [

@@ -10,7 +10,7 @@ namespace lab {
 namespace {
 
 bool fixed(const std::string &what) {
-	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "valve" || what == "fill";
+	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "valve" || what == "fill" || what == "met";
 }
 
 bool is_gas(const std::string &species) {
@@ -105,6 +105,14 @@ double purity(const ItemView &v, const std::string &species) {
 }
 
 std::optional<double> measure(const LabView &view, const Quantity &q) {
+	if (q.what == "met") { // a goal (§13.5): 1 while it is met
+		for (const Goal &g : view.goals) {
+			if (g.id == q.item) {
+				return g.met ? 1.0 : 0.0;
+			}
+		}
+		return std::nullopt;
+	}
 	const ItemView *v = item_of(view, q.item);
 	if (v == nullptr) {
 		return std::nullopt;
@@ -112,7 +120,8 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "valve") {
 		return v->kind == "burner" ? std::optional<double>(100.0 * v->valve) : std::nullopt;
 	}
-	if (v->kind == "burner" || v->kind == "tray" || v->kind == "timer" || v->kind == "monitor" || v->kind == "alarm") {
+	PartKind part = PartKind::Timer;
+	if (v->kind == "burner" || v->kind == "tray" || part_kind_of(v->kind, part)) {
 		return std::nullopt; // a signal part holds no matter
 	}
 	if (q.what == "fill") {
@@ -146,7 +155,8 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 
 std::vector<Quantity> quantities_of(const ItemView &item) {
 	std::vector<Quantity> out;
-	if (item.kind == "timer" || item.kind == "monitor" || item.kind == "alarm" || item.kind == "tray") {
+	PartKind part = PartKind::Timer;
+	if (item.kind == "tray" || part_kind_of(item.kind, part)) {
 		return out;
 	}
 	if (item.kind == "burner") {
@@ -174,6 +184,9 @@ std::string unit(const Quantity &q) {
 	if (q.what == "valve" || q.what == "fill") {
 		return "%";
 	}
+	if (q.what == "met") {
+		return "";
+	}
 	if (fixed(q.what)) {
 		return "mL";
 	}
@@ -194,6 +207,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "valve";
 	} else if (q.what == "fill") {
 		what = "fill";
+	} else if (q.what == "met") {
+		what = "met";
 	} else {
 		what = species_name(q.what) + (q.measure == "count" ? " particles" : q.measure == "size" ? " particle size" : q.measure == "purity" ? " purity" : "");
 	}
@@ -202,6 +217,9 @@ std::string label(const LabView &, const Quantity &q) {
 }
 
 std::string shown(const Quantity &q, double value) {
+	if (q.what == "met") {
+		return value > 0.5 ? "met" : "not met";
+	}
 	if (q.what == "celsius" || q.what == "valve" || q.what == "fill") {
 		return fmt("%.1f ", value) + unit(q);
 	}
@@ -226,6 +244,16 @@ void scales(const Quantity &q, double out[3]) {
 	for (int i = 0; i < 3; ++i) {
 		out[i] = pick[i];
 	}
+}
+
+std::vector<std::string> goal_quantities() {
+	std::vector<std::string> out{ "celsius", "liquid_ml", "gas_ml" };
+	for (const chem::SpeciesDef &s : chem::builtin_species().all_species()) {
+		if (!s.wall) {
+			out.emplace_back(s.id);
+		}
+	}
+	return out;
 }
 
 bool valid(const Quantity &q, std::string &why) {
@@ -405,6 +433,22 @@ bool holds(const Cond &c, const CondContext &x) {
 			return false;
 		}
 	}
+	if (c.goal) {
+		const auto g = std::find_if(x.view.goals.begin(), x.view.goals.end(), [&](const Goal &o) { return o.id == *c.goal; });
+		if (g == x.view.goals.end() || !g->met) {
+			return false;
+		}
+	}
+	if (c.goals_met) {
+		bool every = true, any = false;
+		for (const Goal &g : x.view.goals) {
+			every = every && (!g.game || g.met);
+			any = any || g.game;
+		}
+		if ((every && any) != *c.goals_met) {
+			return false;
+		}
+	}
 	if (c.conserved && *c.conserved != x.view.conserved) {
 		return false;
 	}
@@ -447,7 +491,7 @@ bool holds(const Cond &c, const CondContext &x) {
 		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to)) {
 		return false;
 	}
-	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst)) {
+	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst) || (c.slot && v.slot != *c.slot)) {
 		return false;
 	}
 	if ((c.valve_at_least && !(v.valve >= *c.valve_at_least)) || (c.valve_at_most && !(v.valve <= *c.valve_at_most))) {

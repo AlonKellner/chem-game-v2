@@ -363,8 +363,11 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 	const int64_t stood = p.ui->lab().step();
 	p.ui->frame(1.0);
 	CHECK(p.ui->lab().step() == stood);
-	p.drag("item:balloon", "outbox");
+	p.drag("item:balloon", "outbox"); // the first free slot without a goal: not the one the step asks for
+	CHECK_FALSE(p.item("balloon").submitted);
+	p.drag("item:balloon", "slot:1");
 	CHECK(p.item("balloon").submitted);
+	CHECK(p.item("balloon").slot == 1);
 	// reset is the player's too
 	p.click("reset");
 	CHECK(p.tutorial().step == 0);

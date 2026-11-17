@@ -50,6 +50,7 @@ struct Item {
 	int drains_to = -1; // a vessel: what stands under its outlet
 	bool stirred = false;
 	bool submitted = false;
+	int slot = 0; // in the outbox: its slot, 1 to 6 (GAME_SPEC §13.5)
 	Place place = Place::Cabinet;
 	int col = -1, row = -1; // on the bench: its footprint's top-left square
 	int w = 1, h = 1; // its footprint, in squares (GAME_SPEC §13)
@@ -187,6 +188,9 @@ struct Lab::Impl {
 	std::vector<ControlSetting> controls;
 	int64_t made[PART_KINDS] = {}; // the parts made of each kind, for their names
 	bool rang = false; // an alarm started ringing in the last step
+	// goals (GAME_SPEC §13.5): the bench's, then the player's; `met` as last noticed
+	std::vector<Goal> goals;
+	int64_t goals_made = 0;
 	// notices (GAME_SPEC §13.4): what happened, and what the detectors last saw
 	std::vector<Notice> notices;
 	size_t notices_read = 0; // what the notice parts have read
@@ -227,6 +231,10 @@ struct Lab::Impl {
 
 	// a monitor's reading of one item, from what the view would show of it
 	std::optional<double> reading(const Quantity &q) const {
+		if (q.what == "met") { // a goal (§13.5)
+			const int g = find_goal(q.item);
+			return g >= 0 ? std::optional<double>(goal_met(goals[static_cast<size_t>(g)]) ? 1.0 : 0.0) : std::nullopt;
+		}
 		const int i = find(q.item);
 		if (i < 0) {
 			return std::nullopt;
@@ -234,6 +242,160 @@ struct Lab::Impl {
 		LabView one;
 		one.items.push_back(item_view(items[static_cast<size_t>(i)]));
 		return measure(one, q);
+	}
+
+	// ---- goals (§13.5)
+	int find_goal(const std::string &id) const {
+		for (size_t g = 0; g < goals.size(); ++g) {
+			if (goals[g].id == id) {
+				return static_cast<int>(g);
+			}
+		}
+		return -1;
+	}
+	int goal_in(int slot) const {
+		for (size_t g = 0; g < goals.size(); ++g) {
+			if (goals[g].slot == slot) {
+				return static_cast<int>(g);
+			}
+		}
+		return -1;
+	}
+	// what is handed in to a slot; -1 for nothing
+	int held_in(int slot) const {
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].place == Place::Outbox && items[i].slot == slot) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// met now: a slot holds an item, and every term holds of it
+	bool goal_met(const Goal &g) const {
+		const int i = held_in(g.slot);
+		if (i < 0 || g.terms.empty()) {
+			return false;
+		}
+		for (const GoalTerm &t : g.terms) {
+			const std::optional<double> v = reading(Quantity{ items[static_cast<size_t>(i)].id, t.quantity.what, t.quantity.measure });
+			if (!v || !meets(t.comparison, *v, std::nullopt)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	// a goal becoming met, or no longer met, is news
+	void detect_goals(bool quiet) {
+		for (Goal &g : goals) {
+			const bool now = goal_met(g);
+			if (now != g.met) {
+				g.met = now;
+				if (!quiet) {
+					note(now ? Notice::Event : Notice::Warning, g.id, (now ? "goal met: " : "goal no longer met: ") + g.name);
+				}
+			}
+		}
+	}
+	// a goal's terms, read: a quantity of what is handed in, compared
+	static bool terms_from(const json &j, std::vector<GoalTerm> &out, std::string &why) {
+		if (!j.is_array() || j.empty() || j.size() > 8) {
+			why = "a goal has \"terms\": one to eight of {\"quantity\": {\"what\", \"measure\"}, \"compare\", \"value\" | \"values\"}";
+			return false;
+		}
+		out.clear();
+		for (const json &t : j) {
+			GoalTerm term;
+			if (!t.is_object() || !t.contains("quantity") || !t.at("quantity").is_object() || !t.at("quantity").contains("what") || !t.at("quantity").at("what").is_string()) {
+				why = "a goal's term names a \"quantity\": {\"what\", \"measure\"}";
+				return false;
+			}
+			term.quantity.what = t.at("quantity").at("what").get<std::string>();
+			term.quantity.measure = t.at("quantity").value("measure", std::string("g"));
+			if (term.quantity.what == "met" || !valid(term.quantity, why)) {
+				why = why.empty() ? "a goal's term is a quantity of what is handed in" : why;
+				return false;
+			}
+			if (!t.contains("compare") || !t.at("compare").is_string() || !op_of(t.at("compare").get<std::string>(), term.comparison.op) || term.comparison.op == Comparison::Reaches) {
+				why = "a goal's term compares: \"compare\" is above, below, at_least, at_most, between or outside";
+				return false;
+			}
+			const char *key = two_values(term.comparison.op) ? "values" : "value";
+			if (two_values(term.comparison.op) ? !(t.contains("values") && t.at("values").is_array() && t.at("values").size() == 2 && t.at("values")[0].is_number() && t.at("values")[1].is_number())
+											   : !(t.contains("value") && t.at("value").is_number())) {
+				why = std::string("a goal's term compares with \"") + key + "\"";
+				return false;
+			}
+			term.comparison.a = two_values(term.comparison.op) ? t.at("values")[0].get<double>() : t.at("value").get<double>();
+			term.comparison.b = two_values(term.comparison.op) ? t.at("values")[1].get<double>() : 0.0;
+			if (!valid(term.comparison, why)) {
+				return false;
+			}
+			out.push_back(term);
+		}
+		return true;
+	}
+	static json terms_json(const std::vector<GoalTerm> &terms, bool exact) {
+		static const char *const OPS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
+		json out = json::array();
+		for (const GoalTerm &t : terms) {
+			json j{ { "quantity", { { "what", t.quantity.what }, { "measure", t.quantity.measure } } }, { "compare", OPS[static_cast<int>(t.comparison.op)] } };
+			const auto num = [exact](double v) { return exact ? json(bits(v)) : json(v); };
+			if (two_values(t.comparison.op)) {
+				j["values"] = { num(t.comparison.a), num(t.comparison.b) };
+			} else {
+				j["value"] = num(t.comparison.a);
+			}
+			out.push_back(j);
+		}
+		return out;
+	}
+	static bool slot_of(const json &c, int &slot, std::string &why) {
+		if (!c.contains("slot") || !c.at("slot").is_number_integer() || c.at("slot").get<int>() < 1 || c.at("slot").get<int>() > OUTBOX_SLOTS) {
+			why = "a \"slot\" of the outbox is 1 to 6";
+			return false;
+		}
+		slot = c.at("slot").get<int>();
+		return true;
+	}
+	json goals_json(bool exact) const {
+		json list = json::array();
+		for (const Goal &g : goals) {
+			list.push_back({ { "id", g.id }, { "name", g.name }, { "slot", g.slot }, { "game", g.game }, { "terms", terms_json(g.terms, exact) }, { "met", exact ? g.met : goal_met(g) } });
+		}
+		return list;
+	}
+	bool goals_from(const json &list, int64_t count, std::string &why) {
+		for (const json &x : list) {
+			Goal g;
+			g.id = x.at("id").get<std::string>();
+			g.name = x.at("name").get<std::string>();
+			g.slot = x.at("slot").get<int>();
+			g.game = x.at("game").get<bool>();
+			g.met = x.at("met").get<bool>();
+			for (const json &t : x.at("terms")) {
+				json plain = t; // the values back from their bits
+				const auto back = [&](json &v) {
+					double d = 0.0;
+					if (!from_bits(v, d)) {
+						return false;
+					}
+					v = d;
+					return true;
+				};
+				if ((plain.contains("value") && !back(plain["value"])) || (plain.contains("values") && (!back(plain["values"][0]) || !back(plain["values"][1])))) {
+					why = "the save holds a number that is not one";
+					return false;
+				}
+				std::vector<GoalTerm> one;
+				if (!terms_from(json::array({ plain }), one, why)) {
+					return false;
+				}
+				g.terms.push_back(one[0]);
+			}
+			goals.push_back(g);
+		}
+		goals_made = count;
+		return true;
 	}
 
 	// a control's value now; none when it is not one of the lab's
@@ -734,6 +896,7 @@ struct Lab::Impl {
 				}
 			}
 		}
+		detect_goals(quiet);
 		sim->clear_tally();
 	}
 
@@ -923,6 +1086,7 @@ struct Lab::Impl {
 		v.drains_to = item.drains_to;
 		v.stirred = item.stirred;
 		v.submitted = item.submitted;
+		v.slot = item.slot;
 		v.burst = item.burst;
 		v.valve = item.valve;
 		v.capacity_ml = item.capacity * 1e6;
@@ -1218,6 +1382,32 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false); // the lab checks, and reports through its own status
 	impl->genesis = totals(table, impl->world().snapshot());
+	// the game's goals (§13.5): locked
+	if (bench.contains("goals")) {
+		if (!bench.at("goals").is_array()) {
+			why = "the bench's \"goals\" are a list";
+			return nullptr;
+		}
+		for (const json &j : bench.at("goals")) {
+			Goal g;
+			g.game = true;
+			if (!j.is_object() || !j.contains("id") || !j.at("id").is_string() || j.at("id").get<std::string>().empty() || !j.contains("name") || !j.at("name").is_string()) {
+				why = "a goal of the bench has an \"id\" and a \"name\"";
+				return nullptr;
+			}
+			g.id = j.at("id").get<std::string>();
+			g.name = j.at("name").get<std::string>();
+			if (!Impl::slot_of(j, g.slot, why) || !Impl::terms_from(j.value("terms", json()), g.terms, why)) {
+				why = "the bench's goal \"" + g.id + "\": " + why;
+				return nullptr;
+			}
+			if (impl->find_goal(g.id) >= 0 || impl->goal_in(g.slot) >= 0 || impl->find(g.id) >= 0) {
+				why = "the bench's goal \"" + g.id + "\" shares its id or its slot";
+				return nullptr;
+			}
+			impl->goals.push_back(g);
+		}
+	}
 	impl->detect(true); // what is there from the start is not news
 	return std::unique_ptr<Lab>(new Lab(std::move(impl)));
 }
@@ -1529,7 +1719,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			const std::string about = c.value("item", std::string());
-			if (!about.empty() && find(about) < 0 && find_part(about) < 0) {
+			if (!about.empty() && find(about) < 0 && find_part(about) < 0 && find_goal(about) < 0) {
 				why = "there is no \"" + about + "\" for it to hear about";
 				return false;
 			}
@@ -1544,7 +1734,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			const std::string about = c.value("item", std::string()), says = c.value("says", std::string());
-			if (!about.empty() && find(about) < 0 && find_part(about) < 0) {
+			if (!about.empty() && find(about) < 0 && find_part(about) < 0 && find_goal(about) < 0) {
 				why = "there is no \"" + about + "\" for it to write about";
 				return false;
 			}
@@ -1565,8 +1755,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		q.item = c.value("item", std::string());
 		q.what = c.value("what", std::string());
 		q.measure = c.value("measure", std::string("g"));
-		if (find(q.item) < 0 || items[static_cast<size_t>(find(q.item))].kind == Kind::Tray) {
-			why = "a monitor watches an item on the bench: there is no \"" + q.item + "\"";
+		if (q.what == "met" ? find_goal(q.item) < 0 : find(q.item) < 0 || items[static_cast<size_t>(find(q.item))].kind == Kind::Tray) {
+			why = q.what == "met" ? "a monitor reads \"met\" of a goal: there is no goal \"" + q.item + "\"" : "a monitor watches an item on the bench: there is no \"" + q.item + "\"";
 			return false;
 		}
 		if (!valid(q, why)) {
@@ -2102,10 +2292,72 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		upper.drains_to = thing;
 		return true;
 	}
+	if (what == "goal" || what == "ungoal") {
+		int slot = 0;
+		if (!slot_of(c, slot, why)) {
+			return false;
+		}
+		const int there = goal_in(slot);
+		if (there >= 0 && goals[static_cast<size_t>(there)].game) {
+			why = text_of("slot %.0f holds the game's goal \"", slot) + goals[static_cast<size_t>(there)].name + "\": it cannot be changed";
+			return false;
+		}
+		if (what == "ungoal") {
+			if (there < 0) {
+				why = text_of("slot %.0f has no goal", slot);
+				return false;
+			}
+			goals.erase(goals.begin() + there);
+			return true;
+		}
+		Goal g;
+		g.slot = slot;
+		g.name = c.value("name", std::string());
+		if (g.name.empty() || g.name.size() > MAX_SAYS) {
+			why = text_of("a goal has a \"name\", at most %.0f characters", static_cast<double>(MAX_SAYS));
+			return false;
+		}
+		if (!terms_from(c.value("terms", json()), g.terms, why)) {
+			return false;
+		}
+		if (there >= 0) {
+			g.id = goals[static_cast<size_t>(there)].id;
+			g.met = goals[static_cast<size_t>(there)].met;
+			goals[static_cast<size_t>(there)] = g;
+		} else {
+			do {
+				g.id = "goal" + std::to_string(++goals_made);
+			} while (find_goal(g.id) >= 0 || find(g.id) >= 0 || find_part(g.id) >= 0);
+			goals.push_back(g);
+		}
+		detect_goals(false);
+		return true;
+	}
 	if (what == "submit") {
 		int thing = -1;
 		if (!item(c, "item", Kind::Vessel, thing, why)) {
 			return false;
+		}
+		int slot = 0;
+		if (c.contains("slot")) {
+			if (!slot_of(c, slot, why)) {
+				return false;
+			}
+			if (held_in(slot) >= 0) {
+				why = text_of("slot %.0f holds \"", slot) + items[static_cast<size_t>(held_in(slot))].id + "\"";
+				return false;
+			}
+		} else { // the first free slot without a goal, else the first free one
+			for (int k = 1; k <= OUTBOX_SLOTS && slot == 0; ++k) {
+				slot = held_in(k) < 0 && goal_in(k) < 0 ? k : 0;
+			}
+			for (int k = 1; k <= OUTBOX_SLOTS && slot == 0; ++k) {
+				slot = held_in(k) < 0 ? k : 0;
+			}
+			if (slot == 0) {
+				why = "the outbox is full: every slot holds something";
+				return false;
+			}
 		}
 		Item &x = items[static_cast<size_t>(thing)];
 		if (x.on >= 0 || x.holds >= 0) {
@@ -2133,6 +2385,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		const Item was = x;
 		x.submitted = true;
 		x.place = Place::Outbox;
+		x.slot = slot;
 		x.col = x.row = -1;
 		for (size_t i = 0; i < items.size(); ++i) {
 			if (items[i].kind == Kind::Burner && items[i].place == Place::Under && items[i].under < 0) {
@@ -2140,6 +2393,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				set_beside(static_cast<int>(i), was); // where the vessel stood, or beside it
 			}
 		}
+		detect_goals(false);
 		return true;
 	}
 	why = "there is no command \"" + what + "\"";
@@ -2225,6 +2479,10 @@ LabView Lab::view() const {
 	out.rigs = m.rigs;
 	out.controls = m.controls;
 	out.notices = m.notices;
+	out.goals = m.goals;
+	for (Goal &g : out.goals) {
+		g.met = m.goal_met(g); // live
+	}
 	const Totals now = totals(table, m.world().snapshot());
 	out.conserved = now == m.genesis;
 	out.mass_g = now.mass.grams();
@@ -2270,6 +2528,9 @@ std::string Lab::report() const {
 			j["capacity_ml"] = item.capacity * 1e6;
 		}
 		j["submitted"] = item.submitted;
+		if (item.slot > 0) {
+			j["slot"] = item.slot;
+		}
 		j["stirred"] = item.stirred;
 		j["on"] = item.on >= 0 ? json(m.items[static_cast<size_t>(item.on)].id) : json(nullptr);
 		const double kelvin = m.kelvin(item.cell);
@@ -2310,6 +2571,7 @@ std::string Lab::report() const {
 	out["events"] = events;
 	out["signals"] = m.signals_json(false);
 	out["notices"] = m.notices_json(false);
+	out["goals"] = m.goals_json(false);
 	// the conservation laws, as integers
 	const Totals now = totals(table, m.world().snapshot());
 	json conserved;
@@ -2476,7 +2738,7 @@ json Lab::Impl::save() const {
 		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
 				{ "heats", item.heats.index }, { "under", item.under }, { "valve", bits(item.valve) }, { "on", item.on }, { "joint", item.joint.index }, { "holds", item.holds },
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
-				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst } });
+				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst }, { "slot", item.slot } });
 	}
 	bench["items"] = list;
 	json happened = json::array();
@@ -2486,6 +2748,7 @@ json Lab::Impl::save() const {
 	bench["events"] = happened;
 	bench["signals"] = signals_json(true);
 	bench["notices"] = notices_json(true);
+	bench["goals"] = { { "list", goals_json(true) }, { "made", goals_made } };
 	out["bench"] = bench;
 	return out;
 }
@@ -2589,6 +2852,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.w = j.value("w", 1);
 			item.h = j.value("h", 1);
 			item.burst = j.at("burst").get<bool>();
+			item.slot = j.value("slot", 0);
 			if (!from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
@@ -2606,6 +2870,14 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		}
 		if (bench.contains("notices") && !impl->notices_from(bench.at("notices"), why)) {
 			return nullptr;
+		}
+		if (bench.contains("goals") && !impl->goals_from(bench.at("goals").at("list"), bench.at("goals").at("made").get<int64_t>(), why)) {
+			return nullptr;
+		}
+		for (Item &x : impl->items) { // a save from before the slots: each in the first free one
+			for (int k = 1; x.place == Place::Outbox && x.slot == 0 && k <= OUTBOX_SLOTS; ++k) {
+				x.slot = impl->held_in(k) < 0 ? k : 0;
+			}
 		}
 		const json &remainders = saved.at("remainders");
 		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {
