@@ -87,6 +87,8 @@ public:
 	//   pause   speed:<1|10|60|600>   check   reset
 	//   drawer:<timer|monitor|alarm>   port:<part>   choose:<wire|reset>
 	//   part:edit   part:reset   part:unwire:<to>   part:unrig:<item>:<control>
+	//   circuit:create (the drawer's, for the parts chosen)   part:open   part:give_back
+	//   circuit:close   circuit:up   inner:<col>,<row> (a square of the open circuit)
 	//   edit:set   edit:cancel   (the part editor, while it is open)
 	//     a monitor's: edit:item:<id>   edit:quantity   edit:pick:<what>   edit:measure:<g|count|size|purity>
 	//       edit:compare:<above|below|at_least|at_most|reaches|between|outside>   edit:value:<0|1>   edit:nudge:<-3..3>

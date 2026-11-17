@@ -183,3 +183,30 @@ func _play(dir: String) -> void:
 		_lab.frame(1.0 / 60.0)
 	_click("pause")
 	await _shoot(dir, "5_crystals")
+	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
+	_lab.queue_free()
+	await process_frame
+	_lab = ChemLab.new()
+	_lab.tutorial_path = ""
+	_view.add_child(_lab)
+	await process_frame
+	_click("pause")
+	_drag("item:flask", "square:11,12")
+	_drag("item:burner", "item:flask")
+	for made in [["timer", "square:2,1"], ["monitor", "square:4,2"], ["alarm", "square:6,1"]]:
+		_drag("drawer:" + made[0], made[1])
+		if _lab.locate("edit:cancel") != Vector2(-1, -1):
+			_click("edit:cancel")
+	_drag("port:timer1", "item:monitor1")
+	_drag("port:monitor1", "item:alarm1")
+	_drag("port:monitor1", "item:burner")
+	_click("edit:set")
+	_click("item:timer1")
+	var at := _lab.locate("item:monitor1")
+	_lab.pointer(at.x, at.y, true, 2) # with Shift (CG_POINTER_SHIFT): added to the selection
+	_lab.pointer(at.x, at.y, false, 2)
+	await _shoot(dir, "7_chosen")
+	_click("circuit:create")
+	await _shoot(dir, "8_circuit")
+	_click("part:open")
+	await _shoot(dir, "9_circuit_open")

@@ -153,7 +153,7 @@ struct Lab::Impl {
 	std::vector<Wire> wires;
 	std::vector<Rig> rigs;
 	std::vector<ControlSetting> controls;
-	int64_t made[3] = { 0, 0, 0 }; // the parts made of each kind, for their names
+	int64_t made[4] = { 0, 0, 0, 0 }; // the parts made of each kind, for their names
 	bool rang = false; // an alarm started ringing in the last step
 
 	const SpeciesTable &table() const { return sim->world().species(); }
@@ -332,7 +332,10 @@ struct Lab::Impl {
 		json out;
 		json list = json::array();
 		for (const Part &p : parts) {
-			json j{ { "id", p.id }, { "kind", part_kind_name(p.kind) }, { "at", { p.col, p.row } }, { "own", p.own }, { "out", p.out } };
+			json j{ { "id", p.id }, { "kind", part_kind_name(p.kind) }, { "at", { p.col, p.row } }, { "in", p.in }, { "own", p.own }, { "out", p.out } };
+			if (p.kind == PartKind::Circuit) {
+				j["inner"] = { p.inner_w, p.inner_h };
+			}
 			if (p.kind == PartKind::Monitor) {
 				j["watching"] = p.watching;
 				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
@@ -365,7 +368,7 @@ struct Lab::Impl {
 			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
 		}
 		out["controls"] = k;
-		out["made"] = { made[0], made[1], made[2] };
+		out["made"] = { made[0], made[1], made[2], made[3] };
 		return out;
 	}
 
@@ -393,6 +396,11 @@ struct Lab::Impl {
 			}
 			p.col = x.at("at").at(0).get<int>();
 			p.row = x.at("at").at(1).get<int>();
+			p.in = x.value("in", std::string());
+			if (x.contains("inner")) {
+				p.inner_w = x.at("inner").at(0).get<int>();
+				p.inner_h = x.at("inner").at(1).get<int>();
+			}
 			p.own = x.at("own").get<bool>();
 			p.out = x.at("out").get<bool>();
 			if (p.kind == PartKind::Monitor) {
@@ -439,8 +447,55 @@ struct Lab::Impl {
 			}
 			controls.push_back(k);
 		}
-		for (int k = 0; k < 3; ++k) {
-			made[k] = j.at("made").at(static_cast<size_t>(k)).get<int64_t>();
+		for (size_t k = 0; k < 4 && k < j.at("made").size(); ++k) {
+			made[k] = j.at("made").at(k).get<int64_t>();
+		}
+		return true;
+	}
+
+	// ---- circuits (§13.3)
+
+	// the part on a square of a circuit's own grid, other than `except`; -1 for none
+	int inside_at(const std::string &circuit, int col, int row, int except = -1) const {
+		for (size_t i = 0; i < parts.size(); ++i) {
+			if (static_cast<int>(i) != except && parts[i].in == circuit && parts[i].col == col && parts[i].row == row) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// a part, and everything a circuit holds, and what that holds
+	std::vector<std::string> held_by(const std::string &id) const {
+		std::vector<std::string> out{ id };
+		for (size_t k = 0; k < out.size(); ++k) {
+			for (const Part &p : parts) {
+				if (p.in == out[k]) {
+					out.push_back(p.id);
+				}
+			}
+		}
+		return out;
+	}
+	// a square free for a part: on the bench, or on the grid of the circuit it is to stand in
+	bool square_free(const std::string &circuit, int col, int row, int except_part, std::string &why) const {
+		if (circuit.empty()) {
+			const int there = standing_in(col, row, 1, 1, except_part < 0 ? -1 : static_cast<int>(items.size()) + except_part);
+			if (!on_grid(col, row, 1, 1) || there >= 0) {
+				why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench";
+				return false;
+			}
+			return true;
+		}
+		const int c = find_part(circuit);
+		if (c < 0 || parts[static_cast<size_t>(c)].kind != PartKind::Circuit) {
+			why = "there is no circuit \"" + circuit + "\"";
+			return false;
+		}
+		const Part &k = parts[static_cast<size_t>(c)];
+		const int there = inside_at(circuit, col, row, except_part);
+		if (col < 0 || row < 0 || col >= k.inner_w || row >= k.inner_h || there >= 0) {
+			why = there >= 0 ? "\"" + parts[static_cast<size_t>(there)].id + "\" stands there" : "that is off the circuit's grid";
+			return false;
 		}
 		return true;
 	}
@@ -528,7 +583,7 @@ struct Lab::Impl {
 		for (size_t i = 0; i < parts.size(); ++i) {
 			const Part &o = parts[i];
 			const int index = static_cast<int>(items.size() + i);
-			if (index != except && col <= o.col && o.col < col + w && row <= o.row && o.row < row + h) {
+			if (index != except && o.in.empty() && col <= o.col && o.col < col + w && row <= o.row && o.row < row + h) {
 				return index;
 			}
 		}
@@ -981,9 +1036,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
-			const int there = standing_in(col, row, 1, 1, static_cast<int>(items.size()) + find_part(p.id));
-			if (!on_grid(col, row, 1, 1) || there >= 0) {
-				why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench";
+			if (!square_free(p.in, col, row, find_part(p.id), why)) { // within the circuit it is in
 				return false;
 			}
 			p.col = col;
@@ -1038,6 +1091,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			int thing = name.is_string() ? find(name.get<std::string>()) : -1;
 			if (thing < 0 && name.is_string() && find_part(name.get<std::string>()) >= 0) {
 				thing = n + find_part(name.get<std::string>());
+				if (!parts[static_cast<size_t>(thing - n)].in.empty()) {
+					why = "\"" + name.get<std::string>() + "\" is in a circuit: it moves with it";
+					return false;
+				}
 			}
 			if (thing < 0) {
 				why = "there is no such item to move: " + name.dump();
@@ -1113,8 +1170,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	// ---- signals (§13.3)
 	if (what == "part") {
 		PartKind kind = PartKind::Timer;
-		if (!c.contains("kind") || !c.at("kind").is_string() || !part_kind_of(c.at("kind").get<std::string>(), kind)) {
-			why = "a part's \"kind\" is timer, monitor or alarm";
+		if (!c.contains("kind") || !c.at("kind").is_string() || !part_kind_of(c.at("kind").get<std::string>(), kind) || kind == PartKind::Circuit) {
+			why = "a part's \"kind\" is timer, monitor or alarm (a circuit is made of parts: \"circuit\")";
 			return false;
 		}
 		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
@@ -1122,15 +1179,15 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
-		const int there = standing_in(col, row, 1, 1);
-		if (!on_grid(col, row, 1, 1) || there >= 0) {
-			why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench";
+		const std::string in = c.value("in", std::string());
+		if (!square_free(in, col, row, -1, why)) {
 			return false;
 		}
 		Part p;
 		p.kind = kind;
 		p.col = col;
 		p.row = row;
+		p.in = in;
 		int64_t &count = made[static_cast<int>(kind)];
 		p.id = c.value("id", std::string());
 		if (p.id.empty()) {
@@ -1149,11 +1206,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!part(c, "part", std::nullopt, at, why)) {
 			return false;
 		}
-		const std::string id = parts[static_cast<size_t>(at)].id;
-		std::erase_if(wires, [&](const Wire &w) { return w.from == id || w.to == id; });
-		std::erase_if(rigs, [&](const Rig &r) { return r.from == id || (r.control == "reset" && r.item == id); });
-		std::erase_if(controls, [&](const ControlSetting &s) { return s.item == id; });
-		parts.erase(parts.begin() + at);
+		for (const std::string &id : held_by(parts[static_cast<size_t>(at)].id)) { // a circuit goes with all it holds
+			std::erase_if(wires, [&](const Wire &w) { return w.from == id || w.to == id; });
+			std::erase_if(rigs, [&](const Rig &r) { return r.from == id || (r.control == "reset" && r.item == id); });
+			std::erase_if(controls, [&](const ControlSetting &s) { return s.item == id; });
+			std::erase_if(parts, [&](const Part &p) { return p.id == id; });
+		}
 		return true;
 	}
 	if (what == "set") {
@@ -1173,7 +1231,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return true;
 		}
 		if (p.kind != PartKind::Monitor) {
-			why = "an alarm has nothing to set";
+			why = std::string("a") + (p.kind == PartKind::Alarm ? "n alarm" : " circuit") + " has nothing to set";
 			return false;
 		}
 		Quantity q;
@@ -1234,6 +1292,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "an alarm sends no signal: it has no output to wire";
 			return false;
 		}
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Circuit || parts[static_cast<size_t>(to)].kind == PartKind::Circuit) {
+			why = "a circuit is wired by the parts in it: open it";
+			return false;
+		}
 		if (there != wires.end()) {
 			why = "a wire already runs from \"" + w.from + "\" to \"" + w.to + "\"";
 			return false;
@@ -1260,8 +1322,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			rigs.erase(there);
 			return true;
 		}
-		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm) {
-			why = "an alarm sends no signal: it has no output to rig";
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm || parts[static_cast<size_t>(from)].kind == PartKind::Circuit) {
+			why = parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm sends no signal: it has no output to rig" : "a circuit is rigged by the parts in it: open it";
 			return false;
 		}
 		const bool targets = r.control == "reset" ? find_part(r.item) >= 0 && parts[static_cast<size_t>(find_part(r.item))].kind == PartKind::Timer
@@ -1286,6 +1348,123 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		r.seen = parts[static_cast<size_t>(from)].out; // it acts from the source's next change
 		rigs.push_back(r);
 		return true;
+	}
+	if (what == "circuit") {
+		// signal parts on the bench, circuits too, into a new circuit on a free square (§13.3)
+		if (!c.contains("parts") || !c.at("parts").is_array() || c.at("parts").empty()) {
+			why = "a circuit is made of \"parts\": [...]";
+			return false;
+		}
+		std::vector<int> into;
+		int left = 1 << 30, top = 1 << 30, right = -1, bottom = -1;
+		for (const json &name : c.at("parts")) {
+			const int at = name.is_string() ? find_part(name.get<std::string>()) : -1;
+			if (at < 0 || !parts[static_cast<size_t>(at)].in.empty() || std::find(into.begin(), into.end(), at) != into.end()) {
+				why = "a circuit is made of signal parts on the bench, each once: " + name.dump();
+				return false;
+			}
+			const Part &p = parts[static_cast<size_t>(at)];
+			into.push_back(at);
+			left = std::min(left, p.col);
+			top = std::min(top, p.row);
+			right = std::max(right, p.col);
+			bottom = std::max(bottom, p.row);
+		}
+		Part k;
+		k.kind = PartKind::Circuit;
+		k.inner_w = std::max(right - left + 1, 6);
+		k.inner_h = std::max(bottom - top + 1, 4);
+		k.id = c.value("id", std::string());
+		if (k.id.empty()) {
+			do {
+				k.id = "circuit" + std::to_string(++made[static_cast<int>(PartKind::Circuit)]);
+			} while (find(k.id) >= 0 || find_part(k.id) >= 0);
+		} else if (find(k.id) >= 0 || find_part(k.id) >= 0) {
+			why = "\"" + k.id + "\" is taken";
+			return false;
+		}
+		// the parts leave the bench, keeping their layout inside; the circuit takes the free
+		// square nearest their top-left: rows by distance from it, then columns, the left first
+		for (const int at : into) {
+			Part &p = parts[static_cast<size_t>(at)];
+			p.in = k.id;
+			p.col -= left;
+			p.row -= top;
+		}
+		bool placed = false;
+		for (int dr = 0; dr <= rows && !placed; ++dr) {
+			for (const int row : { top - dr, top + dr }) {
+				for (int dc = 0; dc <= cols && !placed; ++dc) {
+					for (const int col : { left - dc, left + dc }) {
+						if (!placed && on_grid(col, row, 1, 1) && standing_in(col, row, 1, 1) < 0) {
+							k.col = col;
+							k.row = row;
+							placed = true;
+						}
+					}
+				}
+			}
+		}
+		if (!placed) {
+			for (const int at : into) { // as they were
+				Part &p = parts[static_cast<size_t>(at)];
+				p.in.clear();
+				p.col += left;
+				p.row += top;
+			}
+			why = "there is no free square on the bench for the circuit";
+			return false;
+		}
+		parts.push_back(k);
+		return true;
+	}
+	if (what == "uncircuit") {
+		// a circuit's parts back on the bench, as they lie in it, from its square or the nearest place they fit
+		int at = -1;
+		if (!part(c, "circuit", PartKind::Circuit, at, why)) {
+			return false;
+		}
+		const Part k = parts[static_cast<size_t>(at)];
+		if (!k.in.empty()) {
+			why = "\"" + k.id + "\" is in a circuit: open that one first";
+			return false;
+		}
+		std::vector<size_t> held;
+		for (size_t i = 0; i < parts.size(); ++i) {
+			if (parts[i].in == k.id) {
+				held.push_back(i);
+			}
+		}
+		const int self = static_cast<int>(items.size()) + at;
+		const auto fits = [&](int col, int row) {
+			for (const size_t i : held) {
+				const int x = col + parts[i].col, y = row + parts[i].row;
+				const int there = standing_in(x, y, 1, 1, self);
+				if (!on_grid(x, y, 1, 1) || there >= 0) {
+					return false;
+				}
+			}
+			return true;
+		};
+		for (int dr = 0; dr <= rows; ++dr) {
+			for (const int row : { k.row - dr, k.row + dr }) {
+				for (int dc = 0; dc <= cols; ++dc) {
+					for (const int col : { k.col - dc, k.col + dc }) {
+						if (fits(col, row)) {
+							for (const size_t i : held) {
+								parts[i].in.clear();
+								parts[i].col += col;
+								parts[i].row += row;
+							}
+							parts.erase(parts.begin() + at);
+							return true;
+						}
+					}
+				}
+			}
+		}
+		why = "there is no room on the bench for what \"" + k.id + "\" holds";
+		return false;
 	}
 	if (what == "reset") {
 		int at = -1;
@@ -1697,7 +1876,7 @@ LabView Lab::view() const {
 		ItemView v;
 		v.id = p.id;
 		v.kind = part_kind_name(p.kind);
-		v.place = "bench";
+		v.place = p.in.empty() ? "bench" : "circuit";
 		v.col = p.col;
 		v.row = p.row;
 		v.part = p;
@@ -1848,6 +2027,9 @@ std::string Lab::digest() const {
 			hash.update_double(v ? *v : 0.0);
 		};
 		for (const Part &p : m.parts) {
+			if (p.kind == PartKind::Circuit) {
+				continue; // where parts are kept, as where things stand, is not the world
+			}
 			text(p.id);
 			hash.update_i64(static_cast<int64_t>(p.kind));
 			hash.update_u64((p.watching ? 1u : 0u) | (p.own ? 2u : 0u) | (p.out ? 4u : 0u) | (p.ringing ? 8u : 0u));

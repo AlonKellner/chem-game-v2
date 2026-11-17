@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## 0.15.0 (2026-11-17, Stage 14)
+
+Signed off by the user on 2026-11-17 ("Approved, proceed").
+
+- §13.3: circuits.
+  - **Making one:** a selection's signal parts, circuits included, collapse into one compact part
+    on the free square nearest them (`circuit`), keeping their layout inside.
+  - **Signals:** what a circuit holds signals as it would out of it, with the same digest, step
+    for step.
+  - **Working inside:** parts made (`part ... in`) and placed in it; moved and scrapped with it.
+  - **Giving back:** `uncircuit` returns its parts to the bench where they fit.
+  - **Nesting:** to any depth.
+  - **On the screen:** "create circuit" in the drawer; a circuit's square with its lamp; an open
+    circuit's panel to work in, with "up" and "close"; "open" and "give back" in the readout.
+- The Godot suite's frame test allows the step the engine's own earlier frames may leave owing (a
+  carried fraction just under one adds up to 61): a flake of the commit gate, seen once.
+
 ## 0.14.0 (2026-11-17, Stage 13)
 
 Signed off by the user on 2026-11-17 ("Very good, approved, proceed").
