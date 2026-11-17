@@ -1,6 +1,7 @@
 #include "lab/tutorial.hpp"
 
 #include "chem/species.hpp"
+#include "conditions_json.hpp"
 #include "lab/conditions.hpp"
 
 #include <nlohmann/json.hpp>
@@ -16,25 +17,12 @@ using json = nlohmann::json;
 
 namespace {
 
-// A condition on the lab's view (GAME_SPEC §13.2): every key it names holds.
 // A timer's condition, or the editor's, as a check names it (§13.3): every key given matches.
 struct TimerPattern {
 	std::string item, what, measure;
 	std::optional<Comparison::Op> op;
 	std::optional<double> value_at_least, value_at_most;
 	std::optional<bool> fired, limited;
-};
-
-struct Cond {
-	std::string item;
-	std::optional<std::string> selected;
-	std::optional<TimerPattern> editor, timer;
-	std::optional<std::string> place, on, under, drains_to;
-	std::optional<bool> submitted, stirred, burst, conserved, broken;
-	std::optional<double> valve_at_least, valve_at_most, above_c, below_c, liquid_above_ml, liquid_below_ml, above_g, below_g, purity_above, speed_at_least;
-	std::string species;
-	std::optional<std::vector<std::string>> holds_only;
-	std::vector<Cond> all, any, nots;
 };
 
 struct Check {
@@ -52,13 +40,6 @@ struct Step {
 struct Result {
 	std::string label, item, species;
 	std::vector<std::string> show;
-};
-
-struct Context {
-	const LabView &view;
-	double speed;
-	bool broken;
-	const TutorialScreen *screen = nullptr;
 };
 
 bool matches(const TimerPattern &p, const TimerCondition &c, const std::string *text) {
@@ -136,50 +117,6 @@ std::string grouped(int64_t n) {
 	return n < 0 ? "-" + out : out;
 }
 
-const ItemView *item_of(const LabView &view, const std::string &id) {
-	for (const ItemView &v : view.items) {
-		if (v.id == id) {
-			return &v;
-		}
-	}
-	return nullptr;
-}
-
-const std::string &id_at(const LabView &view, int index) {
-	static const std::string none;
-	return index >= 0 && index < static_cast<int>(view.items.size()) ? view.items[static_cast<size_t>(index)].id : none;
-}
-
-double grams(const ItemView &v, const std::string &species) {
-	double g = 0.0;
-	for (const SubstanceView &s : v.contents) {
-		if (s.species == species) {
-			g += s.g;
-		}
-	}
-	return g;
-}
-
-const SubstanceView *substance(const ItemView &v, const std::string &species) {
-	for (const SubstanceView &s : v.contents) {
-		if (s.species == species) {
-			return &s;
-		}
-	}
-	return nullptr;
-}
-
-// the species' share of the item's solids and liquids, by mass (its walls not counted)
-double purity(const ItemView &v, const std::string &species) {
-	double all = 0.0;
-	for (const SubstanceView &s : v.contents) {
-		if (!s.wall && s.phase != 'g') {
-			all += s.g;
-		}
-	}
-	return all > 0.0 ? grams(v, species) / all : 0.0;
-}
-
 // the species' share of the item's gas, by amount
 double gas_share(const ItemView &v, const std::string &species) {
 	double all = 0.0, mine = 0.0;
@@ -192,263 +129,25 @@ double gas_share(const ItemView &v, const std::string &species) {
 	return all > 0.0 ? mine / all : 0.0;
 }
 
-bool holds(const Cond &c, const Context &x) {
-	for (const Cond &a : c.all) {
-		if (!holds(a, x)) {
-			return false;
-		}
-	}
-	if (!c.any.empty()) {
-		bool one = false;
-		for (const Cond &a : c.any) {
-			one = one || holds(a, x);
-		}
-		if (!one) {
-			return false;
-		}
-	}
-	for (const Cond &n : c.nots) {
-		if (holds(n, x)) {
-			return false;
-		}
-	}
-	if (c.conserved && *c.conserved != x.view.conserved) {
-		return false;
-	}
-	if (c.broken && *c.broken != x.broken) {
-		return false;
-	}
-	if (c.speed_at_least && !(x.speed >= *c.speed_at_least)) {
-		return false;
-	}
-	if (c.selected && (x.screen == nullptr || x.screen->selected != *c.selected)) {
-		return false;
-	}
-	if ((c.editor && !editor_holds(*c.editor, x.screen)) || (c.timer && !timer_holds(*c.timer, x.screen))) {
-		return false;
-	}
-	if (c.item.empty()) {
-		return true;
-	}
-	const ItemView *found = item_of(x.view, c.item);
-	if (found == nullptr) {
-		return false;
-	}
-	const ItemView &v = *found;
-	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
-		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to)) {
-		return false;
-	}
-	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst)) {
-		return false;
-	}
-	if ((c.valve_at_least && !(v.valve >= *c.valve_at_least)) || (c.valve_at_most && !(v.valve <= *c.valve_at_most))) {
-		return false;
-	}
-	if ((c.above_c && !(v.celsius > *c.above_c)) || (c.below_c && !(v.celsius < *c.below_c))) {
-		return false;
-	}
-	if ((c.liquid_above_ml && !(v.liquid_ml > *c.liquid_above_ml)) || (c.liquid_below_ml && !(v.liquid_ml < *c.liquid_below_ml))) {
-		return false;
-	}
-	if (!c.species.empty()) {
-		const double g = grams(v, c.species);
-		if ((c.above_g && !(g > *c.above_g)) || (c.below_g && !(g < *c.below_g)) || (c.purity_above && !(purity(v, c.species) > *c.purity_above))) {
-			return false;
-		}
-	}
-	if (c.holds_only) {
-		for (const SubstanceView &s : v.contents) {
-			if (s.wall || !(s.mol > 0.0)) {
-				continue;
-			}
-			bool listed = false;
-			for (const std::string &name : *c.holds_only) {
-				listed = listed || name == s.species;
-			}
-			if (!listed) {
-				return false;
-			}
-		}
-	}
-	return true;
-}
-
-// the measured value a condition waits on, for the player to watch
-std::string now_of(const Cond &c, const Context &x) {
-	if (!c.item.empty()) {
-		if (const ItemView *v = item_of(x.view, c.item)) {
-			if (!c.species.empty() && c.purity_above) {
-				return fmt("%.3f%%", 100.0 * purity(*v, c.species));
-			}
-			if (!c.species.empty() && (c.above_g || c.below_g)) {
-				return fmt("%.3f g", grams(*v, c.species));
-			}
-			if (c.above_c || c.below_c) {
-				return fmt("%.1f C", v->celsius);
-			}
-			if (c.liquid_above_ml || c.liquid_below_ml) {
-				return fmt("%.1f mL", v->liquid_ml);
-			}
-			if (c.valve_at_least || c.valve_at_most) {
-				return fmt("valve %.0f%%", 100.0 * v->valve);
-			}
-		}
-	}
-	if (c.speed_at_least) {
-		return fmt("%.0fx", x.speed);
-	}
-	for (const Cond &a : c.all) {
-		const std::string s = now_of(a, x);
-		if (!s.empty()) {
-			return s;
-		}
-	}
-	return {};
-}
-
 // ------------------------------------------------------------- reading
 
-struct Reader {
-	const LabView &bench;
-	std::string why;
-
-	bool fail(const std::string &reason) {
-		if (why.empty()) {
-			why = reason;
-		}
-		return false;
-	}
-
-	bool item(const json &j, const char *key, std::string &out) {
-		if (!j.is_string()) {
-			return fail(std::string("\"") + key + "\" is not an item's id");
-		}
-		out = j.get<std::string>();
-		return item_of(bench, out) != nullptr || fail("the bench has no item \"" + out + "\"");
-	}
-
-	bool number(const json &j, const char *key, std::optional<double> &out) {
-		if (!j.is_number()) {
-			return fail(std::string("\"") + key + "\" is not a number");
-		}
-		out = j.get<double>();
-		return true;
-	}
-
-	bool flag(const json &j, const char *key, std::optional<bool> &out) {
-		if (!j.is_boolean()) {
-			return fail(std::string("\"") + key + "\" is not true or false");
-		}
-		out = j.get<bool>();
-		return true;
-	}
-
-	bool species(const std::string &name) { return chem::builtin_species().has(chem::builtin_species().find(name)) || fail("no species \"" + name + "\""); }
-
-	bool cond(const json &j, Cond &c) {
-		if (!j.is_object() || j.empty()) {
-			return fail("a condition is not an object with keys");
-		}
-		for (const auto &[key, value] : j.items()) {
-			bool ok = true;
-			if (key == "item") {
-				ok = item(value, "item", c.item);
-			} else if (key == "place") {
-				ok = value.is_string() || fail("\"place\" is not a place");
-				if (ok) {
-					c.place = value.get<std::string>();
-					ok = *c.place == "cabinet" || *c.place == "bench" || *c.place == "on" || *c.place == "under" || *c.place == "outbox" || fail("no place \"" + *c.place + "\"");
-				}
-			} else if (key == "on" || key == "under" || key == "drains_to") {
-				std::string id;
-				ok = item(value, key.c_str(), id);
-				(key == "on" ? c.on : key == "under" ? c.under : c.drains_to) = id;
-			} else if (key == "submitted") {
-				ok = flag(value, "submitted", c.submitted);
-			} else if (key == "stirred") {
-				ok = flag(value, "stirred", c.stirred);
-			} else if (key == "burst") {
-				ok = flag(value, "burst", c.burst);
-			} else if (key == "conserved") {
-				ok = flag(value, "conserved", c.conserved);
-			} else if (key == "broken") {
-				ok = flag(value, "broken", c.broken);
-			} else if (key == "valve_at_least") {
-				ok = number(value, "valve_at_least", c.valve_at_least);
-			} else if (key == "valve_at_most") {
-				ok = number(value, "valve_at_most", c.valve_at_most);
-			} else if (key == "above_c") {
-				ok = number(value, "above_c", c.above_c);
-			} else if (key == "below_c") {
-				ok = number(value, "below_c", c.below_c);
-			} else if (key == "liquid_above_ml") {
-				ok = number(value, "liquid_above_ml", c.liquid_above_ml);
-			} else if (key == "liquid_below_ml") {
-				ok = number(value, "liquid_below_ml", c.liquid_below_ml);
-			} else if (key == "above_g") {
-				ok = number(value, "above_g", c.above_g);
-			} else if (key == "below_g") {
-				ok = number(value, "below_g", c.below_g);
-			} else if (key == "purity_above") {
-				ok = number(value, "purity_above", c.purity_above);
-			} else if (key == "speed_at_least") {
-				ok = number(value, "speed_at_least", c.speed_at_least);
-			} else if (key == "species") {
-				ok = value.is_string() || fail("\"species\" is not a species' id");
-				if (ok) {
-					c.species = value.get<std::string>();
-					ok = species(c.species);
-				}
-			} else if (key == "holds_only") {
-				ok = value.is_array() || fail("\"holds_only\" is not a list of species");
-				if (ok) {
-					c.holds_only.emplace();
-					for (const json &s : value) {
-						ok = ok && (s.is_string() || fail("\"holds_only\" is not a list of species")) && species(s.get<std::string>());
-						if (ok) {
-							c.holds_only->push_back(s.get<std::string>());
-						}
-					}
-				}
-			} else if (key == "all" || key == "any") {
-				ok = (value.is_array() && !value.empty()) || fail("\"" + key + "\" is not a list of conditions");
-				for (size_t i = 0; ok && i < value.size(); ++i) {
-					Cond inner;
-					ok = cond(value[i], inner);
-					(key == "all" ? c.all : c.any).push_back(std::move(inner));
-				}
-			} else if (key == "selected") {
-				std::string id;
-				ok = item(value, "selected", id);
-				c.selected = id;
-			} else if (key == "editor" || key == "timer") {
-				TimerPattern p;
-				ok = pattern(value, p);
-				(key == "editor" ? c.editor : c.timer) = p;
-			} else if (key == "not") {
-				Cond inner;
-				ok = cond(value, inner);
-				c.nots.push_back(std::move(inner));
-			} else {
-				ok = fail("a condition has no key \"" + key + "\"");
-			}
-			if (!ok) {
+struct Reader : CondReader {
+	explicit Reader(const LabView &b) :
+			CondReader{ b, {}, {} } {
+		// the screen's timers and the editor's draft, which only a tutorial reads (§13.3)
+		extra_key = [](const std::string &key, const json &value, Cond &c, CondReader &r, bool &ok) {
+			if (key != "editor" && key != "timer") {
 				return false;
 			}
-		}
-		const bool per_item = c.place || c.on || c.under || c.drains_to || c.submitted || c.stirred || c.burst || c.valve_at_least || c.valve_at_most || c.above_c || c.below_c ||
-				c.liquid_above_ml || c.liquid_below_ml || !c.species.empty() || c.holds_only;
-		if (per_item && c.item.empty()) {
-			return fail("a condition on an item names no \"item\"");
-		}
-		if (!c.species.empty() && !c.above_g && !c.below_g && !c.purity_above) {
-			return fail("a condition names \"" + c.species + "\" but no \"above_g\", \"below_g\" or \"purity_above\"");
-		}
-		if ((c.above_g || c.below_g || c.purity_above) && c.species.empty()) {
-			return fail("a condition on an amount names no \"species\"");
-		}
-		return true;
+			TimerPattern p;
+			ok = static_cast<Reader &>(r).pattern(value, p);
+			if (key == "editor") {
+				c.extra.push_back([p](const CondContext &x) { return editor_holds(p, static_cast<const TutorialScreen *>(x.host)); });
+			} else {
+				c.extra.push_back([p](const CondContext &x) { return timer_holds(p, static_cast<const TutorialScreen *>(x.host)); });
+			}
+			return true;
+		};
 	}
 
 	bool pattern(const json &j, TimerPattern &p) {
@@ -555,7 +254,7 @@ struct Tutorial::Impl {
 	TutorialView view;
 	std::vector<TutorialGesture> no_gestures;
 
-	void show_checks(const std::vector<Check> &list, const Context &x) {
+	void show_checks(const std::vector<Check> &list, const CondContext &x) {
 		view.checks.clear();
 		for (const Check &c : list) {
 			view.checks.push_back(TutorialCheck{ c.text, holds(c.when, x), c.wait, now_of(c.when, x) });
@@ -589,7 +288,7 @@ struct Tutorial::Impl {
 		view.results.push_back(lv.conserved ? "every element, mass and energy: unchanged" : "the world's totals moved");
 	}
 
-	void fill(const Context &x) {
+	void fill(const CondContext &x) {
 		view.step = view.step < 0 ? 0 : view.step;
 		if (view.step < static_cast<int>(steps.size())) {
 			const Step &s = steps[static_cast<size_t>(view.step)];
@@ -623,7 +322,7 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 		return nullptr;
 	}
 	auto impl = std::make_unique<Impl>();
-	Reader r{ bench, {} };
+	Reader r(bench);
 	impl->title = doc.value("title", "Tutorial");
 	const json steps = doc.value("steps", json::array());
 	if (!steps.is_array() || steps.empty()) {
@@ -692,7 +391,7 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 	}
 	impl->view.steps = static_cast<int>(impl->steps.size());
 	std::unique_ptr<Tutorial> t(new Tutorial(std::move(impl)));
-	t->impl_->fill(Context{ bench, 1.0, false, nullptr });
+	t->impl_->fill(CondContext{ bench, 1.0, false, "", nullptr });
 	return t;
 }
 
@@ -707,7 +406,7 @@ void Tutorial::follow(const LabView &lv, const TutorialScreen &screen) {
 	Impl &m = *impl_;
 	const double speed = screen.speed;
 	const bool broken = screen.broken;
-	const Context x{ lv, speed, broken, &screen };
+	const CondContext x{ lv, speed, broken, screen.selected, &screen };
 	if (m.view.state != TutorialView::Running) {
 		return;
 	}

@@ -493,3 +493,58 @@ TEST_CASE("tutorial: one the bench cannot follow is refused, with the reason (St
 	// and not on a bench without its items
 	CHECK_FALSE(lab::Tutorial::open(read("data/tutorials/demo.json"), bench, why));
 }
+
+TEST_CASE("conditions: purity and a balloon's fill are quantities, and any quantity compares (Stage 13)") {
+	ItemView flask, balloon;
+	flask.id = "flask";
+	flask.kind = "vessel";
+	flask.place = "bench";
+	flask.contents = { { "malachite", "Cu2CO3(OH)2", 's', false, 0.01, 2.0, 1000, 10.0 },
+		{ "copper_sulfate_pentahydrate", "CuSO4.5H2O", 's', false, 0.03, 8.0, 5000, 200.0 },
+		{ "nitrogen", "N2", 'g', false, 0.003, 0.084, 0, 0.0 },
+		{ "carbon_dioxide", "CO2", 'g', false, 0.001, 0.044, 0, 0.0 },
+		{ "glass", "SiO2", 's', true, 1.0, 100.0, 0, 0.0 } };
+	balloon.id = "balloon";
+	balloon.kind = "balloon";
+	balloon.place = "bench";
+	balloon.capacity_ml = 3000.0;
+	balloon.gas_ml = 750.0;
+	const LabView bench = view_of({ flask, balloon });
+	using lab::Quantity;
+	// a solid's share of the solids and liquids by mass, the walls and the gas not counted
+	CHECK(*lab::measure(bench, Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }) == doctest::Approx(80.0));
+	// a gas's share of the gas by amount
+	CHECK(*lab::measure(bench, Quantity{ "flask", "carbon_dioxide", "purity" }) == doctest::Approx(25.0));
+	CHECK(*lab::measure(bench, Quantity{ "flask", "copper_oxide", "purity" }) == 0.0);
+	CHECK(*lab::measure(bench, Quantity{ "balloon", "fill", "g" }) == doctest::Approx(25.0));
+	CHECK_FALSE(lab::measure(bench, Quantity{ "flask", "fill", "g" })); // a vessel has no capacity
+	CHECK(lab::label(bench, Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }) == "flask: CuSO4.5H2O(s) purity (%)");
+	CHECK(lab::shown(Quantity{ "flask", "copper_sulfate_pentahydrate", "purity" }, 99.95) == "99.950 %");
+	CHECK(lab::quantities_of(bench.items[1]).back() == Quantity{ "balloon", "fill", "g" });
+
+	const auto passes = [&](const std::string &when) {
+		std::string why;
+		auto t = tutorial_of("\"steps\": [{\"title\": \"t\", \"text\": \"x\", \"checks\": [{\"text\": \"c\", \"when\": " + when + "}]}]", bench, why);
+		REQUIRE_MESSAGE(t != nullptr, why << " in " << when);
+		t->follow(bench, 60.0, false);
+		return t->view().state == TutorialView::Complete;
+	};
+	CHECK(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "purity"}, "compare": "at_least", "value": 80})"));
+	CHECK_FALSE(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "purity"}, "compare": "above", "value": 80.5})"));
+	CHECK(passes(R"({"quantity": {"item": "balloon", "what": "fill"}, "compare": "between", "values": [20, 30]})"));
+	CHECK(passes(R"({"item": "flask", "quantity": {"what": "copper_sulfate_pentahydrate", "measure": "count"}, "compare": "outside", "values": [0, 4999]})"));
+	CHECK_FALSE(passes(R"({"quantity": {"item": "flask", "what": "fill"}, "compare": "below", "value": 100})")); // not a quantity of a vessel: never holds
+
+	const auto refused = [&](const std::string &when, const std::string &reason) {
+		std::string why;
+		const bool none = tutorial_of("\"steps\": [{\"title\": \"t\", \"text\": \"x\", \"checks\": [{\"text\": \"c\", \"when\": " + when + "}]}]", bench, why) == nullptr;
+		CHECK_MESSAGE(none, when);
+		CHECK_MESSAGE(why.find(reason) != std::string::npos, why);
+	};
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "value": 1})", "a comparison is");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "nearly", "value": 1})", "no comparison");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "between", "value": 1})", "values");
+	refused(R"({"item": "flask", "quantity": {"what": "water"}, "compare": "between", "values": [3, 1]})", "low end");
+	refused(R"({"item": "flask", "quantity": {"what": "water", "measure": "taste"}, "compare": "above", "value": 1})", "\"purity\"");
+	refused(R"({"quantity": {"what": "water"}, "compare": "above", "value": 1})", "names no \"item\"");
+}
