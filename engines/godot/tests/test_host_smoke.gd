@@ -107,7 +107,8 @@ func test_frames_advance_the_clock_and_keep_every_total() -> void:
 	var before: int = JSON.parse_string(_lab.report())["step"]
 	_lab.frame(1.0)
 	var report: Dictionary = JSON.parse_string(_lab.report())
-	assert_eq(int(report["step"]) - before, 60)
+	# 60 steps, and the step the engine's own earlier frames may have left owing (a fraction carried just under one)
+	assert_between(int(report["step"]) - before, 60, 61)
 	assert_true(report["conserved"]["unchanged"])
 	await wait_process_frames(3) # the engine's own frames advance it too, and paint it
 	assert_gt(int(JSON.parse_string(_lab.report())["step"]), int(report["step"]))

@@ -140,7 +140,7 @@ constexpr const char *MEASURES[] = { "g", "count", "size", "purity" };
 constexpr const char *SIDES[] = { "on", "off", "change" };
 
 bool is_part_kind(const std::string &kind) {
-	return kind == "timer" || kind == "monitor" || kind == "alarm";
+	return kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "circuit";
 }
 
 } // namespace
@@ -188,8 +188,40 @@ struct Ui::Impl {
 	int making = -1; // a part's kind, dragged out of the drawer
 	int wiring = -1; // the part whose port a wire is drawn from
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
+	std::string opened; // the circuit whose inside is shown (§13.3), "" for none
 
-	void refresh() { view = lab->view(); }
+	void refresh() {
+		view = lab->view();
+		if (!opened.empty() && item_index(opened) < 0) {
+			opened.clear(); // the open circuit was given back, or scrapped
+		}
+	}
+	// the open circuit's buttons, and "create circuit" in the drawer
+	bool circuit_press(float x, float y) {
+		if (!opened.empty() && circuit_close().has(x, y)) {
+			opened.clear();
+			return true;
+		}
+		if (!opened.empty() && circuit_up().has(x, y)) {
+			opened = view.items[static_cast<size_t>(opened_index())].part.in; // the circuit around it, or none
+			return true;
+		}
+		if (create_circuit_rect().has(x, y) && !circuit_parts().empty()) {
+			if (!allowed_click("circuit:create")) {
+				return true;
+			}
+			json names = json::array();
+			for (const std::string &n : circuit_parts()) {
+				names.push_back(n);
+			}
+			if (act({ { "do", "circuit" }, { "parts", names } })) {
+				choose_only(static_cast<int>(view.items.size()) - 1);
+			}
+			return true;
+		}
+		return false;
+	}
+
 	// what a tutorial's checks read of the screen
 	TutorialScreen screen_now() const {
 		TutorialScreen screen;
@@ -369,6 +401,13 @@ struct Ui::Impl {
 			const Rect vessel = rect(v.under);
 			return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h + 64, w, h };
 		}
+		if (v.place == "circuit") { // in the open circuit's panel, or not on the screen
+			if (v.part.in != opened || opened.empty()) {
+				return Rect{ -10000, -10000, 0, 0 };
+			}
+			const Rect g = circuit_grid();
+			return Rect{ g.x + static_cast<float>(v.col) * 40 + 3, g.y + static_cast<float>(v.row) * 40 + 3, 34, 34 };
+		}
 		if (is_part_kind(v.kind)) {
 			const Rect f = foot(v);
 			return Rect{ f.x + 3, f.y + 3, f.w - 6, f.h - 6 }; // a part fills its square
@@ -389,8 +428,12 @@ struct Ui::Impl {
 	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			const std::string &place = view.items[static_cast<size_t>(i)].place;
-			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under")) {
+			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "circuit") ||
+					!visible(i)) {
 				continue;
+			}
+			if (!opened.empty() && view.items[static_cast<size_t>(i)].place != "circuit" && circuit_panel().has(x, y)) {
+				continue; // behind the open circuit's panel
 			}
 			Rect r = rect(i);
 			r.x -= 6;
@@ -497,6 +540,88 @@ struct Ui::Impl {
 			}
 		}
 	}
+	// ---- circuits (§13.3): the open one's panel, and where a part in a closed one is shown
+	int opened_index() const { return opened.empty() ? -1 : item_index(opened); }
+	Rect circuit_panel() const {
+		const int k = opened_index();
+		const Part &c = view.items[static_cast<size_t>(k < 0 ? 0 : k)].part;
+		const float w = static_cast<float>(std::max(c.inner_w, 8)) * 40 + 40, h = static_cast<float>(std::max(c.inner_h, 4)) * 40 + 100;
+		if (w <= OUTBOX.w && h <= OUTBOX.h) {
+			return Rect{ OUTBOX.x, OUTBOX.y, w, h }; // over the outbox: the bench stays in sight, to wire out to
+		}
+		return Rect{ std::clamp(BENCH.cx() - w / 2, BENCH.x, BENCH.x + BENCH.w - w), BENCH.y + BENCH.h - h, w, h };
+	}
+	Rect circuit_grid() const {
+		const Rect p = circuit_panel();
+		const int k = opened_index();
+		const Part &c = view.items[static_cast<size_t>(k < 0 ? 0 : k)].part;
+		return Rect{ p.x + 20, p.y + 70, static_cast<float>(c.inner_w) * 40, static_cast<float>(c.inner_h) * 40 };
+	}
+	Rect circuit_close() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 106, p.y + 12, 90, 30 }; }
+	Rect circuit_up() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 206, p.y + 12, 90, 30 }; }
+	bool visible(int index) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		return v.place != "circuit" || (!opened.empty() && v.part.in == opened);
+	}
+	// what shows a part: itself, or the circuit around it that is on the screen; -1 for none
+	int shown_as(int index) const {
+		while (index >= 0 && !visible(index)) {
+			index = item_index(view.items[static_cast<size_t>(index)].part.in);
+		}
+		return index;
+	}
+	// whether a circuit holds a part, at any depth
+	bool holds(const std::string &circuit, const std::string &part_id) const {
+		for (int i = item_index(part_id); i >= 0;) {
+			const std::string &in = view.items[static_cast<size_t>(i)].part.in;
+			if (in == circuit) {
+				return true;
+			}
+			i = in.empty() ? -1 : item_index(in);
+		}
+		return false;
+	}
+	// a circuit's lamp: something in it signals out of it
+	bool circuit_out(const std::string &circuit) const {
+		const auto lit = [&](const std::string &source) {
+			const int i = item_index(source);
+			return i >= 0 && holds(circuit, source) && view.items[static_cast<size_t>(i)].part.out;
+		};
+		for (const Wire &w : view.wires) {
+			if (lit(w.from) && !holds(circuit, w.to)) {
+				return true;
+			}
+		}
+		for (const Rig &r : view.rigs) {
+			if (lit(r.from) && !holds(circuit, r.item)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// the signal parts of the selection that stand on the bench: what "create circuit" takes
+	std::vector<std::string> circuit_parts() const {
+		std::vector<std::string> out;
+		for (const int i : group) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (is_part_kind(v.kind) && v.place == "bench") {
+				out.push_back(v.id);
+			}
+		}
+		return out;
+	}
+	static Rect create_circuit_rect() { return Rect{ DRAWER.x + 350, DRAWER.y + 56, 96, 90 }; } // beside the three parts
+	// the square of the open circuit's grid under a point; false outside it
+	bool inner_square(float x, float y, int &col, int &row) const {
+		const Rect g = circuit_grid();
+		if (opened.empty() || !g.has(x, y)) {
+			return false;
+		}
+		col = static_cast<int>((x - g.x) / 40);
+		row = static_cast<int>((y - g.y) / 40);
+		return true;
+	}
+
 	// where an item is drawn now: in hand, or carried with the selection
 	Rect drawn(int index) const {
 		Rect r = rect(index);
@@ -556,10 +681,19 @@ struct Ui::Impl {
 			return; // back where it was
 		}
 		if (is_part_kind(v.kind)) {
-			// a signal part: along the bench, or back to the drawer
+			// a signal part: along the bench or within its open circuit, or back to the drawer
+			int inner_col = 0, inner_row = 0;
 			if (CABINET.has(x, y) || DRAWER.has(x, y)) {
 				act({ { "do", "stow" }, { "item", v.id } });
 				choose_only(-1);
+			} else if (v.place == "circuit") {
+				if (inner_square(x, y, inner_col, inner_row)) {
+					act({ { "do", "place" }, { "item", v.id }, { "at", { inner_col, inner_row } } });
+				} else {
+					message = "a part in a circuit stays in it: \"give back\" the circuit to take its parts out";
+				}
+			} else if (!opened.empty() && circuit_panel().has(x, y)) {
+				message = "a part goes into a circuit when the circuit is made: select it with the others, and \"create circuit\"";
 			} else if (BENCH.has(x, y) && target < 0) {
 				const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, view.cols - 1);
 				const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, view.rows - 1);
@@ -623,6 +757,9 @@ struct Ui::Impl {
 				edit_press(x, y);
 				return;
 			}
+		}
+		if (!panel && draft.edit == Draft::None && circuit_press(x, y)) {
+			return;
 		}
 		if (!panel && draft.edit == Draft::None && (part_press(x, y) || begin_signal_drag(x, y))) {
 			return;
@@ -700,6 +837,7 @@ struct Ui::Impl {
 				draft = Draft{};
 				rung.clear();
 				chain.clear();
+				opened.clear();
 				if (tutorial) {
 					tutorial->restart();
 				}
@@ -732,6 +870,9 @@ struct Ui::Impl {
 			}
 		}
 		const int hit = item_at(x, y);
+		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
+			return; // the open circuit's panel: no rectangle across it
+		}
 		if (hit < 0 && BENCH.has(x, y)) {
 			marquee = true; // a rectangle, or, let go where it began, a click on nothing
 			return;
@@ -789,7 +930,7 @@ struct Ui::Impl {
 	static Rect drawer_rect(int k) { return Rect{ DRAWER.x + 20 + static_cast<float>(k) * 110, DRAWER.y + 56, 90, 90 }; }
 	// a part's output, on its right side; an alarm has none
 	bool port_rect(int index, Rect &r) const {
-		if (!is_part(index) || view.items[static_cast<size_t>(index)].kind == "alarm") {
+		if (!is_part(index) || view.items[static_cast<size_t>(index)].kind == "alarm" || view.items[static_cast<size_t>(index)].kind == "circuit" || !visible(index)) {
 			return false;
 		}
 		const Rect body = drawn(index);
@@ -1225,6 +1366,13 @@ struct Ui::Impl {
 		}
 		const ItemView &v = view.items[static_cast<size_t>(selected)];
 		const float top = (tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30) + 110;
+		if (v.kind == "circuit") {
+			out.emplace_back("part:open", Rect{ READOUT.x + 16, top, 90, 30 });
+			if (v.place == "bench") {
+				out.emplace_back("part:give_back", Rect{ READOUT.x + 116, top, 120, 30 });
+			}
+			return out;
+		}
 		if (v.kind != "alarm") {
 			out.emplace_back("part:edit", Rect{ READOUT.x + 16, top, 90, 30 });
 		}
@@ -1255,7 +1403,14 @@ struct Ui::Impl {
 				return true;
 			}
 			const std::string part_id = id(selected);
-			if (name == "part:edit") {
+			if (name == "part:open") {
+				opened = part_id;
+			} else if (name == "part:give_back") {
+				if (act({ { "do", "uncircuit" }, { "circuit", part_id } })) {
+					opened.clear();
+					choose_only(-1);
+				}
+			} else if (name == "part:edit") {
 				edit_part(selected);
 			} else if (name == "part:reset") {
 				act({ { "do", "reset" }, { "timer", part_id } });
@@ -1318,6 +1473,16 @@ struct Ui::Impl {
 	}
 	// a part let go on the bench, out of the drawer: made there, and its settings opened
 	void drop_making(int kind, float x, float y) {
+		int inner_col = 0, inner_row = 0;
+		if (!opened.empty() && circuit_panel().has(x, y)) {
+			if (inner_square(x, y, inner_col, inner_row) &&
+					act({ { "do", "part" }, { "kind", PART_KINDS[kind] }, { "at", { inner_col, inner_row } }, { "in", opened } })) {
+				const int made = static_cast<int>(view.items.size()) - 1;
+				choose_only(made);
+				edit_part(made);
+			}
+			return;
+		}
 		if (!BENCH.has(x, y)) {
 			return;
 		}
@@ -1501,7 +1666,22 @@ struct Ui::Impl {
 	void paint_part(int index, const Rect &r) {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		const Part &p = v.part;
-		const bool ringing = v.kind == "alarm" && p.ringing;
+		bool ringing = v.kind == "alarm" && p.ringing;
+		if (v.kind == "circuit") {
+			int held = 0;
+			for (const ItemView &o : view.items) {
+				held += o.part.in == v.id ? 1 : 0;
+				ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
+			}
+			const bool lit = circuit_out(v.id);
+			rect_fill(r, ringing ? rgba(110, 70, 30) : rgba(40, 60, 80));
+			outline(r, lit ? GOOD : WALL_INK, lit ? 2.0f : 1.0f);
+			outline(Rect{ r.x + 2, r.y + 2, r.w - 4, r.h - 4 }, rgba(90, 110, 140), 1);
+			text(r.x + 4, r.y + 15, short_name(v), INK, 13);
+			text(r.x + 3, r.y + r.h - 4, text_of("%.0f in", held), DIM, 10);
+			circle(r.x + r.w - 8, r.y + 8, 4, ringing ? WARN : lit ? GOOD : BUTTON);
+			return;
+		}
 		rect_fill(r, ringing ? rgba(110, 70, 30) : PANEL_FILL);
 		outline(r, p.out ? GOOD : WALL_INK, p.out ? 2.0f : 1.0f);
 		text(r.x + 4, r.y + 15, short_name(v), INK, 13);
@@ -1518,6 +1698,49 @@ struct Ui::Impl {
 		}
 	}
 
+	// the open circuit: its grid, and what is in it
+	void paint_circuit() {
+		const Rect p = circuit_panel(), g = circuit_grid();
+		rect_fill(p, rgba(52, 56, 62));
+		outline(p, GLASS, 1);
+		const ItemView &k = view.items[static_cast<size_t>(opened_index())];
+		text(p.x + 20, p.y + 36, "inside " + k.id + (k.part.in.empty() ? "" : ", in " + k.part.in), INK, 20);
+		text(p.x + 20, p.y + 58, "move parts in it; wire them in and out", DIM, 13);
+		button(circuit_close(), "close");
+		if (!k.part.in.empty()) {
+			button(circuit_up(), "up");
+		}
+		for (int c = 0; c <= k.part.inner_w; ++c) {
+			line(g.x + static_cast<float>(c) * 40, g.y, g.x + static_cast<float>(c) * 40, g.y + g.h, GRID, 1);
+		}
+		for (int r = 0; r <= k.part.inner_h; ++r) {
+			line(g.x, g.y + static_cast<float>(r) * 40, g.x + g.w, g.y + static_cast<float>(r) * 40, GRID, 1);
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			if (i != drag && view.items[static_cast<size_t>(i)].place == "circuit" && visible(i)) {
+				paint_item(i, drawn(i));
+			}
+		}
+	}
+
+	// where a link leaves a part: its port; a part in a closed circuit, the circuit's right side
+	bool out_point(int index, float &x, float &y) const {
+		const int shown = shown_as(index);
+		if (shown < 0) {
+			return false;
+		}
+		Rect r;
+		if (shown == index && port_rect(index, r)) {
+			x = r.cx();
+			y = r.cy();
+			return true;
+		}
+		r = drawn(shown);
+		x = r.x + r.w;
+		y = r.cy();
+		return true;
+	}
+
 	// the wires between parts, and the rigs onto controls: lit while their source signals
 	void paint_signals() {
 		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
@@ -1528,25 +1751,31 @@ struct Ui::Impl {
 		};
 		const auto in_chain = [&](const std::string &part) { return std::find(chain.begin(), chain.end(), part) != chain.end(); };
 		for (const Wire &w : view.wires) {
-			const int a = item_index(w.from), b = item_index(w.to);
-			Rect port;
-			if (a < 0 || b < 0 || !port_rect(a, port)) {
-				continue;
+			const int a = item_index(w.from), b = shown_as(item_index(w.to));
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (a < 0 || b < 0 || shown_as(a) == b || !out_point(a, x0, y0)) {
+				continue; // inside one closed circuit: not on the screen
 			}
-			float x1 = 0, y1 = 0;
 			in_point(b, x1, y1);
 			const bool lit = in_chain(w.from);
-			line(port.cx(), port.cy(), x1, y1, lit ? alarm_colour : on(w.from) ? GOOD : WALL_INK, lit ? 3.0f : 2.0f);
+			line(x0, y0, x1, y1, lit ? alarm_colour : on(w.from) ? GOOD : WALL_INK, lit ? 3.0f : 2.0f);
 		}
 		for (const Rig &r : view.rigs) {
 			const int a = item_index(r.from);
-			Rect port;
-			if (a < 0 || !port_rect(a, port)) {
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (a < 0 || !out_point(a, x0, y0)) {
 				continue;
 			}
-			float x1 = 0, y1 = 0;
-			control_point(r.item, r.control, x1, y1);
-			line(port.cx(), port.cy(), x1, y1, on(r.from) ? rgba(90, 140, 230) : rgba(110, 130, 160, 200), 2);
+			const int target = item_index(r.item);
+			if (target >= 0 && is_part(target) && shown_as(target) != target) { // a timer's reset, in a closed circuit
+				if (shown_as(target) == shown_as(a)) {
+					continue;
+				}
+				in_point(shown_as(target), x1, y1);
+			} else {
+				control_point(r.item, r.control, x1, y1);
+			}
+			line(x0, y0, x1, y1, on(r.from) ? rgba(90, 140, 230) : rgba(110, 130, 160, 200), 2);
 			circle(x1, y1, 4, rgba(90, 140, 230));
 		}
 		// a wire in hand, and a part out of the drawer
@@ -1563,10 +1792,10 @@ struct Ui::Impl {
 		// what set an alarm off, pulsing, until the clock plays
 		for (const std::string &part : chain) {
 			const int i = item_index(part);
-			if (i < 0) {
+			if (i < 0 || shown_as(i) < 0) {
 				continue;
 			}
-			const Rect r = drawn(i);
+			const Rect r = drawn(shown_as(i));
 			outline(Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }, alarm_colour, 3);
 			const Part &x = view.items[static_cast<size_t>(i)].part;
 			const int watched = x.kind == PartKind::Monitor ? item_index(x.quantity.item) : -1;
@@ -1576,7 +1805,7 @@ struct Ui::Impl {
 			}
 		}
 		for (const std::string &alarm : rung) {
-			const int i = item_index(alarm);
+			const int i = shown_as(item_index(alarm));
 			if (i >= 0) {
 				const Rect r = drawn(i);
 				outline(Rect{ r.x - 8, r.y - 8, r.w + 16, r.h + 16 }, alarm_colour, 4);
@@ -1596,6 +1825,15 @@ struct Ui::Impl {
 			text(r.x + 10, r.y + 30, PART_KINDS[k], INK, 17);
 			text(r.x + 10, r.y + 56, std::string(1, static_cast<char>(PART_KINDS[k][0] - 'a' + 'A')), DIM, 22);
 			text(r.x, r.y + r.h + 22, SAYS[k], DIM, 13);
+		}
+		if (!circuit_parts().empty()) {
+			const Rect c = create_circuit_rect();
+			rect_fill(c, rgba(40, 60, 80));
+			outline(c, GRID, 1);
+			text(c.x + 8, c.y + 26, "create", INK, 16);
+			text(c.x + 8, c.y + 48, "circuit", INK, 16);
+			const size_t n = circuit_parts().size();
+			text(c.x + 8, c.y + 74, text_of(n == 1 ? "of %.0f part" : "of %.0f parts", static_cast<double>(n)), DIM, 13);
 		}
 		text(DRAWER.x + 14, DRAWER.y + 210, "wire a part from its port, on its right:", DIM, 14);
 		text(DRAWER.x + 14, DRAWER.y + 232, "into another part, or onto a control to rig it", DIM, 14);
@@ -1678,7 +1916,7 @@ struct Ui::Impl {
 		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
-			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag) {
+			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit") {
 				continue;
 			}
 			paint_item(i, drawn(i));
@@ -1698,11 +1936,14 @@ struct Ui::Impl {
 				line(a.x + a.w + 26, a.y + a.h + 14, b.cx(), b.y, rgba(70, 120, 190, 200), 1);
 			}
 		}
+		if (!opened.empty()) {
+			paint_circuit();
+		}
 		if (drag >= 0) {
 			paint_item(drag, drawn(drag));
 		}
 		for (const int i : group) {
-			if (i != drag) {
+			if (i != drag && visible(i)) {
 				const Rect r = drawn(i);
 				outline(Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }, WALL_INK, i == selected ? 2.0f : 1.0f);
 			}
@@ -2174,13 +2415,20 @@ struct Ui::Impl {
 		if (showing >= 0 && is_part(showing)) {
 			const ItemView &v = view.items[static_cast<size_t>(showing)];
 			const Part &p = v.part;
-			row(v.id + (p.out ? ": signalling" : ": quiet"), p.out ? GOOD : INK, 20);
+			row(v.kind == "circuit" ? v.id + ": a circuit" : v.id + (p.out ? ": signalling" : ": quiet"), p.out ? GOOD : INK, 20);
 			if (v.kind == "monitor") {
 				row(p.watching ? label(view, p.quantity) + " " + op_name(p.comparison.op) + " " + shown(p.quantity, p.comparison.a) +
 								(two_values(p.comparison.op) ? " and " + shown(p.quantity, p.comparison.b) : "")
 							   : "watches nothing yet: edit it",
 						DIM, 15);
 				row(p.watching ? "now " + shown(p.quantity, now(p.quantity)) : "", DIM, 15);
+			} else if (v.kind == "circuit") {
+				int held = 0;
+				for (const ItemView &o : view.items) {
+					held += o.part.in == v.id ? 1 : 0;
+				}
+				row(text_of(held == 1 ? "holds %.0f part" : "holds %.0f parts", held) + (v.part.in.empty() ? "" : ", in " + v.part.in), DIM, 15);
+				row(circuit_out(v.id) ? "something in it signals out of it" : "nothing in it signals out of it", DIM, 15);
 			} else if (v.kind == "timer") {
 				row(clock_text(static_cast<double>(p.left) / 60.0) + " left of " + clock_text(static_cast<double>(p.preset) / 60.0), DIM, 15);
 				row(p.left == 0 ? "at zero: on until it is reset" : "", DIM, 15);
@@ -2205,7 +2453,9 @@ struct Ui::Impl {
 			for (size_t i = 0; i < inputs.size(); ++i) {
 				named += (i > 0 ? ", " : "") + inputs[i];
 			}
-			row(inputs.empty() ? "no inputs: it signals freely" : named + " (any on lets it signal)", DIM, 15);
+			if (v.kind != "circuit") {
+				row(inputs.empty() ? "no inputs: it signals freely" : named + " (any on lets it signal)", DIM, 15);
+			}
 			for (const Wire &w : view.wires) {
 				if (w.from == v.id) {
 					row("wired into " + w.to, INK, 15);
@@ -2635,7 +2885,29 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (after("item:", rest)) {
 		const int i = index_of(rest);
-		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && centre(m.rect(i));
+		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && m.visible(i) && centre(m.rect(i));
+	}
+	if (what == "circuit:create") {
+		return !m.circuit_parts().empty() && centre(Impl::create_circuit_rect());
+	}
+	if (what == "circuit:close" || what == "circuit:up") {
+		return !m.opened.empty() && (what == "circuit:close" || !m.view.items[static_cast<size_t>(m.opened_index())].part.in.empty()) &&
+				centre(what == "circuit:close" ? m.circuit_close() : m.circuit_up());
+	}
+	if (after("inner:", rest)) {
+		const size_t comma = rest.find(',');
+		if (m.opened.empty() || comma == std::string_view::npos) {
+			return false;
+		}
+		const int col = std::atoi(std::string(rest.substr(0, comma)).c_str()), row = std::atoi(std::string(rest.substr(comma + 1)).c_str());
+		const Part &k = m.view.items[static_cast<size_t>(m.opened_index())].part;
+		if (col < 0 || row < 0 || col >= k.inner_w || row >= k.inner_h) {
+			return false;
+		}
+		const Rect g = m.circuit_grid();
+		x = g.x + static_cast<float>(col) * 40 + 20;
+		y = g.y + static_cast<float>(row) * 40 + 20;
+		return true;
 	}
 	if (after("square:", rest)) {
 		const size_t comma = rest.find(',');

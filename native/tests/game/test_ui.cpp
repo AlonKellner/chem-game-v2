@@ -496,3 +496,82 @@ TEST_CASE("ui: a person boiling down at 600x: a monitor closes the valve at 10 g
 	CHECK(p.item("burner").valve == 0.0); // and the valve stays as the rig left it
 	MESSAGE("the alarm rang at " << p.grams("flask", "water") << " g of water");
 }
+
+TEST_CASE("ui: chosen parts become a circuit, opened to work inside, nested, and given back (Stage 14)") {
+	Player p;
+	p.click("pause");
+	float x = 0, y = 0, x1 = 0, y1 = 0;
+	const auto make = [&](const char *kind, const char *square) {
+		p.drag(std::string("drawer:") + kind, square);
+		if (p.ui->locate("edit:cancel", x, y)) {
+			p.click("edit:cancel");
+		}
+	};
+	make("timer", "square:2,1");
+	make("alarm", "square:4,2");
+	make("monitor", "square:9,1");
+	p.drag("port:timer1", "item:alarm1");
+	CHECK(p.ui->locate("circuit:create", x, y)); // the part just made is chosen
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK_FALSE(p.ui->locate("circuit:create", x, y)); // nothing chosen
+	// a rectangle around the timer and the alarm
+	p.at("square:1,0", x, y);
+	p.at("square:5,3", x1, y1);
+	p.sweep(x, y, x1, y1);
+	CHECK(p.ui->selection() == std::vector<std::string>{ "timer1", "alarm1" });
+	p.click("circuit:create");
+	CHECK(p.ui->message().empty());
+	CHECK(p.ui->selected() == "circuit1");
+	CHECK(p.item("circuit1").col == 2);
+	CHECK_FALSE(p.ui->locate("item:timer1", x, y)); // inside it, not on the bench
+	CHECK(p.ui->locate("item:circuit1", x, y));
+	// opened: what is in it is on the screen, and worked on there
+	p.click("part:open");
+	REQUIRE(p.ui->locate("item:timer1", x, y));
+	p.drag("item:timer1", "inner:4,3");
+	CHECK(p.item("timer1").col == 4);
+	CHECK(p.item("timer1").row == 3);
+	p.drag("drawer:monitor", "inner:0,3"); // out of the drawer, into it
+	CHECK(p.item("monitor2").part.in == "circuit1");
+	p.click("edit:cancel");
+	p.drag("port:timer1", "item:monitor1"); // a wire out of it, to the bench
+	CHECK(p.ui->lab().view().wires.size() == 2);
+	p.drag("item:alarm1", "square:12,1"); // out of the panel: it stays in
+	CHECK(p.ui->message().find("stays in it") != std::string::npos);
+	CHECK(p.item("alarm1").part.in == "circuit1");
+	p.click("circuit:close");
+	CHECK_FALSE(p.ui->locate("item:alarm1", x, y));
+	// the timer at zero rings the alarm in the circuit: the circuit is what is shown
+	p.click("speed:60");
+	for (int frame = 0; !p.ui->paused(); ++frame) {
+		REQUIRE_MESSAGE(frame < 60 * 30, "the alarm in the circuit never rang");
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.ui->message().find("alarm1 rang: timer1 at 00:00:00.000") != std::string::npos);
+	p.click("pause"); // answered
+	// nested: the circuit and the monitor into another
+	p.click("item:circuit1");
+	p.click_with("item:monitor1", lab::Ui::ModShift);
+	p.click("circuit:create");
+	CHECK(p.item("circuit1").part.in == "circuit2");
+	p.click("part:open");
+	p.click("item:circuit1"); // inside the outer one
+	p.click("part:open");
+	CHECK(p.ui->locate("item:timer1", x, y));
+	CHECK(p.ui->locate("circuit:up", x, y));
+	p.click("circuit:up");
+	CHECK(p.ui->locate("item:circuit1", x, y));
+	CHECK_FALSE(p.ui->locate("item:timer1", x, y));
+	p.click("circuit:close");
+	// given back, from the readout
+	p.click("item:circuit2");
+	p.click("part:give_back");
+	CHECK(p.item("circuit1").place == "bench");
+	CHECK(p.item("monitor1").place == "bench");
+	p.click("item:circuit1");
+	p.click("part:give_back");
+	CHECK(p.item("timer1").place == "bench");
+	CHECK(p.item("alarm1").place == "bench");
+	CHECK(p.item("monitor2").place == "bench");
+	well_formed(p.ui->draw());
+}
