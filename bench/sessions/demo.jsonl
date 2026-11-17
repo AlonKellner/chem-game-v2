@@ -21,6 +21,6 @@
 {"digest":"d8c9005c2eba401427777768c869bbeb1101cc37285e12e5d0c79094cbc1f224","do":"wait","i":20,"step":152702}
 {"digest":"4d36170988f30d879cd883c04815391dcfd8b43d621d3548ca2ce290ec824af2","do":"detach","i":21,"step":152702}
 {"digest":"c6c69b28bb8d912dd971f0c43c588feaa308658a1f440c23796d2cc8ec198afe","do":"pour","i":22,"step":152702}
-{"digest":"c6c69b28bb8d912dd971f0c43c588feaa308658a1f440c23796d2cc8ec198afe","do":"submit","i":23,"step":152702}
-{"digest":"cf38b037d48ff16c13ad789511ca6f4370be29a095ae8edc8481304dbfff1c05","do":"submit","i":24,"step":152703}
-{"digest":"2cc9189915ce212ba0b5a7a6c0c98155595a21375ad9030e0a2abdd216617433","do":"wait","i":25,"step":156303}
+{"digest":"70c18cab84f61eb99053c7d0036f4c7a4024e65278918cccca18623c689f8f89","do":"submit","i":23,"step":152703}
+{"digest":"54f2e8c888c493955aa72024cd91e3e475949c700b836036bc9e6faf2a7426af","do":"submit","i":24,"step":152703}
+{"digest":"8beb9eda14a7e8fc427ea71ae47977c8e156d9206eb2d4c50705f5145d8e9833","do":"wait","i":25,"step":156303}

@@ -588,3 +588,59 @@ TEST_CASE("lab: several items move along the bench together, all of them or none
 	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["flask", "jar"], "by": [0, -1]})", &why)); // the burner under it depends on where it stands
 	CHECK(why.find("depends") != std::string::npos);
 }
+
+TEST_CASE("lab: a drain comes off when either of its vessels is moved away, stowed or handed in (Stage 15)") {
+	// demo bench: condenser [12, 10] (2 x 5), beaker [14, 8], waste [17, 8]
+	std::string why;
+	const auto drains = [](lab::Lab &l) {
+		int open = 0;
+		const json report = json::parse(l.report());
+		for (const lab::ItemView &v : l.view().items) {
+			open += v.drains_to >= 0 ? 1 : 0;
+		}
+		(void)report;
+		return open;
+	};
+	const auto joined = [&]() {
+		auto l = demo_bench();
+		REQUIRE(run(*l, R"({"do": "under", "item": "beaker", "of": "condenser"})", &why));
+		REQUIRE(drains(*l) == 1);
+		return l;
+	};
+	{ // the vessel under it moved away: its outlet drips into nothing, and the condenser moves freely
+		auto l = joined();
+		REQUIRE_MESSAGE(run(*l, R"({"do": "place", "item": "beaker", "at": [20, 0]})", &why), why);
+		CHECK(drains(*l) == 0);
+		REQUIRE_MESSAGE(run(*l, R"({"do": "place", "item": "condenser", "at": [0, 0]})", &why), why);
+	}
+	{ // the condenser moved away from what stands under it
+		auto l = joined();
+		REQUIRE_MESSAGE(run(*l, R"({"do": "place", "item": "condenser", "at": [0, 0]})", &why), why);
+		CHECK(drains(*l) == 0);
+	}
+	{ // stowed, either of them
+		auto l = joined();
+		REQUIRE_MESSAGE(run(*l, R"({"do": "stow", "item": "beaker"})", &why), why);
+		CHECK(drains(*l) == 0);
+		auto m = joined();
+		REQUIRE_MESSAGE(run(*m, R"({"do": "stow", "item": "condenser"})", &why), why);
+		CHECK(drains(*m) == 0);
+	}
+	{ // the beaker handed in: no longer fed by the outlet, liquid in the condenser stays in it
+		auto l = joined();
+		REQUIRE_MESSAGE(run(*l, R"({"do": "pour", "from": "acid", "to": "condenser", "ml": 20})", &why), why);
+		REQUIRE_MESSAGE(run(*l, R"({"do": "submit", "item": "beaker"})", &why), why);
+		CHECK(drains(*l) == 0);
+		const double held = grams(item(json::parse(l->report()), "condenser"), "water");
+		REQUIRE(run(*l, R"({"do": "wait", "seconds": 30})", &why));
+		CHECK(grams(item(json::parse(l->report()), "condenser"), "water") == doctest::Approx(held).epsilon(1e-3)); // nothing runs down any more
+		CHECK(json::parse(l->report()).at("conserved").at("unchanged").get<bool>());
+	}
+	{ // moved together, they stay joined; one of them alone, they part
+		auto l = joined();
+		REQUIRE_MESSAGE(run(*l, R"({"do": "move", "items": ["condenser", "beaker"], "by": [0, -1]})", &why), why);
+		CHECK(drains(*l) == 1);
+		REQUIRE_MESSAGE(run(*l, R"({"do": "move", "items": ["beaker"], "by": [6, -4]})", &why), why);
+		CHECK(drains(*l) == 0);
+	}
+}
