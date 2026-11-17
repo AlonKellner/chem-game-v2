@@ -134,6 +134,22 @@ int main(void) {
 		fprintf(stderr, "the comparison did not find the corner of the screen empty\n");
 		return 1;
 	}
+	/* Stage 12: a tutorial over the screen, passed by a drag */
+	cg_tutorial tutorial;
+	tutorial.size = sizeof tutorial;
+	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.state != CG_TUTORIAL_NONE || cg_ui_tutor(ui, "{\"format\": \"chem-tutorial/1\", \"steps\": []}") != CG_ERR_INVALID_ARGUMENT) {
+		fprintf(stderr, "a screen without a tutorial, or an empty tutorial, was not told apart\n");
+		return 1;
+	}
+	if (cg_ui_tutor(ui, "{\"format\": \"chem-tutorial/1\", \"steps\": [{\"title\": \"move\", \"text\": \"the cup to the left\", "
+					   "\"checks\": [{\"text\": \"in the first square\", \"when\": {\"item\": \"cup\", \"place\": \"bench\", \"not\": {\"item\": \"cup\", \"liquid_below_ml\": 1}}}]}]}") != CG_OK) {
+		fprintf(stderr, "the tutorial was refused: %s\n", cg_last_error());
+		return 1;
+	}
+	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.state != CG_TUTORIAL_COMPLETE || tutorial.step != 1 || tutorial.steps != 1) {
+		fprintf(stderr, "the one-step tutorial, already done, is not complete\n");
+		return 1;
+	}
 	cg_ui_close(ui);
 	printf("capi_c_smoke: %s\n", cg_build_name());
 	return 0;

@@ -4,6 +4,11 @@
 
 - §17: the demo checked end to end with the final renderer, headless, through the screen and on the
   GPU; its measured results unchanged.
+- §13.2 added: the tutorial: the demo in 28 steps, each with what to do, why, and checks read from
+  the lab; failures that end a run until a reset; the goal, §17's "done when"; the card above the
+  readout and a pointer at the next gesture. §14: `cg_ui_tutor`, `cg_ui_tutorial`.
+- §13.1: a condenser dragged off its flask while a beaker stands under its outlet stays beside the
+  flask, without a refusal shown for the move along the bench.
 
 ## 0.12.0 (2026-11-17, Stage 11)
 

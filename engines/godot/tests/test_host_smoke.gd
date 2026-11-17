@@ -54,6 +54,16 @@ func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
 	_drag("item:condenser", "item:flask")
 	assert_string_contains(_lab.message(), "taken")
 
+func test_it_opens_with_the_tutorial_and_follows_it() -> void:
+	assert_eq(_lab.tutorial_path, "res://data/tutorials/demo.json")
+	var t := _lab.tutorial()
+	assert_eq(t.size(), 3)
+	assert_eq(t[0], 0, "running")
+	assert_eq(t[1], 0, "at its first step")
+	assert_gt(t[2], 20)
+	_drag("item:flask", "cell:3,1")
+	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
+
 func test_frames_advance_the_clock_and_keep_every_total() -> void:
 	var before: int = JSON.parse_string(_lab.report())["step"]
 	_lab.frame(1.0)

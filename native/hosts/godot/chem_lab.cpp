@@ -42,6 +42,26 @@ godot::String ChemLab::get_bench_path() const {
 	return bench_path_;
 }
 
+void ChemLab::set_tutorial_path(const godot::String &path) {
+	tutorial_path_ = path;
+}
+
+godot::String ChemLab::get_tutorial_path() const {
+	return tutorial_path_;
+}
+
+godot::PackedInt32Array ChemLab::tutorial() const {
+	godot::PackedInt32Array out;
+	cg_tutorial t;
+	t.size = sizeof t;
+	if (ui_ != nullptr && cg_ui_tutorial(ui_, &t) == CG_OK) {
+		out.push_back(t.state);
+		out.push_back(t.step);
+		out.push_back(t.steps);
+	}
+	return out;
+}
+
 godot::String ChemLab::build_name() const {
 	return godot::String::utf8(cg_build_name());
 }
@@ -63,6 +83,12 @@ void ChemLab::_ready() {
 	if (ui_ == nullptr) {
 		godot::UtilityFunctions::push_error("ChemLab: ", godot::String::utf8(cg_last_error()));
 		return;
+	}
+	if (!tutorial_path_.is_empty()) {
+		const godot::String tutorial = godot::FileAccess::get_file_as_string(tutorial_path_);
+		if (tutorial.is_empty() || cg_ui_tutor(ui_, tutorial.utf8().get_data()) != CG_OK) {
+			godot::UtilityFunctions::push_error("ChemLab: the tutorial ", tutorial_path_, ": ", tutorial.is_empty() ? godot::String("cannot be read") : godot::String::utf8(cg_last_error()));
+		}
 	}
 	// the optical pass: a compute shader over the whole screen, shown under what is painted over it
 	optics_ = memnew(godot::TextureRect);
@@ -238,6 +264,10 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_bench_path", "path"), &ChemLab::set_bench_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_bench_path"), &ChemLab::get_bench_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "bench_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_bench_path", "get_bench_path");
+	godot::ClassDB::bind_method(godot::D_METHOD("set_tutorial_path", "path"), &ChemLab::set_tutorial_path);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_tutorial_path"), &ChemLab::get_tutorial_path);
+	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "tutorial_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_tutorial_path", "get_tutorial_path");
+	godot::ClassDB::bind_method(godot::D_METHOD("tutorial"), &ChemLab::tutorial);
 	godot::ClassDB::bind_method(godot::D_METHOD("build_name"), &ChemLab::build_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("debug_report", "message"), &ChemLab::debug_report);
 	godot::ClassDB::bind_method(godot::D_METHOD("pointer", "x", "y", "down"), &ChemLab::pointer);

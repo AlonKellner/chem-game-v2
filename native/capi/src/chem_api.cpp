@@ -457,6 +457,29 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	}
 }
 
+cg_status cg_ui_tutor(cg_ui *ui, const char *tutorial_json) {
+	if (ui == nullptr || tutorial_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_tutor: null argument");
+	}
+	try {
+		std::string why;
+		return ui->ui->tutor(tutorial_json, why) ? CG_OK : fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out) {
+	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_tutorial)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_tutorial: null argument, or the size is not set");
+	}
+	const lab::Tutorial *t = ui->ui->tutorial();
+	out->state = t != nullptr ? static_cast<int32_t>(t->view().state) : CG_TUTORIAL_NONE;
+	out->step = t != nullptr ? t->view().step : 0;
+	out->steps = t != nullptr ? t->view().steps : 0;
+	return CG_OK;
+}
+
 const char *cg_ui_message(cg_ui *ui) {
 	return ui != nullptr ? ui->ui->message().c_str() : "";
 }

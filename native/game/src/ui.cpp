@@ -26,11 +26,12 @@ constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 1120, 300 };
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 300 };
+constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
 constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 
 constexpr uint32_t BACKGROUND = 0x2a2a2aff, GRID = 0x444444ff, GLASS = 0xffffffcc, INK = 0xe6e6e6ff, DIM = 0x9a9a9aff, PANEL_FILL = 0x383838ff, BUTTON = 0x505050ff,
-				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff;
+				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff, GUIDE = 0xffc83cff, GOOD = 0x78c88cff, BAD = 0xf05a5aff;
 // on the lit wall: what is in the glass is seen by the light that comes through it (§12)
 constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff, WALL_GLASS = 0x4a5662cc;
 constexpr double WALL_RADIANCE = 0.7305, DARK_RADIANCE = 0.0232; // the linear values of WALL and BACKGROUND
@@ -53,6 +54,28 @@ std::string text_of(const char *format, double a = 0, double b = 0) {
 	char buffer[160];
 	std::snprintf(buffer, sizeof buffer, format, a, b);
 	return buffer;
+}
+
+// words wrapped at about `width` characters
+std::vector<std::string> wrapped(const std::string &s, size_t width) {
+	std::vector<std::string> lines;
+	std::string line;
+	size_t at = 0;
+	while (at < s.size()) {
+		size_t end = s.find(' ', at);
+		end = end == std::string::npos ? s.size() : end;
+		const std::string word = s.substr(at, end - at);
+		if (!line.empty() && line.size() + 1 + word.size() > width) {
+			lines.push_back(line);
+			line.clear();
+		}
+		line += (line.empty() ? "" : " ") + word;
+		at = end + 1;
+	}
+	if (!line.empty()) {
+		lines.push_back(line);
+	}
+	return lines;
 }
 
 } // namespace
@@ -81,8 +104,16 @@ struct Ui::Impl {
 	bool panel = false;
 	int from = -1, to = -1;
 	double pour_fraction = 1.0;
+	// a tutorial (§13.2), and real time for its pointer's pulse
+	std::unique_ptr<Tutorial> tutorial;
+	double clock = 0.0;
 
 	void refresh() { view = lab->view(); }
+	void follow() {
+		if (tutorial) {
+			tutorial->follow(view, speed, lab->failed());
+		}
+	}
 
 	float cell_w() const { return std::fmin(140.0f, BENCH.w / static_cast<float>(view.cols)); }
 	float cell_h() const { return std::fmin(300.0f, BENCH.h / static_cast<float>(view.rows)); }
@@ -268,8 +299,9 @@ struct Ui::Impl {
 		}
 		if (BENCH.has(x, y)) {
 			const int col = static_cast<int>((x - BENCH.x) / cell_w()), row = static_cast<int>((y - BENCH.y) / cell_h());
-			if (col < view.cols && row < view.rows) {
-				act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } });
+			if (col < view.cols && row < view.rows && !act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } }) && was_on &&
+					view.items[static_cast<size_t>(index)].drains_to >= 0) {
+				message.clear(); // it came off, and stays beside the vessel: what stands under its outlet holds it there
 			}
 		}
 	}
@@ -330,6 +362,9 @@ struct Ui::Impl {
 				owed = 0.0;
 				message.clear();
 				refresh();
+				if (tutorial) {
+					tutorial->restart();
+				}
 			}
 			return;
 		}
@@ -505,9 +540,171 @@ struct Ui::Impl {
 			r.y = py - grab_y;
 			paint_item(drag, r);
 		}
+		if (tutorial) {
+			paint_tutorial();
+		}
 		paint_readout();
 		if (panel) {
 			paint_panel();
+		}
+		if (tutorial) {
+			paint_guide();
+		}
+	}
+
+	bool locate(std::string_view what, float &x, float &y) const;
+
+	// ------------------------------------------------------------- the tutorial (§13.2)
+
+	// the card: the step, what to do and why, its checks; or the result
+	void paint_tutorial() {
+		const TutorialView &t = tutorial->view();
+		rect_fill(TUTOR, PANEL_FILL);
+		outline(TUTOR, GRID, 1);
+		const float x = TUTOR.x + 18, right = TUTOR.x + TUTOR.w - 18;
+		float y = TUTOR.y + 30;
+		const auto lines = [&](const std::string &s, size_t width, uint32_t color, float size, float gap) {
+			for (const std::string &l : wrapped(s, width)) {
+				text(x, y, l, color, size);
+				y += size + gap;
+			}
+		};
+		text(x, y, t.part, DIM, 15);
+		const int shown_step = t.step < t.steps ? t.step + 1 : t.steps;
+		text(right - 110, y, text_of("step %.0f of %.0f", shown_step, t.steps), DIM, 15);
+		y += 12;
+		const float bar = right - x;
+		rect_fill(Rect{ x, y, bar, 6 }, BUTTON);
+		rect_fill(Rect{ x, y, bar * static_cast<float>(t.step) / static_cast<float>(t.steps > 0 ? t.steps : 1), 6 }, t.state == TutorialView::Failed ? BAD : GOOD);
+		y += 40;
+		if (t.state == TutorialView::Failed) {
+			text(x, y, "This run cannot be completed", BAD, 22);
+			y += 36;
+			lines(t.failure, 44, INK, 17, 8);
+			return;
+		}
+		if (t.state == TutorialView::Complete) {
+			text(x, y, "Tutorial complete", GOOD, 24);
+			y += 36;
+			lines("Everything was made and handed in. What was measured:", 50, INK, 16, 7);
+			y += 4;
+			for (const std::string &r : t.results) {
+				lines(r, 54, DIM, 15, 6);
+			}
+			y += 10;
+		} else {
+			lines(t.title, 40, INK, 22, 10);
+			lines(t.text, 46, INK, 17, 7);
+			if (!t.why.empty()) {
+				y += 4;
+				lines(t.why, 54, DIM, 15, 6);
+			}
+			y += 12;
+		}
+		for (const TutorialCheck &c : t.checks) {
+			const Rect tick{ x, y - 13, 14, 14 };
+			if (c.done) {
+				rect_fill(tick, GOOD);
+			} else {
+				outline(tick, INK, 1);
+			}
+			std::string label = c.text;
+			if (!c.done && !c.now.empty()) {
+				label += "  (now " + c.now + ")";
+			}
+			for (const std::string &l : wrapped(label, 52)) {
+				text(x + 24, y, l, c.done ? GOOD : INK, 16);
+				y += 22;
+			}
+		}
+		if (t.state == TutorialView::Complete) {
+			y += 8;
+			text(x, y, "Reset (at the top) plays it again.", DIM, 15);
+		}
+	}
+
+	// where a named thing is drawn: an item's body, a cell, a button; a small box around a point otherwise
+	bool box(std::string_view what, Rect &r) const {
+		float x = 0, y = 0;
+		if (!locate(what, x, y)) {
+			return false;
+		}
+		if (what.substr(0, 5) == "item:") {
+			for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+				if (view.items[static_cast<size_t>(i)].id == what.substr(5)) {
+					const Rect body = rect(i);
+					r = Rect{ body.x - 8, body.y - 8, body.w + 16, body.h + 16 };
+					return true;
+				}
+			}
+		}
+		if (what == "cabinet") {
+			r = CABINET;
+			return true;
+		}
+		if (what == "outbox") {
+			r = OUTBOX;
+			return true;
+		}
+		if (what.substr(0, 5) == "cell:") {
+			r = cell(static_cast<int>((x - BENCH.x) / cell_w()), static_cast<int>((y - BENCH.y) / cell_h()));
+			return true;
+		}
+		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@") {
+			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect() };
+			for (int i = 0; i < 4; ++i) {
+				buttons.push_back(speed_rect(i));
+			}
+			if (panel) {
+				buttons.push_back(pour_button());
+				buttons.push_back(cancel_button());
+				for (const auto &[species, b] : tip_buttons()) {
+					buttons.push_back(b);
+				}
+			}
+			for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+				Rect b;
+				if (stir_rect(i, b)) {
+					buttons.push_back(b);
+				}
+			}
+			for (const Rect &b : buttons) {
+				if (b.has(x, y)) {
+					r = Rect{ b.x - 4, b.y - 4, b.w + 8, b.h + 8 };
+					return true;
+				}
+			}
+		}
+		r = Rect{ x - 20, y - 14, 40, 28 };
+		return true;
+	}
+
+	// the pointer at what the step asks for: the last of its gestures that is on the screen now
+	void paint_guide() {
+		const std::vector<TutorialGesture> &gestures = tutorial->gestures();
+		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
+		const uint32_t colour = (GUIDE & 0xffffff00u) | static_cast<uint32_t>(140.0 + 115.0 * pulse);
+		for (auto g = gestures.rbegin(); g != gestures.rend(); ++g) {
+			Rect a, b;
+			if (!box(g->what, a) || (g->drag && !box(g->to, b))) {
+				continue;
+			}
+			if (drag >= 0 && g->drag) {
+				outline(b, colour, 3); // the item is in hand: only where it goes
+				return;
+			}
+			outline(a, colour, 3);
+			if (g->drag) {
+				outline(b, colour, 3);
+				const float x0 = a.cx(), y0 = a.cy(), x1 = b.cx(), y1 = b.cy();
+				const float dx = x1 - x0, dy = y1 - y0, length = std::sqrt(dx * dx + dy * dy);
+				if (length > 30) {
+					const float ux = dx / length, uy = dy / length, tip_x = x1 - ux * 10, tip_y = y1 - uy * 10;
+					line(x0, y0, tip_x - ux * 16, tip_y - uy * 16, colour, 4);
+					polygon({ tip_x, tip_y, tip_x - ux * 22 - uy * 11, tip_y - uy * 22 + ux * 11, tip_x - ux * 22 + uy * 11, tip_y - uy * 22 - ux * 11 }, colour);
+				}
+			}
+			return;
 		}
 	}
 
@@ -563,7 +760,7 @@ struct Ui::Impl {
 	}
 
 	void paint_readout() {
-		float y = READOUT.y + 30;
+		float y = tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30;
 		const auto row = [&](const std::string &s, uint32_t color = INK, float size = 17) {
 			text(READOUT.x + 16, y, s, color, size);
 			y += size + 8;
@@ -678,6 +875,7 @@ void Ui::pointer(float x, float y, bool down) {
 			m.hover = at;
 		}
 	}
+	m.follow();
 }
 
 void Ui::frame(double seconds) {
@@ -702,7 +900,9 @@ void Ui::frame(double seconds) {
 			m.message = why;
 		}
 	}
+	m.clock += seconds > 0.0 ? seconds : 0.0;
 	m.refresh();
+	m.follow();
 }
 
 const DrawList &Ui::draw() {
@@ -719,6 +919,21 @@ Lab &Ui::lab() {
 	return *impl_->lab;
 }
 
+bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
+	Impl &m = *impl_;
+	std::unique_ptr<Tutorial> t = Tutorial::open(tutorial_json, m.view, why);
+	if (!t) {
+		return false;
+	}
+	m.tutorial = std::move(t);
+	m.follow();
+	return true;
+}
+
+const Tutorial *Ui::tutorial() const {
+	return impl_->tutorial.get();
+}
+
 const std::string &Ui::message() const {
 	return impl_->message;
 }
@@ -732,7 +947,11 @@ bool Ui::paused() const {
 }
 
 bool Ui::locate(std::string_view what, float &x, float &y) const {
-	const Impl &m = *impl_;
+	return impl_->locate(what, x, y);
+}
+
+bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
+	const Impl &m = *this;
 	const auto centre = [&](const Rect &r) {
 		x = r.cx();
 		y = r.cy();
@@ -806,9 +1025,9 @@ bool Ui::locate(std::string_view what, float &x, float &y) const {
 		if (i < 0 || at == std::string_view::npos || !m.valve_rect(i, r)) {
 			return false;
 		}
-		const double to = std::atof(std::string(rest.substr(at + 1)).c_str());
+		const double open = std::atof(std::string(rest.substr(at + 1)).c_str());
 		x = r.cx();
-		y = r.y + r.h * static_cast<float>(1.0 - to);
+		y = r.y + r.h * static_cast<float>(1.0 - open);
 		return true;
 	}
 	if (after("stir:", rest)) {

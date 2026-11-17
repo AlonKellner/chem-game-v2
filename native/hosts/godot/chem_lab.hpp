@@ -27,6 +27,11 @@ public:
 	// the bench it opens (a "chem-bench/1" file)
 	void set_bench_path(const godot::String &path);
 	godot::String get_bench_path() const;
+	// the tutorial over it (a "chem-tutorial/1" file); empty for none
+	void set_tutorial_path(const godot::String &path);
+	godot::String get_tutorial_path() const;
+	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps]
+	godot::PackedInt32Array tutorial() const;
 
 	godot::String build_name() const;
 	// the library's self-check (cg_debug_report): the message reaches push_error
@@ -68,6 +73,7 @@ protected:
 
 private:
 	godot::String bench_path_ = "res://data/benches/lab.json";
+	godot::String tutorial_path_ = "res://data/tutorials/demo.json";
 	void paint(godot::CanvasItem *on, bool above);
 	void paint_over(); // the overlay's draw signal
 	void optics_frame(); // on the render thread

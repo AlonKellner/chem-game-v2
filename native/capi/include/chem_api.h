@@ -224,6 +224,28 @@ CG_API void cg_demo_turn(cg_demo *demo, float radians);
 CG_API cg_status cg_demo_draw(cg_demo *demo, cg_draw_list *out);
 CG_API cg_status cg_demo_optics(cg_demo *demo, cg_optics *out);
 
+/* A tutorial over the screen's lab (GAME_SPEC §13.2; the files of data/tutorials):
+ * its card above the readout, and a pointer at what its step asks for. Reset
+ * starts it again. CG_ERR_INVALID_ARGUMENT, with the reason in cg_last_error,
+ * for one this bench cannot follow. */
+CG_API cg_status cg_ui_tutor(cg_ui *ui, const char *tutorial_json);
+
+enum {
+	CG_TUTORIAL_NONE = -1,
+	CG_TUTORIAL_RUNNING = 0,
+	CG_TUTORIAL_COMPLETE = 1, /* every step passed, and its goal holds */
+	CG_TUTORIAL_FAILED = 2 /* until a reset */
+};
+
+typedef struct cg_tutorial {
+	uint32_t size; /* sizeof(cg_tutorial), set by the caller */
+	int32_t state; /* CG_TUTORIAL_* */
+	int32_t step; /* the current step, from 0; equal to steps once all are passed */
+	int32_t steps;
+} cg_tutorial;
+
+CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
+
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */
 CG_API const char *cg_ui_message(cg_ui *ui);

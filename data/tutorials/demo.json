@@ -1,0 +1,251 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "The demo as a tutorial (GAME_SPEC §13.2), on the interactive bench (data/benches/lab.json). Each step: what to do, why, and checks read from the lab; it is passed when all its checks hold. play: the gestures it asks for, named as Ui::locate names things (the screen points at the last it can find; lab_tests play them all). fails end the run until a reset; goal is checked once every step is passed.",
+	"title": "Tutorial: copper from malachite",
+	"bench": "../benches/lab.json",
+	"steps": [
+		{
+			"part": "Stage 1: gas from malachite",
+			"title": "Set out the flask",
+			"text": "Drag the flask from the cabinet on the left onto a square of the bench.",
+			"why": "Everything happens in this 250 mL flask: first the gas, then the solution, then the crystals.",
+			"checks": [{"text": "the flask stands on the bench", "when": {"item": "flask", "place": "bench"}}],
+			"play": [{"drag": ["item:flask", "cell:3,1"]}]
+		},
+		{
+			"title": "A burner under the flask",
+			"text": "Drag the burner from the cabinet onto the flask.",
+			"why": "A burner heats the vessel it stands under. The slider beside it is its gas valve.",
+			"checks": [{"text": "the burner is under the flask", "when": {"item": "burner", "under": "flask"}}],
+			"play": [{"drag": ["item:burner", "item:flask"]}]
+		},
+		{
+			"title": "Bring the malachite",
+			"text": "Drag the jar from the cabinet onto a free square of the bench.",
+			"why": "The jar holds 5 g of malachite, a green copper carbonate mineral, as a powder.",
+			"checks": [{"text": "the jar stands on the bench", "when": {"item": "jar", "place": "bench"}}],
+			"play": [{"drag": ["item:jar", "cell:1,1"]}]
+		},
+		{
+			"title": "Tip the malachite into the flask",
+			"text": "Drag the jar onto the flask. In the panel that opens, click \"tip in the malachite\".",
+			"why": "Malachite is Cu2CO3(OH)2. Heated, it breaks down into black copper oxide, carbon dioxide and water.",
+			"checks": [{"text": "all 5 g of malachite in the flask", "when": {"item": "flask", "species": "malachite", "above_g": 4.99}}],
+			"play": [{"drag": ["item:jar", "item:flask"]}, {"click": "panel:tip:malachite"}]
+		},
+		{
+			"title": "Catch the gas",
+			"text": "Drag the balloon from the cabinet onto the flask.",
+			"why": "The balloon closes the flask's mouth: any gas that leaves the flask now goes into the balloon.",
+			"checks": [{"text": "the balloon is on the flask", "when": {"item": "balloon", "on": "flask"}}],
+			"play": [{"drag": ["item:balloon", "item:flask"]}]
+		},
+		{
+			"title": "Light the burner",
+			"text": "Drag the slider beside the burner all the way up.",
+			"why": "The flame is at about 1,900 C; the valve sets how much of its heat reaches the flask.",
+			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
+			"play": [{"click": "valve:burner@1"}]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"600x\" at the top. Pause or slow down whenever you like.",
+			"why": "Every 1/60 s of the lab is still simulated and checked; at 600x ten minutes pass in a second.",
+			"checks": [{"text": "time runs at least 60 times faster", "when": {"speed_at_least": 60}}],
+			"play": [{"click": "speed:600"}]
+		},
+		{
+			"title": "Wait for the malachite to break down",
+			"text": "Watch the green powder turn black and the balloon grow. Point at the flask to read what is in it.",
+			"why": "Cu2CO3(OH)2 -> 2 CuO + CO2 + H2O, fast from about 300 C. The balloon takes the flask's hot air first, then the carbon dioxide and the steam.",
+			"checks": [{"text": "less than 5 mg of malachite left", "when": {"item": "flask", "species": "malachite", "below_g": 0.005}}]
+		},
+		{
+			"title": "Hand in the balloon",
+			"text": "Drag the balloon to the outbox at the bottom.",
+			"why": "Taking it off the flask seals it, with the carbon dioxide inside.",
+			"checks": [{"text": "the balloon is in the outbox", "when": {"item": "balloon", "submitted": true}}],
+			"play": [{"drag": ["item:balloon", "outbox"]}]
+		},
+		{
+			"title": "Let the flask cool",
+			"text": "Drag the burner's slider all the way down, then wait for the flask to cool.",
+			"why": "The black copper oxide stays in the flask for the next stage. Acid on hot glass would spit.",
+			"checks": [
+				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},
+				{"text": "the flask below 30 C", "wait": true, "when": {"item": "flask", "below_c": 30}}
+			],
+			"play": [{"click": "valve:burner@0"}]
+		},
+		{
+			"part": "Stage 2: copper sulfate solution",
+			"title": "Bring the acid",
+			"text": "Drag the acid from the cabinet onto a free square of the bench.",
+			"why": "It is about 250 mL of 1 M sulfuric acid, H2SO4 in water.",
+			"checks": [{"text": "the acid stands on the bench", "when": {"item": "acid", "place": "bench"}}],
+			"play": [{"drag": ["item:acid", "cell:2,1"]}]
+		},
+		{
+			"title": "Pour the acid onto the oxide",
+			"text": "Drag the acid onto the flask. The panel opens at 50 mL: click \"pour\".",
+			"why": "CuO + H2SO4 -> CuSO4 + H2O. About 45 mL reacts all the oxide; a little more makes sure none is left.",
+			"checks": [
+				{"text": "more than 45 mL of acid in the flask", "when": {"item": "flask", "liquid_above_ml": 45}},
+				{"text": "less than 120 mL (more only takes longer to boil off)", "when": {"item": "flask", "liquid_below_ml": 120}}
+			],
+			"play": [{"drag": ["item:acid", "item:flask"]}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "Stir",
+			"text": "Click \"stir\" in the corner of the flask's square.",
+			"why": "Stirring brings fresh acid to the surface of the grains.",
+			"checks": [{"text": "the flask is stirred", "when": {"item": "flask", "stirred": true}}],
+			"play": [{"click": "stir:flask"}]
+		},
+		{
+			"title": "A low flame",
+			"text": "Set the burner's slider to about a fifth of the way up.",
+			"why": "Warmth speeds the dissolving. A full flame would boil the acid before it has done its work.",
+			"checks": [
+				{"text": "the valve at least 10% open", "when": {"item": "burner", "valve_at_least": 0.1}},
+				{"text": "and at most 40%", "when": {"item": "burner", "valve_at_most": 0.4}}
+			],
+			"play": [{"click": "valve:burner@0.2"}]
+		},
+		{
+			"title": "Wait for the oxide to dissolve",
+			"text": "Watch the black powder disappear and the liquid turn blue.",
+			"why": "The blue is the copper ion in water, Cu2+(aq): copper sulfate solution.",
+			"checks": [{"text": "less than 1 mg of copper oxide left", "when": {"item": "flask", "species": "copper_oxide", "below_g": 0.001}}]
+		},
+		{
+			"title": "Stop stirring",
+			"text": "Click \"stir\" again.",
+			"why": "Crystals grow larger and fewer from a still solution.",
+			"checks": [{"text": "the flask is not stirred", "when": {"item": "flask", "stirred": false}}],
+			"play": [{"click": "stir:flask"}]
+		},
+		{
+			"part": "Stage 3: water and crystals",
+			"title": "The condenser",
+			"text": "Drag the condenser from the cabinet onto the flask.",
+			"why": "Its cold jacket turns the steam from the flask back into liquid water.",
+			"checks": [{"text": "the condenser is on the flask", "when": {"item": "condenser", "on": "flask"}}],
+			"play": [{"drag": ["item:condenser", "item:flask"]}]
+		},
+		{
+			"title": "A beaker for the water",
+			"text": "Drag the beaker from the cabinet onto a free square of the bench.",
+			"checks": [{"text": "the beaker stands on the bench", "when": {"item": "beaker", "place": "bench"}}],
+			"play": [{"drag": ["item:beaker", "cell:5,1"]}]
+		},
+		{
+			"title": "Under the outlet",
+			"text": "Drag the beaker onto the condenser: it stands under its outlet.",
+			"why": "What condenses runs down into the beaker.",
+			"checks": [{"text": "the condenser drains into the beaker", "when": {"item": "condenser", "drains_to": "beaker"}}],
+			"play": [{"drag": ["item:beaker", "item:condenser"]}]
+		},
+		{
+			"title": "Boil",
+			"text": "Drag the burner's slider all the way up.",
+			"why": "Only the water boils off: the copper sulfate and the leftover acid stay in the flask.",
+			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
+			"play": [{"click": "valve:burner@1"}]
+		},
+		{
+			"title": "Boil it down, not dry",
+			"text": "Wait until about 10 g of water is left in the flask. Point at the flask to watch it fall.",
+			"why": "The crystals need water to grow from. Boiled dry, the salt loses its own water and turns white.",
+			"checks": [{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}}]
+		},
+		{
+			"title": "Stop heating and let it cool",
+			"text": "Drag the burner's slider all the way down, then wait.",
+			"why": "Cold water dissolves less copper sulfate: as the solution cools, blue CuSO4.5H2O crystals grow out of it.",
+			"checks": [
+				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},
+				{"text": "the flask below 21 C", "wait": true, "when": {"item": "flask", "below_c": 21}}
+			],
+			"play": [{"click": "valve:burner@0"}]
+		},
+		{
+			"title": "Let the crystals grow",
+			"text": "Wait a few more minutes. Point at the flask: the readout counts the crystals.",
+			"why": "Near room temperature the solution is only slightly over saturation, and the last of the copper sulfate comes out slowly.",
+			"checks": [{"text": "more than 8.9 g of crystals", "when": {"item": "flask", "species": "copper_sulfate_pentahydrate", "above_g": 8.9}}]
+		},
+		{
+			"title": "Take the condenser off",
+			"text": "Drag the condenser off the flask onto the bench. The beaker under its outlet keeps it beside the flask.",
+			"checks": [{"text": "the condenser is off the flask", "when": {"not": {"item": "condenser", "place": "on"}}}],
+			"play": [{"drag": ["item:condenser", "cell:6,0"]}]
+		},
+		{
+			"title": "A beaker for the liquor",
+			"text": "Drag the waste beaker from the cabinet onto a free square of the bench.",
+			"checks": [{"text": "the waste beaker stands on the bench", "when": {"item": "waste", "place": "bench"}}],
+			"play": [{"drag": ["item:waste", "cell:4,1"]}]
+		},
+		{
+			"title": "Pour off the liquor",
+			"text": "Drag the flask onto the waste beaker. Drag the panel's slider to the right end, then click \"pour it all\".",
+			"why": "The liquor holds the leftover acid and the copper sulfate still dissolved. Poured off, it leaves the crystals clean.",
+			"checks": [{"text": "no liquid left in the flask", "when": {"item": "flask", "liquid_below_ml": 0.01}}],
+			"play": [{"drag": ["item:flask", "item:waste"]}, {"click": "panel:slider@1"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "Hand in the water",
+			"text": "Drag the beaker to the outbox.",
+			"checks": [{"text": "the beaker is in the outbox", "when": {"item": "beaker", "submitted": true}}],
+			"play": [{"drag": ["item:beaker", "outbox"]}]
+		},
+		{
+			"title": "Hand in the crystals",
+			"text": "Drag the flask to the outbox. The burner stays on the bench.",
+			"checks": [{"text": "the flask is in the outbox", "when": {"item": "flask", "submitted": true}}],
+			"play": [{"drag": ["item:flask", "outbox"]}]
+		}
+	],
+	"fails": [
+		{"text": "The balloon burst: it took more gas than its 3 L. Press reset to start again.", "when": {"item": "balloon", "burst": true}},
+		{"text": "The acid went in before the malachite had broken down. Under the liquid it never gets hot enough to. Press reset to start again.",
+			"when": {"all": [{"item": "flask", "species": "malachite", "above_g": 0.005}, {"item": "flask", "liquid_above_ml": 1}]}},
+		{"text": "The crystals overheated: they lost their water of crystallisation and turned to white copper sulfate. Press reset to start again.",
+			"when": {"any": [
+				{"item": "flask", "species": "copper_sulfate", "above_g": 0.01},
+				{"item": "flask", "species": "copper_sulfate_monohydrate", "above_g": 0.01},
+				{"item": "flask", "species": "copper_sulfate_trihydrate", "above_g": 0.01}
+			]}},
+		{"text": "The balloon was handed in before it held the carbon dioxide. Press reset to start again.",
+			"when": {"item": "balloon", "submitted": true, "species": "carbon_dioxide", "below_g": 0.5}},
+		{"text": "The beaker was handed in holding more than water. Press reset to start again.",
+			"when": {"item": "beaker", "submitted": true, "not": {"item": "beaker", "holds_only": ["water", "steam", "nitrogen", "oxygen", "carbon_dioxide"]}}},
+		{"text": "The flask was handed in with its liquor: the crystals are not clean. Press reset to start again.",
+			"when": {"item": "flask", "submitted": true, "liquid_above_ml": 0.01}},
+		{"text": "The flask was handed in without its crystals. Press reset to start again.",
+			"when": {"item": "flask", "submitted": true, "species": "copper_sulfate_pentahydrate", "below_g": 5}},
+		{"text": "Only the balloon, the beaker of water and the flask of crystals go in the outbox. Press reset to start again.",
+			"when": {"any": [
+				{"item": "jar", "submitted": true},
+				{"item": "acid", "submitted": true},
+				{"item": "waste", "submitted": true},
+				{"item": "condenser", "submitted": true},
+				{"item": "burner", "submitted": true}
+			]}}
+	],
+	"goal": [
+		{"text": "the balloon holds carbon dioxide", "when": {"item": "balloon", "submitted": true, "species": "carbon_dioxide", "above_g": 0.5}},
+		{"text": "the beaker holds water and nothing else", "when": {"all": [
+			{"item": "beaker", "submitted": true, "species": "water", "above_g": 20},
+			{"item": "beaker", "holds_only": ["water", "steam", "nitrogen", "oxygen", "carbon_dioxide"]}
+		]}},
+		{"text": "the flask holds copper sulfate crystals, 99.9% pure", "when": {"item": "flask", "submitted": true, "species": "copper_sulfate_pentahydrate", "purity_above": 0.999}},
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "carbon dioxide in the balloon", "item": "balloon", "species": "carbon_dioxide", "show": ["g", "gas_share"]},
+		{"label": "water in the beaker", "item": "beaker", "species": "water", "show": ["g"]},
+		{"label": "crystals in the flask", "item": "flask", "species": "copper_sulfate_pentahydrate", "show": ["g", "purity", "crystals"]}
+	]
+}
