@@ -29,6 +29,9 @@ std::string unit(const Quantity &q);
 std::string shown(const Quantity &q, double value);
 // the three nudge steps for the editor, largest first
 void scales(const Quantity &q, double out[3]);
+// what a goal's term can measure of what is handed in (§13.5): the temperature,
+// the liquid, the gas, then every species of the tables that is not a wall
+std::vector<std::string> goal_quantities();
 // a known quantity name (one of the five, or a species of the tables) and measure
 bool valid(const Quantity &q, std::string &why);
 
@@ -79,6 +82,9 @@ struct RigPattern {
 struct Cond {
 	std::string item;
 	std::optional<std::string> place, on, under, drains_to, selected;
+	std::optional<std::string> goal; // that goal is met (§13.5)
+	std::optional<bool> goals_met; // every game goal is met (and there is one)
+	std::optional<int> slot; // the item is in that slot of the outbox
 	std::optional<bool> submitted, stirred, burst, conserved, broken;
 	std::optional<double> valve_at_least, valve_at_most, above_c, below_c, liquid_above_ml, liquid_below_ml, above_g, below_g, purity_above, speed_at_least;
 	std::string species;

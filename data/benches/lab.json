@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size.",
+	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size. goals: the game's, one to an outbox slot (GAME_SPEC §13.5): each term a quantity of what is handed in there, compared.",
 	"grid": [
 		28,
 		15
@@ -89,6 +89,69 @@
 			"kind": "burner",
 			"celsius": 1927,
 			"conductance": 0.25
+		}
+	],
+	"goals": [
+		{
+			"id": "co2",
+			"name": "carbon dioxide in the balloon",
+			"slot": 1,
+			"terms": [
+				{
+					"quantity": {
+						"what": "carbon_dioxide",
+						"measure": "g"
+					},
+					"compare": "at_least",
+					"value": 0.5
+				}
+			]
+		},
+		{
+			"id": "water",
+			"name": "pure water in the beaker",
+			"slot": 2,
+			"terms": [
+				{
+					"quantity": {
+						"what": "water",
+						"measure": "g"
+					},
+					"compare": "at_least",
+					"value": 20
+				},
+				{
+					"quantity": {
+						"what": "water",
+						"measure": "purity"
+					},
+					"compare": "at_least",
+					"value": 99.99
+				}
+			]
+		},
+		{
+			"id": "crystals",
+			"name": "copper sulfate crystals, 99.9% pure",
+			"slot": 3,
+			"terms": [
+				{
+					"quantity": {
+						"what": "copper_sulfate_pentahydrate",
+						"measure": "g"
+					},
+					"compare": "at_least",
+					"value": 5
+				},
+				{
+					"quantity": {
+						"what": "copper_sulfate_pentahydrate",
+						"measure": "purity"
+					},
+					"compare": "at_least",
+					"value": 99.9
+				}
+			]
 		}
 	]
 }

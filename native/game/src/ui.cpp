@@ -121,7 +121,7 @@ bool seconds_of(const std::string &text, double &seconds) {
 
 // the part editor (§13.3): what is being written, until it is set
 struct Draft {
-	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer } edit = None;
+	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer, Goal } edit = None;
 	int level = 2; // a notice part's, or a writer's
 	std::string says; // a writer's words, as typed
 	std::string part; // the part being set, or a rig's source
@@ -133,7 +133,14 @@ struct Draft {
 	bool change = false;
 	std::array<std::optional<double>, 3> setting; // on, off, change; none: leave as it is
 	std::array<std::string, 3> percent; // a valve's settings, as typed
+	// a goal's (§13.5): its slot, its name (in `says`), its terms and their values as typed
+	int slot = 0;
+	bool existing = false; // the player's goal there, being changed
+	std::vector<GoalTerm> terms;
+	std::array<std::string, 3> values;
 };
+constexpr Comparison::Op GOAL_OPS[] = { Comparison::AtLeast, Comparison::AtMost, Comparison::Above, Comparison::Below };
+constexpr const char *SPECIES_MEASURES[] = { "g", "purity", "count", "size" };
 
 constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
 constexpr int DRAWN_KINDS = 5; // what the drawer holds
@@ -187,7 +194,8 @@ struct Ui::Impl {
 	// signals (§13.3): the part editor, a part being made or wired, what rang
 	Draft draft;
 	bool picking = false; // the monitor's list of quantities is open
-	int focus = -1; // the field typed into: 0, 1 a monitor's values; 2 a timer's preset; 3, 4, 5 a valve's setting on, off, on a change; 6 a writer's words
+	int focus = -1; // the field typed into: 0, 1 a monitor's values; 2 a timer's preset; 3, 4, 5 a valve's setting on, off, on a change; 6 a writer's words, a goal's name; 10 + r a goal's term's value
+	int pick_row = -1; // the goal's term whose quantity is being picked
 	bool fresh = false; // the next key replaces the focused field
 	bool resume = false; // the clock was playing when the editor opened
 	int making = -1; // a part's kind, dragged out of the drawer
@@ -306,7 +314,7 @@ struct Ui::Impl {
 		screen.broken = lab->failed();
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
-		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer" };
+		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal" };
 		screen.edit.editing = EDITING[draft.edit];
 		screen.edit.part = draft.part;
 		screen.edit.quantity = draft.quantity;
@@ -402,7 +410,7 @@ struct Ui::Impl {
 			}
 			const std::string &where = g.to;
 			if ((where.rfind("item:", 0) == 0 && target >= 0 && id(target) == where.substr(5)) || (where.rfind("square:", 0) == 0 && target < 0 && BENCH.has(x, y)) ||
-					(where == "outbox" && OUTBOX.has(x, y)) || (where == "cabinet" && CABINET.has(x, y))) {
+					(where == "outbox" && OUTBOX.has(x, y)) || (where.rfind("slot:", 0) == 0 && slot_at(x, y) == std::atoi(where.c_str() + 5)) || (where == "cabinet" && CABINET.has(x, y))) {
 				return true;
 			}
 		}
@@ -466,9 +474,11 @@ struct Ui::Impl {
 			const float scale = std::fmin(1.0f, std::fmin(box.w / w, (box.h - 24) / h));
 			return Rect{ box.cx() - w * scale / 2, box.y + box.h - 22 - h * scale, w * scale, h * scale };
 		}
-		if (v.place == "outbox") {
-			const Rect box{ OUTBOX.x + 12 + static_cast<float>(slot(index, "outbox")) * 160, OUTBOX.y + 40, 150, 230 };
-			return Rect{ box.cx() - w / 2, box.y + box.h - 30 - h, w, h };
+		if (v.place == "outbox") { // in its slot, below the goal (§13.5)
+			const Rect box = slot_rect(std::max(1, v.slot));
+			const Rect room{ box.x + 6, box.y + box.h - 128, box.w - 12, 106 }; // its name under it, in the slot
+			const float scale = std::fmin(1.0f, std::fmin(room.w / w, room.h / h));
+			return Rect{ room.cx() - w * scale / 2, room.y + room.h - h * scale, w * scale, h * scale };
 		}
 		if (v.place == "on" && v.on >= 0) {
 			const Rect holder = rect(v.on);
@@ -808,7 +818,11 @@ struct Ui::Impl {
 			return;
 		}
 		if (OUTBOX.has(x, y)) {
-			act({ { "do", "submit" }, { "item", v.id } });
+			json c = { { "do", "submit" }, { "item", v.id } };
+			if (slot_at(x, y) > 0) {
+				c["slot"] = slot_at(x, y);
+			}
+			act(c);
 			return;
 		}
 		if (CABINET.has(x, y)) {
@@ -837,6 +851,9 @@ struct Ui::Impl {
 			return; // the notices are the player's, like the clock, under a tutorial too
 		}
 		if (!panel && draft.edit == Draft::None && circuit_press(x, y)) {
+			return;
+		}
+		if (!panel && draft.edit == Draft::None && goal_press(x, y)) {
 			return;
 		}
 		if (!panel && draft.edit == Draft::None && (part_press(x, y) || begin_signal_drag(x, y))) {
@@ -1038,6 +1055,193 @@ struct Ui::Impl {
 		y = control == "reset" ? body.y + body.h - 4 : body.y + 4;
 	}
 
+	// ---- the outbox's slots and their goals (§13.5)
+	static Rect slot_rect(int k) { return Rect{ OUTBOX.x + 8 + static_cast<float>(k - 1) * 104, OUTBOX.y + 36, 100, 258 }; }
+	static int slot_at(float x, float y) {
+		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+			if (slot_rect(k).has(x, y)) {
+				return k;
+			}
+		}
+		return 0;
+	}
+	static Rect goal_button(int k) { return Rect{ slot_rect(k).x + 20, slot_rect(k).y + 4, 58, 22 }; }
+	const Goal *goal_of(int k) const {
+		for (const Goal &g : view.goals) {
+			if (g.slot == k) {
+				return &g;
+			}
+		}
+		return nullptr;
+	}
+	// the first free slot, without a goal first: where a drop on "outbox" goes, as a submit with none
+	int free_slot() const {
+		for (const bool goal_ok : { false, true }) {
+			for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+				bool held = false;
+				for (const ItemView &v : view.items) {
+					held = held || (v.place == "outbox" && v.slot == k);
+				}
+				if (!held && (goal_ok || goal_of(k) == nullptr)) {
+					return k;
+				}
+			}
+		}
+		return OUTBOX_SLOTS;
+	}
+	bool goal_press(float x, float y) {
+		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+			const Goal *g = goal_of(k);
+			if (goal_button(k).has(x, y) && (g == nullptr || !g->game)) {
+				if (allowed_click("goal:" + std::to_string(k))) {
+					edit_goal(k);
+				}
+				return true;
+			}
+		}
+		return false;
+	}
+	static GoalTerm default_term() { return GoalTerm{ Quantity{ "", "water", "g" }, Comparison{ Comparison::AtLeast, 1.0, 0.0 } }; }
+	// a quantity's name alone, without its unit: "CuSO4(aq)", "temperature"
+	static std::string what_name(const std::string &what) {
+		const std::string full = label(LabView{}, Quantity{ "", what, "g" });
+		const std::string name = full.substr(full.find(": ") + 2);
+		const size_t unit_at = name.rfind(" (");
+		return unit_at == std::string::npos || name.back() != ')' ? name : name.substr(0, unit_at);
+	}
+	static std::string term_name(const GoalTerm &t) {
+		const std::string full = label(LabView{}, t.quantity);
+		return full.substr(full.find(": ") + 2);
+	}
+	void edit_goal(int k) {
+		Draft d;
+		d.edit = Draft::Goal;
+		d.slot = k;
+		const Goal *g = goal_of(k);
+		if (g != nullptr) {
+			d.existing = true;
+			d.says = g->name;
+			d.terms = g->terms;
+		} else {
+			d.terms = { default_term() };
+		}
+		for (size_t r = 0; r < d.terms.size() && r < 3; ++r) {
+			d.values[r] = plain(d.terms[r].quantity, d.terms[r].comparison.a);
+		}
+		open_edit(d);
+		pick_row = -1;
+	}
+	Rect goal_name_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 60, 680, 30 }; }
+	float term_y(int r) const { return EDITOR.y + 104 + static_cast<float>(r) * 38; }
+	Rect term_what(int r) const { return Rect{ EDITOR.x + 20, term_y(r), 250, 30 }; }
+	Rect term_measure(int r) const { return Rect{ EDITOR.x + 280, term_y(r), 90, 30 }; }
+	Rect term_compare(int r) const { return Rect{ EDITOR.x + 380, term_y(r), 110, 30 }; }
+	Rect term_value(int r) const { return Rect{ EDITOR.x + 500, term_y(r), 130, 30 }; }
+	Rect term_remove(int r) const { return Rect{ EDITOR.x + 640, term_y(r), 60, 30 }; }
+	Rect term_add() const { return Rect{ EDITOR.x + 20, term_y(static_cast<int>(draft.terms.size())), 140, 30 }; }
+	Rect goal_remove() const { return Rect{ EDITOR.x + EDITOR.w - 250, EDITOR.y + 12, 124, 32 }; }
+	Rect goal_pick(int i) const { return Rect{ EDITOR.x + 20, term_y(pick_row) + 32 + static_cast<float>(i) * 26, 250, 24 }; }
+	bool goal_species(int r) const {
+		const std::string &w = draft.terms[static_cast<size_t>(r)].quantity.what;
+		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml");
+	}
+	void goal_edit_press(float x, float y) {
+		if (pick_row >= 0) {
+			const std::vector<std::string> all = goal_quantities();
+			for (int i = 0; i < static_cast<int>(all.size()); ++i) {
+				if (goal_pick(i).has(x, y) && allowed_click("edit:pick:" + all[static_cast<size_t>(i)])) {
+					GoalTerm &t = draft.terms[static_cast<size_t>(pick_row)];
+					t.quantity = Quantity{ "", all[static_cast<size_t>(i)], "g" };
+				}
+			}
+			pick_row = -1; // a click anywhere closes the list
+			return;
+		}
+		if (draft.existing && goal_remove().has(x, y)) {
+			if (allowed_click("edit:remove") && act({ { "do", "ungoal" }, { "slot", draft.slot } })) {
+				close_edit();
+			}
+			return;
+		}
+		if (goal_name_field().has(x, y)) {
+			if (allowed_click("edit:name")) {
+				focus = 6;
+				fresh = false;
+			}
+			return;
+		}
+		const std::string row = "edit:term:";
+		for (int r = 0; r < static_cast<int>(draft.terms.size()); ++r) {
+			GoalTerm &t = draft.terms[static_cast<size_t>(r)];
+			const std::string at = row + std::to_string(r) + ":";
+			if (term_what(r).has(x, y)) {
+				if (allowed_click(at + "what")) {
+					pick_row = r;
+				}
+				return;
+			}
+			if (goal_species(r) && term_measure(r).has(x, y)) {
+				if (allowed_click(at + "measure")) {
+					int k = 0;
+					while (k < 4 && t.quantity.measure != SPECIES_MEASURES[k]) {
+						++k;
+					}
+					t.quantity.measure = SPECIES_MEASURES[(k + 1) % 4];
+				}
+				return;
+			}
+			if (term_compare(r).has(x, y)) {
+				if (allowed_click(at + "compare")) {
+					int k = 0;
+					while (k < 4 && t.comparison.op != GOAL_OPS[k]) {
+						++k;
+					}
+					t.comparison.op = GOAL_OPS[(k + 1) % 4];
+				}
+				return;
+			}
+			if (term_value(r).has(x, y)) {
+				if (allowed_click(at + "value")) {
+					focus = 10 + r;
+					fresh = true;
+				}
+				return;
+			}
+			if (draft.terms.size() > 1 && term_remove(r).has(x, y)) {
+				if (allowed_click(at + "remove")) {
+					draft.terms.erase(draft.terms.begin() + r);
+					for (size_t k = static_cast<size_t>(r); k + 1 < draft.values.size(); ++k) {
+						draft.values[k] = draft.values[k + 1];
+					}
+					focus = -1;
+				}
+				return;
+			}
+		}
+		if (draft.terms.size() < 3 && term_add().has(x, y)) {
+			if (allowed_click("edit:term:add")) {
+				draft.values[draft.terms.size()] = "1";
+				draft.terms.push_back(default_term());
+			}
+		}
+	}
+	// the goal's command, from the draft; false with the reason when a value is not a number
+	bool goal_command(json &c) {
+		json terms = json::array();
+		for (size_t r = 0; r < draft.terms.size(); ++r) {
+			char *end = nullptr;
+			const double v = std::strtod(draft.values[r].c_str(), &end);
+			if (draft.values[r].empty() || end == nullptr || *end != '\0') {
+				message = "a value is not a number";
+				return false;
+			}
+			const GoalTerm &t = draft.terms[r];
+			terms.push_back({ { "quantity", { { "what", t.quantity.what }, { "measure", t.quantity.measure } } }, { "compare", OP_KEYS[static_cast<int>(t.comparison.op)] }, { "value", v } });
+		}
+		c = { { "do", "goal" }, { "slot", draft.slot }, { "name", draft.says }, { "terms", terms } };
+		return true;
+	}
+
 	// ---- the part editor: geometry
 	Rect edit_cancel() const { return Rect{ EDITOR.x + EDITOR.w - 116, EDITOR.y + 12, 96, 32 }; }
 	Rect edit_done() const { return Rect{ EDITOR.x + 20, EDITOR.y + EDITOR.h - 52, 140, 36 }; }
@@ -1054,14 +1258,22 @@ struct Ui::Impl {
 	}
 	Rect edit_item(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k % 8) * 86, EDITOR.y + 60 + static_cast<float>(k / 8) * 34, 82, 30 }; } // eight a row
 	// what a notice part can hear about, or a writer write about: the equipment, then the writers (§13.4)
-	std::vector<int> about_list() const {
-		std::vector<int> out = watchable();
-		for (int i = 0; i < static_cast<int>(view.items.size()) && out.size() < 15; ++i) {
+	// what a notice part can hear about, or a writer write about: the equipment, the writers, the goals (§13.4, §13.5)
+	std::vector<std::string> about_list() const {
+		std::vector<std::string> out;
+		for (const int i : watchable()) {
+			out.push_back(id(i));
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (view.items[static_cast<size_t>(i)].kind == "writer" && (draft.edit != Draft::Writer || id(i) != draft.part)) {
-				out.push_back(i);
+				out.push_back(id(i));
 			}
 		}
-		return out; // after "any", or "itself": two rows
+		for (const Goal &g : view.goals) {
+			out.push_back(g.id);
+		}
+		out.resize(std::min<size_t>(out.size(), 15)); // after "any", or "itself": two rows
+		return out;
 	}
 	Rect says_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 174, 680, 30 }; }
 	Rect edit_quantity() const { return Rect{ EDITOR.x + 20, EDITOR.y + 108, 330, 30 }; }
@@ -1257,6 +1469,14 @@ struct Ui::Impl {
 			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
+		} else if (draft.edit == Draft::Goal) {
+			json c;
+			if (!allowed_click("edit:set") || !goal_command(c)) {
+				return;
+			}
+			if (guided_commit(c) && act(c)) {
+				close_edit();
+			}
 		} else if (draft.edit == Draft::Writer) {
 			if (!allowed_click("edit:set")) {
 				return;
@@ -1295,6 +1515,10 @@ struct Ui::Impl {
 	}
 
 	void edit_press(float x, float y) {
+		if (draft.edit == Draft::Goal && pick_row >= 0) {
+			goal_edit_press(x, y);
+			return;
+		}
 		if (draft.edit == Draft::Monitor && picking) {
 			const std::vector<Quantity> qs = pickable();
 			for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
@@ -1397,6 +1621,10 @@ struct Ui::Impl {
 				}
 			}
 		}
+		if (draft.edit == Draft::Goal) {
+			goal_edit_press(x, y);
+			return;
+		}
 		if (draft.edit == Draft::Notice || draft.edit == Draft::Writer) {
 			for (int k = 0; k < 4; ++k) {
 				if (level_rect(k).has(x, y)) {
@@ -1406,10 +1634,10 @@ struct Ui::Impl {
 					return;
 				}
 			}
-			const std::vector<int> items = about_list();
+			const std::vector<std::string> items = about_list();
 			for (int k = -1; k < static_cast<int>(items.size()); ++k) {
 				if (edit_item(k + 1).has(x, y)) {
-					const std::string about = k < 0 ? std::string() : id(items[static_cast<size_t>(k)]);
+					const std::string about = k < 0 ? std::string() : items[static_cast<size_t>(k)];
 					if (allowed_click("edit:item:" + (about.empty() ? std::string(draft.edit == Draft::Writer ? "itself" : "any") : about))) {
 						draft.quantity.item = about;
 					}
@@ -1687,10 +1915,14 @@ struct Ui::Impl {
 			return;
 		}
 		if (focus == 6) {
-			type_words(key, codepoint);
+			type_words(key, codepoint); // a writer's words, a goal's name
 			return;
 		}
-		std::string *field = focus == 0 || focus == 1 ? &draft.text[static_cast<size_t>(focus)] : focus == 2 ? &draft.preset : focus >= 3 && focus <= 5 ? &draft.percent[static_cast<size_t>(focus - 3)] : nullptr;
+		std::string *field = focus == 0 || focus == 1 ? &draft.text[static_cast<size_t>(focus)]
+				: focus == 2											 ? &draft.preset
+				: focus >= 3 && focus <= 5								 ? &draft.percent[static_cast<size_t>(focus - 3)]
+				: focus >= 10 && focus < 13								 ? &draft.values[static_cast<size_t>(focus - 10)]
+																		 : nullptr;
 		if (field == nullptr) {
 			return;
 		}
@@ -1701,7 +1933,7 @@ struct Ui::Impl {
 				field->pop_back();
 			}
 			fresh = false;
-		} else if ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || (codepoint == '-' && focus < 2) || (codepoint == ':' && focus == 2)) {
+		} else if ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || (codepoint == '-' && (focus < 2 || focus >= 10)) || (codepoint == ':' && focus == 2)) {
 			const std::string typed = (fresh ? std::string() : *field) + static_cast<char>(codepoint);
 			if (typed.size() <= 16 && allowed_text(typed)) {
 				*field = typed;
@@ -2001,6 +2233,56 @@ struct Ui::Impl {
 		}
 	}
 
+	// the outbox's slots: each one's goal, its terms now, a lamp lit while it is met (§13.5)
+	void paint_slots() {
+		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+			const Rect r = slot_rect(k);
+			const Goal *g = goal_of(k);
+			std::string held; // what is handed in there
+			for (const ItemView &v : view.items) {
+				held = v.place == "outbox" && v.slot == k ? v.id : held;
+			}
+			// its state at a glance: a green band and border while met; amber while what is there falls short
+			const bool met = g != nullptr && g->met, short_of = g != nullptr && !g->met && !held.empty();
+			if (met || short_of) {
+				rect_fill(Rect{ r.x + 1, r.y + 1, r.w - 2, 26 }, met ? rgba(46, 125, 70) : rgba(150, 105, 30));
+			}
+			outline(r, met ? GOOD : short_of ? WARN : WALL_GRID, met || short_of ? 3.0f : 1.0f);
+			text(r.x + 6, r.y + 19, std::to_string(k), met || short_of ? INK : WALL_INK, 15);
+			if (g == nullptr || !g->game) {
+				button(goal_button(k), g == nullptr ? "+ goal" : "edit", false, 12);
+			} else {
+				text(r.x + 22, r.y + 19, "game", met || short_of ? INK : WALL_INK, 11);
+			}
+			if (g == nullptr) {
+				continue;
+			}
+			circle(r.x + r.w - 10, r.y + 14, 5, g->met ? GOOD : BUTTON);
+			text(r.x + 6, r.y + 44, met ? "met" : short_of ? "not met" : "open", met ? rgba(30, 110, 55) : short_of ? rgba(150, 90, 10) : WALL_INK, 13); // dark: on the lit wall
+			float y = r.y + 60;
+			for (const std::string &line : wrapped(g->name, 15)) {
+				text(r.x + 6, y, line, WALL_INK, 12);
+				y += 14;
+			}
+			for (const GoalTerm &t : g->terms) {
+				y += 4;
+				for (const std::string &line : wrapped(term_name(t), 17)) {
+					text(r.x + 6, y, line, WALL_INK, 10);
+					y += 12;
+				}
+				std::string says = std::string(op_name(t.comparison.op)) + " " + shown(t.quantity, t.comparison.a);
+				text(r.x + 6, y, says, WALL_INK, 10);
+				y += 12;
+				if (!held.empty()) {
+					const std::optional<double> now = measure(view, Quantity{ held, t.quantity.what, t.quantity.measure });
+					const bool ok = now && meets(t.comparison, *now, std::nullopt);
+					text(r.x + 6, y, "now " + (now ? shown(t.quantity, *now) : std::string("-")), ok ? GOOD : WARN, 10);
+					y += 12;
+				}
+			}
+		}
+	}
+
 	void paint_drawer() {
 		rect_fill(DRAWER, PANEL_FILL);
 		outline(DRAWER, GRID, 1);
@@ -2091,7 +2373,8 @@ struct Ui::Impl {
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
-		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop here to hand in", WALL_INK);
+		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
+		paint_slots();
 		// the clock
 		button(pause_rect(), paused ? "play" : "pause", paused);
 		for (int i = 0; i < 4; ++i) {
@@ -2196,6 +2479,57 @@ struct Ui::Impl {
 		if (after("choose:", rest)) {
 			return draft.edit == Draft::Choose && (rest == "wire" || rest == "reset") && found(choose_rect(rest == "wire" ? 0 : 1));
 		}
+		if (after("slot:", rest)) {
+			const int k = number(rest);
+			return k >= 1 && k <= OUTBOX_SLOTS && found(slot_rect(k));
+		}
+		if (after("goal:", rest)) {
+			const int k = number(rest);
+			const Goal *g = k >= 1 && k <= OUTBOX_SLOTS ? goal_of(k) : nullptr;
+			return k >= 1 && k <= OUTBOX_SLOTS && draft.edit == Draft::None && (g == nullptr || !g->game) && found(goal_button(k));
+		}
+		if (draft.edit == Draft::Goal && after("edit:", rest)) {
+			if (pick_row >= 0) {
+				const std::vector<std::string> all = goal_quantities();
+				for (int i = 0; rest.substr(0, 5) == "pick:" && i < static_cast<int>(all.size()); ++i) {
+					if (rest.substr(5) == all[static_cast<size_t>(i)]) {
+						return found(goal_pick(i));
+					}
+				}
+				return false;
+			}
+			if (rest == "name") {
+				return found(goal_name_field());
+			}
+			if (rest == "remove") {
+				return draft.existing && found(goal_remove());
+			}
+			if (rest == "set") {
+				return found(edit_done());
+			}
+			if (rest == "cancel") {
+				return found(edit_cancel());
+			}
+			if (rest == "term:add") {
+				return draft.terms.size() < 3 && found(term_add());
+			}
+			if (rest.substr(0, 5) == "term:") {
+				const std::string_view more = rest.substr(5);
+				const int r = number(more);
+				const size_t colon = more.find(':');
+				if (r < 0 || r >= static_cast<int>(draft.terms.size()) || colon == std::string_view::npos) {
+					return false;
+				}
+				const std::string_view field_name = more.substr(colon + 1);
+				return field_name == "what"		? found(term_what(r))
+						: field_name == "measure" ? goal_species(r) && found(term_measure(r))
+						: field_name == "compare" ? found(term_compare(r))
+						: field_name == "value"	? found(term_value(r))
+						: field_name == "remove"	? draft.terms.size() > 1 && found(term_remove(r))
+												: false;
+			}
+			return false;
+		}
 		if (!after("edit:", rest) || draft.edit == Draft::None || draft.edit == Draft::Choose) {
 			return false;
 		}
@@ -2226,9 +2560,9 @@ struct Ui::Impl {
 				if (more == (draft.edit == Draft::Writer ? "itself" : "any")) {
 					return found(edit_item(0));
 				}
-				const std::vector<int> items = about_list();
+				const std::vector<std::string> items = about_list();
 				for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-					if (id(items[static_cast<size_t>(k)]) == more) {
+					if (items[static_cast<size_t>(k)] == more) {
 						return found(edit_item(k + 1));
 					}
 				}
@@ -2802,12 +3136,43 @@ struct Ui::Impl {
 					text(r.x + 8, r.y + 19, name.substr(name.find(": ") + 2), INK, 15);
 				}
 			}
+		} else if (draft.edit == Draft::Goal) {
+			text(EDITOR.x + 20, EDITOR.y + 40, text_of("a goal for slot %.0f", draft.slot), INK, 22);
+			if (draft.existing) {
+				button(goal_remove(), "take it off", false, 15);
+			}
+			field(goal_name_field(), draft.says.empty() && focus != 6 ? std::string("(its name: click to type)") : draft.says, focus == 6);
+			for (int r = 0; r < static_cast<int>(draft.terms.size()); ++r) {
+				const GoalTerm &t = draft.terms[static_cast<size_t>(r)];
+				button(term_what(r), what_name(t.quantity.what) + "  v", false, 15);
+				if (goal_species(r)) {
+					button(term_measure(r), t.quantity.measure, false, 15);
+				}
+				button(term_compare(r), op_name(t.comparison.op), false, 15);
+				field(term_value(r), draft.values[static_cast<size_t>(r)], focus == 10 + r);
+				if (draft.terms.size() > 1) {
+					button(term_remove(r), "x", false, 15);
+				}
+			}
+			if (draft.terms.size() < 3) {
+				button(term_add(), "+ term", false, 15);
+			}
+			text(EDITOR.x + 20, EDITOR.y + 232, "Met while what is handed in to the slot meets every term.", DIM, 14);
+			if (pick_row >= 0) {
+				const std::vector<std::string> all = goal_quantities();
+				for (int i = 0; i < static_cast<int>(all.size()); ++i) {
+					const Rect e = goal_pick(i);
+					rect_fill(e, rgba(20, 20, 20));
+					outline(e, GRID, 1);
+					text(e.x + 8, e.y + 17, what_name(all[static_cast<size_t>(i)]), INK, 14);
+				}
+			}
 		} else if (draft.edit == Draft::Writer) {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " writes a notice about", INK, 22);
-			const std::vector<int> items = about_list();
+			const std::vector<std::string> items = about_list();
 			button(edit_item(0), "itself", draft.quantity.item.empty(), 14);
 			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-				button(edit_item(k + 1), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
+				button(edit_item(k + 1), items[static_cast<size_t>(k)], items[static_cast<size_t>(k)] == draft.quantity.item, 14);
 			}
 			for (int k = 0; k < 4; ++k) {
 				button(level_rect(k), level_name(static_cast<lab::Notice::Level>(k)), draft.level == k);
@@ -2816,10 +3181,10 @@ struct Ui::Impl {
 			text(EDITOR.x + 20, EDITOR.y + 230, "When its input turns on, it writes these words at that level; notice parts hear it.", DIM, 14);
 		} else if (draft.edit == Draft::Notice) {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " hears notices about", INK, 22);
-			const std::vector<int> items = about_list();
+			const std::vector<std::string> items = about_list();
 			button(edit_item(0), "any", draft.quantity.item.empty(), 14);
 			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-				button(edit_item(k + 1), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
+				button(edit_item(k + 1), items[static_cast<size_t>(k)], items[static_cast<size_t>(k)] == draft.quantity.item, 14);
 			}
 			for (int k = 0; k < 4; ++k) {
 				button(level_rect(k), std::string(level_name(static_cast<lab::Notice::Level>(k))) + (k < 3 ? " up" : ""), draft.level == k);
@@ -3104,9 +3469,10 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = CABINET.y + CABINET.h - 60;
 		return true;
 	}
-	if (what == "outbox") {
-		x = OUTBOX.x + OUTBOX.w - 80;
-		y = OUTBOX.cy();
+	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first
+		const Rect r = Impl::slot_rect(m.free_slot());
+		x = r.cx();
+		y = r.y + r.h - 60;
 		return true;
 	}
 	if (what == "pause") {

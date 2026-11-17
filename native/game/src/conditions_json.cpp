@@ -147,6 +147,19 @@ bool CondReader::cond(const json &j, Cond &c) {
 			ok = flag(v, "burst", c.burst);
 		} else if (key == "conserved") {
 			ok = flag(v, "conserved", c.conserved);
+		} else if (key == "slot") {
+			ok = (v.is_number_integer() && v.get<int>() >= 1 && v.get<int>() <= OUTBOX_SLOTS) || fail("\"slot\" is a slot of the outbox, 1 to 6");
+			if (ok) {
+				c.slot = v.get<int>();
+			}
+		} else if (key == "goals_met") {
+			ok = flag(v, "goals_met", c.goals_met);
+		} else if (key == "goal") {
+			ok = v.is_string() || fail("\"goal\" names a goal");
+			if (ok) {
+				c.goal = v.get<std::string>();
+				ok = std::any_of(bench.goals.begin(), bench.goals.end(), [&](const Goal &g) { return g.id == *c.goal; }) || fail("the bench has no goal \"" + *c.goal + "\"");
+			}
 		} else if (key == "broken") {
 			ok = flag(v, "broken", c.broken);
 		} else if (key == "valve_at_least") {
@@ -269,7 +282,7 @@ bool CondReader::cond(const json &j, Cond &c) {
 			return fail("a quantity names no \"item\"");
 		}
 	}
-	const bool per_item = c.place || c.on || c.under || c.drains_to || c.submitted || c.stirred || c.burst || c.valve_at_least || c.valve_at_most || c.above_c || c.below_c ||
+	const bool per_item = c.place || c.on || c.under || c.drains_to || c.submitted || c.slot || c.stirred || c.burst || c.valve_at_least || c.valve_at_most || c.above_c || c.below_c ||
 			c.liquid_above_ml || c.liquid_below_ml || !c.species.empty() || c.holds_only;
 	if (per_item && c.item.empty()) {
 		return fail("a condition on an item names no \"item\"");

@@ -135,7 +135,7 @@ func _play(dir: String) -> void:
 	_click("speed:600")
 	if not _watch(func(): return _grams("flask", "malachite") < 0.005, "the malachite to be gone"):
 		return
-	_drag("item:balloon", "outbox")
+	_drag("item:balloon", "slot:1") # its goal (GAME_SPEC §13.5)
 	_click("valve:burner@0")
 	if not _watch(func(): return _celsius("flask") < 30.0, "the flask to cool"):
 		return
@@ -221,3 +221,14 @@ func _play(dir: String) -> void:
 	for c in "the flask is nearly dry":
 		_lab.key(0, c.unicode_at(0))
 	await _shoot(dir, "11_writer")
+	_click("edit:cancel")
+	# Stage 17: a goal of the player's, in the editor (GAME_SPEC §13.5)
+	_click("goal:4")
+	_click("edit:name")
+	for c in "blue liquor":
+		_lab.key(0, c.unicode_at(0))
+	_click("edit:term:0:what")
+	_click("edit:pick:copper_sulfate_aq")
+	_click("edit:term:add")
+	_click("edit:term:1:measure")
+	await _shoot(dir, "12_goal_editor")
