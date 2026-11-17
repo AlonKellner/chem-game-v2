@@ -516,5 +516,7 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 	cost(true); // warm
 	const double without = cost(false), with = cost(true);
 	MESSAGE("a frame at 600x: " << without << " ms, with three monitors " << with << " ms");
+#ifndef CHEM_SANITIZED // a sanitizer's build is several times slower: its costs are reported, not bounded
 	CHECK(with - without < 3.0);
+#endif
 }
