@@ -123,6 +123,8 @@ struct ReactionRow {
 	std::string id;
 	std::vector<chem::Term> terms;
 	chem::Kinetics kinetics{};
+	int notice_level = 0; // GAME_SPEC §13.4: detail, event, warning, danger
+	std::string notice_says;
 };
 
 std::string quoted(const std::string &s) {
@@ -293,6 +295,19 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
 			}
 		}
+		if (r.contains("notice")) {
+			const json &n = r.at("notice");
+			const std::string level = n.value("level", std::string("detail"));
+			const char *const LEVELS[] = { "detail", "event", "warning", "danger" };
+			row.notice_level = -1;
+			for (int k = 0; k < 4; ++k) {
+				row.notice_level = level == LEVELS[k] ? k : row.notice_level;
+			}
+			if (row.notice_level < 0) {
+				fail(reactions_file, "reaction " + row.id + ": a notice's level is detail, event, warning or danger");
+			}
+			row.notice_says = n.value("says", std::string());
+		}
 		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
 			fail(reactions_file, "\"" + equation + "\": " + why);
 		}
@@ -362,6 +377,12 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\t\t\tif (!r) {\n\t\t\t\tbroken(why);\n\t\t\t}\n"
 		<< "\t\t\tmade.push_back(*r);\n\t\t}\n"
 		<< "\t\treturn made;\n\t}();\n\treturn reactions;\n}\n\n"
+		<< "std::span<const ReactionNote> builtin_reaction_notes() {\n"
+		<< "\tstatic constexpr ReactionNote NOTES[] = {\n";
+	for (const ReactionRow &row : reactions) {
+		cpp << "\t\t{ " << quoted(row.id) << ", " << row.notice_level << ", " << quoted(row.notice_says) << " },\n";
+	}
+	cpp << "\t};\n\treturn NOTES;\n}\n\n"
 		<< "} // namespace chem\n";
 
 	std::ostringstream hpp;

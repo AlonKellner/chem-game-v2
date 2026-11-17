@@ -134,6 +134,38 @@ void default_size(const std::string &kind, double volume_ml, bool condenser, int
 
 } // namespace
 
+const char *level_name(Notice::Level level) {
+	static const char *const NAMES[] = { "detail", "event", "warning", "danger" };
+	return NAMES[static_cast<int>(level) & 3];
+}
+
+bool level_of(std::string_view name, Notice::Level &level) {
+	for (int k = 0; k < 4; ++k) {
+		if (name == level_name(static_cast<Notice::Level>(k))) {
+			level = static_cast<Notice::Level>(k);
+			return true;
+		}
+	}
+	return false;
+}
+
+namespace {
+
+std::string text_of(const std::string &format, double v) {
+	char buffer[256];
+	std::snprintf(buffer, sizeof buffer, format.c_str(), v);
+	return buffer;
+}
+
+// a species as the readout names it: "CuSO4.5H2O(s)"
+std::string named(const SpeciesTable &table, SpeciesId s) {
+	const SpeciesDef &def = table.species(s);
+	static const char *const PHASE[] = { "s", "l", "g", "aq" };
+	return std::string(def.formula) + "(" + PHASE[static_cast<int>(def.phase)] + ")";
+}
+
+} // namespace
+
 struct Lab::Impl {
 	std::optional<Simulation> sim;
 	std::vector<Item> items;
@@ -153,8 +185,17 @@ struct Lab::Impl {
 	std::vector<Wire> wires;
 	std::vector<Rig> rigs;
 	std::vector<ControlSetting> controls;
-	int64_t made[4] = { 0, 0, 0, 0 }; // the parts made of each kind, for their names
+	int64_t made[PART_KINDS] = {}; // the parts made of each kind, for their names
 	bool rang = false; // an alarm started ringing in the last step
+	// notices (GAME_SPEC §13.4): what happened, and what the detectors last saw
+	std::vector<Notice> notices;
+	size_t notices_read = 0; // what the notice parts have read
+	std::vector<uint8_t> present; // item * species: a solid, liquid or dissolved species is there
+	std::vector<uint8_t> running; // item * reaction with a rate law: it runs there
+	std::vector<uint8_t> boiling, full; // per item
+	std::vector<uint8_t> touched; // per item: matter moved in or out by hand since the last reading
+	double tray_g = 0.0; // what the tray held at the last reading
+	bool restored_notices = false; // a load found them in its save
 
 	const SpeciesTable &table() const { return sim->world().species(); }
 	World &world() { return sim->world(); }
@@ -262,14 +303,41 @@ struct Lab::Impl {
 			return true;
 		}
 		const std::vector<Part> before = parts;
-		const SignalStep done = evaluate(parts, wires, rigs, [this](const Quantity &q) { return reading(q); }, static_cast<int64_t>(world().step()));
+		const size_t unread = notices_read;
+		const auto noticed = [this, unread](int level, const std::string &about) {
+			for (size_t k = unread; k < notices.size(); ++k) {
+				if (static_cast<int>(notices[k].level) >= level && (about.empty() || notices[k].item == about)) {
+					return true;
+				}
+			}
+			return false;
+		};
+		const SignalStep done = evaluate(parts, wires, rigs, [this](const Quantity &q) { return reading(q); }, static_cast<int64_t>(world().step()), noticed);
+		notices_read = notices.size();
+		for (size_t k = 0; k < parts.size() && k < before.size(); ++k) {
+			if (parts[k].kind == PartKind::Timer && parts[k].own && !before[k].own) {
+				note(Notice::Detail, parts[k].id, parts[k].id + " reached zero");
+			}
+		}
+		for (const std::string &alarm : done.rang) {
+			note(Notice::Event, alarm, alarm + " rang");
+		}
+		for (const std::string &writer : done.written) { // a writer's own notice: heard from the next step
+			const Part &w = parts[static_cast<size_t>(find_part(writer))];
+			note(static_cast<Notice::Level>(w.notice_level), w.quantity.item.empty() ? w.id : w.quantity.item, w.says.empty() ? w.id + " was signalled" : w.says);
+		}
 		std::vector<std::string> failing;
 		if (check) {
 			failing = check_G2(parts, wires, before);
 		}
 		for (const RigAction &a : done.actions) {
 			const Rig &rig = rigs[a.rig];
-			set_control(rig.item, rig.control, a.value, rig.from);
+			if (set_control(rig.item, rig.control, a.value, rig.from)) {
+				note(Notice::Detail, rig.item,
+						rig.from + (rig.control == "valve" ? text_of(" set the valve of " + rig.item + " to %.0f%%", 100.0 * a.value)
+										: rig.control == "stir" ? (a.value > 0.5 ? " started stirring " : " stopped stirring ") + rig.item
+																: " reset " + rig.item));
+			}
 		}
 		rang = !done.rang.empty();
 		if (check && failing.empty()) {
@@ -336,6 +404,13 @@ struct Lab::Impl {
 			if (p.kind == PartKind::Circuit) {
 				j["inner"] = { p.inner_w, p.inner_h };
 			}
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
+				j["level"] = level_name(static_cast<Notice::Level>(p.notice_level));
+				j["about"] = p.quantity.item;
+			}
+			if (p.kind == PartKind::Writer) {
+				j["says"] = p.says;
+			}
 			if (p.kind == PartKind::Monitor) {
 				j["watching"] = p.watching;
 				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
@@ -368,7 +443,10 @@ struct Lab::Impl {
 			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
 		}
 		out["controls"] = k;
-		out["made"] = { made[0], made[1], made[2], made[3] };
+		out["made"] = json::array();
+		for (const int64_t n : made) {
+			out["made"].push_back(n);
+		}
 		return out;
 	}
 
@@ -400,6 +478,13 @@ struct Lab::Impl {
 			if (x.contains("inner")) {
 				p.inner_w = x.at("inner").at(0).get<int>();
 				p.inner_h = x.at("inner").at(1).get<int>();
+			}
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
+				Notice::Level level = Notice::Warning;
+				level_of(x.value("level", std::string("warning")), level);
+				p.notice_level = static_cast<int>(level);
+				p.quantity.item = x.value("about", std::string());
+				p.says = x.value("says", std::string());
 			}
 			p.own = x.at("own").get<bool>();
 			p.out = x.at("out").get<bool>();
@@ -447,7 +532,7 @@ struct Lab::Impl {
 			}
 			controls.push_back(k);
 		}
-		for (size_t k = 0; k < 4 && k < j.at("made").size(); ++k) {
+		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
 			made[k] = j.at("made").at(k).get<int64_t>();
 		}
 		return true;
@@ -528,6 +613,166 @@ struct Lab::Impl {
 		return true;
 	}
 
+	// ---- notices (§13.4)
+
+	static constexpr size_t MAX_NOTICES = 2000;
+	static constexpr int64_t READ_EVERY = 15; // the detectors read a quarter of a lab-second at a time
+
+	void note(Notice::Level level, const std::string &about, const std::string &says) {
+		notices.push_back(Notice{ static_cast<int64_t>(world().step()), level, about, says });
+		if (notices.size() > MAX_NOTICES) {
+			const size_t drop = notices.size() - MAX_NOTICES / 2;
+			notices.erase(notices.begin(), notices.begin() + static_cast<std::ptrdiff_t>(drop));
+			notices_read = notices_read > drop ? notices_read - drop : 0;
+		}
+	}
+
+	// the detectors' reading of the state, written as notices where it changed;
+	// with `quiet`, only read (the bench as it opens, or loads)
+	void detect(bool quiet) {
+		const SpeciesTable &t = table();
+		const size_t species = static_cast<size_t>(t.species_count()), rated = sim->rated().size();
+		present.resize(items.size() * species, 0);
+		running.resize(items.size() * rated, 0);
+		boiling.resize(items.size(), 0);
+		full.resize(items.size(), 0);
+		touched.resize(items.size(), 0);
+		const std::span<const ReactionNote> notes = builtin_reaction_notes();
+		for (size_t i = 0; i < items.size(); ++i) {
+			const Item &x = items[i];
+			if (x.kind == Kind::Burner) {
+				continue;
+			}
+			if (x.kind == Kind::Tray) {
+				double held = 0.0;
+				for (size_t k = 0; k < species; ++k) {
+					const SpeciesDef &def = t.species(SpeciesId{ static_cast<int32_t>(k) });
+					held += def.phase != Phase::Gas && !def.wall ? grams(x.cell, SpeciesId{ static_cast<int32_t>(k) }) : 0.0;
+				}
+				if (!quiet && held > tray_g + 0.01) {
+					note(Notice::Warning, "tray", text_of("%.2f g spilled into the tray: a vessel overflowed", held - tray_g));
+				}
+				tray_g = held;
+				continue;
+			}
+			const bool by_hand = touched[i] != 0;
+			touched[i] = 0;
+			// what is there: a solid, liquid or dissolved species appearing, or used up
+			for (size_t k = 0; k < species; ++k) {
+				const SpeciesId s{ static_cast<int32_t>(k) };
+				const SpeciesDef &def = t.species(s);
+				if (def.wall || def.phase == Phase::Gas) {
+					continue;
+				}
+				uint8_t &was = present[i * species + k];
+				const double g = grams(x.cell, s);
+				if (!was && g >= 0.001) {
+					was = 1;
+					if (!quiet && !by_hand) {
+						note(Notice::Event, x.id, named(t, s) + " appeared in " + x.id);
+					}
+				} else if (was && g < 0.0001) {
+					was = 0;
+					if (!quiet && !by_hand) {
+						note(Notice::Event, x.id, named(t, s) + " is used up in " + x.id);
+					}
+				}
+			}
+			// a reaction with a rate law starting or stopping there (moving more than a ten-millionth of a mole a reading, or none)
+			for (size_t r = 0; r < rated; ++r) {
+				const int64_t extent = sim->tally(r, x.cell);
+				const double mol = std::fabs(static_cast<double>(extent)) * MOL_PER_QUANTUM;
+				uint8_t &on = running[i * rated + r];
+				const Reaction &reaction = sim->rated()[r];
+				const ReactionNote *n = nullptr;
+				for (const ReactionNote &candidate : notes) {
+					n = candidate.id == reaction.id() ? &candidate : n;
+				}
+				if (!on && mol >= 1e-7) {
+					on = 1;
+					if (!quiet) {
+						const std::string says = n != nullptr && !n->says.empty() ? std::string(n->says) : std::string(reaction.id()) + " began";
+						note(static_cast<Notice::Level>(n != nullptr ? n->level : 0), x.id, x.id + ": " + says);
+					}
+				} else if (on && mol < 1e-9) {
+					on = 0;
+					if (!quiet) {
+						std::string name(reaction.id());
+						std::replace(name.begin(), name.end(), '_', ' ');
+						note(Notice::Detail, x.id, x.id + ": " + name + " stopped");
+					}
+				}
+			}
+			// boiling, and boiling dry
+			const double kelvin_now = kelvin(x.cell), water = grams(x.cell, builtin::water);
+			if (!boiling[i] && water >= 0.05 && kelvin_now >= 273.15 + 99.5) {
+				boiling[i] = 1;
+				if (!quiet) {
+					note(Notice::Event, x.id, x.id + " boils");
+				}
+			} else if (boiling[i] && (water < 0.05 || kelvin_now < 273.15 + 99.0)) {
+				boiling[i] = 0;
+				if (!quiet) {
+					if (water < 0.05) {
+						note(Notice::Warning, x.id, x.id + " boiled dry: nothing is left for crystals to grow from");
+					} else {
+						note(Notice::Event, x.id, x.id + " stopped boiling");
+					}
+				}
+			}
+			// a balloon nearly full
+			if (x.kind == Kind::Bag && x.capacity > 0.0 && !x.burst) {
+				const Fill fill = fill_of(t, world().snapshot_cell(x.cell), kelvin_now);
+				const double share = (fill.gas + fill.condensed) / x.capacity;
+				if (!full[i] && share >= 0.8) {
+					full[i] = 1;
+					if (!quiet) {
+						note(Notice::Warning, x.id, x.id + text_of(" is %.0f%% full: past its capacity it bursts", 100.0 * share));
+					}
+				} else if (full[i] && share < 0.7) {
+					full[i] = 0;
+				}
+			}
+		}
+		sim->clear_tally();
+	}
+
+	json notices_json(bool exact) const {
+		json list = json::array();
+		for (const Notice &n : notices) {
+			list.push_back({ { "step", n.step }, { "level", level_name(n.level) }, { "item", n.item }, { "says", n.says } });
+		}
+		if (!exact) {
+			return list;
+		}
+		return { { "list", list }, { "read", notices_read }, { "present", present }, { "running", running }, { "boiling", boiling }, { "full", full }, { "touched", touched },
+			{ "tray_g", bits(tray_g) }, { "tally", sim->tally_all() } };
+	}
+	bool notices_from(const json &j, std::string &why) {
+		for (const json &n : j.at("list")) {
+			Notice::Level level = Notice::Detail;
+			if (!level_of(n.at("level").get<std::string>(), level)) {
+				why = "the save holds a notice of no level";
+				return false;
+			}
+			notices.push_back(Notice{ n.at("step").get<int64_t>(), level, n.at("item").get<std::string>(), n.at("says").get<std::string>() });
+		}
+		notices_read = j.at("read").get<size_t>();
+		present = j.at("present").get<std::vector<uint8_t>>();
+		running = j.at("running").get<std::vector<uint8_t>>();
+		boiling = j.at("boiling").get<std::vector<uint8_t>>();
+		full = j.at("full").get<std::vector<uint8_t>>();
+		touched = j.at("touched").get<std::vector<uint8_t>>();
+		if (!from_bits(j.at("tray_g"), tray_g)) {
+			why = "the save holds a number that is not one";
+			return false;
+		}
+		restored_tally = j.at("tally").get<std::vector<int64_t>>();
+		restored_notices = true;
+		return true;
+	}
+	std::vector<int64_t> restored_tally; // put back once the simulation is made
+
 	// one step; false when an invariant fails
 	bool step_once(std::string &why) {
 		// A checked step needs its trace to start where the last one ended. After
@@ -545,10 +790,15 @@ struct Lab::Impl {
 			if (!violations.empty()) {
 				broken = true;
 				why = "an invariant failed: " + violations[0];
+				note(Notice::Danger, "", why + ": the lab stopped");
 				return false;
 			}
 		}
+		if (world().step() % READ_EVERY == 0) {
+			detect(false);
+		}
 		if (!signals_step(why)) {
+			note(Notice::Danger, "", why + ": the lab stopped");
 			return false;
 		}
 		burst_balloons();
@@ -571,6 +821,7 @@ struct Lab::Impl {
 			}
 			bag.burst = true;
 			events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", bag.id });
+			note(Notice::Danger, bag.id, bag.id + " burst: it took more gas than it holds, and the gas went into the room");
 			if (bag.on >= 0) {
 				Item &v = items[static_cast<size_t>(bag.on)];
 				world().connect(v.cell, air, PHASES_GAS, &v.mouth);
@@ -967,6 +1218,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false); // the lab checks, and reports through its own status
 	impl->genesis = totals(table, impl->world().snapshot());
+	impl->detect(true); // what is there from the start is not news
 	return std::unique_ptr<Lab>(new Lab(std::move(impl)));
 }
 
@@ -1210,7 +1462,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	if (what == "part") {
 		PartKind kind = PartKind::Timer;
 		if (!c.contains("kind") || !c.at("kind").is_string() || !part_kind_of(c.at("kind").get<std::string>(), kind) || kind == PartKind::Circuit) {
-			why = "a part's \"kind\" is timer, monitor or alarm (a circuit is made of parts: \"circuit\")";
+			why = "a part's \"kind\" is timer, monitor, alarm, notice or writer (a circuit is made of parts: \"circuit\")";
 			return false;
 		}
 		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
@@ -1224,6 +1476,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		Part p;
 		p.kind = kind;
+		p.notice_level = kind == PartKind::Writer ? static_cast<int>(Notice::Event) : p.notice_level;
 		p.col = col;
 		p.row = row;
 		p.in = in;
@@ -1267,6 +1520,41 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			p.preset = std::max<int64_t>(1, static_cast<int64_t>(seconds * 60.0 + 0.5));
 			reset(p);
+			return true;
+		}
+		if (p.kind == PartKind::Notice) {
+			Notice::Level level = Notice::Warning;
+			if (!c.contains("level") || !c.at("level").is_string() || !level_of(c.at("level").get<std::string>(), level)) {
+				why = "a notice part is set to a \"level\": detail, event, warning or danger";
+				return false;
+			}
+			const std::string about = c.value("item", std::string());
+			if (!about.empty() && find(about) < 0 && find_part(about) < 0) {
+				why = "there is no \"" + about + "\" for it to hear about";
+				return false;
+			}
+			p.notice_level = static_cast<int>(level);
+			p.quantity.item = about;
+			return true;
+		}
+		if (p.kind == PartKind::Writer) {
+			Notice::Level level = Notice::Event;
+			if (!c.contains("level") || !c.at("level").is_string() || !level_of(c.at("level").get<std::string>(), level)) {
+				why = "a writer is set to a \"level\": detail, event, warning or danger";
+				return false;
+			}
+			const std::string about = c.value("item", std::string()), says = c.value("says", std::string());
+			if (!about.empty() && find(about) < 0 && find_part(about) < 0) {
+				why = "there is no \"" + about + "\" for it to write about";
+				return false;
+			}
+			if (says.size() > MAX_SAYS) {
+				why = text_of("a writer's words are at most %.0f characters", static_cast<double>(MAX_SAYS));
+				return false;
+			}
+			p.notice_level = static_cast<int>(level);
+			p.quantity.item = about;
+			p.says = says;
 			return true;
 		}
 		if (p.kind != PartKind::Monitor) {
@@ -1327,8 +1615,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			wires.erase(there);
 			return true;
 		}
-		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm) {
-			why = "an alarm sends no signal: it has no output to wire";
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm || parts[static_cast<size_t>(from)].kind == PartKind::Writer) {
+			why = std::string(parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm" : "a writer") + " sends no signal: it has no output to wire";
 			return false;
 		}
 		if (parts[static_cast<size_t>(from)].kind == PartKind::Circuit || parts[static_cast<size_t>(to)].kind == PartKind::Circuit) {
@@ -1361,8 +1649,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			rigs.erase(there);
 			return true;
 		}
-		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm || parts[static_cast<size_t>(from)].kind == PartKind::Circuit) {
-			why = parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm sends no signal: it has no output to rig" : "a circuit is rigged by the parts in it: open it";
+		if (!sends(parts[static_cast<size_t>(from)].kind)) {
+			why = parts[static_cast<size_t>(from)].kind == PartKind::Circuit ? "a circuit is rigged by the parts in it: open it"
+					: std::string(parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm" : "a writer") + " sends no signal: it has no output to rig";
 			return false;
 		}
 		const bool targets = r.control == "reset" ? find_part(r.item) >= 0 && parts[static_cast<size_t>(find_part(r.item))].kind == PartKind::Timer
@@ -1637,6 +1926,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!item(c, "from", Kind::Vessel, from, why) || !item(c, "to", Kind::Vessel, to, why)) {
 			return false;
 		}
+		touched.resize(items.size(), 0);
+		touched[static_cast<size_t>(from)] = touched[static_cast<size_t>(to)] = 1; // what a hand moves is not noticed as appearing
 		if (from == to) {
 			why = "a vessel is not poured into itself";
 			return false;
@@ -1933,6 +2224,7 @@ LabView Lab::view() const {
 	out.wires = m.wires;
 	out.rigs = m.rigs;
 	out.controls = m.controls;
+	out.notices = m.notices;
 	const Totals now = totals(table, m.world().snapshot());
 	out.conserved = now == m.genesis;
 	out.mass_g = now.mass.grams();
@@ -2017,6 +2309,7 @@ std::string Lab::report() const {
 	}
 	out["events"] = events;
 	out["signals"] = m.signals_json(false);
+	out["notices"] = m.notices_json(false);
 	// the conservation laws, as integers
 	const Totals now = totals(table, m.world().snapshot());
 	json conserved;
@@ -2088,6 +2381,9 @@ std::string Lab::digest() const {
 			hash.update_i64(p.left);
 			maybe(p.last);
 			hash.update_i64(p.rang_at);
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
+				hash.update_i64(p.notice_level); // what it hears, or writes, decides what is signalled
+			}
 		}
 		for (const Wire &w : m.wires) {
 			text(w.from);
@@ -2189,6 +2485,7 @@ json Lab::Impl::save() const {
 	}
 	bench["events"] = happened;
 	bench["signals"] = signals_json(true);
+	bench["notices"] = notices_json(true);
 	out["bench"] = bench;
 	return out;
 }
@@ -2307,6 +2604,9 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		if (bench.contains("signals") && !impl->signals_from(bench.at("signals"), why)) {
 			return nullptr;
 		}
+		if (bench.contains("notices") && !impl->notices_from(bench.at("notices"), why)) {
+			return nullptr;
+		}
 		const json &remainders = saved.at("remainders");
 		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {
 			why = "the save holds a number that is not one";
@@ -2340,6 +2640,11 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	impl->sim->set_checking(false);
 	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation));
 	impl->genesis = totals(table, impl->world().snapshot());
+	if (!impl->restored_notices) {
+		impl->detect(true); // a save from before notices: what the detectors see from now on
+	} else {
+		impl->sim->restore_tally(std::move(impl->restored_tally));
+	}
 	return std::unique_ptr<Lab>(new Lab(std::move(impl)));
 }
 

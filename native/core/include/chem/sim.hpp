@@ -55,6 +55,17 @@ public:
 	void restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation);
 	// the reactions of the equilibrium law (what invariant P1 is checked for)
 	const std::vector<Reaction> &equilibria() const { return equilibria_; }
+	// the reactions with a rate law, in the order the tally counts them
+	const std::vector<Reaction> &rated() const { return reactions_; }
+
+	// How far each reaction with a rate law ran in each cell since the tally was
+	// last cleared, in quanta of extent (forward positive): what has happened,
+	// for the lab's notices (GAME_SPEC §13.4); not state, never in a digest.
+	int64_t tally(size_t reaction, CellId cell) const;
+	void clear_tally() { tally_.assign(tally_.size(), 0); }
+	// all of it, cell by cell, and back (a save of the lab's notices holds it)
+	const std::vector<int64_t> &tally_all() const { return tally_; }
+	void restore_tally(std::vector<int64_t> tally) { tally_ = std::move(tally); }
 
 private:
 	void begin_step();
@@ -81,6 +92,7 @@ private:
 	std::vector<double> heat_remainder_;
 	std::vector<double> reaction_remainder_;
 	std::vector<double> nucleation_remainder_;
+	std::vector<int64_t> tally_; // cell * reactions + reaction
 	std::vector<uint8_t> starved_;
 	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
 	std::vector<uint8_t> thermal_valid_;

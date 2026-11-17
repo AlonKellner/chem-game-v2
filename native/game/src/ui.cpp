@@ -121,7 +121,9 @@ bool seconds_of(const std::string &text, double &seconds) {
 
 // the part editor (§13.3): what is being written, until it is set
 struct Draft {
-	enum Edit { None, Monitor, Timer, Rig, Choose } edit = None;
+	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer } edit = None;
+	int level = 2; // a notice part's, or a writer's
+	std::string says; // a writer's words, as typed
 	std::string part; // the part being set, or a rig's source
 	Quantity quantity; // a monitor's
 	Comparison::Op op = Comparison::Below;
@@ -133,14 +135,17 @@ struct Draft {
 	std::array<std::string, 3> percent; // a valve's settings, as typed
 };
 
-constexpr const char *PART_KINDS[] = { "timer", "monitor", "alarm" };
+constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
+constexpr int DRAWN_KINDS = 5; // what the drawer holds
+constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
 constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
 constexpr const char *OP_KEYS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
 constexpr const char *MEASURES[] = { "g", "count", "size", "purity" };
 constexpr const char *SIDES[] = { "on", "off", "change" };
 
 bool is_part_kind(const std::string &kind) {
-	return kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "circuit";
+	PartKind k = PartKind::Timer;
+	return part_kind_of(kind, k);
 }
 
 } // namespace
@@ -182,13 +187,16 @@ struct Ui::Impl {
 	// signals (§13.3): the part editor, a part being made or wired, what rang
 	Draft draft;
 	bool picking = false; // the monitor's list of quantities is open
-	int focus = -1; // the field typed into: 0, 1 a monitor's values; 2 a timer's preset; 3, 4, 5 a valve's setting on, off, on a change
+	int focus = -1; // the field typed into: 0, 1 a monitor's values; 2 a timer's preset; 3, 4, 5 a valve's setting on, off, on a change; 6 a writer's words
 	bool fresh = false; // the next key replaces the focused field
 	bool resume = false; // the clock was playing when the editor opened
 	int making = -1; // a part's kind, dragged out of the drawer
 	int wiring = -1; // the part whose port a wire is drawn from
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
 	std::string opened; // the circuit whose inside is shown (§13.3), "" for none
+	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
+	std::array<bool, 4> hear{ false, true, true, true };
+	bool notices_open = false;
 
 	void refresh() {
 		view = lab->view();
@@ -222,6 +230,75 @@ struct Ui::Impl {
 		return false;
 	}
 
+	// ---- notices (§13.4): the newest heard in the top bar; the panel, with a switch for each level
+	static Rect notices_button() { return Rect{ 1790, 14, 120, 36 }; }
+	static Rect notices_close() { return Rect{ NOTICES.x + NOTICES.w - 106, NOTICES.y + 12, 90, 30 }; }
+	static Rect hear_rect(int k) { return Rect{ NOTICES.x + 20 + static_cast<float>(k) * 122, NOTICES.y + 56, 114, 30 }; }
+	static uint32_t level_colour(lab::Notice::Level level) {
+		return level == lab::Notice::Danger ? BAD : level == lab::Notice::Warning ? WARN : level == lab::Notice::Event ? INK : DIM;
+	}
+	// a press on the notices: the button, the panel's switches; true when it took the press
+	bool notices_press(float x, float y) {
+		if (notices_button().has(x, y)) {
+			notices_open = !notices_open;
+			return true;
+		}
+		if (!notices_open) {
+			return false;
+		}
+		if (notices_close().has(x, y)) {
+			notices_open = false;
+			return true;
+		}
+		for (int k = 0; k < 4; ++k) {
+			if (hear_rect(k).has(x, y)) {
+				hear[static_cast<size_t>(k)] = !hear[static_cast<size_t>(k)];
+				return true;
+			}
+		}
+		return NOTICES.has(x, y); // the panel takes what falls on it
+	}
+	std::string when(int64_t step) const {
+		const double seconds = static_cast<double>(step) / 60.0;
+		return text_of("%02.0f:", std::floor(seconds / 60.0)) + text_of("%04.1f", seconds - 60.0 * std::floor(seconds / 60.0));
+	}
+	void paint_notices() {
+		// the newest heard, beside the clock
+		for (auto n = view.notices.rbegin(); n != view.notices.rend(); ++n) {
+			if (hear[static_cast<size_t>(n->level)]) {
+				std::string line = when(n->step) + "  " + n->says;
+				if (line.size() > 64) {
+					line = line.substr(0, 62) + "..";
+				}
+				text(1230, 40, line, level_colour(n->level), 15);
+				break;
+			}
+		}
+		button(notices_button(), text_of("notices %.0f", static_cast<double>(view.notices.size())), notices_open, 15);
+		if (!notices_open) {
+			return;
+		}
+		rect_fill(NOTICES, PANEL_FILL);
+		outline(NOTICES, GLASS, 1);
+		text(NOTICES.x + 20, NOTICES.y + 36, "what happened, newest first", INK, 20);
+		button(notices_close(), "close");
+		for (int k = 0; k < 4; ++k) {
+			button(hear_rect(k), std::string(level_name(static_cast<lab::Notice::Level>(k))) + (hear[static_cast<size_t>(k)] ? "" : " (off)"), hear[static_cast<size_t>(k)], 15);
+		}
+		float y = NOTICES.y + 120;
+		for (auto n = view.notices.rbegin(); n != view.notices.rend() && y < NOTICES.y + NOTICES.h - 20; ++n) {
+			if (!hear[static_cast<size_t>(n->level)]) {
+				continue; // silenced, and kept
+			}
+			text(NOTICES.x + 20, y, when(n->step) + "  " + level_name(n->level), level_colour(n->level), 14);
+			for (const std::string &l : wrapped(n->says, 54)) {
+				text(NOTICES.x + 150, y, l, level_colour(n->level), 14);
+				y += 20;
+			}
+			y += 6;
+		}
+	}
+
 	// what a tutorial's checks read of the screen
 	TutorialScreen screen_now() const {
 		TutorialScreen screen;
@@ -229,7 +306,7 @@ struct Ui::Impl {
 		screen.broken = lab->failed();
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
-		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose" };
+		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer" };
 		screen.edit.editing = EDITING[draft.edit];
 		screen.edit.part = draft.part;
 		screen.edit.quantity = draft.quantity;
@@ -610,7 +687,7 @@ struct Ui::Impl {
 		}
 		return out;
 	}
-	static Rect create_circuit_rect() { return Rect{ DRAWER.x + 350, DRAWER.y + 56, 96, 90 }; } // beside the three parts
+	static Rect create_circuit_rect() { return Rect{ DRAWER.x + 20, DRAWER.y + 180, 300, 30 }; } // under the parts
 	// the square of the open circuit's grid under a point; false outside it
 	bool inner_square(float x, float y, int &col, int &row) const {
 		const Rect g = circuit_grid();
@@ -755,6 +832,9 @@ struct Ui::Impl {
 				edit_press(x, y);
 				return;
 			}
+		}
+		if (notices_press(x, y)) {
+			return; // the notices are the player's, like the clock, under a tutorial too
 		}
 		if (!panel && draft.edit == Draft::None && circuit_press(x, y)) {
 			return;
@@ -925,10 +1005,10 @@ struct Ui::Impl {
 		return std::string(1, static_cast<char>(v.kind[0] - 'a' + 'A')) + digits;
 	}
 
-	static Rect drawer_rect(int k) { return Rect{ DRAWER.x + 20 + static_cast<float>(k) * 110, DRAWER.y + 56, 90, 90 }; }
+	static Rect drawer_rect(int k) { return Rect{ DRAWER.x + 14 + static_cast<float>(k) * 88, DRAWER.y + 46, 82, 110 }; }
 	// a part's output, on its right side; an alarm has none
 	bool port_rect(int index, Rect &r) const {
-		if (!is_part(index) || view.items[static_cast<size_t>(index)].kind == "alarm" || view.items[static_cast<size_t>(index)].kind == "circuit" || !visible(index)) {
+		if (!is_part(index) || !sends(view.items[static_cast<size_t>(index)].part.kind) || !visible(index)) {
 			return false;
 		}
 		const Rect body = drawn(index);
@@ -972,7 +1052,18 @@ struct Ui::Impl {
 		}
 		return out;
 	}
-	Rect edit_item(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 86, EDITOR.y + 60, 82, 30 }; }
+	Rect edit_item(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k % 8) * 86, EDITOR.y + 60 + static_cast<float>(k / 8) * 34, 82, 30 }; } // eight a row
+	// what a notice part can hear about, or a writer write about: the equipment, then the writers (§13.4)
+	std::vector<int> about_list() const {
+		std::vector<int> out = watchable();
+		for (int i = 0; i < static_cast<int>(view.items.size()) && out.size() < 15; ++i) {
+			if (view.items[static_cast<size_t>(i)].kind == "writer" && (draft.edit != Draft::Writer || id(i) != draft.part)) {
+				out.push_back(i);
+			}
+		}
+		return out; // after "any", or "itself": two rows
+	}
+	Rect says_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 174, 680, 30 }; }
 	Rect edit_quantity() const { return Rect{ EDITOR.x + 20, EDITOR.y + 108, 330, 30 }; }
 	Rect edit_measure(int k) const { return Rect{ EDITOR.x + 360 + static_cast<float>(k) * 70, EDITOR.y + 108, 64, 30 }; }
 	Rect edit_compare(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 96, EDITOR.y + 146, 92, 28 }; }
@@ -999,6 +1090,8 @@ struct Ui::Impl {
 		const int at = k < 0 ? k + 3 : k + 2;
 		return Rect{ EDITOR.x + 240 + static_cast<float>(at) * 64, EDITOR.y + 108, 60, 30 };
 	}
+	// a notice part's: the level it hears from, and what about ("any" first)
+	Rect level_rect(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 110, EDITOR.y + 134, 104, 30 }; }
 	// a rig's: its form, then a row for each setting
 	Rect form_button(int f) const { return Rect{ EDITOR.x + 20 + static_cast<float>(f) * 170, EDITOR.y + 60, 160, 30 }; }
 	std::vector<int> sides() const { return draft.change ? std::vector<int>{ 2 } : std::vector<int>{ 0, 1 }; }
@@ -1068,6 +1161,14 @@ struct Ui::Impl {
 		if (v.kind == "timer") {
 			d.edit = Draft::Timer;
 			d.preset = clock_text(static_cast<double>(v.part.preset) / 60.0);
+			open_edit(d);
+			return;
+		}
+		if (v.kind == "notice" || v.kind == "writer") {
+			d.edit = v.kind == "notice" ? Draft::Notice : Draft::Writer;
+			d.level = v.part.notice_level;
+			d.quantity.item = v.part.quantity.item;
+			d.says = v.part.says;
 			open_edit(d);
 			return;
 		}
@@ -1145,6 +1246,23 @@ struct Ui::Impl {
 				return;
 			}
 			const json c = { { "do", "set" }, { "part", draft.part }, { "seconds", seconds } };
+			if (guided_commit(c) && act(c)) {
+				close_edit();
+			}
+		} else if (draft.edit == Draft::Notice) {
+			if (!allowed_click("edit:set")) {
+				return;
+			}
+			const json c = { { "do", "set" }, { "part", draft.part }, { "level", level_name(static_cast<lab::Notice::Level>(draft.level)) }, { "item", draft.quantity.item } };
+			if (guided_commit(c) && act(c)) {
+				close_edit();
+			}
+		} else if (draft.edit == Draft::Writer) {
+			if (!allowed_click("edit:set")) {
+				return;
+			}
+			const json c = { { "do", "set" }, { "part", draft.part }, { "level", level_name(static_cast<lab::Notice::Level>(draft.level)) }, { "item", draft.quantity.item },
+				{ "says", draft.says } };
 			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
@@ -1277,6 +1395,33 @@ struct Ui::Impl {
 					fresh = true;
 					return;
 				}
+			}
+		}
+		if (draft.edit == Draft::Notice || draft.edit == Draft::Writer) {
+			for (int k = 0; k < 4; ++k) {
+				if (level_rect(k).has(x, y)) {
+					if (allowed_click(std::string("edit:level:") + level_name(static_cast<lab::Notice::Level>(k)))) {
+						draft.level = k;
+					}
+					return;
+				}
+			}
+			const std::vector<int> items = about_list();
+			for (int k = -1; k < static_cast<int>(items.size()); ++k) {
+				if (edit_item(k + 1).has(x, y)) {
+					const std::string about = k < 0 ? std::string() : id(items[static_cast<size_t>(k)]);
+					if (allowed_click("edit:item:" + (about.empty() ? std::string(draft.edit == Draft::Writer ? "itself" : "any") : about))) {
+						draft.quantity.item = about;
+					}
+					return;
+				}
+			}
+			if (draft.edit == Draft::Writer && says_field().has(x, y)) {
+				if (allowed_click("edit:says")) {
+					focus = 6;
+					fresh = false; // words are added to, not replaced
+				}
+				return;
 			}
 		}
 		if (draft.edit == Draft::Timer) {
@@ -1425,9 +1570,9 @@ struct Ui::Impl {
 	}
 	// a drag from the drawer, or from a part's port, begins
 	bool begin_signal_drag(float x, float y) {
-		for (int k = 0; k < 3; ++k) {
+		for (int k = 0; k < DRAWN_KINDS; ++k) {
 			if (drawer_rect(k).has(x, y)) {
-				if (guided() && !asks_drag_from(std::string("drawer:") + PART_KINDS[k])) {
+				if (guided() && !asks_drag_from(std::string("drawer:") + DRAWN[k])) {
 					not_now();
 					return true;
 				}
@@ -1474,7 +1619,7 @@ struct Ui::Impl {
 		int inner_col = 0, inner_row = 0;
 		if (!opened.empty() && circuit_panel().has(x, y)) {
 			if (inner_square(x, y, inner_col, inner_row) &&
-					act({ { "do", "part" }, { "kind", PART_KINDS[kind] }, { "at", { inner_col, inner_row } }, { "in", opened } })) {
+					act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { inner_col, inner_row } }, { "in", opened } })) {
 				const int made = static_cast<int>(view.items.size()) - 1;
 				choose_only(made);
 				edit_part(made);
@@ -1485,11 +1630,11 @@ struct Ui::Impl {
 			return;
 		}
 		const int target = item_at(x, y, -1, true);
-		if (!guided_signal_drop(std::string("drawer:") + PART_KINDS[kind], target, x, y)) {
+		if (!guided_signal_drop(std::string("drawer:") + DRAWN[kind], target, x, y)) {
 			return;
 		}
 		const int col = static_cast<int>((x - BENCH.x) / square()), row = static_cast<int>((y - BENCH.y) / square());
-		if (act({ { "do", "part" }, { "kind", PART_KINDS[kind] }, { "at", { col, row } } })) {
+		if (act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { col, row } } })) {
 			const int made = static_cast<int>(view.items.size()) - 1;
 			choose_only(made);
 			edit_part(made);
@@ -1511,7 +1656,7 @@ struct Ui::Impl {
 			d.part = id(source);
 			d.item = t.id;
 			open_edit(d);
-		} else if (t.kind == "monitor" || t.kind == "alarm") {
+		} else if (t.kind == "monitor" || t.kind == "alarm" || t.kind == "notice" || t.kind == "writer") {
 			act({ { "do", "wire" }, { "from", id(source) }, { "to", t.id } });
 		} else if (t.kind == "vessel") {
 			edit_rig(id(source), t.id, "stir");
@@ -1541,6 +1686,10 @@ struct Ui::Impl {
 			commit();
 			return;
 		}
+		if (focus == 6) {
+			type_words(key, codepoint);
+			return;
+		}
 		std::string *field = focus == 0 || focus == 1 ? &draft.text[static_cast<size_t>(focus)] : focus == 2 ? &draft.preset : focus >= 3 && focus <= 5 ? &draft.percent[static_cast<size_t>(focus - 3)] : nullptr;
 		if (field == nullptr) {
 			return;
@@ -1561,6 +1710,38 @@ struct Ui::Impl {
 		}
 		if (focus >= 3) {
 			read_percent(focus - 3);
+		}
+	}
+
+	// a writer's words: any character, in UTF-8, up to MAX_SAYS bytes
+	void type_words(Ui::Key key, uint32_t codepoint) {
+		std::string &words = draft.says;
+		if (key == Ui::KeyBackspace) {
+			while (!words.empty() && (static_cast<unsigned char>(words.back()) & 0xC0) == 0x80) {
+				words.pop_back(); // a character's continuing bytes
+			}
+			if (!words.empty()) {
+				words.pop_back();
+			}
+			return;
+		}
+		if (key != Ui::KeyText || codepoint < 32 || codepoint == 127 || codepoint > 0x10FFFF || (codepoint >= 0xD800 && codepoint <= 0xDFFF)) {
+			return;
+		}
+		std::string ch;
+		if (codepoint < 0x80) {
+			ch = std::string(1, static_cast<char>(codepoint));
+		} else if (codepoint < 0x800) {
+			ch = { static_cast<char>(0xC0 | (codepoint >> 6)), static_cast<char>(0x80 | (codepoint & 0x3F)) };
+		} else if (codepoint < 0x10000) {
+			ch = { static_cast<char>(0xE0 | (codepoint >> 12)), static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)), static_cast<char>(0x80 | (codepoint & 0x3F)) };
+		} else {
+			ch = { static_cast<char>(0xF0 | (codepoint >> 18)), static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F)), static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F)),
+				static_cast<char>(0x80 | (codepoint & 0x3F)) };
+		}
+		const std::string typed = words + ch;
+		if (typed.size() <= MAX_SAYS && allowed_text(typed)) {
+			words = typed;
 		}
 	}
 
@@ -1601,6 +1782,13 @@ struct Ui::Impl {
 						(two_values(x.comparison.op) ? " and " + shown(x.quantity, x.comparison.b) : "") + " (now " + shown(x.quantity, now(x.quantity)) + ")";
 			} else if (x.kind == PartKind::Timer) {
 				said += ": " + p + " at " + clock_text(static_cast<double>(x.left) / 60.0);
+			} else if (x.kind == PartKind::Notice && !view.notices.empty()) {
+				for (auto n = view.notices.rbegin(); n != view.notices.rend(); ++n) {
+					if (static_cast<int>(n->level) >= x.notice_level && (x.quantity.item.empty() || n->item == x.quantity.item)) {
+						said += ": " + p + " heard \"" + n->says + "\"";
+						break;
+					}
+				}
 			}
 		}
 		message = said;
@@ -1688,6 +1876,8 @@ struct Ui::Impl {
 			text(r.x + 3, r.y + r.h - 4, text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60)), DIM, 10);
 		} else if (v.kind == "monitor") {
 			text(r.x + 3, r.y + r.h - 4, p.watching ? op_name(p.comparison.op) : "unset", DIM, 9);
+		} else if (v.kind == "notice" || v.kind == "writer") {
+			text(r.x + 3, r.y + r.h - 4, level_name(static_cast<lab::Notice::Level>(p.notice_level)), DIM, 9);
 		}
 		circle(r.x + r.w - 8, r.y + 8, 4, ringing ? WARN : p.out ? GOOD : BUTTON);
 		Rect port;
@@ -1785,7 +1975,7 @@ struct Ui::Impl {
 			const Rect ghost{ px - 18, py - 18, 36, 36 };
 			rect_fill(ghost, PANEL_FILL);
 			outline(ghost, GUIDE, 2);
-			text(ghost.x + 4, ghost.y + 15, std::string(1, static_cast<char>(PART_KINDS[making][0] - 'a' + 'A')), INK, 13);
+			text(ghost.x + 4, ghost.y + 15, std::string(1, static_cast<char>(DRAWN[making][0] - 'a' + 'A')), INK, 13);
 		}
 		// what set an alarm off, pulsing, until the clock plays
 		for (const std::string &part : chain) {
@@ -1815,27 +2005,26 @@ struct Ui::Impl {
 		rect_fill(DRAWER, PANEL_FILL);
 		outline(DRAWER, GRID, 1);
 		text(DRAWER.x + 14, DRAWER.y + 26, "parts: drag one onto the bench", INK, 17);
-		static const char *const SAYS[] = { "counts down", "watches a value", "stops the clock" };
-		for (int k = 0; k < 3; ++k) {
+		static const char *const SAYS[][2] = { { "counts", "down" }, { "watches", "a value" }, { "stops", "the clock" }, { "hears", "notices" }, { "writes", "a notice" } };
+		for (int k = 0; k < DRAWN_KINDS; ++k) {
 			const Rect r = drawer_rect(k);
 			rect_fill(r, BUTTON);
 			outline(r, GRID, 1);
-			text(r.x + 10, r.y + 30, PART_KINDS[k], INK, 17);
-			text(r.x + 10, r.y + 56, std::string(1, static_cast<char>(PART_KINDS[k][0] - 'a' + 'A')), DIM, 22);
-			text(r.x, r.y + r.h + 22, SAYS[k], DIM, 13);
+			text(r.x + 8, r.y + 26, DRAWN[k], INK, 16);
+			text(r.x + 8, r.y + 54, std::string(1, static_cast<char>(DRAWN[k][0] - 'a' + 'A')), DIM, 22);
+			text(r.x + 8, r.y + 80, SAYS[k][0], DIM, 12);
+			text(r.x + 8, r.y + 96, SAYS[k][1], DIM, 12);
 		}
 		if (!circuit_parts().empty()) {
 			const Rect c = create_circuit_rect();
 			rect_fill(c, rgba(40, 60, 80));
 			outline(c, GRID, 1);
-			text(c.x + 8, c.y + 26, "create", INK, 16);
-			text(c.x + 8, c.y + 48, "circuit", INK, 16);
 			const size_t n = circuit_parts().size();
-			text(c.x + 8, c.y + 74, text_of(n == 1 ? "of %.0f part" : "of %.0f parts", static_cast<double>(n)), DIM, 13);
+			text(c.x + 8, c.y + 21, text_of(n == 1 ? "create circuit of %.0f part" : "create circuit of %.0f parts", static_cast<double>(n)), INK, 16);
 		}
-		text(DRAWER.x + 14, DRAWER.y + 210, "wire a part from its port, on its right:", DIM, 14);
-		text(DRAWER.x + 14, DRAWER.y + 232, "into another part, or onto a control to rig it", DIM, 14);
-		text(DRAWER.x + 14, DRAWER.y + 254, "(a vessel's stirring, a burner's valve, a timer's reset)", DIM, 14);
+		text(DRAWER.x + 14, DRAWER.y + 234, "wire a part from its port, on its right: into another", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 254, "part, or onto a control to rig it (a vessel's stirring,", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 274, "a burner's valve, a timer's reset)", DIM, 13);
 	}
 
 	void paint_item(int index, Rect r) {
@@ -1955,6 +2144,7 @@ struct Ui::Impl {
 		paint_signals();
 		paint_readout();
 		paint_drawer();
+		paint_notices();
 		if (panel) {
 			paint_panel();
 		}
@@ -1984,8 +2174,8 @@ struct Ui::Impl {
 		};
 		std::string_view rest;
 		if (after("drawer:", rest)) {
-			for (int k = 0; k < 3; ++k) {
-				if (rest == PART_KINDS[k]) {
+			for (int k = 0; k < DRAWN_KINDS; ++k) {
+				if (rest == DRAWN[k]) {
 					return found(drawer_rect(k));
 				}
 			}
@@ -2023,6 +2213,28 @@ struct Ui::Impl {
 			more = rest.substr(prefix.size());
 			return true;
 		};
+		if (draft.edit == Draft::Notice || draft.edit == Draft::Writer) {
+			if (draft.edit == Draft::Writer && rest == "says") {
+				return found(says_field());
+			}
+			for (int k = 0; sub("level:") && k < 4; ++k) {
+				if (more == level_name(static_cast<lab::Notice::Level>(k))) {
+					return found(level_rect(k));
+				}
+			}
+			if (sub("item:")) {
+				if (more == (draft.edit == Draft::Writer ? "itself" : "any")) {
+					return found(edit_item(0));
+				}
+				const std::vector<int> items = about_list();
+				for (int k = 0; k < static_cast<int>(items.size()); ++k) {
+					if (id(items[static_cast<size_t>(k)]) == more) {
+						return found(edit_item(k + 1));
+					}
+				}
+			}
+			return false;
+		}
 		if (draft.edit == Draft::Monitor) {
 			if (picking) {
 				const std::vector<Quantity> qs = pickable();
@@ -2430,6 +2642,12 @@ struct Ui::Impl {
 			} else if (v.kind == "timer") {
 				row(clock_text(static_cast<double>(p.left) / 60.0) + " left of " + clock_text(static_cast<double>(p.preset) / 60.0), DIM, 15);
 				row(p.left == 0 ? "at zero: on until it is reset" : "", DIM, 15);
+			} else if (v.kind == "notice" || v.kind == "writer") {
+				const std::string level = level_name(static_cast<lab::Notice::Level>(p.notice_level));
+				const std::string about = p.quantity.item.empty() ? (v.kind == "notice" ? "anything" : "itself") : p.quantity.item;
+				const std::string a = level == "event" ? "an " : "a ";
+				row(v.kind == "notice" ? "hears " + level + " notices and above, about " + about : "writes " + a + level + " notice about " + about + " when its input turns on", DIM, 15);
+				row(v.kind == "writer" ? "\"" + (p.says.empty() ? v.id + " was signalled" : p.says) + "\"" : "", DIM, 15);
 			} else {
 				row(p.ringing ? "ringing: play on to answer it" : "rings when its input turns on", p.ringing ? WARN : DIM, 15);
 				row("", DIM, 15);
@@ -2452,7 +2670,10 @@ struct Ui::Impl {
 				named += (i > 0 ? ", " : "") + inputs[i];
 			}
 			if (v.kind != "circuit") {
-				row(inputs.empty() ? "no inputs: it signals freely" : named + " (any on lets it signal)", DIM, 15);
+				const bool takes = !sends(v.part.kind); // an alarm, a writer: its input turning on is what it acts on
+				row(inputs.empty() ? (takes ? "no inputs: wire one in, or it never acts" : "no inputs: it signals freely")
+								   : named + (takes ? " (any turning on sets it off)" : " (any on lets it signal)"),
+						DIM, 15);
 			}
 			for (const Wire &w : view.wires) {
 				if (w.from == v.id) {
@@ -2581,6 +2802,30 @@ struct Ui::Impl {
 					text(r.x + 8, r.y + 19, name.substr(name.find(": ") + 2), INK, 15);
 				}
 			}
+		} else if (draft.edit == Draft::Writer) {
+			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " writes a notice about", INK, 22);
+			const std::vector<int> items = about_list();
+			button(edit_item(0), "itself", draft.quantity.item.empty(), 14);
+			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
+				button(edit_item(k + 1), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
+			}
+			for (int k = 0; k < 4; ++k) {
+				button(level_rect(k), level_name(static_cast<lab::Notice::Level>(k)), draft.level == k);
+			}
+			field(says_field(), draft.says.empty() && focus != 6 ? std::string("(its words: click to type)") : draft.says, focus == 6);
+			text(EDITOR.x + 20, EDITOR.y + 230, "When its input turns on, it writes these words at that level; notice parts hear it.", DIM, 14);
+		} else if (draft.edit == Draft::Notice) {
+			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " hears notices about", INK, 22);
+			const std::vector<int> items = about_list();
+			button(edit_item(0), "any", draft.quantity.item.empty(), 14);
+			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
+				button(edit_item(k + 1), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
+			}
+			for (int k = 0; k < 4; ++k) {
+				button(level_rect(k), std::string(level_name(static_cast<lab::Notice::Level>(k))) + (k < 3 ? " up" : ""), draft.level == k);
+			}
+			text(EDITOR.x + 20, EDITOR.y + 192, "It signals for a step when a notice at that level or above is written.", DIM, 15);
+			text(EDITOR.x + 20, EDITOR.y + 214, "Wire it to an alarm to stop the clock on, say, every warning.", DIM, 15);
 		} else if (draft.edit == Draft::Timer) {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " counts down from", INK, 22);
 			field(preset_field(), draft.preset, focus == 2);
@@ -2884,6 +3129,16 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	if (after("item:", rest)) {
 		const int i = index_of(rest);
 		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && m.visible(i) && centre(m.rect(i));
+	}
+	if (what == "notices") {
+		return centre(Impl::notices_button());
+	}
+	if (what == "notices:close") {
+		return m.notices_open && centre(Impl::notices_close());
+	}
+	if (after("notices:", rest)) {
+		lab::Notice::Level level = lab::Notice::Detail;
+		return m.notices_open && level_of(rest, level) && centre(Impl::hear_rect(static_cast<int>(level)));
 	}
 	if (what == "circuit:create") {
 		return !m.circuit_parts().empty() && centre(Impl::create_circuit_rect());

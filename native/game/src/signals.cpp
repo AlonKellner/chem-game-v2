@@ -16,18 +16,26 @@ const char *part_kind_name(PartKind kind) {
 			return "alarm";
 		case PartKind::Circuit:
 			return "circuit";
+		case PartKind::Notice:
+			return "notice";
+		case PartKind::Writer:
+			return "writer";
 	}
 	return "?";
 }
 
 bool part_kind_of(std::string_view name, PartKind &kind) {
-	for (const PartKind k : { PartKind::Timer, PartKind::Monitor, PartKind::Alarm, PartKind::Circuit }) {
-		if (name == part_kind_name(k)) {
-			kind = k;
+	for (int k = 0; k < PART_KINDS; ++k) {
+		if (name == part_kind_name(static_cast<PartKind>(k))) {
+			kind = static_cast<PartKind>(k);
 			return true;
 		}
 	}
 	return false;
+}
+
+bool sends(PartKind kind) {
+	return kind != PartKind::Alarm && kind != PartKind::Writer && kind != PartKind::Circuit;
 }
 
 namespace {
@@ -68,7 +76,7 @@ void reset(Part &timer) {
 	timer.out = false;
 }
 
-SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step) {
+SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step, const NoticeReader &noticed) {
 	SignalStep out;
 	const std::vector<Part> before = parts;
 	for (Part &p : parts) {
@@ -107,6 +115,19 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 			case PartKind::Circuit:
 				p.own = p.out = false; // what is in it signals
 				break;
+			case PartKind::Notice:
+				p.own = noticed && noticed(p.notice_level, p.quantity.item);
+				p.out = p.own && on;
+				break;
+			case PartKind::Writer: {
+				const bool was = p.own;
+				p.own = any_on; // a writer with no input never writes
+				if (p.own && !was) {
+					out.written.push_back(p.id);
+				}
+				p.out = false;
+				break;
+			}
 		}
 	}
 	// a rig is an input too: it reads its source's signal as it was at the end of the step before
@@ -129,7 +150,7 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 std::vector<std::string> check_G2(const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Part> &before) {
 	std::vector<std::string> broken;
 	for (const Part &p : parts) {
-		const bool expected = p.kind != PartKind::Alarm && p.own && enabled(p.id, wires, before);
+		const bool expected = sends(p.kind) && p.own && enabled(p.id, wires, before);
 		if (p.out != expected) {
 			broken.push_back("G2: the signal of \"" + p.id + "\" is not its own condition while its inputs let it");
 		}

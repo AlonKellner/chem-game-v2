@@ -684,7 +684,20 @@ Refusal Simulation::transfer(EdgeId edge, CellId from, std::span<const SpeciesAm
 
 Refusal Simulation::transform(CellId cell, const Reaction &reaction, int64_t extent) {
 	thermal_valid_[static_cast<size_t>(cell.index)] = 0;
-	return world_.transform(cell, reaction, extent);
+	const Refusal refused = world_.transform(cell, reaction, extent);
+	if (refused == Refusal::None && !reactions_.empty() && &reaction >= reactions_.data() && &reaction < reactions_.data() + reactions_.size()) {
+		const size_t r = static_cast<size_t>(&reaction - reactions_.data()), at = static_cast<size_t>(cell.index) * reactions_.size() + r;
+		if (tally_.size() <= at) {
+			tally_.resize(static_cast<size_t>(world_.cell_count()) * reactions_.size(), 0);
+		}
+		tally_[at] += extent;
+	}
+	return refused;
+}
+
+int64_t Simulation::tally(size_t reaction, CellId cell) const {
+	const size_t at = static_cast<size_t>(cell.index) * reactions_.size() + reaction;
+	return at < tally_.size() ? tally_[at] : 0;
 }
 
 // what was derived before the step may be stale: a host may have changed the world between steps

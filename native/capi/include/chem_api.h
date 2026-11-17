@@ -259,11 +259,11 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
 enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
 
-/* The signals on the bench (GAME_SPEC §13.3): timers, monitors and alarms.
+/* The signals on the bench (GAME_SPEC §13.3): timers, monitors, alarms, notice parts, writers, circuits.
  * Borrowed until the next call on this ui. */
 typedef struct cg_part {
 	const char *id; /* "monitor1" */
-	const char *kind; /* "timer", "monitor", "alarm" */
+	const char *kind; /* "timer", "monitor", "alarm", "notice", "writer", "circuit" */
 	int32_t col, row; /* its square */
 	int32_t out; /* it signals */
 	int32_t ringing; /* an alarm, until answered */

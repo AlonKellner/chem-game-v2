@@ -221,4 +221,15 @@ private:
 const SpeciesTable &builtin_species();
 std::span<const Reaction> builtin_reactions();
 
+// What the game says of a built-in reaction (data/reactions.json "notice",
+// GAME_SPEC §13.4): the level of the notice when it starts in an item (0
+// detail, 1 event, 2 warning, 3 danger), and what it says then. Text for the
+// player, not physics: one per reaction, in builtin_reactions()'s order.
+struct ReactionNote {
+	std::string_view id;
+	int level = 0;
+	std::string_view says;
+};
+std::span<const ReactionNote> builtin_reaction_notes();
+
 } // namespace chem
