@@ -364,3 +364,86 @@ TEST_CASE("refraction: through a prism a white slit spreads into its spectrum, v
 	CHECK(ordered == looked);
 	CHECK(spread * 57.2957795 > 4.0); // flint glass: several degrees between violet and red
 }
+
+// ---- the renderer's frames through glass (GAME_SPEC §12.2: band cuts; the content key)
+
+#include "lab/prism_demo.hpp"
+
+namespace {
+
+double frame_error(const OpticsScene &scene, const lab::OpticsFrames &frames, int x, int y) {
+	double truth[3], now[3];
+	lab::optics_truth(scene, x, y, truth);
+	frames.colour(scene, x, y, now);
+	const auto seen = [](const double c[3]) {
+		return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2],
+				0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+	};
+	return lab::eye_difference(seen(truth), seen(now));
+}
+
+// visibly wrong pixels on a row of the prism's silhouette after `frames` frames
+int prism_wrong(lab::PrismDemo &demo, lab::OpticsFrames &rendered, bool cuts, int frames) {
+	OpticsScene scene;
+	for (int f = 0; f < frames; ++f) {
+		scene = demo.optics();
+		scene.table[2 * 4 + 3] = cuts ? 1.0f : 0.0f;
+		rendered.frame(scene);
+	}
+	int wrong = 0;
+	for (int x = 890; x < 1190; x += 2) {
+		if (lab::optics_cover(scene, x, 540) > 0.0 && frame_error(scene, rendered, x, 540) > lab::EYE_VISIBLE) {
+			++wrong;
+		}
+	}
+	return wrong;
+}
+
+} // namespace
+
+TEST_CASE("optics: a pixel's bands are cut where its bent view crosses a drawn edge: the prism's spectrum settles, and stays right when turned (Stage 11)") {
+	lab::PrismDemo demo;
+	lab::OpticsFrames rendered(890, 538, 300, 4);
+	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
+	demo.turn(0.06);
+	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
+	// without the cuts, pixels that see the slit through a narrow window of wavelengths miss it and stay wrong
+	lab::PrismDemo plain;
+	lab::OpticsFrames uncut(890, 538, 300, 4);
+	const int before = prism_wrong(plain, uncut, false, 40);
+	plain.turn(0.06);
+	const int after = prism_wrong(plain, uncut, false, 40);
+	MESSAGE("without cuts: " << before << " pixels wrong on the row as it opens, " << after << " after a turn");
+	CHECK(before + after > 0);
+}
+
+TEST_CASE("optics: a dragged vessel's glass is seen right where it stops, above its liquid too (Stage 11)") {
+	// the content key holds where the view crosses the glass, so a pixel above the liquid starts again as the vessel moves
+	ItemView v = vessel(0.3, true);
+	lab::OpticsRoom r = room(true);
+	for (int k = 0; k < 6; ++k) {
+		r.shapes.push_back(lab::OpticsShape{ 60.0f + 30.0f * k, 0.0f, 1.0f, 1000.0f, 0.55 });
+	}
+	lab::OpticsFrames rendered(60, 95, 220, 125);
+	OpticsScene scene;
+	float x = X;
+	for (int f = 0; f < 70; ++f) {
+		if (f < 40) {
+			x += 1.5f;
+		}
+		scene = OpticsScene{};
+		lab::optics_compose(scene, r, { lab::OpticsBody{ &v, x, Y, W, H } });
+		rendered.frame(scene);
+	}
+	int wrong = 0, looked = 0;
+	for (int yy = static_cast<int>(Y) + 1; yy < static_cast<int>(Y) + 20; yy += 3) { // above the liquid
+		for (int xx = static_cast<int>(x); xx < static_cast<int>(x + W); xx += 3) {
+			if (lab::optics_cover(scene, xx, yy) > 0.0) {
+				++looked;
+				wrong += frame_error(scene, rendered, xx, yy) > lab::EYE_VISIBLE ? 1 : 0;
+			}
+		}
+	}
+	CHECK(looked > 50);
+	CHECK(wrong == 0);
+}

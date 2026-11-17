@@ -477,8 +477,12 @@ int crystals() {
 } // namespace
 
 int spectrum_study(); // spectrum.cpp
+int frames_study(); // frames.cpp
 
 int run_study(const char *name) {
+	if (std::strcmp(name, "frames") == 0) {
+		return frames_study();
+	}
 	if (std::strcmp(name, "spectrum") == 0) {
 		return spectrum_study();
 	}

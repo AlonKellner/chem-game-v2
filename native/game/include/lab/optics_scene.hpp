@@ -16,7 +16,8 @@ namespace lab {
 namespace optics_layout {
 inline constexpr int MAX_BODIES = 16;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
-// the vessels (cm), the radiance of the room in front, whether anything refracts (1 or 0), unused
+// the vessels (cm), the radiance of the room in front, whether anything refracts (1 or 0), whether bands are cut
+// at the edges a bent view crosses (1 or 0)
 inline constexpr int HEADER_VECS = 3;
 inline constexpr int BODY_VECS = 7;
 // the drawn shapes behind the bodies (GAME_SPEC §12.3): two vec4s each, its rectangle and its radiance
@@ -76,6 +77,7 @@ struct OpticsRoom {
 	std::vector<OpticsShape> shapes; // in painting order
 	double wall_cm = 20.0; // how far behind the vessels' axes the wall stands
 	double front = 0.3; // the radiance of the room in front of the bench, which glass reflects
+	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
 
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
@@ -126,6 +128,8 @@ public:
 	int frames() const;
 	// whether pixel (x, y)'s history started again in the last frame
 	bool restarted(int x, int y) const;
+	// the points pixel (x, y) spent in the last frame
+	double spent(int x, int y) const;
 
 private:
 	struct State;

@@ -83,6 +83,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(2, 0, room.wall_cm);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
+	put(2, 3, room.cuts ? 1.0 : 0.0);
 
 	int count = 0, line_count = 0, shape_count = 0;
 	for (const OpticsBody &body : bodies) {

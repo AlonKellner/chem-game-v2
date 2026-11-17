@@ -331,6 +331,14 @@ int OpticsFrames::frames() const {
 	return frame_;
 }
 
+double OpticsFrames::spent(int x, int y) const {
+	const int col = x - x_, row = y - y_;
+	if (col < 0 || row < 0 || col >= w_ || row >= h_) {
+		return 0.0;
+	}
+	return (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s.aux.w;
+}
+
 bool OpticsFrames::restarted(int x, int y) const {
 	const int col = x - x_, row = y - y_;
 	return col >= 0 && row >= 0 && col < w_ && row < h_ && restarted_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)] != 0;

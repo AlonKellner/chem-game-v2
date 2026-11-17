@@ -170,7 +170,6 @@ Path path_of(vec2 p) {
 			if (q.rprism) {
 				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // its centre, which its corners are given from
 				q.rd = (p.x - q.raxis) * form.y;
-				q.key.x = q.key.x + 0.37 * q.rd * (1.0 + 0.6180339887 * float(i)); // where the pixel looks through it
 			}
 		}
 		if (q.layers == 0) {
@@ -188,10 +187,15 @@ Path path_of(vec2 p) {
 		q.cover = max(q.cover, cover);
 		vec4 ids = scene_vec(at + 4);
 		float w = 1.0 + 0.6180339887 * float(i);
-		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze) * w, (l.solid + 7.0 * l.wall) * w, ids.x, ids.y * w);
+		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * cover) * w, (l.solid + 7.0 * l.wall) * w, ids.x, ids.y * w);
 	}
 	// what glows is shown as it is, outside the history; it is in the key so that a pixel shows it anew
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
+	// where the view goes through a refracting body: the ray's distance from its axis, its size, its glass, its medium
+	if (q.refractor >= 0) {
+		q.key.x = q.key.x + 0.37 * q.rd + 0.53 * q.rr + 1.7 * q.rt + (q.rliquid ? 0.19 : 0.0) + 0.43 * q.rcover;
+		q.key.y = q.key.y + 0.31 * q.raxis;
+	}
 	return q;
 }
 
@@ -294,6 +298,7 @@ struct Bend {
 	float x;
 	float pass;
 	float chord;
+	float route; // which surfaces the ray crossed, as a number: where it changes, what the pixel sees jumps
 };
 
 // a prism (GAME_SPEC §12.3, the prism demo): the view ray traced through a triangle of glass seen from
@@ -304,6 +309,7 @@ Bend prism_bend(Path q, float nm) {
 	b.x = q.x;
 	b.pass = 1.0;
 	b.chord = 0.0;
+	b.route = 0.0;
 	int at = HEADER_VECS + q.refractor * BODY_VECS;
 	vec4 m = scene_vec(at + 2);
 	vec4 g = scene_vec(at + 3);
@@ -350,6 +356,7 @@ Bend prism_bend(Path q, float nm) {
 		ox = ox + best * ux;
 		oz = oz + best * uz;
 		last = hit;
+		b.route = b.route * 4.0 + float(hit + 1);
 		// the face's normal, against the ray
 		float len = sqrt(ex * ex + ez * ez);
 		float nx = ez / len;
@@ -367,6 +374,7 @@ Bend prism_bend(Path q, float nm) {
 			// turned back: all of it stays in the glass
 			ux = ux + 2.0 * cos_i * nx;
 			uz = uz + 2.0 * cos_i * nz;
+			b.route = b.route + 100.0;
 			continue;
 		}
 		float cos_t = sqrt(1.0 - sin2);
@@ -385,6 +393,7 @@ Bend prism_bend(Path q, float nm) {
 	}
 	vec4 head = scene_vec(2);
 	float landed = uz > 0.05 ? ox + ux * (head.x - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
+	b.route = b.route + (uz > 0.05 ? 0.0 : 1000.0) + (inside ? 2000.0 : 0.0);
 	b.x = q.raxis + landed / q.rcm;
 	b.pass = 1.0 - q.rcover * (1.0 - b.pass);
 	return b;
@@ -395,6 +404,7 @@ Bend bend_at(Path q, float nm) {
 	b.x = q.x;
 	b.pass = 1.0;
 	b.chord = 0.0;
+	b.route = 0.0;
 	if (q.refractor < 0) {
 		return b;
 	}
@@ -427,6 +437,7 @@ Bend bend_at(Path q, float nm) {
 	float c = cos(turn);
 	float landed = c > 0.05 ? (d - head.x * sin(turn)) / c : -100000.0;
 	b.x = q.raxis + (q.rd < 0.0 ? -landed : landed) / q.rcm;
+	b.route = (inner ? 1.0 : 0.0) + (c > 0.05 ? 0.0 : 2.0) + (b.chord > 0.0 ? 4.0 : 0.0);
 	return b;
 }
 
@@ -471,18 +482,189 @@ vec3 to_linear_srgb(vec3 c) {
 	return vec3(3.2404542 * c.x - 1.5371385 * c.y - 0.4985314 * c.z, -0.9692660 * c.x + 1.8760108 * c.y + 0.0415560 * c.z, 0.0556434 * c.x - 0.2040259 * c.y + 1.0572252 * c.z);
 }
 
-// n bands, each its exact colour times what gets through at one point in it; offset in [0, 1) places the points
-vec3 batch(Path q, int n, float offset) {
+// Where a pixel's light jumps or spikes in wavelength (GAME_SPEC §12.2): the shares of the light's energy at
+// which it does, ascending. A band cut there never straddles a jump, so a narrow window of wavelengths is a
+// band of its own and read every frame, by the moving points and by the fixed estimate alike. Three things
+// are known to make such jumps, for any body and any shape:
+//   - a view bent by glass crossing an edge of what is drawn on the wall, or the bench's own edges: the
+//     landing point moves with the wavelength smoothly, so each edge is bracketed between sixteen even
+//     shares and found by bisection;
+//   - the ray changing its route through the glass (turned back at a face, missing an inner surface): the
+//     route each bend reports, found the same way;
+//   - a narrow absorption line in what the pixel looks through: its core, a width and a half to each side.
+// A light's own narrow lines need none: its energy table gives each its share already.
+const int MAX_CUTS = 24;
+struct Cuts {
+	float u[MAX_CUTS];
+	int count;
+};
+
+// the share of the light's energy at a wavelength (the table is ascending in both)
+float share_at(float nm) {
+	float a = 0.0;
+	float b = 1.0;
+	for (int it = 0; it < 14; it++) {
+		float m = 0.5 * (a + b);
+		if (share(m).x + 380.0 < nm) {
+			a = m;
+		} else {
+			b = m;
+		}
+	}
+	return 0.5 * (a + b);
+}
+
+Cuts add_cut(Cuts c, float u) {
+	if (c.count < MAX_CUTS && u > 0.0 && u < 1.0) {
+		c.u[c.count] = u;
+		c.count = c.count + 1;
+	}
+	return c;
+}
+
+// the lines of one layer's liquid
+Cuts line_cuts(Cuts c, Layer l, int layers, int k) {
+	if (k >= layers || l.depth_cm <= 0.0) {
+		return c;
+	}
+	vec4 ids = scene_vec(HEADER_VECS + l.body * BODY_VECS + 4);
+	int first = int(ids.z);
+	int count = int(ids.w);
+	for (int j = 0; j < 256; j++) {
+		if (j >= count || c.count + 2 > MAX_CUTS) {
+			break;
+		}
+		vec4 ln = line_vec(first + j);
+		c = add_cut(c, share_at(ln.x - 1.5 * ln.y));
+		c = add_cut(c, share_at(ln.x + 1.5 * ln.y));
+	}
+	return c;
+}
+
+Cuts cuts_of(Path q) {
+	Cuts c;
+	c.count = 0;
+	for (int i = 0; i < MAX_CUTS; i++) {
+		c.u[i] = 1.0;
+	}
+	if (scene_vec(2).w < 0.5) {
+		return c;
+	}
+	c = line_cuts(c, q.l0, q.layers, 0);
+	c = line_cuts(c, q.l1, q.layers, 1);
+	c = line_cuts(c, q.l2, q.layers, 2);
+	c = line_cuts(c, q.l3, q.layers, 3);
+	if (q.refractor >= 0) {
+		vec4 bench = scene_vec(1);
+		vec4 bend = scene_vec(HEADER_VECS + q.refractor * BODY_VECS + 5);
+		int first = int(bend.y);
+		int count = int(bend.z);
+		float u0 = 0.0;
+		Bend b0 = bend_at(q, share(0.0).x + 380.0);
+		for (int k = 1; k <= 16; k++) {
+			float u1 = float(k) / 16.0;
+			Bend b1 = bend_at(q, share(u1).x + 380.0);
+			// the route changes between them
+			if (b1.route != b0.route) {
+				float a = u0;
+				float z = u1;
+				for (int it = 0; it < 14; it++) {
+					float m = 0.5 * (a + z);
+					if (bend_at(q, share(m).x + 380.0).route == b0.route) {
+						a = m;
+					} else {
+						z = m;
+					}
+				}
+				c = add_cut(c, 0.5 * (a + z));
+			}
+			// an edge is passed between them: the bench's two sides, and each drawn shape's at the pixel's height
+			float lo = min(b0.x, b1.x);
+			float hi = max(b0.x, b1.x);
+			for (int e = 0; e < 2 + 2 * 32; e++) {
+				float edge = 0.0;
+				if (e < 2) {
+					edge = e == 0 ? bench.x : bench.x + bench.z;
+				} else {
+					int sh = (e - 2) / 2;
+					if (sh >= count) {
+						break;
+					}
+					vec4 r = scene_vec(SHAPE_BASE + 2 * (first + sh));
+					if (q.y < r.y || q.y >= r.y + r.w) {
+						continue;
+					}
+					edge = (e - 2) % 2 == 0 ? r.x : r.x + r.z;
+				}
+				if (edge <= lo || edge > hi || c.count >= MAX_CUTS) {
+					continue;
+				}
+				float a = u0;
+				float z = u1;
+				bool a_below = b0.x < edge;
+				for (int it = 0; it < 14; it++) {
+					float m = 0.5 * (a + z);
+					bool below = bend_at(q, share(m).x + 380.0).x < edge;
+					if (below == a_below) {
+						a = m;
+					} else {
+						z = m;
+					}
+				}
+				c = add_cut(c, 0.5 * (a + z));
+			}
+			u0 = u1;
+			b0 = b1;
+		}
+	}
+	// ascending (insertion sort)
+	for (int i = 1; i < MAX_CUTS; i++) {
+		if (i >= c.count) {
+			break;
+		}
+		float v = c.u[i];
+		int j = i - 1;
+		for (int t = 0; t < MAX_CUTS; t++) {
+			if (j < 0 || c.u[j] <= v) {
+				break;
+			}
+			c.u[j + 1] = c.u[j];
+			j = j - 1;
+		}
+		c.u[j + 1] = v;
+	}
+	return c;
+}
+
+// n bands, each its exact colour times what gets through at one point in it; offset in [0, 1) places the points.
+// A band a cut falls in is split there, each part with its own colour and its own point.
+vec3 batch(Path q, int n, float offset, Cuts cuts) {
 	vec3 sum = vec3(0.0);
 	vec4 before = share(0.0);
+	float lo = 0.0;
+	int j = 0;
 	for (int b = 0; b < 64; b++) {
 		if (b >= n) {
 			break;
 		}
-		vec4 upto = share(float(b + 1) / float(n));
-		float nm = share((float(b) + offset) / float(n)).x + 380.0;
-		sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through(q, nm);
-		before = upto;
+		float band_hi = float(b + 1) / float(n);
+		for (int r = 0; r <= MAX_CUTS; r++) {
+			for (int t = 0; t < MAX_CUTS; t++) {
+				if (j >= cuts.count || cuts.u[j] > lo) {
+					break;
+				}
+				j = j + 1;
+			}
+			float hi = j < cuts.count && cuts.u[j] < band_hi ? cuts.u[j] : band_hi;
+			vec4 upto = share(hi);
+			float nm = share(lo + offset * (hi - lo)).x + 380.0;
+			sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through(q, nm);
+			before = upto;
+			lo = hi;
+			if (hi >= band_hi) {
+				break;
+			}
+		}
 	}
 	return to_linear_srgb(sum);
 }
@@ -666,9 +848,10 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	float frames = s.aux.y;
 	float spent = 0.0;
 	// the content changed: the fixed estimate again, and whether the history still holds
+	Cuts cuts = cuts_of(q);
 	if (s.key.x != q.key.x || s.key.y != q.key.y || s.key.z != q.key.z || s.key.w != q.key.w) {
-		vec3 now = batch(q, PROXY_POINTS, 0.5);
-		spent = spent + float(PROXY_POINTS);
+		vec3 now = batch(q, PROXY_POINTS, 0.5, cuts);
+		spent = spent + float(PROXY_POINTS + cuts.count);
 		bool keep = false;
 		if (s.key.z == q.key.z && points > 0.0) {
 			float moved = eye(lab_of(prox), lab_of(now));
@@ -706,8 +889,8 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	want = ask;
 	if (n > 0) {
 		float seed = fract(0.7548776662 * p.x + 0.56984029 * p.y);
-		vec3 est = batch(q, n, fract(seed + 0.6180339887 * float(frame % 8192)));
-		spent = spent + float(n);
+		vec3 est = batch(q, n, fract(seed + 0.6180339887 * float(frame % 8192)), cuts);
+		spent = spent + float(n + cuts.count);
 		if (points >= 1.0) {
 			float dev = eye(lab_of(prox + d), lab_of(est));
 			float trial = dev * dev / (1.0 / float(n) + 1.0 / points);
