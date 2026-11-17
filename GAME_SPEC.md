@@ -1103,7 +1103,9 @@ measured` asserts each of these.
 
 **Status:** Stage 7: done headlessly, through the C API. Stage 9: playable in the Godot host,
 in flat colours; `ui: the three stages of the demo, played with the pointer alone` plays it
-through the screen. The optics are Stages 10 and 11.
+through the screen. Stages 10 and 11: seen by light, refracted. Stage 12: checked end to end with
+the final renderer, headless, through the screen and on the GPU (`docs/TDD_12_DEMO.md`); the
+user's sign-off closes it.
 
 ## 18. Invariant catalogue
 
