@@ -20,7 +20,7 @@ GAME_SPEC §13.4; the notice part and the writer, §13.3.
 | 16.3 | The notice part: a level and an item; it signals for a step on a notice it hears | Done |
 | 16.4 | The screen: the newest beside the clock, the panel and its switches, the notice part's editor; the drawer of four parts | Done |
 | 16.5 | The writer: the player's own notice, at a level, about an item or itself, when its input turns on; the screen treats notice parts and writers as parts (it drew notice parts as equipment); the drawer of five | Done |
-| 16.6 | The user plays it (`make run`) and signs off | Pending |
+| 16.6 | The user plays it (`make run`) and signs off: "LGTM, approved, proceed" (2026-11-18) | Done |
 
 ## Decisions
 

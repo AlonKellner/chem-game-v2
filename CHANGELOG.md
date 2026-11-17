@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 16)
+## 0.17.0 (2026-11-18, Stage 16)
+
+Signed off by the user on 2026-11-18 ("LGTM, approved, proceed").
 
 - §13.4 added: notices in levels (detail, event, warning, danger).
   - **What the lab notices:** reactions starting and stopping, at the level its data gives

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.16.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.17.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1256,7 +1256,7 @@ so the sessions' records are unchanged.
       drawer, set, wired and rigged, also out to the bench; "up" opens the circuit around it, and
       "close" closes it. A part dragged out of the panel stays in it, with the reason.
 
-**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day; the notice part: Stage 16, §13.4).
+**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day; the notice part and the writer: Stage 16, §13.4).
 **Full design, not yet built:**
 - controllers: a monitor with a target and PID gains whose output is a level, set on an analog
   control or as PWM on a binary one.
@@ -1316,7 +1316,7 @@ says. The player may silence any level.
     start silenced.
   - The notices are the player's under a tutorial too, like the clock.
 
-**Demo subset:** all of the above. **Status:** Stage 16.
+**Demo subset:** all of the above; signed off by the user on 2026-11-18 (Stage 16).
 
 ## 14. C API and hosts
 
