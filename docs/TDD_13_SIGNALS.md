@@ -51,7 +51,8 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
 | 13.6 | `cg_ui_signals`; pointer modifiers through `cg_ui_pointer`; the Godot host forwards Shift, Ctrl, Meta | Done |
 | 13.7 | The tutorial teaches a monitor rigged to the burner and wired to an alarm (35 steps); the screen's timers removed | Done |
 | 13.8 | The user's first finding: the tutorial let a rig or a monitor be set wrong. Every editor gesture, key and "set" is now the step's own | Done |
-| 13.9 | The user plays it (`make run`) and signs off | Pending |
+| 13.9 | The user's second finding: the pointer outlined "set" before the value was right. In the editor it now outlines the first gesture not yet done | Done |
+| 13.10 | The user plays it (`make run`) and signs off | Pending |
 
 ## Decisions
 
@@ -101,6 +102,16 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
     command). It is refused unless the step's checks would then hold (`Tutorial::would_pass`),
     with the check that would not. This holds for any setting a step asks for, not only the
     ones written today.
+- **The pointer in the editor.** The user's second finding:
+  > it highlights the set button before I have set the value correctly. I want it to highlight
+  > the value text box until it's the correct value, and only then highlight the set button.
+
+  Elsewhere the pointer outlines the last of the step's gestures on the screen. In the editor it
+  outlines the first one the editor does not show done:
+  - a choice, until it is chosen;
+  - a value box, until it holds exactly the text the step types (a valve's, until that is its
+    setting);
+  - "set" last.
 
 ## Tests
 
@@ -149,7 +160,9 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
     - "15" stops at the 1;
     - "set" with 1 g refused with what the step asks;
     - a rig left on "leave", another row, another form refused;
-    - a typed 5 refused, 0 taken.
+    - a typed 5 refused, 0 taken;
+    - the pointer outlining the quantity, then water, then the value box at "1" and again after
+      a backspace, "set" only at "10"; the valve's value box, then "set".
 - **The C smoke test and the Godot suite:** a timer out of the drawer, typed with keys, wired to
   an alarm; it rings at 2 s and pauses the clock.
 - **`make screenshots`:** O4 unchanged at every moment (worst 2, none visible). The monitor's

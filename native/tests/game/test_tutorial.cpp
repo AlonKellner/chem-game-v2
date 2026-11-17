@@ -568,15 +568,41 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 		return p.ui->locate("edit:set", x, y);
 	};
 	const auto monitor = [&] { return p.item("monitor1").part; };
-	play_to("Below 10 g");
+	// what the tutorial's pointer outlines: is `what` inside it
+	const auto pointed = [&](const std::string &what) {
+		float x = 0, y = 0;
+		REQUIRE(p.ui->locate(what, x, y));
+		int outlines = 0;
+		bool inside = false;
+		for (const lab::DrawCommand &c : p.ui->draw().commands) {
+			if (c.type == lab::DrawCommand::Outline && c.width == 3.0f && (c.color & 0xffffff00u) == 0xffc83c00u) {
+				++outlines;
+				inside = inside || (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h);
+			}
+		}
+		return outlines == 1 && inside;
+	};
+	play_to("Watch the flask's water");
+	CHECK(pointed("edit:quantity")); // the flask is already chosen: then its quantity
+	p.click("edit:quantity");
+	CHECK(pointed("edit:pick:water"));
+	p.click("edit:pick:water");
+	REQUIRE(p.tutorial().title == "Below 10 g");
 	REQUIRE(editing());
-	p.click("edit:compare:above"); // not what the step asks
+	CHECK(pointed("edit:value:0")); // "below" is already chosen: the value, until it reads 10
+	p.click("edit:value:0");
+	p.type("1");
+	CHECK(pointed("edit:value:0"));
+	p.type("0");
+	CHECK(pointed("edit:set")); // only now the button
+	p.ui->key(lab::Ui::KeyBackspace);
+	CHECK(pointed("edit:value:0"));
+	p.click("edit:compare:above"); // not what the step asks: refused, below stays chosen
 	CHECK(p.ui->message().find("Not now") != std::string::npos);
 	p.click("edit:nudge:1");
 	p.click("edit:cancel");
 	p.ui->key(lab::Ui::KeyEscape);
 	CHECK(editing()); // it cannot be closed half set
-	p.click("edit:compare:below");
 	p.click("edit:value:0");
 	p.type("15"); // the 5 is not the step's 10
 	CHECK(p.ui->message().find("Not that") != std::string::npos);
@@ -592,6 +618,7 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 	CHECK(p.tutorial().title == "Rig it to the burner");
 	play_to("Close the valve when it signals");
 	REQUIRE(editing());
+	CHECK(pointed("edit:on:value")); // its row's value, until it is set to 0 %
 	p.click("edit:set"); // "when on" left as it is: the valve would never close
 	CHECK(p.ui->message().find("the burner closes when the monitor signals") != std::string::npos);
 	CHECK(p.ui->lab().view().rigs.empty());
@@ -601,6 +628,7 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 	p.click("edit:on:value");
 	p.type("5");
 	p.type("0");
+	CHECK(pointed("edit:set"));
 	p.click("edit:set");
 	REQUIRE(p.ui->lab().view().rigs.size() == 1);
 	const lab::Rig rig = p.ui->lab().view().rigs[0];

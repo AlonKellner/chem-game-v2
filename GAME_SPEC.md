@@ -1219,7 +1219,9 @@ so the sessions' records are unchanged.
 
   When "set" is the step's last gesture, the command is first tried on a copy of the lab, and
   refused unless the step's checks would then hold, with what the step still asks for. A wrong
-  setting cannot be set.
+  setting cannot be set. In the editor the pointer outlines the first of the step's gestures that
+  is not yet done: a choice until it is chosen, a value box until it holds the text the step
+  types, and "set" only then.
 
 **Demo subset:** all of the above. **Full design, not yet built:**
 - circuits (parts collected into one compact part, Stage 14);

@@ -2008,10 +2008,86 @@ struct Ui::Impl {
 	}
 
 	// the pointer at what the step asks for: the last of its gestures that is on the screen now
+	// Whether the part editor already shows what a step's gesture does (§13.2): a
+	// choice chosen, a field holding the text the next gesture types. "set" is
+	// never done: it is what the step ends with.
+	bool done_in_editor(const std::vector<TutorialGesture> &gestures, size_t i) const {
+		const std::string &w = gestures[i].what;
+		const std::string *typed = i + 1 < gestures.size() && !gestures[i + 1].type.empty() ? &gestures[i + 1].type : nullptr;
+		const auto after = [&](const std::string &prefix, std::string &rest) {
+			if (w.rfind(prefix, 0) != 0) {
+				return false;
+			}
+			rest = w.substr(prefix.size());
+			return true;
+		};
+		std::string rest;
+		if (draft.edit == Draft::Monitor) {
+			if (after("edit:item:", rest)) {
+				return draft.quantity.item == rest;
+			}
+			if (w == "edit:quantity") { // done once the list is open, or the quantity picked after it is
+				return picking || (i + 1 < gestures.size() && gestures[i + 1].what == "edit:pick:" + draft.quantity.what);
+			}
+			if (after("edit:pick:", rest)) {
+				return draft.quantity.what == rest;
+			}
+			if (after("edit:measure:", rest)) {
+				return draft.quantity.measure == rest;
+			}
+			if (after("edit:compare:", rest)) {
+				for (int k = 0; k < 7; ++k) {
+					if (rest == OP_KEYS[k]) {
+						return draft.op == OPS[k];
+					}
+				}
+				return false;
+			}
+			if (after("edit:value:", rest)) {
+				return typed != nullptr && draft.text[static_cast<size_t>(rest == "1" ? 1 : 0)] == *typed;
+			}
+		}
+		if (draft.edit == Draft::Timer && w == "edit:value") {
+			return typed != nullptr && draft.preset == *typed;
+		}
+		if (draft.edit == Draft::Rig) {
+			if (w == "edit:form:onoff" || w == "edit:form:change") {
+				return draft.change == (w == "edit:form:change");
+			}
+			for (int side = 0; side < 3; ++side) {
+				if (!after(std::string("edit:") + SIDES[side] + ":", rest)) {
+					continue;
+				}
+				const std::optional<double> &now_set = draft.setting[static_cast<size_t>(side)];
+				if (rest == "value") {
+					char *end = nullptr;
+					const double v = typed != nullptr ? std::strtod(typed->c_str(), &end) : -1.0;
+					return typed != nullptr && draft.percent[static_cast<size_t>(side)] == *typed && now_set && std::fabs(*now_set - v / 100.0) < 1e-12;
+				}
+				for (const auto &[name, value] : choices()) {
+					if (rest == name) {
+						return now_set == value;
+					}
+				}
+			}
+		}
+		return false;
+	}
+
 	void paint_guide() {
 		const std::vector<TutorialGesture> &gestures = tutorial->gestures();
 		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
 		const uint32_t colour = (GUIDE & 0xffffff00u) | static_cast<uint32_t>(140.0 + 115.0 * pulse);
+		// in the part editor: the first of the step's gestures it does not show done yet
+		if (draft.edit != Draft::None) {
+			for (size_t i = 0; i < gestures.size(); ++i) {
+				Rect a;
+				if (gestures[i].type.empty() && !gestures[i].drag && gestures[i].what.rfind("edit:", 0) == 0 && !done_in_editor(gestures, i) && box(gestures[i].what, a)) {
+					outline(a, colour, 3);
+					return;
+				}
+			}
+		}
 		for (auto g = gestures.rbegin(); g != gestures.rend(); ++g) {
 			Rect a, b;
 			if (!box(g->what, a) || (g->drag && !box(g->to, b))) {

@@ -25,7 +25,9 @@
   - checks may compare any quantity, and read parts, wires, rigs and the part editor;
   - the tutorial teaches a monitor rigged to the burner and wired to an alarm (35 steps).
 - §13.2: under a tutorial, every editor gesture and key is the step's own, and "set" is refused
-  unless the step's checks would then hold: a monitor or a rig cannot be set wrong.
+  unless the step's checks would then hold: a monitor or a rig cannot be set wrong. In the
+  editor the pointer outlines the first gesture not yet done: a value box until it holds the
+  step's value, and only then "set".
 - The screen's timers of the first draft of this stage are gone, never released.
 
 ## 0.13.0 (2026-11-17, Stage 12)
