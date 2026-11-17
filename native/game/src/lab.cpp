@@ -9,6 +9,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <optional>
@@ -620,6 +621,63 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.place = Place::Bench;
 		x.col = col;
 		x.row = row;
+		return true;
+	}
+	if (what == "move") {
+		// several items along the bench together, by the same offset: all of them or none (GAME_SPEC §13)
+		if (!c.contains("items") || !c.at("items").is_array() || c.at("items").empty() || !c.contains("by") || !c.at("by").is_array() || c.at("by").size() != 2) {
+			why = "a move is {\"items\": [...], \"by\": [columns, rows]}";
+			return false;
+		}
+		const int dc = c.at("by").at(0).get<int>(), dr = c.at("by").at(1).get<int>();
+		std::vector<int> moving;
+		for (const json &name : c.at("items")) {
+			const int thing = name.is_string() ? find(name.get<std::string>()) : -1;
+			if (thing < 0) {
+				why = "there is no such item to move: " + name.dump();
+				return false;
+			}
+			if (std::find(moving.begin(), moving.end(), thing) != moving.end()) {
+				why = "\"" + items[static_cast<size_t>(thing)].id + "\" is named twice";
+				return false;
+			}
+			moving.push_back(thing);
+		}
+		for (const int thing : moving) {
+			const Item &x = items[static_cast<size_t>(thing)];
+			if (x.kind == Kind::Tray || x.place != Place::Bench || x.holds >= 0 || x.drains_to >= 0) {
+				why = "\"" + x.id + "\" cannot be moved as it is: it is not on the bench, or it is joined to something";
+				return false;
+			}
+			for (const Item &other : items) {
+				if (other.under == thing || other.drains_to == thing) {
+					why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
+					return false;
+				}
+			}
+			if (!on_grid(x.col + dc, x.row + dr, x.w, x.h)) {
+				why = "\"" + x.id + "\" would be off the bench";
+				return false;
+			}
+		}
+		for (const int thing : moving) {
+			const Item &x = items[static_cast<size_t>(thing)];
+			for (size_t i = 0; i < items.size(); ++i) {
+				const Item &o = items[i];
+				const bool also = std::find(moving.begin(), moving.end(), static_cast<int>(i)) != moving.end();
+				if (also || o.place != Place::Bench || o.col < 0) {
+					continue;
+				}
+				if (x.col + dc < o.col + o.w && o.col < x.col + dc + x.w && x.row + dr < o.row + o.h && o.row < x.row + dr + x.h) {
+					why = "\"" + o.id + "\" stands where \"" + x.id + "\" would go";
+					return false;
+				}
+			}
+		}
+		for (const int thing : moving) {
+			items[static_cast<size_t>(thing)].col += dc;
+			items[static_cast<size_t>(thing)].row += dr;
+		}
 		return true;
 	}
 	if (what == "stow") {

@@ -50,6 +50,25 @@ struct Player {
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);
 	}
+	// a click with keys held (lab::Ui::Mod)
+	void click_with(const std::string &what, int mods) {
+		float x = 0, y = 0;
+		at(what, x, y);
+		ui->pointer(x, y, false, mods);
+		ui->pointer(x, y, true, mods);
+		ui->pointer(x, y, false, mods);
+	}
+	// the pointer pressed at one point and moved to another as a hand does, a frame at a time
+	void sweep(float x0, float y0, float x1, float y1) {
+		ui->pointer(x0, y0, false);
+		ui->pointer(x0, y0, true);
+		for (int i = 1; i <= 20; ++i) {
+			const float t = static_cast<float>(i) / 20.0f;
+			ui->pointer(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, true);
+			ui->frame(1.0 / 60.0);
+		}
+		ui->pointer(x1, y1, false);
+	}
 	ItemView item(const std::string &id) {
 		const LabView view = ui->lab().view();
 		for (const ItemView &v : view.items) {
@@ -256,4 +275,55 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	well_formed(p.ui->draw());
 	MESSAGE("played with the pointer: " << p.grams("balloon", "carbon_dioxide") << " g of CO2, " << p.grams("beaker", "water") << " g of water, " << crystals
 										<< " g of crystals, in " << view.step / 60 << " s");
+}
+
+TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectangle, and the chosen move together (Stage 13)") {
+	Player p;
+	p.click("pause");
+	p.drag("item:flask", "square:11,12"); // [10, 8]
+	p.drag("item:beaker", "square:19,12"); // [18, 8]
+	p.drag("item:jar", "square:4,13"); // [3, 9]
+	using V = std::vector<std::string>;
+	p.click("item:flask");
+	CHECK(p.ui->selection() == V{ "flask" });
+	p.click_with("item:beaker", lab::Ui::ModShift);
+	CHECK(p.ui->selection() == V{ "flask", "beaker" });
+	CHECK(p.ui->selected() == "beaker");
+	p.click_with("item:flask", lab::Ui::ModCtrl); // taken away again
+	CHECK(p.ui->selection() == V{ "beaker" });
+	p.click_with("item:jar", lab::Ui::ModMeta);
+	CHECK(p.ui->selection() == V{ "beaker", "jar" });
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK(p.ui->selection().empty());
+	// a rectangle from an empty square, across the flask's footprint and the beaker's, not the jar's
+	float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	p.at("square:9,1", x0, y0);
+	p.at("square:19,9", x1, y1);
+	p.sweep(x0, y0, x1, y1);
+	CHECK(p.ui->selection() == V{ "flask", "beaker" });
+	p.click("square:1,1"); // a click on nothing lets go
+	CHECK(p.ui->selection().empty());
+	p.sweep(x0, y0, x1, y1);
+	// carried together, a frame at a time: three squares up
+	float bx = 0, by = 0;
+	p.at("item:beaker", bx, by);
+	p.sweep(bx, by, bx, by - 120);
+	CHECK(p.item("beaker").col == 18);
+	CHECK(p.item("beaker").row == 5);
+	CHECK(p.item("flask").col == 10);
+	CHECK(p.item("flask").row == 5);
+	CHECK(p.ui->message().empty());
+	// the flask would land on the jar: neither moves, and the reason is shown
+	p.at("item:beaker", bx, by);
+	p.sweep(bx, by, bx - 280, by + 120);
+	CHECK(p.item("beaker").col == 18);
+	CHECK(p.item("flask").col == 10);
+	CHECK(p.ui->message().find("stands where \"flask\" would go") != std::string::npos);
+	CHECK(p.ui->selection() == V{ "flask", "beaker" }); // still chosen
+	// back to the cabinet together
+	p.drag("item:flask", "cabinet");
+	CHECK(p.item("flask").place == "cabinet");
+	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.item("jar").place == "bench");
+	well_formed(p.ui->draw());
 }

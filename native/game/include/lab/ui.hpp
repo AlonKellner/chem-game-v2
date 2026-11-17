@@ -44,8 +44,11 @@ public:
 	static std::unique_ptr<Ui> open(std::string_view bench_json, std::string &why);
 	~Ui();
 
-	// The pointer, in screen pixels, and whether its button is down.
-	void pointer(float x, float y, bool down);
+	// The pointer, in screen pixels, whether its button is down, and the keys
+	// held with it: a click with one adds an item to the selection or takes it
+	// away (§13.1).
+	enum Mod : int32_t { ModShift = 1, ModCtrl = 2, ModMeta = 4, ModAny = 7 };
+	void pointer(float x, float y, bool down, int mods = 0);
 	// A key for the focused field (GAME_SPEC §13.3): text (a character, by its
 	// code point), backspace, enter, escape.
 	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3 };
@@ -67,9 +70,12 @@ public:
 	bool tutor(std::string_view tutorial_json, std::string &why);
 	// null without one
 	const Tutorial *tutorial() const;
-	// The player's timers (GAME_SPEC §13.3), and the item selected ("" for none).
+	// The player's timers (GAME_SPEC §13.3), and the item selected ("" for none):
+	// the last one chosen.
 	const Timers &timers() const;
 	std::string selected() const;
+	// Everything selected, in the order it was chosen (§13.1).
+	std::vector<std::string> selection() const;
 	// The last notice: a refusal's reason, a failed invariant.
 	const std::string &message() const;
 	double speed() const;

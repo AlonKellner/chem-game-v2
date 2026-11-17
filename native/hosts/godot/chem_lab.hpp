@@ -9,6 +9,7 @@
 #include "optics_compute.hpp"
 
 #include <godot_cpp/classes/input_event.hpp>
+#include <godot_cpp/classes/input_event_with_modifiers.hpp>
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/classes/texture_rect.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -44,7 +45,8 @@ public:
 	int debug_report(const godot::String &message);
 
 	// For tests and scripted play: what the mouse and the frame do.
-	void pointer(double x, double y, bool down);
+	// mods: CG_POINTER_SHIFT, _CTRL, _META (§13.1)
+	void pointer(double x, double y, bool down, int mods = 0);
 	void frame(double seconds);
 	// the centre of a named thing on the screen ("item:flask", "cell:3,1", ...), or (-1, -1)
 	godot::Vector2 locate(const godot::String &what) const;
@@ -86,6 +88,7 @@ private:
 
 	cg_ui *ui_ = nullptr;
 	bool down_ = false;
+	int32_t state_of(const godot::InputEventWithModifiers *event) const;
 	godot::TextureRect *optics_ = nullptr; // what the optical pass shows
 	godot::Node2D *overlay_ = nullptr; // what is painted over it
 	OpticsCompute compute_;

@@ -549,3 +549,42 @@ TEST_CASE("lab: a vessel full to the last bit expels nothing T1 would not, by th
 	CHECK_MESSAGE(lab->advance(100, why), why);
 	CHECK_FALSE(lab->failed());
 }
+
+TEST_CASE("lab: several items move along the bench together, all of them or none (Stage 13)") {
+	auto lab = demo_bench(); // jar [0, 9], acid [2, 8], balloon [5, 10], flask [9, 8], condenser [12, 10], beaker [14, 8], waste [17, 8], burner [20, 12]
+	const std::string before = lab->digest();
+	std::string why;
+	const auto at = [&](const char *id) {
+		for (const lab::ItemView &v : lab->view().items) {
+			if (v.id == id) {
+				return std::make_pair(v.col, v.row);
+			}
+		}
+		FAIL("no item " << id);
+		return std::make_pair(0, 0);
+	};
+	// into one another's old squares is fine: they move as one
+	REQUIRE_MESSAGE(run(*lab, R"({"do": "move", "items": ["beaker", "waste"], "by": [2, -3]})", &why), why); // the beaker onto the waste's old squares
+	CHECK(at("beaker") == std::make_pair(16, 5));
+	CHECK(at("waste") == std::make_pair(19, 5));
+	CHECK(run(*lab, R"({"do": "move", "items": ["beaker", "waste"], "by": [0, 0]})", &why)); // standing still is a move
+	// one of them would land on something left behind: neither moves
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["jar", "acid"], "by": [1, 0]})", &why));
+	CHECK(why.find("\"balloon\" stands where \"acid\" would go") != std::string::npos);
+	CHECK(at("jar") == std::make_pair(0, 9));
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["jar", "acid"], "by": [-1, 0]})", &why)); // the jar off the grid
+	CHECK(why.find("off the bench") != std::string::npos);
+	CHECK(at("acid") == std::make_pair(2, 8));
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["jar", "jar"], "by": [0, -1]})", &why));
+	CHECK(why.find("twice") != std::string::npos);
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["jar", "kettle"], "by": [0, -1]})", &why));
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["jar"]})", &why));
+	REQUIRE(run(*lab, R"({"do": "move", "items": ["jar", "acid", "balloon"], "by": [0, -1]})", &why));
+	CHECK(at("jar") == std::make_pair(0, 8));
+	CHECK(at("balloon") == std::make_pair(5, 9));
+	// where things stand is not the world: moving them changed nothing physical
+	CHECK(lab->digest() == before);
+	REQUIRE(run(*lab, R"({"do": "heat", "burner": "burner", "vessel": "flask"})"));
+	CHECK_FALSE(run(*lab, R"({"do": "move", "items": ["flask", "jar"], "by": [0, -1]})", &why)); // the burner under it depends on where it stands
+	CHECK(why.find("depends") != std::string::npos);
+}

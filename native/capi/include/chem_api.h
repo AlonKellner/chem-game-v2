@@ -135,8 +135,16 @@ typedef struct cg_ui cg_ui;
 CG_API cg_ui *cg_ui_open(const char *bench_json); /* NULL, with cg_last_error, for a bench that cannot be built */
 CG_API void cg_ui_close(cg_ui *ui);
 
-/* The pointer, in screen pixels, and whether its button is down (nonzero). */
-CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down);
+/* The pointer, in screen pixels: `state` is whether its button is down
+ * (CG_POINTER_DOWN, or 1), with the keys held with it (§13.1: a click with one
+ * adds an item to the selection or takes it away). */
+enum {
+	CG_POINTER_DOWN = 1,
+	CG_POINTER_SHIFT = 2,
+	CG_POINTER_CTRL = 4,
+	CG_POINTER_META = 8
+};
+CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
 /* A frame of real time, in seconds: the lab advances by it times the speed
  * chosen on the screen. */
 CG_API void cg_ui_frame(cg_ui *ui, double seconds);

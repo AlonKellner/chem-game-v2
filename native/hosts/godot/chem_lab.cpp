@@ -161,7 +161,7 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 	if (button.is_valid() && button->get_button_index() == godot::MOUSE_BUTTON_LEFT) {
 		down_ = button->is_pressed();
 		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(button->get_position());
-		cg_ui_pointer(ui_, at.x, at.y, down_ ? 1 : 0);
+		cg_ui_pointer(ui_, at.x, at.y, state_of(button.ptr()));
 		return;
 	}
 	// keys for the screen's focused field (GAME_SPEC §13.3)
@@ -182,14 +182,20 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 	const godot::Ref<godot::InputEventMouseMotion> motion = event;
 	if (motion.is_valid()) {
 		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(motion->get_position());
-		cg_ui_pointer(ui_, at.x, at.y, down_ ? 1 : 0);
+		cg_ui_pointer(ui_, at.x, at.y, state_of(motion.ptr()));
 	}
 }
 
-void ChemLab::pointer(double x, double y, bool down) {
+// the button, and the keys held with it (§13.1)
+int32_t ChemLab::state_of(const godot::InputEventWithModifiers *event) const {
+	return (down_ ? CG_POINTER_DOWN : 0) | (event->is_shift_pressed() ? CG_POINTER_SHIFT : 0) | (event->is_ctrl_pressed() ? CG_POINTER_CTRL : 0) |
+			(event->is_meta_pressed() ? CG_POINTER_META : 0);
+}
+
+void ChemLab::pointer(double x, double y, bool down, int mods) {
 	if (ui_ != nullptr) {
 		down_ = down;
-		cg_ui_pointer(ui_, static_cast<float>(x), static_cast<float>(y), down ? 1 : 0);
+		cg_ui_pointer(ui_, static_cast<float>(x), static_cast<float>(y), (down ? CG_POINTER_DOWN : 0) | mods);
 	}
 }
 
@@ -322,7 +328,7 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("paused"), &ChemLab::paused);
 	godot::ClassDB::bind_method(godot::D_METHOD("build_name"), &ChemLab::build_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("debug_report", "message"), &ChemLab::debug_report);
-	godot::ClassDB::bind_method(godot::D_METHOD("pointer", "x", "y", "down"), &ChemLab::pointer);
+	godot::ClassDB::bind_method(godot::D_METHOD("pointer", "x", "y", "down", "mods"), &ChemLab::pointer, DEFVAL(0));
 	godot::ClassDB::bind_method(godot::D_METHOD("frame", "seconds"), &ChemLab::frame);
 	godot::ClassDB::bind_method(godot::D_METHOD("locate", "what"), &ChemLab::locate);
 	godot::ClassDB::bind_method(godot::D_METHOD("report"), &ChemLab::report);

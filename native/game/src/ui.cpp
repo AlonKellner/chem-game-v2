@@ -99,6 +99,11 @@ struct Ui::Impl {
 	int drag = -1; // the item in hand
 	float grab_x = 0, grab_y = 0; // where in it it was taken
 	int anchor_c = 0, anchor_r = 0; // the square of its footprint under the pointer
+	float press_x = 0, press_y = 0; // where the button went down
+	int mods = 0; // Ui::Mod: the keys held with the pointer
+	// the selection (§13.1): what was chosen, in order; `selected` is the last of it
+	std::vector<int> group;
+	bool marquee = false; // a rectangle being drawn from (press_x, press_y)
 	bool moved = false;
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
@@ -333,6 +338,92 @@ struct Ui::Impl {
 
 	const std::string &id(int index) const { return view.items[static_cast<size_t>(index)].id; }
 
+	// ------------------------------------------------------------- the selection (§13.1)
+
+	bool chosen(int index) const { return std::find(group.begin(), group.end(), index) != group.end(); }
+	void choose_only(int index) {
+		group.clear();
+		if (index >= 0) {
+			group.push_back(index);
+		}
+		selected = index;
+	}
+	void toggle(int index) {
+		const auto at = std::find(group.begin(), group.end(), index);
+		if (at != group.end()) {
+			group.erase(at);
+		} else {
+			group.push_back(index);
+		}
+		selected = group.empty() ? -1 : group.back();
+	}
+	// a selection of several, the item in hand among them, being carried
+	bool carrying_group() const { return drag >= 0 && moved && group.size() > 1 && chosen(drag); }
+	Rect marquee_rect() const { return Rect{ std::fmin(press_x, px), std::fmin(press_y, py), std::fabs(px - press_x), std::fabs(py - press_y) }; }
+	// what a rectangle drawn on the bench takes: everything on the bench it touches
+	void take_marquee() {
+		const Rect m = marquee_rect();
+		if (!(mods & Ui::ModAny)) {
+			choose_only(-1);
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.place != "bench" || v.kind == "tray" || v.col < 0 || chosen(i)) {
+				continue;
+			}
+			const Rect f = foot(v);
+			if (f.x < m.x + m.w && m.x < f.x + f.w && f.y < m.y + m.h && m.y < f.y + f.h) {
+				group.push_back(i);
+				selected = i;
+			}
+		}
+	}
+	// where an item is drawn now: in hand, or carried with the selection
+	Rect drawn(int index) const {
+		Rect r = rect(index);
+		if (index == drag) {
+			r.x = px - grab_x;
+			r.y = py - grab_y;
+		} else if (carrying_group() && chosen(index) && view.items[static_cast<size_t>(index)].place == "bench") {
+			r.x += px - press_x;
+			r.y += py - press_y;
+		}
+		return r;
+	}
+	// letting go of a selection of several, carried by one of them
+	void drop_group(int index, float x, float y) {
+		if (guided()) {
+			not_now(); // a tutorial asks for one item at a time
+			return;
+		}
+		std::vector<int> standing;
+		for (const int i : group) {
+			if (view.items[static_cast<size_t>(i)].place == "bench") {
+				standing.push_back(i);
+			}
+		}
+		if (CABINET.has(x, y)) {
+			for (const int i : standing) {
+				act({ { "do", "stow" }, { "item", id(i) } });
+			}
+			return;
+		}
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (!BENCH.has(x, y) || v.place != "bench") {
+			message = "A selection moves along the bench together, or back to the cabinet; one item at a time goes anywhere else";
+			return;
+		}
+		const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+		const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+		json names = json::array();
+		for (const int i : standing) {
+			names.push_back(id(i));
+		}
+		if (col != v.col || row != v.row) {
+			act({ { "do", "move" }, { "items", names }, { "by", { col - v.col, row - v.row } } });
+		}
+	}
+
 	// what letting go of an item at a point does
 	void drop(int index, float x, float y) {
 		const ItemView v = view.items[static_cast<size_t>(index)];
@@ -478,7 +569,7 @@ struct Ui::Impl {
 				message.clear();
 				refresh();
 				timers = Timers{};
-				selected = -1;
+				choose_only(-1);
 				editor = false;
 				fired = -1;
 				if (tutorial) {
@@ -513,11 +604,19 @@ struct Ui::Impl {
 			}
 		}
 		const int hit = item_at(x, y);
-		if (hit < 0 && (BENCH.has(x, y) || CABINET.has(x, y) || OUTBOX.has(x, y))) {
-			selected = -1; // a click on nothing lets go of the selection
+		if (hit < 0 && BENCH.has(x, y)) {
+			marquee = true; // a rectangle, or, let go where it began, a click on nothing
+			return;
+		}
+		if (hit < 0 && (CABINET.has(x, y) || OUTBOX.has(x, y)) && !(mods & Ui::ModAny)) {
+			choose_only(-1); // a click on nothing lets go of the selection
 		}
 		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place == "outbox") {
-			selected = hit; // handed in: it can be read, and watched, but not moved
+			if (mods & Ui::ModAny) {
+				toggle(hit);
+			} else {
+				choose_only(hit); // handed in: it can be read, and watched, but not moved
+			}
 		}
 		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
 			// a press takes it in hand; a release without moving it selects it (§13.3),
@@ -792,6 +891,9 @@ struct Ui::Impl {
 
 	void type(Ui::Key key, uint32_t codepoint) {
 		if (!editor) {
+			if (key == Ui::KeyEscape && !panel) {
+				choose_only(-1);
+			}
 			return;
 		}
 		if (key == Ui::KeyEscape) {
@@ -839,7 +941,7 @@ struct Ui::Impl {
 		const Timer &t = timers.list()[static_cast<size_t>(n)];
 		const int item = item_index(t.item_fired);
 		if (item >= 0) {
-			selected = item;
+			choose_only(item);
 		}
 		message = text_of("timer %.0f fired: ", n + 1) + t.fired_by;
 	}
@@ -965,7 +1067,7 @@ struct Ui::Impl {
 			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag) {
 				continue;
 			}
-			paint_item(i, rect(i));
+			paint_item(i, drawn(i));
 			Rect r;
 			if (valve_rect(i, r)) {
 				rect_fill(r, BUTTON);
@@ -983,14 +1085,16 @@ struct Ui::Impl {
 			}
 		}
 		if (drag >= 0) {
-			Rect r = rect(drag);
-			r.x = px - grab_x;
-			r.y = py - grab_y;
-			paint_item(drag, r);
+			paint_item(drag, drawn(drag));
 		}
-		if (selected >= 0 && selected != drag) {
-			const Rect r = rect(selected);
-			outline(Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }, WALL_INK, 1);
+		for (const int i : group) {
+			if (i != drag) {
+				const Rect r = drawn(i);
+				outline(Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }, WALL_INK, i == selected ? 2.0f : 1.0f);
+			}
+		}
+		if (marquee && down) {
+			outline(marquee_rect(), WALL_INK, 1);
 		}
 		if (tutorial) {
 			paint_tutorial();
@@ -1302,14 +1406,11 @@ struct Ui::Impl {
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (i != drag) {
-				add(i, rect(i));
+				add(i, drawn(i));
 			}
 		}
 		if (drag >= 0) {
-			Rect r = rect(drag);
-			r.x = px - grab_x;
-			r.y = py - grab_y;
-			add(drag, r);
+			add(drag, drawn(drag));
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
 		OpticsRoom room;
@@ -1563,9 +1664,14 @@ std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 	return std::unique_ptr<Ui>(new Ui(std::move(impl)));
 }
 
-void Ui::pointer(float x, float y, bool down) {
+void Ui::pointer(float x, float y, bool down, int mods) {
 	Impl &m = *impl_;
 	const bool pressed = down && !m.down, released = !down && m.down;
+	m.mods = mods;
+	if (pressed) {
+		m.press_x = x;
+		m.press_y = y;
+	}
 	if (m.drag >= 0 && (std::fabs(x - m.px) > 0 || std::fabs(y - m.py) > 0)) {
 		m.moved = true;
 	}
@@ -1583,11 +1689,28 @@ void Ui::pointer(float x, float y, bool down) {
 	} else if (released) {
 		if (m.drag >= 0 && m.moved) {
 			const int index = m.drag;
+			const bool several = m.carrying_group();
 			m.drag = -1;
-			m.drop(index, x, y);
+			if (several) {
+				m.drop_group(index, x, y);
+			} else {
+				m.drop(index, x, y);
+			}
 		} else if (m.drag >= 0) {
-			m.selected = m.drag; // a click on it, without moving it (§13.3)
+			// a click on it, without moving it, chooses it (§13.1); with a modifier, adds or takes it away
+			if (mods & ModAny) {
+				m.toggle(m.drag);
+			} else {
+				m.choose_only(m.drag);
+			}
+		} else if (m.marquee) {
+			if (std::fabs(x - m.press_x) > 3 || std::fabs(y - m.press_y) > 3) {
+				m.take_marquee();
+			} else if (!(mods & ModAny)) {
+				m.choose_only(-1); // a click on nothing lets go of the selection
+			}
 		}
+		m.marquee = false;
 		m.drag = -1;
 		m.valve_drag = -1;
 		m.slider_drag = false;
@@ -1690,6 +1813,14 @@ const Timers &Ui::timers() const {
 
 std::string Ui::selected() const {
 	return impl_->selected >= 0 ? impl_->id(impl_->selected) : std::string();
+}
+
+std::vector<std::string> Ui::selection() const {
+	std::vector<std::string> out;
+	for (const int i : impl_->group) {
+		out.push_back(impl_->id(i));
+	}
+	return out;
 }
 
 void Ui::key(Key key, uint32_t codepoint) {

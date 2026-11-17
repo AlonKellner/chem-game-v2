@@ -297,12 +297,13 @@ void cg_ui_close(cg_ui *ui) {
 	delete ui;
 }
 
-void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) {
+void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the state
 	if (ui == nullptr) {
 		return;
 	}
 	try {
-		ui->ui->pointer(x, y, down != 0);
+		const int mods = ((down & CG_POINTER_SHIFT) ? lab::Ui::ModShift : 0) | ((down & CG_POINTER_CTRL) ? lab::Ui::ModCtrl : 0) | ((down & CG_POINTER_META) ? lab::Ui::ModMeta : 0);
+		ui->ui->pointer(x, y, (down & CG_POINTER_DOWN) != 0, mods);
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 	}
