@@ -14,7 +14,7 @@ GAME_SPEC §6, §13.
 | 15.1 | A drain comes off when either vessel is placed elsewhere, moved apart, stowed or handed in; moved together they stay joined | Done |
 | 15.2 | The screen's softened refusal gone; the tutorial's condenser step reworded | Done |
 | 15.3 | The demo's record re-recorded, with the user's approval ("Approved, proceed", 2026-11-17) | Done |
-| 15.4 | The user plays it (`make run`) and signs off | Pending |
+| 15.4 | The user plays it (`make run`) and signs off: "Approved, proceed" (2026-11-17) | Done |
 
 ## Decisions
 

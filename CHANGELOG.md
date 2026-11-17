@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 15)
+## 0.16.0 (2026-11-17, Stage 15)
+
+Signed off by the user on 2026-11-17 ("Approved, proceed").
 
 - §13: drains are removable.
   - A drain comes off when either of its vessels is placed elsewhere, moved apart from the other,
