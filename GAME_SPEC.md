@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.17.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.18.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1363,7 +1363,7 @@ does not judge the player: it says what is wanted, and whether what is there mee
   99.9 % of the solids and liquids.
 
 The tutorial's goal is those three met, and the world's totals unchanged; its hand-in failures stay,
-since what is handed in cannot be taken back. **Status:** Stage 17.
+since what is handed in cannot be taken back. Signed off by the user on 2026-11-18 (Stage 17).
 
 ## 14. C API and hosts
 

@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 17)
+## 0.18.0 (2026-11-18, Stage 17)
+
+Signed off by the user on 2026-11-18 ("Approved, proceed").
 
 - §13.5 added: goals on the outbox.
   - **Slots:** the outbox is six slots, one item to a slot; `submit {item, slot}`, or a drop onto
@@ -16,6 +18,8 @@
 - §13.2: the tutorial hands each item in onto its goal's slot, and its goal is the game goals met.
   Its hand-in failures stay: what is handed in cannot be taken back.
 - §13.3: a notice part or a writer may name a goal.
+- A slot shows its goal's state at a glance: met (a green band, border and "met"), falling short
+  (amber, "not met"), or open.
 
 ## 0.17.0 (2026-11-18, Stage 16)
 

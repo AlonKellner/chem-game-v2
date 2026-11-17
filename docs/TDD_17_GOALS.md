@@ -15,7 +15,7 @@ GAME_SPEC §13.5; the commands, §13; the tutorial's keys, §13.2.
 | 17.3 | Conditions: `goal`, `goals_met`, an item's `slot` | Done |
 | 17.4 | The screen: the slots with their goals, terms and values now; a drop onto a slot; the goal editor; a notice part may name a goal | Done |
 | 17.5 | The tutorial: each hand-in onto its goal's slot; its goal, the game goals met | Done |
-| 17.6 | The user plays it (`make run`) and signs off | Pending |
+| 17.6 | The user plays it (`make run`) and signs off: "Approved, proceed" (2026-11-18), after asking for met goals to stand out (the band, border and word) | Done |
 
 ## Decisions
 
