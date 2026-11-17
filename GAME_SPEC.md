@@ -1223,13 +1223,46 @@ so the sessions' records are unchanged.
   is not yet done: a choice until it is chosen, a value box until it holds the text the step
   types, and "set" only then.
 
-**Demo subset:** all of the above; signed off by the user on 2026-11-17. **Full design, not yet built:**
-- circuits (parts collected into one compact part, Stage 14);
+- **Circuits.** A selection's signal parts on the bench, circuits included, collapse into one
+  compact part: `circuit {parts}`, ids `circuit1`, …
+  - **Where it goes.** The new circuit stands on the free square nearest the parts' top-left:
+    rows by distance, then columns, the left first. It is usually the first part's own square,
+    freed.
+  - **Inside it.** The parts keep their layout on the circuit's own grid: their extent, at least
+    6 × 4. They stand on no square of the bench.
+  - **Signals.** A circuit signals nothing itself and takes no wire or rig. What is in it signals,
+    and is wired and rigged, exactly as it would out of it. Wires and rigs that cross its edge are
+    kept.
+  - **The digest.** Where parts are kept is not the world: a lab with a circuit has the digest of
+    the same parts loose, step for step.
+  - **Working inside.**
+    - `part {kind, at, in}` makes a part inside a circuit.
+    - `place` moves a part within its circuit's grid.
+    - `move` takes a circuit as one square, with all it holds; a part in a circuit moves with it.
+    - `scrap` takes a circuit away with all it holds, at every depth, with their wires and rigs.
+  - **Giving back.** `uncircuit {circuit}` puts its parts back on the bench, as they lie in it:
+    - from its square, or the nearest place where all of them fit, in the same order;
+    - refused, with the reason, where nowhere has room;
+    - a circuit inside another is given back once the outer one is;
+    - what was in it at depth stays in the circuits it was in.
+  - **Nesting.** Circuits hold circuits, to any depth.
+  - **On the screen:**
+    - While the selection holds signal parts on the bench, the drawer offers "create circuit".
+    - On the bench a circuit is a square that names it and how many parts it holds. Its lamp is lit
+      while something in it signals out of it, and it is outlined when an alarm in it rings.
+    - Wires and rigs to what is inside a closed circuit are drawn from its square.
+    - The readout offers "open" and "give back". Open, the circuit's inside is a panel, over the
+      outbox where it fits so the bench stays in sight. In it, its parts are moved, made out of the
+      drawer, set, wired and rigged, also out to the bench; "up" opens the circuit around it, and
+      "close" closes it. A part dragged out of the panel stays in it, with the reason.
+
+**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14).
+**Full design, not yet built:**
 - the notice part (Stage 16);
 - controllers: a monitor with a target and PID gains whose output is a level, set on an analog
   control or as PWM on a binary one.
 
-**Status:** Stage 13.
+**Status:** Stage 13; circuits Stage 14.
 
 ## 14. C API and hosts
 
