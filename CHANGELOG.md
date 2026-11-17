@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 14)
+## 0.15.0 (2026-11-17, Stage 14)
+
+Signed off by the user on 2026-11-17 ("Approved, proceed").
 
 - §13.3: circuits.
   - **Making one:** a selection's signal parts, circuits included, collapse into one compact part

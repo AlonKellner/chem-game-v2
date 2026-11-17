@@ -17,7 +17,7 @@ GAME_SPEC §13.3 (Circuits).
 |---|---|---|
 | 14.1 | Circuits in the lab: `circuit`, `uncircuit`; parts made and placed inside; moved, scrapped and saved with all they hold; nesting; the digest of the parts loose | Done |
 | 14.2 | The screen: "create circuit" from the selection, a circuit's square and lamp, the open circuit's panel (made, moved, set, wired inside and out), "up", "close", "open" and "give back" | Done |
-| 14.3 | The user plays it (`make run`) and signs off | Pending |
+| 14.3 | The user plays it (`make run`) and signs off: "Approved, proceed" (2026-11-17) | Done |
 
 ## Decisions
 
