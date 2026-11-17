@@ -54,11 +54,11 @@ public:
 		a.family = family;
 		Spectrum &s = a.continuum;
 		const double ln2x4 = 4.0 * std::log(2.0), c = uniform(360, 800);
-		const auto nm = [](int i) { return 380.0 + i; };
+		const auto nm = [](size_t i) { return 380.0 + static_cast<double>(i); };
 		switch (family) {
 			case 0: {
 				const double w = log_uniform(5, 300);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double d = (nm(i) - c) / w;
 					s[i] = std::exp(-ln2x4 * d * d);
 				}
@@ -66,7 +66,7 @@ public:
 			}
 			case 1: {
 				const double nu0 = 1e7 / c, w = log_uniform(300, 9000);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double d = (1e7 / nm(i) - nu0) / w;
 					s[i] = std::exp(-ln2x4 * d * d);
 				}
@@ -74,7 +74,7 @@ public:
 			}
 			case 2: {
 				const double w = log_uniform(1, 200);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double d = 2 * (nm(i) - c) / w;
 					s[i] = 1 / (1 + d * d);
 				}
@@ -82,7 +82,7 @@ public:
 			}
 			case 3: {
 				const double wl = log_uniform(3, 200), wr = wl * log_uniform(0.1, 10), tail = pick(2) ? log_uniform(2, 150) : 0.0;
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double x = nm(i) - c, d = x / (x < 0 ? wl : wr);
 					s[i] = std::exp(-ln2x4 * d * d);
 					if (tail > 0 && x > 0) {
@@ -97,7 +97,7 @@ public:
 			case 4: {
 				const double w = log_uniform(0.3, 4);
 				const bool lorentz = pick(2);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double d = (nm(i) - c) / w;
 					s[i] = lorentz ? 1 / (1 + 4 * d * d) : std::exp(-ln2x4 * d * d);
 				}
@@ -106,7 +106,7 @@ public:
 			case 5: {
 				const double edge = uniform(370, 790), w = log_uniform(0.5, 60);
 				const bool up = pick(2);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					const double z = (nm(i) - edge) / w;
 					s[i] = 1 / (1 + std::exp(up ? -z : z));
 				}
@@ -115,7 +115,7 @@ public:
 			case 6: {
 				const double p = uniform(0.5, 6);
 				const bool up = pick(2);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					s[i] = std::pow(nm(i) / 550.0, up ? p : -p);
 				}
 				break;
@@ -127,7 +127,7 @@ public:
 					if (n) {
 						f *= huang / n;
 					}
-					for (int i = 0; i < 401; ++i) {
+					for (size_t i = 0; i < 401; ++i) {
 						const double z = (nm(i) - (c - n * spacing)) / w;
 						s[i] += f * std::exp(-ln2x4 * z * z);
 					}
@@ -142,11 +142,11 @@ public:
 					v = normal(rng_);
 				}
 				const int r = std::min(static_cast<int>(std::ceil(3 * ell)), 200);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					double t = 0, ws = 0;
 					for (int d = -r; d <= r; ++d) {
 						const double w = std::exp(-0.5 * d * d / (ell * ell));
-						t += w * g[static_cast<size_t>(i + 200 + d)];
+						t += w * g[i + 200 + static_cast<size_t>(d + 200) - 200];
 						ws += w * w;
 					}
 					s[i] = t / std::sqrt(ws);
@@ -159,15 +159,15 @@ public:
 			}
 			case 9: {
 				const double path = log_uniform(500, 30000), phase = uniform(0, 6.3);
-				for (int i = 0; i < 401; ++i) {
+				for (size_t i = 0; i < 401; ++i) {
 					s[i] = 0.5 + 0.5 * std::cos(2 * 3.14159265358979 * path / nm(i) + phase);
 				}
 				break;
 			}
 			case 10: {
 				const double slope = uniform(-0.3, 0.3);
-				for (int i = 0; i < 401; ++i) {
-					s[i] = 1 + slope * (i - 200) / 200.0;
+				for (size_t i = 0; i < 401; ++i) {
+					s[i] = 1 + slope * (static_cast<double>(i) - 200.0) / 200.0;
 				}
 				break;
 			}

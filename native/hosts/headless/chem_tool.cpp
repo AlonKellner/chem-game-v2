@@ -25,7 +25,8 @@ int usage() {
 						 "  study distillation    water boiled through a condenser into a beaker\n"
 						 "  study dissolution     copper oxide under sulfuric acid: still, stirred, warmed\n"
 						 "  study crystals        the solution boiled down and left to cool\n"
-						 "  study spectrum        how many spectral bands the renderer needs\n");
+						 "  study spectrum        how many spectral bands the renderer needs\n"
+						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n");
 	return 2;
 }
 

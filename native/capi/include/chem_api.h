@@ -210,6 +210,20 @@ typedef struct cg_optics_parity {
 
 CG_API cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, int32_t height, cg_optics_parity *out);
 
+/* A demo of the optical pass alone (GAME_SPEC §12.3), no chemistry: "prism", a
+ * prism of flint glass in a dark room before a slit of white light. It is
+ * driven like the screen: a pointer in, a draw list in two parts and the
+ * optical pass's scene out. NULL and cg_last_error() for an unknown name. */
+typedef struct cg_demo cg_demo;
+CG_API cg_demo *cg_demo_open(const char *name);
+CG_API void cg_demo_close(cg_demo *demo);
+CG_API void cg_demo_pointer(cg_demo *demo, float x, float y, int32_t down);
+/* Turn what the demo shows about its upright axis. */
+CG_API void cg_demo_turn(cg_demo *demo, float radians);
+/* Borrowed until the next call on this demo. */
+CG_API cg_status cg_demo_draw(cg_demo *demo, cg_draw_list *out);
+CG_API cg_status cg_demo_optics(cg_demo *demo, cg_optics *out);
+
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */
 CG_API const char *cg_ui_message(cg_ui *ui);

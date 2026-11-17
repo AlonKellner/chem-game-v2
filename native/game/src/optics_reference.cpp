@@ -84,6 +84,9 @@ inline double sin(double a) {
 inline double cos(double a) {
 	return std::cos(a);
 }
+inline double asin(double a) {
+	return std::asin(a);
+}
 inline double atan(double y, double x) {
 	return std::atan2(y, x);
 }
@@ -187,6 +190,15 @@ int truth_shares(const OpticsScene &scene) {
 }
 
 } // namespace
+
+OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
+	if (!shader::ready(scene)) {
+		return OpticsBend{};
+	}
+	const shader::Use use(scene);
+	const shader::Bend b = shader::bend_at(shader::at(x, y), nm);
+	return OpticsBend{ b.x, b.pass, b.chord };
+}
 
 void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	rgb[0] = rgb[1] = rgb[2] = 0.0;
@@ -319,6 +331,14 @@ int OpticsFrames::frames() const {
 	return frame_;
 }
 
+double OpticsFrames::spent(int x, int y) const {
+	const int col = x - x_, row = y - y_;
+	if (col < 0 || row < 0 || col >= w_ || row >= h_) {
+		return 0.0;
+	}
+	return (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s.aux.w;
+}
+
 bool OpticsFrames::restarted(int x, int y) const {
 	const int col = x - x_, row = y - y_;
 	return col >= 0 && row >= 0 && col < w_ && row < h_ && restarted_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)] != 0;
@@ -384,8 +404,9 @@ std::string check_O1(const OpticsScene &scene) {
 			}
 		}
 		const size_t body = static_cast<size_t>(HEADER_VECS + i * BODY_VECS) * 4;
+		const bool prism = scene.table[body + static_cast<size_t>(FORM) * 4] > 1.5f; // its MORE holds its corners
 		const double extinction = scene.table[body + static_cast<size_t>(MORE) * 4], thickness = scene.table[body + static_cast<size_t>(MORE) * 4 + 1];
-		if (!(extinction >= 0.0) || !(thickness >= 0.0)) {
+		if (!prism && (!(extinction >= 0.0) || !(thickness >= 0.0))) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
 		}
@@ -404,7 +425,11 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 	if (!shader::ready(scene)) {
 		return "O2: no scene";
 	}
-	const double most = std::max({ 1.0, static_cast<double>(scene.table[1]), static_cast<double>(scene.table[2]) });
+	// the brightest of the wall, the room's white, the room in front and what is drawn on the wall
+	double most = std::max({ 1.0, static_cast<double>(scene.table[1]), static_cast<double>(scene.table[2]), static_cast<double>(scene.table[2 * 4 + 1]) });
+	for (int k = 0; k < optics_layout::MAX_SHAPES; ++k) {
+		most = std::max(most, static_cast<double>(scene.table[static_cast<size_t>(optics_layout::SHAPE_BASE + 2 * k + 1) * 4]));
+	}
 	for (int k = 0; k <= 800; ++k) {
 		const double nm = 380.0 + 0.5 * k, t = optics_through(scene, x, y, nm);
 		if (!(t >= 0.0 && t <= most * (1.0 + 1e-12))) {

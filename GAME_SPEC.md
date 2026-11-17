@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.11.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.12.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -659,6 +659,19 @@ For each light:
    band). Asks above the frame's budget are scaled down by the screen's mean ask (a mipmap chain
    on the GPU, nothing read back). The budget is a ceiling, the setting that trades speed for
    accuracy on weaker hardware; a still scene costs almost nothing.
+6. **Cuts where a pixel's light jumps.** Wherever a pixel's light is known to jump or spike in
+   wavelength, its bands are cut there, each part its own exact colour and its own point, so a
+   narrow window of wavelengths is a band of its own and read every frame, by the moving points
+   and by the fixed estimate alike. Three things are known to make such jumps, for any body: a
+   view bent by glass crossing an edge of what is drawn behind it or of the bench (the landing
+   point moves with the wavelength smoothly, so each edge is bracketed between sixteen even shares
+   and bisected); the ray changing its route through the glass (turned back at a face, missing an
+   inner surface), found the same way; and each narrow absorption line in what the pixel looks
+   through (its core, a width and a half each side). A light's own lines need none: its energy
+   table gives each its share. Without the cuts, a pixel that sees a thin slit through a prism, a
+   window of 0.7% of the light's energy, can miss it in its first frames, measure no noise and stop
+   for good; and the fixed estimate, as blind, keeps a stale history when the prism turns.
+   The content key holds each layer's coverage and, through glass, where the ray crosses it.
 
 **How the choice is measured:**
 
@@ -691,6 +704,17 @@ For each light:
    points) is visible on 1 in 1,500. The reference's own frames hold a still scene, a dragged
    body, a pour and a slow reaction to no pixel visibly wrong for 6 frames running (`optics: the
    renderer's frames ...`), and `O4` holds the GPU's settled picture to the truth.
+
+**False positives and false negatives with cuts** (`chem_tool study frames`, the reference's own
+frames against the truth): the prism demo, opened, turned and moved: visible 24.8% to 0.00% of
+pixel-frames, persistent 23.1% to 0.00%, points a pixel a frame 15.3 to 1.55, wasted 7.25 to 0.80;
+a bench of glass vessels dragged, jumping, poured into and reacting: none visible either way (the
+content key's geometry took it from 1.23%, with runs of 92 frames, to none); sixteen glasses of
+random hard spectra with narrow lines: none visible either way, the longest visible run 2 frames
+to 0, wasted 0.79 to 0.86 (the lines' cuts cost a point each). The scene test replayed with its
+dragged ball a refracting glass sphere of water: behind the ball, 16 points everywhere shows 8.4%
+visible; the decided method, with or without cuts, none; water and glass bend too little for a
+view to cross an edge between wavelengths, so the cuts change nothing there.
 
 **What the user's eye decided** (rounds 4 to 8; details in `docs/TDD_10_OPTICS.md`):
 
@@ -811,6 +835,43 @@ is read back. **The reference** is the same file compiled as C++ in float64 (`op
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
 draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
 
+**Refraction and Fresnel** (Stage 11). A vessel is a glass cylinder around what it holds, and
+light bends at each of its surfaces:
+
+- **What is behind is drawn.** The room behind the bodies is the lit wall and what is drawn on it
+  (the bench's grid, the panels' edges: the draw list's first part), each a flat grey of its own
+  radiance. The scene carries, for each body, the drawn shapes its bent rays can reach, and a
+  point reads the wall where its ray lands. Outside a body the same shapes are the flat drawing,
+  so a vessel's rim meets the wall with no seam where nothing bends.
+- **The glass.** Each vessel's wall is borosilicate glass of the wall's mass: its thickness is the
+  mass over the density (2.23 g/cm³) and the area of the side and the floor. Its index is the
+  glass's `n(λ)` (a Cauchy fit to Schott's table for BOROFLOAT 33); the liquid's is water's (the
+  Sellmeier formula of Daimon and Masumura at 20 °C); above the liquid, air (1). Both are spectra
+  at 1 nm like any other, so a point bends by the index at its own wavelength (dispersion).
+- **The bend.** The camera looks straight in; the cylinder's axis is upright, so a ray bends only
+  across it. Through concentric cylinders the ray keeps its distance `d` from the axis times the
+  index (`n d` is constant), so at a surface of radius `r` between indices `n₁` outside and `n₂`
+  inside it meets the normal at `asin(d / (n₁ r))` and leaves it at `asin(d / (n₂ r))`. The ray's
+  total turn `δ` is twice the sum of those differences over the surfaces it crosses going in, and
+  it leaves on a line at distance `d` from the axis, turned by `δ`: on the wall, `D` behind the
+  axis, it lands at `(d − D sin δ) / cos δ` from it. `D` is the distance from the vessels to the
+  wall behind them (calibrated: 20 cm). A ray whose `d / n` misses an inner surface stays in the
+  glass.
+- **The chord.** Inside a medium the ray's distance from the axis is `d / n`, so the liquid's
+  chord is `2 sqrt(r² − (d / n)²)`, at each point's own wavelength: the path the light really
+  takes, which Beer-Lambert reads.
+- **Fresnel.** At each surface the unpolarised reflectance of the two angles (`R`, from Fresnel's
+  equations; at normal incidence `((n₁ − n₂)/(n₁ + n₂))²`) is turned away; what gets through all
+  four surfaces is `T = Π (1 − R)`. What is turned away shows the room in front of the bench,
+  whose radiance is calibrated (0.3 of the room's white): a vessel's rims, where light meets the
+  glass aslant, show more of the room and less of the wall, as glass on a bench does.
+- **What it does not bend:** a heap of solid (its surface is seen as it lies), the balloon (thin
+  rubber around gas), a pixel half under a liquid's surface (it takes the medium its centre is
+  in), anything up and down (the liquid's surface, the floor of the vessel).
+- **A pixel looks from its centre.** A drawn line seen through a vessel is sampled where the
+  pixel's central ray lands, not averaged over the pixel's width (the truth the GPU is held to,
+  `O4`, does the same).
+
 **Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
 (§12.3); every layer a texture with constant weights (the live composition, the powders by mass,
 the rubber, the lit wall); pure water's absorption; then refraction and Fresnel as a separate stage.
@@ -818,10 +879,14 @@ the rubber, the lit wall); pure water's absorption; then refraction and Fresnel 
 constant weights (the live composition, the powders by mass, the rubber, the lit wall) and line
 lists, the room's light in energy bands with moving points, each pixel's history kept by its
 content key and points by need, gamut mapping onto sRGB, and pure water as measured. The glow of a
-hot solid is its exact colour, added outside the history. *PLANNED, Stage 11:* refraction and
-Fresnel. The rest of the full design (lights besides the room's, image and gradient weights,
+hot solid is its exact colour, added outside the history. Stage 11 adds refraction and Fresnel
+through each vessel's glass and liquid, with dispersion, the bench's drawing seen bent, and the
+prism demo: a prism of flint glass (N-SF11) traced through its flat faces, before a slit of white
+light in a dark room (`make prism`). The
+rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
-Mie auras, dispersion, adapted exposure, Display P3 output) is specified and not built.
+Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
+adapted exposure, Display P3 output) is specified and not built.
 
 ## 13. Lab layer and interaction
 
@@ -1107,10 +1172,12 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
-| O1 | Transmittance is within [0, 1]: in the renderer's table every optical depth is at least 0 and every reflectance within [0, 1] | exact | 10 |
-| O2 | No band of a pixel is brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
+| O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
+| O2 | No wavelength of a pixel comes out brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
 | O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
+| O5 | Where every index is 1, refraction changes nothing: each pixel's light is the light of the straight path, with nothing reflected; it fires on water's own index | tolerance (float64 rounding) | 11 |
+| O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -1128,12 +1195,13 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   thermal state derived once, 3.8 µs; with the tray, the bursting check and overflow added,
   4.1 µs: 4050 times real time, 2.5 ms a frame at 600 steps a frame. The time is in the phase
   equilibria themselves (the logarithms of each affinity).
-- Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 10, `make
-  screenshots`, Apple M3 Pro, 1920×1080, as the slope of the frame time over extra passes, each
-  with its barrier): a settled pass 1.7 to 2.2 ms (the first fixed-band pass was 0.21 ms); a pass in
-  which every covered pixel's history starts at once (66,726 pixels, 72 points each) 11 ms. A pour
-  starts one vessel's pixels again, a few thousand. The first build measured 4.9 ms settled; a
-  pixel whose content is the same and which asks for nothing now does nothing.
+- Rendering: the optical pass under 2 ms on an integrated GPU. **Measured** (Stage 11, `make
+  screenshots`, Apple M3 Pro, 1920×1080, refraction on, as the slope of the frame time over extra
+  passes, each with its barrier; three runs): a settled pass about 0.1 ms, within the measurement's
+  noise; a pass in which every covered pixel's history starts at once (66,726 pixels, the fixed
+  estimate and 64 points each) 0.93 to 0.98 ms. Stage 10 recorded 1.9 and 11 ms: its runs' whole
+  frames took 70 ms against about 3 ms since, so the machine was busy with something else then, and
+  those numbers are withdrawn. The first fixed-band pass was 0.21 ms.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -1173,4 +1241,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
+| A pixel looks from its centre: a drawn line seen through glass is not averaged over the pixel's width; a pixel takes the vessel its centre is in, and the medium its centre is in (liquid or air); only the first vessel a pixel looks through bends its view; a ray turned back at an inner surface is treated as staying in the glass | Thin lines seen through a vessel's edge alias; a surface pixel bends as liquid or as air, not half each |
+| A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
+| The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
 | The room's is the only light; a hot solid's glow is its exact colour, added to what the pixel shows outside its history | No lamp or glowing gas lights the scene yet (§12.2 is built for them); the glow is not dimmed by what lies in front of the solid |
