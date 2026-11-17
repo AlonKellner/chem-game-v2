@@ -384,7 +384,7 @@ struct Ui::Impl {
 			return false;
 		}
 		const Rect c = foot(v);
-		r = Rect{ c.x + 4, c.y + 6, 44, 24 }; // the footprint's corner, clear of what stands on the vessel's mouth
+		r = Rect{ c.x + c.w - 38, c.y + c.h - 26, 36, 22 }; // at its foot, on the right: clear of its mouth, its burner and its name
 		return true;
 	}
 
@@ -1424,9 +1424,9 @@ struct Ui::Impl {
 		list.text += '\0';
 		list.commands.push_back(DrawCommand{ DrawCommand::Text, color, 1, offset, static_cast<int32_t>(s.size()), x, y, 0, size });
 	}
-	void button(const Rect &r, const std::string &label, bool on = false) {
+	void button(const Rect &r, const std::string &label, bool on = false, float size = 18) {
 		rect_fill(r, on ? BUTTON_ON : BUTTON);
-		text(r.x + 10, r.y + r.h / 2 + 6, label);
+		text(r.x + (size < 18 ? 6 : 10), r.y + r.h / 2 + size / 3, label, INK, size);
 	}
 
 	// a signal part (§13.3): its name, its state, a lamp lit while it signals, its port
@@ -1572,7 +1572,7 @@ struct Ui::Impl {
 			// under a vessel it needs no name: its valve is beside it
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
-			text(c.x + 4, c.y + c.h - 10, label, WALL_INK, 15);
+			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
 		} else {
 			text(r.x, r.y + r.h + 18, label, WALL_INK, 15);
 		}
@@ -1621,7 +1621,7 @@ struct Ui::Impl {
 				rect_fill(Rect{ r.x - 4, knob - 4, r.w + 8, 8 }, INK);
 			}
 			if (stir_rect(i, r)) {
-				button(r, "stir", view.items[static_cast<size_t>(i)].stirred);
+				button(r, "stir", view.items[static_cast<size_t>(i)].stirred, 14);
 			}
 			// what stands under a condenser's outlet is joined to it by a drip
 			const ItemView &v = view.items[static_cast<size_t>(i)];
@@ -2152,7 +2152,7 @@ struct Ui::Impl {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " watches", INK, 22);
 			const std::vector<int> items = watchable();
 			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-				button(edit_item(k), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item);
+				button(edit_item(k), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
 			}
 			if (draft.quantity.item.empty()) {
 				text(EDITOR.x + 20, EDITOR.y + 128, "choose what it watches", DIM, 15);
