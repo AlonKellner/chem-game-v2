@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.12.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.13.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1160,8 +1160,8 @@ measured` asserts each of these.
 in flat colours; `ui: the three stages of the demo, played with the pointer alone` plays it
 through the screen. Stages 10 and 11: seen by light, refracted. Stage 12: checked end to end with
 the final renderer, headless, through the screen and on the GPU, and made a tutorial (§13.2)
-that teaches it step by step and checks each step (`docs/TDD_12_DEMO.md`); the user's sign-off
-closes it.
+that teaches it step by step and checks each step (`docs/TDD_12_DEMO.md`); signed off by the user
+on 2026-11-17.
 
 ## 18. Invariant catalogue
 

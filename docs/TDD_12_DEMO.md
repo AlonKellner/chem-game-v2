@@ -22,7 +22,7 @@ it turns the demo into a tutorial (GAME_SPEC §13.2), and hands it to the user t
 | 12.4 | The stage-close gates (`make gates`: uncached, ASan and UBSan) | Done |
 | 12.5 | The tutorial (GAME_SPEC §13.2): `lab::Tutorial`, `data/tutorials/demo.json`, the card and the pointer on the screen, `cg_ui_tutor`/`cg_ui_tutorial`, the Godot host's `tutorial_path` | Done |
 | 12.6 | The user's first try failed. The tutorial played at a person's pace; one step at a time; the clock held while a gesture is asked for; the T1 rounding fix | Done |
-| 12.7 | The user plays it (`make run`) and signs off | Pending |
+| 12.7 | The user plays it (`make run`) and signs off | Done (2026-11-17: "Works perfectly! Approved, proceed") |
 
 ## What it measures
 

@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 12)
+## 0.13.0 (2026-11-17, Stage 12)
+
+Signed off by the user on 2026-11-17 ("Works perfectly! Approved, proceed").
 
 - §17: the demo checked end to end with the final renderer, headless, through the screen and on the
   GPU; its measured results unchanged.
