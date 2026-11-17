@@ -18,10 +18,16 @@ namespace lab {
 // A circuit holds other parts, circuits too, compactly on one square (§13.3);
 // it signals nothing itself: what is in it signals as it would out of it.
 // A notice part signals for a step when the lab writes a notice at or above
-// its level (§13.4), about its item if it names one.
-enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4 };
-const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit", "notice"
+// its level (§13.4), about its item if it names one. A writer writes a
+// notice of its own (its level, its words) when its input turns on: with
+// notice parts, the lab's notices are a bus parts post to and hear from.
+enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4, Writer = 5 };
+constexpr int PART_KINDS = 6;
+constexpr size_t MAX_SAYS = 80; // a writer's words, in bytes
+const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit", "notice", "writer"
 bool part_kind_of(std::string_view name, PartKind &kind);
+// whether a part sends a signal: an alarm and a writer only take one, a circuit's parts send theirs
+bool sends(PartKind kind);
 
 struct Part {
 	std::string id; // "monitor1"
@@ -29,7 +35,8 @@ struct Part {
 	int col = -1, row = -1; // its square: on the bench, or inside its circuit
 	std::string in; // the circuit it is in; "" on the bench
 	int inner_w = 0, inner_h = 0; // a circuit's own grid, in squares
-	int notice_level = 2; // a notice part's: 0 detail, 1 event, 2 warning, 3 danger; its item is quantity.item ("" for any)
+	int notice_level = 2; // a notice part's or a writer's: 0 detail, 1 event, 2 warning, 3 danger; its item is quantity.item ("" for any; a writer's own id)
+	std::string says; // a writer's words ("" for "<id> was signalled")
 
 	// a monitor: what it watches, once set
 	bool watching = false;
@@ -41,8 +48,8 @@ struct Part {
 
 	// its state at the end of the last step
 	std::optional<double> last; // a monitor's last reading
-	bool own = false; // its own condition: a monitor's comparison, a timer at zero, an alarm's input
-	bool out = false; // its signal: its own condition, while its inputs let it (an alarm sends none)
+	bool own = false; // its own condition: a monitor's comparison, a timer at zero, an alarm's or a writer's input
+	bool out = false; // its signal: its own condition, while its inputs let it (an alarm and a writer send none)
 	bool ringing = false; // an alarm, from the step its input turned on until acknowledged
 	int64_t rang_at = -1;
 
@@ -74,6 +81,7 @@ struct RigAction {
 struct SignalStep {
 	std::vector<RigAction> actions; // in the order the rigs were made: the newest acts last, and wins
 	std::vector<std::string> rang; // the alarms that started ringing
+	std::vector<std::string> written; // the writers whose input turned on: each writes its notice
 };
 
 // What a monitor reads: a quantity now, none when it is not one of the lab's.

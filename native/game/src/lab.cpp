@@ -185,7 +185,7 @@ struct Lab::Impl {
 	std::vector<Wire> wires;
 	std::vector<Rig> rigs;
 	std::vector<ControlSetting> controls;
-	int64_t made[5] = { 0, 0, 0, 0, 0 }; // the parts made of each kind, for their names
+	int64_t made[PART_KINDS] = {}; // the parts made of each kind, for their names
 	bool rang = false; // an alarm started ringing in the last step
 	// notices (GAME_SPEC §13.4): what happened, and what the detectors last saw
 	std::vector<Notice> notices;
@@ -322,6 +322,10 @@ struct Lab::Impl {
 		for (const std::string &alarm : done.rang) {
 			note(Notice::Event, alarm, alarm + " rang");
 		}
+		for (const std::string &writer : done.written) { // a writer's own notice: heard from the next step
+			const Part &w = parts[static_cast<size_t>(find_part(writer))];
+			note(static_cast<Notice::Level>(w.notice_level), w.quantity.item.empty() ? w.id : w.quantity.item, w.says.empty() ? w.id + " was signalled" : w.says);
+		}
 		std::vector<std::string> failing;
 		if (check) {
 			failing = check_G2(parts, wires, before);
@@ -400,9 +404,12 @@ struct Lab::Impl {
 			if (p.kind == PartKind::Circuit) {
 				j["inner"] = { p.inner_w, p.inner_h };
 			}
-			if (p.kind == PartKind::Notice) {
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
 				j["level"] = level_name(static_cast<Notice::Level>(p.notice_level));
 				j["about"] = p.quantity.item;
+			}
+			if (p.kind == PartKind::Writer) {
+				j["says"] = p.says;
 			}
 			if (p.kind == PartKind::Monitor) {
 				j["watching"] = p.watching;
@@ -436,7 +443,10 @@ struct Lab::Impl {
 			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
 		}
 		out["controls"] = k;
-		out["made"] = { made[0], made[1], made[2], made[3], made[4] };
+		out["made"] = json::array();
+		for (const int64_t n : made) {
+			out["made"].push_back(n);
+		}
 		return out;
 	}
 
@@ -469,11 +479,12 @@ struct Lab::Impl {
 				p.inner_w = x.at("inner").at(0).get<int>();
 				p.inner_h = x.at("inner").at(1).get<int>();
 			}
-			if (p.kind == PartKind::Notice) {
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
 				Notice::Level level = Notice::Warning;
 				level_of(x.value("level", std::string("warning")), level);
 				p.notice_level = static_cast<int>(level);
 				p.quantity.item = x.value("about", std::string());
+				p.says = x.value("says", std::string());
 			}
 			p.own = x.at("own").get<bool>();
 			p.out = x.at("out").get<bool>();
@@ -521,7 +532,7 @@ struct Lab::Impl {
 			}
 			controls.push_back(k);
 		}
-		for (size_t k = 0; k < 5 && k < j.at("made").size(); ++k) {
+		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
 			made[k] = j.at("made").at(k).get<int64_t>();
 		}
 		return true;
@@ -1451,7 +1462,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	if (what == "part") {
 		PartKind kind = PartKind::Timer;
 		if (!c.contains("kind") || !c.at("kind").is_string() || !part_kind_of(c.at("kind").get<std::string>(), kind) || kind == PartKind::Circuit) {
-			why = "a part's \"kind\" is timer, monitor, alarm or notice (a circuit is made of parts: \"circuit\")";
+			why = "a part's \"kind\" is timer, monitor, alarm, notice or writer (a circuit is made of parts: \"circuit\")";
 			return false;
 		}
 		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
@@ -1465,6 +1476,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		Part p;
 		p.kind = kind;
+		p.notice_level = kind == PartKind::Writer ? static_cast<int>(Notice::Event) : p.notice_level;
 		p.col = col;
 		p.row = row;
 		p.in = in;
@@ -1525,6 +1537,26 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.quantity.item = about;
 			return true;
 		}
+		if (p.kind == PartKind::Writer) {
+			Notice::Level level = Notice::Event;
+			if (!c.contains("level") || !c.at("level").is_string() || !level_of(c.at("level").get<std::string>(), level)) {
+				why = "a writer is set to a \"level\": detail, event, warning or danger";
+				return false;
+			}
+			const std::string about = c.value("item", std::string()), says = c.value("says", std::string());
+			if (!about.empty() && find(about) < 0 && find_part(about) < 0) {
+				why = "there is no \"" + about + "\" for it to write about";
+				return false;
+			}
+			if (says.size() > MAX_SAYS) {
+				why = text_of("a writer's words are at most %.0f characters", static_cast<double>(MAX_SAYS));
+				return false;
+			}
+			p.notice_level = static_cast<int>(level);
+			p.quantity.item = about;
+			p.says = says;
+			return true;
+		}
 		if (p.kind != PartKind::Monitor) {
 			why = std::string("a") + (p.kind == PartKind::Alarm ? "n alarm" : " circuit") + " has nothing to set";
 			return false;
@@ -1583,8 +1615,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			wires.erase(there);
 			return true;
 		}
-		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm) {
-			why = "an alarm sends no signal: it has no output to wire";
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm || parts[static_cast<size_t>(from)].kind == PartKind::Writer) {
+			why = std::string(parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm" : "a writer") + " sends no signal: it has no output to wire";
 			return false;
 		}
 		if (parts[static_cast<size_t>(from)].kind == PartKind::Circuit || parts[static_cast<size_t>(to)].kind == PartKind::Circuit) {
@@ -1617,8 +1649,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			rigs.erase(there);
 			return true;
 		}
-		if (parts[static_cast<size_t>(from)].kind == PartKind::Alarm || parts[static_cast<size_t>(from)].kind == PartKind::Circuit) {
-			why = parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm sends no signal: it has no output to rig" : "a circuit is rigged by the parts in it: open it";
+		if (!sends(parts[static_cast<size_t>(from)].kind)) {
+			why = parts[static_cast<size_t>(from)].kind == PartKind::Circuit ? "a circuit is rigged by the parts in it: open it"
+					: std::string(parts[static_cast<size_t>(from)].kind == PartKind::Alarm ? "an alarm" : "a writer") + " sends no signal: it has no output to rig";
 			return false;
 		}
 		const bool targets = r.control == "reset" ? find_part(r.item) >= 0 && parts[static_cast<size_t>(find_part(r.item))].kind == PartKind::Timer
@@ -2348,6 +2381,9 @@ std::string Lab::digest() const {
 			hash.update_i64(p.left);
 			maybe(p.last);
 			hash.update_i64(p.rang_at);
+			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
+				hash.update_i64(p.notice_level); // what it hears, or writes, decides what is signalled
+			}
 		}
 		for (const Wire &w : m.wires) {
 			text(w.from);

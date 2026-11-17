@@ -213,3 +213,11 @@ func _play(dir: String) -> void:
 	await _shoot(dir, "8_circuit")
 	_click("part:open")
 	await _shoot(dir, "9_circuit_open")
+	_click("circuit:close")
+	# Stage 16: a writer, its words being typed (GAME_SPEC §13.4)
+	_drag("drawer:writer", "square:2,4")
+	_click("edit:level:warning")
+	_click("edit:says")
+	for c in "the flask is nearly dry":
+		_lab.key(0, c.unicode_at(0))
+	await _shoot(dir, "11_writer")

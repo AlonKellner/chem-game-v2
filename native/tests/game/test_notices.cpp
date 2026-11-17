@@ -243,3 +243,120 @@ TEST_CASE("notices: on the screen: the newest heard by the clock, the panel with
 	CHECK(part->part.notice_level == 3);
 	CHECK(part->part.quantity.item == "flask");
 }
+
+TEST_CASE("notices: a writer writes its own notice once each time its input turns on, and notice parts hear it like the lab's own (Stage 16)") {
+	auto l = open();
+	l->set_checking(true);
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "set", "part": "timer1", "seconds": 1})",
+				 R"({"do": "part", "kind": "writer", "at": [1, 0]})", R"({"do": "set", "part": "writer1", "level": "warning", "says": "the timer ran out"})",
+				 R"({"do": "wire", "from": "timer1", "to": "writer1"})", R"({"do": "part", "kind": "writer", "at": [2, 0]})",
+				 R"({"do": "part", "kind": "notice", "at": [3, 0]})", R"({"do": "set", "part": "notice1", "level": "warning", "item": "writer1"})",
+				 R"({"do": "part", "kind": "alarm", "at": [4, 0]})", R"({"do": "wire", "from": "notice1", "to": "alarm1"})" }) {
+		must(*l, c);
+	}
+	std::string why;
+	// the timer at zero on step 60; the writer reads it a step later, writes; the notice part hears it the step after; the alarm the step after that
+	REQUIRE(l->advance(600, why, true));
+	INFO(all(*l));
+	CHECK(l->view().step == 63);
+	CHECK(l->view().ringing == std::vector<std::string>{ "alarm1" });
+	const auto written = [&] {
+		std::vector<Notice> out;
+		for (const Notice &n : l->view().notices) {
+			if (n.says == "the timer ran out") {
+				out.push_back(n);
+			}
+		}
+		return out;
+	};
+	REQUIRE(written().size() == 1);
+	CHECK(written()[0].level == Notice::Warning);
+	CHECK(written()[0].item == "writer1"); // about itself: what notice parts can listen for
+	CHECK(written()[0].step == 61);
+	REQUIRE(l->advance(600, why));
+	CHECK(written().size() == 1); // on while the timer stays at zero: written once
+	CHECK(count(*l, Notice::Event, "writer2 was signalled") == 0); // with no input, never
+	// reset: off, then on again a second later, written again
+	must(*l, R"({"do": "reset", "timer": "timer1"})");
+	REQUIRE(l->advance(120, why));
+	CHECK(written().size() == 2);
+	// about an item, and in its own words by default
+	must(*l, R"({"do": "set", "part": "writer2", "level": "event", "item": "flask"})");
+	must(*l, R"({"do": "wire", "from": "timer1", "to": "writer2"})");
+	REQUIRE(l->advance(2, why));
+	CHECK(count(*l, Notice::Event, "writer2 was signalled") == 1);
+	CHECK(l->view().notices.back().item == "flask");
+	// it sends no signal; its words have a length; its level is one of four
+	CHECK_FALSE(l->command(R"({"do": "wire", "from": "writer1", "to": "alarm1"})", why));
+	CHECK(why.find("a writer sends no signal") != std::string::npos);
+	CHECK_FALSE(l->command(R"({"do": "rig", "from": "writer1", "item": "burner", "control": "valve", "on": 1})", why));
+	CHECK(why.find("a writer sends no signal") != std::string::npos);
+	CHECK_FALSE(l->command(nlohmann::json{ { "do", "set" }, { "part", "writer1" }, { "level", "event" }, { "says", std::string(lab::MAX_SAYS + 1, 'x') } }.dump(), why));
+	CHECK_FALSE(l->command(R"({"do": "set", "part": "writer1", "level": "shout"})", why));
+	CHECK_FALSE(l->command(R"({"do": "set", "part": "writer1", "level": "event", "item": "kettle"})", why));
+	// saved and loaded, it is the same writer
+	auto again = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	const lab::LabView before = l->view(), after = again->view();
+	REQUIRE(after.items.size() == before.items.size());
+	for (size_t i = 0; i < before.items.size(); ++i) {
+		CHECK(after.items[i].part == before.items[i].part);
+	}
+	CHECK(again->digest() == l->digest());
+}
+
+TEST_CASE("notices: a writer and a notice part on the screen: parts like the others, the writer's words typed (Stage 16)") {
+	std::string why;
+	auto ui = lab::Ui::open(read("data/benches/demo.json"), why);
+	REQUIRE(ui != nullptr);
+	const auto at = [&](const std::string &what, float &x, float &y) { REQUIRE_MESSAGE(ui->locate(what, x, y), what); };
+	const auto click = [&](const std::string &what) {
+		float x = 0, y = 0;
+		at(what, x, y);
+		ui->pointer(x, y, true);
+		ui->pointer(x, y, false);
+	};
+	const auto drag = [&](const std::string &a, const std::string &b) {
+		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+		at(a, x0, y0);
+		at(b, x1, y1);
+		ui->pointer(x0, y0, true);
+		ui->pointer(x1, y1, true);
+		ui->pointer(x1, y1, false);
+	};
+	const auto part = [&](const std::string &id) {
+		const lab::LabView v = ui->lab().view();
+		const auto i = std::find_if(v.items.begin(), v.items.end(), [&](const lab::ItemView &x) { return x.id == id; });
+		REQUIRE(i != v.items.end());
+		return i->part;
+	};
+	drag("drawer:writer", "square:0,0");
+	click("edit:level:warning");
+	click("edit:says");
+	for (const char32_t ch : std::u32string(U"low water ✓!")) {
+		ui->key(lab::Ui::KeyText, static_cast<uint32_t>(ch));
+	}
+	ui->key(lab::Ui::KeyBackspace);
+	ui->key(lab::Ui::KeyBackspace); // the tick: three bytes, one character
+	click("edit:set");
+	CHECK(part("writer1").says == "low water ");
+	CHECK(part("writer1").notice_level == 2);
+	float x = 0, y = 0;
+	CHECK_FALSE(ui->locate("port:writer1", x, y)); // it sends nothing
+	// a notice part that hears the writer, out of the drawer: a part, with a port
+	drag("drawer:notice", "square:2,0");
+	click("edit:item:writer1");
+	click("edit:set");
+	CHECK(part("notice1").quantity.item == "writer1");
+	REQUIRE(ui->locate("port:notice1", x, y));
+	// a timer wired into the writer from its port
+	drag("drawer:timer", "square:4,0");
+	click("edit:set");
+	drag("port:timer1", "item:writer1");
+	CHECK(ui->lab().view().wires == std::vector<lab::Wire>{ { "timer1", "writer1" } });
+	// selected, it is edited again
+	click("item:writer1");
+	click("part:edit");
+	CHECK(ui->locate("edit:says", x, y));
+	CHECK(ui->draw().text.find("low water") != std::string::npos);
+}

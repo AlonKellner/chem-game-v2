@@ -6,7 +6,12 @@
 > perhaps they should have levels, like logs, maybe DETAIL/EVENT/WARNING/DANGER or something like
 > that? and the player can silence any level they want.
 
-GAME_SPEC §13.4; the notice part, §13.3.
+And, after playing it:
+
+> Very good! Perhaps we could also have some part which creates a custom notice when it receives
+> a signal. It's basically an event bus system if we have that
+
+GAME_SPEC §13.4; the notice part and the writer, §13.3.
 
 | Phase | Topic | Status |
 |---|---|---|
@@ -14,7 +19,8 @@ GAME_SPEC §13.4; the notice part, §13.3.
 | 16.2 | The lab's notices: the detectors, read every quarter lab-second; what happens at once; saved and loaded, not digested | Done |
 | 16.3 | The notice part: a level and an item; it signals for a step on a notice it hears | Done |
 | 16.4 | The screen: the newest beside the clock, the panel and its switches, the notice part's editor; the drawer of four parts | Done |
-| 16.5 | The user plays it (`make run`) and signs off | Pending |
+| 16.5 | The writer: the player's own notice, at a level, about an item or itself, when its input turns on; the screen treats notice parts and writers as parts (it drew notice parts as equipment); the drawer of five | Done |
+| 16.6 | The user plays it (`make run`) and signs off | Pending |
 
 ## Decisions
 
@@ -39,6 +45,14 @@ GAME_SPEC §13.4; the notice part, §13.3.
   the digest. The sessions' records are unchanged.
 - **No special "pause on warnings" switch.** The notice part, wired to an alarm, does that, as the
   plan proposed and the signals generalise.
+- **The writer is the bus's other end.**
+  - It writes on its input's rising edge, like an alarm rings: once while the input stays on.
+  - It sends no signal. What hears it is a notice part, so a writer's notice and the lab's own
+    are heard alike, and one more link (a step) is the bus's only cost.
+  - It is about itself unless it names an item, so a notice part can hear one writer alone (a
+    topic), or every warning whoever wrote it.
+  - A notice part's and a writer's level are digested once a part exists: they decide what is
+    signalled. A writer's words are not: they decide nothing.
 - **Details start silenced.** They come often: a rig acting, a reaction stopping. Every level
   stays in the panel's list once its switch is on again.
 - **`LabView::events`** stays the bursts it was. Notices are a list of their own, so nothing that
@@ -67,5 +81,15 @@ GAME_SPEC §13.4; the notice part, §13.3.
     - the panel, details off at first;
     - an event silenced, kept, and shown again;
     - a notice part out of the drawer, set to danger about the flask.
+  - **The writer:**
+    - a timer at zero writes "the timer ran out" once, a warning about writer1, at the next step;
+      a notice part hearing writer1 rings an alarm two steps later;
+    - written again after the timer is reset and runs out; a writer with no input never writes;
+      about the flask, in its own default words;
+    - refused: a wire or a rig from it, words over 80 bytes, a level that is not one, an item not
+      there; saved and loaded, the same parts and digest;
+    - on the screen: out of the drawer, its words typed (a three-byte character erased by one
+      backspace), no port; a notice part hearing it, with a port; a timer wired into it by a
+      drag; edited again.
 - **`make sessions-check`:** unchanged.
 - **`make screenshots`:** the panel after the demo (picture 10); O4 unchanged.

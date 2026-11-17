@@ -9,6 +9,9 @@
   - **At once:** bursts, failed invariants, timers at zero, rigs acting, alarms ringing.
   - **Saving:** saved and loaded, not digested; the sessions' records unchanged.
   - **The notice part** hears them, at a level, about an item.
+  - **The writer** writes the player's own notice, at a level, when its input turns on: with
+    notice parts, the notices are a bus. The screen now treats notice parts as parts (it drew
+    them as equipment), and a wire dropped on one goes into its input.
   - **On the screen:** the newest beside the clock; a panel with a switch per level, details
     silenced at first.
 - §4/§7 (the core): the simulation tallies how far each reaction with a rate law ran in each cell

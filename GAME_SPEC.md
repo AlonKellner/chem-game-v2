@@ -1289,13 +1289,25 @@ says. The player may silence any level.
   - an invariant failing, a danger;
   - a timer reaching zero, a detail;
   - a rig setting a control, a detail;
-  - an alarm ringing, an event.
+  - an alarm ringing, an event;
+  - a writer's notice, at its level.
 - **History, not state.** The notices, and what the detectors last saw, are saved and loaded:
   a loaded lab writes the same notices as one that was not saved. They are not in the digest. What
   is there when the bench opens is not news. The lab keeps the last 2000.
 - **The notice part** (§13.3, out of the drawer) signals for a step when the lab writes a notice
   at or above its level, about its item if it names one: `set {part, level, item}`. Wired to an
   alarm, it stops the clock on, say, every warning.
+- **The writer** (§13.3, out of the drawer) writes a notice of its own when its input turns on:
+  `set {part, level, says, item}`.
+  - Its words are the player's, at most 80 bytes; with none, "writer1 was signalled".
+  - It is about its item, or about itself when it names none, so a notice part can hear one writer
+    alone.
+  - Like an alarm, it takes inputs and sends no signal; with no input it never writes. While its
+    input stays on it writes once; it writes again when the input turns off and on.
+  - Its notice is written at the end of the step its input turned on, and heard by notice parts
+    in the step after: one more link.
+  - So the notices are a bus: writers post to it, notice parts hear from it, and the lab posts
+    its own notices beside theirs.
 - **On the screen:**
   - The newest notice of the levels heard stands beside the clock.
   - "Notices" opens a panel over the readout: a switch for each level, and every notice heard,
