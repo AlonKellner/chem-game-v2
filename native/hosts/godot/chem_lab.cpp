@@ -3,6 +3,7 @@
 #include "chem_optics_demo.hpp"
 #include "draw_list.hpp"
 
+#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -11,8 +12,10 @@
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -144,6 +147,7 @@ void ChemLab::_ready() {
 void ChemLab::_process(double delta) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, delta);
+		keep_export();
 		if (compute_.ready()) {
 			godot::RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ChemLab::optics_frame));
 		}
@@ -198,9 +202,33 @@ void ChemLab::pointer(double x, double y, bool down, int mods) {
 	}
 }
 
+// the debug panel's export (§13.6): the lab's save, in user://saves/, named by the time
+void ChemLab::keep_export() {
+	const char *save = cg_ui_take_export(ui_);
+	if (save == nullptr || save[0] == '\0') {
+		return;
+	}
+	godot::DirAccess::make_dir_recursive_absolute("user://saves");
+	const godot::String path = "user://saves/lab-" + godot::String::num_int64(static_cast<int64_t>(godot::Time::get_singleton()->get_unix_time_from_system() * 1000.0)) + ".json";
+	const godot::Ref<godot::FileAccess> file = godot::FileAccess::open(path, godot::FileAccess::WRITE);
+	if (file.is_null()) {
+		godot::UtilityFunctions::push_error("ChemLab: the export could not be written to ", path);
+		return;
+	}
+	file->store_string(godot::String::utf8(save));
+	file->close();
+	exported_ = path;
+	godot::UtilityFunctions::print("ChemLab: the lab's save exported to ", godot::ProjectSettings::get_singleton()->globalize_path(path));
+}
+
+godot::String ChemLab::exported() const {
+	return exported_;
+}
+
 void ChemLab::frame(double seconds) {
 	if (ui_ != nullptr) {
 		cg_ui_frame(ui_, seconds);
+		keep_export();
 		queue_redraw();
 		overlay_->queue_redraw();
 	}
@@ -332,6 +360,7 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("locate", "what"), &ChemLab::locate);
 	godot::ClassDB::bind_method(godot::D_METHOD("report"), &ChemLab::report);
 	godot::ClassDB::bind_method(godot::D_METHOD("message"), &ChemLab::message);
+	godot::ClassDB::bind_method(godot::D_METHOD("exported"), &ChemLab::exported);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_flat_visible", "on"), &ChemLab::set_flat_visible);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_visible", "on"), &ChemLab::set_optics_visible);
 	godot::ClassDB::bind_method(godot::D_METHOD("optics_parity", "rgba"), &ChemLab::optics_parity);

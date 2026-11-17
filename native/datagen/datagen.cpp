@@ -125,6 +125,7 @@ struct ReactionRow {
 	chem::Kinetics kinetics{};
 	int notice_level = 0; // GAME_SPEC §13.4: detail, event, warning, danger
 	std::string notice_says;
+	std::string explain; // GAME_SPEC §13.6: why it happens
 };
 
 std::string quoted(const std::string &s) {
@@ -308,6 +309,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			}
 			row.notice_says = n.value("says", std::string());
 		}
+		row.explain = r.value("explain", std::string());
 		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
 			fail(reactions_file, "\"" + equation + "\": " + why);
 		}
@@ -380,7 +382,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "std::span<const ReactionNote> builtin_reaction_notes() {\n"
 		<< "\tstatic constexpr ReactionNote NOTES[] = {\n";
 	for (const ReactionRow &row : reactions) {
-		cpp << "\t\t{ " << quoted(row.id) << ", " << row.notice_level << ", " << quoted(row.notice_says) << " },\n";
+		cpp << "\t\t{ " << quoted(row.id) << ", " << row.notice_level << ", " << quoted(row.notice_says) << ", " << quoted(row.explain) << " },\n";
 	}
 	cpp << "\t};\n\treturn NOTES;\n}\n\n"
 		<< "} // namespace chem\n";

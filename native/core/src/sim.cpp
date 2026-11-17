@@ -679,7 +679,22 @@ Refusal Simulation::transfer(EdgeId edge, CellId from, std::span<const SpeciesAm
 	const Edge &e = world_.edges()[static_cast<size_t>(edge.index)];
 	thermal_valid_[static_cast<size_t>(e.a.index)] = 0;
 	thermal_valid_[static_cast<size_t>(e.b.index)] = 0;
-	return world_.transfer(edge, from, amounts, energy);
+	const Refusal refused = world_.transfer(edge, from, amounts, energy);
+	if (refused == Refusal::None) { // the flows (§13.6), from a to b
+		const size_t at = static_cast<size_t>(edge.index) * PROCESSES + static_cast<size_t>(process_);
+		if (flows_.energy.size() <= at) {
+			flows_.energy.resize(world_.edges().size() * PROCESSES, 0);
+			flows_.grams.resize(world_.edges().size() * PROCESSES, 0.0);
+		}
+		const int64_t sign = from == e.a ? 1 : -1;
+		flows_.energy[at] += sign * energy.quanta;
+		double g = 0.0;
+		for (const SpeciesAmount &x : amounts) {
+			g += static_cast<double>(x.amount.quanta) * MOL_PER_QUANTUM * static_cast<double>(world_.species().molar_mass_ug(x.species)) * 1e-6;
+		}
+		flows_.grams[at] += static_cast<double>(sign) * g;
+	}
+	return refused;
 }
 
 Refusal Simulation::transform(CellId cell, const Reaction &reaction, int64_t extent) {
@@ -691,6 +706,17 @@ Refusal Simulation::transform(CellId cell, const Reaction &reaction, int64_t ext
 			tally_.resize(static_cast<size_t>(world_.cell_count()) * reactions_.size(), 0);
 		}
 		tally_[at] += extent;
+	}
+	if (refused == Refusal::None) { // the flows (§13.6): a rated reaction, or an equilibrium after them
+		size_t r = SIZE_MAX;
+		if (!reactions_.empty() && &reaction >= reactions_.data() && &reaction < reactions_.data() + reactions_.size()) {
+			r = static_cast<size_t>(&reaction - reactions_.data());
+		} else if (!equilibria_.empty() && &reaction >= equilibria_.data() && &reaction < equilibria_.data() + equilibria_.size()) {
+			r = reactions_.size() + static_cast<size_t>(&reaction - equilibria_.data());
+		}
+		if (r != SIZE_MAX) {
+			flows_.extent[static_cast<size_t>(cell.index) * flows_.reactions + r] += extent;
+		}
 	}
 	return refused;
 }
@@ -705,6 +731,11 @@ void Simulation::begin_step() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	thermal_.resize(cells);
 	thermal_valid_.assign(cells, 0);
+	flows_.reactions = reactions_.size() + equilibria_.size();
+	flows_.energy.assign(world_.edges().size() * PROCESSES, 0);
+	flows_.grams.assign(world_.edges().size() * PROCESSES, 0.0);
+	flows_.extent.assign(cells * flows_.reactions, 0);
+	process_ = Process::Reaction;
 }
 
 void Simulation::restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation) {
@@ -716,10 +747,15 @@ void Simulation::restore_remainders(std::vector<double> heat, std::vector<double
 void Simulation::advance() {
 	begin_step();
 	if (world_.thermal()) {
+		process_ = Process::Reaction;
 		react();
+		process_ = Process::Heat;
 		conduct_heat();
+		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Settle;
 		settle();
+		process_ = Process::Overflow;
 		overflow();
 	}
 	world_.skip_step();
@@ -733,10 +769,15 @@ StepTrace Simulation::step() {
 	}
 	begin_step();
 	if (world_.thermal()) {
+		process_ = Process::Reaction;
 		react();
+		process_ = Process::Heat;
 		conduct_heat();
+		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Settle;
 		settle();
+		process_ = Process::Overflow;
 		overflow();
 	}
 	StepTrace trace = world_.close_step();

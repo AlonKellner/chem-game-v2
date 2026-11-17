@@ -145,6 +145,7 @@ constexpr const char *SPECIES_MEASURES[] = { "g", "purity", "count", "size" };
 constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
 constexpr int DRAWN_KINDS = 5; // what the drawer holds
 constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
+constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
 constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
 constexpr const char *OP_KEYS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
 constexpr const char *MEASURES[] = { "g", "count", "size", "purity" };
@@ -205,6 +206,10 @@ struct Ui::Impl {
 	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
 	std::array<bool, 4> hear{ false, true, true, true };
 	bool notices_open = false;
+	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
+	bool debug_open = false;
+	int debug_from = 0;
+	std::string exported;
 
 	void refresh() {
 		view = lab->view();
@@ -249,6 +254,7 @@ struct Ui::Impl {
 	bool notices_press(float x, float y) {
 		if (notices_button().has(x, y)) {
 			notices_open = !notices_open;
+			debug_open = debug_open && !notices_open;
 			return true;
 		}
 		if (!notices_open) {
@@ -275,8 +281,8 @@ struct Ui::Impl {
 		for (auto n = view.notices.rbegin(); n != view.notices.rend(); ++n) {
 			if (hear[static_cast<size_t>(n->level)]) {
 				std::string line = when(n->step) + "  " + n->says;
-				if (line.size() > 64) {
-					line = line.substr(0, 62) + "..";
+				if (line.size() > 56) {
+					line = line.substr(0, 54) + ".."; // short of the debug button
 				}
 				text(1230, 40, line, level_colour(n->level), 15);
 				break;
@@ -304,6 +310,137 @@ struct Ui::Impl {
 				y += 20;
 			}
 			y += 6;
+		}
+	}
+
+	// ---- the debug panel (§13.6): the selected item from the inside
+	static Rect debug_button() { return Rect{ 1670, 14, 110, 36 }; }
+	static Rect debug_rect(int k) { return Rect{ DEBUG.x + 20 + static_cast<float>(k) * 98, DEBUG.y + 56, 90, 30 }; } // step, export, up, down, close
+	static constexpr const char *DEBUG_BUTTONS[] = { "step", "export", "up", "down", "close" };
+	bool debug_press(float x, float y) {
+		if (debug_button().has(x, y)) {
+			debug_open = !debug_open;
+			notices_open = notices_open && !debug_open;
+			debug_from = 0;
+			return true;
+		}
+		if (!debug_open) {
+			return false;
+		}
+		for (int k = 0; k < 5; ++k) {
+			if (!debug_rect(k).has(x, y)) {
+				continue;
+			}
+			if (k == 0) {
+				step_once();
+			} else if (k == 1) {
+				exported = lab->save();
+				message = "exported: the host keeps the lab's save (chem-save/1)";
+			} else if (k == 2) {
+				debug_from = std::max(0, debug_from - 12);
+			} else if (k == 3) {
+				debug_from += 12;
+			} else {
+				debug_open = false;
+			}
+			return true;
+		}
+		return DEBUG.has(x, y); // the panel takes what falls on it
+	}
+	// exactly one step, the clock paused; under a tutorial only while it lets the clock run
+	void step_once() {
+		if (held()) {
+			message = "The clock waits for you: " + tutorial->view().text;
+			return;
+		}
+		paused = true;
+		owed = 0.0;
+		std::string why;
+		lab->set_checking(true);
+		const bool ok = lab->advance(1, why, true);
+		lab->set_checking(false);
+		if (!ok) {
+			message = why;
+		} else if (lab->rang()) {
+			ring();
+		}
+		refresh();
+		follow();
+	}
+	// the panel's lines: text, colour, size
+	struct Line {
+		std::string text;
+		uint32_t colour;
+		float size;
+		float indent;
+	};
+	std::vector<Line> debug_lines() const {
+		std::vector<Line> out;
+		const auto add = [&](const std::string &t, uint32_t c, float size = 14, float indent = 0) {
+			for (const std::string &l : wrapped(t, static_cast<size_t>((DEBUG.w - 40 - indent) / (size * 0.52f)))) {
+				out.push_back(Line{ l, c, size, indent });
+			}
+		};
+		if (selected < 0) {
+			add("select an item to look inside it", DIM);
+			return out;
+		}
+		const ItemDebug d = lab->debug(id(selected));
+		if (!d.found) {
+			add(id(selected) + " holds nothing: a burner's flame, or a signal part", DIM);
+			return out;
+		}
+		add(d.item + (d.has_temperature ? text_of(": %.2f C", d.celsius) + text_of(", heat capacity %.1f J/K", d.heat_capacity) : ": no temperature"), INK, 18);
+		add("what it holds: mol, g, mole fraction in its mixture, molality, activity", DIM, 13);
+		for (const SpeciesDebug &s : d.species) {
+			std::string row = s.formula + text_of("  %.4g mol", s.mol) + text_of("  %.4g g", s.g) + text_of("  x %.4g", s.fraction);
+			if (s.phase == 'a') {
+				row += text_of("  %.4g mol/kg", s.molality);
+			}
+			add(row + text_of("  a %.4g", s.activity), INK, 13, 10);
+		}
+		add("its flows in the last step, into it", DIM, 13);
+		if (d.flows.empty()) {
+			add("none", DIM, 13, 10);
+		}
+		for (const FlowDebug &f : d.flows) {
+			std::string row = f.process + " with " + f.with + ":";
+			if (f.watts != 0.0) {
+				row += text_of(" %+.4g W", f.watts);
+			}
+			if (f.grams_per_s != 0.0) {
+				row += text_of(" %+.4g g/s", f.grams_per_s);
+			}
+			add(row, INK, 13, 10);
+		}
+		add("its reactions", DIM, 13);
+		for (const ReactionDebug &r : d.reactions) {
+			add(r.equation, INK, 14, 10);
+			add(r.explain, DIM, 12, 20);
+			add(text_of("rate %.3g mol/s", r.rate_mol_s) + (r.weighed ? text_of(", affinity %.3g kJ/mol", r.affinity_kj) : std::string()), INK, 12, 20);
+			// running: green; at rest by its nature: plain; held back: amber
+			const bool running = r.limit.rfind("fast:", 0) == 0 || r.limit.rfind("supersaturated", 0) == 0 || r.limit.rfind("limited by its surface", 0) == 0;
+			const bool resting = r.limit == "at equilibrium" || r.limit.rfind("fast: held", 0) == 0 || r.limit.rfind("it does not run on its own", 0) == 0;
+			add("limit: " + r.limit, resting ? INK : running ? GOOD : WARN, 13, 20);
+		}
+		return out;
+	}
+	void paint_debug() {
+		button(debug_button(), "debug", debug_open, 15);
+		if (!debug_open) {
+			return;
+		}
+		rect_fill(DEBUG, PANEL_FILL);
+		outline(DEBUG, GLASS, 1);
+		text(DEBUG.x + 20, DEBUG.y + 36, "inside the selected item", INK, 20);
+		for (int k = 0; k < 5; ++k) {
+			button(debug_rect(k), DEBUG_BUTTONS[k], false, 15);
+		}
+		const std::vector<Line> lines = debug_lines();
+		float y = DEBUG.y + 116;
+		for (size_t k = static_cast<size_t>(std::min<int>(debug_from, static_cast<int>(lines.size()) - 1 < 0 ? 0 : static_cast<int>(lines.size()) - 1)); k < lines.size() && y < DEBUG.y + DEBUG.h - 12; ++k) {
+			text(DEBUG.x + 20 + lines[k].indent, y, lines[k].text, lines[k].colour, lines[k].size);
+			y += lines[k].size + 6;
 		}
 	}
 
@@ -847,8 +984,8 @@ struct Ui::Impl {
 				return;
 			}
 		}
-		if (notices_press(x, y)) {
-			return; // the notices are the player's, like the clock, under a tutorial too
+		if (notices_press(x, y) || debug_press(x, y)) {
+			return; // the notices and the debug panel are the player's, like the clock, under a tutorial too
 		}
 		if (!panel && draft.edit == Draft::None && circuit_press(x, y)) {
 			return;
@@ -2428,6 +2565,7 @@ struct Ui::Impl {
 		paint_readout();
 		paint_drawer();
 		paint_notices();
+		paint_debug();
 		if (panel) {
 			paint_panel();
 		}
@@ -3379,6 +3517,12 @@ void Ui::frame(double seconds) {
 	m.follow();
 }
 
+std::string Ui::take_export() {
+	std::string out;
+	out.swap(impl_->exported);
+	return out;
+}
+
 const DrawList &Ui::draw() {
 	impl_->paint();
 	return impl_->list;
@@ -3498,6 +3642,17 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "notices") {
 		return centre(Impl::notices_button());
+	}
+	if (what == "debug") {
+		return centre(Impl::debug_button());
+	}
+	if (after("debug:", rest)) {
+		for (int k = 0; k < 5; ++k) {
+			if (rest == Impl::DEBUG_BUTTONS[k]) {
+				return m.debug_open && centre(Impl::debug_rect(k));
+			}
+		}
+		return false;
 	}
 	if (what == "notices:close") {
 		return m.notices_open && centre(Impl::notices_close());

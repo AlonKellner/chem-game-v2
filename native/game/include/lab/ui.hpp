@@ -76,6 +76,9 @@ public:
 	std::vector<std::string> selection() const;
 	// The last notice: a refusal's reason, a failed invariant.
 	const std::string &message() const;
+	// The lab's save, once the debug panel's "export" was pressed (GAME_SPEC
+	// §13.6), for the host to write; "" when it was not since the last call.
+	std::string take_export();
 	double speed() const;
 	bool paused() const;
 
@@ -91,6 +94,9 @@ public:
 	//   circuit:close   circuit:up   inner:<col>,<row> (a square of the open circuit)
 	//   notices   notices:<detail|event|warning|danger> (its switch)   notices:close
 	//   edit:level:<detail|event|warning|danger>   edit:item:any (a notice part's)
+	//   debug   debug:<step|export|up|down|close> (the debug panel, §13.6)
+	//   slot:<1..6>   goal:<1..6> (a slot's goal button)   edit:name   edit:term:<r>:<what|measure|compare|value|remove>
+	//   edit:term:add   edit:remove (the goal editor, §13.5)
 	//   edit:set   edit:cancel   (the part editor, while it is open)
 	//     a monitor's: edit:item:<id>   edit:quantity   edit:pick:<what>   edit:measure:<g|count|size|purity>
 	//       edit:compare:<above|below|at_least|at_most|reaches|between|outside>   edit:value:<0|1>   edit:nudge:<-3..3>

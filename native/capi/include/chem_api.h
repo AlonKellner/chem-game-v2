@@ -284,6 +284,10 @@ CG_API cg_status cg_ui_signals(cg_ui *ui, cg_signals *out);
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */
 CG_API const char *cg_ui_message(cg_ui *ui);
+/* The lab's save (chem-save/1) once the debug panel's "export" was pressed
+ * (GAME_SPEC §13.6), for the host to write; "" when it was not since the last
+ * call. Borrowed until the next call on this ui. */
+CG_API const char *cg_ui_take_export(cg_ui *ui);
 CG_API const char *cg_ui_report(cg_ui *ui);
 
 /* The centre of a named thing on the screen, for tests and scripted hosts:

@@ -145,3 +145,16 @@ func test_the_optical_pass_lies_between_the_two_flat_layers() -> void:
 	_lab.optics_budget = 4.0
 	assert_eq(_lab.optics_budget, 4.0, "a setting: accuracy for speed")
 	assert_eq(_lab.optics_parity(PackedByteArray()).size(), 0, "a picture of the wrong size is not compared")
+
+func test_the_debug_panels_export_is_written_to_user_saves() -> void:
+	for what in ["debug", "debug:export"]:
+		var at := _lab.locate(what)
+		assert_ne(at, Vector2(-1, -1), what + " is on the screen")
+		_lab.pointer(at.x, at.y, true)
+		_lab.pointer(at.x, at.y, false)
+	_lab.frame(0.0)
+	var path := _lab.exported()
+	assert_string_starts_with(path, "user://saves/")
+	var saved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
+	assert_eq(saved["format"], "chem-save/1")
+	DirAccess.remove_absolute(path)
