@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.13.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.14.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1223,7 +1223,7 @@ so the sessions' records are unchanged.
   is not yet done: a choice until it is chosen, a value box until it holds the text the step
   types, and "set" only then.
 
-**Demo subset:** all of the above. **Full design, not yet built:**
+**Demo subset:** all of the above; signed off by the user on 2026-11-17. **Full design, not yet built:**
 - circuits (parts collected into one compact part, Stage 14);
 - the notice part (Stage 16);
 - controllers: a monitor with a target and PID gains whose output is a level, set on an analog

@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 13)
+## 0.14.0 (2026-11-17, Stage 13)
+
+Signed off by the user on 2026-11-17 ("Very good, approved, proceed").
 
 - §13.3 added: signals.
   - **Parts:** timers, monitors and alarms on the bench, out of an unlimited drawer.

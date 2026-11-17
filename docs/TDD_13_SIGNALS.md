@@ -52,7 +52,7 @@ Circuits are Stage 14. GAME_SPEC §13, §13.1, §13.2, §13.3, §18 (G1, G2).
 | 13.7 | The tutorial teaches a monitor rigged to the burner and wired to an alarm (35 steps); the screen's timers removed | Done |
 | 13.8 | The user's first finding: the tutorial let a rig or a monitor be set wrong. Every editor gesture, key and "set" is now the step's own | Done |
 | 13.9 | The user's second finding: the pointer outlined "set" before the value was right. In the editor it now outlines the first gesture not yet done | Done |
-| 13.10 | The user plays it (`make run`) and signs off | Pending |
+| 13.10 | The user plays it (`make run`) and signs off: "Very good, approved, proceed" (2026-11-17) | Done |
 
 ## Decisions
 
