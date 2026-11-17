@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 16)
+
+- §13.4 added: notices in levels (detail, event, warning, danger).
+  - **What the lab notices:** reactions starting and stopping, at the level its data gives
+    (`data/reactions.json`: `notice`); what appears and is used up, not what a hand moved;
+    boiling and boiling dry; a balloon 80 % full; spills into the tray.
+  - **At once:** bursts, failed invariants, timers at zero, rigs acting, alarms ringing.
+  - **Saving:** saved and loaded, not digested; the sessions' records unchanged.
+  - **The notice part** hears them, at a level, about an item.
+  - **On the screen:** the newest beside the clock; a panel with a switch per level, details
+    silenced at first.
+- §4/§7 (the core): the simulation tallies how far each reaction with a rate law ran in each cell
+  (`Simulation::tally`), for the notices; not state.
+
 ## 0.16.0 (2026-11-17, Stage 15)
 
 Signed off by the user on 2026-11-17 ("Approved, proceed").

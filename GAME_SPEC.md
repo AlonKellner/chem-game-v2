@@ -1256,13 +1256,55 @@ so the sessions' records are unchanged.
       drawer, set, wired and rigged, also out to the bench; "up" opens the circuit around it, and
       "close" closes it. A part dragged out of the panel stays in it, with the reason.
 
-**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day).
+**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day; the notice part: Stage 16, §13.4).
 **Full design, not yet built:**
-- the notice part (Stage 16);
 - controllers: a monitor with a target and PID gains whose output is a level, set on an analog
   control or as PWM on a binary one.
 
 **Status:** Stage 13; circuits Stage 14.
+
+### 13.4 Notices
+
+The lab says what happened, as **notices**: the step, a level, the item it is about, and what it
+says. The player may silence any level.
+
+- **Levels:** detail, event, warning, danger.
+- **What the lab notices.** The detectors read every quarter of a lab-second, and write a notice
+  where the state changed since their last reading:
+  - **A reaction with a rate law starting or stopping in an item:** when it moves more than a
+    ten-millionth of a mole a reading, or none.
+    - Its start's level and text are the reaction's own, from `data/reactions.json` (`notice`):
+      an event for the malachite breaking down, a warning for the crystals losing their water.
+    - Its stop is a detail.
+    - Reactions of the equilibrium law (evaporation) are not noticed.
+  - **A solid, liquid or dissolved species appearing in an item** (at least a milligram), or used
+    up there (under a tenth of one): an event. Not when a hand moved it: an item poured or tipped
+    from or into since the last reading writes no such notice.
+  - **Boiling:** an item with liquid water at 99.5 °C or more boils, an event. It stops boiling
+    below 99 °C, an event, or it boils dry, a warning.
+  - **A balloon 80 % full or more:** a warning, once until it is below 70 % again.
+  - **A spill into the tray:** a warning.
+- **What happens at once:**
+  - a balloon bursting, a danger;
+  - an invariant failing, a danger;
+  - a timer reaching zero, a detail;
+  - a rig setting a control, a detail;
+  - an alarm ringing, an event.
+- **History, not state.** The notices, and what the detectors last saw, are saved and loaded:
+  a loaded lab writes the same notices as one that was not saved. They are not in the digest. What
+  is there when the bench opens is not news. The lab keeps the last 2000.
+- **The notice part** (§13.3, out of the drawer) signals for a step when the lab writes a notice
+  at or above its level, about its item if it names one: `set {part, level, item}`. Wired to an
+  alarm, it stops the clock on, say, every warning.
+- **On the screen:**
+  - The newest notice of the levels heard stands beside the clock.
+  - "Notices" opens a panel over the readout: a switch for each level, and every notice heard,
+    newest first, with its time and level.
+  - A silenced level is still kept, and is shown again when its switch is turned back on. Details
+    start silenced.
+  - The notices are the player's under a tutorial too, like the clock.
+
+**Demo subset:** all of the above. **Status:** Stage 16.
 
 ## 14. C API and hosts
 
