@@ -941,8 +941,8 @@ input to them, and a session script is a list of them.
 | `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
-| `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6) |
-| `submit` | `item` | hands it in, to the outbox; it must not be joined to anything. A burner under it stays on the bench |
+| `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
+| `submit` | `item` | hands it in, to the outbox; it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench |
 | `wait` | `seconds` | advances time |
 | `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; or until the alarm `rings`; fails at the timeout |
 | `part` | `kind`, `at` | a timer, monitor or alarm out of the drawer onto a free square (§13.3) |
