@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -85,10 +86,61 @@ struct Pupil {
 		const int64_t until = ui->lab().step() + static_cast<int64_t>(seconds * 60.0);
 		while (!done()) {
 			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title);
+			REQUIRE_MESSAGE((ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
+					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message());
 			ui->frame(1.0 / 60.0);
 			REQUIRE_MESSAGE(!ui->lab().failed(), ui->message());
 		}
 	}
+	// ---- as a person plays: a second and a half to read and reach before each
+	// gesture, the pointer moved across the screen frame by frame, the clock running
+	void frames(int n) {
+		for (int i = 0; i < n; ++i) {
+			ui->frame(1.0 / 60.0);
+		}
+	}
+	// where a person lets go: on an item, its middle; in the outbox, on whatever was handed in last
+	void target(const std::string &what, float &x, float &y) {
+		if (what == "outbox") {
+			for (const ItemView &v : ui->lab().view().items) {
+				if (v.place == "outbox" && ui->locate("item:" + v.id, x, y)) {
+					return; // over it
+				}
+			}
+		}
+		at(what, x, y);
+	}
+	void move(float x0, float y0, float x1, float y1, bool down) {
+		for (int i = 1; i <= 20; ++i) {
+			const float f = static_cast<float>(i) / 20.0f;
+			ui->pointer(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f, down);
+			ui->frame(1.0 / 60.0);
+		}
+	}
+	void person(const lab::TutorialGesture &g) {
+		frames(90); // reading the card, finding the thing
+		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+		if (!g.drag && g.what.rfind("valve:", 0) == 0) {
+			// a slider: taken at its knob, where it is now, and dragged
+			const std::string burner = g.what.substr(6, g.what.find('@') - 6);
+			at("valve:" + burner + "@" + std::to_string(item(burner).valve), x0, y0);
+			at(g.what, x1, y1);
+		} else if (g.drag) {
+			at(g.what, x0, y0);
+			target(g.to, x1, y1);
+		} else {
+			at(g.what, x0, y0);
+			x1 = x0;
+			y1 = y0;
+		}
+		move(x0 - 200, y0 - 100, x0, y0, false);
+		ui->pointer(x0, y0, true);
+		ui->frame(1.0 / 60.0);
+		move(x0, y0, x1, y1, true);
+		ui->pointer(x1, y1, false);
+		ui->frame(1.0 / 60.0);
+	}
+
 	bool drawn(const std::string &s) {
 		const lab::DrawList &list = ui->draw();
 		return list.text.find(s) != std::string::npos;
@@ -158,6 +210,47 @@ TEST_CASE("tutorial: followed with its own gestures, step by step, it completes 
 	CHECK(p.drawn("Set out the flask"));
 }
 
+TEST_CASE("tutorial: played as a person plays it, slowly, at the speed it asks for, it completes (Stage 12)") {
+	Pupil p;
+	const int steps = p.tutorial().steps;
+	int64_t step_limit = 0;
+	while (p.tutorial().state == TutorialView::Running && p.tutorial().step < steps) {
+		const int step = p.tutorial().step;
+		const std::string title = p.tutorial().title;
+		for (const lab::TutorialGesture &g : std::vector<lab::TutorialGesture>(p.ui->tutorial()->gestures())) {
+			p.person(g);
+			INFO("step " << step + 1 << ": " << title);
+			REQUIRE_MESSAGE(!p.ui->lab().failed(), "step " << step + 1 << " (" << title << "): " << p.ui->message());
+			CHECK_MESSAGE(p.ui->message().empty(), p.ui->message());
+			if (p.tutorial().state != TutorialView::Running) {
+				break;
+			}
+		}
+		// then waits, looking at the card every half second
+		step_limit = p.ui->lab().step() + 3600 * 60;
+		while (p.tutorial().step == step && p.tutorial().state == TutorialView::Running) {
+			REQUIRE_MESSAGE(p.ui->lab().step() < step_limit, "waited too long on step " << step + 1 << ": " << title);
+			const int64_t before = p.ui->lab().step();
+			if (const char *keep = std::getenv("CHEM_TUTORIAL_SAVE")) { // the state before each half second, for a failure's diagnosis
+				std::ofstream(keep) << p.ui->lab().save();
+			}
+			p.frames(30);
+			REQUIRE_MESSAGE(!p.ui->lab().failed(), "step " << step + 1 << " (" << title << "): " << p.ui->message());
+			if (p.ui->lab().step() == before && p.tutorial().step == step) {
+				FAIL("step " << step + 1 << " (" << title << "): the clock stands, waiting for a gesture its gestures did not make; " << p.ui->message());
+			}
+		}
+		if (p.tutorial().state == TutorialView::Failed) {
+			FAIL("step " << step + 1 << " (" << title << "): " << p.tutorial().failure);
+		}
+	}
+	REQUIRE(p.tutorial().state == TutorialView::Complete);
+	CHECK(p.grams("flask", "copper_sulfate_pentahydrate") > 8.0);
+	for (const std::string &r : p.tutorial().results) {
+		MESSAGE(r);
+	}
+}
+
 TEST_CASE("tutorial: the screen points at what the step asks for, and stops once it is done (Stage 12)") {
 	Pupil p;
 	CHECK(p.tutorial().step == 0);
@@ -191,44 +284,106 @@ TEST_CASE("tutorial: the screen points at what the step asks for, and stops once
 	CHECK(p.drawn("(now 5.000 g)"));
 }
 
-TEST_CASE("tutorial: a failure ends the run until a reset (Stage 12)") {
-	SUBCASE("handing in the wrong thing") {
-		Pupil p;
-		p.drag("item:jar", "cell:1,1");
-		p.drag("item:jar", "outbox");
-		CHECK(p.tutorial().state == TutorialView::Failed);
-		CHECK(p.tutorial().failure.find("Only the balloon") != std::string::npos);
-		CHECK(p.drawn("This run cannot be completed"));
-		CHECK(p.ui->tutorial()->gestures().empty());
-		p.drag("item:flask", "cell:3,1"); // nothing more is passed
-		CHECK(p.tutorial().state == TutorialView::Failed);
-		p.click("reset");
-		CHECK(p.tutorial().state == TutorialView::Running);
-		CHECK(p.tutorial().step == 0);
-		p.drag("item:flask", "cell:3,1");
-		CHECK(p.tutorial().step == 1);
+TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else changes the lab (Stage 12)") {
+	Pupil p;
+	const auto refused = [&](const std::string &digest) {
+		CHECK(p.ui->message().find("Not now") != std::string::npos);
+		CHECK(p.ui->lab().digest() == digest);
+	};
+	std::string before = p.ui->lab().digest();
+	p.drag("item:burner", "cell:3,1"); // the flask comes first
+	refused(before);
+	CHECK(p.item("burner").place == "cabinet");
+	p.drag("item:jar", "outbox");
+	refused(before);
+	p.drag("item:flask", "cabinet"); // the right item, the wrong place
+	refused(before);
+	p.drag("item:flask", "cell:3,1");
+	CHECK(p.tutorial().step == 1);
+	CHECK(p.ui->message().empty());
+	before = p.ui->lab().digest();
+	p.drag("item:burner", "cell:5,1"); // onto the bench, not under the flask
+	refused(before);
+	p.drag("item:burner", "item:flask");
+	p.drag("item:jar", "cell:1,1");
+	before = p.ui->lab().digest();
+	p.click("valve:burner@1"); // the malachite first
+	refused(before);
+	p.drag("item:jar", "item:flask");
+	p.click("panel:tip:malachite");
+	p.drag("item:acid", "cell:2,1"); // the acid's time is the second stage
+	refused(p.ui->lab().digest());
+	CHECK(p.item("acid").place == "cabinet");
+	p.drag("item:balloon", "item:flask");
+	p.click("valve:burner@1");
+	CHECK(p.tutorial().step == 6);
+	// the clock waits while a gesture is asked for
+	const int64_t at = p.ui->lab().step();
+	p.ui->frame(5.0);
+	CHECK(p.ui->lab().step() == at);
+	CHECK(p.drawn("The clock waits for you."));
+	p.click("speed:600"); // the clock is always the player's
+	CHECK(p.tutorial().step == 7);
+	CHECK(p.ui->tutorial()->waiting());
+	p.ui->frame(1.0 / 60.0);
+	CHECK(p.ui->lab().step() == at + 600);
+	CHECK(p.drawn("The clock runs"));
+	// while the lab is waited on, nothing but the clock
+	before = p.ui->lab().digest();
+	p.drag("item:balloon", "outbox");
+	refused(before);
+	CHECK(p.ui->message().find("wait for the lab") != std::string::npos);
+	// and when the wait ends the clock stops within a second of the lab, for the next gesture
+	p.watch([&] { return p.tutorial().step == 8; }, 1800);
+	CHECK(p.grams("flask", "malachite") < 0.005);
+	const int64_t stood = p.ui->lab().step();
+	p.ui->frame(1.0);
+	CHECK(p.ui->lab().step() == stood);
+	p.drag("item:balloon", "outbox");
+	CHECK(p.item("balloon").submitted);
+	// reset is the player's too
+	p.click("reset");
+	CHECK(p.tutorial().step == 0);
+	CHECK(p.item("balloon").place == "cabinet");
+}
+
+TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {
+	// the lab driven by its commands, past the screen's guard: what the failures say
+	std::string why;
+	const auto played = [&](std::initializer_list<const char *> commands) {
+		std::unique_ptr<lab::Lab> l = lab::Lab::open(read("data/benches/lab.json"), why);
+		REQUIRE(l != nullptr);
+		std::unique_ptr<lab::Tutorial> t = lab::Tutorial::open(read("data/tutorials/demo.json"), l->view(), why);
+		REQUIRE_MESSAGE(t != nullptr, why);
+		for (const char *c : commands) {
+			REQUIRE_MESSAGE(l->command(c, why), c << ": " << why);
+			t->follow(l->view(), 1.0, l->failed());
+		}
+		return std::make_pair(std::move(l), std::move(t));
+	};
+	{
+		auto [l, t] = played({ R"({"do": "place", "item": "jar", "at": [1, 1]})", R"({"do": "submit", "item": "jar"})" });
+		CHECK(t->view().state == TutorialView::Failed);
+		CHECK(t->view().failure.find("Only the balloon") != std::string::npos);
+		CHECK(t->gestures().empty());
+		t->follow(l->view(), 1.0, false); // it stays failed
+		CHECK(t->view().state == TutorialView::Failed);
+		t->restart();
+		CHECK(t->view().state == TutorialView::Running);
+		CHECK(t->view().step == 0);
 	}
-	SUBCASE("acid on the malachite before it has broken down") {
-		Pupil p;
-		p.drag("item:flask", "cell:3,1");
-		p.drag("item:jar", "cell:1,1");
-		p.drag("item:jar", "item:flask");
-		p.click("panel:tip:malachite");
-		p.drag("item:acid", "cell:2,1");
-		p.drag("item:acid", "item:flask");
-		p.click("panel:pour");
-		CHECK(p.tutorial().state == TutorialView::Failed);
-		CHECK(p.tutorial().failure.find("never gets hot enough") != std::string::npos);
+	{
+		auto [l, t] = played({ R"({"do": "place", "item": "flask", "at": [3, 1]})", R"({"do": "place", "item": "jar", "at": [1, 1]})",
+				R"({"do": "tip", "from": "jar", "to": "flask", "species": "malachite", "all": true})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+				R"({"do": "pour", "from": "acid", "to": "flask", "ml": 50})" });
+		CHECK(t->view().state == TutorialView::Failed);
+		CHECK(t->view().failure.find("never gets hot enough") != std::string::npos);
 	}
-	SUBCASE("the beaker handed in with acid in it") {
-		Pupil p;
-		p.drag("item:beaker", "cell:5,1");
-		p.drag("item:acid", "cell:2,1");
-		p.drag("item:acid", "item:beaker");
-		p.click("panel:pour");
-		p.drag("item:beaker", "outbox");
-		CHECK(p.tutorial().state == TutorialView::Failed);
-		CHECK(p.tutorial().failure.find("more than water") != std::string::npos);
+	{
+		auto [l, t] = played({ R"({"do": "place", "item": "beaker", "at": [5, 1]})", R"({"do": "place", "item": "acid", "at": [2, 1]})",
+				R"({"do": "pour", "from": "acid", "to": "beaker", "ml": 50})", R"({"do": "submit", "item": "beaker"})" });
+		CHECK(t->view().state == TutorialView::Failed);
+		CHECK(t->view().failure.find("more than water") != std::string::npos);
 	}
 }
 

@@ -115,6 +115,51 @@ struct Ui::Impl {
 		}
 	}
 
+	// ---- a running tutorial allows only its step's gestures (§13.2)
+	bool guided() const { return tutorial && tutorial->view().state == TutorialView::Running; }
+	// its clock stands while the step asks for a gesture
+	bool held() const { return guided() && !tutorial->waiting(); }
+	bool asks_click(const std::string &what) const {
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (!g.drag && (g.what == what || (what.back() == '@' && g.what.rfind(what, 0) == 0))) {
+				return true;
+			}
+		}
+		return false;
+	}
+	bool asks_drag(int index) const {
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (g.drag && g.what == "item:" + id(index)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// refused, with what the step asks for instead
+	bool not_now() {
+		const TutorialView &t = tutorial->view();
+		message = tutorial->waiting() ? "Not now: wait for the lab (" + t.title + ")" : "Not now. The tutorial asks: " + t.text;
+		return false;
+	}
+	bool allowed_click(const std::string &what) { return !guided() || asks_click(what) || not_now(); }
+	// a drop where the step's drag goes: onto its item, into a free square, the outbox or the cabinet
+	bool guided_drop(int index, int target, float x, float y) {
+		if (!guided()) {
+			return true;
+		}
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (!g.drag || g.what != "item:" + id(index)) {
+				continue;
+			}
+			const std::string &where = g.to;
+			if ((where.rfind("item:", 0) == 0 && target >= 0 && id(target) == where.substr(5)) || (where.rfind("cell:", 0) == 0 && target < 0 && BENCH.has(x, y)) ||
+					(where == "outbox" && OUTBOX.has(x, y)) || (where == "cabinet" && CABINET.has(x, y))) {
+				return true;
+			}
+		}
+		return not_now();
+	}
+
 	float cell_w() const { return std::fmin(140.0f, BENCH.w / static_cast<float>(view.cols)); }
 	float cell_h() const { return std::fmin(300.0f, BENCH.h / static_cast<float>(view.rows)); }
 	Rect cell(int col, int row) const { return Rect{ BENCH.x + static_cast<float>(col) * cell_w(), BENCH.y + static_cast<float>(row) * cell_h(), cell_w(), cell_h() }; }
@@ -180,10 +225,12 @@ struct Ui::Impl {
 		return Rect{ c.cx() - w / 2, c.y + c.h - lift - h, w, h };
 	}
 
-	// the item under a point, the topmost; not the tray, not `except`
-	int item_at(float x, float y, int except = -1) const {
+	// the item under a point, the topmost; not the tray, not `except`; with
+	// `on_bench`, only what stands on the bench (what can be joined or poured into)
+	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
-			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray") {
+			const std::string &place = view.items[static_cast<size_t>(i)].place;
+			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under")) {
 				continue;
 			}
 			Rect r = rect(i);
@@ -254,11 +301,14 @@ struct Ui::Impl {
 	// what letting go of an item at a point does
 	void drop(int index, float x, float y) {
 		const ItemView v = view.items[static_cast<size_t>(index)];
-		const int target = item_at(x, y, index);
+		const int target = item_at(x, y, index, true);
 		// first it comes off what it is joined to
 		const bool was_on = v.place == "on", was_under = v.place == "under";
 		if (target >= 0 && (target == v.on || target == v.under)) {
 			return; // put back where it was
+		}
+		if (!guided_drop(index, target, x, y)) {
+			return; // back where it was
 		}
 		if (was_on && !act({ { "do", "detach" }, { "item", v.id } })) {
 			return;
@@ -309,11 +359,18 @@ struct Ui::Impl {
 	void press(float x, float y) {
 		if (panel) {
 			if (pour_slider().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (guided() && !asks_click("panel:pour") && !asks_click("panel:slider@")) {
+					not_now();
+					return;
+				}
 				slider_drag = true;
 				slide(x);
 				return;
 			}
 			if (pour_button().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (!allowed_click("panel:pour")) {
+					return;
+				}
 				const double ml = view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
 				json command = { { "do", "pour" }, { "from", id(from) }, { "to", id(to) } };
 				if (pour_fraction >= 1.0) {
@@ -328,6 +385,9 @@ struct Ui::Impl {
 			}
 			for (const auto &[species, r] : tip_buttons()) {
 				if (r.has(x, y)) {
+					if (!allowed_click("panel:tip:" + species)) {
+						return;
+					}
 					if (act({ { "do", "tip" }, { "from", id(from) }, { "to", id(to) }, { "species", species }, { "all", true } })) {
 						panel = false;
 					}
@@ -377,18 +437,28 @@ struct Ui::Impl {
 				wide.y -= 6;
 				wide.h += 12;
 				if (wide.has(x, y)) {
+					if (!allowed_click("valve:" + id(i) + "@")) {
+						return;
+					}
 					valve_drag = i;
 					turn(y);
 					return;
 				}
 			}
 			if (stir_rect(i, r) && r.has(x, y)) {
+				if (!allowed_click("stir:" + id(i))) {
+					return;
+				}
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
 		}
 		const int hit = item_at(x, y);
 		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
+			if (guided() && !asks_drag(hit)) {
+				not_now();
+				return;
+			}
 			const Rect r = rect(hit);
 			drag = hit;
 			grab_x = x - r.x;
@@ -599,7 +669,9 @@ struct Ui::Impl {
 				y += 4;
 				lines(t.why, 54, DIM, 15, 6);
 			}
-			y += 12;
+			y += 4;
+			text(x, y + 14, tutorial->waiting() ? "The clock runs: 60x or 600x hurries it." : "The clock waits for you.", WARN, 15);
+			y += 38;
 		}
 		for (const TutorialCheck &c : t.checks) {
 			const Rect tick{ x, y - 13, 14, 14 };
@@ -886,14 +958,33 @@ void Ui::frame(double seconds) {
 		auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
 		m.owed = m.owed < 1200.0 ? m.owed - static_cast<double>(steps) : 0.0;
 		std::string why;
-		bool ok = true;
-		if (steps > 0) {
-			// one step of every frame against every invariant; all of them when asked
-			m.lab->set_checking(true);
-			ok = m.lab->advance(m.check_every_step ? steps : 1, why);
+		bool ok = true, first = true;
+		// one step of every frame against every invariant; all of them when asked
+		const auto run = [&](int64_t n) {
+			m.lab->set_checking(first || m.check_every_step);
+			ok = m.lab->advance(first && !m.check_every_step ? 1 : n, why);
 			m.lab->set_checking(false);
-			if (ok && !m.check_every_step && steps > 1) {
-				ok = m.lab->advance(steps - 1, why);
+			if (ok && first && !m.check_every_step && n > 1) {
+				ok = m.lab->advance(n - 1, why);
+			}
+			first = false;
+		};
+		if (!m.tutorial) {
+			if (steps > 0) {
+				run(steps);
+			}
+		} else {
+			// a tutorial's clock stands while its step asks for a gesture (§13.2): the lab
+			// advances a second at a time, and stops in the second the step's wait ends
+			while (ok && steps > 0 && !m.held()) {
+				const int64_t n = steps < 60 ? steps : 60;
+				run(n);
+				steps -= n;
+				m.refresh();
+				m.follow();
+			}
+			if (m.held()) {
+				m.owed = 0.0;
 			}
 		}
 		if (!ok) {

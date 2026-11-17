@@ -470,3 +470,19 @@ TEST_CASE("lab: a save that is not one is refused (Stage 8)") {
 	}
 	CHECK(lab::Lab::load(saved.dump(), why) != nullptr);
 }
+
+// Found by the tutorial played as a person (Stage 12): an idle vessel whose gas
+// filled it to the last bit. The settling expelled a quantum of each gas because
+// its own arithmetic found it a hair over-full, while T1, adding the same
+// volumes in another order, found it exactly full. The state is kept as it was
+// saved, half a lab-minute before the step that failed.
+TEST_CASE("lab: a vessel full to the last bit expels nothing T1 would not, by the same arithmetic (Stage 12)") {
+	std::string why;
+	std::unique_ptr<lab::Lab> lab = lab::Lab::load(read("bench/states/t1_expulsion_rounding.json"), why);
+	REQUIRE_MESSAGE(lab != nullptr, why);
+	lab->set_checking(false);
+	REQUIRE(lab->advance(1111000 - lab->step(), why));
+	lab->set_checking(true); // every invariant on every step past the one that failed (1,111,034)
+	CHECK_MESSAGE(lab->advance(100, why), why);
+	CHECK_FALSE(lab->failed());
+}

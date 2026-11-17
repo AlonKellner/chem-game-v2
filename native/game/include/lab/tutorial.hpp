@@ -59,6 +59,10 @@ public:
 	// on is still open: the screen points at the last one it can find, a test
 	// plays them all.
 	const std::vector<TutorialGesture> &gestures() const;
+	// Running, and the current step waits on the lab alone: every check still
+	// open is waited on. While a tutorial runs and is not waiting, the screen
+	// holds its clock: the lab's time passes only while there is nothing to do.
+	bool waiting() const;
 	const std::string &title() const;
 
 private:

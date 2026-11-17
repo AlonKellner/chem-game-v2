@@ -531,6 +531,11 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 			}
 			s.gestures.push_back(std::move(gesture));
 		}
+		if (s.gestures.empty()) {
+			for (Check &c : s.checks) {
+				c.wait = true; // a step that asks for no gesture waits on the lab
+			}
+		}
 		impl->steps.push_back(std::move(s));
 	}
 	if (!r.checks(doc.value("fails", json::array()), "fails", impl->fails) || !r.checks(doc.value("goal", json::array()), "goal", impl->goal)) {
@@ -628,6 +633,21 @@ const std::vector<TutorialGesture> &Tutorial::gestures() const {
 		}
 	}
 	return m.no_gestures;
+}
+
+bool Tutorial::waiting() const {
+	const Impl &m = *impl_;
+	if (m.view.state != TutorialView::Running || m.view.step >= static_cast<int>(m.steps.size())) {
+		return false;
+	}
+	bool open = false;
+	for (const TutorialCheck &c : m.view.checks) {
+		if (!c.done && !c.wait) {
+			return false;
+		}
+		open = open || !c.done;
+	}
+	return open;
 }
 
 const std::string &Tutorial::title() const {

@@ -21,7 +21,8 @@ it turns the demo into a tutorial (GAME_SPEC §13.2), and hands it to the user t
 | 12.3 | The demo through the screen and on the GPU (`make screenshots`): five moments, O4, the pass's cost | Done |
 | 12.4 | The stage-close gates (`make gates`: uncached, ASan and UBSan) | Done |
 | 12.5 | The tutorial (GAME_SPEC §13.2): `lab::Tutorial`, `data/tutorials/demo.json`, the card and the pointer on the screen, `cg_ui_tutor`/`cg_ui_tutorial`, the Godot host's `tutorial_path` | Done |
-| 12.6 | The user plays it (`make run`) and signs off | Pending |
+| 12.6 | The user's first try failed. The tutorial played at a person's pace; one step at a time; the clock held while a gesture is asked for; the T1 rounding fix | Done |
+| 12.7 | The user plays it (`make run`) and signs off | Pending |
 
 ## What it measures
 
@@ -86,6 +87,46 @@ One gesture changed on the screen: a condenser dragged off the flask while the b
 its outlet is left beside the flask. The lab does not take the drain away, so a move along the
 bench is refused. The screen no longer shows that refusal, since the condenser did come off.
 The lab, the sessions and their golden records are unchanged.
+
+## The user's first try, and what it found
+
+The user followed the instructions and the tutorial did not work. The test that passed played
+like a machine: each gesture at its exact point, the instant the step before was passed. A new
+test plays as a person does:
+- a second and a half before each gesture;
+- the pointer moved across the screen frame by frame, with the clock running at the speed the
+  tutorial asks for (600x);
+- a slider taken at its knob;
+- a drop into the outbox over what was handed in before.
+
+Played that way, the old tutorial failed, and the test found three faults:
+
+1. **Too slow for the clock.** At 600x, a second and a half of reaching for the valve is 15 minutes
+   of a full flame: "boil it down to 10 g" became boiling nearly dry. Now the clock waits while a
+   step asks for a gesture, and stops within a lab-second of a wait ending.
+2. **Gestures out of order were taken.** Now only the step's gestures are, and anything else is
+   refused with what the step asks for (`tutorial: only the step's own gestures are taken`).
+3. **An invariant failed** (T1, five hours into the boiled-dry flask). An idle vessel full to the
+   last bit expelled a quantum of each gas: the settling reckoned its excess as gas − (volume −
+   condensed) and found a hair over zero, while T1 reckoned gas + condensed − volume and found
+   exactly zero. The settling now uses T1's arithmetic. The saved state that failed is kept
+   (`bench/states/t1_expulsion_rounding.json`), and `lab: a vessel full to the last bit expels
+   nothing T1 would not` fails without the fix. The sessions' records are unchanged.
+
+And a drop into the outbox over the balloon already there was taken as a drop onto the balloon
+("takes nothing"); drops now land only on what stands on the bench.
+
+Played as a person, the tutorial now completes: 0.896 g of CO₂ in the balloon, 40.970 g of water,
+8.923 g of crystals, 99.976% pure, 450,601 of them of 0.25 mm; every total unchanged.
+
+**What the user saw, still open: a flask that looks empty after boiling too far.** Boiled past
+saturation, no crystal forms. At full flame, from 20 g of water, the flask reaches 434 °C with
+0.17 g of liquid water and all 7.2 g of copper sulfate still counted dissolved; the liquid is
+drawn as the 0.17 mL it is. In a real flask, pentahydrate crystallises once the boiling solution
+saturates (about 10 g of water here), and boiled dry it leaves the white anhydrous salt. The ideal
+dilute solution of GAME_SPEC §20 breaks down far from dilution: its water activity falls so fast
+that the pentahydrate looks undersaturated again, and no other solid can come out of solution.
+The tutorial no longer reaches that state; free play still can.
 
 ## Not done, and said so
 

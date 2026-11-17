@@ -1021,8 +1021,20 @@ gestures, and a run with a tutorial is the same lab as one without.
   under, what drains into what, handed in, stirred, burst; its valve, temperature, liquid volume;
   a species' mass, or its share of the solids and liquids; what alone it holds; the screen's speed;
   the world's totals unchanged. Conditions combine with `all`, `any` and `not`. A check is marked
-  `wait` when the lab is waited on for it rather than a gesture. One that names an item the bench
+  `wait` when the lab is waited on for it rather than a gesture; every check of a step that asks
+  for no gesture is waited on. One that names an item the bench
   does not have, or a species the tables do not, is refused when the tutorial is opened.
+- **One step at a time.** While a tutorial runs, the screen takes only the current step's
+  gestures: a drag of the item it names, let go where it goes (onto the item it names, into a
+  free square for a square, into the outbox or the cabinet); a click on the button, valve or
+  slider it names. Anything else is refused, with what the step asks for, and changes nothing.
+  While the step waits on the lab, no gesture is taken. The clock's buttons and reset are always
+  the player's. Once the run is complete or has failed, the screen is the player's again.
+- **The clock waits for the player.** While the step asks for a gesture, the lab's time does not
+  pass; it runs only while every open check is waited on. The screen then advances the lab a
+  second at a time and stops in the second the wait ends, at any speed: a player is never too
+  slow for the lab, and a 600x clock cannot boil a flask dry while the player reaches for the
+  valve.
 - **Passing.** After every frame and every gesture, the current step is passed when all its checks
   hold, and so on while the next ones hold too: a step done early is passed when it is reached.
   The state decides, not the order the gestures came in.
@@ -1045,7 +1057,11 @@ balloon handed in without the CO₂, the beaker with more than water, the flask 
 without its crystals; anything else handed in. Its goal is §17's "done when". The Godot host opens
 it by default (`tutorial_path`).
 **Status:** Stage 12. `tutorial: followed with its own gestures, step by step, it completes the
-demo` plays every step's gestures through the screen and waits as a player would.
+demo` plays every step's gestures through the screen and waits for the lab. `tutorial: played as a
+person plays it, slowly, at the speed it asks for, it completes` plays them as a person does: a
+second and a half before each gesture, the pointer moved across the screen frame by frame, a
+slider taken at its knob, a drop into the outbox over what was handed in before, the clock at
+600x.
 
 ## 14. C API and hosts
 

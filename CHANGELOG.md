@@ -7,6 +7,14 @@
 - §13.2 added: the tutorial: the demo in 28 steps, each with what to do, why, and checks read from
   the lab; failures that end a run until a reset; the goal, §17's "done when"; the card above the
   readout and a pointer at the next gesture. §14: `cg_ui_tutor`, `cg_ui_tutorial`.
+- §13.2: a running tutorial takes only its step's gestures, and holds the clock while it asks
+  for one; its steps without gestures wait on the lab.
+- §13.1: a drop lands only on what stands on the bench: never on what is in the cabinet or
+  handed in (a beaker dropped into the outbox over the balloon was refused, "takes nothing").
+- §6: a rigid cell's excess gas is reckoned by the same arithmetic as T1's (gas + condensed −
+  volume). Reckoned as gas − (volume − condensed), an idle vessel full to the last bit could
+  expel a quantum T1 judged it had no excess for: an invariant failure after five hours of lab
+  time, found by the tutorial played at a person's pace. The sessions' records are unchanged.
 - §13.1: a condenser dragged off its flask while a beaker stands under its outlet stays beside the
   flask, without a refusal shown for the move along the bench.
 

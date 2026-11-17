@@ -8,6 +8,7 @@ var _lab: ChemLab
 
 func before_each() -> void:
 	_lab = ChemLab.new()
+	_lab.tutorial_path = "" # the wiring alone: a tutorial holds the clock while it asks for a gesture
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 
@@ -55,12 +56,20 @@ func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
 	assert_string_contains(_lab.message(), "taken")
 
 func test_it_opens_with_the_tutorial_and_follows_it() -> void:
+	assert_eq(_lab.tutorial(), PackedInt32Array([-1, 0, 0]), "none when its path is empty")
+	_lab = ChemLab.new()
+	add_child_autofree(_lab)
+	await wait_process_frames(2)
 	assert_eq(_lab.tutorial_path, "res://data/tutorials/demo.json")
 	var t := _lab.tutorial()
 	assert_eq(t.size(), 3)
 	assert_eq(t[0], 0, "running")
 	assert_eq(t[1], 0, "at its first step")
 	assert_gt(t[2], 20)
+	_lab.frame(1.0)
+	assert_eq(int(JSON.parse_string(_lab.report())["step"]), 0, "the clock waits while it asks for a gesture")
+	_drag("item:burner", "cell:3,1")
+	assert_string_contains(_lab.message(), "Not now", "anything but the step's gesture is refused")
 	_drag("item:flask", "cell:3,1")
 	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
 
