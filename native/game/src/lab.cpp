@@ -1675,6 +1675,10 @@ bool Lab::failed() const {
 	return impl_->broken;
 }
 
+bool Lab::rang() const {
+	return impl_->rang;
+}
+
 int64_t Lab::step() const {
 	return static_cast<int64_t>(impl_->world().step());
 }

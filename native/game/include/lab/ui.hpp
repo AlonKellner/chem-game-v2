@@ -2,7 +2,6 @@
 
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
-#include "lab/timers.hpp"
 #include "lab/tutorial.hpp"
 
 #include <cstdint>
@@ -49,8 +48,9 @@ public:
 	// away (§13.1).
 	enum Mod : int32_t { ModShift = 1, ModCtrl = 2, ModMeta = 4, ModAny = 7 };
 	void pointer(float x, float y, bool down, int mods = 0);
-	// A key for the focused field (GAME_SPEC §13.3): text (a character, by its
-	// code point), backspace, enter, escape.
+	// A key for the part editor's focused field (GAME_SPEC §13.3): text (a
+	// character, by its code point), backspace, enter (set), escape (cancel; with
+	// no editor open, let go of the selection).
 	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3 };
 	void key(Key key, uint32_t codepoint = 0);
 	// A frame of real time: the lab advances by it times the speed. One step
@@ -70,9 +70,7 @@ public:
 	bool tutor(std::string_view tutorial_json, std::string &why);
 	// null without one
 	const Tutorial *tutorial() const;
-	// The player's timers (GAME_SPEC §13.3), and the item selected ("" for none):
-	// the last one chosen.
-	const Timers &timers() const;
+	// The item selected ("" for none): the last one chosen.
 	std::string selected() const;
 	// Everything selected, in the order it was chosen (§13.1).
 	std::vector<std::string> selection() const;
@@ -87,12 +85,13 @@ public:
 	//   valve:<burner>@<0..1>   stir:<vessel>
 	//   panel:pour  panel:slider@<0..1>  panel:tip:<species>  panel:cancel
 	//   pause   speed:<1|10|60|600>   check   reset
-	//   timer:add   timer:cancel   timer:arm   timer:any   timer:all   timer:condition:add
-	//   timer:quantity:<c>   timer:pick:<what>   timer:measure:<c>:<g|count|size>
-	//   timer:compare:<c>:<above|below|at_least|at_most|reaches|between|outside>
-	//   timer:value:<c>:<0|1>   timer:nudge:<c>:<-3..3>   timer:remove:<c>
-	//   timer:limit:toggle   timer:limit:value   timer:limit:nudge:<-2..2>
-	//   timer:row:<n>:rearm   timer:row:<n>:remove
+	//   drawer:<timer|monitor|alarm>   port:<part>   choose:<wire|reset>
+	//   part:edit   part:reset   part:unwire:<to>   part:unrig:<item>:<control>
+	//   edit:set   edit:cancel   (the part editor, while it is open)
+	//     a monitor's: edit:item:<id>   edit:quantity   edit:pick:<what>   edit:measure:<g|count|size|purity>
+	//       edit:compare:<above|below|at_least|at_most|reaches|between|outside>   edit:value:<0|1>   edit:nudge:<-3..3>
+	//     a timer's: edit:value   edit:nudge:<-3..3>
+	//     a rig's: edit:form:<onoff|change>   edit:<on|off|change>:<stir|stop|reset|leave|value|nudge:<-2..2>>
 	// false when it is not on the screen now.
 	bool locate(std::string_view what, float &x, float &y) const;
 

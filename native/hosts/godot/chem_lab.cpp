@@ -70,30 +70,29 @@ void ChemLab::key(int code, int codepoint) {
 	}
 }
 
-godot::Array ChemLab::timers() const {
+godot::Array ChemLab::signals() const {
 	godot::Array out;
-	cg_timers t;
-	t.size = sizeof t;
-	if (ui_ == nullptr || cg_ui_timers(ui_, &t) != CG_OK) {
+	cg_signals sig;
+	sig.size = sizeof sig;
+	if (ui_ == nullptr || cg_ui_signals(ui_, &sig) != CG_OK) {
 		return out;
 	}
-	for (int32_t i = 0; i < t.count; ++i) {
+	for (int32_t i = 0; i < sig.count; ++i) {
 		godot::Dictionary d;
-		d["fired"] = t.timers[i].fired != 0;
-		d["conditions"] = t.timers[i].conditions;
-		d["limited"] = t.timers[i].limited != 0;
-		d["left_s"] = t.timers[i].left_s;
-		d["fired_by"] = godot::String::utf8(t.timers[i].fired_by);
-		d["item"] = godot::String::utf8(t.timers[i].item);
+		d["id"] = godot::String::utf8(sig.parts[i].id);
+		d["kind"] = godot::String::utf8(sig.parts[i].kind);
+		d["out"] = sig.parts[i].out != 0;
+		d["ringing"] = sig.parts[i].ringing != 0;
+		d["left_s"] = sig.parts[i].left_s;
 		out.push_back(d);
 	}
 	return out;
 }
 
 bool ChemLab::paused() const {
-	cg_timers t;
-	t.size = sizeof t;
-	return ui_ != nullptr && cg_ui_timers(ui_, &t) == CG_OK && t.paused != 0;
+	cg_signals sig;
+	sig.size = sizeof sig;
+	return ui_ != nullptr && cg_ui_signals(ui_, &sig) == CG_OK && sig.paused != 0;
 }
 
 godot::String ChemLab::build_name() const {
@@ -324,7 +323,7 @@ void ChemLab::_bind_methods() {
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "tutorial_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_tutorial_path", "get_tutorial_path");
 	godot::ClassDB::bind_method(godot::D_METHOD("tutorial"), &ChemLab::tutorial);
 	godot::ClassDB::bind_method(godot::D_METHOD("key", "code", "codepoint"), &ChemLab::key);
-	godot::ClassDB::bind_method(godot::D_METHOD("timers"), &ChemLab::timers);
+	godot::ClassDB::bind_method(godot::D_METHOD("signals"), &ChemLab::signals);
 	godot::ClassDB::bind_method(godot::D_METHOD("paused"), &ChemLab::paused);
 	godot::ClassDB::bind_method(godot::D_METHOD("build_name"), &ChemLab::build_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("debug_report", "message"), &ChemLab::debug_report);

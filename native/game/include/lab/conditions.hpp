@@ -56,6 +56,24 @@ struct CondContext {
 	const void *host = nullptr; // what a reader's own keys read (Cond::extra)
 };
 
+// A signal part, a wire or a rig in the view (§13.3), as a condition names
+// them: one that every key given matches. A part of a wire or a rig is named
+// by its id or its kind ("monitor1", "monitor").
+struct PartPattern {
+	std::string id, kind, item, what, measure; // item, what, measure: a monitor's quantity
+	std::optional<Comparison::Op> op;
+	std::optional<double> value_at_least, value_at_most;
+	std::optional<bool> watching, ringing, rang;
+};
+struct WirePattern {
+	std::string from, to;
+};
+struct RigPattern {
+	std::string from, item, control;
+	std::optional<double> on_at_least, on_at_most, off_at_least, off_at_most;
+	std::optional<bool> on_leaves, off_leaves, change;
+};
+
 // A condition on the lab (GAME_SPEC §13.2): every key it gives holds. Written
 // as JSON in tutorials and benches; read by `read_cond` (src/conditions_json.hpp).
 struct Cond {
@@ -68,6 +86,10 @@ struct Cond {
 	// any quantity of the item, compared: {"quantity": {"what", "measure"}, "compare", "value" | "values"}
 	std::optional<Quantity> quantity;
 	Comparison comparison;
+	// signals (§13.3)
+	std::optional<PartPattern> part;
+	std::optional<WirePattern> wire;
+	std::optional<RigPattern> rig;
 	std::vector<Cond> all, any, nots;
 	// a reader's own keys, each a test of the context
 	std::vector<std::function<bool(const CondContext &)>> extra;

@@ -323,6 +323,55 @@ const std::string &id_at(const LabView &view, int index) {
 	return index >= 0 && index < static_cast<int>(view.items.size()) ? view.items[static_cast<size_t>(index)].id : none;
 }
 
+bool is_part(const ItemView &v) {
+	return v.kind == "timer" || v.kind == "monitor" || v.kind == "alarm";
+}
+
+// a part named by its id or its kind
+bool names(const LabView &view, const std::string &pattern, const std::string &id) {
+	if (pattern.empty() || pattern == id) {
+		return true;
+	}
+	const ItemView *v = item_of(view, id);
+	return v != nullptr && v->kind == pattern;
+}
+
+bool range(const std::optional<double> &value, const std::optional<double> &at_least, const std::optional<double> &at_most) {
+	return (!at_least && !at_most) || (value && (!at_least || *value >= *at_least) && (!at_most || *value <= *at_most));
+}
+
+bool part_holds(const PartPattern &p, const LabView &view) {
+	for (const ItemView &v : view.items) {
+		if (!is_part(v) || (!p.id.empty() && v.id != p.id) || (!p.kind.empty() && v.kind != p.kind)) {
+			continue;
+		}
+		const Part &x = v.part;
+		if ((!p.item.empty() && x.quantity.item != p.item) || (!p.what.empty() && x.quantity.what != p.what) || (!p.measure.empty() && x.quantity.measure != p.measure) ||
+				(p.op && x.comparison.op != *p.op) || (p.watching && x.watching != *p.watching) || (p.ringing && x.ringing != *p.ringing) || (p.rang && (x.rang_at >= 0) != *p.rang)) {
+			continue;
+		}
+		if (!range(x.comparison.a, p.value_at_least, p.value_at_most)) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+
+bool rig_holds(const RigPattern &p, const LabView &view) {
+	for (const Rig &r : view.rigs) {
+		if (!names(view, p.from, r.from) || (!p.item.empty() && r.item != p.item) || (!p.control.empty() && r.control != p.control) || (p.change && r.change != *p.change)) {
+			continue;
+		}
+		if (!range(r.on, p.on_at_least, p.on_at_most) || !range(r.off, p.off_at_least, p.off_at_most) || (p.on_leaves && r.on.has_value() == *p.on_leaves) ||
+				(p.off_leaves && r.off.has_value() == *p.off_leaves)) {
+			continue;
+		}
+		return true;
+	}
+	return false;
+}
+
 Quantity quantity_of(const Cond &c) {
 	Quantity q = *c.quantity;
 	q.item = q.item.empty() ? c.item : q.item;
@@ -371,6 +420,18 @@ bool holds(const Cond &c, const CondContext &x) {
 	if (c.quantity) {
 		const std::optional<double> v = measure(x.view, quantity_of(c));
 		if (!v || !meets(c.comparison, *v, std::nullopt)) {
+			return false;
+		}
+	}
+	if ((c.part && !part_holds(*c.part, x.view)) || (c.rig && !rig_holds(*c.rig, x.view))) {
+		return false;
+	}
+	if (c.wire) {
+		bool any = false;
+		for (const Wire &w : x.view.wires) {
+			any = any || (names(x.view, c.wire->from, w.from) && names(x.view, c.wire->to, w.to));
+		}
+		if (!any) {
 			return false;
 		}
 	}

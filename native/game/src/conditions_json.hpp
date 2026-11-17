@@ -26,6 +26,8 @@ struct CondReader {
 	bool flag(const json &j, const char *key, std::optional<bool> &out);
 	bool species(const std::string &name);
 	bool cond(const json &j, Cond &c);
+	bool part_pattern(const json &j, PartPattern &p);
+	bool rig_pattern(const json &j, RigPattern &p);
 };
 
 } // namespace lab

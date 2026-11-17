@@ -1,5 +1,6 @@
 // The tutorial (GAME_SPEC §13.2): the demo as steps with checks read from the
 // lab, played here with the pointer and nothing but its own gestures.
+#include "lab/conditions.hpp"
 #include "lab/tutorial.hpp"
 #include "lab/ui.hpp"
 

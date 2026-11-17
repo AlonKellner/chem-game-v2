@@ -259,24 +259,27 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
 enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
 
-/* The player's timers (GAME_SPEC §13.3). Borrowed until the next call on this ui. */
-typedef struct cg_timer {
-	int32_t fired; /* 0 armed, 1 fired */
-	int32_t conditions; /* its value conditions */
-	int32_t limited; /* its time limit is on */
-	double left_s; /* of its time limit, while armed */
-	const char *fired_by; /* what fired it, "" while armed */
-	const char *item; /* the item it fired on, "" for none */
-} cg_timer;
+/* The signals on the bench (GAME_SPEC §13.3): timers, monitors and alarms.
+ * Borrowed until the next call on this ui. */
+typedef struct cg_part {
+	const char *id; /* "monitor1" */
+	const char *kind; /* "timer", "monitor", "alarm" */
+	int32_t col, row; /* its square */
+	int32_t out; /* it signals */
+	int32_t ringing; /* an alarm, until answered */
+	double left_s; /* a timer's time left */
+} cg_part;
 
-typedef struct cg_timers {
-	uint32_t size; /* sizeof(cg_timers), set by the caller */
+typedef struct cg_signals {
+	uint32_t size; /* sizeof(cg_signals), set by the caller */
 	int32_t count;
-	const cg_timer *timers;
+	const cg_part *parts;
+	int32_t wires, rigs;
+	int32_t ringing; /* the alarms ringing */
 	int32_t paused; /* the screen's clock is paused */
-} cg_timers;
+} cg_signals;
 
-CG_API cg_status cg_ui_timers(cg_ui *ui, cg_timers *out);
+CG_API cg_status cg_ui_signals(cg_ui *ui, cg_signals *out);
 
 /* The last notice (a refusal's reason, a failed invariant), "" if none; the
  * lab's report (as cg_lab_report). Borrowed until the next call on this ui. */

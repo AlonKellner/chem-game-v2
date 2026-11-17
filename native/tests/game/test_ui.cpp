@@ -327,3 +327,172 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	CHECK(p.item("jar").place == "bench");
 	well_formed(p.ui->draw());
 }
+
+TEST_CASE("ui: parts come out of the drawer, are set, wired and rigged with the pointer and the keys, and go back (Stage 13)") {
+	Player p;
+	p.click("pause");
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	p.drag("item:jar", "square:4,13");
+	using V = std::vector<std::string>;
+	const auto kinds = [&] {
+		V out;
+		for (const ItemView &v : p.ui->lab().view().items) {
+			if (v.kind == "timer" || v.kind == "monitor" || v.kind == "alarm") {
+				out.push_back(v.id);
+			}
+		}
+		return out;
+	};
+	float x = 0, y = 0;
+	// a monitor: its editor opens; the flask's temperature, between 30 and 40.5 C, typed and nudged
+	p.drag("drawer:monitor", "square:1,1");
+	CHECK(kinds() == V{ "monitor1" });
+	CHECK(p.ui->selected() == "monitor1");
+	p.click("edit:item:flask");
+	p.click("edit:compare:between");
+	p.click("edit:value:0");
+	p.ui->key(lab::Ui::KeyText, '3');
+	p.ui->key(lab::Ui::KeyText, '0');
+	p.click("edit:value:1");
+	for (const char c : std::string("40")) {
+		p.ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+	}
+	p.click("edit:nudge:-1"); // the second value, focused: 40 + 0.1 * 5
+	p.click("edit:nudge:1");
+	p.click("edit:nudge:1");
+	p.click("edit:nudge:1");
+	p.click("edit:nudge:1");
+	p.click("edit:nudge:1");
+	p.click("edit:set");
+	CHECK(p.ui->message().empty());
+	ItemView m = p.item("monitor1");
+	CHECK(m.part.watching);
+	CHECK(m.part.quantity == lab::Quantity{ "flask", "celsius", "g" });
+	CHECK(m.part.comparison.op == lab::Comparison::Between);
+	CHECK(m.part.comparison.a == doctest::Approx(30.0));
+	CHECK(m.part.comparison.b == doctest::Approx(40.4));
+	CHECK_FALSE(p.ui->locate("edit:set", x, y)); // closed
+	// edited again: a value that is not a number is refused, and the editor stays
+	p.click("item:monitor1");
+	p.click("part:edit");
+	p.click("edit:value:0");
+	p.ui->key(lab::Ui::KeyText, '-');
+	p.ui->key(lab::Ui::KeyText, '.');
+	p.ui->key(lab::Ui::KeyEnter);
+	CHECK(p.ui->message().find("not a number") != std::string::npos);
+	CHECK(p.ui->locate("edit:set", x, y));
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK_FALSE(p.ui->locate("edit:set", x, y));
+	CHECK(p.item("monitor1").part.comparison.a == doctest::Approx(30.0)); // unchanged
+	// a timer: typed, as hh:mm:ss.mmm or seconds
+	p.drag("drawer:timer", "square:2,1");
+	p.click("edit:value");
+	for (const char c : std::string("0:01:30")) {
+		p.ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+	}
+	p.click("edit:nudge:-1");
+	p.click("edit:set");
+	CHECK(p.item("timer1").part.preset == 89 * 60);
+	// an alarm, and a wire into it; a wire onto a timer asks which of its inputs
+	p.drag("drawer:alarm", "square:3,1");
+	CHECK(kinds() == V{ "monitor1", "timer1", "alarm1" });
+	CHECK_FALSE(p.ui->locate("edit:set", x, y)); // an alarm has nothing to set
+	p.drag("port:monitor1", "item:alarm1");
+	p.drag("port:monitor1", "item:timer1");
+	p.click("choose:wire");
+	CHECK(p.ui->lab().view().wires == std::vector<lab::Wire>{ { "monitor1", "alarm1" }, { "monitor1", "timer1" } });
+	p.drag("port:timer1", "item:timer1"); // onto its own reset
+	p.click("choose:reset");
+	CHECK(p.ui->locate("edit:on:reset", x, y));
+	p.click("edit:set");
+	// a rig onto the burner's valve: on any change, 25 %
+	p.drag("port:monitor1", "item:burner");
+	p.click("edit:form:change");
+	p.click("edit:change:value");
+	p.ui->key(lab::Ui::KeyText, '2');
+	p.ui->key(lab::Ui::KeyText, '0');
+	p.click("edit:change:nudge:1");
+	p.click("edit:change:nudge:1");
+	p.click("edit:change:nudge:1");
+	p.click("edit:change:nudge:1");
+	p.click("edit:change:nudge:1");
+	p.click("edit:set");
+	// and onto the flask's stirring: stir when on, leave when off
+	p.drag("port:monitor1", "item:flask");
+	p.click("edit:off:leave");
+	p.click("edit:set");
+	const std::vector<lab::Rig> rigs = p.ui->lab().view().rigs;
+	REQUIRE(rigs.size() == 3);
+	CHECK(rigs[0].item == "timer1");
+	CHECK(rigs[0].control == "reset");
+	CHECK(rigs[1].change);
+	CHECK(*rigs[1].any == doctest::Approx(0.25));
+	CHECK(*rigs[2].on == 1.0);
+	CHECK_FALSE(rigs[2].off.has_value());
+	// a wire onto what has no control is refused with the reason
+	p.drag("port:monitor1", "item:jar");
+	CHECK(p.ui->locate("edit:set", x, y)); // a vessel: its stirring
+	p.click("edit:cancel");
+	// the readout takes wires and rigs off again
+	p.click("item:monitor1");
+	p.click("part:unrig:flask:stir");
+	p.click("part:unwire:timer1");
+	CHECK(p.ui->lab().view().rigs.size() == 2);
+	CHECK(p.ui->lab().view().wires.size() == 1);
+	// a part dropped on equipment is refused; dragged along the bench, it moves; to the drawer, it goes
+	p.drag("item:alarm1", "item:jar");
+	CHECK(p.ui->message().find("free square") != std::string::npos);
+	p.drag("item:alarm1", "square:5,1");
+	CHECK(p.item("alarm1").col == 5);
+	p.drag("item:timer1", "cabinet");
+	CHECK(kinds() == V{ "monitor1", "alarm1" });
+	CHECK(p.ui->lab().view().rigs.size() == 1); // its reset rig went with it
+	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a person boiling down at 600x: a monitor closes the valve at 10 g, and an alarm stops the clock and shows why (Stage 13)") {
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	p.drag("item:acid", "square:7,12");
+	p.drag("item:acid", "item:flask");
+	p.click("panel:pour");
+	p.drag("drawer:monitor", "square:1,1");
+	p.click("edit:item:flask");
+	p.click("edit:quantity");
+	p.click("edit:pick:water");
+	p.click("edit:compare:below");
+	p.click("edit:value:0");
+	p.ui->key(lab::Ui::KeyText, '1');
+	p.ui->key(lab::Ui::KeyText, '0');
+	p.click("edit:set");
+	p.drag("port:monitor1", "item:burner");
+	p.click("edit:on:value");
+	p.ui->key(lab::Ui::KeyText, '0');
+	p.click("edit:set");
+	p.drag("drawer:alarm", "square:3,1");
+	p.drag("port:monitor1", "item:alarm1");
+	CHECK(p.ui->message().empty());
+	p.click("valve:burner@1");
+	p.click("speed:600");
+	// a person: watching the screen, doing nothing
+	for (int frame = 0; !p.ui->paused(); ++frame) {
+		REQUIRE_MESSAGE(frame < 60 * 60, "the alarm never rang");
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.grams("flask", "water") < 10.0);
+	CHECK(p.grams("flask", "water") > 9.9);
+	CHECK(p.item("burner").valve == 0.0);
+	CHECK(p.ui->message().find("alarm1 rang: monitor1, flask: H2O(l) (g) below 10.000 g") != std::string::npos);
+	CHECK(p.ui->selected() == "flask"); // what the monitor watched is shown
+	const std::string at_ring = p.ui->lab().digest();
+	p.ui->frame(1.0); // paused: nothing moves
+	CHECK(p.ui->lab().digest() == at_ring);
+	p.click("speed:600"); // playing on answers it
+	CHECK(p.ui->lab().view().ringing.empty());
+	CHECK_FALSE(p.ui->paused());
+	p.ui->frame(1.0);
+	CHECK(p.item("burner").valve == 0.0); // and the valve stays as the rig left it
+	MESSAGE("the alarm rang at " << p.grams("flask", "water") << " g of water");
+}

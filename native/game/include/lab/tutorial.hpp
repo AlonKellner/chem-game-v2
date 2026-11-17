@@ -1,7 +1,7 @@
 #pragma once
 
 #include "lab/lab.hpp"
-#include "lab/timers.hpp"
+#include "lab/quantity.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -30,14 +30,24 @@ struct TutorialGesture {
 	std::string type; // text typed into the focused field (then `what` is empty)
 };
 
+// What the screen's part editor holds while it is open (§13.3), as a
+// tutorial's checks read it ("editor").
+struct TutorialEdit {
+	std::string editing; // "", "monitor", "timer", "rig", "choose"
+	std::string part; // the part being set, or the rig's source
+	Quantity quantity; // a monitor's
+	Comparison::Op op = Comparison::Below;
+	std::string value; // a monitor's first value, as typed
+	std::string item, control; // a rig's
+};
+
 // What the screen holds that a tutorial's checks may read besides the lab.
 struct TutorialScreen {
 	double speed = 1.0;
 	bool broken = false; // the lab stopped on an invariant
 	bool paused = false;
 	std::string selected; // the item selected, "" for none
-	const TimerDraft *draft = nullptr; // the timer being written, while the editor is open
-	const std::vector<Timer> *timers = nullptr;
+	TutorialEdit edit;
 };
 
 struct TutorialView {

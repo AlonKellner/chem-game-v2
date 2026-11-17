@@ -101,6 +101,8 @@ public:
 	bool failed() const;
 
 	int64_t step() const;
+	// An alarm started ringing in the last step (§13.3).
+	bool rang() const;
 	// What is where, measured, as plain data.
 	LabView view() const;
 	// What is where, measured (JSON; GAME_SPEC §13: reports are functions of state).

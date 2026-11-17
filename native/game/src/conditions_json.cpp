@@ -39,6 +39,83 @@ bool CondReader::species(const std::string &name) {
 	return chem::builtin_species().has(chem::builtin_species().find(name)) || fail("no species \"" + name + "\"");
 }
 
+bool CondReader::part_pattern(const json &j, PartPattern &p) {
+	if (!j.is_object()) {
+		return fail("a part's pattern is an object");
+	}
+	for (const auto &[key, v] : j.items()) {
+		bool ok = true;
+		if (key == "id" || key == "kind" || key == "what" || key == "measure") {
+			ok = v.is_string() || fail("\"" + key + "\" is not a name");
+			if (ok) {
+				(key == "id" ? p.id : key == "kind" ? p.kind : key == "what" ? p.what : p.measure) = v.get<std::string>();
+			}
+		} else if (key == "item") {
+			ok = item(v, "item", p.item);
+		} else if (key == "compare") {
+			Comparison::Op op = Comparison::Below;
+			ok = (v.is_string() && op_of(v.get<std::string>(), op)) || fail("no comparison " + v.dump());
+			p.op = op;
+		} else if (key == "value_at_least") {
+			ok = number(v, "value_at_least", p.value_at_least);
+		} else if (key == "value_at_most") {
+			ok = number(v, "value_at_most", p.value_at_most);
+		} else if (key == "watching") {
+			ok = flag(v, "watching", p.watching);
+		} else if (key == "ringing") {
+			ok = flag(v, "ringing", p.ringing);
+		} else if (key == "rang") {
+			ok = flag(v, "rang", p.rang);
+		} else {
+			ok = fail("a part's pattern has no key \"" + key + "\"");
+		}
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool CondReader::rig_pattern(const json &j, RigPattern &p) {
+	if (!j.is_object()) {
+		return fail("a rig's pattern is an object");
+	}
+	for (const auto &[key, v] : j.items()) {
+		bool ok = true;
+		if (key == "from" || key == "control") {
+			ok = v.is_string() || fail("\"" + key + "\" is not a name");
+			if (ok) {
+				(key == "from" ? p.from : p.control) = v.get<std::string>();
+			}
+		} else if (key == "item") {
+			ok = v.is_string() || fail("\"item\" is not a name"); // equipment, or a timer made in play
+			if (ok) {
+				p.item = v.get<std::string>();
+			}
+		} else if (key == "on_at_least") {
+			ok = number(v, "on_at_least", p.on_at_least);
+		} else if (key == "on_at_most") {
+			ok = number(v, "on_at_most", p.on_at_most);
+		} else if (key == "off_at_least") {
+			ok = number(v, "off_at_least", p.off_at_least);
+		} else if (key == "off_at_most") {
+			ok = number(v, "off_at_most", p.off_at_most);
+		} else if (key == "on_leaves") {
+			ok = flag(v, "on_leaves", p.on_leaves);
+		} else if (key == "off_leaves") {
+			ok = flag(v, "off_leaves", p.off_leaves);
+		} else if (key == "change") {
+			ok = flag(v, "change", p.change);
+		} else {
+			ok = fail("a rig's pattern has no key \"" + key + "\"");
+		}
+		if (!ok) {
+			return false;
+		}
+	}
+	return true;
+}
+
 bool CondReader::cond(const json &j, Cond &c) {
 	if (!j.is_object() || j.empty()) {
 		return fail("a condition is not an object with keys");
@@ -139,6 +216,17 @@ bool CondReader::cond(const json &j, Cond &c) {
 				value = v[0].get<double>();
 				value_b = v[1].get<double>();
 			}
+		} else if (key == "part") {
+			ok = part_pattern(v, c.part.emplace());
+		} else if (key == "wire") {
+			ok = (v.is_object() && v.size() <= 2) || fail("a wire is {\"from\", \"to\"}: a part's id or kind each");
+			if (ok) {
+				WirePattern &w = c.wire.emplace();
+				w.from = v.value("from", std::string());
+				w.to = v.value("to", std::string());
+			}
+		} else if (key == "rig") {
+			ok = rig_pattern(v, c.rig.emplace());
 		} else if (key == "all" || key == "any") {
 			ok = (v.is_array() && !v.empty()) || fail("\"" + key + "\" is not a list of conditions");
 			for (size_t i = 0; ok && i < v.size(); ++i) {

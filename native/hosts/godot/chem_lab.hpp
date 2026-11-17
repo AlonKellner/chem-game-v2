@@ -36,8 +36,8 @@ public:
 	godot::PackedInt32Array tutorial() const;
 	// A key, as the engine's would be (GAME_SPEC §13.3): code 0 text (by its code point), 1 backspace, 2 enter, 3 escape.
 	void key(int code, int codepoint);
-	// The timers: each {fired, conditions, limited, left_s, fired_by, item}; and whether the clock is paused.
-	godot::Array timers() const;
+	// The signal parts (§13.3): each {id, kind, out, ringing, left_s}; and whether the clock is paused.
+	godot::Array signals() const;
 	bool paused() const;
 
 	godot::String build_name() const;

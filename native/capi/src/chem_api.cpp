@@ -15,8 +15,8 @@
 struct cg_ui {
 	std::unique_ptr<lab::Ui> ui;
 	std::string text; // the last report handed out
-	std::vector<cg_timer> timers; // the last timers handed out, and their strings
-	std::vector<std::string> timer_text;
+	std::vector<cg_part> parts; // the last parts handed out, and their strings
+	std::vector<std::string> part_text;
 };
 
 // the draw list crosses the boundary as it is
@@ -471,31 +471,35 @@ void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
 	}
 }
 
-cg_status cg_ui_timers(cg_ui *ui, cg_timers *out) {
-	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_timers)) {
-		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_timers: null argument, or the size is not set");
+cg_status cg_ui_signals(cg_ui *ui, cg_signals *out) {
+	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_signals)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_signals: null argument, or the size is not set");
 	}
-	const std::vector<lab::Timer> &list = ui->ui->timers().list();
-	const double now = static_cast<double>(ui->ui->lab().step()) / 60.0;
-	ui->timer_text.clear();
-	ui->timer_text.reserve(2 * list.size());
-	ui->timers.clear();
-	for (const lab::Timer &t : list) {
-		ui->timer_text.push_back(t.fired_by);
-		ui->timer_text.push_back(t.item_fired);
-		cg_timer c{};
-		c.fired = t.fired ? 1 : 0;
-		c.conditions = static_cast<int32_t>(t.conditions.size());
-		c.limited = t.limited ? 1 : 0;
-		c.left_s = t.limited && !t.fired ? t.limit_s - (now - t.armed_at_s) : 0.0;
-		ui->timers.push_back(c);
+	const lab::LabView view = ui->ui->lab().view();
+	ui->part_text.clear();
+	ui->parts.clear();
+	for (const lab::ItemView &v : view.items) {
+		if (v.kind == "timer" || v.kind == "monitor" || v.kind == "alarm") {
+			ui->part_text.push_back(v.id);
+			ui->part_text.push_back(v.kind);
+			cg_part p{};
+			p.col = v.col;
+			p.row = v.row;
+			p.out = v.part.out ? 1 : 0;
+			p.ringing = v.part.ringing ? 1 : 0;
+			p.left_s = v.kind == "timer" ? static_cast<double>(v.part.left) / 60.0 : 0.0;
+			ui->parts.push_back(p);
+		}
 	}
-	for (size_t i = 0; i < ui->timers.size(); ++i) {
-		ui->timers[i].fired_by = ui->timer_text[2 * i].c_str();
-		ui->timers[i].item = ui->timer_text[2 * i + 1].c_str();
+	for (size_t i = 0; i < ui->parts.size(); ++i) {
+		ui->parts[i].id = ui->part_text[2 * i].c_str();
+		ui->parts[i].kind = ui->part_text[2 * i + 1].c_str();
 	}
-	out->count = static_cast<int32_t>(ui->timers.size());
-	out->timers = ui->timers.data();
+	out->count = static_cast<int32_t>(ui->parts.size());
+	out->parts = ui->parts.data();
+	out->wires = static_cast<int32_t>(view.wires.size());
+	out->rigs = static_cast<int32_t>(view.rigs.size());
+	out->ringing = static_cast<int32_t>(view.ringing.size());
 	out->paused = ui->ui->paused() ? 1 : 0;
 	return CG_OK;
 }

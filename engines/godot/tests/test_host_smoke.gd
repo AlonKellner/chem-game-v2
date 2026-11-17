@@ -80,14 +80,11 @@ func _click(what: String) -> void:
 	_lab.pointer(a.x, a.y, true)
 	_lab.pointer(a.x, a.y, false)
 
-func test_a_timer_typed_in_fires_and_pauses_the_clock() -> void:
-	_drag("item:flask", "square:11,12")
-	_click("item:flask")
-	_click("timer:add")
-	_click("timer:remove:0")
-	_click("timer:limit:value")
+func test_a_timer_typed_in_rings_an_alarm_and_pauses_the_clock() -> void:
+	_drag("drawer:timer", "square:1,1")
+	_click("edit:value")
 	# the engine's own key events reach the editor's field
-	for c in "0:03":
+	for c in "3":
 		var press := InputEventKey.new()
 		press.pressed = true
 		press.unicode = c.unicode_at(0)
@@ -97,13 +94,14 @@ func test_a_timer_typed_in_fires_and_pauses_the_clock() -> void:
 	enter.keycode = KEY_ENTER
 	get_viewport().push_input(enter, true)
 	await wait_process_frames(2)
-	assert_eq(_lab.timers().size(), 1, "armed")
-	assert_false(_lab.paused(), "the clock plays on once it is armed")
+	_drag("drawer:alarm", "square:3,1")
+	_drag("port:timer1", "item:alarm1")
+	assert_eq(_lab.signals().size(), 2, "a timer and an alarm")
+	assert_false(_lab.paused(), "the clock plays on once the timer is set")
 	_lab.frame(3.5)
-	var t: Dictionary = _lab.timers()[0]
-	assert_true(t["fired"])
-	assert_eq(t["fired_by"], "0:03 passed")
-	assert_true(_lab.paused(), "the clock stopped when it fired")
+	var alarm: Dictionary = _lab.signals()[1]
+	assert_true(alarm["ringing"], "the alarm rang when the timer reached zero")
+	assert_true(_lab.paused(), "the clock stopped when it rang")
 
 func test_frames_advance_the_clock_and_keep_every_total() -> void:
 	var before: int = JSON.parse_string(_lab.report())["step"]

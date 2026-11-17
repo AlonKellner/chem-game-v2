@@ -147,46 +147,51 @@
 			"play": [{"drag": ["item:beaker", "item:condenser"]}]
 		},
 		{
-			"title": "Select the flask",
-			"text": "Click the flask without moving it. The readout keeps showing it, and offers \"add timer\".",
-			"why": "Boiling down is the step to watch: too far, and the crystals have nothing to grow from. A timer watches it for you while the clock runs fast.",
-			"checks": [{"text": "the flask is selected", "when": {"selected": "flask"}}],
-			"play": [{"click": "item:flask"}]
+			"title": "A monitor",
+			"text": "Drag a monitor out of the parts drawer, beside the outbox, onto a free square of the bench. Its settings open.",
+			"why": "Boiling down is the step to watch: too far, and the crystals have nothing to grow from. A monitor watches a value for you while the clock runs fast.",
+			"checks": [{"text": "a monitor on the bench", "when": {"part": {"kind": "monitor"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}]
 		},
 		{
-			"title": "Add a timer",
-			"text": "Click \"add timer\" in the readout.",
-			"why": "A timer stops the clock when what it watches changes as you ask, or when its time limit passes.",
-			"checks": [{"text": "a timer is being written for the flask", "when": {"editor": {"item": "flask"}}}],
-			"play": [{"click": "timer:add"}]
-		},
-		{
-			"title": "Watch the water",
-			"text": "Click the quantity it watches (the temperature), and choose H2O(l): the flask's liquid water.",
-			"checks": [{"text": "it watches the water", "when": {"editor": {"item": "flask", "what": "water"}}}],
-			"play": [{"click": "timer:quantity:0"}, {"click": "timer:pick:water"}]
+			"title": "Watch the flask's water",
+			"text": "Click \"flask\", then the quantity it watches (the temperature), and choose H2O(l): the flask's liquid water.",
+			"checks": [{"text": "it watches the water in the flask", "when": {"editor": {"editing": "monitor", "item": "flask", "what": "water"}}}],
+			"play": [{"click": "edit:item:flask"}, {"click": "edit:quantity"}, {"click": "edit:pick:water"}]
 		},
 		{
 			"title": "Below 10 g",
-			"text": "Click \"below\". Then click the value and type 10.",
-			"checks": [
-				{"text": "the water below", "when": {"editor": {"what": "water", "compare": "below"}}},
-				{"text": "10 g", "when": {"editor": {"what": "water", "value_at_least": 9, "value_at_most": 11}}}
-			],
-			"play": [{"click": "timer:compare:0:below"}, {"click": "timer:value:0:0"}, {"type": "10"}]
+			"text": "Click \"below\". Then click the value, type 10, and click \"set\".",
+			"why": "From then on the monitor signals whenever less than 10 g of water is left: its lamp lights, and its port, on its right, sends the signal.",
+			"checks": [{"text": "the monitor signals below 10 g of water", "when": {"part": {"kind": "monitor", "item": "flask", "what": "water", "compare": "below", "value_at_least": 9, "value_at_most": 11}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "10"}, {"click": "edit:set"}]
 		},
 		{
-			"title": "No time limit this time",
-			"text": "Click \"time limit: on\" to turn it off: this boil takes longer than five minutes.",
-			"why": "With the limit on, the timer fires at whichever comes first: the water below 10 g, or 5:00.",
-			"checks": [{"text": "the time limit is off", "when": {"editor": {"limited": false}}}],
-			"play": [{"click": "timer:limit:toggle"}]
+			"title": "Rig it to the burner",
+			"text": "Drag from the monitor's port, the dot on its right, onto the burner. The rig's settings open.",
+			"why": "A rig sets a control when its signal changes: here, the burner's valve.",
+			"checks": [{"text": "a rig from the monitor to the burner's valve", "when": {"editor": {"editing": "rig", "item": "burner", "control": "valve"}}}],
+			"play": [{"drag": ["port:monitor1", "item:burner"]}]
 		},
 		{
-			"title": "Arm it",
-			"text": "Click \"arm\". The timer appears in the list beside the outbox.",
-			"checks": [{"text": "the timer is armed", "when": {"timer": {"item": "flask", "what": "water", "compare": "below", "value_at_least": 9, "value_at_most": 11, "fired": false}}}],
-			"play": [{"click": "timer:arm"}]
+			"title": "Close the valve when it signals",
+			"text": "On the \"when on\" row, click the value and type 0. Leave \"when off\" as it is. Click \"rig\".",
+			"why": "When the water goes below 10 g, the valve closes itself, at any speed. Your own hand can still open it after: the control keeps whatever set it last.",
+			"checks": [{"text": "the burner closes when the monitor signals", "when": {"rig": {"from": "monitor", "item": "burner", "control": "valve", "on_at_most": 0.001, "off_leaves": true}}}],
+			"play": [{"click": "edit:on:value"}, {"type": "0"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "An alarm",
+			"text": "Drag an alarm out of the parts drawer onto a free square.",
+			"why": "An alarm stops the clock when its input turns on, and shows you what set it off.",
+			"checks": [{"text": "an alarm on the bench", "when": {"part": {"kind": "alarm"}}}],
+			"play": [{"drag": ["drawer:alarm", "square:3,1"]}]
+		},
+		{
+			"title": "Wire the monitor to it",
+			"text": "Drag from the monitor's port onto the alarm.",
+			"checks": [{"text": "the monitor wired into the alarm", "when": {"wire": {"from": "monitor", "to": "alarm"}}}],
+			"play": [{"drag": ["port:monitor1", "item:alarm1"]}]
 		},
 		{
 			"title": "Boil",
@@ -197,22 +202,22 @@
 		},
 		{
 			"title": "Boil it down, not dry",
-			"text": "Speed up as you like: your timer stops the clock when less than 10 g of water is left.",
+			"text": "Speed up as you like: below 10 g of water the monitor closes the valve, and the alarm stops the clock.",
 			"why": "The crystals need water to grow from. Boiled dry, the salt loses its own water and turns white.",
 			"checks": [
 				{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}},
-				{"text": "your timer fired", "when": {"timer": {"item": "flask", "what": "water", "fired": true}}}
+				{"text": "the rig closed the valve", "when": {"item": "burner", "valve_at_most": 0}},
+				{"text": "the alarm rang", "when": {"part": {"kind": "alarm", "rang": true}}}
 			]
 		},
 		{
-			"title": "Stop heating and let it cool",
-			"text": "Drag the burner's slider all the way down, then press play and wait.",
+			"title": "Let it cool",
+			"text": "Press play (or a speed) to answer the alarm, and wait.",
 			"why": "Cold water dissolves less copper sulfate: as the solution cools, blue CuSO4.5H2O crystals grow out of it.",
 			"checks": [
 				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},
-				{"text": "the flask below 21 C", "wait": true, "when": {"item": "flask", "below_c": 21}}
-			],
-			"play": [{"click": "valve:burner@0"}]
+				{"text": "the flask below 21 C", "when": {"item": "flask", "below_c": 21}}
+			]
 		},
 		{
 			"title": "Let the crystals grow",

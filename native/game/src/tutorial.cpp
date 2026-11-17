@@ -17,14 +17,6 @@ using json = nlohmann::json;
 
 namespace {
 
-// A timer's condition, or the editor's, as a check names it (§13.3): every key given matches.
-struct TimerPattern {
-	std::string item, what, measure;
-	std::optional<Comparison::Op> op;
-	std::optional<double> value_at_least, value_at_most;
-	std::optional<bool> fired, limited;
-};
-
 struct Check {
 	std::string text;
 	bool wait = false;
@@ -42,61 +34,31 @@ struct Result {
 	std::vector<std::string> show;
 };
 
-bool matches(const TimerPattern &p, const TimerCondition &c, const std::string *text) {
-	if ((!p.item.empty() && c.quantity.item != p.item) || (!p.what.empty() && c.quantity.what != p.what) || (!p.measure.empty() && c.quantity.measure != p.measure) ||
-			(p.op && c.comparison.op != *p.op)) {
+// What the screen's part editor holds, as a check names it (§13.3): every key given matches.
+struct EditPattern {
+	std::string editing, item, what, measure, control;
+	std::optional<Comparison::Op> op;
+	std::optional<double> value_at_least, value_at_most;
+};
+
+bool editor_holds(const EditPattern &p, const TutorialScreen *screen) {
+	if (screen == nullptr || screen->edit.editing.empty()) {
+		return false;
+	}
+	const TutorialEdit &e = screen->edit;
+	const std::string &item = e.editing == "rig" ? e.item : e.quantity.item;
+	if ((!p.editing.empty() && e.editing != p.editing) || (!p.item.empty() && item != p.item) || (!p.what.empty() && e.quantity.what != p.what) ||
+			(!p.measure.empty() && e.quantity.measure != p.measure) || (!p.control.empty() && e.control != p.control) || (p.op && e.op != *p.op)) {
 		return false;
 	}
 	if (p.value_at_least || p.value_at_most) {
-		double v = c.comparison.a;
-		if (text != nullptr) { // the editor's value as typed
-			char *end = nullptr;
-			v = std::strtod(text->c_str(), &end);
-			if (text->empty() || end == nullptr || *end != '\0') {
-				return false;
-			}
-		}
-		if ((p.value_at_least && !(v >= *p.value_at_least)) || (p.value_at_most && !(v <= *p.value_at_most))) {
+		char *end = nullptr;
+		const double v = std::strtod(e.value.c_str(), &end);
+		if (e.value.empty() || end == nullptr || *end != '\0' || (p.value_at_least && !(v >= *p.value_at_least)) || (p.value_at_most && !(v <= *p.value_at_most))) {
 			return false;
 		}
 	}
 	return true;
-}
-
-bool editor_holds(const TimerPattern &p, const TutorialScreen *screen) {
-	if (screen == nullptr || screen->draft == nullptr) {
-		return false;
-	}
-	const TimerDraft &d = *screen->draft;
-	if (p.limited && d.limited != *p.limited) {
-		return false;
-	}
-	if (p.what.empty() && !p.op && !p.value_at_least && !p.value_at_most) {
-		return p.item.empty() || d.item == p.item;
-	}
-	for (size_t i = 0; i < d.conditions.size(); ++i) {
-		if (matches(p, d.conditions[i], i < d.text.size() ? &d.text[i][0] : nullptr)) {
-			return true;
-		}
-	}
-	return false;
-}
-
-bool timer_holds(const TimerPattern &p, const TutorialScreen *screen) {
-	if (screen == nullptr || screen->timers == nullptr) {
-		return false;
-	}
-	for (const Timer &t : *screen->timers) {
-		if ((p.fired && t.fired != *p.fired) || (p.limited && t.limited != *p.limited)) {
-			continue;
-		}
-		for (const TimerCondition &c : t.conditions) {
-			if (matches(p, c, nullptr)) {
-				return true;
-			}
-		}
-	}
-	return false;
 }
 
 std::string fmt(const char *format, double v) {
@@ -134,34 +96,30 @@ double gas_share(const ItemView &v, const std::string &species) {
 struct Reader : CondReader {
 	explicit Reader(const LabView &b) :
 			CondReader{ b, {}, {} } {
-		// the screen's timers and the editor's draft, which only a tutorial reads (§13.3)
+		// the screen's part editor, which only a tutorial reads (§13.3)
 		extra_key = [](const std::string &key, const json &value, Cond &c, CondReader &r, bool &ok) {
-			if (key != "editor" && key != "timer") {
+			if (key != "editor") {
 				return false;
 			}
-			TimerPattern p;
+			EditPattern p;
 			ok = static_cast<Reader &>(r).pattern(value, p);
-			if (key == "editor") {
-				c.extra.push_back([p](const CondContext &x) { return editor_holds(p, static_cast<const TutorialScreen *>(x.host)); });
-			} else {
-				c.extra.push_back([p](const CondContext &x) { return timer_holds(p, static_cast<const TutorialScreen *>(x.host)); });
-			}
+			c.extra.push_back([p](const CondContext &x) { return editor_holds(p, static_cast<const TutorialScreen *>(x.host)); });
 			return true;
 		};
 	}
 
-	bool pattern(const json &j, TimerPattern &p) {
+	bool pattern(const json &j, EditPattern &p) {
 		if (!j.is_object()) {
-			return fail("a timer's pattern is an object");
+			return fail("an editor's pattern is an object");
 		}
 		for (const auto &[key, value] : j.items()) {
 			bool ok = true;
 			if (key == "item") {
 				ok = item(value, "item", p.item);
-			} else if (key == "what" || key == "measure") {
+			} else if (key == "editing" || key == "what" || key == "measure" || key == "control") {
 				ok = value.is_string() || fail("\"" + key + "\" is not a name");
 				if (ok) {
-					(key == "what" ? p.what : p.measure) = value.get<std::string>();
+					(key == "editing" ? p.editing : key == "what" ? p.what : key == "measure" ? p.measure : p.control) = value.get<std::string>();
 				}
 			} else if (key == "compare") {
 				Comparison::Op op = Comparison::Below;
@@ -171,12 +129,8 @@ struct Reader : CondReader {
 				ok = number(value, "value_at_least", p.value_at_least);
 			} else if (key == "value_at_most") {
 				ok = number(value, "value_at_most", p.value_at_most);
-			} else if (key == "fired") {
-				ok = flag(value, "fired", p.fired);
-			} else if (key == "limited") {
-				ok = flag(value, "limited", p.limited);
 			} else {
-				ok = fail("a timer's pattern has no key \"" + key + "\"");
+				ok = fail("an editor's pattern has no key \"" + key + "\"");
 			}
 			if (!ok) {
 				return false;
