@@ -23,7 +23,7 @@ front, and the bench's drawing behind a vessel is seen bent.
 | 11.9 | It fails: pixels that see the slit through a narrow window of wavelengths stop wrong, and stay stale when it turns | Found |
 | 11.10 | Band cuts where a pixel's light jumps (bent views crossing edges, route changes, narrow lines); the content key's geometry; `chem_tool study frames` | Done |
 | 11.11 | The scene test with a refracting ball (the replay and the published page, round 9) | Done |
-| 11.12 | The user's sign-off | Pending |
+| 11.12 | The user's sign-off | Done (2026-11-17: "Looks very good, approved, proceed") |
 
 ## Decisions
 

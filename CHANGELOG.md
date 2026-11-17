@@ -1,6 +1,9 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 11)
+## 0.12.0 (2026-11-17, Stage 11)
+
+Signed off by the user on 2026-11-17 ("Looks very good, approved, proceed").
+
 
 - §12.3: refraction and Fresnel built: a vessel is a glass cylinder of its wall's mass; water's
   and glass's indices as spectra at 1 nm (Daimon and Masumura; Schott's BOROFLOAT 33); the ray's
