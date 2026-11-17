@@ -89,6 +89,8 @@ public:
 	//   part:edit   part:reset   part:unwire:<to>   part:unrig:<item>:<control>
 	//   circuit:create (the drawer's, for the parts chosen)   part:open   part:give_back
 	//   circuit:close   circuit:up   inner:<col>,<row> (a square of the open circuit)
+	//   notices   notices:<detail|event|warning|danger> (its switch)   notices:close
+	//   edit:level:<detail|event|warning|danger>   edit:item:any (a notice part's)
 	//   edit:set   edit:cancel   (the part editor, while it is open)
 	//     a monitor's: edit:item:<id>   edit:quantity   edit:pick:<what>   edit:measure:<g|count|size|purity>
 	//       edit:compare:<above|below|at_least|at_most|reaches|between|outside>   edit:value:<0|1>   edit:nudge:<-3..3>

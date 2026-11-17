@@ -16,12 +16,14 @@ const char *part_kind_name(PartKind kind) {
 			return "alarm";
 		case PartKind::Circuit:
 			return "circuit";
+		case PartKind::Notice:
+			return "notice";
 	}
 	return "?";
 }
 
 bool part_kind_of(std::string_view name, PartKind &kind) {
-	for (const PartKind k : { PartKind::Timer, PartKind::Monitor, PartKind::Alarm, PartKind::Circuit }) {
+	for (const PartKind k : { PartKind::Timer, PartKind::Monitor, PartKind::Alarm, PartKind::Circuit, PartKind::Notice }) {
 		if (name == part_kind_name(k)) {
 			kind = k;
 			return true;
@@ -68,7 +70,7 @@ void reset(Part &timer) {
 	timer.out = false;
 }
 
-SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step) {
+SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step, const NoticeReader &noticed) {
 	SignalStep out;
 	const std::vector<Part> before = parts;
 	for (Part &p : parts) {
@@ -106,6 +108,10 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 			}
 			case PartKind::Circuit:
 				p.own = p.out = false; // what is in it signals
+				break;
+			case PartKind::Notice:
+				p.own = noticed && noticed(p.notice_level, p.quantity.item);
+				p.out = p.own && on;
 				break;
 		}
 	}

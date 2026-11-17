@@ -183,6 +183,9 @@ func _play(dir: String) -> void:
 		_lab.frame(1.0 / 60.0)
 	_click("pause")
 	await _shoot(dir, "5_crystals")
+	_click("notices") # what the lab told of the demo (GAME_SPEC §13.4)
+	await _shoot(dir, "10_notices")
+	_click("notices")
 	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
 	_lab.queue_free()
 	await process_frame

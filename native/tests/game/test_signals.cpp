@@ -373,7 +373,7 @@ TEST_CASE("signals: parts are made from the drawer, wired, set and scrapped, and
 	CHECK(refused(*l, R"({"do": "part", "kind": "monitor", "at": [0, 0]})").find("\"monitor1\" stands there") != std::string::npos);
 	CHECK(refused(*l, R"({"do": "part", "kind": "monitor", "at": [9, 9]})").find("\"flask\" stands there") != std::string::npos);
 	CHECK(refused(*l, R"({"do": "part", "kind": "monitor", "at": [28, 0]})").find("off the bench") != std::string::npos);
-	CHECK(refused(*l, R"({"do": "part", "kind": "kettle", "at": [5, 0]})").find("timer, monitor or alarm") != std::string::npos);
+	CHECK(refused(*l, R"({"do": "part", "kind": "kettle", "at": [5, 0]})").find("timer, monitor, alarm or notice") != std::string::npos);
 	CHECK(refused(*l, R"({"do": "part", "kind": "timer", "at": [5, 0], "id": "flask"})").find("taken") != std::string::npos);
 	CHECK(refused(*l, R"({"do": "place", "item": "flask", "at": [0, 0]})").find("monitor1") != std::string::npos);
 	must(*l, R"({"do": "wire", "from": "monitor1", "to": "alarm1"})");

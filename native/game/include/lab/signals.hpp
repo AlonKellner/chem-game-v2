@@ -17,8 +17,10 @@ namespace lab {
 
 // A circuit holds other parts, circuits too, compactly on one square (§13.3);
 // it signals nothing itself: what is in it signals as it would out of it.
-enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3 };
-const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit"
+// A notice part signals for a step when the lab writes a notice at or above
+// its level (§13.4), about its item if it names one.
+enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4 };
+const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit", "notice"
 bool part_kind_of(std::string_view name, PartKind &kind);
 
 struct Part {
@@ -27,6 +29,7 @@ struct Part {
 	int col = -1, row = -1; // its square: on the bench, or inside its circuit
 	std::string in; // the circuit it is in; "" on the bench
 	int inner_w = 0, inner_h = 0; // a circuit's own grid, in squares
+	int notice_level = 2; // a notice part's: 0 detail, 1 event, 2 warning, 3 danger; its item is quantity.item ("" for any)
 
 	// a monitor: what it watches, once set
 	bool watching = false;
@@ -75,6 +78,9 @@ struct SignalStep {
 
 // What a monitor reads: a quantity now, none when it is not one of the lab's.
 using QuantityReader = std::function<std::optional<double>(const Quantity &)>;
+// What a notice part reads: whether the lab wrote a notice since the step
+// before at or above `level`, about `item` ("" for any).
+using NoticeReader = std::function<bool(int level, const std::string &item)>;
 
 // One step's signals (§13.3), at the step's end. Synchronous: every part reads
 // its inputs' signals as they were at the end of the step before, and all are
@@ -83,7 +89,8 @@ using QuantityReader = std::function<std::optional<double>(const Quantity &)>;
 // parallel are OR; a chain is AND). Then each rig whose source's signal, as
 // it was at the end of the step before, changed acts, if it has a setting for
 // that change: every link, a wire or a rig, takes one step.
-SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step);
+SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step,
+		const NoticeReader &noticed = {});
 
 // Whether a part's inputs let it signal, from their signals `before`.
 bool enabled(const std::string &id, const std::vector<Wire> &wires, const std::vector<Part> &before);

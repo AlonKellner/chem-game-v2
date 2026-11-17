@@ -55,6 +55,19 @@ struct ItemView {
 	Part part; // a signal part (§13.3): its settings and state
 };
 
+// What the lab says happened (GAME_SPEC §13.4), at a level the player may
+// silence: a detail, an event, a warning, a danger.
+struct Notice {
+	enum Level : int32_t { Detail = 0, Event = 1, Warning = 2, Danger = 3 };
+	int64_t step = 0;
+	Level level = Detail;
+	std::string item; // what it is about; "" for the lab itself
+	std::string says;
+	bool operator==(const Notice &) const = default;
+};
+const char *level_name(Notice::Level level); // "detail", "event", "warning", "danger"
+bool level_of(std::string_view name, Notice::Level &level);
+
 struct LabView {
 	int64_t step = 0;
 	int cols = 0, rows = 0; // the bench's grid, in squares
@@ -68,6 +81,7 @@ struct LabView {
 	std::vector<Rig> rigs; // in the order they were made
 	std::vector<ControlSetting> controls; // every control's last setting, and who made it
 	std::vector<std::string> ringing; // the alarms ringing
+	std::vector<Notice> notices; // oldest first (the last 2000)
 };
 
 class Lab {
