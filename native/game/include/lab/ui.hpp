@@ -2,6 +2,7 @@
 
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/tutorial.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -55,6 +56,12 @@ public:
 	const OpticsScene &optics();
 
 	Lab &lab();
+	// A tutorial over the lab (GAME_SPEC §13.2): its card above the readout,
+	// and a pointer at what its step asks for. false, with the reason, for a
+	// tutorial this bench cannot follow. Reset starts it again.
+	bool tutor(std::string_view tutorial_json, std::string &why);
+	// null without one
+	const Tutorial *tutorial() const;
 	// The last notice: a refusal's reason, a failed invariant.
 	const std::string &message() const;
 	double speed() const;

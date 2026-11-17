@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.12.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.13.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1009,6 +1009,60 @@ for play: everything in the cabinet), the commands and the screen above.
 **Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
 places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 
+### 13.2 The tutorial
+
+A tutorial (`lab/tutorial.hpp`; data in `data/tutorials/`, `chem-tutorial/1`) is a play of the lab
+in steps. It reads the lab and never commands it: everything is still done by the player's own
+gestures, and a run with a tutorial is the same lab as one without.
+
+- **A step** has a part (the demo's stage), a title, what to do, why (the chemistry), its checks,
+  and the gestures it asks for, named as the screen's `locate` names things.
+- **A check** is a condition on the lab's view with a text: an item's place, what it is on or
+  under, what drains into what, handed in, stirred, burst; its valve, temperature, liquid volume;
+  a species' mass, or its share of the solids and liquids; what alone it holds; the screen's speed;
+  the world's totals unchanged. Conditions combine with `all`, `any` and `not`. A check is marked
+  `wait` when the lab is waited on for it rather than a gesture; every check of a step that asks
+  for no gesture is waited on. One that names an item the bench
+  does not have, or a species the tables do not, is refused when the tutorial is opened.
+- **One step at a time.** While a tutorial runs, the screen takes only the current step's
+  gestures: a drag of the item it names, let go where it goes (onto the item it names, into a
+  free square for a square, into the outbox or the cabinet); a click on the button, valve or
+  slider it names. Anything else is refused, with what the step asks for, and changes nothing.
+  While the step waits on the lab, no gesture is taken. The clock's buttons and reset are always
+  the player's. Once the run is complete or has failed, the screen is the player's again.
+- **The clock waits for the player.** While the step asks for a gesture, the lab's time does not
+  pass; it runs only while every open check is waited on. The screen then advances the lab a
+  second at a time and stops in the second the wait ends, at any speed: a player is never too
+  slow for the lab, and a 600x clock cannot boil a flask dry while the player reaches for the
+  valve.
+- **Passing.** After every frame and every gesture, the current step is passed when all its checks
+  hold, and so on while the next ones hold too: a step done early is passed when it is reached.
+  The state decides, not the order the gestures came in.
+- **Failing.** A tutorial lists its failures, each a condition with what went wrong; the first that
+  holds ends the run, as does an invariant stopping the lab. A failed run stays failed until the
+  screen's reset, which starts the lab and the tutorial again.
+- **Completing.** Once every step is passed, its goal is checked: if every goal check holds the
+  tutorial is complete, and it reports what was made, measured from the state; if one does not,
+  the run has failed, and the card says which.
+- **On the screen** the card stands above the readout: the part, the step's number and a progress
+  bar, the title, what to do and why, and each check with a box, ticked when it holds, with the
+  value it waits on ("now 1.509 g"). A pulsing outline points at the last of the step's gestures
+  that is on the screen now (for a drag, both ends and an arrow), while a check that is not waited
+  on is still open; with the item in hand, only where it goes.
+
+**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 28 steps.
+Its failures: the balloon burst; acid poured before the malachite has broken down (in liquid it
+never gets hot enough); the crystals overheated to a lower hydrate or the anhydrous salt; the
+balloon handed in without the CO₂, the beaker with more than water, the flask with its liquor or
+without its crystals; anything else handed in. Its goal is §17's "done when". The Godot host opens
+it by default (`tutorial_path`).
+**Status:** Stage 12. `tutorial: followed with its own gestures, step by step, it completes the
+demo` plays every step's gestures through the screen and waits for the lab. `tutorial: played as a
+person plays it, slowly, at the speed it asks for, it completes` plays them as a person does: a
+second and a half before each gesture, the pointer moved across the screen frame by frame, a
+slider taken at its knob, a drop into the outbox over what was handed in before, the clock at
+600x.
+
 ## 14. C API and hosts
 
 - `native/capi/include/chem_api.h` is the game for any host. Rules: every struct starts with its
@@ -1031,7 +1085,8 @@ places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
 
 - **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
   (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
-  `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts).
+  `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts),
+  `cg_ui_tutor` and `cg_ui_tutorial` (a tutorial over the screen, §13.2, and how far it is).
 - **The optical pass through the C API:** `cg_ui_optics` (the scene of §12.3: the table, each
   body's spectra, the lines, the room light's energy table, with one revision),
   `cg_ui_optics_compare` (a host's settled picture of the pass against the truth: `O4`).
@@ -1103,7 +1158,10 @@ measured` asserts each of these.
 
 **Status:** Stage 7: done headlessly, through the C API. Stage 9: playable in the Godot host,
 in flat colours; `ui: the three stages of the demo, played with the pointer alone` plays it
-through the screen. The optics are Stages 10 and 11.
+through the screen. Stages 10 and 11: seen by light, refracted. Stage 12: checked end to end with
+the final renderer, headless, through the screen and on the GPU, and made a tutorial (§13.2)
+that teaches it step by step and checks each step (`docs/TDD_12_DEMO.md`); signed off by the user
+on 2026-11-17.
 
 ## 18. Invariant catalogue
 

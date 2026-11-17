@@ -488,7 +488,8 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 		return false;
 	}
 	const double free = meta.volume - fill.condensed;
-	const double excess = fill.gas - free;
+	// as gas_excess() has it, to the last bit: T1 judges the expulsion by that number
+	const double excess = fill.gas + fill.condensed - meta.volume;
 	std::vector<SpeciesAmount> amounts;
 	if (excess > 0.0 && fill.gas > 0.0) {
 		const double fraction = excess < fill.gas ? excess / fill.gas : 1.0;

@@ -26,11 +26,12 @@ constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 1120, 300 };
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 300 };
+constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
 constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 
 constexpr uint32_t BACKGROUND = 0x2a2a2aff, GRID = 0x444444ff, GLASS = 0xffffffcc, INK = 0xe6e6e6ff, DIM = 0x9a9a9aff, PANEL_FILL = 0x383838ff, BUTTON = 0x505050ff,
-				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff;
+				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff, GUIDE = 0xffc83cff, GOOD = 0x78c88cff, BAD = 0xf05a5aff;
 // on the lit wall: what is in the glass is seen by the light that comes through it (§12)
 constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff, WALL_GLASS = 0x4a5662cc;
 constexpr double WALL_RADIANCE = 0.7305, DARK_RADIANCE = 0.0232; // the linear values of WALL and BACKGROUND
@@ -53,6 +54,28 @@ std::string text_of(const char *format, double a = 0, double b = 0) {
 	char buffer[160];
 	std::snprintf(buffer, sizeof buffer, format, a, b);
 	return buffer;
+}
+
+// words wrapped at about `width` characters
+std::vector<std::string> wrapped(const std::string &s, size_t width) {
+	std::vector<std::string> lines;
+	std::string line;
+	size_t at = 0;
+	while (at < s.size()) {
+		size_t end = s.find(' ', at);
+		end = end == std::string::npos ? s.size() : end;
+		const std::string word = s.substr(at, end - at);
+		if (!line.empty() && line.size() + 1 + word.size() > width) {
+			lines.push_back(line);
+			line.clear();
+		}
+		line += (line.empty() ? "" : " ") + word;
+		at = end + 1;
+	}
+	if (!line.empty()) {
+		lines.push_back(line);
+	}
+	return lines;
 }
 
 } // namespace
@@ -81,8 +104,61 @@ struct Ui::Impl {
 	bool panel = false;
 	int from = -1, to = -1;
 	double pour_fraction = 1.0;
+	// a tutorial (§13.2), and real time for its pointer's pulse
+	std::unique_ptr<Tutorial> tutorial;
+	double clock = 0.0;
 
 	void refresh() { view = lab->view(); }
+	void follow() {
+		if (tutorial) {
+			tutorial->follow(view, speed, lab->failed());
+		}
+	}
+
+	// ---- a running tutorial allows only its step's gestures (§13.2)
+	bool guided() const { return tutorial && tutorial->view().state == TutorialView::Running; }
+	// its clock stands while the step asks for a gesture
+	bool held() const { return guided() && !tutorial->waiting(); }
+	bool asks_click(const std::string &what) const {
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (!g.drag && (g.what == what || (what.back() == '@' && g.what.rfind(what, 0) == 0))) {
+				return true;
+			}
+		}
+		return false;
+	}
+	bool asks_drag(int index) const {
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (g.drag && g.what == "item:" + id(index)) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// refused, with what the step asks for instead
+	bool not_now() {
+		const TutorialView &t = tutorial->view();
+		message = tutorial->waiting() ? "Not now: wait for the lab (" + t.title + ")" : "Not now. The tutorial asks: " + t.text;
+		return false;
+	}
+	bool allowed_click(const std::string &what) { return !guided() || asks_click(what) || not_now(); }
+	// a drop where the step's drag goes: onto its item, into a free square, the outbox or the cabinet
+	bool guided_drop(int index, int target, float x, float y) {
+		if (!guided()) {
+			return true;
+		}
+		for (const TutorialGesture &g : tutorial->gestures()) {
+			if (!g.drag || g.what != "item:" + id(index)) {
+				continue;
+			}
+			const std::string &where = g.to;
+			if ((where.rfind("item:", 0) == 0 && target >= 0 && id(target) == where.substr(5)) || (where.rfind("cell:", 0) == 0 && target < 0 && BENCH.has(x, y)) ||
+					(where == "outbox" && OUTBOX.has(x, y)) || (where == "cabinet" && CABINET.has(x, y))) {
+				return true;
+			}
+		}
+		return not_now();
+	}
 
 	float cell_w() const { return std::fmin(140.0f, BENCH.w / static_cast<float>(view.cols)); }
 	float cell_h() const { return std::fmin(300.0f, BENCH.h / static_cast<float>(view.rows)); }
@@ -149,10 +225,12 @@ struct Ui::Impl {
 		return Rect{ c.cx() - w / 2, c.y + c.h - lift - h, w, h };
 	}
 
-	// the item under a point, the topmost; not the tray, not `except`
-	int item_at(float x, float y, int except = -1) const {
+	// the item under a point, the topmost; not the tray, not `except`; with
+	// `on_bench`, only what stands on the bench (what can be joined or poured into)
+	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
-			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray") {
+			const std::string &place = view.items[static_cast<size_t>(i)].place;
+			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under")) {
 				continue;
 			}
 			Rect r = rect(i);
@@ -223,11 +301,14 @@ struct Ui::Impl {
 	// what letting go of an item at a point does
 	void drop(int index, float x, float y) {
 		const ItemView v = view.items[static_cast<size_t>(index)];
-		const int target = item_at(x, y, index);
+		const int target = item_at(x, y, index, true);
 		// first it comes off what it is joined to
 		const bool was_on = v.place == "on", was_under = v.place == "under";
 		if (target >= 0 && (target == v.on || target == v.under)) {
 			return; // put back where it was
+		}
+		if (!guided_drop(index, target, x, y)) {
+			return; // back where it was
 		}
 		if (was_on && !act({ { "do", "detach" }, { "item", v.id } })) {
 			return;
@@ -268,8 +349,9 @@ struct Ui::Impl {
 		}
 		if (BENCH.has(x, y)) {
 			const int col = static_cast<int>((x - BENCH.x) / cell_w()), row = static_cast<int>((y - BENCH.y) / cell_h());
-			if (col < view.cols && row < view.rows) {
-				act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } });
+			if (col < view.cols && row < view.rows && !act({ { "do", "place" }, { "item", v.id }, { "at", { col, row } } }) && was_on &&
+					view.items[static_cast<size_t>(index)].drains_to >= 0) {
+				message.clear(); // it came off, and stays beside the vessel: what stands under its outlet holds it there
 			}
 		}
 	}
@@ -277,11 +359,18 @@ struct Ui::Impl {
 	void press(float x, float y) {
 		if (panel) {
 			if (pour_slider().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (guided() && !asks_click("panel:pour") && !asks_click("panel:slider@")) {
+					not_now();
+					return;
+				}
 				slider_drag = true;
 				slide(x);
 				return;
 			}
 			if (pour_button().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (!allowed_click("panel:pour")) {
+					return;
+				}
 				const double ml = view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
 				json command = { { "do", "pour" }, { "from", id(from) }, { "to", id(to) } };
 				if (pour_fraction >= 1.0) {
@@ -296,6 +385,9 @@ struct Ui::Impl {
 			}
 			for (const auto &[species, r] : tip_buttons()) {
 				if (r.has(x, y)) {
+					if (!allowed_click("panel:tip:" + species)) {
+						return;
+					}
 					if (act({ { "do", "tip" }, { "from", id(from) }, { "to", id(to) }, { "species", species }, { "all", true } })) {
 						panel = false;
 					}
@@ -330,6 +422,9 @@ struct Ui::Impl {
 				owed = 0.0;
 				message.clear();
 				refresh();
+				if (tutorial) {
+					tutorial->restart();
+				}
 			}
 			return;
 		}
@@ -342,18 +437,28 @@ struct Ui::Impl {
 				wide.y -= 6;
 				wide.h += 12;
 				if (wide.has(x, y)) {
+					if (!allowed_click("valve:" + id(i) + "@")) {
+						return;
+					}
 					valve_drag = i;
 					turn(y);
 					return;
 				}
 			}
 			if (stir_rect(i, r) && r.has(x, y)) {
+				if (!allowed_click("stir:" + id(i))) {
+					return;
+				}
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
 		}
 		const int hit = item_at(x, y);
 		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
+			if (guided() && !asks_drag(hit)) {
+				not_now();
+				return;
+			}
 			const Rect r = rect(hit);
 			drag = hit;
 			grab_x = x - r.x;
@@ -505,9 +610,173 @@ struct Ui::Impl {
 			r.y = py - grab_y;
 			paint_item(drag, r);
 		}
+		if (tutorial) {
+			paint_tutorial();
+		}
 		paint_readout();
 		if (panel) {
 			paint_panel();
+		}
+		if (tutorial) {
+			paint_guide();
+		}
+	}
+
+	bool locate(std::string_view what, float &x, float &y) const;
+
+	// ------------------------------------------------------------- the tutorial (§13.2)
+
+	// the card: the step, what to do and why, its checks; or the result
+	void paint_tutorial() {
+		const TutorialView &t = tutorial->view();
+		rect_fill(TUTOR, PANEL_FILL);
+		outline(TUTOR, GRID, 1);
+		const float x = TUTOR.x + 18, right = TUTOR.x + TUTOR.w - 18;
+		float y = TUTOR.y + 30;
+		const auto lines = [&](const std::string &s, size_t width, uint32_t color, float size, float gap) {
+			for (const std::string &l : wrapped(s, width)) {
+				text(x, y, l, color, size);
+				y += size + gap;
+			}
+		};
+		text(x, y, t.part, DIM, 15);
+		const int shown_step = t.step < t.steps ? t.step + 1 : t.steps;
+		text(right - 110, y, text_of("step %.0f of %.0f", shown_step, t.steps), DIM, 15);
+		y += 12;
+		const float bar = right - x;
+		rect_fill(Rect{ x, y, bar, 6 }, BUTTON);
+		rect_fill(Rect{ x, y, bar * static_cast<float>(t.step) / static_cast<float>(t.steps > 0 ? t.steps : 1), 6 }, t.state == TutorialView::Failed ? BAD : GOOD);
+		y += 40;
+		if (t.state == TutorialView::Failed) {
+			text(x, y, "This run cannot be completed", BAD, 22);
+			y += 36;
+			lines(t.failure, 44, INK, 17, 8);
+			return;
+		}
+		if (t.state == TutorialView::Complete) {
+			text(x, y, "Tutorial complete", GOOD, 24);
+			y += 36;
+			lines("Everything was made and handed in. What was measured:", 50, INK, 16, 7);
+			y += 4;
+			for (const std::string &r : t.results) {
+				lines(r, 54, DIM, 15, 6);
+			}
+			y += 10;
+		} else {
+			lines(t.title, 40, INK, 22, 10);
+			lines(t.text, 46, INK, 17, 7);
+			if (!t.why.empty()) {
+				y += 4;
+				lines(t.why, 54, DIM, 15, 6);
+			}
+			y += 4;
+			text(x, y + 14, tutorial->waiting() ? "The clock runs: 60x or 600x hurries it." : "The clock waits for you.", WARN, 15);
+			y += 38;
+		}
+		for (const TutorialCheck &c : t.checks) {
+			const Rect tick{ x, y - 13, 14, 14 };
+			if (c.done) {
+				rect_fill(tick, GOOD);
+			} else {
+				outline(tick, INK, 1);
+			}
+			std::string label = c.text;
+			if (!c.done && !c.now.empty()) {
+				label += "  (now " + c.now + ")";
+			}
+			for (const std::string &l : wrapped(label, 52)) {
+				text(x + 24, y, l, c.done ? GOOD : INK, 16);
+				y += 22;
+			}
+		}
+		if (t.state == TutorialView::Complete) {
+			y += 8;
+			text(x, y, "Reset (at the top) plays it again.", DIM, 15);
+		}
+	}
+
+	// where a named thing is drawn: an item's body, a cell, a button; a small box around a point otherwise
+	bool box(std::string_view what, Rect &r) const {
+		float x = 0, y = 0;
+		if (!locate(what, x, y)) {
+			return false;
+		}
+		if (what.substr(0, 5) == "item:") {
+			for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+				if (view.items[static_cast<size_t>(i)].id == what.substr(5)) {
+					const Rect body = rect(i);
+					r = Rect{ body.x - 8, body.y - 8, body.w + 16, body.h + 16 };
+					return true;
+				}
+			}
+		}
+		if (what == "cabinet") {
+			r = CABINET;
+			return true;
+		}
+		if (what == "outbox") {
+			r = OUTBOX;
+			return true;
+		}
+		if (what.substr(0, 5) == "cell:") {
+			r = cell(static_cast<int>((x - BENCH.x) / cell_w()), static_cast<int>((y - BENCH.y) / cell_h()));
+			return true;
+		}
+		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@") {
+			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect() };
+			for (int i = 0; i < 4; ++i) {
+				buttons.push_back(speed_rect(i));
+			}
+			if (panel) {
+				buttons.push_back(pour_button());
+				buttons.push_back(cancel_button());
+				for (const auto &[species, b] : tip_buttons()) {
+					buttons.push_back(b);
+				}
+			}
+			for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+				Rect b;
+				if (stir_rect(i, b)) {
+					buttons.push_back(b);
+				}
+			}
+			for (const Rect &b : buttons) {
+				if (b.has(x, y)) {
+					r = Rect{ b.x - 4, b.y - 4, b.w + 8, b.h + 8 };
+					return true;
+				}
+			}
+		}
+		r = Rect{ x - 20, y - 14, 40, 28 };
+		return true;
+	}
+
+	// the pointer at what the step asks for: the last of its gestures that is on the screen now
+	void paint_guide() {
+		const std::vector<TutorialGesture> &gestures = tutorial->gestures();
+		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
+		const uint32_t colour = (GUIDE & 0xffffff00u) | static_cast<uint32_t>(140.0 + 115.0 * pulse);
+		for (auto g = gestures.rbegin(); g != gestures.rend(); ++g) {
+			Rect a, b;
+			if (!box(g->what, a) || (g->drag && !box(g->to, b))) {
+				continue;
+			}
+			if (drag >= 0 && g->drag) {
+				outline(b, colour, 3); // the item is in hand: only where it goes
+				return;
+			}
+			outline(a, colour, 3);
+			if (g->drag) {
+				outline(b, colour, 3);
+				const float x0 = a.cx(), y0 = a.cy(), x1 = b.cx(), y1 = b.cy();
+				const float dx = x1 - x0, dy = y1 - y0, length = std::sqrt(dx * dx + dy * dy);
+				if (length > 30) {
+					const float ux = dx / length, uy = dy / length, tip_x = x1 - ux * 10, tip_y = y1 - uy * 10;
+					line(x0, y0, tip_x - ux * 16, tip_y - uy * 16, colour, 4);
+					polygon({ tip_x, tip_y, tip_x - ux * 22 - uy * 11, tip_y - uy * 22 + ux * 11, tip_x - ux * 22 + uy * 11, tip_y - uy * 22 - ux * 11 }, colour);
+				}
+			}
+			return;
 		}
 	}
 
@@ -563,7 +832,7 @@ struct Ui::Impl {
 	}
 
 	void paint_readout() {
-		float y = READOUT.y + 30;
+		float y = tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30;
 		const auto row = [&](const std::string &s, uint32_t color = INK, float size = 17) {
 			text(READOUT.x + 16, y, s, color, size);
 			y += size + 8;
@@ -678,6 +947,7 @@ void Ui::pointer(float x, float y, bool down) {
 			m.hover = at;
 		}
 	}
+	m.follow();
 }
 
 void Ui::frame(double seconds) {
@@ -688,21 +958,42 @@ void Ui::frame(double seconds) {
 		auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
 		m.owed = m.owed < 1200.0 ? m.owed - static_cast<double>(steps) : 0.0;
 		std::string why;
-		bool ok = true;
-		if (steps > 0) {
-			// one step of every frame against every invariant; all of them when asked
-			m.lab->set_checking(true);
-			ok = m.lab->advance(m.check_every_step ? steps : 1, why);
+		bool ok = true, first = true;
+		// one step of every frame against every invariant; all of them when asked
+		const auto run = [&](int64_t n) {
+			m.lab->set_checking(first || m.check_every_step);
+			ok = m.lab->advance(first && !m.check_every_step ? 1 : n, why);
 			m.lab->set_checking(false);
-			if (ok && !m.check_every_step && steps > 1) {
-				ok = m.lab->advance(steps - 1, why);
+			if (ok && first && !m.check_every_step && n > 1) {
+				ok = m.lab->advance(n - 1, why);
+			}
+			first = false;
+		};
+		if (!m.tutorial) {
+			if (steps > 0) {
+				run(steps);
+			}
+		} else {
+			// a tutorial's clock stands while its step asks for a gesture (§13.2): the lab
+			// advances a second at a time, and stops in the second the step's wait ends
+			while (ok && steps > 0 && !m.held()) {
+				const int64_t n = steps < 60 ? steps : 60;
+				run(n);
+				steps -= n;
+				m.refresh();
+				m.follow();
+			}
+			if (m.held()) {
+				m.owed = 0.0;
 			}
 		}
 		if (!ok) {
 			m.message = why;
 		}
 	}
+	m.clock += seconds > 0.0 ? seconds : 0.0;
 	m.refresh();
+	m.follow();
 }
 
 const DrawList &Ui::draw() {
@@ -719,6 +1010,21 @@ Lab &Ui::lab() {
 	return *impl_->lab;
 }
 
+bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
+	Impl &m = *impl_;
+	std::unique_ptr<Tutorial> t = Tutorial::open(tutorial_json, m.view, why);
+	if (!t) {
+		return false;
+	}
+	m.tutorial = std::move(t);
+	m.follow();
+	return true;
+}
+
+const Tutorial *Ui::tutorial() const {
+	return impl_->tutorial.get();
+}
+
 const std::string &Ui::message() const {
 	return impl_->message;
 }
@@ -732,7 +1038,11 @@ bool Ui::paused() const {
 }
 
 bool Ui::locate(std::string_view what, float &x, float &y) const {
-	const Impl &m = *impl_;
+	return impl_->locate(what, x, y);
+}
+
+bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
+	const Impl &m = *this;
 	const auto centre = [&](const Rect &r) {
 		x = r.cx();
 		y = r.cy();
@@ -806,9 +1116,9 @@ bool Ui::locate(std::string_view what, float &x, float &y) const {
 		if (i < 0 || at == std::string_view::npos || !m.valve_rect(i, r)) {
 			return false;
 		}
-		const double to = std::atof(std::string(rest.substr(at + 1)).c_str());
+		const double open = std::atof(std::string(rest.substr(at + 1)).c_str());
 		x = r.cx();
-		y = r.y + r.h * static_cast<float>(1.0 - to);
+		y = r.y + r.h * static_cast<float>(1.0 - open);
 		return true;
 	}
 	if (after("stir:", rest)) {
