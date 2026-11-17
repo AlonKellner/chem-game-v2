@@ -67,7 +67,8 @@ GAME_SPEC §13.5; the commands, §13; the tutorial's keys, §13.2.
   - **Reading goals:** a monitor reading `met` and a notice part hearing the goal ring their alarms.
     Saved and loaded: the same goals, slots, notices and digests. A play with goals digests as the
     same play without them, command for command.
-  - **The screen:** a game goal's name in its slot, no editor for it; a goal of two terms made in
+  - **The screen:** a game goal's name in its slot, "open", no editor for it; the jar dropped onto
+    the water's slot, "not met"; a goal of two terms made in
     the editor, a term taken off, the goal taken off; a drop onto slot 5; a drop onto the outbox
     to the first free slot without a goal; a notice part set to hear `crystals`.
 - **`test_tutorial.cpp`:** a drop of the balloon onto the outbox is refused (not the slot the step

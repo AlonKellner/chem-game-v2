@@ -241,6 +241,8 @@ TEST_CASE("goals: on the screen: a slot for each, a drop onto a slot, the player
 	};
 	const auto drawn = [&](const std::string &text) { return ui->draw().text.find(text) != std::string::npos; };
 	CHECK(drawn("carbon dioxide")); // the game goal's name, in its slot
+	CHECK(drawn("open"));
+	CHECK_FALSE(drawn("not met"));
 	float x = 0, y = 0;
 	CHECK_FALSE(ui->locate("goal:1", x, y)); // the game's: locked
 	// a goal of the player's, in slot 4: two terms
@@ -283,6 +285,12 @@ TEST_CASE("goals: on the screen: a slot for each, a drop onto a slot, the player
 	CHECK(item(ui->lab().view(), "beaker").slot == 5);
 	drag("item:waste", "outbox");
 	CHECK(item(ui->lab().view(), "waste").slot == 4);
+	// what falls short of a goal is shown so: the jar is not pure water
+	REQUIRE(ui->lab().command(R"({"do": "place", "item": "jar", "at": [14, 2]})", why));
+	drag("item:jar", "slot:2");
+	CHECK(item(ui->lab().view(), "jar").slot == 2);
+	CHECK(drawn("not met"));
+	CHECK(ui->draw().text.find(std::string("\0met\0", 5)) == std::string::npos); // nothing met yet
 	// a notice part hears one goal, by its id
 	drag("drawer:notice", "square:0,0");
 	click("edit:level:event");

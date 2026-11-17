@@ -1349,8 +1349,9 @@ does not judge the player: it says what is wanted, and whether what is there mee
   `{"goals_met": true}` while every game goal is.
 - **History, not state.** Goals and which slot holds what are saved and loaded, and are not in
   the digest; the sessions' records are unchanged.
-- **On the screen** each slot shows its goal: the name, each term with its value now, a lamp lit
-  while it is met, and what was handed in there. A slot without a game goal has "+ goal" (or
+- **On the screen** each slot shows its goal: the name, each term with its value now, and what was
+  handed in there. Its state is seen at a glance: met, a green band and border and "met"; an item
+  there that falls short, amber and "not met"; nothing there yet, "open". A slot without a game goal has "+ goal" (or
   "edit"), which opens the goal editor: a name, typed, and up to three terms, each a quantity
   (any species, or the temperature, the liquid, the gas), a comparison and a value.
 

@@ -2238,25 +2238,31 @@ struct Ui::Impl {
 		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
 			const Rect r = slot_rect(k);
 			const Goal *g = goal_of(k);
-			outline(r, g != nullptr && g->met ? GOOD : WALL_GRID, g != nullptr && g->met ? 2.0f : 1.0f);
-			text(r.x + 6, r.y + 19, std::to_string(k), WALL_INK, 15);
+			std::string held; // what is handed in there
+			for (const ItemView &v : view.items) {
+				held = v.place == "outbox" && v.slot == k ? v.id : held;
+			}
+			// its state at a glance: a green band and border while met; amber while what is there falls short
+			const bool met = g != nullptr && g->met, short_of = g != nullptr && !g->met && !held.empty();
+			if (met || short_of) {
+				rect_fill(Rect{ r.x + 1, r.y + 1, r.w - 2, 26 }, met ? rgba(46, 125, 70) : rgba(150, 105, 30));
+			}
+			outline(r, met ? GOOD : short_of ? WARN : WALL_GRID, met || short_of ? 3.0f : 1.0f);
+			text(r.x + 6, r.y + 19, std::to_string(k), met || short_of ? INK : WALL_INK, 15);
 			if (g == nullptr || !g->game) {
 				button(goal_button(k), g == nullptr ? "+ goal" : "edit", false, 12);
 			} else {
-				text(r.x + 22, r.y + 19, "game", WALL_INK, 11);
+				text(r.x + 22, r.y + 19, "game", met || short_of ? INK : WALL_INK, 11);
 			}
 			if (g == nullptr) {
 				continue;
 			}
 			circle(r.x + r.w - 10, r.y + 14, 5, g->met ? GOOD : BUTTON);
-			float y = r.y + 42;
+			text(r.x + 6, r.y + 44, met ? "met" : short_of ? "not met" : "open", met ? rgba(30, 110, 55) : short_of ? rgba(150, 90, 10) : WALL_INK, 13); // dark: on the lit wall
+			float y = r.y + 60;
 			for (const std::string &line : wrapped(g->name, 15)) {
 				text(r.x + 6, y, line, WALL_INK, 12);
 				y += 14;
-			}
-			std::string held;
-			for (const ItemView &v : view.items) {
-				held = v.place == "outbox" && v.slot == k ? v.id : held;
 			}
 			for (const GoalTerm &t : g->terms) {
 				y += 4;
