@@ -23,7 +23,9 @@ struct Rect {
 // the screen's fixed parts
 constexpr Rect CABINET{ 0, 64, 240, 1016 };
 constexpr Rect BENCH{ 260, 120, 1120, 600 };
-constexpr Rect OUTBOX{ 260, 760, 1120, 300 };
+constexpr Rect OUTBOX{ 260, 760, 640, 300 };
+constexpr Rect TIMERS{ 920, 760, 460, 300 }; // the player's timers (§13.3), beside the outbox
+constexpr Rect EDITOR{ 440, 76, 720, 680 }; // a timer being written
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 300 };
 constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
@@ -107,12 +109,33 @@ struct Ui::Impl {
 	// a tutorial (§13.2), and real time for its pointer's pulse
 	std::unique_ptr<Tutorial> tutorial;
 	double clock = 0.0;
+	// the player's timers (§13.3): the item selected, the editor, what fired
+	Timers timers;
+	int selected = -1;
+	bool editor = false;
+	TimerDraft draft;
+	int picking = -1; // the condition whose quantity list is open
+	int focus_c = -1, focus_f = -1; // the focused field: a condition's value, or (-1, 2) the time limit
+	bool fresh = false; // the next key replaces the focused field
+	int fired = -1; // the timer that paused the clock, until play
+	bool resume = false; // the clock was playing when the editor opened
 
 	void refresh() { view = lab->view(); }
 	void follow() {
 		if (tutorial) {
-			tutorial->follow(view, speed, lab->failed());
+			TutorialScreen screen;
+			screen.speed = speed;
+			screen.broken = lab->failed();
+			screen.paused = paused;
+			screen.selected = selected >= 0 ? id(selected) : std::string();
+			screen.draft = editor ? &draft : nullptr;
+			screen.timers = &timers.list();
+			tutorial->follow(view, screen);
 		}
+	}
+	void play() {
+		paused = false;
+		fired = -1;
 	}
 
 	// ---- a running tutorial allows only its step's gestures (§13.2)
@@ -357,6 +380,21 @@ struct Ui::Impl {
 	}
 
 	void press(float x, float y) {
+		if (editor) {
+			// the clock stays the player's while a timer is written
+			if (!pause_rect().has(x, y) && !(speed_rect(0).has(x, y) || speed_rect(1).has(x, y) || speed_rect(2).has(x, y) || speed_rect(3).has(x, y))) {
+				editor_press(x, y);
+				return;
+			}
+		}
+		if (!panel && !editor && timers_press(x, y)) {
+			return;
+		}
+		Rect add;
+		if (!panel && add_rect(add) && add.has(x, y)) {
+			open_editor(selected);
+			return;
+		}
 		if (panel) {
 			if (pour_slider().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
 				if (guided() && !asks_click("panel:pour") && !asks_click("panel:slider@")) {
@@ -400,13 +438,17 @@ struct Ui::Impl {
 			return;
 		}
 		if (pause_rect().has(x, y)) {
-			paused = !paused;
+			if (paused) {
+				play();
+			} else {
+				paused = true;
+			}
 			return;
 		}
 		for (int i = 0; i < 4; ++i) {
 			if (speed_rect(i).has(x, y)) {
 				speed = SPEEDS[i];
-				paused = false;
+				play();
 				return;
 			}
 		}
@@ -422,6 +464,10 @@ struct Ui::Impl {
 				owed = 0.0;
 				message.clear();
 				refresh();
+				timers = Timers{};
+				selected = -1;
+				editor = false;
+				fired = -1;
 				if (tutorial) {
 					tutorial->restart();
 				}
@@ -454,17 +500,328 @@ struct Ui::Impl {
 			}
 		}
 		const int hit = item_at(x, y);
+		if (hit < 0 && (BENCH.has(x, y) || CABINET.has(x, y) || OUTBOX.has(x, y))) {
+			selected = -1; // a click on nothing lets go of the selection
+		}
+		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place == "outbox") {
+			selected = hit; // handed in: it can be read, and watched, but not moved
+		}
 		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
-			if (guided() && !asks_drag(hit)) {
-				not_now();
-				return;
-			}
+			// a press takes it in hand; a release without moving it selects it (§13.3),
+			// and a drop the tutorial does not ask for is refused when it is let go
 			const Rect r = rect(hit);
 			drag = hit;
 			grab_x = x - r.x;
 			grab_y = y - r.y;
 			moved = false;
 		}
+	}
+
+	// ------------------------------------------------------------- timers (§13.3)
+
+	// the readout's "add timer", while an item is selected
+	bool add_rect(Rect &r) const {
+		if (selected < 0 || selected >= static_cast<int>(view.items.size()) || view.items[static_cast<size_t>(selected)].kind == "tray") {
+			return false;
+		}
+		const float top = tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30;
+		r = Rect{ READOUT.x + READOUT.w - 146, top + 58 - 24, 130, 32 };
+		return true;
+	}
+
+	float cond_y(int c) const { return EDITOR.y + 104 + static_cast<float>(c) * 130; }
+	Rect cond_quantity(int c) const { return Rect{ EDITOR.x + 20, cond_y(c), 330, 30 }; }
+	Rect cond_measure(int c, int k) const { return Rect{ EDITOR.x + 360 + static_cast<float>(k) * 70, cond_y(c), 64, 30 }; }
+	Rect cond_remove(int c) const { return Rect{ EDITOR.x + EDITOR.w - 56, cond_y(c), 36, 30 }; }
+	Rect cond_compare(int c, int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 96, cond_y(c) + 38, 92, 28 }; }
+	Rect cond_field(int c, int f) const { return Rect{ EDITOR.x + 20 + static_cast<float>(f) * 180, cond_y(c) + 74, 140, 30 }; }
+	Rect cond_nudge(int c, int k) const { // k in -3..-1, 1..3
+		const int at = k < 0 ? k + 3 : k + 2;
+		return Rect{ EDITOR.x + 356 + static_cast<float>(at) * 58, cond_y(c) + 74, 54, 30 };
+	}
+	Rect add_condition() const { return Rect{ EDITOR.x + 20, cond_y(static_cast<int>(draft.conditions.size())), 200, 30 }; }
+	float limit_y() const { return cond_y(static_cast<int>(draft.conditions.size())) + 50; }
+	Rect limit_toggle() const { return Rect{ EDITOR.x + 20, limit_y(), 170, 30 }; }
+	Rect limit_field() const { return Rect{ EDITOR.x + 200, limit_y(), 110, 30 }; }
+	Rect limit_nudge(int k) const { // k in -2..-1, 1..2
+		const int at = k < 0 ? k + 2 : k + 1;
+		return Rect{ EDITOR.x + 320 + static_cast<float>(at) * 64, limit_y(), 60, 30 };
+	}
+	Rect any_button() const { return Rect{ EDITOR.x + 140, EDITOR.y + 56, 70, 30 }; }
+	Rect all_button() const { return Rect{ EDITOR.x + 216, EDITOR.y + 56, 70, 30 }; }
+	Rect arm_button() const { return Rect{ EDITOR.x + 20, EDITOR.y + EDITOR.h - 52, 140, 36 }; }
+	Rect editor_cancel() const { return Rect{ EDITOR.x + EDITOR.w - 116, EDITOR.y + 12, 96, 32 }; }
+	std::vector<Quantity> pickable() const {
+		const int item = item_index(draft.item);
+		return item >= 0 ? quantities_of(view.items[static_cast<size_t>(item)]) : std::vector<Quantity>{};
+	}
+	Rect pick_entry(int i) const {
+		const Rect q = cond_quantity(picking < 0 ? 0 : picking);
+		return Rect{ q.x, q.y + q.h + 2 + static_cast<float>(i) * 28, q.w, 26 };
+	}
+	static constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
+	static constexpr const char *OP_KEYS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
+	static constexpr const char *MEASURES[] = { "g", "count", "size" };
+
+	Rect row_rect(int n) const { return Rect{ TIMERS.x + 10, TIMERS.y + 40 + static_cast<float>(n) * 52, TIMERS.w - 20, 48 }; }
+	Rect row_rearm(int n) const { const Rect r = row_rect(n); return Rect{ r.x + r.w - 126, r.y + 4, 70, 26 }; }
+	Rect row_remove(int n) const { const Rect r = row_rect(n); return Rect{ r.x + r.w - 50, r.y + 4, 46, 26 }; }
+
+	int item_index(const std::string &name) const {
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			if (view.items[static_cast<size_t>(i)].id == name) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	// a value as the editor writes it: plain, to the quantity's last shown digit
+	static std::string plain(const Quantity &q, double v) {
+		const char *f = q.what == "celsius" || q.what == "valve" ? "%.1f" : q.what == "gas_ml" || q.what == "condensed_ml" || q.what == "liquid_ml" ? "%.2f" : q.measure == "count" ? "%.0f" : q.measure == "size" ? "%.1f" : "%.3f";
+		return text_of(f, v);
+	}
+	double now(const Quantity &q) const {
+		const std::optional<double> v = measure(view, q);
+		return v ? *v : 0.0;
+	}
+	void set_quantity(int c, const Quantity &q) {
+		TimerCondition &cond = draft.conditions[static_cast<size_t>(c)];
+		cond.quantity = q;
+		draft.text[static_cast<size_t>(c)] = { plain(q, now(q)), plain(q, now(q)) };
+	}
+
+	void open_editor(int item) {
+		const std::vector<Quantity> qs = quantities_of(view.items[static_cast<size_t>(item)]);
+		draft = TimerDraft{};
+		draft.item = id(item);
+		if (!qs.empty()) {
+			draft.conditions.push_back(TimerCondition{ qs.front(), Comparison{} });
+			draft.text.push_back({ "", "" });
+			set_quantity(0, qs.front());
+		}
+		editor = true;
+		picking = -1;
+		focus_c = focus_f = -1;
+		message.clear();
+		// the clock waits while a timer is written: at 600x the moment could pass first
+		resume = !paused;
+		paused = true;
+	}
+	void close_editor() {
+		editor = false;
+		picking = -1;
+		if (resume && fired < 0) {
+			paused = false;
+		}
+		resume = false;
+	}
+	void focus(int c, int f) {
+		focus_c = c;
+		focus_f = f;
+		fresh = true;
+	}
+	std::string *focused() {
+		if (focus_c == -1 && focus_f == 2) {
+			return &draft.limit_text;
+		}
+		if (focus_c >= 0 && focus_c < static_cast<int>(draft.text.size()) && focus_f >= 0 && focus_f < 2) {
+			return &draft.text[static_cast<size_t>(focus_c)][static_cast<size_t>(focus_f)];
+		}
+		return nullptr;
+	}
+	void nudge(int c, int k) {
+		TimerCondition &cond = draft.conditions[static_cast<size_t>(c)];
+		const int f = focus_c == c && focus_f >= 0 && focus_f < 2 ? focus_f : 0;
+		std::string &field = draft.text[static_cast<size_t>(c)][static_cast<size_t>(f)];
+		double scale[3];
+		scales(cond.quantity, scale);
+		char *end = nullptr;
+		double v = std::strtod(field.c_str(), &end);
+		if (field.empty() || end == nullptr || *end != '\0') {
+			v = now(cond.quantity);
+		}
+		v += (k < 0 ? -1.0 : 1.0) * scale[3 - (k < 0 ? -k : k)];
+		field = plain(cond.quantity, v);
+		fresh = true;
+	}
+	void nudge_limit(int k) {
+		double t = 0.0;
+		if (!Timers::seconds_of(draft.limit_text, t)) {
+			t = 300.0;
+		}
+		t += (k < 0 ? -1.0 : 1.0) * ((k == 2 || k == -2) ? 60.0 : 10.0);
+		draft.limit_text = Timers::clock_of(t < 10.0 ? 10.0 : t);
+	}
+	void arm() {
+		std::string why;
+		if (timers.arm(draft, view, why)) {
+			close_editor();
+			message.clear();
+		} else {
+			message = why;
+		}
+	}
+
+	void editor_press(float x, float y) {
+		if (picking >= 0) {
+			const std::vector<Quantity> qs = pickable();
+			for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
+				if (pick_entry(i).has(x, y)) {
+					set_quantity(picking, qs[static_cast<size_t>(i)]);
+				}
+			}
+			picking = -1; // a click anywhere closes the list
+			return;
+		}
+		if (editor_cancel().has(x, y)) {
+			close_editor();
+			return;
+		}
+		if (arm_button().has(x, y)) {
+			arm();
+			return;
+		}
+		if (any_button().has(x, y) || all_button().has(x, y)) {
+			draft.all = all_button().has(x, y);
+			return;
+		}
+		const int n = static_cast<int>(draft.conditions.size());
+		for (int c = 0; c < n; ++c) {
+			TimerCondition &cond = draft.conditions[static_cast<size_t>(c)];
+			if (cond_quantity(c).has(x, y)) {
+				picking = c;
+				return;
+			}
+			if (cond_remove(c).has(x, y)) {
+				draft.conditions.erase(draft.conditions.begin() + c);
+				draft.text.erase(draft.text.begin() + c);
+				focus_c = focus_f = -1;
+				return;
+			}
+			const bool species = cond.quantity.what != "celsius" && cond.quantity.what != "gas_ml" && cond.quantity.what != "condensed_ml" && cond.quantity.what != "liquid_ml" &&
+					cond.quantity.what != "valve";
+			for (int k = 0; species && k < 3; ++k) {
+				if (cond_measure(c, k).has(x, y)) {
+					Quantity q = cond.quantity;
+					q.measure = MEASURES[k];
+					set_quantity(c, q);
+					return;
+				}
+			}
+			for (int k = 0; k < 7; ++k) {
+				if (cond_compare(c, k).has(x, y)) {
+					cond.comparison.op = OPS[k];
+					return;
+				}
+			}
+			for (int f = 0; f < (two_values(cond.comparison.op) ? 2 : 1); ++f) {
+				if (cond_field(c, f).has(x, y)) {
+					focus(c, f);
+					return;
+				}
+			}
+			for (int k : { -3, -2, -1, 1, 2, 3 }) {
+				if (cond_nudge(c, k).has(x, y)) {
+					nudge(c, k);
+					return;
+				}
+			}
+		}
+		if (n < Timers::MAX_CONDITIONS && add_condition().has(x, y)) {
+			const std::vector<Quantity> qs = pickable();
+			if (!qs.empty()) {
+				draft.conditions.push_back(TimerCondition{ qs.front(), Comparison{} });
+				draft.text.push_back({ "", "" });
+				set_quantity(n, qs.front());
+			}
+			return;
+		}
+		if (limit_toggle().has(x, y)) {
+			draft.limited = !draft.limited;
+			return;
+		}
+		if (draft.limited && limit_field().has(x, y)) {
+			focus(-1, 2);
+			return;
+		}
+		for (int k : { -2, -1, 1, 2 }) {
+			if (draft.limited && limit_nudge(k).has(x, y)) {
+				nudge_limit(k);
+				return;
+			}
+		}
+		focus_c = focus_f = -1;
+	}
+
+	bool timers_press(float x, float y) {
+		for (int n = 0; n < static_cast<int>(timers.list().size()); ++n) {
+			if (row_rearm(n).has(x, y)) {
+				timers.rearm(n, view);
+				fired = fired == n ? -1 : fired;
+				return true;
+			}
+			if (row_remove(n).has(x, y)) {
+				timers.remove(n);
+				fired = fired == n ? -1 : fired > n ? fired - 1 : fired;
+				return true;
+			}
+		}
+		return TIMERS.has(x, y);
+	}
+
+	void type(Ui::Key key, uint32_t codepoint) {
+		if (!editor) {
+			return;
+		}
+		if (key == Ui::KeyEscape) {
+			if (picking >= 0) {
+				picking = -1;
+			} else {
+				close_editor();
+			}
+			return;
+		}
+		if (key == Ui::KeyEnter) {
+			arm();
+			return;
+		}
+		std::string *field = focused();
+		if (field == nullptr) {
+			return;
+		}
+		if (key == Ui::KeyBackspace) {
+			if (fresh) {
+				field->clear();
+			} else if (!field->empty()) {
+				field->pop_back();
+			}
+			fresh = false;
+			return;
+		}
+		const bool limit = focus_c == -1;
+		if ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || (codepoint == '-' && !limit) || (codepoint == ':' && limit)) {
+			if (fresh) {
+				field->clear();
+			}
+			fresh = false;
+			if (field->size() < 16) {
+				field->push_back(static_cast<char>(codepoint));
+			}
+		}
+	}
+
+	// a timer fired: the clock stops, and the item it watched is shown
+	void fire(int n) {
+		paused = true;
+		owed = 0.0;
+		fired = n;
+		const Timer &t = timers.list()[static_cast<size_t>(n)];
+		const int item = item_index(t.item_fired);
+		if (item >= 0) {
+			selected = item;
+		}
+		message = text_of("timer %.0f fired: ", n + 1) + t.fired_by;
 	}
 
 	void slide(float x) {
@@ -610,19 +967,145 @@ struct Ui::Impl {
 			r.y = py - grab_y;
 			paint_item(drag, r);
 		}
+		if (selected >= 0 && selected != drag) {
+			const Rect r = rect(selected);
+			outline(Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }, WALL_INK, 1);
+		}
 		if (tutorial) {
 			paint_tutorial();
 		}
 		paint_readout();
+		paint_timers();
 		if (panel) {
 			paint_panel();
 		}
+		if (editor) {
+			paint_editor();
+		}
+		paint_fired();
 		if (tutorial) {
 			paint_guide();
 		}
 	}
 
 	bool locate(std::string_view what, float &x, float &y) const;
+
+	// the timers' names on the screen (Ui::locate, after "timer:"): where each is drawn
+	bool locate_timer(std::string_view what, float &x, float &y) const {
+		Rect r;
+		if (!timer_rect(what, r)) {
+			return false;
+		}
+		x = r.cx();
+		y = r.cy();
+		return true;
+	}
+	bool timer_rect(std::string_view what, Rect &out) const {
+		const auto centre = [&](const Rect &r) {
+			out = r;
+			return true;
+		};
+		const auto number = [](std::string_view s) { return std::atoi(std::string(s).c_str()); };
+		const auto after = [&](std::string_view prefix, std::string_view &rest) {
+			if (what.substr(0, prefix.size()) != prefix) {
+				return false;
+			}
+			rest = what.substr(prefix.size());
+			return true;
+		};
+		std::string_view rest;
+		if (what == "add") {
+			Rect r;
+			return !editor && add_rect(r) && centre(r);
+		}
+		if (after("row:", rest)) {
+			const size_t colon = rest.find(':');
+			const int n = number(rest.substr(0, colon));
+			if (colon == std::string_view::npos || n < 0 || n >= static_cast<int>(timers.list().size())) {
+				return false;
+			}
+			return rest.substr(colon + 1) == "rearm" ? centre(row_rearm(n)) : rest.substr(colon + 1) == "remove" && centre(row_remove(n));
+		}
+		if (!editor) {
+			return false;
+		}
+		const int n = static_cast<int>(draft.conditions.size());
+		if (what == "cancel") {
+			return centre(editor_cancel());
+		}
+		if (what == "arm") {
+			return centre(arm_button());
+		}
+		if (what == "any" || what == "all") {
+			return centre(what == "any" ? any_button() : all_button());
+		}
+		if (what == "condition:add") {
+			return n < Timers::MAX_CONDITIONS && centre(add_condition());
+		}
+		if (what == "limit:toggle") {
+			return centre(limit_toggle());
+		}
+		if (what == "limit:value") {
+			return draft.limited && centre(limit_field());
+		}
+		if (after("limit:nudge:", rest)) {
+			const int k = number(rest);
+			return draft.limited && (k == -2 || k == -1 || k == 1 || k == 2) && centre(limit_nudge(k));
+		}
+		if (after("pick:", rest)) {
+			const std::vector<Quantity> qs = pickable();
+			for (int i = 0; picking >= 0 && i < static_cast<int>(qs.size()); ++i) {
+				if (qs[static_cast<size_t>(i)].what == rest) {
+					return centre(pick_entry(i));
+				}
+			}
+			return false;
+		}
+		// the rest name a condition: <kind>:<c>[:<more>]
+		const size_t colon = what.find(':');
+		if (colon == std::string_view::npos) {
+			return false;
+		}
+		const std::string_view kind = what.substr(0, colon);
+		rest = what.substr(colon + 1);
+		const size_t second = rest.find(':');
+		const int c = number(rest.substr(0, second));
+		const std::string_view more = second == std::string_view::npos ? std::string_view() : rest.substr(second + 1);
+		if (c < 0 || c >= n || picking >= 0) {
+			return false;
+		}
+		if (kind == "quantity") {
+			return centre(cond_quantity(c));
+		}
+		if (kind == "remove") {
+			return centre(cond_remove(c));
+		}
+		if (kind == "measure") {
+			for (int k = 0; k < 3; ++k) {
+				if (more == MEASURES[k]) {
+					return centre(cond_measure(c, k));
+				}
+			}
+			return false;
+		}
+		if (kind == "compare") {
+			for (int k = 0; k < 7; ++k) {
+				if (more == OP_KEYS[k]) {
+					return centre(cond_compare(c, k));
+				}
+			}
+			return false;
+		}
+		if (kind == "value") {
+			const int f = number(more);
+			return (f == 0 || (f == 1 && two_values(draft.conditions[static_cast<size_t>(c)].comparison.op))) && centre(cond_field(c, f));
+		}
+		if (kind == "nudge") {
+			const int k = number(more);
+			return k != 0 && k >= -3 && k <= 3 && centre(cond_nudge(c, k));
+		}
+		return false;
+	}
 
 	// ------------------------------------------------------------- the tutorial (§13.2)
 
@@ -670,7 +1153,7 @@ struct Ui::Impl {
 				lines(t.why, 54, DIM, 15, 6);
 			}
 			y += 4;
-			text(x, y + 14, tutorial->waiting() ? "The clock runs: 60x or 600x hurries it." : "The clock waits for you.", WARN, 15);
+			text(x, y + 14, !tutorial->waiting() ? "The clock waits for you." : paused ? "The clock is paused: press play, or a speed." : "The clock runs: 60x or 600x hurries it.", WARN, 15);
 			y += 38;
 		}
 		for (const TutorialCheck &c : t.checks) {
@@ -700,6 +1183,13 @@ struct Ui::Impl {
 		float x = 0, y = 0;
 		if (!locate(what, x, y)) {
 			return false;
+		}
+		if (what.substr(0, 6) == "timer:") {
+			Rect t;
+			if (timer_rect(what.substr(6), t)) {
+				r = Rect{ t.x - 4, t.y - 4, t.w + 8, t.h + 8 };
+				return true;
+			}
 		}
 		if (what.substr(0, 5) == "item:") {
 			for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
@@ -841,10 +1331,14 @@ struct Ui::Impl {
 		row(view.conserved ? "every element, mass and energy: unchanged" : "THE TOTALS MOVED", view.conserved ? rgba(120, 200, 140) : rgba(240, 90, 90));
 		row(text_of("world: %.3f g, %.3f kJ", view.mass_g, view.energy_j / 1000.0), DIM, 15);
 		y += 10;
-		const int shown = drag >= 0 ? drag : hover;
+		const int shown = drag >= 0 ? drag : selected >= 0 ? selected : hover;
 		if (shown >= 0) {
 			const ItemView &v = view.items[static_cast<size_t>(shown)];
 			row(v.id + " (" + v.kind + (v.condenser ? ", condenser" : "") + ", " + v.place + ")", INK, 20);
+			Rect add;
+			if (shown == selected && add_rect(add)) {
+				button(add, "add timer");
+			}
 			if (v.kind == "burner") {
 				row(text_of("flame %.0f C, valve %.0f%%", v.celsius, 100.0 * v.valve));
 			} else {
@@ -876,6 +1370,140 @@ struct Ui::Impl {
 				text(READOUT.x + 16, READOUT.y + READOUT.h - 120 + static_cast<float>(at / 52) * 24, message.substr(at, 52), WARN, 16);
 			}
 		}
+	}
+
+	void paint_timers() {
+		rect_fill(TIMERS, PANEL_FILL);
+		outline(TIMERS, GRID, 1);
+		const std::vector<Timer> &all = timers.list();
+		text(TIMERS.x + 14, TIMERS.y + 26, text_of("timers  %.0f of %.0f", static_cast<double>(all.size()), Timers::MAX_TIMERS), INK, 17);
+		if (all.empty()) {
+			text(TIMERS.x + 14, TIMERS.y + 60, "Select an item, then \"add timer\":", DIM, 15);
+			text(TIMERS.x + 14, TIMERS.y + 82, "the clock stops when it fires.", DIM, 15);
+			return;
+		}
+		const double t = static_cast<double>(view.step) / 60.0;
+		for (int n = 0; n < static_cast<int>(all.size()); ++n) {
+			const Timer &tm = all[static_cast<size_t>(n)];
+			const Rect r = row_rect(n);
+			rect_fill(r, n == fired ? rgba(90, 70, 30) : GRID);
+			std::string what;
+			for (size_t c = 0; c < tm.conditions.size(); ++c) {
+				what += (c > 0 ? (tm.all ? " and " : " or ") : "") + Timers::describe(view, tm.conditions[c]);
+			}
+			if (what.empty()) {
+				what = "time limit";
+			}
+			if (what.size() > 40) {
+				what = what.substr(0, 38) + "..";
+			}
+			text(r.x + 8, r.y + 19, text_of("%.0f  ", n + 1) + what, INK, 15);
+			std::string state;
+			if (tm.fired) {
+				state = "fired: " + tm.fired_by;
+			} else {
+				if (!tm.conditions.empty()) {
+					const TimerCondition &c = tm.conditions.front();
+					state = "now " + shown(c.quantity, now(c.quantity));
+				}
+				if (tm.limited) {
+					state += (state.empty() ? "" : ",  ") + Timers::clock_of(tm.limit_s - (t - tm.armed_at_s)) + " left";
+				}
+			}
+			if (state.size() > 52) {
+				state = state.substr(0, 50) + "..";
+			}
+			text(r.x + 8, r.y + 40, state, tm.fired ? WARN : DIM, 14);
+			button(row_rearm(n), "again");
+			button(row_remove(n), " x");
+		}
+	}
+
+	void paint_editor() {
+		rect_fill(EDITOR, PANEL_FILL);
+		outline(EDITOR, GLASS, 1);
+		text(EDITOR.x + 20, EDITOR.y + 38, "a timer on " + draft.item, INK, 22);
+		button(editor_cancel(), "cancel");
+		text(EDITOR.x + 20, EDITOR.y + 77, "fires when", DIM, 15);
+		button(any_button(), "any", !draft.all);
+		button(all_button(), "all", draft.all);
+		text(EDITOR.x + 300, EDITOR.y + 77, "of its conditions holds, or its time limit passes", DIM, 15);
+		const auto field = [&](const Rect &r, const std::string &value, bool focused) {
+			rect_fill(r, focused ? rgba(30, 30, 30) : rgba(24, 24, 24));
+			outline(r, focused ? GUIDE : GRID, focused ? 2.0f : 1.0f);
+			text(r.x + 8, r.y + r.h / 2 + 6, value + (focused && !fresh ? "_" : ""), INK, 17);
+		};
+		for (int c = 0; c < static_cast<int>(draft.conditions.size()); ++c) {
+			const TimerCondition &cond = draft.conditions[static_cast<size_t>(c)];
+			const std::string full = label(view, cond.quantity);
+			button(cond_quantity(c), full.substr(full.find(": ") + 2) + "  v");
+			const bool species = !(cond.quantity.what == "celsius" || cond.quantity.what == "gas_ml" || cond.quantity.what == "condensed_ml" || cond.quantity.what == "liquid_ml" ||
+					cond.quantity.what == "valve");
+			for (int k = 0; species && k < 3; ++k) {
+				button(cond_measure(c, k), MEASURES[k], cond.quantity.measure == MEASURES[k]);
+			}
+			button(cond_remove(c), " x");
+			for (int k = 0; k < 7; ++k) {
+				button(cond_compare(c, k), op_name(OPS[k]), cond.comparison.op == OPS[k]);
+			}
+			const int fields = two_values(cond.comparison.op) ? 2 : 1;
+			for (int f = 0; f < fields; ++f) {
+				field(cond_field(c, f), draft.text[static_cast<size_t>(c)][static_cast<size_t>(f)], focus_c == c && focus_f == f);
+			}
+			if (fields == 2) {
+				text(cond_field(c, 0).x + 146, cond_field(c, 0).y + 21, "and", DIM, 15);
+			}
+			double scale[3];
+			scales(cond.quantity, scale);
+			for (int k : { -3, -2, -1, 1, 2, 3 }) {
+				const double step = scale[3 - (k < 0 ? -k : k)];
+				std::string amount = text_of(step >= 1.0 ? "%.0f" : "%g", step);
+				if (amount.rfind("0.", 0) == 0) {
+					amount = amount.substr(1); // ".01"
+				}
+				button(cond_nudge(c, k), (k < 0 ? "-" : "+") + amount);
+			}
+			text(cond_field(c, 0).x, cond_field(c, 0).y + 48, "now " + shown(cond.quantity, now(cond.quantity)), DIM, 14);
+		}
+		if (static_cast<int>(draft.conditions.size()) < Timers::MAX_CONDITIONS) {
+			button(add_condition(), "+ a condition");
+		}
+		button(limit_toggle(), draft.limited ? "time limit: on" : "time limit: off", draft.limited);
+		if (draft.limited) {
+			field(limit_field(), draft.limit_text, focus_c == -1 && focus_f == 2);
+			const char *labels[] = { "-1m", "-10s", "+10s", "+1m" };
+			int i = 0;
+			for (int k : { -2, -1, 1, 2 }) {
+				button(limit_nudge(k), labels[i++]);
+			}
+		}
+		button(arm_button(), "arm");
+		text(arm_button().x + 160, arm_button().y + 24, "click a value to type it; enter arms, escape cancels", DIM, 14);
+		if (picking >= 0) {
+			const std::vector<Quantity> qs = pickable();
+			for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
+				const Rect r = pick_entry(i);
+				rect_fill(r, rgba(20, 20, 20));
+				outline(r, GRID, 1);
+				const std::string full = label(view, qs[static_cast<size_t>(i)]);
+				text(r.x + 8, r.y + 19, full.substr(full.find(": ") + 2), INK, 15);
+			}
+		}
+	}
+
+	// what a timer fired on, pulsing, until the clock plays again
+	void paint_fired() {
+		if (fired < 0 || fired >= static_cast<int>(timers.list().size())) {
+			return;
+		}
+		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
+		const uint32_t colour = (WARN & 0xffffff00u) | static_cast<uint32_t>(140.0 + 115.0 * pulse);
+		const int item = item_index(timers.list()[static_cast<size_t>(fired)].item_fired);
+		if (item >= 0) {
+			const Rect r = rect(item);
+			outline(Rect{ r.x - 10, r.y - 10, r.w + 20, r.h + 20 }, colour, 4);
+		}
+		outline(row_rect(fired), colour, 3);
 	}
 
 	void paint_panel() {
@@ -936,6 +1564,8 @@ void Ui::pointer(float x, float y, bool down) {
 			const int index = m.drag;
 			m.drag = -1;
 			m.drop(index, x, y);
+		} else if (m.drag >= 0) {
+			m.selected = m.drag; // a click on it, without moving it (§13.3)
 		}
 		m.drag = -1;
 		m.valve_drag = -1;
@@ -969,21 +1599,29 @@ void Ui::frame(double seconds) {
 			}
 			first = false;
 		};
-		if (!m.tutorial) {
+		if (!m.tutorial && !m.timers.armed()) {
 			if (steps > 0) {
 				run(steps);
 			}
 		} else {
-			// a tutorial's clock stands while its step asks for a gesture (§13.2): the lab
-			// advances a second at a time, and stops in the second the step's wait ends
-			while (ok && steps > 0 && !m.held()) {
-				const int64_t n = steps < 60 ? steps : 60;
+			// a tutorial's clock stands while its step asks for a gesture (§13.2), and an armed
+			// timer is read after every quarter of a lab-second (§13.3): the lab advances in
+			// pieces, and stops in the piece where a wait ends or a timer fires
+			while (ok && steps > 0 && !m.held() && !m.paused) {
+				const int64_t piece = m.timers.armed() ? Timers::READ_STEPS : 60;
+				const int64_t n = steps < piece ? steps : piece;
 				run(n);
 				steps -= n;
 				m.refresh();
+				if (m.timers.armed()) {
+					const int fired = m.timers.poll(m.view);
+					if (fired >= 0) {
+						m.fire(fired);
+					}
+				}
 				m.follow();
 			}
-			if (m.held()) {
+			if (m.held() || m.paused) {
 				m.owed = 0.0;
 			}
 		}
@@ -1023,6 +1661,19 @@ bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
 
 const Tutorial *Ui::tutorial() const {
 	return impl_->tutorial.get();
+}
+
+const Timers &Ui::timers() const {
+	return impl_->timers;
+}
+
+std::string Ui::selected() const {
+	return impl_->selected >= 0 ? impl_->id(impl_->selected) : std::string();
+}
+
+void Ui::key(Key key, uint32_t codepoint) {
+	impl_->type(key, codepoint);
+	impl_->follow();
 }
 
 const std::string &Ui::message() const {
@@ -1125,6 +1776,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const int i = index_of(rest);
 		Rect r;
 		return i >= 0 && m.stir_rect(i, r) && centre(r);
+	}
+	if (after("timer:", rest)) {
+		return m.locate_timer(rest, x, y);
 	}
 	if (!m.panel) {
 		return false;

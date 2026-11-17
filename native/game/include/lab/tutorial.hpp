@@ -1,6 +1,7 @@
 #pragma once
 
 #include "lab/lab.hpp"
+#include "lab/timers.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -26,6 +27,17 @@ struct TutorialCheck {
 struct TutorialGesture {
 	bool drag = false; // a drag from `what` to `to`; otherwise a click on `what`
 	std::string what, to;
+	std::string type; // text typed into the focused field (then `what` is empty)
+};
+
+// What the screen holds that a tutorial's checks may read besides the lab.
+struct TutorialScreen {
+	double speed = 1.0;
+	bool broken = false; // the lab stopped on an invariant
+	bool paused = false;
+	std::string selected; // the item selected, "" for none
+	const TimerDraft *draft = nullptr; // the timer being written, while the editor is open
+	const std::vector<Timer> *timers = nullptr;
 };
 
 struct TutorialView {
@@ -51,6 +63,7 @@ public:
 	// hold, in order, and fails or completes. `speed` is the screen's clock;
 	// `broken` is the lab having stopped on an invariant.
 	void follow(const LabView &view, double speed, bool broken);
+	void follow(const LabView &view, const TutorialScreen &screen);
 	// From the first step again (the screen's reset).
 	void restart();
 

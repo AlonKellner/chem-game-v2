@@ -153,6 +153,14 @@ func _play(dir: String) -> void:
 	_drag("item:condenser", "item:flask")
 	_drag("item:beaker", "cell:5,1")
 	_drag("item:beaker", "item:condenser")
+	# a timer on the flask's water, written as the tutorial asks (GAME_SPEC §13.3)
+	for what in ["item:flask", "timer:add", "timer:quantity:0", "timer:pick:water", "timer:compare:0:below", "timer:value:0:0"]:
+		_click(what)
+	for c in "10":
+		_lab.key(0, c.unicode_at(0))
+	_click("timer:limit:toggle")
+	await _shoot(dir, "6_timer_editor")
+	_click("timer:arm")
 	_click("valve:burner@1")
 	if not _watch(func(): return _grams("flask", "water") < 30.0, "the solution to boil down"):
 		return
@@ -162,6 +170,8 @@ func _play(dir: String) -> void:
 	if not _watch(func(): return _grams("flask", "water") < 10.0, "the solution to boil down"):
 		return
 	_click("valve:burner@0")
+	if _lab.paused(): # the timer stopped the clock at 10 g
+		_click("pause")
 	if not _watch(func(): return _celsius("flask") < 21.0, "the flask to cool"):
 		return
 	for i in 90:

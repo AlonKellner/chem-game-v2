@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/node2d.hpp>
 #include <godot_cpp/classes/texture_rect.hpp>
+#include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/string.hpp>
@@ -32,6 +33,11 @@ public:
 	godot::String get_tutorial_path() const;
 	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps]
 	godot::PackedInt32Array tutorial() const;
+	// A key, as the engine's would be (GAME_SPEC §13.3): code 0 text (by its code point), 1 backspace, 2 enter, 3 escape.
+	void key(int code, int codepoint);
+	// The timers: each {fired, conditions, limited, left_s, fired_by, item}; and whether the clock is paused.
+	godot::Array timers() const;
+	bool paused() const;
 
 	godot::String build_name() const;
 	// the library's self-check (cg_debug_report): the message reaches push_error

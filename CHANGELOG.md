@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 13)
+
+- §13.3 added: timers. A time limit (on by default, 5:00) and up to three value conditions on an
+  item's quantities (temperature; gas, solids and liquids, liquid; each species' mass, particle
+  count and size; a burner's valve), compared as above, below, at least, at most, reaches,
+  between or outside, combined as any or all. Read every quarter of a lab-second at every speed;
+  the first to hold pauses the clock and outlines the item. One-shot, re-armable, removable; five
+  at most. Written in an editor opened from a selected item (a click without moving it), with
+  typed values and nudges; the clock waits while it is open. Keys reach the screen
+  (`cg_ui_key`); `cg_ui_timers` reports them.
+- §13.2: the tutorial teaches a timer at the boil-down; its checks may read the selection, the
+  timer editor and the timers; a gesture may type text.
+- §13.1: the outbox is the bench's left part; the timers' list stands beside it.
+
 ## 0.13.0 (2026-11-17, Stage 12)
 
 Signed off by the user on 2026-11-17 ("Works perfectly! Approved, proceed").

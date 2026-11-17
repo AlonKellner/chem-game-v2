@@ -56,8 +56,21 @@ struct Pupil {
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);
 	}
+	void type(const std::string &text) {
+		for (const char c : text) {
+			ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+		}
+	}
+	// a paused clock (a timer fired) is played on, as the card says
+	void resume() {
+		if (ui->paused()) {
+			click("pause");
+		}
+	}
 	void play(const lab::TutorialGesture &g) {
-		if (g.drag) {
+		if (!g.type.empty()) {
+			type(g.type);
+		} else if (g.drag) {
 			drag(g.what, g.to);
 		} else {
 			click(g.what);
@@ -85,6 +98,7 @@ struct Pupil {
 	void watch(Done done, double seconds) {
 		const int64_t until = ui->lab().step() + static_cast<int64_t>(seconds * 60.0);
 		while (!done()) {
+			resume();
 			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title);
 			REQUIRE_MESSAGE((ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
 					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message());
@@ -119,6 +133,13 @@ struct Pupil {
 	}
 	void person(const lab::TutorialGesture &g) {
 		frames(90); // reading the card, finding the thing
+		if (!g.type.empty()) {
+			for (const char c : g.type) {
+				ui->key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+				frames(12);
+			}
+			return;
+		}
 		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 		if (!g.drag && g.what.rfind("valve:", 0) == 0) {
 			// a slider: taken at its knob, where it is now, and dragged
@@ -230,6 +251,8 @@ TEST_CASE("tutorial: played as a person plays it, slowly, at the speed it asks f
 		step_limit = p.ui->lab().step() + 3600 * 60;
 		while (p.tutorial().step == step && p.tutorial().state == TutorialView::Running) {
 			REQUIRE_MESSAGE(p.ui->lab().step() < step_limit, "waited too long on step " << step + 1 << ": " << title);
+			p.frames(45); // reading the card
+			p.resume();
 			const int64_t before = p.ui->lab().step();
 			if (const char *keep = std::getenv("CHEM_TUTORIAL_SAVE")) { // the state before each half second, for a failure's diagnosis
 				std::ofstream(keep) << p.ui->lab().save();

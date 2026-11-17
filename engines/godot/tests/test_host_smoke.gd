@@ -73,6 +73,38 @@ func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 	_drag("item:flask", "cell:3,1")
 	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
 
+func _click(what: String) -> void:
+	var a := _lab.locate(what)
+	assert_ne(a, Vector2(-1, -1), what + " is on the screen")
+	_lab.pointer(a.x, a.y, false)
+	_lab.pointer(a.x, a.y, true)
+	_lab.pointer(a.x, a.y, false)
+
+func test_a_timer_typed_in_fires_and_pauses_the_clock() -> void:
+	_drag("item:flask", "cell:3,1")
+	_click("item:flask")
+	_click("timer:add")
+	_click("timer:remove:0")
+	_click("timer:limit:value")
+	# the engine's own key events reach the editor's field
+	for c in "0:03":
+		var press := InputEventKey.new()
+		press.pressed = true
+		press.unicode = c.unicode_at(0)
+		get_viewport().push_input(press, true)
+	var enter := InputEventKey.new()
+	enter.pressed = true
+	enter.keycode = KEY_ENTER
+	get_viewport().push_input(enter, true)
+	await wait_process_frames(2)
+	assert_eq(_lab.timers().size(), 1, "armed")
+	assert_false(_lab.paused(), "the clock plays on once it is armed")
+	_lab.frame(3.5)
+	var t: Dictionary = _lab.timers()[0]
+	assert_true(t["fired"])
+	assert_eq(t["fired_by"], "0:03 passed")
+	assert_true(_lab.paused(), "the clock stopped when it fired")
+
 func test_frames_advance_the_clock_and_keep_every_total() -> void:
 	var before: int = JSON.parse_string(_lab.report())["step"]
 	_lab.frame(1.0)

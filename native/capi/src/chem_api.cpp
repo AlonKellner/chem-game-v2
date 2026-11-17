@@ -15,6 +15,8 @@
 struct cg_ui {
 	std::unique_ptr<lab::Ui> ui;
 	std::string text; // the last report handed out
+	std::vector<cg_timer> timers; // the last timers handed out, and their strings
+	std::vector<std::string> timer_text;
 };
 
 // the draw list crosses the boundary as it is
@@ -284,7 +286,7 @@ cg_ui *cg_ui_open(const char *bench_json) {
 			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
 			return nullptr;
 		}
-		return new cg_ui{ std::move(made), {} };
+		return new cg_ui{ std::move(made), {}, {}, {} };
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 		return nullptr;
@@ -455,6 +457,46 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
 	}
+}
+
+void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_ESCAPE) {
+		return;
+	}
+	try {
+		ui->ui->key(static_cast<lab::Ui::Key>(key), codepoint);
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_ui_timers(cg_ui *ui, cg_timers *out) {
+	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_timers)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_timers: null argument, or the size is not set");
+	}
+	const std::vector<lab::Timer> &list = ui->ui->timers().list();
+	const double now = static_cast<double>(ui->ui->lab().step()) / 60.0;
+	ui->timer_text.clear();
+	ui->timer_text.reserve(2 * list.size());
+	ui->timers.clear();
+	for (const lab::Timer &t : list) {
+		ui->timer_text.push_back(t.fired_by);
+		ui->timer_text.push_back(t.item_fired);
+		cg_timer c{};
+		c.fired = t.fired ? 1 : 0;
+		c.conditions = static_cast<int32_t>(t.conditions.size());
+		c.limited = t.limited ? 1 : 0;
+		c.left_s = t.limited && !t.fired ? t.limit_s - (now - t.armed_at_s) : 0.0;
+		ui->timers.push_back(c);
+	}
+	for (size_t i = 0; i < ui->timers.size(); ++i) {
+		ui->timers[i].fired_by = ui->timer_text[2 * i].c_str();
+		ui->timers[i].item = ui->timer_text[2 * i + 1].c_str();
+	}
+	out->count = static_cast<int32_t>(ui->timers.size());
+	out->timers = ui->timers.data();
+	out->paused = ui->ui->paused() ? 1 : 0;
+	return CG_OK;
 }
 
 cg_status cg_ui_tutor(cg_ui *ui, const char *tutorial_json) {

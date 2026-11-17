@@ -147,6 +147,48 @@
 			"play": [{"drag": ["item:beaker", "item:condenser"]}]
 		},
 		{
+			"title": "Select the flask",
+			"text": "Click the flask without moving it. The readout keeps showing it, and offers \"add timer\".",
+			"why": "Boiling down is the step to watch: too far, and the crystals have nothing to grow from. A timer watches it for you while the clock runs fast.",
+			"checks": [{"text": "the flask is selected", "when": {"selected": "flask"}}],
+			"play": [{"click": "item:flask"}]
+		},
+		{
+			"title": "Add a timer",
+			"text": "Click \"add timer\" in the readout.",
+			"why": "A timer stops the clock when what it watches changes as you ask, or when its time limit passes.",
+			"checks": [{"text": "a timer is being written for the flask", "when": {"editor": {"item": "flask"}}}],
+			"play": [{"click": "timer:add"}]
+		},
+		{
+			"title": "Watch the water",
+			"text": "Click the quantity it watches (the temperature), and choose H2O(l): the flask's liquid water.",
+			"checks": [{"text": "it watches the water", "when": {"editor": {"item": "flask", "what": "water"}}}],
+			"play": [{"click": "timer:quantity:0"}, {"click": "timer:pick:water"}]
+		},
+		{
+			"title": "Below 10 g",
+			"text": "Click \"below\". Then click the value and type 10.",
+			"checks": [
+				{"text": "the water below", "when": {"editor": {"what": "water", "compare": "below"}}},
+				{"text": "10 g", "when": {"editor": {"what": "water", "value_at_least": 9, "value_at_most": 11}}}
+			],
+			"play": [{"click": "timer:compare:0:below"}, {"click": "timer:value:0:0"}, {"type": "10"}]
+		},
+		{
+			"title": "No time limit this time",
+			"text": "Click \"time limit: on\" to turn it off: this boil takes longer than five minutes.",
+			"why": "With the limit on, the timer fires at whichever comes first: the water below 10 g, or 5:00.",
+			"checks": [{"text": "the time limit is off", "when": {"editor": {"limited": false}}}],
+			"play": [{"click": "timer:limit:toggle"}]
+		},
+		{
+			"title": "Arm it",
+			"text": "Click \"arm\". The timer appears in the list beside the outbox.",
+			"checks": [{"text": "the timer is armed", "when": {"timer": {"item": "flask", "what": "water", "compare": "below", "value_at_least": 9, "value_at_most": 11, "fired": false}}}],
+			"play": [{"click": "timer:arm"}]
+		},
+		{
 			"title": "Boil",
 			"text": "Drag the burner's slider all the way up.",
 			"why": "Only the water boils off: the copper sulfate and the leftover acid stay in the flask.",
@@ -155,13 +197,16 @@
 		},
 		{
 			"title": "Boil it down, not dry",
-			"text": "Wait until about 10 g of water is left in the flask. Point at the flask to watch it fall.",
+			"text": "Speed up as you like: your timer stops the clock when less than 10 g of water is left.",
 			"why": "The crystals need water to grow from. Boiled dry, the salt loses its own water and turns white.",
-			"checks": [{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}}]
+			"checks": [
+				{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}},
+				{"text": "your timer fired", "when": {"timer": {"item": "flask", "what": "water", "fired": true}}}
+			]
 		},
 		{
 			"title": "Stop heating and let it cool",
-			"text": "Drag the burner's slider all the way down, then wait.",
+			"text": "Drag the burner's slider all the way down, then press play and wait.",
 			"why": "Cold water dissolves less copper sulfate: as the solution cools, blue CuSO4.5H2O crystals grow out of it.",
 			"checks": [
 				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},

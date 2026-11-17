@@ -2,6 +2,7 @@
 
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/timers.hpp"
 #include "lab/tutorial.hpp"
 
 #include <cstdint>
@@ -45,6 +46,10 @@ public:
 
 	// The pointer, in screen pixels, and whether its button is down.
 	void pointer(float x, float y, bool down);
+	// A key for the focused field (GAME_SPEC §13.3): text (a character, by its
+	// code point), backspace, enter, escape.
+	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3 };
+	void key(Key key, uint32_t codepoint = 0);
 	// A frame of real time: the lab advances by it times the speed. One step
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.
@@ -62,6 +67,9 @@ public:
 	bool tutor(std::string_view tutorial_json, std::string &why);
 	// null without one
 	const Tutorial *tutorial() const;
+	// The player's timers (GAME_SPEC §13.3), and the item selected ("" for none).
+	const Timers &timers() const;
+	std::string selected() const;
 	// The last notice: a refusal's reason, a failed invariant.
 	const std::string &message() const;
 	double speed() const;
@@ -72,6 +80,12 @@ public:
 	//   valve:<burner>@<0..1>   stir:<vessel>
 	//   panel:pour  panel:slider@<0..1>  panel:tip:<species>  panel:cancel
 	//   pause   speed:<1|10|60|600>   check   reset
+	//   timer:add   timer:cancel   timer:arm   timer:any   timer:all   timer:condition:add
+	//   timer:quantity:<c>   timer:pick:<what>   timer:measure:<c>:<g|count|size>
+	//   timer:compare:<c>:<above|below|at_least|at_most|reaches|between|outside>
+	//   timer:value:<c>:<0|1>   timer:nudge:<c>:<-3..3>   timer:remove:<c>
+	//   timer:limit:toggle   timer:limit:value   timer:limit:nudge:<-2..2>
+	//   timer:row:<n>:rearm   timer:row:<n>:remove
 	// false when it is not on the screen now.
 	bool locate(std::string_view what, float &x, float &y) const;
 

@@ -8,6 +8,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
+#include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
@@ -15,6 +16,7 @@
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
@@ -60,6 +62,38 @@ godot::PackedInt32Array ChemLab::tutorial() const {
 		out.push_back(t.steps);
 	}
 	return out;
+}
+
+void ChemLab::key(int code, int codepoint) {
+	if (ui_ != nullptr) {
+		cg_ui_key(ui_, code, static_cast<uint32_t>(codepoint));
+	}
+}
+
+godot::Array ChemLab::timers() const {
+	godot::Array out;
+	cg_timers t;
+	t.size = sizeof t;
+	if (ui_ == nullptr || cg_ui_timers(ui_, &t) != CG_OK) {
+		return out;
+	}
+	for (int32_t i = 0; i < t.count; ++i) {
+		godot::Dictionary d;
+		d["fired"] = t.timers[i].fired != 0;
+		d["conditions"] = t.timers[i].conditions;
+		d["limited"] = t.timers[i].limited != 0;
+		d["left_s"] = t.timers[i].left_s;
+		d["fired_by"] = godot::String::utf8(t.timers[i].fired_by);
+		d["item"] = godot::String::utf8(t.timers[i].item);
+		out.push_back(d);
+	}
+	return out;
+}
+
+bool ChemLab::paused() const {
+	cg_timers t;
+	t.size = sizeof t;
+	return ui_ != nullptr && cg_ui_timers(ui_, &t) == CG_OK && t.paused != 0;
 }
 
 godot::String ChemLab::build_name() const {
@@ -128,6 +162,21 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 		down_ = button->is_pressed();
 		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(button->get_position());
 		cg_ui_pointer(ui_, at.x, at.y, down_ ? 1 : 0);
+		return;
+	}
+	// keys for the screen's focused field (GAME_SPEC §13.3)
+	const godot::Ref<godot::InputEventKey> key = event;
+	if (key.is_valid() && key->is_pressed()) {
+		const godot::Key code = key->get_keycode();
+		if (code == godot::KEY_BACKSPACE) {
+			cg_ui_key(ui_, CG_KEY_BACKSPACE, 0);
+		} else if (code == godot::KEY_ENTER || code == godot::KEY_KP_ENTER) {
+			cg_ui_key(ui_, CG_KEY_ENTER, 0);
+		} else if (code == godot::KEY_ESCAPE) {
+			cg_ui_key(ui_, CG_KEY_ESCAPE, 0);
+		} else if (key->get_unicode() > 0) {
+			cg_ui_key(ui_, CG_KEY_TEXT, static_cast<uint32_t>(key->get_unicode()));
+		}
 		return;
 	}
 	const godot::Ref<godot::InputEventMouseMotion> motion = event;
@@ -268,6 +317,9 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("get_tutorial_path"), &ChemLab::get_tutorial_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "tutorial_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_tutorial_path", "get_tutorial_path");
 	godot::ClassDB::bind_method(godot::D_METHOD("tutorial"), &ChemLab::tutorial);
+	godot::ClassDB::bind_method(godot::D_METHOD("key", "code", "codepoint"), &ChemLab::key);
+	godot::ClassDB::bind_method(godot::D_METHOD("timers"), &ChemLab::timers);
+	godot::ClassDB::bind_method(godot::D_METHOD("paused"), &ChemLab::paused);
 	godot::ClassDB::bind_method(godot::D_METHOD("build_name"), &ChemLab::build_name);
 	godot::ClassDB::bind_method(godot::D_METHOD("debug_report", "message"), &ChemLab::debug_report);
 	godot::ClassDB::bind_method(godot::D_METHOD("pointer", "x", "y", "down"), &ChemLab::pointer);

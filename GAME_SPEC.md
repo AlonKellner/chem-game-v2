@@ -1063,6 +1063,46 @@ second and a half before each gesture, the pointer moved across the screen frame
 slider taken at its knob, a drop into the outbox over what was handed in before, the clock at
 600x.
 
+### 13.3 Timers
+
+A timer is the player's: it watches the lab while the clock runs fast and stops it when something
+happens. Timers belong to the screen (`lab/timers.hpp`), not to the lab: they only read the lab's
+view and pause the clock, so a run with timers is the same lab, digest for digest, as one paused at
+the same steps.
+
+- **A timer** has a **time limit**, lab time from when it is armed (on by default, 5:00), and any
+  number of **value conditions**. A value condition is an item, one of its quantities, a
+  comparison and one or two values. The value conditions combine as **any** (the default) or
+  **all**; the time limit fires on its own. The time limit may be switched off only while the timer
+  has a value condition.
+- **Quantities** of an item: its temperature (°C); its gas, its solids and liquids, and its liquid
+  (mL); for each species it holds, its mass (g), particle count and particle size (µm); a burner's
+  valve (%).
+- **Comparisons:** above, below, at least, at most, between [a, b], outside [a, b], and reaches: the
+  quantity is crossed or touched between two readings (from below or above).
+- **Firing.** An armed timer is read after every quarter of a lab-second (15 steps), at every speed:
+  the screen advances the lab in quarters while one is armed. The first reading at which the time
+  limit has passed or the value conditions hold fires it: the clock is paused at the end of that
+  quarter, the timer is marked fired with the condition that fired it, and the item it names is
+  outlined, pulsing, and shown in the readout, until the player plays on. A timer whose conditions
+  hold when it is armed fires at its first reading.
+- **One-shot.** A fired timer stays in the list, marked fired; re-arming it starts its time limit
+  again, and removing it takes it off the list.
+- **On the screen.** A click on an item, without moving it, selects it: the readout shows it until
+  another is selected, and offers "add timer". The editor (a panel, like the pour panel) lists the
+  item's quantities, the comparisons, the value fields (prefilled with the quantity's value now;
+  typed with the keyboard, or nudged by −/+ at three scales), the time limit (on or off, mm:ss),
+  any or all, and arm or cancel. While the editor is open the clock is paused (at 600× the moment
+  could pass while the timer is written); arming or cancelling plays it on if it was playing. A
+  value that is not a number, or a between whose low end is above
+  its high end, is refused. The list stands in the right-hand column under the readout: per timer
+  its conditions, the value now, the time left and its state, with re-arm and remove.
+- **A tutorial** never restricts the timers' gestures, as it never restricts the clock's.
+- **Keys.** The screen takes keys for the focused field: digits, the decimal point, minus,
+  backspace, enter (arm) and escape (cancel). A host forwards them (`cg_ui_key`).
+
+**Demo subset:** all of the above. **Status:** Stage 13.
+
 ## 14. C API and hosts
 
 - `native/capi/include/chem_api.h` is the game for any host. Rules: every struct starts with its

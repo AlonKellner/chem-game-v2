@@ -134,6 +134,33 @@ int main(void) {
 		fprintf(stderr, "the comparison did not find the corner of the screen empty\n");
 		return 1;
 	}
+	/* Stage 13: a timer written with the pointer and the keys: the cup's temperature, a time limit of 0:02 */
+	float x = 0, y = 0;
+	if (!cg_ui_locate(ui, "item:cup", &x, &y)) {
+		fprintf(stderr, "the cup is not on the screen\n");
+		return 1;
+	}
+	cg_ui_pointer(ui, x, y, 0);
+	cg_ui_pointer(ui, x, y, 1);
+	cg_ui_pointer(ui, x, y, 0);
+	const char *gestures[] = { "timer:add", "timer:remove:0", "timer:limit:value" };
+	for (int i = 0; i < 3; ++i) {
+		if (!cg_ui_locate(ui, gestures[i], &x, &y)) {
+			fprintf(stderr, "not on the screen: %s\n", gestures[i]);
+			return 1;
+		}
+		cg_ui_pointer(ui, x, y, 1);
+		cg_ui_pointer(ui, x, y, 0);
+	}
+	cg_ui_key(ui, CG_KEY_TEXT, '2');
+	cg_ui_key(ui, CG_KEY_ENTER, 0);
+	cg_ui_frame(ui, 2.5);
+	cg_timers timers;
+	timers.size = sizeof timers;
+	if (cg_ui_timers(ui, &timers) != CG_OK || timers.count != 1 || timers.timers[0].fired != 1 || strcmp(timers.timers[0].fired_by, "0:02 passed") != 0 || timers.paused != 1) {
+		fprintf(stderr, "the timer did not fire at its time limit and pause the clock\n");
+		return 1;
+	}
 	/* Stage 12: a tutorial over the screen, passed by a drag */
 	cg_tutorial tutorial;
 	tutorial.size = sizeof tutorial;

@@ -1,10 +1,12 @@
 #include "lab/tutorial.hpp"
 
 #include "chem/species.hpp"
+#include "lab/conditions.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <cstdio>
+#include <cstdlib>
 #include <optional>
 #include <utility>
 
@@ -15,8 +17,18 @@ using json = nlohmann::json;
 namespace {
 
 // A condition on the lab's view (GAME_SPEC §13.2): every key it names holds.
+// A timer's condition, or the editor's, as a check names it (§13.3): every key given matches.
+struct TimerPattern {
+	std::string item, what, measure;
+	std::optional<Comparison::Op> op;
+	std::optional<double> value_at_least, value_at_most;
+	std::optional<bool> fired, limited;
+};
+
 struct Cond {
 	std::string item;
+	std::optional<std::string> selected;
+	std::optional<TimerPattern> editor, timer;
 	std::optional<std::string> place, on, under, drains_to;
 	std::optional<bool> submitted, stirred, burst, conserved, broken;
 	std::optional<double> valve_at_least, valve_at_most, above_c, below_c, liquid_above_ml, liquid_below_ml, above_g, below_g, purity_above, speed_at_least;
@@ -46,7 +58,65 @@ struct Context {
 	const LabView &view;
 	double speed;
 	bool broken;
+	const TutorialScreen *screen = nullptr;
 };
+
+bool matches(const TimerPattern &p, const TimerCondition &c, const std::string *text) {
+	if ((!p.item.empty() && c.quantity.item != p.item) || (!p.what.empty() && c.quantity.what != p.what) || (!p.measure.empty() && c.quantity.measure != p.measure) ||
+			(p.op && c.comparison.op != *p.op)) {
+		return false;
+	}
+	if (p.value_at_least || p.value_at_most) {
+		double v = c.comparison.a;
+		if (text != nullptr) { // the editor's value as typed
+			char *end = nullptr;
+			v = std::strtod(text->c_str(), &end);
+			if (text->empty() || end == nullptr || *end != '\0') {
+				return false;
+			}
+		}
+		if ((p.value_at_least && !(v >= *p.value_at_least)) || (p.value_at_most && !(v <= *p.value_at_most))) {
+			return false;
+		}
+	}
+	return true;
+}
+
+bool editor_holds(const TimerPattern &p, const TutorialScreen *screen) {
+	if (screen == nullptr || screen->draft == nullptr) {
+		return false;
+	}
+	const TimerDraft &d = *screen->draft;
+	if (p.limited && d.limited != *p.limited) {
+		return false;
+	}
+	if (p.what.empty() && !p.op && !p.value_at_least && !p.value_at_most) {
+		return p.item.empty() || d.item == p.item;
+	}
+	for (size_t i = 0; i < d.conditions.size(); ++i) {
+		if (matches(p, d.conditions[i], i < d.text.size() ? &d.text[i][0] : nullptr)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool timer_holds(const TimerPattern &p, const TutorialScreen *screen) {
+	if (screen == nullptr || screen->timers == nullptr) {
+		return false;
+	}
+	for (const Timer &t : *screen->timers) {
+		if ((p.fired && t.fired != *p.fired) || (p.limited && t.limited != *p.limited)) {
+			continue;
+		}
+		for (const TimerCondition &c : t.conditions) {
+			if (matches(p, c, nullptr)) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
 
 std::string fmt(const char *format, double v) {
 	char buffer[64];
@@ -149,6 +219,12 @@ bool holds(const Cond &c, const Context &x) {
 		return false;
 	}
 	if (c.speed_at_least && !(x.speed >= *c.speed_at_least)) {
+		return false;
+	}
+	if (c.selected && (x.screen == nullptr || x.screen->selected != *c.selected)) {
+		return false;
+	}
+	if ((c.editor && !editor_holds(*c.editor, x.screen)) || (c.timer && !timer_holds(*c.timer, x.screen))) {
 		return false;
 	}
 	if (c.item.empty()) {
@@ -342,6 +418,14 @@ struct Reader {
 					ok = cond(value[i], inner);
 					(key == "all" ? c.all : c.any).push_back(std::move(inner));
 				}
+			} else if (key == "selected") {
+				std::string id;
+				ok = item(value, "selected", id);
+				c.selected = id;
+			} else if (key == "editor" || key == "timer") {
+				TimerPattern p;
+				ok = pattern(value, p);
+				(key == "editor" ? c.editor : c.timer) = p;
 			} else if (key == "not") {
 				Cond inner;
 				ok = cond(value, inner);
@@ -363,6 +447,47 @@ struct Reader {
 		}
 		if ((c.above_g || c.below_g || c.purity_above) && c.species.empty()) {
 			return fail("a condition on an amount names no \"species\"");
+		}
+		return true;
+	}
+
+	bool pattern(const json &j, TimerPattern &p) {
+		if (!j.is_object()) {
+			return fail("a timer's pattern is an object");
+		}
+		for (const auto &[key, value] : j.items()) {
+			bool ok = true;
+			if (key == "item") {
+				ok = item(value, "item", p.item);
+			} else if (key == "what" || key == "measure") {
+				ok = value.is_string() || fail("\"" + key + "\" is not a name");
+				if (ok) {
+					(key == "what" ? p.what : p.measure) = value.get<std::string>();
+				}
+			} else if (key == "compare") {
+				Comparison::Op op = Comparison::Below;
+				ok = (value.is_string() && op_of(value.get<std::string>(), op)) || fail("no comparison \"" + value.dump() + "\"");
+				p.op = op;
+			} else if (key == "value_at_least") {
+				ok = number(value, "value_at_least", p.value_at_least);
+			} else if (key == "value_at_most") {
+				ok = number(value, "value_at_most", p.value_at_most);
+			} else if (key == "fired") {
+				ok = flag(value, "fired", p.fired);
+			} else if (key == "limited") {
+				ok = flag(value, "limited", p.limited);
+			} else {
+				ok = fail("a timer's pattern has no key \"" + key + "\"");
+			}
+			if (!ok) {
+				return false;
+			}
+		}
+		if (!p.what.empty()) {
+			std::string why_not;
+			if (!valid(Quantity{ p.item, p.what, p.measure.empty() ? "g" : p.measure }, why_not)) {
+				return fail(why_not);
+			}
 		}
 		return true;
 	}
@@ -401,6 +526,10 @@ struct Reader {
 	static bool target(const json &j) { return j.is_string() && !j.get<std::string>().empty(); }
 
 	bool gesture(const json &j, TutorialGesture &g) {
+		if (j.is_object() && j.size() == 1 && j.contains("type") && target(j["type"])) {
+			g.type = j["type"].get<std::string>();
+			return true;
+		}
 		if (j.is_object() && j.size() == 1 && j.contains("click") && target(j["click"])) {
 			g.what = j["click"].get<std::string>();
 			return true;
@@ -411,7 +540,7 @@ struct Reader {
 			g.to = j["drag"][1].get<std::string>();
 			return true;
 		}
-		return fail("a gesture is not {\"click\": what} or {\"drag\": [what, to]}");
+		return fail("a gesture is not {\"click\": what}, {\"drag\": [what, to]} or {\"type\": text}");
 	}
 };
 
@@ -563,13 +692,22 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 	}
 	impl->view.steps = static_cast<int>(impl->steps.size());
 	std::unique_ptr<Tutorial> t(new Tutorial(std::move(impl)));
-	t->impl_->fill(Context{ bench, 1.0, false });
+	t->impl_->fill(Context{ bench, 1.0, false, nullptr });
 	return t;
 }
 
 void Tutorial::follow(const LabView &lv, double speed, bool broken) {
+	TutorialScreen screen;
+	screen.speed = speed;
+	screen.broken = broken;
+	follow(lv, screen);
+}
+
+void Tutorial::follow(const LabView &lv, const TutorialScreen &screen) {
 	Impl &m = *impl_;
-	const Context x{ lv, speed, broken };
+	const double speed = screen.speed;
+	const bool broken = screen.broken;
+	const Context x{ lv, speed, broken, &screen };
 	if (m.view.state != TutorialView::Running) {
 		return;
 	}
