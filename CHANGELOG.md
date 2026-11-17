@@ -2,17 +2,29 @@
 
 ## Unreleased (Stage 13)
 
-- §13.3 added: timers. A time limit (on by default, 5:00) and up to three value conditions on an
-  item's quantities (temperature; gas, solids and liquids, liquid; each species' mass, particle
-  count and size; a burner's valve), compared as above, below, at least, at most, reaches,
-  between or outside, combined as any or all. Read every quarter of a lab-second at every speed;
-  the first to hold pauses the clock and outlines the item. One-shot, re-armable, removable; five
-  at most. Written in an editor opened from a selected item (a click without moving it), with
-  typed values and nudges; the clock waits while it is open. Keys reach the screen
-  (`cg_ui_key`); `cg_ui_timers` reports them.
-- §13.2: the tutorial teaches a timer at the boil-down; its checks may read the selection, the
-  timer editor and the timers; a gesture may type text.
-- §13.1: the outbox is the bench's left part; the timers' list stands beside it.
+- §13.3 added: signals.
+  - **Parts:** timers, monitors and alarms on the bench, out of an unlimited drawer.
+  - **Wiring:** parts are wired to each other (inputs in parallel are OR, a chain is AND, no input
+    is free) and rigged to the lab's controls: a vessel's stirring, a burner's valve, a timer's
+    reset.
+  - **Evaluation:** every step, all at once, loops included; every link takes a step.
+  - **Rigs:** they set a control on their source's turning on and off, or on any change. The last
+    event wins, the player's hand included.
+  - **Alarms:** an alarm stops the clock in the step it rang, and shows what set it off.
+  - **In the lab:** signals are saved, loaded and digested. Commands: `part`, `scrap`, `set`,
+    `wire`, `unwire`, `rig`, `unrig`, `reset`, `ack`, `wait_until {rings}`. §18: G1, G2.
+- §13: the bench is a grid of squares (`chem-bench/2`, 28 × 15). Items stand on footprints by kind
+  and volume, and `chem-bench/1` still reads. `move` moves several things together, all or none.
+  The demo session's record is unchanged.
+- §13.1: the selection: a click, Shift/Ctrl/Cmd, a rectangle, Escape; a selection carried
+  together. The drawer stands beside the outbox; the part editor; a vessel's stir button at its
+  foot. Pointer modifiers through `cg_ui_pointer`; `cg_ui_signals`.
+- §13.2:
+  - conditions are the shared module's;
+  - purity (a species' share) and a balloon's fill are quantities;
+  - checks may compare any quantity, and read parts, wires, rigs and the part editor;
+  - the tutorial teaches a monitor rigged to the burner and wired to an alarm (35 steps).
+- The screen's timers of the first draft of this stage are gone, never released.
 
 ## 0.13.0 (2026-11-17, Stage 12)
 

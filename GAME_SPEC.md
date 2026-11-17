@@ -893,9 +893,10 @@ adapted exposure, Display P3 output) is specified and not built.
 The engine-free game layer (`native/game`, namespace `lab`): a bench of equipment over one closed
 world, driven by commands.
 
-**The bench** is data (`data/benches/*.json`, `chem-bench/1`): the room, and the items with what
-they hold. Every item exists from the start, as cells of the one world; nothing is created or
-destroyed in play. Items:
+**The bench** is data (`data/benches/*.json`, `chem-bench/2`): the room, and the items with what
+they hold. Every item of equipment exists from the start, as cells of the one world; no equipment
+is created or destroyed in play (the signal parts of §13.3 hold no matter, and come from a
+drawer). Items:
 
 - **vessel:** a rigid cell with a volume, a wall and a heat loss to the room. It starts open to
   the room's air and full of it. One with a `coolant` is a condenser.
@@ -903,18 +904,35 @@ destroyed in play. Items:
 - **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
 - **the tray:** the bench's own, under everything: where what overflows goes (§6).
 
-**Places.** The bench is a grid. An item is in the cabinet, on the bench at a grid cell (one
-item to a cell), on a vessel's mouth, under a vessel (a burner), or in the outbox. Equipment is
-used on the bench: a command on an item still in the cabinet, or handed in, is refused. A bench
-file gives each item its cell (`at`), or leaves it in the cabinet.
+**Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
+- **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
+  what stands on its mouth starts above it, and a vessel's stand over a burner. Footprints are by
+  kind and volume, or the bench's own `size`:
+  - a vessel under 100 mL, 2 × 6; a larger one, 3 × 7;
+  - a condenser, 2 × 5;
+  - a balloon, 4 × 5;
+  - a burner, 3 × 3;
+  - a signal part, 1 × 1.
+
+  Footprints never overlap; `at` is the footprint's top-left square.
+- **Places.** An item is in the cabinet, on the bench, on a vessel's mouth, under a vessel (a
+  burner), or in the outbox.
+- **Setting down.** The lab sets an item down "beside" another (after `unheat`, `detach`, a
+  burner left by `submit`) on the first free footprint: rows by how far their foot is from the
+  other's foot, then columns by how far from it, the left first.
+- **Using it.** Equipment is used on the bench: a command on an item still in the cabinet, or
+  handed in, is refused.
+- **The bench file** gives each item its square (`at`), or leaves it in the cabinet. A
+  `chem-bench/1` file is a grid of cells, one item to a cell: each footprint is one square.
 
 **Commands** are JSON objects with a `do`. They are everything a player can do; a host maps
 input to them, and a session script is a list of them.
 
 | `do` | Fields | Effect |
 |---|---|---|
-| `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it; refused where something stands, off the grid, or while the item is joined to another |
-| `stow` | `item` | back into the cabinet |
+| `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it (a signal part too); refused where something stands, off the grid, or while the item is joined to another |
+| `move` | `items`, `by` [columns, rows] | several items and parts along the bench together, by one offset: all of them or none, with the reason (one would be off the grid, or land on something left behind) |
+| `stow` | `item` | back into the cabinet; a signal part back to the drawer |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
@@ -926,7 +944,14 @@ input to them, and a session script is a list of them.
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6) |
 | `submit` | `item` | hands it in, to the outbox; it must not be joined to anything. A burner under it stays on the bench |
 | `wait` | `seconds` | advances time |
-| `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; fails at the timeout |
+| `wait_until` | `item`, a condition, `timeout` | advances until `species` is `below_g` or `above_g`, or the item is `below_c` or `above_c`; or until the alarm `rings`; fails at the timeout |
+| `part` | `kind`, `at` | a timer, monitor or alarm out of the drawer onto a free square (§13.3) |
+| `scrap` | `part` | back to the drawer, with its wires and rigs |
+| `set` | `part`, a monitor's `item`, `what`, `measure`, `compare`, `value` or `values`; a timer's `seconds` | its settings |
+| `wire`, `unwire` | `from`, `to` | a part's signal into another's input |
+| `rig`, `unrig` | `from`, `item`, `control`, `on` and `off`, or `change` | a part's signal onto a control: a vessel's `stir`, a burner's `valve`, a timer's `reset` |
+| `reset` | `timer` | back to its preset, by hand |
+| `ack` | `alarm`, or none for all | answers a ringing alarm |
 
 - **Refusals.** A command that cannot be done is refused with its reason, and changes nothing: an
   unknown item, the wrong kind of item, a mouth that is taken, more than a vessel holds, liquid
@@ -950,8 +975,9 @@ input to them, and a session script is a list of them.
   totals of every element, of mass and of energy, with whether they are what they were at the
   start.
 - **The digest** is the SHA-256 of the whole state: every amount, energy and particle count, the
-  processes' carried remainders, the connections, the stirring, the step. Equal digests are equal
-  states.
+  processes' carried remainders, the connections, the stirring, the step; and, once there is a
+  part, the signals: every part's settings and state, the wires, the rigs. Where things stand is
+  not in it. Equal digests are equal states.
 - **Sessions** (`data/sessions/*.json`, `chem-session/1`): a bench and a script. A session's
   **record** (`bench/sessions/*.jsonl`) is the digest after each command; replaying the session
   must reproduce it (invariant D4).
@@ -962,8 +988,9 @@ The screen is engine-free too (`lab/ui.hpp`): a lab, a pointer, and a draw list.
 its pointer, calls a frame, and paints the list. Everything a player does on the screen becomes a
 lab command here, so it is the same on every host and is tested without one.
 
-**Layout** (1920 × 1080): the cabinet on the left; the bench's grid in the middle; the outbox
-under it; on the right the readout; on top the clock.
+**Layout** (1920 × 1080): the cabinet on the left; the bench's grid of squares in the middle; the
+outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
+top the clock.
 
 **Gestures.** Everything is a drag or a click:
 
@@ -979,6 +1006,20 @@ under it; on the right the readout; on top the clock.
 | drag something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the drop means |
 | drag the slider beside a burner | `valve` |
 | click a vessel's stir button | `stir` |
+| drag a selection along the bench | `move` |
+| drag a part out of the drawer | `part`, and its settings open (§13.3) |
+| drag from a part's port onto a part, a vessel, a burner | `wire`, or the rig's settings: `rig` |
+
+**The selection.**
+- A click on an item, without moving it, chooses it. A click with Shift, Ctrl or Cmd adds an item
+  to the selection, or takes it away.
+- A rectangle drawn from an empty square chooses everything on the bench it touches; with one of
+  those keys held, it adds to the selection.
+- A click on an empty square, or Escape, lets go of the selection.
+- The readout shows the last item chosen.
+- A dragged item of a selection of several carries all of them, one `move` (all of them or none).
+  Dropped on the cabinet, the equipment is stowed and the parts go back to the drawer.
+- The selection is the screen's, not the lab's. A tutorial takes one item at a time.
 
 A refusal's reason is shown in the readout, and nothing has changed. A click outside the pour
 panel closes it.
@@ -1000,14 +1041,15 @@ flat and in two parts, one under that pass and one over it: the room and its gri
 lines, a liquid's surface as a line (a clear liquid is otherwise invisible until Stage 11's
 refraction), a flame by its valve, labels, the readout and panels over.
 
-**Full design, not yet built:** items larger than one grid cell, and adjacency deciding what can
-join what; supports that appear with the glassware; pouring at a rate; a debug panel of the
-processes' rates and heat flows, single-stepping and exporting the state.
+**Full design, not yet built:** adjacency deciding what can join what; supports that appear with
+the glassware; pouring at a rate; a debug panel of the processes' rates and heat flows,
+single-stepping and exporting the state.
 
 **Demo subset:** the benches of `data/benches/` (`demo.json` for the scripted session, `lab.json`
 for play: everything in the cabinet), the commands and the screen above.
 **Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
-places, the tray, bursting and save/load; Stage 9 the screen and the Godot host.
+places, the tray, bursting and save/load; Stage 9 the screen and the Godot host; Stage 13 the grid
+of squares and footprints, the selection and `move`.
 
 ### 13.2 The tutorial
 
@@ -1020,7 +1062,16 @@ gestures, and a run with a tutorial is the same lab as one without.
 - **A check** is a condition on the lab's view with a text: an item's place, what it is on or
   under, what drains into what, handed in, stirred, burst; its valve, temperature, liquid volume;
   a species' mass, or its share of the solids and liquids; what alone it holds; the screen's speed;
-  the world's totals unchanged. Conditions combine with `all`, `any` and `not`. A check is marked
+  the world's totals unchanged.
+  - Any of §13.3's quantities, compared: `{"quantity": {"what", "measure"}, "compare", "value"
+    | "values"}`. Purity, a species' share (%), is one.
+  - The signals: a part (`part`: its kind, what a monitor watches and how, whether an alarm rang),
+    a wire (`wire`: from and to, by id or kind), a rig (`rig`: from, item, control, its
+    settings).
+  - The selection, and the part editor while it is open (`selected`, `editor`).
+
+  Conditions combine with `all`, `any` and `not`. They are the shared module's
+  (`lab/conditions.hpp`), as signals read them. A check is marked
   `wait` when the lab is waited on for it rather than a gesture; every check of a step that asks
   for no gesture is waited on. One that names an item the bench
   does not have, or a species the tables do not, is refused when the tutorial is opened.
@@ -1050,7 +1101,7 @@ gestures, and a run with a tutorial is the same lab as one without.
   that is on the screen now (for a drag, both ends and an arrow), while a check that is not waited
   on is still open; with the item in hand, only where it goes.
 
-**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 28 steps.
+**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 35 steps; Stage 13 teaches the signals at the boil-down: a monitor on the flask's water, rigged to close the burner's valve and wired to an alarm.
 Its failures: the balloon burst; acid poured before the malachite has broken down (in liquid it
 never gets hot enough); the crystals overheated to a lower hydrate or the anhydrous salt; the
 balloon handed in without the CO₂, the beaker with more than water, the flask with its liquor or
@@ -1063,45 +1114,114 @@ second and a half before each gesture, the pointer moved across the screen frame
 slider taken at its knob, a drop into the outbox over what was handed in before, the clock at
 600x.
 
-### 13.3 Timers
+### 13.3 Signals
 
-A timer is the player's: it watches the lab while the clock runs fast and stops it when something
-happens. Timers belong to the screen (`lab/timers.hpp`), not to the lab: they only read the lab's
-view and pause the clock, so a run with timers is the same lab, digest for digest, as one paused at
-the same steps.
+Signals let the player act on the lab while its clock runs fast. They are **parts** on the bench
+that watch the lab and act on it (`lab/signals.hpp`):
 
-- **A timer** has a **time limit**, lab time from when it is armed (on by default, 5:00), and any
-  number of **value conditions**. A value condition is an item, one of its quantities, a
-  comparison and one or two values. The value conditions combine as **any** (the default) or
-  **all**; the time limit fires on its own. The time limit may be switched off only while the timer
-  has a value condition.
-- **Quantities** of an item: its temperature (°C); its gas, its solids and liquids, and its liquid
-  (mL); for each species it holds, its mass (g), particle count and particle size (µm); a burner's
-  valve (%).
-- **Comparisons:** above, below, at least, at most, between [a, b], outside [a, b], and reaches: the
-  quantity is crossed or touched between two readings (from below or above).
-- **Firing.** An armed timer is read after every quarter of a lab-second (15 steps), at every speed:
-  the screen advances the lab in quarters while one is armed. The first reading at which the time
-  limit has passed or the value conditions hold fires it: the clock is paused at the end of that
-  quarter, the timer is marked fired with the condition that fired it, and the item it names is
-  outlined, pulsing, and shown in the readout, until the player plays on. A timer whose conditions
-  hold when it is armed fires at its first reading.
-- **One-shot.** A fired timer stays in the list, marked fired; re-arming it starts its time limit
-  again, and removing it takes it off the list.
-- **On the screen.** A click on an item, without moving it, selects it: the readout shows it until
-  another is selected, and offers "add timer". The editor (a panel, like the pour panel) lists the
-  item's quantities, the comparisons, the value fields (prefilled with the quantity's value now;
-  typed with the keyboard, or nudged by −/+ at three scales), the time limit (on or off, mm:ss),
-  any or all, and arm or cancel. While the editor is open the clock is paused (at 600× the moment
-  could pass while the timer is written); arming or cancelling plays it on if it was playing. A
-  value that is not a number, or a between whose low end is above
-  its high end, is refused. The list stands in the right-hand column under the readout: per timer
-  its conditions, the value now, the time left and its state, with re-arm and remove.
-- **A tutorial** never restricts the timers' gestures, as it never restricts the clock's.
-- **Keys.** The screen takes keys for the focused field: digits, the decimal point, minus,
-  backspace, enter (arm) and escape (cancel). A host forwards them (`cg_ui_key`).
+- **A timer** counts down.
+- **A monitor** compares a quantity.
+- **An alarm** stops the clock and shows the player what set it off.
 
-**Demo subset:** all of the above. **Status:** Stage 13.
+Parts are **wired** to each other and **rigged** to the lab's controls. Parts belong to the lab:
+they are saved, loaded and digested with it. A bench with no part digests as it did before them,
+so the sessions' records are unchanged.
+
+- **Parts** come from an unlimited drawer, and go back to it.
+  - Commands: `part {kind, at}` (ids `timer1`, `monitor1`, … never used again); `scrap`, or
+    `stow` (the drawer).
+  - Each stands on one square of the bench. Parts hold no matter and are not cells of the world.
+  - They are placed, and moved with a selection, like equipment.
+- **Synchronous evaluation**, at the end of every step:
+  - Every part reads its inputs' signals as they were at the end of the step before, and all are
+    updated together.
+  - So any wiring is well defined and deterministic: loops, and a part wired into itself,
+    included.
+  - Every link, a wire or a rig, takes one step (1/60 s), so a chain of N parts answers in N steps.
+  - The order the parts were made in changes nothing.
+- **Gating.**
+  - A part with no inputs is enabled.
+  - With inputs, a part is enabled while any of them is on: inputs in parallel are OR.
+  - A part signals while its own condition holds and it is enabled. A chain of parts is therefore
+    AND.
+- **A monitor** (`set {part, item, what, measure, compare, value | values}`):
+  - Its own condition is a comparison (§13.2's quantities and comparisons, purity included) of one
+    item's quantity, read every step.
+  - "Reaches" holds when the value lies between its last two readings, ends included.
+  - A monitor not yet set signals nothing.
+- **A timer** (`set {part, seconds}`):
+  - Its preset is shown as hh:mm:ss.mmm and kept in steps; setting it resets it.
+  - It counts down one step per step while the lab runs.
+  - At zero its own condition holds, and stays held until the timer is reset.
+  - Its **reset** control sets it back to its preset. Reset can be done by hand (`reset {timer}`)
+    or by a rig, once per event.
+- **An alarm** has inputs and no output.
+  - It rings in the step its input turns on, and rings until it is answered (`ack`, or the screen
+    playing on).
+  - An alarm with no input never rings.
+  - `advance` may stop at the end of a step in which an alarm started ringing. A session's `wait`
+    does not stop there; `wait_until {rings}` waits for one.
+- **Wires**: `wire {from, to}` and `unwire`. A wire from an alarm is refused, and so is a
+  duplicate.
+- **Rigs**: `rig {from, item, control, on, off}` or `rig {from, item, control, change}`, and
+  `unrig`.
+  - A rig is an input to a control:
+    - a vessel's `stir`: true to stir, false to stop;
+    - a burner's `valve`: 0 to 1;
+    - a timer's `reset`: true.
+  - It gives settings either for its source turning **on** and turning **off**, or for any
+    **change**, never both. A setting left out, or null, leaves the control as it is.
+  - **Events set state, and the last event wins.**
+    - When a rig's source changes, as it was at the end of the step before, and the rig has a
+      setting for that change, the setting is applied at the end of the step.
+    - It is applied through the same paths as the player's own commands; there is no new physics
+      path.
+    - The control keeps that state until the next event from any input.
+  - **Any number of rigs per control.** When several act in one step, they act in the order they
+    were made, so the newest wins.
+  - **The player is another input.** A `stir`, `valve` or `reset` command sets the control in the
+    same way, and every rig stays attached.
+  - The lab keeps each control's last setting, who made it (a part, or the player) and when.
+- **Invariants:** G1 and G2 (§18).
+- **On the screen:**
+  - **Making and placing.**
+    - The drawer stands beside the outbox. A part dragged out of it is made on the square where it
+      is let go, and its settings open.
+    - A part shows its name, its state (a timer's time left, a monitor's comparison), a lamp lit
+      while it signals, and its port on its right.
+    - A drag from a port is a wire:
+      - onto a monitor or an alarm: a wire into it;
+      - onto a timer: a choice, a wire into its input or a rig onto its reset;
+      - onto a vessel or a burner: a rig, whose settings open.
+    - Wires and rigs are drawn as lines, lit while their source signals.
+    - Dropped on equipment or in the outbox, a part is refused, with the reason.
+  - **The editor** (a panel like the pour panel):
+    - a monitor's: the item, the quantity (g, count, size or purity of a species), the comparison,
+      and values typed or nudged at three scales;
+    - a timer's: its preset, typed or nudged by a minute, ten seconds or a second;
+    - a rig's: its form, and each setting, a choice or a valve's per cent.
+
+    Enter sets it, escape cancels, and the clock waits while it is open.
+  - **The readout** for a part: its state, its inputs, its wires and rigs, each with a button that
+    takes it off, and "edit" and "reset". For equipment, each control's last setting, and who made
+    it.
+  - **A ring** pauses the clock. It outlines, pulsing:
+    - the alarm;
+    - the parts upstream that set it off, and the items their monitors watch;
+    - the wires between them.
+
+    It selects the watched item, and names the chain in the message: "alarm1 rang: monitor1,
+    flask: H2O(l) (g) below 10.000 g (now 9.996 g)". Playing on answers it.
+- **A tutorial** restricts the drags out of the drawer and from ports, and the editor's "set", to
+  its step's gestures. The editor's other buttons, like the clock's, are the player's.
+
+**Demo subset:** all of the above. **Full design, not yet built:**
+- circuits (parts collected into one compact part, Stage 14);
+- the notice part (Stage 16);
+- controllers: a monitor with a target and PID gains whose output is a level, set on an analog
+  control or as PWM on a binary one.
+
+**Status:** Stage 13.
 
 ## 14. C API and hosts
 
@@ -1276,6 +1396,8 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the light of the straight path, with nothing reflected; it fires on water's own index | tolerance (float64 rounding) | 11 |
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
+| G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
+| G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
