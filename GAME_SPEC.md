@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.18.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.19.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1364,6 +1364,51 @@ does not judge the player: it says what is wanted, and whether what is there mee
 
 The tutorial's goal is those three met, and the world's totals unchanged; its hand-in failures stay,
 since what is handed in cannot be taken back. Signed off by the user on 2026-11-18 (Stage 17).
+
+### 13.6 The debug panel
+
+What the lab is doing, and why, for the item selected: the state's truth, the last step's flows,
+and each reaction's account of itself (`Lab::debug`).
+
+- **The last step's flows** (`Simulation::flows`, the core): what the step's two primitives moved,
+  summed by process: reactions, heat, drains, settling (gas in and out, boiling and condensing),
+  overflow.
+  - For each edge and process: the energy and the mass moved from one end to the other.
+  - For each cell and reaction (those with a rate law, then those of the equilibrium law): the
+    extent applied.
+  - They are kept whether the step was checked or not, are not state, and equal the ledger's sums
+    (with T1's signs: heat from the hotter cell to the colder).
+- **For the item** (`Lab::debug(item)`):
+  - its temperature and heat capacity;
+  - **what it holds:** each species' amount and mass; its mole fraction in its own mixture (of the
+    gas, of the solution); a solute's molality; its activity;
+  - **its flows** in the last step, each with what is at the edge's other end and the process: heat
+    (W) and matter (g/s), positive into the item;
+  - **each reaction** that names a species it holds: the equation, why it happens (the reaction's
+    `explain` in `data/reactions.json`), its rate in the last step (mol/s), its affinity now
+    (kJ/mol), and **what limits it**.
+- **What limits a reaction**, worked out from its kinetics and the state, the first that applies:
+  - no temperature to weigh it at;
+  - **at equilibrium** (its affinity under a thousandth of RT);
+  - a species it would consume is used up: "no CuO(s) left" (running backwards: "would run
+    backwards, but there is no CuO(s)");
+  - no rate law: it does not run on its own;
+  - the equilibrium law: held at its equilibrium every step;
+  - **running backwards**, with its rate;
+  - the first-order law: **too cold** while its time constant 1/(k |f|) is over a minute, with the
+    temperature from which it is fast ("too cold: 3e-9 mol/s at 120 °C, fast from about 357 °C");
+    otherwise its half-life;
+  - the surface law, using up a solid: its surface (the area of its particles), the activity of
+    its driver, and its stirring;
+  - the surface law, growing a solid: the supersaturation S = e^(A/RT), and new particles a second
+    while none has started; undersaturated, the solid dissolves.
+- **On the screen:** "debug" by the clock opens the panel over the readout, for the item selected.
+  - "step" advances the lab exactly one step (1/60 s), the clock paused; under a tutorial, only
+    while the tutorial lets the clock run.
+  - "export" hands the host the lab's save (`chem-save/1`, `cg_ui_take_export`); the Godot host
+    writes it to `user://saves/`. Loaded, it continues with the same digests (D2).
+
+**Demo subset:** all of the above. Signed off by the user on 2026-11-18 (Stage 18).
 
 ## 14. C API and hosts
 

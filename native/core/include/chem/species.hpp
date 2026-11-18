@@ -229,6 +229,7 @@ struct ReactionNote {
 	std::string_view id;
 	int level = 0;
 	std::string_view says;
+	std::string_view explain; // why it happens (GAME_SPEC §13.6, "explain")
 };
 std::span<const ReactionNote> builtin_reaction_notes();
 

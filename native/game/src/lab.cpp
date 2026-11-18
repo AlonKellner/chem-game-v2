@@ -157,6 +157,11 @@ std::string text_of(const std::string &format, double v) {
 	std::snprintf(buffer, sizeof buffer, format.c_str(), v);
 	return buffer;
 }
+std::string text_of(const std::string &format, double v, double w) {
+	char buffer[256];
+	std::snprintf(buffer, sizeof buffer, format.c_str(), v, w);
+	return buffer;
+}
 
 // a species as the readout names it: "CuSO4.5H2O(s)"
 std::string named(const SpeciesTable &table, SpeciesId s) {
@@ -2491,6 +2496,216 @@ LabView Lab::view() const {
 		char when[48];
 		std::snprintf(when, sizeof when, " at %.1f s", static_cast<double>(e.step) * STEP_SECONDS);
 		out.events.push_back("the " + e.item + (e.what == "burst" ? " burst" : " " + e.what) + when);
+	}
+	return out;
+}
+
+namespace {
+
+// what limits a reaction (GAME_SPEC §13.6), from its kinetics and the cell now
+std::string limit_of(const SpeciesTable &table, const World &world, CellId cell, const Reaction &reaction, double a, double kelvin, double rate) {
+	const std::span<const Term> terms = reaction.terms();
+	const CellState &state = world.snapshot_cell(cell);
+	const double rt = GAS_CONSTANT * kelvin;
+	if (std::fabs(a) < 1e-3 * rt) {
+		return "at equilibrium";
+	}
+	const bool forward = a > 0.0;
+	const Kinetics &k = reaction.kinetics();
+	const bool grows = k.law == Kinetics::Law::Surface && reaction.nu(k.in) > 0; // makes its solid: crystals
+	// what it would consume either way, used up: forward, or both ways at once, it is short of a reactant
+	SpeciesId short_forward, short_backward;
+	for (const Term &t : terms) {
+		SpeciesId &first = t.nu < 0 ? short_forward : short_backward;
+		if (state.amount[static_cast<size_t>(t.species.index)] == 0 && !table.has(first)) {
+			first = t.species;
+		}
+	}
+	if (forward && table.has(short_forward)) {
+		return "no " + named(table, short_forward) + " left";
+	}
+	if (!forward && table.has(short_backward)) {
+		return table.has(short_forward) ? "no " + named(table, short_forward) + " left" : "would run backwards, but there is no " + named(table, short_backward);
+	}
+	if (k.law == Kinetics::Law::None) {
+		return "it does not run on its own: no rate law";
+	}
+	if (k.law == Kinetics::Law::Equilibrium) {
+		return "fast: held at its equilibrium every step";
+	}
+	const double s_ratio = a / rt < 700.0 ? std::exp(a / rt) : HUGE_VAL; // the supersaturation, for crystals
+	if (grows) {
+		const auto in = static_cast<size_t>(k.in.index);
+		if (!forward) {
+			return text_of("undersaturated (S = %.4f): the crystals dissolve", s_ratio);
+		}
+		if (state.amount[in] == 0 || state.particles[in] == 0) {
+			double liquid = 0.0;
+			for (size_t s = 0; s < state.amount.size(); ++s) {
+				liquid += table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid ? static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * 0.018015 : 0.0;
+			}
+			const double born = k.nucleation * liquid * std::pow(s_ratio - 1.0, k.nucleation_order);
+			return text_of("supersaturated (S = %.4f): no crystals yet, %.3g starting a second", s_ratio, born);
+		}
+		return text_of("supersaturated (S = %.4f): growing on ", s_ratio) + text_of("%.0f crystals", static_cast<double>(state.particles[in]));
+	}
+	if (!forward) {
+		return text_of("running backwards: %.3g mol/s", -rate);
+	}
+	const double f = 1.0 - std::exp(-a / rt);
+	const double rate_constant = k.prefactor * std::exp(-k.activation / rt);
+	if (k.law == Kinetics::Law::FirstOrder) {
+		const double tau = 1.0 / (rate_constant * f);
+		if (tau > 60.0 && k.activation > 0.0) {
+			const double ln = std::log(k.prefactor * 60.0);
+			return ln > 0.0 ? text_of("too cold: %.3g mol/s at %.0f C", rate, kelvin - 273.15) + text_of(", fast from about %.0f C", k.activation / (GAS_CONSTANT * ln) - 273.15)
+							: text_of("too slow: %.3g mol/s, at any temperature", rate);
+		}
+		return text_of("fast: half of it goes in %.3g s", 0.6931471805599453 * tau);
+	}
+	// the surface law, using up its solid
+	const SpeciesDef &solid = table.species(k.in);
+	const auto in = static_cast<size_t>(k.in.index);
+	const double mol = static_cast<double>(state.amount[in]) * MOL_PER_QUANTUM;
+	const double area = 4.835975862049409 * std::cbrt(static_cast<double>(state.particles[in])) * std::pow(mol * solid.molar_volume, 2.0 / 3.0); // m^2
+	std::string says = text_of("limited by its surface: %.3g cm2 of ", area * 1e4) + named(table, k.in);
+	if (table.has(k.driver)) {
+		says += text_of(", %.3g mol/kg of ", activity(table, state, k.driver)) + named(table, k.driver);
+	}
+	const double mixing = world.meta(cell).mixing;
+	says += mixing < 3.0 ? text_of("; stirring would make it %.0f times faster", 3.0 / mixing) : std::string("; stirred");
+	return says;
+}
+
+std::string equation_of(const SpeciesTable &table, const Reaction &reaction) {
+	std::string left, right;
+	for (const Term &t : reaction.terms()) {
+		std::string &side = t.nu < 0 ? left : right;
+		const int n = t.nu < 0 ? -t.nu : t.nu;
+		side += (side.empty() ? "" : " + ") + (n == 1 ? std::string() : std::to_string(n) + " ") + named(table, t.species);
+	}
+	return left + " -> " + right;
+}
+
+} // namespace
+
+ItemDebug Lab::debug(const std::string &id) const {
+	const Impl &m = *impl_;
+	const SpeciesTable &table = m.table();
+	const World &world = m.world();
+	ItemDebug out;
+	out.item = id;
+	const int i = m.find(id);
+	if (i < 0 || m.items[static_cast<size_t>(i)].kind == Kind::Burner) {
+		return out;
+	}
+	out.found = true;
+	const CellId cell = m.items[static_cast<size_t>(i)].cell;
+	const CellState &state = world.snapshot_cell(cell);
+	const Thermal thermal = thermal_state(table, state);
+	out.has_temperature = thermal.defined;
+	out.celsius = thermal.temperature - 273.15;
+	out.heat_capacity = thermal.heat_capacity;
+	// what it holds
+	double gas = 0.0, solution = 0.0, liquid = 0.0;
+	for (size_t s = 0; s < state.amount.size(); ++s) {
+		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		const double n = static_cast<double>(state.amount[s]);
+		gas += def.phase == Phase::Gas ? n : 0.0;
+		solution += def.phase == Phase::Liquid || def.phase == Phase::Aqueous ? n : 0.0;
+		liquid += def.phase == Phase::Liquid ? n : 0.0;
+	}
+	for (size_t s = 0; s < state.amount.size(); ++s) {
+		const SpeciesId sid{ static_cast<int32_t>(s) };
+		const SpeciesDef &def = table.species(sid);
+		if (state.amount[s] == 0 || def.wall) {
+			continue;
+		}
+		static const char PHASE[] = { 's', 'l', 'g', 'a' };
+		SpeciesDebug d;
+		d.species = std::string(def.id);
+		d.formula = named(table, sid);
+		d.phase = PHASE[static_cast<int>(def.phase)];
+		const double n = static_cast<double>(state.amount[s]);
+		d.mol = n * MOL_PER_QUANTUM;
+		d.g = d.mol * static_cast<double>(table.molar_mass_ug(sid)) * 1e-6;
+		d.fraction = def.phase == Phase::Gas ? n / gas : def.phase == Phase::Solid ? 1.0 : n / solution;
+		d.molality = def.phase == Phase::Aqueous && liquid > 0.0 ? n / (liquid * MOL_PER_QUANTUM * 0.018015) * MOL_PER_QUANTUM : 0.0;
+		d.activity = activity(table, state, sid);
+		out.species.push_back(d);
+	}
+	// its flows in the last step, into it
+	const StepFlows &f = m.sim->flows();
+	const std::span<const Edge> edges = world.edges();
+	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow" };
+	for (size_t e = 0; e < edges.size() && (e + 1) * PROCESSES <= f.energy.size(); ++e) {
+		if (edges[e].a != cell && edges[e].b != cell) {
+			continue;
+		}
+		const double sign = edges[e].b == cell ? 1.0 : -1.0;
+		const CellId other = edges[e].a == cell ? edges[e].b : edges[e].a;
+		for (size_t p = 0; p < PROCESSES; ++p) {
+			const int64_t q = f.energy[e * PROCESSES + p];
+			const double g = f.grams[e * PROCESSES + p];
+			if (q == 0 && g == 0.0) {
+				continue;
+			}
+			out.flows.push_back(FlowDebug{ world.cell_name(other), PROCESS[p], sign * static_cast<double>(q) * JOULE_PER_QUANTUM / STEP_SECONDS, sign * g / STEP_SECONDS });
+		}
+	}
+	// each reaction that names a species it holds
+	const std::span<const ReactionNote> notes = builtin_reaction_notes();
+	const std::span<const Reaction> all = builtin_reactions();
+	for (size_t r = 0; r < all.size(); ++r) {
+		const Reaction &reaction = all[r];
+		bool names = false;
+		for (const Term &t : reaction.terms()) {
+			names = names || state.amount[static_cast<size_t>(t.species.index)] > 0;
+		}
+		if (!names) {
+			continue;
+		}
+		ReactionDebug d;
+		d.id = std::string(reaction.id());
+		d.equation = equation_of(table, reaction);
+		d.explain = r < notes.size() ? std::string(notes[r].explain) : std::string();
+		// the last step's extent: the simulation's rated reactions, then its equilibria
+		size_t at = SIZE_MAX;
+		for (size_t k = 0; k < m.sim->rated().size(); ++k) {
+			at = m.sim->rated()[k].id() == reaction.id() ? k : at;
+		}
+		for (size_t k = 0; k < m.sim->equilibria().size(); ++k) {
+			at = m.sim->equilibria()[k].id() == reaction.id() ? m.sim->rated().size() + k : at;
+		}
+		const size_t slot = static_cast<size_t>(cell.index) * f.reactions + at;
+		if (at != SIZE_MAX && slot < f.extent.size()) {
+			d.rate_mol_s = static_cast<double>(f.extent[slot]) * MOL_PER_QUANTUM / STEP_SECONDS;
+		}
+		if (!thermal.defined) {
+			d.limit = "no temperature to weigh it at";
+		} else {
+			bool defined = false;
+			const double a = affinity(table, state, reaction.terms(), thermal.temperature, defined);
+			d.weighed = defined;
+			d.affinity_kj = a / 1000.0;
+			if (defined) {
+				d.limit = limit_of(table, world, cell, reaction, a, thermal.temperature, d.rate_mol_s);
+			} else { // not weighed: still short of a reactant, or with no rate law; else why it cannot be
+				bool solute = false;
+				for (const Term &t : reaction.terms()) {
+					if (d.limit.empty() && t.nu < 0 && state.amount[static_cast<size_t>(t.species.index)] == 0) {
+						d.limit = "no " + named(table, t.species) + " left";
+					}
+					solute = solute || table.species(t.species).phase == Phase::Aqueous;
+				}
+				if (d.limit.empty()) {
+					d.limit = reaction.kinetics().law == Kinetics::Law::None ? "it does not run on its own: no rate law"
+							: solute && liquid == 0.0								 ? "it cannot be weighed here: a solute with no liquid to hold it"
+																					 : "it cannot be weighed here: a species it names has no thermodynamic data";
+				}
+			}
+		}
+		out.reactions.push_back(d);
 	}
 	return out;
 }

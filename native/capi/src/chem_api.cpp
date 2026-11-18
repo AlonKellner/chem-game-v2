@@ -531,6 +531,14 @@ const char *cg_ui_message(cg_ui *ui) {
 	return ui != nullptr ? ui->ui->message().c_str() : "";
 }
 
+const char *cg_ui_take_export(cg_ui *ui) {
+	if (ui == nullptr) {
+		return "";
+	}
+	ui->text = ui->ui->take_export();
+	return ui->text.c_str();
+}
+
 const char *cg_ui_report(cg_ui *ui) {
 	if (ui == nullptr) {
 		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_report: null ui");

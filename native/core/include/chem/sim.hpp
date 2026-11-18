@@ -19,6 +19,20 @@ namespace chem {
 // per frame; it never changes the step (GAME_SPEC §3).
 inline constexpr double STEP_SECONDS = 1.0 / 60.0;
 
+// The last step's flows (GAME_SPEC §13.6): what the step's primitives moved,
+// summed by process. Kept whether the step was traced or not; not state.
+enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4 };
+inline constexpr size_t PROCESSES = 5;
+struct StepFlows {
+	// per edge and process (edge * PROCESSES + process): from the edge's a to its b
+	std::vector<int64_t> energy; // quanta
+	std::vector<double> grams;
+	// per cell and reaction (cell * reactions + r; the rated ones, then the
+	// equilibria): the extent applied, in quanta, forward positive
+	std::vector<int64_t> extent;
+	size_t reactions = 0; // rated + equilibria
+};
+
 class Simulation {
 public:
 	// `reactions` are the ones that run on their own, in every cell, in this
@@ -67,6 +81,9 @@ public:
 	const std::vector<int64_t> &tally_all() const { return tally_; }
 	void restore_tally(std::vector<int64_t> tally) { tally_ = std::move(tally); }
 
+	// The last step's flows (GAME_SPEC §13.6), empty before the first step.
+	const StepFlows &flows() const { return flows_; }
+
 private:
 	void begin_step();
 	const Thermal &thermal(CellId cell);
@@ -93,6 +110,8 @@ private:
 	std::vector<double> reaction_remainder_;
 	std::vector<double> nucleation_remainder_;
 	std::vector<int64_t> tally_; // cell * reactions + reaction
+	StepFlows flows_;
+	Process process_ = Process::Reaction; // what the primitives are applied for now
 	std::vector<uint8_t> starved_;
 	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
 	std::vector<uint8_t> thermal_valid_;

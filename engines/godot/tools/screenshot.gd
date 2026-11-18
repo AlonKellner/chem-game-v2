@@ -186,6 +186,10 @@ func _play(dir: String) -> void:
 	_click("notices") # what the lab told of the demo (GAME_SPEC §13.4)
 	await _shoot(dir, "10_notices")
 	_click("notices")
+	_click("item:flask") # chosen, it is looked inside (GAME_SPEC §13.6)
+	_click("debug")
+	await _shoot(dir, "13_debug")
+	_click("debug")
 	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
 	_lab.queue_free()
 	await process_frame

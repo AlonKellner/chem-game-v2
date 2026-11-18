@@ -105,6 +105,39 @@ struct LabView {
 	std::vector<Goal> goals; // §13.5: in the order they were made, the bench's first
 };
 
+// The debug panel (GAME_SPEC §13.6): what an item holds, its flows in the
+// last step, and each reaction's account of itself.
+struct SpeciesDebug {
+	std::string species, formula; // "water", "H2O(l)"
+	char phase = 's'; // s, l, g; a for dissolved
+	double mol = 0.0, g = 0.0;
+	double fraction = 1.0; // its mole fraction in its own mixture: of the gas, of the solution; 1 for a solid
+	double molality = 0.0; // a solute's, mol/kg of water
+	double activity = 0.0;
+};
+struct FlowDebug {
+	std::string with; // the other end: an item, "room", "air", "tray", "<item>.coolant"
+	std::string process; // heat, drain, settle, overflow
+	double watts = 0.0; // into the item
+	double grams_per_s = 0.0; // into the item
+};
+struct ReactionDebug {
+	std::string id, equation, explain;
+	double rate_mol_s = 0.0; // the last step's extent, forward positive
+	bool weighed = false; // its affinity is defined here
+	double affinity_kj = 0.0; // now, kJ/mol (may be infinite)
+	std::string limit; // what limits it
+};
+struct ItemDebug {
+	std::string item;
+	bool found = false;
+	bool has_temperature = false;
+	double celsius = 0.0, heat_capacity = 0.0; // J/K
+	std::vector<SpeciesDebug> species;
+	std::vector<FlowDebug> flows;
+	std::vector<ReactionDebug> reactions;
+};
+
 class Lab {
 public:
 	// A bench (data/benches/*.json, "chem-bench/1"): the room, and the
@@ -140,6 +173,9 @@ public:
 	bool rang() const;
 	// What is where, measured, as plain data.
 	LabView view() const;
+	// An item from the inside (GAME_SPEC §13.6): its composition, its flows in
+	// the last step, its reactions and what limits each.
+	ItemDebug debug(const std::string &item) const;
 	// What is where, measured (JSON; GAME_SPEC §13: reports are functions of state).
 	std::string report() const;
 	// SHA-256 of the whole state: amounts, energies, particles, the processes'

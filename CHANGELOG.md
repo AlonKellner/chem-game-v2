@@ -1,5 +1,25 @@
 # GAME_SPEC version history
 
+## 0.19.0 (2026-11-18, Stage 18)
+
+Signed off by the user on 2026-11-18 ("Approved, proceed").
+
+- §13.6 added: the debug panel.
+  - **The core** keeps the last step's flows by process (`Simulation::flows`): each edge's energy
+    and mass by reaction, heat, drain, settling and overflow, and each cell's extent of every
+    reaction. They are the ledger's sums, whether the step was checked or not, at no measurable
+    cost (4.40 us a step against 4.42).
+  - **The lab** (`Lab::debug`) tells an item from the inside: its temperature and heat capacity;
+    each species' amount, mole fraction in its mixture, molality and activity; its flows in the
+    last step; each reaction that names what it holds, with why it happens (`explain` in
+    `data/reactions.json`), its rate and affinity, and what limits it.
+  - **What limits a reaction:** at equilibrium; used up; no rate law; held at its equilibrium; running
+    backwards; too cold, with the temperature it is fast from, or its half-life; its surface,
+    driver and stirring; the supersaturation and the crystals starting or growing.
+  - **The screen:** "debug" by the clock opens the panel for the item selected, with "step" (one
+    step), "export" (the save, written by the Godot host to `user://saves/`) and scrolling.
+- §14: `cg_ui_take_export`.
+
 ## 0.18.0 (2026-11-18, Stage 17)
 
 Signed off by the user on 2026-11-18 ("Approved, proceed").

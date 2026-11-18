@@ -52,6 +52,8 @@ public:
 	godot::Vector2 locate(const godot::String &what) const;
 	godot::String report() const;
 	godot::String message() const;
+	// Where the debug panel's last export was written (user://saves/...), "" for none (§13.6).
+	godot::String exported() const;
 	// For looking at the optical pass alone, and at the screen without it.
 	void set_flat_visible(bool on);
 	void set_optics_visible(bool on);
@@ -85,6 +87,8 @@ private:
 	void paint(godot::CanvasItem *on, bool above);
 	void paint_over(); // the overlay's draw signal
 	void optics_frame(); // on the render thread
+	void keep_export(); // the debug panel's export, written to user://saves/
+	godot::String exported_;
 
 	cg_ui *ui_ = nullptr;
 	bool down_ = false;
