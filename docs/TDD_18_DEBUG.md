@@ -15,7 +15,7 @@ GAME_SPEC §13.6.
 | 18.3 | The data: each reaction's `explain`, embedded by `chem_datagen` beside its notice | Done |
 | 18.4 | The lab: `Lab::debug`, an item's composition, flows and reactions, and what limits each | Done |
 | 18.5 | The screen, the C API and the host: the panel, a single step, the export to `user://saves/` | Done |
-| 18.6 | The user plays it (`make run`) and signs off | Pending |
+| 18.6 | The user plays it (`make run`) and signs off: "Approved, proceed" (2026-11-18) | Done |
 
 ## Decisions
 

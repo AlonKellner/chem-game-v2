@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 18)
+## 0.19.0 (2026-11-18, Stage 18)
+
+Signed off by the user on 2026-11-18 ("Approved, proceed").
 
 - §13.6 added: the debug panel.
   - **The core** keeps the last step's flows by process (`Simulation::flows`): each edge's energy

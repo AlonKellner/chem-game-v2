@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.18.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.19.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1408,7 +1408,7 @@ and each reaction's account of itself (`Lab::debug`).
   - "export" hands the host the lab's save (`chem-save/1`, `cg_ui_take_export`); the Godot host
     writes it to `user://saves/`. Loaded, it continues with the same digests (D2).
 
-**Demo subset:** all of the above. **Status:** Stage 18.
+**Demo subset:** all of the above. Signed off by the user on 2026-11-18 (Stage 18).
 
 ## 14. C API and hosts
 
