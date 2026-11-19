@@ -276,6 +276,40 @@ float backdrop(float x, float y, int body) {
 	return seen;
 }
 
+// The wall seen through a footprint (GAME_SPEC §12.3, Stage 20): its average over [x0, x1] x [y0, y1],
+// the bench's share of it and then each drawn shape's, in painting order, each over the wall beneath it.
+// Exact unless two drawn shapes overlap inside the footprint (grid lines crossing: a line's width squared).
+float backdrop_area(float x0, float x1, float y0, float y1, int body) {
+	if (x1 - x0 < 1.0e-4) {
+		return backdrop(0.5 * (x0 + x1), 0.5 * (y0 + y1), body);
+	}
+	vec4 head = scene_vec(0);
+	vec4 bench = scene_vec(1);
+	float area = (x1 - x0) * (y1 - y0);
+	float on = max(min(x1, bench.x + bench.z) - max(x0, bench.x), 0.0) * max(min(y1, bench.y + bench.w) - max(y0, bench.y), 0.0) / area;
+	float seen = on * head.y + (1.0 - on) * head.z;
+	vec4 bend = scene_vec(HEADER_VECS + body * BODY_VECS + 5);
+	int first = int(bend.y);
+	int count = int(bend.z);
+	for (int k = 0; k < 32; k++) {
+		if (k >= count) {
+			break;
+		}
+		vec4 r = scene_vec(SHAPE_BASE + 2 * (first + k));
+		float w = min(x1, r.x + r.z) - max(x0, r.x);
+		float h = min(y1, r.y + r.w) - max(y0, r.y);
+		if (w <= 0.0 || h <= 0.0) {
+			continue;
+		}
+		// the wall beneath it: the bench's or the room's, at the overlap's middle
+		float mx = 0.5 * (max(x0, r.x) + min(x1, r.x + r.z));
+		float my = 0.5 * (max(y0, r.y) + min(y1, r.y + r.w));
+		float under = mx >= bench.x && mx < bench.x + bench.z && my >= bench.y && my < bench.y + bench.w ? head.y : head.z;
+		seen = seen + w * h / area * (scene_vec(SHAPE_BASE + 2 * (first + k) + 1).x - under);
+	}
+	return seen;
+}
+
 // what a vessel does to the view at nm (GAME_SPEC §12.3): where the bent ray meets the wall (x, on the
 // screen), what all its surfaces let through (pass, Fresnel), and the chord of its liquid the ray crosses (cm)
 struct Bend {
@@ -423,17 +457,13 @@ Bend bend_at(Path q, float nm) {
 	return b;
 }
 
-// the share of the room's light at nm that reaches the eye: off the backdrop, through every body in front of it;
-// a vessel bends the view: the wall is read where the bent ray lands, its liquid along the ray's own chord, and
-// what its surfaces turn away shows the room in front
-float through(Path q, float nm) {
-	float seen = q.back;
-	Bend b = bend_at(q, nm);
+// what one ray brings: off the wall at `wall` (already read, through a footprint or at a point), through
+// every body in front of it, the refracting one along the ray's own chord, what its surfaces turn away
+// showing the room in front
+float along(Path q, float nm, Bend b, float wall) {
+	float seen = q.refractor >= 0 ? wall : q.back;
 	float chord = b.chord;
 	float pass = b.pass;
-	if (q.refractor >= 0) {
-		seen = backdrop(b.x, q.y, q.refractor);
-	}
 	if (q.layers > 0) {
 		seen = through_layer(q.l0, seen, nm, q.l0.body == q.refractor ? chord * q.l0.wet : q.l0.depth_cm);
 	}
@@ -450,6 +480,77 @@ float through(Path q, float nm) {
 		seen = pass * seen + (1.0 - pass) * scene_vec(2).y;
 	}
 	return seen;
+}
+
+// The rays of the pixel from a to z across (as the distance from the refractor's axis, cm), given the ray at
+// a: where the rays at a, between and z take one route and the middle one lands between the others as a
+// straight map would put it, they land in an interval of the wall, a pixel high, read exactly (GAME_SPEC
+// §12.3, Stage 20).
+struct Part {
+	bool even;
+	float light;
+	Bend right;
+};
+
+Part part_of(Path q, float nm, float a, float z, Bend left, Bend mid) {
+	Path side = q;
+	side.rd = z;
+	Part p;
+	p.right = bend_at(side, nm);
+	side.rd = 0.5 * (a + z);
+	p.even = left.route == mid.route && p.right.route == mid.route && abs(mid.x - 0.5 * (left.x + p.right.x)) <= 0.02 + 0.02 * abs(p.right.x - left.x);
+	p.light = 0.0;
+	if (p.even) {
+		// each half of the rays on its own half of the landing: the map's bend across the part followed
+		float wall = 0.5 * backdrop_area(min(left.x, mid.x), max(left.x, mid.x), q.y - 0.5, q.y + 0.5, q.refractor) +
+				0.5 * backdrop_area(min(mid.x, p.right.x), max(mid.x, p.right.x), q.y - 0.5, q.y + 0.5, q.refractor);
+		p.light = along(side, nm, mid, wall);
+	}
+	return p;
+}
+
+// the share of the room's light at nm that reaches the eye.
+// A pixel is the light of all its rays (GAME_SPEC §12.3, Stage 20): read as one part where it is smooth;
+// else in eighths, each read exactly where it is smooth itself, and an eighth that is not (a rim, a ray
+// turned back, a fold) at one ray, jx across it (a moving point's own place, so the history settles on the
+// average), or at four for the truth (jx < 0).
+float through(Path q, float nm, float jx) {
+	Bend b = bend_at(q, nm);
+	if (q.refractor < 0) {
+		return along(q, nm, b, q.back);
+	}
+	float a0 = q.rd - 0.5 * q.rcm;
+	Path side = q;
+	side.rd = a0;
+	Bend left = bend_at(side, nm);
+	Part whole = part_of(q, nm, a0, q.rd + 0.5 * q.rcm, left, b);
+	if (whole.even) {
+		return whole.light;
+	}
+	float total = 0.0;
+	for (int k = 0; k < 8; k++) {
+		float a = a0 + float(k) / 8.0 * q.rcm;
+		float z = a0 + float(k + 1) / 8.0 * q.rcm;
+		side.rd = 0.5 * (a + z);
+		Part eighth = part_of(q, nm, a, z, left, bend_at(side, nm));
+		if (eighth.even) {
+			total = total + eighth.light;
+		} else {
+			int places = jx < 0.0 ? 4 : 1;
+			float sum = 0.0;
+			for (int t = 0; t < 4; t++) {
+				if (t >= places) {
+					break;
+				}
+				side.rd = a + (jx < 0.0 ? (float(t) + 0.5) / 4.0 : jx) * (z - a);
+				Bend bt = bend_at(side, nm);
+				sum = sum + along(side, nm, bt, backdrop(bt.x, q.y, q.refractor));
+			}
+			total = total + sum / float(places);
+		}
+		left = eighth.right;
+	}
+	return total / 8.0;
 }
 
 // ---- the light in bands of equal energy
@@ -541,12 +642,13 @@ Cuts cuts_of(Path q) {
 		vec4 bend = scene_vec(HEADER_VECS + q.refractor * BODY_VECS + 5);
 		int first = int(bend.y);
 		int count = int(bend.z);
+		// the route the centre's ray takes; and where the footprint's ends, the pixel's left and right edges'
+		// rays, cross an edge on the wall: between those its light changes fastest (GAME_SPEC §12.3, Stage 20)
 		float u0 = 0.0;
 		Bend b0 = bend_at(q, share(0.0).x + 380.0);
 		for (int k = 1; k <= 16; k++) {
 			float u1 = float(k) / 16.0;
 			Bend b1 = bend_at(q, share(u1).x + 380.0);
-			// the route changes between them
 			if (b1.route != b0.route) {
 				float a = u0;
 				float z = u1;
@@ -560,43 +662,55 @@ Cuts cuts_of(Path q) {
 				}
 				c = add_cut(c, 0.5 * (a + z));
 			}
-			// an edge is passed between them: the bench's two sides, and each drawn shape's at the pixel's height
-			float lo = min(b0.x, b1.x);
-			float hi = max(b0.x, b1.x);
-			for (int e = 0; e < 2 + 2 * 32; e++) {
-				float edge = 0.0;
-				if (e < 2) {
-					edge = e == 0 ? bench.x : bench.x + bench.z;
-				} else {
-					int sh = (e - 2) / 2;
-					if (sh >= count) {
-						break;
-					}
-					vec4 r = scene_vec(SHAPE_BASE + 2 * (first + sh));
-					if (q.y < r.y || q.y >= r.y + r.w) {
-						continue;
-					}
-					edge = (e - 2) % 2 == 0 ? r.x : r.x + r.z;
-				}
-				if (edge <= lo || edge > hi || c.count >= MAX_CUTS) {
-					continue;
-				}
-				float a = u0;
-				float z = u1;
-				bool a_below = b0.x < edge;
-				for (int it = 0; it < 14; it++) {
-					float m = 0.5 * (a + z);
-					bool below = bend_at(q, share(m).x + 380.0).x < edge;
-					if (below == a_below) {
-						a = m;
-					} else {
-						z = m;
-					}
-				}
-				c = add_cut(c, 0.5 * (a + z));
-			}
 			u0 = u1;
 			b0 = b1;
+		}
+		for (int end_k = 0; end_k < 2; end_k++) {
+			Path side = q;
+			side.rd = q.rd + (end_k == 0 ? -0.5 : 0.5) * q.rcm;
+			u0 = 0.0;
+			b0 = bend_at(side, share(0.0).x + 380.0);
+			for (int k = 1; k <= 16; k++) {
+				float u1 = float(k) / 16.0;
+				Bend b1 = bend_at(side, share(u1).x + 380.0);
+				// an edge is passed between them: the bench's two sides, and each drawn shape's at the pixel's height
+				float lo = min(b0.x, b1.x);
+				float hi = max(b0.x, b1.x);
+				for (int e = 0; e < 2 + 2 * 32; e++) {
+					float edge = 0.0;
+					if (e < 2) {
+						edge = e == 0 ? bench.x : bench.x + bench.z;
+					} else {
+						int sh = (e - 2) / 2;
+						if (sh >= count) {
+							break;
+						}
+						vec4 r = scene_vec(SHAPE_BASE + 2 * (first + sh));
+						if (q.y < r.y || q.y >= r.y + r.w) {
+							continue;
+						}
+						edge = (e - 2) % 2 == 0 ? r.x : r.x + r.z;
+					}
+					if (edge <= lo || edge > hi || c.count >= MAX_CUTS) {
+						continue;
+					}
+					float a = u0;
+					float z = u1;
+					bool a_below = b0.x < edge;
+					for (int it = 0; it < 14; it++) {
+						float m = 0.5 * (a + z);
+						bool below = bend_at(side, share(m).x + 380.0).x < edge;
+						if (below == a_below) {
+							a = m;
+						} else {
+							z = m;
+						}
+					}
+					c = add_cut(c, 0.5 * (a + z));
+				}
+				u0 = u1;
+				b0 = b1;
+			}
 		}
 	}
 	// ascending (insertion sort)
@@ -640,7 +754,7 @@ vec3 batch(Path q, int n, float offset, Cuts cuts) {
 			float hi = j < cuts.count && cuts.u[j] < band_hi ? cuts.u[j] : band_hi;
 			vec4 upto = share(hi);
 			float nm = share(lo + offset * (hi - lo)).x + 380.0;
-			sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through(q, nm);
+			sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through(q, nm, fract(offset * 2.6180339887 + float(b) * 0.6180339887 + float(r) * 0.4142135624 + 0.37));
 			before = upto;
 			lo = hi;
 			if (hi >= band_hi) {
@@ -661,7 +775,7 @@ vec3 truth(Path q, int shares) {
 		vec4 a = share(float(j) / float(shares));
 		vec4 b = share(float(j + 1) / float(shares));
 		float nm = share((float(j) + 0.5) / float(shares)).x + 380.0;
-		sum = sum + vec3(b.y - a.y, b.z - a.z, b.w - a.w) * through(q, nm);
+		sum = sum + vec3(b.y - a.y, b.z - a.z, b.w - a.w) * through(q, nm, -1.0);
 	}
 	return to_linear_srgb(sum);
 }

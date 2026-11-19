@@ -8,6 +8,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
+#include <vector>
 
 namespace lab {
 
@@ -109,8 +111,8 @@ inline vec4 mix(const vec4 &a, const vec4 &b, double t) {
 	return a * (1.0 - t) + b * t;
 }
 
-// the scene being drawn
-const OpticsScene *current = nullptr;
+// the scene being drawn (one a thread: the comparison below runs on several)
+thread_local const OpticsScene *current = nullptr;
 inline vec4 scene_vec(int i) {
 	const float *v = &current->table[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -165,7 +167,7 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm) {
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	return shader::through(shader::at(x, y), nm);
+	return shader::through(shader::at(x, y), nm, -1.0);
 }
 
 double optics_cover(const OpticsScene &scene, int x, int y) {
@@ -272,8 +274,9 @@ Exact exact_bend(const shader::Path &q, double nm) {
 				}
 			}
 		} else {
-			for (const double r : { q.rr, ri }) {
-				if (r <= 0.0 || (r == ri && q.rt <= 0.0)) {
+			for (int k = 0; k < 2; ++k) {
+				const double r = k == 0 ? q.rr : ri; // the outer surface, then the inner, if there is glass
+				if (r <= 0.0 || (k == 1 && q.rt <= 0.0)) {
 					continue;
 				}
 				const double b = ox * ux + oz * uz, c = ox * ox + oz * oz - r * r, disc = b * b - c;
@@ -408,6 +411,75 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 	rgb[0] = c.x;
 	rgb[1] = c.y;
 	rgb[2] = c.z;
+}
+
+std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, double radiance, OpticsThrough through) {
+	if (!shader::ready(scene)) {
+		return "O7: the scene is not ready";
+	}
+	namespace L = optics_layout;
+	OpticsScene even = scene;
+	even.table[0 * 4 + 1] = even.table[0 * 4 + 2] = static_cast<float>(radiance); // the wall, on the bench and off it
+	even.table[2 * 4 + 1] = static_cast<float>(radiance); // the room in front, which the glass reflects
+	for (int b = 0; b < L::MAX_BODIES; ++b) {
+		even.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::REFRACT) * 4 + 2] = 0.0f; // nothing drawn behind it
+		for (const int row : { L::LIQUID_ROW, L::WALL_ROW }) {
+			for (int i = 0; i < L::ROW; ++i) {
+				even.rows[static_cast<size_t>((b * L::ROWS_PER_BODY + row) * L::ROW + i)] = 0.0f; // nothing absorbs
+			}
+		}
+	}
+	for (size_t i = 2; i < even.lines.size(); i += 4) {
+		even.lines[i] = 0.0f;
+	}
+	const OpticsThrough read = through != nullptr ? through : optics_through;
+	for (int y = y0; y < y1; ++y) {
+		for (int x = x0; x < x1; ++x) {
+			if (optics_cover(even, x, y) <= 0.0) {
+				continue;
+			}
+			for (const double nm : { 430.0, 550.0, 670.0 }) {
+				const double seen = read(even, x, y, nm);
+				if (std::fabs(seen - radiance) > 1e-6 * radiance) {
+					char buffer[200];
+					std::snprintf(buffer, sizeof buffer, "O7: pixel (%d, %d) at %.0f nm shows %.9g of a uniform wall of %.9g", x, y, nm, seen, radiance);
+					return buffer;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through) {
+	if (!shader::ready(with_line) || !shader::ready(without)) {
+		return "O8: a scene is not ready";
+	}
+	const OpticsThrough read = through != nullptr ? through : optics_through;
+	double shown = 0.0;
+	for (int x = x0; x < x1; ++x) {
+		shown += read(with_line, x, row, nm) - read(without, x, row, nm);
+	}
+	// the truth: 1024 rays a pixel across, at the row's middle, each traced exactly (a line's image can be a
+	// tenth of a pixel wide: fewer rays would count it by whole steps)
+	constexpr int RAYS = 1024;
+	double truth = 0.0;
+	for (const OpticsScene *scene : { &with_line, &without }) {
+		const shader::Use use(*scene);
+		double sum = 0.0;
+		for (int x = x0; x < x1; ++x) {
+			for (int i = 0; i < RAYS; ++i) {
+				sum += exact_through(shader::path_of(shader::vec2(x + (i + 0.5) / RAYS, row + 0.5), 1.0 / RAYS), nm);
+			}
+		}
+		truth += (scene == &with_line ? 1.0 : -1.0) * sum / RAYS;
+	}
+	if (std::fabs(shown - truth) > 0.01 * std::fabs(truth) + 1e-6) {
+		char buffer[200];
+		std::snprintf(buffer, sizeof buffer, "O8: the line brings %.6g summed over the pixels of row %d, its rays %.6g", shown, row, truth);
+		return buffer;
+	}
+	return "";
 }
 
 void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
@@ -556,12 +628,13 @@ bool OpticsFrames::restarted(int x, int y) const {
 
 // ---- the GPU's picture against the truth (O4)
 
-OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h) {
+namespace {
+
+// O4 over rows [from, to) of the picture
+OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int w, int from, int to) {
 	OpticsParity out;
-	if (!shader::ready(scene)) {
-		return out;
-	}
-	for (int row = 0; row < h; ++row) {
+	for (int row = from; row < to; ++row) {
+		const uint8_t *rgba = picture + static_cast<size_t>(row) * static_cast<size_t>(w) * 4;
 		for (int col = 0; col < w; ++col, rgba += 4) {
 			// Where a body covers less than a fiftieth of a pixel it is not held to account: whether such a
 			// pixel is in the body at all turns on the last bit of a sum, and float32 and float64 need not agree.
@@ -587,6 +660,35 @@ OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w
 				out.worst_y = row;
 			}
 			out.over += d > EYE_VISIBLE ? 1 : 0;
+		}
+	}
+	return out;
+}
+
+} // namespace
+
+OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h) {
+	if (!shader::ready(scene) || w <= 0 || h <= 0) {
+		return OpticsParity{};
+	}
+	// the truth costs a pixel thousands of rays: the rows are shared among the machine's threads
+	const unsigned threads = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
+	std::vector<OpticsParity> parts(threads);
+	std::vector<std::thread> workers;
+	for (unsigned t = 0; t < threads; ++t) {
+		const int from = static_cast<int>(static_cast<long long>(h) * t / threads), to = static_cast<int>(static_cast<long long>(h) * (t + 1) / threads);
+		workers.emplace_back([&, t, from, to] { parts[t] = compare_rows(scene, rgba, w, from, to); });
+	}
+	OpticsParity out;
+	for (unsigned t = 0; t < threads; ++t) {
+		workers[t].join();
+		const OpticsParity &p = parts[t];
+		out.covered += p.covered;
+		out.over += p.over;
+		if (p.worst > out.worst) {
+			out.worst = p.worst;
+			out.worst_x = p.worst_x;
+			out.worst_y = p.worst_y;
 		}
 	}
 	return out;

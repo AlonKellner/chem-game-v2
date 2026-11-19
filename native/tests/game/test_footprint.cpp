@@ -121,3 +121,43 @@ TEST_CASE("footprint: the tracer lands a cylinder's rays where the closed form d
 		}
 	}
 }
+
+namespace {
+
+// a renderer that brightens where its rays crowd: the light times how far apart its neighbours land (what
+// O7 rules out: bending makes no brightness)
+double crowded(const OpticsScene &scene, int x, int y, double nm) {
+	return lab::optics_through(scene, x, y, nm) * std::fabs(lab::optics_bend(scene, x + 1, y, nm).x - lab::optics_bend(scene, x, y, nm).x);
+}
+
+// a renderer that reads only each pixel's centre ray (what O8 rules out: a line between two centres is lost)
+double centred(const OpticsScene &scene, int x, int y, double nm) {
+	return lab::optics_area_through(scene, x, y, nm, 1);
+}
+
+lab::OpticsShape line_at(float x) {
+	return lab::OpticsShape{ x, 0.0f, 0.3f, 1000.0f, 0.05 };
+}
+
+} // namespace
+
+TEST_CASE("O7: brightness is neither made nor lost by bending: a uniform wall through clear glass and water, and a prism, stays as it is (Stage 20)") {
+	const OpticsScene vessel = scene_with({ line_at(150.0f) });
+	CHECK(lab::check_O7(vessel, static_cast<int>(X) - 1, 140, static_cast<int>(X + W) + 1, 210, 0.6) == "");
+	// it fires on a renderer that brightens where its rays crowd
+	CHECK(lab::check_O7(vessel, static_cast<int>(X) - 1, 140, static_cast<int>(X + W) + 1, 210, 0.6, crowded).rfind("O7", 0) == 0);
+}
+
+TEST_CASE("O8: a thin line keeps its light, wherever the glass puts it: summed over the pixels it is what its rays bring (Stage 20)") {
+	const OpticsScene plain = scene_with({});
+	int lost = 0;
+	for (const float x : { 120.3f, 141.7f, 150.2f, 170.9f, 186.4f }) {
+		CAPTURE(x);
+		const OpticsScene lined = scene_with({ line_at(x) });
+		CHECK(lab::check_O8(lined, plain, LOW, static_cast<int>(X) - 2, static_cast<int>(X + W) + 2, 550.0) == "");
+		lost += lab::check_O8(lined, plain, LOW, static_cast<int>(X) - 2, static_cast<int>(X + W) + 2, 550.0, centred).empty() ? 0 : 1;
+	}
+	// it fires on centre sampling: a line thinner than a pixel is lost between centres, or counted whole
+	CHECK(lost >= 3);
+	MESSAGE("centre sampling misses " << lost << " of the 5 lines");
+}

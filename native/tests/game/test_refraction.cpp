@@ -101,7 +101,7 @@ TEST_CASE("refraction: the indices of water and of laboratory glass, as measured
 	CHECK(chem::optics::refractive_index(chem::builtin::copper_oxide)[100] == 1.0); // none known: air's
 }
 
-TEST_CASE("O5: where every index is 1, refraction changes nothing (Stage 11)") {
+TEST_CASE("O5: where every index is 1, refraction changes nothing: a pixel is the average of its straight rays (Stage 11, 20)") {
 	const ItemView v = vessel(0.5, false); // no glass: with indices of 1 the light's path is the straight one
 	OpticsScene bent = scene_of(v, room(true));
 	const OpticsScene straight = scene_of(v, room(false));
@@ -111,16 +111,27 @@ TEST_CASE("O5: where every index is 1, refraction changes nothing (Stage 11)") {
 			bent.rows[static_cast<size_t>(row * ROW + i)] = 1.0f;
 		}
 	}
-	double worst = 0.0;
+	// a pixel whose rays all go one way is its straight view exactly; one at the rim, where some of its
+	// rays miss the vessel, is the average of its straight rays (Stage 20), as the truth averages them
+	double worst = 0.0, rim_worst = 0.0;
+	int rims = 0;
 	for (int y = LOW - 60; y <= LOW + 10; y += 7) {
 		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); x += 3) {
+			const bool rim = x < static_cast<int>(X) + 2 || x > static_cast<int>(X + W) - 3;
 			for (const double nm : { 420.0, 550.0, 700.0 }) {
 				const double a = lab::optics_through(bent, x, y, nm), b = lab::optics_through(straight, x, y, nm);
-				worst = std::max(worst, std::fabs(a - b) / std::max(b, 1e-300));
+				if (rim) {
+					rim_worst = std::max(rim_worst, std::fabs(a - lab::optics_area_through(bent, x, y, nm, 64)));
+					++rims;
+				} else {
+					worst = std::max(worst, std::fabs(a - b) / std::max(b, 1e-300));
+				}
 			}
 		}
 	}
 	CHECK(worst < 1e-9);
+	CHECK(rims > 0);
+	CHECK(rim_worst < 0.005); // of the room's white
 	// and it fires: water's own index bends and reflects
 	const OpticsScene water = scene_of(v, room(true));
 	CHECK(std::fabs(lab::optics_through(water, AXIS + 30, LOW, 550.0) - lab::optics_through(straight, AXIS + 30, LOW, 550.0)) > 1e-3);

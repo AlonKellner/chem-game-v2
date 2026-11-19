@@ -112,6 +112,17 @@ void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]);
 // reaches the eye at one wavelength, and the colour (every band read; linear sRGB, glow included).
 double optics_area_through(const OpticsScene &scene, int x, int y, double nm, int grid);
 void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]);
+// A renderer's light at a pixel and a wavelength, for the checks below (optics_through by default).
+using OpticsThrough = double (*)(const OpticsScene &scene, int x, int y, double nm);
+// O7 (GAME_SPEC §18, Stage 20): brightness is neither made nor lost by bending. The scene is made
+// uniform (the wall, the room in front and off the bench all `radiance`, nothing drawn, nothing
+// absorbing), and every pixel a body covers in [x0, x1) x [y0, y1) must then show exactly that
+// radiance, at three wavelengths. "" when it holds.
+std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, double radiance, OpticsThrough through = nullptr);
+// O8 (GAME_SPEC §18, Stage 20): a thin line keeps its light. Summed over the pixels of [x0, x1) on a
+// row, what a scene with the line shows beyond the same scene without it is what the truth's rays
+// bring (1024 a pixel across, each traced exactly), wherever the line lands. "" when it holds.
+std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through = nullptr);
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
