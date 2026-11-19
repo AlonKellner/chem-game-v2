@@ -457,7 +457,7 @@ crystals and fast cooling many small ones, without a rule saying so.
   5 → 3 → 1 → 0.
 - Which form is stable follows from the temperature and the water's activity, and nothing else
   says so:
-  - Under its saturated solution the pentahydrate gives way to the trihydrate at 93.5 °C. This is
+  - Under its saturated solution the pentahydrate gives way to the trihydrate at 93.2 °C. This is
     derived, and measured at 95.9 °C.
   - Boiled down, a solution starts crystals near 10 g of water. A trihydrate that forms above the
     transition dissolves again as the solution cools, and the pentahydrate grows.
@@ -516,7 +516,8 @@ The parameters do not depend on temperature, so neither does `G_ex / T`. That me
 
 **Demo subset:**
 - Electrolytes by the equations above, with the parameters of 25 °C at every temperature:
-  - CuSO₄: Pitzer and Mayorga (1974).
+  - CuSO₄: Pitzer and Mayorga (1974), without their C^φ: extrapolated, it turns the water's
+    activity back up beyond 65 mol/kg.
   - H₂SO₄: fitted, as fully dissociated, to Staples' (1981) recommended values.
   - No mixing terms between ions of the same sign.
 - A dissolved species takes a constant volume: its apparent molar volume.
@@ -1550,11 +1551,11 @@ black solid is gone in 227 s and the liquid is blue.
 
 **Stage 3: water and crystals.** The condenser on the flask, the beaker under its outlet, the
 valve open. The solution boils; vapour condenses and runs into the beaker. With 12 g of water
-left the valve is closed: with less, the boiling liquor would be saturated above the 93.5 °C
+left the valve is closed: with less, the boiling liquor would be saturated above the 93.2 °C
 transition, and pale trihydrate would come out first (§9). As the flask cools the solution passes
 saturation and blue pentahydrate crystals grow. The liquor is poured off into the waste beaker;
 the beaker and the flask are handed in. *Measured (Stage 19):* 38.91 g of water in the beaker and
-nothing else but air; 9.262 g of CuSO₄·5H₂O in the flask, in 961,569 crystals of 0.20 mm, 82% of
+nothing else but air; 9.274 g of CuSO₄·5H₂O in the flask, in 1,002,347 crystals of 0.20 mm, 82% of
 the copper. The flask's solids are 99.977% pentahydrate: the rest is the 2 mg of malachite that
 never decomposed.
 
@@ -1638,7 +1639,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
-| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3%. Stage 19: the solubility within 2.5% of the handbook from 0 to 100 °C (three numbers fitted to the eleven points from 0 to 90 °C); copper sulfate's mean activity coefficient at saturation (1.41 mol/kg, 25 °C) within 4% of the two measurements; the acid's osmotic coefficient and water activity within 2% of Staples to 5 mol/kg; the pentahydrate giving way to the trihydrate under its saturated solution within 3 K of the measured 95.9 °C; the acid lowering the salt's solubility; a neutral solute's ebullioscopic constant still within 3% | data oracle | 2–6, 19 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3%. Stage 19: the solubility within 3% of the handbook from 0 to 100 °C (three numbers fitted to the eleven points from 0 to 90 °C); copper sulfate's mean activity coefficient at saturation (1.41 mol/kg, 25 °C) within 4% of the two measurements; the acid's osmotic coefficient and water activity within 2% of Staples to 5 mol/kg; the pentahydrate giving way to the trihydrate under its saturated solution within 3 K of the measured 95.9 °C; the acid lowering the salt's solubility; a neutral solute's ebullioscopic constant still within 3% | data oracle | 2–6, 19 |
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
@@ -1688,9 +1689,9 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | No gravitational energy in the ledger | About 0.2 J per pour |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
-| Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.3% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+191 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
-| The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there |
-| No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.71 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
+| Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
+| The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
+| No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
 | Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no pH, no vapour of its own; its heat capacity is the pure liquid's |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps with calibrated rates | One activation energy for all three (80 kJ/mol), and prefactors that put each step's fastest rate at its thermogravimetric peak (90, 120 and 256 °C at 10 °C/min). The times are plausible, not measured |

@@ -15,9 +15,11 @@
   - Each crystallises from the solution by the surface law with nucleation.
   - The hydrates lose water in three first-order steps (calibrated at their thermogravimetric
     peaks). The one-step calcination is gone.
-  - The pentahydrate gives way to the trihydrate under its solution at 93.5 °C (measured 95.9).
+  - The pentahydrate gives way to the trihydrate under its solution at 93.2 °C (measured 95.9).
 - §7: the surface law's driver is its molality.
-- CuSO₄(aq) is refitted (`Hf`, `S°`, `Cp`) to the CRC's solubility, within 2.3 % from 0 to 100 °C.
+- CuSO₄(aq) is refitted (`Hf`, `S°`, `Cp`) to the CRC's solubility, within 2.6 % from 0 to 100 °C.
+  CuSO₄'s published C^φ is left out: extrapolated, it turned the water's activity back up beyond
+  65 mol/kg, which a debug build caught as P1 in a flask boiled nearly dry.
   The trihydrate and the monohydrate are verified (NBS 1982) and have calibrated colours.
 - §18:
   - K1 gains the electrolyte oracles.

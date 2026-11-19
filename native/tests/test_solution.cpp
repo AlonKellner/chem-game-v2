@@ -97,7 +97,7 @@ TEST_CASE("solution: the data oracle: saturated copper sulfate against the handb
 		}
 		const double grams = molality(s.sim.world(), s.cell, builtin::copper_sulfate_aq) * 159.602 / 10.0;
 		CAPTURE(row.celsius);
-		CHECK(grams == doctest::Approx(row.grams).epsilon(0.025));
+		CHECK(grams == doctest::Approx(row.grams).epsilon(0.03));
 		CHECK(std::abs(temperature(s.sim.world(), s.cell) - (row.celsius + 273.15)) < 1e-6);
 		// D3: saturated, nothing moves
 		const Snapshot rest = s.sim.world().snapshot();
@@ -123,7 +123,7 @@ TEST_CASE("solution: saturation is the same from above and from below (Stage 6)"
 }
 
 TEST_CASE("solution: dissolving the pentahydrate cools the solution (Stage 6)") {
-	// adiabatic: the heat of solution, +14.16 kJ/mol (Stage 19's fit), comes out of the water
+	// adiabatic: the heat of solution, +14.56 kJ/mol (Stage 19's fit), comes out of the water
 	World::Builder b(builtin_species());
 	const CellId cell = b.add_cell("beaker");
 	b.set_amount(cell, builtin::water, mol(100.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_pentahydrate, mol(0.05));
@@ -137,9 +137,9 @@ TEST_CASE("solution: dissolving the pentahydrate cools the solution (Stage 6)") 
 	CHECK(sim.world().amount(cell, builtin::copper_sulfate_pentahydrate).quanta == 0); // all of it: 0.47 mol/kg is under saturation
 	CHECK(sim.world().particles(cell, builtin::copper_sulfate_pentahydrate) == 0); // X1
 	CHECK(sim.world().amount(cell, builtin::copper_sulfate_aq) == mol(0.05));
-	// 0.05 mol * 14.164 kJ/mol over the solution's heat capacity
-	const double heat = -836386.0 + 5.0 * -285830.0 - -2279700.0;
-	CHECK(heat == doctest::Approx(14164.0));
+	// 0.05 mol * 14.56 kJ/mol over the solution's heat capacity
+	const double heat = -835990.0 + 5.0 * -285830.0 - -2279700.0;
+	CHECK(heat == doctest::Approx(14560.0));
 	const double capacity = thermal_state(builtin_species(), sim.world().snapshot_cell(cell)).heat_capacity;
 	CHECK(298.15 - temperature(sim.world(), cell) == doctest::Approx(0.05 * heat / capacity).epsilon(0.01));
 	CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
@@ -356,6 +356,36 @@ TEST_CASE("solution: the data oracle: copper sulfate and the acid as electrolyte
 		CHECK(gamma == doctest::Approx(row.gamma).epsilon(0.02));
 	}
 	CHECK(activity(t, solution_of(0.0, 1.0), builtin::water) == doctest::Approx(0.96155).epsilon(0.001));
+}
+
+TEST_CASE("solution: stable at every strength: the water's activity falls as water leaves, to 400 mol/kg (Stage 19)") {
+	// A solution boiled nearly dry passes any strength. Were the water's activity
+	// to rise again as water left, evaporating would drive itself and the fast
+	// equilibrium would have no last quantum (P1). CuSO4's published C^phi did
+	// that beyond 65 mol/kg; it is left out (docs/DATA_SOURCES.md).
+	const SpeciesTable &t = builtin_species();
+	for (const double share : { 0.0, 0.1, 0.5, 1.0 }) { // of the solute that is acid
+		CAPTURE(share);
+		double last = 1e300;
+		for (double m = 0.1; m < 400.0; m *= 1.05) {
+			CellState cell{ std::vector<int64_t>(static_cast<size_t>(t.species_count()), 0), 0, {} };
+			cell.amount[static_cast<size_t>(builtin::water.index)] = mol(1.0 / (0.018015 * m)).quanta; // one mol of solute in 1/m kg
+			if (share < 1.0) {
+				cell.amount[static_cast<size_t>(builtin::copper_sulfate_aq.index)] = mol(1.0 - share).quanta;
+			}
+			if (share > 0.0) {
+				cell.amount[static_cast<size_t>(builtin::sulfuric_acid_aq.index)] = mol(share).quanta;
+			}
+			// the evaporation's affinity carries ln a of the water, finite where a underflows
+			cell.amount[static_cast<size_t>(builtin::steam.index)] = mol(1.0).quanta;
+			bool defined = false;
+			const double a = affinity(t, cell, reaction(builtin::reaction::water_vaporization).terms(), 373.15, defined);
+			REQUIRE(defined);
+			CAPTURE(m);
+			REQUIRE(a < last);
+			last = a;
+		}
+	}
 }
 
 TEST_CASE("solution: every activity is the derivative of one Gibbs energy (Gibbs-Duhem) (Stage 19)") {

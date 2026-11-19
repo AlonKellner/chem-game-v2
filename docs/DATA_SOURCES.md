@@ -44,7 +44,7 @@ appendix reproduces the NBS tables (Wagman et al. 1982).
 |---|---|---|---|---|
 | CuSO4·5H2O(s) | −2279.7 | 300.4 | 280 | Atkins. Its ΔGf° there, −1879.7, is not used. Density 2.286 g/cm³: CRC Handbook, 92nd ed., p. 4.62, as cited by Wikipedia |
 | H2SO4(aq) | −909.27 | 20.1 | 138.9 (stand-in) | ΔHf° and S° are Atkins's SO4²⁻(aq) (with H⁺(aq) at zero: the acid fully ionised). **Cp is a stand-in**: Atkins's value for the pure liquid acid, since the game treats the acid as one neutral dissolved species |
-| CuSO4(aq) | −836.386 (fitted) | −52.943 (fitted) | 190.70 (fitted) | **Fitted, not tabulated**, in Stage 19 with the activities of GAME_SPEC §10 (below). Stage 6 fitted −839.382, −10.095 and chose −96.875 for an ideal-dilute neutral solute. For reference, Atkins's ions give Cu²⁺(aq) + SO4²⁻(aq) = −844.50 kJ/mol and −79.5 J/mol·K |
+| CuSO4(aq) | −835.990 (fitted) | −51.520 (fitted) | 211.81 (fitted) | **Fitted, not tabulated**, in Stage 19 with the activities of GAME_SPEC §10 (below). Stage 6 fitted −839.382, −10.095 and chose −96.875 for an ideal-dilute neutral solute. For reference, Atkins's ions give Cu²⁺(aq) + SO4²⁻(aq) = −844.50 kJ/mol and −79.5 J/mol·K |
 
 **The fit of CuSO4(aq) in Stage 6**, replaced in Stage 19. The game treated the dissolved salt as one neutral species in an
 ideal-dilute solution. With the tabulated ionic values that model puts saturation near
@@ -96,15 +96,20 @@ CuSO4·H2O: 3.382 g/cm³ from its crystal structure at 100 K (COD 7061268, Ibrah
 
   | β(0) | β(1) | β(2) | C^φ | α1 | α2 | Range |
   |---|---|---|---|---|---|---|
-  | 0.2358 | 2.485 | −47.35 | −0.0012 | 1.4 | 12 | to 1.4 mol/kg |
+  | 0.2358 | 2.485 | −47.35 | 0 (published −0.0012) | 1.4 | 12 | to 1.4 mol/kg |
 
   Pitzer and Mayorga, "Thermodynamics of electrolytes. III. 2-2 electrolytes", J. Solution Chem.
   3, 539 (1974), LBL-2282 preprint Table I (escholarship.org/uc/item/0q16265x). The same values
   are in Simoes et al. 2016, Table 1.
+  - **Their C^φ is left out (Stage 19).** Fitted below 1.4 mol/kg, where it is within the
+    fit's noise, it makes a cubic term. Extrapolated, that term turns the water's activity back
+    up beyond 65 mol/kg: in a liquor boiled nearly dry, evaporating would then drive itself.
+    Without it the water's activity falls at every strength (a test holds it to 400 mol/kg).
+    The fit's rms rises from 1.35 % to 1.49 %.
   - Other sets disagree: Downes and Pitzer 1975 (0.2340, 2.527, −48.33, 0.0044); Höffler 2017
     at 298.15 K (0.2086, 2.6587, −58.29, 0.01924).
   - Each was tried in the fit below. Pitzer and Mayorga's fits the solubility best (rms 1.35%,
-    against 1.9% and 2.9%), and is used.
+    against 1.9% and 2.9%), and is used, without its C^φ.
 - H2SO4 as fully dissociated:
 
   | β(0) | β(1) | β(2) | C^φ | α1 | α2 |
@@ -141,7 +146,7 @@ olympiads-xyz-bg.vercel.app (edition not shown). The row is "CuSO4 12.4 14.4 16.
 **The fit of CuSO4(aq)**, refitted in Stage 19:
 - Its `Hf`, `S°` and `Cp` are fitted, by least squares in ln m, to make
   `CuSO4·5H2O(s) ⇌ CuSO4(aq) + 5 H2O(l)` with the activities above reproduce the eleven points
-  from 0 to 90 °C: **−836.386 kJ/mol, −52.943 J/mol·K and 190.70 J/mol·K**.
+  from 0 to 90 °C: **−835.990 kJ/mol, −51.520 J/mol·K and 211.81 J/mol·K** (rms 1.49 % in molality).
 - For reference, the ions' sum in NBS is −844.50 kJ/mol and −79.5 J/mol·K.
 - The positive Cp is an effective value. It carries the temperature dependence of the activity
   coefficients, which the model holds at 25 °C.
@@ -149,17 +154,17 @@ olympiads-xyz-bg.vercel.app (edition not shown). The row is "CuSO4 12.4 14.4 16.
 | °C | 0 | 10 | 20 | 25 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | handbook, g/100 g water | 14.16 | 16.82 | 20.05 | 21.95 | 23.92 | 28.53 | 34.05 | 40.45 | 47.93 | 56.99 | 67.50 | 76.99 |
-| the game, pentahydrate | 14.39 | 16.65 | 19.78 | 21.68 | 23.82 | 28.76 | 34.55 | 41.15 | 48.54 | 56.78 | 65.96 | 76.30 |
-| the game, trihydrate | 87.9 | 81.8 | 77.1 | 75.2 | 73.5 | 71.0 | 69.3 | 68.3 | 68.0 | 68.3 | 69.1 | 70.3 |
+| the game, pentahydrate | 14.41 | 16.63 | 19.75 | 21.67 | 23.81 | 28.79 | 34.61 | 41.22 | 48.59 | 56.75 | 65.78 | 75.83 |
+| the game, trihydrate | 83.5 | 78.0 | 73.8 | 72.1 | 70.7 | 68.6 | 67.2 | 66.6 | 66.7 | 67.3 | 68.4 | 69.9 |
 
 Derived, not fitted:
-- The two curves cross at **93.5 °C**, the transition, against 95.9 measured.
+- The two curves cross at **93.2 °C**, the transition, against 95.9 measured.
 - The saturated solution boils at 104.8 °C, at 4.45 mol/kg.
 
 **The common-ion effect.** Holler and Peffer, NBS Bulletin 13 (1916), at 15 °C: "395 grams of
 crystallized copper sulphate … in 1 liter of the saturated solution … addition of 100 grams per
 liter of sulphuric acid reduces the solubility … to 215 grams per liter". That is a ratio of 0.54
-on a basis the text leaves unclear. The model gives 0.71 with 1.0 mol/kg of acid at 15 °C.
+on a basis the text leaves unclear. The model gives 0.70 with 1.0 mol/kg of acid at 15 °C.
 
 **Apparent molar volumes** (GAME_SPEC §10), from densities at 20 °C: Engineering Toolbox,
 "Density of aqueous solutions of inorganic salts and acids" (engineeringtoolbox.com, d_1958).

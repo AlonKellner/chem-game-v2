@@ -10,7 +10,7 @@
 		{"id": "nitrogen", "formula": "N2", "phase": "g", "thermo": {"hf_kj": 0, "cp": 29.124, "s0": 191.609}},
 		{"id": "oxygen", "formula": "O2", "phase": "g", "thermo": {"hf_kj": 0, "cp": 29.383, "s0": 205.152}},
 		{"id": "sulfuric_acid_aq", "formula": "H2SO4", "phase": "aq", "ions": {"H+1": 2, "SO4-2": 1}, "volume_cm3": 35.7, "thermo": {"hf_kj": -909.27, "cp": 138.9, "s0": 20.1}},
-		{"id": "copper_sulfate_aq", "formula": "CuSO4", "phase": "aq", "ions": {"Cu+2": 1, "SO4-2": 1}, "volume_cm3": 2.7, "thermo": {"hf_kj": -836.386, "cp": 190.70, "s0": -52.943}},
+		{"id": "copper_sulfate_aq", "formula": "CuSO4", "phase": "aq", "ions": {"Cu+2": 1, "SO4-2": 1}, "volume_cm3": 2.7, "thermo": {"hf_kj": -835.990, "cp": 211.81, "s0": -51.520}},
 		{"id": "copper_sulfate_pentahydrate", "formula": "CuSO4.5H2O", "phase": "s", "density": 2.286, "thermo": {"hf_kj": -2279.7, "cp": 280, "s0": 300.4}},
 		{"id": "copper_sulfate_trihydrate", "formula": "CuSO4.3H2O", "phase": "s", "density": 2.663, "thermo": {"hf_kj": -1684.31, "cp": 205, "s0": 221.3}},
 		{"id": "copper_sulfate_monohydrate", "formula": "CuSO4.H2O", "phase": "s", "density": 3.382, "thermo": {"hf_kj": -1085.83, "cp": 134, "s0": 146.0}},

@@ -4,7 +4,7 @@
 	"a_phi": 0.392,
 	"b": 1.2,
 	"pairs": [
-		{"cation": "Cu+2", "anion": "SO4-2", "beta0": 0.2358, "beta1": 2.485, "beta2": -47.35, "c_phi": -0.0012, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974"},
+		{"cation": "Cu+2", "anion": "SO4-2", "beta0": 0.2358, "beta1": 2.485, "beta2": -47.35, "c_phi": 0, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974; their c_phi, -0.0012, left out: beyond 65 mol/kg it turns the water's activity back up"},
 		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"}
 	]
 }
