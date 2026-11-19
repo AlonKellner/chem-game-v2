@@ -1,6 +1,8 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 19)
+## 0.20.0 (2026-11-19, Stage 19)
+
+Signed off by the user on 2026-11-19 ("Approved, proceed").
 
 - §4.6, §10: concentrated solutions.
   - **Activities from ions.** A dissolved species names its ions (`data/species.json`); its

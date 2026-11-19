@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.19.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.20.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -476,7 +476,7 @@ crystals and fast cooling many small ones, without a rule saying so.
 - Stage 6 implements the pentahydrate, ideal-dilute solutions of neutral solutes, and dissolved
   species that take no volume.
 - Stage 19 makes the solutes electrolytes and gives them their volumes, and adds the lower
-  hydrates and the stepwise dehydration.
+  hydrates and the stepwise dehydration. Signed off by the user on 2026-11-19 (Stage 19).
 
 ## 10. Property models
 
@@ -525,7 +525,7 @@ The parameters do not depend on temperature, so neither does `G_ex / T`. That me
 
 **Status:**
 - Stage 6: ideal-dilute solutions and additive volumes.
-- Stage 19: electrolytes, and dissolved volumes.
+- Stage 19: electrolytes, and dissolved volumes. Signed off by the user on 2026-11-19.
 
 ## 11. Surface effects
 

@@ -21,7 +21,7 @@ The oracles are the solubility curve, the 5↔3 transition and the boiling point
 | 19.6 | The demo closes the valve at 12 g; the tutorial says why | Done |
 | 19.7 | The golden records: the evidence below; approved by the user ("This looks perfect! Approved, proceed", 2026-11-19), re-recorded | Done |
 | 19.8 | CuSO₄'s C^φ left out: `make gates` (the debug build) caught P1 in a flask boiled nearly dry; refitted, re-recorded after a second approval ("Approved, proceed", 2026-11-19) | Done |
-| 19.9 | The user plays it (`make run`) and signs off | Pending |
+| 19.9 | The user plays it (`make run`) and signs off: "Approved, proceed" (2026-11-19) | Done |
 
 ## Decisions
 
