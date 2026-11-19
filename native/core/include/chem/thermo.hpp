@@ -39,7 +39,7 @@ struct Fill {
 };
 
 // The volume the cell's contents take at temperature T (GAME_SPEC §6). Solutes
-// take no room of their own until Stage 6.
+// take their apparent molar volume (GAME_SPEC §10), or none if they have none.
 Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature);
 
 // How far a rigid cell is from exactly full, in m^3: gas + condensed - volume.
@@ -79,7 +79,7 @@ private:
 	struct Part {
 		double nu = 0.0;
 		double quanta = 0.0; // of the species, before
-		Phase phase = Phase::Solid;
+		const SpeciesDef *def = nullptr;
 		double hf = 0.0, cp = 0.0, s0 = 0.0;
 	};
 	std::array<Part, MAX_TERMS> parts_{};
@@ -92,16 +92,23 @@ private:
 	// the cell's mixtures before, and what a quantum of extent adds to each
 	double gas_ = 0.0, gas_step_ = 0.0; // quanta of gas
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
-	double solute_ = 0.0, solute_step_ = 0.0; // quanta dissolved
+	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
+	const SpeciesTable *table_ = nullptr; // its solution model
 };
 
 // The activity of a species in the cell (GAME_SPEC §4.6). A gas: its partial
 // pressure over the standard pressure, y_i * P / P°, y_i its fraction of the
-// cell's gas, P one atmosphere. A solid: 1. A dissolved species: its molality
-// (mol per 55.51 mol of the cell's liquid: per kg of water). A liquid: the solvent of an ideal-dilute
-// solution, ln a = ln x_i - (dissolved) / (liquid), which is 1 when nothing is
-// dissolved in it. 0 for a gas or a solute that is absent.
+// cell's gas, P one atmosphere. A solid: 1. A dissolved species: the product
+// over its particles of (m_j gamma_j)^nu_j, m_j the particle's molality (mol
+// per 55.51 mol of the cell's liquid: per kg of water) and gamma_j its
+// activity coefficient (GAME_SPEC §10). A liquid: the solvent, ln a = ln x_i -
+// phi (dissolved particles) / (liquid), which is 1 when nothing is dissolved
+// in it. 0 for a gas or a solute that is absent.
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species);
+
+// A dissolved species' molality: its amount per 55.51 mol of the cell's
+// liquid (per kg of water). 0 when the cell has no liquid.
+double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species);
 
 // The enthalpy, in quanta, that these amounts carry at temperature T: what a
 // transfer of matter takes with it (GAME_SPEC §6).

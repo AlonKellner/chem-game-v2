@@ -2,6 +2,7 @@
 
 #include "chem/math.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -63,21 +64,129 @@ namespace {
 
 constexpr double INFINITE = std::numeric_limits<double>::infinity();
 
+// A solute's molality is its amount per 55.51 mol of the cell's liquid: per kg
+// when the liquid is water (18.015 g/mol). Counting the solvent in moles, not
+// kilograms, is what keeps a mixed solvent consistent with its solutes
+// (Gibbs-Duhem).
+constexpr double SOLVENT_MOL_PER_UNIT = 1.0 / 0.018015;
+
 // What a cell's mixtures hold, in quanta: its gas; its liquid (the solvent)
-// and what is dissolved in it. Walls are in neither.
+// and the particles dissolved in it (GAME_SPEC §4.6). Walls are in neither.
+// With them, the excess of the solution (GAME_SPEC §10): each particle's
+// ln gamma, and the solvent's share of it.
 struct Mix {
 	double gas = 0.0;
 	double liquid = 0.0;
-	double solute = 0.0;
+	std::array<double, MAX_PARTICLES> particles{};
+	double dissolved = 0.0; // the particles' sum
+	std::array<double, MAX_PARTICLES> ln_gamma{};
+	double solvent_excess = 0.0; // the excess part of ln a of the solvent
 };
 
-// A solute's activity is its amount per 55.51 mol of the cell's liquid: its
-// molality when the liquid is water (18.015 g/mol). Counting the solvent in
-// moles, not kilograms, is what keeps a mixed solvent consistent with its
-// solutes (Gibbs-Duhem).
-constexpr double SOLVENT_MOL_PER_UNIT = 1.0 / 0.018015;
+// g(x) = 2 (1 - (1 + x) e^-x) / x^2 and h(x) = e^-x - g(x), by their series
+// where they cancel (GAME_SPEC §10)
+void pitzer_g(double x, double &g, double &h) {
+	if (x < 1e-3) {
+		g = 1.0 - x * (2.0 / 3.0 - x * (0.25 - x / 15.0));
+		h = -x * (1.0 / 3.0 - x * (0.25 - x * 0.1));
+		return;
+	}
+	const double e = exp(-x);
+	g = 2.0 * (1.0 - (1.0 + x) * e) / (x * x);
+	h = e - g;
+}
 
-Mix mix_of(const SpeciesTable &table, const CellState &cell) {
+// Pitzer's excess (GAME_SPEC §10): F = G_ex / (w R T) per kg of water, as a
+// function of the molalities, and its derivatives ln gamma_j = dF/dm_j. The
+// solvent's share follows: w d(wF)/dw = F - sum m_j F_j, per kg.
+void excess_of(const SolutionDef &model, Mix &mix) {
+	const size_t n = model.ions.size();
+	std::array<double, MAX_PARTICLES> m{};
+	double ionic = 0.0, z_sum = 0.0;
+	for (size_t j = 0; j < n; ++j) {
+		m[j] = mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT;
+		const double z = static_cast<double>(model.ions[j].charge);
+		ionic += 0.5 * m[j] * z * z;
+		z_sum += m[j] * (z < 0.0 ? -z : z);
+	}
+	if (!(ionic > 0.0)) {
+		return; // only neutral particles: ideal
+	}
+	const double s = std::sqrt(ionic);
+	const double lnp = log(1.0 + model.b * s);
+	double f = -model.a_phi * 4.0 * ionic / model.b * lnp;
+	const double f_ionic = -model.a_phi * (4.0 / model.b * lnp + 2.0 * s / (1.0 + model.b * s)); // df/dI
+	std::array<double, MAX_PARTICLES> d{};
+	double d_ionic = f_ionic; // dF/dI
+	double d_z = 0.0; // dF/dZ
+	// g and h of each exponent once: pairs share them (alpha2 is 12 for most)
+	struct Known {
+		double alpha = 0.0, g = 0.0, h = 0.0;
+	};
+	std::array<Known, 4> known{};
+	size_t kept = 0;
+	const auto of = [&](double alpha, double &g, double &h) {
+		for (size_t k = 0; k < kept; ++k) {
+			if (known[k].alpha == alpha) {
+				g = known[k].g;
+				h = known[k].h;
+				return;
+			}
+		}
+		pitzer_g(alpha * s, g, h);
+		if (kept < known.size()) {
+			known[kept++] = Known{ alpha, g, h };
+		}
+	};
+	for (const PairDef &p : model.pairs) {
+		const auto c = static_cast<size_t>(p.cation), a = static_cast<size_t>(p.anion);
+		const double mm = m[c] * m[a];
+		if (!(mm > 0.0)) {
+			continue;
+		}
+		double g1 = 0.0, h1 = 0.0, g2 = 0.0, h2 = 0.0;
+		of(p.alpha1, g1, h1);
+		of(p.alpha2, g2, h2);
+		const double b_ca = p.beta0 + p.beta1 * g1 + p.beta2 * g2;
+		const double b_ionic = (p.beta1 * h1 + p.beta2 * h2) / ionic; // dB/dI
+		const double zc = static_cast<double>(model.ions[c].charge), za = static_cast<double>(-model.ions[a].charge);
+		const double c_ca = p.c_phi / (2.0 * std::sqrt(zc * za));
+		f += 2.0 * mm * (b_ca + z_sum * c_ca);
+		d[c] += 2.0 * m[a] * (b_ca + z_sum * c_ca);
+		d[a] += 2.0 * m[c] * (b_ca + z_sum * c_ca);
+		d_ionic += 2.0 * mm * b_ionic;
+		d_z += 2.0 * mm * c_ca;
+	}
+	double weighted = 0.0;
+	for (size_t j = 0; j < n; ++j) {
+		const double z = static_cast<double>(model.ions[j].charge);
+		mix.ln_gamma[j] = d[j] + d_ionic * 0.5 * z * z + d_z * (z < 0.0 ? -z : z);
+		weighted += m[j] * mix.ln_gamma[j];
+	}
+	mix.solvent_excess = (f - weighted) / SOLVENT_MOL_PER_UNIT;
+}
+
+// the particles a dissolved species adds to the cell, per quantum of it
+void add_particles(const SpeciesDef &def, double quanta, Mix &mix) {
+	for (const IonCount &ion : def.ions) {
+		if (ion.count <= 0) {
+			break;
+		}
+		const double q = quanta * static_cast<double>(ion.count);
+		mix.particles[static_cast<size_t>(ion.ion)] += q;
+		mix.dissolved += q;
+	}
+}
+
+// the excess, once the mixture's amounts are known
+void complete(const SpeciesTable &table, Mix &mix) {
+	if (mix.liquid > 0.0 && mix.dissolved > 0.0) {
+		excess_of(table.solution(), mix);
+	}
+}
+
+// The cell's mixtures; with `excess`, the solution's excess too (GAME_SPEC §10)
+Mix mix_of(const SpeciesTable &table, const CellState &cell, bool excess = true) {
 	Mix mix;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		if (cell.amount[s] <= 0) {
@@ -93,8 +202,11 @@ Mix mix_of(const SpeciesTable &table, const CellState &cell) {
 		} else if (def.phase == Phase::Liquid) {
 			mix.liquid += quanta;
 		} else if (def.phase == Phase::Aqueous) {
-			mix.solute += quanta;
+			add_particles(def, quanta, mix);
 		}
+	}
+	if (excess) {
+		complete(table, mix);
 	}
 	return mix;
 }
@@ -104,18 +216,20 @@ enum class Presence { Present, Absent, Undefined };
 // The logarithm of a species' activity (GAME_SPEC §4.6), given how much of it
 // there is and the cell's mixtures.
 //   gas:    y_i P / P°, y_i its fraction of the cell's gas. Absent when there is none.
-//   liquid: ln a = ln x_i - (dissolved) / (liquid), x_i its fraction of the
-//           cell's liquids: the solvent of an ideal-dilute solution. This form,
-//           not ln of the mole fraction, is the one consistent with the
+//   liquid: ln a = ln x_i - phi (dissolved) / (liquid), x_i its fraction of
+//           the cell's liquids, phi the osmotic coefficient: the solvent's
+//           share of the solution's Gibbs energy, consistent with the
 //           solutes' (Gibbs-Duhem), so the entropy is a state function. Where
 //           the cell has no liquid at all, one would form pure, at activity 1.
 //           Absent from a liquid that is there, its activity is 0: liquids mix.
-//   solute: its molality (mol per 55.51 mol of the cell's liquid: per kg of
-//           water). Absent when there is none; undefined without a solvent.
+//   solute: the sum over its particles of nu_j ln(m_j gamma_j), m_j the
+//           particle's molality (mol per 55.51 mol of the cell's liquid: per
+//           kg of water). Absent when one of its particles is; undefined
+//           without a solvent.
 //   solid:  1.
-Presence log_activity(Phase phase, double quanta, const Mix &mix, double &ln) {
+Presence log_activity(const SpeciesDef &def, double quanta, const Mix &mix, double &ln) {
 	ln = 0.0;
-	switch (phase) {
+	switch (def.phase) {
 		case Phase::Gas:
 			if (!(quanta > 0.0) || !(mix.gas > 0.0)) {
 				return Presence::Absent;
@@ -124,22 +238,28 @@ Presence log_activity(Phase phase, double quanta, const Mix &mix, double &ln) {
 			return Presence::Present;
 		case Phase::Liquid:
 			if (!(mix.liquid > 0.0)) {
-				ln = mix.solute > 0.0 ? -INFINITE : 0.0;
+				ln = mix.dissolved > 0.0 ? -INFINITE : 0.0;
 				return Presence::Present;
 			}
 			if (!(quanta > 0.0)) {
 				return Presence::Absent; // it would mix into the liquid that is there
 			}
-			ln = (quanta < mix.liquid ? log(quanta / mix.liquid) : 0.0) - mix.solute / mix.liquid;
+			ln = (quanta < mix.liquid ? log(quanta / mix.liquid) : 0.0) - mix.dissolved / mix.liquid + mix.solvent_excess;
 			return Presence::Present;
 		case Phase::Aqueous:
 			if (!(mix.liquid > 0.0)) {
 				return Presence::Undefined;
 			}
-			if (!(quanta > 0.0)) {
-				return Presence::Absent;
+			for (const IonCount &ion : def.ions) {
+				if (ion.count <= 0) {
+					break;
+				}
+				const auto j = static_cast<size_t>(ion.ion);
+				if (!(mix.particles[j] > 0.0)) {
+					return Presence::Absent;
+				}
+				ln += static_cast<double>(ion.count) * (log(mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT) + mix.ln_gamma[j]);
 			}
-			ln = log(quanta / mix.liquid * SOLVENT_MOL_PER_UNIT);
 			return Presence::Present;
 		case Phase::Solid:
 			return Presence::Present;
@@ -157,11 +277,15 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 			continue;
 		}
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
-		if (def.wall || def.phase == Phase::Aqueous) {
+		if (def.wall) {
 			continue;
 		}
 		if (def.phase == Phase::Gas) {
 			gas += static_cast<double>(cell.amount[s]);
+			continue;
+		}
+		if (def.phase == Phase::Aqueous) { // its apparent molar volume, if it has one (GAME_SPEC §10)
+			out.condensed += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
 			continue;
 		}
 		if (!(def.molar_volume > 0.0)) {
@@ -199,7 +323,7 @@ double particle_diameter(const SpeciesTable &table, const CellState &cell, Speci
 
 bool dry_solute(const SpeciesTable &table, const CellState &cell) {
 	const Mix mix = mix_of(table, cell);
-	return mix.solute > 0.0 && !(mix.liquid > 0.0);
+	return mix.dissolved > 0.0 && !(mix.liquid > 0.0);
 }
 
 int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool forward) {
@@ -216,8 +340,13 @@ int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool
 
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
 	double ln = 0.0;
-	const Presence presence = log_activity(table.species(species).phase, static_cast<double>(cell.amount[static_cast<size_t>(species.index)]), mix_of(table, cell), ln);
+	const Presence presence = log_activity(table.species(species), static_cast<double>(cell.amount[static_cast<size_t>(species.index)]), mix_of(table, cell), ln);
 	return presence == Presence::Present ? exp(ln) : 0.0;
+}
+
+double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
+	const Mix mix = mix_of(table, cell);
+	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;
 }
 
 double entropy(const SpeciesTable &table, const CellState &cell, double temperature) {
@@ -231,7 +360,7 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 		double molar = def.s0 + def.cp * ln_t;
 		double ln = 0.0;
-		if (!def.wall && log_activity(def.phase, static_cast<double>(cell.amount[s]), mix, ln) == Presence::Present) {
+		if (!def.wall && log_activity(def, static_cast<double>(cell.amount[s]), mix, ln) == Presence::Present) {
 			molar -= GAS_CONSTANT * ln;
 		}
 		total += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar;
@@ -266,7 +395,7 @@ double affinity(const SpeciesTable &table, const CellState &cell, std::span<cons
 		const SpeciesDef &def = table.species(t.species);
 		standard -= static_cast<double>(t.nu) * (def.hf + def.cp * (temperature - T0) - temperature * (def.s0 + def.cp * ln_t));
 		double ln = 0.0;
-		switch (log_activity(def.phase, static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]), mix, ln)) {
+		switch (log_activity(def, static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]), mix, ln)) {
 			case Presence::Present:
 				mixing += static_cast<double>(t.nu) * ln;
 				break;
@@ -296,7 +425,7 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 		Part &part = parts_[count_++];
 		part.nu = static_cast<double>(t.nu);
 		part.quanta = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]);
-		part.phase = def.phase;
+		part.def = &def;
 		part.hf = def.hf;
 		part.cp = def.cp;
 		part.s0 = def.s0;
@@ -307,13 +436,19 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 		} else if (def.phase == Phase::Liquid) {
 			liquid_step_ += part.nu;
 		} else if (def.phase == Phase::Aqueous) {
-			solute_step_ += part.nu;
+			for (const IonCount &ion : def.ions) {
+				if (ion.count <= 0) {
+					break;
+				}
+				particles_step_[static_cast<size_t>(ion.ion)] += part.nu * static_cast<double>(ion.count);
+			}
 		}
 	}
-	const Mix mix = mix_of(table, cell);
+	const Mix mix = mix_of(table, cell, false); // the amounts: at() works out the excess at each extent
 	gas_ = mix.gas;
 	liquid_ = mix.liquid;
-	solute_ = mix.solute;
+	particles_ = mix.particles;
+	table_ = &table;
 	temperature_ = thermal.temperature;
 	capacity_ = thermal.heat_capacity;
 	defined_ = true;
@@ -340,7 +475,11 @@ bool AffinityProbe::at(double extent, double &a) const {
 	Mix mix;
 	mix.gas = clamp(gas_ + extent * gas_step_);
 	mix.liquid = clamp(liquid_ + extent * liquid_step_);
-	mix.solute = clamp(solute_ + extent * solute_step_);
+	for (size_t j = 0; j < particles_.size(); ++j) {
+		mix.particles[j] = clamp(particles_[j] + extent * particles_step_[j]);
+		mix.dissolved += mix.particles[j];
+	}
+	complete(*table_, mix);
 	const double ln_t = log(temperature / T0);
 	double standard = 0.0;
 	double mixing = 0.0;
@@ -350,7 +489,7 @@ bool AffinityProbe::at(double extent, double &a) const {
 		const Part &part = parts_[i];
 		standard -= part.nu * (part.hf + part.cp * (temperature - T0) - temperature * (part.s0 + part.cp * ln_t));
 		double ln = 0.0;
-		switch (log_activity(part.phase, part.quanta + part.nu * extent, mix, ln)) {
+		switch (log_activity(*part.def, part.quanta + part.nu * extent, mix, ln)) {
 			case Presence::Present:
 				mixing += part.nu * ln;
 				break;

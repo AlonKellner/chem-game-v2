@@ -590,13 +590,13 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 	p.click("edit:quantity");
 	CHECK(pointed("edit:pick:water"));
 	p.click("edit:pick:water");
-	REQUIRE(p.tutorial().title == "Below 10 g");
+	REQUIRE(p.tutorial().title == "Below 12 g");
 	REQUIRE(editing());
-	CHECK(pointed("edit:value:0")); // "below" is already chosen: the value, until it reads 10
+	CHECK(pointed("edit:value:0")); // "below" is already chosen: the value, until it reads 12
 	p.click("edit:value:0");
 	p.type("1");
 	CHECK(pointed("edit:value:0"));
-	p.type("0");
+	p.type("2");
 	CHECK(pointed("edit:set")); // only now the button
 	p.ui->key(lab::Ui::KeyBackspace);
 	CHECK(pointed("edit:value:0"));
@@ -607,17 +607,17 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 	p.ui->key(lab::Ui::KeyEscape);
 	CHECK(editing()); // it cannot be closed half set
 	p.click("edit:value:0");
-	p.type("15"); // the 5 is not the step's 10
+	p.type("15"); // the 5 is not the step's 12
 	CHECK(p.ui->message().find("Not that") != std::string::npos);
 	p.click("edit:set"); // 1 g: the step's check would not hold
-	CHECK(p.ui->message().find("the monitor signals below 10 g of water") != std::string::npos);
+	CHECK(p.ui->message().find("the monitor signals below 12 g of water") != std::string::npos);
 	CHECK(editing());
 	CHECK_FALSE(monitor().watching);
-	p.type("0");
+	p.type("2");
 	p.click("edit:set");
 	CHECK(p.ui->message().empty());
 	CHECK(monitor().watching);
-	CHECK(monitor().comparison.a == 10.0);
+	CHECK(monitor().comparison.a == 12.0);
 	CHECK(p.tutorial().title == "Rig it to the burner");
 	play_to("Close the valve when it signals");
 	REQUIRE(editing());

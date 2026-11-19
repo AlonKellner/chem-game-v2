@@ -2,6 +2,7 @@
 // Each check is shown to fire on a trace corrupted in the way it exists to catch,
 // and to stay silent on the corruptions that are another check's.
 #include "chem/builtin_ids.hpp"
+#include "tables.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 
@@ -279,7 +280,7 @@ TEST_CASE("invariants: a cell without a temperature is detected: T3 (Stage 2)") 
 	{
 		StepTrace t = clean_thermal(); // a species without thermodynamic data appears
 		t.after.cells[1].amount[static_cast<size_t>(builtin::copper_sulfate_trihydrate.index)] = 1000;
-		CHECK(has(check_all(builtin_species(), t), "T3"));
+		CHECK(has(check_all(testing::unverified_table(), t), "T3"));
 	}
 	{
 		StepTrace t = clean_thermal(); // a cell emptied: no heat capacity
@@ -431,6 +432,39 @@ TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (S
 		CHECK(has(check_all(builtin_species(), t, equilibria), "P1"));
 	}
 	CHECK_FALSE(has(check_all(builtin_species(), honest), "P1")); // not asked: no reactions given
+}
+
+TEST_CASE("invariants: P1 allows the rounding of a minor gas, and no more (Stage 19)") {
+	// a cold condenser: a little water under dry air at 15 C, its steam a
+	// small part of the gas. Gas moved after the equilibrium rounds each
+	// species by up to a quantum per species of the table: for the steam that
+	// shifts the affinity by RT N / n_steam, far more than RT N / n_gas.
+	bool ok = false;
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("condenser");
+	b.set_amount(cell, builtin::water, amount_from_mol(1e-4, ok)).set_amount(cell, builtin::nitrogen, amount_from_mol(2e-3, ok));
+	b.set_temperature(cell, 288.15);
+	auto world = b.build();
+	REQUIRE(world.has_value());
+	Simulation sim(std::move(*world), shipped_reactions());
+	const StepTrace honest = sim.step();
+	const std::vector<Reaction> equilibria = sim.equilibria();
+	const auto steam = static_cast<size_t>(builtin::steam.index);
+	REQUIRE(honest.after.cells[0].amount[static_cast<size_t>(builtin::water.index)] > 0); // liquid left: at saturation
+	CHECK(check_all(builtin_species(), honest, equilibria).empty());
+	const int64_t slack = builtin_species().species_count() + 1;
+	{
+		StepTrace t = honest; // what rounding can leave (half the bound: the honest state is up to a quantum short): no violation
+		t.after.cells[0].amount[steam] -= slack / 2;
+		t.after.cells[0].amount[static_cast<size_t>(builtin::nitrogen.index)] += slack / 2;
+		CHECK_FALSE(has(check_P1(builtin_species(), t, equilibria), "P1"));
+	}
+	{
+		StepTrace t = honest; // far more than rounding: the air too dry
+		t.after.cells[0].amount[steam] -= 1000 * slack;
+		t.after.cells[0].amount[static_cast<size_t>(builtin::nitrogen.index)] += 1000 * slack;
+		CHECK(has(check_P1(builtin_species(), t, equilibria), "P1"));
+	}
 }
 
 TEST_CASE("invariants: more liquid than the vessel holds is detected: V2 (Stage 5)") {

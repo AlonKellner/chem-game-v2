@@ -602,9 +602,11 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 				continue; // nothing left to go that way: dry, or no vapour
 			}
 			// Gas moved after the equilibrium was taken is rounded to whole
-			// quanta, a quantum per species: that shifts every gas activity by
-			// up to slack / (the cell's gas, in quanta), and the affinity by RT
-			// times that.
+			// quanta, up to `slack` of each species: that shifts the log of a
+			// gas's mole fraction by up to slack / n_i (its own amount) plus
+			// slack / (the cell's gas), and the affinity by RT times the sum
+			// over the reaction's gases of |nu_i| times that. A minor gas (the
+			// steam over a cold condenser) moves far more than the whole gas.
 			double gas = 0.0;
 			for (size_t s = 0; s < cell.amount.size(); ++s) {
 				if (cell.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
@@ -612,7 +614,14 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 				}
 			}
 			const Thermal thermal = thermal_state(table, cell);
-			const double rounding = gas > 0.0 ? 2.0 * static_cast<double>(slack) / gas * GAS_CONSTANT * thermal.temperature : 0.0;
+			double shift = 0.0; // in the log of the activities, summed over the reaction's gases
+			for (const Term &t : reaction.terms()) {
+				const auto n = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]);
+				if (table.species(t.species).phase == Phase::Gas && n > 0.0 && gas > 0.0) {
+					shift += static_cast<double>(t.nu < 0 ? -t.nu : t.nu) * static_cast<double>(slack) * (1.0 / n + 1.0 / gas);
+				}
+			}
+			const double rounding = shift * GAS_CONSTANT * thermal.temperature;
 			if ((forward ? a : -a) <= rounding) {
 				continue;
 			}

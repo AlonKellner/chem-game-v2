@@ -75,7 +75,7 @@ chem_apply_flags(chem_datagen)
 add_custom_command(
     OUTPUT "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/builtin_optics.cpp" "${CHEM_GEN_DIR}/include/chem/builtin_ids.hpp"
     COMMAND chem_datagen "${CHEM_DATA_DIR}" "${CHEM_GEN_DIR}"
-    DEPENDS chem_datagen "${CHEM_DATA_DIR}/elements.json" "${CHEM_DATA_DIR}/species.json" "${CHEM_DATA_DIR}/reactions.json"
+    DEPENDS chem_datagen "${CHEM_DATA_DIR}/elements.json" "${CHEM_DATA_DIR}/species.json" "${CHEM_DATA_DIR}/reactions.json" "${CHEM_DATA_DIR}/solutions.json"
             "${CHEM_DATA_DIR}/optics/media.json" "${CHEM_DATA_DIR}/optics/cie_1931_2deg.csv" "${CHEM_DATA_DIR}/optics/d65.csv"
     COMMENT "Embedding the species and reactions (data/), every reaction balanced")
 

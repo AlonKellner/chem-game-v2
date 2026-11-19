@@ -1,5 +1,31 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 19)
+
+- §4.6, §10: concentrated solutions.
+  - **Activities from ions.** A dissolved species names its ions (`data/species.json`); its
+    activity is `Σ ν_j ln(m_j γ_j)`, the solvent's `ln x − φ n/n_liquid`.
+  - **One excess function.** `γ_j` and `φ` are the exact derivatives of Pitzer's excess Gibbs
+    energy, with its parameters at 25 °C (`data/solutions.json`): CuSO₄ from Pitzer and Mayorga
+    (1974), the acid fitted as fully dissociated to Staples (1981).
+  - **No heat of dilution.** The excess is all entropy, so the temperature and conservation are
+    untouched.
+  - **Volumes.** A dissolved species takes its apparent molar volume.
+- §9: the four forms of the salt.
+  - Each crystallises from the solution by the surface law with nucleation.
+  - The hydrates lose water in three first-order steps (calibrated at their thermogravimetric
+    peaks). The one-step calcination is gone.
+  - The pentahydrate gives way to the trihydrate under its solution at 93.5 °C (measured 95.9).
+- §7: the surface law's driver is its molality.
+- CuSO₄(aq) is refitted (`Hf`, `S°`, `Cp`) to the CRC's solubility, within 2.3 % from 0 to 100 °C.
+  The trihydrate and the monohydrate are verified (NBS 1982) and have calibrated colours.
+- §18:
+  - K1 gains the electrolyte oracles.
+  - P1's rounding bound counts a minor gas: the steam over a cold condenser drawing dry air
+    failed it, latent since Stage 5.
+- §17: the demo closes the valve at 12 g of water, not 10. At 10 g the boiling liquor is past the
+  trihydrate's saturation.
+
 ## 0.19.0 (2026-11-18, Stage 18)
 
 Signed off by the user on 2026-11-18 ("Approved, proceed").

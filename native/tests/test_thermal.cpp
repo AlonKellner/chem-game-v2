@@ -1,5 +1,6 @@
 // Temperature, heat conduction and entropy (GAME_SPEC §4.2, §4.6, §5).
 #include "chem/builtin_ids.hpp"
+#include "tables.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
@@ -45,9 +46,11 @@ TEST_CASE("thermal: the data oracle: water's heat of vaporisation at 25 C follow
 	CHECK(def(builtin::steam).hf - def(builtin::water).hf == doctest::Approx(43990.0).epsilon(0.002));
 	// liquid water's heat capacity, 4.18 J/g/K
 	CHECK(def(builtin::water).cp / 18.015 == doctest::Approx(4.184).epsilon(0.002));
-	// the species the later stages still have to verify have no data yet
-	CHECK_FALSE(def(builtin::copper_sulfate_trihydrate).has_thermo);
-	CHECK(def(builtin::copper_oxide).has_thermo);
+	// every built-in species has verified data (Stage 19: the last two hydrates)
+	for (const SpeciesDef &s : builtin_species().all_species()) {
+		CAPTURE(s.id);
+		CHECK(s.has_thermo);
+	}
 }
 
 TEST_CASE("thermal: a cell built at a temperature has it, and its heat capacity is the sum of its parts (Stage 2)") {
@@ -67,7 +70,7 @@ TEST_CASE("thermal: a cell built at a temperature has it, and its heat capacity 
 TEST_CASE("thermal: worlds that cannot have temperatures are refused (Stage 2)") {
 	std::string why;
 	{
-		World::Builder b(builtin_species()); // a species without verified data
+		World::Builder b(testing::unverified_table()); // a species without verified data
 		const CellId c = b.add_cell("c");
 		b.set_amount(c, builtin::copper_sulfate_trihydrate, mol(0.02)).set_temperature(c, 300.0);
 		CHECK_FALSE(b.build(&why));

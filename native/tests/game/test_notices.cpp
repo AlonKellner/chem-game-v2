@@ -104,11 +104,15 @@ TEST_CASE("notices: warnings and dangers: a balloon nearly full, then bursting; 
 	INFO(all(*l));
 	CHECK(count(*l, Notice::Warning, "bag is 8") == 1); // 80% and more: once
 	CHECK(count(*l, Notice::Danger, "bag burst") == 1);
-	// a flask with a little water, boiled until it is dry
-	auto d = open();
+	// a flask with a little water, boiled until it is dry (water: the acid's
+	// would never go, held by the acid, concentrated: Stage 19)
+	auto d = lab::Lab::open(R"({"format": "chem-bench/2", "room": {"celsius": 20}, "items": [
+		{"id": "flask", "at": [0, 0], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.9, "contents": {"water": {"g": 5}}},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})",
+			why);
+	REQUIRE_MESSAGE(d != nullptr, why);
 	d->set_checking(false);
-	for (const char *c : { R"({"do": "pour", "from": "acid", "to": "flask", "ml": 5})", R"({"do": "heat", "burner": "burner", "vessel": "flask"})",
-				 R"({"do": "valve", "burner": "burner", "to": 1})" }) {
+	for (const char *c : { R"({"do": "heat", "burner": "burner", "vessel": "flask"})", R"({"do": "valve", "burner": "burner", "to": 1})" }) {
 		must(*d, c);
 	}
 	for (int i = 0; i < 600 && count(*d, Notice::Warning, "boiled dry") == 0; ++i) {
