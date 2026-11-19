@@ -44,9 +44,9 @@ appendix reproduces the NBS tables (Wagman et al. 1982).
 |---|---|---|---|---|
 | CuSO4·5H2O(s) | −2279.7 | 300.4 | 280 | Atkins. Its ΔGf° there, −1879.7, is not used. Density 2.286 g/cm³: CRC Handbook, 92nd ed., p. 4.62, as cited by Wikipedia |
 | H2SO4(aq) | −909.27 | 20.1 | 138.9 (stand-in) | ΔHf° and S° are Atkins's SO4²⁻(aq) (with H⁺(aq) at zero: the acid fully ionised). **Cp is a stand-in**: Atkins's value for the pure liquid acid, since the game treats the acid as one neutral dissolved species |
-| CuSO4(aq) | −839.382 (fitted) | −10.095 (fitted) | −96.875 (chosen) | **Fitted, not tabulated.** See below. For reference, Atkins's ions give Cu²⁺(aq) + SO4²⁻(aq) = −844.50 kJ/mol and −79.5 J/mol·K |
+| CuSO4(aq) | −835.990 (fitted) | −51.520 (fitted) | 211.81 (fitted) | **Fitted, not tabulated**, in Stage 19 with the activities of GAME_SPEC §10 (below). Stage 6 fitted −839.382, −10.095 and chose −96.875 for an ideal-dilute neutral solute. For reference, Atkins's ions give Cu²⁺(aq) + SO4²⁻(aq) = −844.50 kJ/mol and −79.5 J/mol·K |
 
-**The fit of CuSO4(aq).** The game treats the dissolved salt as one neutral species in an
+**The fit of CuSO4(aq) in Stage 6**, replaced in Stage 19. The game treated the dissolved salt as one neutral species in an
 ideal-dilute solution. With the tabulated ionic values that model puts saturation near
 0.002 mol/kg; the real figure is 1.3. So the dissolved salt's enthalpy and entropy are the two
 numbers that make `CuSO4·5H2O(s) ⇌ CuSO4(aq) + 5 H2O(l)` reproduce the handbook's solubility: a
@@ -64,6 +64,126 @@ and per litre; per 100 g of water is the handbook's usual basis and is what is u
 | handbook, g | 14.3 | 17.2 | 20.5 | 39.5 | 75.4 |
 | the game, g | 14.21 | 17.20 | 20.61 | 39.82 | 74.69 |
 
+## Verified data for concentrated solutions and the hydrates (Stage 19)
+
+**NBS**: Wagman et al., *The NBS tables of chemical thermodynamic properties*, J. Phys. Chem. Ref.
+Data 11, Suppl. 2 (1982), srd.nist.gov/JPCRD/jpcrdS2Vol11.pdf. It is a scan with no text layer;
+each row was read off the page image (retrieved 2026-11-18).
+
+| Species | ΔHf° (kJ/mol) | ΔGf° | S° (J/mol·K) | Cp (J/mol·K) | Page |
+|---|---|---|---|---|---|
+| CuSO4·5H2O(cr) | −2279.65 | −1879.745 | 300.4 | 280. | 2-156 (the game keeps Atkins's −2279.7, the same table rounded) |
+| CuSO4·3H2O(cr) | −1684.31 | −1399.96 | 221.3 | 205. | 2-156 |
+| CuSO4·H2O(cr) | −1085.83 | −918.11 | 146.0 | 134. | 2-156 |
+| CuSO4(cr) | −771.36 | −661.8 | 109. | 100.0 | 2-155 (the game keeps CODATA's −771.4 and 109.2, and Chase's Cp) |
+| Cu2+(ao) | 64.77 | 65.49 | −99.6 | — | 2-154 |
+| SO4 2−(ao) | −909.27 | −744.53 | 20.1 | −293. | 2-57 |
+| H2SO4(ai) | −909.27 | −744.53 | 20.1 | −293. | 2-58: the acid exists in the table only fully ionised, as 2 H⁺ + SO₄²⁻ |
+
+The free energies give the hydrates' dissociation pressures at 25 °C: 7.80 torr (5 → 3), 5.14 torr
+(3 → 1) and 0.0104 torr (1 → 0). Cotti et al., *Cryst. Growth Des.* 2024 (doi
+10.1021/acs.cgd.4c00589), give 10 and 6 mbar for the first two (7.5 and 4.5 torr).
+
+**Densities.** CuSO4·3H2O: 2.663 g/cm³ measured on synthetic bonattite (*Handbook of Mineralogy*,
+handbookofmineralogy.org/pdfs/bonattite.pdf; the structure gives 2.679 at 100 K, COD 7061267).
+CuSO4·H2O: 3.382 g/cm³ from its crystal structure at 100 K (COD 7061268, Ibrahim and Boeré,
+*New J. Chem.* 46, 5479, 2022). No measured density was found. **Medium confidence.**
+
+**Pitzer's equations** (GAME_SPEC §10).
+- A^φ = 0.392 at 25 °C and b = 1.2: Pitzer and Mayorga, "Thermodynamics of electrolytes. II",
+  LBL preprint (escholarship.org/uc/item/1rc6r4vm), p. 8.
+- CuSO4:
+
+  | β(0) | β(1) | β(2) | C^φ | α1 | α2 | Range |
+  |---|---|---|---|---|---|---|
+  | 0.2358 | 2.485 | −47.35 | 0 (published −0.0012) | 1.4 | 12 | to 1.4 mol/kg |
+
+  Pitzer and Mayorga, "Thermodynamics of electrolytes. III. 2-2 electrolytes", J. Solution Chem.
+  3, 539 (1974), LBL-2282 preprint Table I (escholarship.org/uc/item/0q16265x). The same values
+  are in Simoes et al. 2016, Table 1.
+  - **Their C^φ is left out (Stage 19).** Fitted below 1.4 mol/kg, where it is within the
+    fit's noise, it makes a cubic term. Extrapolated, that term turns the water's activity back
+    up beyond 65 mol/kg: in a liquor boiled nearly dry, evaporating would then drive itself.
+    Without it the water's activity falls at every strength (a test holds it to 400 mol/kg).
+    The fit's rms rises from 1.35 % to 1.49 %.
+  - Other sets disagree: Downes and Pitzer 1975 (0.2340, 2.527, −48.33, 0.0044); Höffler 2017
+    at 298.15 K (0.2086, 2.6587, −58.29, 0.01924).
+  - Each was tried in the fit below. Pitzer and Mayorga's fits the solubility best (rms 1.35%,
+    against 1.9% and 2.9%), and is used, without its C^φ.
+- H2SO4 as fully dissociated:
+
+  | β(0) | β(1) | β(2) | C^φ | α1 | α2 |
+  |---|---|---|---|---|---|
+  | 0.12593 | −8.17145 | −24.32491 | 0 | 4.5 | 12 |
+
+  **Fitted, not tabulated.** Fitted to the osmotic and mean activity coefficients of Staples,
+  J. Phys. Chem. Ref. Data 10, 779 (1981), Table 42 (srd.nist.gov/jpcrdreprint/1.555648.pdf), at
+  16 molalities from 0.1 to 5 mol/kg, with rms 0.0046.
+  - The published models treat the acid with bisulfate, and their parameters do not carry over.
+    The negative β(1) and β(2) stand for the association the model leaves out.
+  - At 1 mol/kg the model gives φ 0.7203 and a_w 0.9618, where Staples gives 0.7255 and 0.96155.
+- No mixing parameters (θ, ψ) are used. The one published θ(Cu²⁺, H⁺), −0.023 (Wang et al.
+  2012, as listed by Justel et al. 2020), belongs to a model with bisulfate.
+
+**Oracles for the activity model** (never inputs).
+- CuSO4's mean activity coefficient at saturation, 25 °C: 0.0369 (Wetmore and Gordon) and 0.0360
+  (Müller and Reuther) at 1.413 mol/kg, as listed by Sibarani et al. 2022, Table 12. The model
+  gives 0.0357 at 1.4 mol/kg.
+- The CRC's mean activity coefficients (0.150, 0.104, 0.062 and 0.042 at 0.1, 0.2, 0.5 and 1.0),
+  as reproduced by a university handout, are of low confidence in their unit; the model gives
+  0.147, 0.102, 0.061 and 0.042.
+
+**Solubility of CuSO4**, mass % of the anhydrous salt: CRC Handbook, "Aqueous solubility of
+inorganic compounds at various temperatures" (after Söhnel and Novotny), as reproduced at
+olympiads-xyz-bg.vercel.app (edition not shown). The row is "CuSO4 12.4 14.4 16.7 18.0 19.3 22.2
+25.4 28.8 32.4 36.3 40.3 43.5" for 0, 10, 20, 25, 30 … 100 °C.
+- Linke–Seidell gives about 2% more at 20–25 °C (1.2833 and 1.413 mol/kg, as listed by Justel et
+  al. 2019).
+- Miles and Menzies (1937) list the pentahydrate up to 369.05 K and the trihydrate from there
+  (as listed by Höffler 2017, Table 12): the transition under the saturated solution is
+  **95.9 °C**. Höffler's model puts it at 93.75 °C.
+
+**The fit of CuSO4(aq)**, refitted in Stage 19:
+- Its `Hf`, `S°` and `Cp` are fitted, by least squares in ln m, to make
+  `CuSO4·5H2O(s) ⇌ CuSO4(aq) + 5 H2O(l)` with the activities above reproduce the eleven points
+  from 0 to 90 °C: **−835.990 kJ/mol, −51.520 J/mol·K and 211.81 J/mol·K** (rms 1.49 % in molality).
+- For reference, the ions' sum in NBS is −844.50 kJ/mol and −79.5 J/mol·K.
+- The positive Cp is an effective value. It carries the temperature dependence of the activity
+  coefficients, which the model holds at 25 °C.
+
+| °C | 0 | 10 | 20 | 25 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| handbook, g/100 g water | 14.16 | 16.82 | 20.05 | 21.95 | 23.92 | 28.53 | 34.05 | 40.45 | 47.93 | 56.99 | 67.50 | 76.99 |
+| the game, pentahydrate | 14.41 | 16.63 | 19.75 | 21.67 | 23.81 | 28.79 | 34.61 | 41.22 | 48.59 | 56.75 | 65.78 | 75.83 |
+| the game, trihydrate | 83.5 | 78.0 | 73.8 | 72.1 | 70.7 | 68.6 | 67.2 | 66.6 | 66.7 | 67.3 | 68.4 | 69.9 |
+
+Derived, not fitted:
+- The two curves cross at **93.2 °C**, the transition, against 95.9 measured.
+- The saturated solution boils at 104.8 °C, at 4.45 mol/kg.
+
+**The common-ion effect.** Holler and Peffer, NBS Bulletin 13 (1916), at 15 °C: "395 grams of
+crystallized copper sulphate … in 1 liter of the saturated solution … addition of 100 grams per
+liter of sulphuric acid reduces the solubility … to 215 grams per liter". That is a ratio of 0.54
+on a basis the text leaves unclear. The model gives 0.70 with 1.0 mol/kg of acid at 15 °C.
+
+**Apparent molar volumes** (GAME_SPEC §10), from densities at 20 °C: Engineering Toolbox,
+"Density of aqueous solutions of inorganic salts and acids" (engineeringtoolbox.com, d_1958).
+That page is unsourced, so **low confidence**. Water is 0.99820 g/cm³ at 20 °C.
+
+| Solute | Mass % | Density | Apparent molar volume (cm³/mol) |
+|---|---|---|---|
+| CuSO4 | 1, 5, 10 | 1.0085, 1.0511, 1.107 | −3.4, −1.1, 2.7 |
+| H2SO4 | 1, 5, 10, 20 | 1.0049, 1.0318, 1.0661, 1.1398 | 32.8, 34.3, 35.7, 37.2 |
+
+The game uses 2.7 for CuSO4(aq) and 35.7 for H2SO4(aq): each taken where the demo's solution is
+(0.7 and 1.1 mol/kg).
+
+**Colours of the hydrates** (for the calibrated spectra below):
+- CuSO4·3H2O is "pale blue" (*Handbook of Mineralogy*, bonattite).
+- Single crystals are "clear grayish blue" (CuSO4·3H2O), "clear light blue" (CuSO4·H2O) and "clear
+  colourless" (CuSO4), from COD 7061267–7061269.
+- No reliable source describes the monohydrate as a powder.
+
 ## Calibrated kinetics (Stage 6)
 
 None of these is measured. Each is chosen so the demo plays in minutes, and is labelled here and
@@ -74,7 +194,9 @@ in GAME_SPEC §20.
 | CuO dissolving in the acid | surface, driven by the acid's molality | 1.15e6 mol/m²/s, Ea 50 kJ/mol | 3.6 g in 2.5 million grains under 100 mL of 1 M acid: 99% gone in 37 min at 20 °C still, 11 min stirred (×3), 3 min warmed and stirred |
 | Pentahydrate growing and dissolving | surface | 3e-2 mol/m²/s, no activation energy | a crop finished about ten minutes after the burner goes off |
 | Pentahydrate nucleating | with the above | 2e6 per kg of water per second × (S − 1)³ | about 140,000 crystals of 0.3 mm from the demo's flask |
-| Pentahydrate losing its water | first order | 7.5e7 /s, Ea 80 kJ/mol | 1e-2 /s at 150 °C, 5e-4 /s at 100 °C, a half-life of nine hours at 60 °C |
+| Pentahydrate losing its water (Stage 6, replaced) | first order, 5 → 0 | 7.5e7 /s, Ea 80 kJ/mol | 1e-2 /s at 150 °C, 5e-4 /s at 100 °C, a half-life of nine hours at 60 °C |
+| The trihydrate, monohydrate and anhydrous salt growing, dissolving and nucleating (Stage 19) | surface, with nucleation | the pentahydrate's: 3e-2 mol/m²/s, 2e6 per kg per second × (S − 1)³ | no source gives them apart |
+| The hydrates losing water, 5 → 3, 3 → 1, 1 → 0 (Stage 19) | first order | Ea 80 kJ/mol for each; prefactors 3.9e9, 4.3e8 and 4.5e5 /s | each step's rate constant at its DTG peak is the first-order peak condition at 10 °C/min, k = β Ea / (R Tp²): peaks at 90.0, 120.2 and 255.9 °C (Yu Yuye, *Asian J. Chem.* 19, 2023, 2007, Table 2, 5–10 mg in flowing nitrogen) |
 
 Dehydration temperatures in air, for comparison: two waters lost at 63 °C, two more at 109 °C,
 the last at 200 °C (Galwey and Green 1999; Wiberg 2001; as cited by Wikipedia).
@@ -140,14 +262,11 @@ recall is uncertain), **low** (estimate or game calibration).
 
 | Species | M (g/mol) | ΔHf° (kJ/mol) | Cp (J/mol·K) | S° (J/mol·K) | ρ (g/cm³) | Confidence | Needed by |
 |---|---|---|---|---|---|---|---|
-| CuSO4·3H2O(s) | 213.647 | −1684.3 | 205 | 221.3 | about 2.66 | medium | after the demo: no source found yet; inert until then |
-| CuSO4·H2O(s) | 177.617 | −1085.8 | 134 | 146.0 | about 3.2 | medium | after the demo: no source found yet; inert until then |
 
 ### Oracles (test references, never inputs)
 
-**Hydrate dissociation:** 5→3 about 7.8 torr at 25 °C; in air, onsets near 63 °C (5→3), 110 °C
-(3→1), 200–250 °C (1→0). Pentahydrate/trihydrate transition in contact with saturated solution
-about 95.9 °C. Confidence medium.
+**Hydrate dissociation:** verified in Stage 19 (above). In air, onsets near 63 °C (5→3), 109 °C
+(3→1) and 200 °C (1→0) (Wikipedia, after Galwey and Green 1999; one secondary source).
 
 ### Kinetics (game-calibrated)
 
@@ -182,6 +301,8 @@ as literature are from memory and were not checked against a source.
 | Malachite | Diffuse reflectance 0.06 plus a Gaussian of 0.42 at 525 nm (width 45 nm) | A green mineral pigment | low |
 | CuO | Diffuse reflectance 0.035, flat | A black powder | low |
 | CuSO₄·5H₂O | Diffuse reflectance 0.05 plus a Gaussian of 0.5 at 465 nm (width 55 nm) | Blue crystals | low |
+| CuSO₄·3H₂O | Diffuse reflectance 0.3 plus a Gaussian of 0.4 at 470 nm (width 70 nm) | "Pale blue" (*Handbook of Mineralogy*, bonattite) | low |
+| CuSO₄·H₂O | Diffuse reflectance 0.62 plus a Gaussian of 0.18 at 475 nm (width 80 nm) | A bluish white powder: its crystals are "clear light blue" (COD 7061268), a powder paler | low |
 | CuSO₄ | Diffuse reflectance 0.82, flat | A white powder | low |
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
 | H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |

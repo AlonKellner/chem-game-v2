@@ -1,6 +1,6 @@
 {
 	"format": "chem-species/1",
-	"note": "Formula, phase, charge; element counts and molar masses are derived from the formula by the build. thermo (298.15 K, 1 bar): hf_kj = standard enthalpy of formation in kJ/mol, cp = molar heat capacity in J/mol/K, s0 = standard entropy in J/mol/K. A species has thermo only once its row of docs/DATA_SOURCES.md is verified; one without it cannot be in a cell that has a temperature. density (g/cm3, condensed phases): the build derives the molar volume; a condensed species without it cannot be in a rigid cell. wall: the vessel's own material: it holds heat, takes no room inside, never moves and never reacts.",
+	"note": "Formula, phase, charge; element counts and molar masses are derived from the formula by the build. thermo (298.15 K, 1 bar): hf_kj = standard enthalpy of formation in kJ/mol, cp = molar heat capacity in J/mol/K, s0 = standard entropy in J/mol/K. A species has thermo only once its row of docs/DATA_SOURCES.md is verified; one without it cannot be in a cell that has a temperature. density (g/cm3, condensed phases): the build derives the molar volume; a condensed species without it cannot be in a rigid cell. wall: the vessel's own material: it holds heat, takes no room inside, never moves and never reacts. ions (dissolved species, GAME_SPEC §4.6): the particles it is made of in solution, each named by its formula and charge (\"SO4-2\") with its count; their elements and charges must sum to the species'. A dissolved species without ions is one neutral particle. volume_cm3 (dissolved species): its apparent molar volume in cm3/mol; without it a dissolved species takes no room.",
 	"species": [
 		{"id": "malachite", "formula": "Cu2CO3(OH)2", "phase": "s", "density": 3.8, "thermo": {"hf_kj": -1053.95, "cp": 154.3, "s0": 166.3}},
 		{"id": "copper_oxide", "formula": "CuO", "phase": "s", "density": 6.315, "thermo": {"hf_kj": -156.06, "cp": 42.246, "s0": 42.59}},
@@ -9,11 +9,11 @@
 		{"id": "steam", "formula": "H2O", "phase": "g", "thermo": {"hf_kj": -241.826, "cp": 33.59, "s0": 188.835}},
 		{"id": "nitrogen", "formula": "N2", "phase": "g", "thermo": {"hf_kj": 0, "cp": 29.124, "s0": 191.609}},
 		{"id": "oxygen", "formula": "O2", "phase": "g", "thermo": {"hf_kj": 0, "cp": 29.383, "s0": 205.152}},
-		{"id": "sulfuric_acid_aq", "formula": "H2SO4", "phase": "aq", "thermo": {"hf_kj": -909.27, "cp": 138.9, "s0": 20.1}},
-		{"id": "copper_sulfate_aq", "formula": "CuSO4", "phase": "aq", "thermo": {"hf_kj": -839.382, "cp": -96.875, "s0": -10.095}},
+		{"id": "sulfuric_acid_aq", "formula": "H2SO4", "phase": "aq", "ions": {"H+1": 2, "SO4-2": 1}, "volume_cm3": 35.7, "thermo": {"hf_kj": -909.27, "cp": 138.9, "s0": 20.1}},
+		{"id": "copper_sulfate_aq", "formula": "CuSO4", "phase": "aq", "ions": {"Cu+2": 1, "SO4-2": 1}, "volume_cm3": 2.7, "thermo": {"hf_kj": -835.990, "cp": 211.81, "s0": -51.520}},
 		{"id": "copper_sulfate_pentahydrate", "formula": "CuSO4.5H2O", "phase": "s", "density": 2.286, "thermo": {"hf_kj": -2279.7, "cp": 280, "s0": 300.4}},
-		{"id": "copper_sulfate_trihydrate", "formula": "CuSO4.3H2O", "phase": "s"},
-		{"id": "copper_sulfate_monohydrate", "formula": "CuSO4.H2O", "phase": "s"},
+		{"id": "copper_sulfate_trihydrate", "formula": "CuSO4.3H2O", "phase": "s", "density": 2.663, "thermo": {"hf_kj": -1684.31, "cp": 205, "s0": 221.3}},
+		{"id": "copper_sulfate_monohydrate", "formula": "CuSO4.H2O", "phase": "s", "density": 3.382, "thermo": {"hf_kj": -1085.83, "cp": 134, "s0": 146.0}},
 		{"id": "copper_sulfate", "formula": "CuSO4", "phase": "s", "density": 3.603, "thermo": {"hf_kj": -771.4, "cp": 98.531, "s0": 109.2}},
 		{"id": "glass", "formula": "SiO2", "phase": "s", "wall": true, "thermo": {"hf_kj": -910.86, "cp": 48.066, "s0": 41.46}},
 		{"id": "latex", "formula": "C5H8", "phase": "s", "wall": true, "thermo": {"hf_kj": 0, "cp": 130.1, "s0": 0}}

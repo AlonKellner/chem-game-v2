@@ -137,6 +137,12 @@ void Simulation::react() {
 				continue;
 			}
 			const bool forward = a > 0.0;
+			const int64_t most = feasible_extent(state, reaction.terms(), forward);
+			if (most == 0) { // nothing to go that way with (an absent crystal to dissolve)
+				remainder = 0.0;
+				nucleation_remainder = 0.0;
+				continue;
+			}
 			const double rt = GAS_CONSTANT * probe.temperature();
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
 			const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
@@ -149,7 +155,7 @@ void Simulation::react() {
 				const double per = static_cast<double>(nu < 0 ? -nu : nu);
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
-				const double driver = table.has(kinetics.driver) ? activity(table, state, kinetics.driver) : 1.0;
+				const double driver = table.has(kinetics.driver) ? molality(table, state, kinetics.driver) : 1.0; // its concentration (GAME_SPEC §7)
 				// mol/m^2/s of the solid, at its surface
 				const double flux = rate * driver * world_.meta(cell).mixing * factor * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
@@ -184,7 +190,6 @@ void Simulation::react() {
 			int64_t whole = total > -9.0e18 && total < 9.0e18 ? static_cast<int64_t>(total) : 0; // toward zero
 			remainder = total - static_cast<double>(whole);
 			int64_t size = (forward ? whole : -whole) + born;
-			const int64_t most = feasible_extent(state, reaction.terms(), forward);
 			if (size > most) {
 				size = most;
 				remainder = 0.0;

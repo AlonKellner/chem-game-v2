@@ -38,6 +38,38 @@ struct ElementDef {
 	int64_t mass_ug_per_mol = 0; // micrograms per mole: 1.008 g/mol is 1'008'000
 };
 
+// The particles in solution (GAME_SPEC §4.6, §10): the ions of a table's
+// dissolved species, and a neutral particle for each dissolved species that
+// names none.
+inline constexpr int MAX_IONS = 3; // per species
+inline constexpr int MAX_PARTICLES = 16; // per table
+
+struct IonCount {
+	int32_t ion = -1;
+	int32_t count = 0;
+};
+
+struct IonDef {
+	std::string_view name; // "SO4-2"; a neutral particle: its species' id
+	int32_t charge = 0;
+};
+
+// Pitzer's parameters of one cation and one anion (GAME_SPEC §10).
+struct PairDef {
+	int32_t cation = -1, anion = -1; // ions
+	double beta0 = 0.0, beta1 = 0.0, beta2 = 0.0, c_phi = 0.0;
+	double alpha1 = 2.0, alpha2 = 12.0;
+};
+
+// The electrolyte model of a table (GAME_SPEC §10): the Debye-Hückel term and
+// the pairs, at 25 C, used at every temperature.
+struct SolutionDef {
+	double a_phi = 0.392;
+	double b = 1.2;
+	std::vector<IonDef> ions;
+	std::vector<PairDef> pairs;
+};
+
 struct SpeciesDef {
 	std::string_view id; // "water"
 	std::string_view formula; // "H2O"
@@ -56,8 +88,14 @@ struct SpeciesDef {
 	bool wall = false;
 	// The volume of a mole of a condensed species, m^3 (derived from its
 	// density by the build); 0 when unknown. A condensed species without it
-	// cannot be in a rigid cell.
+	// cannot be in a rigid cell. A dissolved species: its apparent molar
+	// volume (GAME_SPEC §10); without it, it takes no room.
 	double molar_volume = 0.0;
+	// A dissolved species: the particles it is made of in solution (GAME_SPEC
+	// §4.6), each an index into the table's solution ions with its count; a
+	// count of 0 ends the list. One with none is a neutral particle of its own
+	// (the table gives it one).
+	std::array<IonCount, MAX_IONS> ions{};
 };
 
 struct SpeciesId {
@@ -85,11 +123,11 @@ struct Term {
 // Surface (GAME_SPEC §7, §9): the reaction happens at the surface of one of
 // its solids, `in`, a reactant (it dissolves) or a product (it grows):
 //
-//   rate = prefactor * e^(-activation / RT) * area * a_driver * mixing * affinity factor   [mol/s]
+//   rate = prefactor * e^(-activation / RT) * area * m_driver * mixing * affinity factor   [mol/s]
 //
 // The area is that of the solid's particles, equal spheres:
 // (36 pi)^(1/3) N^(1/3) (n v)^(2/3). `driver`, if any, is a dissolved reactant
-// whose activity the rate is proportional to. Where `in` is a product, new
+// whose molality (its concentration, not its activity) the rate is proportional to. Where `in` is a product, new
 // particles form in a supersaturated solution, nucleation * (kg of solvent) *
 // (S - 1)^nucleation_order per second, S = e^(A/RT); each begins as one quantum.
 struct Kinetics {
@@ -165,7 +203,15 @@ public:
 	// for an element the table does not have, a species with no atoms, a molar
 	// mass of 2^30 ug/mol (about 1074 g/mol) or more, thermodynamic data that
 	// is not finite.
-	static std::optional<SpeciesTable> make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why = nullptr);
+	// The solution model (GAME_SPEC §10) is refused when: an ion is named
+	// twice or has no name; a species names ions without being dissolved, an
+	// ion out of range or a count that is not positive, or ions whose charges
+	// do not sum to its own; a pair is not one cation and one anion, or a
+	// parameter is not finite, or an alpha or b not positive; there are more
+	// than MAX_PARTICLES particles. A dissolved species that names no ions is
+	// given a neutral particle of its own.
+	static std::optional<SpeciesTable> make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why = nullptr,
+			SolutionDef solution = {});
 
 	int element_count() const { return static_cast<int>(elements_.size()); }
 	int species_count() const { return static_cast<int>(species_.size()); }
@@ -177,12 +223,16 @@ public:
 	bool has(SpeciesId s) const { return s.index >= 0 && s.index < species_count(); }
 	// the species with this id, or an invalid id
 	SpeciesId find(std::string_view id) const;
+	// the particles in solution and their interactions (GAME_SPEC §10)
+	const SolutionDef &solution() const { return solution_; }
+	int particle_count() const { return static_cast<int>(solution_.ions.size()); }
 
 private:
 	SpeciesTable() = default;
 	std::vector<ElementDef> elements_;
 	std::vector<SpeciesDef> species_;
 	std::vector<int64_t> molar_mass_;
+	SolutionDef solution_;
 };
 
 // A balanced reaction over one species table. There is no other kind: make()

@@ -157,7 +157,7 @@ func _play(dir: String) -> void:
 	_drag("drawer:monitor", "square:1,1")
 	for what in ["edit:item:flask", "edit:quantity", "edit:pick:water", "edit:compare:below", "edit:value:0"]:
 		_click(what)
-	for c in "10":
+	for c in "12":
 		_lab.key(0, c.unicode_at(0))
 	await _shoot(dir, "6_monitor_editor")
 	_click("edit:set")
@@ -173,9 +173,9 @@ func _play(dir: String) -> void:
 	_click("pause")
 	await _shoot(dir, "4_boiling")
 	_click("speed:600")
-	if not _watch(func(): return _grams("flask", "water") < 10.0, "the solution to boil down"):
+	if not _watch(func(): return _grams("flask", "water") < 12.0, "the solution to boil down"):
 		return
-	if _lab.paused(): # the alarm stopped the clock at 10 g, and the rig closed the valve
+	if _lab.paused(): # the alarm stopped the clock at 12 g, and the rig closed the valve
 		_click("pause")
 	if not _watch(func(): return _celsius("flask") < 21.0, "the flask to cool"):
 		return

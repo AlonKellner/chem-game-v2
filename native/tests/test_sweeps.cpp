@@ -251,7 +251,7 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		species.push_back(wall);
 	}
 	std::string why;
-	const auto table = SpeciesTable::make(elements, species, &why);
+	const auto table = SpeciesTable::make(elements, species, &why, chem.table->solution());
 	REQUIRE_MESSAGE(table.has_value(), why);
 	const int contents = table->species_count() - (volumes ? 1 : 0); // the species a cell may be filled with
 

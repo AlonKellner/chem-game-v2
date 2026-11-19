@@ -1,6 +1,7 @@
 // Gas volumes and flow (GAME_SPEC §6, the demo's subset): rigid cells stay
 // exactly full at one atmosphere; elastic cells take what they are given.
 #include "chem/builtin_ids.hpp"
+#include "tables.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
@@ -275,7 +276,7 @@ TEST_CASE("gas: a rigid cell is never sealed, and a wall never moves or reacts (
 		CHECK_FALSE(b.build(&why));
 	}
 	{
-		World::Builder b(builtin_species()); // a solid whose density is not known yet
+		World::Builder b(testing::unverified_table()); // a solid whose density is not known
 		const CellId flask = b.add_rigid_cell("flask", FLASK);
 		const CellId air = b.add_cell("air");
 		b.add_edge(flask, air, PHASES_GAS);

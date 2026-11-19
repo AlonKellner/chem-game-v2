@@ -165,7 +165,8 @@ TEST_CASE("lab: a refused command says why and changes nothing (Stage 7)") {
 	// only the timed-out wait moved the clock; nothing else changed anything
 	const json report = json::parse(lab->report());
 	CHECK(report.at("step") == 30);
-	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5).epsilon(1e-6)); // none poured
+	// none poured: what is missing is the steam the bottle's settling gas took out (its solution takes room: Stage 19)
+	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5).epsilon(1e-5));
 	CHECK(grams(item(report, "flask"), "water") == 0.0);
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(5.0).epsilon(1e-9));
 	CHECK(report.at("conserved").at("unchanged").get<bool>());

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.19.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.20.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -201,15 +201,26 @@ Each species has an **activity** `a_i` in its cell:
 - **a gas:** its partial pressure over the standard pressure, `y_i P / P°` (`y_i` its mole
   fraction among the cell's gases, `P` the cell's pressure, `P°` = 1 bar);
 - **a solid:** 1;
-- **a dissolved species:** its molality, counted per 55.51 mol of the cell's liquid (per kg of
-  water);
-- **a liquid:** the solvent of an ideal-dilute solution, `ln a = ln x_i − n_dissolved / n_liquid`
-  (`x_i` its fraction of the cell's liquids). With nothing dissolved in a single liquid this is 1.
+- **a dissolved species:** from the particles it is made of.
+  - An electrolyte names its ions: CuSO₄(aq) is Cu²⁺ and SO₄²⁻, H₂SO₄(aq) is 2 H⁺ and SO₄²⁻. A
+    dissolved species that names none is one neutral particle of its own.
+  - Each particle `j` has a molality `m_j`: the sum over every dissolved species holding it,
+    counted per 55.51 mol of the cell's liquid (per kg of water). It also has an activity
+    coefficient `γ_j` (§10).
+  - Then `ln a = Σ_j ν_j ln(m_j γ_j)`.
+  - An ion shared between species is the common-ion effect. The acid's sulfate raises the
+    salt's activity, so less of the salt dissolves.
+- **a liquid:** the solvent, `ln a = ln x_i − φ n_particles / n_liquid`.
+  - `x_i` is its fraction of the cell's liquids, and `φ` is the solution's osmotic coefficient
+    (§10).
+  - With nothing dissolved in a single liquid this is 1.
 
-The solvent's form is not the mole fraction `n_w / (n_w + n_dissolved)` of an earlier draft: only
-`−n_dissolved / n_liquid` is consistent with solutes at their molality (the Gibbs-Duhem
-relation), and only a consistent pair makes the entropy a function of state. The random sweeps
-caught the inconsistent form as falling entropy.
+`γ_j` and `φ` both come from one function, the solution's excess Gibbs energy (§10): they are its
+derivatives. That keeps the solvent consistent with its solutes (the Gibbs-Duhem relation), and
+only a consistent pair makes the entropy a function of state.
+
+The solvent's form is not the mole fraction `n_w / (n_w + n_dissolved)` of an earlier draft. The
+random sweeps caught that inconsistent form as falling entropy.
 
 A dissolved species needs a liquid: a cell that holds one and no liquid is not a valid state
 (invariant X2). The dynamics cannot produce it: the last of the solvent has activity zero, so it
@@ -360,8 +371,9 @@ Stage 8 overflow and the balloon's capacity (§13).
   - The **area** is that of the solid's particles as equal spheres:
     `(36π)^(1/3) N^(1/3) (n v)^(2/3)`, from its amount `n`, molar volume `v` and particle count `N`
     (§9).
-  - The **driver**, if any, is a dissolved reactant whose activity the rate is proportional to
-    (the acid, for an oxide dissolving in it).
+  - The **driver**, if any, is a dissolved reactant whose molality the rate is proportional to
+    (the acid, for an oxide dissolving in it). It is its concentration, not its activity: the
+    rate counts what reaches the surface (Stage 19; with ideal solutions the two were the same).
   - **Mixing** is the cell's stirring: 1 at rest. It multiplies this law's rates, which transport
     limits, and nothing else.
   - With this area the cube root of the amount moves linearly in time, so the step is exact: a
@@ -438,13 +450,33 @@ crystals. The count is state, saved with the rest, but not a conserved quantity:
 Growth and nucleation compete for the same supersaturation, so slow cooling gives few large
 crystals and fast cooling many small ones, without a rule saying so.
 
-**Demo subset:** CuSO₄ and H₂SO₄ as neutral ideal-dilute solutes; CuSO₄(aq)'s `Hf` and `S°`
-fitted to the solubility curve; the pentahydrate crystallising by the surface law with
-nucleation; the pentahydrate dehydrating in one step to the anhydrous salt (the trihydrate and
-the monohydrate have no verified data yet and are inert); dissolved species take no volume;
-particles as equal spheres, one count per solid per cell. Decanting comes with the equipment
-(*PLANNED, Stage 8*).
-**Status:** Stage 6 implements the demo subset.
+**The four forms of the salt.**
+- CuSO₄·5H₂O, CuSO₄·3H₂O, CuSO₄·H₂O and CuSO₄ each crystallise from the solution, and dissolve
+  into it, by the surface law with nucleation.
+- Each hydrate loses water to the next in a first-order step that gives off steam:
+  5 → 3 → 1 → 0.
+- Which form is stable follows from the temperature and the water's activity, and nothing else
+  says so:
+  - Under its saturated solution the pentahydrate gives way to the trihydrate at 93.2 °C. This is
+    derived, and measured at 95.9 °C.
+  - Boiled down, a solution starts crystals near 10 g of water. A trihydrate that forms above the
+    transition dissolves again as the solution cools, and the pentahydrate grows.
+  - Boiled dry and heated on, the hydrates turn white as their water leaves.
+- Water on the white salt dissolves it and grows the blue pentahydrate.
+
+**Demo subset:**
+- CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
+  fitted to the solubility curve.
+- The four forms of the salt, above.
+- A dissolved species takes its apparent molar volume.
+- Particles as equal spheres, one count per solid per cell.
+- Decanting comes with the equipment (*PLANNED, Stage 8*).
+
+**Status:**
+- Stage 6 implements the pentahydrate, ideal-dilute solutions of neutral solutes, and dissolved
+  species that take no volume.
+- Stage 19 makes the solutes electrolytes and gives them their volumes, and adds the lower
+  hydrates and the stepwise dehydration. Signed off by the user on 2026-11-19 (Stage 19).
 
 ## 10. Property models
 
@@ -461,8 +493,39 @@ is part of `μ`, so conservation and the second law are untouched.
 - **Surface tension** (Macleod-Sugden), **osmotic pressure**, **dielectric constant**.
 - **Real gases:** virial or cubic equation of state.
 
-**Demo subset:** none. Constant `Cp`, ideal gas, ideal-dilute solutions, additive volumes.
-**Status:** specified; after the demo.
+**Electrolytes (Pitzer).** The solution's excess Gibbs energy, per kilogram of water `w`:
+
+`G_ex / (w R T) = f(I) + Σ_c Σ_a 2 m_c m_a (B_ca + Z C_ca)`
+
+- `I = ½ Σ m_j z_j²` is the ionic strength, and `Z = Σ m_j |z_j|`.
+- `f(I) = −A_φ (4I/b) ln(1 + b√I)`, with `A_φ = 0.392` and `b = 1.2`.
+- `B_ca = β0 + β1 g(α1 √I) + β2 g(α2 √I)`, with `g(x) = 2(1 − (1 + x) e^(−x)) / x²`.
+- `C_ca = C^φ / (2 √|z_c z_a|)`.
+- The sum runs over the pairs of a cation and an anion that `data/solutions.json` gives
+  parameters for.
+
+The derivatives of `G_ex` are the activity coefficients: `ln γ_j = ∂(G_ex/RT)/∂n_j`. Its
+derivative by the water is the solvent's share, `−φ` of §4.6. Both are taken from one function,
+so they are consistent by construction.
+
+The parameters do not depend on temperature, so neither does `G_ex / T`. That means:
+- There is no excess enthalpy: no heat of dilution. The cell's temperature still follows from its
+  energy as in §4.2.
+- The excess is all entropy, `S_ex = −G_ex / T`. That is the `−R ln γ` of each species in §4.6's
+  sum.
+
+**Demo subset:**
+- Electrolytes by the equations above, with the parameters of 25 °C at every temperature:
+  - CuSO₄: Pitzer and Mayorga (1974), without their C^φ: extrapolated, it turns the water's
+    activity back up beyond 65 mol/kg.
+  - H₂SO₄: fitted, as fully dissociated, to Staples' (1981) recommended values.
+  - No mixing terms between ions of the same sign.
+- A dissolved species takes a constant volume: its apparent molar volume.
+- Constant `Cp` and an ideal gas.
+
+**Status:**
+- Stage 6: ideal-dilute solutions and additive volumes.
+- Stage 19: electrolytes, and dissolved volumes. Signed off by the user on 2026-11-19.
 
 ## 11. Surface effects
 
@@ -1484,15 +1547,17 @@ mouth afterwards.
 
 **Stage 2: copper sulfate solution.** Once the flask is below 30 °C, 50 mL of the 1 M sulfuric
 acid is poured onto the oxide (about 45 mL would react it all), stirred, over a low flame. The
-black solid is gone in 219 s and the liquid is blue.
+black solid is gone in 227 s and the liquid is blue.
 
 **Stage 3: water and crystals.** The condenser on the flask, the beaker under its outlet, the
-valve open. The solution boils; vapour condenses and runs into the beaker. With 10 g of water
-left the valve is closed. As the flask cools the solution passes saturation and blue pentahydrate
-crystals grow. The liquor is poured off into the waste beaker; the beaker and the flask are
-handed in. *Measured:* 40.87 g of water in the beaker and nothing else but air; 8.935 g of
-CuSO₄·5H₂O in the flask, in 447,472 crystals of 0.26 mm, 79% of the copper. The flask's solids
-are 99.977% pentahydrate: the rest is the 2 mg of malachite that never decomposed.
+valve open. The solution boils; vapour condenses and runs into the beaker. With 12 g of water
+left the valve is closed: with less, the boiling liquor would be saturated above the 93.2 °C
+transition, and pale trihydrate would come out first (§9). As the flask cools the solution passes
+saturation and blue pentahydrate crystals grow. The liquor is poured off into the waste beaker;
+the beaker and the flask are handed in. *Measured (Stage 19):* 38.91 g of water in the beaker and
+nothing else but air; 9.274 g of CuSO₄·5H₂O in the flask, in 1,002,347 crystals of 0.20 mm, 82% of
+the copper. The flask's solids are 99.977% pentahydrate: the rest is the 2 mg of malachite that
+never decomposed.
 
 Heating the crystals too far, or boiling dry, turns them to the white anhydrous salt. Acid
 beyond what the oxide needs stays in the liquor, and is the reason to pour it off.
@@ -1561,7 +1626,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4) | sign-exact | 2–4 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
-| P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: 2 N R T / (the cell's gas in quanta), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5 |
+| P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: R T Σ\|ν_i\| N (1/n_i + 1/n_gas) over the reaction's gases, n_i each one's quanta and n_gas the cell's (Stage 19: before, 2 N R T / n_gas, which a minor gas exceeds: the steam over a cold condenser drawing dry air), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5, 19 |
 | V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No rigid cell holds more solids and liquids than its volume. In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8 |
 | V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
@@ -1574,7 +1639,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |
 | M2 | Doubling every extensive quantity leaves intensive trajectories unchanged | metamorphic | 3 |
 | M3 | Halving the step halves the error (first order), within 25% | convergence | 3 |
-| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3% | data oracle | 2–6 |
+| K1 | Table-derived values agree with literature within stated tolerances. Stage 2: water's heat of vaporisation at 25 °C. Stage 3: malachite's decomposition is endothermic and becomes spontaneous between 25 and 127 °C. Stage 5: water's saturation pressure within 2% and heat of vaporisation within 0.6% of NIST from 25 to 100 °C; boiling point within 0.5 K. Stage 6: copper sulfate's solubility within 1.5% of the handbook from 0 to 100 °C (the dissolved salt's two numbers were fitted to those five points); water's ebullioscopic constant within 3%. Stage 19: the solubility within 3% of the handbook from 0 to 100 °C (three numbers fitted to the eleven points from 0 to 90 °C); copper sulfate's mean activity coefficient at saturation (1.41 mol/kg, 25 °C) within 4% of the two measurements; the acid's osmotic coefficient and water activity within 2% of Staples to 5 mol/kg; the pentahydrate giving way to the trihydrate under its saturated solution within 3 K of the measured 95.9 °C; the acid lowering the salt's solubility; a neutral solute's ebullioscopic constant still within 3% | data oracle | 2–6, 19 |
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
@@ -1609,6 +1674,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   estimate and 64 points each) 0.93 to 0.98 ms. Stage 10 recorded 1.9 and 11 ms: its runs' whole
   frames took 70 ms against about 3 ms since, so the machine was busy with something else then, and
   those numbers are withdrawn. The first fixed-band pass was 0.21 ms.
+- **Stage 19:**
+  - Electrolytes cost the demo 6.67 µs a step, against 4.27 µs on the same machine before: 4.0 ms
+    a frame at 600 steps a frame.
+  - The time is the boiling equilibrium's search through Pitzer's excess, and the three more
+    crystallisations.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -1619,11 +1689,12 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | No gravitational energy in the ledger | About 0.2 J per pour |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
-| Ideal-dilute solutions of neutral solutes; CuSO₄(aq)'s `Hf` and `S°` fitted to its solubility | Solubility within 1.5% of the handbook from 0 to 100 °C in water alone. No heat of dilution. No common-ion effect: acid left in the liquor lowers water's activity and so *raises* the salt's solubility in this model (2.1 mol/kg at 20 °C beside 4.6 mol/kg of acid, against 1.3 in water); in reality it lowers it |
-| The solution model is valid below about 11 mol/kg | Beyond it (a solution boiled almost dry) the model's solubility has a second, unphysical branch. Real saturation is 4.7 mol/kg at 100 °C |
-| Sulfuric acid is one neutral dissolved species that only reacts with the oxide | No dissociation, no pH, no vapour of its own; its heat capacity is the pure liquid's |
-| Dissolved species take no volume | The demo's solution is about 3% larger than modelled |
-| The pentahydrate loses its water in one step | The pale trihydrate and monohydrate are skipped: blue goes to white. In dry air this model's crystals are stable below about 46 °C (in reality the first two waters go near 63 °C) |
+| Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
+| The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
+| No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
+| Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no pH, no vapour of its own; its heat capacity is the pure liquid's |
+| A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
+| The hydrates lose their water in three first-order steps with calibrated rates | One activation energy for all three (80 kJ/mol), and prefactors that put each step's fastest rate at its thermogravimetric peak (90, 120 and 256 °C at 10 °C/min). The times are plausible, not measured |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |

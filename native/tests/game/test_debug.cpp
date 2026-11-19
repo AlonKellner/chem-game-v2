@@ -65,7 +65,8 @@ TEST_CASE("debug: what an item holds: amounts, mole fractions in their own mixtu
 		if (s.species == "sulfuric_acid_aq") {
 			CHECK(s.mol == doctest::Approx(0.1).epsilon(1e-9));
 			CHECK(s.molality == doctest::Approx(0.1 / 0.1).epsilon(1e-3)); // 0.1 mol in 100 g of water
-			CHECK(s.activity == doctest::Approx(s.molality).epsilon(1e-9));
+			// an electrolyte (Stage 19): (2m gamma)^2 (m gamma), Staples' gamma 0.1247 at 1 mol/kg
+			CHECK(s.activity == doctest::Approx(4.0 * 0.1247 * 0.1247 * 0.1247).epsilon(0.03));
 			CHECK(s.formula == "H2SO4(aq)");
 		}
 		if (s.species == "copper_oxide") {
@@ -80,7 +81,7 @@ TEST_CASE("debug: what an item holds: amounts, mole fractions in their own mixtu
 	CHECK_FALSE(l->debug("burner").found);
 }
 
-TEST_CASE("debug: each reaction says why it happens and what limits it: too cold, used up, its surface, the supersaturation, no rate law (Stage 18)") {
+TEST_CASE("debug: each reaction says why it happens and what limits it: too cold, used up, its surface, the supersaturation (Stage 18)") {
 	SUBCASE("malachite, cold and then hot") {
 		auto l = one(R"({"malachite": {"g": 5, "particles": 2500000}})");
 		lab::ReactionDebug r = reaction(l->debug("flask"), "malachite_decomposition");
@@ -142,14 +143,12 @@ TEST_CASE("debug: each reaction says why it happens and what limits it: too cold
 		CHECK((r.limit.find("growing on ") != std::string::npos || r.limit == "at equilibrium"));
 		CHECK(r.rate_mol_s >= 0.0);
 	}
-	SUBCASE("dry crystals: a dehydration without a rate law; the calcination too cold") {
+	SUBCASE("dry crystals: the first dehydration too cold, fast from about 94 C (Stage 19)") {
 		auto l = one(R"({"copper_sulfate_pentahydrate": {"g": 5, "particles": 1000}})");
-		const lab::ItemDebug d = l->debug("flask");
-		CHECK(reaction(d, "pentahydrate_dehydration").limit == "it does not run on its own: no rate law");
-		const lab::ReactionDebug c = reaction(d, "pentahydrate_calcination");
+		const lab::ReactionDebug c = reaction(l->debug("flask"), "pentahydrate_dehydration");
 		INFO(c.limit);
 		CHECK(begins(c.limit, "too cold: "));
-		CHECK(c.limit.find("fast from about 16") != std::string::npos); // about 160 C
+		CHECK(c.limit.find("fast from about 9") != std::string::npos); // about 94 C
 	}
 }
 

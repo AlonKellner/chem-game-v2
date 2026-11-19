@@ -14,7 +14,7 @@ void set_why(std::string *why, std::string text) {
 
 } // namespace
 
-std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why) {
+std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why, SolutionDef solution) {
 	if (elements.empty() || elements.size() > static_cast<size_t>(MAX_ELEMENTS)) {
 		set_why(why, "a table has 1 to " + std::to_string(MAX_ELEMENTS) + " elements");
 		return std::nullopt;
@@ -82,8 +82,75 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 		}
 		table.molar_mass_.push_back(mass);
 	}
+	// the solution model (GAME_SPEC §4.6, §10)
+	const auto finite = [](double v) { return v - v == 0.0; };
+	if (!finite(solution.a_phi) || !(solution.b > 0.0) || !finite(solution.b)) {
+		set_why(why, "the solution model needs a finite A_phi and a positive b");
+		return std::nullopt;
+	}
+	for (size_t i = 0; i < solution.ions.size(); ++i) {
+		if (solution.ions[i].name.empty()) {
+			set_why(why, "ion " + std::to_string(i) + " has no name");
+			return std::nullopt;
+		}
+		for (size_t j = 0; j < i; ++j) {
+			if (solution.ions[j].name == solution.ions[i].name) {
+				set_why(why, "ion " + std::string(solution.ions[i].name) + " is listed twice");
+				return std::nullopt;
+			}
+		}
+	}
+	const auto ion_count = static_cast<int32_t>(solution.ions.size());
+	for (SpeciesDef &s : species) {
+		const std::string name(s.id);
+		int64_t charge = 0;
+		size_t named = 0;
+		for (const IonCount &ion : s.ions) {
+			if (ion.count == 0 && ion.ion < 0) {
+				break;
+			}
+			if (ion.ion < 0 || ion.ion >= ion_count || ion.count <= 0) {
+				set_why(why, "species " + name + " names an ion out of range, or a count that is not positive");
+				return std::nullopt;
+			}
+			charge += static_cast<int64_t>(ion.count) * solution.ions[static_cast<size_t>(ion.ion)].charge;
+			++named;
+		}
+		if (named > 0 && s.phase != Phase::Aqueous) {
+			set_why(why, "species " + name + " names ions, and only a dissolved species has them");
+			return std::nullopt;
+		}
+		if (named > 0 && charge != s.charge) {
+			set_why(why, "species " + name + ": the charges of its ions do not sum to its own");
+			return std::nullopt;
+		}
+		if (named == 0 && s.phase == Phase::Aqueous) {
+			// a neutral particle of its own
+			solution.ions.push_back(IonDef{ s.id, s.charge });
+			s.ions = {};
+			s.ions[0] = IonCount{ static_cast<int32_t>(solution.ions.size() - 1), 1 };
+		}
+	}
+	if (solution.ions.size() > static_cast<size_t>(MAX_PARTICLES)) {
+		set_why(why, "a table has at most " + std::to_string(MAX_PARTICLES) + " particles in solution");
+		return std::nullopt;
+	}
+	for (const PairDef &p : solution.pairs) {
+		const bool cation = p.cation >= 0 && p.cation < ion_count && solution.ions[static_cast<size_t>(p.cation)].charge > 0;
+		const bool anion = p.anion >= 0 && p.anion < ion_count && solution.ions[static_cast<size_t>(p.anion)].charge < 0;
+		if (!cation || !anion) {
+			set_why(why, "a pair of the solution model is not one cation and one anion");
+			return std::nullopt;
+		}
+		if (!finite(p.beta0) || !finite(p.beta1) || !finite(p.beta2) || !finite(p.c_phi) || !(p.alpha1 > 0.0) || !(p.alpha2 > 0.0) || !finite(p.alpha1) ||
+				!finite(p.alpha2)) {
+			set_why(why, "a pair of the solution model has a parameter that is not finite, or an alpha that is not positive");
+			return std::nullopt;
+		}
+	}
 	table.elements_ = std::move(elements);
 	table.species_ = std::move(species);
+	table.solution_ = std::move(solution);
 	return table;
 }
 

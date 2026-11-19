@@ -22,7 +22,7 @@
 		{"note": "Stage 3: water and crystals", "do": "attach", "item": "condenser", "to": "flask"},
 		{"do": "under", "item": "beaker", "of": "condenser"},
 		{"do": "valve", "burner": "burner", "to": 1},
-		{"do": "wait_until", "item": "flask", "species": "water", "below_g": 10, "timeout": 1800},
+		{"do": "wait_until", "item": "flask", "species": "water", "below_g": 12, "timeout": 1800},
 		{"do": "valve", "burner": "burner", "to": 0},
 		{"do": "wait_until", "item": "flask", "below_c": 21, "timeout": 3600},
 		{"do": "wait", "seconds": 900},

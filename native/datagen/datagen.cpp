@@ -116,7 +116,15 @@ struct SpeciesRow {
 	double hf = 0.0, cp = 0.0, s0 = 0.0; // J/mol, J/mol/K, J/mol/K
 	bool wall = false;
 	double density = 0.0; // g/cm^3; 0: none given
-	double molar_volume = 0.0; // m^3/mol, derived
+	double molar_volume = 0.0; // m^3/mol, derived (a dissolved species: from volume_cm3)
+	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
+};
+
+// An ion as species.json names it: its formula, then its charge, "SO4-2".
+struct IonRow {
+	std::string name;
+	int charge = 0;
+	chem::Atoms atoms{};
 };
 
 struct ReactionRow {
@@ -154,9 +162,11 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 
 	// ---- species
+	std::string why;
 	const std::string species_file = (data / "species.json").string();
 	const json species_json = load(data / "species.json", "chem-species/1");
 	std::vector<SpeciesRow> species;
+	std::vector<IonRow> ions;
 	std::map<std::string, int> by_key; // "H2O(g)" -> index
 	for (const json &s : species_json.at("species")) {
 		SpeciesRow row;
@@ -188,7 +198,6 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			fail(species_file, "species " + row.id + ": a density is positive, and only a solid or a liquid has one");
 		}
 		chemdata::AtomCounts counts;
-		std::string why;
 		if (!chemdata::parse_formula(row.formula, counts, why)) {
 			fail(species_file, "species " + row.id + ": formula \"" + row.formula + "\": " + why);
 		}
@@ -201,6 +210,62 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				fail(species_file, "species " + row.id + ": element " + symbol + " is not in elements.json");
 			}
 			row.atoms[e] = n;
+		}
+		// what it is made of in solution (GAME_SPEC §4.6): its ions' elements and
+		// charges sum to its own
+		if (s.contains("ions")) {
+			if (row.phase->phase != chem::Phase::Aqueous) {
+				fail(species_file, "species " + row.id + ": only a dissolved species has ions");
+			}
+			chem::Atoms sum{};
+			int charge = 0;
+			for (const auto &[name, count_json] : s.at("ions").items()) {
+				const int count = count_json.get<int>();
+				const size_t sign = name.find_last_of("+-");
+				if (sign == std::string::npos || sign == 0 || sign + 1 >= name.size() || count <= 0) {
+					fail(species_file, "species " + row.id + ": ion \"" + name + "\" is not a formula, a sign and a charge, with a positive count");
+				}
+				int index = -1;
+				for (size_t i = 0; i < ions.size(); ++i) {
+					index = ions[i].name == name ? static_cast<int>(i) : index;
+				}
+				if (index < 0) {
+					IonRow ion;
+					ion.name = name;
+					ion.charge = std::stoi(name.substr(sign + 1)) * (name[sign] == '-' ? -1 : 1);
+					chemdata::AtomCounts ion_counts;
+					if (!chemdata::parse_formula(name.substr(0, sign), ion_counts, why)) {
+						fail(species_file, "species " + row.id + ": ion \"" + name + "\": " + why);
+					}
+					for (const auto &[symbol, n] : ion_counts) {
+						size_t e = 0;
+						while (e < symbols.size() && symbols[e] != symbol) {
+							++e;
+						}
+						if (e == symbols.size()) {
+							fail(species_file, "species " + row.id + ": ion " + name + ": element " + symbol + " is not in elements.json");
+						}
+						ion.atoms[e] = n;
+					}
+					index = static_cast<int>(ions.size());
+					ions.push_back(ion);
+				}
+				for (size_t e = 0; e < sum.size(); ++e) {
+					sum[e] += count * ions[static_cast<size_t>(index)].atoms[e];
+				}
+				charge += count * ions[static_cast<size_t>(index)].charge;
+				row.ions.emplace_back(index, count);
+			}
+			if (sum != row.atoms || charge != row.charge || row.ions.size() > static_cast<size_t>(chem::MAX_IONS)) {
+				fail(species_file, "species " + row.id + ": its ions do not sum to its formula and charge (at most " + std::to_string(chem::MAX_IONS) + " ions)");
+			}
+		}
+		if (s.contains("volume_cm3")) {
+			const double v = s.at("volume_cm3").get<double>();
+			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0)) {
+				fail(species_file, "species " + row.id + ": volume_cm3 is a dissolved species' positive apparent molar volume");
+			}
+			row.molar_volume = v * 1e-6;
 		}
 		if (row.density > 0.0) {
 			// molar mass (ug/mol -> g/mol) over density (g/cm^3), in m^3/mol
@@ -224,11 +289,38 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 	std::vector<chem::SpeciesDef> species_defs;
 	for (const SpeciesRow &row : species) {
-		species_defs.push_back(chem::SpeciesDef{ row.id, row.formula, row.phase->phase, row.charge, row.atoms, row.has_thermo, row.hf, row.cp, row.s0, row.wall,
-				row.molar_volume });
+		chem::SpeciesDef def{ row.id, row.formula, row.phase->phase, row.charge, row.atoms, row.has_thermo, row.hf, row.cp, row.s0, row.wall, row.molar_volume };
+		for (size_t i = 0; i < row.ions.size(); ++i) {
+			def.ions[i] = chem::IonCount{ row.ions[i].first, row.ions[i].second };
+		}
+		species_defs.push_back(def);
 	}
-	std::string why;
-	const std::optional<chem::SpeciesTable> table = chem::SpeciesTable::make(element_defs, species_defs, &why);
+
+	// ---- the solution model (GAME_SPEC §10): optional; without it, no pairs
+	const std::string solutions_file = (data / "solutions.json").string();
+	chem::SolutionDef solution;
+	for (const IonRow &ion : ions) {
+		solution.ions.push_back(chem::IonDef{ ion.name, ion.charge });
+	}
+	if (std::filesystem::exists(data / "solutions.json")) {
+		const json solutions_json = load(data / "solutions.json", "chem-solutions/1");
+		solution.a_phi = solutions_json.at("a_phi").get<double>();
+		solution.b = solutions_json.at("b").get<double>();
+		for (const json &p : solutions_json.at("pairs")) {
+			const auto ion_of = [&](const char *key) {
+				const std::string name = p.at(key).get<std::string>();
+				for (size_t i = 0; i < ions.size(); ++i) {
+					if (ions[i].name == name) {
+						return static_cast<int32_t>(i);
+					}
+				}
+				fail(solutions_file, "a pair names ion " + name + ", which no species is made of");
+			};
+			solution.pairs.push_back(chem::PairDef{ ion_of("cation"), ion_of("anion"), p.at("beta0").get<double>(), p.at("beta1").get<double>(),
+					p.value("beta2", 0.0), p.at("c_phi").get<double>(), p.at("alpha1").get<double>(), p.value("alpha2", 12.0) });
+		}
+	}
+	const std::optional<chem::SpeciesTable> table = chem::SpeciesTable::make(element_defs, species_defs, &why, solution);
 	if (!table) {
 		fail(species_file, why);
 	}
@@ -337,9 +429,33 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		char thermo[200];
 		std::snprintf(thermo, sizeof thermo, ", %s, %.17g, %.17g, %.17g, %s, %.17g", row.has_thermo ? "true" : "false", row.hf, row.cp, row.s0,
 				row.wall ? "true" : "false", row.molar_volume);
-		cpp << " } }" << thermo << " },\n";
+		cpp << " } }" << thermo << ", { {";
+		for (size_t i = 0; i < static_cast<size_t>(chem::MAX_IONS); ++i) {
+			cpp << (i ? ", " : " ") << "IonCount{ " << (i < row.ions.size() ? row.ions[i].first : -1) << ", " << (i < row.ions.size() ? row.ions[i].second : 0) << " }";
+		}
+		cpp << " } } },\n";
 	}
-	cpp << "};\n\nconstexpr ReactionDef REACTIONS[] = {\n";
+	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";
+	for (const IonRow &ion : ions) {
+		cpp << "\t{ " << quoted(ion.name) << ", " << ion.charge << " },\n";
+	}
+	if (ions.empty()) {
+		cpp << "\t{ \"none\", 0 },\n";
+	}
+	cpp << "};\n\nconstexpr PairDef PAIRS[] = {\n";
+	for (const chem::PairDef &p : solution.pairs) {
+		char pair[300];
+		std::snprintf(pair, sizeof pair, "\t{ %d, %d, %.17g, %.17g, %.17g, %.17g, %.17g, %.17g },\n", p.cation, p.anion, p.beta0, p.beta1, p.beta2, p.c_phi, p.alpha1,
+				p.alpha2);
+		cpp << pair;
+	}
+	if (solution.pairs.empty()) {
+		cpp << "\t{},\n";
+	}
+	char model[120];
+	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g;\n", solution.a_phi, solution.b);
+	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ";\n";
+	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
 		cpp << "\t{ " << quoted(row.id) << ", { { ";
 		for (size_t i = 0; i < row.terms.size(); ++i) {
@@ -365,8 +481,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "const SpeciesTable &builtin_species() {\n"
 		<< "\tstatic const SpeciesTable table = [] {\n"
 		<< "\t\tstd::string why;\n"
+		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT) };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
-		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why);\n"
+		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"
 		<< "\t\treturn *made;\n\t}();\n\treturn table;\n}\n\n"
 		<< "std::span<const Reaction> builtin_reactions() {\n"

@@ -1,6 +1,7 @@
 // Reactions in the step loop (GAME_SPEC §7): rate laws with an affinity
 // factor, stable at any rate, stopping at their own equilibrium.
 #include "chem/builtin_ids.hpp"
+#include "tables.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
@@ -110,7 +111,7 @@ TEST_CASE("kinetics: affinity has the sign of the spontaneous direction (Stage 3
 	CHECK(activity(t, cell, builtin::carbon_dioxide) == doctest::Approx(1e6 / (1e9 + 2e6) * 1.01325));
 	// a species without verified data: no affinity, so no reaction
 	const Reaction &unverified = builtin_reactions()[static_cast<size_t>(builtin::reaction::trihydrate_dehydration)];
-	affinity(t, cell, unverified.terms(), 300.0, defined);
+	affinity(testing::unverified_table(), cell, unverified.terms(), 300.0, defined);
 	CHECK_FALSE(defined);
 }
 
@@ -257,7 +258,7 @@ TEST_CASE("kinetics: shifting every formation enthalpy by its elements changes n
 			def.hf += per_atom[e] * def.atoms[static_cast<size_t>(e)];
 		}
 	}
-	const auto shifted = SpeciesTable::make(elements, species);
+	const auto shifted = SpeciesTable::make(elements, species, nullptr, base.solution());
 	REQUIRE(shifted.has_value());
 
 	const auto run = [](const SpeciesTable &table, std::vector<double> &temperatures, std::vector<double> &left) {

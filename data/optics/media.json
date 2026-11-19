@@ -7,6 +7,8 @@
 		"malachite": {"kind": "reflect", "base": 0.06, "bands": [{"centre_nm": 525, "width_nm": 45, "peak": 0.42}]},
 		"copper_oxide": {"kind": "reflect", "base": 0.035, "bands": []},
 		"copper_sulfate_pentahydrate": {"kind": "reflect", "base": 0.05, "bands": [{"centre_nm": 465, "width_nm": 55, "peak": 0.5}]},
+		"copper_sulfate_trihydrate": {"kind": "reflect", "base": 0.3, "bands": [{"centre_nm": 470, "width_nm": 70, "peak": 0.4}]},
+		"copper_sulfate_monohydrate": {"kind": "reflect", "base": 0.62, "bands": [{"centre_nm": 475, "width_nm": 80, "peak": 0.18}]},
 		"copper_sulfate": {"kind": "reflect", "base": 0.82, "bands": []},
 		"latex": {"kind": "transmit", "base": 0.04, "rise": 0.9, "edge_nm": 600, "edge_width_nm": 18}
 	},

@@ -160,11 +160,11 @@
 			"play": [{"click": "edit:item:flask"}, {"click": "edit:quantity"}, {"click": "edit:pick:water"}]
 		},
 		{
-			"title": "Below 10 g",
-			"text": "Click \"below\". Then click the value, type 10, and click \"set\".",
-			"why": "From then on the monitor signals whenever less than 10 g of water is left: its lamp lights, and its port, on its right, sends the signal.",
-			"checks": [{"text": "the monitor signals below 10 g of water", "when": {"part": {"kind": "monitor", "item": "flask", "what": "water", "compare": "below", "value_at_least": 9, "value_at_most": 11}}}],
-			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "10"}, {"click": "edit:set"}]
+			"title": "Below 12 g",
+			"text": "Click \"below\". Then click the value, type 12, and click \"set\".",
+			"why": "From then on the monitor signals whenever less than 12 g of water is left: its lamp lights, and its port, on its right, sends the signal. With less, the boiling solution would be saturated, and above about 94 C the pale trihydrate comes out of it, not the blue crystals.",
+			"checks": [{"text": "the monitor signals below 12 g of water", "when": {"part": {"kind": "monitor", "item": "flask", "what": "water", "compare": "below", "value_at_least": 11, "value_at_most": 13}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "12"}, {"click": "edit:set"}]
 		},
 		{
 			"title": "Rig it to the burner",
@@ -176,7 +176,7 @@
 		{
 			"title": "Close the valve when it signals",
 			"text": "On the \"when on\" row, click the value and type 0. Leave \"when off\" as it is. Click \"rig\".",
-			"why": "When the water goes below 10 g, the valve closes itself, at any speed. Your own hand can still open it after: the control keeps whatever set it last.",
+			"why": "When the water goes below 12 g, the valve closes itself, at any speed. Your own hand can still open it after: the control keeps whatever set it last.",
 			"checks": [{"text": "the burner closes when the monitor signals", "when": {"rig": {"from": "monitor", "item": "burner", "control": "valve", "on_at_most": 0.001, "off_leaves": true}}}],
 			"play": [{"click": "edit:on:value"}, {"type": "0"}, {"click": "edit:set"}]
 		},
@@ -202,10 +202,10 @@
 		},
 		{
 			"title": "Boil it down, not dry",
-			"text": "Speed up as you like: below 10 g of water the monitor closes the valve, and the alarm stops the clock.",
+			"text": "Speed up as you like: below 12 g of water the monitor closes the valve, and the alarm stops the clock.",
 			"why": "The crystals need water to grow from. Boiled dry, the salt loses its own water and turns white.",
 			"checks": [
-				{"text": "less than 10 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 10}},
+				{"text": "less than 12 g of water left in the flask", "when": {"item": "flask", "species": "water", "below_g": 12}},
 				{"text": "the rig closed the valve", "when": {"item": "burner", "valve_at_most": 0}},
 				{"text": "the alarm rang", "when": {"part": {"kind": "alarm", "rang": true}}}
 			]
@@ -265,7 +265,7 @@
 			"when": {"any": [
 				{"item": "flask", "species": "copper_sulfate", "above_g": 0.01},
 				{"item": "flask", "species": "copper_sulfate_monohydrate", "above_g": 0.01},
-				{"item": "flask", "species": "copper_sulfate_trihydrate", "above_g": 0.01}
+				{"all": [{"item": "flask", "species": "copper_sulfate_trihydrate", "above_g": 0.01}, {"item": "flask", "liquid_below_ml": 0.5}]}
 			]}},
 		{"text": "The balloon was handed in before it held the carbon dioxide. Press reset to start again.",
 			"when": {"item": "balloon", "submitted": true, "species": "carbon_dioxide", "below_g": 0.5}},
