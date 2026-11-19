@@ -106,6 +106,14 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]);
 // That colour as the screen shows it: gamut-mapped, sRGB-encoded, in [0, 1];
 // alpha 0 where no body is.
 void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]);
+// The truth of a pixel's area (GAME_SPEC §12.3, Stage 20): the average of a grid of grid x grid
+// sub-pixel rays, each bent by the reference's own exact tracer (vector Snell and Fresnel through
+// whatever medium a point is in, turned back where it cannot pass), not the renderer's: what
+// reaches the eye at one wavelength, and the colour (every band read; linear sRGB, glow included).
+double optics_area_through(const OpticsScene &scene, int x, int y, double nm, int grid);
+void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]);
+// where the exact tracer lands the pixel's central ray, on the screen
+double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 

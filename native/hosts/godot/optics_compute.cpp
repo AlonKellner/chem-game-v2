@@ -51,7 +51,7 @@ void main() {
 		imageStore(shown_image, at, vec4(0.0));
 		return;
 	}
-	Path q = path_of(p);
+	Path q = path_of(p, 1.0);
 	if (q.cover <= 0.0) {
 		imageStore(shown_image, at, vec4(0.0));
 		return;

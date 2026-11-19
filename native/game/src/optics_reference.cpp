@@ -155,7 +155,7 @@ bool ready(const OpticsScene &s) {
 }
 
 Path at(int x, int y) {
-	return path_of(vec2(x + 0.5, y + 0.5));
+	return path_of(vec2(x + 0.5, y + 0.5), 1.0);
 }
 
 } // namespace shader
@@ -198,6 +198,216 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 	const shader::Use use(scene);
 	const shader::Bend b = shader::bend_at(shader::at(x, y), nm);
 	return OpticsBend{ b.x, b.pass, b.chord };
+}
+
+// ---- the truth of a pixel's area (GAME_SPEC §12.3, Stage 20): its own tracer, not the renderer's
+
+namespace {
+
+// Where a level ray meets the wall through one body, traced exactly (vector Snell, Fresnel at every
+// crossing, turned back where it cannot pass), seen from above: x across, z away from the eye, in cm
+// from the body's axis. Independent of the renderer's formulas: it asks only which medium a point is in.
+struct Exact {
+	double x = 0.0, pass = 1.0, chord = 0.0;
+	int meetings = 0;
+};
+
+Exact exact_bend(const shader::Path &q, double nm) {
+	Exact out;
+	out.x = q.x;
+	if (q.refractor < 0) {
+		return out;
+	}
+	using shader::row_at;
+	using shader::scene_vec;
+	const int at = optics_layout::HEADER_VECS + q.refractor * optics_layout::BODY_VECS;
+	const int start = q.refractor * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
+	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
+	const double n_in = q.rliquid ? row_at(start + 3 * optics_layout::ROW, nm) : 1.0;
+	const double ri = q.rr - q.rt;
+	// the prism's corners (cm from its centre)
+	const shader::vec4 m = scene_vec(at + 2), g = scene_vec(at + 3);
+	const double cx[3] = { m.x, m.z, g.x }, cz[3] = { m.y, m.w, g.y };
+	const auto inside_prism = [&](double x, double z) {
+		bool in = true;
+		double sign = 0.0;
+		for (int e = 0; e < 3; ++e) {
+			const int f = (e + 1) % 3;
+			const double c = (cx[f] - cx[e]) * (z - cz[e]) - (cz[f] - cz[e]) * (x - cx[e]);
+			if (sign == 0.0) {
+				sign = c;
+			} else if (c * sign < 0.0) {
+				in = false;
+			}
+		}
+		return in;
+	};
+	// 0 air, 1 glass, 2 the core (liquid or air inside the glass)
+	const auto medium = [&](double x, double z) {
+		if (q.rprism) {
+			return inside_prism(x, z) ? 1 : 0;
+		}
+		const double r = std::sqrt(x * x + z * z);
+		return r < ri && q.rt > 0.0 ? 2 : r < q.rr ? (q.rt > 0.0 ? 1 : 2) : 0;
+	};
+	const auto index = [&](int k) { return k == 0 ? 1.0 : k == 1 ? n_glass : n_in; };
+	// the nearest boundary ahead: circles of radius rr and ri, or the prism's three faces
+	const auto next = [&](double ox, double oz, double ux, double uz, double &t, double &nx, double &nz) {
+		t = 1e30;
+		if (q.rprism) {
+			for (int e = 0; e < 3; ++e) {
+				const int f = (e + 1) % 3;
+				const double dx = cx[f] - cx[e], dz = cz[f] - cz[e];
+				const double denom = ux * dz - uz * dx;
+				if (std::fabs(denom) < 1e-15) {
+					continue;
+				}
+				const double wx = cx[e] - ox, wz = cz[e] - oz;
+				const double tt = (wx * dz - wz * dx) / denom, ss = (wx * uz - wz * ux) / denom;
+				if (tt > 1e-9 && ss >= 0.0 && ss <= 1.0 && tt < t) {
+					t = tt;
+					const double len = std::sqrt(dx * dx + dz * dz);
+					nx = dz / len;
+					nz = -dx / len;
+				}
+			}
+		} else {
+			for (const double r : { q.rr, ri }) {
+				if (r <= 0.0 || (r == ri && q.rt <= 0.0)) {
+					continue;
+				}
+				const double b = ox * ux + oz * uz, c = ox * ox + oz * oz - r * r, disc = b * b - c;
+				if (disc < 0.0) {
+					continue;
+				}
+				for (const double tt : { -b - std::sqrt(disc), -b + std::sqrt(disc) }) {
+					if (tt > 1e-9 && tt < t) {
+						t = tt;
+						nx = (ox + tt * ux) / r;
+						nz = (oz + tt * uz) / r;
+					}
+				}
+			}
+		}
+		return t < 1e29;
+	};
+	double ox = q.rd, oz = -1000.0, ux = 0.0, uz = 1.0;
+	int here = 0;
+	for (int k = 0; k < 16; ++k) {
+		double t = 0.0, nx = 0.0, nz = 0.0;
+		if (!next(ox, oz, ux, uz, t, nx, nz)) {
+			break;
+		}
+		if (here == 2 && q.rliquid) {
+			out.chord += t;
+		}
+		ox += t * ux;
+		oz += t * uz;
+		++out.meetings;
+		const int there = medium(ox + 1e-7 * ux, oz + 1e-7 * uz);
+		if (there == here) {
+			continue; // grazing: the same medium on both sides
+		}
+		if (nx * ux + nz * uz > 0.0) { // the normal against the ray
+			nx = -nx;
+			nz = -nz;
+		}
+		const double n1 = index(here), n2 = index(there);
+		const double cos_i = -(nx * ux + nz * uz), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
+		if (sin2 >= 1.0) { // turned back: all of it
+			ux += 2.0 * cos_i * nx;
+			uz += 2.0 * cos_i * nz;
+			continue;
+		}
+		const double cos_t = std::sqrt(1.0 - sin2);
+		const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+		out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
+		ux = eta * ux + (eta * cos_i - cos_t) * nx;
+		uz = eta * uz + (eta * cos_i - cos_t) * nz;
+		here = there;
+	}
+	if (here != 0) {
+		out.pass = 0.0; // still inside: nothing of the wall comes this way
+	}
+	const double wall = scene_vec(2).x;
+	const double landed = uz > 0.05 ? ox + ux * (wall - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
+	out.x = q.raxis + landed / q.rcm;
+	out.pass = 1.0 - q.rcover * (1.0 - out.pass);
+	return out;
+}
+
+// what one ray of the room's light brings at nm: the renderer's layers, the truth's own bend
+double exact_through(const shader::Path &q, double nm) {
+	double seen = q.back;
+	const Exact b = exact_bend(q, nm);
+	if (q.refractor >= 0) {
+		seen = shader::backdrop(b.x, q.y, q.refractor);
+	}
+	const shader::Layer *layers[4] = { &q.l0, &q.l1, &q.l2, &q.l3 };
+	for (int k = 0; k < q.layers && k < 4; ++k) {
+		const shader::Layer &l = *layers[k];
+		seen = shader::through_layer(l, seen, nm, l.body == q.refractor ? b.chord * l.wet : l.depth_cm);
+	}
+	if (q.refractor >= 0) {
+		seen = b.pass * seen + (1.0 - b.pass) * shader::scene_vec(2).y;
+	}
+	return seen;
+}
+
+} // namespace
+
+double optics_area_through(const OpticsScene &scene, int x, int y, double nm, int grid) {
+	if (!shader::ready(scene) || grid < 1) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	double sum = 0.0;
+	for (int j = 0; j < grid; ++j) {
+		for (int i = 0; i < grid; ++i) {
+			const shader::Path q = shader::path_of(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid);
+			sum += exact_through(q, nm);
+		}
+	}
+	return sum / (grid * grid);
+}
+
+double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	return exact_bend(shader::at(x, y), nm).x;
+}
+
+void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]) {
+	rgb[0] = rgb[1] = rgb[2] = 0.0;
+	if (!shader::ready(scene) || grid < 1) {
+		return;
+	}
+	const shader::Use use(scene);
+	std::vector<shader::Path> paths;
+	shader::vec3 glow;
+	for (int j = 0; j < grid; ++j) {
+		for (int i = 0; i < grid; ++i) {
+			paths.push_back(shader::path_of(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid));
+			glow = glow + paths.back().glow / static_cast<double>(grid * grid);
+		}
+	}
+	const int shares = truth_shares(scene);
+	shader::vec3 sum;
+	for (int j = 0; j < shares; ++j) {
+		const shader::vec4 a = shader::share(static_cast<double>(j) / shares), b = shader::share(static_cast<double>(j + 1) / shares);
+		const double nm = shader::share((j + 0.5) / shares).x + 380.0;
+		double seen = 0.0;
+		for (const shader::Path &q : paths) {
+			seen += exact_through(q, nm);
+		}
+		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(paths.size()));
+	}
+	const shader::vec3 c = shader::to_linear_srgb(sum) + glow;
+	rgb[0] = c.x;
+	rgb[1] = c.y;
+	rgb[2] = c.z;
 }
 
 void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {

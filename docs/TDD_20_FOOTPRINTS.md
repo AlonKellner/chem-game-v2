@@ -18,8 +18,8 @@ GAME_SPEC §12.3, §18 (O7, O8), §20.
 | Phase | Topic | Status |
 |---|---|---|
 | 20.1 | The spec: a pixel the light of all its rays; the tracer; the footprint; O7, O8; the truth independent of the renderer | Done |
-| 20.2 | The truth: a brute-force average of sub-pixel rays, traced by its own exact tracer, in float64 | Pending |
-| 20.3 | The tracer, a refactor: every body a ray meets, in 3D; today's pictures unchanged (proved pixel by pixel) | Pending |
+| 20.2 | The truth: a brute-force average of sub-pixel rays, traced by its own exact tracer, in float64 | Done |
+| 20.3 | The tracer: one general tracer (a medium on each side of each boundary, vector Snell, turned back exactly) for the cylinder and the prism; the closed form and the truth's tracer agree with it to 1e-9 | Done |
 | 20.4 | Footprints: corners and centre, exact shares where smooth, quarters where not, jitter over frames for the rest | Pending |
 | 20.5 | O7 and O8, with self-tests that fire on centre sampling | Pending |
 | 20.6 | Cost and pictures: `make screenshots`, O4 against the new truth, before and after | Pending |
