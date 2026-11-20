@@ -399,6 +399,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	place_maps(scene, t, rows, count);
 	// where the chain may be needed: with the table, so the scene's revision covers it
 	scene.chain.clear();
+	scene.chain_bodies.clear();
 	for (int b = 0; b < count; ++b) {
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4], *refract = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4];
 		const float *form = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4];
@@ -408,11 +409,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		bool wanted = refract[1] > 0.5f || t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + MAP) * 4 + 3] != 1.0f;
 		for (int o = 0; o < count && !wanted; ++o) {
 			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
-			wanted = o != b && t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 3] > 0.5f && other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0] &&
+			// across another that bends, on its own layer (one of a nearer layer covers the pixels they share)
+			const float *others = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4];
+			wanted = o != b && others[3] > 0.5f && others[1] == refract[1] && other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0] &&
 					other[1] < rect[1] + rect[3] + 2.0f && other[1] + other[3] + 2.0f > rect[1];
 		}
 		if (wanted) {
 			scene.chain.insert(scene.chain.end(), { std::floor(rect[0] - 2.0f), std::floor(rect[1] - 2.0f), std::ceil(rect[0] + rect[2] + 2.0f), std::ceil(rect[1] + rect[3] + 2.0f) });
+			scene.chain_bodies.push_back(b);
 		}
 	}
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
@@ -421,6 +425,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		scene.lines = std::move(lines);
 		++scene.revision;
 	}
+	optics_stacks(scene); // the rays of what is held, followed through what stands behind it
 }
 
 void optics_maps(OpticsScene &scene) {
@@ -429,6 +434,8 @@ void optics_maps(OpticsScene &scene) {
 	}
 	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]));
 	++scene.revision;
+	scene.stack_keys.clear(); // followed for other maps
+	optics_stacks(scene);
 }
 
 // The wall as a table (GAME_SPEC §12.3; lab/optics_scene.hpp lays it out).

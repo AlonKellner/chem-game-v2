@@ -128,8 +128,8 @@ int main(void) {
 		return 1;
 	}
 	/* Stage 21: nothing is held, so no pixel needs a ray followed through several bodies */
-	if (optics.chain_count != 0) {
-		fprintf(stderr, "the optical pass's scene asks for the chain with nothing held\n");
+	if (optics.chain_count != 0 || optics.stack_count != 16 || optics.stacks == NULL || optics.stacks[0] != -1.0f) {
+		fprintf(stderr, "the optical pass's scene asks for a second pass, or has a stack, with nothing held\n");
 		return 1;
 	}
 	optics.size = 0;

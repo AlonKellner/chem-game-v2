@@ -1,9 +1,11 @@
 // The reference renderer: the per-pixel source compiled as C++, in float64 (GAME_SPEC §12, §12.2).
 #include "lab/optics_scene.hpp"
+#include "lab/optics_trace.hpp"
 
 #include "lab/colour.hpp"
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -32,6 +34,8 @@ struct vec3 {
 };
 struct vec4 {
 	double x = 0.0, y = 0.0, z = 0.0, w = 0.0;
+	double &operator[](int i) { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
+	double operator[](int i) const { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
 	vec4() = default;
 	explicit vec4(double a) :
 			x(a), y(a), z(a), w(a) {}
@@ -141,6 +145,10 @@ inline vec4 map_vec(int i) {
 	const float *v = &current->maps[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
+inline vec4 stack_vec(int i) {
+	const float *v = &current->stacks[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
 inline vec4 wall_vec(int i) {
 	const float *v = &current->wall[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -151,7 +159,8 @@ inline vec4 wall_vec(int i) {
 #pragma clang diagnostic ignored "-Wkeyword-macro"
 #endif
 #define float double
-#define OPTICS_CHAIN 1 // the reference reads every pixel: the chain too (the host compiles it apart)
+#define OPTICS_CHAIN 1 // the reference reads every pixel: a prism's and a stack's too (the host compiles those apart)
+#define OPTICS_FOLLOW 1 // and follows the rays of a stack, which runs on the CPU alone
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)
@@ -171,6 +180,7 @@ struct Use {
 
 bool ready(const OpticsScene &s) {
 	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() == static_cast<size_t>(optics_layout::ROWS_SIZE) && !s.wall.empty() &&
+		   s.stacks.size() >= static_cast<size_t>(optics_layout::MAX_BODIES) * 4 &&
 		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
 
@@ -193,8 +203,7 @@ double optics_through_general(const OpticsScene &scene, int x, int y, double nm)
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	const shader::Path q = shader::at(x, y);
-	return shader::through_band(q, shader::stack_of(q, q.refractor >= 0), 0.0, 0.0, 0.0, nm);
+	return shader::general_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
 }
 
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t) {
@@ -979,6 +988,224 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 		}
 	}
 	return "";
+}
+
+// ---- the stacks (GAME_SPEC §12.3, Stage 21): the rays of a vessel with bodies behind it, followed here
+
+namespace {
+
+uint64_t fnv_of(const void *data, size_t size, uint64_t h = 1469598103934665603ull) {
+	const auto *bytes = static_cast<const unsigned char *>(data);
+	for (size_t i = 0; i < size; ++i) {
+		h = (h ^ bytes[i]) * 1099511628211ull;
+	}
+	return h;
+}
+
+} // namespace
+
+void optics_stacks(OpticsScene &scene) {
+	namespace L = optics_layout;
+	const size_t directory = static_cast<size_t>(L::MAX_BODIES) * 4;
+	std::vector<float> out(directory, 0.0f);
+	for (int b = 0; b < L::MAX_BODIES; ++b) {
+		out[static_cast<size_t>(b) * 4] = -1.0f;
+	}
+	scene.stack_keys.resize(static_cast<size_t>(L::MAX_BODIES), 0);
+	scene.stack_blocks.resize(static_cast<size_t>(L::MAX_BODIES));
+	std::vector<bool> has(static_cast<size_t>(L::MAX_BODIES), false);
+	if (scene.table.size() == static_cast<size_t>(L::SIZE_VECS) * 4 && scene.rows.size() == static_cast<size_t>(L::ROWS_SIZE) && !scene.wall.empty()) {
+		if (scene.stacks.size() < directory) {
+			scene.stacks = out; // following a ray reads no stack; the pixel's path may look for one
+		}
+		const shader::Use use(scene);
+		const int count = static_cast<int>(scene.table[0]);
+		const auto vec = [&](int body, int which) { return &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + which) * 4]; };
+		const auto bends = [&](int body) { return vec(body, L::REFRACT)[3] > 0.5f && (vec(body, L::FORM)[0] < 0.5f || vec(body, L::FORM)[0] > 1.5f); };
+		int64_t followed = 0;
+		for (const int b : scene.chain_bodies) {
+			if (b < 0 || b >= count || !bends(b) || vec(b, L::MAP)[3] != 1.0f) {
+				continue; // a map of several pieces (a prism) is read as one vessel's
+			}
+			const float *rect = vec(b, L::RECT);
+			const double layer = vec(b, L::REFRACT)[1], top = rect[1] - 2.0, bottom = static_cast<double>(rect[1]) + rect[3] + 2.0, centre = rect[0] + rect[2] * 0.5;
+			// its slots, the nearest the eye first (the last painted of the nearest layer): itself; what stands
+			// behind it, in its rows; what stands across it on its own layer; what bends nothing in front of it
+			std::vector<int> slots;
+			for (int o = count - 1; o >= 0; --o) {
+				const float *other = vec(o, L::RECT);
+				const double other_layer = vec(o, L::REFRACT)[1];
+				const bool rows = other[1] < bottom && static_cast<double>(other[1]) + other[3] > top;
+				const bool across = other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0];
+				if (o == b || (rows && (other_layer < layer || (across && (other_layer == layer || !bends(o)))))) {
+					slots.push_back(o);
+				}
+			}
+			if (slots.size() > static_cast<size_t>(shader::MAX_VISITS)) {
+				// more than a ray is followed through: the nearest across are kept
+				std::vector<int> nearest = slots;
+				std::stable_sort(nearest.begin(), nearest.end(), [&](int p, int q) {
+					const auto away = [&](int o) { return o == b ? -1.0 : std::fabs(vec(o, L::RECT)[0] + vec(o, L::RECT)[2] * 0.5 - centre); };
+					return away(p) < away(q);
+				});
+				nearest.resize(static_cast<size_t>(shader::MAX_VISITS));
+				std::vector<int> kept;
+				for (const int o : slots) {
+					if (std::find(nearest.begin(), nearest.end(), o) != nearest.end()) {
+						kept.push_back(o);
+					}
+				}
+				slots = kept;
+			}
+			// what it is followed for: where each of its bodies stands, its shape, its surface, its map
+			uint64_t key = fnv_of(&scene.table[2 * 4], 2 * 4 * sizeof(float));
+			for (const int o : slots) {
+				key = fnv_of(vec(o, L::RECT), 4 * sizeof(float), key);
+				key = fnv_of(vec(o, L::FORM), 3 * sizeof(float), key);
+				key = fnv_of(vec(o, L::REFRACT), 4 * sizeof(float), key);
+				key = fnv_of(vec(o, L::MAP), 4 * sizeof(float), key);
+				const uint64_t map_key = static_cast<size_t>(o) < scene.map_keys.size() ? scene.map_keys[static_cast<size_t>(o)] : 0;
+				key = fnv_of(&map_key, sizeof map_key, key);
+				key = fnv_of(&o, sizeof o, key);
+			}
+			key |= 1u;
+			has[static_cast<size_t>(b)] = true;
+			std::vector<float> &block = scene.stack_blocks[static_cast<size_t>(b)];
+			if (scene.stack_keys[static_cast<size_t>(b)] == key && !block.empty()) {
+				continue;
+			}
+			scene.stack_keys[static_cast<size_t>(b)] = key;
+			// the stack as a ray is followed through it
+			shader::Stack stack = shader::stack_of(shader::path_of(shader::vec2(rect[0], rect[1]), 1.0), false);
+			int bending = 0;
+			std::vector<double> edges{ top, bottom };
+			for (size_t j = 0; j < slots.size(); ++j) {
+				const int o = slots[j];
+				const float *r = vec(o, L::RECT), *form = vec(o, L::FORM);
+				stack.body[j] = o;
+				stack.layer[j] = vec(o, L::REFRACT)[1];
+				stack.bends[j] = bends(o);
+				stack.round[j] = form[0] < 0.5f;
+				stack.axis[j] = r[0] + r[2] * 0.5 + (form[0] > 1.5f ? static_cast<double>(vec(o, L::GLOW)[2]) : 0.0);
+				stack.radius[j] = r[2] * 0.5;
+				stack.top[j] = r[1];
+				stack.foot[j] = static_cast<double>(r[1]) + r[3];
+				stack.surface[j] = form[2];
+				if (stack.bends[j]) {
+					const float *map = vec(o, L::MAP);
+					const float *head = &scene.maps[static_cast<size_t>(map[0]) * 4];
+					stack.map[j] = static_cast<int>(map[0]);
+					stack.coarse[j] = static_cast<int>(map[1]);
+					stack.left[j] = map[2];
+					stack.pieces[j] = static_cast<int>(map[3]);
+					stack.media[j] = static_cast<int>(head[1]);
+					stack.samples[j] = static_cast<int>(head[2]);
+					if (bending == 0) {
+						stack.first = static_cast<int>(j);
+					}
+					++bending;
+					// its rows change what it is: a band ends at its top, its floor and its surface
+					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j] }) {
+						if (e > top + 1e-4 && e < bottom - 1e-4) {
+							edges.push_back(e);
+						}
+					}
+				}
+			}
+			stack.count = static_cast<int>(slots.size());
+			stack.chained = bending > 1;
+			std::sort(edges.begin(), edges.end());
+			std::vector<double> bands; // tops, then the last bottom
+			for (const double e : edges) {
+				if (bands.empty() || e > bands.back() + 1e-4) {
+					bands.push_back(e);
+				}
+			}
+			const int band_count = static_cast<int>(bands.size()) - 1, slot_count = stack.count;
+			// its samples: four a pixel, on the screen's own quarter pixels, from a pixel before its first to one after its last
+			const int px_min = static_cast<int>(std::floor(rect[0] - 1.0f)), px_max = static_cast<int>(std::floor(rect[0] + rect[2] + 1.0f));
+			const int first = px_min - 1, coarse = px_max - px_min + 3, samples = coarse * 4 + 1, stride = 2 + 4 * slot_count;
+			const size_t cells_at = static_cast<size_t>(2 + band_count + slot_count);
+			block.assign((cells_at + static_cast<size_t>(band_count) * static_cast<size_t>(samples) * static_cast<size_t>(stride)) * 4, 0.0f);
+			const auto put = [&](size_t vec4_at, int part, double v) { block[vec4_at * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
+			put(0, 0, coarse);
+			put(0, 1, band_count);
+			put(0, 2, samples);
+			put(0, 3, slot_count);
+			put(1, 0, first);
+			for (int k = 0; k < band_count; ++k) {
+				put(static_cast<size_t>(2 + k), 0, bands[static_cast<size_t>(k)]);
+				put(static_cast<size_t>(2 + k), 1, bands[static_cast<size_t>(k) + 1]);
+			}
+			for (int j = 0; j < slot_count; ++j) {
+				put(static_cast<size_t>(2 + band_count + j), 0, stack.body[j]);
+				put(static_cast<size_t>(2 + band_count + j), 1, stack.bends[j] ? 1.0 : 0.0);
+			}
+			std::map<double, int> ids; // routes as small whole numbers, in the order met
+			std::vector<shader::Ray> rays(static_cast<size_t>(samples) * 4);
+			for (int k = 0; k < band_count; ++k) {
+				const double y = 0.5 * (bands[static_cast<size_t>(k)] + bands[static_cast<size_t>(k) + 1]);
+				for (int i = 0; i < samples; ++i) {
+					for (int n = 0; n < 4; ++n) {
+						rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = shader::chain_at(stack, y, first + i * 0.25, trace::map_nm(n / 3.0));
+					}
+				}
+				followed += static_cast<int64_t>(samples) * 4;
+				for (int i = 0; i < samples; ++i) {
+					const size_t cell = cells_at + static_cast<size_t>(k * samples + i) * static_cast<size_t>(stride);
+					for (int n = 0; n < 4; ++n) {
+						const shader::Ray &r = rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
+						// where the route changes on the way to the next sample: by the map of the first body the
+						// two rays differ in, from how far from its axis each passes
+						double along = 0.0;
+						if (i + 1 < samples) {
+							const shader::Ray &next = rays[static_cast<size_t>(i + 1) * 4 + static_cast<size_t>(n)];
+							if (next.route != r.route) {
+								along = 0.5;
+								for (int j = 0; j < slot_count; ++j) {
+									if (r.bent[j] != next.bent[j] || r.way[j] != next.way[j]) {
+										const double lo = r.from_axis[j], hi = next.from_axis[j];
+										if (std::fabs(hi - lo) > 1e-9) {
+											const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
+											const double change = shader::map_change(shader::ref_at(stack, j), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
+											along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
+										}
+										break;
+									}
+								}
+							}
+						}
+						const int id = ids.emplace(r.route, static_cast<int>(ids.size())).first->second;
+						put(cell, n, r.x);
+						put(cell + 1, n, id + 0.5 * along);
+						for (int j = 0; j < slot_count; ++j) {
+							const size_t at = cell + 2 + static_cast<size_t>(4 * j);
+							put(at, n, r.bent[j] ? 2.0 : r.seen[j] ? 1.0 : 0.0);
+							put(at + 1, n, r.cross[j]);
+							put(at + 2, n, r.pass[j]);
+							put(at + 3, n, r.chord[j] * r.chord[j]);
+						}
+					}
+				}
+			}
+		}
+		if (followed > 0) {
+			scene.stack_rays = followed;
+		}
+	}
+	for (int b = 0; b < L::MAX_BODIES; ++b) {
+		if (!has[static_cast<size_t>(b)]) {
+			scene.stack_keys[static_cast<size_t>(b)] = 0;
+			scene.stack_blocks[static_cast<size_t>(b)].clear();
+			continue;
+		}
+		out[static_cast<size_t>(b) * 4] = static_cast<float>(out.size() / 4);
+		out.insert(out.end(), scene.stack_blocks[static_cast<size_t>(b)].begin(), scene.stack_blocks[static_cast<size_t>(b)].end());
+	}
+	if (out != scene.stacks) {
+		scene.stacks = std::move(out);
+		++scene.stacks_revision;
+	}
 }
 
 } // namespace lab

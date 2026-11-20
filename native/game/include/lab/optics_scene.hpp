@@ -75,11 +75,22 @@ struct OpticsScene {
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
 	std::vector<float> drawn;
-	// Where pixels may be the chain's (GAME_SPEC §12.3, Stage 21): the rectangle of each body that bends
-	// and is on a layer nearer than the bench's, or has a map of several pieces, or stands across another
-	// that bends: 4 floats a rectangle (left, top, right, bottom, whole pixels). A host whose pass over the
-	// screen leaves the chain's pixels alone runs the chain over these.
+	// Where pixels may need more than one vessel's reading (GAME_SPEC §12.3, Stage 21): the rectangle of
+	// each body that bends and is on a layer nearer than the bench's, or has a map of several pieces, or
+	// stands across another of its own layer that bends: 4 floats a rectangle (left, top, right, bottom,
+	// whole pixels). A host whose pass over the screen leaves those pixels alone runs its second pass over
+	// these.
 	std::vector<float> chain;
+	std::vector<int> chain_bodies; // which body each rectangle is
+	// The stacks (GAME_SPEC §12.3, Stage 21): for each of those bodies whose map is of one piece, the rays
+	// that come in across it, followed through every body behind it (the chain) at the spectrum's four nodes,
+	// in each band of rows in which every body is one thing: vec4s, as native/game/shader/optics_pixel.glsl
+	// lays them out. Followed again only when a body of the stack moves or changes shape or index.
+	std::vector<float> stacks;
+	uint64_t stacks_revision = 0;
+	std::vector<uint64_t> stack_keys; // what each body's stack was followed for
+	std::vector<std::vector<float>> stack_blocks;
+	int64_t stack_rays = 0; // followed in the last compose that followed any
 };
 
 // One vessel or balloon as the screen places it.
@@ -131,6 +142,8 @@ void optics_maps(OpticsScene &scene);
 // The wall's table and what is drawn on it, from the room (optics_compose calls it; O7 makes a wall of
 // its own with it).
 void optics_wall(OpticsScene &scene, const OpticsRoom &room);
+// The stacks, from the scene's own table, spectra and maps (optics_compose and optics_maps call it).
+void optics_stacks(OpticsScene &scene);
 
 // ---- the reference: the per-pixel source compiled as C++, in float64
 

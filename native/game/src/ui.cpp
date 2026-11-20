@@ -3037,20 +3037,25 @@ struct Ui::Impl {
 
 	// the bodies the optical pass shows, as the screen places them: in painting order
 	void compose() {
+		// What is in hand is a layer of its own, nearer the eye (GAME_SPEC §12.3): the item being carried, and
+		// those of a selection carried with it. What stands behind it is seen through it. An item pressed and
+		// not yet moved still stands.
 		std::vector<OpticsBody> bodies;
-		const auto add = [&](int i, const Rect &r) {
+		const auto add = [&](int i, const Rect &r, bool in_hand) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			if (v.kind == "vessel" || v.kind == "balloon") {
-				bodies.push_back(OpticsBody{ &v, r.x, r.y, r.w, r.h });
+				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
+				body.layer = in_hand ? 1 : 0;
+				bodies.push_back(body);
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (i != drag) {
-				add(i, drawn(i));
+				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
 			}
 		}
 		if (drag >= 0) {
-			add(drag, drawn(drag));
+			add(drag, drawn(drag), moved);
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
 		OpticsRoom room;

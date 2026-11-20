@@ -34,6 +34,7 @@ layout(set = 0, binding = 8, rgba8) uniform restrict writeonly image2D shown_ima
 layout(set = 0, binding = 9, std430) restrict buffer AskBuffer { uint total[2]; } ask_buffer;
 layout(set = 0, binding = 10, std430) restrict readonly buffer MapBuffer { vec4 v[]; } map_buffer;
 layout(set = 0, binding = 11, std430) restrict readonly buffer WallBuffer { vec4 v[]; } wall_buffer;
+layout(set = 0, binding = 12, std430) restrict readonly buffer StackBuffer { vec4 v[]; } stack_buffer;
 layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; } params;
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
@@ -41,6 +42,7 @@ vec4 line_vec(int i) { return line_buffer.v[i]; }
 vec4 light_vec(int i) { return light_buffer.v[i]; }
 vec4 map_vec(int i) { return map_buffer.v[i]; }
 vec4 wall_vec(int i) { return wall_buffer.v[i]; }
+vec4 stack_vec(int i) { return stack_buffer.v[i]; }
 // ---- the per-pixel source (native/game/shader/optics_pixel.glsl)
 )";
 
@@ -115,7 +117,7 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], pipeline_[0], pipeline_[1], shader_[0], shader_[1], scene_.rid, rows_.rid, lines_.rid, lights_.rid, maps_.rid, wall_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], pipeline_[0], pipeline_[1], shader_[0], shader_[1], scene_.rid, rows_.rid, lines_.rid, lights_.rid, maps_.rid, wall_.rid, stacks_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -237,6 +239,10 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		hold(wall_, optics.wall, 4 * optics.wall_count);
 		uploaded_wall_ = optics.wall_revision;
 	}
+	if (!have_scene_ || optics.stacks_revision != uploaded_stacks_) {
+		hold(stacks_, optics.stacks, 4 * optics.stack_count);
+		uploaded_stacks_ = optics.stacks_revision;
+	}
 	if (!asked_.is_valid()) {
 		godot::PackedByteArray zero;
 		zero.resize(8);
@@ -266,6 +272,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 9, asked_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 10, maps_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 11, wall_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 12, stacks_.rid);
 		for (int pass = 0; pass < 2; ++pass) {
 			if (uniforms_[pass].is_valid()) {
 				rd_->free_rid(uniforms_[pass]);
@@ -312,11 +319,11 @@ void OpticsCompute::run(double budget, bool again) {
 		// a pass where every history starts again; 2 x 32, 1.56)
 		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + 1) / 2), static_cast<uint32_t>((bottom - top + 31) / 32), 1);
 	};
-	// the whole screen, without the chain: what a pass costs follows what its shader could do, so the chain's
-	// code is not in it (measured: with it, a settled pass 0.58 ms and a restarting one 2.15; without, nothing
-	// and 1.56)
+	// the whole screen, with one vessel's reading alone: what a pass costs follows what its shader could do, so
+	// the other readings are not in it (measured: with them, a settled pass 0.58 ms and a restarting one 2.15;
+	// without, nothing and 1.56)
 	pass_over(0, 0, 0, WIDTH, HEIGHT);
-	// then the chain, over the rectangles where pixels can need it (what is held, a prism)
+	// then the other readings (a prism's map of many pieces; a stack), over the rectangles where pixels can need them
 	for (size_t i = 0; i + 3 < chain_.size(); i += 4) {
 		const int32_t left = std::max(0, static_cast<int32_t>(chain_[i])), top = std::max(0, static_cast<int32_t>(chain_[i + 1]));
 		const int32_t right = std::min(WIDTH, static_cast<int32_t>(chain_[i + 2])), bottom = std::min(HEIGHT, static_cast<int32_t>(chain_[i + 3]));
