@@ -145,8 +145,21 @@ time it ran (O4, none visible). Its cost was not:
   drawn outline and its liquid's drawn surface line are gone: a line the screen draws over the
   pass is not bent by what is held before it. A vessel is now its glass and its liquid alone: two
   rims, no floor, no lip.
+- **A vessel's floor** (the user, 2026-11-20: "a thick base is important"): glass all through,
+  a third core of the vessel's map; what it holds rests on it. 2.6 mm at 250 mL, calibrated from
+  one supplier's table (`docs/DATA_SOURCES.md`: no standard read gives it). The wall behind is seen
+  through it at -3.0 times (the paraxial figure for a rod); 368 pixels of a vessel's foot against
+  64 rays each: worst 5.6 on the eye metric. With floors, a restarting pass costs 1.64 ms with
+  nothing held and 9.6 ms with a vessel held (more bands of rows in a stack).
+- **Its lip is not built.** ISO 3819 gives the brim's flare (5 to 15% wider than the body), not
+  its bead; and a flared brim is wider than the body's rectangle and bends rays up and down.
+  Planned with the rest of a vessel's shape (GAME_SPEC §12.3).
 - **Still drawn over the pass, not in it**: the burner and its flame, a condenser's outlet, signal
-  parts and wires, labels. A vessel carried across one of them is drawn under it.
+  parts and wires, labels. A vessel carried across one of them is drawn under it. Planned as
+  Stage 22: everything that takes space is physical, and an item's controls leave the grid for a
+  panel of actions (GAME_SPEC §12.3, §13.1).
+- **A liquid's surface** stays flat and level; its shape (meniscus, a stirred vortex, sloshing)
+  is specified as planned (GAME_SPEC §11).
 - **A ball's outline** blends by degrees (pre-existing): seen through a held vessel as seen
   straight, a pixel the outline cuts aslant can differ from the truth's sharp outline.
 

@@ -456,3 +456,74 @@ TEST_CASE("layers: a hot solid's glow is a light in the pass: what is held befor
 	CHECK(worst < 0.25); // a heap's sloping edge blends by degrees, as it does seen straight
 	MESSAGE("a glowing heap through a held vessel of water: " << seen << " of " << compared << " pixels show it; against 64 rays each, within " << worst << " of the light");
 }
+
+TEST_CASE("layers: a vessel's floor is glass all through: a rod seen from the side, and what it holds rests on it (Stage 21)") {
+	// no outline is drawn: a vessel is its glass and what it holds. Its floor, 2.6 mm thick, is glass from side
+	// to side, and near its axis shows the wall behind at 1 - 2 D (n - 1) / (n R) times: turned over and three
+	// times its size
+	ItemView v = vessel(250.0, 100.0, 0.3, 1.1);
+	v.floor_mm = 2.6;
+	OpticsScene scene;
+	lab::optics_compose(scene, drawn_room(), { OpticsBody{ &v, X, Y, W, H } });
+	REQUIRE(lab::check_O1(scene) == "");
+	namespace L = lab::optics_layout;
+	const float *form = &scene.table[static_cast<size_t>(L::HEADER_VECS + L::FORM) * 4], *refract = &scene.table[static_cast<size_t>(L::HEADER_VECS + L::REFRACT) * 4];
+	const double floor_px = refract[2] / form[1], foot = Y + H;
+	CHECK(refract[2] == doctest::Approx(0.26));
+	CHECK(floor_px == doctest::Approx(3.69).epsilon(0.01));
+	CHECK(scene.maps[1] == 3.0f); // its map's cores: its liquid, the air over it, its floor
+	// its liquid's surface stands that much higher than without a floor
+	ItemView bare = v;
+	bare.floor_mm = 0.0;
+	OpticsScene without;
+	lab::optics_compose(without, drawn_room(), { OpticsBody{ &bare, X, Y, W, H } });
+	CHECK(form[2] == doctest::Approx(without.table[static_cast<size_t>(L::HEADER_VECS + L::FORM) * 4 + 2] - floor_px).epsilon(1e-5));
+	// in its floor's rows a ray near the axis goes through glass alone
+	const int row = static_cast<int>(foot - floor_px / 2.0), axis = static_cast<int>(X + W / 2);
+	const double n = index_at(chem::builtin::glass, 550.0), radius = W / 2.0;
+	const double times = (lab::optics_bend(scene, axis + 1, row, 550.0).x - lab::optics_bend(scene, axis - 1, row, 550.0).x) / 2.0;
+	CHECK(times == doctest::Approx(1.0 - 2.0 * 284.0 * (n - 1.0) / (n * radius)).epsilon(0.02));
+	CHECK(times < -2.5);
+	CHECK(lab::optics_bend(scene, axis + 10, row, 550.0).chord == 0.0); // no liquid in its way: nothing of the blue
+	// the truth's own tracer agrees, there and in the rows the floor's top cuts
+	for (int px = static_cast<int>(X) + 8; px < static_cast<int>(X + W) - 8; px += 5) {
+		CAPTURE(px);
+		const double exact = lab::optics_exact_bend(scene, px, row, 550.0);
+		const double slope = std::max(1.0, std::fabs(lab::optics_exact_bend(scene, px + 1, row, 550.0) - lab::optics_exact_bend(scene, px - 1, row, 550.0)) / 2.0);
+		CHECK(std::fabs(exact - lab::optics_bend(scene, px, row, 550.0).x) / slope < 0.02);
+	}
+	double worst = 0.0;
+	int compared = 0;
+	for (int y = static_cast<int>(foot) - 7; y <= static_cast<int>(foot); ++y) {
+		for (int px = static_cast<int>(X) - 1; px <= static_cast<int>(X + W); px += 2) {
+			if (lab::optics_cover(scene, px, y) <= 0.0) {
+				continue;
+			}
+			double shown[3], truth[3];
+			lab::optics_truth(scene, px, y, shown);
+			lab::optics_area_truth(scene, px, y, 8, truth);
+			const double e = eye(shown, truth);
+			CAPTURE(px);
+			CAPTURE(y);
+			CHECK(e < lab::EYE_VISIBLE);
+			worst = std::max(worst, e);
+			++compared;
+		}
+	}
+	CHECK(compared > 250);
+	// a uniform wall stays uniform through it (O7), and held before another vessel it is followed as the rest is
+	CHECK(lab::check_O7(scene, static_cast<int>(X) - 1, static_cast<int>(foot) - 8, static_cast<int>(X + W) + 1, static_cast<int>(foot) + 1, 0.6) == "");
+	ItemView in_hand = vessel(50.0, 30.0, 0.0, 0.8);
+	in_hand.floor_mm = 1.9;
+	const OpticsScene held_scene = scene_of(drawn_room(), in_hand, 215, 118, v);
+	const int held_floor = static_cast<int>(118 + HELD_H) - 1;
+	double worst_held = 0.0;
+	for (int px = 216; px < 284; px += 3) {
+		double shown[3], truth[3];
+		lab::optics_truth(held_scene, px, held_floor, shown);
+		lab::optics_area_truth(held_scene, px, held_floor, 8, truth);
+		worst_held = std::max(worst_held, eye(shown, truth));
+	}
+	CHECK(worst_held < lab::EYE_VISIBLE);
+	MESSAGE(compared << " pixels of a vessel's foot against 64 rays each: worst " << worst << " on the eye metric; its floor held before another vessel: " << worst_held << "; the wall through its floor at " << times << " times");
+}

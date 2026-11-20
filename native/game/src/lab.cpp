@@ -56,6 +56,7 @@ struct Item {
 	int w = 1, h = 1; // its footprint, in squares (GAME_SPEC §13)
 	double capacity = 0.0; // a balloon: the volume at which it bursts, m^3
 	double wall_mm = 0.0; // a vessel: how thick its wall is, for what is seen through it (GAME_SPEC §12.3); its heat is its wall's mass
+	double floor_mm = 0.0; // and its floor: glass all through, seen from the side
 	bool burst = false;
 };
 
@@ -1097,6 +1098,7 @@ struct Lab::Impl {
 		v.valve = item.valve;
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
+		v.floor_mm = item.floor_mm;
 		if (item.kind != Kind::Burner) {
 			const double kelvin = m.kelvin(item.cell);
 			v.celsius = kelvin - 273.15;
@@ -1324,8 +1326,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			}
 			b.set_amount(item.cell, wall, amount(j.at("wall_g").get<double>() / (static_cast<double>(table.molar_mass_ug(wall)) * 1e-6)));
 			item.wall_mm = number(j, "wall_mm", 0.0);
-			if (!(item.wall_mm >= 0.0)) {
-				why = "item \"" + item.id + "\": a wall is no thinner than nothing";
+			item.floor_mm = number(j, "floor_mm", 0.0);
+			if (!(item.wall_mm >= 0.0) || !(item.floor_mm >= 0.0)) {
+				why = "item \"" + item.id + "\": a wall is no thinner than nothing, nor a floor";
 				return nullptr;
 			}
 			double condensed = 0.0;
@@ -2961,7 +2964,7 @@ json Lab::Impl::save() const {
 				{ "heats", item.heats.index }, { "under", item.under }, { "valve", bits(item.valve) }, { "on", item.on }, { "joint", item.joint.index }, { "holds", item.holds },
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
 				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst }, { "slot", item.slot },
-				{ "wall_mm", bits(item.wall_mm) } });
+				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) } });
 	}
 	bench["items"] = list;
 	json happened = json::array();
@@ -3077,7 +3080,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.burst = j.at("burst").get<bool>();
 			item.slot = j.value("slot", 0);
 			if (!from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)
-					|| (j.contains("wall_mm") && !from_bits(j.at("wall_mm"), item.wall_mm))) {
+					|| (j.contains("wall_mm") && !from_bits(j.at("wall_mm"), item.wall_mm)) || (j.contains("floor_mm") && !from_bits(j.at("floor_mm"), item.floor_mm))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}

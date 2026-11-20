@@ -290,9 +290,10 @@ struct Exact {
 	bool out = true; // it left the body (not still inside after every meeting allowed)
 };
 
-// `line` through body `body`, whose axis stands at the depth z_axis, its core liquid or air; the line it
-// leaves on replaces `line`.
-Exact exact_body(int body, bool liquid, double nm, double z_axis, Line &line) {
+// `line` through body `body`, whose axis stands at the depth z_axis, its core its liquid (0), the air over
+// it (1) or glass all through (2: its floor); the line it leaves on replaces `line`.
+Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
+	const bool liquid = core == 0;
 	Exact out;
 	using shader::row_at;
 	using shader::scene_vec;
@@ -304,7 +305,7 @@ Exact exact_body(int body, bool liquid, double nm, double z_axis, Line &line) {
 	const double axis = rect.x + rect.z * 0.5 + (prism ? scene_vec(at + 3).z : 0.0);
 	const int start = body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
 	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
-	const double n_in = liquid ? row_at(start + 3 * optics_layout::ROW, nm) : 1.0;
+	const double n_in = liquid ? row_at(start + 3 * optics_layout::ROW, nm) : core == 2 ? n_glass : 1.0;
 	const double ri = rr - rt;
 	// the prism's corners (cm from its centre)
 	const shader::vec4 m = scene_vec(at + 2), g = scene_vec(at + 3);
@@ -448,6 +449,11 @@ ExactRay exact_ray(double x, double y, double nm) {
 	const auto vec_of = [](int body, int which) { return scene_vec(optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS + which); };
 	const auto bends = [&](int body) { return vec_of(body, 5).w > 0.5 && (vec_of(body, 1).x < 0.5 || vec_of(body, 1).x > 1.5); };
 	const auto in_rows = [&](int body) { return y >= vec_of(body, 0).y && y <= static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w; };
+	// what a body is in this row: its floor (glass all through), its liquid, or the air over it
+	const auto core_in = [&](int body) {
+		const double foot = static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w, floor_px = static_cast<double>(vec_of(body, 5).z) / vec_of(body, 1).y;
+		return floor_px > 0.0 && y >= foot - floor_px ? 2 : y >= vec_of(body, 1).z ? 0 : 1;
+	};
 	Line line{ x, -1.0e5, 0.0, 1.0 };
 	bool lands = true;
 	for (int last = count - 1; last >= 0 && lands;) {
@@ -463,7 +469,7 @@ ExactRay exact_ray(double x, double y, double nm) {
 		for (int k = first; k <= last; ++k) {
 			if (bends(k) && in_rows(k)) {
 				Line trial = line;
-				const Exact e = exact_body(k, y >= vec_of(k, 1).z, nm, z, trial);
+				const Exact e = exact_body(k, core_in(k), nm, z, trial);
 				if (e.met && e.meetings > 0 && e.entry < nearest) {
 					nearest = e.entry;
 					hit = k;
@@ -472,7 +478,7 @@ ExactRay exact_ray(double x, double y, double nm) {
 		}
 		for (int k = last; k >= first; --k) {
 			if (k == hit) {
-				const Exact e = exact_body(k, y >= vec_of(k, 1).z, nm, z, line);
+				const Exact e = exact_body(k, core_in(k), nm, z, line);
 				out.met.push_back(Met{ k, cross, true, e.pass, e.chord });
 				if (!e.out || line.uz <= 0.05) {
 					lands = false;
@@ -1088,6 +1094,7 @@ void optics_stacks(OpticsScene &scene) {
 				stack.top[j] = r[1];
 				stack.foot[j] = static_cast<double>(r[1]) + r[3];
 				stack.surface[j] = form[2];
+				stack.base[j] = stack.foot[j] - static_cast<double>(vec(o, L::REFRACT)[2]) / form[1];
 				if (stack.bends[j]) {
 					const float *map = vec(o, L::MAP);
 					const float *head = &scene.maps[static_cast<size_t>(map[0]) * 4];
@@ -1102,7 +1109,7 @@ void optics_stacks(OpticsScene &scene) {
 					}
 					++bending;
 					// its rows change what it is: a band ends at its top, its floor and its surface
-					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j] }) {
+					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j], stack.base[j] }) {
 						if (e > top + 1e-4 && e < bottom - 1e-4) {
 							edges.push_back(e);
 						}

@@ -1,17 +1,17 @@
 {
 	"format": "chem-bench/2",
-	"note": "The demo's bench (GAME_SPEC §17). Every item is a cell of the one closed world; each vessel starts open to the room, full of air. loss: W/K to the room. wall_g: the wall's mass, which holds heat; wall_mm: how thick it is, which bends what is seen through it (ISO 3819's least wall for a beaker of its capacity). A burner's conductance is with its valve fully open. at: [column, row], the top-left square of its footprint on the bench's grid of squares; an item without it starts in the cabinet. The bench adds its own tray, where what overflows goes.",
+	"note": "The demo's bench (GAME_SPEC §17). Every item is a cell of the one closed world; each vessel starts open to the room, full of air. loss: W/K to the room. wall_g: the wall's mass, which holds heat; wall_mm: how thick it is, which bends what is seen through it (ISO 3819's least wall for a beaker of its capacity). floor_mm: how thick its floor is, glass all through (calibrated: docs/DATA_SOURCES.md). A burner's conductance is with its valve fully open. at: [column, row], the top-left square of its footprint on the bench's grid of squares; an item without it starts in the cabinet. The bench adds its own tray, where what overflows goes.",
 	"grid": [28, 15],
 	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
-		{"id": "flask", "at": [9, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "wall_mm": 1.1, "loss": 0.9},
+		{"id": "flask", "at": [9, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 100, "wall_mm": 1.1, "floor_mm": 2.6, "loss": 0.9},
 		{"id": "balloon", "at": [5, 10], "kind": "balloon", "wall": "latex", "wall_g": 2, "loss": 0.5, "capacity_ml": 3000},
-		{"id": "condenser", "at": [12, 10], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "wall_mm": 0.8, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
-		{"id": "beaker", "at": [14, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "wall_mm": 1.1, "loss": 0.5},
-		{"id": "waste", "at": [17, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "wall_mm": 1.1, "loss": 0.5},
-		{"id": "jar", "at": [0, 9], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 40, "wall_mm": 0.8, "loss": 0.3,
+		{"id": "condenser", "at": [12, 10], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 50, "wall_mm": 0.8, "floor_mm": 1.9, "loss": 0.1, "coolant": {"celsius": 15, "conductance": 10}},
+		{"id": "beaker", "at": [14, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "wall_mm": 1.1, "floor_mm": 2.6, "loss": 0.5},
+		{"id": "waste", "at": [17, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "wall_g": 80, "wall_mm": 1.1, "floor_mm": 2.6, "loss": 0.5},
+		{"id": "jar", "at": [0, 9], "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 40, "wall_mm": 0.8, "floor_mm": 1.9, "loss": 0.3,
 			"contents": {"malachite": {"g": 5, "particles": 2500000}}},
-		{"id": "acid", "at": [2, 8], "kind": "vessel", "volume_ml": 500, "wall": "glass", "wall_g": 250, "wall_mm": 1.3, "loss": 0.8,
+		{"id": "acid", "at": [2, 8], "kind": "vessel", "volume_ml": 500, "wall": "glass", "wall_g": 250, "wall_mm": 1.3, "floor_mm": 3.1, "loss": 0.8,
 			"contents": {"water": {"g": 240.5}, "sulfuric_acid_aq": {"mol": 0.25}}},
 		{"id": "burner", "at": [20, 12], "kind": "burner", "celsius": 1927, "conductance": 0.25}
 	]

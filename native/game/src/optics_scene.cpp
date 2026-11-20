@@ -130,9 +130,9 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 				key = fnv(more, 4 * sizeof(float), fnv(glow, 3 * sizeof(float)));
 			} else {
 				spec.shape = trace::cylinder(rect[2] * 0.5 * form[1], refract[0]);
-				spec.media = 2;
+				spec.media = refract[2] > 0.0f ? 3 : 2; // with a floor, a third core: glass all through
 				spec.liquid_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
-				key = fnv(refract, sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
+				key = fnv(refract, 3 * sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
 			}
 			const double span[6] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]), spec.grid };
 			key = fnv(span, sizeof span, fnv(spec.glass_index, ROW * sizeof(float), key)) | 1u;
@@ -352,9 +352,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// heat's mass spread thin; a wall as thick as the vessel is wide is glass all through
 				put(at + REFRACT, 0, v.wall_mm / 10.0);
 			}
+			// its floor: glass all through, as high as it is thick (at most the vessel's height); what it holds
+			// rests on it
+			const double floor_cm = glass ? std::min(v.floor_mm / 10.0, d_cm * aspect) : 0.0;
+			put(at + REFRACT, 2, floor_cm);
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
-				put(at + FORM, 2, bottom - v.condensed_ml / floor_cm2 / cm_per_px);
+				put(at + FORM, 2, bottom - (floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
 			}
 			if (solid_ml > 0.0 && v.stirred && v.liquid_ml > 0.0) {
 				// stirred up: every particle shades its own cross-section, twice over

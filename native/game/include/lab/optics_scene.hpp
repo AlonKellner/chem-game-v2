@@ -23,7 +23,7 @@ inline constexpr int HEADER_VECS = 4;
 inline constexpr int BODY_VECS = 7;
 inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
-// the eye), unused, whether it refracts. MAP: where its
+// the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts. MAP: where its
 // refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
 // (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from

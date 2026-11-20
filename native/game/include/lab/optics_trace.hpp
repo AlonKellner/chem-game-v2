@@ -66,7 +66,7 @@ struct MapSpec {
 	// there. The map's samples are laid on that grid's sixteenths: a pixel's parts begin and end on samples.
 	double grid = 0.0;
 	double wall_cm = 20.0;
-	int media = 2; // 2: its core as liquid, then as air; 1: its core as air alone (a prism)
+	int media = 2; // 2: its core as liquid, then as air; 3: and then as glass (a vessel's floor, seen from the side); 1: its core as air alone (a prism)
 	const float *glass_index = nullptr, *liquid_index = nullptr;
 };
 

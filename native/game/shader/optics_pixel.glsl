@@ -78,7 +78,8 @@ struct Path {
 	int rmedia;
 	float rleft; // the map's first sample, pixels from the axis
 	float rwet; // how much of the pixel's height is under its liquid's surface
-	float rin; // how much of the pixel's height is between its top and its floor
+	float rin; // how much of the pixel's height is between its top and its foot
+	float rfloor; // how much of the pixel's height is in its floor (glass all through: its map's third core)
 	// its rays are followed on (GAME_SPEC §12.3, Stage 21): it looks through more than one body that bends,
 	// or bodies of a layer behind its vessel's stand in its rows
 	bool chain;
@@ -113,6 +114,8 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	float from_axis = p.x - (rect.x + radius);
 	float dx = from_axis / radius;
 	float ground = rect.y + rect.w; // where its solids rest, under this place
+	float side = 1.0; // how much of the sample is within it, across
+	float under = 0.0; // how much of the sample is under where its contents rest
 	float within = 0.0; // samples inside its outline
 	float chord = 0.0; // the path through it, in diameters
 	float wall = 0.0; // the wall crossed, in reference thicknesses
@@ -123,6 +126,10 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 		// a cylinder seen from the side
 		within = min(radius * (1.0 - abs(dx)) / across, min(p.y - rect.y, ground - p.y) / up);
 		chord = sqrt(max(1.0 - dx * dx, 0.0));
+		// what it holds rests on its floor, which is glass all through
+		side = clamp(radius * (1.0 - abs(dx)) / across + 0.5, 0.0, 1.0);
+		ground = ground - scene_vec(at + 5).z / form.y;
+		under = clamp((p.y - ground) / up + 0.5, 0.0, 1.0);
 	} else {
 		// a ball: its skin is crossed twice, and aslant near the rim
 		float half_height = rect.w * 0.5;
@@ -139,11 +146,11 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	}
 	float cm = 2.0 * radius * chord * form.y;
 	// a sample half under the surface is half as deep in it: T^coverage
-	float wet = clamp((p.y - form.z) / up + 0.5, 0.0, 1.0) * cover;
+	float wet = form.x < 0.5 ? max(clamp((p.y - form.z) / up + 0.5, 0.0, 1.0) - under, 0.0) * side : clamp((p.y - form.z) / up + 0.5, 0.0, 1.0) * cover;
 	float heap = form.x > 1.5 ? 0.0 : form.w * max(1.0 - abs(from_axis) / max(more.z, 0.001), 0.0);
 	l.depth_cm = cm * wet;
 	l.haze = form.x > 1.5 ? 0.0 : 1.0 - exp(-more.x * cm * wet);
-	l.solid = form.w > 0.0 ? clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) * cover : 0.0;
+	l.solid = form.w <= 0.0 ? 0.0 : (form.x < 0.5 ? max(clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) - under, 0.0) * side : clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) * cover);
 	l.wall = wall * cover;
 	l.wet = wet;
 	l.cover = cover;
@@ -172,6 +179,7 @@ Path path_of(vec2 p, float size) {
 	q.rleft = 0.0;
 	q.rwet = 0.0;
 	q.rin = 0.0;
+	q.rfloor = 0.0;
 	q.chain = false;
 	vec4 head = scene_vec(0);
 	vec4 bench = scene_vec(1);
@@ -229,6 +237,8 @@ Path path_of(vec2 p, float size) {
 			// the rows of the pixel under its liquid's surface, and those between its top and its floor
 			q.rwet = clamp((p.y - form.z) / size + 0.5, 0.0, 1.0);
 			q.rin = clamp(min(p.y - rect.y, rect.y + rect.w - p.y) / size + 0.5, 0.0, 1.0);
+			// and those in its floor, from the floor's top to the vessel's foot
+			q.rfloor = q.rmedia > 2 ? clamp((min(p.y + 0.5 * size, rect.y + rect.w) - max(p.y - 0.5 * size, rect.y + rect.w - bend.z / form.y)) / size, 0.0, 1.0) : 0.0;
 		}
 		if (q.layers == 0) {
 			q.l0 = l;
@@ -251,7 +261,7 @@ Path path_of(vec2 p, float size) {
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
 	// where the view goes through a refracting body: where across it, and how much of the pixel is under its liquid and within it
 	if (q.refractor >= 0) {
-		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin;
+		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin + 0.29 * q.rfloor;
 		q.key.y = q.key.y + 0.31 * q.raxis;
 		q.chain = bending > 1 || lowest < q.rlayer;
 		if (q.chain) {
@@ -735,6 +745,12 @@ float map_bend(MapRef m, float x) {
 	return map_vec(m.at + 1 + c).y;
 }
 
+// how much of the pixel's height is in each core of its vessel: 0 its liquid, 1 the air over it, 2 its floor
+float core_share(Path q, int core) {
+	float wet = max(q.rin * q.rwet - q.rfloor, 0.0);
+	return core == 0 ? wet : (core == 1 ? q.rin - q.rfloor - wet : q.rfloor);
+}
+
 // in how many straight steps a band of `nm` nanometres is swept, where the landing bends so: as many as keep
 // the sweep within MAP_SWEEP_TOLERANCE (0.02 pixels of the screen) of the true landing; at most sixteen
 int map_steps(float bend, float nm) {
@@ -973,8 +989,8 @@ float general_band(Path q, float u0, float u1, float t, float one_nm) {
 		float weight = max(u_end - u_begin, 0.0);
 		Shade shade = shade_of(q, nm);
 		float light = 0.0;
-		for (int core = 0; core < 2; core++) {
-			float share_core = q.rin * (core == 0 ? q.rwet : 1.0 - q.rwet);
+		for (int core = 0; core < 3; core++) {
+			float share_core = core_share(q, core);
 			if (share_core <= 0.0) {
 				continue;
 			}
@@ -1304,6 +1320,7 @@ struct Stack {
 	float top[MAX_VISITS];
 	float foot[MAX_VISITS];
 	float surface[MAX_VISITS];
+	float base[MAX_VISITS]; // its floor's top (its foot, with no floor)
 	int map[MAX_VISITS];
 	int coarse[MAX_VISITS];
 	int samples[MAX_VISITS];
@@ -1349,6 +1366,7 @@ Stack stack_of(Path q, bool wanted) {
 		s.top[j] = 0.0;
 		s.foot[j] = 0.0;
 		s.surface[j] = 0.0;
+		s.base[j] = 0.0;
 		s.map[j] = 0;
 		s.coarse[j] = 0;
 		s.samples[j] = 0;
@@ -1394,6 +1412,7 @@ Stack stack_of(Path q, bool wanted) {
 		s.top[j] = rect.y;
 		s.foot[j] = rect.y + rect.w;
 		s.surface[j] = form.z;
+		s.base[j] = s.foot[j] - refract.z / form.y;
 		if (s.bends[j]) {
 			vec4 map = scene_vec(at + 6);
 			vec4 map_head = map_vec(int(map.x));
@@ -1426,6 +1445,7 @@ Stack stack_of(Path q, bool wanted) {
 					hi = s.top[j] > lo + 1.0e-5 && s.top[j] < hi ? s.top[j] : hi;
 					hi = s.foot[j] > lo + 1.0e-5 && s.foot[j] < hi ? s.foot[j] : hi;
 					hi = s.surface[j] > lo + 1.0e-5 && s.surface[j] < hi ? s.surface[j] : hi;
+					hi = s.base[j] > lo + 1.0e-5 && s.base[j] < hi ? s.base[j] : hi;
 				}
 			}
 		}
@@ -1440,11 +1460,14 @@ Stack stack_of(Path q, bool wanted) {
 	return s;
 }
 
-// which core of a body a row is in: 0 its liquid (or the one core of a body with one), 1 the air over it;
-// -1, past its top or its floor
+// which core of a body a row is in: 0 its liquid (or the one core of a body with one), 1 the air over it,
+// 2 its floor; -1, past its top or its foot
 int core_of(Stack s, int j, float y) {
 	if (y < s.top[j] || y > s.foot[j]) {
 		return -1;
+	}
+	if (s.media[j] > 2 && y >= s.base[j]) {
+		return 2;
 	}
 	return s.media[j] > 1 && y < s.surface[j] ? 1 : 0;
 }
@@ -1672,8 +1695,8 @@ float plain_band(Path q, Plain p, float u0, float u1, float t, float one_nm) {
 		vec4 near_b = nearest_weights(g_b);
 		vec4 near_p = nearest_weights(g_p);
 		float light = 0.0;
-		for (int core = 0; core < 2; core++) {
-			float share_core = q.rin * (core == 0 ? q.rwet : 1.0 - q.rwet);
+		for (int core = 0; core < 3; core++) {
+			float share_core = core_share(q, core);
 			if (share_core <= 0.0) {
 				continue;
 			}

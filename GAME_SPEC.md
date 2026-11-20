@@ -538,6 +538,22 @@ inside a cell.
   resistance and change what is seen.
 - **Wetting and meniscus**; **bubbles** as a transient gas population in a liquid.
 - **Cleaning:** removing deposits by solvent, heat or abrasion.
+- **A liquid's surface as a shape** *(PLANNED; asked for by the user, 2026-11-20)*. Today a
+  liquid's surface is flat and level, and is seen only by what the liquid under it does to the
+  light. The full design gives it a shape, which the optical pass traces as it traces glass (a
+  surface that bends rays up and down as well as across: a map with rows, §12.3):
+  - **At rest:** level, but for the meniscus, where it climbs the glass (over about a capillary
+    length, `sqrt(γ / ρg)`: 2.7 mm for water) and is seen from the side as a dark line.
+  - **Stirred:** a vortex. Within the stirrer's reach the liquid turns as a body and its surface
+    is a paraboloid, `z = ω² r² / 2g`; beyond it the turning falls off and the surface rises to
+    the wall. Its depth follows how fast it is stirred; a vessel stirred too fast for its liquid
+    draws air to the stirrer.
+  - **Agitated:** carried or set down, a liquid sloshes in its vessel's first mode
+    (`ω² = g k tanh(k h)`, `k = 1.841 / R` in a round vessel) and settles by its viscosity; poured
+    into, it is broken where the stream lands; boiling, by the bubbles that reach it.
+  - **Kept:** a surface's shape moves no matter out of its cell and changes no volume; the work
+    of stirring is heat in the liquid (C5), as a burner's is. The values (surface tension,
+    viscosity, contact angle on glass) are rows of `docs/DATA_SOURCES.md` before they are used.
 
 **Demo subset:** none. Crystals nucleate in the bulk cell.
 **Status:** specified; after the demo.
@@ -922,7 +938,10 @@ light bends at each of its surfaces:
   from the wall's mass, which is its heat's (Stage 20; until then the thickness was the mass
   spread over the side and the floor, two to three times too thick). A wall of no thickness is
   no glass: the liquid's own surfaces bend. A wall as thick as the vessel is wide is glass all
-  through. Its index is the
+  through. **Its floor** is that: glass from side to side, as high as it is thick (`floor_mm`:
+  1.9, 2.6, 3.1 mm, calibrated; Stage 21), a rod seen from the side, which shows the wall behind
+  it turned over and three times its size; what the vessel holds rests on it. It is a third core
+  of the vessel's map, beside its liquid and the air over it. Its index is the
   glass's `n(λ)` (a Cauchy fit to Schott's table for BOROFLOAT 33); the liquid's is water's (the
   Sellmeier formula of Daimon and Masumura at 20 °C); above the liquid, air (1). Both are spectra
   at 1 nm like any other, so a point bends by the index at its own wavelength (dispersion).
@@ -1099,6 +1118,25 @@ of every ray through its area, and its colour is their average (a box filter).
     condenser's outlet, signal parts, wires, labels) is not bent, and lies over what is held.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
+- **Everything that takes space is physical** *(PLANNED, Stage 22; the user, 2026-11-20: "If it's
+  an actual space taking part - it should have a spectral visual. The only non spectral colors and
+  elements should be overlays like highlights and interaction elements")*.
+  - Every thing that stands on the bench is a body of the optical pass, with a shape and spectra
+    of its own: the burner (an opaque body with a reflectance), its flame (a light with an
+    emission spectrum of its own, §12.2), a condenser's outlet (glass), a signal part and a
+    circuit (opaque bodies, their faces' colours as reflectances), a wire. Seen through what is
+    held, each is bent and tinted as a vessel is, and what is held is seen in front of it.
+  - No lab thing is drawn over the pass. A vessel's outline and its liquid's surface line went
+    in Stage 21.
+  - What the screen draws flat is what is not in the lab: highlights (a selection, a tutorial's
+    pointer, an alarm's ring), labels and readouts, panels.
+  - The scene holds as many bodies as a bench of parts needs, and a pixel finds its own without
+    looking at all of them (today: 16, each looked at by every pixel near any).
+- **A vessel's whole shape** *(PLANNED, after Stage 22)*: its lip (ISO 3819: the brim 5 to 15%
+  wider than the body, flared in a smooth curve, its edge a bead), its spout, the rounded corner
+  between its floor and its side (ISO 3819: a radius of 10 to 20% of the diameter from 250 mL),
+  flasks that are balls and cones. Each is more surface patches for the tracer (§12.3); a lip
+  and a ball bend rays up and down as well as across, which needs a map with rows.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
   brute-force average of a fine grid of sub-pixel rays, each traced exactly, every band read.
 
@@ -1228,6 +1266,11 @@ lab command here, so it is the same on every host and is tested without one.
 **Layout** (1920 × 1080): the cabinet on the left; the bench's grid of squares in the middle; the
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
+
+**An item's controls are not on the bench** *(PLANNED, Stage 22; the user, 2026-11-20)*. Today a
+vessel's "stir" button and a burner's valve stand on the grid beside the item, always. They are
+interaction, not lab things, and they cover what the optical pass shows: they move to a panel of
+actions beside the bench, shown for the item that is selected, and nothing of them is on the grid.
 
 **Gestures.** Everything is a drag or a click:
 
@@ -1918,5 +1961,5 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
 | Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; what the screen still draws over the pass (the burner and its flame, a condenser's outlet, signal parts, wires, labels) is not bent | A burner or a signal part is drawn over a vessel carried across it, not seen through it; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
-| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity; its floor, its thicker rim, its flare and spout, and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
+| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
 | The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |
