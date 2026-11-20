@@ -35,6 +35,8 @@ inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * 2;
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
 // SET: the set of spectra it is made of (a row set of `rows`), whether a body of a layer behind it stands in
 // its rows (1 or 0), a signature of those (where they stand, what they are), unused.
+// FORM x is its shape: 0 a cylinder (a vessel), 1 a ball (a balloon), 2 a prism; 3 a slab, 4 a bar, 5 a cone
+// (Stage 22: FORM z its size, a slab's corners' radius or a bar's width; MORE a bar's two ends)
 inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6, SET = 7;
 // each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
@@ -112,6 +114,24 @@ struct OpticsBody {
 	// its layer (GAME_SPEC §12.3): 0 stands on the bench's plane; each one more is a gap nearer the eye (what
 	// is held: 1). Up to OPTICS_LAYERS
 	int layer = 0;
+	// A thing of the lab that is no vessel (GAME_SPEC §12.3, Stage 22): with no item, a shape made of what it
+	// reflects and what it emits, which bends nothing.
+	//   Slab: its rectangle, the corners rounded by `size`; opaque, lit by the room's light.
+	//   Bar: every place within `size` / 2 of the line from (x0, y0) to (x1, y1); opaque. Its rectangle is
+	//        found from the line.
+	//   Cone: a cone of glowing gas, its apex at its rectangle's top centre, its base its rectangle's bottom;
+	//         it emits along the path through it (its light is a multiple of the room's for each pixel of
+	//         path) and absorbs nothing.
+	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5 };
+	Shape shape = Item;
+	float size = 0.0f;
+	float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
+	const char *surface = nullptr; // what it reflects: data/optics/media.json's surfaces (none: nothing)
+	// what it emits: an emitter's light, or toward another's by `toward`, times `strength` (none: nothing)
+	const char *light = nullptr;
+	const char *light_to = nullptr;
+	double toward = 0.0, strength = 1.0;
+	uint64_t id = 0; // which thing it is: a pixel's history follows it
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;

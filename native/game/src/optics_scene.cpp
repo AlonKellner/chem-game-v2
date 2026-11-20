@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <string>
 
 namespace lab {
 
@@ -201,12 +202,67 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	const auto layer_of = [](const OpticsBody &b) { return b.layer < 0 ? 0 : b.layer >= OPTICS_LAYERS ? OPTICS_LAYERS - 1 : b.layer; };
 	std::stable_sort(ordered.begin(), ordered.end(), [&](const OpticsBody *a, const OpticsBody *b) { return layer_of(*a) < layer_of(*b); });
 	int count = 0, line_count = 0, nearest = 0;
+	std::map<std::string, int> shared; // the sets of spectra things share, by what they are made of
 	for (const OpticsBody *each : ordered) {
 		const OpticsBody &body = *each;
-		if (count == MAX_BODIES || body.item == nullptr || !(body.w > 0.0f) || !(body.h > 0.0f)) {
+		const bool thing = body.shape != OpticsBody::Item;
+		if (count == MAX_BODIES || (body.item == nullptr && !thing) || (body.shape != OpticsBody::Bar && (!(body.w > 0.0f) || !(body.h > 0.0f)))) {
 			continue;
 		}
 		nearest = std::max(nearest, layer_of(body));
+		if (thing) {
+			// a thing of the lab that is no vessel (Stage 22): a shape, of a set of spectra things share
+			const int at = HEADER_VECS + count * BODY_VECS;
+			++count;
+			const std::string made = std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") +
+									 "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
+			auto found = shared.find(made);
+			if (found == shared.end()) {
+				const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
+				rows.resize(static_cast<size_t>((set + 1) * ROWS_PER_SET * ROW), 0.0f);
+				float *base = &rows[static_cast<size_t>(set * ROWS_PER_SET * ROW)];
+				for (int i = 0; i < ROW; ++i) {
+					base[LIQUID_INDEX_ROW * ROW + i] = base[WALL_INDEX_ROW * ROW + i] = 1.0f; // air
+				}
+				if (const Spectrum *r = body.surface ? chem::optics::surface(body.surface) : nullptr) {
+					for (int i = 0; i < ROW; ++i) {
+						base[SOLID_ROW * ROW + i] = static_cast<float>((*r)[static_cast<size_t>(i)]);
+					}
+				}
+				const Spectrum *a = body.light ? chem::optics::emitter(body.light) : nullptr, *b = body.light_to ? chem::optics::emitter(body.light_to) : nullptr;
+				for (int i = 0; i < ROW && (a != nullptr || b != nullptr); ++i) {
+					const double from = a ? (*a)[static_cast<size_t>(i)] : 0.0, to = b ? (*b)[static_cast<size_t>(i)] : from;
+					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward));
+				}
+				found = shared.emplace(made, set).first;
+			}
+			float x = body.x, y = body.y, w = body.w, h = body.h;
+			if (body.shape == OpticsBody::Bar) {
+				x = std::min(body.x0, body.x1) - body.size * 0.5f;
+				y = std::min(body.y0, body.y1) - body.size * 0.5f;
+				w = std::fabs(body.x1 - body.x0) + body.size;
+				h = std::fabs(body.y1 - body.y0) + body.size;
+				put(at + MORE, 0, body.x0);
+				put(at + MORE, 1, body.y0);
+				put(at + MORE, 2, body.x1);
+				put(at + MORE, 3, body.y1);
+			}
+			put(at + RECT, 0, x);
+			put(at + RECT, 1, y);
+			put(at + RECT, 2, w);
+			put(at + RECT, 3, h);
+			put(at + FORM, 0, static_cast<int>(body.shape));
+			put(at + FORM, 1, 1.0);
+			put(at + FORM, 2, body.size);
+			put(at + REFRACT, 1, layer_of(body));
+			put(at + SET, 0, found->second);
+			put(at + IDS, 0, tag(body.id != 0 ? body.id : fnv(made.data(), made.size())));
+			uint64_t h_sig = fnv(&rows[static_cast<size_t>(found->second * ROWS_PER_SET * ROW)], ROWS_PER_SET * ROW * sizeof(float));
+			h_sig = fnv(&t[static_cast<size_t>(at) * 4], 3 * 4 * sizeof(float), h_sig);
+			h_sig = fnv(&wall_key, sizeof wall_key, h_sig);
+			put(at + IDS, 1, tag(h_sig));
+			continue;
+		}
 		const ItemView &v = *body.item;
 		const int at = HEADER_VECS + count * BODY_VECS;
 		// its own set of spectra

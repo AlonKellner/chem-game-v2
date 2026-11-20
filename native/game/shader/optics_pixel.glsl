@@ -34,6 +34,11 @@ const int ROW = 401;
 const int ROWS_PER_SET = 6;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
+const int WALL_ROWS = 1080;
+const int WALL_COLUMNS = 1920;
+const int WALL_ROW_BASE = 1;
+const int WALL_COLUMN_BASE = 1081;
+const int WALL_BREAK_BASE = 3001;
 const float WALL_MOST = 4.0; // a wall seen edge on is no thicker than this, in reference thicknesses
 
 // the method (GAME_SPEC §12.2, item 4 and item 5)
@@ -55,7 +60,7 @@ struct Layer {
 	float haze; // how much of the room's light its suspended solids turn back
 	float solid; // how much of the pixel a heap of solid fills
 	float wall; // the wall crossed, in reference thicknesses
-	float wet; // how much of the pixel is in its liquid
+	float glowing; // the path through glowing gas (pixels, times how much of the sample it covers): a flame
 	float cover; // how much of the pixel it covers
 };
 
@@ -67,7 +72,8 @@ struct Path {
 	Layer l2;
 	Layer l3;
 	int layers;
-	float back; // the backdrop's radiance, a share of the room's white
+	float back; // the backdrop's radiance, a share of the room's white; or, where an opaque thing covers part of the pixel and no vessel bends it, the wall over the part it leaves uncovered (edge: 1)
+	float edge;
 	float cover; // how much of the pixel a body covers
 	vec3 glow; // what hot solids emit, linear sRGB: for the key alone (the pass reads each body's glow at 1 nm)
 	vec4 key; // everything the pixel's colour depends on that can change
@@ -133,6 +139,32 @@ int set_in(int packed) {
 
 // What body i is at the place p of the screen, for a sample `across` wide and `up` high (pixels): how much
 // of the sample it covers (its outlines blend by that), and what the sample looks through there.
+// A thing of the lab at the place p (Stage 22): how far inside its outline p is (pixels; negative outside),
+// and for glowing gas the path through it there (pixels).
+vec2 thing_at(vec4 form, vec4 rect, vec4 more, vec2 p) {
+	if (form.x < 3.5) {
+		// a slab: its rectangle, the corners rounded
+		float r = min(form.z, min(rect.z, rect.w) * 0.5);
+		float qx = abs(p.x - (rect.x + rect.z * 0.5)) - (rect.z * 0.5 - r);
+		float qy = abs(p.y - (rect.y + rect.w * 0.5)) - (rect.w * 0.5 - r);
+		return vec2(r - sqrt(max(qx, 0.0) * max(qx, 0.0) + max(qy, 0.0) * max(qy, 0.0)) - min(max(qx, qy), 0.0), 0.0);
+	}
+	if (form.x < 4.5) {
+		// a bar: within half its width of its line
+		float ux = more.z - more.x;
+		float uy = more.w - more.y;
+		float t = clamp(((p.x - more.x) * ux + (p.y - more.y) * uy) / max(ux * ux + uy * uy, 1.0e-9), 0.0, 1.0);
+		float ex = p.x - (more.x + t * ux);
+		float ey = p.y - (more.y + t * uy);
+		return vec2(0.5 * form.z - sqrt(ex * ex + ey * ey), 0.0);
+	}
+	// a cone, its apex at the top's centre: its round section there, seen from the side
+	float from_axis = p.x - (rect.x + rect.z * 0.5);
+	float reach = rect.z * 0.5 * clamp((p.y - rect.y) / max(rect.w, 1.0e-3), 0.0, 1.0);
+	float inside = min(reach - abs(from_axis), min(p.y - rect.y, rect.y + rect.w - p.y));
+	return vec2(inside, 2.0 * sqrt(max(reach * reach - from_axis * from_axis, 0.0)));
+}
+
 Layer layer_at(int i, vec2 p, float across, float up) {
 	Layer l;
 	l.body = i + 256 * set_of(i);
@@ -140,7 +172,7 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	l.haze = 0.0;
 	l.solid = 0.0;
 	l.wall = 0.0;
-	l.wet = 0.0;
+	l.glowing = 0.0;
 	l.cover = 0.0;
 	int at = HEADER_VECS + i * BODY_VECS;
 	vec4 rect = scene_vec(at);
@@ -155,6 +187,28 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	float within = 0.0; // samples inside its outline
 	float chord = 0.0; // the path through it, in diameters
 	float wall = 0.0; // the wall crossed, in reference thicknesses
+	if (form.x > 2.5) {
+		// a thing of the lab that is no vessel (Stage 22): it bends nothing. A slab (3) and a bar (4) are
+		// opaque, lit by the room's light as a heap is; a cone (5) is glowing gas, which emits along the path
+		// through it and absorbs nothing. Its outline and its path are read at 4 x 4 places in the sample, each
+		// blended by its own share (a thin bar's edge, and a flame's path near its edge, change within a pixel)
+		float covered = 0.0;
+		float glowing = 0.0;
+		float fine = max(across, up) * 0.25;
+		for (int j = 0; j < 4; j++) {
+			for (int k = 0; k < 4; k++) {
+				vec2 at_k = vec2(p.x + (float(k) - 1.5) * 0.25 * across, p.y + (float(j) - 1.5) * 0.25 * up);
+				vec2 seen = thing_at(form, rect, more, at_k);
+				float share_k = clamp(seen.x / fine + 0.5, 0.0, 1.0);
+				covered = covered + share_k;
+				glowing = glowing + seen.y * share_k;
+			}
+		}
+		l.cover = covered / 16.0;
+		l.solid = form.x < 4.5 ? l.cover : 0.0;
+		l.glowing = glowing / 16.0;
+		return l;
+	}
 	if (form.x > 1.5) {
 		// a prism standing upright: seen from the side its silhouette is its rectangle
 		within = min(min(p.x - rect.x, rect.x + rect.z - p.x) / across, min(p.y - rect.y, ground - p.y) / up);
@@ -188,9 +242,55 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	l.haze = form.x > 1.5 ? 0.0 : 1.0 - exp(-more.x * cm * wet);
 	l.solid = form.w <= 0.0 ? 0.0 : (form.x < 0.5 ? max(clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) - under, 0.0) * side : clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) * cover);
 	l.wall = wall * cover;
-	l.wet = wet;
 	l.cover = cover;
 	return l;
+}
+
+float wall_span(int profile, float a, float b);
+
+// whether a layer is an opaque thing of the lab (a slab or a bar) that covers part of its sample, not all
+bool opaque_edge_of(Layer l) {
+	float kind = scene_vec(HEADER_VECS + body_of(l.body) * BODY_VECS + 1).x;
+	return kind > 2.5 && kind < 4.5 && l.solid > 0.0 && l.solid < 1.0;
+}
+
+bool opaque_edge(Path q) {
+	return (q.layers > 0 && opaque_edge_of(q.l0)) || (q.layers > 1 && opaque_edge_of(q.l1)) || (q.layers > 2 && opaque_edge_of(q.l2)) || (q.layers > 3 && opaque_edge_of(q.l3));
+}
+
+// how much of the c-th quarter of the sample, across, a layer leaves uncovered (an opaque thing's; others: all)
+float column_open(Layer l, Path q, int c) {
+	int at = HEADER_VECS + body_of(l.body) * BODY_VECS;
+	vec4 form = scene_vec(at + 1);
+	if (form.x < 2.5 || form.x > 4.5) {
+		return 1.0;
+	}
+	vec4 rect = scene_vec(at);
+	vec4 more = scene_vec(at + 2);
+	float fine = q.size * 0.25;
+	float covered = 0.0;
+	for (int j = 0; j < 4; j++) {
+		vec2 seen = thing_at(form, rect, more, vec2(q.x + (float(c) - 1.5) * fine, q.y + (float(j) - 1.5) * fine));
+		covered = covered + clamp(seen.x / fine + 0.5, 0.0, 1.0);
+	}
+	return 1.0 - 0.25 * covered;
+}
+
+float uncovered(Path q, int c) {
+	float u = 1.0;
+	if (q.layers > 0) {
+		u = u * column_open(q.l0, q, c);
+	}
+	if (q.layers > 1) {
+		u = u * column_open(q.l1, q, c);
+	}
+	if (q.layers > 2) {
+		u = u * column_open(q.l2, q, c);
+	}
+	if (q.layers > 3) {
+		u = u * column_open(q.l3, q, c);
+	}
+	return u;
 }
 
 // what the pixel at p looks through; `size` is how wide a sample it is, in pixels: 1 for a pixel (its
@@ -221,6 +321,7 @@ Path path_of(vec2 p, float size) {
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
 	q.back = on_bench ? head.y : head.z;
+	q.edge = 0.0;
 	int bending = 0;
 	vec4 behind = vec4(0.0); // whether a body of a layer behind the vessel stands in its rows (y), a signature of those (z)
 	// the bodies of the pixel's square of the screen (the scene lists them: a pixel looks at no other)
@@ -285,10 +386,28 @@ Path path_of(vec2 p, float size) {
 		q.cover = max(q.cover, l.cover);
 		vec4 ids = scene_vec(at + 4);
 		float w = 1.0 + 0.6180339887 * float(i);
-		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * l.cover) * w, (l.solid + 7.0 * l.wall) * w, ids.x, ids.y * w);
+		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * l.cover) * w, (l.solid + 7.0 * l.wall + 0.13 * l.glowing) * w, ids.x, ids.y * w);
 	}
 	// what glows is a light in the pass (each body's glow at 1 nm); its colour is in the key so that a pixel shows it anew
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
+	// Where an opaque thing covers part of the pixel and no vessel bends its view, the wall shows only where it
+	// is uncovered: read over those parts (four across, each by its uncovered share), once, here (Stage 22: a
+	// thin line under the covered part is not seen)
+	if (q.refractor < 0 && q.layers > 0 && opaque_edge(q)) {
+		int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(q.y)), 0, WALL_ROWS - 1)).x);
+		float sum = 0.0;
+		float open = 0.0;
+		for (int c = 0; c < 4; c++) {
+			float left = q.x - 0.5 * size + 0.25 * size * float(c);
+			float u = uncovered(q, c);
+			sum = sum + u * wall_span(profile, left, left + 0.25 * size);
+			open = open + u;
+		}
+		if (open > 1.0e-6) {
+			q.back = sum / open;
+			q.edge = 1.0;
+		}
+	}
 	// where the view goes through a refracting body: where across it, and how much of the pixel is under its liquid and within it
 	if (q.refractor >= 0) {
 		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin + 0.29 * q.rfloor;
@@ -340,19 +459,16 @@ float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
 	float seen = seen_before * exp(-depth);
 	// what is suspended in it turns the room's light back, from half way in on average
 	seen = mix(seen, colour * exp(-depth * 0.5), l.haze);
-	// what lies in it is lit and seen through it: there and back is one chord; and glows, through half of one
-	seen = mix(seen, colour * exp(-depth) + row_at(start + 5 * ROW, nm) * exp(-depth * 0.5), l.solid);
+	// what lies in it is lit and seen through it: there and back is one chord; and glows, through half of one;
+	// and glowing gas adds its light along its path
+	float glow = row_at(start + 5 * ROW, nm);
+	seen = mix(seen, colour * exp(-depth) + glow * exp(-depth * 0.5), l.solid) + glow * l.glowing;
 	// and the wall
 	return seen * exp(-row_at(start + 2 * ROW, nm) * l.wall);
 }
 
 // ---- the wall behind the bodies (GAME_SPEC §12.3): a table, read exactly
 
-const int WALL_ROWS = 1080;
-const int WALL_COLUMNS = 1920;
-const int WALL_ROW_BASE = 1;
-const int WALL_COLUMN_BASE = 1081;
-const int WALL_BREAK_BASE = 3001;
 
 // A place on a row of the wall: the cell it is in, how far it is from the cell's left end (the first cell
 // has none: from breakpoint 0, behind it), the cell's radiance, the row's integral from breakpoint 0
@@ -700,7 +816,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float depth = per_cm * l.depth_cm;
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
-	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * exp(-depth * 0.5) * l.solid) * glass;
+	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * glass;
 	if (s.own) {
 		s.b_front = a * s.b_front + b;
 		s.a_front = a * s.a_front;
@@ -828,7 +944,11 @@ float share_of(float nm) {
 
 // what reaches the eye where no vessel bends the view: the bodies as they lie, before the backdrop
 float flat_band(Path q, float u0, float u1, float t, float one_nm) {
-	return along(q, nm_at(mix(u0, u1, t), one_nm), 1.0, 0.0, 0.0, false, q.back);
+	// the wall itself over the pixel's width (Stage 22: a flame and a balloon are seen through, and the bench's
+	// drawing with them)
+	int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(q.y)), 0, WALL_ROWS - 1)).x);
+	float wall = q.edge > 0.5 ? q.back : wall_span(profile, q.x - 0.5 * q.size, q.x + 0.5 * q.size); // at an opaque thing's edge, where it leaves the wall uncovered
+	return along(q, nm_at(mix(u0, u1, t), one_nm), 1.0, 0.0, 0.0, false, wall);
 }
 
 #ifdef OPTICS_CHAIN
@@ -1078,7 +1198,7 @@ vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth,
 	float skin = exp(-skin_depth * l.wall);
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * skin;
-	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * exp(-depth * 0.5) * l.solid) * skin;
+	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * skin;
 	return vec2(pass * a, pass * b + (1.0 - pass) * room);
 }
 

@@ -45,6 +45,11 @@ const Spectrum &refractive_index(SpeciesId species);
 double index_density(SpeciesId species);
 // An optical material that is no species (the prism demo's flint glass, "n_sf11"), or nullptr.
 const Spectrum *material_index(std::string_view name);
+// What the lab's things that are no substance reflect (a part's face, a wire, a burner's metal: a reflectance),
+// and the lights of a lamp or a flame (a multiple of the room's light at each wavelength), by name; null for
+// one there is not (data/optics/media.json: surfaces, emitters; GAME_SPEC §12.3, Stage 22).
+const Spectrum *surface(std::string_view name);
+const Spectrum *emitter(std::string_view name);
 // An absorber's narrow lines, beside its 1 nm spectrum (GAME_SPEC §12.1): each a
 // Gaussian of the given full width at half maximum, read at the exact wavelength
 // a point falls on, never averaged over a nanometre.

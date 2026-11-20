@@ -2,23 +2,247 @@
 	"format": "chem-optics/1",
 	"note": "What each species does to light, 380-780 nm (GAME_SPEC §12). absorb: molar absorptivity in L/mol/cm (decadic), a sum of Gaussian bands in wavenumber (centre and full width at half maximum in 1/cm), or a measured table of absorption and scattering coefficients in 1/m (water.csv) over the absorber's own concentration as a pure liquid; and narrow lines, kept as lines (lines: centre_nm, fwhm_nm, peak). reflect: diffuse reflectance, a base plus Gaussian bands in wavelength (exp(-((nm - centre) / width)^2)). transmit: the transmittance of a wall at its reference thickness, a base plus a logistic rise at an edge. Water's table is measured; every other number here is calibrated to the colour the substance has, not measured: docs/DATA_SOURCES.md.",
 	"media": {
-		"water": {"kind": "absorb", "table": "water.csv", "mol_per_litre": 55.345},
-		"copper_sulfate_aq": {"kind": "absorb", "bands": [{"centre_cm1": 12400, "fwhm_cm1": 4700, "peak": 12}]},
-		"malachite": {"kind": "reflect", "base": 0.06, "bands": [{"centre_nm": 525, "width_nm": 45, "peak": 0.42}]},
-		"copper_oxide": {"kind": "reflect", "base": 0.035, "bands": []},
-		"copper_sulfate_pentahydrate": {"kind": "reflect", "base": 0.05, "bands": [{"centre_nm": 465, "width_nm": 55, "peak": 0.5}]},
-		"copper_sulfate_trihydrate": {"kind": "reflect", "base": 0.3, "bands": [{"centre_nm": 470, "width_nm": 70, "peak": 0.4}]},
-		"copper_sulfate_monohydrate": {"kind": "reflect", "base": 0.62, "bands": [{"centre_nm": 475, "width_nm": 80, "peak": 0.18}]},
-		"copper_sulfate": {"kind": "reflect", "base": 0.82, "bands": []},
-		"latex": {"kind": "transmit", "base": 0.04, "rise": 0.9, "edge_nm": 600, "edge_width_nm": 18}
+		"water": {
+			"kind": "absorb",
+			"table": "water.csv",
+			"mol_per_litre": 55.345
+		},
+		"copper_sulfate_aq": {
+			"kind": "absorb",
+			"bands": [
+				{
+					"centre_cm1": 12400,
+					"fwhm_cm1": 4700,
+					"peak": 12
+				}
+			]
+		},
+		"malachite": {
+			"kind": "reflect",
+			"base": 0.06,
+			"bands": [
+				{
+					"centre_nm": 525,
+					"width_nm": 45,
+					"peak": 0.42
+				}
+			]
+		},
+		"copper_oxide": {
+			"kind": "reflect",
+			"base": 0.035,
+			"bands": []
+		},
+		"copper_sulfate_pentahydrate": {
+			"kind": "reflect",
+			"base": 0.05,
+			"bands": [
+				{
+					"centre_nm": 465,
+					"width_nm": 55,
+					"peak": 0.5
+				}
+			]
+		},
+		"copper_sulfate_trihydrate": {
+			"kind": "reflect",
+			"base": 0.3,
+			"bands": [
+				{
+					"centre_nm": 470,
+					"width_nm": 70,
+					"peak": 0.4
+				}
+			]
+		},
+		"copper_sulfate_monohydrate": {
+			"kind": "reflect",
+			"base": 0.62,
+			"bands": [
+				{
+					"centre_nm": 475,
+					"width_nm": 80,
+					"peak": 0.18
+				}
+			]
+		},
+		"copper_sulfate": {
+			"kind": "reflect",
+			"base": 0.82,
+			"bands": []
+		},
+		"latex": {
+			"kind": "transmit",
+			"base": 0.04,
+			"rise": 0.9,
+			"edge_nm": 600,
+			"edge_width_nm": 18
+		}
 	},
 	"indices_note": "Refractive indices n(lambda) (GAME_SPEC §12.3). sellmeier_um: n^2 - 1 = sum of B lambda^2 / (lambda^2 - C), lambda in micrometres, [B, C] pairs. table: [nm, n] pairs, fitted at build by n = A + B/lambda^2 + C/lambda^4; density_g_cm3 for a wall's thickness. Sources: docs/DATA_SOURCES.md.",
 	"indices": {
-		"water": {"sellmeier_um": [[0.5684027565, 0.005101829712], [0.1726177391, 0.01821153936], [0.02086189578, 0.02620722293], [0.1130748688, 10.69792721]]},
-		"glass": {"table": [[435.8, 1.48015], [479.9, 1.47676], [546.1, 1.47311], [589.3, 1.47133], [643.8, 1.46953], [656.3, 1.46916]], "density_g_cm3": 2.23}
+		"water": {
+			"sellmeier_um": [
+				[
+					0.5684027565,
+					0.005101829712
+				],
+				[
+					0.1726177391,
+					0.01821153936
+				],
+				[
+					0.02086189578,
+					0.02620722293
+				],
+				[
+					0.1130748688,
+					10.69792721
+				]
+			]
+		},
+		"glass": {
+			"table": [
+				[
+					435.8,
+					1.48015
+				],
+				[
+					479.9,
+					1.47676
+				],
+				[
+					546.1,
+					1.47311
+				],
+				[
+					589.3,
+					1.47133
+				],
+				[
+					643.8,
+					1.46953
+				],
+				[
+					656.3,
+					1.46916
+				]
+			],
+			"density_g_cm3": 2.23
+		}
 	},
 	"materials_note": "Optical materials that are not species (the prism demo's glass): indices as above.",
 	"materials": {
-		"n_sf11": {"sellmeier_um": [[1.73848403, 0.0136068604], [0.311168974, 0.0615960463], [1.17490871, 121.922711]]}
+		"n_sf11": {
+			"sellmeier_um": [
+				[
+					1.73848403,
+					0.0136068604
+				],
+				[
+					0.311168974,
+					0.0615960463
+				],
+				[
+					1.17490871,
+					121.922711
+				]
+			]
+		}
+	},
+	"surfaces_note": "What the lab's things that are no substance are made of (GAME_SPEC §12.3, Stage 22): reflectances, as a reflecting medium's (base, and Gaussian bands in nm), lit by the room's light. Calibrated, not measured: each placed so that the thing has the colour the screen drew it in before Stage 22 (docs/DATA_SOURCES.md).",
+	"surfaces": {
+		"part_face": {
+			"base": 0.045
+		},
+		"circuit_face": {
+			"base": 0.025,
+			"bands": [
+				{
+					"centre_nm": 460,
+					"width_nm": 60,
+					"peak": 0.06
+				}
+			]
+		},
+		"wire": {
+			"base": 0.08
+		},
+		"rig": {
+			"base": 0.15,
+			"bands": [
+				{
+					"centre_nm": 460,
+					"width_nm": 70,
+					"peak": 0.22
+				}
+			]
+		},
+		"burner_metal": {
+			"base": 0.12
+		},
+		"outlet_glass": {
+			"base": 0.07,
+			"bands": [
+				{
+					"centre_nm": 470,
+					"width_nm": 80,
+					"peak": 0.06
+				}
+			]
+		},
+		"lamp_glass": {
+			"base": 0.03
+		}
+	},
+	"emitters_note": "Lights of the lab's things (GAME_SPEC §12.3, Stage 22), as multiples of the room's light at each wavelength: a lamp's face where it is seen; a flame's for each pixel of path through it. Gaussian bands in nm. Calibrated, not measured (docs/DATA_SOURCES.md): a lamp's green and amber as the screen drew them; a flame's soot rising to the red, and its blue as the bands of CH (431 nm) and C2 (516 nm) that a premixed flame's blue is (Gaydon, The Spectroscopy of Flames).",
+	"emitters": {
+		"lamp_green": {
+			"bands": [
+				{
+					"centre_nm": 530,
+					"width_nm": 30,
+					"peak": 1.2
+				}
+			]
+		},
+		"lamp_amber": {
+			"bands": [
+				{
+					"centre_nm": 600,
+					"width_nm": 30,
+					"peak": 1.5
+				}
+			]
+		},
+		"flame_sooty": {
+			"bands": [
+				{
+					"centre_nm": 650,
+					"width_nm": 120,
+					"peak": 0.08
+				},
+				{
+					"centre_nm": 570,
+					"width_nm": 60,
+					"peak": 0.03
+				}
+			]
+		},
+		"flame_blue": {
+			"base": 0.002,
+			"bands": [
+				{
+					"centre_nm": 431,
+					"width_nm": 6,
+					"peak": 0.12
+				},
+				{
+					"centre_nm": 516,
+					"width_nm": 8,
+					"peak": 0.06
+				}
+			]
+		}
 	}
 }

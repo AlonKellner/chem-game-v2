@@ -545,16 +545,53 @@ double drawn_at(double x, double y) {
 	return seen;
 }
 
+// the wall over a small square of the screen, exactly: what is drawn is rectangles, so the square is cut at
+// their edges into cells, each one radiance, read by drawn_at at its middle (Stage 22: a line thinner than
+// the truth's own samples was counted by how many of them it caught)
+double drawn_over(double x0, double x1, double y0, double y1) {
+	const shader::vec4 bench = shader::scene_vec(1);
+	std::vector<double> xs{ x0, x1 }, ys{ y0, y1 };
+	const auto cut = [](std::vector<double> &at, double lo, double hi, double v) {
+		if (v > lo && v < hi) {
+			at.push_back(v);
+		}
+	};
+	cut(xs, x0, x1, bench.x);
+	cut(xs, x0, x1, bench.x + bench.z);
+	cut(ys, y0, y1, bench.y);
+	cut(ys, y0, y1, bench.y + bench.w);
+	const std::vector<float> &d = shader::current->drawn;
+	for (size_t k = 0; k + 4 < d.size(); k += 5) {
+		if (d[k] < x1 && d[k] + d[k + 2] > x0 && d[k + 1] < y1 && d[k + 1] + d[k + 3] > y0) {
+			cut(xs, x0, x1, d[k]);
+			cut(xs, x0, x1, static_cast<double>(d[k]) + d[k + 2]);
+			cut(ys, y0, y1, d[k + 1]);
+			cut(ys, y0, y1, static_cast<double>(d[k + 1]) + d[k + 3]);
+		}
+	}
+	std::sort(xs.begin(), xs.end());
+	std::sort(ys.begin(), ys.end());
+	double sum = 0.0;
+	for (size_t i = 0; i + 1 < xs.size(); ++i) {
+		for (size_t j = 0; j + 1 < ys.size(); ++j) {
+			const double w = (xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]);
+			if (w > 0.0) {
+				sum += w * drawn_at(0.5 * (xs[i] + xs[i + 1]), 0.5 * (ys[j] + ys[j + 1]));
+			}
+		}
+	}
+	return sum / ((x1 - x0) * (y1 - y0));
+}
+
 // what one ray of the room's light brings at nm, at the point p of the screen (`size` across, for the
 // bodies' outlines): the truth's own tracing through every body, and its own reading of the wall; each body
 // read where the ray met it, gathered from the eye inward
 double exact_through(const shader::vec2 &p, double size, double nm) {
 	const shader::Path q = shader::path_of(p, size);
-	if (q.layers == 0) {
-		return shader::along(q, nm, 1.0, 0.0, 0.0, false, drawn_at(p.x, p.y)); // beside every body: the wall itself, as the screen has it there
-	}
-	if (q.refractor < 0) {
-		return shader::along(q, nm, 1.0, 0.0, 0.0, false, q.back);
+	// beside every body, and behind what bends nothing, the wall itself as the screen has it, over the sample
+	const double half = 0.5 * size;
+	if (q.layers == 0 || q.refractor < 0) {
+		return shader::along(q, nm, 1.0, 0.0, 0.0, false, size > 1.0e-3 ? drawn_over(p.x - half, p.x + half, p.y - half, p.y + half) : drawn_at(p.x, p.y));
 	}
 	const ExactRay ray = exact_ray(p.x, p.y, nm);
 	const double room = shader::scene_vec(2).y;
@@ -1035,7 +1072,7 @@ std::string check_O1(const OpticsScene &scene) {
 			}
 		}
 		const size_t body = static_cast<size_t>(HEADER_VECS + i * BODY_VECS) * 4;
-		const bool prism = scene.table[body + static_cast<size_t>(FORM) * 4] > 1.5f; // its MORE holds its corners
+		const bool prism = scene.table[body + static_cast<size_t>(FORM) * 4] > 1.5f; // its MORE holds its corners (a thing of the lab's, its ends)
 		const double extinction = scene.table[body + static_cast<size_t>(MORE) * 4], thickness = scene.table[body + static_cast<size_t>(MORE) * 4 + 1];
 		if (!prism && (!(extinction >= 0.0) || !(thickness >= 0.0))) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
@@ -1061,11 +1098,23 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 	for (size_t k = 4; k < scene.drawn.size(); k += 5) {
 		most = std::max(most, static_cast<double>(scene.drawn[k]));
 	}
+	// and what the bodies emit at that wavelength (Stage 22): a glowing solid or a lamp its light where it is
+	// seen, glowing gas its light for each pixel of the longest path through it
+	const auto emitted = [&](double nm) {
+		const shader::Use use(scene);
+		double sum = 0.0;
+		for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+			const size_t at = static_cast<size_t>(optics_layout::HEADER_VECS + b * optics_layout::BODY_VECS);
+			const double path = scene.table[(at + optics_layout::FORM) * 4] > 4.5f ? static_cast<double>(scene.table[(at + optics_layout::RECT) * 4 + 2]) : 0.0;
+			sum += shader::row_at(shader::set_of(b) * optics_layout::ROWS_PER_SET * optics_layout::ROW + optics_layout::GLOW_ROW * optics_layout::ROW, nm) * (1.0 + path);
+		}
+		return sum;
+	};
 	for (int k = 0; k <= 800; ++k) {
 		const double nm = 380.0 + 0.5 * k, t = optics_through(scene, x, y, nm);
-		if (!(t >= 0.0 && t <= most * (1.0 + 1e-12))) {
+		if (!(t >= 0.0 && t <= (most + emitted(nm)) * (1.0 + 1e-12))) {
 			char text[160];
-			std::snprintf(text, sizeof text, "O2: at (%d, %d), %g nm carries %g: more than came in", x, y, nm, t);
+			std::snprintf(text, sizeof text, "O2: at (%d, %d), %g nm carries %g: more than came in or was emitted", x, y, nm, t);
 			return text;
 		}
 	}
