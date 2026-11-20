@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.20.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.21.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1048,7 +1048,7 @@ through each vessel's glass and liquid, with dispersion, the bench's drawing see
 prism demo: a prism of flint glass (N-SF11) traced through its flat faces, before a slit of white
 light in a dark room (`make prism`). Stage 20 makes each pixel the light of all its rays (a
 general tracer on the CPU, a refraction map for each body, the wall as a table read exactly), and
-gives each vessel's glass its real thickness. Layers of refraction (what is held, in front of
+gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20). Layers of refraction (what is held, in front of
 what stands) are *PLANNED* for Stage 21. The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
@@ -1785,6 +1785,14 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
     a frame at 600 steps a frame.
   - The time is the boiling equilibrium's search through Pitzer's excess, and the three more
     crystallisations.
+- **Stage 20** (`make pass-cost`, Apple M3 Pro, 1920×1080; a restarting pass read between 8 and
+  24 extra passes, since 2 and 6 sat under a display refresh and read cheap passes as free):
+  - A pass in which every history starts again: 1.77 ms, against 1.07 ms before the stage by the
+    same protocol. Accepted by the user: it is the worst frame only. A settled pass: 0.001 ms.
+  - What is over the old cost is the rims: six pixels each side of a vessel read in four parts.
+    With one part a pixel everywhere the pass is 1.04 ms; with no bodies, 0.53 ms.
+  - A vessel's map: about 3,000 rays, 0.6 ms on the CPU, once. A prism's, while it is turned:
+    3 to 6 ms a frame.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo

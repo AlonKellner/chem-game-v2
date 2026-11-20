@@ -41,7 +41,7 @@ integrals, a pixel pass of lookups).
 | 20.11 | The pixel pass, in the reference: lookups and the wall over a band's sweep | Done |
 | 20.12 | The GPU host: the maps' and the wall's buffers; the cost | Done. The cost gate (1.07 ms) was not met: 1.77 ms, which the user accepted on 2026-11-20 ("Approved, proceed") |
 | 20.13 | Real glass: each vessel's wall thickness as sourced data | Done |
-| 20.14 | Pictures before and after; the user judges by eye and signs off | Pictures taken; the sign-off pending |
+| 20.14 | Pictures before and after; the user judges by eye and signs off: "Approved, proceed" (2026-11-20) | Done |
 
 ### The spike, and the measurement corrected
 

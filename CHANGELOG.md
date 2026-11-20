@@ -1,5 +1,40 @@
 # GAME_SPEC version history
 
+## 0.21.0 (2026-11-20, Stage 20)
+
+Signed off by the user on 2026-11-20 ("Approved, proceed").
+
+- §12.3: a pixel is the light of all its rays, so a thin line on the wall seen through glass is
+  never lost between two pixels.
+  - **A general tracer, on the CPU.** A body is a list of surface patches (a quadric or a plane,
+    the medium on each side); rays are 3D. The cylinder and the prism are data; spheres and
+    cones later are more data.
+  - **A refraction map for each body**, traced once: where a ray across the body lands at each
+    wavelength, what its surfaces pass, its chord. Four samples a pixel, on the screen's own
+    quarter pixels; cubic pieces in wavelength (a vessel's whole spectrum is one piece).
+  - **The wall as a table** with exact integrals: no limit on drawn shapes, overlaps exact.
+  - **The pixel pass traces nothing.** It reads maps and integrates the wall exactly over each
+    part of the pixel's footprint and over a band's sweep of wavelengths. The search for cuts at
+    wall edges and the random place in the pixel are gone.
+  - **One light, two readings:** a compact one for maps of one piece (every vessel), the general
+    one for the rest (a prism); a test holds them to the same light.
+- §12.3: **real glass.** Each vessel's wall has a thickness of its own (`wall_mm`: ISO 3819's
+  least wall for a beaker of its capacity), apart from its mass, which is its heat's. Before, the
+  mass spread over the side and floor made walls two to three times too thick.
+- §18:
+  - `O7`: bending makes no brightness (the radiance theorem).
+  - `O8`: a thin line keeps its light, wherever it lands.
+  - `O5` restated: where every index is 1, a pixel is the average of its straight rays.
+  - The truth is independent of the renderer: sub-pixel rays through its own tracer, the wall
+    read from the shapes themselves.
+- §19: a restarting pass costs 1.77 ms, against 1.07 ms before (accepted by the user); `make
+  screenshots` takes 34 s, against 69 s. The cost is read between 8 and 24 extra passes.
+- §20: what a map interpolates, four parts a pixel at most, a route's change read at each side's
+  own ray, one thickness of glass all round.
+- §12.3: layers of refraction (what the player holds, shown in front of what stands on the bench,
+  with refraction and every spectral effect; baths; up to six) are *PLANNED* for Stage 21.
+- `make pass-cost`: the optical pass's cost alone.
+
 ## 0.20.0 (2026-11-19, Stage 19)
 
 Signed off by the user on 2026-11-19 ("Approved, proceed").
