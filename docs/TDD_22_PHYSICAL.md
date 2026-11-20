@@ -14,7 +14,7 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 
 | Phase | Topic | Status |
 |---|---|---|
-| 22.0 | Quicker gates (asked for by the user): a ctest entry a test file, the reference's heavy loops on threads, sparse samples under the sanitizers. The sanitizer gate 35 min -> 5 min | Done |
+| 22.0 | Quicker gates (asked for by the user): a ctest entry a test file, the reference's heavy loops on threads, sparse samples under the sanitizers. The sanitizer gate 35 min -> 5 min; then the sanitizer build at -O2: its tests 237 s -> 102 s | Done |
 | 22.1 | The spec; the calibrated rows | Spec done; rows pending |
 | 22.2 | The scene: 256 bodies, spectra named by set, a grid of squares for a pixel to find its bodies | Pending |
 | 22.3 | Three shapes: the slab, the bar, the cone; opaque and glowing | Pending |

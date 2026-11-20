@@ -43,8 +43,14 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
   n-th sample across in the tests that hold every pixel to 64 traced rays
   (`native/tests/support/sparse.hpp`; `ASAN_SPARSE`, default 3), as it runs fewer sweep worlds.
   The release ctest runs every sample.
+- **The sanitizer build is optimized (-O2)**, still a Debug build whose assertions abort: the
+  sanitizers instrument the same code. Its tests ran 237 s at -O1 and 102 s at -O2 (their summed
+  work 1,649 s and 470 s; the machine was busier for the first).
 - Measured (Stage 22, a machine busy with other work): the lab tests in one process, 368 s; as
-  entries side by side with threads, 112 s.
+  entries side by side with threads, 112 s. The closing gate (`make gates`): 37 min at the end of
+  Stage 21; 8 min with the entries and threads; then the sanitizer build at -O2.
+- **Next, if it is needed**: the sanitizer run's longest entry is `lab_tests.optics` (98 s), whose
+  tests could be split into two files.
 
 ## The conservation sweep
 
