@@ -157,12 +157,12 @@ TEST_CASE("map: a vessel's map, read anywhere and at any wavelength, is its rays
 	for (const float l : map.level) {
 		bent += l > 1.0f ? 1 : 0;
 	}
-	MESSAGE("a 250 mL vessel's map: " << map.rows << " rows, " << map.samples() << " samples, " << bent << " of " << map.coarse << " pixels bent, " << map.rays << " rays, "
+	MESSAGE("a 250 mL vessel's map: " << map.pieces << " pieces in wavelength, " << map.samples() << " samples, " << bent << " of " << map.coarse << " pixels bent, " << map.rays << " rays, "
 									  << ms << " ms; worst landing " << worst << " px, worst pass " << worst_pass);
 	CHECK(map.rays < 150000);
 }
 
-TEST_CASE("map: a prism of flint glass, its light spread thousands of pixels: read by the cubic through its rows (Stage 20)") {
+TEST_CASE("map: a prism of flint glass, its light spread thousands of pixels: read by the cubics of its pieces (Stage 20)") {
 	const std::vector<float> flint = cauchy(1.7400, 13600.0);
 	const double side = 5.0, h = side * std::sqrt(3.0) / 2.0;
 	// on its side, its apex across, turned a little: rays pass in one slanted face and out the other
@@ -189,14 +189,21 @@ TEST_CASE("map: a prism of flint glass, its light spread thousands of pixels: re
 		for (const double nm : { 391.0, 455.5, 533.0, 640.25, 771.0 }) {
 			const MapRay exact = map_ray(spec, x, nm, 0), read = map_read(map, x, nm, 0);
 			const MapRay before = map_ray(spec, x - 1.0 / MAP_FINE, nm, 0), after = map_ray(spec, x + 1.0 / MAP_FINE, nm, 0);
-			if (before.route == exact.route && after.route == exact.route && exact.pass > 0.02 && std::fabs(exact.landing) < 5e4) {
+			// and unless its route changes within a piece of the map's of its wavelength (there it is its nearest node's)
+			const double place = map_place(nm), piece = 1.0 / map.pieces;
+			const MapRay bluer = map_ray(spec, x, map_nm(place - piece), 0), redder = map_ray(spec, x, map_nm(place + piece), 0);
+			if (before.route == exact.route && after.route == exact.route && bluer.route == exact.route && redder.route == exact.route && exact.pass > 0.02 && std::fabs(exact.landing) < 5e4) {
 				const double slope = std::max(1.0, std::fabs(after.landing - before.landing) * MAP_FINE / 2.0);
-				worst = std::max(worst, std::fabs(read.landing - exact.landing) / slope);
+				// where a ray leaves a face nearly along it, its landing runs away with the wavelength: there the map
+				// is held to a shift in wavelength (MAP_NM_TOLERANCE) instead
+				const double per_nm = std::fabs(map_ray(spec, x, nm + 0.05, 0).landing - map_ray(spec, x, nm - 0.05, 0).landing) / 0.1;
+				const double error = std::fabs(read.landing - exact.landing);
+				worst = std::max(worst, error > 3.0 * MAP_NM_TOLERANCE * per_nm ? error / slope : 0.0);
 				++compared;
 			}
 		}
 	}
 	CHECK(compared > 100);
 	CHECK(worst < 3.0 * MAP_LANDING_TOLERANCE);
-	MESSAGE("a prism's map: " << map.rows << " rows, " << map.rays << " rays, " << ms << " ms; worst landing " << worst << " px");
+	MESSAGE("a prism's map: " << map.pieces << " pieces in wavelength, " << map.rays << " rays, " << ms << " ms; worst landing " << worst << " px");
 }

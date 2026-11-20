@@ -23,7 +23,7 @@ inline constexpr int BODY_VECS = 7;
 inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
 // within a body; REFRACT: its glass's thickness (cm), unused, unused, whether it refracts. MAP: where its
 // refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
-// (pixels from its axis), its rows in wavelength (lab/optics_trace.hpp lays a map out).
+// (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
 inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6;
@@ -129,6 +129,9 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm);
 // And the wavelength at a share of the light's energy.
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t);
 double optics_share_nm(const OpticsScene &scene, double u);
+// optics_through by the general reading alone (GAME_SPEC §12.3): a pixel through a map of one piece is
+// drawn by a reading made for it, and the two must agree.
+double optics_through_general(const OpticsScene &scene, int x, int y, double nm);
 double optics_cover(const OpticsScene &scene, int x, int y);
 // Where the pixel's view meets the wall at a wavelength (GAME_SPEC §12.3: bent by the vessel it looks
 // through, if any), on the screen; what the vessel's surfaces let through; the chord of liquid crossed (cm).

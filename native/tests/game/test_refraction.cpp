@@ -199,7 +199,7 @@ TEST_CASE("refraction: the light takes the bent chord through the liquid, at its
 		const double cm_per_px = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
 		const double glass_cm = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4];
 		const double r_in = 45.0 * cm_per_px - glass_cm, d = (k + 0.5) * cm_per_px, n = index_at(chem::builtin::water, 680.0);
-		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-6));
+		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-4)); // the map's one cubic over the spectrum
 		if (k > 0) {
 			CHECK(b.chord > 2.0 * std::sqrt(r_in * r_in - d * d));
 		}
@@ -329,18 +329,25 @@ TEST_CASE("refraction: a 60-degree prism of flint glass deviates light least by 
 		return std::atan(std::fabs(b.x - a.x) * cm_per_px / 10.0);
 	};
 	double closest = 10.0;
-	int at = -1;
 	double turn_at = 0.0;
 	for (const double turn : { incidence, -incidence }) {
 		for (int x = 480; x <= 720; x += 4) {
 			const double d = deviation(turn, x);
 			if (d >= 0.0 && std::fabs(d - expected) < std::fabs(closest - expected)) {
 				closest = d;
-				at = x;
 				turn_at = turn;
 			}
 		}
 	}
+	// the rays that pass two faces all turn so: the one in their middle (one at their end leaves the prism's outline as it turns)
+	std::vector<int> passing;
+	for (int x = 480; x <= 720; x += 4) {
+		if (std::fabs(deviation(turn_at, x) - expected) < 0.002 * expected) {
+			passing.push_back(x);
+		}
+	}
+	REQUIRE(passing.size() > 4);
+	const int at = passing[passing.size() / 2];
 	MESSAGE("at least deviation's turn: " << closest * 57.2957795 << " degrees; 2 asin(n sin 30) - 60 = " << expected * 57.2957795);
 	CHECK(closest == doctest::Approx(expected).epsilon(0.002));
 	// and it is the least: turned a little either way, the same ray turns further

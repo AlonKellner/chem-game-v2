@@ -67,7 +67,8 @@ OpticsScene scene_with(std::vector<lab::OpticsShape> shapes) {
 TEST_CASE("footprint: the truth's own tracer lands where the renderer's map does, away from the rims (Stage 20)") {
 	// The renderer reads a map traced through surface patches (lab/optics_trace.hpp); the truth's tracer asks
 	// only which medium a point is in. Away from the rims the two are the same geometry by different code,
-	// and the map is within a hundredth of a pixel of it.
+	// and the map puts the image within a hundredth of a pixel of the screen of it (the error on the wall,
+	// over how fast the landing moves across the vessel there).
 	const OpticsScene scene = scene_with({});
 	int compared = 0;
 	for (int x = static_cast<int>(X); x < static_cast<int>(X + W); ++x) {
@@ -78,7 +79,8 @@ TEST_CASE("footprint: the truth's own tracer lands where the renderer's map does
 		for (const double nm : { 420.0, 550.0, 680.0 }) {
 			CAPTURE(x);
 			CAPTURE(nm);
-			CHECK(std::fabs(lab::optics_exact_bend(scene, x, LOW, nm) - lab::optics_bend(scene, x, LOW, nm).x) < 0.01);
+			const double slope = std::max(1.0, std::fabs(lab::optics_exact_bend(scene, x + 1, LOW, nm) - lab::optics_exact_bend(scene, x - 1, LOW, nm)) / 2.0);
+			CHECK(std::fabs(lab::optics_exact_bend(scene, x, LOW, nm) - lab::optics_bend(scene, x, LOW, nm).x) / slope < 0.01);
 			++compared;
 		}
 	}
@@ -121,7 +123,10 @@ TEST_CASE("footprint: a vessel's map lands its rays where the closed form does: 
 			const double turn = 2.0 * (std::asin(a / radius) - std::asin(a / (n_glass * radius)) + std::asin(a / (n_glass * inner)) - std::asin(a / (n_water * inner)));
 			const double landed = (a - wall * std::sin(turn)) / std::cos(turn);
 			CAPTURE(x);
-			CHECK(std::fabs(lab::optics_bend(scene, x, LOW, nm).x - (rect[0] + rect[2] * 0.5 + (d < 0.0 ? -landed : landed) / cm)) < 0.01); // the tracer itself: to 1e-10 (test_trace.cpp)
+			// the map is true to a hundredth of a pixel of the screen: on the wall, that times how fast the
+			// landing moves across the vessel (the tracer itself: to 1e-10, test_trace.cpp)
+			const double slope = std::max(1.0, std::fabs(lab::optics_bend(scene, x + 1, LOW, nm).x - lab::optics_bend(scene, x - 1, LOW, nm).x) / 2.0);
+			CHECK(std::fabs(lab::optics_bend(scene, x, LOW, nm).x - (rect[0] + rect[2] * 0.5 + (d < 0.0 ? -landed : landed) / cm)) / slope < 0.01);
 		}
 	}
 }
@@ -260,4 +265,41 @@ TEST_CASE("footprint: a band's light is its wavelengths' together: the wall read
 	CHECK(compared > 1000);
 	CHECK(off * 200 <= compared); // where the view turns round at the least deviation, a step is less true
 	MESSAGE(compared << " bands of a sixteenth: " << off << " more than 3% off, the worst " << worst);
+}
+
+TEST_CASE("footprint: a pixel through a map of one piece is read by a reading of its own, which is the general one's light (Stage 20)") {
+	// What a pass costs on the GPU follows how much there is to do in a band, done or not: a vessel's pixels
+	// are read with nothing of what they never need. Where a pixel's rays all go one way the two readings are
+	// the same arithmetic; at a rim, each side of the route's change is its own ray's in the one, and carried
+	// on from its neighbour in the other.
+	lab::OpticsRoom r = room();
+	for (int k = 0; k < 40; ++k) {
+		r.shapes.push_back(lab::OpticsShape{ 31.3f + 7.77f * static_cast<float>(k), 0.0f, 0.4f + 0.11f * static_cast<float>(k % 7), 1000.0f, 0.15 + 0.01 * (k % 5) });
+	}
+	OpticsScene scene;
+	lab::optics_compose(scene, r, { lab::OpticsBody{ &blue_vessel(), X, Y, W, H } });
+	const int surface = static_cast<int>(scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 2]);
+	int same = 0, near = 0;
+	for (const int y : { static_cast<int>(Y), surface, 175, LOW }) {
+		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); ++x) {
+			if (lab::optics_cover(scene, x, y) <= 0.0) {
+				continue;
+			}
+			for (const double nm : { 430.0, 550.0, 690.0 }) {
+				const double own = lab::optics_through(scene, x, y, nm), general = lab::optics_through_general(scene, x, y, nm);
+				CAPTURE(x);
+				CAPTURE(y);
+				CAPTURE(nm);
+				if (x >= static_cast<int>(X) + 2 && x < static_cast<int>(X + W) - 2) {
+					CHECK(own == doctest::Approx(general).epsilon(1e-9));
+					++same;
+				} else {
+					CHECK(std::fabs(own - general) < 0.02);
+					++near;
+				}
+			}
+		}
+	}
+	CHECK(same > 900);
+	CHECK(near > 30);
 }

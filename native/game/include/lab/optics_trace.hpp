@@ -62,40 +62,59 @@ struct MapSpec {
 	Shape shape;
 	double cm_per_pixel = 1.0;
 	double left = 0.0, right = 0.0; // the span to cover, in pixels from the body's axis
+	// where the screen's pixels lie: a pixel's edge is at `grid` from the axis, and at every whole pixel from
+	// there. The map's samples are laid on that grid's sixteenths: a pixel's parts begin and end on samples.
+	double grid = 0.0;
 	double wall_cm = 20.0;
 	int media = 2; // 2: its core as liquid, then as air; 1: its core as air alone (a prism)
 	const float *glass_index = nullptr, *liquid_index = nullptr;
 };
 
-// The map (GAME_SPEC §12.3): samples across the body, MAP_FINE a pixel; rows in wavelength, evenly from
-// 380 to 780 nm; for each core, row and sample a cell: where the ray lands (pixels from the axis), what
-// its surfaces pass, the square of its chord in the core (cm^2: straight across where the chord rises as a root, at a rim), its route (a small whole number, the same for rays that
-// go the same way). And for each whole pixel across, its level: into how many equal parts it must be
-// read for the map to be straight within each (1, 2, 4, 8 or 16). The format is even, so that a pass on
-// the GPU can build it too (a stack of bodies that moves: later).
+// The map (GAME_SPEC §12.3): samples across the body, MAP_FINE a pixel; pieces in wavelength, even in
+// 1 / nm^2 from 380 to 780 nm (what glass and water disperse nearly straight in). For each core, sample and
+// piece a cell: the ray at the piece's four nodes (its ends and its thirds): where it lands (pixels from the
+// axis), what its surfaces pass, the square of its chord in the core (cm^2: straight across where the chord
+// rises as a root, at a rim); and its route (a small whole number, the same for rays that go the same way).
+// Within a piece a ray is the cubic through its four nodes: a vessel's whole spectrum is one piece, so one
+// cell is a ray at every wavelength. A ray whose route changes within a piece is its nearest node's there. And for each whole pixel across, its level: into
+// how many equal parts it must be read for the map to be straight within each (1, 2 or 4). The
+// format is even, so that a pass on the GPU can build it too (a stack of bodies that moves: later).
+inline constexpr int MAP_CELL = 16; // floats: four vec4s
 struct Map {
-	int media = 0, rows = 0;
+	int media = 0, pieces = 0;
 	double left = 0.0; // the first sample's place, pixels from the axis
 	int coarse = 0; // whole pixels spanned: coarse * MAP_FINE + 1 samples
 	std::vector<float> level; // coarse
 	std::vector<float> bend; // coarse: how fast the landing bends in wavelength there, at most (pixels of the screen per nm^2)
-	std::vector<float> cells; // media * samples * rows * 4: by core, sample, row
+	// media * samples * pieces * MAP_CELL, by core, sample, piece: the landing at the four nodes; what passes;
+	// the chord squared; the route at each (with half of how far along the route changes before the next sample)
+	std::vector<float> cells;
 	int64_t rays = 0; // traced to build it
 	int samples() const;
-	// a sample's rows lie side by side: a ray is read from four of them at once
-	const float *cell(int medium, int row, int sample) const { return &cells[((static_cast<size_t>(medium) * static_cast<size_t>(samples()) + static_cast<size_t>(sample)) * static_cast<size_t>(rows) + static_cast<size_t>(row)) * 4]; }
+	const float *cell(int medium, int piece, int sample) const {
+		return &cells[((static_cast<size_t>(medium) * static_cast<size_t>(samples()) + static_cast<size_t>(sample)) * static_cast<size_t>(pieces) + static_cast<size_t>(piece)) * MAP_CELL];
+	}
 };
 
-inline constexpr int MAP_FINE = 16; // samples a pixel
-// How far the map may put the image off, in pixels of the screen, within a part and between rows: the
+inline constexpr int MAP_FINE = 4; // samples a pixel: a pixel is read in four parts at most
+inline constexpr int MAP_PIECES_MOST = 64;
+// How far the map may put the image off, in pixels of the screen, within a part and within a piece: the
 // landing's error on the wall over how fast the landing moves across the body there (at least 1).
-inline constexpr double MAP_LANDING_TOLERANCE = 0.01;
+inline constexpr double MAP_LANDING_TOLERANCE = 0.02;
+// Or, within a piece, how far off in wavelength (nm): where a landing runs away with the wavelength.
+inline constexpr double MAP_NM_TOLERANCE = 0.05;
 inline constexpr double MAP_PASS_TOLERANCE = 0.005;
 // How far apart the slopes of a part's two halves may be, as a share of the slope: a thin line's image is
-// as bright as the slope where it lands is small, so this is twice the error of its light.
+// as bright as the slope where it lands is small, so this is twice the error of its light: at most 4% of
+// it, half of what the eye sees of the brightest line there can be.
 inline constexpr double MAP_SLOPE_TOLERANCE = 0.08;
 // How far a band's sweep may stray from the true landing, in pixels of the screen, between two of its steps.
 inline constexpr double MAP_SWEEP_TOLERANCE = 0.02;
+
+// Where a wavelength is among a map's pieces: 0 at 380 nm, 1 at 780 nm, even in 1 / nm^2; and back.
+inline constexpr double MAP_PLACE_SPAN = 1.0 - (380.0 / 780.0) * (380.0 / 780.0);
+double map_place(double nm);
+double map_nm(double place);
 
 Map build_map(const MapSpec &spec);
 
@@ -107,13 +126,13 @@ struct MapRay {
 };
 MapRay map_ray(const MapSpec &spec, double x, double nm, int medium);
 // The same read from the map: straight between two samples across (the nearer one's where the route
-// changes between them); in wavelength, the landing by the cubic through four rows, the rest straight.
+// changes between them); in wavelength, the cubic through its piece's four nodes.
 MapRay map_read(const Map &map, double x, double nm, int medium);
 
 // The map as the renderer reads it (lab/optics_scene.hpp lays the scene's maps out): vec4s.
-//   [0]                 coarse, media, samples, rows
+//   [0]                 coarse, media, samples, pieces
 //   [1 .. coarse]       each whole pixel's level (x), and how fast its landing bends in wavelength (y)
-//   then                the cells: (landing, pass, chord squared, route), by core, sample, row
+//   then                the cells, four vec4s each, by core, sample, piece
 std::vector<float> map_block(const Map &map);
 
 } // namespace lab::trace

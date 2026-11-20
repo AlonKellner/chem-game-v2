@@ -107,6 +107,9 @@ inline double fract(double a) {
 inline double clamp(double v, double lo, double hi) {
 	return v < lo ? lo : v > hi ? hi : v;
 }
+inline double dot(const vec4 &a, const vec4 &b) {
+	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
 inline double mix(double a, double b, double t) {
 	return a * (1.0 - t) + b * t;
 }
@@ -181,6 +184,14 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm) {
 		return 0.0;
 	}
 	const shader::Use use(scene);
+	return shader::band_light(shader::at(x, y), 0.0, 0.0, 0.0, nm);
+}
+
+double optics_through_general(const OpticsScene &scene, int x, int y, double nm) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
 	return shader::through_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
 }
 
@@ -189,7 +200,7 @@ double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1,
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	return shader::through_band(shader::at(x, y), u0, u1, t, 0.0);
+	return shader::band_light(shader::at(x, y), u0, u1, t, 0.0);
 }
 
 double optics_share_nm(const OpticsScene &scene, double u) {

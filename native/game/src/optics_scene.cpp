@@ -96,6 +96,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			spec.cm_per_pixel = form[1];
 			spec.left = rect[0] - 1.0 - axis;
 			spec.right = rect[0] + rect[2] + 1.0 - axis;
+			spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
 			spec.wall_cm = wall_cm;
 			spec.glass_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
 			if (prism) {
@@ -110,7 +111,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 				spec.liquid_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
 				key = fnv(refract, sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
 			}
-			const double span[5] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]) };
+			const double span[6] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]), spec.grid };
 			key = fnv(span, sizeof span, fnv(spec.glass_index, ROW * sizeof(float), key)) | 1u;
 		}
 		std::vector<float> &block = scene.map_blocks[static_cast<size_t>(b)];
@@ -123,8 +124,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			offsets[static_cast<size_t>(b)] = map_at;
 			put(at + MAP, 0, map_at);
 			put(at + MAP, 1, block[0]); // the whole pixels it spans
-			put(at + MAP, 2, std::floor(spec.left));
-			put(at + MAP, 3, block[3]); // its rows
+			put(at + MAP, 2, std::floor(spec.left - spec.grid) + spec.grid);
+			put(at + MAP, 3, block[3]); // its pieces in wavelength
 			map_at += static_cast<int>(block.size() / 4);
 			// a pixel's history follows the map it looks through
 			const float tagged = t[static_cast<size_t>(at + IDS) * 4 + 1];

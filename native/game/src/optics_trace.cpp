@@ -204,56 +204,89 @@ MapRay map_ray(const MapSpec &spec, double x, double nm, int medium) {
 	return out;
 }
 
+double map_place(double nm) {
+	const double r = 380.0 / std::min(std::max(nm, 380.0), 780.0);
+	return std::min(std::max((1.0 - r * r) / MAP_PLACE_SPAN, 0.0), 1.0);
+}
+
+double map_nm(double place) {
+	return 380.0 / std::sqrt(1.0 - MAP_PLACE_SPAN * std::min(std::max(place, 0.0), 1.0));
+}
+
+namespace {
+
+// the cubic through four values at the thirds of a piece, at g of the way through it
+double thirds(double v0, double v1, double v2, double v3, double g) {
+	const double s = 3.0 * g;
+	return -(s - 1.0) * (s - 2.0) * (s - 3.0) / 6.0 * v0 + s * (s - 2.0) * (s - 3.0) / 2.0 * v1 - s * (s - 1.0) * (s - 3.0) / 2.0 * v2 + s * (s - 1.0) * (s - 2.0) / 6.0 * v3;
+}
+
+} // namespace
+
 Map build_map(const MapSpec &spec) {
 	Map map;
 	map.media = spec.media;
-	map.left = std::floor(spec.left);
+	map.left = std::floor(spec.left - spec.grid) + spec.grid;
 	map.coarse = std::max(1, static_cast<int>(std::ceil(spec.right - map.left)));
 	const int n = map.samples();
 
-	// the rows: the fewest, evenly spaced, that keep the landing between two of them straight in
-	// wavelength, tried on rays across the body at every 3.125 nm
-	constexpr int FINEST = 129;
-	map.rows = 17;
+	// The pieces: the fewest, even in 1 / nm^2, in each of which the cubic through a ray's four nodes is the
+	// ray: tried on rays across the body, in the middle of each third of each piece. A landing may be off by
+	// MAP_LANDING_TOLERANCE as a shift of the image on the screen, or by MAP_NM_TOLERANCE as a shift in
+	// wavelength (where a ray leaves a face nearly along it, its landing runs away with the wavelength, and no
+	// cubic follows it: but the light there is spread as far, and a nanometre's twentieth of it is nothing).
+	map.pieces = 1;
 	{
 		constexpr int PROBES = 33;
-		std::vector<MapRay> probe(static_cast<size_t>(FINEST));
 		for (int p = 0; p < PROBES; ++p) {
 			const double x = spec.left + (spec.right - spec.left) * (p + 0.5) / PROBES;
 			for (int medium = 0; medium < spec.media; ++medium) {
-				for (int k = 0; k < FINEST; ++k) {
-					probe[static_cast<size_t>(k)] = map_ray(spec, x, 380.0 + 400.0 * k / (FINEST - 1), medium);
-					++map.rays;
-				}
 				// how fast the landing moves across the body here: an error on the wall shifts the image by
 				// that much less on the screen
-				const MapRay beside = map_ray(spec, x + 1.0 / MAP_FINE, 580.0, medium);
-				++map.rays;
-				const double slope = std::max(1.0, std::fabs(beside.landing - probe[FINEST / 2].landing) * MAP_FINE);
-				for (; map.rows < FINEST;) {
-					const int stride = (FINEST - 1) / (map.rows - 1);
-					bool straight = true;
-					for (int k = 0; k + stride < FINEST && straight; k += stride) {
-						const MapRay &a = probe[static_cast<size_t>(k)], &m = probe[static_cast<size_t>(k + stride / 2)], &b = probe[static_cast<size_t>(k + stride)];
-						// the rows are read by the cubic through four of them (map_read): the row before and the one after
-						const bool before = k - stride >= 0 && probe[static_cast<size_t>(k - stride)].route == m.route;
-						const bool after = k + 2 * stride < FINEST && probe[static_cast<size_t>(k + 2 * stride)].route == m.route;
-						const double p0 = before ? probe[static_cast<size_t>(k - stride)].landing : 2.0 * a.landing - b.landing;
-						const double p3 = after ? probe[static_cast<size_t>(k + 2 * stride)].landing : 2.0 * b.landing - a.landing;
-						const double read = (-p0 + 9.0 * a.landing + 9.0 * b.landing - p3) / 16.0;
-						straight = a.route != m.route || b.route != m.route || m.pass < 0.02 || std::fabs(m.landing - read) <= MAP_LANDING_TOLERANCE * slope;
+				const MapRay here = map_ray(spec, x, 580.0, medium), beside = map_ray(spec, x + 1.0 / MAP_FINE, 580.0, medium);
+				map.rays += 2;
+				const double slope = std::max(1.0, std::fabs(beside.landing - here.landing) * MAP_FINE);
+				for (; map.pieces < MAP_PIECES_MOST;) {
+					bool true_to_it = true;
+					for (int piece = 0; piece < map.pieces && true_to_it; ++piece) {
+						MapRay node[4];
+						double nm[4];
+						for (int k = 0; k < 4; ++k) {
+							nm[k] = map_nm((piece + k / 3.0) / map.pieces);
+							node[k] = map_ray(spec, x, nm[k], medium);
+							++map.rays;
+						}
+						for (int third = 0; third < 3 && true_to_it; ++third) {
+							const double g = (third + 0.5) / 3.0;
+							const MapRay exact = map_ray(spec, x, map_nm((piece + g) / map.pieces), medium);
+							++map.rays;
+							if (exact.route != node[0].route || node[1].route != node[0].route || node[2].route != node[0].route || node[3].route != node[0].route || exact.pass < 0.02) {
+								continue; // a ray that changes its way in the piece is read at the piece's nearer end
+							}
+							const double per_nm = std::fabs(node[third + 1].landing - node[third].landing) / std::max(nm[third + 1] - nm[third], 1e-9);
+							const auto sq = [](const MapRay &r) { return r.chord * r.chord; };
+							true_to_it = std::fabs(thirds(node[0].landing, node[1].landing, node[2].landing, node[3].landing, g) - exact.landing) <=
+												 std::max(MAP_LANDING_TOLERANCE * slope, MAP_NM_TOLERANCE * per_nm) &&
+										 std::fabs(thirds(node[0].pass, node[1].pass, node[2].pass, node[3].pass, g) - exact.pass) <= MAP_PASS_TOLERANCE &&
+										 std::fabs(thirds(sq(node[0]), sq(node[1]), sq(node[2]), sq(node[3]), g) - sq(exact)) <= 0.01 * std::max(1.0, sq(exact));
+						}
 					}
-					if (straight) {
+					if (true_to_it) {
 						break;
 					}
-					map.rows = (map.rows - 1) * 2 + 1;
+					map.pieces *= 2;
 				}
 			}
 		}
 	}
 
-	// the cells: traced where the map bends, filled along the straight line where it does not
-	const int per = map.media * map.rows; // rays a sample
+	for (;;) {
+	// the cells: traced where the map bends across the body, filled along the straight line where it does not
+	const int nodes = 3 * map.pieces + 1, per = map.media * nodes; // rays a sample
+	std::vector<double> node_nm(static_cast<size_t>(nodes));
+	for (int j = 0; j < nodes; ++j) {
+		node_nm[static_cast<size_t>(j)] = map_nm(static_cast<double>(j) / (nodes - 1));
+	}
 	std::vector<MapRay> rays(static_cast<size_t>(n) * static_cast<size_t>(per));
 	std::vector<char> known(static_cast<size_t>(n), 0);
 	const auto shoot = [&](int i) {
@@ -261,9 +294,9 @@ Map build_map(const MapSpec &spec) {
 			return;
 		}
 		for (int medium = 0; medium < map.media; ++medium) {
-			for (int row = 0; row < map.rows; ++row) {
-				rays[static_cast<size_t>(i) * static_cast<size_t>(per) + static_cast<size_t>(medium * map.rows + row)] =
-						map_ray(spec, map.left + static_cast<double>(i) / MAP_FINE, 380.0 + 400.0 * row / (map.rows - 1), medium);
+			for (int j = 0; j < nodes; ++j) {
+				rays[static_cast<size_t>(i) * static_cast<size_t>(per) + static_cast<size_t>(medium * nodes + j)] =
+						map_ray(spec, map.left + static_cast<double>(i) / MAP_FINE, node_nm[static_cast<size_t>(j)], medium);
 				++map.rays;
 			}
 		}
@@ -323,23 +356,24 @@ Map build_map(const MapSpec &spec) {
 		refine(refine, c * MAP_FINE, (c + 1) * MAP_FINE, c);
 	}
 
-	// how fast each whole pixel's landing bends in wavelength, at most: the second difference between rows,
-	// over the map's slope across (as a shift on the screen), in pixels per nm^2. A band's sweep is taken in
-	// as many straight steps as keep it true (the renderer: map_steps).
+	// how fast each whole pixel's landing bends in wavelength, at most: the second difference between a
+	// ray's nodes, over the map's slope across (as a shift on the screen), in pixels per nm^2. A band's sweep
+	// is taken in as many straight steps as keep it true (the renderer: map_steps).
 	map.bend.assign(static_cast<size_t>(map.coarse), 0.0f);
-	const double row_nm = 400.0 / (map.rows - 1);
 	for (int c = 0; c < map.coarse; ++c) {
 		double most = 0.0;
 		for (int i = c * MAP_FINE; i < (c + 1) * MAP_FINE; ++i) {
 			for (int medium = 0; medium < map.media; ++medium) {
-				for (int row = 1; row + 1 < map.rows; ++row) {
-					const int k = medium * map.rows + row;
+				for (int j = 1; j + 1 < nodes; ++j) {
+					const int k = medium * nodes + j;
 					const MapRay &before = ray(i, k - 1), &here = ray(i, k), &after = ray(i, k + 1), &beside = ray(i + 1, k);
 					if (before.route != here.route || after.route != here.route || beside.route != here.route || here.pass < 0.02) {
 						continue;
 					}
 					const double slope = std::max(1.0, std::fabs(beside.landing - here.landing) * MAP_FINE);
-					most = std::max(most, std::fabs(before.landing - 2.0 * here.landing + after.landing) / (row_nm * row_nm) / slope);
+					const double nm0 = node_nm[static_cast<size_t>(j - 1)], nm1 = node_nm[static_cast<size_t>(j)], nm2 = node_nm[static_cast<size_t>(j + 1)];
+					const double second = 2.0 * ((after.landing - here.landing) / (nm2 - nm1) - (here.landing - before.landing) / (nm1 - nm0)) / (nm2 - nm0);
+					most = std::max(most, std::fabs(second) / slope);
 				}
 			}
 		}
@@ -350,31 +384,72 @@ Map build_map(const MapSpec &spec) {
 	// next, how far along (found by halving, twelve times): in the route's fraction, half of it, so that a part
 	// of a pixel across the change is shared out truly (a rim: none of it to the ray that misses).
 	std::map<uint32_t, int> ids;
-	map.cells.resize(static_cast<size_t>(per) * static_cast<size_t>(n) * 4);
-	for (int k = 0; k < per; ++k) {
-		const int medium = k / map.rows;
-		const double nm = 380.0 + 400.0 * (k % map.rows) / (map.rows - 1);
-		for (int i = 0; i < n; ++i) {
-			const MapRay &r = ray(i, k);
-			const auto found = ids.emplace(r.route, static_cast<int>(ids.size())).first;
-			double along_cell = 0.0;
-			if (i + 1 < n && ray(i + 1, k).route != r.route) {
-				double lo = 0.0, hi = 1.0;
-				for (int it = 0; it < 12; ++it) {
-					const double mid = 0.5 * (lo + hi);
-					(map_ray(spec, map.left + (i + mid) / MAP_FINE, nm, medium).route == r.route ? lo : hi) = mid;
-					++map.rays;
+	std::vector<float> routes(static_cast<size_t>(n) * static_cast<size_t>(per));
+	// Where a route's boundary across the body moves with the wavelength, a ray near it changes its way within
+	// a piece, and is read there as its nearest node's ray: wrongly over at most half the way the boundary
+	// moves between two nodes. That is kept to MAP_LANDING_TOLERANCE of the screen, by more pieces.
+	double moved = 0.0;
+	std::vector<std::array<double, 3>> before, here; // a node's boundaries: where, and the routes on its two sides
+	for (int medium = 0; medium < map.media; ++medium) {
+		before.clear();
+		for (int j = 0; j < nodes; ++j) {
+			const int k = medium * nodes + j;
+			here.clear();
+			for (int i = 0; i < n; ++i) {
+				const MapRay &r = ray(i, k);
+				const auto found = ids.emplace(r.route, static_cast<int>(ids.size())).first;
+				double along_cell = 0.0;
+				if (i + 1 < n && ray(i + 1, k).route != r.route) {
+					double lo = 0.0, hi = 1.0;
+					for (int it = 0; it < 12; ++it) {
+						const double mid = 0.5 * (lo + hi);
+						(map_ray(spec, map.left + (i + mid) / MAP_FINE, node_nm[static_cast<size_t>(j)], medium).route == r.route ? lo : hi) = mid;
+						++map.rays;
+					}
+					along_cell = 0.5 * (lo + hi);
+					here.push_back({ (i + along_cell) / MAP_FINE, static_cast<double>(r.route), static_cast<double>(ray(i + 1, k).route) });
 				}
-				along_cell = 0.5 * (lo + hi);
+				routes[static_cast<size_t>(i) * static_cast<size_t>(per) + static_cast<size_t>(k)] = static_cast<float>(found->second + 0.5 * along_cell);
 			}
-			float *cell = &map.cells[((static_cast<size_t>(medium) * static_cast<size_t>(n) + static_cast<size_t>(i)) * static_cast<size_t>(map.rows) + static_cast<size_t>(k % map.rows)) * 4];
-			cell[0] = static_cast<float>(r.landing);
-			cell[1] = static_cast<float>(r.pass);
-			cell[2] = static_cast<float>(r.chord * r.chord); // its square: straight across, where the chord rises as a root at a rim
-			cell[3] = static_cast<float>(found->second + 0.5 * along_cell);
+			if (j > 0) {
+				for (const auto &now : here) {
+					double nearest = -1.0;
+					for (const auto &was : before) {
+						if (was[1] == now[1] && was[2] == now[2] && (nearest < 0.0 || std::fabs(was[0] - now[0]) < nearest)) {
+							nearest = std::fabs(was[0] - now[0]);
+						}
+					}
+					moved = std::max(moved, nearest); // one that was not there before: not counted
+				}
+			}
+			before = here;
+		}
+	}
+	int wanted = map.pieces;
+	while (wanted < MAP_PIECES_MOST && 0.5 * moved * map.pieces / wanted > MAP_LANDING_TOLERANCE) {
+		wanted *= 2;
+	}
+	if (wanted > map.pieces) {
+		map.pieces = wanted;
+		continue; // again, finer
+	}
+	map.cells.resize(static_cast<size_t>(map.media) * static_cast<size_t>(n) * static_cast<size_t>(map.pieces) * MAP_CELL);
+	for (int medium = 0; medium < map.media; ++medium) {
+		for (int i = 0; i < n; ++i) {
+			for (int piece = 0; piece < map.pieces; ++piece) {
+				float *cell = &map.cells[((static_cast<size_t>(medium) * static_cast<size_t>(n) + static_cast<size_t>(i)) * static_cast<size_t>(map.pieces) + static_cast<size_t>(piece)) * MAP_CELL];
+				for (int k = 0; k < 4; ++k) {
+					const MapRay &r = ray(i, medium * nodes + 3 * piece + k);
+					cell[k] = static_cast<float>(r.landing);
+					cell[4 + k] = static_cast<float>(r.pass);
+					cell[8 + k] = static_cast<float>(r.chord * r.chord); // its square: straight across, where the chord rises as a root at a rim
+					cell[12 + k] = routes[static_cast<size_t>(i) * static_cast<size_t>(per) + static_cast<size_t>(medium * nodes + 3 * piece + k)];
+				}
+			}
 		}
 	}
 	return map;
+	}
 }
 
 MapRay map_read(const Map &map, double x, double nm, int medium) {
@@ -382,40 +457,30 @@ MapRay map_read(const Map &map, double x, double nm, int medium) {
 	const double s = std::min(std::max((x - map.left) * MAP_FINE, 0.0), static_cast<double>(n - 1));
 	const int i = std::min(static_cast<int>(s), n - 2);
 	double f = s - i;
-	const double r = std::min(std::max((nm - 380.0) / 400.0, 0.0), 1.0) * (map.rows - 1);
-	const int k = std::min(static_cast<int>(r), map.rows - 2);
-	const double g = r - k;
-	const float *a0 = map.cell(medium, k, i), *a1 = map.cell(medium, k, i + 1), *c0 = map.cell(medium, k + 1, i), *c1 = map.cell(medium, k + 1, i + 1);
+	const double place = map_place(nm) * map.pieces;
+	const int piece = std::min(static_cast<int>(place), map.pieces - 1);
+	const double g = place - piece;
+	const float *a = map.cell(medium, piece, i), *b = map.cell(medium, piece, i + 1);
 	const auto whole = [](float route) { return std::floor(route); };
-	if (whole(a0[3]) != whole(a1[3]) || whole(c0[3]) != whole(c1[3])) {
-		// the route changes between the samples: each side of the change its own sample's ray
-		const double change = 2.0 * (whole(a0[3]) != whole(a1[3]) ? a0[3] - whole(a0[3]) : c0[3] - whole(c0[3]));
-		f = f < change ? 0.0 : 1.0;
+	for (int k = 0; k < 4; ++k) {
+		if (whole(a[12 + k]) != whole(b[12 + k])) {
+			// the route changes between the samples: each side of the change its own sample's ray
+			f = f < 2.0 * (a[12 + k] - whole(a[12 + k])) ? 0.0 : 1.0;
+			break;
+		}
 	}
+	const float *near = f < 0.5 ? a : b;
+	const auto one_way = [&](const float *c) { return whole(c[13]) == whole(c[12]) && whole(c[14]) == whole(c[12]) && whole(c[15]) == whole(c[12]); };
+	const bool cubic = (f <= 0.0 || one_way(b)) && (f >= 1.0 || one_way(a));
+	const int node = std::min(static_cast<int>(3.0 * g + 0.5), 3);
+	const auto across = [&](int k) { return a[k] * (1.0 - f) + b[k] * f; };
+	// the cubic through the piece's four nodes, where they all go one way; if not, the nearest node's ray
+	const auto read = [&](int from) { return cubic ? thirds(across(from), across(from + 1), across(from + 2), across(from + 3), g) : across(from + node); };
 	MapRay out;
-	const auto across = [&](const float *lo, const float *hi, int part) { return lo[part] * (1.0 - f) + hi[part] * f; };
-	out.pass = across(a0, a1, 1) * (1.0 - g) + across(c0, c1, 1) * g;
-	out.chord = std::sqrt(std::max(across(a0, a1, 2) * (1.0 - g) + across(c0, c1, 2) * g, 0.0));
-	const float route = whole(f < 0.5 ? a0[3] : a1[3]);
-	out.route = static_cast<uint32_t>(route);
-	// the landing: the cubic through four rows (Catmull-Rom), where they are all this route; a row that is
-	// not, or is past the table's end, is the straight line's continuation
-	const double p1 = across(a0, a1, 0), p2 = across(c0, c1, 0);
-	double p0 = 2.0 * p1 - p2, p3 = 2.0 * p2 - p1;
-	if (k > 0) {
-		const float *b0 = map.cell(medium, k - 1, i), *b1 = map.cell(medium, k - 1, i + 1);
-		if (whole(f < 0.5 ? b0[3] : b1[3]) == route && whole(b0[3]) == whole(b1[3])) {
-			p0 = across(b0, b1, 0);
-		}
-	}
-	if (k + 2 < map.rows) {
-		const float *d0 = map.cell(medium, k + 2, i), *d1 = map.cell(medium, k + 2, i + 1);
-		if (whole(f < 0.5 ? d0[3] : d1[3]) == route && whole(d0[3]) == whole(d1[3])) {
-			p3 = across(d0, d1, 0);
-		}
-	}
-	const bool one_route = whole(f < 0.5 ? c0[3] : c1[3]) == route;
-	out.landing = one_route ? p1 + 0.5 * g * (p2 - p0 + g * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + g * (3.0 * (p1 - p2) + p3 - p0))) : (g < 0.5 ? p1 : p2);
+	out.landing = read(0);
+	out.pass = std::min(std::max(read(4), 0.0), 1.0);
+	out.chord = std::sqrt(std::max(read(8), 0.0));
+	out.route = static_cast<uint32_t>(whole(near[12 + (cubic ? 0 : node)]));
 	return out;
 }
 
@@ -424,7 +489,7 @@ std::vector<float> map_block(const Map &map) {
 	out[0] = static_cast<float>(map.coarse);
 	out[1] = static_cast<float>(map.media);
 	out[2] = static_cast<float>(map.samples());
-	out[3] = static_cast<float>(map.rows);
+	out[3] = static_cast<float>(map.pieces);
 	for (int c = 0; c < map.coarse; ++c) {
 		out[static_cast<size_t>(1 + c) * 4] = map.level[static_cast<size_t>(c)];
 		out[static_cast<size_t>(1 + c) * 4 + 1] = map.bend[static_cast<size_t>(c)];

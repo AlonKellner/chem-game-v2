@@ -20,7 +20,7 @@ using godot::RenderingDevice;
 
 // What the per-pixel source is given, and what it writes (lab/optics_scene.hpp lays the buffers out).
 const char *const WRAPPER_HEAD = R"(#version 450
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(local_size_x = 2, local_size_y = 32, local_size_z = 1) in;
 layout(set = 0, binding = 0, std430) restrict readonly buffer SceneBuffer { vec4 v[]; } scene_buffer;
 layout(set = 0, binding = 1, std430) restrict readonly buffer RowBuffer { float v[]; } row_buffer;
 layout(set = 0, binding = 2, std430) restrict readonly buffer LineBuffer { vec4 v[]; } line_buffer;
@@ -267,7 +267,10 @@ void OpticsCompute::run(double budget, bool again) {
 	rd_->compute_list_bind_compute_pipeline(list, pipeline_);
 	rd_->compute_list_bind_uniform_set(list, uniforms_, 0);
 	rd_->compute_list_set_push_constant(list, push, static_cast<uint32_t>(push.size()));
-	rd_->compute_list_dispatch(list, (WIDTH + 7) / 8, (HEIGHT + 7) / 8, 1);
+	// groups two pixels wide and thirty-two tall: a vessel's pixels in one column are read in the same number
+	// of parts, and pixels run together wait for the one with most to do (measured: 8 x 8, 1.72 ms a pass
+	// where every history starts again; 2 x 32, 1.56)
+	rd_->compute_list_dispatch(list, (WIDTH + 1) / 2, (HEIGHT + 31) / 32, 1);
 	rd_->compute_list_end();
 	parity_ = 1 - parity_;
 	++frame_;
