@@ -14,6 +14,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <thread>
 
 using lab::ItemView;
 using lab::OpticsScene;
@@ -440,11 +441,23 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 		ui->frame(0.0);
 		const lab::OpticsScene &scene = ui->optics();
 		REQUIRE(lab::check_O1(scene) == "");
-		for (int y = 100; y < 1080; y += 17) {
-			for (int x = 3; x < 1400; x += 17) {
-				const std::string o2 = lab::check_O2(scene, x, y);
-				REQUIRE_MESSAGE(o2.empty(), o2 << " after command " << n);
-			}
+		// (rows dealt among threads: the reference's scene in use is each thread's own)
+		std::vector<std::string> said(12);
+		std::vector<std::thread> threads;
+		for (size_t t = 0; t < said.size(); ++t) {
+			threads.emplace_back([&, t] {
+				for (int y = 100 + 17 * static_cast<int>(t); y < 1080 && said[t].empty(); y += 17 * static_cast<int>(said.size())) {
+					for (int x = 3; x < 1400 && said[t].empty(); x += 17) {
+						said[t] = lab::check_O2(scene, x, y);
+					}
+				}
+			});
+		}
+		for (std::thread &t : threads) {
+			t.join();
+		}
+		for (const std::string &o2 : said) {
+			REQUIRE_MESSAGE(o2.empty(), o2 << " after command " << n);
 		}
 		if (command.value("do", "") == "stir" && !command.at("on").get<bool>()) {
 			after_dissolving = flask_colour();

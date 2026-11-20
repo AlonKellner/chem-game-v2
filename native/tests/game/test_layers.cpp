@@ -7,6 +7,8 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <algorithm>
@@ -197,7 +199,7 @@ TEST_CASE("layers: every pixel's colour is what its rays bring, through what is 
 		const int surface_standing = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + L::FORM) * 4 + 2]);
 		const int surface_held = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + L::BODY_VECS + L::FORM) * 4 + 2]);
 		for (const int y : { 118, 135, 149, surface_standing, surface_held, 195, 205 }) {
-			for (int px = static_cast<int>(x) - 1; px <= static_cast<int>(x + HELD_W); px += (y == surface_held ? 1 : 3)) {
+			for (int px = static_cast<int>(x) - 1; px <= static_cast<int>(x + HELD_W); px += (y == surface_held ? 1 : 3) * sparse()) {
 				if (lab::optics_cover(scene, px, y) <= 0.0) {
 					continue;
 				}
@@ -215,7 +217,7 @@ TEST_CASE("layers: every pixel's colour is what its rays bring, through what is 
 			}
 		}
 	}
-	CHECK(compared > 300);
+	CHECK(compared > 300 / sparse());
 	CHECK(sum / compared < 1.5);
 	MESSAGE(compared << " pixels through a held vessel and a standing one, against 64 rays each: worst " << worst << " on the eye metric (visible above 8), mean " << sum / compared);
 }
@@ -495,7 +497,7 @@ TEST_CASE("layers: a vessel's floor is glass all through: a rod seen from the si
 	double worst = 0.0;
 	int compared = 0;
 	for (int y = static_cast<int>(foot) - 7; y <= static_cast<int>(foot); ++y) {
-		for (int px = static_cast<int>(X) - 1; px <= static_cast<int>(X + W); px += 2) {
+		for (int px = static_cast<int>(X) - 1; px <= static_cast<int>(X + W); px += 2 * sparse()) {
 			if (lab::optics_cover(scene, px, y) <= 0.0) {
 				continue;
 			}
@@ -510,7 +512,7 @@ TEST_CASE("layers: a vessel's floor is glass all through: a rod seen from the si
 			++compared;
 		}
 	}
-	CHECK(compared > 250);
+	CHECK(compared > 250 / sparse());
 	// a uniform wall stays uniform through it (O7), and held before another vessel it is followed as the rest is
 	CHECK(lab::check_O7(scene, static_cast<int>(X) - 1, static_cast<int>(foot) - 8, static_cast<int>(X + W) + 1, static_cast<int>(foot) + 1, 0.6) == "");
 	ItemView in_hand = vessel(50.0, 30.0, 0.0, 0.8);

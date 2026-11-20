@@ -7,7 +7,7 @@ conservation laws enforced as invariants. Design: `GAME_SPEC.md`.
 
 - **Game**: engine-free native C++20 (`native/core`, `native/game`) behind a C API (`native/capi/include/chem_api.h`)
 - **Engine host**: Godot 4.7 (`engines/godot`; the host is one GDExtension node, `native/hosts/godot`)
-- **Testing**: doctest/ctest (`chem_tests`, `lab_tests`); GUT 9.6.0 for the Godot host only
+- **Testing**: doctest/ctest (`chem_tests`, `lab_tests`, a ctest entry a source file); GUT 9.6.0 for the Godot host only
 - **IDE**: VSCode
 
 ## Architecture
@@ -48,7 +48,7 @@ make demo-bench                 # its step cost
 make sessions-check             # the sessions against their golden records (make sessions re-records: a behaviour change)
 ```
 
-- Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`.
+- Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`. Each source file is a ctest entry, run side by side; a test that holds many pixels to the brute-force truth leans on the reference's own threads (`LAB_THREADS`) and, under the sanitizers, samples sparsely (`sparse()`, `tests/support/sparse.hpp`): `docs/WORKFLOW.md`.
 - Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`. The screen itself is tested natively (`native/tests/game/test_ui.cpp`), through `Ui::locate`.
 - **A script that runs on Godot's own thread never waits unbounded**: every loop in `engines/godot/tools/` has a limit, and a windowed Godot started from a shell is given a time limit (`perl -e 'alarm 90; exec @ARGV' godot …`). An unbounded wait froze the window once.
 - **Invariants over examples**: a property goes in the catalogue (GAME_SPEC §18) as a named check with a self-test that proves it fires on a corrupted trace.

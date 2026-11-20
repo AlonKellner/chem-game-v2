@@ -269,6 +269,40 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 	return out;
 }
 
+// The reference's heavy loops (thousands of exact rays a pixel) are dealt among the machine's threads: `count`
+// pieces, each done whole by one thread. A piece is the same piece on every machine and results are joined in
+// the pieces' order, so a sum comes out the same however many threads there are. The scene in use is each
+// thread's own (shader::current): a piece names its own.
+template <typename Piece>
+void in_pieces(int count, const Piece &piece) {
+	// half the machine's threads, six at most (measured on six fast cores and six slow ones: 20 s on one thread,
+	// 7.6 s on four, 14 s on twelve); or LAB_THREADS, where several such loops run side by side (ctest)
+	static const int most = [] {
+		const char *asked = std::getenv("LAB_THREADS");
+		const int n = asked != nullptr ? std::atoi(asked) : static_cast<int>(std::min(6u, std::thread::hardware_concurrency() / 2));
+		return n < 1 ? 1 : n > 64 ? 64 : n;
+	}();
+	const int threads = std::max(1, std::min(count, most));
+	if (threads == 1) {
+		for (int i = 0; i < count; ++i) {
+			piece(i);
+		}
+		return;
+	}
+	std::atomic<int> next{ 0 };
+	std::vector<std::thread> workers;
+	for (int t = 0; t < threads; ++t) {
+		workers.emplace_back([&] {
+			for (int i = next.fetch_add(1); i < count; i = next.fetch_add(1)) {
+				piece(i);
+			}
+		});
+	}
+	for (std::thread &w : workers) {
+		w.join();
+	}
+}
+
 // ---- the truth of a pixel's area (GAME_SPEC §12.3, Stage 20): its own tracer, not the renderer's
 
 namespace {
@@ -543,12 +577,17 @@ double optics_area_through(const OpticsScene &scene, int x, int y, double nm, in
 	if (!shader::ready(scene) || grid < 1) {
 		return 0.0;
 	}
-	const shader::Use use(scene);
-	double sum = 0.0;
-	for (int j = 0; j < grid; ++j) {
+	// a row of the grid a piece
+	std::vector<double> rows(static_cast<size_t>(grid), 0.0);
+	in_pieces(grid, [&](int j) {
+		const shader::Use use(scene);
 		for (int i = 0; i < grid; ++i) {
-			sum += exact_through(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid, nm);
+			rows[static_cast<size_t>(j)] += exact_through(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid, nm);
 		}
+	});
+	double sum = 0.0;
+	for (const double r : rows) {
+		sum += r;
 	}
 	return sum / (grid * grid);
 }
@@ -574,16 +613,26 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 			places.push_back(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid));
 		}
 	}
-	const int shares = truth_shares(scene);
-	shader::vec3 sum;
-	for (int j = 0; j < shares; ++j) {
-		const shader::vec4 a = shader::share(static_cast<double>(j) / shares), b = shader::share(static_cast<double>(j + 1) / shares);
-		const double nm = shader::share((j + 0.5) / shares).x + 380.0;
-		double seen = 0.0;
-		for (const shader::vec2 &place : places) {
-			seen += exact_through(place, 1.0 / grid, nm);
+	// the light's shares, sixty-four to a piece
+	const int shares = truth_shares(scene), pieces = (shares + 63) / 64;
+	std::vector<shader::vec3> parts(static_cast<size_t>(pieces));
+	in_pieces(pieces, [&](int piece) {
+		const shader::Use mine(scene);
+		shader::vec3 part;
+		for (int j = piece * 64; j < std::min(shares, piece * 64 + 64); ++j) {
+			const shader::vec4 a = shader::share(static_cast<double>(j) / shares), b = shader::share(static_cast<double>(j + 1) / shares);
+			const double nm = shader::share((j + 0.5) / shares).x + 380.0;
+			double seen = 0.0;
+			for (const shader::vec2 &place : places) {
+				seen += exact_through(place, 1.0 / grid, nm);
+			}
+			part = part + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(places.size()));
 		}
-		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(places.size()));
+		parts[static_cast<size_t>(piece)] = part;
+	});
+	shader::vec3 sum;
+	for (const shader::vec3 &part : parts) {
+		sum = sum + part;
 	}
 	const shader::vec3 c = shader::to_linear_srgb(sum);
 	rgb[0] = c.x;
@@ -643,9 +692,11 @@ std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, i
 		return "O8: a scene is not ready";
 	}
 	const OpticsThrough read = through != nullptr ? through : optics_through;
+	std::vector<double> of_pixel(static_cast<size_t>(std::max(0, x1 - x0)), 0.0);
+	in_pieces(x1 - x0, [&](int i) { of_pixel[static_cast<size_t>(i)] = read(with_line, x0 + i, row, nm) - read(without, x0 + i, row, nm); });
 	double shown = 0.0;
-	for (int x = x0; x < x1; ++x) {
-		shown += read(with_line, x, row, nm) - read(without, x, row, nm);
+	for (const double v : of_pixel) {
+		shown += v;
 	}
 	// The truth: what the line adds to one ray, with the line and without, traced exactly at the row's middle.
 	// It is nothing but where rays land on the line: those places' ends are found by halving (a line's image
@@ -671,49 +722,64 @@ std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, i
 		return exact_ray(x, row + 0.5, nm).x;
 	};
 	constexpr int STEPS = 256; // a pixel, to begin with
-	std::vector<double> ends;
-	const auto end_between = [&](double lo, double hi, bool on_lo) {
-		for (int it = 0; it < 40; ++it) {
-			const double mid = 0.5 * (lo + hi);
-			((adds(mid) != 0.0) == on_lo ? lo : hi) = mid;
-		}
-		ends.push_back(0.5 * (lo + hi));
-	};
 	struct Place {
 		double x, lands;
 		bool on;
 	};
-	std::vector<Place> todo; // the right ends of the pieces still to look at, the nearest last
-	Place before{ static_cast<double>(x0), lands(x0), adds(x0) != 0.0 };
-	for (int i = 1; i <= (x1 - x0) * STEPS; ++i) {
-		const double x = x0 + static_cast<double>(i) / STEPS;
-		todo.push_back(Place{ x, lands(x), adds(x) != 0.0 });
-		while (!todo.empty()) {
-			const Place here = todo.back();
-			if (std::fabs(here.lands - before.lands) > 0.05 && here.x - before.x > 1e-11) {
-				const double mid = 0.5 * (before.x + here.x);
-				todo.push_back(Place{ mid, lands(mid), adds(mid) != 0.0 });
-				continue;
+	// a pixel a piece: each begins where the one before it ends, on the same ray
+	std::vector<std::vector<double>> ends_of(static_cast<size_t>(std::max(0, x1 - x0)));
+	in_pieces(x1 - x0, [&](int pixel) {
+		std::vector<double> &ends = ends_of[static_cast<size_t>(pixel)];
+		const auto end_between = [&](double lo, double hi, bool on_lo) {
+			for (int it = 0; it < 40; ++it) {
+				const double mid = 0.5 * (lo + hi);
+				((adds(mid) != 0.0) == on_lo ? lo : hi) = mid;
 			}
-			todo.pop_back();
-			if (before.on != here.on) {
-				end_between(before.x, here.x, before.on);
+			ends.push_back(0.5 * (lo + hi));
+		};
+		std::vector<Place> todo; // the right ends of the pieces still to look at, the nearest last
+		const double from = x0 + pixel;
+		Place before{ from, lands(from), adds(from) != 0.0 };
+		for (int i = 1; i <= STEPS; ++i) {
+			const double x = from + static_cast<double>(i) / STEPS;
+			todo.push_back(Place{ x, lands(x), adds(x) != 0.0 });
+			while (!todo.empty()) {
+				const Place here = todo.back();
+				if (std::fabs(here.lands - before.lands) > 0.05 && here.x - before.x > 1e-11) {
+					const double mid = 0.5 * (before.x + here.x);
+					todo.push_back(Place{ mid, lands(mid), adds(mid) != 0.0 });
+					continue;
+				}
+				todo.pop_back();
+				if (before.on != here.on) {
+					end_between(before.x, here.x, before.on);
+				}
+				before = here;
 			}
-			before = here;
 		}
+	});
+	std::vector<double> ends;
+	for (const std::vector<double> &some : ends_of) {
+		ends.insert(ends.end(), some.begin(), some.end());
 	}
-	double truth = 0.0;
-	for (size_t e = 0; e + 1 < ends.size(); ++e) {
-		const double a = ends[e] + 1e-9, b = ends[e + 1] - 1e-9;
+	// each stretch between two ends a piece
+	const int stretches = ends.size() > 1 ? static_cast<int>(ends.size()) - 1 : 0;
+	std::vector<double> of_stretch(static_cast<size_t>(stretches), 0.0);
+	in_pieces(stretches, [&](int e) {
+		const double a = ends[static_cast<size_t>(e)] + 1e-9, b = ends[static_cast<size_t>(e) + 1] - 1e-9;
 		if (adds(0.5 * (a + b)) == 0.0) {
-			continue; // between two images
+			return; // between two images
 		}
 		constexpr int N = 32;
 		double sum = adds(a) + adds(b);
 		for (int k = 1; k < N; ++k) {
 			sum += (k % 2 == 1 ? 4.0 : 2.0) * adds(a + (b - a) * k / N);
 		}
-		truth += sum * (b - a) / (3.0 * N);
+		of_stretch[static_cast<size_t>(e)] = sum * (b - a) / (3.0 * N);
+	});
+	double truth = 0.0;
+	for (const double v : of_stretch) {
+		truth += v;
 	}
 	if (std::fabs(shown - truth) > 0.01 * std::fabs(truth) + 1e-6) {
 		char buffer[200];
@@ -784,10 +850,12 @@ void OpticsFrames::frame(const OpticsScene &scene) {
 	if (!shader::ready(scene)) {
 		return;
 	}
-	const shader::Use use(scene);
 	const double scale = shader::budget_scale(asked_, budget_, static_cast<double>(w_) * h_);
-	double asked = 0.0, points = 0.0;
-	for (int row = 0; row < h_; ++row) {
+	// a row a piece: a pixel's step touches its own state alone
+	std::vector<double> asked_of(static_cast<size_t>(h_), 0.0), points_of(static_cast<size_t>(h_), 0.0);
+	in_pieces(h_, [&](int row) {
+		const shader::Use use(scene);
+		double &asked = asked_of[static_cast<size_t>(row)], &points = points_of[static_cast<size_t>(row)];
 		for (int col = 0; col < w_; ++col) {
 			const size_t i = static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col);
 			const int x = x_ + col, y = y_ + row;
@@ -808,6 +876,11 @@ void OpticsFrames::frame(const OpticsScene &scene) {
 			asked += st.aux.z;
 			points += st.aux.w;
 		}
+	});
+	double asked = 0.0, points = 0.0;
+	for (int row = 0; row < h_; ++row) {
+		asked += asked_of[static_cast<size_t>(row)];
+		points += points_of[static_cast<size_t>(row)];
 	}
 	asked_ = asked;
 	points_ = points;

@@ -27,6 +27,25 @@ summary table gives each gate's seconds and result, and the log directory.
 repo data (`data/`, `bench/`) hash the same as on a run where it passed is not run again. Lints
 always run. `make gates` never reads the cache. `make gate-clear-cache` empties it.
 
+## What keeps the gates quick
+
+- **A ctest entry for each test source file** (`chem_tests.<file>`, `lab_tests.<file>`, by doctest's
+  source-file filter): ctest runs them side by side, and the result cache keeps each apart.
+  `chem_tests.every_file_runs` and `lab_tests.every_file_runs` fail if a test case is in a file no
+  entry runs.
+- **The reference's heavy loops are dealt among threads** (`in_pieces`,
+  `native/game/src/optics_reference.cpp`): the truth of a pixel's area (thousands of exact rays),
+  the O8 check's scan, the renderer's frames. A piece is the same piece on every machine and
+  results are joined in the pieces' order, so a result does not depend on the number of threads.
+  `LAB_THREADS=n` sets it (default: half the machine's, six at most); the five heavy `lab_tests`
+  entries run with four, and ctest counts each as four processors.
+- **The sanitizer build samples the heaviest comparisons sparsely**: `LAB_SPARSE=n` takes every
+  n-th sample across in the tests that hold every pixel to 64 traced rays
+  (`native/tests/support/sparse.hpp`; `ASAN_SPARSE`, default 3), as it runs fewer sweep worlds.
+  The release ctest runs every sample.
+- Measured (Stage 22, a machine busy with other work): the lab tests in one process, 368 s; as
+  entries side by side with threads, 112 s.
+
 ## The conservation sweep
 
 `sweeps: conservation holds on every step of every random world` (in `chem_tests`) builds random
@@ -52,7 +71,7 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 
 | Entry | Checks |
 |---|---|
-| `chem_tests`, `lab_tests` | the core's and the lab layer's doctest cases |
+| `chem_tests.<file>`, `lab_tests.<file>` | the core's and the lab layer's doctest cases, an entry a source file; `.every_file_runs`: no test case is left out |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
 | `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest |
