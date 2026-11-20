@@ -193,12 +193,12 @@ func _play(dir: String) -> void:
 	await _shoot(dir, "13_debug")
 	_click("debug")
 	_click("item:flask") # let go of
-	# Stage 21: the beaker carried over the flask and held: what stands is seen through it (GAME_SPEC §12.3)
+	# Stage 21, 22: the beaker held over the flask's foot and the burner: what stands is seen through it (§12.3)
 	var from := _lab.locate("item:beaker")
 	var over := _lab.locate("item:flask")
 	_lab.pointer(from.x, from.y, true)
 	for i in 12: # a few moves, as a hand makes
-		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 12.0, (i + 1) / 12.0), true)
+		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 70.0, (i + 1) / 12.0), true)
 	await _shoot(dir, "14_held")
 	await _cost("a vessel held over another: ", 0, 1)
 	_lab.pointer(from.x, from.y, false) # carried back, and set down where it stood

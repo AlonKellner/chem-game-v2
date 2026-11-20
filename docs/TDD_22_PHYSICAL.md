@@ -20,7 +20,7 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 | 22.3 | Three shapes: the slab, the bar, the cone; opaque and glowing | Done: see below |
 | 22.4 | The screen: parts, lamps, wires, the burner and its flame, the outlet as bodies; nothing of the lab drawn over the pass, and a test that holds it | Done: see below |
 | 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Done: see below |
-| 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Pending |
+| 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Done |
 | 22.7 | Pictures; the user judges by eye and signs off | Pending |
 
 ## The scene's capacity (22.2)
@@ -94,4 +94,13 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 - Tested: on a busy bench with nothing chosen, nothing the screen draws over the pass that falls
   on what stands there is a fill, a polygon or a circle (only names, outlines and line
   highlights); a person opens the valve over 40 frames and stirs, from the column.
+
+## The GPU (22.6)
+
+- O4, none visible on 14 pictures; `14_held` holds the beaker over the flask's foot and the burner
+  under it, with the rig's bar crossing behind it.
+- A restarting pass 1.59 ms with nothing held; 9.3 ms with the beaker held (its stack has more
+  slots now: the burner, the rig's bar). A settled pass costs nothing.
+- **Open**: a highlight is the screen's drawing, so it is not bent: while a part signals, its
+  wire's or its rig's highlight runs straight across a held vessel beside the bar's bent image.
 
