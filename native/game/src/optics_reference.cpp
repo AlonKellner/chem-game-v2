@@ -1,9 +1,11 @@
 // The reference renderer: the per-pixel source compiled as C++, in float64 (GAME_SPEC §12, §12.2).
 #include "lab/optics_scene.hpp"
+#include "lab/optics_trace.hpp"
 
 #include "lab/colour.hpp"
 
 #include <algorithm>
+#include <map>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -32,6 +34,8 @@ struct vec3 {
 };
 struct vec4 {
 	double x = 0.0, y = 0.0, z = 0.0, w = 0.0;
+	double &operator[](int i) { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
+	double operator[](int i) const { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
 	vec4() = default;
 	explicit vec4(double a) :
 			x(a), y(a), z(a), w(a) {}
@@ -141,6 +145,10 @@ inline vec4 map_vec(int i) {
 	const float *v = &current->maps[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
+inline vec4 stack_vec(int i) {
+	const float *v = &current->stacks[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
 inline vec4 wall_vec(int i) {
 	const float *v = &current->wall[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -151,6 +159,8 @@ inline vec4 wall_vec(int i) {
 #pragma clang diagnostic ignored "-Wkeyword-macro"
 #endif
 #define float double
+#define OPTICS_CHAIN 1 // the reference reads every pixel: a prism's and a stack's too (the host compiles those apart)
+#define OPTICS_FOLLOW 1 // and follows the rays of a stack, which runs on the CPU alone
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)
@@ -170,6 +180,7 @@ struct Use {
 
 bool ready(const OpticsScene &s) {
 	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() == static_cast<size_t>(optics_layout::ROWS_SIZE) && !s.wall.empty() &&
+		   s.stacks.size() >= static_cast<size_t>(optics_layout::MAX_BODIES) * 4 &&
 		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
 
@@ -192,7 +203,7 @@ double optics_through_general(const OpticsScene &scene, int x, int y, double nm)
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	return shader::through_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
+	return shader::general_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
 }
 
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t) {
@@ -243,53 +254,59 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 	if (q.refractor < 0) {
 		return OpticsBend{ q.x, 1.0, 0.0 };
 	}
-	// the pixel's central ray, through the core its centre is in
-	const shader::Bend b = shader::map_at(q, q.rmedia > 1 && q.rwet < 0.5 ? 1 : 0, q.x - q.raxis, nm);
-	return OpticsBend{ b.x, b.pass, q.rwet < 0.5 ? 0.0 : b.chord };
+	// the pixel's central ray, followed through every layer; in the row its centre is in
+	const shader::Stack stack = shader::stack_of(q, true);
+	const shader::Ray r = shader::chain_at(stack, q.y, q.x, nm);
+	OpticsBend out{ r.x, 1.0, 0.0 };
+	bool first = true;
+	for (int j = 0; j < stack.count; ++j) {
+		if (r.bent[j]) {
+			out.pass *= r.pass[j];
+			out.chord = first ? r.chord[j] : out.chord; // its chord in the nearest body that bent it
+			first = false;
+		}
+	}
+	return out;
 }
 
 // ---- the truth of a pixel's area (GAME_SPEC §12.3, Stage 20): its own tracer, not the renderer's
 
 namespace {
 
-// Where a level ray meets the wall through one body, traced exactly (vector Snell, Fresnel at every
-// crossing, turned back where it cannot pass), seen from above: x across, z away from the eye, in cm
-// from the body's axis. Independent of the renderer's formulas: it asks only which medium a point is in.
-struct Exact {
-	double x = 0.0, pass = 1.0, chord = 0.0;
-	int meetings = 0;
+// A level ray on its way, seen from above, in the one world of the screen's pixels: x across the screen, z
+// away from the eye (0: the bench's plane), and its direction.
+struct Line {
+	double x = 0.0, z = 0.0, ux = 0.0, uz = 1.0;
 };
 
-Exact exact_bend(int body, double x, bool liquid, double nm) {
+// What one body does to a ray, traced exactly (vector Snell, Fresnel at every crossing, turned back where
+// it cannot pass). Independent of the renderer's maps and of its chain: it asks only which medium a point
+// is in, and takes a ray from anywhere.
+struct Exact {
+	bool met = false; // the ray met the body
+	double entry = 0.0; // how far along the line, from where it was given (pixels)
+	double pass = 1.0, chord = 0.0; // what its surfaces passed; its path in the liquid (cm)
+	int meetings = 0;
+	bool out = true; // it left the body (not still inside after every meeting allowed)
+};
+
+// `line` through body `body`, whose axis stands at the depth z_axis, its core its liquid (0), the air over
+// it (1) or glass all through (2: its floor); the line it leaves on replaces `line`.
+Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
+	const bool liquid = core == 0;
 	Exact out;
-	out.x = x;
-	if (body < 0) {
-		return out;
-	}
 	using shader::row_at;
 	using shader::scene_vec;
 	const int at = optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS;
-	// the body, read from the scene's table itself
-	struct {
-		int refractor = -1;
-		bool rprism = false, rliquid = false;
-		double rr = 0.0, rt = 0.0, rd = 0.0, raxis = 0.0, rcm = 1.0, rcover = 1.0;
-	} q;
-	{
-		const shader::vec4 rect = scene_vec(at), form = scene_vec(at + 1);
-		q.refractor = body;
-		q.rprism = form.x > 1.5;
-		q.rliquid = liquid;
-		q.rcm = form.y;
-		q.rr = rect.z * 0.5 * form.y;
-		q.rt = scene_vec(at + 5).x;
-		q.raxis = rect.x + rect.z * 0.5 + (q.rprism ? scene_vec(at + 3).z : 0.0);
-		q.rd = (x - q.raxis) * form.y;
-	}
-	const int start = q.refractor * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
+	// the body, read from the scene's table itself: in its own centimetres, from its axis
+	const shader::vec4 rect = scene_vec(at), form = scene_vec(at + 1);
+	const bool prism = form.x > 1.5;
+	const double cm = form.y, rr = rect.z * 0.5 * cm, rt = scene_vec(at + 5).x;
+	const double axis = rect.x + rect.z * 0.5 + (prism ? scene_vec(at + 3).z : 0.0);
+	const int start = body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
 	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
-	const double n_in = q.rliquid ? row_at(start + 3 * optics_layout::ROW, nm) : 1.0;
-	const double ri = q.rr - q.rt;
+	const double n_in = liquid ? row_at(start + 3 * optics_layout::ROW, nm) : core == 2 ? n_glass : 1.0;
+	const double ri = rr - rt;
 	// the prism's corners (cm from its centre)
 	const shader::vec4 m = scene_vec(at + 2), g = scene_vec(at + 3);
 	const double cx[3] = { m.x, m.z, g.x }, cz[3] = { m.y, m.w, g.y };
@@ -309,17 +326,17 @@ Exact exact_bend(int body, double x, bool liquid, double nm) {
 	};
 	// 0 air, 1 glass, 2 the core (liquid or air inside the glass)
 	const auto medium = [&](double x, double z) {
-		if (q.rprism) {
+		if (prism) {
 			return inside_prism(x, z) ? 1 : 0;
 		}
 		const double r = std::sqrt(x * x + z * z);
-		return r < ri && q.rt > 0.0 ? 2 : r < q.rr ? (q.rt > 0.0 ? 1 : 2) : 0;
+		return r < ri && rt > 0.0 ? 2 : r < rr ? (rt > 0.0 ? 1 : 2) : 0;
 	};
 	const auto index = [&](int k) { return k == 0 ? 1.0 : k == 1 ? n_glass : n_in; };
 	// the nearest boundary ahead: circles of radius rr and ri, or the prism's three faces
 	const auto next = [&](double ox, double oz, double ux, double uz, double &t, double &nx, double &nz) {
 		t = 1e30;
-		if (q.rprism) {
+		if (prism) {
 			for (int e = 0; e < 3; ++e) {
 				const int f = (e + 1) % 3;
 				const double dx = cx[f] - cx[e], dz = cz[f] - cz[e];
@@ -338,8 +355,8 @@ Exact exact_bend(int body, double x, bool liquid, double nm) {
 			}
 		} else {
 			for (int k = 0; k < 2; ++k) {
-				const double r = k == 0 ? q.rr : ri; // the outer surface, then the inner, if there is glass
-				if (r <= 0.0 || (k == 1 && q.rt <= 0.0)) {
+				const double r = k == 0 ? rr : ri; // the outer surface, then the inner, if there is glass
+				if (r <= 0.0 || (k == 1 && rt <= 0.0)) {
 					continue;
 				}
 				const double b = ox * ux + oz * uz, c = ox * ox + oz * oz - r * r, disc = b * b - c;
@@ -357,14 +374,21 @@ Exact exact_bend(int body, double x, bool liquid, double nm) {
 		}
 		return t < 1e29;
 	};
-	double ox = q.rd, oz = -1000.0, ux = 0.0, uz = 1.0;
+	// from well before the body, on the line
+	const double back = 1000.0;
+	double ux = line.ux, uz = line.uz;
+	double ox = (line.x - axis) * cm - back * ux, oz = (line.z - z_axis) * cm - back * uz;
 	int here = 0;
 	for (int k = 0; k < 16; ++k) {
 		double t = 0.0, nx = 0.0, nz = 0.0;
 		if (!next(ox, oz, ux, uz, t, nx, nz)) {
 			break;
 		}
-		if (here == 2 && q.rliquid) {
+		if (!out.met) {
+			out.met = true;
+			out.entry = (t - back) / cm;
+		}
+		if (here == 2 && liquid) {
 			out.chord += t;
 		}
 		ox += t * ux;
@@ -394,11 +418,82 @@ Exact exact_bend(int body, double x, bool liquid, double nm) {
 	}
 	if (here != 0) {
 		out.pass = 0.0; // still inside: nothing of the wall comes this way
+		out.out = false;
 	}
-	const double wall = scene_vec(2).x;
-	const double landed = uz > 0.05 ? ox + ux * (wall - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
-	out.x = q.raxis + landed / q.rcm;
-	out.pass = 1.0 - q.rcover * (1.0 - out.pass);
+	if (out.met) {
+		line = Line{ axis + ox / cm, z_axis + oz / cm, ux, uz };
+	}
+	return out;
+}
+
+// One ray of the room's light, from the eye straight in at (x, y), followed exactly through the one world
+// (GAME_SPEC §12.3): layer by layer, the nearest first; every body of a layer where the ray's line, as it
+// arrives, crosses the layer's plane; the layer's body that bends, the first the line meets, traced by
+// exact_body. What it met, in the order it met it, and where it lands on the wall.
+struct Met {
+	int body = 0;
+	double cross = 0.0;
+	bool bent = false;
+	double pass = 1.0, chord = 0.0;
+};
+struct ExactRay {
+	double x = 0.0;
+	std::vector<Met> met;
+};
+
+ExactRay exact_ray(double x, double y, double nm) {
+	using shader::scene_vec;
+	ExactRay out;
+	const int count = static_cast<int>(scene_vec(0).x);
+	const double wall = scene_vec(2).x, gap = scene_vec(3).x;
+	const auto vec_of = [](int body, int which) { return scene_vec(optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS + which); };
+	const auto bends = [&](int body) { return vec_of(body, 5).w > 0.5 && (vec_of(body, 1).x < 0.5 || vec_of(body, 1).x > 1.5); };
+	const auto in_rows = [&](int body) { return y >= vec_of(body, 0).y && y <= static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w; };
+	// what a body is in this row: its floor (glass all through), its liquid, or the air over it
+	const auto core_in = [&](int body) {
+		const double foot = static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w, floor_px = static_cast<double>(vec_of(body, 5).z) / vec_of(body, 1).y;
+		return floor_px > 0.0 && y >= foot - floor_px ? 2 : y >= vec_of(body, 1).z ? 0 : 1;
+	};
+	Line line{ x, -1.0e5, 0.0, 1.0 };
+	bool lands = true;
+	for (int last = count - 1; last >= 0 && lands;) {
+		const double layer = vec_of(last, 5).y, z = -layer * gap;
+		int first = last;
+		while (first > 0 && vec_of(first - 1, 5).y == layer) {
+			--first;
+		}
+		const double cross = line.x + (z - line.z) * line.ux / line.uz;
+		// the layer's body that bends which the line meets first
+		int hit = -1;
+		double nearest = 1e30;
+		for (int k = first; k <= last; ++k) {
+			if (bends(k) && in_rows(k)) {
+				Line trial = line;
+				const Exact e = exact_body(k, core_in(k), nm, z, trial);
+				if (e.met && e.meetings > 0 && e.entry < nearest) {
+					nearest = e.entry;
+					hit = k;
+				}
+			}
+		}
+		for (int k = last; k >= first; --k) {
+			if (k == hit) {
+				const Exact e = exact_body(k, core_in(k), nm, z, line);
+				out.met.push_back(Met{ k, cross, true, e.pass, e.chord });
+				if (!e.out || line.uz <= 0.05) {
+					lands = false;
+					out.x = line.ux < 0.0 ? -100000.0 : 100000.0;
+					break;
+				}
+			} else if (!bends(k)) {
+				out.met.push_back(Met{ k, cross, false, 1.0, 0.0 });
+			}
+		}
+		last = first - 1;
+	}
+	if (lands) {
+		out.x = line.x + (wall - line.z) * line.ux / line.uz;
+	}
 	return out;
 }
 
@@ -417,7 +512,8 @@ double drawn_at(double x, double y) {
 }
 
 // what one ray of the room's light brings at nm, at the point p of the screen (`size` across, for the
-// renderer's layers): the truth's own bend and its own reading of the wall
+// bodies' outlines): the truth's own tracing through every body, and its own reading of the wall; each body
+// read where the ray met it, gathered from the eye inward
 double exact_through(const shader::vec2 &p, double size, double nm) {
 	const shader::Path q = shader::path_of(p, size);
 	if (q.layers == 0) {
@@ -426,12 +522,19 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	if (q.refractor < 0) {
 		return shader::along(q, nm, 1.0, 0.0, 0.0, false, q.back);
 	}
-	if (q.rin < 0.5) {
-		return shader::along(q, nm, 1.0, 0.0, 0.0, false, drawn_at(p.x, p.y)); // past its top or its floor: straight
+	const ExactRay ray = exact_ray(p.x, p.y, nm);
+	const double room = shader::scene_vec(2).y;
+	double a = 1.0, b = 0.0;
+	for (const Met &m : ray.met) {
+		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, p.y), size, size);
+		const int start = m.body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
+		const double per_cm = shader::liquid_at(m.body, nm);
+		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
+				per_cm * (m.bent ? m.chord : l.depth_cm), m.pass, room);
+		b += a * does.y;
+		a *= does.x;
 	}
-	const bool liquid = q.rwet >= 0.5;
-	const Exact b = exact_bend(q.refractor, p.x, liquid, nm);
-	return shader::along(q, nm, b.pass, b.chord, b.chord, liquid, drawn_at(b.x, p.y));
+	return a * drawn_at(ray.x, p.y) + b;
 }
 
 } // namespace
@@ -456,7 +559,7 @@ double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {
 	}
 	const shader::Use use(scene);
 	const shader::Path q = shader::at(x, y);
-	return q.refractor < 0 ? q.x : exact_bend(q.refractor, q.x, q.rwet >= 0.5, nm).x;
+	return q.refractor < 0 ? q.x : exact_ray(q.x, q.y, nm).x;
 }
 
 void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]) {
@@ -466,11 +569,9 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 	}
 	const shader::Use use(scene);
 	std::vector<shader::vec2> places;
-	shader::vec3 glow;
 	for (int j = 0; j < grid; ++j) {
 		for (int i = 0; i < grid; ++i) {
 			places.push_back(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid));
-			glow = glow + shader::path_of(places.back(), 1.0 / grid).glow / static_cast<double>(grid * grid);
 		}
 	}
 	const int shares = truth_shares(scene);
@@ -484,7 +585,7 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 		}
 		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(places.size()));
 	}
-	const shader::vec3 c = shader::to_linear_srgb(sum) + glow;
+	const shader::vec3 c = shader::to_linear_srgb(sum);
 	rgb[0] = c.x;
 	rgb[1] = c.y;
 	rgb[2] = c.z;
@@ -562,20 +663,44 @@ std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, i
 		}
 		return with - bare;
 	};
-	constexpr int STEPS = 256; // a pixel: finer than any image looked for
+	// Where the rays land: an image can be far thinner than any even step (through two vessels a landing may
+	// cross the whole wall within a hundredth of a pixel), so between two places whose rays land more than a
+	// twentieth of a pixel apart the screen is halved again, down to where a landing jumps (the rays part ways).
+	const auto lands = [&](double x) {
+		const shader::Use use(without);
+		return exact_ray(x, row + 0.5, nm).x;
+	};
+	constexpr int STEPS = 256; // a pixel, to begin with
 	std::vector<double> ends;
-	double before = adds(x0);
-	for (int i = 1; i <= (x1 - x0) * STEPS; ++i) {
-		const double x = x0 + static_cast<double>(i) / STEPS, here = adds(x);
-		if ((before != 0.0) != (here != 0.0)) {
-			double lo = x - 1.0 / STEPS, hi = x;
-			for (int it = 0; it < 40; ++it) {
-				const double mid = 0.5 * (lo + hi);
-				((adds(mid) != 0.0) == (before != 0.0) ? lo : hi) = mid;
-			}
-			ends.push_back(0.5 * (lo + hi));
+	const auto end_between = [&](double lo, double hi, bool on_lo) {
+		for (int it = 0; it < 40; ++it) {
+			const double mid = 0.5 * (lo + hi);
+			((adds(mid) != 0.0) == on_lo ? lo : hi) = mid;
 		}
-		before = here;
+		ends.push_back(0.5 * (lo + hi));
+	};
+	struct Place {
+		double x, lands;
+		bool on;
+	};
+	std::vector<Place> todo; // the right ends of the pieces still to look at, the nearest last
+	Place before{ static_cast<double>(x0), lands(x0), adds(x0) != 0.0 };
+	for (int i = 1; i <= (x1 - x0) * STEPS; ++i) {
+		const double x = x0 + static_cast<double>(i) / STEPS;
+		todo.push_back(Place{ x, lands(x), adds(x) != 0.0 });
+		while (!todo.empty()) {
+			const Place here = todo.back();
+			if (std::fabs(here.lands - before.lands) > 0.05 && here.x - before.x > 1e-11) {
+				const double mid = 0.5 * (before.x + here.x);
+				todo.push_back(Place{ mid, lands(mid), adds(mid) != 0.0 });
+				continue;
+			}
+			todo.pop_back();
+			if (before.on != here.on) {
+				end_between(before.x, here.x, before.on);
+			}
+			before = here;
+		}
 	}
 	double truth = 0.0;
 	for (size_t e = 0; e + 1 < ends.size(); ++e) {
@@ -605,7 +730,7 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	}
 	const shader::Use use(scene);
 	const shader::Path q = shader::at(x, y);
-	const shader::vec3 c = shader::truth(q, truth_shares(scene)) + q.glow;
+	const shader::vec3 c = shader::truth(q, truth_shares(scene));
 	rgb[0] = c.x;
 	rgb[1] = c.y;
 	rgb[2] = c.z;
@@ -697,10 +822,9 @@ void OpticsFrames::colour(const OpticsScene &scene, int x, int y, double rgb[3])
 	}
 	const shader::Use use(scene);
 	const shader::PixelState &st = (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s;
-	const shader::Path q = shader::at(x, y);
-	rgb[0] = st.prox.x + st.hist.x + q.glow.x;
-	rgb[1] = st.prox.y + st.hist.y + q.glow.y;
-	rgb[2] = st.prox.z + st.hist.z + q.glow.z;
+	rgb[0] = st.prox.x + st.hist.x;
+	rgb[1] = st.prox.y + st.hist.y;
+	rgb[2] = st.prox.z + st.hist.z;
 }
 
 void OpticsFrames::shown(const OpticsScene &scene, int x, int y, double rgba[4]) const {
@@ -826,7 +950,7 @@ std::string check_O1(const OpticsScene &scene) {
 		for (int k = 0; k < ROW; ++k) {
 			const size_t base = static_cast<size_t>(i * ROWS_PER_BODY * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
-			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0)) {
+			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(scene.rows[base + GLOW_ROW * ROW] >= 0.0)) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
 				return text;
 			}
@@ -867,6 +991,225 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 		}
 	}
 	return "";
+}
+
+// ---- the stacks (GAME_SPEC §12.3, Stage 21): the rays of a vessel with bodies behind it, followed here
+
+namespace {
+
+uint64_t fnv_of(const void *data, size_t size, uint64_t h = 1469598103934665603ull) {
+	const auto *bytes = static_cast<const unsigned char *>(data);
+	for (size_t i = 0; i < size; ++i) {
+		h = (h ^ bytes[i]) * 1099511628211ull;
+	}
+	return h;
+}
+
+} // namespace
+
+void optics_stacks(OpticsScene &scene) {
+	namespace L = optics_layout;
+	const size_t directory = static_cast<size_t>(L::MAX_BODIES) * 4;
+	std::vector<float> out(directory, 0.0f);
+	for (int b = 0; b < L::MAX_BODIES; ++b) {
+		out[static_cast<size_t>(b) * 4] = -1.0f;
+	}
+	scene.stack_keys.resize(static_cast<size_t>(L::MAX_BODIES), 0);
+	scene.stack_blocks.resize(static_cast<size_t>(L::MAX_BODIES));
+	std::vector<bool> has(static_cast<size_t>(L::MAX_BODIES), false);
+	if (scene.table.size() == static_cast<size_t>(L::SIZE_VECS) * 4 && scene.rows.size() == static_cast<size_t>(L::ROWS_SIZE) && !scene.wall.empty()) {
+		if (scene.stacks.size() < directory) {
+			scene.stacks = out; // following a ray reads no stack; the pixel's path may look for one
+		}
+		const shader::Use use(scene);
+		const int count = static_cast<int>(scene.table[0]);
+		const auto vec = [&](int body, int which) { return &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + which) * 4]; };
+		const auto bends = [&](int body) { return vec(body, L::REFRACT)[3] > 0.5f && (vec(body, L::FORM)[0] < 0.5f || vec(body, L::FORM)[0] > 1.5f); };
+		int64_t followed = 0;
+		for (const int b : scene.chain_bodies) {
+			if (b < 0 || b >= count || !bends(b) || vec(b, L::MAP)[3] != 1.0f) {
+				continue; // a map of several pieces (a prism) is read as one vessel's
+			}
+			const float *rect = vec(b, L::RECT);
+			const double layer = vec(b, L::REFRACT)[1], top = rect[1] - 2.0, bottom = static_cast<double>(rect[1]) + rect[3] + 2.0, centre = rect[0] + rect[2] * 0.5;
+			// its slots, the nearest the eye first (the last painted of the nearest layer): itself; what stands
+			// behind it, in its rows; what stands across it on its own layer; what bends nothing in front of it
+			std::vector<int> slots;
+			for (int o = count - 1; o >= 0; --o) {
+				const float *other = vec(o, L::RECT);
+				const double other_layer = vec(o, L::REFRACT)[1];
+				const bool rows = other[1] < bottom && static_cast<double>(other[1]) + other[3] > top;
+				const bool across = other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0];
+				if (o == b || (rows && (other_layer < layer || (across && (other_layer == layer || !bends(o)))))) {
+					slots.push_back(o);
+				}
+			}
+			if (slots.size() > static_cast<size_t>(shader::MAX_VISITS)) {
+				// more than a ray is followed through: the nearest across are kept
+				std::vector<int> nearest = slots;
+				std::stable_sort(nearest.begin(), nearest.end(), [&](int p, int q) {
+					const auto away = [&](int o) { return o == b ? -1.0 : std::fabs(vec(o, L::RECT)[0] + vec(o, L::RECT)[2] * 0.5 - centre); };
+					return away(p) < away(q);
+				});
+				nearest.resize(static_cast<size_t>(shader::MAX_VISITS));
+				std::vector<int> kept;
+				for (const int o : slots) {
+					if (std::find(nearest.begin(), nearest.end(), o) != nearest.end()) {
+						kept.push_back(o);
+					}
+				}
+				slots = kept;
+			}
+			// what it is followed for: where each of its bodies stands, its shape, its surface, its map
+			uint64_t key = fnv_of(&scene.table[2 * 4], 2 * 4 * sizeof(float));
+			for (const int o : slots) {
+				key = fnv_of(vec(o, L::RECT), 4 * sizeof(float), key);
+				key = fnv_of(vec(o, L::FORM), 3 * sizeof(float), key);
+				key = fnv_of(vec(o, L::REFRACT), 4 * sizeof(float), key);
+				key = fnv_of(vec(o, L::MAP), 4 * sizeof(float), key);
+				const uint64_t map_key = static_cast<size_t>(o) < scene.map_keys.size() ? scene.map_keys[static_cast<size_t>(o)] : 0;
+				key = fnv_of(&map_key, sizeof map_key, key);
+				key = fnv_of(&o, sizeof o, key);
+			}
+			key |= 1u;
+			has[static_cast<size_t>(b)] = true;
+			std::vector<float> &block = scene.stack_blocks[static_cast<size_t>(b)];
+			if (scene.stack_keys[static_cast<size_t>(b)] == key && !block.empty()) {
+				continue;
+			}
+			scene.stack_keys[static_cast<size_t>(b)] = key;
+			// the stack as a ray is followed through it
+			shader::Stack stack = shader::stack_of(shader::path_of(shader::vec2(rect[0], rect[1]), 1.0), false);
+			int bending = 0;
+			std::vector<double> edges{ top, bottom };
+			for (size_t j = 0; j < slots.size(); ++j) {
+				const int o = slots[j];
+				const float *r = vec(o, L::RECT), *form = vec(o, L::FORM);
+				stack.body[j] = o;
+				stack.layer[j] = vec(o, L::REFRACT)[1];
+				stack.bends[j] = bends(o);
+				stack.round[j] = form[0] < 0.5f;
+				stack.axis[j] = r[0] + r[2] * 0.5 + (form[0] > 1.5f ? static_cast<double>(vec(o, L::GLOW)[2]) : 0.0);
+				stack.radius[j] = r[2] * 0.5;
+				stack.top[j] = r[1];
+				stack.foot[j] = static_cast<double>(r[1]) + r[3];
+				stack.surface[j] = form[2];
+				stack.base[j] = stack.foot[j] - static_cast<double>(vec(o, L::REFRACT)[2]) / form[1];
+				if (stack.bends[j]) {
+					const float *map = vec(o, L::MAP);
+					const float *head = &scene.maps[static_cast<size_t>(map[0]) * 4];
+					stack.map[j] = static_cast<int>(map[0]);
+					stack.coarse[j] = static_cast<int>(map[1]);
+					stack.left[j] = map[2];
+					stack.pieces[j] = static_cast<int>(map[3]);
+					stack.media[j] = static_cast<int>(head[1]);
+					stack.samples[j] = static_cast<int>(head[2]);
+					if (bending == 0) {
+						stack.first = static_cast<int>(j);
+					}
+					++bending;
+					// its rows change what it is: a band ends at its top, its floor and its surface
+					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j], stack.base[j] }) {
+						if (e > top + 1e-4 && e < bottom - 1e-4) {
+							edges.push_back(e);
+						}
+					}
+				}
+			}
+			stack.count = static_cast<int>(slots.size());
+			stack.chained = bending > 1;
+			std::sort(edges.begin(), edges.end());
+			std::vector<double> bands; // tops, then the last bottom
+			for (const double e : edges) {
+				if (bands.empty() || e > bands.back() + 1e-4) {
+					bands.push_back(e);
+				}
+			}
+			const int band_count = static_cast<int>(bands.size()) - 1, slot_count = stack.count;
+			// its samples: four a pixel, on the screen's own quarter pixels, from a pixel before its first to one after its last
+			const int px_min = static_cast<int>(std::floor(rect[0] - 1.0f)), px_max = static_cast<int>(std::floor(rect[0] + rect[2] + 1.0f));
+			const int first = px_min - 1, coarse = px_max - px_min + 3, samples = coarse * 4 + 1, stride = 2 + 4 * slot_count;
+			const size_t cells_at = static_cast<size_t>(2 + band_count + slot_count);
+			block.assign((cells_at + static_cast<size_t>(band_count) * static_cast<size_t>(samples) * static_cast<size_t>(stride)) * 4, 0.0f);
+			const auto put = [&](size_t vec4_at, int part, double v) { block[vec4_at * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
+			put(0, 0, coarse);
+			put(0, 1, band_count);
+			put(0, 2, samples);
+			put(0, 3, slot_count);
+			put(1, 0, first);
+			for (int k = 0; k < band_count; ++k) {
+				put(static_cast<size_t>(2 + k), 0, bands[static_cast<size_t>(k)]);
+				put(static_cast<size_t>(2 + k), 1, bands[static_cast<size_t>(k) + 1]);
+			}
+			for (int j = 0; j < slot_count; ++j) {
+				put(static_cast<size_t>(2 + band_count + j), 0, stack.body[j]);
+				put(static_cast<size_t>(2 + band_count + j), 1, stack.bends[j] ? 1.0 : 0.0);
+			}
+			std::map<double, int> ids; // routes as small whole numbers, in the order met
+			std::vector<shader::Ray> rays(static_cast<size_t>(samples) * 4);
+			for (int k = 0; k < band_count; ++k) {
+				const double y = 0.5 * (bands[static_cast<size_t>(k)] + bands[static_cast<size_t>(k) + 1]);
+				for (int i = 0; i < samples; ++i) {
+					for (int n = 0; n < 4; ++n) {
+						rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = shader::chain_at(stack, y, first + i * 0.25, trace::map_nm(n / 3.0));
+					}
+				}
+				followed += static_cast<int64_t>(samples) * 4;
+				for (int i = 0; i < samples; ++i) {
+					const size_t cell = cells_at + static_cast<size_t>(k * samples + i) * static_cast<size_t>(stride);
+					for (int n = 0; n < 4; ++n) {
+						const shader::Ray &r = rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
+						// where the route changes on the way to the next sample: by the map of the first body the
+						// two rays differ in, from how far from its axis each passes
+						double along = 0.0;
+						if (i + 1 < samples) {
+							const shader::Ray &next = rays[static_cast<size_t>(i + 1) * 4 + static_cast<size_t>(n)];
+							if (next.route != r.route) {
+								along = 0.5;
+								for (int j = 0; j < slot_count; ++j) {
+									if (r.bent[j] != next.bent[j] || r.way[j] != next.way[j]) {
+										const double lo = r.from_axis[j], hi = next.from_axis[j];
+										if (std::fabs(hi - lo) > 1e-9) {
+											const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
+											const double change = shader::map_change(shader::ref_at(stack, j), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
+											along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
+										}
+										break;
+									}
+								}
+							}
+						}
+						const int id = ids.emplace(r.route, static_cast<int>(ids.size())).first->second;
+						put(cell, n, r.x);
+						put(cell + 1, n, id + 0.5 * along);
+						for (int j = 0; j < slot_count; ++j) {
+							const size_t at = cell + 2 + static_cast<size_t>(4 * j);
+							put(at, n, r.bent[j] ? 2.0 : r.seen[j] ? 1.0 : 0.0);
+							put(at + 1, n, r.cross[j]);
+							put(at + 2, n, r.pass[j]);
+							put(at + 3, n, r.chord[j] * r.chord[j]);
+						}
+					}
+				}
+			}
+		}
+		if (followed > 0) {
+			scene.stack_rays = followed;
+		}
+	}
+	for (int b = 0; b < L::MAX_BODIES; ++b) {
+		if (!has[static_cast<size_t>(b)]) {
+			scene.stack_keys[static_cast<size_t>(b)] = 0;
+			scene.stack_blocks[static_cast<size_t>(b)].clear();
+			continue;
+		}
+		out[static_cast<size_t>(b) * 4] = static_cast<float>(out.size() / 4);
+		out.insert(out.end(), scene.stack_blocks[static_cast<size_t>(b)].begin(), scene.stack_blocks[static_cast<size_t>(b)].end());
+	}
+	if (out != scene.stacks) {
+		scene.stacks = std::move(out);
+		++scene.stacks_revision;
+	}
 }
 
 } // namespace lab

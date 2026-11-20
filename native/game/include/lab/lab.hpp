@@ -50,6 +50,7 @@ struct ItemView {
 	double volume_ml = 0.0; // a vessel's own
 	double capacity_ml = 0.0; // a balloon's
 	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)
+	double floor_mm = 0.0; // and its floor, glass all through: seen from the side it bends as a rod does
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;

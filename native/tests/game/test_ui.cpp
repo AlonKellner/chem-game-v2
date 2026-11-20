@@ -1,5 +1,6 @@
 // The screen (GAME_SPEC §13): a pointer in, lab commands and a draw list out.
 // The demo is played here with nothing but the pointer.
+#include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
@@ -155,6 +156,73 @@ TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, a
 	// a click without a drag moves nothing
 	p.click("item:flask");
 	CHECK(p.item("flask").col == 18);
+	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands behind it is seen through it (Stage 21)") {
+	// A person picks the jar up and carries it slowly over the flask, a few pixels a frame, and holds it there:
+	// while it is in hand it is a layer nearer the eye, the pixels it covers are the chain's, and the flask's
+	// liquid is seen through it. Set down, it stands again.
+	namespace L = lab::optics_layout;
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:acid", "square:5,12");
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "pour", "from": "acid", "to": "flask", "ml": 120})", why), why);
+	p.drag("item:jar", "square:16,12");
+	const auto body_of = [&](const lab::OpticsScene &scene, float layer_wanted) {
+		// the scene's bodies carry no names: the jar is the narrowest rectangle that refracts on its layer
+		int found = -1;
+		for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+			const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+			const float *refract = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::REFRACT) * 4];
+			if (refract[3] > 0.5f && refract[1] == layer_wanted && (found < 0 || rect[2] < scene.table[static_cast<size_t>(L::HEADER_VECS + found * L::BODY_VECS + L::RECT) * 4 + 2])) {
+				found = b;
+			}
+		}
+		return found;
+	};
+	// everything stands: one layer, and no pixel is the chain's
+	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
+	CHECK(p.ui->optics().chain.empty());
+	float jx = 0, jy = 0, fx = 0, fy = 0;
+	p.at("item:jar", jx, jy);
+	p.at("item:flask", fx, fy);
+	// pressed, not yet moved: it still stands
+	p.ui->pointer(jx, jy, false);
+	p.ui->pointer(jx, jy, true);
+	p.ui->frame(1.0 / 60.0);
+	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
+	// carried, a person's pace: about four pixels a frame, toward the flask
+	const int frames = 50;
+	for (int k = 1; k <= frames; ++k) {
+		p.ui->pointer(jx + (fx - jx) * static_cast<float>(k) / frames, jy + (fy - jy) * static_cast<float>(k) / frames, true);
+		p.ui->frame(1.0 / 60.0);
+		REQUIRE(p.ui->optics().table[3 * 4 + 1] == 1.0f); // in hand all the way
+	}
+	// held still over the flask
+	for (int k = 0; k < 10; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	const lab::OpticsScene held = p.ui->optics();
+	REQUIRE(lab::check_O1(held) == "");
+	const int jar = body_of(held, 1.0f);
+	REQUIRE(jar >= 0);
+	CHECK(jar == static_cast<int>(held.table[0]) - 1); // painted over everything that stands
+	REQUIRE(held.chain.size() == 4); // its rectangle is where the chain's pass runs
+	const float *rect = &held.table[static_cast<size_t>(L::HEADER_VECS + jar * L::BODY_VECS + L::RECT) * 4];
+	CHECK(held.chain[0] <= rect[0]);
+	CHECK(held.chain[2] >= rect[0] + rect[2]);
+	// through the jar's glass, low in it, the flask's blue liquid behind: less of the red than beside the flask
+	const int px = static_cast<int>(rect[0] + rect[2] / 2), py = static_cast<int>(rect[1] + rect[3]) - 12;
+	const double through_both = lab::optics_through(held, px, py, 650.0);
+	CHECK(lab::optics_through(held, px, py, 650.0) == doctest::Approx(lab::optics_area_through(held, px, py, 650.0, 8)).epsilon(0.05));
+	// let go beside the flask: it stands again, on the bench's layer, and nothing is the chain's
+	p.ui->pointer(fx, fy, false);
+	p.ui->frame(1.0 / 60.0);
+	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
+	CHECK(p.ui->optics().chain.empty());
+	MESSAGE("carried over the flask: through the jar and the flask's liquid at 650 nm, " << through_both << " of the room's light");
 	well_formed(p.ui->draw());
 }
 

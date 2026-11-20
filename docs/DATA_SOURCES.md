@@ -322,10 +322,25 @@ Stage 20 the thickness was the wall's heat-holding mass spread over the side and
 (2.4 mm for the flask, 2.8 mm for the jar): too thick, and it bent the view through an empty
 vessel far more than glassware does. The wall's mass (`wall_g`) is still its heat's.
 
-**Calibrated room for refraction (Stage 11):** the wall stands 20 cm behind the vessels' axes;
-the room in front of the bench, which the glass reflects, has a radiance of 0.3 of the room's white
-(darker than the lit wall: what a lab looks like from the bench). Both are chosen for a plausible
-bench, not measured. A solution's index is water's: the solutes' share is not modelled.
+**Calibrated floors (Stage 21)** (`data/benches/`, each glass vessel's `floor_mm`). No standard
+found gives a beaker's floor: ISO 3819 gives its wall alone.
+
+| Vessel | Floor (mm) | Basis | Confidence |
+|---|---|---|---|
+| 250 mL | 2.6 | A supplier's table for a 250 mL borosilicate low-form beaker (indigoinstruments.com, item 55107, read 2026-11-20): height 98 ± 4 mm, diameter 68 ± 2 mm, "thickness 1.5-2.6 mm", weight 100 ± 10 g. Taken as its thinnest glass (the side) and its thickest (the floor). The weight is consistent: a 1.5 mm side and a 2.6 mm floor of those dimensions are 89 g of glass at 2.23 g/cm³; two other suppliers list 98 g and 102 g for a 70 × 95 mm beaker | low: one supplier, and the range's meaning is read into it |
+| 50 mL | 1.9 | The 250 mL floor, in the ratio of ISO 3819's walls (0.8 to 1.1) | low |
+| 500 mL | 3.1 | Likewise (1.3 to 1.1) | low |
+
+To verify: a maker's drawing, or ASTM E960's table (not read: behind a paywall).
+
+**Calibrated room for refraction (Stage 11, 21):** the wall stands 284 px behind the plane of the
+bench's vessels, for every vessel (20 cm at a 250 mL vessel's scale, as it has been since Stage 11
+for that vessel; until Stage 21 it was 20 cm at each vessel's own scale: 375 px for a 50 mL one,
+259 px for a 500 mL one); what is held stands on a plane 120 px nearer the eye (8.5 cm at that
+scale: a hand's reach in front of the bench); the room in front of the bench, which the glass
+reflects, has a radiance of 0.3 of the room's white (darker than the lit wall: what a lab looks
+like from the bench). All three are chosen for a plausible bench, not measured: the screen is one
+world in pixels, since each item is drawn at its own scale. A solution's index is water's: the solutes' share is not modelled.
 
 **Calibrated geometry of solids:** a heap's angle of repose 35° and packing fraction 0.5 (typical
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).

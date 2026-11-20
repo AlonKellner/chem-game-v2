@@ -1,10 +1,8 @@
 extends SceneTree
 
-# Screenshots of the host at five moments of the demo, for looking at what a
-# player sees (make screenshots -> build/screenshots/*.png). It plays with the
-# pointer, as tests/test_host_smoke.gd does. At each moment the optical pass
-# alone, settled, is held to what each pixel should show (GAME_SPEC §18: O4), and
-# at the end the GPU's time for one pass is measured.
+# Screenshots of the host at moments of the demo (make screenshots -> build/screenshots/*.png), played with
+# the pointer as tests/test_host_smoke.gd plays. At each the optical pass alone, settled, is held to what each
+# pixel should show (GAME_SPEC §18: O4); and the GPU's time for one pass is measured.
 #
 #   godot --path engines/godot -s tools/screenshot.gd -- <output directory> [cost]
 
@@ -40,8 +38,7 @@ func _celsius(id: String) -> float:
 			return item["celsius"]
 	return 0.0
 
-# frames at the chosen speed until `done`, or a bound: a script on the engine's
-# own thread must never wait for something that may not come
+# frames until `done`, or a bound: a script on the engine's own thread never waits for what may not come
 func _watch(done: Callable, what: String) -> bool:
 	for i in 2000:
 		if done.call():
@@ -73,10 +70,8 @@ func _shoot(dir: String, name: String) -> void:
 		if parity[2] > 0:
 			alone.save_png(dir.path_join(name + "_optics_alone.png"))
 
-# The time of a frame with the optical pass run `extra` more times: one pass is
-# too quick to time alone, and a display hands frames out in whole refreshes,
-# so the cost of one is the slope between two heavy loads. The scene is still:
-# this is a settled pass's cost (each pixel finds its content unchanged and asks for nothing).
+# The time of a frame with the optical pass run `extra` more times: one pass is too quick to time alone, and a
+# display hands frames out in whole refreshes, so the cost of one is the slope between two heavy loads.
 func _time(extra: int) -> float:
 	_lab.set_optics_extra(extra)
 	for i in 5:
@@ -106,18 +101,23 @@ func _initialize() -> void:
 	root.add_child(shown)
 	await process_frame
 	await _play(dir)
-	if DisplayServer.get_name() != "headless":
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-		var few := await _time(10)
-		var many := await _time(30)
-		print("a frame with 10 more optical passes: %.2f ms; with 30: %.2f ms; one settled pass at 1920 x 1080: %.3f ms" % [few, many, (many - few) / 20.0])
-		_lab.set_optics_restarting(true) # the worst frame: every pixel's history starts again
-		few = await _time(8) # enough passes that both frames outlast a display refresh: fewer read as free
-		many = await _time(24)
-		_lab.set_optics_restarting(false)
-		print("every history starting again: a frame with 8 more passes: %.2f ms; with 24: %.2f ms; one such pass: %.3f ms" % [few, many, (many - few) / 16.0])
+	await _cost("")
 	print("screenshot.gd: done, at step ", JSON.parse_string(_lab.report())["step"])
 	quit(1 if _failed else 0)
+
+# the pass's cost on the GPU as the scene stands: settled, and with every pixel's history starting again
+func _cost(when: String, few_passes: int = 8, many_passes: int = 24) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	var few := await _time(10)
+	var many := await _time(30)
+	print("%sa frame with 10 more optical passes: %.2f ms; with 30: %.2f ms; one settled pass at 1920 x 1080: %.3f ms" % [when, few, many, (many - few) / 20.0])
+	_lab.set_optics_restarting(true) # the worst frame: every pixel's history starts again
+	few = await _time(few_passes) # enough passes that both frames outlast a display refresh: fewer read as free
+	many = await _time(many_passes)
+	_lab.set_optics_restarting(false)
+	print("%severy history starting again: a frame with %d more passes: %.2f ms; with %d: %.2f ms; one such pass: %.3f ms" % [when, few_passes, few, many_passes, many, (many - few) / float(many_passes - few_passes)])
 
 func _play(dir: String) -> void:
 	_click("pause")
@@ -192,6 +192,16 @@ func _play(dir: String) -> void:
 	_click("debug")
 	await _shoot(dir, "13_debug")
 	_click("debug")
+	_click("item:flask") # let go of
+	# Stage 21: the beaker carried over the flask and held: what stands is seen through it (GAME_SPEC §12.3)
+	var from := _lab.locate("item:beaker")
+	var over := _lab.locate("item:flask")
+	_lab.pointer(from.x, from.y, true)
+	for i in 12: # a few moves, as a hand makes
+		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 12.0, (i + 1) / 12.0), true)
+	await _shoot(dir, "14_held")
+	await _cost("a vessel held over another: ", 0, 1)
+	_lab.pointer(from.x, from.y, false) # carried back, and set down where it stood
 	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
 	_lab.queue_free()
 	await process_frame

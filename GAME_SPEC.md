@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.21.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.22.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -538,6 +538,22 @@ inside a cell.
   resistance and change what is seen.
 - **Wetting and meniscus**; **bubbles** as a transient gas population in a liquid.
 - **Cleaning:** removing deposits by solvent, heat or abrasion.
+- **A liquid's surface as a shape** *(PLANNED; asked for by the user, 2026-11-20)*. Today a
+  liquid's surface is flat and level, and is seen only by what the liquid under it does to the
+  light. The full design gives it a shape, which the optical pass traces as it traces glass (a
+  surface that bends rays up and down as well as across: a map with rows, §12.3):
+  - **At rest:** level, but for the meniscus, where it climbs the glass (over about a capillary
+    length, `sqrt(γ / ρg)`: 2.7 mm for water) and is seen from the side as a dark line.
+  - **Stirred:** a vortex. Within the stirrer's reach the liquid turns as a body and its surface
+    is a paraboloid, `z = ω² r² / 2g`; beyond it the turning falls off and the surface rises to
+    the wall. Its depth follows how fast it is stirred; a vessel stirred too fast for its liquid
+    draws air to the stirrer.
+  - **Agitated:** carried or set down, a liquid sloshes in its vessel's first mode
+    (`ω² = g k tanh(k h)`, `k = 1.841 / R` in a round vessel) and settles by its viscosity; poured
+    into, it is broken where the stream lands; boiling, by the bubbles that reach it.
+  - **Kept:** a surface's shape moves no matter out of its cell and changes no volume; the work
+    of stirring is heat in the liquid (C5), as a burner's is. The values (surface tension,
+    viscosity, contact angle on glass) are rows of `docs/DATA_SOURCES.md` before they are used.
 
 **Demo subset:** none. Crystals nucleate in the bulk cell.
 **Status:** specified; after the demo.
@@ -878,28 +894,35 @@ glowing body is measured against.
 - **Its solids stirred** are suspended: each particle shades its own cross-section twice over
   (extinction efficiency 2), so the liquid's extinction is `2 N (π d²/4) / V`; light it removes is
   replaced by the room's light off the solid, through half a chord of the liquid.
-- **A hot solid glows:** Planck's law times its emissivity `1 − reflectance`, integrated at 1 nm
-  in the lab layer, in units of the room's white.
+- **A hot solid glows:** Planck's law times its emissivity `1 − reflectance`, at 1 nm, as a
+  multiple of the room's light at each wavelength: a light in the pass (Stage 21; until then its
+  colour, integrated in the lab layer, was added to the pixel outside its history).
 - **A balloon is a ball** of its volume. Its rubber is a wall crossed twice, aslant near the rim
   (`2t / cos θ`, at most four reference thicknesses), and thinner the further it is stretched
   (`t ∝ 1/R²`). What condensed inside lies at the bottom.
 - **An edge covers a pixel by degrees:** depths are multiplied by the coverage (`T^coverage`), a
   solid is mixed in by it.
 
-**The scene** (`lab/optics_scene.hpp`, `cg_ui_optics`): 98 vec4s (the room, and 6 for each of at
-most 16 bodies: its rectangle, form, haze and wall, glow, and identity, a signature of its
-contents and its lines); each body's three spectra at 1 nm (its liquid's optical depth per
-centimetre, its solids' reflectance, its wall's depth); up to 256 narrow lines; the room light's
-energy table (4,097 entries). **The renderer** (`native/game/shader/optics_pixel.glsl`, copied into
+**The scene** (`lab/optics_scene.hpp`, `cg_ui_optics`): 116 vec4s (4 for the room, and 7 for each
+of at most 16 bodies: its rectangle, form, haze and wall, glow, identity (a signature of its
+contents and its lines), glass and layer, and map); each body's six spectra at 1 nm (its liquid's
+optical depth per centimetre, its solids' reflectance, its wall's depth, its liquid's and its
+wall's refractive index, its solids' glow); up to 256 narrow lines; the room light's energy table
+(4,097 entries); the maps, the wall's table and the stacks (§12.3), each with a revision of its
+own; and the rectangles where the second pass runs. **The renderer** (`native/game/shader/optics_pixel.glsl`, copied into
 the Godot project) is the method of §12.2 for one pixel: its path, what gets through at a
 wavelength, a batch of points, the fixed estimate, the frame's step and what it shows. The Godot
-host runs it as a compute shader over the whole screen each frame, each pixel's state in four
+host runs it as a compute shader over the whole screen each frame (and, compiled with the other
+readings, over the rectangles of what is held or is a prism), each pixel's state in four
 float images on the GPU, the screen's total ask summed there for the next frame's budget; nothing
 is read back. **The reference** is the same file compiled as C++ in float64 (`optics_through`,
 `optics_truth`, `optics_pixel`, `optics_picture`, `OpticsFrames`, `optics_compare`).
 
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
-draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
+draw list's second part (labels, the burner and its flame, a condenser's outlet, wires, the readout and
+panels). A vessel has no drawn outline and its liquid no drawn surface (Stage 21): its glass, its
+liquid and what the two do to the light are all of it, so that what is held before it bends all of
+it. What the second part still draws of the lab's own things is not in the pass yet (§20).
 
 **Refraction and Fresnel** (Stage 11). A vessel is a glass cylinder around what it holds, and
 light bends at each of its surfaces:
@@ -915,7 +938,10 @@ light bends at each of its surfaces:
   from the wall's mass, which is its heat's (Stage 20; until then the thickness was the mass
   spread over the side and the floor, two to three times too thick). A wall of no thickness is
   no glass: the liquid's own surfaces bend. A wall as thick as the vessel is wide is glass all
-  through. Its index is the
+  through. **Its floor** is that: glass from side to side, as high as it is thick (`floor_mm`:
+  1.9, 2.6, 3.1 mm, calibrated; Stage 21), a rod seen from the side, which shows the wall behind
+  it turned over and three times its size; what the vessel holds rests on it. It is a third core
+  of the vessel's map, beside its liquid and the air over it. Its index is the
   glass's `n(λ)` (a Cauchy fit to Schott's table for BOROFLOAT 33); the liquid's is water's (the
   Sellmeier formula of Daimon and Masumura at 20 °C); above the liquid, air (1). Both are spectra
   at 1 nm like any other, so a point bends by the index at its own wavelength (dispersion).
@@ -1021,18 +1047,96 @@ of every ray through its area, and its colour is their average (a box filter).
   - Each item is drawn at its own scale, so the screen is not one world in centimetres: a ray bent
     by one body is not traced into another, and the first refracting body a pixel looks through
     bends it.
-- **Layers of refraction** *(PLANNED, Stage 21)*. What the player holds is a layer of its own,
-  shown in front of what stands on the bench.
-  - Seen through a held vessel, the bench's equipment is what the wall is through a vessel today:
-    bent, dispersed, turned away at the rims by Fresnel, absorbed along the bent chord, with every
-    spectral effect of §12.1 and §12.2, each pixel the light of all its rays.
-  - A layer is general, not the hand's alone: a vessel in a bath is a layer inside another's.
-    At least two layers (the bench's, the hand's), up to six.
-  - `O4`, `O5`, `O7` and `O8` hold through every layer, against the same independent truth.
-  - The method is this stage's: a map for each stack of bodies a pixel looks through, the stack
-    one world of the screen's pixels; a stack that moves (a held vessel does, every frame) has
-    its map traced by a pass on the GPU, at a map's resolution. A map's format is even, its
-    cells take several chords and the tracer's patches carry the medium on each side, for this.
+- **Layers of refraction** (Stage 21). What the player holds is a layer of its own, shown in
+  front of what stands on the bench.
+  - **Every layer is a full optical body**, the held one as much as one that stands: its glass
+    and liquid bend and disperse, its surfaces turn light away by Fresnel, its contents absorb
+    along the bent chord, its haze scatters, its solids reflect, its hot solids glow, its narrow
+    lines are cut: every effect of §12.1 to §12.3, each pixel the light of all its rays.
+  - **Light between layers is a spectrum, never a colour.** What a layer behind sends forward is
+    its radiance at each wavelength; the layer in front bends each wavelength by its own index
+    and takes from it what its own contents absorb. A blue solution seen through a yellow one is
+    the product of the two spectra along the bent ray, not a mixture of two drawn colours, and a
+    layer is never a finished picture laid over another.
+  - **One world, in pixels.** Each item is drawn at its own scale, so the screen's pixels are the
+    one measure every body shares, in depth as across. Layer 0 is the bench's: its bodies' axes
+    stand on one plane. Layer `k` stands `k` gaps nearer the eye (a gap: 120 px, calibrated; the
+    hand's is layer 1; up to six layers). The wall stands 284 px behind the bench's plane
+    (calibrated: 20 cm at a 250 mL vessel's scale), for every body. A body's own scale gives only
+    its lengths in centimetres: what its liquid absorbs along a chord, its glass's share of its
+    radius. A vessel picked up sees the wall from a gap further.
+  - **A round body's map answers every level ray.** An upright round vessel is the same from every
+    side, so what it does to a level ray depends only on the ray's distance from its axis: the
+    ray leaves as it came, turned about the axis, having crossed the same chord and lost the same
+    light at its surfaces. Its map (the rays that come straight in) is therefore its answer to a
+    ray from anywhere: the turn is read from where the map's ray lands
+    (`L cos δ − W sin δ = b`: `b` from the axis, landing at `L` on a wall `W` behind it).
+  - **A ray is followed layer by layer** (the chain), with no tracing: from the eye straight in;
+    at each layer, nearest first, the body its line meets there turns it by its map, and the line
+    goes on; behind the last, it lands on the wall. Held against both bodies traced together as
+    one, the chain lands within 1e-8 of a pixel; with each map true to a fiftieth of a pixel, the
+    image through two is true to 0.06.
+  - **A stack: the rays followed, as a table.** For each vessel with bodies behind it the rays
+    are followed on the CPU, where a ray costs 0.4 µs, as a vessel's map is traced there: a ray at
+    every sample across the vessel (four a pixel, on the screen's quarter pixels), in each band of
+    rows in which every body is one thing (a band ends at a top, a floor or a liquid's surface of
+    a body that bends), at the four nodes of the spectrum. A cell holds, at the four nodes, where
+    the ray lands, its route, and for each body what it did there: where it crossed the body's
+    layer's plane, what the body's surfaces passed, its chord in the body's liquid. A stack is
+    followed again only when one of its bodies moves or changes shape or index: about 11,000 rays
+    and 1.4 ms a frame while a vessel is carried across two others.
+  - **The pass reads the stack as it reads a map.** Between the nodes a ray is the cubic through
+    the four; where its route differs among them (a rim's image passes it as the wavelength goes),
+    its nearest node's ray. A pixel is read in four parts across; the wall is integrated exactly
+    over each part's footprint and a band's sweep, as through one body. Where a part's two rays go
+    different ways, each side is its own ray's, by the share the map of the first body they differ
+    in gives the change. A row across a band's edge is the two bands' lights, each by its share of
+    the pixel's height.
+  - **Each body is read where the rays cross it:** a vessel's liquid along the rays' own chords
+    there, its haze, its heap of solid (where a ray's line, as it arrives, crosses the plane of
+    the vessel's axis), what its surfaces turn away; a body that bends nothing (a balloon) where
+    the rays cross its layer's plane. What the bodies do is gathered from the eye inward (each
+    takes what reaches it to `a` times it plus `b`), once a band, at the band's point: a stack's
+    rays spread the wavelengths wide, a band is swept in many steps, and only the wall needs them.
+  - **Three readings of one light, in two passes.** What a pass costs on the GPU follows what its
+    shader could do, done or not. So the pass over the whole screen holds the reading for one
+    vessel of one piece and nothing else, and leaves every other pixel alone; a second pass, over
+    the rectangles of the bodies that can need it, holds the reading of a stack and the general
+    reading of one vessel (a prism, whose map has many pieces). Nothing in the pass follows a ray:
+    following them there cost 344 ms a frame for one held vessel.
+  - **A pixel through a stack starts its history with the least batch** (16 points, not 64): its
+    points cost several of one vessel's, and while what is held moves its history starts again
+    every frame; once it is still it has the rest.
+  - **A hot solid's glow is a light in the pass**: each body's glow at 1 nm (Planck's law times
+    the solid's emissivity, as a multiple of the room's light there), seen where the solid is
+    seen, through half a chord of its liquid: bent, absorbed and turned away by whatever is in
+    front of it, as the wall's light is. Nothing is added to a pixel outside its history.
+  - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
+    into a neighbour on its own layer; a body that is not round (the prism), seen through another
+    or seeing another, is read as it is seen straight on; a vessel standing inside another (a
+    bath) is not built; what the screen still draws over the pass (the burner and its flame, a
+    condenser's outlet, signal parts, wires, labels) is not bent, and lies over what is held.
+  - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
+    its own tracer through every body of the one world.
+- **Everything that takes space is physical** *(PLANNED, Stage 22; the user, 2026-11-20: "If it's
+  an actual space taking part - it should have a spectral visual. The only non spectral colors and
+  elements should be overlays like highlights and interaction elements")*.
+  - Every thing that stands on the bench is a body of the optical pass, with a shape and spectra
+    of its own: the burner (an opaque body with a reflectance), its flame (a light with an
+    emission spectrum of its own, §12.2), a condenser's outlet (glass), a signal part and a
+    circuit (opaque bodies, their faces' colours as reflectances), a wire. Seen through what is
+    held, each is bent and tinted as a vessel is, and what is held is seen in front of it.
+  - No lab thing is drawn over the pass. A vessel's outline and its liquid's surface line went
+    in Stage 21.
+  - What the screen draws flat is what is not in the lab: highlights (a selection, a tutorial's
+    pointer, an alarm's ring), labels and readouts, panels.
+  - The scene holds as many bodies as a bench of parts needs, and a pixel finds its own without
+    looking at all of them (today: 16, each looked at by every pixel near any).
+- **A vessel's whole shape** *(PLANNED, after Stage 22)*: its lip (ISO 3819: the brim 5 to 15%
+  wider than the body, flared in a smooth curve, its edge a bead), its spout, the rounded corner
+  between its floor and its side (ISO 3819: a radius of 10 to 20% of the diameter from 250 mL),
+  flasks that are balls and cones. Each is more surface patches for the tracer (§12.3); a lip
+  and a ball bend rays up and down as well as across, which needs a map with rows.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
   brute-force average of a fine grid of sub-pixel rays, each traced exactly, every band read.
 
@@ -1043,13 +1147,16 @@ the rubber, the lit wall); pure water's absorption; then refraction and Fresnel 
 constant weights (the live composition, the powders by mass, the rubber, the lit wall) and line
 lists, the room's light in energy bands with moving points, each pixel's history kept by its
 content key and points by need, gamut mapping onto sRGB, and pure water as measured. The glow of a
-hot solid is its exact colour, added outside the history. Stage 11 adds refraction and Fresnel
+hot solid was its exact colour, added outside the history (until Stage 21). Stage 11 adds refraction and Fresnel
 through each vessel's glass and liquid, with dispersion, the bench's drawing seen bent, and the
 prism demo: a prism of flint glass (N-SF11) traced through its flat faces, before a slit of white
 light in a dark room (`make prism`). Stage 20 makes each pixel the light of all its rays (a
 general tracer on the CPU, a refraction map for each body, the wall as a table read exactly), and
-gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20). Layers of refraction (what is held, in front of
-what stands) are *PLANNED* for Stage 21. The
+gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20).
+Stage 21 adds layers of refraction: what is held is seen in front of what stands, a ray followed
+through every layer by the bodies' maps, each body read where the ray crosses it, a hot solid's
+glow a light in the pass; no outline is drawn, and a vessel's floor is glass. Signed off by the
+user on 2026-11-20 (Stage 21). The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
 Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
@@ -1160,6 +1267,11 @@ lab command here, so it is the same on every host and is tested without one.
 **Layout** (1920 × 1080): the cabinet on the left; the bench's grid of squares in the middle; the
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
+
+**An item's controls are not on the bench** *(PLANNED, Stage 22; the user, 2026-11-20)*. Today a
+vessel's "stir" button and a burner's valve stand on the grid beside the item, always. They are
+interaction, not lab things, and they cover what the optical pass shows: they move to a panel of
+actions beside the bench, shown for the item that is selected, and nothing of them is on the grid.
 
 **Gestures.** Everything is a drag or a click:
 
@@ -1753,7 +1865,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | O7 | A uniform wall seen through any clear geometry is the wall's radiance: with absorption and reflection turned off, every pixel a body covers shows the wall's radiance (the radiance theorem). It fires on a renderer that weights the wall by the area its rays land on | tolerance (float32) | 20 |
-| O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the ends of the line's image are found by halving, on rays traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole | tolerance (1% of the line's light) | 20 |
+| O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the ends of the line's image are found by halving, on rays traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole. Through two layers likewise (Stage 21); a line seen only in a stack's rims, where rays part ways within a quarter of a pixel, keeps its light to 3%. The check's own rays are found wherever a landing moves more than a twentieth of a pixel between two of them: through two vessels an image can be far thinner than any even step | tolerance (1% of the line's light) | 20–21 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | S1 | No NaN or infinity in any output | exact | 2 |
@@ -1793,6 +1905,18 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
     With one part a pixel everywhere the pass is 1.04 ms; with no bodies, 0.53 ms.
   - A vessel's map: about 3,000 rays, 0.6 ms on the CPU, once. A prism's, while it is turned:
     3 to 6 ms a frame.
+- **Stage 21** (`make screenshots`, the same machine and protocol; with a vessel held, one pass
+  against two):
+  - Nothing held: a restarting pass 1.54 ms (1.77 before the stage: the general reading is no
+    longer in the pass over the screen); a settled pass nothing a frame could show.
+  - A 250 mL vessel held over another, every history starting again (as while it is carried):
+    7.2 ms a pass; held still, nothing. On the CPU, following its rays: 1.4 ms a frame (about
+    11,000 rays) while it is carried across two standing vessels.
+  - What it cost on the way: a ray followed in the pass for every band, the GPU's fence timed
+    out; followed once a pixel at four wavelengths, 344 ms; the same with nothing but arithmetic
+    in a band's loop, still too slow to time; followed on the CPU and read as a table, 14 ms; a
+    stack's pixel starting with 16 points, 9.9; its bodies read once a band, 6.9. On this GPU
+    the code of per-ray arrays runs a hundred times below its arithmetic.
 - Timing is evidence, recorded per stage; it is not a gate.
 
 ## 20. Declared simplifications of the demo
@@ -1828,13 +1952,15 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A vessel is a cylinder and a balloon a ball, whatever they are drawn as | Path lengths are those of a cylinder of the vessel's volume |
-| Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is shown by a drawn line at its surface; metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
+| Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
-| What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is not traced into another (each item is drawn at its own scale); a footprint's width is taken as its mean across one step of a band's wavelengths; between a map's samples and within its pieces a ray is interpolated (within a fiftieth of a pixel of the screen); a pixel is read in four parts at most; at a route's change each side's wall is read where its own ray lands (a quarter of a pixel at most, of rays that graze a surface) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
+| What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer; a footprint's width is taken as its mean across one step of a band's wavelengths; between a map's samples and within its pieces a ray is interpolated (within a fiftieth of a pixel of the screen); a pixel is read in four parts at most; at a route's change each side's wall is read where its own ray lands (a quarter of a pixel at most, of rays that graze a surface) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
-| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity; its thicker floor and rim, and its flare and spout, are not modelled | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
-| The room's is the only light; a hot solid's glow is its exact colour, added to what the pixel shows outside its history | No lamp or glowing gas lights the scene yet (§12.2 is built for them); the glow is not dimmed by what lies in front of the solid |
+| The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
+| Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; what the screen still draws over the pass (the burner and its flame, a condenser's outlet, signal parts, wires, labels) is not bent | A burner or a signal part is drawn over a vessel carried across it, not seen through it; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
+| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
+| The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |

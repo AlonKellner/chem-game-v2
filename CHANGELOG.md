@@ -1,5 +1,40 @@
 # GAME_SPEC version history
 
+## 0.22.0 (2026-11-20, Stage 21)
+
+Signed off by the user on 2026-11-20 ("Looks good! Approved, proceed").
+
+- §12.3: layers of refraction. What the player carries is a layer of its own, seen in front of
+  what stands, and what stands is seen through it.
+  - **One world, in pixels.** The wall stands 284 px behind the bench's plane for every body (it
+    was 20 cm at each body's own scale); what is held stands 120 px nearer the eye. Up to six
+    layers.
+  - **The chain.** A round vessel's map answers a ray from anywhere, by its distance from the
+    axis: a ray is followed layer by layer through the bodies' maps, with no tracing. Against
+    both bodies traced together it lands within 1e-8 of a pixel.
+  - **The stacks.** A held vessel's rays are followed on the CPU into a table (in bands of rows,
+    at the spectrum's four nodes), which the pass reads as it reads a map. Each body is read
+    where the rays cross it: its liquid along their own chords, its haze, its heap, its surfaces.
+  - **Two passes on the GPU.** The pass over the screen holds one vessel's reading alone; a
+    second, over the rectangles of what is held or is a prism, holds the rest.
+  - **Glow is a light in the pass**: each body's glow at 1 nm, bent and absorbed by what is in
+    front of it. Nothing is added to a pixel outside its history.
+- §12.3: **no outline is drawn.** A vessel is its glass and what it holds; a line drawn over the
+  pass is not bent by what is held before it. The line at a liquid's surface likewise.
+- §12.3: **a vessel's floor** is glass all through (`floor_mm`, calibrated: 2.6 mm at 250 mL), a
+  third core of its map; what the vessel holds rests on it.
+- §18: `O5`, `O6`, `O7` and `O8` through layers. The O8 check's own truth finds images thinner
+  than its scan.
+- §19: a restarting pass 1.64 ms with nothing held (1.77 before the stage) and 9.6 ms with a
+  vessel held; a settled pass nothing; following a carried vessel's rays 1.4 ms a frame on the
+  CPU. Following rays in the pass cost 344 ms a frame: per-ray arrays are slow on the GPU.
+- §20: a ray is not followed into a neighbour on its own layer; a body that is not round is read
+  in a stack as seen straight on; a thin line seen only in a stack's rims keeps its light to 3%;
+  what the screen still draws over the pass (the burner, signal parts, wires) is not bent.
+- *PLANNED:* everything that takes space is a body of the optical pass, and an item's controls
+  leave the grid for a panel of actions (Stage 22; §12.3, §13.1); a vessel's whole shape (lip,
+  spout, flasks); a liquid's surface as a shape (meniscus, a stirred vortex, sloshing; §11).
+
 ## 0.21.0 (2026-11-20, Stage 20)
 
 Signed off by the user on 2026-11-20 ("Approved, proceed").

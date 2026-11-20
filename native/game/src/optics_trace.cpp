@@ -184,7 +184,7 @@ double index_at(const float *row, double nm) {
 
 // whether the core is liquid: with two media the first is the liquid's, with one it is air's
 bool liquid(const MapSpec &spec, int medium) {
-	return spec.media == 2 && medium == 0;
+	return spec.media >= 2 && medium == 0;
 }
 
 } // namespace
@@ -194,7 +194,9 @@ int Map::samples() const {
 }
 
 MapRay map_ray(const MapSpec &spec, double x, double nm, int medium) {
-	std::array<double, MAX_MEDIA> index{ 1.0, index_at(spec.glass_index, nm), liquid(spec, medium) ? index_at(spec.liquid_index, nm) : 1.0, 1.0 };
+	// its core: its liquid, the air over it, or (a third core: a vessel's floor) glass all through
+	const double glass = index_at(spec.glass_index, nm);
+	std::array<double, MAX_MEDIA> index{ 1.0, glass, liquid(spec, medium) ? index_at(spec.liquid_index, nm) : medium == 2 ? glass : 1.0, 1.0 };
 	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, 0.0, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
 	MapRay out;
 	out.landing = l.lands ? l.x / spec.cm_per_pixel : l.x;

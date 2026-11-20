@@ -521,19 +521,37 @@ TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its ma
 	CHECK(wall_mm(*lab, "flask") == 1.1); // 250 mL
 	CHECK(wall_mm(*lab, "acid") == 1.3); // 500 mL
 	CHECK(wall_mm(*lab, "balloon") == 0.0); // rubber: none given
+	// and its floor, glass all through (Stage 21)
+	const auto floor_mm = [](const lab::Lab &l, const char *id) {
+		for (const lab::ItemView &v : l.view().items) {
+			if (v.id == id) {
+				return v.floor_mm;
+			}
+		}
+		return -1.0;
+	};
+	CHECK(floor_mm(*lab, "jar") == 1.9);
+	CHECK(floor_mm(*lab, "flask") == 2.6);
+	CHECK(floor_mm(*lab, "acid") == 3.1);
+	CHECK(floor_mm(*lab, "balloon") == 0.0);
 	std::string why;
 	auto again = lab::Lab::load(lab->save(), why);
 	REQUIRE_MESSAGE(again != nullptr, why);
 	CHECK(wall_mm(*again, "acid") == 1.3);
+	CHECK(floor_mm(*again, "acid") == 3.1);
 	CHECK(again->digest() == lab->digest());
 	// a save from before walls had a thickness loads, its walls of none
 	json old = json::parse(lab->save());
 	for (json &item : old.at("bench").at("items")) {
 		item.erase("wall_mm");
+		item.erase("floor_mm");
 	}
 	auto older = lab::Lab::load(old.dump(), why);
 	REQUIRE_MESSAGE(older != nullptr, why);
 	CHECK(wall_mm(*older, "acid") == 0.0);
+	CHECK(floor_mm(*older, "acid") == 0.0);
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "a", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 20, "floor_mm": -1}]})", why) == nullptr);
 	// a bench that gives none has a wall of none; less than none is refused
 	auto plain = lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
 		{"id": "a", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 20}]})", why);

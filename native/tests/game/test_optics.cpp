@@ -254,10 +254,11 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 	const auto glow_of = [](const OpticsScene &scene, int x, int y, double rgb[3]) {
 		double all[3];
 		lab::optics_truth(scene, x, y, all);
+		// (a solid's glow is a light in the pass: each body's glow at 1 nm, a multiple of the room's light)
 		OpticsScene cold = scene;
 		for (int i = 0; i < static_cast<int>(cold.table[0]); ++i) {
-			for (int c = 0; c < 3; ++c) {
-				cold.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + i * lab::optics_layout::BODY_VECS + lab::optics_layout::GLOW) * 4 + static_cast<size_t>(c)] = 0.0f;
+			for (int k = 0; k < lab::optics_layout::ROW; ++k) {
+				cold.rows[static_cast<size_t>((i * lab::optics_layout::ROWS_PER_BODY + lab::optics_layout::GLOW_ROW) * lab::optics_layout::ROW + k)] = 0.0f;
 			}
 		}
 		double lit[3];
@@ -412,12 +413,13 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 		float x = 0, y = 0;
 		REQUIRE(ui->locate("item:flask", x, y));
 		ui->frame(0.0);
-		// low in the flask, clear of the heap
+		// low in the flask, clear of the heap, over its floor of glass (Stage 21: what it holds rests on that)
 		const lab::OpticsScene &scene = ui->optics();
 		const float *rect = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS) * 4];
 		for (int i = 0; i < static_cast<int>(scene.table[0]); ++i, rect += lab::optics_layout::BODY_VECS * 4) {
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
-				return seen(scene, x + rect[2] / 4, rect[1] + rect[3] - 4);
+				const float floor_px = rect[lab::optics_layout::REFRACT * 4 + 2] / rect[lab::optics_layout::FORM * 4 + 1];
+				return seen(scene, x + rect[2] / 4, rect[1] + rect[3] - floor_px - 4);
 			}
 		}
 		FAIL("the flask is not in the scene");

@@ -101,7 +101,7 @@ void PrismDemo::compose() {
 	room.w = 1920;
 	room.h = 1080;
 	room.bench = room.elsewhere = room.front = DARK;
-	room.wall_cm = WALL_CM;
+	room.wall_px = WALL_CM / (PRISM_SIDE_CM / SIDE); // the prism's own scale
 	room.shapes.push_back(OpticsShape{ SLIT_X, SLIT_Y, SLIT_W, SLIT_H, SLIT });
 	OpticsBody body{ &prism_, cx_ - SIDE / 2, cy_ - HEIGHT / 2, SIDE, HEIGHT };
 	body.turn = turn_;

@@ -60,6 +60,27 @@ void glow_of(double kelvin, const Spectrum &reflectance, double rgb[3]) {
 	}
 }
 
+// The same at each nanometre, as a multiple of the room's light there (GAME_SPEC §12.3, Stage 21): a light
+// in the pass, which what is in front of the solid bends, absorbs and turns away as it does the wall's.
+void glow_row(double kelvin, const Spectrum &reflectance, float *row) {
+	if (kelvin < 500.0) {
+		return;
+	}
+	// the room's light at each nanometre, on the scale on which its white is Y = 1
+	static const double white = [] {
+		double y = 0.0;
+		for (size_t i = 0; i < chem::optics::d65().size(); ++i) {
+			y += chem::optics::ybar()[i] * chem::optics::d65()[i];
+		}
+		return y;
+	}();
+	for (size_t i = 0; i < reflectance.size(); ++i) {
+		const double metres = (chem::optics::FIRST_NM + static_cast<double>(i)) * 1e-9;
+		const double radiance = 1.191042972e-16 / (metres * metres * metres * metres * metres) / (std::exp(0.014387769 / (metres * kelvin)) - 1.0) * 1e-9;
+		row[i] = static_cast<float>(radiance * (1.0 - reflectance[i]) * 683.002 / ROOM_WHITE_CD_M2 / (chem::optics::d65()[i] / white));
+	}
+}
+
 // the depth of liquid of volume `ml` at the bottom of a ball of radius `r` cm
 double pool_depth(double ml, double r) {
 	double lo = 0.0, hi = 2.0 * r;
@@ -75,7 +96,8 @@ double pool_depth(double ml, double r) {
 namespace {
 
 // (in `t`, the scene's table being made: each body's MAP and the tag its pixels' histories follow)
-void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count, double wall_cm) {
+void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count) {
+	const double wall_px = t[2 * 4], gap_px = t[3 * 4];
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
 	// Each refracting body's map: traced again only when its shape, its glass or its indices change; where
 	// it stands and what fills it change nothing
@@ -97,7 +119,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			spec.left = rect[0] - 1.0 - axis;
 			spec.right = rect[0] + rect[2] + 1.0 - axis;
 			spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
-			spec.wall_cm = wall_cm;
+			// the wall, from its own plane: a gap further for each layer nearer the eye (in its own centimetres)
+			spec.wall_cm = (wall_px + static_cast<double>(refract[1]) * gap_px) * spec.cm_per_pixel;
 			spec.glass_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
 			if (prism) {
 				const float *more = &t[static_cast<size_t>(at + MORE) * 4], *glow = &t[static_cast<size_t>(at + GLOW) * 4];
@@ -107,9 +130,9 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 				key = fnv(more, 4 * sizeof(float), fnv(glow, 3 * sizeof(float)));
 			} else {
 				spec.shape = trace::cylinder(rect[2] * 0.5 * form[1], refract[0]);
-				spec.media = 2;
+				spec.media = refract[2] > 0.0f ? 3 : 2; // with a floor, a third core: glass all through
 				spec.liquid_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
-				key = fnv(refract, sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
+				key = fnv(refract, 3 * sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
 			}
 			const double span[6] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]), spec.grid };
 			key = fnv(span, sizeof span, fnv(spec.glass_index, ROW * sizeof(float), key)) | 1u;
@@ -155,7 +178,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(1, 1, room.y);
 	put(1, 2, room.w);
 	put(1, 3, room.h);
-	put(2, 0, room.wall_cm);
+	put(2, 0, room.wall_px);
+	put(3, 0, room.gap_px);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -168,11 +192,20 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
 	}
 	wall_key |= 1u; // never 0: a scene with no table yet
-	int count = 0, line_count = 0;
+	// a nearer layer's bodies are painted over a further one's: by layer, each layer in the order given
+	std::vector<const OpticsBody *> ordered;
 	for (const OpticsBody &body : bodies) {
+		ordered.push_back(&body);
+	}
+	const auto layer_of = [](const OpticsBody &b) { return b.layer < 0 ? 0 : b.layer >= OPTICS_LAYERS ? OPTICS_LAYERS - 1 : b.layer; };
+	std::stable_sort(ordered.begin(), ordered.end(), [&](const OpticsBody *a, const OpticsBody *b) { return layer_of(*a) < layer_of(*b); });
+	int count = 0, line_count = 0, nearest = 0;
+	for (const OpticsBody *each : ordered) {
+		const OpticsBody &body = *each;
 		if (count == MAX_BODIES || body.item == nullptr || !(body.w > 0.0f) || !(body.h > 0.0f)) {
 			continue;
 		}
+		nearest = std::max(nearest, layer_of(body));
 		const ItemView &v = *body.item;
 		const int at = HEADER_VECS + count * BODY_VECS;
 		float *liquid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_ROW) * ROW)];
@@ -180,6 +213,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		float *wall = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_ROW) * ROW)];
 		float *liquid_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
 		float *wall_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
+		float *glows = &rows[static_cast<size_t>((count * ROWS_PER_BODY + GLOW_ROW) * ROW)];
 		for (int i = 0; i < ROW; ++i) {
 			liquid_index[i] = wall_index[i] = 1.0f; // air
 		}
@@ -192,6 +226,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(at + RECT, 3, body.h);
 		put(at + FORM, 0, ball ? 1.0 : 0.0);
 		put(at + FORM, 2, bottom + 2.0); // no liquid: its surface is under the floor
+		put(at + REFRACT, 1, layer_of(body));
 		if (v.kind == "prism") {
 			// an equilateral triangle of flint glass, turned; its rectangle is its silhouette
 			const double cm_per_px = PRISM_SIDE_CM / body.w, r = PRISM_SIDE_CM / std::sqrt(3.0);
@@ -317,9 +352,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// heat's mass spread thin; a wall as thick as the vessel is wide is glass all through
 				put(at + REFRACT, 0, v.wall_mm / 10.0);
 			}
+			// its floor: glass all through, as high as it is thick (at most the vessel's height); what it holds
+			// rests on it
+			const double floor_cm = glass ? std::min(v.floor_mm / 10.0, d_cm * aspect) : 0.0;
+			put(at + REFRACT, 2, floor_cm);
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
-				put(at + FORM, 2, bottom - v.condensed_ml / floor_cm2 / cm_per_px);
+				put(at + FORM, 2, bottom - (floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
 			}
 			if (solid_ml > 0.0 && v.stirred && v.liquid_ml > 0.0) {
 				// stirred up: every particle shades its own cross-section, twice over
@@ -339,8 +378,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			double rgb[3];
 			glow_of(v.celsius + 273.15, reflectance, rgb);
 			for (int c = 0; c < 3; ++c) {
-				put(at + GLOW, c, rgb[c]);
+				put(at + GLOW, c, rgb[c]); // its colour: a pixel's history follows it
 			}
+			glow_row(v.celsius + 273.15, reflectance, glows);
 		}
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
@@ -382,21 +422,47 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		optics_wall(scene, room);
 		scene.wall_key = wall_key;
 	}
-	place_maps(scene, t, rows, count, room.wall_cm);
+	put(3, 1, nearest);
+	place_maps(scene, t, rows, count);
+	// where the chain may be needed: with the table, so the scene's revision covers it
+	scene.chain.clear();
+	scene.chain_bodies.clear();
+	for (int b = 0; b < count; ++b) {
+		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4], *refract = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4];
+		const float *form = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4];
+		if (!(refract[3] > 0.5f) || !(form[0] < 0.5f || form[0] > 1.5f)) {
+			continue;
+		}
+		bool wanted = refract[1] > 0.5f || t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + MAP) * 4 + 3] != 1.0f;
+		for (int o = 0; o < count && !wanted; ++o) {
+			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
+			// across another that bends, on its own layer (one of a nearer layer covers the pixels they share)
+			const float *others = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4];
+			wanted = o != b && others[3] > 0.5f && others[1] == refract[1] && other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0] &&
+					other[1] < rect[1] + rect[3] + 2.0f && other[1] + other[3] + 2.0f > rect[1];
+		}
+		if (wanted) {
+			scene.chain.insert(scene.chain.end(), { std::floor(rect[0] - 2.0f), std::floor(rect[1] - 2.0f), std::ceil(rect[0] + rect[2] + 2.0f), std::ceil(rect[1] + rect[3] + 2.0f) });
+			scene.chain_bodies.push_back(b);
+		}
+	}
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
 		scene.lines = std::move(lines);
 		++scene.revision;
 	}
+	optics_stacks(scene); // the rays of what is held, followed through what stands behind it
 }
 
 void optics_maps(OpticsScene &scene) {
 	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4 || scene.rows.size() != static_cast<size_t>(ROWS_SIZE)) {
 		return;
 	}
-	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]), scene.table[2 * 4]);
+	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]));
 	++scene.revision;
+	scene.stack_keys.clear(); // followed for other maps
+	optics_stacks(scene);
 }
 
 // The wall as a table (GAME_SPEC §12.3; lab/optics_scene.hpp lays it out).

@@ -357,6 +357,11 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->wall_count = static_cast<int32_t>(scene.wall.size() / 4);
 	out->wall = scene.wall.data();
 	out->wall_revision = scene.wall_revision;
+	out->chain_count = static_cast<int32_t>(scene.chain.size() / 4);
+	out->chain = scene.chain.empty() ? nullptr : scene.chain.data();
+	out->stack_count = static_cast<int32_t>(scene.stacks.size() / 4);
+	out->stacks = scene.stacks.data();
+	out->stacks_revision = scene.stacks_revision;
 }
 
 void fill_draw(const lab::DrawList &list, cg_draw_list *out) {

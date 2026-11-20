@@ -116,7 +116,7 @@ int main(void) {
 		fprintf(stderr, "the draw list is not in two parts around the optical pass\n");
 		return 1;
 	}
-	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 3 + 16 * 7 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 16 * 5 * 401 ||
+	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 4 + 16 * 7 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 16 * 6 * 401 ||
 			optics.line_count != 256 || optics.light_count != 4097 + 401 || optics.rows == NULL || optics.lights == NULL || optics.lights[4 * 4096 + 2] < 0.99f) {
 		fprintf(stderr, "the optical pass's scene is not one vessel in 115 vectors, with its spectra, its lines and the room light's table\n");
 		return 1;
@@ -125,6 +125,11 @@ int main(void) {
 	if (optics.map_count < 1000 || optics.maps == NULL || optics.maps_revision == 0 || optics.maps[1] != 2.0f || optics.maps[2] != optics.maps[0] * 4.0f + 1.0f ||
 			optics.wall_count < 3001 || optics.wall == NULL || optics.wall_revision == 0) {
 		fprintf(stderr, "the optical pass's scene has no refraction map for its vessel, or no table of the wall\n");
+		return 1;
+	}
+	/* Stage 21: nothing is held, so no pixel needs a ray followed through several bodies */
+	if (optics.chain_count != 0 || optics.stack_count != 16 || optics.stacks == NULL || optics.stacks[0] != -1.0f) {
+		fprintf(stderr, "the optical pass's scene asks for a second pass, or has a stack, with nothing held\n");
 		return 1;
 	}
 	optics.size = 0;
