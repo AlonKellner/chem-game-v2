@@ -22,7 +22,7 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 | 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Done: see below |
 | 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Done |
 | 22.7 | Pictures; the user's reservations: labels on the grid, text on parts | Done: see below |
-| 22.8 | The user judges by eye and signs off | Pending |
+| 22.8 | The user judges by eye and signs off: "Approved, proceed" (2026-11-21) | Done |
 
 ## The scene's capacity (22.2)
 

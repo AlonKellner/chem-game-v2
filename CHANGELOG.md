@@ -1,5 +1,28 @@
 # GAME_SPEC version history
 
+## 0.23.0 (2026-11-21, Stage 22)
+
+Signed off by the user on 2026-11-21 ("Approved, proceed").
+
+- §12.3: **everything that takes space is physical.** A burner and its flame, a condenser's outlet,
+  a signal part on the bench (its face, its lamp, its port; a timer's strip of time left), wires
+  and rigs are bodies of the optical pass: bent, tinted and seen through what is held, as a vessel
+  is. Three shapes: the slab and the bar (opaque, lit by the room) and the cone of glowing gas (a
+  flame emits along its path and absorbs nothing), of calibrated surfaces and emitters
+  (`data/optics/media.json`), shared by set.
+  - No text on the bench but for what is chosen; a part is known by its kind's colour, its state
+    by its lamp.
+  - The scene holds 256 bodies (16 before); the screen in squares of 40 px lists the bodies a pixel
+    looks at.
+  - At an opaque thing's edge the wall is read where it is uncovered; behind what bends nothing the
+    wall itself is seen, not a flat backdrop.
+- §13.1: **an item's controls are not on the bench**: a burner's valve and a vessel's stirring are in
+  the readout's column for the item chosen; a rig ends on the item itself.
+- §18: O2 counts what bodies emit; the truth reads the drawn wall exactly over its samples.
+- A GPU bug fixed: a pixel covered again by content it had shown before stayed blank.
+- The gates: a ctest entry a test file, the reference's heavy loops on threads, sparse samples and
+  -O2 under the sanitizers. The closing gate 37 min -> under 3 min.
+
 ## 0.22.0 (2026-11-20, Stage 21)
 
 Signed off by the user on 2026-11-20 ("Looks good! Approved, proceed").

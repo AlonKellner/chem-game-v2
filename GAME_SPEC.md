@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.22.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.23.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1118,7 +1118,7 @@ of every ray through its area, and its colour is their average (a box filter).
     condenser's outlet, signal parts, wires, labels) is not bent, and lies over what is held.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
-- **Everything that takes space is physical** (Stage 22, *in progress*; the user, 2026-11-20: "If
+- **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If
   it's an actual space taking part - it should have a spectral visual. The only non spectral
   colors and elements should be overlays like highlights and interaction elements").
   - **Every thing that stands on the bench is a body of the optical pass**, with a shape and
@@ -1294,7 +1294,7 @@ lab command here, so it is the same on every host and is tested without one.
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
 
-**An item's controls are not on the bench** (Stage 22, *in progress*; the user, 2026-11-20).
+**An item's controls are not on the bench** (Stage 22, signed off by the user on 2026-11-21; asked for on 2026-11-20).
 Until Stage 22 a vessel's "stir" button and a burner's valve stood on the grid beside the item,
 always. They are interaction, not lab things, and they covered what the optical pass shows: they
 are in the readout's column, under what the selected item holds, for the item that is selected
