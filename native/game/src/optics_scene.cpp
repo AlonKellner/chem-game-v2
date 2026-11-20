@@ -176,7 +176,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	for (const OpticsBody &body : bodies) {
 		ordered.push_back(&body);
 	}
-	const auto layer_of = [](const OpticsBody &b) { return b.layer < 0 ? 0 : b.layer >= MAX_LAYERS ? MAX_LAYERS - 1 : b.layer; };
+	const auto layer_of = [](const OpticsBody &b) { return b.layer < 0 ? 0 : b.layer >= OPTICS_LAYERS ? OPTICS_LAYERS - 1 : b.layer; };
 	std::stable_sort(ordered.begin(), ordered.end(), [&](const OpticsBody *a, const OpticsBody *b) { return layer_of(*a) < layer_of(*b); });
 	int count = 0, line_count = 0, nearest = 0;
 	for (const OpticsBody *each : ordered) {

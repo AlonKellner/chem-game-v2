@@ -86,10 +86,10 @@ struct OpticsBody {
 	// on (x + w / 2) and recomputed as its silhouette
 	double turn = 0.0;
 	// its layer (GAME_SPEC §12.3): 0 stands on the bench's plane; each one more is a gap nearer the eye (what
-	// is held: 1). Up to MAX_LAYERS
+	// is held: 1). Up to OPTICS_LAYERS
 	int layer = 0;
 };
-inline constexpr int MAX_LAYERS = 6;
+inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;
 
 // A shape drawn on the wall behind the bodies: a rectangle of a flat grey.
