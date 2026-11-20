@@ -18,7 +18,7 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 | 22.1 | The spec; the calibrated rows | Done |
 | 22.2 | The scene: 256 bodies, spectra named by set, a grid of squares for a pixel to find its bodies | Done: see below |
 | 22.3 | Three shapes: the slab, the bar, the cone; opaque and glowing | Done: see below |
-| 22.4 | The screen: parts, lamps, wires, the burner and its flame, the outlet as bodies; nothing of the lab drawn over the pass, and a test that holds it | Pending |
+| 22.4 | The screen: parts, lamps, wires, the burner and its flame, the outlet as bodies; nothing of the lab drawn over the pass, and a test that holds it | Done: see below |
 | 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Pending |
 | 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Pending |
 | 22.7 | Pictures; the user judges by eye and signs off | Pending |
@@ -61,4 +61,25 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 - Measured: against 64 rays a pixel, a slab worst 1.4 on the eye metric, a bar 1.4, a flame 0.7,
   a part and a flame through a held vessel of water 1.5. O4, none visible on 14 pictures. The cost,
   back to back: before 1.87 and 1.88 ms, after 1.89 and 1.97.
+
+## The screen's things (22.4)
+
+- **Bodies**: a burner (a slab of its metal) and its flame (a cone, from sooty to blue with its
+  valve); a condenser's outlet (a bar); a signal part or a circuit on the bench (its face, a slab;
+  its lamp, a slab that glows green while it signals and amber while it rings; its port, a round
+  slab); a wire and a rig (bars; a rig's knob at its control). A part in an open circuit is the
+  panel's drawing.
+- **Over the pass**: a part's name and count, and highlights: a ringing part's outline, a wire while
+  its source signals, a rig while it works its control.
+- **A GPU bug, found by the flame**: a pixel no longer covered had its shown colour cleared but kept
+  its history; covered again by the very same content (the flame lit again at a valve it had had),
+  it was judged settled and never shown again. The reference derives what is shown from the history
+  and did not have it. A settled pixel whose shown colour is clear is now shown again from its
+  history. A vessel moved away and back would have shown it too.
+- **The flame's blue** was first 6 to 8 nm bands; the pass samples a light at a few moving
+  wavelengths, and a band that narrow is caught or missed by chance. It is now the band systems'
+  widths (14 to 30 nm). A narrow emission line wants the cuts an absorption line has: not built.
+- **A timing test made robust**: "three monitors cost little" takes the best of three runs each,
+  interleaved; the entries run side by side, and a moment's load was not the monitors'.
+- O4, none visible on 14 pictures; a restarting pass 1.54 ms with nothing held.
 

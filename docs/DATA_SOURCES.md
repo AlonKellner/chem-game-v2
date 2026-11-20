@@ -338,7 +338,7 @@ by eye; measured spectra are a later stage).
 | A lamp's glass, dark | 0.03, flat | a dark glass |
 | A lamp, green; amber | 1.2 times the room's light at 530 nm (width 30); 1.5 at 600 nm (width 30) | the screen's green (#78c88c) and amber (#e0a040), brighter than the wall as a lamp is |
 | A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
-| A flame, blue | for each pixel of path: 0.12 at 431 nm (width 6), 0.06 at 516 nm (width 8), 0.002 throughout | the bands of CH (431 nm) and C2 (516 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye |
+| A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
 
 **Calibrated floors (Stage 21)** (`data/benches/`, each glass vessel's `floor_mm`). No standard
 found gives a beaker's floor: ISO 3819 gives its wall alone.

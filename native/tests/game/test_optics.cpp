@@ -435,7 +435,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	const lab::DrawList &list = ui->draw();
 	CHECK(list.above > 0);
 	CHECK(list.above < static_cast<int32_t>(list.commands.size()));
-	CHECK(ui->optics().table[0] == 7); // five vessels, the jar, the balloon
+	CHECK(ui->optics().table[0] == 9); // five vessels, the jar, the balloon; the burner and the condenser's outlet (Stage 22)
 	const lab::CieLab empty = flask_colour();
 	CHECK(std::fabs(empty.b) < 0.5);
 

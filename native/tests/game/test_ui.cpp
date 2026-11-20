@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -224,6 +225,51 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	CHECK(p.ui->optics().chain.empty());
 	MESSAGE("carried over the flask: through the jar and the flask's liquid at 650 nm, " << through_both << " of the room's light");
 	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: everything on the bench that takes space is a body of the optical pass: a burner and its flame, parts, their lamps and ports, wires, rigs (Stage 22)") {
+	namespace L = lab::optics_layout;
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	std::string why;
+	for (const char *c : { R"({"do": "valve", "burner": "burner", "to": 0.7})", R"({"do": "part", "kind": "monitor", "at": [1, 1]})", R"({"do": "part", "kind": "alarm", "at": [4, 1]})",
+				 R"({"do": "wire", "from": "monitor1", "to": "alarm1"})", R"({"do": "rig", "from": "monitor1", "item": "burner", "control": "valve", "on": 0})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	p.ui->frame(1.0 / 60.0);
+	const lab::OpticsScene &scene = p.ui->optics();
+	REQUIRE(lab::check_O1(scene) == "");
+	int slabs = 0, bars = 0, cones = 0, vessels = 0;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float kind = scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4];
+		slabs += kind == 3.0f ? 1 : 0;
+		bars += kind == 4.0f ? 1 : 0;
+		cones += kind == 5.0f ? 1 : 0;
+		vessels += kind == 0.0f ? 1 : 0;
+	}
+	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
+	CHECK(cones == 1); // the burner's flame
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1); // the burner; two faces and two lamps; the monitor's port; the rig's knob
+	CHECK(bars == 3); // the wire and the rig; the condenser's outlet, in the cabinet
+	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
+	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
+	// and none of it is drawn over the pass: no polygon (a flame) anywhere, no circle (a lamp, a port, a knob) on
+	// a part or the burner
+	float mx = 0, my = 0, ax = 0, ay = 0, bx = 0, by = 0;
+	p.at("item:monitor1", mx, my);
+	p.at("item:alarm1", ax, ay);
+	p.at("item:burner", bx, by);
+	const lab::DrawList &list = p.ui->draw();
+	for (size_t k = static_cast<size_t>(list.above); k < list.commands.size(); ++k) {
+		const lab::DrawCommand &c = list.commands[k];
+		CHECK(c.type != lab::DrawCommand::Polygon);
+		if (c.type == lab::DrawCommand::Circle) {
+			for (const auto &[x, y] : { std::pair{ mx, my }, std::pair{ ax, ay }, std::pair{ bx, by } }) {
+				CHECK((std::fabs(c.x - x) > 45.0f || std::fabs(c.y - y) > 45.0f));
+			}
+		}
+	}
 }
 
 TEST_CASE("ui: a refusal is shown, and nothing changes (Stage 9)") {
