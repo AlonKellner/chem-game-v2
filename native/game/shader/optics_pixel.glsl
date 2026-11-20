@@ -17,11 +17,13 @@
 //   float row_value(int i)   each body's spectra at 1 nm from 380 nm: its liquid's optical
 //                            depth per centimetre, its solids' reflectance, its wall's depth
 //   vec4 line_vec(int i)     narrow lines: centre (nm), full width at half maximum, depth per cm at the peak
-//   vec4 light_vec(int i)    the room light's energy table: nm - 380, and its colour up to there, X Y Z
+//   vec4 light_vec(int i)    the room light's energy table: nm - 380, and its colour up to there, X Y Z;
+//                            and after its LIGHT_ENTRIES, the share of its energy up to each whole nm (x)
+//   vec4 map_vec(int i)      each refracting body's map (lab/optics_trace.hpp): where its rays land
+//   vec4 wall_vec(int i)     the wall as a table (lab/optics_scene.hpp): what is drawn behind the bodies
 
 const int HEADER_VECS = 3;
 const int BODY_VECS = 7;
-const int SHAPE_BASE = 3 + 16 * 7;
 const int ROW = 401;
 const int ROWS_PER_BODY = 5;
 const int LIGHT_ENTRIES = 4097;
@@ -63,14 +65,15 @@ struct Path {
 	float x;
 	float y;
 	int refractor; // that body, or -1
-	float rd; // the view ray's distance from its axis (cm), signed
-	float rr; // its outer radius (cm)
-	float rt; // its glass's thickness (cm)
 	float raxis; // its axis on the screen (pixels)
-	float rcm; // centimetres a pixel
-	bool rliquid; // whether the ray meets its liquid (else air)
-	float rcover; // how much of the pixel it covers: what its surfaces turn away is in proportion
-	bool rprism; // a prism (flat faces), not a cylinder
+	int rmap; // its map: where it starts among the maps, the whole pixels it spans, its samples, rows and cores
+	int rcoarse;
+	int rsamples;
+	int rrows;
+	int rmedia;
+	float rleft; // the map's first sample, pixels from the axis
+	float rwet; // how much of the pixel's height is under its liquid's surface
+	float rin; // how much of the pixel's height is between its top and its floor
 };
 
 // a pixel's state between frames
@@ -94,14 +97,15 @@ Path path_of(vec2 p, float size) {
 	q.x = p.x;
 	q.y = p.y;
 	q.refractor = -1;
-	q.rd = 0.0;
-	q.rr = 1.0;
-	q.rt = 0.0;
 	q.raxis = 0.0;
-	q.rcm = 1.0;
-	q.rliquid = false;
-	q.rcover = 0.0;
-	q.rprism = false;
+	q.rmap = 0;
+	q.rcoarse = 0;
+	q.rsamples = 0;
+	q.rrows = 0;
+	q.rmedia = 0;
+	q.rleft = 0.0;
+	q.rwet = 0.0;
+	q.rin = 0.0;
 	vec4 head = scene_vec(0);
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
@@ -161,18 +165,21 @@ Path path_of(vec2 p, float size) {
 		if (bend.w > 0.5 && q.refractor < 0) {
 			// a vessel bends the view: the first one the pixel looks through
 			q.refractor = i;
-			q.rd = from_axis * form.y;
-			q.rr = radius * form.y;
-			q.rt = bend.x;
 			q.raxis = rect.x + radius;
-			q.rcm = form.y;
-			q.rliquid = wet >= 0.5 * cover;
-			q.rcover = cover;
-			q.rprism = form.x > 1.5;
-			if (q.rprism) {
-				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // its centre, which its corners are given from
-				q.rd = (p.x - q.raxis) * form.y;
+			if (form.x > 1.5) {
+				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // a prism's centre, which its corners are given from
 			}
+			vec4 map = scene_vec(at + 6);
+			q.rmap = int(map.x);
+			q.rcoarse = int(map.y);
+			q.rleft = map.z;
+			q.rrows = int(map.w);
+			vec4 map_head = map_vec(q.rmap);
+			q.rmedia = int(map_head.y);
+			q.rsamples = int(map_head.z);
+			// the rows of the pixel under its liquid's surface, and those between its top and its floor
+			q.rwet = clamp((p.y - form.z) / size + 0.5, 0.0, 1.0);
+			q.rin = clamp(min(p.y - rect.y, rect.y + rect.w - p.y) / size + 0.5, 0.0, 1.0);
 		}
 		if (q.layers == 0) {
 			q.l0 = l;
@@ -193,9 +200,9 @@ Path path_of(vec2 p, float size) {
 	}
 	// what glows is shown as it is, outside the history; it is in the key so that a pixel shows it anew
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
-	// where the view goes through a refracting body: the ray's distance from its axis, its size, its glass, its medium
+	// where the view goes through a refracting body: where across it, and how much of the pixel is under its liquid and within it
 	if (q.refractor >= 0) {
-		q.key.x = q.key.x + 0.37 * q.rd + 0.53 * q.rr + 1.7 * q.rt + (q.rliquid ? 0.19 : 0.0) + 0.43 * q.rcover;
+		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin;
 		q.key.y = q.key.y + 0.31 * q.raxis;
 	}
 	return q;
@@ -256,301 +263,508 @@ float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
 	return seen * exp(-row_at(start + 2 * ROW, nm) * l.wall);
 }
 
-// the wall at (x, y): its radiance on the bench or off it, and the shapes drawn on it that a body's rays reach
-float backdrop(float x, float y, int body) {
-	vec4 head = scene_vec(0);
-	vec4 bench = scene_vec(1);
-	float seen = x >= bench.x && x < bench.x + bench.z && y >= bench.y && y < bench.y + bench.w ? head.y : head.z;
-	vec4 bend = scene_vec(HEADER_VECS + body * BODY_VECS + 5);
-	int first = int(bend.y);
-	int count = int(bend.z);
-	for (int k = 0; k < 32; k++) {
-		if (k >= count) {
+// ---- the wall behind the bodies (GAME_SPEC §12.3): a table, read exactly
+
+const int WALL_ROWS = 1080;
+const int WALL_COLUMNS = 1920;
+const int WALL_ROW_BASE = 1;
+const int WALL_COLUMN_BASE = 1081;
+const int WALL_BREAK_BASE = 3001;
+
+// A place on a row of the wall: the cell it is in, how far it is from the cell's left end (the first cell
+// has none: from breakpoint 0, behind it), the cell's radiance, and the row's integral from breakpoint 0
+// to that left end, in its two parts.
+struct WallAt {
+	int cell;
+	float from;
+	float radiance;
+	float coarse;
+	float fine;
+};
+
+WallAt wall_at(int profile, float x) {
+	int m = int(wall_vec(0).x);
+	// the cell: how many breakpoints are at or left of x; from the column's, a few steps
+	int j = x < 0.0 ? 0 : int(wall_vec(WALL_COLUMN_BASE + min(int(x), WALL_COLUMNS - 1)).x);
+	for (int k = 0; k < 64; k++) {
+		if (j >= m || wall_vec(WALL_BREAK_BASE + j).x > x) {
 			break;
 		}
-		vec4 r = scene_vec(SHAPE_BASE + 2 * (first + k));
-		if (x >= r.x && x < r.x + r.z && y >= r.y && y < r.y + r.w) {
-			seen = scene_vec(SHAPE_BASE + 2 * (first + k) + 1).x;
-		}
+		j = j + 1;
 	}
-	return seen;
+	vec4 c = wall_vec(WALL_BREAK_BASE + m + profile * (m + 1) + j);
+	WallAt w;
+	w.cell = j;
+	w.from = x - wall_vec(WALL_BREAK_BASE + max(j - 1, 0)).x;
+	w.radiance = c.x;
+	w.coarse = c.y;
+	w.fine = c.z;
+	return w;
 }
 
-// The wall seen through a footprint (GAME_SPEC §12.3, Stage 20): its average over [x0, x1] x [y0, y1],
-// the bench's share of it and then each drawn shape's, in painting order, each over the wall beneath it.
-// Exact unless two drawn shapes overlap inside the footprint (grid lines crossing: a line's width squared).
-float backdrop_area(float x0, float x1, float y0, float y1, int body) {
-	if (x1 - x0 < 1.0e-4) {
-		return backdrop(0.5 * (x0 + x1), 0.5 * (y0 + y1), body);
+// the row's integral from place r to place w: within a cell exactly its radiance times the way
+float wall_between(WallAt r, WallAt w) {
+	if (w.cell == r.cell) {
+		return w.radiance * (w.from - r.from);
 	}
-	vec4 head = scene_vec(0);
-	vec4 bench = scene_vec(1);
-	float area = (x1 - x0) * (y1 - y0);
-	float on = max(min(x1, bench.x + bench.z) - max(x0, bench.x), 0.0) * max(min(y1, bench.y + bench.w) - max(y0, bench.y), 0.0) / area;
-	float seen = on * head.y + (1.0 - on) * head.z;
-	vec4 bend = scene_vec(HEADER_VECS + body * BODY_VECS + 5);
-	int first = int(bend.y);
-	int count = int(bend.z);
-	for (int k = 0; k < 32; k++) {
-		if (k >= count) {
+	return (w.coarse - r.coarse) + (w.fine - r.fine) + w.radiance * w.from - r.radiance * r.from;
+}
+
+// the mean radiance of the row from a to b
+float wall_span(int profile, float a, float b) {
+	float lo = min(a, b);
+	float hi = max(a, b);
+	WallAt w = wall_at(profile, lo);
+	if (hi - lo < 1.0e-5) {
+		return w.radiance;
+	}
+	return wall_between(w, wall_at(profile, hi)) / (hi - lo);
+}
+
+// The mean, over the places from x0 to x1, of the row's integral from place r. Cell by cell, in each of
+// which the integral is a straight line: exact, however many edges lie between (past eight, sixteen even
+// steps: over so long a way the integral is nearly straight).
+float wall_mean(int profile, WallAt r, float x0, float x1) {
+	float lo = min(x0, x1);
+	float hi = max(x0, x1);
+	WallAt a = wall_at(profile, lo);
+	float s_a = wall_between(r, a);
+	if (hi - lo < 1.0e-5) {
+		return s_a;
+	}
+	WallAt b = wall_at(profile, hi);
+	if (a.cell == b.cell) {
+		return s_a + 0.5 * a.radiance * (hi - lo);
+	}
+	if (b.cell - a.cell > 8) {
+		float even = 0.5 * (s_a + wall_between(r, b));
+		for (int k = 1; k < 16; k++) {
+			even = even + wall_between(r, wall_at(profile, lo + (hi - lo) * float(k) / 16.0));
+		}
+		return even / 16.0;
+	}
+	int m = int(wall_vec(0).x);
+	float sum = 0.0;
+	float at = lo;
+	float s_at = s_a;
+	for (int k = 0; k < 9; k++) {
+		int cell = a.cell + k;
+		if (cell > b.cell) {
 			break;
 		}
-		vec4 r = scene_vec(SHAPE_BASE + 2 * (first + k));
-		float w = min(x1, r.x + r.z) - max(x0, r.x);
-		float h = min(y1, r.y + r.w) - max(y0, r.y);
-		if (w <= 0.0 || h <= 0.0) {
-			continue;
-		}
-		// the wall beneath it: the bench's or the room's, at the overlap's middle
-		float mx = 0.5 * (max(x0, r.x) + min(x1, r.x + r.z));
-		float my = 0.5 * (max(y0, r.y) + min(y1, r.y + r.w));
-		float under = mx >= bench.x && mx < bench.x + bench.z && my >= bench.y && my < bench.y + bench.w ? head.y : head.z;
-		seen = seen + w * h / area * (scene_vec(SHAPE_BASE + 2 * (first + k) + 1).x - under);
+		float end = cell == b.cell ? hi : wall_vec(WALL_BREAK_BASE + cell).x; // a cell ends at its own breakpoint
+		float s_end = s_at + wall_vec(WALL_BREAK_BASE + m + profile * (m + 1) + cell).x * (end - at);
+		sum = sum + 0.5 * (s_at + s_end) * (end - at);
+		at = end;
+		s_at = s_end;
 	}
-	return seen;
+	return sum / (hi - lo);
 }
 
-// what a vessel does to the view at nm (GAME_SPEC §12.3): where the bent ray meets the wall (x, on the
-// screen), what all its surfaces let through (pass, Fresnel), and the chord of its liquid the ray crosses (cm)
+// ---- a body's refraction map (GAME_SPEC §12.3; lab/optics_trace.hpp lays it out)
+
+const float MAP_FINE = 16.0; // samples a pixel
+
+// what a ray does: where it lands on the wall (x, on the screen), what the body's surfaces let through
+// (pass, Fresnel), the chord of its liquid it crosses (cm), and its route (the same for rays that go the same way)
 struct Bend {
 	float x;
 	float pass;
 	float chord;
-	float route; // which surfaces the ray crossed, as a number: where it changes, what the pixel sees jumps
+	float route;
 };
 
-// The tracer (GAME_SPEC §12.3, Stage 20): one level view ray through the body the pixel looks through,
-// seen from above (x across, z away from the eye, in cm from its centre). It asks only which medium a
-// point is in and where the next boundary is, so a body is a shape behind those two questions: the
-// upright cylinder (its glass ring and its core) and the prism (a triangle of glass). At each boundary
-// the ray refracts by vector Snell, losing what Fresnel reflects; where it cannot pass it is turned back,
-// all of it. The prism's corners (MORE and GLOW x, y) are read from the scene.
-
-// the nearest boundary ahead: its distance (x, or 1e30 for none), its normal (y, z) and which it is (w)
-vec4 next_boundary(Path q, vec4 m, vec4 g, float ox, float oz, float ux, float uz) {
-	vec4 best = vec4(1.0e30, 0.0, 0.0, -1.0);
-	if (q.rprism) {
-		for (int e = 0; e < 3; e++) {
-			float ax = e == 0 ? m.x : (e == 1 ? m.z : g.x);
-			float az = e == 0 ? m.y : (e == 1 ? m.w : g.y);
-			float bx = e == 0 ? m.z : (e == 1 ? g.x : m.x);
-			float bz = e == 0 ? m.w : (e == 1 ? g.y : m.y);
-			float dx = bx - ax;
-			float dz = bz - az;
-			float denom = ux * dz - uz * dx;
-			if (abs(denom) < 1.0e-9) {
-				continue;
-			}
-			float wx = ax - ox;
-			float wz = az - oz;
-			float t = (wx * dz - wz * dx) / denom;
-			float s = (wx * uz - wz * ux) / denom;
-			if (t > 1.0e-5 && s >= 0.0 && s <= 1.0 && t < best.x) {
-				float len = sqrt(dx * dx + dz * dz);
-				best = vec4(t, dz / len, -dx / len, float(e));
-			}
-		}
-		return best;
-	}
-	for (int k = 0; k < 2; k++) {
-		float r = k == 0 ? q.rr : q.rr - q.rt;
-		if (k == 1 && q.rt <= 0.0) {
-			continue;
-		}
-		float b = ox * ux + oz * uz;
-		float c = ox * ox + oz * oz - r * r;
-		float disc = b * b - c;
-		if (disc < 0.0) {
-			continue;
-		}
-		float root = sqrt(disc);
-		for (int j = 0; j < 2; j++) {
-			float t = j == 0 ? -b - root : -b + root;
-			if (t > 1.0e-5 && t < best.x) {
-				best = vec4(t, (ox + t * ux) / r, (oz + t * uz) / r, float(k));
-			}
-		}
-	}
-	return best;
-}
-
-Bend bend_at(Path q, float nm) {
+// The ray at x (pixels from the body's axis) and nm, through its core as liquid (medium 0 of two) or as air:
+// read from its map, straight between two samples across (the nearer one's where the route changes between
+// them); in wavelength, the landing by the cubic through four rows, the rest straight. Past the map's ends
+// a ray misses the body and goes straight.
+Bend map_at(Path q, int medium, float x, float nm) {
 	Bend b;
-	b.x = q.x;
+	b.x = q.raxis + x;
 	b.pass = 1.0;
 	b.chord = 0.0;
-	b.route = 0.0;
-	if (q.refractor < 0) {
+	b.route = -1.0;
+	float s = (x - q.rleft) * MAP_FINE;
+	if (q.rsamples < 2 || s < 0.0 || s > float(q.rsamples - 1)) {
 		return b;
 	}
-	vec4 head = scene_vec(2);
-	int at = HEADER_VECS + q.refractor * BODY_VECS;
-	vec4 m = scene_vec(at + 2);
-	vec4 g = scene_vec(at + 3);
-	int start = q.refractor * ROWS_PER_BODY * ROW;
-	float n_glass = row_at(start + 4 * ROW, nm);
-	float n_core = q.rliquid ? row_at(start + 3 * ROW, nm) : 1.0;
-	// the ray starts just outside the body: far starts lose the circles' precision in float32
-	float reach = q.rprism ? 2.0 * max(max(max(abs(m.x), abs(m.y)), max(abs(m.z), abs(m.w))), max(abs(g.x), abs(g.y))) : q.rr;
-	float ox = q.rd;
-	float oz = -reach - 1.0;
-	float ux = 0.0;
-	float uz = 1.0;
-	int here = 0;
-	for (int k = 0; k < 8; k++) {
-		vec4 hit = next_boundary(q, m, g, ox, oz, ux, uz);
-		if (hit.x > 1.0e29) {
-			break;
+	int i = min(int(floor(s)), q.rsamples - 2);
+	float f = s - float(i);
+	float r = clamp((nm - 380.0) / 400.0, 0.0, 1.0) * float(q.rrows - 1);
+	int k = min(int(floor(r)), q.rrows - 2);
+	float g = r - float(k);
+	int base = q.rmap + 1 + q.rcoarse + (medium * q.rsamples + i) * q.rrows + k; // a sample's rows lie side by side
+	bool between = f > 0.0; // on a sample (a pixel's parts begin and end on samples, wherever a body stands on whole or half pixels): that sample alone
+	vec4 a0 = map_vec(base);
+	vec4 c0 = map_vec(base + 1);
+	vec4 a1 = a0;
+	vec4 c1 = c0;
+	if (between) {
+		a1 = map_vec(base + q.rrows);
+		c1 = map_vec(base + q.rrows + 1);
+		if (floor(a0.w) != floor(a1.w) || floor(c0.w) != floor(c1.w)) {
+			// the route changes between the samples (how far along: twice the route's fraction): each side its own sample's ray
+			float change = 2.0 * (floor(a0.w) != floor(a1.w) ? fract(a0.w) : fract(c0.w));
+			f = f < change ? 0.0 : 1.0;
 		}
-		if (here == 2 && q.rliquid) {
-			b.chord = b.chord + hit.x;
-		}
-		ox = ox + hit.x * ux;
-		oz = oz + hit.x * uz;
-		// which medium is beyond: from the boundary crossed and which way (the normal points outward)
-		float nx = hit.y;
-		float nz = hit.z;
-		bool outward = nx * ux + nz * uz > 0.0;
-		int there = 0;
-		if (q.rprism) {
-			there = here == 0 ? 1 : 0;
-		} else if (hit.w < 0.5) {
-			there = outward ? 0 : (q.rt > 0.0 ? 1 : 2); // the outer surface
-		} else {
-			there = outward ? 1 : 2; // the inner one
-		}
-		if (there == here) {
-			continue; // grazing: the same medium on both sides
-		}
-		b.route = b.route * 4.0 + hit.w + 1.0;
-		if (outward) {
-			nx = -nx;
-			nz = -nz;
-		}
-		float n1 = here == 0 ? 1.0 : (here == 1 ? n_glass : n_core);
-		float n2 = there == 0 ? 1.0 : (there == 1 ? n_glass : n_core);
-		float cos_i = -(nx * ux + nz * uz);
-		float eta = n1 / n2;
-		float sin2 = eta * eta * (1.0 - cos_i * cos_i);
-		if (sin2 >= 1.0) {
-			// turned back: all of it stays where it was
-			ux = ux + 2.0 * cos_i * nx;
-			uz = uz + 2.0 * cos_i * nz;
-			b.route = b.route + 100.0;
-			continue;
-		}
-		float cos_t = sqrt(1.0 - sin2);
-		float rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
-		float rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
-		b.pass = b.pass * (1.0 - 0.5 * (rs * rs + rp * rp));
-		ux = eta * ux + (eta * cos_i - cos_t) * nx;
-		uz = eta * uz + (eta * cos_i - cos_t) * nz;
-		here = there;
 	}
-	if (here != 0) {
-		b.pass = 0.0; // still inside after eight meetings: nothing of the wall comes this way
+	float route = floor(f < 0.5 ? a0.w : a1.w);
+	float p1 = mix(a0.x, a1.x, f);
+	float p2 = mix(c0.x, c1.x, f);
+	float p0 = 2.0 * p1 - p2;
+	float p3 = 2.0 * p2 - p1;
+	if (k > 0) {
+		vec4 e0 = map_vec(base - 1);
+		vec4 e1 = e0;
+		if (between) {
+			e1 = map_vec(base + q.rrows - 1);
+		}
+		if (floor(f < 0.5 ? e0.w : e1.w) == route && floor(e0.w) == floor(e1.w)) {
+			p0 = mix(e0.x, e1.x, f);
+		}
 	}
-	float landed = uz > 0.05 ? ox + ux * (head.x - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
-	b.route = b.route + (uz > 0.05 ? 0.0 : 1000.0) + (here != 0 ? 2000.0 : 0.0) + (b.chord > 0.0 ? 4000.0 : 0.0);
-	b.x = q.raxis + landed / q.rcm;
-	b.pass = 1.0 - q.rcover * (1.0 - b.pass);
+	if (k + 2 < q.rrows) {
+		vec4 e0 = map_vec(base + 2);
+		vec4 e1 = e0;
+		if (between) {
+			e1 = map_vec(base + q.rrows + 2);
+		}
+		if (floor(f < 0.5 ? e0.w : e1.w) == route && floor(e0.w) == floor(e1.w)) {
+			p3 = mix(e0.x, e1.x, f);
+		}
+	}
+	bool one_route = floor(f < 0.5 ? c0.w : c1.w) == route;
+	float landing = one_route ? p1 + 0.5 * g * (p2 - p0 + g * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3 + g * (3.0 * (p1 - p2) + p3 - p0))) : (g < 0.5 ? p1 : p2);
+	b.x = q.raxis + landing;
+	b.pass = mix(mix(a0.y, a1.y, f), mix(c0.y, c1.y, f), g);
+	b.chord = sqrt(max(mix(mix(a0.z, a1.z, f), mix(c0.z, c1.z, f), g), 0.0)); // the map holds its square
+	b.route = route;
 	return b;
 }
 
-// what one ray brings: off the wall at `wall` (already read, through a footprint or at a point), through
-// every body in front of it, the refracting one along the ray's own chord, what its surfaces turn away
-// showing the room in front
-float along(Path q, float nm, Bend b, float wall) {
-	float seen = q.refractor >= 0 ? wall : q.back;
-	float chord = b.chord;
-	float pass = b.pass;
-	if (q.layers > 0) {
-		seen = through_layer(q.l0, seen, nm, q.l0.body == q.refractor ? chord * q.l0.wet : q.l0.depth_cm);
+// into how many equal parts the whole pixel of the body that x is in must be read
+float map_level(Path q, float x) {
+	int c = int(floor(x - q.rleft));
+	if (c < 0 || c >= q.rcoarse) {
+		return 1.0;
 	}
-	if (q.layers > 1) {
-		seen = through_layer(q.l1, seen, nm, q.l1.body == q.refractor ? chord * q.l1.wet : q.l1.depth_cm);
+	return map_vec(q.rmap + 1 + c).x;
+}
+
+// ---- what reaches the eye
+
+// The chord that absorbs as the rays of a part do, together (GAME_SPEC §12.3): their chords run from c0 to
+// c1, the square straight across the part (as a chord's is, exactly, where it rises as a root at a rim),
+// and the liquid's optical depth is `per_cm` a centimetre. The mean of e^(-per_cm c) over the part, in closed
+// form, as one chord's.
+float chord_of_part(float c0, float c1, float per_cm) {
+	float lo = min(c0, c1);
+	float hi = max(c0, c1);
+	if (per_cm * (hi - lo) < 1.0e-3) {
+		return 0.5 * (lo + hi);
 	}
-	if (q.layers > 2) {
-		seen = through_layer(q.l2, seen, nm, q.l2.body == q.refractor ? chord * q.l2.wet : q.l2.depth_cm);
+	// (2 / (b k^2)) ((k lo + 1) e^(-k lo) - (k hi + 1) e^(-k hi)), b = hi^2 - lo^2; e^(-k lo) taken out
+	float through_part = 2.0 / ((hi * hi - lo * lo) * per_cm * per_cm) * (per_cm * lo + 1.0 - (per_cm * hi + 1.0) * exp(-per_cm * (hi - lo)));
+	return lo - log(max(through_part, 1.0e-30)) / per_cm;
+}
+
+// What the bodies a pixel looks through do to the wall's light at one wavelength (GAME_SPEC §12.2): read
+// once for the wavelength, then applied to each part of the pixel by arithmetic alone. The layers behind the
+// refracting body and those in front of it each take what they are given to a times it plus b; the
+// refracting body's own liquid is crossed along each part's own chords, so its spectra are kept as read.
+struct Shade {
+	float a_behind;
+	float b_behind;
+	float a_front;
+	float b_front;
+	bool own; // the refracting body is among the layers
+	float per_cm; // its liquid's optical depth a centimetre
+	float colour; // what its solids and its haze turn back
+	float glass; // what its wall lets through
+	float haze;
+	float solid;
+	float room; // the room in front, which the surfaces turn back
+};
+
+Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
+	if (k >= q.layers) {
+		return s;
 	}
-	if (q.layers > 3) {
-		seen = through_layer(q.l3, seen, nm, q.l3.body == q.refractor ? chord * q.l3.wet : q.l3.depth_cm);
+	int start = l.body * ROWS_PER_BODY * ROW;
+	float per_cm = liquid_at(l.body, nm);
+	float colour = row_at(start + ROW, nm);
+	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
+	if (l.body == q.refractor && !s.own) {
+		s.own = true;
+		s.per_cm = per_cm;
+		s.colour = colour;
+		s.glass = glass;
+		s.haze = l.haze;
+		s.solid = l.solid;
+		return s;
 	}
+	// through_layer, as a times what reaches it plus b
+	float depth = per_cm * l.depth_cm;
+	float through = exp(-depth);
+	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
+	float b = colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * glass;
+	if (s.own) {
+		s.b_front = a * s.b_front + b;
+		s.a_front = a * s.a_front;
+	} else {
+		s.b_behind = a * s.b_behind + b;
+		s.a_behind = a * s.a_behind;
+	}
+	return s;
+}
+
+Shade shade_of(Path q, float nm) {
+	Shade s;
+	s.a_behind = 1.0;
+	s.b_behind = 0.0;
+	s.a_front = 1.0;
+	s.b_front = 0.0;
+	s.own = false;
+	s.per_cm = 0.0;
+	s.colour = 0.0;
+	s.glass = 1.0;
+	s.haze = 0.0;
+	s.solid = 0.0;
+	s.room = scene_vec(2).y;
+	s = shade_layer(s, q, q.l0, 0, nm);
+	s = shade_layer(s, q, q.l1, 1, nm);
+	s = shade_layer(s, q, q.l2, 2, nm);
+	s = shade_layer(s, q, q.l3, 3, nm);
+	return s;
+}
+
+// what the rays of a part bring: off the wall (already read), through every body in front of it, the
+// refracting one along their own chords of its liquid (c0 to c1; none, through its core as air), what its
+// surfaces turn away showing the room in front
+float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float wall) {
+	float seen = s.a_behind * wall + s.b_behind;
+	if (s.own) {
+		float depth = liquid ? s.per_cm * chord_of_part(c0, c1, s.per_cm) : 0.0;
+		float through = exp(-depth);
+		seen = seen * through;
+		seen = mix(seen, s.colour * exp(-depth * 0.5), s.haze);
+		seen = mix(seen, s.colour * through, s.solid);
+		seen = seen * s.glass;
+	}
+	seen = s.a_front * seen + s.b_front;
 	if (q.refractor >= 0) {
-		seen = pass * seen + (1.0 - pass) * scene_vec(2).y;
+		seen = pass * seen + (1.0 - pass) * s.room;
 	}
 	return seen;
 }
 
-// The rays of the pixel from a to z across (as the distance from the refractor's axis, cm), given the ray at
-// a: where the rays at a, between and z take one route and the middle one lands between the others as a
-// straight map would put it, they land in an interval of the wall, a pixel high, read exactly (GAME_SPEC
-// §12.3, Stage 20).
-struct Part {
-	bool even;
-	float light;
-	Bend right;
-};
-
-Part part_of(Path q, float nm, float a, float z, Bend left, Bend mid) {
-	Path side = q;
-	side.rd = z;
-	Part p;
-	p.right = bend_at(side, nm);
-	side.rd = 0.5 * (a + z);
-	p.even = left.route == mid.route && p.right.route == mid.route && abs(mid.x - 0.5 * (left.x + p.right.x)) <= 0.02 + 0.02 * abs(p.right.x - left.x);
-	p.light = 0.0;
-	if (p.even) {
-		// each half of the rays on its own half of the landing: the map's bend across the part followed
-		float wall = 0.5 * backdrop_area(min(left.x, mid.x), max(left.x, mid.x), q.y - 0.5, q.y + 0.5, q.refractor) +
-				0.5 * backdrop_area(min(mid.x, p.right.x), max(mid.x, p.right.x), q.y - 0.5, q.y + 0.5, q.refractor);
-		p.light = along(side, nm, mid, wall);
-	}
-	return p;
+float along(Path q, float nm, float pass, float c0, float c1, bool liquid, float wall) {
+	return shaded(shade_of(q, nm), q, pass, c0, c1, liquid, wall);
 }
 
-// the share of the room's light at nm that reaches the eye.
-// A pixel is the light of all its rays (GAME_SPEC §12.3, Stage 20): read as one part where it is smooth;
-// else in eighths, each read exactly where it is smooth itself, and an eighth that is not (a rim, a ray
-// turned back, a fold) at one ray, jx across it (a moving point's own place, so the history settles on the
-// average), or at four for the truth (jx < 0).
-float through(Path q, float nm, float jx) {
-	Bend b = bend_at(q, nm);
-	if (q.refractor < 0) {
-		return along(q, nm, b, q.back);
+// in how many straight steps a band of `nm` nanometres is swept, for the whole pixel of the body that x is in:
+// as many as keep the sweep within MAP_SWEEP_TOLERANCE (0.02 pixels of the screen) of the true landing, which
+// bends in wavelength at most as the map says there; at most sixteen
+int map_steps(Path q, float x, float nm) {
+	int c = int(floor(x - q.rleft));
+	if (c < 0 || c >= q.rcoarse) {
+		return 1;
 	}
-	float a0 = q.rd - 0.5 * q.rcm;
-	Path side = q;
-	side.rd = a0;
-	Bend left = bend_at(side, nm);
-	Part whole = part_of(q, nm, a0, q.rd + 0.5 * q.rcm, left, b);
-	if (whole.even) {
-		return whole.light;
-	}
-	float total = 0.0;
-	for (int k = 0; k < 8; k++) {
-		float a = a0 + float(k) / 8.0 * q.rcm;
-		float z = a0 + float(k + 1) / 8.0 * q.rcm;
-		side.rd = 0.5 * (a + z);
-		Part eighth = part_of(q, nm, a, z, left, bend_at(side, nm));
-		if (eighth.even) {
-			total = total + eighth.light;
-		} else {
-			int places = jx < 0.0 ? 4 : 1;
-			float sum = 0.0;
-			for (int t = 0; t < 4; t++) {
-				if (t >= places) {
-					break;
-				}
-				side.rd = a + (jx < 0.0 ? (float(t) + 0.5) / 4.0 : jx) * (z - a);
-				Bend bt = bend_at(side, nm);
-				sum = sum + along(side, nm, bt, backdrop(bt.x, q.y, q.refractor));
-			}
-			total = total + sum / float(places);
+	return int(clamp(ceil(nm * sqrt(map_vec(q.rmap + 1 + c).y / 0.16)), 1.0, 16.0));
+}
+
+// Between two places of a part whose rays go different ways (GAME_SPEC §12.3): the left ray's share of the
+// part, from where the map says the route changes (in a sample's cell, how far along: twice its route's
+// fraction). A rim: all of the part inside the body is the ray's that goes through.
+float left_share(Path q, int medium, float left, float right, float nm) {
+	float r = clamp((nm - 380.0) / 400.0, 0.0, 1.0) * float(q.rrows - 1);
+	int k = min(int(floor(r + 0.5)), q.rrows - 1);
+	int row = q.rmap + 1 + q.rcoarse + medium * q.rsamples * q.rrows + k;
+	int first = int(floor((left - q.rleft) * MAP_FINE));
+	for (int j = 0; j < 4; j++) {
+		int i = first + j;
+		if (i < 0 || i + 1 >= q.rsamples) {
+			continue;
 		}
-		left = eighth.right;
+		float here = map_vec(row + i * q.rrows).w;
+		if (floor(here) != floor(map_vec(row + (i + 1) * q.rrows).w)) {
+			float change = q.rleft + (float(i) + 2.0 * fract(here)) / MAP_FINE;
+			return clamp((change - left) / (right - left), 0.0, 1.0);
+		}
+		if (q.rleft + float(i + 1) / MAP_FINE >= right) {
+			break;
+		}
 	}
-	return total / 8.0;
+	return 0.5;
+}
+
+// a ray's own side of a route's change, carried on to the change: from the ray `near` it, as far again as
+// `t` of the way from the ray `far` on that side (the landing and what passes, straight; the chord by its square)
+Bend toward(Bend near, Bend far, float t) {
+	Bend b;
+	b.x = near.x + (near.x - far.x) * t;
+	b.pass = clamp(near.pass + (near.pass - far.pass) * t, 0.0, 1.0);
+	b.chord = sqrt(max(near.chord * near.chord + (near.chord * near.chord - far.chord * far.chord) * t, 0.0));
+	b.route = near.route;
+	return b;
+}
+
+// the wall between two rays at one wavelength: the interval between their landings; or, if they go
+// different ways, each ray's own landing, half and half
+float end_wall(int profile, Bend l, Bend r) {
+	if (l.route == r.route) {
+		return wall_span(profile, l.x, r.x);
+	}
+	return 0.5 * (wall_span(profile, l.x, l.x) + wall_span(profile, r.x, r.x));
+}
+
+vec4 share(float u);
+
+// the wavelength at the share u of the light's energy; or `one_nm`, if one wavelength alone is asked for
+float nm_at(float u, float one_nm) {
+	return one_nm > 0.0 ? one_nm : share(u).x + 380.0;
+}
+
+// the share of the light's energy up to a wavelength: the table the other way
+float share_of(float nm) {
+	float x = clamp(nm - 380.0, 0.0, 400.0);
+	int i = min(int(floor(x)), 399);
+	return mix(light_vec(LIGHT_ENTRIES + i).x, light_vec(LIGHT_ENTRIES + i + 1).x, x - float(i));
+}
+
+// One part of a pixel whose rays go different ways (GAME_SPEC §12.3), between the rays at `left` and
+// `right` (pixels from the body's axis), read at a step's point nm: a and b are its left ray at the step's
+// two ends, a2 and b2 its right. If the point's two rays go one way, the wall at the step's two ends; if
+// not, each side is its own straight piece, from its end's ray to the change of route, continued from the
+// ray beyond its end if that goes the same way.
+float split_part(Path q, Shade shade, int profile, int medium, bool liquid, float left, float right, float nm, Bend a, Bend a2, Bend b, Bend b2) {
+	Bend lp = map_at(q, medium, left, nm);
+	Bend rp = map_at(q, medium, right, nm);
+	if (lp.route == rp.route) {
+		float wall = 0.5 * (end_wall(profile, a, a2) + end_wall(profile, b, b2)); // a route changes on the way: the step's two ends
+		return shaded(shade, q, 0.5 * (lp.pass + rp.pass), lp.chord, rp.chord, liquid, wall);
+	}
+	float width = right - left;
+	float share_left = left_share(q, medium, left, right, nm);
+	Bend l_edge = lp;
+	Bend beyond = map_at(q, medium, left - width, nm);
+	if (beyond.route == lp.route) {
+		l_edge = toward(lp, beyond, share_left);
+	}
+	Bend r_edge = rp;
+	beyond = map_at(q, medium, right + width, nm);
+	if (beyond.route == rp.route) {
+		r_edge = toward(rp, beyond, 1.0 - share_left);
+	}
+	return share_left * shaded(shade, q, 0.5 * (lp.pass + l_edge.pass), lp.chord, l_edge.chord, liquid, wall_span(profile, lp.x, l_edge.x)) +
+		   (1.0 - share_left) * shaded(shade, q, 0.5 * (rp.pass + r_edge.pass), r_edge.chord, rp.chord, liquid, wall_span(profile, r_edge.x, rp.x));
+}
+
+// A pixel through one core of the body it looks through (its liquid, or air), over one straight step of a
+// band's wavelengths, from `begin` to `end`, its point `nm` being `at` of the way (GAME_SPEC §12.2, §12.3).
+// The pixel is read in `parts` equal parts, from `left` (pixels from the body's axis). The rays of a part
+// land in an interval of the wall that sweeps as the step is crossed, and the wall is read over that sweep
+// exactly: the mean, along each boundary ray's sweep, of the row's integral (one boundary serves the parts
+// on both its sides), the footprint's width taken as its mean. No edge on the wall is missed, in place or
+// along the sweep. What the surfaces pass and the chords are the boundary rays' at the step's two ends,
+// straight between (the chord by its square).
+float core_light(Path q, Shade shade, int profile, int medium, bool liquid, float left, int parts, float begin, float end, float nm, float at) {
+	Bend a = map_at(q, medium, left, begin);
+	Bend b = map_at(q, medium, left, end);
+	WallAt origin = wall_at(profile, a.x);
+	float m = wall_mean(profile, origin, a.x, b.x);
+	float sum = 0.0;
+	for (int k = 1; k <= 16; k++) {
+		if (k > parts) {
+			break;
+		}
+		float x0 = left + float(k - 1) / float(parts);
+		float x1 = left + float(k) / float(parts);
+		Bend a2 = map_at(q, medium, x1, begin);
+		Bend b2 = map_at(q, medium, x1, end);
+		if (a.route == a2.route && b.route == b2.route && a.route == b.route) {
+			float m2 = wall_mean(profile, origin, a2.x, b2.x);
+			float w0 = a2.x - a.x;
+			float w1 = b2.x - b.x;
+			float wall = 0.0;
+			if (w0 * w1 < 0.0) {
+				// folded over on the way: each end's own footprint
+				wall = 0.5 * (wall_span(profile, a.x, a2.x) + wall_span(profile, b.x, b2.x));
+			} else if (abs(w0 + w1) < 2.0e-4) {
+				// no width: one ray, moving
+				wall = wall_span(profile, 0.5 * (a.x + a2.x), 0.5 * (b.x + b2.x));
+			} else {
+				wall = (m2 - m) / (0.5 * (w0 + w1));
+			}
+			float pass = mix(0.5 * (a.pass + a2.pass), 0.5 * (b.pass + b2.pass), at);
+			float c0 = sqrt(max(mix(a.chord * a.chord, b.chord * b.chord, at), 0.0));
+			float c1 = sqrt(max(mix(a2.chord * a2.chord, b2.chord * b2.chord, at), 0.0));
+			sum = sum + shaded(shade, q, pass, c0, c1, liquid, wall);
+			m = m2;
+		} else {
+			sum = sum + split_part(q, shade, profile, medium, liquid, x0, x1, nm, a, a2, b, b2);
+			// the integral from here on is counted from this boundary: the two sides may be far apart on the wall
+			origin = wall_at(profile, a2.x);
+			m = wall_mean(profile, origin, a2.x, b2.x);
+		}
+		a = a2;
+		b = b2;
+	}
+	return sum / float(parts);
+}
+
+// The share of the room's light that reaches the eye over a band of its energy, from the share u0 to u1,
+// its point t of the way through (GAME_SPEC §12.2, §12.3); or at one wavelength, `one_nm`, if that is asked
+// for. A pixel is the light of all its rays: through a refracting body it is read in as many equal parts as
+// the body's map is straight within; a row across its liquid's surface is its two cores' lights, each by
+// its share of the pixel's height; and a row across its top or floor, the bent view and the straight one
+// likewise. The band is swept in straight steps, even in wavelength, along which a landing moves smoothly,
+// each weighed by its own share of the band's energy (a band is even in energy, not in wavelength: its red
+// end may be all tail). In each step the liquids and the surfaces are read at the step's own point (t of
+// the way through it): so what a bright edge brings is weighed by what gets through at the wavelength it
+// is crossed at.
+float through_band(Path q, float u0, float u1, float t, float one_nm) {
+	float nm0 = nm_at(u0, one_nm);
+	float nm1 = nm_at(u1, one_nm);
+	if (q.refractor < 0) {
+		return along(q, nm_at(mix(u0, u1, t), one_nm), 1.0, 0.0, 0.0, false, q.back);
+	}
+	int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(q.y)), 0, WALL_ROWS - 1)).x);
+	float left = q.x - 0.5 - q.raxis;
+	int parts = int(max(map_level(q, left), map_level(q, left + 0.9999)));
+	float across = abs(nm1 - nm0);
+	int steps = max(map_steps(q, left, across), map_steps(q, left + 0.9999, across));
+	float total = 0.0;
+	float weights = 0.0;
+	float begin = nm0;
+	float u_begin = steps > 1 ? share_of(nm0) : 0.0;
+	for (int s = 1; s <= 16; s++) {
+		if (s > steps) {
+			break;
+		}
+		float end = mix(nm0, nm1, float(s) / float(steps));
+		float nm = steps > 1 ? mix(begin, end, t) : nm_at(mix(u0, u1, t), one_nm);
+		float u_end = steps > 1 ? share_of(end) : 1.0;
+		float weight = max(u_end - u_begin, 0.0);
+		float at = abs(end - begin) > 1.0e-6 ? clamp((nm - begin) / (end - begin), 0.0, 1.0) : 0.5;
+		Shade shade = shade_of(q, nm);
+		float light = 0.0;
+		for (int core = 0; core < 2; core++) {
+			float share_core = q.rin * (core == 0 ? q.rwet : 1.0 - q.rwet);
+			if (share_core <= 0.0) {
+				continue;
+			}
+			light = light + share_core * core_light(q, shade, profile, q.rmedia > 1 ? core : 0, core == 0, left, parts, begin, end, nm, at);
+		}
+		if (q.rin < 1.0) {
+			light = light + (1.0 - q.rin) * shaded(shade, q, 1.0, 0.0, 0.0, false, wall_span(profile, q.x - 0.5, q.x + 0.5));
+		}
+		total = total + weight * light;
+		weights = weights + weight;
+		begin = end;
+		u_begin = u_end;
+	}
+	return weights > 0.0 ? total / weights : 0.0;
 }
 
 // ---- the light in bands of equal energy
@@ -565,17 +779,11 @@ vec3 to_linear_srgb(vec3 c) {
 	return vec3(3.2404542 * c.x - 1.5371385 * c.y - 0.4985314 * c.z, -0.9692660 * c.x + 1.8760108 * c.y + 0.0415560 * c.z, 0.0556434 * c.x - 0.2040259 * c.y + 1.0572252 * c.z);
 }
 
-// Where a pixel's light jumps or spikes in wavelength (GAME_SPEC §12.2): the shares of the light's energy at
-// which it does, ascending. A band cut there never straddles a jump, so a narrow window of wavelengths is a
-// band of its own and read every frame, by the moving points and by the fixed estimate alike. Three things
-// are known to make such jumps, for any body and any shape:
-//   - a view bent by glass crossing an edge of what is drawn on the wall, or the bench's own edges: the
-//     landing point moves with the wavelength smoothly, so each edge is bracketed between sixteen even
-//     shares and found by bisection;
-//   - the ray changing its route through the glass (turned back at a face, missing an inner surface): the
-//     route each bend reports, found the same way;
-//   - a narrow absorption line in what the pixel looks through: its core, a width and a half to each side.
-// A light's own narrow lines need none: its energy table gives each its share already.
+// Where a pixel's light spikes in wavelength within a band (GAME_SPEC §12.2): the shares of the light's
+// energy at which it does, ascending. A band cut there is read on each side of the spike, by the moving
+// points and by the fixed estimate alike. Only a narrow absorption line in what the pixel looks through
+// needs it (its core, a width and a half to each side): a bent view sweeping across the wall's edges is
+// integrated exactly (core_light), and a light's own narrow lines have their shares in its energy table.
 const int MAX_CUTS = 24;
 struct Cuts {
 	float u[MAX_CUTS];
@@ -637,82 +845,6 @@ Cuts cuts_of(Path q) {
 	c = line_cuts(c, q.l1, q.layers, 1);
 	c = line_cuts(c, q.l2, q.layers, 2);
 	c = line_cuts(c, q.l3, q.layers, 3);
-	if (q.refractor >= 0) {
-		vec4 bench = scene_vec(1);
-		vec4 bend = scene_vec(HEADER_VECS + q.refractor * BODY_VECS + 5);
-		int first = int(bend.y);
-		int count = int(bend.z);
-		// the route the centre's ray takes; and where the footprint's ends, the pixel's left and right edges'
-		// rays, cross an edge on the wall: between those its light changes fastest (GAME_SPEC §12.3, Stage 20)
-		float u0 = 0.0;
-		Bend b0 = bend_at(q, share(0.0).x + 380.0);
-		for (int k = 1; k <= 16; k++) {
-			float u1 = float(k) / 16.0;
-			Bend b1 = bend_at(q, share(u1).x + 380.0);
-			if (b1.route != b0.route) {
-				float a = u0;
-				float z = u1;
-				for (int it = 0; it < 14; it++) {
-					float m = 0.5 * (a + z);
-					if (bend_at(q, share(m).x + 380.0).route == b0.route) {
-						a = m;
-					} else {
-						z = m;
-					}
-				}
-				c = add_cut(c, 0.5 * (a + z));
-			}
-			u0 = u1;
-			b0 = b1;
-		}
-		for (int end_k = 0; end_k < 2; end_k++) {
-			Path side = q;
-			side.rd = q.rd + (end_k == 0 ? -0.5 : 0.5) * q.rcm;
-			u0 = 0.0;
-			b0 = bend_at(side, share(0.0).x + 380.0);
-			for (int k = 1; k <= 16; k++) {
-				float u1 = float(k) / 16.0;
-				Bend b1 = bend_at(side, share(u1).x + 380.0);
-				// an edge is passed between them: the bench's two sides, and each drawn shape's at the pixel's height
-				float lo = min(b0.x, b1.x);
-				float hi = max(b0.x, b1.x);
-				for (int e = 0; e < 2 + 2 * 32; e++) {
-					float edge = 0.0;
-					if (e < 2) {
-						edge = e == 0 ? bench.x : bench.x + bench.z;
-					} else {
-						int sh = (e - 2) / 2;
-						if (sh >= count) {
-							break;
-						}
-						vec4 r = scene_vec(SHAPE_BASE + 2 * (first + sh));
-						if (q.y < r.y || q.y >= r.y + r.w) {
-							continue;
-						}
-						edge = (e - 2) % 2 == 0 ? r.x : r.x + r.z;
-					}
-					if (edge <= lo || edge > hi || c.count >= MAX_CUTS) {
-						continue;
-					}
-					float a = u0;
-					float z = u1;
-					bool a_below = b0.x < edge;
-					for (int it = 0; it < 14; it++) {
-						float m = 0.5 * (a + z);
-						bool below = bend_at(side, share(m).x + 380.0).x < edge;
-						if (below == a_below) {
-							a = m;
-						} else {
-							z = m;
-						}
-					}
-					c = add_cut(c, 0.5 * (a + z));
-				}
-				u0 = u1;
-				b0 = b1;
-			}
-		}
-	}
 	// ascending (insertion sort)
 	for (int i = 1; i < MAX_CUTS; i++) {
 		if (i >= c.count) {
@@ -753,8 +885,7 @@ vec3 batch(Path q, int n, float offset, Cuts cuts) {
 			}
 			float hi = j < cuts.count && cuts.u[j] < band_hi ? cuts.u[j] : band_hi;
 			vec4 upto = share(hi);
-			float nm = share(lo + offset * (hi - lo)).x + 380.0;
-			sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through(q, nm, fract(offset * 2.6180339887 + float(b) * 0.6180339887 + float(r) * 0.4142135624 + 0.37));
+			sum = sum + vec3(upto.y - before.y, upto.z - before.z, upto.w - before.w) * through_band(q, lo, hi, offset, 0.0);
 			before = upto;
 			lo = hi;
 			if (hi >= band_hi) {
@@ -774,8 +905,7 @@ vec3 truth(Path q, int shares) {
 		}
 		vec4 a = share(float(j) / float(shares));
 		vec4 b = share(float(j + 1) / float(shares));
-		float nm = share((float(j) + 0.5) / float(shares)).x + 380.0;
-		sum = sum + vec3(b.y - a.y, b.z - a.z, b.w - a.w) * through(q, nm, -1.0);
+		sum = sum + vec3(b.y - a.y, b.z - a.z, b.w - a.w) * through_band(q, float(j) / float(shares), float(j + 1) / float(shares), 0.5, 0.0);
 	}
 	return to_linear_srgb(sum);
 }

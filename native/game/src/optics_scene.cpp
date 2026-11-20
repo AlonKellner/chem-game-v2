@@ -4,9 +4,11 @@
 #include "chem/optics.hpp"
 #include "chem/species.hpp"
 #include "lab/colour.hpp"
+#include "lab/optics_trace.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <map>
 
 namespace lab {
 
@@ -70,6 +72,78 @@ double pool_depth(double ml, double r) {
 
 } // namespace
 
+namespace {
+
+// (in `t`, the scene's table being made: each body's MAP and the tag its pixels' histories follow)
+void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count, double wall_cm) {
+	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
+	// Each refracting body's map: traced again only when its shape, its glass or its indices change; where
+	// it stands and what fills it change nothing
+	scene.map_keys.resize(static_cast<size_t>(MAX_BODIES), 0);
+	scene.map_blocks.resize(static_cast<size_t>(MAX_BODIES));
+	bool maps_changed = false;
+	std::vector<int> offsets(static_cast<size_t>(MAX_BODIES), -1);
+	int map_at = 0; // vec4s
+	for (int b = 0; b < MAX_BODIES; ++b) {
+		const int at = HEADER_VECS + b * BODY_VECS;
+		const float *rect = &t[static_cast<size_t>(at + RECT) * 4], *form = &t[static_cast<size_t>(at + FORM) * 4], *refract = &t[static_cast<size_t>(at + REFRACT) * 4];
+		const bool refracts = b < count && refract[3] > 0.5f && (form[0] < 0.5f || form[0] > 1.5f);
+		uint64_t key = 0;
+		trace::MapSpec spec;
+		if (refracts) {
+			const bool prism = form[0] > 1.5f;
+			const double axis = rect[0] + rect[2] * 0.5 + (prism ? t[static_cast<size_t>(at + GLOW) * 4 + 2] : 0.0f);
+			spec.cm_per_pixel = form[1];
+			spec.left = rect[0] - 1.0 - axis;
+			spec.right = rect[0] + rect[2] + 1.0 - axis;
+			spec.wall_cm = wall_cm;
+			spec.glass_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
+			if (prism) {
+				const float *more = &t[static_cast<size_t>(at + MORE) * 4], *glow = &t[static_cast<size_t>(at + GLOW) * 4];
+				const double corners[3][2] = { { more[0], more[1] }, { more[2], more[3] }, { glow[0], glow[1] } };
+				spec.shape = trace::prism(corners);
+				spec.media = 1;
+				key = fnv(more, 4 * sizeof(float), fnv(glow, 3 * sizeof(float)));
+			} else {
+				spec.shape = trace::cylinder(rect[2] * 0.5 * form[1], refract[0]);
+				spec.media = 2;
+				spec.liquid_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
+				key = fnv(refract, sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
+			}
+			const double span[5] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]) };
+			key = fnv(span, sizeof span, fnv(spec.glass_index, ROW * sizeof(float), key)) | 1u;
+		}
+		std::vector<float> &block = scene.map_blocks[static_cast<size_t>(b)];
+		if (scene.map_keys[static_cast<size_t>(b)] != key) {
+			block = refracts ? trace::map_block(trace::build_map(spec)) : std::vector<float>();
+			scene.map_keys[static_cast<size_t>(b)] = key;
+			maps_changed = true;
+		}
+		if (refracts) {
+			offsets[static_cast<size_t>(b)] = map_at;
+			put(at + MAP, 0, map_at);
+			put(at + MAP, 1, block[0]); // the whole pixels it spans
+			put(at + MAP, 2, std::floor(spec.left));
+			put(at + MAP, 3, block[3]); // its rows
+			map_at += static_cast<int>(block.size() / 4);
+			// a pixel's history follows the map it looks through
+			const float tagged = t[static_cast<size_t>(at + IDS) * 4 + 1];
+			put(at + IDS, 1, tag(fnv(&key, sizeof key, fnv(&tagged, sizeof tagged))));
+		}
+	}
+	if (maps_changed || static_cast<int>(scene.maps.size()) != map_at * 4) {
+		scene.maps.assign(static_cast<size_t>(map_at) * 4, 0.0f);
+		for (int b = 0; b < MAX_BODIES; ++b) {
+			if (offsets[static_cast<size_t>(b)] >= 0) {
+				std::copy(scene.map_blocks[static_cast<size_t>(b)].begin(), scene.map_blocks[static_cast<size_t>(b)].end(), scene.maps.begin() + static_cast<std::ptrdiff_t>(offsets[static_cast<size_t>(b)]) * 4);
+			}
+		}
+		++scene.maps_revision;
+	}
+}
+
+} // namespace
+
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies) {
 	std::vector<float> t(static_cast<size_t>(SIZE_VECS) * 4, 0.0f), rows(static_cast<size_t>(ROWS_SIZE), 0.0f), lines(static_cast<size_t>(MAX_LINES) * 4, 0.0f);
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
@@ -85,7 +159,15 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
 
-	int count = 0, line_count = 0, shape_count = 0;
+	// what the wall's table is made from: the room and everything drawn on it
+	uint64_t wall_key = fnv(&room.x, 4 * sizeof(float));
+	wall_key = fnv(&room.bench, 2 * sizeof(double), wall_key);
+	for (const OpticsShape &sh : room.shapes) {
+		wall_key = fnv(&sh.x, 4 * sizeof(float), wall_key);
+		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
+	}
+	wall_key |= 1u; // never 0: a scene with no table yet
+	int count = 0, line_count = 0;
 	for (const OpticsBody &body : bodies) {
 		if (count == MAX_BODIES || body.item == nullptr || !(body.w > 0.0f) || !(body.h > 0.0f)) {
 			continue;
@@ -138,25 +220,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
-			const int first_shape = shape_count;
-			for (const OpticsShape &sh : room.shapes) {
-				if (shape_count == MAX_SHAPES || shape_count - first_shape == 32) {
-					break;
-				}
-				if (sh.y < body.y + body.h && sh.y + sh.h > body.y && sh.w * sh.h < 100000.0f) {
-					const int k = SHAPE_BASE + 2 * shape_count++;
-					put(k, 0, sh.x);
-					put(k, 1, sh.y);
-					put(k, 2, sh.w);
-					put(k, 3, sh.h);
-					put(k + 1, 0, sh.radiance);
-				}
-			}
-			put(at + REFRACT, 1, first_shape);
-			put(at + REFRACT, 2, shape_count - first_shape);
 			put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
 			uint64_t h = fnv(&t[static_cast<size_t>(at) * 4], static_cast<size_t>(BODY_VECS) * 4 * sizeof(float));
-			h = fnv(&t[static_cast<size_t>(SHAPE_BASE + 2 * first_shape) * 4], static_cast<size_t>(shape_count - first_shape) * 8 * sizeof(float), h);
+			h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it
 			put(at + IDS, 1, tag(h));
 			continue;
 		}
@@ -276,31 +342,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + GLOW, c, rgb[c]);
 			}
 		}
-		// the drawn shapes its bent rays can reach: across it and some widths to each side, at its height
-		const int first_shape = shape_count;
-		if (room.refraction && !ball) {
-			for (const OpticsShape &sh : room.shapes) {
-				if (shape_count == MAX_SHAPES || shape_count - first_shape == 32) {
-					break;
-				}
-				const bool reach = sh.x < body.x + 4.0f * body.w && sh.x + sh.w > body.x - 3.0f * body.w && sh.y < body.y + body.h && sh.y + sh.h > body.y;
-				if (reach && sh.w * sh.h < 100000.0f) {
-					const int k = SHAPE_BASE + 2 * shape_count++;
-					put(k, 0, sh.x);
-					put(k, 1, sh.y);
-					put(k, 2, sh.w);
-					put(k, 3, sh.h);
-					put(k + 1, 0, sh.radiance);
-				}
-			}
-		}
-		put(at + REFRACT, 1, first_shape);
-		put(at + REFRACT, 2, shape_count - first_shape);
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
 		uint64_t h = fnv(liquid, ROWS_PER_BODY * ROW * sizeof(float));
 		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);
-		h = fnv(&t[static_cast<size_t>(SHAPE_BASE + 2 * first_shape) * 4], static_cast<size_t>(shape_count - first_shape) * 8 * sizeof(float), h);
+		h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it
 		h = fnv(&lines[static_cast<size_t>(first_line) * 4], static_cast<size_t>(line_count - first_line) * 4 * sizeof(float), h);
 		put(at + IDS, 1, tag(h));
 		put(at + IDS, 2, first_line);
@@ -310,7 +356,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 
 	if (scene.lights.empty()) {
 		const chem::optics::EnergyTable &room_light = chem::optics::room_light();
-		scene.lights.resize(static_cast<size_t>(LIGHTS * LIGHT_ENTRIES) * 4);
+		scene.lights.assign(static_cast<size_t>(LIGHTS * LIGHT_SIZE) * 4, 0.0f);
 		for (size_t j = 0; j < static_cast<size_t>(LIGHT_ENTRIES); ++j) {
 			const chem::optics::EnergyEntry &e = room_light.entry[j];
 			scene.lights[4 * j] = static_cast<float>(e.nm - chem::optics::FIRST_NM);
@@ -318,14 +364,137 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			scene.lights[4 * j + 2] = static_cast<float>(e.up_to.y);
 			scene.lights[4 * j + 3] = static_cast<float>(e.up_to.z);
 		}
+		// the table the other way: the share of the energy up to each whole nm (the entries ascend in both)
+		size_t j = 0;
+		for (int i = 0; i < ROW; ++i) {
+			const double nm = i;
+			while (j + 2 < static_cast<size_t>(LIGHT_ENTRIES) && scene.lights[4 * (j + 1)] <= nm) {
+				++j;
+			}
+			const double lo = scene.lights[4 * j], hi = scene.lights[4 * (j + 1)];
+			const double part = hi > lo ? std::min(std::max((nm - lo) / (hi - lo), 0.0), 1.0) : 0.0;
+			scene.lights[4 * (static_cast<size_t>(LIGHT_ENTRIES) + static_cast<size_t>(i))] = static_cast<float>((static_cast<double>(j) + part) / (LIGHT_ENTRIES - 1));
+		}
 		++scene.revision;
 	}
+	// the wall's table (GAME_SPEC §12.3): made again only when what is drawn on it changes
+	if (scene.wall_key != wall_key || scene.wall.empty()) {
+		optics_wall(scene, room);
+		scene.wall_key = wall_key;
+	}
+	place_maps(scene, t, rows, count, room.wall_cm);
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
 		scene.lines = std::move(lines);
 		++scene.revision;
 	}
+}
+
+void optics_maps(OpticsScene &scene) {
+	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4 || scene.rows.size() != static_cast<size_t>(ROWS_SIZE)) {
+		return;
+	}
+	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]), scene.table[2 * 4]);
+	++scene.revision;
+}
+
+// The wall as a table (GAME_SPEC §12.3; lab/optics_scene.hpp lays it out).
+void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
+	scene.drawn.clear();
+	// the breakpoints: every edge of the bench and of what is drawn, across and down
+	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w }, ys{ room.y, static_cast<double>(room.y) + room.h };
+	for (const OpticsShape &sh : room.shapes) {
+		if (!(sh.w > 0.0f) || !(sh.h > 0.0f)) {
+			continue;
+		}
+		xs.push_back(sh.x);
+		xs.push_back(static_cast<double>(sh.x) + sh.w);
+		ys.push_back(sh.y);
+		ys.push_back(static_cast<double>(sh.y) + sh.h);
+		for (const double v : { static_cast<double>(sh.x), static_cast<double>(sh.y), static_cast<double>(sh.w), static_cast<double>(sh.h), sh.radiance }) {
+			scene.drawn.push_back(static_cast<float>(v));
+		}
+	}
+	for (std::vector<double> *v : { &xs, &ys }) {
+		std::sort(v->begin(), v->end());
+		v->erase(std::unique(v->begin(), v->end()), v->end());
+	}
+	const int m = static_cast<int>(xs.size()), my = static_cast<int>(ys.size());
+	// cell j across is from breakpoint j - 1 to breakpoint j; painted in order, the topmost shape's radiance
+	const auto cells_of = [](const std::vector<double> &v, double lo, double hi, int &from, int &to) {
+		from = static_cast<int>(std::lower_bound(v.begin(), v.end(), lo) - v.begin()) + 1;
+		to = static_cast<int>(std::lower_bound(v.begin(), v.end(), hi) - v.begin());
+	};
+	std::vector<float> grid(static_cast<size_t>(my + 1) * static_cast<size_t>(m + 1), static_cast<float>(room.elsewhere));
+	const auto paint = [&](double x, double y, double w, double h, double radiance) {
+		int x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+		cells_of(xs, x, x + w, x0, x1);
+		cells_of(ys, y, y + h, y0, y1);
+		for (int r = y0; r <= y1; ++r) {
+			std::fill(grid.begin() + static_cast<std::ptrdiff_t>(r) * (m + 1) + x0, grid.begin() + static_cast<std::ptrdiff_t>(r) * (m + 1) + x1 + 1, static_cast<float>(radiance));
+		}
+	};
+	if (room.w > 0.0f && room.h > 0.0f) {
+		paint(room.x, room.y, room.w, room.h, room.bench);
+	}
+	for (const OpticsShape &sh : room.shapes) {
+		if (sh.w > 0.0f && sh.h > 0.0f) {
+			paint(sh.x, sh.y, sh.w, sh.h, sh.radiance);
+		}
+	}
+	// each row of pixels: the cells down that it crosses, each by its share of the row's height
+	std::vector<std::vector<float>> profiles;
+	std::map<std::vector<float>, int> known;
+	std::vector<int> row_profile(static_cast<size_t>(WALL_ROWS), 0);
+	std::vector<float> blend(static_cast<size_t>(m + 1));
+	for (int y = 0; y < WALL_ROWS; ++y) {
+		std::fill(blend.begin(), blend.end(), 0.0f);
+		const int first = static_cast<int>(std::upper_bound(ys.begin(), ys.end(), static_cast<double>(y)) - ys.begin());
+		for (int r = first; r <= my; ++r) {
+			const double lo = std::max(static_cast<double>(y), r == 0 ? -1.0e300 : ys[static_cast<size_t>(r - 1)]), hi = std::min(y + 1.0, r == my ? 1.0e300 : ys[static_cast<size_t>(r)]);
+			if (hi <= lo) {
+				break;
+			}
+			for (int j = 0; j <= m; ++j) {
+				blend[static_cast<size_t>(j)] += static_cast<float>((hi - lo) * grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)]);
+			}
+		}
+		const auto found = known.emplace(blend, static_cast<int>(profiles.size()));
+		if (found.second) {
+			profiles.push_back(blend);
+		}
+		row_profile[static_cast<size_t>(y)] = found.first->second;
+	}
+	std::vector<float> &w = scene.wall;
+	const size_t cells = static_cast<size_t>(WALL_BREAK_BASE + m);
+	w.assign((cells + profiles.size() * static_cast<size_t>(m + 1)) * 4, 0.0f);
+	w[0] = static_cast<float>(m);
+	w[1] = static_cast<float>(profiles.size());
+	for (int y = 0; y < WALL_ROWS; ++y) {
+		w[static_cast<size_t>(WALL_ROW_BASE + y) * 4] = static_cast<float>(row_profile[static_cast<size_t>(y)]);
+	}
+	for (int c = 0; c < WALL_COLUMNS; ++c) {
+		w[static_cast<size_t>(WALL_COLUMN_BASE + c) * 4] = static_cast<float>(std::upper_bound(xs.begin(), xs.end(), static_cast<double>(c)) - xs.begin());
+	}
+	for (int j = 0; j < m; ++j) {
+		w[static_cast<size_t>(WALL_BREAK_BASE + j) * 4] = static_cast<float>(xs[static_cast<size_t>(j)]);
+	}
+	for (size_t p = 0; p < profiles.size(); ++p) {
+		double integral = 0.0; // from breakpoint 0 to the cell's left end
+		for (int j = 0; j <= m; ++j) {
+			float *cell = &w[(cells + p * static_cast<size_t>(m + 1) + static_cast<size_t>(j)) * 4];
+			if (j >= 2) {
+				// the breakpoints as the table holds them, in float: the integral is of what the renderer reads
+				integral += static_cast<double>(profiles[p][static_cast<size_t>(j - 1)]) * (static_cast<double>(static_cast<float>(xs[static_cast<size_t>(j - 1)])) - static_cast<double>(static_cast<float>(xs[static_cast<size_t>(j - 2)])));
+			}
+			const double coarse = std::round(integral * 64.0) / 64.0;
+			cell[0] = profiles[p][static_cast<size_t>(j)];
+			cell[1] = static_cast<float>(coarse);
+			cell[2] = static_cast<float>(integral - coarse);
+		}
+	}
+	++scene.wall_revision;
 }
 
 } // namespace lab

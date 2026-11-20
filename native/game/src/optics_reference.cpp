@@ -65,6 +65,12 @@ inline double max(double a, double b) {
 inline int min(int a, int b) {
 	return a < b ? a : b;
 }
+inline int max(int a, int b) {
+	return a > b ? a : b;
+}
+inline int clamp(int v, int lo, int hi) {
+	return v < lo ? lo : v > hi ? hi : v;
+}
 inline double abs(double a) {
 	return std::fabs(a);
 }
@@ -128,6 +134,14 @@ inline vec4 light_vec(int i) {
 	const float *v = &current->lights[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
+inline vec4 map_vec(int i) {
+	const float *v = &current->maps[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
+inline vec4 wall_vec(int i) {
+	const float *v = &current->wall[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -152,8 +166,8 @@ struct Use {
 };
 
 bool ready(const OpticsScene &s) {
-	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() == static_cast<size_t>(optics_layout::ROWS_SIZE) &&
-		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_ENTRIES) * 4;
+	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() == static_cast<size_t>(optics_layout::ROWS_SIZE) && !s.wall.empty() &&
+		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
 
 Path at(int x, int y) {
@@ -167,7 +181,23 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm) {
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	return shader::through(shader::at(x, y), nm, -1.0);
+	return shader::through_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
+}
+
+double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	return shader::through_band(shader::at(x, y), u0, u1, t, 0.0);
+}
+
+double optics_share_nm(const OpticsScene &scene, double u) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	return shader::share(u).x + 380.0;
 }
 
 double optics_cover(const OpticsScene &scene, int x, int y) {
@@ -198,8 +228,13 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 		return OpticsBend{};
 	}
 	const shader::Use use(scene);
-	const shader::Bend b = shader::bend_at(shader::at(x, y), nm);
-	return OpticsBend{ b.x, b.pass, b.chord };
+	const shader::Path q = shader::at(x, y);
+	if (q.refractor < 0) {
+		return OpticsBend{ q.x, 1.0, 0.0 };
+	}
+	// the pixel's central ray, through the core its centre is in
+	const shader::Bend b = shader::map_at(q, q.rmedia > 1 && q.rwet < 0.5 ? 1 : 0, q.x - q.raxis, nm);
+	return OpticsBend{ b.x, b.pass, q.rwet < 0.5 ? 0.0 : b.chord };
 }
 
 // ---- the truth of a pixel's area (GAME_SPEC §12.3, Stage 20): its own tracer, not the renderer's
@@ -214,15 +249,32 @@ struct Exact {
 	int meetings = 0;
 };
 
-Exact exact_bend(const shader::Path &q, double nm) {
+Exact exact_bend(int body, double x, bool liquid, double nm) {
 	Exact out;
-	out.x = q.x;
-	if (q.refractor < 0) {
+	out.x = x;
+	if (body < 0) {
 		return out;
 	}
 	using shader::row_at;
 	using shader::scene_vec;
-	const int at = optics_layout::HEADER_VECS + q.refractor * optics_layout::BODY_VECS;
+	const int at = optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS;
+	// the body, read from the scene's table itself
+	struct {
+		int refractor = -1;
+		bool rprism = false, rliquid = false;
+		double rr = 0.0, rt = 0.0, rd = 0.0, raxis = 0.0, rcm = 1.0, rcover = 1.0;
+	} q;
+	{
+		const shader::vec4 rect = scene_vec(at), form = scene_vec(at + 1);
+		q.refractor = body;
+		q.rprism = form.x > 1.5;
+		q.rliquid = liquid;
+		q.rcm = form.y;
+		q.rr = rect.z * 0.5 * form.y;
+		q.rt = scene_vec(at + 5).x;
+		q.raxis = rect.x + rect.z * 0.5 + (q.rprism ? scene_vec(at + 3).z : 0.0);
+		q.rd = (x - q.raxis) * form.y;
+	}
 	const int start = q.refractor * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
 	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
 	const double n_in = q.rliquid ? row_at(start + 3 * optics_layout::ROW, nm) : 1.0;
@@ -339,22 +391,36 @@ Exact exact_bend(const shader::Path &q, double nm) {
 	return out;
 }
 
-// what one ray of the room's light brings at nm: the renderer's layers, the truth's own bend
-double exact_through(const shader::Path &q, double nm) {
-	double seen = q.back;
-	const Exact b = exact_bend(q, nm);
-	if (q.refractor >= 0) {
-		seen = shader::backdrop(b.x, q.y, q.refractor);
-	}
-	const shader::Layer *layers[4] = { &q.l0, &q.l1, &q.l2, &q.l3 };
-	for (int k = 0; k < q.layers && k < 4; ++k) {
-		const shader::Layer &l = *layers[k];
-		seen = shader::through_layer(l, seen, nm, l.body == q.refractor ? b.chord * l.wet : l.depth_cm);
-	}
-	if (q.refractor >= 0) {
-		seen = b.pass * seen + (1.0 - b.pass) * shader::scene_vec(2).y;
+// the wall at a point, from what is drawn on it (not from the renderer's table): the bench or the room,
+// then each shape in painting order
+double drawn_at(double x, double y) {
+	const shader::vec4 head = shader::scene_vec(0), bench = shader::scene_vec(1);
+	double seen = x >= bench.x && x < bench.x + bench.z && y >= bench.y && y < bench.y + bench.w ? head.y : head.z;
+	const std::vector<float> &d = shader::current->drawn;
+	for (size_t k = 0; k + 4 < d.size(); k += 5) {
+		if (x >= d[k] && x < static_cast<double>(d[k]) + d[k + 2] && y >= d[k + 1] && y < static_cast<double>(d[k + 1]) + d[k + 3]) {
+			seen = d[k + 4];
+		}
 	}
 	return seen;
+}
+
+// what one ray of the room's light brings at nm, at the point p of the screen (`size` across, for the
+// renderer's layers): the truth's own bend and its own reading of the wall
+double exact_through(const shader::vec2 &p, double size, double nm) {
+	const shader::Path q = shader::path_of(p, size);
+	if (q.layers == 0) {
+		return shader::along(q, nm, 1.0, 0.0, 0.0, false, drawn_at(p.x, p.y)); // beside every body: the wall itself, as the screen has it there
+	}
+	if (q.refractor < 0) {
+		return shader::along(q, nm, 1.0, 0.0, 0.0, false, q.back);
+	}
+	if (q.rin < 0.5) {
+		return shader::along(q, nm, 1.0, 0.0, 0.0, false, drawn_at(p.x, p.y)); // past its top or its floor: straight
+	}
+	const bool liquid = q.rwet >= 0.5;
+	const Exact b = exact_bend(q.refractor, p.x, liquid, nm);
+	return shader::along(q, nm, b.pass, b.chord, b.chord, liquid, drawn_at(b.x, p.y));
 }
 
 } // namespace
@@ -367,8 +433,7 @@ double optics_area_through(const OpticsScene &scene, int x, int y, double nm, in
 	double sum = 0.0;
 	for (int j = 0; j < grid; ++j) {
 		for (int i = 0; i < grid; ++i) {
-			const shader::Path q = shader::path_of(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid);
-			sum += exact_through(q, nm);
+			sum += exact_through(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid, nm);
 		}
 	}
 	return sum / (grid * grid);
@@ -379,7 +444,8 @@ double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {
 		return 0.0;
 	}
 	const shader::Use use(scene);
-	return exact_bend(shader::at(x, y), nm).x;
+	const shader::Path q = shader::at(x, y);
+	return q.refractor < 0 ? q.x : exact_bend(q.refractor, q.x, q.rwet >= 0.5, nm).x;
 }
 
 void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]) {
@@ -388,12 +454,12 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 		return;
 	}
 	const shader::Use use(scene);
-	std::vector<shader::Path> paths;
+	std::vector<shader::vec2> places;
 	shader::vec3 glow;
 	for (int j = 0; j < grid; ++j) {
 		for (int i = 0; i < grid; ++i) {
-			paths.push_back(shader::path_of(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid), 1.0 / grid));
-			glow = glow + paths.back().glow / static_cast<double>(grid * grid);
+			places.push_back(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid));
+			glow = glow + shader::path_of(places.back(), 1.0 / grid).glow / static_cast<double>(grid * grid);
 		}
 	}
 	const int shares = truth_shares(scene);
@@ -402,10 +468,10 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 		const shader::vec4 a = shader::share(static_cast<double>(j) / shares), b = shader::share(static_cast<double>(j + 1) / shares);
 		const double nm = shader::share((j + 0.5) / shares).x + 380.0;
 		double seen = 0.0;
-		for (const shader::Path &q : paths) {
-			seen += exact_through(q, nm);
+		for (const shader::vec2 &place : places) {
+			seen += exact_through(place, 1.0 / grid, nm);
 		}
-		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(paths.size()));
+		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(places.size()));
 	}
 	const shader::vec3 c = shader::to_linear_srgb(sum) + glow;
 	rgb[0] = c.x;
@@ -421,8 +487,17 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 	OpticsScene even = scene;
 	even.table[0 * 4 + 1] = even.table[0 * 4 + 2] = static_cast<float>(radiance); // the wall, on the bench and off it
 	even.table[2 * 4 + 1] = static_cast<float>(radiance); // the room in front, which the glass reflects
+	{
+		// nothing drawn: one radiance everywhere
+		OpticsRoom room;
+		room.x = scene.table[4];
+		room.y = scene.table[5];
+		room.w = scene.table[6];
+		room.h = scene.table[7];
+		room.bench = room.elsewhere = radiance;
+		optics_wall(even, room);
+	}
 	for (int b = 0; b < L::MAX_BODIES; ++b) {
-		even.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::REFRACT) * 4 + 2] = 0.0f; // nothing drawn behind it
 		for (const int row : { L::LIQUID_ROW, L::WALL_ROW }) {
 			for (int i = 0; i < L::ROW; ++i) {
 				even.rows[static_cast<size_t>((b * L::ROWS_PER_BODY + row) * L::ROW + i)] = 0.0f; // nothing absorbs
@@ -460,19 +535,49 @@ std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, i
 	for (int x = x0; x < x1; ++x) {
 		shown += read(with_line, x, row, nm) - read(without, x, row, nm);
 	}
-	// the truth: 1024 rays a pixel across, at the row's middle, each traced exactly (a line's image can be a
-	// tenth of a pixel wide: fewer rays would count it by whole steps)
-	constexpr int RAYS = 1024;
-	double truth = 0.0;
-	for (const OpticsScene *scene : { &with_line, &without }) {
-		const shader::Use use(*scene);
-		double sum = 0.0;
-		for (int x = x0; x < x1; ++x) {
-			for (int i = 0; i < RAYS; ++i) {
-				sum += exact_through(shader::path_of(shader::vec2(x + (i + 0.5) / RAYS, row + 0.5), 1.0 / RAYS), nm);
-			}
+	// The truth: what the line adds to one ray, with the line and without, traced exactly at the row's middle.
+	// It is nothing but where rays land on the line: those places' ends are found by halving (a line's image
+	// can be a tenth of a pixel wide: counting rays would count it by whole steps), and between two ends it
+	// is summed by Simpson's rule.
+	const auto adds = [&](double x) {
+		double with = 0.0, bare = 0.0;
+		{
+			const shader::Use use(with_line);
+			with = exact_through(shader::vec2(x, row + 0.5), 1.0e-6, nm);
 		}
-		truth += (scene == &with_line ? 1.0 : -1.0) * sum / RAYS;
+		{
+			const shader::Use use(without);
+			bare = exact_through(shader::vec2(x, row + 0.5), 1.0e-6, nm);
+		}
+		return with - bare;
+	};
+	constexpr int STEPS = 256; // a pixel: finer than any image looked for
+	std::vector<double> ends;
+	double before = adds(x0);
+	for (int i = 1; i <= (x1 - x0) * STEPS; ++i) {
+		const double x = x0 + static_cast<double>(i) / STEPS, here = adds(x);
+		if ((before != 0.0) != (here != 0.0)) {
+			double lo = x - 1.0 / STEPS, hi = x;
+			for (int it = 0; it < 40; ++it) {
+				const double mid = 0.5 * (lo + hi);
+				((adds(mid) != 0.0) == (before != 0.0) ? lo : hi) = mid;
+			}
+			ends.push_back(0.5 * (lo + hi));
+		}
+		before = here;
+	}
+	double truth = 0.0;
+	for (size_t e = 0; e + 1 < ends.size(); ++e) {
+		const double a = ends[e] + 1e-9, b = ends[e + 1] - 1e-9;
+		if (adds(0.5 * (a + b)) == 0.0) {
+			continue; // between two images
+		}
+		constexpr int N = 32;
+		double sum = adds(a) + adds(b);
+		for (int k = 1; k < N; ++k) {
+			sum += (k % 2 == 1 ? 4.0 : 2.0) * adds(a + (b - a) * k / N);
+		}
+		truth += sum * (b - a) / (3.0 * N);
 	}
 	if (std::fabs(shown - truth) > 0.01 * std::fabs(truth) + 1e-6) {
 		char buffer[200];
@@ -630,10 +735,10 @@ bool OpticsFrames::restarted(int x, int y) const {
 
 namespace {
 
-// O4 over rows [from, to) of the picture
-OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int w, int from, int to) {
+// O4 over every `stride`th row of the picture, from row `from`
+OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int w, int h, int from, int stride) {
 	OpticsParity out;
-	for (int row = from; row < to; ++row) {
+	for (int row = from; row < h; row += stride) {
 		const uint8_t *rgba = picture + static_cast<size_t>(row) * static_cast<size_t>(w) * 4;
 		for (int col = 0; col < w; ++col, rgba += 4) {
 			// Where a body covers less than a fiftieth of a pixel it is not held to account: whether such a
@@ -671,16 +776,16 @@ OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w
 	if (!shader::ready(scene) || w <= 0 || h <= 0) {
 		return OpticsParity{};
 	}
-	// the truth costs a pixel thousands of rays: the rows are shared among the machine's threads
-	const unsigned threads = std::max(1u, std::min(16u, std::thread::hardware_concurrency()));
-	std::vector<OpticsParity> parts(threads);
+	// the truth costs a pixel thousands of rays: the rows are dealt among the machine's threads, one each in
+	// turn (the bodies are in a few rows of the screen, and a thread given a band of rows would have them all)
+	const int threads = static_cast<int>(std::max(1u, std::min(16u, std::thread::hardware_concurrency())));
+	std::vector<OpticsParity> parts(static_cast<size_t>(threads));
 	std::vector<std::thread> workers;
-	for (unsigned t = 0; t < threads; ++t) {
-		const int from = static_cast<int>(static_cast<long long>(h) * t / threads), to = static_cast<int>(static_cast<long long>(h) * (t + 1) / threads);
-		workers.emplace_back([&, t, from, to] { parts[t] = compare_rows(scene, rgba, w, from, to); });
+	for (int t = 0; t < threads; ++t) {
+		workers.emplace_back([&, t] { parts[static_cast<size_t>(t)] = compare_rows(scene, rgba, w, h, t, threads); });
 	}
 	OpticsParity out;
-	for (unsigned t = 0; t < threads; ++t) {
+	for (size_t t = 0; t < workers.size(); ++t) {
 		workers[t].join();
 		const OpticsParity &p = parts[t];
 		out.covered += p.covered;
@@ -739,8 +844,8 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 	}
 	// the brightest of the wall, the room's white, the room in front and what is drawn on the wall
 	double most = std::max({ 1.0, static_cast<double>(scene.table[1]), static_cast<double>(scene.table[2]), static_cast<double>(scene.table[2 * 4 + 1]) });
-	for (int k = 0; k < optics_layout::MAX_SHAPES; ++k) {
-		most = std::max(most, static_cast<double>(scene.table[static_cast<size_t>(optics_layout::SHAPE_BASE + 2 * k + 1) * 4]));
+	for (size_t k = 4; k < scene.drawn.size(); k += 5) {
+		most = std::max(most, static_cast<double>(scene.drawn[k]));
 	}
 	for (int k = 0; k <= 800; ++k) {
 		const double nm = 380.0 + 0.5 * k, t = optics_through(scene, x, y, nm);

@@ -187,18 +187,28 @@ CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
  * every frame, each pixel keeping its own history; these are its inputs, laid
  * out as lab/optics_scene.hpp says: the header and the bodies (vec_count
  * vec4s), each body's spectra at 1 nm (row_count floats), narrow lines
- * (line_count vec4s), and the room light's energy table (light_count vec4s). */
+ * (line_count vec4s), the room light's energy table (light_count vec4s), each
+ * refracting body's map (map_count vec4s) and the wall as a table (wall_count
+ * vec4s). */
 typedef struct cg_optics {
 	uint32_t size; /* sizeof(cg_optics), set by the caller */
 	int32_t vec_count; /* the scene is 4 * vec_count floats */
 	const float *table;
-	uint64_t revision; /* moves when any of the four does: upload them then */
+	uint64_t revision; /* moves when any of these four does: upload them then */
 	int32_t row_count;
 	const float *rows;
 	int32_t line_count;
 	const float *lines; /* 4 * line_count floats */
 	int32_t light_count;
 	const float *lights; /* 4 * light_count floats */
+	/* The refraction maps and the wall's table (GAME_SPEC §12.3): large and seldom
+	 * changed, each with a revision of its own. */
+	int32_t map_count;
+	const float *maps; /* 4 * map_count floats */
+	uint64_t maps_revision;
+	int32_t wall_count;
+	const float *wall; /* 4 * wall_count floats */
+	uint64_t wall_revision;
 } cg_optics;
 
 /* Borrowed until the next call on this ui. */

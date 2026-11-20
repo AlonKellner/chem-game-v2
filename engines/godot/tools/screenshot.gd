@@ -6,11 +6,12 @@ extends SceneTree
 # alone, settled, is held to what each pixel should show (GAME_SPEC §18: O4), and
 # at the end the GPU's time for one pass is measured.
 #
-#   godot --path engines/godot -s tools/screenshot.gd -- <output directory>
+#   godot --path engines/godot -s tools/screenshot.gd -- <output directory> [cost]
 
 var _lab: ChemLab
 var _view: SubViewport # the game's own 1920 x 1080, whatever the window is
 var _failed := false
+var _cost_only := false # a second argument, "cost": no pictures, no O4, the pass's cost alone
 
 func _drag(what: String, to: String) -> void:
 	var a := _lab.locate(what)
@@ -53,7 +54,7 @@ func _shoot(dir: String, name: String) -> void:
 	# the game is paused: the optical pass settles (each pixel's history), in a bounded number of frames
 	for i in 40:
 		await process_frame
-	if DisplayServer.get_name() == "headless": # it paints nothing
+	if DisplayServer.get_name() == "headless" or _cost_only: # it paints nothing; or only the pass's cost is asked
 		return
 	var image := _view.get_texture().get_image()
 	image.save_png(dir.path_join(name + ".png"))
@@ -91,6 +92,7 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
 	DirAccess.make_dir_recursive_absolute(dir)
+	_cost_only = args.size() > 1 and args[1] == "cost"
 	_view = SubViewport.new()
 	_view.size = Vector2i(1920, 1080)
 	_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS

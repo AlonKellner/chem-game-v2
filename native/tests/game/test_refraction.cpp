@@ -111,27 +111,29 @@ TEST_CASE("O5: where every index is 1, refraction changes nothing: a pixel is th
 			bent.rows[static_cast<size_t>(row * ROW + i)] = 1.0f;
 		}
 	}
-	// a pixel whose rays all go one way is its straight view exactly; one at the rim, where some of its
-	// rays miss the vessel, is the average of its straight rays (Stage 20), as the truth averages them
-	double worst = 0.0, rim_worst = 0.0;
+	lab::optics_maps(bent); // a map is traced for its body's indices
+	// Every pixel is the average of its straight rays, as the truth averages them (64 across and down, each
+	// its own chord): at the rim too, where some of its rays miss the vessel and the rest cross little liquid.
+	// And in the vessel's middle half, where the chord hardly changes across a pixel, that is the straight
+	// path's own light. (Until Stage 20, when a pixel was its centre's ray, the two were equal to 1e-9.)
+	double middle_worst = 0.0, truth_worst = 0.0;
 	int rims = 0;
 	for (int y = LOW - 60; y <= LOW + 10; y += 7) {
 		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); x += 3) {
-			const bool rim = x < static_cast<int>(X) + 2 || x > static_cast<int>(X + W) - 3;
+			const bool middle = std::fabs(x + 0.5 - (X + W / 2)) < W / 4;
+			rims += x < static_cast<int>(X) + 2 || x > static_cast<int>(X + W) - 3 ? 1 : 0;
 			for (const double nm : { 420.0, 550.0, 700.0 }) {
-				const double a = lab::optics_through(bent, x, y, nm), b = lab::optics_through(straight, x, y, nm);
-				if (rim) {
-					rim_worst = std::max(rim_worst, std::fabs(a - lab::optics_area_through(bent, x, y, nm, 64)));
-					++rims;
-				} else {
-					worst = std::max(worst, std::fabs(a - b) / std::max(b, 1e-300));
+				const double a = lab::optics_through(bent, x, y, nm);
+				truth_worst = std::max(truth_worst, std::fabs(a - lab::optics_area_through(bent, x, y, nm, 64)));
+				if (middle) {
+					middle_worst = std::max(middle_worst, std::fabs(a - lab::optics_through(straight, x, y, nm)));
 				}
 			}
 		}
 	}
-	CHECK(worst < 1e-9);
 	CHECK(rims > 0);
-	CHECK(rim_worst < 0.005); // of the room's white
+	CHECK(truth_worst < 0.002); // of the room's white
+	CHECK(middle_worst < 2e-4);
 	// and it fires: water's own index bends and reflects
 	const OpticsScene water = scene_of(v, room(true));
 	CHECK(std::fabs(lab::optics_through(water, AXIS + 30, LOW, 550.0) - lab::optics_through(straight, AXIS + 30, LOW, 550.0)) > 1e-3);
@@ -192,7 +194,7 @@ TEST_CASE("refraction: the light takes the bent chord through the liquid, at its
 		// exp(-tau L) along the chord the ray really crosses
 		const double front = 0.3, reflected = (1.0 - b.pass) * front;
 		const double t_salt = (lab::optics_through(salt, AXIS + k, LOW, 680.0) - reflected) / (lab::optics_through(plain, AXIS + k, LOW, 680.0) - reflected);
-		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-5));
+		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-3)); // the map's chord, between its samples
 		// the chord of a ray d from the axis inside water is 2 sqrt(r^2 - (d / n)^2): longer than the straight one
 		const double cm_per_px = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
 		const double glass_cm = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4];
@@ -224,15 +226,16 @@ TEST_CASE("refraction: on the bench the vessels show the grid behind them, bent,
 	const OpticsScene &scene = ui->optics();
 	REQUIRE(lab::check_O1(scene) == "");
 	CHECK(scene.table[2 * 4 + 2] == 1.0f); // refraction is on in the game
-	int shapes = 0, bending = 0;
+	int bending = 0;
 	using namespace lab::optics_layout;
 	for (int i = 0; i < static_cast<int>(scene.table[0]); ++i) {
 		const size_t at = static_cast<size_t>(HEADER_VECS + i * BODY_VECS);
-		shapes += static_cast<int>(scene.table[(at + REFRACT) * 4 + 2]);
 		bending += scene.table[(at + REFRACT) * 4 + 3] > 0.5f ? 1 : 0;
 	}
-	CHECK(shapes > 0); // the grid's lines behind them
+	CHECK(scene.drawn.size() >= 5 * 40); // the grid's lines behind them, and the rest of the wall's drawing: all of it
+	CHECK(scene.wall[0] > 40.0f); // their edges, the wall's breakpoints
 	CHECK(bending >= 5); // the vessels; not the balloon
+	CHECK(scene.maps.size() > 1000); // each with its map
 	// somewhere in a vessel the pixel's view lands on a grid line it does not lie on
 	float fx = 0, fy = 0;
 	REQUIRE(ui->locate("item:jar", fx, fy));
@@ -412,20 +415,20 @@ int prism_wrong(lab::PrismDemo &demo, lab::OpticsFrames &rendered, bool cuts, in
 
 } // namespace
 
-TEST_CASE("optics: a pixel's bands are cut where its bent view crosses a drawn edge: the prism's spectrum settles, and stays right when turned (Stage 11)") {
+TEST_CASE("optics: a bent view sweeping across a drawn edge is read exactly: the prism's spectrum settles, and stays right when turned (Stage 11, 20)") {
+	// A pixel sees the slit through a narrow window of wavelengths. Until Stage 20 each such window was found
+	// by bisection and the band cut there; now the wall is integrated over the band's sweep, and no window is
+	// missed, with the cuts on or off (they are for narrow absorption lines alone).
 	lab::PrismDemo demo;
 	lab::OpticsFrames rendered(890, 538, 300, 4);
 	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
 	demo.turn(0.06);
 	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
-	// without the cuts, pixels that see the slit through a narrow window of wavelengths miss it and stay wrong
 	lab::PrismDemo plain;
 	lab::OpticsFrames uncut(890, 538, 300, 4);
-	const int before = prism_wrong(plain, uncut, false, 40);
+	CHECK(prism_wrong(plain, uncut, false, 40) == 0);
 	plain.turn(0.06);
-	const int after = prism_wrong(plain, uncut, false, 40);
-	MESSAGE("without cuts: " << before << " pixels wrong on the row as it opens, " << after << " after a turn");
-	CHECK(before + after > 0);
+	CHECK(prism_wrong(plain, uncut, false, 40) == 0);
 }
 
 TEST_CASE("optics: a dragged vessel's glass is seen right where it stops, above its liquid too (Stage 11)") {
