@@ -34,13 +34,14 @@ integrals, a pixel pass of lookups).
 | Phase | Topic | Status |
 |---|---|---|
 | 20.6 | The spike: `bend_at` a map lookup, everything else as built | Done: see below |
-| 20.7 | The spec: §12.2, §12.3, §20 | Pending |
-| 20.8 | The tracer on the CPU: surface patches, 3D rays | Pending |
-| 20.9 | Maps: knots across a body, rows in wavelength | Pending |
-| 20.10 | The wall table and its exact integrals | Pending |
-| 20.11 | The pixel pass, in the reference: lookups and the wall over a band's sweep | Pending |
-| 20.12 | The GPU host: the maps' and the wall's buffers; the cost | Pending |
-| 20.13 | Pictures before and after; the user judges by eye and signs off | Pending |
+| 20.7 | The spec: §12.2, §12.3, §20 | Done |
+| 20.8 | The tracer on the CPU: surface patches, 3D rays (`lab/optics_trace.hpp`) | Done |
+| 20.9 | Maps: samples across a body, pieces in wavelength | Done |
+| 20.10 | The wall table and its exact integrals | Done |
+| 20.11 | The pixel pass, in the reference: lookups and the wall over a band's sweep | Done |
+| 20.12 | The GPU host: the maps' and the wall's buffers; the cost | Done; **the cost gate is not met** (1.77 ms against 1.07): the user's decision |
+| 20.13 | Real glass: each vessel's wall thickness as sourced data | Pending |
+| 20.14 | Pictures before and after; the user judges by eye and signs off | Pending |
 
 ### The spike, and the measurement corrected
 
@@ -66,3 +67,76 @@ integrals, a pixel pass of lookups).
 - **What remains above the floor** is the wall's shape loop (2.0 ms), the cut search (0.8 ms) and
   the footprint's subdivision (1.3 ms): what the wall table and the exact sweep replace.
 - **The gate for the GPU step:** a restarting pass at or under `main`'s 1.07 ms.
+
+## What was built (2026-11-20)
+
+- **The tracer** (`native/game/src/optics_trace.cpp`): float64, on the CPU. A body is a list of
+  surface patches (a quadric or a plane, its bounds, the medium on each side); rays are 3D;
+  vector Snell, Fresnel, total internal reflection. Held to the cylinder's closed form to 1e-10,
+  the prism's least deviation, and a ball lens's focus (the path that bends up and down).
+- **A map per body**, traced once:
+  - four samples a pixel across, on the screen's own quarter pixels;
+  - each whole pixel's level: 1, 2 or 4 equal parts;
+  - pieces in wavelength, even in 1/λ², a ray the cubic through each piece's four nodes. A
+    vessel is one piece (about 3,000 rays, 0.6 ms); the prism 16 to 32.
+- **The wall as a table**: breakpoints across, a profile for each row of pixels, the running
+  integral in two floats. No limit on shapes; overlaps exact.
+- **The pixel pass**: a pixel is its parts; the wall is integrated exactly over each part's
+  footprint and over the band's sweep; liquids and surfaces are read once a step.
+- **The truth** stays independent: its own tracer, the wall read from the shapes themselves.
+
+## The cost on the GPU, and what it taught
+
+Protocol: a restarting pass, read between 8 and 24 extra passes, at 1920 x 1080, on an M3 Pro.
+
+| Build | A restarting pass |
+|---|---|
+| `main` before the stage | 1.07 ms |
+| Footprints with the tracer on the GPU (88461a8) | 8.94 ms |
+| Maps and the wall table, first working (the pixel pass as lookups) | 9.0 ms |
+| The spectra read once a step, the parts sharing their boundary rays (6b39e95) | 3.9 ms |
+| A reading for one-piece maps with nothing it never needs | 2.4 ms |
+| Four samples a pixel (a pixel in four parts at most) | 1.72 ms |
+| Work groups 2 x 32 pixels, not 8 x 8 | 1.56 ms |
+| A rim's two sides carried on from their neighbours (O5 at the rim) (a2f36fc) | 1.77 ms |
+| The same with one part a pixel everywhere (a bound, not a build) | 1.04 ms |
+| No bodies near (the floor) | 0.53 ms |
+
+`make screenshots`: 20 s (69 s on `main`); O4 on all 13 pictures, the largest difference 2 on the
+eye metric.
+
+**Findings:**
+- **The GPU pays for what a band could do, done or not.** Removing a branch that no pixel ever
+  took (a ray read between two samples) saved 0.9 ms; a rare one (a part split at a route's
+  change) 0.5 ms; the wall's slow paths 0.75 ms. Marking branches (`[[dont_flatten]]`) changed
+  nothing. So the hot loop must hold only what most pixels need, and the rest sits in a separate
+  reading chosen once a pixel.
+- **Reads are not the cost.** Halving the buffer reads of a band changed nothing; laying a
+  sample's rows side by side in memory, 3%.
+- **State carried in local arrays is slow.** One sweep through a batch's bands, each boundary
+  ray and its place on the wall carried from band to band in arrays, read almost nothing and
+  cost 6.7 ms against 3.9.
+- **Pixels run together wait for the slowest.** The cost follows the most parts in a group more
+  than the mean: tall, narrow work groups (a vessel's column has one level) took 9% off.
+- **The first measurement of a lookup (0.02 ms a screen) was of a trivial one**, and misled the
+  plan: a real lookup's cost is its branches.
+
+**Decisions:**
+- `MAP_SLOPE_TOLERANCE` 0.02 to 0.08: a thin line's light within 4%, half of what the eye sees of
+  the brightest line. O8 (1% of a line's light, summed over the pixels) still holds.
+- `MAP_LANDING_TOLERANCE` 0.01 to 0.02 of a pixel of the screen. The brute-force comparison is
+  unchanged: worst 3.3 on the eye metric (visible above 8), mean 0.52.
+- Four samples a pixel, not sixteen. With at most 8 or 4 parts a pixel every invariant holds;
+  with 2, O5 fails.
+- At a route's change each side's wall is read where its own ray lands: giving it its footprint
+  costs 0.3 ms, for a quarter of a pixel of rays that graze a surface.
+
+## Open
+
+- **The cost gate** agreed for this step was `main`'s 1.07 ms. The pass is at 1.77 ms. The bound
+  with one part a pixel is 1.04 ms: what is over it is the rims (six pixels each side of a
+  vessel in four parts) and the pixels beside them in two.
+- **A prism being turned** traces its map again each frame (3 to 6 ms on the CPU, 16 to 32
+  pieces): not measured in the window.
+- **The general reading** (a map of several pieces) is as slow as before for the pixels that
+  take it: the prism demo only, today.

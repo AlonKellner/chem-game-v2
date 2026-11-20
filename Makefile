@@ -17,7 +17,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: prism prism-shots core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -132,6 +132,12 @@ prism-shots: native
 
 run:
 	$(GODOT) --path $(GODOT_PROJECT)
+
+# The optical pass's cost on the GPU, without the pictures or O4: a settled
+# pass, and one where every pixel's history starts again (docs/TDD_20_FOOTPRINTS.md).
+pass-cost: native
+	mkdir -p build/screenshots
+	perl -e 'alarm 90; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots cost
 
 # Five screenshots of the host through the demo -> build/screenshots; at each,
 # the GPU's optical pass against the reference renderer (O4), and the GPU's

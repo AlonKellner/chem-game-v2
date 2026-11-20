@@ -949,15 +949,30 @@ of every ray through its area, and its colour is their average (a box filter).
   its indices, the wall's distance), the ray's place across it and the wavelength. It does not
   depend on where the body stands, what it holds or how full it is. So it is traced once and
   kept:
-  - **Knots across the body:** one a pixel where the map is straight, halved (to 1/32 of a pixel)
-    wherever the middle ray departs from the straight line between its neighbours, or takes
-    another route (a rim, a ray turned back, a fold).
-  - **Rows in wavelength:** as many as keep the interpolation between rows within a hundredth of
-    a pixel.
+  - **Samples across the body:** four a pixel, on the screen's own quarter pixels, so a pixel's
+    parts begin and end on samples wherever the body stands. Each whole pixel has its level: in
+    how many equal parts (1, 2 or 4) it must be read for the map to be straight within each.
+    Straight means:
+    - the middle ray lands within a fiftieth of a pixel of the screen of where the ends put it
+      (the error on the wall, over how fast the landing moves across the body there);
+    - the slopes of a part's two halves are alike within 8%: a thin line's image is as bright as
+      the slope where it lands is small, so its light is true within 4%;
+    - what the surfaces pass is within 0.005, and the chord's square within 1%.
+  - **A route's change** (a rim, a ray turned back, a fold) is in a part of the finest kind, and
+    the map says how far along the part it is (found by halving).
+  - **Pieces in wavelength.** A ray is kept at the four nodes of each piece (its ends and its
+    thirds), the pieces even in 1/λ², which glass and water disperse nearly straight in. Within a
+    piece a ray is the cubic through its nodes: where it lands, what passes, its chord's square.
+    There are as many pieces as keep that cubic within the same fiftieth of a pixel (or a
+    twentieth of a nanometre, where a ray leaves a face nearly along it and its landing runs away
+    with the wavelength), and as keep a route's boundary from moving further than that between
+    two nodes; at most 64. A vessel's whole spectrum is one piece: one cell is a ray at every
+    wavelength (about 3,000 rays and 0.6 ms for a vessel's map). A ray whose route changes within
+    a piece is its nearest node's ray there.
   - **Two cores:** liquid and air, for the rows of the screen under and over the liquid's surface.
   - **Past the body's rim the map is the identity:** a ray that misses the body goes straight.
-  - A map is traced again only when its body's shape, glass or indices change: a prism being
-    turned.
+  - A map is traced again only when its body's shape, glass or indices change, or the fraction of
+    a pixel its axis stands at: a prism being turned, a vessel being dragged.
 - **Brightness is not made or lost by bending.** Glass that squeezes a larger patch of wall into
   a pixel spreads the pixel's rays over more directions in step: the radiance along a ray is
   conserved (the radiance theorem). A uniform wall seen through any clear shape is as bright as
@@ -969,15 +984,30 @@ of every ray through its area, and its colour is their average (a box filter).
   radiance, the topmost shape's as on the screen. Each row of pixels has its profile across, with
   its running integral and that integral's integral, so the wall's light over any interval, and
   over an interval sweeping, is exact: however many shapes, however large, however they overlap.
-- **The footprint.** A pixel is the knot intervals it spans. The rays of one land in an interval
-  of the wall, a pixel high, and as the wavelength crosses a band that interval sweeps along the
-  wall.
-  - The wall's light is integrated exactly over the interval and over the sweep (the footprint's
-    width taken as its mean across the band).
+- **The footprint.** A pixel is its parts. The rays of one land in an interval of the wall, a
+  pixel high, and as the wavelength crosses a band that interval sweeps along the wall.
+  - The wall's light is integrated exactly over the interval and over the sweep: the mean, along
+    each boundary ray's sweep, of the row's integral (the footprint's width taken as its mean
+    across the step). No edge is missed, in place or along the sweep.
+  - A band is swept in straight steps, even in wavelength: as many as keep the sweep within a
+    fiftieth of a pixel of the true landing (the map says how fast each pixel's landing bends in
+    wavelength), at most 16. Each step is weighed by its share of the band's energy: a band is
+    even in energy, not in wavelength.
   - What is smooth in wavelength (the liquids' absorption, what the surfaces let through) is read
-    at the band's moving point (§12.2), on the interval's middle ray.
-  - Where a knot interval's two ends take different routes (a thirty-second of a pixel), each half
-    is read as its own end's ray.
+    once a step, at the step's own point (the band's moving point, §12.2). What passes is the mean
+    of the part's two boundary rays'; the liquid absorbs as the part's rays do together, in closed
+    form, their chords' square taken straight across the part (as it is, exactly, where a chord
+    rises as a root at a rim).
+  - Where the route changes within a part (a quarter of a pixel), each side is its own ray's, by
+    the share the map gives it. What passes and the chord are carried on to the change from the
+    ray beyond (the chord by its square: at a vessel's rim it falls to nothing); the wall is read
+    where the side's own ray lands.
+  - **One light, two readings.** What a pass costs on the GPU follows how much there is to do in a
+    band, whether it is done or not (measured: a branch never taken cost as much as one always
+    taken). So a pixel through a map of one piece, which is every vessel's, is read by a reading
+    with nothing of what it never needs; a pixel through any other map (a prism's) by the general
+    one. Where a pixel's rays go one way the two are the same arithmetic, and a test holds them
+    to the same light.
   - A row across a liquid's surface is its two cores' lights, each by its share of the pixel; a
     row across a vessel's top or floor is the bent view and the straight one, likewise.
   - The bodies are upright, so a ray is bent only across: the footprint's height is the pixel's.
@@ -1704,7 +1734,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | O7 | A uniform wall seen through any clear geometry is the wall's radiance: with absorption and reflection turned off, every pixel a body covers shows the wall's radiance (the radiance theorem). It fires on a renderer that weights the wall by the area its rays land on | tolerance (float32) | 20 |
-| O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the rays are 1,024 a pixel, traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole | tolerance (1% of the line's light) | 20 |
+| O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the ends of the line's image are found by halving, on rays traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole | tolerance (1% of the line's light) | 20 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | S1 | No NaN or infinity in any output | exact | 2 |
@@ -1776,7 +1806,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
-| What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is not traced into another (each item is drawn at its own scale); a footprint's width is taken as its mean across one band of wavelengths; between a map's knots and rows the landing is interpolated (within a hundredth of a pixel, a route's change within a thirty-second) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
+| What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is not traced into another (each item is drawn at its own scale); a footprint's width is taken as its mean across one step of a band's wavelengths; between a map's samples and within its pieces a ray is interpolated (within a fiftieth of a pixel of the screen); a pixel is read in four parts at most; at a route's change each side's wall is read where its own ray lands (a quarter of a pixel at most, of rays that graze a surface) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
 | The room's is the only light; a hot solid's glow is its exact colour, added to what the pixel shows outside its history | No lamp or glowing gas lights the scene yet (§12.2 is built for them); the glow is not dimmed by what lies in front of the solid |
