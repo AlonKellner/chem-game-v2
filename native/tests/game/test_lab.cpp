@@ -504,6 +504,46 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 	}
 }
 
+TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its mass, and a save keeps it (Stage 20)") {
+	// what is seen through a vessel bends by its wall's thickness (GAME_SPEC §12.3): data of its own, ISO 3819's
+	// least wall for a beaker of its capacity
+	auto lab = demo_bench();
+	const auto wall_mm = [](const lab::Lab &l, const char *id) {
+		for (const lab::ItemView &v : l.view().items) {
+			if (v.id == id) {
+				return v.wall_mm;
+			}
+		}
+		FAIL("no item " << id);
+		return -1.0;
+	};
+	CHECK(wall_mm(*lab, "jar") == 0.8); // 50 mL
+	CHECK(wall_mm(*lab, "flask") == 1.1); // 250 mL
+	CHECK(wall_mm(*lab, "acid") == 1.3); // 500 mL
+	CHECK(wall_mm(*lab, "balloon") == 0.0); // rubber: none given
+	std::string why;
+	auto again = lab::Lab::load(lab->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(wall_mm(*again, "acid") == 1.3);
+	CHECK(again->digest() == lab->digest());
+	// a save from before walls had a thickness loads, its walls of none
+	json old = json::parse(lab->save());
+	for (json &item : old.at("bench").at("items")) {
+		item.erase("wall_mm");
+	}
+	auto older = lab::Lab::load(old.dump(), why);
+	REQUIRE_MESSAGE(older != nullptr, why);
+	CHECK(wall_mm(*older, "acid") == 0.0);
+	// a bench that gives none has a wall of none; less than none is refused
+	auto plain = lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "a", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 20}]})", why);
+	REQUIRE_MESSAGE(plain != nullptr, why);
+	CHECK(wall_mm(*plain, "a") == 0.0);
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "a", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 20, "wall_mm": -1}]})", why) == nullptr);
+	CHECK(why.find("wall") != std::string::npos);
+}
+
 TEST_CASE("lab: a save that is not one is refused (Stage 8)") {
 	std::string why;
 	CHECK(lab::Lab::load("not json", why) == nullptr);

@@ -43,7 +43,7 @@ SubstanceView substance(const char *species, char phase, double mol, double g, b
 	return s;
 }
 
-// 100 mL of copper sulfate solution, with or without its 50 g of glass
+// 100 mL of copper sulfate solution, with or without its glass (50 g, 1.1 mm thick)
 ItemView vessel(double molar, bool glass) {
 	ItemView v;
 	v.id = "flask";
@@ -57,6 +57,7 @@ ItemView vessel(double molar, bool glass) {
 	}
 	if (glass) {
 		v.contents.push_back(substance("glass", 's', 0.83, 50.0, true));
+		v.wall_mm = 1.1; // a 250 mL beaker's wall (ISO 3819)
 	}
 	return v;
 }
@@ -184,6 +185,45 @@ TEST_CASE("refraction: a vessel of water is a lens: inverted and magnified, as p
 	CHECK(lab::optics_bend(scene, AXIS + 10, static_cast<int>(Y) + 10, 550.0).x == doctest::Approx(AXIS + 10.5));
 }
 
+TEST_CASE("refraction: glass bends by how thick the vessel is made, not by what its wall weighs (Stage 20)") {
+	// above the liquid a vessel is a shell of glass around air: a weak lens that spreads the view. Near the axis
+	// its two surfaces turn a ray by -2 (1 - 1/n) t d / (R r), so the wall is seen at 1 + 2 D (n - 1) t / (n R r) times
+	const double d_wall = 20.0, n = index_at(chem::builtin::glass, 550.0);
+	const int high = static_cast<int>(Y) + 10;
+	const auto times = [&](const ItemView &v) {
+		const OpticsScene scene = scene_of(v, room(true));
+		return (lab::optics_bend(scene, AXIS + 1, high, 550.0).x - lab::optics_bend(scene, AXIS - 1, high, 550.0).x) / 2.0;
+	};
+	ItemView made = vessel(0.0, true);
+	const OpticsScene scene = scene_of(made, room(true));
+	const double r_out = 45.0 * scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
+	const auto paraxial = [&](double t) { return 1.0 + 2.0 * d_wall * (n - 1.0) * t / (n * r_out * (r_out - t)); };
+	const double thin = times(made);
+	MESSAGE("a 250 mL beaker's 1.1 mm of glass, 20 cm in front of the wall: the wall seen through it at " << thin << " times (paraxial: " << paraxial(0.11) << ")");
+	CHECK(thin == doctest::Approx(paraxial(0.11)).epsilon(0.01));
+	// the wall's mass is its heat's, and bends nothing: five times the glass, the same view
+	ItemView heavy = made;
+	heavy.contents.back().g *= 5.0;
+	heavy.contents.back().mol *= 5.0;
+	CHECK(times(heavy) == thin);
+	// twice as thick, about twice the spread
+	ItemView thick = made;
+	thick.wall_mm = 2.2;
+	CHECK(times(thick) == doctest::Approx(paraxial(0.22)).epsilon(0.01));
+	CHECK(times(thick) - 1.0 > 1.9 * (thin - 1.0));
+	// a wall of no thickness is no glass: nothing bends above the liquid, and face on only the liquid's
+	// own surfaces turn light away
+	ItemView none = made;
+	none.wall_mm = 0.0;
+	CHECK(times(none) == doctest::Approx(1.0));
+	const double nw = index_at(chem::builtin::water, 550.0), r = std::pow((nw - 1.0) / (nw + 1.0), 2.0);
+	CHECK(lab::optics_bend(scene_of(none, room(true)), AXIS, LOW, 550.0).pass == doctest::Approx((1.0 - r) * (1.0 - r)).epsilon(1e-3));
+	// a wall as thick as the vessel is wide is glass all through: a rod, still a scene that holds
+	ItemView rod = made;
+	rod.wall_mm = 100.0;
+	CHECK(times(rod) < -1.0); // a strong lens: the view inverted
+}
+
 TEST_CASE("refraction: the light takes the bent chord through the liquid, at its own wavelength (Stage 11)") {
 	// weak enough that some light gets through six centimetres at 680 nm
 	const OpticsScene salt = scene_of(vessel(0.02, true), room(true)), plain = scene_of(vessel(0.0, true), room(true));
@@ -204,7 +244,8 @@ TEST_CASE("refraction: the light takes the bent chord through the liquid, at its
 			CHECK(b.chord > 2.0 * std::sqrt(r_in * r_in - d * d));
 		}
 	}
-	CHECK(salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4] > 0.05); // 50 g of glass: about a millimetre
+	// its glass is as thick as the vessel is made, whatever its wall weighs
+	CHECK(salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4] == doctest::Approx(0.11));
 }
 
 TEST_CASE("refraction: glass shows the room in front at its rims, and lets most through face on (Stage 11)") {

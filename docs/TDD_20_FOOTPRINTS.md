@@ -39,9 +39,9 @@ integrals, a pixel pass of lookups).
 | 20.9 | Maps: samples across a body, pieces in wavelength | Done |
 | 20.10 | The wall table and its exact integrals | Done |
 | 20.11 | The pixel pass, in the reference: lookups and the wall over a band's sweep | Done |
-| 20.12 | The GPU host: the maps' and the wall's buffers; the cost | Done; **the cost gate is not met** (1.77 ms against 1.07): the user's decision |
-| 20.13 | Real glass: each vessel's wall thickness as sourced data | Pending |
-| 20.14 | Pictures before and after; the user judges by eye and signs off | Pending |
+| 20.12 | The GPU host: the maps' and the wall's buffers; the cost | Done. The cost gate (1.07 ms) was not met: 1.77 ms, which the user accepted on 2026-11-20 ("Approved, proceed") |
+| 20.13 | Real glass: each vessel's wall thickness as sourced data | Done |
+| 20.14 | Pictures before and after; the user judges by eye and signs off | Pictures taken; the sign-off pending |
 
 ### The spike, and the measurement corrected
 
@@ -131,11 +131,39 @@ eye metric.
 - At a route's change each side's wall is read where its own ray lands: giving it its footprint
   costs 0.3 ms, for a quarter of a pixel of rays that graze a surface.
 
+## Real glass (2026-11-20)
+
+The user asked whether thin glass should bend as much as the vessels did, and to fix it if not.
+It should not: a vessel's glass was its heat-holding mass spread over its side and floor (2.4 mm
+for the 250 mL flask, 2.8 mm for the 50 mL jar, a fifth of its radius at most).
+
+- **A thickness of its own.** Each vessel's `wall_mm` in the bench's data, apart from `wall_g`:
+  ISO 3819's least wall for a beaker of its capacity (0.8, 1.1, 1.3 mm at 50, 250, 500 mL;
+  `docs/DATA_SOURCES.md`). It is in the item, the view and the save; not in the digest, which is
+  the world's (the session records are unchanged).
+- **General at its ends.** A wall of no thickness is no glass (a bench that gives none; a save
+  from before); one as thick as the vessel is wide is glass all through. No cap.
+- **Measured.** Through an empty 250 mL vessel the wall behind is seen at 1.146 times its size
+  (the paraxial 1 + 2 D (n − 1) t / (n R r): 1.146); at the flask's old 2.4 mm the same formula gives 1.33. The wall's mass changes
+  nothing (`refraction: glass bends by how thick the vessel is made`).
+- **On the GPU.** O4 on all 13 pictures (largest difference 2, none visible); a restarting pass
+  1.73 ms; `make screenshots` 34 s.
+- **The wall's distance** (20 cm, calibrated) is unchanged: for the user's eye in the pictures.
+
+## After this stage
+
+| Stage | Topic |
+|---|---|
+| 21 | **Layers of refraction** (the user, 2026-11-20): what the player holds is shown in front of what stands on the bench, with refraction, the spectral effects and everything; layers are general (a vessel in a bath), at least two, up to six. GAME_SPEC §12.3 |
+| 22 | Measured data (spectra, rates): goldens re-recorded with approval, colours judged by eye |
+| later | Spheres and cones (new patch lists, a map with the screen's rows too); caustics; controllers |
+
 ## Open
 
-- **The cost gate** agreed for this step was `main`'s 1.07 ms. The pass is at 1.77 ms. The bound
-  with one part a pixel is 1.04 ms: what is over it is the rims (six pixels each side of a
-  vessel in four parts) and the pixels beside them in two.
+- **The cost** is 1.77 ms a restarting pass against `main`'s 1.07 ms, accepted by the user. The
+  bound with one part a pixel is 1.04 ms: what is over it is the rims (six pixels each side of a
+  vessel in four parts) and the pixels beside them in two. A way back to `main`'s cost for a
+  restart from a colour's change: keep each pixel's wall term (new GPU state; not planned).
 - **A prism being turned** traces its map again each frame (3 to 6 ms on the CPU, 16 to 32
   pieces): not measured in the window.
 - **The general reading** (a map of several pieces) is as slow as before for the pixels that

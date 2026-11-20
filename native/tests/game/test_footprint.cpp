@@ -48,6 +48,7 @@ const ItemView &water_vessel() {
 		it.celsius = 20.0;
 		it.liquid_ml = it.condensed_ml = 100.0;
 		it.contents = { substance("water", 'l', 5.5, 100.0), substance("glass", 's', 0.83, 50.0, true) };
+		it.wall_mm = 1.1; // a 250 mL beaker's wall (ISO 3819)
 		return it;
 	}();
 	return v;

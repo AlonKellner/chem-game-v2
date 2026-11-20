@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size. goals: the game's, one to an outbox slot (GAME_SPEC §13.5): each term a quantity of what is handed in there, compared.",
+	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. wall_g: the wall's mass, which holds heat; wall_mm: how thick it is, which bends what is seen through it (ISO 3819's least wall for a beaker of its capacity). A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size. goals: the game's, one to an outbox slot (GAME_SPEC §13.5): each term a quantity of what is handed in there, compared.",
 	"grid": [
 		28,
 		15
@@ -16,6 +16,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 100,
+			"wall_mm": 1.1,
 			"loss": 0.9
 		},
 		{
@@ -32,6 +33,7 @@
 			"volume_ml": 50,
 			"wall": "glass",
 			"wall_g": 50,
+			"wall_mm": 0.8,
 			"loss": 0.1,
 			"coolant": {
 				"celsius": 15,
@@ -44,6 +46,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 80,
+			"wall_mm": 1.1,
 			"loss": 0.5
 		},
 		{
@@ -52,6 +55,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 80,
+			"wall_mm": 1.1,
 			"loss": 0.5
 		},
 		{
@@ -60,6 +64,7 @@
 			"volume_ml": 50,
 			"wall": "glass",
 			"wall_g": 40,
+			"wall_mm": 0.8,
 			"loss": 0.3,
 			"contents": {
 				"malachite": {
@@ -74,6 +79,7 @@
 			"volume_ml": 500,
 			"wall": "glass",
 			"wall_g": 250,
+			"wall_mm": 1.3,
 			"loss": 0.8,
 			"contents": {
 				"water": {

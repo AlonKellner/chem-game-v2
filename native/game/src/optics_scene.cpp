@@ -230,7 +230,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 
 		// ---- what is in it, at 1 nm, and its liquid's narrow lines
 		Spectrum reflectance{};
-		double solid_g = 0.0, cross_section_cm2 = 0.0, wall_g = 0.0, wall_density = 0.0;
+		double solid_g = 0.0, cross_section_cm2 = 0.0;
+		bool glass = false;
 		const int first_line = line_count;
 		for (const SubstanceView &s : v.contents) {
 			const chem::SpeciesId id = chem::builtin_species().find(s.species);
@@ -242,8 +243,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					for (size_t i = 0; i < n.size(); ++i) {
 						wall_index[i] = static_cast<float>(n[i]);
 					}
-					wall_g += s.g;
-					wall_density = chem::optics::index_density(id);
+					glass = true;
 				}
 				if (kind == Kind::Transmit) {
 					const Spectrum &tr = chem::optics::spectrum(id);
@@ -312,11 +312,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const double cm_per_px = d_cm / body.w;
 			const double floor_cm2 = PI * d_cm * d_cm / 4.0;
 			put(at + FORM, 1, cm_per_px);
-			if (room.refraction && wall_g > 0.0 && wall_density > 0.0) {
-				// its glass: the wall's mass over its side and its floor, at most a fifth of its radius
-				const double h_cm = d_cm * aspect, area = PI * d_cm * h_cm + floor_cm2;
-				const double glass_cm = wall_g / wall_density / area;
-				put(at + REFRACT, 0, glass_cm < 0.2 * d_cm / 2.0 ? glass_cm : 0.2 * d_cm / 2.0);
+			if (room.refraction && glass) {
+				// its glass: as thick as its vessel is made (ISO 3819's walls, docs/DATA_SOURCES.md), not its
+				// heat's mass spread thin; a wall as thick as the vessel is wide is glass all through
+				put(at + REFRACT, 0, v.wall_mm / 10.0);
 			}
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
