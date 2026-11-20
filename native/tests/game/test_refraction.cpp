@@ -166,7 +166,7 @@ TEST_CASE("refraction: a vessel of water is a lens: inverted and magnified, as p
 	const ItemView v = vessel(0.0, false);
 	const OpticsScene scene = scene_of(v, room(true));
 	const double cm_per_px = scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
-	const double r_cm = 45.0 * cm_per_px, n = index_at(chem::builtin::water, 550.0), d_wall = 20.0;
+	const double r_cm = 45.0 * cm_per_px, n = index_at(chem::builtin::water, 550.0), d_wall = 284.0 * cm_per_px; // the wall, 284 px behind: 20 cm at this scale
 	// near the axis the ray turns by 2 (n - 1) d / (n R) and lands at d - D turn: a magnification of 1 - 2 D (n - 1) / (n R)
 	const double expected = 1.0 - 2.0 * d_wall * (n - 1.0) / (n * r_cm);
 	const double slope = (lab::optics_bend(scene, AXIS + 1, LOW, 550.0).x - lab::optics_bend(scene, AXIS - 1, LOW, 550.0).x) / 2.0;
@@ -188,7 +188,7 @@ TEST_CASE("refraction: a vessel of water is a lens: inverted and magnified, as p
 TEST_CASE("refraction: glass bends by how thick the vessel is made, not by what its wall weighs (Stage 20)") {
 	// above the liquid a vessel is a shell of glass around air: a weak lens that spreads the view. Near the axis
 	// its two surfaces turn a ray by -2 (1 - 1/n) t d / (R r), so the wall is seen at 1 + 2 D (n - 1) t / (n R r) times
-	const double d_wall = 20.0, n = index_at(chem::builtin::glass, 550.0);
+	const double n = index_at(chem::builtin::glass, 550.0);
 	const int high = static_cast<int>(Y) + 10;
 	const auto times = [&](const ItemView &v) {
 		const OpticsScene scene = scene_of(v, room(true));
@@ -197,6 +197,7 @@ TEST_CASE("refraction: glass bends by how thick the vessel is made, not by what 
 	ItemView made = vessel(0.0, true);
 	const OpticsScene scene = scene_of(made, room(true));
 	const double r_out = 45.0 * scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
+	const double d_wall = 284.0 * r_out / 45.0; // the wall, 284 px behind: 20 cm at this scale
 	const auto paraxial = [&](double t) { return 1.0 + 2.0 * d_wall * (n - 1.0) * t / (n * r_out * (r_out - t)); };
 	const double thin = times(made);
 	MESSAGE("a 250 mL beaker's 1.1 mm of glass, 20 cm in front of the wall: the wall seen through it at " << thin << " times (paraxial: " << paraxial(0.11) << ")");
@@ -338,7 +339,7 @@ OpticsScene prism_scene(double turn, double wall_cm, std::vector<lab::OpticsShap
 	}();
 	lab::OpticsRoom r = room(true);
 	r.bench = r.elsewhere = r.front = 0.0;
-	r.wall_cm = wall_cm;
+	r.wall_px = wall_cm / (lab::PRISM_SIDE_CM / 200.0); // the prism is 200 px on a side
 	r.shapes = std::move(shapes);
 	lab::OpticsBody body{ &prism, 500.0f, 300.0f, 200.0f, 300.0f };
 	body.turn = turn;

@@ -75,7 +75,8 @@ double pool_depth(double ml, double r) {
 namespace {
 
 // (in `t`, the scene's table being made: each body's MAP and the tag its pixels' histories follow)
-void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count, double wall_cm) {
+void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count) {
+	const double wall_px = t[2 * 4], gap_px = t[3 * 4];
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
 	// Each refracting body's map: traced again only when its shape, its glass or its indices change; where
 	// it stands and what fills it change nothing
@@ -97,7 +98,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			spec.left = rect[0] - 1.0 - axis;
 			spec.right = rect[0] + rect[2] + 1.0 - axis;
 			spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
-			spec.wall_cm = wall_cm;
+			// the wall, from its own plane: a gap further for each layer nearer the eye (in its own centimetres)
+			spec.wall_cm = (wall_px + static_cast<double>(refract[1]) * gap_px) * spec.cm_per_pixel;
 			spec.glass_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
 			if (prism) {
 				const float *more = &t[static_cast<size_t>(at + MORE) * 4], *glow = &t[static_cast<size_t>(at + GLOW) * 4];
@@ -155,7 +157,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(1, 1, room.y);
 	put(1, 2, room.w);
 	put(1, 3, room.h);
-	put(2, 0, room.wall_cm);
+	put(2, 0, room.wall_px);
+	put(3, 0, room.gap_px);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -168,11 +171,20 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
 	}
 	wall_key |= 1u; // never 0: a scene with no table yet
-	int count = 0, line_count = 0;
+	// a nearer layer's bodies are painted over a further one's: by layer, each layer in the order given
+	std::vector<const OpticsBody *> ordered;
 	for (const OpticsBody &body : bodies) {
+		ordered.push_back(&body);
+	}
+	const auto layer_of = [](const OpticsBody &b) { return b.layer < 0 ? 0 : b.layer >= MAX_LAYERS ? MAX_LAYERS - 1 : b.layer; };
+	std::stable_sort(ordered.begin(), ordered.end(), [&](const OpticsBody *a, const OpticsBody *b) { return layer_of(*a) < layer_of(*b); });
+	int count = 0, line_count = 0, nearest = 0;
+	for (const OpticsBody *each : ordered) {
+		const OpticsBody &body = *each;
 		if (count == MAX_BODIES || body.item == nullptr || !(body.w > 0.0f) || !(body.h > 0.0f)) {
 			continue;
 		}
+		nearest = std::max(nearest, layer_of(body));
 		const ItemView &v = *body.item;
 		const int at = HEADER_VECS + count * BODY_VECS;
 		float *liquid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_ROW) * ROW)];
@@ -192,6 +204,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(at + RECT, 3, body.h);
 		put(at + FORM, 0, ball ? 1.0 : 0.0);
 		put(at + FORM, 2, bottom + 2.0); // no liquid: its surface is under the floor
+		put(at + REFRACT, 1, layer_of(body));
 		if (v.kind == "prism") {
 			// an equilateral triangle of flint glass, turned; its rectangle is its silhouette
 			const double cm_per_px = PRISM_SIDE_CM / body.w, r = PRISM_SIDE_CM / std::sqrt(3.0);
@@ -382,7 +395,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		optics_wall(scene, room);
 		scene.wall_key = wall_key;
 	}
-	place_maps(scene, t, rows, count, room.wall_cm);
+	put(3, 1, nearest);
+	place_maps(scene, t, rows, count);
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
@@ -395,7 +409,7 @@ void optics_maps(OpticsScene &scene) {
 	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4 || scene.rows.size() != static_cast<size_t>(ROWS_SIZE)) {
 		return;
 	}
-	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]), scene.table[2 * 4]);
+	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]));
 	++scene.revision;
 }
 

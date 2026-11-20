@@ -106,7 +106,7 @@ TEST_CASE("footprint: a vessel's map lands its rays where the closed form does: 
 	namespace L = lab::optics_layout;
 	const auto vec = [&](int i) { return &scene.table[static_cast<size_t>(i) * 4]; };
 	const float *rect = vec(L::HEADER_VECS + L::RECT), *form = vec(L::HEADER_VECS + L::FORM), *refract = vec(L::HEADER_VECS + L::REFRACT);
-	const double cm = form[1], radius = rect[2] * 0.5 * cm, glass = refract[0], inner = radius - glass, wall = vec(2)[0];
+	const double cm = form[1], radius = rect[2] * 0.5 * cm, glass = refract[0], inner = radius - glass, wall = vec(2)[0] * cm; // the wall, in the vessel's own centimetres
 	const auto row = [&](int which, double nm) {
 		const size_t base = static_cast<size_t>(which) * L::ROW;
 		const auto i = static_cast<size_t>(nm - 380.0);

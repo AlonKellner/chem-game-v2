@@ -16,12 +16,14 @@ namespace lab {
 namespace optics_layout {
 inline constexpr int MAX_BODIES = 16;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
-// the vessels (cm), the radiance of the room in front, whether anything refracts (1 or 0), whether bands are cut
-// at the edges a bent view crosses (1 or 0)
-inline constexpr int HEADER_VECS = 3;
+// the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
+// bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
+// nearest layer any body is on, unused, unused
+inline constexpr int HEADER_VECS = 4;
 inline constexpr int BODY_VECS = 7;
 inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
-// within a body; REFRACT: its glass's thickness (cm), unused, unused, whether it refracts. MAP: where its
+// within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
+// the eye), unused, whether it refracts. MAP: where its
 // refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
 // (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
@@ -83,7 +85,11 @@ struct OpticsBody {
 	// on a side, w pixels on a side, turned by `turn` radians about its upright axis; its rectangle is centred
 	// on (x + w / 2) and recomputed as its silhouette
 	double turn = 0.0;
+	// its layer (GAME_SPEC §12.3): 0 stands on the bench's plane; each one more is a gap nearer the eye (what
+	// is held: 1). Up to MAX_LAYERS
+	int layer = 0;
 };
+inline constexpr int MAX_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;
 
 // A shape drawn on the wall behind the bodies: a rectangle of a flat grey.
@@ -100,7 +106,10 @@ struct OpticsRoom {
 	double elsewhere = 0.02;
 	bool refraction = true; // GAME_SPEC §12.3: glass and liquids bend the light
 	std::vector<OpticsShape> shapes; // in painting order
-	double wall_cm = 20.0; // how far behind the vessels' axes the wall stands
+	// The screen is one world in pixels (GAME_SPEC §12.3): the wall stands this far behind the bench's plane
+	// (20 cm at a 250 mL vessel's scale), and each layer's plane a gap nearer the eye than the one behind it
+	double wall_px = 284.0;
+	double gap_px = 120.0;
 	double front = 0.3; // the radiance of the room in front of the bench, which glass reflects
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
@@ -108,8 +117,8 @@ struct OpticsRoom {
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
 inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
 
-// Fills the scene from the state (bodies in painting order; those past
-// MAX_BODIES are left out). The revision moves only if the scene did.
+// Fills the scene from the state (bodies in painting order, a nearer layer's over a further one's; those
+// past MAX_BODIES are left out). The revision moves only if the scene did.
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies);
 // The maps again, from the scene's own table and spectra: for a scene whose indices were changed after it
 // was composed (a map is traced for its body's indices).

@@ -22,7 +22,7 @@
 //   vec4 map_vec(int i)      each refracting body's map (lab/optics_trace.hpp): where its rays land
 //   vec4 wall_vec(int i)     the wall as a table (lab/optics_scene.hpp): what is drawn behind the bodies
 
-const int HEADER_VECS = 3;
+const int HEADER_VECS = 4;
 const int BODY_VECS = 7;
 const int ROW = 401;
 const int ROWS_PER_BODY = 5;

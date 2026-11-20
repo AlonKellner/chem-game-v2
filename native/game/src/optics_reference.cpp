@@ -395,7 +395,7 @@ Exact exact_bend(int body, double x, bool liquid, double nm) {
 	if (here != 0) {
 		out.pass = 0.0; // still inside: nothing of the wall comes this way
 	}
-	const double wall = scene_vec(2).x;
+	const double wall = (scene_vec(2).x + scene_vec(at + 5).y * scene_vec(3).x) * q.rcm; // from its own plane, in its own centimetres
 	const double landed = uz > 0.05 ? ox + ux * (wall - oz) / uz : (ux < 0.0 ? -100000.0 : 100000.0);
 	out.x = q.raxis + landed / q.rcm;
 	out.pass = 1.0 - q.rcover * (1.0 - out.pass);
