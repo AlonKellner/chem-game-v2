@@ -772,6 +772,20 @@ float share_of(float nm) {
 }
 
 // ---- a ray followed through the layers (GAME_SPEC §12.3, Stage 21)
+//
+// What a pass costs on the GPU follows how much there is in the shader a pixel could do, done or not
+// (measured: with this section present, a pass in which every pixel is settled cost 0.58 ms, and without
+// it nothing a frame could show). So the host compiles this file twice: without OPTICS_CHAIN for the pass
+// over the whole screen, which leaves the pixels that need the chain alone; and with it for a pass over
+// the rectangles of the bodies that can need it (a held vessel, a prism). The reference has both.
+
+// what reaches the eye where no vessel bends the view: the bodies as they lie, before the backdrop
+float flat_band(Path q, float u0, float u1, float t, float one_nm) {
+	return along(q, nm_at(mix(u0, u1, t), one_nm), 1.0, 0.0, 0.0, false, q.back);
+}
+
+#ifdef OPTICS_CHAIN
+
 
 const int MAX_VISITS = 6; // the bodies one pixel's rays are followed through
 const int MAX_STRIPS = 4; // the strips a pixel's height is read in, where bodies' tops, floors and surfaces cut it
@@ -1277,7 +1291,7 @@ float through_band(Path q, Stack s, float u0, float u1, float t, float one_nm) {
 	float nm0 = nm_at(u0, one_nm);
 	float nm1 = nm_at(u1, one_nm);
 	if (q.refractor < 0) {
-		return along(q, nm_at(mix(u0, u1, t), one_nm), 1.0, 0.0, 0.0, false, q.back);
+		return flat_band(q, u0, u1, t, one_nm);
 	}
 	int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(q.y)), 0, WALL_ROWS - 1)).x);
 	float left = q.x - 0.5;
@@ -1320,6 +1334,25 @@ float through_band(Path q, Stack s, float u0, float u1, float t, float one_nm) {
 	}
 	return weights > 0.0 ? total / weights : 0.0;
 }
+
+#else
+
+// the pass over the whole screen: no chain, and no pixel that needs one is read by it
+struct Stack {
+	int count;
+};
+
+Stack stack_of(Path q, bool wanted) {
+	Stack s;
+	s.count = 0;
+	return s;
+}
+
+float through_band(Path q, Stack s, float u0, float u1, float t, float one_nm) {
+	return flat_band(q, u0, u1, t, one_nm);
+}
+
+#endif
 
 // ---- a pixel through a map of one piece (GAME_SPEC §12.3)
 
@@ -1512,6 +1545,11 @@ float plain_band(Path q, Plain p, float u0, float u1, float t, float one_nm) {
 
 // The share of the room's light that reaches the eye over a band of its energy, as a picture reads it:
 // through a map of one piece by the reading made for it, else by the general one.
+// whether a pixel is read by the chain: a vessel bends its view, and the reading for one vessel is not its
+bool chained(Path q) {
+	return q.refractor >= 0 && !plain_of(q).ok;
+}
+
 float band_light(Path q, float u0, float u1, float t, float one_nm) {
 	Plain plain = plain_of(q);
 	if (plain.ok) {

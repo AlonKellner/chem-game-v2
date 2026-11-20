@@ -151,6 +151,7 @@ inline vec4 wall_vec(int i) {
 #pragma clang diagnostic ignored "-Wkeyword-macro"
 #endif
 #define float double
+#define OPTICS_CHAIN 1 // the reference reads every pixel: the chain too (the host compiles it apart)
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)

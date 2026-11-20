@@ -75,6 +75,11 @@ struct OpticsScene {
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
 	std::vector<float> drawn;
+	// Where pixels may be the chain's (GAME_SPEC §12.3, Stage 21): the rectangle of each body that bends
+	// and is on a layer nearer than the bench's, or has a map of several pieces, or stands across another
+	// that bends: 4 floats a rectangle (left, top, right, bottom, whole pixels). A host whose pass over the
+	// screen leaves the chain's pixels alone runs the chain over these.
+	std::vector<float> chain;
 };
 
 // One vessel or balloon as the screen places it.

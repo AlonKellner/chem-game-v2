@@ -209,6 +209,12 @@ typedef struct cg_optics {
 	int32_t wall_count;
 	const float *wall; /* 4 * wall_count floats */
 	uint64_t wall_revision;
+	/* Where a pixel may need a ray followed through several bodies (GAME_SPEC §12.3,
+	 * Stage 21: what is held, a prism): chain_count rectangles of whole pixels
+	 * (left, top, right, bottom). A host whose pass over the screen is compiled
+	 * without the chain runs the chain over these. They change with `revision`. */
+	int32_t chain_count;
+	const float *chain; /* 4 * chain_count floats */
 } cg_optics;
 
 /* Borrowed until the next call on this ui. */

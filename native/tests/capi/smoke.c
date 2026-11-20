@@ -127,6 +127,11 @@ int main(void) {
 		fprintf(stderr, "the optical pass's scene has no refraction map for its vessel, or no table of the wall\n");
 		return 1;
 	}
+	/* Stage 21: nothing is held, so no pixel needs a ray followed through several bodies */
+	if (optics.chain_count != 0) {
+		fprintf(stderr, "the optical pass's scene asks for the chain with nothing held\n");
+		return 1;
+	}
 	optics.size = 0;
 	if (cg_ui_optics(ui, &optics) != CG_ERR_INVALID_ARGUMENT) {
 		fprintf(stderr, "a table with no size was not refused\n");
