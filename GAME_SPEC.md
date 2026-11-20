@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.21.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.22.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1155,7 +1155,8 @@ general tracer on the CPU, a refraction map for each body, the wall as a table r
 gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20).
 Stage 21 adds layers of refraction: what is held is seen in front of what stands, a ray followed
 through every layer by the bodies' maps, each body read where the ray crosses it, a hot solid's
-glow a light in the pass (*in progress*: the user's sign-off pending). The
+glow a light in the pass; no outline is drawn, and a vessel's floor is glass. Signed off by the
+user on 2026-11-20 (Stage 21). The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
 Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),

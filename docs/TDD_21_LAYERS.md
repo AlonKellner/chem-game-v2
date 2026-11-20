@@ -24,8 +24,9 @@ GAME_SPEC §12.3, §18 (O4 to O8), §20.
 | 21.6 | The GPU: two passes; the chain moved to the CPU (the stacks); the cost | Done: see below |
 | 21.7 | A hot solid's glow as a light in the pass | Done |
 | 21.8 | The screen: a carried item, and a carried selection, are the hand's layer; a person-paced test | Done |
-| 21.9 | O4 on every picture, one with a vessel held over another; `make gates` | Pictures taken; gates pending |
-| 21.10 | The user judges the pictures by eye and signs off | Pending |
+| 21.9 | O4 on every picture, one with a vessel held over another; `make gates` | Done |
+| 21.10 | No outline drawn; a vessel's floor as glass (asked for by the user on seeing the pictures) | Done |
+| 21.11 | The user judges the pictures by eye and signs off: "Looks good! Approved, proceed" (2026-11-20) | Done |
 
 ## The spikes (2026-11-20)
 
