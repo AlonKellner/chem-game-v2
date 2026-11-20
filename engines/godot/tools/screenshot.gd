@@ -110,10 +110,10 @@ func _initialize() -> void:
 		var many := await _time(30)
 		print("a frame with 10 more optical passes: %.2f ms; with 30: %.2f ms; one settled pass at 1920 x 1080: %.3f ms" % [few, many, (many - few) / 20.0])
 		_lab.set_optics_restarting(true) # the worst frame: every pixel's history starts again
-		few = await _time(2)
-		many = await _time(6)
+		few = await _time(8) # enough passes that both frames outlast a display refresh: fewer read as free
+		many = await _time(24)
 		_lab.set_optics_restarting(false)
-		print("every history starting again: a frame with 2 more passes: %.2f ms; with 6: %.2f ms; one such pass: %.3f ms" % [few, many, (many - few) / 4.0])
+		print("every history starting again: a frame with 8 more passes: %.2f ms; with 24: %.2f ms; one such pass: %.3f ms" % [few, many, (many - few) / 16.0])
 	print("screenshot.gd: done, at step ", JSON.parse_string(_lab.report())["step"])
 	quit(1 if _failed else 0)
 
