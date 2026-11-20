@@ -576,14 +576,18 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			fail(media_file, "\"" + name + "\" is not a species");
 		}
 		const std::string kind = m.at("kind").get<std::string>();
-		// a measured table (nm, coefficients per metre, summed): an absorber's coefficients over the
-		// concentration it has as a pure liquid, as a molar absorptivity (decadic, L/mol/cm)
+		// A measured table in data/optics (nm, then its values). An absorber's: coefficients per metre, summed,
+		// over the concentration it has as a pure liquid (its mol_per_litre), as a molar absorptivity (decadic,
+		// L/mol/cm); or, with "units": "L/mol/cm", the molar absorptivity itself. A reflector's: its diffuse
+		// reflectance, a fraction (Stage 23).
 		std::vector<std::pair<double, double>> measured;
 		if (m.contains("table")) {
 			const std::string file = m.at("table").get<std::string>();
 			std::ifstream in(data / "optics" / file);
-			if (!in || kind != "absorb" || !m.contains("mol_per_litre")) {
-				fail(media_file, "\"" + name + "\": a table is an absorber's, named in data/optics, with its mol_per_litre");
+			const std::string units = m.value("units", std::string(kind == "reflect" ? "fraction" : "per_metre"));
+			const bool absorptivity = kind == "absorb" && units == "L/mol/cm", reflectance = kind == "reflect" && units == "fraction";
+			if (!in || !(absorptivity || reflectance || (kind == "absorb" && units == "per_metre" && m.contains("mol_per_litre")))) {
+				fail(media_file, "\"" + name + "\": a table is named in data/optics: an absorber's per metre with its mol_per_litre, or in L/mol/cm; a reflector's as a fraction");
 			}
 			std::string line;
 			while (std::getline(in, line)) {
@@ -603,7 +607,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				if (cells.size() < 2 || (!measured.empty() && cells[0] <= measured.back().first)) {
 					fail(file, "is not a table of ascending wavelengths");
 				}
-				measured.emplace_back(cells[0], sum / 100.0 / std::log(10.0) / m.at("mol_per_litre").get<double>());
+				measured.emplace_back(cells[0], absorptivity || reflectance ? sum : sum / 100.0 / std::log(10.0) / m.at("mol_per_litre").get<double>());
 			}
 			if (measured.empty() || measured.front().first > 380.0 || measured.back().first < 780.0) {
 				fail(file, "does not run from 380 to 780 nm");

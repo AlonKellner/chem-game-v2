@@ -1,0 +1,54 @@
+# Copper sulfate solution (hexaaquacopper(II) in dilute sulfuric acid): its molar absorption coefficient, decadic, L/mol/cm.
+# 350-750 nm: NBS Circular 484 (K. S. Gibson, Spectrophotometry, 1949), Table 4, the copper sulfate standard: 20.000 g
+# CuSO4.5H2O and 10.0 ml sulfuric acid (sp. gr. 1.835) a litre, 10.00 mm, 25 C; absorbancy As = -log10 Ts against the solvent
+# (after Davis and Gibson, NBS Misc. Publ. M114, 1931, Table 5, solution B1: Beer's law holds from 5 to 40 g/l). Divided here by
+# 0.07986 mol/L (20.000 g / 249.68 g/mol, the salt assayed at 99.7 % of its copper) and 1 cm. Below 500 nm As is 0.001 to 0.009,
+# near the stated uncertainty of 0.001. The published As, every 10 nm from 350 to 750 nm:
+#   350:0.009 360:0.0063 370:0.0046 380:0.0035 390:0.0028 400:0.0023 410:0.0019 420:0.0016 430:0.0014 440:0.0012 450:0.0011 460:0.0011 470:0.0012 480:0.0014 490:0.0018 500:0.0026 510:0.0038 520:0.0055 530:0.0079 540:0.0111 550:0.0155 560:0.0216 570:0.0292 580:0.039 590:0.0518 600:0.068 610:0.0885 620:0.1125 630:0.143 640:0.18 650:0.224 660:0.274 670:0.332 680:0.392 690:0.459 700:0.527 710:0.592 720:0.656 730:0.715 740:0.768 750:0.817
+# 760-780 nm: straight between NBS's 750 nm and 12.05 at 790 nm (Davenet et al., arXiv:2512.01458, 2025, Table 2: CuSO4.5H2O,
+# nine solutions, a regression); not measured. The eye sees almost nothing there.
+nm,epsilon
+350,0.11269
+360,0.078886
+370,0.057599
+380,0.043825
+390,0.03506
+400,0.0288
+410,0.023791
+420,0.020035
+430,0.01753
+440,0.015026
+450,0.013774
+460,0.013774
+470,0.015026
+480,0.01753
+490,0.022539
+500,0.032556
+510,0.047582
+520,0.068869
+530,0.09892
+540,0.13899
+550,0.19408
+560,0.27047
+570,0.36563
+580,0.48834
+590,0.64862
+600,0.85147
+610,1.1082
+620,1.4087
+630,1.7906
+640,2.2539
+650,2.8048
+660,3.4309
+670,4.1572
+680,4.9085
+690,5.7474
+700,6.5989
+710,7.4128
+720,8.2141
+730,8.9529
+740,9.6166
+750,10.23
+760,10.685
+770,11.14
+780,11.595
