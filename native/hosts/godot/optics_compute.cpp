@@ -30,7 +30,7 @@ layout(set = 0, binding = 4, rgba32f) uniform restrict image2D hist_image;
 layout(set = 0, binding = 5, rgba32f) uniform restrict image2D key_image;
 layout(set = 0, binding = 6, rgba32f) uniform restrict image2D prox_image;
 layout(set = 0, binding = 7, rgba32f) uniform restrict image2D aux_image;
-layout(set = 0, binding = 8, rgba8) uniform restrict writeonly image2D shown_image;
+layout(set = 0, binding = 8, rgba8) uniform restrict image2D shown_image;
 layout(set = 0, binding = 9, std430) restrict buffer AskBuffer { uint total[2]; } ask_buffer;
 layout(set = 0, binding = 10, std430) restrict readonly buffer MapBuffer { vec4 v[]; } map_buffer;
 layout(set = 0, binding = 11, std430) restrict readonly buffer WallBuffer { vec4 v[]; } wall_buffer;
@@ -79,6 +79,13 @@ void main() {
 	s.key = imageLoad(key_image, at);
 	s.aux = imageLoad(aux_image, at);
 	if (done(q, s.key, s.aux)) {
+		// settled: what it shows stands, unless it was cleared while nothing covered it (a flame gone and lit
+		// again as it was, a vessel moved away and back): then it is shown again from its history
+		if (imageLoad(shown_image, at).w < 0.5) {
+			s.hist = imageLoad(hist_image, at);
+			s.prox = imageLoad(prox_image, at);
+			imageStore(shown_image, at, shown(q, s));
+		}
 		return;
 	}
 	// whose pixel it is (asked only of a pixel with something still to do)

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.22.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.23.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1118,20 +1118,46 @@ of every ray through its area, and its colour is their average (a box filter).
     condenser's outlet, signal parts, wires, labels) is not bent, and lies over what is held.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
-- **Everything that takes space is physical** *(PLANNED, Stage 22; the user, 2026-11-20: "If it's
-  an actual space taking part - it should have a spectral visual. The only non spectral colors and
-  elements should be overlays like highlights and interaction elements")*.
-  - Every thing that stands on the bench is a body of the optical pass, with a shape and spectra
-    of its own: the burner (an opaque body with a reflectance), its flame (a light with an
-    emission spectrum of its own, §12.2), a condenser's outlet (glass), a signal part and a
-    circuit (opaque bodies, their faces' colours as reflectances), a wire. Seen through what is
-    held, each is bent and tinted as a vessel is, and what is held is seen in front of it.
-  - No lab thing is drawn over the pass. A vessel's outline and its liquid's surface line went
-    in Stage 21.
-  - What the screen draws flat is what is not in the lab: highlights (a selection, a tutorial's
-    pointer, an alarm's ring), labels and readouts, panels.
-  - The scene holds as many bodies as a bench of parts needs, and a pixel finds its own without
-    looking at all of them (today: 16, each looked at by every pixel near any).
+- **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If
+  it's an actual space taking part - it should have a spectral visual. The only non spectral
+  colors and elements should be overlays like highlights and interaction elements").
+  - **Every thing that stands on the bench is a body of the optical pass**, with a shape and
+    spectra of its own. Seen through what is held, each is bent and tinted as a vessel is, and what
+    is held is seen in front of it.
+
+    | Thing | Its body |
+    |---|---|
+    | A signal part, a circuit | A slab: an opaque rounded rectangle with its face's reflectance, each kind its own colour (a timer blue, a monitor green, an alarm red, a notice ochre, a writer purple, a circuit dark blue). Nothing is written on it |
+    | A timer's time left | A strip of light along its foot, as long as the share of its time that is left |
+    | A part's state | A lamp on its face: a small slab that glows while the part signals (green), or while an alarm rings (amber), and is dark glass otherwise |
+    | A wire, a rig | A bar: an opaque line of a width between two places, with its insulation's reflectance |
+    | A burner | A slab, of its metal's reflectance |
+    | Its flame | A cone of glowing gas: it emits along the path through it and absorbs nothing; from a sooty yellow to a blue as its valve opens |
+    | A condenser's outlet | A bar (its glass is not traced) |
+
+  - **Three more shapes** beside the cylinder, the ball and the prism: the slab (a rectangle, its
+    corners rounded by a radius), the bar (every place within half its width of a line between two
+    points), the cone (seen from the side a triangle; the path through it at a place is the chord
+    of its round section there). A slab and a bar are opaque: what covers a pixel of them is seen
+    by the room's light off it, as a heap of solid is. None of the three bends.
+  - **What a body is made of is named, and shared**: a body's spectra (six rows at 1 nm) are a set
+    it names by number, so fifty parts are one set. A vessel's set is its own.
+  - **As many bodies as a bench of parts needs** (256), and a pixel finds its own without looking
+    at all of them: the screen is cut into squares of 40 px, and each square lists the bodies that
+    reach into it (seven at most: the nearest the eye). What stands in a vessel's rows on a layer
+    behind it is found on the CPU, when the scene is composed, and is part of the vessel's
+    signature.
+  - **No lab thing is drawn over the pass.** What the screen draws flat is what is not in the
+    lab: highlights (a selection, a tutorial's pointer, a wire while it carries a signal, the drip
+    from a condenser's outlet to what stands under it), readouts, panels and the drawer of parts
+    (its tiles show each kind's colour, computed from the same spectrum). On the bench a label is
+    written only for what is chosen: an item's name and temperature, a part's name and what it is
+    set to. The cabinet and the outbox are the screen's panels, and name what they hold.
+    (The user, on seeing Stage 22's pictures: labels always on the grid were confusing, and text
+    on a part did not look like part of it. Text drawn through the pass is not built: a part is
+    known by its colour, its lamp and, for a timer, its strip.)
+  - Their spectra are calibrated, not measured (`docs/DATA_SOURCES.md`): simple shapes placed so
+    that each thing has the colour it is known to have.
 - **A vessel's whole shape** *(PLANNED, after Stage 22)*: its lip (ISO 3819: the brim 5 to 15%
   wider than the body, flared in a smooth curve, its edge a bead), its spout, the rounded corner
   between its floor and its side (ISO 3819: a radius of 10 to 20% of the diameter from 250 mL),
@@ -1268,10 +1294,13 @@ lab command here, so it is the same on every host and is tested without one.
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
 
-**An item's controls are not on the bench** *(PLANNED, Stage 22; the user, 2026-11-20)*. Today a
-vessel's "stir" button and a burner's valve stand on the grid beside the item, always. They are
-interaction, not lab things, and they cover what the optical pass shows: they move to a panel of
-actions beside the bench, shown for the item that is selected, and nothing of them is on the grid.
+**An item's controls are not on the bench** (Stage 22, signed off by the user on 2026-11-21; asked for on 2026-11-20).
+Until Stage 22 a vessel's "stir" button and a burner's valve stood on the grid beside the item,
+always. They are interaction, not lab things, and they covered what the optical pass shows: they
+are in the readout's column, under what the selected item holds, for the item that is selected
+(a vessel standing on the bench with liquid in it: "stir"; a burner on the bench or under a
+vessel: its valve, a slider from shut to open). Nothing of them is on the grid; a tutorial's step
+that asks for one asks first for its item to be chosen.
 
 **Gestures.** Everything is a drag or a click:
 
@@ -1859,7 +1888,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
-| O2 | No wavelength of a pixel comes out brighter than the brighter of the backdrop and the room's white; emission is carried apart | exact | 10 |
+| O2 | No wavelength of a pixel comes out brighter than the brightest of the backdrop, what is drawn on it, the room in front and the room's white, and what the scene's bodies emit there (a glowing solid's or a lamp's light where it is seen, glowing gas's for each pixel of the longest path through it; Stage 22: emission is in the pass) | exact | 10, 22 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
 | O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |

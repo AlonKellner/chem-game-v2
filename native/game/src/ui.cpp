@@ -2,6 +2,8 @@
 
 #include "lab/conditions.hpp"
 
+#include "chem/optics.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -39,22 +41,13 @@ constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 constexpr uint32_t BACKGROUND = 0x2a2a2aff, GRID = 0x444444ff, GLASS = 0xffffffcc, INK = 0xe6e6e6ff, DIM = 0x9a9a9aff, PANEL_FILL = 0x383838ff, BUTTON = 0x505050ff,
 				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff, GUIDE = 0xffc83cff, GOOD = 0x78c88cff, BAD = 0xf05a5aff;
 // on the lit wall: what is in the glass is seen by the light that comes through it (§12)
-constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff, WALL_GLASS = 0x4a5662cc;
+constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff;
 constexpr double WALL_RADIANCE = 0.7305, DARK_RADIANCE = 0.0232; // the linear values of WALL and BACKGROUND
 
 uint32_t rgba(int r, int g, int b, int a = 255) {
 	return static_cast<uint32_t>(r) << 24 | static_cast<uint32_t>(g) << 16 | static_cast<uint32_t>(b) << 8 | static_cast<uint32_t>(a);
 }
 
-uint32_t mix(uint32_t a, uint32_t b, double t) {
-	t = t < 0 ? 0 : t > 1 ? 1 : t;
-	uint32_t out = 0;
-	for (int shift = 24; shift >= 0; shift -= 8) {
-		const double ca = (a >> shift) & 0xff, cb = (b >> shift) & 0xff;
-		out |= static_cast<uint32_t>(ca + (cb - ca) * t + 0.5) << shift;
-	}
-	return out;
-}
 
 std::string text_of(const char *format, double a = 0, double b = 0) {
 	char buffer[160];
@@ -143,6 +136,43 @@ constexpr Comparison::Op GOAL_OPS[] = { Comparison::AtLeast, Comparison::AtMost,
 constexpr const char *SPECIES_MEASURES[] = { "g", "purity", "count", "size" };
 
 constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
+
+// what a part's face is made of, by its kind (data/optics/media.json: surfaces; Stage 22): each kind its own
+// colour, so a part is known by how it looks, not by text written over the pass
+const char *face_of(const std::string &kind) {
+	if (kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "notice" || kind == "writer") {
+		static const std::string names[] = { "timer_face", "monitor_face", "alarm_face", "notice_face", "writer_face" };
+		const int k = kind == "timer" ? 0 : kind == "monitor" ? 1 : kind == "alarm" ? 2 : kind == "notice" ? 3 : 4;
+		return names[k].c_str();
+	}
+	return kind == "circuit" ? "circuit_face" : "part_face";
+}
+
+// a surface's colour in the room's light, for the drawer's swatches (the screen's own drawing of what the pass shows)
+uint32_t surface_colour(const char *name) {
+	const chem::optics::Spectrum *r = chem::optics::surface(name);
+	if (r == nullptr) {
+		return 0x808080ff;
+	}
+	double x = 0.0, y = 0.0, z = 0.0, white = 0.0;
+	for (size_t i = 0; i < r->size(); ++i) {
+		const double light = chem::optics::d65()[i];
+		x += chem::optics::xbar()[i] * light * (*r)[i];
+		y += chem::optics::ybar()[i] * light * (*r)[i];
+		z += chem::optics::zbar()[i] * light * (*r)[i];
+		white += chem::optics::ybar()[i] * light;
+	}
+	x /= white;
+	y /= white;
+	z /= white;
+	const double lin[3] = { 3.2404542 * x - 1.5371385 * y - 0.4985314 * z, -0.9692660 * x + 1.8760108 * y + 0.0415560 * z, 0.0556434 * x - 0.2040259 * y + 1.0572252 * z };
+	uint32_t out = 0xff;
+	for (int c = 0; c < 3; ++c) {
+		const double v = std::min(std::max(lin[c], 0.0), 1.0), e = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+		out |= static_cast<uint32_t>(std::lround(e * 255.0)) << (24 - 8 * c);
+	}
+	return out;
+}
 constexpr int DRAWN_KINDS = 5; // what the drawer holds
 constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
 constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
@@ -671,25 +701,26 @@ struct Ui::Impl {
 		return -1;
 	}
 
-	// a burner's valve: a slider beside it, while it is on the bench or under a vessel
+	// An item's controls are not on the bench (GAME_SPEC §13.1, Stage 22): they are in the readout's column, under
+	// the selected item's name, for the item that is selected. Where the readout's rows begin:
+	float readout_top() const { return tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30; }
+	// a burner's valve: a slider, shut at its left and open at its right, while it is on the bench or under a vessel
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (v.kind != "burner" || (v.place != "bench" && v.place != "under")) {
+		if (index != selected || v.kind != "burner" || (v.place != "bench" && v.place != "under") || draft.edit != Draft::None) {
 			return false;
 		}
-		const Rect body = rect(index);
-		r = Rect{ body.x + body.w + 10, body.y + body.h - 84, 16, 84 };
+		r = Rect{ READOUT.x + 90, readout_top() + 96, 300, 18 };
 		return true;
 	}
 
 	// a vessel's stirring button, while it stands on the bench with liquid in it
 	bool stir_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (v.kind != "vessel" || v.place != "bench" || !(v.liquid_ml > 0.0)) {
+		if (index != selected || v.kind != "vessel" || v.place != "bench" || !(v.liquid_ml > 0.0) || draft.edit != Draft::None) {
 			return false;
 		}
-		const Rect c = foot(v);
-		r = Rect{ c.x + c.w - 38, c.y + c.h - 26, 36, 22 }; // at its foot, on the right: clear of its mouth, its burner and its name
+		r = Rect{ READOUT.x + 16, readout_top() + 90, 90, 30 };
 		return true;
 	}
 
@@ -1089,7 +1120,7 @@ struct Ui::Impl {
 						return;
 					}
 					valve_drag = i;
-					turn(y);
+					turn(x);
 					return;
 				}
 			}
@@ -1181,13 +1212,19 @@ struct Ui::Impl {
 			x = y = 0;
 			return;
 		}
-		Rect r;
-		if ((control == "valve" && valve_rect(i, r)) || (control == "stir" && stir_rect(i, r))) {
-			x = r.cx();
-			y = r.cy();
+		// on the item itself (its controls are not on the bench: Stage 22): a burner's valve at its right side, a
+		// vessel's stirring at its foot's right corner, a part's input at its corner
+		const Rect body = drawn(i);
+		if (control == "valve") {
+			x = body.x + body.w;
+			y = body.cy();
 			return;
 		}
-		const Rect body = drawn(i);
+		if (control == "stir") {
+			x = body.x + body.w - 6;
+			y = body.y + body.h - 8;
+			return;
+		}
 		x = body.x + 4;
 		y = control == "reset" ? body.y + body.h - 4 : body.y + 4;
 	}
@@ -2177,12 +2214,12 @@ struct Ui::Impl {
 		pour_fraction = f < 0.02 ? 0.02 : f > 1 ? 1 : f;
 	}
 
-	void turn(float y) {
+	void turn(float x) {
 		Rect r;
 		if (!valve_rect(valve_drag, r)) {
 			return;
 		}
-		double open = 1.0 - (y - r.y) / r.h;
+		double open = (x - r.x) / r.w;
 		open = open < 0 ? 0 : open > 1 ? 1 : open;
 		act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
 	}
@@ -2222,6 +2259,32 @@ struct Ui::Impl {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		const Part &p = v.part;
 		bool ringing = v.kind == "alarm" && p.ringing;
+		if (v.place == "bench") {
+			// its face (its kind's colour), its lamp, its port, a timer's strip are bodies of the pass (Stage 22):
+			// nothing is written on it. While it is chosen its name and what it is set to are a label above it;
+			// a highlight round it while it (or an alarm in it) rings
+			if (v.kind == "circuit") {
+				for (const ItemView &o : view.items) {
+					ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
+				}
+			}
+			if (chosen(index) && index != drag) {
+				std::string says = v.id;
+				if (v.kind == "timer") {
+					const auto seconds = static_cast<int64_t>(std::ceil(static_cast<double>(p.left) / 60.0));
+					says += "  " + text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60));
+				} else if (v.kind == "monitor") {
+					says += p.watching ? "  " + std::string(op_name(p.comparison.op)) : "  unset";
+				} else if (v.kind == "notice" || v.kind == "writer") {
+					says += "  " + std::string(level_name(static_cast<lab::Notice::Level>(p.notice_level)));
+				}
+				text(r.x, r.y - 8, says, WALL_INK, 14);
+			}
+			if (ringing) {
+				outline(Rect{ r.x - 3, r.y - 3, r.w + 6, r.h + 6 }, WARN, 2.0f);
+			}
+			return;
+		}
 		if (v.kind == "circuit") {
 			int held = 0;
 			for (const ItemView &o : view.items) {
@@ -2298,7 +2361,29 @@ struct Ui::Impl {
 		return true;
 	}
 
-	// the wires between parts, and the rigs onto controls: lit while their source signals
+	// whether an item is on the bench (not in the cabinet, a circuit or the outbox)
+	bool on_bench(int index) const { return index >= 0 && view.items[static_cast<size_t>(index)].place == "bench"; }
+	// a rig's two ends on the screen: from its part's port to the control it works
+	bool rig_ends(const Rig &r, float &x0, float &y0, float &x1, float &y1) const {
+		const int a = item_index(r.from);
+		if (a < 0 || !out_point(a, x0, y0)) {
+			return false;
+		}
+		const int target = item_index(r.item);
+		if (target >= 0 && is_part(target) && shown_as(target) != target) { // a timer's reset, in a closed circuit
+			if (shown_as(target) == shown_as(a)) {
+				return false;
+			}
+			in_point(shown_as(target), x1, y1);
+		} else {
+			control_point(r.item, r.control, x1, y1);
+		}
+		return true;
+	}
+
+	// The wires between parts, and the rigs onto controls. On the bench they are bodies of the pass, and what is
+	// drawn here is a highlight along one while its source signals (Stage 22); in an open circuit's panel, the
+	// panel's drawing.
 	void paint_signals() {
 		const double pulse = 0.5 + 0.5 * std::sin(clock * 5.0);
 		const uint32_t alarm_colour = (WARN & 0xffffff00u) | static_cast<uint32_t>(140.0 + 115.0 * pulse);
@@ -2314,26 +2399,23 @@ struct Ui::Impl {
 				continue; // inside one closed circuit: not on the screen
 			}
 			in_point(b, x1, y1);
-			const bool lit = in_chain(w.from);
-			line(x0, y0, x1, y1, lit ? alarm_colour : on(w.from) ? GOOD : WALL_INK, lit ? 3.0f : 2.0f);
+			const bool lit = in_chain(w.from), standing = on_bench(shown_as(a)) && on_bench(b);
+			if (!standing || lit || on(w.from)) {
+				line(x0, y0, x1, y1, lit ? alarm_colour : on(w.from) ? GOOD : WALL_INK, lit ? 3.0f : standing ? 1.0f : 2.0f);
+			}
 		}
 		for (const Rig &r : view.rigs) {
-			const int a = item_index(r.from);
 			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
-			if (a < 0 || !out_point(a, x0, y0)) {
+			if (!rig_ends(r, x0, y0, x1, y1)) {
 				continue;
 			}
-			const int target = item_index(r.item);
-			if (target >= 0 && is_part(target) && shown_as(target) != target) { // a timer's reset, in a closed circuit
-				if (shown_as(target) == shown_as(a)) {
-					continue;
-				}
-				in_point(shown_as(target), x1, y1);
-			} else {
-				control_point(r.item, r.control, x1, y1);
+			const bool standing = on_bench(shown_as(item_index(r.from)));
+			if (!standing) {
+				line(x0, y0, x1, y1, on(r.from) ? rgba(90, 140, 230) : rgba(110, 130, 160, 200), 2);
+				circle(x1, y1, 4, rgba(90, 140, 230));
+			} else if (on(r.from)) {
+				line(x0, y0, x1, y1, rgba(90, 140, 230), 1); // a highlight: it is working its control
 			}
-			line(x0, y0, x1, y1, on(r.from) ? rgba(90, 140, 230) : rgba(110, 130, 160, 200), 2);
-			circle(x1, y1, 4, rgba(90, 140, 230));
 		}
 		// a wire in hand, and a part out of the drawer
 		Rect port;
@@ -2429,6 +2511,7 @@ struct Ui::Impl {
 			const Rect r = drawer_rect(k);
 			rect_fill(r, BUTTON);
 			outline(r, GRID, 1);
+			rect_fill(Rect{ r.x + r.w - 26, r.y + 8, 18, 18 }, surface_colour(face_of(DRAWN[k]))); // how one looks on the bench
 			text(r.x + 8, r.y + 26, DRAWN[k], INK, 16);
 			text(r.x + 8, r.y + 54, std::string(1, static_cast<char>(DRAWN[k][0] - 'a' + 'A')), DIM, 22);
 			text(r.x + 8, r.y + 80, SAYS[k][0], DIM, 12);
@@ -2442,8 +2525,8 @@ struct Ui::Impl {
 			text(c.x + 8, c.y + 21, text_of(n == 1 ? "create circuit of %.0f part" : "create circuit of %.0f parts", static_cast<double>(n)), INK, 16);
 		}
 		text(DRAWER.x + 14, DRAWER.y + 234, "wire a part from its port, on its right: into another", DIM, 13);
-		text(DRAWER.x + 14, DRAWER.y + 254, "part, or onto a control to rig it (a vessel's stirring,", DIM, 13);
-		text(DRAWER.x + 14, DRAWER.y + 274, "a burner's valve, a timer's reset)", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 254, "part, or onto a vessel, a burner or a timer to rig its", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 274, "stirring, its valve or its reset", DIM, 13);
 	}
 
 	void paint_item(int index, Rect r) {
@@ -2453,28 +2536,28 @@ struct Ui::Impl {
 			return;
 		}
 		if (v.kind == "burner") {
-			rect_fill(r, rgba(96, 96, 96));
-			if (v.valve > 0.0) {
-				const float flame = static_cast<float>(12.0 + 30.0 * v.valve);
-				polygon({ r.cx() - 12, r.y, r.cx() + 12, r.y, r.cx(), r.y - flame }, mix(rgba(240, 200, 60), rgba(80, 140, 255), v.valve));
-			}
+			// its body and its flame are the pass's (Stage 22)
 		} else if (v.kind == "balloon") {
 			// all of it is the optical pass's: rubber, and what condensed inside
 		} else {
-			// All of it is the optical pass's (§12): its glass, what is in it, its liquid's surface. No outline
-			// is drawn over the pass (Stage 21): a line the screen draws is not bent by what is held before it.
-			if (v.condenser) {
-				line(r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, WALL_GLASS); // its outlet
-			}
+			// All of it is the optical pass's (§12): its glass, what is in it, its liquid's surface, a condenser's
+			// outlet. No outline is drawn over the pass (Stage 21): a line the screen draws is not bent by what is
+			// held before it.
 		}
 		const std::string label = v.kind == "burner" ? v.id : v.id + text_of("  %.0f C", v.celsius);
 		if (index == drag) {
 			return;
 		}
+		// on the bench a name is a label the screen writes over the pass: only for what is chosen (Stage 22). The
+		// cabinet and the outbox are the screen's own panels, and name what they hold
+		if ((v.place == "on" || v.place == "under" || v.place == "bench") && !chosen(index)) {
+			return;
+		}
 		if (v.place == "on") {
 			text(r.x, r.y - 8, label, WALL_INK, 15);
 		} else if (v.place == "under") {
-			// under a vessel it needs no name: its valve is beside it
+			const Rect c = rect(index);
+			text(c.x, c.y + c.h + 18, label, WALL_INK, 14);
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
 			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
@@ -2520,15 +2603,6 @@ struct Ui::Impl {
 				continue;
 			}
 			paint_item(i, drawn(i));
-			Rect r;
-			if (valve_rect(i, r)) {
-				rect_fill(r, BUTTON);
-				const float knob = r.y + r.h * static_cast<float>(1.0 - view.items[static_cast<size_t>(i)].valve);
-				rect_fill(Rect{ r.x - 4, knob - 4, r.w + 8, 8 }, INK);
-			}
-			if (stir_rect(i, r)) {
-				button(r, "stir", view.items[static_cast<size_t>(i)].stirred, 14);
-			}
 			// what stands under a condenser's outlet is joined to it by a drip
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			if (v.drains_to >= 0) {
@@ -3033,13 +3107,76 @@ struct Ui::Impl {
 		// What is in hand is a layer of its own, nearer the eye (GAME_SPEC §12.3): the item being carried, and
 		// those of a selection carried with it. What stands behind it is seen through it. An item pressed and
 		// not yet moved still stands.
+		//
+		// Everything that takes space is a body of the pass (Stage 22): a vessel and a balloon by what they hold; a
+		// burner, its flame, a condenser's outlet, a signal part on the bench (its face, its lamp, its port), a
+		// wire and a rig as things of the lab, each a shape of a surface and a light. A part in an open circuit
+		// is the circuit panel's drawing, not the bench's.
 		std::vector<OpticsBody> bodies;
+		const auto thing = [&](const std::string &who, const char *role, OpticsBody::Shape shape, Rect r, float size, const char *surface, const char *light, bool in_hand) {
+			OpticsBody b;
+			b.shape = shape;
+			b.x = r.x;
+			b.y = r.y;
+			b.w = r.w;
+			b.h = r.h;
+			b.size = size;
+			b.surface = surface;
+			b.light = light;
+			b.layer = in_hand ? 1 : 0;
+			b.id = std::hash<std::string>{}(who + "/" + role);
+			bodies.push_back(b);
+			return bodies.size() - 1;
+		};
+		const auto bar = [&](const std::string &who, const char *role, float x0, float y0, float x1, float y1, float width, const char *surface, bool in_hand) {
+			const size_t k = thing(who, role, OpticsBody::Bar, Rect{}, width, surface, nullptr, in_hand);
+			bodies[k].x0 = x0;
+			bodies[k].y0 = y0;
+			bodies[k].x1 = x1;
+			bodies[k].y1 = y1;
+		};
 		const auto add = [&](int i, const Rect &r, bool in_hand) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
 				bodies.push_back(body);
+				if (v.condenser) {
+					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
+				}
+			} else if (v.kind == "burner") {
+				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
+				if (v.valve > 0.0) {
+					// its flame: from a sooty yellow, barely open, to a blue, wide open
+					const float flame = static_cast<float>(12.0 + 30.0 * v.valve);
+					const size_t k = thing(v.id, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
+					bodies[k].light_to = "flame_blue";
+					bodies[k].toward = v.valve;
+				}
+			} else if (is_part_kind(v.kind) && v.place == "bench") {
+				const bool circuit = v.kind == "circuit";
+				bool ringing = v.kind == "alarm" && v.part.ringing, lit = v.part.out;
+				if (circuit) {
+					lit = circuit_out(v.id);
+					for (const ItemView &o : view.items) {
+						ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
+					}
+				}
+				thing(v.id, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
+				if (v.kind == "timer") {
+					// its time left: a strip of light along its foot, as long as the share of its time that is left
+					const Rect strip{ r.x + 5, r.y + r.h - 9, r.w - 10, 4 };
+					thing(v.id, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
+					const double left = v.part.preset > 0 ? static_cast<double>(v.part.left) / static_cast<double>(v.part.preset) : 0.0;
+					if (left > 0.0) {
+						thing(v.id, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
+					}
+				}
+				thing(v.id, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
+				Rect port;
+				if (port_rect(i, port)) {
+					thing(v.id, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
+				}
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
@@ -3049,6 +3186,25 @@ struct Ui::Impl {
 		}
 		if (drag >= 0) {
 			add(drag, drawn(drag), moved);
+		}
+		// the wires and the rigs between things on the bench
+		for (const Wire &w : view.wires) {
+			const int a = item_index(w.from), b = shown_as(item_index(w.to));
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (a < 0 || b < 0 || shown_as(a) == b || !on_bench(shown_as(a)) || !on_bench(b) || !out_point(a, x0, y0)) {
+				continue;
+			}
+			in_point(b, x1, y1);
+			bar(w.from + ">" + w.to, "wire", x0, y0, x1, y1, 2.0f, "wire", false);
+		}
+		for (const Rig &r : view.rigs) {
+			const int a = item_index(r.from);
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (a < 0 || !on_bench(shown_as(a)) || !rig_ends(r, x0, y0, x1, y1)) {
+				continue;
+			}
+			bar(r.from + ">" + r.item + "." + r.control, "rig", x0, y0, x1, y1, 2.0f, "rig", false);
+			thing(r.from + ">" + r.item + "." + r.control, "knob", OpticsBody::Slab, Rect{ x1 - 4, y1 - 4, 8, 8 }, 4.0f, "rig", nullptr, false);
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
 		OpticsRoom room;
@@ -3168,6 +3324,20 @@ struct Ui::Impl {
 		} else if (showing >= 0) {
 			const ItemView &v = view.items[static_cast<size_t>(showing)];
 			row(v.id + " (" + v.kind + (v.condenser ? ", condenser" : "") + ", " + v.place + ")", INK, 20);
+			// its controls, while it is selected (GAME_SPEC §13.1: not on the bench)
+			Rect control;
+			if (valve_rect(showing, control)) {
+				text(READOUT.x + 16, control.y + 15, "valve", INK, 16);
+				rect_fill(control, BUTTON);
+				const float knob = control.x + control.w * static_cast<float>(v.valve);
+				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
+				rect_fill(Rect{ knob - 4, control.y - 4, 8, control.h + 8 }, INK);
+				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * v.valve), DIM, 15);
+				y += 42;
+			} else if (stir_rect(showing, control)) {
+				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
+				y += 42;
+			}
 			for (const ControlSetting &c : view.controls) {
 				if (c.item == v.id) {
 					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") + ", set by " + c.by +
@@ -3417,7 +3587,7 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 		if (m.slider_drag) {
 			m.slide(x);
 		} else if (m.valve_drag >= 0) {
-			m.turn(y);
+			m.turn(x);
 		}
 	} else if (released) {
 		if (m.making >= 0) {
@@ -3703,8 +3873,8 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 			return false;
 		}
 		const double open = std::atof(std::string(rest.substr(at + 1)).c_str());
-		x = r.cx();
-		y = r.y + r.h * static_cast<float>(1.0 - open);
+		x = r.x + r.w * static_cast<float>(open);
+		y = r.cy();
 		return true;
 	}
 	if (after("stir:", rest)) {

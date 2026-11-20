@@ -6,6 +6,8 @@
 
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <cmath>
@@ -216,7 +218,7 @@ TEST_CASE("footprint: every pixel's colour is what its rays bring, before a wall
 	double worst = 0.0, sum = 0.0;
 	int compared = 0;
 	for (const int y : { static_cast<int>(Y), surface, 165, 175, 199, 200, static_cast<int>(Y + H) - 1 }) {
-		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); x += (y == 199 || y == surface ? 1 : 3)) {
+		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); x += (y == 199 || y == surface ? 1 : 3) * sparse()) {
 			if (lab::optics_cover(scene, x, y) <= 0.0) {
 				continue;
 			}
@@ -232,7 +234,7 @@ TEST_CASE("footprint: every pixel's colour is what its rays bring, before a wall
 			++compared;
 		}
 	}
-	CHECK(compared > 250);
+	CHECK(compared > 250 / sparse());
 	CHECK(sum / compared < 1.0);
 	MESSAGE(compared << " pixels against 64 rays each: worst " << worst << " on the eye metric (visible above 8), mean " << sum / compared);
 }

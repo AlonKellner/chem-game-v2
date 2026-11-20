@@ -514,7 +514,12 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 		return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() / 10.0; // per 600 steps: one frame at 600x
 	};
 	cost(true); // warm
-	const double without = cost(false), with = cost(true);
+	// the best of three each, taken in turn: the tests run side by side, and a moment's load is not the monitors'
+	double without = 1e30, with = 1e30;
+	for (int k = 0; k < 3; ++k) {
+		without = std::min(without, cost(false));
+		with = std::min(with, cost(true));
+	}
 	MESSAGE("a frame at 600x: " << without << " ms, with three monitors " << with << " ms");
 #ifndef CHEM_SANITIZED // a sanitizer's build is several times slower: its costs are reported, not bounded
 	CHECK(with - without < 3.0);

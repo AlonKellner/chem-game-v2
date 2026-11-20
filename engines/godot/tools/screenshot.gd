@@ -3,7 +3,6 @@ extends SceneTree
 # Screenshots of the host at moments of the demo (make screenshots -> build/screenshots/*.png), played with
 # the pointer as tests/test_host_smoke.gd plays. At each the optical pass alone, settled, is held to what each
 # pixel should show (GAME_SPEC §18: O4); and the GPU's time for one pass is measured.
-#
 #   godot --path engines/godot -s tools/screenshot.gd -- <output directory> [cost]
 
 var _lab: ChemLab
@@ -20,6 +19,8 @@ func _drag(what: String, to: String) -> void:
 	_lab.pointer(b.x, b.y, false)
 
 func _click(what: String) -> void:
+	if (what.begins_with("valve:") or what.begins_with("stir:")) and _lab.locate(what) == Vector2(-1, -1):
+		_click("item:" + what.get_slice(":", 1).get_slice("@", 0)) # its controls show for the item chosen
 	var a := _lab.locate(what)
 	_lab.pointer(a.x, a.y, true)
 	_lab.pointer(a.x, a.y, false)
@@ -38,7 +39,6 @@ func _celsius(id: String) -> float:
 			return item["celsius"]
 	return 0.0
 
-# frames until `done`, or a bound: a script on the engine's own thread never waits for what may not come
 func _watch(done: Callable, what: String) -> bool:
 	for i in 2000:
 		if done.call():
@@ -193,12 +193,12 @@ func _play(dir: String) -> void:
 	await _shoot(dir, "13_debug")
 	_click("debug")
 	_click("item:flask") # let go of
-	# Stage 21: the beaker carried over the flask and held: what stands is seen through it (GAME_SPEC §12.3)
+	# Stage 21, 22: the beaker held over the flask's foot and the burner: what stands is seen through it (§12.3)
 	var from := _lab.locate("item:beaker")
 	var over := _lab.locate("item:flask")
 	_lab.pointer(from.x, from.y, true)
 	for i in 12: # a few moves, as a hand makes
-		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 12.0, (i + 1) / 12.0), true)
+		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 70.0, (i + 1) / 12.0), true)
 	await _shoot(dir, "14_held")
 	await _cost("a vessel held over another: ", 0, 1)
 	_lab.pointer(from.x, from.y, false) # carried back, and set down where it stood

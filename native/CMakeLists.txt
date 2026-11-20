@@ -4,7 +4,7 @@
 #   chem_lab    static, engine-free (namespace lab): the lab layer            game/
 #   chem_capi   the C API (chem_api.h), static and shared                     capi/
 #   chem_gd     shared GDExtension: the Godot host on the C API               hosts/godot/ -> engines/godot/bin
-#   chem_tests / lab_tests   doctest executables, registered with ctest       tests/, tests/game/
+#   chem_tests / lab_tests   doctest executables, a ctest entry a source file   tests/, tests/game/
 #   chem_datagen  embeds data/ in chem_core, refusing unbalanced reactions       datagen/
 #   chem_tool   the headless host                                             hosts/headless/
 #
@@ -162,7 +162,24 @@ if(CHEM_BUILD_TESTS)
     target_include_directories(chem_tests PRIVATE tests/support datagen)
     target_compile_definitions(chem_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
     chem_apply_flags(chem_tests NO_CONVERSION)
-    add_test(NAME chem_tests COMMAND chem_tests)
+    # One ctest entry for each source file of a test binary (its test cases, by doctest's source-file
+    # filter): ctest runs them side by side, and the gate's cache keeps each apart. And one that fails if a
+    # test case is in a file no entry runs.
+    function(chem_add_tests target)
+        set(all "")
+        foreach(source ${ARGN})
+            get_filename_component(stem ${source} NAME_WE)
+            if(NOT stem STREQUAL "test_main")
+                string(REGEX REPLACE "^test_" "" short ${stem})
+                add_test(NAME ${target}.${short} COMMAND ${target} --source-file=*${stem}.cpp)
+                list(APPEND all "*${stem}.cpp")
+            endif()
+        endforeach()
+        list(JOIN all "," excluded)
+        add_test(NAME ${target}.every_file_runs COMMAND ${target} --count --source-file-exclude=${excluded})
+        set_tests_properties(${target}.every_file_runs PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: 0")
+    endfunction()
+    chem_add_tests(chem_tests ${CHEM_TEST_SOURCES})
 
     # the lab layer's tests
     file(GLOB LAB_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
@@ -172,7 +189,13 @@ if(CHEM_BUILD_TESTS)
     target_include_directories(lab_tests PRIVATE tests/support)
     target_compile_definitions(lab_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
     chem_apply_flags(lab_tests NO_CONVERSION)
-    add_test(NAME lab_tests COMMAND lab_tests)
+    chem_add_tests(lab_tests ${LAB_TEST_SOURCES})
+    # The optics tests deal their heavy loops among threads (lab/optics_scene.hpp: the reference): ctest
+    # counts each as four processors, and each keeps to four threads, so that a run of all of them side by
+    # side does not ask for more than the machine has.
+    foreach(heavy optics layers footprint refraction lab)
+        set_tests_properties(lab_tests.${heavy} PROPERTIES PROCESSORS 4 ENVIRONMENT "LAB_THREADS=4")
+    endforeach()
 
     # Data that breaks a conservation law does not build: chem_datagen refuses
     # each of these (tests/data/bad_*), so the custom command above would fail.

@@ -757,6 +757,33 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		material_cases += "\tif (name == \"" + name + "\") {\n\t\treturn &MATERIAL_" + std::to_string(material_count) + ";\n\t}\n";
 		++material_count;
 	}
+	// the lab's things that are no substance (Stage 22): what they reflect, and what they emit, by name
+	for (const char *section : { "surfaces", "emitters" }) {
+		const bool emits = std::string(section) == "emitters";
+		std::string cases;
+		int count = 0;
+		const json entries = media.value(section, json::object());
+		for (const auto &[name, m] : entries.items()) {
+			std::vector<double> values(401, 0.0);
+			for (size_t i = 0; i < values.size(); ++i) {
+				const double nm = 380.0 + static_cast<double>(i);
+				double v = m.value("base", 0.0);
+				for (const json &b : m.value("bands", json::array())) {
+					const double d = (nm - b.at("centre_nm").get<double>()) / b.at("width_nm").get<double>();
+					v += b.at("peak").get<double>() * std::exp(-d * d);
+				}
+				if (v < 0.0 || (!emits && v > 1.0)) {
+					fail(media_file, "\"" + name + "\": a reflectance is between 0 and 1, and a light at least 0");
+				}
+				values[i] = v;
+			}
+			const std::string symbol = std::string(emits ? "EMITTER_" : "SURFACE_") + std::to_string(count);
+			emit(optics, symbol.c_str(), values);
+			cases += "\tif (name == \"" + name + "\") {\n\t\treturn &" + symbol + ";\n\t}\n";
+			++count;
+		}
+		optics << "const Spectrum *" << (emits ? "emitter" : "surface") << "(std::string_view name) {\n" << cases << "\treturn nullptr;\n}\n\n";
+	}
 	optics << "const Spectrum *material_index(std::string_view name) {\n" << material_cases << "\treturn nullptr;\n}\n\n"
 		   << "const Spectrum &xbar() {\n\treturn XBAR;\n}\nconst Spectrum &ybar() {\n\treturn YBAR;\n}\nconst Spectrum &zbar() {\n\treturn ZBAR;\n}\n"
 		   << "const Spectrum &d65() {\n\treturn D65;\n}\n\nKind kind(SpeciesId species) {\n\tswitch (species.index) {\n";

@@ -5,6 +5,7 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -36,6 +37,11 @@ struct Player {
 	}
 	void click(const std::string &what) {
 		float x = 0, y = 0;
+		if ((what.rfind("valve:", 0) == 0 || what.rfind("stir:", 0) == 0) && !ui->locate(what, x, y)) {
+			// an item's controls are shown for the item chosen (Stage 22): it is chosen first
+			const std::string item = what.substr(what.find(':') + 1);
+			click("item:" + item.substr(0, item.find('@')));
+		}
 		at(what, x, y);
 		ui->pointer(x, y, false);
 		ui->pointer(x, y, true);
@@ -223,6 +229,199 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
 	CHECK(p.ui->optics().chain.empty());
 	MESSAGE("carried over the flask: through the jar and the flask's liquid at 650 nm, " << through_both << " of the room's light");
+	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: everything on the bench that takes space is a body of the optical pass: a burner and its flame, parts, their lamps and ports, wires, rigs (Stage 22)") {
+	namespace L = lab::optics_layout;
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	std::string why;
+	for (const char *c : { R"({"do": "valve", "burner": "burner", "to": 0.7})", R"({"do": "part", "kind": "monitor", "at": [1, 1]})", R"({"do": "part", "kind": "alarm", "at": [4, 1]})",
+				 R"({"do": "wire", "from": "monitor1", "to": "alarm1"})", R"({"do": "rig", "from": "monitor1", "item": "burner", "control": "valve", "on": 0})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	p.ui->frame(1.0 / 60.0);
+	const lab::OpticsScene &scene = p.ui->optics();
+	REQUIRE(lab::check_O1(scene) == "");
+	int slabs = 0, bars = 0, cones = 0, vessels = 0;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float kind = scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4];
+		slabs += kind == 3.0f ? 1 : 0;
+		bars += kind == 4.0f ? 1 : 0;
+		cones += kind == 5.0f ? 1 : 0;
+		vessels += kind == 0.0f ? 1 : 0;
+	}
+	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
+	CHECK(cones == 1); // the burner's flame
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1); // the burner; two faces and two lamps; the monitor's port; the rig's knob
+	CHECK(bars == 3); // the wire and the rig; the condenser's outlet, in the cabinet
+	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
+	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
+	// and none of it is drawn over the pass: no polygon (a flame) anywhere, no circle (a lamp, a port, a knob) on
+	// a part or the burner
+	float mx = 0, my = 0, ax = 0, ay = 0, bx = 0, by = 0;
+	p.at("item:monitor1", mx, my);
+	p.at("item:alarm1", ax, ay);
+	p.at("item:burner", bx, by);
+	const lab::DrawList &list = p.ui->draw();
+	for (size_t k = static_cast<size_t>(list.above); k < list.commands.size(); ++k) {
+		const lab::DrawCommand &c = list.commands[k];
+		CHECK(c.type != lab::DrawCommand::Polygon);
+		if (c.type == lab::DrawCommand::Circle) {
+			for (const auto &[x, y] : { std::pair{ mx, my }, std::pair{ ax, ay }, std::pair{ bx, by } }) {
+				CHECK((std::fabs(c.x - x) > 45.0f || std::fabs(c.y - y) > 45.0f));
+			}
+		}
+	}
+}
+
+TEST_CASE("ui: nothing of the lab is drawn over the optical pass: on the bench only names, outlines and highlights cross what stands there (Stage 22)") {
+	// A busy bench: a lit burner under the flask, a condenser on it and a beaker under its outlet, a monitor rigged
+	// to the burner and wired to an alarm. Nothing chosen. What the screen draws over the pass that falls on what
+	// stands on the bench is text, an outline or a line (a highlight), never a fill, a polygon or a circle.
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	p.drag("item:condenser", "item:flask");
+	p.drag("item:beaker", "square:16,12");
+	std::string why;
+	for (const char *c : { R"({"do": "valve", "burner": "burner", "to": 0.5})", R"({"do": "part", "kind": "monitor", "at": [1, 1]})", R"({"do": "part", "kind": "alarm", "at": [4, 1]})",
+				 R"({"do": "wire", "from": "monitor1", "to": "alarm1"})", R"({"do": "rig", "from": "monitor1", "item": "burner", "control": "valve", "on": 0})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	p.ui->key(lab::Ui::KeyEscape); // nothing chosen
+	p.ui->frame(1.0 / 60.0);
+	float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	p.at("square:0,0", x0, y0);
+	p.at("square:1,0", x1, y1);
+	const float square = x1 - x0, left = x0 - square / 2, top = y0 - square / 2;
+	std::vector<lab::ItemView> standing;
+	for (const lab::ItemView &v : p.ui->lab().view().items) {
+		if (v.place == "bench" || v.place == "under" || v.place == "on") {
+			standing.push_back(v);
+		}
+	}
+	REQUIRE(standing.size() >= 6);
+	const lab::DrawList &list = p.ui->draw();
+	int crossing = 0;
+	for (size_t k = static_cast<size_t>(list.above); k < list.commands.size(); ++k) {
+		const lab::DrawCommand &c = list.commands[k];
+		if (c.type == lab::DrawCommand::Outline || c.type == lab::DrawCommand::Line) {
+			continue; // a highlight
+		}
+		// nothing is written on the bench while nothing is chosen (a text's box: its baseline, its size above it)
+		const bool text = c.type == lab::DrawCommand::Text;
+		const float cx0 = c.type == lab::DrawCommand::Circle ? c.x - c.w : c.x, cy0 = c.type == lab::DrawCommand::Circle ? c.y - c.w : text ? c.y - c.h : c.y;
+		const float cx1 = c.type == lab::DrawCommand::Circle ? c.x + c.w : text ? c.x + 4.0f : c.x + c.w, cy1 = c.type == lab::DrawCommand::Circle ? c.y + c.w : text ? c.y : c.y + c.h;
+		for (const lab::ItemView &v : standing) {
+			if (v.col < 0) {
+				continue;
+			}
+			const float fx = left + static_cast<float>(v.col) * square, fy = top + static_cast<float>(v.row) * square;
+			if (cx0 < fx + static_cast<float>(v.w) * square && cx1 > fx && cy0 < fy + static_cast<float>(v.h) * square && cy1 > fy) {
+				CAPTURE(v.id);
+				CAPTURE(c.type);
+				CAPTURE(c.x);
+				CAPTURE(c.y);
+				CHECK(false);
+				++crossing;
+			}
+		}
+	}
+	CHECK(crossing == 0);
+	// chosen, a part says its name and what it is set to, above it; and each kind of part is its own colour
+	p.click("item:monitor1");
+	p.ui->frame(1.0 / 60.0);
+	const lab::DrawList &chosen = p.ui->draw();
+	bool named = false;
+	for (size_t k = static_cast<size_t>(chosen.above); k < chosen.commands.size(); ++k) {
+		const lab::DrawCommand &c = chosen.commands[k];
+		named = named || (c.type == lab::DrawCommand::Text && std::string(&chosen.text[static_cast<size_t>(c.first)]).rfind("monitor1", 0) == 0);
+	}
+	CHECK(named);
+	namespace L = lab::optics_layout;
+	const lab::OpticsScene &scene = p.ui->optics();
+	std::vector<float> faces; // the sets of the faces of a monitor and an alarm
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 3.0f && rect[2] > 30.0f && rect[3] > 30.0f && rect[3] < 40.0f) {
+			faces.push_back(scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4]);
+		}
+	}
+	REQUIRE(faces.size() == 2);
+	CHECK(faces[0] != faces[1]);
+}
+
+TEST_CASE("ui: a timer's time left is a strip of light on it that shrinks as it counts down (Stage 22)") {
+	namespace L = lab::optics_layout;
+	Player p;
+	std::string why;
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [1, 1]})", R"({"do": "set", "part": "timer1", "seconds": 10})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	const auto lit = [&] {
+		p.ui->frame(1.0 / 60.0);
+		const lab::OpticsScene &scene = p.ui->optics();
+		float widest = 0.0f;
+		for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+			const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+			const int set = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4]);
+			const float glow = scene.rows[static_cast<size_t>((set * L::ROWS_PER_SET + L::GLOW_ROW) * L::ROW + 150)]; // 530 nm
+			if (rect[3] == 4.0f && glow > 0.5f) {
+				widest = std::max(widest, rect[2]);
+			}
+		}
+		return widest;
+	};
+	const float full = lit();
+	CHECK(full > 20.0f);
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "wait", "seconds": 5})", why), why);
+	CHECK(lit() == doctest::Approx(full / 2.0f).epsilon(0.05));
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "wait", "seconds": 6})", why), why);
+	CHECK(lit() == 0.0f);
+}
+
+TEST_CASE("ui: an item's controls are in the column on the right, for the item chosen; a person opens the valve and stirs at their pace (Stage 22)") {
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "pour", "from": "acid", "to": "flask", "ml": 60})", why), why);
+	float x = 0, y = 0;
+	// nothing chosen: no control is on the screen
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK_FALSE(p.ui->locate("valve:burner@0.5", x, y));
+	CHECK_FALSE(p.ui->locate("stir:flask", x, y));
+	// the burner chosen: its valve, in the readout's column, not on the bench
+	p.click("item:burner");
+	REQUIRE(p.ui->locate("valve:burner@0", x, y));
+	float bx = 0, by = 0;
+	p.at("square:27,0", bx, by);
+	CHECK(x > bx + 20.0f);
+	CHECK_FALSE(p.ui->locate("stir:flask", x, y));
+	// a person drags it open, a few pixels a frame
+	float sx = 0, sy = 0, ex = 0, ey = 0;
+	p.at("valve:burner@0", sx, sy);
+	p.at("valve:burner@0.8", ex, ey);
+	p.ui->pointer(sx, sy, false);
+	p.ui->pointer(sx, sy, true);
+	for (int k = 1; k <= 40; ++k) {
+		p.ui->pointer(sx + (ex - sx) * static_cast<float>(k) / 40.0f, sy, true);
+		p.ui->frame(1.0 / 60.0);
+	}
+	p.ui->pointer(ex, ey, false);
+	CHECK(p.item("burner").valve == doctest::Approx(0.8).epsilon(0.02));
+	// the flask chosen: its stirring, and no valve
+	p.click("item:flask");
+	CHECK_FALSE(p.ui->locate("valve:burner@0.5", x, y));
+	REQUIRE(p.ui->locate("stir:flask", x, y));
+	p.click("stir:flask");
+	CHECK(p.item("flask").stirred);
+	p.ui->frame(1.0 / 60.0);
+	p.click("stir:flask");
+	CHECK_FALSE(p.item("flask").stirred);
 	well_formed(p.ui->draw());
 }
 

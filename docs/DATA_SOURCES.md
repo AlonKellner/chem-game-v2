@@ -322,6 +322,25 @@ Stage 20 the thickness was the wall's heat-holding mass spread over the side and
 (2.4 mm for the flask, 2.8 mm for the jar): too thick, and it bent the view through an empty
 vessel far more than glassware does. The wall's mass (`wall_g`) is still its heat's.
 
+**Calibrated things of the lab (Stage 22)** (`data/optics/media.json`: `surfaces`, `emitters`). None is
+measured: each is a simple shape placed so that the thing has the colour the screen drew it in
+before Stage 22, when it was drawn over the optical pass. **Confidence: low** (colours to be judged
+by eye; measured spectra are a later stage).
+
+| Thing | Reflectance, or light | Basis |
+|---|---|---|
+| A signal part's face, by kind | a timer 0.035 and 0.10 at 470 nm (width 60); a monitor 0.035 and 0.10 at 525 nm (width 50); an alarm 0.035 and 0.14 at 640 nm (width 60); a notice 0.035 and 0.13 at 585 nm (width 55); a writer 0.04, and 0.08 at 430 nm (width 40) and at 660 nm (width 50) | dark faces of distinct hues, so that a kind is known by its colour (the user: no text on a part) |
+| A signal part's face, other | 0.045, flat | the screen's panel grey (#383838) |
+| A circuit's face | 0.025, and 0.06 at 460 nm (width 60) | its dark blue (#283c50) |
+| A wire | 0.08, flat | the wall's ink (#505050) |
+| A rig | 0.15, and 0.22 at 460 nm (width 70) | its blue (#6e82a0) |
+| A burner's metal | 0.12, flat | its grey (#606060) |
+| A condenser's outlet (glass, not traced) | 0.07, and 0.06 at 470 nm (width 80) | the glass's ink (#4a5662) |
+| A lamp's glass, dark | 0.03, flat | a dark glass |
+| A lamp, green; amber | 1.2 times the room's light at 530 nm (width 30); 1.5 at 600 nm (width 30) | the screen's green (#78c88c) and amber (#e0a040), brighter than the wall as a lamp is |
+| A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
+| A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
+
 **Calibrated floors (Stage 21)** (`data/benches/`, each glass vessel's `floor_mm`). No standard
 found gives a beaker's floor: ISO 3819 gives its wall alone.
 

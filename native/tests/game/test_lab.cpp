@@ -8,6 +8,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 using json = nlohmann::json;
@@ -17,6 +18,14 @@ namespace {
 std::string read(const std::string &relative) {
 	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	REQUIRE_MESSAGE(static_cast<bool>(in), relative);
+	std::ostringstream out;
+	out << in.rdbuf();
+	return out.str();
+}
+
+// the same, asserting nothing: for a thread that is not the test's
+std::string read_file(const std::string &relative) {
+	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	std::ostringstream out;
 	out << in.rdbuf();
 	return out.str();
@@ -483,24 +492,52 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 		plain.erase("note");
 		return plain.dump();
 	};
-	for (const size_t cut : { size_t{ 0 }, size_t{ 4 }, size_t{ 9 }, size_t{ 12 }, size_t{ 17 }, size_t{ 20 } }) {
-		CAPTURE(cut);
-		auto first = demo_bench();
-		std::string why;
-		for (size_t i = 0; i <= cut; ++i) {
-			REQUIRE_MESSAGE(first->command(command(i), why), why);
-		}
-		const std::string saved = first->save();
-		auto second = lab::Lab::load(saved, why);
-		REQUIRE_MESSAGE(second != nullptr, why);
-		CHECK(second->digest() == first->digest());
-		CHECK(second->step() == first->step());
-		CHECK(json::parse(second->report()) == json::parse(first->report()));
-		CHECK(second->save() == saved); // saving what was loaded gives the same text
-		for (size_t i = cut + 1; i < golden.size(); ++i) {
-			REQUIRE_MESSAGE(second->command(command(i), why), "command " << i << ": " << why);
-			REQUIRE_MESSAGE(second->digest() == golden[i].at("digest").get<std::string>(), "after loading at " << cut << ", command " << i << " departs from the record");
-		}
+	// each cut on a thread of its own (a lab is its own world: nothing is shared but the tables); what goes
+	// wrong is said here, on the test's thread
+	const std::vector<size_t> cuts{ 0, 4, 9, 12, 17, 20 };
+	std::vector<std::string> wrong(cuts.size());
+	std::vector<std::thread> threads;
+	for (size_t k = 0; k < cuts.size(); ++k) {
+		threads.emplace_back([&, k] {
+			const size_t cut = cuts[k];
+			std::string &said = wrong[k];
+			const auto fail = [&](const std::string &what) { said = "saved after command " + std::to_string(cut) + ": " + what; };
+			std::string why;
+			auto first = lab::Lab::open(read_file("data/benches/demo.json"), why);
+			if (first == nullptr) {
+				return fail(why);
+			}
+			for (size_t i = 0; i <= cut; ++i) {
+				if (!first->command(command(i), why)) {
+					return fail(why);
+				}
+			}
+			const std::string saved = first->save();
+			auto second = lab::Lab::load(saved, why);
+			if (second == nullptr) {
+				return fail(why);
+			}
+			if (second->digest() != first->digest() || second->step() != first->step() || json::parse(second->report()) != json::parse(first->report())) {
+				return fail("the loaded lab is not the saved one");
+			}
+			if (second->save() != saved) {
+				return fail("saving what was loaded gives another text");
+			}
+			for (size_t i = cut + 1; i < golden.size(); ++i) {
+				if (!second->command(command(i), why)) {
+					return fail("command " + std::to_string(i) + ": " + why);
+				}
+				if (second->digest() != golden[i].at("digest").get<std::string>()) {
+					return fail("command " + std::to_string(i) + " departs from the record");
+				}
+			}
+		});
+	}
+	for (std::thread &t : threads) {
+		t.join();
+	}
+	for (const std::string &said : wrong) {
+		CHECK(said == "");
 	}
 }
 
