@@ -322,10 +322,14 @@ Stage 20 the thickness was the wall's heat-holding mass spread over the side and
 (2.4 mm for the flask, 2.8 mm for the jar): too thick, and it bent the view through an empty
 vessel far more than glassware does. The wall's mass (`wall_g`) is still its heat's.
 
-**Calibrated room for refraction (Stage 11):** the wall stands 20 cm behind the vessels' axes;
-the room in front of the bench, which the glass reflects, has a radiance of 0.3 of the room's white
-(darker than the lit wall: what a lab looks like from the bench). Both are chosen for a plausible
-bench, not measured. A solution's index is water's: the solutes' share is not modelled.
+**Calibrated room for refraction (Stage 11, 21):** the wall stands 284 px behind the plane of the
+bench's vessels, for every vessel (20 cm at a 250 mL vessel's scale, as it has been since Stage 11
+for that vessel; until Stage 21 it was 20 cm at each vessel's own scale: 375 px for a 50 mL one,
+259 px for a 500 mL one); what is held stands on a plane 120 px nearer the eye (8.5 cm at that
+scale: a hand's reach in front of the bench); the room in front of the bench, which the glass
+reflects, has a radiance of 0.3 of the room's white (darker than the lit wall: what a lab looks
+like from the bench). All three are chosen for a plausible bench, not measured: the screen is one
+world in pixels, since each item is drawn at its own scale. A solution's index is water's: the solutes' share is not modelled.
 
 **Calibrated geometry of solids:** a heap's angle of repose 35° and packing fraction 0.5 (typical
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).
