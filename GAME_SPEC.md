@@ -903,7 +903,10 @@ is read back. **The reference** is the same file compiled as C++ in float64 (`op
 `optics_truth`, `optics_pixel`, `optics_picture`, `OpticsFrames`, `optics_compare`).
 
 **The picture is in three layers:** the draw list's first part (the room), the optical pass, the
-draw list's second part (glass, labels, flames, a liquid's surface line, the readout and panels).
+draw list's second part (labels, the burner and its flame, a condenser's outlet, wires, the readout and
+panels). A vessel has no drawn outline and its liquid no drawn surface (Stage 21): its glass, its
+liquid and what the two do to the light are all of it, so that what is held before it bends all of
+it. What the second part still draws of the lab's own things is not in the pass yet (§20).
 
 **Refraction and Fresnel** (Stage 11). A vessel is a glass cylinder around what it holds, and
 light bends at each of its surfaces:
@@ -1092,7 +1095,8 @@ of every ray through its area, and its colour is their average (a box filter).
   - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
     into a neighbour on its own layer; a body that is not round (the prism), seen through another
     or seeing another, is read as it is seen straight on; a vessel standing inside another (a
-    bath) is not built; the outlines and labels the screen draws over the pass are not bent.
+    bath) is not built; what the screen still draws over the pass (the burner and its flame, a
+    condenser's outlet, signal parts, wires, labels) is not bent, and lies over what is held.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
@@ -1904,7 +1908,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A vessel is a cylinder and a balloon a ball, whatever they are drawn as | Path lengths are those of a cylinder of the vessel's volume |
-| Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is shown by a drawn line at its surface; metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
+| Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
@@ -1913,6 +1917,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
-| Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; the outlines and labels the screen draws over the pass are not bent | Through what is held the standing vessels' drawn outlines stay where they stand, over their bent images; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
-| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity; its thicker floor and rim, and its flare and spout, are not modelled | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
+| Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; what the screen still draws over the pass (the burner and its flame, a condenser's outlet, signal parts, wires, labels) is not bent | A burner or a signal part is drawn over a vessel carried across it, not seen through it; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
+| A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity; its floor, its thicker rim, its flare and spout, and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
 | The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |

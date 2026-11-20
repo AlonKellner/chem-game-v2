@@ -140,8 +140,13 @@ time it ran (O4, none visible). Its cost was not:
 - **7.2 ms a frame while a vessel is carried over others** (and 1.4 ms on the CPU). Held still,
   nothing. What might bring it down: reading a stack's bodies once a pixel where its rays go one
   way; a pass over the stack's pixels alone, not its rectangle.
-- **The drawn outlines and labels are not bent**: through what is held, a standing vessel's
-  outline stays where it stands, over its bent image. They are the screen's drawing over the pass.
+- **No outline is drawn** (the user, 2026-11-20: "all lab placed elements must have spectral
+  colors and shapes and they should be propagated through the spectral pipeline"). A vessel's
+  drawn outline and its liquid's drawn surface line are gone: a line the screen draws over the
+  pass is not bent by what is held before it. A vessel is now its glass and its liquid alone: two
+  rims, no floor, no lip.
+- **Still drawn over the pass, not in it**: the burner and its flame, a condenser's outlet, signal
+  parts and wires, labels. A vessel carried across one of them is drawn under it.
 - **A ball's outline** blends by degrees (pre-existing): seen through a held vessel as seen
   straight, a pixel the outline cuts aslant can differ from the truth's sharp outline.
 

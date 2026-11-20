@@ -2461,15 +2461,8 @@ struct Ui::Impl {
 		} else if (v.kind == "balloon") {
 			// all of it is the optical pass's: rubber, and what condensed inside
 		} else {
-			// what is in it is the optical pass's (§12); here, the glass: open at the top
-			if (v.liquid_ml > 0.05) {
-				// and a liquid's surface, until refraction shows a clear one (Stage 11)
-				const float level = static_cast<float>(std::fmin(1.0, v.condensed_ml / (v.volume_ml > 0.0 ? v.volume_ml : 1.0))) * r.h;
-				line(r.x + 1, r.y + r.h - level, r.x + r.w - 1, r.y + r.h - level, rgba(74, 86, 98, 110), 1);
-			}
-			line(r.x, r.y, r.x, r.y + r.h, WALL_GLASS);
-			line(r.x, r.y + r.h, r.x + r.w, r.y + r.h, WALL_GLASS);
-			line(r.x + r.w, r.y + r.h, r.x + r.w, r.y, WALL_GLASS);
+			// All of it is the optical pass's (§12): its glass, what is in it, its liquid's surface. No outline
+			// is drawn over the pass (Stage 21): a line the screen draws is not bent by what is held before it.
 			if (v.condenser) {
 				line(r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, WALL_GLASS); // its outlet
 			}
