@@ -662,25 +662,26 @@ struct Ui::Impl {
 		return -1;
 	}
 
-	// a burner's valve: a slider beside it, while it is on the bench or under a vessel
+	// An item's controls are not on the bench (GAME_SPEC §13.1, Stage 22): they are in the readout's column, under
+	// the selected item's name, for the item that is selected. Where the readout's rows begin:
+	float readout_top() const { return tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30; }
+	// a burner's valve: a slider, shut at its left and open at its right, while it is on the bench or under a vessel
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (v.kind != "burner" || (v.place != "bench" && v.place != "under")) {
+		if (index != selected || v.kind != "burner" || (v.place != "bench" && v.place != "under") || draft.edit != Draft::None) {
 			return false;
 		}
-		const Rect body = rect(index);
-		r = Rect{ body.x + body.w + 10, body.y + body.h - 84, 16, 84 };
+		r = Rect{ READOUT.x + 90, readout_top() + 96, 300, 18 };
 		return true;
 	}
 
 	// a vessel's stirring button, while it stands on the bench with liquid in it
 	bool stir_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (v.kind != "vessel" || v.place != "bench" || !(v.liquid_ml > 0.0)) {
+		if (index != selected || v.kind != "vessel" || v.place != "bench" || !(v.liquid_ml > 0.0) || draft.edit != Draft::None) {
 			return false;
 		}
-		const Rect c = foot(v);
-		r = Rect{ c.x + c.w - 38, c.y + c.h - 26, 36, 22 }; // at its foot, on the right: clear of its mouth, its burner and its name
+		r = Rect{ READOUT.x + 16, readout_top() + 90, 90, 30 };
 		return true;
 	}
 
@@ -1080,7 +1081,7 @@ struct Ui::Impl {
 						return;
 					}
 					valve_drag = i;
-					turn(y);
+					turn(x);
 					return;
 				}
 			}
@@ -1172,13 +1173,19 @@ struct Ui::Impl {
 			x = y = 0;
 			return;
 		}
-		Rect r;
-		if ((control == "valve" && valve_rect(i, r)) || (control == "stir" && stir_rect(i, r))) {
-			x = r.cx();
-			y = r.cy();
+		// on the item itself (its controls are not on the bench: Stage 22): a burner's valve at its right side, a
+		// vessel's stirring at its foot's right corner, a part's input at its corner
+		const Rect body = drawn(i);
+		if (control == "valve") {
+			x = body.x + body.w;
+			y = body.cy();
 			return;
 		}
-		const Rect body = drawn(i);
+		if (control == "stir") {
+			x = body.x + body.w - 6;
+			y = body.y + body.h - 8;
+			return;
+		}
 		x = body.x + 4;
 		y = control == "reset" ? body.y + body.h - 4 : body.y + 4;
 	}
@@ -2168,12 +2175,12 @@ struct Ui::Impl {
 		pour_fraction = f < 0.02 ? 0.02 : f > 1 ? 1 : f;
 	}
 
-	void turn(float y) {
+	void turn(float x) {
 		Rect r;
 		if (!valve_rect(valve_drag, r)) {
 			return;
 		}
-		double open = 1.0 - (y - r.y) / r.h;
+		double open = (x - r.x) / r.w;
 		open = open < 0 ? 0 : open > 1 ? 1 : open;
 		act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
 	}
@@ -2479,8 +2486,8 @@ struct Ui::Impl {
 			text(c.x + 8, c.y + 21, text_of(n == 1 ? "create circuit of %.0f part" : "create circuit of %.0f parts", static_cast<double>(n)), INK, 16);
 		}
 		text(DRAWER.x + 14, DRAWER.y + 234, "wire a part from its port, on its right: into another", DIM, 13);
-		text(DRAWER.x + 14, DRAWER.y + 254, "part, or onto a control to rig it (a vessel's stirring,", DIM, 13);
-		text(DRAWER.x + 14, DRAWER.y + 274, "a burner's valve, a timer's reset)", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 254, "part, or onto a vessel, a burner or a timer to rig its", DIM, 13);
+		text(DRAWER.x + 14, DRAWER.y + 274, "stirring, its valve or its reset", DIM, 13);
 	}
 
 	void paint_item(int index, Rect r) {
@@ -2551,15 +2558,6 @@ struct Ui::Impl {
 				continue;
 			}
 			paint_item(i, drawn(i));
-			Rect r;
-			if (valve_rect(i, r)) {
-				rect_fill(r, BUTTON);
-				const float knob = r.y + r.h * static_cast<float>(1.0 - view.items[static_cast<size_t>(i)].valve);
-				rect_fill(Rect{ r.x - 4, knob - 4, r.w + 8, 8 }, INK);
-			}
-			if (stir_rect(i, r)) {
-				button(r, "stir", view.items[static_cast<size_t>(i)].stirred, 14);
-			}
 			// what stands under a condenser's outlet is joined to it by a drip
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			if (v.drains_to >= 0) {
@@ -3272,6 +3270,20 @@ struct Ui::Impl {
 		} else if (showing >= 0) {
 			const ItemView &v = view.items[static_cast<size_t>(showing)];
 			row(v.id + " (" + v.kind + (v.condenser ? ", condenser" : "") + ", " + v.place + ")", INK, 20);
+			// its controls, while it is selected (GAME_SPEC §13.1: not on the bench)
+			Rect control;
+			if (valve_rect(showing, control)) {
+				text(READOUT.x + 16, control.y + 15, "valve", INK, 16);
+				rect_fill(control, BUTTON);
+				const float knob = control.x + control.w * static_cast<float>(v.valve);
+				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
+				rect_fill(Rect{ knob - 4, control.y - 4, 8, control.h + 8 }, INK);
+				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * v.valve), DIM, 15);
+				y += 42;
+			} else if (stir_rect(showing, control)) {
+				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
+				y += 42;
+			}
 			for (const ControlSetting &c : view.controls) {
 				if (c.item == v.id) {
 					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") + ", set by " + c.by +
@@ -3521,7 +3533,7 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 		if (m.slider_drag) {
 			m.slide(x);
 		} else if (m.valve_drag >= 0) {
-			m.turn(y);
+			m.turn(x);
 		}
 	} else if (released) {
 		if (m.making >= 0) {
@@ -3807,8 +3819,8 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 			return false;
 		}
 		const double open = std::atof(std::string(rest.substr(at + 1)).c_str());
-		x = r.cx();
-		y = r.y + r.h * static_cast<float>(1.0 - open);
+		x = r.x + r.w * static_cast<float>(open);
+		y = r.cy();
 		return true;
 	}
 	if (after("stir:", rest)) {

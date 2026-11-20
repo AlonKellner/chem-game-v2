@@ -15,7 +15,7 @@
 		{
 			"title": "A burner under the flask",
 			"text": "Drag the burner from the cabinet onto the flask.",
-			"why": "A burner heats the vessel it stands under. The slider beside it is its gas valve.",
+			"why": "A burner heats the vessel it stands under. Chosen, its gas valve shows in the column on the right.",
 			"checks": [{"text": "the burner is under the flask", "when": {"item": "burner", "under": "flask"}}],
 			"play": [{"drag": ["item:burner", "item:flask"]}]
 		},
@@ -42,10 +42,10 @@
 		},
 		{
 			"title": "Light the burner",
-			"text": "Drag the slider beside the burner all the way up.",
+			"text": "Click the burner to choose it, then drag its valve, in the column on the right, all the way open.",
 			"why": "The flame is at about 1,900 C; the valve sets how much of its heat reaches the flask.",
 			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
-			"play": [{"click": "valve:burner@1"}]
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}]
 		},
 		{
 			"title": "Speed up time",
@@ -69,13 +69,13 @@
 		},
 		{
 			"title": "Let the flask cool",
-			"text": "Drag the burner's slider all the way down, then wait for the flask to cool.",
+			"text": "Choose the burner and shut its valve, then wait for the flask to cool.",
 			"why": "The black copper oxide stays in the flask for the next stage. Acid on hot glass would spit.",
 			"checks": [
 				{"text": "the burner is off", "when": {"item": "burner", "valve_at_most": 0}},
 				{"text": "the flask below 30 C", "wait": true, "when": {"item": "flask", "below_c": 30}}
 			],
-			"play": [{"click": "valve:burner@0"}]
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@0"}]
 		},
 		{
 			"part": "Stage 2: copper sulfate solution",
@@ -97,20 +97,20 @@
 		},
 		{
 			"title": "Stir",
-			"text": "Click \"stir\" in the corner of the flask's square.",
+			"text": "Click the flask to choose it, then \"stir\" in the column on the right.",
 			"why": "Stirring brings fresh acid to the surface of the grains.",
 			"checks": [{"text": "the flask is stirred", "when": {"item": "flask", "stirred": true}}],
-			"play": [{"click": "stir:flask"}]
+			"play": [{"click": "item:flask"}, {"click": "stir:flask"}]
 		},
 		{
 			"title": "A low flame",
-			"text": "Set the burner's slider to about a fifth of the way up.",
+			"text": "Choose the burner and set its valve to about a fifth open.",
 			"why": "Warmth speeds the dissolving. A full flame would boil the acid before it has done its work.",
 			"checks": [
 				{"text": "the valve at least 10% open", "when": {"item": "burner", "valve_at_least": 0.1}},
 				{"text": "and at most 40%", "when": {"item": "burner", "valve_at_most": 0.4}}
 			],
-			"play": [{"click": "valve:burner@0.2"}]
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@0.2"}]
 		},
 		{
 			"title": "Wait for the oxide to dissolve",
@@ -120,10 +120,10 @@
 		},
 		{
 			"title": "Stop stirring",
-			"text": "Click \"stir\" again.",
+			"text": "Choose the flask and click \"stirring\" to stop.",
 			"why": "Crystals grow larger and fewer from a still solution.",
 			"checks": [{"text": "the flask is not stirred", "when": {"item": "flask", "stirred": false}}],
-			"play": [{"click": "stir:flask"}]
+			"play": [{"click": "item:flask"}, {"click": "stir:flask"}]
 		},
 		{
 			"part": "Stage 3: water and crystals",
@@ -195,10 +195,10 @@
 		},
 		{
 			"title": "Boil",
-			"text": "Drag the burner's slider all the way up.",
+			"text": "Choose the burner and open its valve all the way.",
 			"why": "Only the water boils off: the copper sulfate and the leftover acid stay in the flask.",
 			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
-			"play": [{"click": "valve:burner@1"}]
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}]
 		},
 		{
 			"title": "Boil it down, not dry",

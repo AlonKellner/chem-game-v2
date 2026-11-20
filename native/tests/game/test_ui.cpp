@@ -37,6 +37,11 @@ struct Player {
 	}
 	void click(const std::string &what) {
 		float x = 0, y = 0;
+		if ((what.rfind("valve:", 0) == 0 || what.rfind("stir:", 0) == 0) && !ui->locate(what, x, y)) {
+			// an item's controls are shown for the item chosen (Stage 22): it is chosen first
+			const std::string item = what.substr(what.find(':') + 1);
+			click("item:" + item.substr(0, item.find('@')));
+		}
 		at(what, x, y);
 		ui->pointer(x, y, false);
 		ui->pointer(x, y, true);
@@ -270,6 +275,102 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 			}
 		}
 	}
+}
+
+TEST_CASE("ui: nothing of the lab is drawn over the optical pass: on the bench only names, outlines and highlights cross what stands there (Stage 22)") {
+	// A busy bench: a lit burner under the flask, a condenser on it and a beaker under its outlet, a monitor rigged
+	// to the burner and wired to an alarm. Nothing chosen. What the screen draws over the pass that falls on what
+	// stands on the bench is text, an outline or a line (a highlight), never a fill, a polygon or a circle.
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	p.drag("item:condenser", "item:flask");
+	p.drag("item:beaker", "square:16,12");
+	std::string why;
+	for (const char *c : { R"({"do": "valve", "burner": "burner", "to": 0.5})", R"({"do": "part", "kind": "monitor", "at": [1, 1]})", R"({"do": "part", "kind": "alarm", "at": [4, 1]})",
+				 R"({"do": "wire", "from": "monitor1", "to": "alarm1"})", R"({"do": "rig", "from": "monitor1", "item": "burner", "control": "valve", "on": 0})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	p.ui->key(lab::Ui::KeyEscape); // nothing chosen
+	p.ui->frame(1.0 / 60.0);
+	float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	p.at("square:0,0", x0, y0);
+	p.at("square:1,0", x1, y1);
+	const float square = x1 - x0, left = x0 - square / 2, top = y0 - square / 2;
+	std::vector<lab::ItemView> standing;
+	for (const lab::ItemView &v : p.ui->lab().view().items) {
+		if (v.place == "bench" || v.place == "under" || v.place == "on") {
+			standing.push_back(v);
+		}
+	}
+	REQUIRE(standing.size() >= 6);
+	const lab::DrawList &list = p.ui->draw();
+	int crossing = 0;
+	for (size_t k = static_cast<size_t>(list.above); k < list.commands.size(); ++k) {
+		const lab::DrawCommand &c = list.commands[k];
+		if (c.type == lab::DrawCommand::Text || c.type == lab::DrawCommand::Outline || c.type == lab::DrawCommand::Line) {
+			continue;
+		}
+		const float cx0 = c.type == lab::DrawCommand::Circle ? c.x - c.w : c.x, cy0 = c.type == lab::DrawCommand::Circle ? c.y - c.w : c.y;
+		const float cx1 = c.type == lab::DrawCommand::Circle ? c.x + c.w : c.x + c.w, cy1 = c.type == lab::DrawCommand::Circle ? c.y + c.w : c.y + c.h;
+		for (const lab::ItemView &v : standing) {
+			if (v.col < 0) {
+				continue;
+			}
+			const float fx = left + static_cast<float>(v.col) * square, fy = top + static_cast<float>(v.row) * square;
+			if (cx0 < fx + static_cast<float>(v.w) * square && cx1 > fx && cy0 < fy + static_cast<float>(v.h) * square && cy1 > fy) {
+				CAPTURE(v.id);
+				CAPTURE(c.type);
+				CAPTURE(c.x);
+				CAPTURE(c.y);
+				CHECK(false);
+				++crossing;
+			}
+		}
+	}
+	CHECK(crossing == 0);
+}
+
+TEST_CASE("ui: an item's controls are in the column on the right, for the item chosen; a person opens the valve and stirs at their pace (Stage 22)") {
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "pour", "from": "acid", "to": "flask", "ml": 60})", why), why);
+	float x = 0, y = 0;
+	// nothing chosen: no control is on the screen
+	p.ui->key(lab::Ui::KeyEscape);
+	CHECK_FALSE(p.ui->locate("valve:burner@0.5", x, y));
+	CHECK_FALSE(p.ui->locate("stir:flask", x, y));
+	// the burner chosen: its valve, in the readout's column, not on the bench
+	p.click("item:burner");
+	REQUIRE(p.ui->locate("valve:burner@0", x, y));
+	float bx = 0, by = 0;
+	p.at("square:27,0", bx, by);
+	CHECK(x > bx + 20.0f);
+	CHECK_FALSE(p.ui->locate("stir:flask", x, y));
+	// a person drags it open, a few pixels a frame
+	float sx = 0, sy = 0, ex = 0, ey = 0;
+	p.at("valve:burner@0", sx, sy);
+	p.at("valve:burner@0.8", ex, ey);
+	p.ui->pointer(sx, sy, false);
+	p.ui->pointer(sx, sy, true);
+	for (int k = 1; k <= 40; ++k) {
+		p.ui->pointer(sx + (ex - sx) * static_cast<float>(k) / 40.0f, sy, true);
+		p.ui->frame(1.0 / 60.0);
+	}
+	p.ui->pointer(ex, ey, false);
+	CHECK(p.item("burner").valve == doctest::Approx(0.8).epsilon(0.02));
+	// the flask chosen: its stirring, and no valve
+	p.click("item:flask");
+	CHECK_FALSE(p.ui->locate("valve:burner@0.5", x, y));
+	REQUIRE(p.ui->locate("stir:flask", x, y));
+	p.click("stir:flask");
+	CHECK(p.item("flask").stirred);
+	p.ui->frame(1.0 / 60.0);
+	p.click("stir:flask");
+	CHECK_FALSE(p.item("flask").stirred);
+	well_formed(p.ui->draw());
 }
 
 TEST_CASE("ui: a refusal is shown, and nothing changes (Stage 9)") {

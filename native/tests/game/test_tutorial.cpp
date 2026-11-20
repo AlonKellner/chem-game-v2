@@ -42,6 +42,11 @@ struct Pupil {
 	}
 	void click(const std::string &what) {
 		float x = 0, y = 0;
+		if ((what.rfind("valve:", 0) == 0 || what.rfind("stir:", 0) == 0) && !ui->locate(what, x, y)) {
+			// an item's controls are shown for the item chosen (Stage 22): it is chosen first
+			const std::string item = what.substr(what.find(':') + 1);
+			click("item:" + item.substr(0, item.find('@')));
+		}
 		at(what, x, y);
 		ui->pointer(x, y, false);
 		ui->pointer(x, y, true);

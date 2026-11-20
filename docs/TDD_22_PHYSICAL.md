@@ -19,7 +19,7 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 | 22.2 | The scene: 256 bodies, spectra named by set, a grid of squares for a pixel to find its bodies | Done: see below |
 | 22.3 | Three shapes: the slab, the bar, the cone; opaque and glowing | Done: see below |
 | 22.4 | The screen: parts, lamps, wires, the burner and its flame, the outlet as bodies; nothing of the lab drawn over the pass, and a test that holds it | Done: see below |
-| 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Pending |
+| 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Done: see below |
 | 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Pending |
 | 22.7 | Pictures; the user judges by eye and signs off | Pending |
 
@@ -82,4 +82,16 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 - **A timing test made robust**: "three monitors cost little" takes the best of three runs each,
   interleaved; the entries run side by side, and a moment's load was not the monitors'.
 - O4, none visible on 14 pictures; a restarting pass 1.54 ms with nothing held.
+
+## The controls (22.5)
+
+- A burner's valve (a slider, shut at its left) and a vessel's "stir" (a button, "stirring" while
+  on) are in the readout's column under the item's name, for the item chosen; none is on the bench.
+- A rig's bar ends on the item itself (a burner's side, a vessel's foot), not on a control.
+- The tutorial's steps that use them choose the item first (`item:burner`, then the valve); their
+  words say so. The tests' helpers and the picture tool choose an item before clicking a control
+  that is not showing.
+- Tested: on a busy bench with nothing chosen, nothing the screen draws over the pass that falls
+  on what stands there is a fill, a polygon or a circle (only names, outlines and line
+  highlights); a person opens the valve over 40 frames and stirs, from the column.
 
