@@ -28,7 +28,7 @@ public:
 	// RenderingDevice (the headless and Compatibility renderers) or it does not compile.
 	bool open(const godot::String &pixel_source, godot::String &why);
 	bool ready() const { return rd_ != nullptr; }
-	// The scene's buffers, when its revision has moved.
+	// The scene's buffers, when its revision has moved; its maps and its wall's table, when theirs have.
 	void upload(const cg_optics &optics);
 	// One frame over the screen, `budget` points a pixel at most (on the render thread). `again`: the
 	// same frame run once more, for timing (no new total of asks, the same frame number).
@@ -44,11 +44,18 @@ private:
 
 	godot::RenderingDevice *rd_ = nullptr;
 	godot::RID shader_, pipeline_, uniforms_;
-	godot::RID scene_, rows_, lines_, lights_, asked_;
+	// a storage buffer and how many bytes it can hold: made anew, larger, when what it is given outgrows it
+	struct Buffer {
+		godot::RID rid;
+		uint32_t capacity = 0;
+	};
+	void hold(Buffer &buffer, const float *data, int32_t floats);
+	Buffer scene_, rows_, lines_, lights_, maps_, wall_;
+	godot::RID asked_;
 	godot::RID state_[4];
 	godot::RID shown_;
 	godot::Ref<godot::Texture2DRD> shown_texture_;
-	uint64_t uploaded_ = 0;
+	uint64_t uploaded_ = 0, uploaded_maps_ = 0, uploaded_wall_ = 0;
 	bool have_scene_ = false;
 	int32_t frame_ = 0;
 	int32_t parity_ = 0;

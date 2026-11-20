@@ -43,7 +43,7 @@ SubstanceView substance(const char *species, char phase, double mol, double g, b
 	return s;
 }
 
-// 100 mL of copper sulfate solution, with or without its 50 g of glass
+// 100 mL of copper sulfate solution, with or without its glass (50 g, 1.1 mm thick)
 ItemView vessel(double molar, bool glass) {
 	ItemView v;
 	v.id = "flask";
@@ -57,6 +57,7 @@ ItemView vessel(double molar, bool glass) {
 	}
 	if (glass) {
 		v.contents.push_back(substance("glass", 's', 0.83, 50.0, true));
+		v.wall_mm = 1.1; // a 250 mL beaker's wall (ISO 3819)
 	}
 	return v;
 }
@@ -101,7 +102,7 @@ TEST_CASE("refraction: the indices of water and of laboratory glass, as measured
 	CHECK(chem::optics::refractive_index(chem::builtin::copper_oxide)[100] == 1.0); // none known: air's
 }
 
-TEST_CASE("O5: where every index is 1, refraction changes nothing (Stage 11)") {
+TEST_CASE("O5: where every index is 1, refraction changes nothing: a pixel is the average of its straight rays (Stage 11, 20)") {
 	const ItemView v = vessel(0.5, false); // no glass: with indices of 1 the light's path is the straight one
 	OpticsScene bent = scene_of(v, room(true));
 	const OpticsScene straight = scene_of(v, room(false));
@@ -111,16 +112,29 @@ TEST_CASE("O5: where every index is 1, refraction changes nothing (Stage 11)") {
 			bent.rows[static_cast<size_t>(row * ROW + i)] = 1.0f;
 		}
 	}
-	double worst = 0.0;
+	lab::optics_maps(bent); // a map is traced for its body's indices
+	// Every pixel is the average of its straight rays, as the truth averages them (64 across and down, each
+	// its own chord): at the rim too, where some of its rays miss the vessel and the rest cross little liquid.
+	// And in the vessel's middle half, where the chord hardly changes across a pixel, that is the straight
+	// path's own light. (Until Stage 20, when a pixel was its centre's ray, the two were equal to 1e-9.)
+	double middle_worst = 0.0, truth_worst = 0.0;
+	int rims = 0;
 	for (int y = LOW - 60; y <= LOW + 10; y += 7) {
 		for (int x = static_cast<int>(X) - 1; x <= static_cast<int>(X + W); x += 3) {
+			const bool middle = std::fabs(x + 0.5 - (X + W / 2)) < W / 4;
+			rims += x < static_cast<int>(X) + 2 || x > static_cast<int>(X + W) - 3 ? 1 : 0;
 			for (const double nm : { 420.0, 550.0, 700.0 }) {
-				const double a = lab::optics_through(bent, x, y, nm), b = lab::optics_through(straight, x, y, nm);
-				worst = std::max(worst, std::fabs(a - b) / std::max(b, 1e-300));
+				const double a = lab::optics_through(bent, x, y, nm);
+				truth_worst = std::max(truth_worst, std::fabs(a - lab::optics_area_through(bent, x, y, nm, 64)));
+				if (middle) {
+					middle_worst = std::max(middle_worst, std::fabs(a - lab::optics_through(straight, x, y, nm)));
+				}
 			}
 		}
 	}
-	CHECK(worst < 1e-9);
+	CHECK(rims > 0);
+	CHECK(truth_worst < 0.002); // of the room's white
+	CHECK(middle_worst < 2e-4);
 	// and it fires: water's own index bends and reflects
 	const OpticsScene water = scene_of(v, room(true));
 	CHECK(std::fabs(lab::optics_through(water, AXIS + 30, LOW, 550.0) - lab::optics_through(straight, AXIS + 30, LOW, 550.0)) > 1e-3);
@@ -171,6 +185,45 @@ TEST_CASE("refraction: a vessel of water is a lens: inverted and magnified, as p
 	CHECK(lab::optics_bend(scene, AXIS + 10, static_cast<int>(Y) + 10, 550.0).x == doctest::Approx(AXIS + 10.5));
 }
 
+TEST_CASE("refraction: glass bends by how thick the vessel is made, not by what its wall weighs (Stage 20)") {
+	// above the liquid a vessel is a shell of glass around air: a weak lens that spreads the view. Near the axis
+	// its two surfaces turn a ray by -2 (1 - 1/n) t d / (R r), so the wall is seen at 1 + 2 D (n - 1) t / (n R r) times
+	const double d_wall = 20.0, n = index_at(chem::builtin::glass, 550.0);
+	const int high = static_cast<int>(Y) + 10;
+	const auto times = [&](const ItemView &v) {
+		const OpticsScene scene = scene_of(v, room(true));
+		return (lab::optics_bend(scene, AXIS + 1, high, 550.0).x - lab::optics_bend(scene, AXIS - 1, high, 550.0).x) / 2.0;
+	};
+	ItemView made = vessel(0.0, true);
+	const OpticsScene scene = scene_of(made, room(true));
+	const double r_out = 45.0 * scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
+	const auto paraxial = [&](double t) { return 1.0 + 2.0 * d_wall * (n - 1.0) * t / (n * r_out * (r_out - t)); };
+	const double thin = times(made);
+	MESSAGE("a 250 mL beaker's 1.1 mm of glass, 20 cm in front of the wall: the wall seen through it at " << thin << " times (paraxial: " << paraxial(0.11) << ")");
+	CHECK(thin == doctest::Approx(paraxial(0.11)).epsilon(0.01));
+	// the wall's mass is its heat's, and bends nothing: five times the glass, the same view
+	ItemView heavy = made;
+	heavy.contents.back().g *= 5.0;
+	heavy.contents.back().mol *= 5.0;
+	CHECK(times(heavy) == thin);
+	// twice as thick, about twice the spread
+	ItemView thick = made;
+	thick.wall_mm = 2.2;
+	CHECK(times(thick) == doctest::Approx(paraxial(0.22)).epsilon(0.01));
+	CHECK(times(thick) - 1.0 > 1.9 * (thin - 1.0));
+	// a wall of no thickness is no glass: nothing bends above the liquid, and face on only the liquid's
+	// own surfaces turn light away
+	ItemView none = made;
+	none.wall_mm = 0.0;
+	CHECK(times(none) == doctest::Approx(1.0));
+	const double nw = index_at(chem::builtin::water, 550.0), r = std::pow((nw - 1.0) / (nw + 1.0), 2.0);
+	CHECK(lab::optics_bend(scene_of(none, room(true)), AXIS, LOW, 550.0).pass == doctest::Approx((1.0 - r) * (1.0 - r)).epsilon(1e-3));
+	// a wall as thick as the vessel is wide is glass all through: a rod, still a scene that holds
+	ItemView rod = made;
+	rod.wall_mm = 100.0;
+	CHECK(times(rod) < -1.0); // a strong lens: the view inverted
+}
+
 TEST_CASE("refraction: the light takes the bent chord through the liquid, at its own wavelength (Stage 11)") {
 	// weak enough that some light gets through six centimetres at 680 nm
 	const OpticsScene salt = scene_of(vessel(0.02, true), room(true)), plain = scene_of(vessel(0.0, true), room(true));
@@ -181,17 +234,18 @@ TEST_CASE("refraction: the light takes the bent chord through the liquid, at its
 		// exp(-tau L) along the chord the ray really crosses
 		const double front = 0.3, reflected = (1.0 - b.pass) * front;
 		const double t_salt = (lab::optics_through(salt, AXIS + k, LOW, 680.0) - reflected) / (lab::optics_through(plain, AXIS + k, LOW, 680.0) - reflected);
-		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-5));
+		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-3)); // the map's chord, between its samples
 		// the chord of a ray d from the axis inside water is 2 sqrt(r^2 - (d / n)^2): longer than the straight one
 		const double cm_per_px = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
 		const double glass_cm = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4];
 		const double r_in = 45.0 * cm_per_px - glass_cm, d = (k + 0.5) * cm_per_px, n = index_at(chem::builtin::water, 680.0);
-		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-6));
+		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-4)); // the map's one cubic over the spectrum
 		if (k > 0) {
 			CHECK(b.chord > 2.0 * std::sqrt(r_in * r_in - d * d));
 		}
 	}
-	CHECK(salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4] > 0.05); // 50 g of glass: about a millimetre
+	// its glass is as thick as the vessel is made, whatever its wall weighs
+	CHECK(salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4] == doctest::Approx(0.11));
 }
 
 TEST_CASE("refraction: glass shows the room in front at its rims, and lets most through face on (Stage 11)") {
@@ -213,15 +267,16 @@ TEST_CASE("refraction: on the bench the vessels show the grid behind them, bent,
 	const OpticsScene &scene = ui->optics();
 	REQUIRE(lab::check_O1(scene) == "");
 	CHECK(scene.table[2 * 4 + 2] == 1.0f); // refraction is on in the game
-	int shapes = 0, bending = 0;
+	int bending = 0;
 	using namespace lab::optics_layout;
 	for (int i = 0; i < static_cast<int>(scene.table[0]); ++i) {
 		const size_t at = static_cast<size_t>(HEADER_VECS + i * BODY_VECS);
-		shapes += static_cast<int>(scene.table[(at + REFRACT) * 4 + 2]);
 		bending += scene.table[(at + REFRACT) * 4 + 3] > 0.5f ? 1 : 0;
 	}
-	CHECK(shapes > 0); // the grid's lines behind them
+	CHECK(scene.drawn.size() >= 5 * 40); // the grid's lines behind them, and the rest of the wall's drawing: all of it
+	CHECK(scene.wall[0] > 40.0f); // their edges, the wall's breakpoints
 	CHECK(bending >= 5); // the vessels; not the balloon
+	CHECK(scene.maps.size() > 1000); // each with its map
 	// somewhere in a vessel the pixel's view lands on a grid line it does not lie on
 	float fx = 0, fy = 0;
 	REQUIRE(ui->locate("item:jar", fx, fy));
@@ -315,18 +370,25 @@ TEST_CASE("refraction: a 60-degree prism of flint glass deviates light least by 
 		return std::atan(std::fabs(b.x - a.x) * cm_per_px / 10.0);
 	};
 	double closest = 10.0;
-	int at = -1;
 	double turn_at = 0.0;
 	for (const double turn : { incidence, -incidence }) {
 		for (int x = 480; x <= 720; x += 4) {
 			const double d = deviation(turn, x);
 			if (d >= 0.0 && std::fabs(d - expected) < std::fabs(closest - expected)) {
 				closest = d;
-				at = x;
 				turn_at = turn;
 			}
 		}
 	}
+	// the rays that pass two faces all turn so: the one in their middle (one at their end leaves the prism's outline as it turns)
+	std::vector<int> passing;
+	for (int x = 480; x <= 720; x += 4) {
+		if (std::fabs(deviation(turn_at, x) - expected) < 0.002 * expected) {
+			passing.push_back(x);
+		}
+	}
+	REQUIRE(passing.size() > 4);
+	const int at = passing[passing.size() / 2];
 	MESSAGE("at least deviation's turn: " << closest * 57.2957795 << " degrees; 2 asin(n sin 30) - 60 = " << expected * 57.2957795);
 	CHECK(closest == doctest::Approx(expected).epsilon(0.002));
 	// and it is the least: turned a little either way, the same ray turns further
@@ -401,20 +463,20 @@ int prism_wrong(lab::PrismDemo &demo, lab::OpticsFrames &rendered, bool cuts, in
 
 } // namespace
 
-TEST_CASE("optics: a pixel's bands are cut where its bent view crosses a drawn edge: the prism's spectrum settles, and stays right when turned (Stage 11)") {
+TEST_CASE("optics: a bent view sweeping across a drawn edge is read exactly: the prism's spectrum settles, and stays right when turned (Stage 11, 20)") {
+	// A pixel sees the slit through a narrow window of wavelengths. Until Stage 20 each such window was found
+	// by bisection and the band cut there; now the wall is integrated over the band's sweep, and no window is
+	// missed, with the cuts on or off (they are for narrow absorption lines alone).
 	lab::PrismDemo demo;
 	lab::OpticsFrames rendered(890, 538, 300, 4);
 	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
 	demo.turn(0.06);
 	CHECK(prism_wrong(demo, rendered, true, 40) == 0);
-	// without the cuts, pixels that see the slit through a narrow window of wavelengths miss it and stay wrong
 	lab::PrismDemo plain;
 	lab::OpticsFrames uncut(890, 538, 300, 4);
-	const int before = prism_wrong(plain, uncut, false, 40);
+	CHECK(prism_wrong(plain, uncut, false, 40) == 0);
 	plain.turn(0.06);
-	const int after = prism_wrong(plain, uncut, false, 40);
-	MESSAGE("without cuts: " << before << " pixels wrong on the row as it opens, " << after << " after a turn");
-	CHECK(before + after > 0);
+	CHECK(prism_wrong(plain, uncut, false, 40) == 0);
 }
 
 TEST_CASE("optics: a dragged vessel's glass is seen right where it stops, above its liquid too (Stage 11)") {

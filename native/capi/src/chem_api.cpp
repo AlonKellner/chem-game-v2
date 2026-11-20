@@ -351,6 +351,12 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->lines = scene.lines.data();
 	out->light_count = static_cast<int32_t>(scene.lights.size() / 4);
 	out->lights = scene.lights.data();
+	out->map_count = static_cast<int32_t>(scene.maps.size() / 4);
+	out->maps = scene.maps.data();
+	out->maps_revision = scene.maps_revision;
+	out->wall_count = static_cast<int32_t>(scene.wall.size() / 4);
+	out->wall = scene.wall.data();
+	out->wall_revision = scene.wall_revision;
 }
 
 void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
@@ -425,18 +431,7 @@ cg_status cg_ui_optics(cg_ui *ui, cg_optics *out) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_optics: null argument, or the size is not set");
 	}
 	try {
-		const lab::OpticsScene &scene = ui->ui->optics();
-		out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
-		out->table = scene.table.data();
-		out->revision = scene.revision;
-		if (out->size >= sizeof(cg_optics)) {
-			out->row_count = static_cast<int32_t>(scene.rows.size());
-			out->rows = scene.rows.data();
-			out->line_count = static_cast<int32_t>(scene.lines.size() / 4);
-			out->lines = scene.lines.data();
-			out->light_count = static_cast<int32_t>(scene.lights.size() / 4);
-			out->lights = scene.lights.data();
-		}
+		fill_optics(ui->ui->optics(), out);
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());

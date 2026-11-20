@@ -20,14 +20,13 @@ inline constexpr int MAX_BODIES = 16;
 // at the edges a bent view crosses (1 or 0)
 inline constexpr int HEADER_VECS = 3;
 inline constexpr int BODY_VECS = 7;
-// the drawn shapes behind the bodies (GAME_SPEC §12.3): two vec4s each, its rectangle and its radiance
-inline constexpr int MAX_SHAPES = 256;
-inline constexpr int SHAPE_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
-inline constexpr int SIZE_VECS = SHAPE_BASE + 2 * MAX_SHAPES;
-// within a body; REFRACT: its glass's thickness (cm), its first shape, how many, whether it refracts.
+inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
+// within a body; REFRACT: its glass's thickness (cm), unused, unused, whether it refracts. MAP: where its
+// refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
+// (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5;
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6;
 // each body's spectra, ROW values at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
 // liquid's refractive index, its wall's
@@ -39,15 +38,41 @@ inline constexpr int ROWS_SIZE = MAX_BODIES * ROWS_PER_BODY * ROW;
 inline constexpr int MAX_LINES = 256;
 // the lights: the room's (the only one yet), 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)
 inline constexpr int LIGHT_ENTRIES = 4097;
+// and after them the table the other way: the share of its energy up to each whole nm from 380 (x), ROW of them
+inline constexpr int LIGHT_SIZE = LIGHT_ENTRIES + ROW;
 inline constexpr int LIGHTS = 1;
+// The wall as a table (GAME_SPEC §12.3), in vec4s. The edges of everything drawn on it are its
+// breakpoints across; between two it is one radiance on any row of pixels (the shapes over a row's
+// height averaged). Rows alike share a profile.
+//   [0]                          breakpoints m, profiles, 0, 0
+//   [WALL_ROW_BASE + y]          the profile of pixel row y (x)
+//   [WALL_COLUMN_BASE + c]       the cell that x = c is in: how many breakpoints are at or left of it (x)
+//   [WALL_BREAK_BASE + j]        breakpoint j (x), ascending
+//   then, a profile after another, m + 1 cells each: cell j is from breakpoint j - 1 to breakpoint j
+//                                (the first from the far left, the last to the far right):
+//                                (its radiance, the profile's integral from breakpoint 0 to the cell's
+//                                left end in two parts, coarse and fine: their sum, exactly; 0)
+inline constexpr int WALL_ROWS = 1080, WALL_COLUMNS = 1920;
+inline constexpr int WALL_ROW_BASE = 1, WALL_COLUMN_BASE = WALL_ROW_BASE + WALL_ROWS, WALL_BREAK_BASE = WALL_COLUMN_BASE + WALL_COLUMNS;
 } // namespace optics_layout
 
 struct OpticsScene {
 	std::vector<float> table; // SIZE_VECS * 4
 	std::vector<float> rows; // ROWS_SIZE
 	std::vector<float> lines; // MAX_LINES * 4
-	std::vector<float> lights; // LIGHTS * LIGHT_ENTRIES * 4
+	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	uint64_t revision = 0; // changes when any of them does
+	// The refraction maps and the wall's table (GAME_SPEC §12.3): large, and seldom changed, so each has
+	// its own revision. A map is traced again only when its body's shape, glass or indices change.
+	std::vector<float> maps; // vec4s: each refracting body's map (lab/optics_trace.hpp: map_block)
+	std::vector<float> wall; // vec4s: optics_layout's wall table
+	uint64_t maps_revision = 0, wall_revision = 0;
+	std::vector<uint64_t> map_keys; // what each body's map was traced for
+	std::vector<std::vector<float>> map_blocks;
+	uint64_t wall_key = 0; // what the wall's table was made from
+	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
+	// reads the wall from these, not from the table
+	std::vector<float> drawn;
 };
 
 // One vessel or balloon as the screen places it.
@@ -86,6 +111,12 @@ inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
 // Fills the scene from the state (bodies in painting order; those past
 // MAX_BODIES are left out). The revision moves only if the scene did.
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies);
+// The maps again, from the scene's own table and spectra: for a scene whose indices were changed after it
+// was composed (a map is traced for its body's indices).
+void optics_maps(OpticsScene &scene);
+// The wall's table and what is drawn on it, from the room (optics_compose calls it; O7 makes a wall of
+// its own with it).
+void optics_wall(OpticsScene &scene, const OpticsRoom &room);
 
 // ---- the reference: the per-pixel source compiled as C++, in float64
 
@@ -93,6 +124,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 // What reaches the eye at one wavelength, of the room's light (a factor: the
 // backdrop's radiance times everything in the way); and how much a body covers.
 double optics_through(const OpticsScene &scene, int x, int y, double nm);
+// The same over a band of the light's energy, from the share u0 to u1, its point t of the way through
+// (GAME_SPEC §12.2, §12.3): the wall read over the band's sweep, the liquids and the surfaces at its point.
+// And the wavelength at a share of the light's energy.
+double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t);
+double optics_share_nm(const OpticsScene &scene, double u);
+// optics_through by the general reading alone (GAME_SPEC §12.3): a pixel through a map of one piece is
+// drawn by a reading made for it, and the two must agree.
+double optics_through_general(const OpticsScene &scene, int x, int y, double nm);
 double optics_cover(const OpticsScene &scene, int x, int y);
 // Where the pixel's view meets the wall at a wavelength (GAME_SPEC §12.3: bent by the vessel it looks
 // through, if any), on the screen; what the vessel's surfaces let through; the chord of liquid crossed (cm).
@@ -106,6 +145,26 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]);
 // That colour as the screen shows it: gamut-mapped, sRGB-encoded, in [0, 1];
 // alpha 0 where no body is.
 void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]);
+// The truth of a pixel's area (GAME_SPEC §12.3, Stage 20): the average of a grid of grid x grid
+// sub-pixel rays, each bent by the reference's own exact tracer (vector Snell and Fresnel through
+// whatever medium a point is in, turned back where it cannot pass), not the renderer's: what
+// reaches the eye at one wavelength, and the colour (every band read; linear sRGB, glow included).
+double optics_area_through(const OpticsScene &scene, int x, int y, double nm, int grid);
+void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double rgb[3]);
+// A renderer's light at a pixel and a wavelength, for the checks below (optics_through by default).
+using OpticsThrough = double (*)(const OpticsScene &scene, int x, int y, double nm);
+// O7 (GAME_SPEC §18, Stage 20): brightness is neither made nor lost by bending. The scene is made
+// uniform (the wall, the room in front and off the bench all `radiance`, nothing drawn, nothing
+// absorbing), and every pixel a body covers in [x0, x1) x [y0, y1) must then show exactly that
+// radiance, at three wavelengths. "" when it holds.
+std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, double radiance, OpticsThrough through = nullptr);
+// O8 (GAME_SPEC §18, Stage 20): a thin line keeps its light. Summed over the pixels of [x0, x1) on a
+// row, what a scene with the line shows beyond the same scene without it is what the truth's rays
+// bring (traced exactly; the ends of the line's image found by halving, the light between them summed by
+// Simpson's rule), wherever the line lands. "" when it holds.
+std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through = nullptr);
+// where the exact tracer lands the pixel's central ray, on the screen
+double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 

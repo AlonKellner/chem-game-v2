@@ -307,6 +307,21 @@ as literature are from memory and were not checked against a source.
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
 | H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
 
+**Verified wall thicknesses (Stage 20)** (`data/benches/`, each glass vessel's `wall_mm`):
+
+| Vessel | Wall (mm) | Source |
+|---|---|---|
+| 50 mL (the jar, the condenser) | 0.8 | ISO 3819 (Laboratory glassware: Beakers), Table 1, low form, the least wall thickness: read in the draft ISO/DIS 3819:2013 (iteh.ai's preview of ISO 3819:2015, read 2026-11-20); the same numbers in Wikipedia's "Beaker (glassware)", citing DIN EN ISO 3819:2015-12 |
+| 250 mL (the flask, the beaker, the waste) | 1.1 | The same table |
+| 500 mL (the acid's bottle) | 1.3 | The same table |
+
+The standard gives the least wall a beaker may have; makers keep near it for resistance to
+thermal shock, and thicken the floor and the rim, which are not modelled. **Confidence: high for
+a beaker's side.** Every vessel of the demo is drawn as a beaker, whatever it is called. Before
+Stage 20 the thickness was the wall's heat-holding mass spread over the side and the floor
+(2.4 mm for the flask, 2.8 mm for the jar): too thick, and it bent the view through an empty
+vessel far more than glassware does. The wall's mass (`wall_g`) is still its heat's.
+
 **Calibrated room for refraction (Stage 11):** the wall stands 20 cm behind the vessels' axes;
 the room in front of the bench, which the glass reflects, has a radiance of 0.3 of the room's white
 (darker than the lit wall: what a lab looks like from the bench). Both are chosen for a plausible

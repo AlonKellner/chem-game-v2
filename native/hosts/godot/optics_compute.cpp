@@ -20,7 +20,7 @@ using godot::RenderingDevice;
 
 // What the per-pixel source is given, and what it writes (lab/optics_scene.hpp lays the buffers out).
 const char *const WRAPPER_HEAD = R"(#version 450
-layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+layout(local_size_x = 2, local_size_y = 32, local_size_z = 1) in;
 layout(set = 0, binding = 0, std430) restrict readonly buffer SceneBuffer { vec4 v[]; } scene_buffer;
 layout(set = 0, binding = 1, std430) restrict readonly buffer RowBuffer { float v[]; } row_buffer;
 layout(set = 0, binding = 2, std430) restrict readonly buffer LineBuffer { vec4 v[]; } line_buffer;
@@ -31,11 +31,15 @@ layout(set = 0, binding = 6, rgba32f) uniform restrict image2D prox_image;
 layout(set = 0, binding = 7, rgba32f) uniform restrict image2D aux_image;
 layout(set = 0, binding = 8, rgba8) uniform restrict writeonly image2D shown_image;
 layout(set = 0, binding = 9, std430) restrict buffer AskBuffer { uint total[2]; } ask_buffer;
+layout(set = 0, binding = 10, std430) restrict readonly buffer MapBuffer { vec4 v[]; } map_buffer;
+layout(set = 0, binding = 11, std430) restrict readonly buffer WallBuffer { vec4 v[]; } wall_buffer;
 layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; } params;
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
 vec4 line_vec(int i) { return line_buffer.v[i]; }
 vec4 light_vec(int i) { return light_buffer.v[i]; }
+vec4 map_vec(int i) { return map_buffer.v[i]; }
+vec4 wall_vec(int i) { return wall_buffer.v[i]; }
 // ---- the per-pixel source (native/game/shader/optics_pixel.glsl)
 )";
 
@@ -51,7 +55,7 @@ void main() {
 		imageStore(shown_image, at, vec4(0.0));
 		return;
 	}
-	Path q = path_of(p);
+	Path q = path_of(p, 1.0);
 	if (q.cover <= 0.0) {
 		imageStore(shown_image, at, vec4(0.0));
 		return;
@@ -77,15 +81,6 @@ void main() {
 }
 )";
 
-godot::PackedByteArray bytes_of(const float *data, int32_t floats) {
-	godot::PackedByteArray out;
-	out.resize(static_cast<int64_t>(floats) * 4);
-	if (floats > 0) {
-		std::memcpy(out.ptrw(), data, static_cast<size_t>(floats) * 4);
-	}
-	return out;
-}
-
 } // namespace
 
 OpticsCompute::~OpticsCompute() {
@@ -97,7 +92,7 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_, pipeline_, shader_, scene_, rows_, lines_, lights_, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+	for (const godot::RID &rid : { uniforms_, pipeline_, shader_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, maps_.rid, wall_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -161,21 +156,64 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	return true;
 }
 
-void OpticsCompute::upload(const cg_optics &optics) {
-	if (rd_ == nullptr || (have_scene_ && optics.revision == uploaded_)) {
+void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats) {
+	const uint32_t bytes = static_cast<uint32_t>(floats > 0 ? floats : 0) * 4;
+	godot::PackedByteArray given;
+	if (bytes <= buffer.capacity && buffer.rid.is_valid()) {
+		if (bytes > 0) {
+			given.resize(bytes);
+			std::memcpy(given.ptrw(), data, bytes);
+			rd_->buffer_update(buffer.rid, 0, bytes, given);
+		}
 		return;
 	}
-	const godot::PackedByteArray scene = bytes_of(optics.table, 4 * optics.vec_count), rows = bytes_of(optics.rows, optics.row_count),
-								 lines = bytes_of(optics.lines, 4 * optics.line_count), lights = bytes_of(optics.lights, 4 * optics.light_count);
-	if (!have_scene_) {
-		scene_ = rd_->storage_buffer_create(static_cast<uint32_t>(scene.size()), scene);
-		rows_ = rd_->storage_buffer_create(static_cast<uint32_t>(rows.size()), rows);
-		lines_ = rd_->storage_buffer_create(static_cast<uint32_t>(lines.size()), lines);
-		lights_ = rd_->storage_buffer_create(static_cast<uint32_t>(lights.size()), lights);
+	// larger than it was: a new buffer, with room to grow, and the uniform set that names it made again
+	if (uniforms_.is_valid()) {
+		rd_->free_rid(uniforms_);
+		uniforms_ = godot::RID();
+	}
+	if (buffer.rid.is_valid()) {
+		rd_->free_rid(buffer.rid);
+	}
+	uint32_t capacity = 1024;
+	while (capacity < bytes) {
+		capacity *= 2;
+	}
+	given.resize(capacity);
+	given.fill(0);
+	if (bytes > 0) {
+		std::memcpy(given.ptrw(), data, bytes);
+	}
+	buffer.rid = rd_->storage_buffer_create(capacity, given);
+	buffer.capacity = capacity;
+}
+
+void OpticsCompute::upload(const cg_optics &optics) {
+	if (rd_ == nullptr) {
+		return;
+	}
+	if (!have_scene_ || optics.revision != uploaded_) {
+		hold(scene_, optics.table, 4 * optics.vec_count);
+		hold(rows_, optics.rows, optics.row_count);
+		hold(lines_, optics.lines, 4 * optics.line_count);
+		hold(lights_, optics.lights, 4 * optics.light_count);
+		uploaded_ = optics.revision;
+	}
+	if (!have_scene_ || optics.maps_revision != uploaded_maps_) {
+		hold(maps_, optics.maps, 4 * optics.map_count);
+		uploaded_maps_ = optics.maps_revision;
+	}
+	if (!have_scene_ || optics.wall_revision != uploaded_wall_) {
+		hold(wall_, optics.wall, 4 * optics.wall_count);
+		uploaded_wall_ = optics.wall_revision;
+	}
+	if (!asked_.is_valid()) {
 		godot::PackedByteArray zero;
 		zero.resize(8);
 		zero.fill(0);
 		asked_ = rd_->storage_buffer_create(8, zero);
+	}
+	if (!uniforms_.is_valid()) {
 		godot::TypedArray<godot::RDUniform> uniforms;
 		const auto add = [&](RenderingDevice::UniformType type, int binding, const godot::RID &id) {
 			godot::Ref<godot::RDUniform> u;
@@ -185,24 +223,20 @@ void OpticsCompute::upload(const cg_optics &optics) {
 			u->add_id(id);
 			uniforms.push_back(u);
 		};
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 0, scene_);
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 1, rows_);
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 2, lines_);
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 3, lights_);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 0, scene_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 1, rows_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 2, lines_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 3, lights_.rid);
 		for (int i = 0; i < 4; ++i) {
 			add(RenderingDevice::UNIFORM_TYPE_IMAGE, 4 + i, state_[i]);
 		}
 		add(RenderingDevice::UNIFORM_TYPE_IMAGE, 8, shown_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 9, asked_);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 10, maps_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 11, wall_.rid);
 		uniforms_ = rd_->uniform_set_create(uniforms, shader_, 0);
-		have_scene_ = true;
-	} else {
-		rd_->buffer_update(scene_, 0, static_cast<uint32_t>(scene.size()), scene);
-		rd_->buffer_update(rows_, 0, static_cast<uint32_t>(rows.size()), rows);
-		rd_->buffer_update(lines_, 0, static_cast<uint32_t>(lines.size()), lines);
-		rd_->buffer_update(lights_, 0, static_cast<uint32_t>(lights.size()), lights);
 	}
-	uploaded_ = optics.revision;
+	have_scene_ = true;
 }
 
 void OpticsCompute::restart() {
@@ -233,7 +267,10 @@ void OpticsCompute::run(double budget, bool again) {
 	rd_->compute_list_bind_compute_pipeline(list, pipeline_);
 	rd_->compute_list_bind_uniform_set(list, uniforms_, 0);
 	rd_->compute_list_set_push_constant(list, push, static_cast<uint32_t>(push.size()));
-	rd_->compute_list_dispatch(list, (WIDTH + 7) / 8, (HEIGHT + 7) / 8, 1);
+	// groups two pixels wide and thirty-two tall: a vessel's pixels in one column are read in the same number
+	// of parts, and pixels run together wait for the one with most to do (measured: 8 x 8, 1.72 ms a pass
+	// where every history starts again; 2 x 32, 1.56)
+	rd_->compute_list_dispatch(list, (WIDTH + 1) / 2, (HEIGHT + 31) / 32, 1);
 	rd_->compute_list_end();
 	parity_ = 1 - parity_;
 	++frame_;

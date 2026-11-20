@@ -49,6 +49,7 @@ struct ItemView {
 	double celsius = 0.0;
 	double volume_ml = 0.0; // a vessel's own
 	double capacity_ml = 0.0; // a balloon's
+	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;
