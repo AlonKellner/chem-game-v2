@@ -21,7 +21,8 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
 | 22.4 | The screen: parts, lamps, wires, the burner and its flame, the outlet as bodies; nothing of the lab drawn over the pass, and a test that holds it | Done: see below |
 | 22.5 | The controls in the readout's column; the tutorial, the tests and the tools | Done: see below |
 | 22.6 | The GPU host; O4 on every picture, one of a vessel held over a part and a burner; the cost | Done |
-| 22.7 | Pictures; the user judges by eye and signs off | Pending |
+| 22.7 | Pictures; the user's reservations: labels on the grid, text on parts | Done: see below |
+| 22.8 | The user judges by eye and signs off | Pending |
 
 ## The scene's capacity (22.2)
 
@@ -103,4 +104,22 @@ lamp; the drip from a condenser's outlet a flat highlight for now. GAME_SPEC §1
   slots now: the burner, the rig's bar). A settled pass costs nothing.
 - **Open**: a highlight is the screen's drawing, so it is not bent: while a part signals, its
   wire's or its rig's highlight runs straight across a held vessel beside the bar's bent image.
+
+## The user's reservations (2026-11-21)
+
+> The element labels are confusing, they always are visible and are in the lab grid, but are not
+> spectral. … The text on signal parts is not spectral, despite it supposed to look like part of
+> the part itself. Either decide to remove the text and make each part visually distinct, or make
+> the text actually spectral.
+
+- **Labels on the bench only for what is chosen**: an item's name and temperature, a part's name
+  and what it is set to. The cabinet and the outbox (the screen's panels) keep naming what they hold.
+- **No text on a part; each kind its own colour.** Decided against text through the pass: it would
+  need glyphs in the pixel shader (a cost in every band of the pass over the screen, as Stage 20
+  measured for any code there), for writing two letters high on a 34 px face. A kind is known by its
+  face's colour (calibrated surfaces), its state by its lamp, a timer's time left by a strip of light
+  that shrinks. The drawer's tiles show each kind's colour, from the same spectrum.
+- Tested: nothing is written on what stands on the bench while nothing is chosen; a chosen part is
+  named; a monitor and an alarm have faces of different sets; a timer's strip is half as long half
+  way through and gone at zero.
 

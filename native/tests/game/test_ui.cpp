@@ -308,11 +308,13 @@ TEST_CASE("ui: nothing of the lab is drawn over the optical pass: on the bench o
 	int crossing = 0;
 	for (size_t k = static_cast<size_t>(list.above); k < list.commands.size(); ++k) {
 		const lab::DrawCommand &c = list.commands[k];
-		if (c.type == lab::DrawCommand::Text || c.type == lab::DrawCommand::Outline || c.type == lab::DrawCommand::Line) {
-			continue;
+		if (c.type == lab::DrawCommand::Outline || c.type == lab::DrawCommand::Line) {
+			continue; // a highlight
 		}
-		const float cx0 = c.type == lab::DrawCommand::Circle ? c.x - c.w : c.x, cy0 = c.type == lab::DrawCommand::Circle ? c.y - c.w : c.y;
-		const float cx1 = c.type == lab::DrawCommand::Circle ? c.x + c.w : c.x + c.w, cy1 = c.type == lab::DrawCommand::Circle ? c.y + c.w : c.y + c.h;
+		// nothing is written on the bench while nothing is chosen (a text's box: its baseline, its size above it)
+		const bool text = c.type == lab::DrawCommand::Text;
+		const float cx0 = c.type == lab::DrawCommand::Circle ? c.x - c.w : c.x, cy0 = c.type == lab::DrawCommand::Circle ? c.y - c.w : text ? c.y - c.h : c.y;
+		const float cx1 = c.type == lab::DrawCommand::Circle ? c.x + c.w : text ? c.x + 4.0f : c.x + c.w, cy1 = c.type == lab::DrawCommand::Circle ? c.y + c.w : text ? c.y : c.y + c.h;
 		for (const lab::ItemView &v : standing) {
 			if (v.col < 0) {
 				continue;
@@ -329,6 +331,56 @@ TEST_CASE("ui: nothing of the lab is drawn over the optical pass: on the bench o
 		}
 	}
 	CHECK(crossing == 0);
+	// chosen, a part says its name and what it is set to, above it; and each kind of part is its own colour
+	p.click("item:monitor1");
+	p.ui->frame(1.0 / 60.0);
+	const lab::DrawList &chosen = p.ui->draw();
+	bool named = false;
+	for (size_t k = static_cast<size_t>(chosen.above); k < chosen.commands.size(); ++k) {
+		const lab::DrawCommand &c = chosen.commands[k];
+		named = named || (c.type == lab::DrawCommand::Text && std::string(&chosen.text[static_cast<size_t>(c.first)]).rfind("monitor1", 0) == 0);
+	}
+	CHECK(named);
+	namespace L = lab::optics_layout;
+	const lab::OpticsScene &scene = p.ui->optics();
+	std::vector<float> faces; // the sets of the faces of a monitor and an alarm
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 3.0f && rect[2] > 30.0f && rect[3] > 30.0f && rect[3] < 40.0f) {
+			faces.push_back(scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4]);
+		}
+	}
+	REQUIRE(faces.size() == 2);
+	CHECK(faces[0] != faces[1]);
+}
+
+TEST_CASE("ui: a timer's time left is a strip of light on it that shrinks as it counts down (Stage 22)") {
+	namespace L = lab::optics_layout;
+	Player p;
+	std::string why;
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [1, 1]})", R"({"do": "set", "part": "timer1", "seconds": 10})" }) {
+		REQUIRE_MESSAGE(p.ui->lab().command(c, why), why);
+	}
+	const auto lit = [&] {
+		p.ui->frame(1.0 / 60.0);
+		const lab::OpticsScene &scene = p.ui->optics();
+		float widest = 0.0f;
+		for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+			const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+			const int set = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4]);
+			const float glow = scene.rows[static_cast<size_t>((set * L::ROWS_PER_SET + L::GLOW_ROW) * L::ROW + 150)]; // 530 nm
+			if (rect[3] == 4.0f && glow > 0.5f) {
+				widest = std::max(widest, rect[2]);
+			}
+		}
+		return widest;
+	};
+	const float full = lit();
+	CHECK(full > 20.0f);
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "wait", "seconds": 5})", why), why);
+	CHECK(lit() == doctest::Approx(full / 2.0f).epsilon(0.05));
+	REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "wait", "seconds": 6})", why), why);
+	CHECK(lit() == 0.0f);
 }
 
 TEST_CASE("ui: an item's controls are in the column on the right, for the item chosen; a person opens the valve and stirs at their pace (Stage 22)") {

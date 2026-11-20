@@ -329,7 +329,8 @@ by eye; measured spectra are a later stage).
 
 | Thing | Reflectance, or light | Basis |
 |---|---|---|
-| A signal part's face | 0.045, flat | the screen's panel grey (#383838) |
+| A signal part's face, by kind | a timer 0.035 and 0.10 at 470 nm (width 60); a monitor 0.035 and 0.10 at 525 nm (width 50); an alarm 0.035 and 0.14 at 640 nm (width 60); a notice 0.035 and 0.13 at 585 nm (width 55); a writer 0.04, and 0.08 at 430 nm (width 40) and at 660 nm (width 50) | dark faces of distinct hues, so that a kind is known by its colour (the user: no text on a part) |
+| A signal part's face, other | 0.045, flat | the screen's panel grey (#383838) |
 | A circuit's face | 0.025, and 0.06 at 460 nm (width 60) | its dark blue (#283c50) |
 | A wire | 0.08, flat | the wall's ink (#505050) |
 | A rig | 0.15, and 0.22 at 460 nm (width 70) | its blue (#6e82a0) |

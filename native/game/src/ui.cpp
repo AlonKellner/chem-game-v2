@@ -2,6 +2,8 @@
 
 #include "lab/conditions.hpp"
 
+#include "chem/optics.hpp"
+
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
@@ -134,6 +136,43 @@ constexpr Comparison::Op GOAL_OPS[] = { Comparison::AtLeast, Comparison::AtMost,
 constexpr const char *SPECIES_MEASURES[] = { "g", "purity", "count", "size" };
 
 constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
+
+// what a part's face is made of, by its kind (data/optics/media.json: surfaces; Stage 22): each kind its own
+// colour, so a part is known by how it looks, not by text written over the pass
+const char *face_of(const std::string &kind) {
+	if (kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "notice" || kind == "writer") {
+		static const std::string names[] = { "timer_face", "monitor_face", "alarm_face", "notice_face", "writer_face" };
+		const int k = kind == "timer" ? 0 : kind == "monitor" ? 1 : kind == "alarm" ? 2 : kind == "notice" ? 3 : 4;
+		return names[k].c_str();
+	}
+	return kind == "circuit" ? "circuit_face" : "part_face";
+}
+
+// a surface's colour in the room's light, for the drawer's swatches (the screen's own drawing of what the pass shows)
+uint32_t surface_colour(const char *name) {
+	const chem::optics::Spectrum *r = chem::optics::surface(name);
+	if (r == nullptr) {
+		return 0x808080ff;
+	}
+	double x = 0.0, y = 0.0, z = 0.0, white = 0.0;
+	for (size_t i = 0; i < r->size(); ++i) {
+		const double light = chem::optics::d65()[i];
+		x += chem::optics::xbar()[i] * light * (*r)[i];
+		y += chem::optics::ybar()[i] * light * (*r)[i];
+		z += chem::optics::zbar()[i] * light * (*r)[i];
+		white += chem::optics::ybar()[i] * light;
+	}
+	x /= white;
+	y /= white;
+	z /= white;
+	const double lin[3] = { 3.2404542 * x - 1.5371385 * y - 0.4985314 * z, -0.9692660 * x + 1.8760108 * y + 0.0415560 * z, 0.0556434 * x - 0.2040259 * y + 1.0572252 * z };
+	uint32_t out = 0xff;
+	for (int c = 0; c < 3; ++c) {
+		const double v = std::min(std::max(lin[c], 0.0), 1.0), e = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+		out |= static_cast<uint32_t>(std::lround(e * 255.0)) << (24 - 8 * c);
+	}
+	return out;
+}
 constexpr int DRAWN_KINDS = 5; // what the drawer holds
 constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
 constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
@@ -2221,26 +2260,25 @@ struct Ui::Impl {
 		const Part &p = v.part;
 		bool ringing = v.kind == "alarm" && p.ringing;
 		if (v.place == "bench") {
-			// its face, its lamp and its port are bodies of the pass (Stage 22): here, what it says, and a
-			// highlight round it while it (or an alarm in it) rings
+			// its face (its kind's colour), its lamp, its port, a timer's strip are bodies of the pass (Stage 22):
+			// nothing is written on it. While it is chosen its name and what it is set to are a label above it;
+			// a highlight round it while it (or an alarm in it) rings
 			if (v.kind == "circuit") {
-				int held = 0;
 				for (const ItemView &o : view.items) {
-					held += o.part.in == v.id ? 1 : 0;
 					ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
 				}
-				text(r.x + 4, r.y + 15, short_name(v), INK, 13);
-				text(r.x + 3, r.y + r.h - 4, text_of("%.0f in", held), DIM, 10);
-			} else {
-				text(r.x + 4, r.y + 15, short_name(v), INK, 13);
+			}
+			if (chosen(index) && index != drag) {
+				std::string says = v.id;
 				if (v.kind == "timer") {
 					const auto seconds = static_cast<int64_t>(std::ceil(static_cast<double>(p.left) / 60.0));
-					text(r.x + 3, r.y + r.h - 4, text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60)), DIM, 10);
+					says += "  " + text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60));
 				} else if (v.kind == "monitor") {
-					text(r.x + 3, r.y + r.h - 4, p.watching ? op_name(p.comparison.op) : "unset", DIM, 9);
+					says += p.watching ? "  " + std::string(op_name(p.comparison.op)) : "  unset";
 				} else if (v.kind == "notice" || v.kind == "writer") {
-					text(r.x + 3, r.y + r.h - 4, level_name(static_cast<lab::Notice::Level>(p.notice_level)), DIM, 9);
+					says += "  " + std::string(level_name(static_cast<lab::Notice::Level>(p.notice_level)));
 				}
+				text(r.x, r.y - 8, says, WALL_INK, 14);
 			}
 			if (ringing) {
 				outline(Rect{ r.x - 3, r.y - 3, r.w + 6, r.h + 6 }, WARN, 2.0f);
@@ -2473,6 +2511,7 @@ struct Ui::Impl {
 			const Rect r = drawer_rect(k);
 			rect_fill(r, BUTTON);
 			outline(r, GRID, 1);
+			rect_fill(Rect{ r.x + r.w - 26, r.y + 8, 18, 18 }, surface_colour(face_of(DRAWN[k]))); // how one looks on the bench
 			text(r.x + 8, r.y + 26, DRAWN[k], INK, 16);
 			text(r.x + 8, r.y + 54, std::string(1, static_cast<char>(DRAWN[k][0] - 'a' + 'A')), DIM, 22);
 			text(r.x + 8, r.y + 80, SAYS[k][0], DIM, 12);
@@ -2509,10 +2548,16 @@ struct Ui::Impl {
 		if (index == drag) {
 			return;
 		}
+		// on the bench a name is a label the screen writes over the pass: only for what is chosen (Stage 22). The
+		// cabinet and the outbox are the screen's own panels, and name what they hold
+		if ((v.place == "on" || v.place == "under" || v.place == "bench") && !chosen(index)) {
+			return;
+		}
 		if (v.place == "on") {
 			text(r.x, r.y - 8, label, WALL_INK, 15);
 		} else if (v.place == "under") {
-			// under a vessel it needs no name: its valve is beside it
+			const Rect c = rect(index);
+			text(c.x, c.y + c.h + 18, label, WALL_INK, 14);
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
 			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
@@ -3117,7 +3162,16 @@ struct Ui::Impl {
 						ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
 					}
 				}
-				thing(v.id, "face", OpticsBody::Slab, r, 4.0f, circuit ? "circuit_face" : "part_face", nullptr, in_hand);
+				thing(v.id, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
+				if (v.kind == "timer") {
+					// its time left: a strip of light along its foot, as long as the share of its time that is left
+					const Rect strip{ r.x + 5, r.y + r.h - 9, r.w - 10, 4 };
+					thing(v.id, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
+					const double left = v.part.preset > 0 ? static_cast<double>(v.part.left) / static_cast<double>(v.part.preset) : 0.0;
+					if (left > 0.0) {
+						thing(v.id, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
+					}
+				}
 				thing(v.id, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
 				Rect port;
 				if (port_rect(i, port)) {

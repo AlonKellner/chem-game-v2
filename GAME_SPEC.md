@@ -1127,7 +1127,8 @@ of every ray through its area, and its colour is their average (a box filter).
 
     | Thing | Its body |
     |---|---|
-    | A signal part, a circuit | A slab: an opaque rounded rectangle with its face's reflectance |
+    | A signal part, a circuit | A slab: an opaque rounded rectangle with its face's reflectance, each kind its own colour (a timer blue, a monitor green, an alarm red, a notice ochre, a writer purple, a circuit dark blue). Nothing is written on it |
+    | A timer's time left | A strip of light along its foot, as long as the share of its time that is left |
     | A part's state | A lamp on its face: a small slab that glows while the part signals (green), or while an alarm rings (amber), and is dark glass otherwise |
     | A wire, a rig | A bar: an opaque line of a width between two places, with its insulation's reflectance |
     | A burner | A slab, of its metal's reflectance |
@@ -1148,8 +1149,13 @@ of every ray through its area, and its colour is their average (a box filter).
     signature.
   - **No lab thing is drawn over the pass.** What the screen draws flat is what is not in the
     lab: highlights (a selection, a tutorial's pointer, a wire while it carries a signal, the drip
-    from a condenser's outlet to what stands under it), labels and readouts (a part's name and
-    its count are labels), panels and the drawer of parts.
+    from a condenser's outlet to what stands under it), readouts, panels and the drawer of parts
+    (its tiles show each kind's colour, computed from the same spectrum). On the bench a label is
+    written only for what is chosen: an item's name and temperature, a part's name and what it is
+    set to. The cabinet and the outbox are the screen's panels, and name what they hold.
+    (The user, on seeing Stage 22's pictures: labels always on the grid were confusing, and text
+    on a part did not look like part of it. Text drawn through the pass is not built: a part is
+    known by its colour, its lamp and, for a timer, its strip.)
   - Their spectra are calibrated, not measured (`docs/DATA_SOURCES.md`): simple shapes placed so
     that each thing has the colour it is known to have.
 - **A vessel's whole shape** *(PLANNED, after Stage 22)*: its lip (ISO 3819: the brim 5 to 15%

@@ -152,6 +152,61 @@
 	},
 	"surfaces_note": "What the lab's things that are no substance are made of (GAME_SPEC §12.3, Stage 22): reflectances, as a reflecting medium's (base, and Gaussian bands in nm), lit by the room's light. Calibrated, not measured: each placed so that the thing has the colour the screen drew it in before Stage 22 (docs/DATA_SOURCES.md).",
 	"surfaces": {
+		"timer_face": {
+			"base": 0.035,
+			"bands": [
+				{
+					"centre_nm": 470,
+					"width_nm": 60,
+					"peak": 0.1
+				}
+			]
+		},
+		"monitor_face": {
+			"base": 0.035,
+			"bands": [
+				{
+					"centre_nm": 525,
+					"width_nm": 50,
+					"peak": 0.1
+				}
+			]
+		},
+		"alarm_face": {
+			"base": 0.035,
+			"bands": [
+				{
+					"centre_nm": 640,
+					"width_nm": 60,
+					"peak": 0.14
+				}
+			]
+		},
+		"notice_face": {
+			"base": 0.035,
+			"bands": [
+				{
+					"centre_nm": 585,
+					"width_nm": 55,
+					"peak": 0.13
+				}
+			]
+		},
+		"writer_face": {
+			"base": 0.04,
+			"bands": [
+				{
+					"centre_nm": 430,
+					"width_nm": 40,
+					"peak": 0.08
+				},
+				{
+					"centre_nm": 660,
+					"width_nm": 50,
+					"peak": 0.08
+				}
+			]
+		},
 		"part_face": {
 			"base": 0.045
 		},
