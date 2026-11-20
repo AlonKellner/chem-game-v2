@@ -1021,18 +1021,57 @@ of every ray through its area, and its colour is their average (a box filter).
   - Each item is drawn at its own scale, so the screen is not one world in centimetres: a ray bent
     by one body is not traced into another, and the first refracting body a pixel looks through
     bends it.
-- **Layers of refraction** *(PLANNED, Stage 21)*. What the player holds is a layer of its own,
-  shown in front of what stands on the bench.
-  - Seen through a held vessel, the bench's equipment is what the wall is through a vessel today:
-    bent, dispersed, turned away at the rims by Fresnel, absorbed along the bent chord, with every
-    spectral effect of §12.1 and §12.2, each pixel the light of all its rays.
-  - A layer is general, not the hand's alone: a vessel in a bath is a layer inside another's.
-    At least two layers (the bench's, the hand's), up to six.
-  - `O4`, `O5`, `O7` and `O8` hold through every layer, against the same independent truth.
-  - The method is this stage's: a map for each stack of bodies a pixel looks through, the stack
-    one world of the screen's pixels; a stack that moves (a held vessel does, every frame) has
-    its map traced by a pass on the GPU, at a map's resolution. A map's format is even, its
-    cells take several chords and the tracer's patches carry the medium on each side, for this.
+- **Layers of refraction** (Stage 21). What the player holds is a layer of its own, shown in
+  front of what stands on the bench.
+  - **Every layer is a full optical body**, the held one as much as one that stands: its glass
+    and liquid bend and disperse, its surfaces turn light away by Fresnel, its contents absorb
+    along the bent chord, its haze scatters, its solids reflect, its hot solids glow, its narrow
+    lines are cut: every effect of §12.1 to §12.3, each pixel the light of all its rays.
+  - **Light between layers is a spectrum, never a colour.** What a layer behind sends forward is
+    its radiance at each wavelength; the layer in front bends each wavelength by its own index
+    and takes from it what its own contents absorb. A blue solution seen through a yellow one is
+    the product of the two spectra along the bent ray, not a mixture of two drawn colours, and a
+    layer is never a finished picture laid over another.
+  - **One world, in pixels.** Each item is drawn at its own scale, so the screen's pixels are the
+    one measure every body shares, in depth as across. Layer 0 is the bench's: its bodies' axes
+    stand on one plane. Layer `k` stands `k` gaps nearer the eye (a gap: 120 px, calibrated; the
+    hand's is layer 1; up to six layers). The wall stands 284 px behind the bench's plane
+    (calibrated: 20 cm at a 250 mL vessel's scale), for every body. A body's own scale gives only
+    its lengths in centimetres: what its liquid absorbs along a chord, its glass's share of its
+    radius. A vessel picked up sees the wall from a gap further.
+  - **A round body's map answers every level ray.** An upright round vessel is the same from every
+    side, so what it does to a level ray depends only on the ray's distance from its axis: the
+    ray leaves as it came, turned about the axis, having crossed the same chord and lost the same
+    light at its surfaces. Its map (the rays that come straight in) is therefore its answer to a
+    ray from anywhere: the turn is read from where the map's ray lands
+    (`L cos δ − W sin δ = b`: `b` from the axis, landing at `L` on a wall `W` behind it).
+  - **A ray is followed layer by layer** (the chain), in the pixel pass, with no tracing: from the
+    eye straight in; at each layer, nearest first, the body its line meets there turns it by its
+    map, and the line goes on; behind the last, it lands on the wall. Held against both bodies
+    traced together as one, the chain lands within 1e-8 of a pixel.
+  - **Each body is read where the ray crosses it:** a vessel's liquid along the ray's own chord
+    there, its haze, its heap of solid (where the ray's line, as it arrives, crosses the plane of
+    the vessel's axis), what its surfaces turn away; a body that bends nothing (a balloon) where
+    the ray crosses its layer's plane. What the bodies do is gathered from the eye inward (each
+    takes what reaches it to `a` times it plus `b`).
+  - **A pixel is still all its rays.** It is read in four parts through a chain; the wall is
+    integrated exactly over each part's footprint and a band's sweep, as through one body. Where
+    a part's two rays go different ways (one through a body behind, one past it), each side is
+    its own ray's, by the share the body's map gives the change. A row of pixels across any of
+    the bodies' tops, floors or surfaces is read in as many strips as those cut it into (four at
+    most), each by its share of the pixel's height.
+  - **One light, two readings, as before.** A pixel through one round vessel of one piece, with
+    nothing of a layer behind it in its rows, is read by the reading made for it. Every other
+    pixel through a refracting body is read by the chain: held vessels, and the prism.
+  - **A hot solid's glow is a light in the pass** (Planck's law times the solid's emissivity, a
+    spectrum at 1 nm like any other): bent, absorbed and turned away by whatever is in front of
+    it, as the wall's light is.
+  - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
+    into a neighbour on its own layer; a body that is not round (the prism), seen through another
+    or seeing another, is read as it is seen straight on; a vessel standing inside another (a
+    bath) is not built.
+  - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
+    its own tracer through every body of the one world.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
   brute-force average of a fine grid of sub-pixel rays, each traced exactly, every band read.
 
@@ -1048,8 +1087,10 @@ through each vessel's glass and liquid, with dispersion, the bench's drawing see
 prism demo: a prism of flint glass (N-SF11) traced through its flat faces, before a slit of white
 light in a dark room (`make prism`). Stage 20 makes each pixel the light of all its rays (a
 general tracer on the CPU, a refraction map for each body, the wall as a table read exactly), and
-gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20). Layers of refraction (what is held, in front of
-what stands) are *PLANNED* for Stage 21. The
+gives each vessel's glass its real thickness. Signed off by the user on 2026-11-20 (Stage 20).
+Stage 21 adds layers of refraction: what is held is seen in front of what stands, a ray followed
+through every layer by the bodies' maps, each body read where the ray crosses it, a hot solid's
+glow a light in the pass (*in progress*). The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
 Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
