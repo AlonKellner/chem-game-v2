@@ -121,7 +121,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
 			// the wall, from its own plane: a gap further for each layer nearer the eye (in its own centimetres)
 			spec.wall_cm = (wall_px + static_cast<double>(refract[1]) * gap_px) * spec.cm_per_pixel;
-			spec.glass_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
+			const int set = static_cast<int>(t[static_cast<size_t>(at + SET) * 4]);
+			spec.glass_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_INDEX_ROW) * ROW)];
 			if (prism) {
 				const float *more = &t[static_cast<size_t>(at + MORE) * 4], *glow = &t[static_cast<size_t>(at + GLOW) * 4];
 				const double corners[3][2] = { { more[0], more[1] }, { more[2], more[3] }, { glow[0], glow[1] } };
@@ -131,7 +132,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			} else {
 				spec.shape = trace::cylinder(rect[2] * 0.5 * form[1], refract[0]);
 				spec.media = refract[2] > 0.0f ? 3 : 2; // with a floor, a third core: glass all through
-				spec.liquid_index = &rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
+				spec.liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
 				key = fnv(refract, 3 * sizeof(float), fnv(spec.liquid_index, ROW * sizeof(float)));
 			}
 			const double span[6] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]), spec.grid };
@@ -169,7 +170,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 } // namespace
 
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies) {
-	std::vector<float> t(static_cast<size_t>(SIZE_VECS) * 4, 0.0f), rows(static_cast<size_t>(ROWS_SIZE), 0.0f), lines(static_cast<size_t>(MAX_LINES) * 4, 0.0f);
+	std::vector<float> t(static_cast<size_t>(SIZE_VECS) * 4, 0.0f), rows, lines(static_cast<size_t>(MAX_LINES) * 4, 0.0f);
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
 	put(0, 1, room.bench);
 	put(0, 2, room.elsewhere);
@@ -208,12 +209,16 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		nearest = std::max(nearest, layer_of(body));
 		const ItemView &v = *body.item;
 		const int at = HEADER_VECS + count * BODY_VECS;
-		float *liquid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_ROW) * ROW)];
-		float *solid = &rows[static_cast<size_t>((count * ROWS_PER_BODY + SOLID_ROW) * ROW)];
-		float *wall = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_ROW) * ROW)];
-		float *liquid_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
-		float *wall_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
-		float *glows = &rows[static_cast<size_t>((count * ROWS_PER_BODY + GLOW_ROW) * ROW)];
+		// its own set of spectra
+		const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
+		rows.resize(static_cast<size_t>((set + 1) * ROWS_PER_SET * ROW), 0.0f);
+		put(at + SET, 0, set);
+		float *liquid = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
+		float *solid = &rows[static_cast<size_t>((set * ROWS_PER_SET + SOLID_ROW) * ROW)];
+		float *wall = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_ROW) * ROW)];
+		float *liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
+		float *wall_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_INDEX_ROW) * ROW)];
+		float *glows = &rows[static_cast<size_t>((set * ROWS_PER_SET + GLOW_ROW) * ROW)];
 		for (int i = 0; i < ROW; ++i) {
 			liquid_index[i] = wall_index[i] = 1.0f; // air
 		}
@@ -384,7 +389,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
-		uint64_t h = fnv(liquid, ROWS_PER_BODY * ROW * sizeof(float));
+		uint64_t h = fnv(liquid, ROWS_PER_SET * ROW * sizeof(float));
 		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);
 		h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it
 		h = fnv(&lines[static_cast<size_t>(first_line) * 4], static_cast<size_t>(line_count - first_line) * 4 * sizeof(float), h);
@@ -446,6 +451,46 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			scene.chain_bodies.push_back(b);
 		}
 	}
+	// What stands behind each body, in its rows, on a layer further from the eye: whether anything does, and
+	// a signature of it (where it stands and what it is), which a pixel's history follows (GAME_SPEC §12.3)
+	for (int b = 0; b < count; ++b) {
+		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
+		const float layer = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4 + 1];
+		bool lower = false;
+		uint64_t h = 1469598103934665603ull;
+		for (int o = 0; o < count; ++o) {
+			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
+			if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+				lower = true;
+				h = fnv(other, 4 * sizeof(float), h);
+				h = fnv(&t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + FORM) * 4], 4 * sizeof(float), h);
+				h = fnv(&t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + IDS) * 4], 2 * sizeof(float), h);
+			}
+		}
+		put(HEADER_VECS + b * BODY_VECS + SET, 1, lower ? 1.0 : 0.0);
+		put(HEADER_VECS + b * BODY_VECS + SET, 2, lower ? tag(h) : 0.0);
+	}
+	// the screen's squares: each the bodies that reach into it, in painting order, the nearest kept
+	for (int b = 0; b < count; ++b) {
+		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
+		const auto square = [](double v, int most) { return std::min(std::max(static_cast<int>(std::floor(v / GRID_SQUARE)), 0), most - 1); };
+		const int c0 = square(rect[0] - 1.5, GRID_COLS), c1 = square(static_cast<double>(rect[0]) + rect[2] + 1.5, GRID_COLS);
+		const int r0 = square(rect[1] - 1.5, GRID_ROWS), r1 = square(static_cast<double>(rect[1]) + rect[3] + 1.5, GRID_ROWS);
+		for (int r = r0; r <= r1; ++r) {
+			for (int c = c0; c <= c1; ++c) {
+				float *cell = &t[static_cast<size_t>(GRID_BASE + 2 * (r * GRID_COLS + c)) * 4];
+				int n = static_cast<int>(cell[0]);
+				if (n == GRID_SLOTS) {
+					for (int k = 1; k < GRID_SLOTS; ++k) {
+						cell[k] = cell[k + 1]; // the furthest goes
+					}
+					--n;
+				}
+				cell[1 + n] = static_cast<float>(b);
+				cell[0] = static_cast<float>(n + 1);
+			}
+		}
+	}
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
@@ -456,7 +501,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 }
 
 void optics_maps(OpticsScene &scene) {
-	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4 || scene.rows.size() != static_cast<size_t>(ROWS_SIZE)) {
+	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4 || scene.rows.size() % static_cast<size_t>(ROWS_PER_SET * ROW) != 0) {
 		return;
 	}
 	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]));

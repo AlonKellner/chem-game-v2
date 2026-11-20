@@ -14,29 +14,36 @@
 namespace lab {
 
 namespace optics_layout {
-inline constexpr int MAX_BODIES = 16;
+inline constexpr int MAX_BODIES = 256;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
 // bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
 // nearest layer any body is on, unused, unused
 inline constexpr int HEADER_VECS = 4;
-inline constexpr int BODY_VECS = 7;
-inline constexpr int SIZE_VECS = HEADER_VECS + MAX_BODIES * BODY_VECS;
+inline constexpr int BODY_VECS = 8;
+// The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
+// round them) reach into it, in painting order, the nearest the eye last: its count and up to GRID_SLOTS
+// bodies, in two vec4s. A pixel looks at its square's bodies alone. Where more reach in, the nearest are kept.
+inline constexpr int GRID_SQUARE = 40, GRID_COLS = 48, GRID_ROWS = 27, GRID_SLOTS = 7;
+inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
+inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * 2;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
 // the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts. MAP: where its
 // refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
 // (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6;
-// each body's spectra, ROW values at 1 nm from 380 nm: its liquid's optical depth per centimetre
+// SET: the set of spectra it is made of (a row set of `rows`), whether a body of a layer behind it stands in
+// its rows (1 or 0), a signature of those (where they stand, what they are), unused.
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6, SET = 7;
+// each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
+// at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
 // liquid's refractive index, its wall's, and what its solids glow with (Planck's law times their
 // emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's)
 inline constexpr int ROW = 401;
-inline constexpr int ROWS_PER_BODY = 6;
+inline constexpr int ROWS_PER_SET = 6;
 inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5;
-inline constexpr int ROWS_SIZE = MAX_BODIES * ROWS_PER_BODY * ROW;
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
 // the lights: the room's (the only one yet), 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)
@@ -61,7 +68,7 @@ inline constexpr int WALL_ROW_BASE = 1, WALL_COLUMN_BASE = WALL_ROW_BASE + WALL_
 
 struct OpticsScene {
 	std::vector<float> table; // SIZE_VECS * 4
-	std::vector<float> rows; // ROWS_SIZE
+	std::vector<float> rows; // ROWS_PER_SET * ROW a set, as many sets as there are
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	uint64_t revision = 0; // changes when any of them does

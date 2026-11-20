@@ -248,7 +248,7 @@ int frames_study() {
 			int line = 0;
 			for (int i = 0; i < 16 && i < static_cast<int>(scene.table[0]); ++i) {
 				const spectra::Absorber &a = absorbers[static_cast<size_t>(i)];
-				float *row = &scene.rows[static_cast<size_t>((i * ROWS_PER_BODY + LIQUID_ROW) * ROW)];
+				float *row = &scene.rows[static_cast<size_t>((i * ROWS_PER_SET + LIQUID_ROW) * ROW)];
 				for (int k = 0; k < ROW; ++k) {
 					row[k] = static_cast<float>(depth[static_cast<size_t>(i)] * a.continuum[static_cast<size_t>(k)]);
 				}

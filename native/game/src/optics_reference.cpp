@@ -167,7 +167,7 @@ inline vec4 wall_vec(int i) {
 #pragma clang diagnostic pop
 #endif
 
-static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_layout::BODY_VECS && ROW == optics_layout::ROW && ROWS_PER_BODY == optics_layout::ROWS_PER_BODY &&
+static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_layout::BODY_VECS && ROW == optics_layout::ROW && ROWS_PER_SET == optics_layout::ROWS_PER_SET &&
 				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES,
 		"the per-pixel source and lab/optics_scene.hpp lay the scene out alike");
 
@@ -179,7 +179,7 @@ struct Use {
 };
 
 bool ready(const OpticsScene &s) {
-	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() == static_cast<size_t>(optics_layout::ROWS_SIZE) && !s.wall.empty() &&
+	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() % static_cast<size_t>(optics_layout::ROWS_PER_SET * optics_layout::ROW) == 0 && !s.wall.empty() &&
 		   s.stacks.size() >= static_cast<size_t>(optics_layout::MAX_BODIES) * 4 &&
 		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
@@ -337,7 +337,7 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const bool prism = form.x > 1.5;
 	const double cm = form.y, rr = rect.z * 0.5 * cm, rt = scene_vec(at + 5).x;
 	const double axis = rect.x + rect.z * 0.5 + (prism ? scene_vec(at + 3).z : 0.0);
-	const int start = body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
+	const int start = shader::set_of(body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
 	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
 	const double n_in = liquid ? row_at(start + 3 * optics_layout::ROW, nm) : core == 2 ? n_glass : 1.0;
 	const double ri = rr - rt;
@@ -561,8 +561,8 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	double a = 1.0, b = 0.0;
 	for (const Met &m : ray.met) {
 		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, p.y), size, size);
-		const int start = m.body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
-		const double per_cm = shader::liquid_at(m.body, nm);
+		const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
+		const double per_cm = shader::liquid_at(m.body, start, nm);
 		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
 				per_cm * (m.bent ? m.chord : l.depth_cm), m.pass, room);
 		b += a * does.y;
@@ -658,10 +658,10 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 		room.bench = room.elsewhere = radiance;
 		optics_wall(even, room);
 	}
-	for (int b = 0; b < L::MAX_BODIES; ++b) {
+	for (int b = 0; b < static_cast<int>(even.rows.size()) / (L::ROWS_PER_SET * L::ROW); ++b) {
 		for (const int row : { L::LIQUID_ROW, L::WALL_ROW }) {
 			for (int i = 0; i < L::ROW; ++i) {
-				even.rows[static_cast<size_t>((b * L::ROWS_PER_BODY + row) * L::ROW + i)] = 0.0f; // nothing absorbs
+				even.rows[static_cast<size_t>((b * L::ROWS_PER_SET + row) * L::ROW + i)] = 0.0f; // nothing absorbs
 			}
 		}
 	}
@@ -1019,9 +1019,15 @@ std::string check_O1(const OpticsScene &scene) {
 		return "O1: more bodies than the scene holds";
 	}
 	char text[200];
+	const int sets = static_cast<int>(scene.rows.size()) / (ROWS_PER_SET * ROW);
 	for (int i = 0; i < count; ++i) {
+		const float set = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4];
+		if (!(set >= 0.0f) || set >= static_cast<float>(sets) || set != std::floor(set)) {
+			std::snprintf(text, sizeof text, "O1: body %d is made of set %g of spectra; there are %d", i, static_cast<double>(set), sets);
+			return text;
+		}
 		for (int k = 0; k < ROW; ++k) {
-			const size_t base = static_cast<size_t>(i * ROWS_PER_BODY * ROW + k);
+			const size_t base = static_cast<size_t>(static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4]) * ROWS_PER_SET * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(scene.rows[base + GLOW_ROW * ROW] >= 0.0)) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
@@ -1090,7 +1096,7 @@ void optics_stacks(OpticsScene &scene) {
 	scene.stack_keys.resize(static_cast<size_t>(L::MAX_BODIES), 0);
 	scene.stack_blocks.resize(static_cast<size_t>(L::MAX_BODIES));
 	std::vector<bool> has(static_cast<size_t>(L::MAX_BODIES), false);
-	if (scene.table.size() == static_cast<size_t>(L::SIZE_VECS) * 4 && scene.rows.size() == static_cast<size_t>(L::ROWS_SIZE) && !scene.wall.empty()) {
+	if (scene.table.size() == static_cast<size_t>(L::SIZE_VECS) * 4 && scene.rows.size() % static_cast<size_t>(L::ROWS_PER_SET * L::ROW) == 0 && !scene.wall.empty()) {
 		if (scene.stacks.size() < directory) {
 			scene.stacks = out; // following a ray reads no stack; the pixel's path may look for one
 		}

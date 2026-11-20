@@ -24,9 +24,14 @@
 //   vec4 stack_vec(int i)    the stacks (lab/optics_scene.hpp): the rays followed through several bodies
 
 const int HEADER_VECS = 4;
-const int BODY_VECS = 7;
+const int BODY_VECS = 8;
+const int MAX_BODIES = 256;
+const float GRID_SQUARE = 40.0;
+const int GRID_COLS = 48;
+const int GRID_ROWS = 27;
+const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
-const int ROWS_PER_BODY = 6;
+const int ROWS_PER_SET = 6;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
 const float WALL_MOST = 4.0; // a wall seen edge on is no thicker than this, in reference thicknesses
@@ -42,6 +47,9 @@ const float TARGET = 2.0; // the expected error a pixel's average is brought to,
 const float DRIFT_MOST = 4.0; // how far the fixed estimate may move, summed, before the history starts again
 
 struct Layer {
+	// which body (body_of), and its set of spectra (set_in): one number, body + 256 times its set. A pixel
+	// reads its set once, in its path; a field more on each layer cost the pass 0.1 ms (a pixel's state is
+	// kept in the GPU's registers, and they are few)
 	int body;
 	float depth_cm; // the liquid crossed, in centimetres
 	float haze; // how much of the room's light its suspended solids turn back
@@ -95,11 +103,39 @@ struct PixelState {
 
 // ---- where the pixel looks
 
+// the square of the screen p is in: its two vec4s, (count, b0, b1, b2) and (b3, b4, b5, b6)
+int square_at(vec2 p) {
+	int c = clamp(int(floor(p.x / GRID_SQUARE)), 0, GRID_COLS - 1);
+	int r = clamp(int(floor(p.y / GRID_SQUARE)), 0, GRID_ROWS - 1);
+	return GRID_BASE + 2 * (r * GRID_COLS + c);
+}
+
+// the k-th body of a square
+int square_body(vec4 a, vec4 b, int k) {
+	float v = k == 0 ? a.y : (k == 1 ? a.z : (k == 2 ? a.w : (k == 3 ? b.x : (k == 4 ? b.y : (k == 5 ? b.z : b.w)))));
+	return int(v);
+}
+
+// the set of spectra a body is made of
+int set_of(int body) {
+	return int(scene_vec(HEADER_VECS + body * BODY_VECS + 7).x);
+}
+
+// a layer's body, and where its set of spectra begins among the rows
+int body_of(int packed) {
+	return packed - 256 * (packed / 256);
+}
+
+int set_in(int packed) {
+	return (packed / 256) * ROWS_PER_SET * ROW;
+}
+
+
 // What body i is at the place p of the screen, for a sample `across` wide and `up` high (pixels): how much
 // of the sample it covers (its outlines blend by that), and what the sample looks through there.
 Layer layer_at(int i, vec2 p, float across, float up) {
 	Layer l;
-	l.body = i;
+	l.body = i + 256 * set_of(i);
 	l.depth_cm = 0.0;
 	l.haze = 0.0;
 	l.solid = 0.0;
@@ -185,29 +221,21 @@ Path path_of(vec2 p, float size) {
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
 	q.back = on_bench ? head.y : head.z;
-	bool layered = scene_vec(3).y > 0.5; // something is on a layer nearer than the bench's
-	float lowest = 99.0; // the furthest layer any body in the pixel's rows is on
 	int bending = 0;
-	vec4 behind = vec4(0.0);
-	int count = int(head.x);
-	for (int i = 0; i < 16; i++) {
-		if (i >= count) {
+	vec4 behind = vec4(0.0); // whether a body of a layer behind the vessel stands in its rows (y), a signature of those (z)
+	// the bodies of the pixel's square of the screen (the scene lists them: a pixel looks at no other)
+	int square = square_at(p);
+	vec4 listed_a = scene_vec(square);
+	vec4 listed_b = scene_vec(square + 1);
+	int listed = int(listed_a.x);
+	for (int k = 0; k < 7; k++) {
+		if (k >= listed) {
 			break;
 		}
+		int i = square_body(listed_a, listed_b, k);
 		int at = HEADER_VECS + i * BODY_VECS;
 		vec4 rect = scene_vec(at);
-		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0) {
-			continue;
-		}
-		if (layered) {
-			// in the pixel's rows: a nearer layer's vessel may bend the pixel's rays into it, wherever across
-			// it stands, so where it stands and what it holds are the pixel's content too
-			vec4 beside = scene_vec(at + 4);
-			float w = 1.0 + 0.6180339887 * float(i);
-			lowest = min(lowest, scene_vec(at + 5).y);
-			behind = behind + vec4(0.23 * (rect.x - p.x) * w + 0.07 * rect.z, 0.11 * (rect.y - p.y) * w + 0.05 * (scene_vec(at + 1).z - p.y), 0.5 * beside.x, beside.y * w);
-		}
-		if (p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {
+		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0 || p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {
 			continue;
 		}
 		Layer l = layer_at(i, p, size, size);
@@ -234,6 +262,8 @@ Path path_of(vec2 p, float size) {
 			vec4 map_head = map_vec(q.rmap);
 			q.rmedia = int(map_head.y);
 			q.rsamples = int(map_head.z);
+			// what stands behind it, in its rows, on a layer further from the eye (the scene says, and signs it)
+			behind = scene_vec(at + 7);
 			// the rows of the pixel under its liquid's surface, and those between its top and its floor
 			q.rwet = clamp((p.y - form.z) / size + 0.5, 0.0, 1.0);
 			q.rin = clamp(min(p.y - rect.y, rect.y + rect.w - p.y) / size + 0.5, 0.0, 1.0);
@@ -263,9 +293,9 @@ Path path_of(vec2 p, float size) {
 	if (q.refractor >= 0) {
 		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin + 0.29 * q.rfloor;
 		q.key.y = q.key.y + 0.31 * q.raxis;
-		q.chain = bending > 1 || lowest < q.rlayer;
+		q.chain = bending > 1 || behind.y > 0.5;
 		if (q.chain) {
-			q.key = q.key + behind;
+			q.key.w = q.key.w + 0.73 * behind.z;
 		}
 	}
 	return q;
@@ -273,17 +303,7 @@ Path path_of(vec2 p, float size) {
 
 // whether any body's rectangle is near the pixel: most of the screen is not, and needs nothing more
 bool near_any(vec2 p) {
-	int count = int(scene_vec(0).x);
-	for (int i = 0; i < 16; i++) {
-		if (i >= count) {
-			break;
-		}
-		vec4 rect = scene_vec(HEADER_VECS + i * BODY_VECS);
-		if (p.x >= rect.x - 1.0 && p.x <= rect.x + rect.z + 1.0 && p.y >= rect.y - 1.0 && p.y <= rect.y + rect.w + 1.0) {
-			return true;
-		}
-	}
-	return false;
+	return scene_vec(square_at(p)).x > 0.5;
 }
 
 // ---- what gets through at one wavelength
@@ -295,8 +315,8 @@ float row_at(int start, float nm) {
 	return row_value(start + i) * (1.0 - f) + row_value(start + i + 1) * f;
 }
 
-float liquid_at(int body, float nm) {
-	float depth = row_at(body * ROWS_PER_BODY * ROW, nm);
+float liquid_at(int body, int rows, float nm) {
+	float depth = row_at(rows, nm);
 	vec4 ids = scene_vec(HEADER_VECS + body * BODY_VECS + 4);
 	int first = int(ids.z);
 	int count = int(ids.w);
@@ -313,8 +333,8 @@ float liquid_at(int body, float nm) {
 
 // what one body does to the light that reaches it, at nm, through depth_cm of its liquid
 float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
-	int start = l.body * ROWS_PER_BODY * ROW;
-	float depth = liquid_at(l.body, nm) * depth_cm;
+	int start = set_in(l.body);
+	float depth = liquid_at(body_of(l.body), start, nm) * depth_cm;
 	float colour = row_at(start + ROW, nm);
 	// through the liquid (Beer-Lambert)
 	float seen = seen_before * exp(-depth);
@@ -661,12 +681,12 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	if (k >= q.layers) {
 		return s;
 	}
-	int start = l.body * ROWS_PER_BODY * ROW;
-	float per_cm = liquid_at(l.body, nm);
+	int start = set_in(l.body);
+	float per_cm = liquid_at(body_of(l.body), start, nm);
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
 	float glow = row_at(start + 5 * ROW, nm); // what its solids glow with, a multiple of the room's light
-	if (l.body == q.refractor && !s.own) {
+	if (body_of(l.body) == q.refractor && !s.own) {
 		s.own = true;
 		s.per_cm = per_cm;
 		s.colour = colour;
@@ -1017,7 +1037,7 @@ float general_band(Path q, float u0, float u1, float t, float one_nm) {
 // Nothing here follows a ray: following one in the pass cost 344 ms a frame for one held vessel.
 //
 // The includer's stack_vec lays them out:
-//   [b], b < 16            where body b's stack begins (x), or -1: its pixels are read as one vessel's
+//   [b], b < MAX_BODIES    where body b's stack begins (x), or -1: its pixels are read as one vessel's
 //   and from a stack's start o:
 //   [o]                    the whole pixels it spans, its bands, its samples, its slots
 //   [o + 1]                its first sample's place on the screen (x)
@@ -1111,8 +1131,8 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 		float cross_a = stack_value(a + at + 1, w_a, far_a + at + 1, w_far_a, on_a);
 		float cross_b = stack_value(b + at + 1, w_b, far_b + at + 1, w_far_b, on_b);
 		Layer l = layer_at(body, vec2(0.5 * (cross_a + cross_b), q.y), max(abs(cross_b - cross_a), 1.0e-3 * q.size), q.size);
-		int start = body * ROWS_PER_BODY * ROW;
-		float per_cm = liquid_at(body, nm);
+		int start = set_of(body) * ROWS_PER_SET * ROW;
+		float per_cm = liquid_at(body, start, nm);
 		float depth = per_cm * l.depth_cm;
 		float pass = 1.0;
 		if (kind > 1.5) {
@@ -1383,7 +1403,7 @@ Stack stack_of(Path q, bool wanted) {
 	}
 	int count = int(scene_vec(0).x);
 	int bending = 0;
-	for (int k = 0; k < 16; k++) {
+	for (int k = 0; k < MAX_BODIES; k++) {
 		int i = count - 1 - k;
 		if (i < 0 || s.count >= MAX_VISITS) {
 			break;
@@ -1852,7 +1872,7 @@ Cuts line_cuts(Cuts c, Layer l, int layers, int k) {
 	if (k >= layers || l.depth_cm <= 0.0) {
 		return c;
 	}
-	vec4 ids = scene_vec(HEADER_VECS + l.body * BODY_VECS + 4);
+	vec4 ids = scene_vec(HEADER_VECS + body_of(l.body) * BODY_VECS + 4);
 	int first = int(ids.z);
 	int count = int(ids.w);
 	for (int j = 0; j < 256; j++) {

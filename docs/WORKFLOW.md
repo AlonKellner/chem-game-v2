@@ -49,6 +49,9 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
 - Measured (Stage 22, a machine busy with other work): the lab tests in one process, 368 s; as
   entries side by side with threads, 112 s. The closing gate (`make gates`): 37 min at the end of
   Stage 21; 8 min with the entries and threads; then the sanitizer build at -O2.
+- **The GPU's cost is compared back to back**: the same machine reads a restarting pass from 1.6 to
+  2.3 ms as its state drifts over an hour. A change's cost is the difference between it and the
+  code before it, measured one after the other, three times each (`make pass-cost`).
 - **Next, if it is needed**: the sanitizer run's longest entry is `lab_tests.optics` (98 s), whose
   tests could be split into two files.
 

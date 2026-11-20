@@ -259,7 +259,7 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 		OpticsScene cold = scene;
 		for (int i = 0; i < static_cast<int>(cold.table[0]); ++i) {
 			for (int k = 0; k < lab::optics_layout::ROW; ++k) {
-				cold.rows[static_cast<size_t>((i * lab::optics_layout::ROWS_PER_BODY + lab::optics_layout::GLOW_ROW) * lab::optics_layout::ROW + k)] = 0.0f;
+				cold.rows[static_cast<size_t>((i * lab::optics_layout::ROWS_PER_SET + lab::optics_layout::GLOW_ROW) * lab::optics_layout::ROW + k)] = 0.0f;
 			}
 		}
 		double lit[3];
@@ -375,8 +375,14 @@ TEST_CASE("O1, O2: the checks hold on a scene and fire on a corrupted one (Stage
 	}
 	{
 		OpticsScene bad = scene;
-		bad.table[0] = 40.0f; // more bodies than there is room for
+		bad.table[0] = static_cast<float>(lab::optics_layout::MAX_BODIES + 1); // more bodies than there is room for
 		CHECK(lab::check_O1(bad).rfind("O1:", 0) == 0);
+	}
+	{
+		OpticsScene bad = scene; // a body made of a set of spectra that is not there
+		bad.table[static_cast<size_t>(HEADER_VECS + lab::optics_layout::SET) * 4] = 3.0f;
+		CHECK(lab::check_O1(bad).rfind("O1:", 0) == 0);
+		bad = scene;
 		bad.table.resize(8);
 		CHECK(lab::check_O1(bad).rfind("O1:", 0) == 0);
 	}
@@ -400,7 +406,7 @@ TEST_CASE("optics: the picture is the pixels, and the table moves only when what
 		}
 	}
 	// more bodies than the table holds: the rest are left out, none is half written
-	std::vector<lab::OpticsBody> many(40, lab::OpticsBody{ &v, X, Y, W, H });
+	std::vector<lab::OpticsBody> many(lab::optics_layout::MAX_BODIES + 44, lab::OpticsBody{ &v, X, Y, W, H });
 	lab::optics_compose(scene, ROOM, many);
 	CHECK(scene.table[0] == lab::optics_layout::MAX_BODIES);
 	CHECK(lab::check_O1(scene) == "");
@@ -643,4 +649,51 @@ TEST_CASE("optics: the budget is a ceiling on what the frames ask for (Stage 10)
 		mean.frame(scene);
 	}
 	CHECK(frames_error(scene, mean, MIDDLE, FLOOR - 10) < lab::EYE_VISIBLE);
+}
+
+TEST_CASE("optics: a bench of two hundred bodies: each pixel finds its own through the screen's squares, as if each stood alone (Stage 22)") {
+	// what a pixel sees is found among the bodies its square of the screen lists, not among all of them: so with
+	// two hundred small vessels on the screen each pixel is what it is with its own vessel alone
+	namespace L = lab::optics_layout;
+	std::vector<ItemView> items;
+	for (int k = 0; k < 200; ++k) {
+		ItemView v = solution(0.05 + 0.005 * k);
+		v.volume_ml = 50.0;
+		items.push_back(v);
+	}
+	std::vector<lab::OpticsBody> bodies;
+	for (int k = 0; k < 200; ++k) {
+		bodies.push_back(lab::OpticsBody{ &items[static_cast<size_t>(k)], 20.0f + 92.0f * static_cast<float>(k % 20), 30.0f + 100.0f * static_cast<float>(k / 20), 36.0f, 45.0f });
+	}
+	OpticsScene all;
+	lab::optics_compose(all, ROOM, bodies);
+	REQUIRE(lab::check_O1(all) == "");
+	CHECK(all.table[0] == 200.0f);
+	CHECK(all.rows.size() == static_cast<size_t>(200 * L::ROWS_PER_SET * L::ROW)); // a set of spectra each
+	int compared = 0;
+	for (int k = 0; k < 200; k += 7) {
+		OpticsScene alone;
+		lab::optics_compose(alone, ROOM, { bodies[static_cast<size_t>(k)] });
+		const lab::OpticsBody &b = bodies[static_cast<size_t>(k)];
+		for (const float fx : { 0.1f, 0.5f, 0.85f }) {
+			const int x = static_cast<int>(b.x + fx * b.w), y = static_cast<int>(b.y + 0.8f * b.h);
+			CAPTURE(k);
+			CAPTURE(x);
+			CHECK(lab::optics_through(all, x, y, 550.0) == doctest::Approx(lab::optics_through(alone, x, y, 550.0)).epsilon(1e-9));
+			++compared;
+		}
+	}
+	CHECK(compared > 80);
+	// a square lists the bodies that reach into it, the nearest the eye kept where more than seven do
+	std::vector<lab::OpticsBody> heap(10, lab::OpticsBody{ &items[0], 400.0f, 400.0f, 36.0f, 45.0f });
+	OpticsScene crowded;
+	lab::optics_compose(crowded, ROOM, heap);
+	const float *square = &crowded.table[static_cast<size_t>(L::GRID_BASE + 2 * (10 * L::GRID_COLS + 10)) * 4];
+	CHECK(square[0] == 7.0f);
+	CHECK(square[1] == 3.0f); // the three furthest are left out
+	CHECK(square[7] == 9.0f); // the nearest, last
+	// past the screen's edge a body is listed in the edge's squares, and its pixels found there
+	OpticsScene edge;
+	lab::optics_compose(edge, ROOM, { lab::OpticsBody{ &items[3], 1900.0f, 1050.0f, 36.0f, 45.0f } });
+	CHECK(lab::optics_cover(edge, 1910, 1070) > 0.0);
 }

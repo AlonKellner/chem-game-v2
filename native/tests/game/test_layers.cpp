@@ -258,7 +258,7 @@ TEST_CASE("O5: where every index is 1, layers change nothing: a held vessel and 
 	for (int b = 0; b < 2; ++b) {
 		for (const int row : { LIQUID_INDEX_ROW, WALL_INDEX_ROW }) {
 			for (int i = 0; i < ROW; ++i) {
-				bent.rows[static_cast<size_t>((b * ROWS_PER_BODY + row) * ROW + i)] = 1.0f;
+				bent.rows[static_cast<size_t>((b * ROWS_PER_SET + row) * ROW + i)] = 1.0f;
 			}
 		}
 	}
@@ -292,7 +292,7 @@ TEST_CASE("O6: Fresnel loses no light through layers: in a room as bright in fro
 	using namespace lab::optics_layout;
 	for (int b = 0; b < 2; ++b) {
 		for (int i = 0; i < ROW; ++i) {
-			scene.rows[static_cast<size_t>((b * ROWS_PER_BODY + LIQUID_ROW) * ROW + i)] = 0.0f; // water that absorbs nothing
+			scene.rows[static_cast<size_t>((b * ROWS_PER_SET + LIQUID_ROW) * ROW + i)] = 0.0f; // water that absorbs nothing
 		}
 	}
 	double worst = 0.0;
