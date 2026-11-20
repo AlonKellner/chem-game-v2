@@ -523,7 +523,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, p.y), size, size);
 		const int start = m.body * optics_layout::ROWS_PER_BODY * optics_layout::ROW;
 		const double per_cm = shader::liquid_at(m.body, nm);
-		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
+		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
 				per_cm * (m.bent ? m.chord : l.depth_cm), m.pass, room);
 		b += a * does.y;
 		a *= does.x;
@@ -563,11 +563,9 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 	}
 	const shader::Use use(scene);
 	std::vector<shader::vec2> places;
-	shader::vec3 glow;
 	for (int j = 0; j < grid; ++j) {
 		for (int i = 0; i < grid; ++i) {
 			places.push_back(shader::vec2(x + (i + 0.5) / grid, y + (j + 0.5) / grid));
-			glow = glow + shader::path_of(places.back(), 1.0 / grid).glow / static_cast<double>(grid * grid);
 		}
 	}
 	const int shares = truth_shares(scene);
@@ -581,7 +579,7 @@ void optics_area_truth(const OpticsScene &scene, int x, int y, int grid, double 
 		}
 		sum = sum + shader::vec3(b.y - a.y, b.z - a.z, b.w - a.w) * (seen / static_cast<double>(places.size()));
 	}
-	const shader::vec3 c = shader::to_linear_srgb(sum) + glow;
+	const shader::vec3 c = shader::to_linear_srgb(sum);
 	rgb[0] = c.x;
 	rgb[1] = c.y;
 	rgb[2] = c.z;
@@ -726,7 +724,7 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	}
 	const shader::Use use(scene);
 	const shader::Path q = shader::at(x, y);
-	const shader::vec3 c = shader::truth(q, truth_shares(scene)) + q.glow;
+	const shader::vec3 c = shader::truth(q, truth_shares(scene));
 	rgb[0] = c.x;
 	rgb[1] = c.y;
 	rgb[2] = c.z;
@@ -818,10 +816,9 @@ void OpticsFrames::colour(const OpticsScene &scene, int x, int y, double rgb[3])
 	}
 	const shader::Use use(scene);
 	const shader::PixelState &st = (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s;
-	const shader::Path q = shader::at(x, y);
-	rgb[0] = st.prox.x + st.hist.x + q.glow.x;
-	rgb[1] = st.prox.y + st.hist.y + q.glow.y;
-	rgb[2] = st.prox.z + st.hist.z + q.glow.z;
+	rgb[0] = st.prox.x + st.hist.x;
+	rgb[1] = st.prox.y + st.hist.y;
+	rgb[2] = st.prox.z + st.hist.z;
 }
 
 void OpticsFrames::shown(const OpticsScene &scene, int x, int y, double rgba[4]) const {
@@ -947,7 +944,7 @@ std::string check_O1(const OpticsScene &scene) {
 		for (int k = 0; k < ROW; ++k) {
 			const size_t base = static_cast<size_t>(i * ROWS_PER_BODY * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
-			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0)) {
+			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(scene.rows[base + GLOW_ROW * ROW] >= 0.0)) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
 				return text;
 			}

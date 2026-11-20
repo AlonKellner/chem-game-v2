@@ -404,3 +404,55 @@ TEST_CASE("layers: a balloon behind a held vessel is seen where the bent rays cr
 	CHECK(off[off.size() - 3] < lab::EYE_VISIBLE);
 	MESSAGE(compared << " pixels of a balloon behind a held vessel of water: all but two within " << off[off.size() - 3] << " on the eye metric; on its outline, " << off.back());
 }
+
+TEST_CASE("layers: a hot solid's glow is a light in the pass: what is held before it bends it and takes its red (Stage 21)") {
+	// copper oxide at 850 C glows a dull red in a standing vessel; a vessel of copper sulfate solution is held
+	// in front of it. The glow is seen where the held vessel's rays reach the heap, not straight behind the
+	// pixel, and through the solution, which takes the red: as the truth's rays have it.
+	ItemView hot;
+	hot.id = "hot";
+	hot.kind = "vessel";
+	hot.volume_ml = 250.0;
+	hot.celsius = 850.0;
+	hot.condensed_ml = 6.0;
+	SubstanceView oxide = substance("copper_oxide", 's', 0.08, 6.3);
+	oxide.particles = 1000000;
+	oxide.size_um = 100.0;
+	hot.contents = { oxide, substance("glass", 's', 0.83, 50.0, true) };
+	hot.wall_mm = 1.1;
+	const ItemView water = vessel(50.0, 45.0, 0.0, 0.8), blue = vessel(50.0, 45.0, 0.5, 0.8);
+	const float hand_y = Y + H - HELD_H; // low: its liquid before the heap on the standing vessel's floor
+	const int row = static_cast<int>(Y + H) - 4;
+	const auto red_of = [&](const OpticsScene &scene, int px) {
+		double shown[3];
+		lab::optics_truth(scene, px, row, shown);
+		return shown[0];
+	};
+	const OpticsScene clear = scene_of(room(), water, 215, hand_y, hot), tinted = scene_of(room(), blue, 215, hand_y, hot);
+	OpticsScene alone;
+	lab::optics_compose(alone, room(), { OpticsBody{ &hot, X, Y, W, H } });
+	// the heap alone glows in the middle of the standing vessel's floor
+	const double bare = red_of(alone, 245);
+	CHECK(bare > 0.5); // far above what the room's light makes of black copper oxide
+	double worst = 0.0;
+	int compared = 0, seen = 0, dimmer = 0;
+	for (int px = 222; px < 280; px += 2) {
+		double shown[3], truth[3];
+		lab::optics_truth(clear, px, row, shown);
+		lab::optics_area_truth(clear, px, row, 8, truth);
+		CAPTURE(px);
+		// the glow is many times the room's light: compared as light, not on the screen (where it is past white)
+		const double scale = std::max(0.05, std::max(shown[0], truth[0]));
+		worst = std::max(worst, std::fabs(shown[0] - truth[0]) / scale);
+		++compared;
+		if (shown[0] > 0.3) {
+			++seen;
+			dimmer += red_of(tinted, px) < 0.5 * shown[0] ? 1 : 0; // the solution takes most of the red
+		}
+	}
+	CHECK(compared > 20);
+	CHECK(seen > 5);
+	CHECK(dimmer == seen);
+	CHECK(worst < 0.25); // a heap's sloping edge blends by degrees, as it does seen straight
+	MESSAGE("a glowing heap through a held vessel of water: " << seen << " of " << compared << " pixels show it; against 64 rays each, within " << worst << " of the light");
+}

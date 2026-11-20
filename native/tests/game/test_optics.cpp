@@ -254,10 +254,11 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 	const auto glow_of = [](const OpticsScene &scene, int x, int y, double rgb[3]) {
 		double all[3];
 		lab::optics_truth(scene, x, y, all);
+		// (a solid's glow is a light in the pass: each body's glow at 1 nm, a multiple of the room's light)
 		OpticsScene cold = scene;
 		for (int i = 0; i < static_cast<int>(cold.table[0]); ++i) {
-			for (int c = 0; c < 3; ++c) {
-				cold.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + i * lab::optics_layout::BODY_VECS + lab::optics_layout::GLOW) * 4 + static_cast<size_t>(c)] = 0.0f;
+			for (int k = 0; k < lab::optics_layout::ROW; ++k) {
+				cold.rows[static_cast<size_t>((i * lab::optics_layout::ROWS_PER_BODY + lab::optics_layout::GLOW_ROW) * lab::optics_layout::ROW + k)] = 0.0f;
 			}
 		}
 		double lit[3];

@@ -26,7 +26,7 @@
 const int HEADER_VECS = 4;
 const int BODY_VECS = 7;
 const int ROW = 401;
-const int ROWS_PER_BODY = 5;
+const int ROWS_PER_BODY = 6;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
 const float WALL_MOST = 4.0; // a wall seen edge on is no thicker than this, in reference thicknesses
@@ -61,7 +61,7 @@ struct Path {
 	int layers;
 	float back; // the backdrop's radiance, a share of the room's white
 	float cover; // how much of the pixel a body covers
-	vec3 glow; // what hot solids emit, linear sRGB
+	vec3 glow; // what hot solids emit, linear sRGB: for the key alone (the pass reads each body's glow at 1 nm)
 	vec4 key; // everything the pixel's colour depends on that can change
 	// where it looks from, how wide a sample it is, and the vessel that bends its view (GAME_SPEC §12.3), if
 	// any: the nearest the eye of those it looks through
@@ -247,7 +247,7 @@ Path path_of(vec2 p, float size) {
 		float w = 1.0 + 0.6180339887 * float(i);
 		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * l.cover) * w, (l.solid + 7.0 * l.wall) * w, ids.x, ids.y * w);
 	}
-	// what glows is shown as it is, outside the history; it is in the key so that a pixel shows it anew
+	// what glows is a light in the pass (each body's glow at 1 nm); its colour is in the key so that a pixel shows it anew
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
 	// where the view goes through a refracting body: where across it, and how much of the pixel is under its liquid and within it
 	if (q.refractor >= 0) {
@@ -310,8 +310,8 @@ float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
 	float seen = seen_before * exp(-depth);
 	// what is suspended in it turns the room's light back, from half way in on average
 	seen = mix(seen, colour * exp(-depth * 0.5), l.haze);
-	// what lies in it is lit and seen through it: there and back is one chord
-	seen = mix(seen, colour * exp(-depth), l.solid);
+	// what lies in it is lit and seen through it: there and back is one chord; and glows, through half of one
+	seen = mix(seen, colour * exp(-depth) + row_at(start + 5 * ROW, nm) * exp(-depth * 0.5), l.solid);
 	// and the wall
 	return seen * exp(-row_at(start + 2 * ROW, nm) * l.wall);
 }
@@ -640,6 +640,7 @@ struct Shade {
 	bool own; // the refracting body is among the layers
 	float per_cm; // its liquid's optical depth a centimetre
 	float colour; // what its solids and its haze turn back
+	float glow; // what its solids glow with
 	float glass; // what its wall lets through
 	float haze;
 	float solid;
@@ -654,10 +655,12 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float per_cm = liquid_at(l.body, nm);
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
+	float glow = row_at(start + 5 * ROW, nm); // what its solids glow with, a multiple of the room's light
 	if (l.body == q.refractor && !s.own) {
 		s.own = true;
 		s.per_cm = per_cm;
 		s.colour = colour;
+		s.glow = glow;
 		s.glass = glass;
 		s.haze = l.haze;
 		s.solid = l.solid;
@@ -667,7 +670,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float depth = per_cm * l.depth_cm;
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
-	float b = colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * glass;
+	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * exp(-depth * 0.5) * l.solid) * glass;
 	if (s.own) {
 		s.b_front = a * s.b_front + b;
 		s.a_front = a * s.a_front;
@@ -687,6 +690,7 @@ Shade shade_of(Path q, float nm) {
 	s.own = false;
 	s.per_cm = 0.0;
 	s.colour = 0.0;
+	s.glow = 0.0;
 	s.glass = 1.0;
 	s.haze = 0.0;
 	s.solid = 0.0;
@@ -708,7 +712,7 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		float through = exp(-depth);
 		seen = seen * through;
 		seen = mix(seen, s.colour * exp(-depth * 0.5), s.haze);
-		seen = mix(seen, s.colour * through, s.solid);
+		seen = mix(seen, s.colour * through + s.glow * exp(-depth * 0.5), s.solid);
 		seen = seen * s.glass;
 	}
 	if (q.refractor >= 0) {
@@ -1032,13 +1036,13 @@ float swept_wall(int profile, float a0, float a, float b0, float b) {
 
 // What one body does to the light that reaches it from behind, at one wavelength: it takes it to x times it
 // plus y. Through `depth` (optical) of its liquid; its haze turns the room's light back from half way in; a
-// heap in it is lit and seen through it; its wall; and its surfaces pass `pass` of all that, the rest showing
-// the room in front.
-vec2 body_does(Layer l, float colour, float skin_depth, float depth, float pass, float room) {
+// heap in it is lit and seen through it, and glows (`glow`, a multiple of the room's light) through half of
+// it; its wall; and its surfaces pass `pass` of all that, the rest showing the room in front.
+vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth, float pass, float room) {
 	float skin = exp(-skin_depth * l.wall);
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * skin;
-	float b = colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * skin;
+	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * exp(-depth * 0.5) * l.solid) * skin;
 	return vec2(pass * a, pass * b + (1.0 - pass) * room);
 }
 
@@ -1101,7 +1105,7 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 			depth = per_cm * chord_of_part(chord_a, chord_b, per_cm);
 			pass = 0.5 * (clamp(stack_value(a + at + 2, w_a, far_a + at + 2, w_far_a, on_a), 0.0, 1.0) + clamp(stack_value(b + at + 2, w_b, far_b + at + 2, w_far_b, on_b), 0.0, 1.0));
 		}
-		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 2 * ROW, nm), depth, pass, room);
+		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 5 * ROW, nm), row_at(start + 2 * ROW, nm), depth, pass, room);
 		added = added + gain * does.y;
 		gain = gain * does.x;
 	}
@@ -2147,8 +2151,8 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	return next;
 }
 
-// what the pixel shows: the fixed estimate, what its history adds, and what glows; sRGB-encoded, alpha 0 where no body is
+// what the pixel shows: the fixed estimate and what its history adds; sRGB-encoded, alpha 0 where no body is
 vec4 shown(Path q, PixelState s) {
-	vec3 c = gamut(vec3(s.prox.x + s.hist.x + q.glow.x, s.prox.y + s.hist.y + q.glow.y, s.prox.z + s.hist.z + q.glow.z));
+	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), q.cover > 0.0 ? 1.0 : 0.0);
 }

@@ -60,6 +60,27 @@ void glow_of(double kelvin, const Spectrum &reflectance, double rgb[3]) {
 	}
 }
 
+// The same at each nanometre, as a multiple of the room's light there (GAME_SPEC §12.3, Stage 21): a light
+// in the pass, which what is in front of the solid bends, absorbs and turns away as it does the wall's.
+void glow_row(double kelvin, const Spectrum &reflectance, float *row) {
+	if (kelvin < 500.0) {
+		return;
+	}
+	// the room's light at each nanometre, on the scale on which its white is Y = 1
+	static const double white = [] {
+		double y = 0.0;
+		for (size_t i = 0; i < chem::optics::d65().size(); ++i) {
+			y += chem::optics::ybar()[i] * chem::optics::d65()[i];
+		}
+		return y;
+	}();
+	for (size_t i = 0; i < reflectance.size(); ++i) {
+		const double metres = (chem::optics::FIRST_NM + static_cast<double>(i)) * 1e-9;
+		const double radiance = 1.191042972e-16 / (metres * metres * metres * metres * metres) / (std::exp(0.014387769 / (metres * kelvin)) - 1.0) * 1e-9;
+		row[i] = static_cast<float>(radiance * (1.0 - reflectance[i]) * 683.002 / ROOM_WHITE_CD_M2 / (chem::optics::d65()[i] / white));
+	}
+}
+
 // the depth of liquid of volume `ml` at the bottom of a ball of radius `r` cm
 double pool_depth(double ml, double r) {
 	double lo = 0.0, hi = 2.0 * r;
@@ -192,6 +213,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		float *wall = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_ROW) * ROW)];
 		float *liquid_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + LIQUID_INDEX_ROW) * ROW)];
 		float *wall_index = &rows[static_cast<size_t>((count * ROWS_PER_BODY + WALL_INDEX_ROW) * ROW)];
+		float *glows = &rows[static_cast<size_t>((count * ROWS_PER_BODY + GLOW_ROW) * ROW)];
 		for (int i = 0; i < ROW; ++i) {
 			liquid_index[i] = wall_index[i] = 1.0f; // air
 		}
@@ -352,8 +374,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			double rgb[3];
 			glow_of(v.celsius + 273.15, reflectance, rgb);
 			for (int c = 0; c < 3; ++c) {
-				put(at + GLOW, c, rgb[c]);
+				put(at + GLOW, c, rgb[c]); // its colour: a pixel's history follows it
 			}
+			glow_row(v.celsius + 273.15, reflectance, glows);
 		}
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
