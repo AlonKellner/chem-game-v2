@@ -1229,11 +1229,13 @@ of every ray through its area, and its colour is their average (a box filter).
     its standard's proportions; its silhouette is its outside profile.
   - **The tracer's surfaces.** A straight piece turned about the axis is a cone (a cylinder, a flat
     ring): a quadric. An arc turned about the axis is part of a torus, which has no quadratic: a ray
-    meets it where its distance from the arc's circle equals the arc's radius, found on the CPU by
-    stepping along the ray within the patch's bounds and halving where it changes sign, then by
-    Newton's steps, to 1e-12 cm. A surface the tracer has no closed form for is still a surface it
-    traces exactly. Held to closed forms: a profile that is a cylinder, a cone or a ball traces
-    within 1e-9 of the quadric patches; a torus's own intersections against its quartic.
+    meets it where the torus's quartic changes sign, found on the CPU by stepping along the ray
+    within the patch's bounds (its heights, its rings about the axis, its arc's angles) and halving,
+    to 1e-13 of the distance. A surface the tracer has no closed form for is still a surface it
+    traces exactly. An arc centred on the axis is a sphere, a quadric. Held to closed forms: a
+    beaker's upright band traces within 1e-9 of the glass cylinder's closed form, a profile ball
+    as the ball; each arc's first crossing is a fine search of its quartic's; and every surface of
+    every vessel names the media on its two sides alike (no crossing from a medium into itself).
   - **Maps with rows.** A shaped vessel bends rays up and down as well as across, wherever its
     profile is not upright: at a flare, a corner, a cone, a shoulder, a lip. Its map is then a set
     of rows, each a map across as before, landing at a place on the wall (across and up), what

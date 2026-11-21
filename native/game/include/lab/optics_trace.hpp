@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lab/glassware.hpp"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -20,10 +22,18 @@ struct Vec3 {
 // One surface of a body: where f(p) = a.x x^2 + a.y y^2 + a.z z^2 + l . p + c is zero, within its
 // bounds: a plane (a = 0), an upright cylinder, a sphere, a cone. x is across, y up, z away from the
 // eye, in centimetres from the body's centre.
+// Or (Stage 24) a torus about the upright axis: the circle of radius `minor` about (major, cy) in the
+// half-plane of a section, turned about the axis; f = (rho - major)^2 + (y - cy)^2 - minor^2, rho the
+// distance from the axis. It has no quadratic: a ray meets it where the torus's quartic changes sign,
+// found by stepping along the ray within the patch's bounds and halving. Its arc: the angles from t_lo to
+// t_hi (radians, from +rho toward +y), within its bounds.
 struct Patch {
 	Vec3 a, l;
 	double c = 0.0;
 	Vec3 lo{ -1.0e300, -1.0e300, -1.0e300 }, hi{ 1.0e300, 1.0e300, 1.0e300 };
+	double rho_lo = 0.0, rho_hi = 1.0e300; // bounds on the distance from the upright axis (Stage 24)
+	bool torus = false;
+	double major = 0.0, cy = 0.0, minor = 0.0, t_lo = 0.0, t_hi = 0.0;
 	int below = 0, above = 0; // the medium where f < 0, and where f > 0
 };
 
@@ -39,6 +49,9 @@ struct Landing {
 	std::array<double, MAX_MEDIA> chord{}; // its path in each medium, cm
 	uint32_t route = 0; // the surfaces it crossed and where it was turned back: the same for rays that go the same way
 	int meetings = 0;
+	// crossings of a surface with the same medium on both sides, not grazing: none in a shape whose
+	// surfaces name their media consistently (a test of a shape, Stage 24)
+	int mismatched = 0;
 };
 
 // One ray from `origin` along `direction` (a unit vector) through the shape, to the wall's plane
@@ -53,6 +66,10 @@ Shape cylinder(double outer, double glass);
 Shape prism(const double corners[3][2]);
 // A ball of glass (the tracer's rays bend up and down as well as across).
 Shape ball(double radius);
+// A vessel's glass, its profile turned about the upright axis (GAME_SPEC §12.3, Stage 24): y up from its
+// base, cm. Its straight pieces are cones (cylinders, flat rings), its arcs tori (spheres where centred on
+// the axis); the outside has air beyond it and glass within, the inside glass beyond and the core within.
+Shape revolved(const glass::Vessel &vessel);
 
 // ---- a body's refraction map
 

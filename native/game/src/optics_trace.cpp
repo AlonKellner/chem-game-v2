@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <numbers>
 
 namespace lab::trace {
 
@@ -19,7 +20,105 @@ Vec3 along(const Vec3 &o, const Vec3 &u, double t) {
 
 bool within(const Patch &p, const Vec3 &at) {
 	constexpr double SLACK = 1.0e-9;
-	return at.x >= p.lo.x - SLACK && at.x <= p.hi.x + SLACK && at.y >= p.lo.y - SLACK && at.y <= p.hi.y + SLACK && at.z >= p.lo.z - SLACK && at.z <= p.hi.z + SLACK;
+	if (!(at.x >= p.lo.x - SLACK && at.x <= p.hi.x + SLACK && at.y >= p.lo.y - SLACK && at.y <= p.hi.y + SLACK && at.z >= p.lo.z - SLACK && at.z <= p.hi.z + SLACK)) {
+		return false;
+	}
+	if (p.rho_lo > 0.0 || p.rho_hi < 1.0e299 || p.torus) {
+		const double rho = std::sqrt(at.x * at.x + at.z * at.z);
+		if (rho < p.rho_lo - SLACK || rho > p.rho_hi + SLACK) {
+			return false;
+		}
+		if (p.torus) {
+			// on its own arc of the circle, not the rest of it
+			// how far round from the arc's start, in [0, 2 pi): within the arc's own sweep
+			const double turn = 2.0 * std::numbers::pi;
+			double d = std::fmod(std::atan2(at.y - p.cy, rho - p.major) - p.t_lo, turn);
+			d = d < 0.0 ? d + turn : d;
+			d = d > turn - 1.0e-9 ? d - turn : d;
+			return d <= p.t_hi - p.t_lo + 1.0e-9;
+		}
+	}
+	return true;
+}
+
+// the torus's quartic along the ray: negative inside its tube
+double quartic(const Patch &p, const Vec3 &o, const Vec3 &u, double t) {
+	const Vec3 q = along(o, u, t);
+	const double rho2 = q.x * q.x + q.z * q.z, dy = q.y - p.cy;
+	const double s = rho2 + dy * dy + p.major * p.major - p.minor * p.minor;
+	return s * s - 4.0 * p.major * p.major * rho2;
+}
+
+// where t along the ray keeps rho^2 = |o + t u|^2 (across) within [r0^2, r1^2]: up to two intervals
+int rho_spans(const Vec3 &o, const Vec3 &u, double r0, double r1, double span[2][2]) {
+	const double a = u.x * u.x + u.z * u.z, b = 2.0 * (o.x * u.x + o.z * u.z), c = o.x * o.x + o.z * o.z;
+	if (a < 1.0e-18) {
+		if (c < r0 * r0 || c > r1 * r1) {
+			return 0;
+		}
+		span[0][0] = -1.0e300;
+		span[0][1] = 1.0e300;
+		return 1;
+	}
+	// rho^2(t) = a t^2 + b t + c: within the outer circle, and outside the inner one
+	const double disc1 = b * b - 4.0 * a * (c - r1 * r1);
+	if (disc1 <= 0.0) {
+		return 0;
+	}
+	const double t1a = (-b - std::sqrt(disc1)) / (2.0 * a), t1b = (-b + std::sqrt(disc1)) / (2.0 * a);
+	const double disc0 = b * b - 4.0 * a * (c - r0 * r0);
+	if (r0 <= 0.0 || disc0 <= 0.0) {
+		span[0][0] = t1a;
+		span[0][1] = t1b;
+		return 1;
+	}
+	const double t0a = (-b - std::sqrt(disc0)) / (2.0 * a), t0b = (-b + std::sqrt(disc0)) / (2.0 * a);
+	span[0][0] = t1a;
+	span[0][1] = t0a;
+	span[1][0] = t0b;
+	span[1][1] = t1b;
+	return 2;
+}
+
+// a torus patch's nearest crossing after `after`, within its bounds: stepping along each span of the ray
+// that is within its rings and its heights, halving where the quartic changes sign
+double torus_hit(const Patch &p, const Vec3 &o, const Vec3 &u, double after) {
+	double span[2][2];
+	const int spans = rho_spans(o, u, std::max(0.0, p.rho_lo - 1.0e-9), p.rho_hi + 1.0e-9, span);
+	for (int k = 0; k < spans; ++k) {
+		double t0 = std::max(span[k][0], after), t1 = span[k][1];
+		// and within its heights
+		if (std::fabs(u.y) > 1.0e-18) {
+			const double ya = (p.lo.y - 1.0e-9 - o.y) / u.y, yb = (p.hi.y + 1.0e-9 - o.y) / u.y;
+			t0 = std::max(t0, std::min(ya, yb));
+			t1 = std::min(t1, std::max(ya, yb));
+		} else if (o.y < p.lo.y - 1.0e-9 || o.y > p.hi.y + 1.0e-9) {
+			continue;
+		}
+		if (!(t1 > t0)) {
+			continue;
+		}
+		constexpr int STEPS = 48;
+		double ta = t0, fa = quartic(p, o, u, ta);
+		for (int i = 1; i <= STEPS; ++i) {
+			const double tb = t0 + (t1 - t0) * i / STEPS, fb = quartic(p, o, u, tb);
+			if ((fa < 0.0) != (fb < 0.0)) {
+				double lo = ta, hi = tb;
+				const bool rising = fb >= 0.0;
+				while (hi - lo > 1.0e-13 * std::max(1.0, std::fabs(hi))) {
+					const double mid = 0.5 * (lo + hi);
+					((quartic(p, o, u, mid) >= 0.0) == rising ? hi : lo) = mid;
+				}
+				const double t = 0.5 * (lo + hi);
+				if (t > after && within(p, along(o, u, t))) {
+					return t;
+				}
+			}
+			ta = tb;
+			fa = fb;
+		}
+	}
+	return -1.0;
 }
 
 } // namespace
@@ -34,6 +133,14 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		int hit = -1;
 		for (size_t i = 0; i < shape.patches.size(); ++i) {
 			const Patch &p = shape.patches[i];
+			if (p.torus) {
+				const double t = torus_hit(p, o, u, NEAR);
+				if (t > NEAR && t < best) {
+					best = t;
+					hit = static_cast<int>(i);
+				}
+				continue;
+			}
 			// f(o + t u) = A t^2 + B t + C
 			const double a = p.a.x * u.x * u.x + p.a.y * u.y * u.y + p.a.z * u.z * u.z;
 			const double b = 2.0 * (p.a.x * o.x * u.x + p.a.y * o.y * u.y + p.a.z * o.z * u.z) + dot(p.l, u);
@@ -71,6 +178,11 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		++out.meetings;
 		// the surface's normal, and which medium is beyond it
 		Vec3 n{ 2.0 * p.a.x * o.x + p.l.x, 2.0 * p.a.y * o.y + p.l.y, 2.0 * p.a.z * o.z + p.l.z };
+		if (p.torus) {
+			const double rho = std::sqrt(o.x * o.x + o.z * o.z);
+			const double k = rho > 0.0 ? 2.0 * (rho - p.major) / rho : 0.0;
+			n = Vec3{ k * o.x, 2.0 * (o.y - p.cy), k * o.z };
+		}
 		const double length = std::sqrt(dot(n, n));
 		if (!(length > 0.0)) {
 			continue;
@@ -79,6 +191,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		const bool rising = dot(n, u) > 0.0; // from f < 0 to f > 0
 		const int there = rising ? p.above : p.below;
 		if (there == here) {
+			out.mismatched += std::fabs(dot(n, u)) > 1.0e-6 ? 1 : 0;
 			continue; // grazing, or a surface between two parts of one medium
 		}
 		if (rising) {
@@ -165,6 +278,87 @@ Shape ball(double radius) {
 	skin.below = GLASS;
 	skin.above = 0;
 	s.patches.push_back(skin);
+	return s;
+}
+
+Shape revolved(const glass::Vessel &vessel) {
+	Shape s;
+	// a piece of a chain whose left side (as it runs) is `left` and right side `right`
+	const auto add = [&](const glass::Piece &piece, int left, int right) {
+		Patch p;
+		if (piece.arc) {
+			const double t_lo = std::min(piece.t0, piece.t1), t_hi = std::max(piece.t0, piece.t1);
+			double rlo = std::min(piece.a.r, piece.b.r), rhi = std::max(piece.a.r, piece.b.r);
+			double ylo = std::min(piece.a.y, piece.b.y), yhi = std::max(piece.a.y, piece.b.y);
+			for (int k = -4; k <= 4; ++k) { // the circle's extremes within the arc
+				const double t = k * 0.5 * std::numbers::pi;
+				if (t > t_lo && t < t_hi) {
+					rlo = std::min(rlo, piece.centre.r + piece.radius * std::cos(t));
+					rhi = std::max(rhi, piece.centre.r + piece.radius * std::cos(t));
+					ylo = std::min(ylo, piece.centre.y + piece.radius * std::sin(t));
+					yhi = std::max(yhi, piece.centre.y + piece.radius * std::sin(t));
+				}
+			}
+			p.lo.y = ylo;
+			p.hi.y = yhi;
+			p.rho_lo = std::max(0.0, rlo);
+			p.rho_hi = rhi;
+			// the centre is on the left of an arc that turns anticlockwise
+			const bool centre_left = piece.t1 > piece.t0;
+			const int inner = centre_left ? left : right, outer = centre_left ? right : left;
+			if (std::fabs(piece.centre.r) < 1.0e-12) {
+				// centred on the axis: a sphere
+				p.a = Vec3{ 1.0, 1.0, 1.0 };
+				p.l = Vec3{ 0.0, -2.0 * piece.centre.y, 0.0 };
+				p.c = piece.centre.y * piece.centre.y - piece.radius * piece.radius;
+			} else {
+				p.torus = true;
+				p.major = piece.centre.r;
+				p.cy = piece.centre.y;
+				p.minor = piece.radius;
+				p.t_lo = t_lo;
+				p.t_hi = t_hi;
+			}
+			p.below = inner;
+			p.above = outer;
+		} else if (std::fabs(piece.b.y - piece.a.y) < 1.0e-15) {
+			// a flat ring: f = y - y0; running outward its left is above
+			p.l = Vec3{ 0.0, 1.0, 0.0 };
+			p.c = -piece.a.y;
+			p.rho_lo = std::min(piece.a.r, piece.b.r);
+			p.rho_hi = std::max(piece.a.r, piece.b.r);
+			const bool outward = piece.b.r > piece.a.r;
+			p.below = outward ? right : left;
+			p.above = outward ? left : right;
+		} else {
+			// a cone: rho = m + k y, f = rho^2 - (m + k y)^2, negative toward the axis; running up its left is the axis's side
+			const double k = (piece.b.r - piece.a.r) / (piece.b.y - piece.a.y), m = piece.a.r - k * piece.a.y;
+			p.a = Vec3{ 1.0, -k * k, 1.0 };
+			p.l = Vec3{ 0.0, -2.0 * m * k, 0.0 };
+			p.c = -m * m;
+			p.lo.y = std::min(piece.a.y, piece.b.y);
+			p.hi.y = std::max(piece.a.y, piece.b.y);
+			const bool up = piece.b.y > piece.a.y;
+			p.below = up ? left : right;
+			p.above = up ? right : left;
+		}
+		s.patches.push_back(p);
+	};
+	for (const glass::Piece &piece : vessel.outside) {
+		add(piece, GLASS, 0);
+	}
+	for (const glass::Piece &piece : vessel.inside) {
+		add(piece, CORE, GLASS);
+	}
+	// the top of the wall: a flat ring from the outside's end to the inside's, running inward (glass on its left, below)
+	if (!vessel.outside.empty() && !vessel.inside.empty()) {
+		glass::Piece ring;
+		ring.a = vessel.outside.back().b;
+		ring.b = vessel.inside.back().b;
+		if (std::fabs(ring.a.r - ring.b.r) > 1.0e-12) {
+			add(ring, GLASS, 0);
+		}
+	}
 	return s;
 }
 
