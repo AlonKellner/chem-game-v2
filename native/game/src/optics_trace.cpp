@@ -3,7 +3,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <atomic>
 #include <map>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <numbers>
 
 namespace lab::trace {
 
@@ -19,7 +24,106 @@ Vec3 along(const Vec3 &o, const Vec3 &u, double t) {
 
 bool within(const Patch &p, const Vec3 &at) {
 	constexpr double SLACK = 1.0e-9;
-	return at.x >= p.lo.x - SLACK && at.x <= p.hi.x + SLACK && at.y >= p.lo.y - SLACK && at.y <= p.hi.y + SLACK && at.z >= p.lo.z - SLACK && at.z <= p.hi.z + SLACK;
+	if (!(at.x >= p.lo.x - SLACK && at.x <= p.hi.x + SLACK && at.y >= p.lo.y - SLACK && at.y <= p.hi.y + SLACK && at.z >= p.lo.z - SLACK && at.z <= p.hi.z + SLACK)) {
+		return false;
+	}
+	if (p.rho_lo > 0.0 || p.rho_hi < 1.0e299 || p.torus) {
+		const double rho = std::sqrt(at.x * at.x + at.z * at.z);
+		if (rho < p.rho_lo - SLACK || rho > p.rho_hi + SLACK) {
+			return false;
+		}
+		if (p.torus) {
+			// on its own arc of the circle, not the rest of it
+			// how far round from the arc's start, in [0, 2 pi): within the arc's own sweep
+			const double turn = 2.0 * std::numbers::pi;
+			double d = std::fmod(std::atan2(at.y - p.cy, rho - p.major) - p.t_lo, turn);
+			d = d < 0.0 ? d + turn : d;
+			d = d > turn - 1.0e-9 ? d - turn : d;
+			return d <= p.t_hi - p.t_lo + 1.0e-9;
+		}
+	}
+	return true;
+}
+
+// where t along the ray keeps rho^2 = |o + t u|^2 (across) within [r0^2, r1^2]: up to two intervals
+int rho_spans(const Vec3 &o, const Vec3 &u, double r0, double r1, double span[2][2]) {
+	const double a = u.x * u.x + u.z * u.z, b = 2.0 * (o.x * u.x + o.z * u.z), c = o.x * o.x + o.z * o.z;
+	if (a < 1.0e-18) {
+		if (c < r0 * r0 || c > r1 * r1) {
+			return 0;
+		}
+		span[0][0] = -1.0e300;
+		span[0][1] = 1.0e300;
+		return 1;
+	}
+	// rho^2(t) = a t^2 + b t + c: within the outer circle, and outside the inner one
+	const double disc1 = b * b - 4.0 * a * (c - r1 * r1);
+	if (disc1 <= 0.0) {
+		return 0;
+	}
+	const double t1a = (-b - std::sqrt(disc1)) / (2.0 * a), t1b = (-b + std::sqrt(disc1)) / (2.0 * a);
+	const double disc0 = b * b - 4.0 * a * (c - r0 * r0);
+	if (r0 <= 0.0 || disc0 <= 0.0) {
+		span[0][0] = t1a;
+		span[0][1] = t1b;
+		return 1;
+	}
+	const double t0a = (-b - std::sqrt(disc0)) / (2.0 * a), t0b = (-b + std::sqrt(disc0)) / (2.0 * a);
+	span[0][0] = t1a;
+	span[0][1] = t0a;
+	span[1][0] = t0b;
+	span[1][1] = t1b;
+	return 2;
+}
+
+// a torus patch's nearest crossing after `after`, within its bounds: stepping along each span of the ray
+// that is within its rings and its heights, halving where the quartic changes sign
+double torus_hit(const Patch &p, const Vec3 &o, const Vec3 &u, double after) {
+	double span[2][2];
+	const int spans = rho_spans(o, u, std::max(0.0, p.rho_lo - 1.0e-9), p.rho_hi + 1.0e-9, span);
+	for (int k = 0; k < spans; ++k) {
+		double t0 = std::max(span[k][0], after), t1 = span[k][1];
+		// and within its heights
+		if (std::fabs(u.y) > 1.0e-18) {
+			const double ya = (p.lo.y - 1.0e-9 - o.y) / u.y, yb = (p.hi.y + 1.0e-9 - o.y) / u.y;
+			t0 = std::max(t0, std::min(ya, yb));
+			t1 = std::min(t1, std::max(ya, yb));
+		} else if (o.y < p.lo.y - 1.0e-9 || o.y > p.hi.y + 1.0e-9) {
+			continue;
+		}
+		if (!(t1 > t0)) {
+			continue;
+		}
+		// the quartic's coefficients along the ray from the span's start (no cancellation from a far origin):
+		// S = rho^2 + (y - cy)^2 + major^2 - minor^2, P = S^2 - 4 major^2 rho^2
+		const Vec3 s0 = along(o, u, t0);
+		const double dy = s0.y - p.cy, m2 = p.major * p.major;
+		const double a2 = u.x * u.x + u.z * u.z, a1 = 2.0 * (s0.x * u.x + s0.z * u.z), a0 = s0.x * s0.x + s0.z * s0.z;
+		const double q2 = a2 + u.y * u.y, q1 = a1 + 2.0 * dy * u.y, q0 = a0 + dy * dy + m2 - p.minor * p.minor;
+		const double c4 = q2 * q2, c3 = 2.0 * q2 * q1, c2 = q1 * q1 + 2.0 * q2 * q0 - 4.0 * m2 * a2, c1 = 2.0 * q1 * q0 - 4.0 * m2 * a1, c0 = q0 * q0 - 4.0 * m2 * a0;
+		const auto f = [&](double tau) { return (((c4 * tau + c3) * tau + c2) * tau + c1) * tau + c0; };
+		constexpr int STEPS = 48;
+		const double length = t1 - t0;
+		double ta = 0.0, fa = f(ta);
+		for (int i = 1; i <= STEPS; ++i) {
+			const double tb = length * i / STEPS, fb = f(tb);
+			if ((fa < 0.0) != (fb < 0.0)) {
+				double lo = ta, hi = tb;
+				const bool rising = fb >= 0.0;
+				while (hi - lo > 1.0e-13 * std::max(1.0, std::fabs(t0 + hi))) {
+					const double mid = 0.5 * (lo + hi);
+					((f(mid) >= 0.0) == rising ? hi : lo) = mid;
+				}
+				const double t = t0 + 0.5 * (lo + hi);
+				if (t > after && within(p, along(o, u, t))) {
+					return t;
+				}
+			}
+			ta = tb;
+			fa = fb;
+		}
+	}
+	return -1.0;
 }
 
 } // namespace
@@ -34,6 +138,14 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		int hit = -1;
 		for (size_t i = 0; i < shape.patches.size(); ++i) {
 			const Patch &p = shape.patches[i];
+			if (p.torus) {
+				const double t = torus_hit(p, o, u, NEAR);
+				if (t > NEAR && t < best) {
+					best = t;
+					hit = static_cast<int>(i);
+				}
+				continue;
+			}
 			// f(o + t u) = A t^2 + B t + C
 			const double a = p.a.x * u.x * u.x + p.a.y * u.y * u.y + p.a.z * u.z * u.z;
 			const double b = 2.0 * (p.a.x * o.x * u.x + p.a.y * o.y * u.y + p.a.z * o.z * u.z) + dot(p.l, u);
@@ -71,6 +183,11 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		++out.meetings;
 		// the surface's normal, and which medium is beyond it
 		Vec3 n{ 2.0 * p.a.x * o.x + p.l.x, 2.0 * p.a.y * o.y + p.l.y, 2.0 * p.a.z * o.z + p.l.z };
+		if (p.torus) {
+			const double rho = std::sqrt(o.x * o.x + o.z * o.z);
+			const double k = rho > 0.0 ? 2.0 * (rho - p.major) / rho : 0.0;
+			n = Vec3{ k * o.x, 2.0 * (o.y - p.cy), k * o.z };
+		}
 		const double length = std::sqrt(dot(n, n));
 		if (!(length > 0.0)) {
 			continue;
@@ -79,6 +196,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		const bool rising = dot(n, u) > 0.0; // from f < 0 to f > 0
 		const int there = rising ? p.above : p.below;
 		if (there == here) {
+			out.mismatched += std::fabs(dot(n, u)) > 1.0e-6 ? 1 : 0;
 			continue; // grazing, or a surface between two parts of one medium
 		}
 		if (rising) {
@@ -100,9 +218,12 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		here = there;
 		out.route = out.route * 31u + static_cast<uint32_t>(2 * (hit + 1));
 	}
+	out.at = o;
+	out.toward = u;
 	if (here != 0) {
 		out.pass = 0.0; // still inside after every meeting allowed: nothing of the wall comes this way
 		out.route = out.route * 31u + 7u;
+		out.left = false;
 	}
 	out.lands = here == 0 && u.z > 0.05;
 	if (out.lands) {
@@ -168,6 +289,98 @@ Shape ball(double radius) {
 	return s;
 }
 
+Shape revolved(const glass::Vessel &vessel) {
+	Shape s;
+	// a piece of a chain whose left side (as it runs) is `left` and right side `right`
+	const auto add = [&](const glass::Piece &piece, int left, int right) {
+		Patch p;
+		if (piece.arc) {
+			const double t_lo = std::min(piece.t0, piece.t1), t_hi = std::max(piece.t0, piece.t1);
+			double rlo = std::min(piece.a.r, piece.b.r), rhi = std::max(piece.a.r, piece.b.r);
+			double ylo = std::min(piece.a.y, piece.b.y), yhi = std::max(piece.a.y, piece.b.y);
+			for (int k = -4; k <= 4; ++k) { // the circle's extremes within the arc
+				const double t = k * 0.5 * std::numbers::pi;
+				if (t > t_lo && t < t_hi) {
+					rlo = std::min(rlo, piece.centre.r + piece.radius * std::cos(t));
+					rhi = std::max(rhi, piece.centre.r + piece.radius * std::cos(t));
+					ylo = std::min(ylo, piece.centre.y + piece.radius * std::sin(t));
+					yhi = std::max(yhi, piece.centre.y + piece.radius * std::sin(t));
+				}
+			}
+			p.lo.y = ylo;
+			p.hi.y = yhi;
+			p.rho_lo = std::max(0.0, rlo);
+			p.rho_hi = rhi;
+			// the centre is on the left of an arc that turns anticlockwise
+			const bool centre_left = piece.t1 > piece.t0;
+			const int inner = centre_left ? left : right, outer = centre_left ? right : left;
+			if (std::fabs(piece.centre.r) < 1.0e-12) {
+				// centred on the axis: a sphere
+				p.a = Vec3{ 1.0, 1.0, 1.0 };
+				p.l = Vec3{ 0.0, -2.0 * piece.centre.y, 0.0 };
+				p.c = piece.centre.y * piece.centre.y - piece.radius * piece.radius;
+			} else {
+				p.torus = true;
+				p.major = piece.centre.r;
+				p.cy = piece.centre.y;
+				p.minor = piece.radius;
+				p.t_lo = t_lo;
+				p.t_hi = t_hi;
+			}
+			p.below = inner;
+			p.above = outer;
+		} else if (std::fabs(piece.b.y - piece.a.y) < 1.0e-15) {
+			// a flat ring: f = y - y0; running outward its left is above
+			p.l = Vec3{ 0.0, 1.0, 0.0 };
+			p.c = -piece.a.y;
+			p.rho_lo = std::min(piece.a.r, piece.b.r);
+			p.rho_hi = std::max(piece.a.r, piece.b.r);
+			const bool outward = piece.b.r > piece.a.r;
+			p.below = outward ? right : left;
+			p.above = outward ? left : right;
+		} else {
+			// a cone: rho = m + k y, f = rho^2 - (m + k y)^2, negative toward the axis; running up its left is the axis's side
+			const double k = (piece.b.r - piece.a.r) / (piece.b.y - piece.a.y), m = piece.a.r - k * piece.a.y;
+			p.a = Vec3{ 1.0, -k * k, 1.0 };
+			p.l = Vec3{ 0.0, -2.0 * m * k, 0.0 };
+			p.c = -m * m;
+			p.lo.y = std::min(piece.a.y, piece.b.y);
+			p.hi.y = std::max(piece.a.y, piece.b.y);
+			const bool up = piece.b.y > piece.a.y;
+			p.below = up ? left : right;
+			p.above = up ? right : left;
+		}
+		s.patches.push_back(p);
+	};
+	for (const glass::Piece &piece : vessel.outside) {
+		add(piece, GLASS, 0);
+	}
+	for (const glass::Piece &piece : vessel.inside) {
+		add(piece, CORE, GLASS);
+	}
+	// the top of the wall: a flat ring from the outside's end to the inside's, running inward (glass on its left, below)
+	if (!vessel.outside.empty() && !vessel.inside.empty()) {
+		glass::Piece ring;
+		ring.a = vessel.outside.back().b;
+		ring.b = vessel.inside.back().b;
+		if (std::fabs(ring.a.r - ring.b.r) > 1.0e-12) {
+			add(ring, GLASS, 0);
+		}
+	}
+	return s;
+}
+
+const Shape &revolved_of(const glass::Vessel &vessel) {
+	static std::mutex lock;
+	static std::map<const glass::Vessel *, std::unique_ptr<Shape>> made;
+	const std::lock_guard<std::mutex> hold(lock);
+	std::unique_ptr<Shape> &s = made[&vessel];
+	if (!s) {
+		s = std::make_unique<Shape>(revolved(vessel));
+	}
+	return *s;
+}
+
 // ---- maps
 
 namespace {
@@ -197,7 +410,7 @@ MapRay map_ray(const MapSpec &spec, double x, double nm, int medium) {
 	// its core: its liquid, the air over it, or (a third core: a vessel's floor) glass all through
 	const double glass = index_at(spec.glass_index, nm);
 	std::array<double, MAX_MEDIA> index{ 1.0, glass, liquid(spec, medium) ? index_at(spec.liquid_index, nm) : medium == 2 ? glass : 1.0, 1.0 };
-	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, 0.0, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
+	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, spec.y_cm, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
 	MapRay out;
 	out.landing = l.lands ? l.x / spec.cm_per_pixel : l.x;
 	out.pass = l.pass;
@@ -237,7 +450,7 @@ Map build_map(const MapSpec &spec) {
 	// MAP_LANDING_TOLERANCE as a shift of the image on the screen, or by MAP_NM_TOLERANCE as a shift in
 	// wavelength (where a ray leaves a face nearly along it, its landing runs away with the wavelength, and no
 	// cubic follows it: but the light there is spread as far, and a nanometre's twentieth of it is nothing).
-	map.pieces = 1;
+	map.pieces = std::max(1, spec.pieces_at_least);
 	{
 		constexpr int PROBES = 33;
 		for (int p = 0; p < PROBES; ++p) {
@@ -248,7 +461,7 @@ Map build_map(const MapSpec &spec) {
 				const MapRay here = map_ray(spec, x, 580.0, medium), beside = map_ray(spec, x + 1.0 / MAP_FINE, 580.0, medium);
 				map.rays += 2;
 				const double slope = std::max(1.0, std::fabs(beside.landing - here.landing) * MAP_FINE);
-				for (; map.pieces < MAP_PIECES_MOST;) {
+				for (; map.pieces < spec.pieces_most;) {
 					bool true_to_it = true;
 					for (int piece = 0; piece < map.pieces && true_to_it; ++piece) {
 						MapRay node[4];
@@ -428,7 +641,7 @@ Map build_map(const MapSpec &spec) {
 		}
 	}
 	int wanted = map.pieces;
-	while (wanted < MAP_PIECES_MOST && 0.5 * moved * map.pieces / wanted > MAP_LANDING_TOLERANCE) {
+	while (wanted < spec.pieces_most && 0.5 * moved * map.pieces / wanted > MAP_LANDING_TOLERANCE) {
 		wanted *= 2;
 	}
 	if (wanted > map.pieces) {
@@ -483,6 +696,162 @@ MapRay map_read(const Map &map, double x, double nm, int medium) {
 	out.pass = std::min(std::max(read(4), 0.0), 1.0);
 	out.chord = std::sqrt(std::max(read(8), 0.0));
 	out.route = static_cast<uint32_t>(whole(near[12 + (cubic ? 0 : node)]));
+	return out;
+}
+
+// ---- a shaped vessel's maps, a map for each band of its rows (Stage 24)
+
+RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double height) {
+	RowMap out;
+	const double cm = spec.cm_per_pixel;
+	// the bands: cut where any piece of the profile begins or ends
+	std::vector<double> cuts{ 0.0, height };
+	for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+		for (const glass::Piece &p : *chain) {
+			for (const double y : { p.a.y, p.b.y }) {
+				const double row = height - y / cm;
+				if (row > 0.0 && row < height) {
+					cuts.push_back(row);
+				}
+			}
+		}
+	}
+	std::sort(cuts.begin(), cuts.end());
+	cuts.erase(std::unique(cuts.begin(), cuts.end(), [](double a, double b) { return std::fabs(a - b) < 1e-9; }), cuts.end());
+	// a band is upright if every piece reaching into it is a vertical line: one map serves all its rows
+	const auto upright = [&](double top, double foot) {
+		const double y0 = (height - foot) * cm, y1 = (height - top) * cm;
+		for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+			for (const glass::Piece &p : *chain) {
+				const double lo = std::min(p.a.y, p.b.y), hi = std::max(p.a.y, p.b.y);
+				if (hi > y0 + 1e-12 && lo < y1 - 1e-12 && (p.arc || std::fabs(p.a.r - p.b.r) > 1e-12)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+	// the rows' bands: an upright band whole, a curved one in steps of at most ROW_STEP pixels
+	for (size_t b = 0; b + 1 < cuts.size(); ++b) {
+		const double top = cuts[b], foot = cuts[b + 1];
+		const int steps = upright(top, foot) ? 1 : std::max(1, static_cast<int>(std::ceil((foot - top) / ROW_STEP)));
+		for (int k = 1; k <= steps; ++k) {
+			out.ends.push_back(top + (foot - top) * k / steps);
+		}
+	}
+	// each band's map, traced at its middle row, the bands on the threads at once (none depends on another)
+	out.maps.resize(out.ends.size());
+	std::atomic<size_t> next{ 0 };
+	std::vector<std::thread> workers;
+	const unsigned threads = std::max(1u, std::min(static_cast<unsigned>(out.ends.size()), std::thread::hardware_concurrency()));
+	for (unsigned t = 0; t < threads; ++t) {
+		workers.emplace_back([&] {
+			for (size_t k = next.fetch_add(1); k < out.ends.size(); k = next.fetch_add(1)) {
+				const double from = k == 0 ? 0.0 : out.ends[k - 1];
+				MapSpec row = spec;
+				row.y_cm = (height - 0.5 * (from + out.ends[k])) * cm;
+				row.pieces_most = std::min(spec.pieces_most, ROW_PIECES_MOST);
+				out.maps[k] = build_map(row);
+			}
+		});
+	}
+	for (std::thread &w : workers) {
+		w.join();
+	}
+	for (const Map &m : out.maps) {
+		out.rays += m.rays;
+	}
+	// the rims: where each band's map was traced, and in each whole row
+	const auto outer_at = [&](double y) { return vessel.radius_outside((height - y) * cm) / cm; };
+	const auto inner_at = [&](double y) { return vessel.radius_inside((height - y) * cm) / cm; };
+	for (size_t k = 0; k < out.ends.size(); ++k) {
+		const double mid = 0.5 * ((k == 0 ? 0.0 : out.ends[k - 1]) + out.ends[k]);
+		out.band_outer.push_back(outer_at(mid));
+		out.band_inner.push_back(inner_at(mid));
+	}
+	const size_t whole = static_cast<size_t>(std::ceil(height)) + 1;
+	for (size_t r = 0; r < whole; ++r) {
+		const double mid = std::min(static_cast<double>(r) + 0.5, height);
+		out.row_outer.push_back(outer_at(mid));
+		out.row_inner.push_back(inner_at(mid));
+	}
+	return out;
+}
+
+MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium) {
+	MapSpec row = spec;
+	row.y_cm = (height - y) * spec.cm_per_pixel;
+	return map_ray(row, x, nm, medium);
+}
+
+namespace {
+
+// a place across a row in a measure both its rims keep: inside the inner rim from 0 to 1, through the glass from
+// 1 to 2, past the outer rim 2 and the pixels beyond (no inner rim: 0 to 2 from the axis to the outer)
+double rim_measure(double x, double outer, double inner) {
+	const double a = std::fabs(x), sign = x < 0.0 ? -1.0 : 1.0;
+	if (inner < 1.0e-6) {
+		return sign * (a <= outer ? 2.0 * a / outer : 2.0 + (a - outer));
+	}
+	return sign * (a <= inner ? a / inner : a <= outer ? 1.0 + (a - inner) / (outer - inner) : 2.0 + (a - outer));
+}
+double rim_place(double c, double outer, double inner) {
+	const double a = std::fabs(c), sign = c < 0.0 ? -1.0 : 1.0;
+	if (inner < 1.0e-6) {
+		return sign * (a <= 2.0 ? 0.5 * a * outer : outer + (a - 2.0));
+	}
+	return sign * (a <= 1.0 ? a * inner : a <= 2.0 ? inner + (a - 1.0) * (outer - inner) : outer + (a - 2.0));
+}
+
+} // namespace
+
+MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium) {
+	size_t k = 0;
+	while (k + 1 < rows.ends.size() && y >= rows.ends[k]) {
+		++k;
+	}
+	// the row's rims (straight between the middles of its whole rows), and the band's
+	const double d = std::max(y - 0.5, 0.0);
+	const size_t r = std::min(static_cast<size_t>(d), rows.row_outer.size() - 1), r1 = std::min(r + 1, rows.row_outer.size() - 1);
+	const double f = d - static_cast<double>(r);
+	const double outer = rows.row_outer[r] + (rows.row_outer[r1] - rows.row_outer[r]) * f, inner = rows.row_inner[r] + (rows.row_inner[r1] - rows.row_inner[r]) * f;
+	const double xb = outer > 0.0 && rows.band_outer[k] > 0.0 ? rim_place(rim_measure(x, outer, inner), rows.band_outer[k], rows.band_inner[k]) : x;
+	MapRay out = map_read(rows.maps[k], xb, nm, medium);
+	out.landing += x - xb;
+	return out;
+}
+
+std::vector<float> rows_block(const RowMap &rows) {
+	// [0] the rows' bands K, the whole rows R; [1 .. K] each band: where its rows end (pixels down from the
+	// body's top), where its map begins (vec4s from the table's start), its pieces in wavelength, its whole
+	// pixels across; [1 + K .. K + R] for each whole row, the band its top is in; then the maps
+	const size_t k = rows.ends.size(), whole = static_cast<size_t>(std::ceil(rows.ends.back())) + 1;
+	std::vector<float> out((1 + k + whole + k) * 4, 0.0f);
+	out[0] = static_cast<float>(k);
+	out[1] = static_cast<float>(whole);
+	size_t band = 0;
+	for (size_t r = 0; r < whole; ++r) {
+		while (band + 1 < k && static_cast<double>(r) >= rows.ends[band]) {
+			++band;
+		}
+		out[(1 + k + r) * 4] = static_cast<float>(band);
+		out[(1 + k + r) * 4 + 1] = static_cast<float>(r < rows.row_outer.size() ? rows.row_outer[r] : 0.0);
+		out[(1 + k + r) * 4 + 2] = static_cast<float>(r < rows.row_inner.size() ? rows.row_inner[r] : 0.0);
+	}
+	for (size_t i = 0; i < k; ++i) {
+		out[(1 + k + whole + i) * 4] = static_cast<float>(rows.band_outer[i]);
+		out[(1 + k + whole + i) * 4 + 1] = static_cast<float>(rows.band_inner[i]);
+	}
+	size_t at = 1 + k + whole + k;
+	for (size_t i = 0; i < k; ++i) {
+		const std::vector<float> block = map_block(rows.maps[i]);
+		out[(1 + i) * 4] = static_cast<float>(rows.ends[i]);
+		out[(1 + i) * 4 + 1] = static_cast<float>(at);
+		out[(1 + i) * 4 + 2] = static_cast<float>(rows.maps[i].pieces);
+		out[(1 + i) * 4 + 3] = static_cast<float>(rows.maps[i].coarse);
+		out.insert(out.end(), block.begin(), block.end());
+		at += block.size() / 4;
+	}
 	return out;
 }
 

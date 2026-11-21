@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lab/glassware.hpp"
+
 #include <array>
 #include <cstdint>
 #include <vector>
@@ -20,10 +22,18 @@ struct Vec3 {
 // One surface of a body: where f(p) = a.x x^2 + a.y y^2 + a.z z^2 + l . p + c is zero, within its
 // bounds: a plane (a = 0), an upright cylinder, a sphere, a cone. x is across, y up, z away from the
 // eye, in centimetres from the body's centre.
+// Or (Stage 24) a torus about the upright axis: the circle of radius `minor` about (major, cy) in the
+// half-plane of a section, turned about the axis; f = (rho - major)^2 + (y - cy)^2 - minor^2, rho the
+// distance from the axis. It has no quadratic: a ray meets it where the torus's quartic changes sign,
+// found by stepping along the ray within the patch's bounds and halving. Its arc: the angles from t_lo to
+// t_hi (radians, from +rho toward +y), within its bounds.
 struct Patch {
 	Vec3 a, l;
 	double c = 0.0;
 	Vec3 lo{ -1.0e300, -1.0e300, -1.0e300 }, hi{ 1.0e300, 1.0e300, 1.0e300 };
+	double rho_lo = 0.0, rho_hi = 1.0e300; // bounds on the distance from the upright axis (Stage 24)
+	bool torus = false;
+	double major = 0.0, cy = 0.0, minor = 0.0, t_lo = 0.0, t_hi = 0.0;
 	int below = 0, above = 0; // the medium where f < 0, and where f > 0
 };
 
@@ -39,6 +49,13 @@ struct Landing {
 	std::array<double, MAX_MEDIA> chord{}; // its path in each medium, cm
 	uint32_t route = 0; // the surfaces it crossed and where it was turned back: the same for rays that go the same way
 	int meetings = 0;
+	// crossings of a surface with the same medium on both sides, not grazing: none in a shape whose
+	// surfaces name their media consistently (a test of a shape, Stage 24)
+	int mismatched = 0;
+	// where it last was and which way it went on (cm, the body's frame): a ray carried on beyond (Stage 24);
+	// whether it left the body (not still inside after every meeting allowed)
+	Vec3 at, toward;
+	bool left = true;
 };
 
 // One ray from `origin` along `direction` (a unit vector) through the shape, to the wall's plane
@@ -53,11 +70,18 @@ Shape cylinder(double outer, double glass);
 Shape prism(const double corners[3][2]);
 // A ball of glass (the tracer's rays bend up and down as well as across).
 Shape ball(double radius);
+// A vessel's glass, its profile turned about the upright axis (GAME_SPEC §12.3, Stage 24): y up from its
+// base, cm. Its straight pieces are cones (cylinders, flat rings), its arcs tori (spheres where centred on
+// the axis); the outside has air beyond it and glass within, the inside glass beyond and the core within.
+Shape revolved(const glass::Vessel &vessel);
+// The same, made once for each vessel and kept.
+const Shape &revolved_of(const glass::Vessel &vessel);
 
 // ---- a body's refraction map
 
 // What a map is traced for: the body, how it is drawn, and its indices at 1 nm from 380 nm (401
 // values each; null: 1).
+inline constexpr int MAP_PIECES_MOST = 64;
 struct MapSpec {
 	Shape shape;
 	double cm_per_pixel = 1.0;
@@ -68,6 +92,12 @@ struct MapSpec {
 	double wall_cm = 20.0;
 	int media = 2; // 2: its core as liquid, then as air; 3: and then as glass (a vessel's floor, seen from the side); 1: its core as air alone (a prism)
 	const float *glass_index = nullptr, *liquid_index = nullptr;
+	// Stage 24: the height the map's rays come in at (cm, the body's frame: up from a vessel's base), and the
+	// fewest pieces in wavelength it may have (so that a body's rows share them)
+	double y_cm = 0.0;
+	int pieces_at_least = 1;
+	// and the most it may have (a shaped vessel's bands: ROW_PIECES_MOST)
+	int pieces_most = MAP_PIECES_MOST;
 };
 
 // The map (GAME_SPEC §12.3): samples across the body, MAP_FINE a pixel; pieces in wavelength, even in
@@ -97,7 +127,6 @@ struct Map {
 };
 
 inline constexpr int MAP_FINE = 4; // samples a pixel: a pixel is read in four parts at most
-inline constexpr int MAP_PIECES_MOST = 64;
 // How far the map may put the image off, in pixels of the screen, within a part and within a piece: the
 // landing's error on the wall over how fast the landing moves across the body there (at least 1).
 inline constexpr double MAP_LANDING_TOLERANCE = 0.02;
@@ -128,6 +157,35 @@ MapRay map_ray(const MapSpec &spec, double x, double nm, int medium);
 // The same read from the map: straight between two samples across (the nearer one's where the route
 // changes between them); in wavelength, the cubic through its piece's four nodes.
 MapRay map_read(const Map &map, double x, double nm, int medium);
+
+// ---- a shaped vessel's maps: a map for each band of its rows (GAME_SPEC §12.3, Stage 24)
+
+// A vessel that is not upright everywhere sees each row differently. Its rows are cut into bands where its
+// profile's pieces begin and end; an upright band (every surface it crosses there a vertical cylinder) is
+// one map, the same at every row; a curved band is cut again every ROW_STEP pixels at most, each its own map,
+// traced at its middle row. A row reads its band's map along its own outline: a place across the row is read at
+// the same place in a measure both rims keep (inside the inner rim from the axis to it, through the glass from
+// it to the outer rim), in the band's middle row, and the ray keeps its deflection there. So the outline is
+// where the glass is in every row, never a step. Rays are taken as level (bending up and down is Stage 25's).
+inline constexpr double ROW_STEP = 4.0;
+inline constexpr int ROW_PIECES_MOST = 1; // one piece, as every upright vessel's: read by the plain reading, followed in stacks
+struct RowMap {
+	std::vector<double> ends; // where each band's rows end, pixels down from the body's top, ascending; the last its foot
+	std::vector<Map> maps; // each band's map
+	std::vector<double> band_outer, band_inner; // the rims where each band's map was traced, pixels (inner 0: none)
+	std::vector<double> row_outer, row_inner; // each whole row's rims, at its middle
+	int64_t rays = 0;
+};
+// `spec` as for one row, its shape the vessel's; `height` the body's height in pixels (its foot the vessel's base)
+RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double height);
+// One ray traced directly at `y` pixels down from the body's top; and the same read from the band's map.
+MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium);
+MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium);
+// The table as the renderer reads it: [0] the bands K and the whole rows R; [1 .. K] (where its rows end, its
+// map's offset in vec4s from the table's start, its pieces, its whole pixels); [1 + K .. K + R] for each whole
+// row the band its top is in, its outer rim and its inner (at its middle); [1 + K + R .. 2K + R] each band's rims
+// (outer, inner); then each band's map_block.
+std::vector<float> rows_block(const RowMap &rows);
 
 // The map as the renderer reads it (lab/optics_scene.hpp lays the scene's maps out): vec4s.
 //   [0]                 coarse, media, samples, pieces

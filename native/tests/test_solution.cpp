@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <utility>
 #include <vector>
 
 using namespace chem;
@@ -348,6 +349,11 @@ TEST_CASE("solution: the data oracle: copper sulfate and the acid as electrolyte
 	CHECK(salt == doctest::Approx(0.0360).epsilon(0.04));
 	// a 2-2 salt is far from ideal: a tenth of a mole per kg already has gamma 0.15
 	CHECK(std::sqrt(activity(t, solution_of(0.1, 0.0), builtin::copper_sulfate_aq)) / 0.1 == doctest::Approx(0.150).epsilon(0.03));
+	// the CRC's mean activity coefficients at 0.2, 0.5 and 1.0 mol/kg (low confidence in their unit; docs/DATA_SOURCES.md)
+	for (const auto [m, gamma] : { std::pair{ 0.2, 0.104 }, std::pair{ 0.5, 0.062 }, std::pair{ 1.0, 0.042 } }) {
+		CAPTURE(m);
+		CHECK(std::sqrt(activity(t, solution_of(m, 0.0), builtin::copper_sulfate_aq)) / m == doctest::Approx(gamma).epsilon(0.03));
+	}
 	// K1: the acid against Staples (1981): its osmotic coefficient (from the
 	// water's activity, three particles) and mean activity coefficient
 	// (a = (2m)^2 m gamma^3), within 2% to 5 mol/kg

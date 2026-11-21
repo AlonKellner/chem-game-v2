@@ -1,0 +1,211 @@
+{
+	"format": "chem-sources/1",
+	"note": "Where each number in data/ comes from (CLAUDE.md, 'Fetched data is documented and held to its source'; tools/check_sources.py, the ctest entry data_sources). Every numeric value under data/ (a JSON number or decimal string; a CSV table as a whole) must match an entry's pattern. A pattern is a path: the file, then keys; an array of objects is keyed by each one's id, symbol or name, any other array by '#'. '{a,b}' is any of its names; '*' and '**' only as the last segment (one key; anything below), so a new file, species, reaction, item or medium matches nothing until it is entered here. An entry is measured (tests: the TEST_CASEs that hold it to its source; doc: phrases docs/DATA_SOURCES.md must contain), calibrated (why; doc; tests optional) or design (why: a choice of the game, not a claim about the world).",
+	"entries": [
+		{
+			"data": ["elements.json/elements/{H,C,N,O,Si,S,Cu}/mass"],
+			"measured": "CIAAW's abridged standard atomic weights",
+			"doc": ["CIAAW"],
+			"tests": ["sources: molar masses are IUPAC's atomic weights"]
+		},
+		{
+			"data": ["species.json/species/{water,steam,carbon_dioxide,nitrogen,oxygen,copper_oxide,copper_sulfate,malachite,glass}/thermo/*"],
+			"measured": "NIST WebBook: CODATA, Chase; Richardson and Brown; Kiseleva et al.; ISO 3585",
+			"doc": ["Verified species data", "Richardson and Brown", "Kiseleva", "ISO 3585"],
+			"tests": [
+				"sources: every species' thermodynamic row is the one cited",
+				"thermal: the data oracle: water's heat of vaporisation",
+				"phase: the data oracle: the table's saturation pressure",
+				"kinetics: the data oracle: malachite's decomposition"
+			]
+		},
+		{
+			"data": ["species.json/species/{copper_sulfate_pentahydrate,copper_sulfate_trihydrate,copper_sulfate_monohydrate,sulfuric_acid_aq}/thermo/*"],
+			"measured": "Atkins (NBS 1982); NBS 1982; the acid's Cp a stand-in",
+			"doc": ["Atkins and Jones", "Wagman et al.", "Cp is a stand-in"],
+			"tests": [
+				"sources: every species' thermodynamic row is the one cited",
+				"sources: the hydrates' dissociation pressures",
+				"solution: the data oracle: the pentahydrate gives way to the trihydrate"
+			]
+		},
+		{
+			"data": ["species.json/species/copper_sulfate_aq/thermo/*"],
+			"measured": "fitted to the CRC's solubility through the model's activities",
+			"doc": ["The fit of CuSO4(aq)"],
+			"tests": ["sources: every species' thermodynamic row is the one cited", "solution: the data oracle: saturated copper sulfate"]
+		},
+		{
+			"data": ["species.json/species/latex/thermo/*"],
+			"measured": "NETZSCH's heat capacity of natural rubber; a wall never reacts, so its formation terms are 0",
+			"doc": ["NETZSCH"],
+			"tests": ["sources: every species' thermodynamic row is the one cited"]
+		},
+		{
+			"data": ["species.json/species/{water,copper_sulfate,copper_oxide,malachite,copper_sulfate_pentahydrate,copper_sulfate_trihydrate,copper_sulfate_monohydrate}/density"],
+			"measured": "NIST (IAPWS-95), Merck, mineral handbooks, the CRC, COD",
+			"doc": ["Verified densities and walls", "Densities."],
+			"tests": ["sources: molar masses are IUPAC's atomic weights, and molar volumes the cited densities"]
+		},
+		{
+			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq}/volume_cm3"],
+			"measured": "apparent molar volumes from Engineering Toolbox's densities (low confidence)",
+			"doc": ["Apparent molar volumes"],
+			"tests": ["sources: the solutes' apparent molar volumes"]
+		},
+		{
+			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq}/ions/*"],
+			"design": "a dissolved salt's ions, counted from its formula"
+		},
+		{
+			"data": ["solutions.json/{a_phi,b}", "solutions.json/pairs/#/*"],
+			"measured": "Pitzer and Mayorga; the acid's set fitted to Staples",
+			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples"],
+			"tests": ["solution: the data oracle: copper sulfate and the acid as electrolytes", "solution: the acid lowers the salt's solubility"]
+		},
+		{
+			"data": ["solutions.json/diffusion/*", "solutions.json/viscosity/#/*"],
+			"measured": "Li and Gregory 1974; NIST WebBook (IAPWS 2008)",
+			"doc": ["Li and Gregory", "IAPWS 2008"],
+			"tests": ["measured: water's viscosity, and the ions' diffusion"]
+		},
+		{
+			"data": ["reactions.json/reactions/malachite_decomposition/kinetics/*"],
+			"measured": "Aoki, Yamamoto and Koga 2021",
+			"doc": ["Aoki, Yamamoto and Koga", "Seguin"],
+			"tests": ["measured: malachite at Koga's isothermal run", "sources: malachite's activation energy lies in Seguin's range"]
+		},
+		{
+			"data": ["reactions.json/reactions/copper_oxide_dissolution/kinetics/*"],
+			"measured": "Majima et al. 1980, as cited by Nicol and Akilan (low confidence)",
+			"doc": ["Majima"],
+			"tests": ["measured: copper oxide dissolves at Majima's rate"]
+		},
+		{
+			"data": ["reactions.json/reactions/pentahydrate_crystallization/kinetics/{prefactor,activation_kj}"],
+			"measured": "Tanimoto, Kobayashi and Fujita 1963",
+			"doc": ["Tanimoto, Kobayashi and Fujita"],
+			"tests": ["measured: the pentahydrate grows at Tanimoto's surface rate", "measured: a crystal in water dissolves by transport"]
+		},
+		{
+			"data": ["reactions.json/reactions/pentahydrate_crystallization/kinetics/{nucleation,nucleation_order}"],
+			"measured": "fitted to Sheng 2012's induction times (a lower bound)",
+			"doc": ["Sheng, PhD thesis"],
+			"tests": ["measured: the pentahydrate's first crystal appears at Sheng's induction times"]
+		},
+		{
+			"data": ["reactions.json/reactions/{trihydrate_crystallization,monohydrate_crystallization,anhydrous_crystallization}/kinetics/*"],
+			"calibrated": "no source gives the other hydrates' growth and nucleation: assumed equal to the pentahydrate's",
+			"doc": ["assumed equal"]
+		},
+		{
+			"data": ["reactions.json/reactions/{pentahydrate_dehydration,trihydrate_dehydration,monohydrate_dehydration}/kinetics/*"],
+			"measured": "Cheng et al. 2019 (Ea); Yu 2007's DTG peaks (prefactors)",
+			"doc": ["Cheng et al.", "Yu Yuye"],
+			"tests": ["measured: each dehydration's rate at its DTG peak"]
+		},
+		{
+			"data": ["optics/cie_1931_2deg.csv", "optics/d65.csv"],
+			"measured": "CIE, as distributed by cvrl.org",
+			"doc": ["CIE 1931 2°", "CIE standard illuminant D65"],
+			"tests": ["colour: the illuminant is white"]
+		},
+		{
+			"data": ["optics/water.csv", "optics/media.json/media/water/mol_per_litre"],
+			"measured": "NASA Ocean Optics Protocols (Pope and Fry; Sogandares and Fry; Kou et al.; Buiteveld et al.); Kou, Labrie and Chylek 1993",
+			"doc": ["NASA Ocean Optics Protocols", "Kou, Labrie and Chylek", "Water as an absorber"],
+			"tests": ["optics: pure water, as measured"]
+		},
+		{
+			"data": ["optics/malachite.csv"],
+			"measured": "USGS splib07a, Malachite GDS801",
+			"doc": ["GDS801"],
+			"tests": ["measured: malachite reflects as the USGS library's GDS801"]
+		},
+		{
+			"data": ["optics/copper_sulfate_aq.csv"],
+			"measured": "NBS Circular 484, Table 4; 760-780 nm to Davenet et al.'s 790 nm",
+			"doc": ["NBS Circular 484", "Davenet"],
+			"tests": ["measured: the copper sulfate standard's absorbancy is NBS Circular 484's"]
+		},
+		{
+			"data": ["optics/media.json/indices/water/**", "optics/media.json/indices/glass/**"],
+			"measured": "Daimon and Masumura 2007; SCHOTT BOROFLOAT 33; ISO 3585's density",
+			"doc": ["Daimon and Masumura", "BOROFLOAT 33"],
+			"tests": ["refraction: the indices of water and of laboratory glass, as measured"]
+		},
+		{
+			"data": ["optics/media.json/materials/n_sf11/**"],
+			"measured": "SCHOTT's Sellmeier coefficients for N-SF11",
+			"doc": ["N-SF11"],
+			"tests": ["refraction: a 60-degree prism"]
+		},
+		{
+			"data": ["optics/media.json/media/{copper_oxide,copper_sulfate,copper_sulfate_pentahydrate,copper_sulfate_trihydrate,copper_sulfate_monohydrate,latex}/**"],
+			"calibrated": "searched and not found measured: shapes placed so the substance has its known colour",
+			"doc": ["Calibrated media", "not found measured"],
+			"tests": ["colour: the first measurement: 24 fixed bands show the demo's colours"]
+		},
+		{
+			"data": [
+				"optics/media.json/surfaces/{timer_face,monitor_face,alarm_face,notice_face,writer_face,part_face,circuit_face,wire,rig,burner_metal,outlet_glass,lamp_glass}/**",
+				"optics/media.json/emitters/{lamp_green,lamp_amber,flame_sooty,flame_blue}/**"
+			],
+			"calibrated": "the lab's things that are no substance: the colours the screen drew them in, until measured",
+			"doc": ["Calibrated things of the lab"]
+		},
+		{
+			"data": ["benches/{demo.json,lab.json}/items/condenser/{wall_mm,floor_mm}"],
+			"calibrated": "the condenser, made to no standard yet: a 50 mL beaker's least wall (ISO 3819) and the calibrated floor",
+			"doc": ["The condenser keeps", "Calibrated floors"],
+			"tests": ["lab: a vessel's wall is as thick as its bench says"]
+		},
+		{
+			"data": [
+				"benches/{demo.json,lab.json}/items/{flask,balloon,condenser,beaker,waste,jar,acid}/{loss,wall_g}",
+				"benches/{demo.json,lab.json}/items/burner/{celsius,conductance}",
+				"benches/{demo.json,lab.json}/items/condenser/coolant/*",
+				"benches/{demo.json,lab.json}/items/balloon/capacity_ml"
+			],
+			"calibrated": "the equipment's heat losses, walls' masses, the flame, the coolant and the balloon's capacity: chosen for the bench",
+			"doc": ["Calibrated equipment"]
+		},
+		{
+			"data": [
+				"benches/{demo.json,lab.json}/grid/#",
+				"benches/{demo.json,lab.json}/room/*",
+				"benches/demo.json/items/{flask,balloon,condenser,beaker,waste,jar,acid,burner}/at/#",
+				"benches/{demo.json,lab.json}/items/{flask,condenser,beaker,waste,jar,acid}/volume_ml",
+				"benches/{demo.json,lab.json}/items/{jar,acid}/contents/**",
+				"benches/lab.json/goals/**"
+			],
+			"design": "the bench: its grid, its room, where each thing stands, the vessels' capacities, what the demo starts with, its goals"
+		},
+		{
+			"data": [
+				"glassware.json/kinds/{beaker,conical_flask,bottle}/sizes/#/{ml,diameter_mm,height_mm,wall_mm}",
+				"glassware.json/kinds/conical_flask/sizes/#/neck_mm",
+				"glassware.json/kinds/bottle/sizes/#/shoulder_mm"
+			],
+			"measured": "ISO 3819, ISO 1773 and ISO 4796-1: each kind's row for its nominal capacity",
+			"doc": ["ISO 3819:1985", "ISO 1773:1997", "ISO 4796-1:2016"],
+			"tests": ["glassware: every kind's rows are its standard's", "capacity: the standards' own volumes"]
+		},
+		{
+			"data": [
+				"glassware.json/kinds/beaker/sizes/#/corner",
+				"glassware.json/kinds/beaker/{brim,flare_rise,floor_per_wall}",
+				"glassware.json/kinds/conical_flask/{corner,neck_length,shoulder,floor_per_wall}",
+				"glassware.json/kinds/bottle/sizes/#/{neck_mm,neck_inside_mm,neck_height_mm}",
+				"glassware.json/kinds/bottle/{corner,shoulder,neck_radius_mm,floor_per_wall}"
+			],
+			"calibrated": "what the standards leave open: the flare, the radii, the necks, the floors, chosen within their words",
+			"doc": ["Calibrated, within the standards' words"],
+			"tests": ["capacity: the standards' own volumes", "glassware: a profile is one smooth line"]
+		},
+		{
+			"data": ["sessions/demo.json/**", "tutorials/demo.json/**"],
+			"design": "scripts of the demo: waits, settings and checks"
+		}
+	]
+}

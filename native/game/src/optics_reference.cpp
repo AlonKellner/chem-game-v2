@@ -307,15 +307,16 @@ void in_pieces(int count, const Piece &piece) {
 
 namespace {
 
-// A level ray on its way, seen from above, in the one world of the screen's pixels: x across the screen, z
-// away from the eye (0: the bench's plane), and its direction.
+// A ray on its way, in the one world of the screen's pixels: x across the screen, y down it, z away from the
+// eye (0: the bench's plane), and its direction (Stage 24: rays bend up and down as well as across).
 struct Line {
-	double x = 0.0, z = 0.0, ux = 0.0, uz = 1.0;
+	double x = 0.0, y = 0.0, z = 0.0, ux = 0.0, uy = 0.0, uz = 1.0;
 };
 
-// What one body does to a ray, traced exactly (vector Snell, Fresnel at every crossing, turned back where
-// it cannot pass). Independent of the renderer's maps and of its chain: it asks only which medium a point
-// is in, and takes a ray from anywhere.
+// What one body does to a ray, traced exactly in three dimensions by the general tracer (vector Snell,
+// Fresnel at every crossing, turned back where it cannot pass), through the body's own surfaces: its
+// glassware's whole profile, or a glass cylinder, or the prism's faces. Independent of the renderer's maps,
+// footprints and chain: it takes a ray from anywhere.
 struct Exact {
 	bool met = false; // the ray met the body
 	double entry = 0.0; // how far along the line, from where it was given (pixels)
@@ -325,153 +326,66 @@ struct Exact {
 };
 
 // `line` through body `body`, whose axis stands at the depth z_axis, its core its liquid (0), the air over
-// it (1) or glass all through (2: its floor); the line it leaves on replaces `line`.
+// it (1) or glass all through (2: a cylinder's floor; glassware's floor is in its shape); the line it leaves
+// on replaces `line`.
 Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const bool liquid = core == 0;
 	Exact out;
 	using shader::row_at;
 	using shader::scene_vec;
 	const int at = optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS;
-	// the body, read from the scene's table itself: in its own centimetres, from its axis
 	const shader::vec4 rect = scene_vec(at), form = scene_vec(at + 1);
 	const bool prism = form.x > 1.5;
 	const double cm = form.y, rr = rect.z * 0.5 * cm, rt = scene_vec(at + 5).x;
-	const double axis = rect.x + rect.z * 0.5 + (prism ? scene_vec(at + 3).z : 0.0);
+	const double axis = rect.x + rect.z * 0.5 + (prism ? scene_vec(at + 3).z : 0.0), foot = static_cast<double>(rect.y) + rect.w;
 	const int start = shader::set_of(body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
 	const double n_glass = row_at(start + 4 * optics_layout::ROW, nm);
 	const double n_in = liquid ? row_at(start + 3 * optics_layout::ROW, nm) : core == 2 ? n_glass : 1.0;
-	const double ri = rr - rt;
-	// the prism's corners (cm from its centre)
-	const shader::vec4 m = scene_vec(at + 2), g = scene_vec(at + 3);
-	const double cx[3] = { m.x, m.z, g.x }, cz[3] = { m.y, m.w, g.y };
-	const auto inside_prism = [&](double x, double z) {
-		bool in = true;
-		double sign = 0.0;
-		for (int e = 0; e < 3; ++e) {
-			const int f = (e + 1) % 3;
-			const double c = (cx[f] - cx[e]) * (z - cz[e]) - (cz[f] - cz[e]) * (x - cx[e]);
-			if (sign == 0.0) {
-				sign = c;
-			} else if (c * sign < 0.0) {
-				in = false;
-			}
-		}
-		return in;
-	};
-	// 0 air, 1 glass, 2 the core (liquid or air inside the glass)
-	const auto medium = [&](double x, double z) {
-		if (prism) {
-			return inside_prism(x, z) ? 1 : 0;
-		}
-		const double r = std::sqrt(x * x + z * z);
-		return r < ri && rt > 0.0 ? 2 : r < rr ? (rt > 0.0 ? 1 : 2) : 0;
-	};
-	const auto index = [&](int k) { return k == 0 ? 1.0 : k == 1 ? n_glass : n_in; };
-	// the nearest boundary ahead: circles of radius rr and ri, or the prism's three faces
-	const auto next = [&](double ox, double oz, double ux, double uz, double &t, double &nx, double &nz) {
-		t = 1e30;
-		if (prism) {
-			for (int e = 0; e < 3; ++e) {
-				const int f = (e + 1) % 3;
-				const double dx = cx[f] - cx[e], dz = cz[f] - cz[e];
-				const double denom = ux * dz - uz * dx;
-				if (std::fabs(denom) < 1e-15) {
-					continue;
-				}
-				const double wx = cx[e] - ox, wz = cz[e] - oz;
-				const double tt = (wx * dz - wz * dx) / denom, ss = (wx * uz - wz * ux) / denom;
-				if (tt > 1e-9 && ss >= 0.0 && ss <= 1.0 && tt < t) {
-					t = tt;
-					const double len = std::sqrt(dx * dx + dz * dz);
-					nx = dz / len;
-					nz = -dx / len;
-				}
-			}
-		} else {
-			for (int k = 0; k < 2; ++k) {
-				const double r = k == 0 ? rr : ri; // the outer surface, then the inner, if there is glass
-				if (r <= 0.0 || (k == 1 && rt <= 0.0)) {
-					continue;
-				}
-				const double b = ox * ux + oz * uz, c = ox * ox + oz * oz - r * r, disc = b * b - c;
-				if (disc < 0.0) {
-					continue;
-				}
-				for (const double tt : { -b - std::sqrt(disc), -b + std::sqrt(disc) }) {
-					if (tt > 1e-9 && tt < t) {
-						t = tt;
-						nx = (ox + tt * ux) / r;
-						nz = (oz + tt * uz) / r;
-					}
-				}
-			}
-		}
-		return t < 1e29;
-	};
-	// from well before the body, on the line
+	const std::vector<const glass::Vessel *> &vessels = shader::current->vessels;
+	const glass::Vessel *made = static_cast<size_t>(body) < vessels.size() ? vessels[static_cast<size_t>(body)] : nullptr;
+	trace::Shape own;
+	const trace::Shape *shape = &own;
+	if (made) {
+		shape = &trace::revolved_of(*made);
+	} else if (prism) {
+		const shader::vec4 m = scene_vec(at + 2), g = scene_vec(at + 3);
+		const double corners[3][2] = { { m.x, m.y }, { m.z, m.w }, { g.x, g.y } };
+		own = trace::prism(corners);
+	} else {
+		own = trace::cylinder(rr, rt);
+	}
+	// prism: 0 air, 1 glass; a vessel: 0 air, 1 glass, 2 its core
+	const std::array<double, trace::MAX_MEDIA> index{ 1.0, n_glass, prism ? n_glass : n_in, 1.0 };
+	// from well before the body, on the line; the body's frame: cm from its axis, y up from its foot
 	const double back = 1000.0;
-	double ux = line.ux, uz = line.uz;
-	double ox = (line.x - axis) * cm - back * ux, oz = (line.z - z_axis) * cm - back * uz;
-	int here = 0;
-	for (int k = 0; k < 16; ++k) {
-		double t = 0.0, nx = 0.0, nz = 0.0;
-		if (!next(ox, oz, ux, uz, t, nx, nz)) {
-			break;
-		}
-		if (!out.met) {
-			out.met = true;
-			out.entry = (t - back) / cm;
-		}
-		if (here == 2 && liquid) {
-			out.chord += t;
-		}
-		ox += t * ux;
-		oz += t * uz;
-		++out.meetings;
-		const int there = medium(ox + 1e-7 * ux, oz + 1e-7 * uz);
-		if (there == here) {
-			continue; // grazing: the same medium on both sides
-		}
-		if (nx * ux + nz * uz > 0.0) { // the normal against the ray
-			nx = -nx;
-			nz = -nz;
-		}
-		const double n1 = index(here), n2 = index(there);
-		const double cos_i = -(nx * ux + nz * uz), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
-		if (sin2 >= 1.0) { // turned back: all of it
-			ux += 2.0 * cos_i * nx;
-			uz += 2.0 * cos_i * nz;
-			continue;
-		}
-		const double cos_t = std::sqrt(1.0 - sin2);
-		const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
-		out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
-		ux = eta * ux + (eta * cos_i - cos_t) * nx;
-		uz = eta * uz + (eta * cos_i - cos_t) * nz;
-		here = there;
+	const trace::Vec3 u{ line.ux, -line.uy, line.uz };
+	const trace::Vec3 o{ (line.x - axis) * cm - back * u.x, (foot - line.y) * cm - back * u.y, (line.z - z_axis) * cm - back * u.z };
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index);
+	out.meetings = l.meetings;
+	if (l.meetings == 0) {
+		return out;
 	}
-	if (here != 0) {
-		out.pass = 0.0; // still inside: nothing of the wall comes this way
-		out.out = false;
-	}
-	if (out.met) {
-		line = Line{ axis + ox / cm, z_axis + oz / cm, ux, uz };
-	}
+	out.met = true;
+	out.entry = (l.chord[0] - back) / cm;
+	out.pass = l.pass;
+	out.chord = liquid && !prism ? l.chord[trace::CORE] : 0.0;
+	out.out = l.left;
+	line = Line{ axis + l.at.x / cm, foot - l.at.y / cm, z_axis + l.at.z / cm, l.toward.x, -l.toward.y, l.toward.z };
 	return out;
 }
 
 // One ray of the room's light, from the eye straight in at (x, y), followed exactly through the one world
 // (GAME_SPEC §12.3): layer by layer, the nearest first; every body of a layer where the ray's line, as it
 // arrives, crosses the layer's plane; the layer's body that bends, the first the line meets, traced by
-// exact_body. What it met, in the order it met it, and where it lands on the wall.
+// exact_body. What it met, in the order it met it, and where it lands on the wall (across and up).
 struct Met {
 	int body = 0;
-	double cross = 0.0;
+	double cross = 0.0, cross_y = 0.0;
 	bool bent = false;
 	double pass = 1.0, chord = 0.0;
 };
 struct ExactRay {
-	double x = 0.0;
+	double x = 0.0, y = 0.0;
 	std::vector<Met> met;
 };
 
@@ -482,13 +396,15 @@ ExactRay exact_ray(double x, double y, double nm) {
 	const double wall = scene_vec(2).x, gap = scene_vec(3).x;
 	const auto vec_of = [](int body, int which) { return scene_vec(optics_layout::HEADER_VECS + body * optics_layout::BODY_VECS + which); };
 	const auto bends = [&](int body) { return vec_of(body, 5).w > 0.5 && (vec_of(body, 1).x < 0.5 || vec_of(body, 1).x > 1.5); };
-	const auto in_rows = [&](int body) { return y >= vec_of(body, 0).y && y <= static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w; };
-	// what a body is in this row: its floor (glass all through), its liquid, or the air over it
-	const auto core_in = [&](int body) {
+	const auto in_rows = [&](int body, double row) { return row >= vec_of(body, 0).y && row <= static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w; };
+	const std::vector<const glass::Vessel *> &vessels = shader::current->vessels;
+	// what a body is in a row: its floor (a cylinder's: glass all through), its liquid, or the air over it
+	const auto core_in = [&](int body, double row) {
+		const bool made = static_cast<size_t>(body) < vessels.size() && vessels[static_cast<size_t>(body)] != nullptr;
 		const double foot = static_cast<double>(vec_of(body, 0).y) + vec_of(body, 0).w, floor_px = static_cast<double>(vec_of(body, 5).z) / vec_of(body, 1).y;
-		return floor_px > 0.0 && y >= foot - floor_px ? 2 : y >= vec_of(body, 1).z ? 0 : 1;
+		return !made && floor_px > 0.0 && row >= foot - floor_px ? 2 : row >= vec_of(body, 1).z ? 0 : 1;
 	};
-	Line line{ x, -1.0e5, 0.0, 1.0 };
+	Line line{ x, y, -1.0e5, 0.0, 0.0, 1.0 };
 	bool lands = true;
 	for (int last = count - 1; last >= 0 && lands;) {
 		const double layer = vec_of(last, 5).y, z = -layer * gap;
@@ -496,14 +412,14 @@ ExactRay exact_ray(double x, double y, double nm) {
 		while (first > 0 && vec_of(first - 1, 5).y == layer) {
 			--first;
 		}
-		const double cross = line.x + (z - line.z) * line.ux / line.uz;
+		const double cross = line.x + (z - line.z) * line.ux / line.uz, cross_y = line.y + (z - line.z) * line.uy / line.uz;
 		// the layer's body that bends which the line meets first
 		int hit = -1;
 		double nearest = 1e30;
 		for (int k = first; k <= last; ++k) {
-			if (bends(k) && in_rows(k)) {
+			if (bends(k) && in_rows(k, cross_y)) {
 				Line trial = line;
-				const Exact e = exact_body(k, core_in(k), nm, z, trial);
+				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, trial);
 				if (e.met && e.meetings > 0 && e.entry < nearest) {
 					nearest = e.entry;
 					hit = k;
@@ -512,21 +428,23 @@ ExactRay exact_ray(double x, double y, double nm) {
 		}
 		for (int k = last; k >= first; --k) {
 			if (k == hit) {
-				const Exact e = exact_body(k, core_in(k), nm, z, line);
-				out.met.push_back(Met{ k, cross, true, e.pass, e.chord });
+				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, line);
+				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord });
 				if (!e.out || line.uz <= 0.05) {
 					lands = false;
 					out.x = line.ux < 0.0 ? -100000.0 : 100000.0;
+					out.y = line.y;
 					break;
 				}
 			} else if (!bends(k)) {
-				out.met.push_back(Met{ k, cross, false, 1.0, 0.0 });
+				out.met.push_back(Met{ k, cross, cross_y, false, 1.0, 0.0 });
 			}
 		}
 		last = first - 1;
 	}
 	if (lands) {
 		out.x = line.x + (wall - line.z) * line.ux / line.uz;
+		out.y = line.y + (wall - line.z) * line.uy / line.uz;
 	}
 	return out;
 }
@@ -597,7 +515,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	const double room = shader::scene_vec(2).y;
 	double a = 1.0, b = 0.0;
 	for (const Met &m : ray.met) {
-		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, p.y), size, size);
+		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), size, size);
 		const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
 		const double per_cm = shader::liquid_at(m.body, start, nm);
 		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
@@ -605,7 +523,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 		b += a * does.y;
 		a *= does.x;
 	}
-	return a * drawn_at(ray.x, p.y) + b;
+	return a * drawn_at(ray.x, ray.y) + b;
 }
 
 } // namespace
@@ -1154,8 +1072,21 @@ void optics_stacks(OpticsScene &scene) {
 		const auto vec = [&](int body, int which) { return &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + which) * 4]; };
 		const auto bends = [&](int body) { return vec(body, L::REFRACT)[3] > 0.5f && (vec(body, L::FORM)[0] < 0.5f || vec(body, L::FORM)[0] > 1.5f); };
 		int64_t followed = 0;
+		// a body's maps are of one piece: its one map, or every band of its table of rows' bands (Stage 24)
+		const auto one_piece = [&](int body) {
+			const float *map = vec(body, L::MAP);
+			if (map[3] >= 0.0f) {
+				return map[3] == 1.0f;
+			}
+			for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
+				if (scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4 + 2] != 1.0f) {
+					return false;
+				}
+			}
+			return true;
+		};
 		for (const int b : scene.chain_bodies) {
-			if (b < 0 || b >= count || !bends(b) || vec(b, L::MAP)[3] != 1.0f) {
+			if (b < 0 || b >= count || !bends(b) || !one_piece(b)) {
 				continue; // a map of several pieces (a prism) is read as one vessel's
 			}
 			const float *rect = vec(b, L::RECT);
@@ -1225,7 +1156,9 @@ void optics_stacks(OpticsScene &scene) {
 				stack.base[j] = stack.foot[j] - static_cast<double>(vec(o, L::REFRACT)[2]) / form[1];
 				if (stack.bends[j]) {
 					const float *map = vec(o, L::MAP);
-					const float *head = &scene.maps[static_cast<size_t>(map[0]) * 4];
+					// a table of rows' bands: its first band's map's head (every band's is alike)
+					const size_t first_map = map[3] >= 0.0f ? static_cast<size_t>(map[0]) : static_cast<size_t>(map[0]) + static_cast<size_t>(scene.maps[(static_cast<size_t>(map[0]) + 1) * 4 + 1]);
+					const float *head = &scene.maps[first_map * 4];
 					stack.map[j] = static_cast<int>(map[0]);
 					stack.coarse[j] = static_cast<int>(map[1]);
 					stack.left[j] = map[2];
@@ -1240,6 +1173,15 @@ void optics_stacks(OpticsScene &scene) {
 					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j], stack.base[j] }) {
 						if (e > top + 1e-4 && e < bottom - 1e-4) {
 							edges.push_back(e);
+						}
+					}
+					// and where each band of its rows ends, for one with a table of them (Stage 24)
+					if (map[3] < 0.0f) {
+						for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
+							const double e = stack.top[j] + scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
+							if (e > top + 1e-4 && e < bottom - 1e-4) {
+								edges.push_back(e);
+							}
 						}
 					}
 				}
@@ -1299,7 +1241,7 @@ void optics_stacks(OpticsScene &scene) {
 										const double lo = r.from_axis[j], hi = next.from_axis[j];
 										if (std::fabs(hi - lo) > 1e-9) {
 											const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
-											const double change = shader::map_change(shader::ref_at(stack, j), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
+											const double change = shader::map_change(shader::ref_at(stack, j, y), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
 											along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
 										}
 										break;

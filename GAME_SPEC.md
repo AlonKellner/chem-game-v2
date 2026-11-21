@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.24.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.25.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -912,8 +912,10 @@ glowing body is measured against.
 
 **A body** is a vessel or a balloon, as the screen places it, in painting order:
 
-- **A vessel is a cylinder** of its volume and of the proportions it is drawn with, seen from the
-  side. At a pixel the path through it is the chord `2R·sqrt(1 − (x/R)²)`, in real centimetres.
+- **A vessel is its glassware** (Stage 24; until then a cylinder of its volume and of the
+  proportions it was drawn with): a beaker, a conical flask or a bottle in its standard's shape,
+  seen from the side (below, *A vessel's whole shape*). Through an upright band of it the path is
+  the chord `2R·sqrt(1 − (x/R)²)`, in real centimetres.
 - **Its liquid** fills it to the height its condensed volume reaches, and dims the light behind
   it by `exp(−Σ ε_i(λ) c_i L)` at each point's wavelength, with `c_i` the live concentration of
   each liquid or dissolved species that has an absorption spectrum: water itself, as measured,
@@ -964,7 +966,8 @@ light bends at each of its surfaces:
   so a vessel's rim meets the wall with no seam where nothing bends.
 - **The glass.** Each vessel's wall is borosilicate glass, as thick as the vessel is made: a
   thickness of its own in the bench's data (`wall_mm`: ISO 3819's least wall for a beaker of its
-  capacity, 0.8 mm at 50 mL, 1.1 mm at 250 mL, 1.3 mm at 500 mL; `docs/DATA_SOURCES.md`), apart
+  capacity, 0.8 mm at 50 mL, 1.1 mm at 250 mL; from Stage 24 each kind's own standard's: the
+  conical flask's 0.9 mm at 250 mL (ISO 1773), the bottle's 1.5 mm at 500 mL (ISO 4796-1); `docs/DATA_SOURCES.md`), apart
   from the wall's mass, which is its heat's (Stage 20; until then the thickness was the mass
   spread over the side and the floor, two to three times too thick). A wall of no thickness is
   no glass: the liquid's own surfaces bend. A wall as thick as the vessel is wide is glass all
@@ -993,7 +996,8 @@ light bends at each of its surfaces:
   whose radiance is calibrated (0.3 of the room's white): a vessel's rims, where light meets the
   glass aslant, show more of the room and less of the wall, as glass on a bench does.
 - **What it does not bend:** a heap of solid (its surface is seen as it lies), the balloon (thin
-  rubber around gas), anything up and down (the liquid's surface, the floor of the vessel).
+  rubber around gas), the liquid's surface. Up and down, from Stage 24, a vessel bends where its
+  shape does (a flare, a corner, a cone, a shoulder, a lip); until then nothing bent up and down.
 
 **A pixel is the light of all its rays** (Stage 20). A pixel is not a point: it gathers the light
 of every ray through its area, and its colour is their average (a box filter).
@@ -1071,9 +1075,9 @@ of every ray through its area, and its colour is their average (a box filter).
     to the same light.
   - A row across a liquid's surface is its two cores' lights, each by its share of the pixel; a
     row across a vessel's top or floor is the bent view and the straight one, likewise.
-  - The bodies are upright, so a ray is bent only across: the footprint's height is the pixel's.
-    A body that bends up and down too (a sphere, later) has a map with rows of the screen as
-    well, and a footprint cut by the wall's rows into such intervals.
+  - Where a body is upright a ray is bent only across: the footprint's height is the pixel's.
+    Where it is not (Stage 24: a vessel's curved bands) its map has rows, and a footprint is a
+    patch of the wall read over its rows (*A vessel's whole shape*, below).
   - Each item is drawn at its own scale, so the screen is not one world in centimetres: a ray bent
     by one body is not traced into another, and the first refracting body a pixel looks through
     bends it.
@@ -1188,13 +1192,88 @@ of every ray through its area, and its colour is their average (a box filter).
     known by its colour, its lamp and, for a timer, its strip.)
   - Their spectra are calibrated, not measured (`docs/DATA_SOURCES.md`): simple shapes placed so
     that each thing has the colour it is known to have.
-- **A vessel's whole shape** *(PLANNED, after Stage 22)*: its lip (ISO 3819: the brim 5 to 15%
-  wider than the body, flared in a smooth curve, its edge a bead), its spout, the rounded corner
-  between its floor and its side (ISO 3819: a radius of 10 to 20% of the diameter from 250 mL),
-  flasks that are balls and cones. Each is more surface patches for the tracer (§12.3); a lip
-  and a ball bend rays up and down as well as across, which needs a map with rows.
+- **A vessel's whole shape** (Stage 24). Every vessel is a piece of glassware made to its
+  standard, and its shape is one model, shared: the lab's capacity, the liquid's level, the
+  screen's silhouette and the tracer's surfaces are all read from it.
+  - **Glassware** (`data/glassware.json`): a bench's vessel names its kind and its nominal
+    capacity; its dimensions are its standard's row for that capacity (`docs/DATA_SOURCES.md`).
+    What a standard leaves open (a "smooth curve", a "suitable radius") is calibrated within the
+    standard's words and flagged so.
+    - **The low-form beaker** (ISO 3819): its outside diameter and height; its side flared near the
+      brim "in a smooth and regular curve", the brim 5 to 15 % wider than the body; its edge
+      finished in a plane parallel to its base; an outside radius where base meets side of 15 to
+      20 % of its diameter from 250 mL, at least 5 % below. (Its spout is not built: §20.)
+    - **The conical flask** (ISO 1773, Table 1): the body's greatest diameter, the neck's outside
+      diameter, the height; a neck 1 to 1.25 times its own diameter long, its top "suitably
+      reinforced" (a bead); a radius where base meets side of 15 to 20 % of the greatest diameter.
+    - **The screw-neck bottle** (ISO 4796-1): its outside diameter, its height to the shoulder and
+      overall; a cylindrical side; a radius at the base and at the shoulder; a conical upper part,
+      met by the neck in as small a radius as can be made; a neck with a strengthening lip. (Its
+      thread and cap are not built: §20.)
+    - Each has its standard's least wall, and a floor of its own (calibrated, §20).
+  - **The profile.** Seen in section a vessel is its outside profile turned about its axis: a
+    chain of straight pieces and arcs, each meeting the next along a common tangent (a flat base,
+    the arc of its corner, the side, a flare, a shoulder, a neck, the arc of a lip). The inside is
+    the outside moved in by the wall's thickness, exactly (a line moved is a line, an arc an arc of
+    another radius), and over the floor by the floor's. The top of a beaker's wall is a flat ring;
+    a neck's bead is a half-round as thick as twice the wall.
+  - **Its capacity** is the inside's volume to the brim (or to the neck's top), integrated over the
+    profile. The lab's cell is that volume (§6): a 250 mL beaker holds about a tenth more to its
+    brim, as ISO 3819 asks (`capacity: the standards' own volumes` holds each kind to its
+    standard's capacity rule: the beaker's 10 % or 10 mm, the flask's nominal at the neck's base,
+    the bottle's nominal at the shoulder and about 15 % more at the neck). The nominal capacity is
+    only the vessel's name.
+  - **The liquid's level** is the height where the inside's volume below it is what the vessel
+    holds, condensed (found by halving): a cone fills faster as it narrows.
+  - **On the screen** a vessel is drawn as wide as before (by its nominal capacity) and as tall as
+    its standard's proportions; its silhouette is its outside profile.
+  - **The tracer's surfaces.** A straight piece turned about the axis is a cone (a cylinder, a flat
+    ring): a quadric. An arc turned about the axis is part of a torus, which has no quadratic: a ray
+    meets it where the torus's quartic changes sign, found on the CPU by stepping along the ray
+    within the patch's bounds (its heights, its rings about the axis, its arc's angles) and halving,
+    to 1e-13 of the distance. A surface the tracer has no closed form for is still a surface it
+    traces exactly. An arc centred on the axis is a sphere, a quadric. Held to closed forms: a
+    beaker's upright band traces within 1e-9 of the glass cylinder's closed form, a profile ball
+    as the ball; each arc's first crossing is a fine search of its quartic's; and every surface of
+    every vessel names the media on its two sides alike (no crossing from a medium into itself).
+  - **A map for each band of its rows** (Stage 24). A shaped vessel sees each row differently. Its rows
+    are cut into bands where its profile's pieces begin and end: an upright band (every surface it
+    crosses there a vertical cylinder) is one map, the same at every row; a curved band is cut again
+    every 4 pixels, each part its own map, traced at its middle row; each band's map is of one piece
+    in wavelength, so it is read by the plain reading and followed in stacks.
+    - **The outline is smooth.** Near its rims (within two pixels of either, and through the glass
+      between them) a row is read along its own outline: a place across it is read at the same place
+      in a measure both rims keep (from the axis to the inner rim 0 to 1, through the glass 1 to 2),
+      in the band's middle row, and the ray keeps its deflection; two pixels further in, the band's
+      map is read as it is (the two differ there by well under a pixel). The outline is where the
+      glass is in every row, never a step; the plain reading reads between the band's samples there.
+    - **Rays are taken as level.** A ray through a curved band bends across as the band's map has it,
+      and is read on its own row: the bending up and down that the truth traces (a level line seen
+      through a flask's cone two or three rows away) is not yet in the renderer *(PLANNED, Stage 25:
+      the rows interpolated in the rims' measure, each ray's drop, the footprint a patch of the
+      wall's rows; built with the cost measured)*. Where a band is upright the renderer is the truth's
+      within the eye's threshold (`renderer: through a beaker's upright band`).
+    - **A pixel's history follows its row.** Its key (§12.2) holds its row in a shaped vessel, whose
+      rows differ: moved up or down (the burner's stand lifting a flask), its pixels read their new
+      rows, never keep their old ones. A cylinder's rows are alike, and its pixels' histories survive
+      its moving as before.
+    - **Made before the game runs.** A vessel made as glassware stands with its axis on a whole pixel
+      and its liquid's index is water's whether it holds any or not, so its maps depend only on its
+      glassware, its drawn size, its layer and the indices: `chem_tool maps` makes them for every
+      vessel of the benches at each layer it can be on (standing, in the hand) into a store
+      (`engines/godot/data/maps`, in `make native`), each under a key of everything it was traced for
+      and the builder's version; the game reads them, and makes one it does not find. A band's index
+      of the whole rows finds its band in one read; a stack's bands are found by halving.
+    - **The liquid's surface is not yet a surface** (§11, planned): it is not traced, and a row is
+      read through the liquid or the air by the screen's row, as before, in the renderer and in the
+      truth alike.
+  - **Layers.** A stack (a held vessel's rays followed through what stands behind it) is cut at the
+    bands of every shaped vessel in it, and follows each band's map, its rays level as above.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
   brute-force average of a fine grid of sub-pixel rays, each traced exactly, every band read.
+  From Stage 24 each ray is traced in three dimensions through the body's own surfaces by the
+  general tracer, with no map, no interpolation and no footprint (until then the truth had a
+  tracer of its own, for upright cylinders and the prism only).
 
 **Demo subset:** absorption, reflection, thermal emission, analytic haze, daylight, fixed exposure
 (§12.3); every layer a texture with constant weights (the live composition, the powders by mass,
@@ -1212,7 +1291,12 @@ gives each vessel's glass its real thickness. Signed off by the user on 2026-11-
 Stage 21 adds layers of refraction: what is held is seen in front of what stands, a ray followed
 through every layer by the bodies' maps, each body read where the ray crosses it, a hot solid's
 glow a light in the pass; no outline is drawn, and a vessel's floor is glass. Signed off by the
-user on 2026-11-20 (Stage 21). The
+user on 2026-11-20 (Stage 21). Stage 24 gives every vessel its whole shape: glassware to its
+standard (the low-form beaker, the conical flask, the screw-neck bottle), one profile read by the
+lab's capacity, the liquid's level, the silhouette and the tracer (arcs as tori, traced
+numerically), a map for each band of a curved vessel's rows read along each row's outline, made
+before the game runs, and the truth traced in three dimensions; rays bending up and down in the
+renderer is Stage 25's. The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
 Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
@@ -1228,8 +1312,11 @@ they hold. Every item of equipment exists from the start, as cells of the one wo
 is created or destroyed in play (the signal parts of §13.3 hold no matter, and come from a
 drawer). Items:
 
-- **vessel:** a rigid cell with a volume, a wall and a heat loss to the room. It starts open to
-  the room's air and full of it. One with a `coolant` is a condenser.
+- **vessel:** a rigid cell with a wall and a heat loss to the room, made as a piece of glassware
+  (`glassware`: a kind of `data/glassware.json` and its nominal capacity, `volume_ml`): its volume
+  is the glassware's capacity to the brim, and its wall's and floor's thicknesses are the
+  glassware's (§12.3, Stage 24). It starts open to the room's air and full of it. One with a
+  `coolant` is a condenser.
 - **balloon:** an elastic cell with a wall, and a capacity.
 - **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
 - **the tray:** the bench's own, under everything: where what overflows goes (§6).
@@ -2011,7 +2098,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | One item to a grid cell, and position decides nothing | A beaker "under" a condenser is a connection, not a place |
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
-| A vessel is a cylinder and a balloon a ball, whatever they are drawn as | Path lengths are those of a cylinder of the vessel's volume |
+| A balloon is a ball, whatever it is drawn as; a vessel is its glassware turned about its axis, with no spout, no thread and no cap; its floor is a slab of calibrated thickness, and what a standard leaves open of its curves is calibrated (Stage 24; until then every vessel was a cylinder) | A beaker pours over its whole brim; a bottle stands open |
+| The renderer reads a shaped vessel's curved rows as level: each band of four rows its middle row's map (along each row's own outline near the rims); its bands are of one piece in wavelength (Stage 24; the truth traces every ray in three dimensions) | A level line seen through a flask's cone is where it is on the wall, not two or three rows away as the truth has it; over a vessel's base a few rays in a hundred go astray by up to half a pixel; up and down: Stage 25 |
 | Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |

@@ -51,6 +51,8 @@ struct ItemView {
 	double capacity_ml = 0.0; // a balloon's
 	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)
 	double floor_mm = 0.0; // and its floor, glass all through: seen from the side it bends as a rod does
+	std::string glassware; // a vessel made to a standard (§12.3, Stage 24): its kind (lab/glassware.hpp), or none
+	double nominal_ml = 0.0; // its nominal capacity: its name, and how large it is drawn
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;

@@ -5,6 +5,19 @@ Every physical constant and material property used by the game, with its source.
 principle 12). Molar masses are derived by the build from the formulas and the standard atomic
 weights of `data/elements.json`.
 
+**Atomic weights** (`data/elements.json`): the abridged standard atomic weights of CIAAW (IUPAC's
+Commission on Isotopic Abundances and Atomic Weights), "Abridged Standard Atomic Weights 2024"
+(ciaaw.org/abridged-atomic-weights.htm, after the "Atomic Weights 2021" report; read 2026-11-21):
+H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed.
+Check: each molar mass the build derives is these summed by the formula (water 18.015, the
+pentahydrate 249.677): `sources: molar masses are IUPAC's atomic weights`.
+
+**Every number in `data/` has an entry in `data/sources.json`** saying whether it is measured
+(with the tests that hold it to its source and the phrases of its row here), calibrated (why, and
+its row here) or a choice of the game's design; `tools/check_sources.py` (the ctest entries
+`data_sources` and `data_sources_self_test`) fails on a value with no entry, a named test or row
+that does not exist, and an entry that matches nothing.
+
 ## Verified species data (298.15 K, 1 bar)
 
 These rows are in `data/species.json` and used by the game. Sources:
@@ -30,6 +43,9 @@ These rows are in `data/species.json` and used by the game. Sources:
 | CuSO4(s) | −771.4 ± 1.2 | 109.2 ± 0.4 | 98.531 | NIST: CODATA (Chase lists −769.98 and 109.05); Cp from Chase's fit (298–2000 K) |
 | Cu2CO3(OH)2(s), malachite | −1053.95 ± 2.1 | 166.3 ± 2.5 | 154.3 ± 0.93 | ΔHf°: Richardson and Brown, *Enthalpy of Formation of Malachite*, U.S. Bureau of Mines RI 7851, 1974 (−251.9 ± 0.5 kcal/mol, HCl solution calorimetry). S° and Cp: Kiseleva, Ogorodova, Melchakova, Bisengalieva and Becturganov, Phys. Chem. Minerals 19, 322–333, 1992 (adiabatic calorimetry, 3.8–300 K) |
 | Glass, as SiO2 | −910.86 | 41.46 | 48.066 | ΔHf° and S° are quartz's (NIST: Chase; S° from its fit), a stand-in: the wall never reacts, so they cancel. Cp is ISO 3585's 0.8 kJ/kg·K × 60.083 g/mol |
+
+Check: every row read back from the table the build embeds, and the liquid water fit's Cp:
+`sources: every species' thermodynamic row is the one cited`.
 
 Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
 compilation's value); glass Cp is 48.07 (the draft guessed about 50).
@@ -82,7 +98,10 @@ each row was read off the page image (retrieved 2026-11-18).
 
 The free energies give the hydrates' dissociation pressures at 25 °C: 7.80 torr (5 → 3), 5.14 torr
 (3 → 1) and 0.0104 torr (1 → 0). Cotti et al., *Cryst. Growth Des.* 2024 (doi
-10.1021/acs.cgd.4c00589), give 10 and 6 mbar for the first two (7.5 and 4.5 torr).
+10.1021/acs.cgd.4c00589), give 10 and 6 mbar for the first two (7.5 and 4.5 torr). The game's
+table gives 7.67, 5.17 and 0.0125 torr (10.2, 6.9 and 0.017 mbar): it keeps Atkins's pentahydrate
+and CODATA's anhydrous salt, which moves the last by a fifth. Check: within 2 %, 2 % and 25 % of
+NBS's, and 5 % and 20 % of Cotti's: `sources: the hydrates' dissociation pressures`.
 
 **Densities.** CuSO4·3H2O: 2.663 g/cm³ measured on synthetic bonattite (*Handbook of Mineralogy*,
 handbookofmineralogy.org/pdfs/bonattite.pdf; the structure gives 2.679 at 100 K, COD 7061267).
@@ -226,6 +245,11 @@ Densities give the molar volumes of solids and liquids (GAME_SPEC §6). Retrieve
 | Cu2CO3(OH)2(s) | 3.8 | The middle of the 3.6–4.0 range for malachite (Handbook of Mineralogy, Mindat, Webmineral, as cited by Wikipedia's infobox). **Medium confidence.** 5 g is 1.3 mL of a 250 mL flask |
 | Glass (wall) | 2.23 | ISO 3585. Not used: a wall takes no room inside its vessel |
 
+Check: each molar volume the build derives is the molar mass over these, the hydrates' included:
+`sources: molar masses are IUPAC's atomic weights, and molar volumes the cited densities`. The
+apparent molar volumes follow from the densities above within 3 %: `sources: the solutes' apparent
+molar volumes`.
+
 | Wall | Cp (J/mol·K) | Source |
 |---|---|---|
 | Latex, as C5H8 (natural rubber, the isoprene unit, 68.119 g/mol) | 130.1 | 1.91 J/g·K, the low end of NETZSCH's 1.91–2.08 J/g·K for natural rubber (analyzing-testing.netzsch.com); another compilation gives 1.55. A 2 g balloon is 3.8 J/K. ΔHf° and S° are set to 0: a wall never reacts, so they cancel |
@@ -326,7 +350,9 @@ balloon. These stay calibrated:
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
 | H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
 
-**Verified wall thicknesses (Stage 20)** (`data/benches/`, each glass vessel's `wall_mm`):
+**Verified wall thicknesses (Stage 20)** (`data/benches/`, each glass vessel's `wall_mm`; from Stage 24
+each vessel's glassware gives its wall and floor, Glassware above. The condenser keeps the bench's
+own 0.8 mm and 1.9 mm, a 50 mL beaker's, until a condenser is made to its standard):
 
 | Vessel | Wall (mm) | Source |
 |---|---|---|
@@ -359,6 +385,41 @@ by eye; measured spectra are a later stage).
 | A lamp, green; amber | 1.2 times the room's light at 530 nm (width 30); 1.5 at 600 nm (width 30) | the screen's green (#78c88c) and amber (#e0a040), brighter than the wall as a lamp is |
 | A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
 | A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
+
+**Glassware (Stage 24)** (`data/glassware.json`): each vessel is made to its standard. Read
+2026-11-21 from the standards' own preview pages (standards.iteh.ai: the scanned pages rendered and
+read by eye, ISO 4796-1's from its text), every number as printed; each kind is held to its
+standard's capacity rule by `capacity: the standards' own volumes`, and each row is read back by
+`glassware: every kind's rows are its standard's`.
+
+| Kind | Standard | Row used | Rules used |
+|---|---|---|---|
+| Low-form beaker | ISO 3819:1985, *Laboratory glassware — Beakers*, Table "Basic dimensions" (the same figures, heights within 2 mm, in ISO 3819:2015's table as reproduced by Wikipedia's "Beaker (glassware)", citing DIN EN ISO 3819:2015-12) | 50 mL: outside diameter 42, overall height 60, least wall 0.8 mm; 250 mL: 70, 95, 1.1 mm (tolerances ±5 %, §8.2) | §5: the overflow capacity exceeds the nominal by 10 %, or the nominal level is at least 10 mm under the overflow, whichever is the greater; §7.2: the side "slightly flared near the brim in a smooth and regular curve", the brim's diameter "of the order of 5 to 15 % greater than the diameter of the body", its edge "finished in a plane parallel with that of the base"; §8.3: an external radius at the junction of base and side of 15 to 20 % of the external diameter from 250 mL, at least 5 % below |
+| Conical flask | ISO 1773:1997, *Laboratory glassware — Narrow-necked boiling flasks*, Table 1 | 250 mL: the body's outside diameter at its widest 85 ± 2, the neck's outside diameter 34 ± 1.5, overall height 145 ± 3, least wall 0.9 mm | §3.2: the nominal capacity is the series value nearest to but not above the real volume to the base of the neck (the series 25, 50, 100, 250, 500 …); §3.4.2: the neck's top "suitably reinforced"; §3.5.2: the neck 1 to 1.25 times its outside diameter long; §3.5.3: the radius where base meets side 15 to 20 % of the greatest outside diameter |
+| Screw-neck bottle | ISO 4796-1:2016, *Laboratory glassware — Bottles — Part 1: Screw-neck bottles*, Table 1 | 500 mL: total height 176, height to shoulder 110, outside diameter 86 (all "approx."), least wall 1.5 mm, inside neck diameter at least 27 mm | §3.2: the nominal capacity is what a bottle of average wall holds filled to the turn of the shoulder; §3.3: to the base of the neck about 15 % more; §5.2.2: a radius at the base, the side cylindrical (25 mL to 2 L); §5.2.3: a radius at the shoulder; §5.2.4: the upper portion conical, met by the neck in as small a radius as manufacture allows; §5.2.6: the neck finished with a strengthening lip. A 500 mL bottle's thread is GL 45 (DURAN's catalogue, dwk.com, 500 mL GL 45, 86 mm across) |
+
+Calibrated, within the standards' words (**low confidence**: chosen for a plausible vessel, to be judged by eye):
+
+| Value | Chosen | Basis |
+|---|---|---|
+| A beaker's brim | 10 % wider than its body (the middle of 5 to 15 %), flared over a rise of 2.3 times the widening, in one arc tangent to the side | ISO 3819 §7.2 gives the widening, not the curve; the rise makes the brim leave at about 47° |
+| A beaker's base corner | 17.5 % of the diameter at 250 mL (the middle of 15 to 20 %); 10 % at 50 mL (at least 5 %) | ISO 3819 §8.3 |
+| A flask's base corner | 17.5 % of the greatest diameter | ISO 1773 §3.5.3: 15 to 20 % |
+| A flask's neck | 1.125 times its outside diameter long (the middle of 1 to 1.25); met by the cone in an arc of a third of the neck's diameter; a bead on its top, a half-round as thick as twice the wall | ISO 1773 §3.4.2, §3.5.2 |
+| A bottle's neck | outside 45 mm (GL 45), inside 33 mm (at least 27), 50 mm high (the thread and the plain neck under it), with a bead like the flask's | ISO 4796-1 Table 1, §5.2.6; the height set so that the bottle holds about 15 % more to the neck's base than to the turn of its shoulder (§3.3: the model gives 18 %; with a 25 mm neck it gave 38 %); the thread's own dimensions (DIN 168-1) not read |
+| A bottle's radii | at the base 10 % of its diameter; at the shoulder 20 %; where the cone meets the neck 2 mm | ISO 4796-1 §5.2.2 to §5.2.4 ("suitable", "as small as possible") |
+| A vessel's floor | 2.36 times its wall: 1.9 mm (50 mL beaker), 2.6 (250 mL beaker), 2.1 (conical flask), 3.5 (bottle) | The one supplier's 250 mL beaker below (a floor of 2.6 to a side of 1.1), as a ratio for every vessel; replaces Stage 21's floors (1.9, 2.6, 3.1 by capacity) |
+
+**Calibrated equipment** (`data/benches/`): none is measured or checked against a source; each was
+chosen when the bench was built, so that the demo runs at a pace a person can follow.
+
+| Value | Where | Basis |
+|---|---|---|
+| A vessel's loss to the room, W/K (`loss`) | 0.1 (the condenser) to 0.9 (the flask) | chosen; free convection and radiation from a vessel of this size are of this order (not checked) |
+| A wall's mass, g (`wall_g`) | 40 (the jar) to 250 (the acid's bottle); 2 for the balloon | chosen; it holds the wall's heat. The flask's 100 g agrees with one supplier's 250 mL beaker (100 ± 10 g, below) |
+| The burner (`celsius`, `conductance`) | a reservoir at 1927 °C (2200 K), 0.25 W/K with its valve fully open | chosen: the flame as a hot body, not measured |
+| The condenser's coolant (`coolant`) | 15 °C, 10 W/K | chosen: tap water, a conductance that takes the steam the demo makes |
+| The balloon's capacity (`capacity_ml`) | 3000 mL | chosen: an ordinary party balloon of about 18 cm |
 
 **Calibrated floors (Stage 21)** (`data/benches/`, each glass vessel's `floor_mm`). No standard
 found gives a beaker's floor: ISO 3819 gives its wall alone.

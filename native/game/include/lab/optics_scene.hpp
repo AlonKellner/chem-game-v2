@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lab/glassware.hpp"
 #include "lab/lab.hpp"
 
 #include <cstdint>
@@ -101,6 +102,9 @@ struct OpticsScene {
 	std::vector<uint64_t> stack_keys; // what each body's stack was followed for
 	std::vector<std::vector<float>> stack_blocks;
 	int64_t stack_rays = 0; // followed in the last compose that followed any
+	// each body's glassware, if it is made as one (GAME_SPEC §12.3, Stage 24): its whole shape, which the truth
+	// traces (null: a cylinder, a prism, a ball, a thing of the lab)
+	std::vector<const glass::Vessel *> vessels;
 };
 
 // One vessel or balloon as the screen places it.
@@ -160,6 +164,13 @@ struct OpticsRoom {
 
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
 inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
+
+// The maps' store (GAME_SPEC §12.3, Stage 24): a directory where maps made before the game runs are kept, each
+// under a key of everything it was traced for and of the builder's version; none until one is named. A map not
+// found there is made, and written there if it can be.
+void optics_store(const std::string &directory);
+bool optics_store_read(uint64_t key, std::vector<float> &block);
+void optics_store_write(uint64_t key, const std::vector<float> &block);
 
 // Fills the scene from the state (bodies in painting order, a nearer layer's over a further one's; those
 // past MAX_BODIES are left out). The revision moves only if the scene did.

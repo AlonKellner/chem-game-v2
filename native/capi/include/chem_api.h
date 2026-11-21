@@ -149,6 +149,14 @@ CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
  * chosen on the screen. */
 CG_API void cg_ui_frame(cg_ui *ui, double seconds);
 
+/* The refraction maps' store (GAME_SPEC §12.3, Stage 24): a directory where the
+ * maps of the vessels made as glassware are kept, made before the game runs;
+ * NULL or "": none. A map not found there is made, and written there if it can
+ * be. cg_ui_prepare makes every vessel's maps of the bench now (each layer it can
+ * be on) and so keeps them: how many tables, or -1. */
+CG_API void cg_optics_store(const char *directory);
+CG_API int32_t cg_ui_prepare(cg_ui *ui);
+
 enum {
 	CG_DRAW_RECT = 0, /* x, y, w, h: filled */
 	CG_DRAW_OUTLINE = 1, /* x, y, w, h; width */

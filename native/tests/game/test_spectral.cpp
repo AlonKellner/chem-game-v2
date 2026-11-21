@@ -217,6 +217,9 @@ TEST_CASE("optics: pure water, as measured: a beaker of it is clear, a column of
 	const double per_metre = water[170] * 2.302585092994046 * 55.345 * 100.0;
 	CHECK(per_metre == doctest::Approx(0.0579).epsilon(1e-3));
 	CHECK(water[320] * 2.302585092994046 * 55.345 * 100.0 == doctest::Approx(0.624 + 0.0005).epsilon(1e-3)); // 700 nm
+	// 755-780 nm: Kou, Labrie and Chylek (1993), with Morel's scattering: 760 nm 2.8605 + 0.000378, 780 nm 2.6905 + 0.000338 per metre
+	CHECK(water[380] * 2.302585092994046 * 55.345 * 100.0 == doctest::Approx(2.8605 + 0.000378).epsilon(1e-3));
+	CHECK(water[400] * 2.302585092994046 * 55.345 * 100.0 == doctest::Approx(2.6905 + 0.000338).epsilon(1e-3));
 	const auto column = [&](double metres) {
 		return truth([&](double nm) {
 			const double x = nm - 380.0;

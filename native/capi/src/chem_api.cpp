@@ -4,6 +4,7 @@
 #include "chem/species.hpp"
 #include "lab/lab.hpp"
 #include "lab/prism_demo.hpp"
+#include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 
 #include <cmath>
@@ -306,6 +307,26 @@ void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the sta
 		ui->ui->pointer(x, y, (down & CG_POINTER_DOWN) != 0, mods);
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+void cg_optics_store(const char *directory) {
+	try {
+		lab::optics_store(directory != nullptr ? directory : "");
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+int32_t cg_ui_prepare(cg_ui *ui) {
+	if (ui == nullptr) {
+		return -1;
+	}
+	try {
+		return ui->ui->prepare_optics();
+	} catch (const std::exception &e) {
+		fail(CG_ERR_INTERNAL, e.what());
+		return -1;
 	}
 }
 

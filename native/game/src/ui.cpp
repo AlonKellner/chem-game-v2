@@ -1,4 +1,5 @@
 #include "lab/ui.hpp"
+#include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
 
@@ -614,6 +615,10 @@ struct Ui::Impl {
 		} else if (v.condenser) {
 			w = 44;
 			h = 120;
+		} else if (const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml)) {
+			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
+			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
+			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
 		} else {
 			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.volume_ml));
 			h = w * 1.25f;
@@ -3699,6 +3704,29 @@ const DrawList &Ui::draw() {
 const OpticsScene &Ui::optics() {
 	impl_->compose();
 	return impl_->scene;
+}
+
+int Ui::prepare_optics() {
+	Impl &m = *impl_;
+	const LabView view = m.lab->view();
+	int tables = 0;
+	for (const ItemView &v : view.items) {
+		if (v.kind != "vessel" || v.glassware.empty()) {
+			continue;
+		}
+		float w = 0, h = 0;
+		m.size_of(v, w, h);
+		// alone, its axis on a whole pixel, as the screen draws it: its maps are its anywhere
+		for (const int layer : { 0, 1 }) {
+			OpticsRoom room;
+			OpticsBody body{ &v, 100.0f - w / 2.0f, 100.0f, w, h };
+			body.layer = layer;
+			OpticsScene alone;
+			optics_compose(alone, room, { body });
+			++tables;
+		}
+	}
+	return tables;
 }
 
 Lab &Ui::lab() {
