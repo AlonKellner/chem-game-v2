@@ -20,7 +20,7 @@ GAME_SPEC §12.3 (*A vessel's whole shape*), §18 (O8), §20.
 | 25.3 | The pixel pass: two knots a row (the light through each mixed by the share); the footprint over the wall's rows | Rows between knots done; the footprint up and down deferred (below) |
 | 25.4 | Stacks follow the drop | Deferred (below) |
 | 25.5 | The GPU host; O4; the costs | Done (below) |
-| 25.6 | Pictures; the user judges by eye and signs off | |
+| 25.6 | Pictures; the user judges by eye and signs off | Signed off by the user, 2026-11-21 |
 
 Decided by the user, 2026-11-21: document the specks below and move on; the renderer's remaining work
 (the specks, bending up and down) waits for a later attempt with a more capable reasoning model.

@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 25)
+## 0.26.0 (2026-11-21, Stage 25)
 
 - §12.3: **a shaped vessel's rows read between two knots**, each along the row's own outline, the light
   through each mixed by the share of the way: lines seen through a cone curve smoothly (the bands of

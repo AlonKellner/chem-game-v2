@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.25.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.26.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2133,6 +2133,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A balloon is a ball, whatever it is drawn as; a vessel is its glassware turned about its axis, with no spout, no thread and no cap; its floor is a slab of calibrated thickness, and what a standard leaves open of its curves is calibrated (Stage 24; until then every vessel was a cylinder) | A beaker pours over its whole brim; a bottle stands open |
 | A shaped vessel's maps are of one piece in wavelength, its knots at most `ROW_KNOTS_MOST`, and within a pixel of a rim each ray is its nearer knot's; its curved rows are read as level in the renderer (Stage 25: rows between two knots; in Stage 24 a band of four rows its middle row's map) | Over a vessel's floor and corners, where a ray's route changes part way through the spectrum, pixels are tinted by chance: coloured specks the truth does not have (docs/TDD_25_UPDOWN.md); a level line seen through a cone is not bent up or down; a few rays in a hundred at the rims go astray by up to half a pixel |
+| A held vessel's stacks are bands of rows, each read at its middle, cut at the knots of a shaped vessel behind no closer than two pixels | Through what is held, a cone behind is read at one height for five to eight rows: its outline is a staircase whose steps move with the held vessel (docs/TDD_25_UPDOWN.md) |
 | Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
