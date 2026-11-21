@@ -2,6 +2,16 @@
 
 ## Unreleased (Stage 24)
 
+- §12.3, §13, §20: **vessels in their whole shape**: glassware made to its standard (the low-form
+  beaker, ISO 3819; the conical flask, ISO 1773; the screw-neck bottle, ISO 4796-1), its profile of
+  lines and arcs read by the lab's capacity (each cell holds its shape's capacity to the brim: goldens
+  re-recorded with approval), the liquid's level, the drawn proportions and the tracer (arcs as tori).
+  The condenser stays as it was, until a condenser is made to its standard.
+- §12.3: **the truth in three dimensions**, every body through the general tracer.
+- §12.3: **a map for each band of a shaped vessel's rows**, read along each row's own outline near the
+  rims (smooth outlines), made before the game runs (`chem_tool maps`, in `make native`). Rays through
+  curved rows are taken as level in the renderer: bending up and down is Stage 25's.
+
 - **Every number in `data/` has a known origin** (`data/sources.json`, ctest `data_sources` with
   its self-test): measured, with the tests that hold it to its source and its row in
   `docs/DATA_SOURCES.md`; calibrated, with why; or the game's design. A value with no entry, a

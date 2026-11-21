@@ -1236,29 +1236,35 @@ of every ray through its area, and its colour is their average (a box filter).
     beaker's upright band traces within 1e-9 of the glass cylinder's closed form, a profile ball
     as the ball; each arc's first crossing is a fine search of its quartic's; and every surface of
     every vessel names the media on its two sides alike (no crossing from a medium into itself).
-  - **Maps with rows.** A shaped vessel bends rays up and down as well as across, wherever its
-    profile is not upright: at a flare, a corner, a cone, a shoulder, a lip. Its map is then a set
-    of rows, each a map across as before, landing at a place on the wall (across and up), what
-    passes, the chord:
-    - **Straight bands** (where the outside and the inside are upright across the row's height
-      and the rays that meet them stay level) share one map across, read exactly as before, and a
-      pixel there is read by the reading of §12.3 with nothing more: what most of a beaker is costs
-      what it did.
-    - **Curved bands** have rows of their own, four a pixel like the samples across, refined by
-      halving where the middle row departs from the straight prediction by more than a fiftieth
-      of a pixel. A pixel there is its sub-cells (four by four at most); the rays of a sub-cell
-      land in a patch of the wall, its extent across and up; the wall is read over that patch's
-      rows exactly (each row's integral across, weighed by the share of the patch's height in
-      that row), swept along the band's wavelengths as before. A thin line drawn level on the wall
-      keeps its light as a thin upright one does (`O8`, both ways). Curved bands are read in the
-      second pass, with what is held and the prisms.
+  - **A map for each band of its rows** (Stage 24). A shaped vessel sees each row differently. Its rows
+    are cut into bands where its profile's pieces begin and end: an upright band (every surface it
+    crosses there a vertical cylinder) is one map, the same at every row; a curved band is cut again
+    every 4 pixels, each part its own map, traced at its middle row; each band's map is of one piece
+    in wavelength, so it is read by the plain reading and followed in stacks.
+    - **The outline is smooth.** Near its rims (within two pixels of either, and through the glass
+      between them) a row is read along its own outline: a place across it is read at the same place
+      in a measure both rims keep (from the axis to the inner rim 0 to 1, through the glass 1 to 2),
+      in the band's middle row, and the ray keeps its deflection; two pixels further in, the band's
+      map is read as it is (the two differ there by well under a pixel). The outline is where the
+      glass is in every row, never a step; the plain reading reads between the band's samples there.
+    - **Rays are taken as level.** A ray through a curved band bends across as the band's map has it,
+      and is read on its own row: the bending up and down that the truth traces (a level line seen
+      through a flask's cone two or three rows away) is not yet in the renderer *(PLANNED, Stage 25:
+      the rows interpolated in the rims' measure, each ray's drop, the footprint a patch of the
+      wall's rows; built with the cost measured)*. Where a band is upright the renderer is the truth's
+      within the eye's threshold (`renderer: through a beaker's upright band`).
+    - **Made before the game runs.** A vessel made as glassware stands with its axis on a whole pixel
+      and its liquid's index is water's whether it holds any or not, so its maps depend only on its
+      glassware, its drawn size, its layer and the indices: `chem_tool maps` makes them for every
+      vessel of the benches at each layer it can be on (standing, in the hand) into a store
+      (`engines/godot/data/maps`, in `make native`), each under a key of everything it was traced for
+      and the builder's version; the game reads them, and makes one it does not find. A band's index
+      of the whole rows finds its band in one read; a stack's bands are found by halving.
     - **The liquid's surface is not yet a surface** (§11, planned): it is not traced, and a row is
       read through the liquid or the air by the screen's row, as before, in the renderer and in the
       truth alike.
-  - **Layers.** A ray that leaves a shaped vessel is no longer level, so a stack (a held vessel's
-    rays followed through what stands behind it) is traced on the CPU through every body of the
-    stack together, in three dimensions, by the tracer, in place of following the rays by maps
-    that answer level rays only.
+  - **Layers.** A stack (a held vessel's rays followed through what stands behind it) is cut at the
+    bands of every shaped vessel in it, and follows each band's map, its rays level as above.
 - **The truth** for the GPU (`O4`) and the two invariants is independent of the renderer: a
   brute-force average of a fine grid of sub-pixel rays, each traced exactly, every band read.
   From Stage 24 each ray is traced in three dimensions through the body's own surfaces by the
@@ -1284,7 +1290,9 @@ glow a light in the pass; no outline is drawn, and a vessel's floor is glass. Si
 user on 2026-11-20 (Stage 21). Stage 24 gives every vessel its whole shape: glassware to its
 standard (the low-form beaker, the conical flask, the screw-neck bottle), one profile read by the
 lab's capacity, the liquid's level, the silhouette and the tracer (arcs as tori, traced
-numerically), maps with rows where a vessel curves, the truth traced in three dimensions. The
+numerically), a map for each band of a curved vessel's rows read along each row's outline, made
+before the game runs, and the truth traced in three dimensions; rays bending up and down in the
+renderer is Stage 25's. The
 rest of the full design (lights besides the room's, image and gradient weights,
 Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
 Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
@@ -2087,6 +2095,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A balloon is a ball, whatever it is drawn as; a vessel is its glassware turned about its axis, with no spout, no thread and no cap; its floor is a slab of calibrated thickness, and what a standard leaves open of its curves is calibrated (Stage 24; until then every vessel was a cylinder) | A beaker pours over its whole brim; a bottle stands open |
+| The renderer reads a shaped vessel's curved rows as level: each band of four rows its middle row's map (along each row's own outline near the rims); its bands are of one piece in wavelength (Stage 24; the truth traces every ray in three dimensions) | A level line seen through a flask's cone is where it is on the wall, not two or three rows away as the truth has it; over a vessel's base a few rays in a hundred go astray by up to half a pixel; up and down: Stage 25 |
 | Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |

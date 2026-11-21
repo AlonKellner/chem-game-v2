@@ -20,10 +20,17 @@ GAME_SPEC §12.3 (*A vessel's whole shape*), §13, §20; `docs/DATA_SOURCES.md` 
 | 24.2 | The shape model: glassware data, profiles of lines and arcs, capacity, the liquid's level, the silhouette; the benches' vessels made as glassware | Done; goldens re-recorded with the user's approval (below) |
 | 24.3 | The tracer: arcs as tori, traced numerically; profiles as patches | Done |
 | 24.4 | The truth in three dimensions, through the general tracer | Done |
-| 24.5 | Maps with rows: straight bands shared, curved bands their own; the cost of a build measured (gate: within a frame's budget) | |
-| 24.6 | The pixel pass: curved bands in the second pass, the footprint as a patch of the wall; the stacks traced in three dimensions | |
-| 24.7 | The GPU host; O4 on every picture; the pass's cost at or under `main`'s | |
-| 24.8 | The goldens' evidence; pictures; the user judges by eye and signs off | |
+| 24.5 | Maps for a shaped vessel's rows: upright bands one map, curved bands one every 4 px, each of one piece; made before the game runs (`chem_tool maps`, `make native`) | Done (the strict maps with rows measured and set aside: below) |
+| 24.6 | The pixel pass: a row's band found in one read; near the rims a row read along its own outline (smooth outlines); stacks cut at the bands, found by halving | Done |
+| 24.7 | The GPU host: the maps' store named; O4 on every picture; the pass's cost | Done (costs below) |
+| 24.8 | Pictures; the user judges by eye and signs off | Awaiting the user |
+
+Decided by the user while building (2026-11-21):
+- **Split the renderer** (bending up and down): Stage 24 closes with the shapes, the capacities, the 3D
+  truth and a renderer that reads each row of a curved band level; Stage 25 builds the full renderer.
+- **Smooth outlines now**, in Stage 24 (the first cut stepped every 4 px).
+- **Whatever can be made before the game runs is**: the maps are made by `chem_tool maps` into a
+  store, keyed by their inputs.
 
 ## What the standards say
 
@@ -59,3 +66,54 @@ Each vessel's cell holds its shape's capacity to the brim (or the neck's top): t
 | The flask's wall, the bottle's | 1.1 mm, 1.3 mm | 0.9 mm (ISO 1773), 1.5 mm (ISO 4796-1) |
 
 Every conservation total is exact, as before.
+
+## The maps with rows, measured (for Stage 25)
+
+The first design (GAME_SPEC §12.3 as specified in 24.1) refined knots down a vessel's height by
+halving until each middle row was the straight line between its neighbours, to a fiftieth of a pixel,
+landing and drop (how far a ray lands below its row) alike. Measured on the three kinds:
+- **At a fixed place across, rows are not alike near a rim**: the rim moves across as the radius
+  changes, and everything near it jumps. Read at the same share of the radius they are; better still in
+  a measure that keeps both rims (the inner rim at 1, the outer at 2), since the wall is as thick in
+  every row and the radius is not.
+- **Within a pixel of a rim rays graze and turn chaotically with the row**: no knot spacing makes them
+  straight. Read by the nearer knot.
+- **Route boundaries that sweep with the wavelength** where rays graze a vessel's base and corners asked
+  for up to 64 pieces (0.8 s a row); capped.
+- **A middle alike may hide a curve**: the quarters must be held too; and a route that changes between
+  two knots must be split for, as across. Held so, the maps were right (the worst landing a few tenths of
+  a pixel as a shift) but 150 to 400 knots and 5 to 9 s a vessel.
+
+Stage 25's design starts from these: knots refined locally (by region, not by whole rows), read in the
+rims' measure, made before the game runs.
+
+## What was built
+
+- **Glassware** (`data/glassware.json`, `lab/glassware.hpp`): profiles of lines and arcs, the inside
+  moved in by each segment's thickness; capacity, the liquid's level, the radius at a height. Each kind
+  held to its standard's rows and capacity rule (`test_glassware.cpp`).
+- **The tracer** (`lab/optics_trace.hpp`): flat rings bounded about the axis; arcs as tori, found by
+  stepping and halving on the quartic's coefficients within their own arc; arcs on the axis as spheres
+  (`test_revolved.cpp`).
+- **The truth in three dimensions** (`optics_reference.cpp`): every body through the general tracer
+  (`test_truth3d.cpp`).
+- **The renderer**: a table of each shaped vessel's bands of rows (`build_rows`, `rows_block`); each
+  row's band from an index of its whole rows; near the rims each row read along its own outline;
+  the store of maps made ahead (`optics_store`, `Ui::prepare_optics`, `cg_ui_prepare`,
+  `chem_tool maps`). `test_rows.cpp`, `test_truth3d.cpp` (the renderer within the eye's threshold of
+  the truth through an upright band; O7 through a flask).
+
+## Costs (`make screenshots`, the 8/24 protocol)
+
+| | Stage 23 | Stage 24 |
+|---|---|---|
+| A settled pass | 0.00 ms | 0.00 ms |
+| A pass where every history starts again | 1.59 ms | 2.12 ms |
+| The same, a vessel held over another | 9.5 ms | 19.5 ms |
+| The maps, made before the game runs (both benches) | | 0.4 s |
+| O4 on every picture | 0 visible | 0 visible |
+
+Along the way: bands every 2 px doubled the restarting pass (the maps of one vessel grew from one to
+63, and the GPU's cache missed); every 4 px brought it back. Reading the curved rows by the general
+reading in the second pass cost 12 ms (a branch costs what it could do on the GPU): the plain reading
+reads them instead. A held vessel over another costs twice what it did; Stage 25 measures it again.
