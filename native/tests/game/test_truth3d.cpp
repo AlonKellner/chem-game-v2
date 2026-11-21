@@ -200,3 +200,41 @@ TEST_CASE("frames: a shaped vessel moved up or down settles on its new picture, 
 	MESSAGE("a flask moved up 40 px: settled, worst " << worst << " on the eye metric from its new picture");
 	CHECK(worst < lab::EYE_VISIBLE);
 }
+
+TEST_CASE("renderer: through a flask's curved rows, before a wall of upright lines, its pixels are the 3D truth's (Stage 25)") {
+	// lines drawn up and down the wall: bending up and down changes nothing of them, so the rows read between
+	// two knots are held to the truth across, row by row (its rims apart: within a pixel of one, rays graze)
+	std::vector<lab::OpticsShape> lines;
+	for (int k = 0; k < 12; ++k) {
+		lines.push_back(lab::OpticsShape{ X - 20.0f + 11.3f * static_cast<float>(k), 0.0f, 0.7f + 0.2f * static_cast<float>(k % 3), 1000.0f, 0.1 + 0.05 * (k % 4) });
+	}
+	const ItemView flask = glassware("conical_flask", 250);
+	const OpticsScene scene = scene_of(flask, lines);
+	const lab::glass::Vessel &g = *lab::glass::find("conical_flask", 250);
+	const float h = height_of("conical_flask", 250), cm = static_cast<float>(2.0 * g.widest() / W);
+	double worst = 0.0, sum = 0.0;
+	int compared = 0, visible = 0;
+	for (int y = static_cast<int>(Y) + 2; y < static_cast<int>(Y + h) - 2; y += 3 * sparse()) {
+		const double y_cm = (Y + h - (y + 0.5f)) * cm, outer = g.radius_outside(y_cm) / cm, inner = g.radius_inside(y_cm) / cm;
+		for (int x = static_cast<int>(X); x < static_cast<int>(X + W); x += 2) {
+			const double off = std::fabs(x + 0.5 - (X + W / 2.0));
+			if (lab::optics_cover(scene, x, y) < 0.99 || std::fabs(off - outer) < 1.5 || (inner > 0.0 && std::fabs(off - inner) < 1.5)) {
+				continue;
+			}
+			double shown[3], truth[3];
+			lab::optics_truth(scene, x, y, shown);
+			lab::optics_area_truth(scene, x, y, 6, truth);
+			const double e = eye(shown, truth);
+			worst = std::max(worst, e);
+			sum += e;
+			visible += e >= lab::EYE_VISIBLE ? 1 : 0;
+			++compared;
+		}
+	}
+	MESSAGE("through a flask's curved rows, " << compared << " pixels: worst " << worst << ", mean " << sum / compared << " on the eye metric, " << visible << " visible");
+	// a thin line's image is coloured by a cubic through the whole spectrum (each knot's map is of one piece, for
+	// the plain reading): at one pixel in a thousand its fringe shows
+	CHECK(compared > 300 / sparse());
+	CHECK(visible <= compared / 500);
+	CHECK(sum / compared < 1.0);
+}

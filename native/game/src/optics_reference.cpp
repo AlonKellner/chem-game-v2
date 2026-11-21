@@ -1175,12 +1175,15 @@ void optics_stacks(OpticsScene &scene) {
 							edges.push_back(e);
 						}
 					}
-					// and where each band of its rows ends, for one with a table of them (Stage 24)
+					// and, for one with a table of knots, every two pixels at most down its height (Stage 25: within a
+					// band of the stack its rows are read at the band's middle; knots crowd where rays graze)
 					if (map[3] < 0.0f) {
+						double last = -1.0e9;
 						for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
 							const double e = stack.top[j] + scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
-							if (e > top + 1e-4 && e < bottom - 1e-4) {
+							if (e > top + 1e-4 && e < bottom - 1e-4 && e - last >= 2.0) {
 								edges.push_back(e);
+								last = e;
 							}
 						}
 					}

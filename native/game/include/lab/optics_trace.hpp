@@ -119,6 +119,9 @@ struct Map {
 	// media * samples * pieces * MAP_CELL, by core, sample, piece: the landing at the four nodes; what passes;
 	// the chord squared; the route at each (with half of how far along the route changes before the next sample)
 	std::vector<float> cells;
+	// Stage 25: how far each ray lands below the row it came in on, on the screen (pixels), at the four nodes:
+	// media * samples * pieces * 4, laid after the cells
+	std::vector<float> drops;
 	int64_t rays = 0; // traced to build it
 	int samples() const;
 	const float *cell(int medium, int piece, int sample) const {
@@ -152,40 +155,46 @@ Map build_map(const MapSpec &spec);
 struct MapRay {
 	double landing = 0.0, pass = 1.0, chord = 0.0;
 	uint32_t route = 0;
+	double drop = 0.0; // how far below its own row it lands, on the screen (pixels; Stage 25)
 };
 MapRay map_ray(const MapSpec &spec, double x, double nm, int medium);
 // The same read from the map: straight between two samples across (the nearer one's where the route
 // changes between them); in wavelength, the cubic through its piece's four nodes.
 MapRay map_read(const Map &map, double x, double nm, int medium);
 
-// ---- a shaped vessel's maps: a map for each band of its rows (GAME_SPEC §12.3, Stage 24)
+// ---- a shaped vessel's rows (GAME_SPEC §12.3, Stage 24, 25)
 
-// A vessel that is not upright everywhere sees each row differently. Its rows are cut into bands where its
-// profile's pieces begin and end; an upright band (every surface it crosses there a vertical cylinder) is
-// one map, the same at every row; a curved band is cut again every ROW_STEP pixels at most, each its own map,
-// traced at its middle row. A row reads its band's map along its own outline: a place across the row is read at
-// the same place in a measure both rims keep (inside the inner rim from the axis to it, through the glass from
-// it to the outer rim), in the band's middle row, and the ray keeps its deflection there. So the outline is
-// where the glass is in every row, never a step. Rays are taken as level (bending up and down is Stage 25's).
-inline constexpr double ROW_STEP = 4.0;
 inline constexpr int ROW_PIECES_MOST = 1; // one piece, as every upright vessel's: read by the plain reading, followed in stacks
-struct RowMap {
-	std::vector<double> ends; // where each band's rows end, pixels down from the body's top, ascending; the last its foot
-	std::vector<Map> maps; // each band's map
-	std::vector<double> band_outer, band_inner; // the rims where each band's map was traced, pixels (inner 0: none)
+// One ray of a shaped vessel's map traced directly at `y` pixels down from its top (its foot the vessel's base).
+MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium);
+
+// ---- a shaped vessel's knots: its rows read between two maps, bending up and down (GAME_SPEC §12.3, Stage 25)
+
+// Knots down a shaped vessel's height, each a map traced at its own row. An upright band is one map for its
+// whole height (its rays level). A curved band's knots are refined by halving where the middle row is not the
+// line between its neighbours, read at the same place in the rims' measure (the deflection, the drop, what
+// passes, the chord; the quarters too past a pixel; a route that changes split for), at most `most` knots.
+// A row is read between the two knots around it, at the same place in that measure.
+inline constexpr int ROW_KNOTS_MOST = 96;
+// How far a row between two knots may put the image off, up or down or across, as a shift on the screen
+// (pixels): far under what the eye sees, looser than a map across (whose fiftieth keeps a thin line's light)
+inline constexpr double ROW_TOLERANCE = 0.1;
+struct KnotMap {
+	std::vector<double> knots; // pixels down from the body's top, ascending: its top and its foot among them
+	std::vector<int> map_of; // which of the maps each knot is
+	std::vector<char> level; // from knot k to k + 1 one map, every ray level
+	std::vector<double> outer, inner; // the rims each knot's map was traced at, pixels
 	std::vector<double> row_outer, row_inner; // each whole row's rims, at its middle
+	std::vector<Map> maps;
 	int64_t rays = 0;
 };
-// `spec` as for one row, its shape the vessel's; `height` the body's height in pixels (its foot the vessel's base)
-RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double height);
-// One ray traced directly at `y` pixels down from the body's top; and the same read from the band's map.
-MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium);
-MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium);
-// The table as the renderer reads it: [0] the bands K and the whole rows R; [1 .. K] (where its rows end, its
-// map's offset in vec4s from the table's start, its pieces, its whole pixels); [1 + K .. K + R] for each whole
-// row the band its top is in, its outer rim and its inner (at its middle); [1 + K + R .. 2K + R] each band's rims
-// (outer, inner); then each band's map_block.
-std::vector<float> rows_block(const RowMap &rows);
+KnotMap build_knots(const MapSpec &spec, const glass::Vessel &vessel, double height, int most = ROW_KNOTS_MOST);
+MapRay knots_read(const KnotMap &knots, double x, double y, double nm, int medium);
+// The table as the renderer reads it: [0] (K knots, R whole rows); [1 .. K] (its row, its map's offset in vec4s
+// from the table's start, its pieces, 1 if a level span begins at it); [1 + K .. K + R] (the knot at or above
+// the row's top, its outer rim, its inner); [1 + K + R .. 2K + R] (each knot's rims); then each map's map_block
+// followed by its drops.
+std::vector<float> knots_block(const KnotMap &knots);
 
 // The map as the renderer reads it (lab/optics_scene.hpp lays the scene's maps out): vec4s.
 //   [0]                 coarse, media, samples, pieces

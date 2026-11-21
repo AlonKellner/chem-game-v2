@@ -428,7 +428,12 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
 				const float floor_px = rect[lab::optics_layout::REFRACT * 4 + 2] / rect[lab::optics_layout::FORM * 4 + 1];
 				const float floor_top = rect[1] + rect[3] - floor_px, surface = rect[lab::optics_layout::FORM * 4 + 2];
-				return seen(scene, x + rect[2] / 4, surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				const int px = static_cast<int>(x + rect[2] / 4), py = static_cast<int>(surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				// (Stage 25: a conical flask's curved base disperses a little; the renderer's colour there is its truth's)
+				double truth[3];
+				lab::optics_area_truth(scene, px, py, 8, truth);
+				CHECK(std::fabs(seen(scene, px, py).b - lab_of(truth).b) < 1.0);
+				return seen(scene, px, py);
 			}
 		}
 		FAIL("the flask is not in the scene");
@@ -439,7 +444,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	CHECK(list.above < static_cast<int32_t>(list.commands.size()));
 	CHECK(ui->optics().table[0] == 9); // five vessels, the jar, the balloon; the burner and the condenser's outlet (Stage 22)
 	const lab::CieLab empty = flask_colour();
-	CHECK(std::fabs(empty.b) < 0.5);
+	CHECK(std::fabs(empty.b) < 1.0); // nearly neutral (the base's glass disperses a little: Stage 25)
 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
 	lab::CieLab after_dissolving{}, boiled_down{};

@@ -101,7 +101,7 @@ double pool_depth(double ml, double r) {
 namespace {
 
 // the builder's version: a map made by another is not read
-constexpr uint64_t MAP_STORE_VERSION = 24006;
+constexpr uint64_t MAP_STORE_VERSION = 25006;
 
 std::mutex &store_lock() {
 	static std::mutex lock;
@@ -151,7 +151,7 @@ void optics_store_write(uint64_t key, const std::vector<float> &block) {
 
 namespace {
 
-// A glassware vessel's table of maps (lab/optics_trace.hpp: rows_block), made once for its inputs and kept for
+// A glassware vessel's table of maps (lab/optics_trace.hpp: knots_block), made once for its inputs and kept for
 // every scene; and, made ahead, read from the maps' store (GAME_SPEC §12.3, Stage 24: made before the game runs)
 std::vector<float> shaped_block(const trace::MapSpec &spec, const glass::Vessel &vessel, double height, uint64_t key) {
 	static std::mutex lock;
@@ -165,7 +165,7 @@ std::vector<float> shaped_block(const trace::MapSpec &spec, const glass::Vessel 
 	}
 	std::vector<float> block;
 	if (!optics_store_read(key, block)) {
-		block = trace::rows_block(trace::build_rows(spec, vessel, height));
+		block = trace::knots_block(trace::build_knots(spec, vessel, height));
 		optics_store_write(key, block);
 	}
 	const std::lock_guard<std::mutex> hold(lock);
@@ -233,7 +233,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 		if (refracts) {
 			offsets[static_cast<size_t>(b)] = map_at;
 			put(at + MAP, 0, map_at);
-			put(at + MAP, 1, shaped ? block[7] : block[0]); // the whole pixels it spans
+			put(at + MAP, 1, shaped ? block[static_cast<size_t>(block[5]) * 4] : block[0]); // the whole pixels it spans (a table: its first knot's map's)
 			put(at + MAP, 2, std::floor(spec.left - spec.grid) + spec.grid);
 			put(at + MAP, 3, shaped ? -block[0] : block[3]); // its pieces in wavelength; or, a table of its rows' bands, minus their count
 			map_at += static_cast<int>(block.size() / 4);
