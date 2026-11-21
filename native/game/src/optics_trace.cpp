@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+#include <memory>
+#include <mutex>
 #include <numbers>
 
 namespace lab::trace {
@@ -213,9 +215,12 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		here = there;
 		out.route = out.route * 31u + static_cast<uint32_t>(2 * (hit + 1));
 	}
+	out.at = o;
+	out.toward = u;
 	if (here != 0) {
 		out.pass = 0.0; // still inside after every meeting allowed: nothing of the wall comes this way
 		out.route = out.route * 31u + 7u;
+		out.left = false;
 	}
 	out.lands = here == 0 && u.z > 0.05;
 	if (out.lands) {
@@ -360,6 +365,17 @@ Shape revolved(const glass::Vessel &vessel) {
 		}
 	}
 	return s;
+}
+
+const Shape &revolved_of(const glass::Vessel &vessel) {
+	static std::mutex lock;
+	static std::map<const glass::Vessel *, std::unique_ptr<Shape>> made;
+	const std::lock_guard<std::mutex> hold(lock);
+	std::unique_ptr<Shape> &s = made[&vessel];
+	if (!s) {
+		s = std::make_unique<Shape>(revolved(vessel));
+	}
+	return *s;
 }
 
 // ---- maps

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "lab/glassware.hpp"
 #include "lab/lab.hpp"
 
 #include <cstdint>
@@ -101,6 +102,9 @@ struct OpticsScene {
 	std::vector<uint64_t> stack_keys; // what each body's stack was followed for
 	std::vector<std::vector<float>> stack_blocks;
 	int64_t stack_rays = 0; // followed in the last compose that followed any
+	// each body's glassware, if it is made as one (GAME_SPEC §12.3, Stage 24): its whole shape, which the truth
+	// traces (null: a cylinder, a prism, a ball, a thing of the lab)
+	std::vector<const glass::Vessel *> vessels;
 };
 
 // One vessel or balloon as the screen places it.

@@ -52,6 +52,10 @@ struct Landing {
 	// crossings of a surface with the same medium on both sides, not grazing: none in a shape whose
 	// surfaces name their media consistently (a test of a shape, Stage 24)
 	int mismatched = 0;
+	// where it last was and which way it went on (cm, the body's frame): a ray carried on beyond (Stage 24);
+	// whether it left the body (not still inside after every meeting allowed)
+	Vec3 at, toward;
+	bool left = true;
 };
 
 // One ray from `origin` along `direction` (a unit vector) through the shape, to the wall's plane
@@ -70,6 +74,8 @@ Shape ball(double radius);
 // base, cm. Its straight pieces are cones (cylinders, flat rings), its arcs tori (spheres where centred on
 // the axis); the outside has air beyond it and glass within, the inside glass beyond and the core within.
 Shape revolved(const glass::Vessel &vessel);
+// The same, made once for each vessel and kept.
+const Shape &revolved_of(const glass::Vessel &vessel);
 
 // ---- a body's refraction map
 

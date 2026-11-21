@@ -186,6 +186,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
+	scene.vessels.assign(static_cast<size_t>(MAX_BODIES), nullptr);
 
 	// what the wall's table is made from: the room and everything drawn on it
 	uint64_t wall_key = fnv(&room.x, 4 * sizeof(float));
@@ -406,6 +407,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			// glassware in its standard's shape (GAME_SPEC §12.3, Stage 24): its rectangle is its widest by its
 			// height; or, made to no standard, a cylinder of its volume and of the proportions it is drawn with
 			const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+			scene.vessels[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS)] = made;
 			const double aspect = static_cast<double>(body.h) / body.w;
 			const double d_cm = made ? 2.0 * made->widest() : std::cbrt(4.0 * (v.volume_ml > 0.0 ? v.volume_ml : 1.0) / (PI * aspect));
 			const double cm_per_px = d_cm / body.w;

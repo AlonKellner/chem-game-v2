@@ -19,7 +19,7 @@ GAME_SPEC §12.3 (*A vessel's whole shape*), §13, §20; `docs/DATA_SOURCES.md` 
 | 24.1 | Spec and sources: the three standards read from their own pages; what they leave open calibrated | Done |
 | 24.2 | The shape model: glassware data, profiles of lines and arcs, capacity, the liquid's level, the silhouette; the benches' vessels made as glassware | Done; goldens re-recorded with the user's approval (below) |
 | 24.3 | The tracer: arcs as tori, traced numerically; profiles as patches | Done |
-| 24.4 | The truth in three dimensions, through the general tracer | |
+| 24.4 | The truth in three dimensions, through the general tracer | Done |
 | 24.5 | Maps with rows: straight bands shared, curved bands their own; the cost of a build measured (gate: within a frame's budget) | |
 | 24.6 | The pixel pass: curved bands in the second pass, the footprint as a patch of the wall; the stacks traced in three dimensions | |
 | 24.7 | The GPU host; O4 on every picture; the pass's cost at or under `main`'s | |
