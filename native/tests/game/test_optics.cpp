@@ -213,7 +213,7 @@ TEST_CASE("optics: a solid is seen by the room's light, and through what covers 
 		{ "copper_sulfate", chem::builtin::copper_sulfate } };
 	for (const auto &solid : solids) {
 		ItemView dry = vessel();
-		dry.condensed_ml = 1.25;
+		dry.condensed_ml = dry.solid_ml = 1.25;
 		dry.contents = { substance(solid.species, 's', 0.02, 5.0, 1000000, 100.0) };
 		const OpticsScene scene = scene_of(dry);
 		CHECK(lab::difference(seen(scene, MIDDLE, FLOOR), reference(0.0, &chem::optics::spectrum(solid.id))) <= TRUTH_FIT);
@@ -224,6 +224,7 @@ TEST_CASE("optics: a solid is seen by the room's light, and through what covers 
 		// under 100 mL of solution: lit through it and seen through it
 		ItemView wet = solution(0.45);
 		wet.condensed_ml += 1.25;
+		wet.solid_ml = 1.25;
 		wet.contents.push_back(dry.contents[0]);
 		CHECK(lab::difference(seen(scene_of(wet), MIDDLE, FLOOR), reference(0.45 * DIAMETER_CM, &chem::optics::spectrum(solid.id))) <= TRUTH_FIT);
 	}
@@ -237,6 +238,7 @@ TEST_CASE("optics: a solid is seen by the room's light, and through what covers 
 TEST_CASE("optics: stirred up, a powder clouds the liquid; at rest it lies under it (Stage 10)") {
 	ItemView v = solution(0.2);
 	v.condensed_ml += 0.6;
+	v.solid_ml = 0.6;
 	v.contents.push_back(substance("copper_oxide", 's', 0.045, 3.6, 2000000, 80.0));
 	const OpticsScene rest = scene_of(v);
 	v.stirred = true;
@@ -274,7 +276,7 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 	const auto glow_at = [&](double celsius, double rgb[3]) {
 		ItemView v = vessel();
 		v.celsius = celsius;
-		v.condensed_ml = 1.0;
+		v.condensed_ml = v.solid_ml = 1.0;
 		v.contents = { substance("copper_oxide", 's', 0.08, 6.3, 1000000, 100.0) };
 		const OpticsScene scene = scene_of(v);
 		glow_of(scene, MIDDLE, FLOOR, rgb);
@@ -299,7 +301,7 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 	// a black body at 2042 K (freezing platinum) is 600 000 cd/m2: the old standard of light
 	ItemView v = vessel();
 	v.celsius = 2042.0 - 273.15;
-	v.condensed_ml = 1.0;
+	v.condensed_ml = v.solid_ml = 1.0;
 	v.contents = { substance("copper_oxide", 's', 0.08, 6.3, 1000000, 100.0) };
 	double hot[3];
 	glow_of(scene_of(v), MIDDLE, FLOOR, hot);
@@ -349,6 +351,7 @@ TEST_CASE("optics: a balloon is its rubber: red, paler as it stretches, deeper a
 TEST_CASE("O1, O2: the checks hold on a scene and fire on a corrupted one (Stage 10)") {
 	ItemView v = solution(0.5);
 	v.condensed_ml += 1.25;
+	v.solid_ml = 1.25;
 	v.contents.push_back(substance("malachite", 's', 0.02, 5.0, 1000000, 100.0));
 	OpticsScene scene = scene_of(v);
 	CHECK(lab::check_O1(scene) == "");

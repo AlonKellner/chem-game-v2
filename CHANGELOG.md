@@ -17,6 +17,12 @@
 - §12.3: **everything behind a held vessel is seen through it**: the GPU read six of a stack's
   bodies, so behind a held vessel only the last painted part showed (the user: "only one is ever
   visible"); now twelve, on the CPU and the GPU alike, the largest kept first where more stand behind.
+- §12.3: **a stirred suspension is in its vessel's shape**: its haze was the vessel's rectangle taken
+  as a cylinder, so in a conical flask the stirred copper oxide was a grey rectangle past the cone's
+  sides; it is now along each ray's own path through the liquid, as the liquid's colour is.
+- **A solution holds no solid**: the solids a vessel shows were what is condensed less what is liquid,
+  which counted a solute's volume as a heap (a triangle in the acid's bottle); the view now gives its
+  solids' own volume (`ItemView::solid_ml`), which the pass and the "solids" quantity read.
 - A goal's value typed in the editor no longer reads past a valve's per cents (a crash, once the
   editor's draft grew).
 - Open: a material's volume, a vessel's pressure; a controller tuned again as what it controls changes.

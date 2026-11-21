@@ -141,8 +141,8 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "liquid_ml") {
 		return v->liquid_ml;
 	}
-	if (q.what == "solid_ml") { // what is condensed and not liquid (§13.3, Stage 26)
-		return std::max(0.0, v->condensed_ml - v->liquid_ml);
+	if (q.what == "solid_ml") { // its solids, not its wall (§13.3, Stage 26)
+		return v->solid_ml;
 	}
 	if (q.what == "mass_g") { // all it holds, its wall not
 		double all = 0.0;

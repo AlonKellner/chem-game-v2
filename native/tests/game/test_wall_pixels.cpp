@@ -170,3 +170,57 @@ TEST_CASE("wall pixels: through a held vessel every part behind it is seen: two 
 		CHECK(rgb[1] < 0.4); // a dark face, not the lit wall (0.73)
 	}
 }
+
+TEST_CASE("wall pixels: a suspension stirred up in a conical flask is in the flask's shape, not its rectangle: beside the cone the wall, as its rays find it (Stage 26)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read_file("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	for (const char *c : { R"({"do": "place", "item": "flask", "at": [10, 6]})", R"({"do": "place", "item": "jar", "at": [4, 6]})", R"({"do": "place", "item": "acid", "at": [16, 6]})",
+				 R"({"do": "tip", "species": "malachite", "from": "jar", "to": "flask", "all": true})", R"({"do": "pour", "from": "acid", "to": "flask", "all": true})",
+				 R"({"do": "stir", "vessel": "flask", "on": true})" }) {
+		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
+	}
+	ui->frame(0.0);
+	const lab::OpticsScene &scene = ui->optics();
+	// the same bench with no flask: what is behind it
+	std::unique_ptr<lab::Ui> bare = lab::Ui::open(read_file("data/benches/lab.json"), why);
+	REQUIRE(bare != nullptr);
+	REQUIRE(bare->lab().command(R"({"do": "place", "item": "jar", "at": [4, 6]})", why));
+	REQUIRE(bare->lab().command(R"({"do": "place", "item": "acid", "at": [16, 6]})", why));
+	bare->frame(0.0);
+	const lab::OpticsScene &behind = bare->optics();
+	namespace L = lab::optics_layout;
+	// the flask's body: its rectangle, and its liquid's surface
+	int flask = -1;
+	float cx = 0, cy = 0;
+	REQUIRE(ui->locate("item:flask", cx, cy));
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float *r = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 0.0f && cx > r[0] && cx < r[0] + r[2] && cy > r[1] && cy < r[1] + r[3]) {
+			flask = b;
+		}
+	}
+	REQUIRE(flask >= 0);
+	const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + flask * L::BODY_VECS + L::RECT) * 4];
+	const float *form = &scene.table[static_cast<size_t>(L::HEADER_VECS + flask * L::BODY_VECS + L::FORM) * 4];
+	REQUIRE(scene.table[static_cast<size_t>(L::HEADER_VECS + flask * L::BODY_VECS + L::MORE) * 4] > 0.0f); // stirred up: a haze
+	const int surface = static_cast<int>(std::ceil(form[2]));
+	REQUIRE(surface < static_cast<int>(rect[1] + rect[3]) - 10);
+	// across rows a little under the surface, from the rectangle's edge inward: where the rays meet no glass
+	int beside = 0, wrong = 0;
+	for (const int y : { surface + 4, surface + 12 }) {
+		for (int x = static_cast<int>(rect[0]); x < static_cast<int>(rect[0] + rect[2] * 0.5f); ++x) {
+			double truth[3], seen[3], wall[3];
+			lab::optics_area_truth(scene, x, y, 3, truth);
+			lab::optics_truth(behind, x, y, wall);
+			if (std::fabs(truth[1] - wall[1]) > 0.003) {
+				break; // the cone's glass from here on
+			}
+			lab::optics_truth(scene, x, y, seen);
+			++beside;
+			wrong += std::fabs(seen[1] - truth[1]) > 0.02 ? 1 : 0;
+		}
+	}
+	CHECK(beside > 4);
+	CHECK(wrong == 0);
+}

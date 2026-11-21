@@ -957,6 +957,15 @@ float map_level(MapRef m, float x) {
 // c1, the square straight across the part (as a chord's is, exactly, where it rises as a root at a rim),
 // and the liquid's optical depth is `per_cm` a centimetre. The mean of e^(-per_cm c) over the part, in closed
 // form, as one chord's.
+// How much of the room's light what is stirred up in a vessel's liquid turns back, along a path through the
+// liquid as long as `chord_cm`: its extinction (MORE.x, a centimetre) over that path (Stage 26: along the path the
+// maps give, the vessel's own shape, not its rectangle as a cylinder: a conical flask's stirred suspension was a
+// grey rectangle past the cone's sides)
+float haze_along(int body, float chord_cm) {
+	int at = HEADER_VECS + body * BODY_VECS;
+	return scene_vec(at + 1).x < 0.5 ? 1.0 - exp(-scene_vec(at + 2).x * max(chord_cm, 0.0)) : 0.0;
+}
+
 float chord_of_part(float c0, float c1, float per_cm) {
 	float lo = min(c0, c1);
 	float hi = max(c0, c1);
@@ -985,6 +994,7 @@ struct Shade {
 	float haze;
 	float solid;
 	float room; // the room in front, which the surfaces turn back
+	int body; // the refracting one's
 };
 
 Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
@@ -1004,6 +1014,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 		s.glass = glass;
 		s.haze = l.haze;
 		s.solid = l.solid;
+		s.body = body_of(l.body);
 		return s;
 	}
 	// through_layer, as a times what reaches it plus b
@@ -1034,6 +1045,7 @@ Shade shade_of(Path q, float nm) {
 	s.glass = 1.0;
 	s.haze = 0.0;
 	s.solid = 0.0;
+	s.body = 0;
 	s.room = scene_vec(2).y;
 	s = shade_layer(s, q, q.l0, 0, nm);
 	s = shade_layer(s, q, q.l1, 1, nm);
@@ -1051,7 +1063,10 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		float depth = liquid ? s.per_cm * chord_of_part(c0, c1, s.per_cm) : 0.0;
 		float through = exp(-depth);
 		seen = seen * through;
-		seen = mix(seen, s.colour * exp(-depth * 0.5), s.haze);
+		// its haze along these rays' own path through its liquid; none through its core as air
+		float k = scene_vec(HEADER_VECS + s.body * BODY_VECS + 2).x;
+		float haze = liquid ? haze_along(s.body, chord_of_part(c0, c1, max(k, 1.0e-6))) : 0.0;
+		seen = mix(seen, s.colour * exp(-depth * 0.5), haze);
 		seen = mix(seen, s.colour * through + s.glow * exp(-depth * 0.5), s.solid);
 		seen = seen * s.glass;
 	}
@@ -1460,6 +1475,7 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 			float chord_a = sqrt(max(stack_value(a + at + 3, w_a, far_a + at + 3, w_far_a, on_a), 0.0));
 			float chord_b = sqrt(max(stack_value(b + at + 3, w_b, far_b + at + 3, w_far_b, on_b), 0.0));
 			depth = per_cm * chord_of_part(chord_a, chord_b, per_cm);
+			l.haze = haze_along(body, chord_of_part(chord_a, chord_b, max(scene_vec(HEADER_VECS + body * BODY_VECS + 2).x, 1.0e-6)));
 			pass = 0.5 * (clamp(stack_value(a + at + 2, w_a, far_a + at + 2, w_far_a, on_a), 0.0, 1.0) + clamp(stack_value(b + at + 2, w_b, far_b + at + 2, w_far_b, on_b), 0.0, 1.0));
 		}
 		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 5 * ROW, nm), row_at(start + 2 * ROW, nm), depth, pass, room);

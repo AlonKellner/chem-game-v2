@@ -525,7 +525,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				solid[i] = static_cast<float>(reflectance[i]);
 			}
 		}
-		const double solid_ml = v.condensed_ml > v.liquid_ml ? v.condensed_ml - v.liquid_ml : 0.0;
+		const double solid_ml = v.solid_ml; // its solids alone: a solute's volume is the solution's (Stage 26)
 		if (v.liquid_ml > 0.0 || !v.glassware.empty()) {
 			// a liquid's index is water's: the solutes' share is not modelled (GAME_SPEC §20); a glassware vessel's
 			// liquid core is water's even while empty, so its maps are the same as it fills (Stage 24)

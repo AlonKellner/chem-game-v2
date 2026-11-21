@@ -516,7 +516,10 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	const double room = shader::scene_vec(2).y;
 	double a = 1.0, b = 0.0;
 	for (const Met &m : ray.met) {
-		const shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), size, size);
+		shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), size, size);
+		if (m.bent) {
+			l.haze = shader::haze_along(m.body, m.chord); // along its own path through the liquid (Stage 26)
+		}
 		const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
 		const double per_cm = shader::liquid_at(m.body, start, nm);
 		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),

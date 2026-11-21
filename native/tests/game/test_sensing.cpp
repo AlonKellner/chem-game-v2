@@ -102,7 +102,11 @@ TEST_CASE("sensing: the guided lists offer only what the item has now, by kind (
 	}
 	CHECK(total == doctest::Approx(sum));
 	CHECK(total > 4.9);
-	CHECK(*lab::measure(v, lab::Quantity{ "flask", "solid_ml", "g" }) == doctest::Approx(flask.condensed_ml - flask.liquid_ml));
+	CHECK(*lab::measure(v, lab::Quantity{ "flask", "solid_ml", "g" }) == doctest::Approx(flask.solid_ml));
+	CHECK(flask.solid_ml > 0.0); // the malachite
+	// a solution holds no solid: the acid's sulfuric acid is dissolved (its volume the solution's, not a heap's)
+	CHECK(item(v, "acid").solid_ml == 0.0);
+	CHECK(item(v, "acid").condensed_ml > item(v, "acid").liquid_ml);
 	CHECK(*lab::measure(v, lab::Quantity{ "flask", "malachite", "mol" }) == doctest::Approx(5.0 / 221.116).epsilon(1e-3));
 	CHECK(lab::label(v, lab::Quantity{ "flask", "malachite", "mol" }).find("amount (mol)") != std::string::npos);
 	CHECK(lab::label(v, lab::Quantity{ "flask", "mass_g", "g" }) == "flask: total mass (g)");

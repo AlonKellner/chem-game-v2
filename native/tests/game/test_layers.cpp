@@ -416,7 +416,7 @@ TEST_CASE("layers: a hot solid's glow is a light in the pass: what is held befor
 	hot.kind = "vessel";
 	hot.volume_ml = 250.0;
 	hot.celsius = 850.0;
-	hot.condensed_ml = 6.0;
+	hot.condensed_ml = hot.solid_ml = 6.0;
 	SubstanceView oxide = substance("copper_oxide", 's', 0.08, 6.3);
 	oxide.particles = 1000000;
 	oxide.size_um = 100.0;

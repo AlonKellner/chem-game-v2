@@ -1263,6 +1263,9 @@ struct Lab::Impl {
 				if (def.phase == Phase::Liquid && !def.wall) {
 					v.liquid_ml += row.mol * def.molar_volume * 1e6;
 				}
+				if (def.phase == Phase::Solid && !def.wall) {
+					v.solid_ml += row.mol * def.molar_volume * 1e6;
+				}
 				v.contents.push_back(row);
 			}
 			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner

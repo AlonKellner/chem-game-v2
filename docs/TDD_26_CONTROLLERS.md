@@ -74,6 +74,19 @@ and 46.9 for an integrator (`test_control.cpp`).
   where every history starts again, held over another (`make screenshots`): 28.9 ms, now 32.0 (what
   is behind it is read now, all of it); passing over a thing the rays do not cross is for things that
   bend nothing (a vessel's slot passed over broke the layers' truth: 14.7 on the eye metric).
+- **A grey rectangle past the flask's sides** (the user, 2026-11-21: right after the acid is poured,
+  stirred, the liquid "a dark grey rectangle poking out of the flask"; bright blue and in shape once
+  heated). The black copper oxide stirred up is a haze, and its haze was computed as if the vessel were
+  a cylinder its rectangle's width (`layer_at`): right for a beaker, not for a cone. The liquid's own
+  colour already went along each ray's path from the maps; the haze now does too (`haze_along`, in the
+  pass, the stacks and the truth). Once the oxide dissolves there is no haze, so the flask showed its
+  shape again. The grey is right: black powder stirred in acid, until it dissolves into the blue.
+  `test_wall_pixels.cpp`: beside a cone, a stirred suspension's pixels are the 3D truth's (22 wrong
+  before).
+- **A triangle in the acid's bottle** (the user: "shouldn't the acid vessel only contain liquids?").
+  The scene took a vessel's solids as what is condensed less what is liquid; the view's liquid counts
+  liquid species alone, so the dissolved sulfuric acid's 8.9 mL were a heap. The view gives its solids
+  (`solid_ml`: the solid species, not the wall); the "solids" quantity reads it too.
 - **A crash typing a goal's value**: the editor read a valve's per cent past its three settings for
   any focused field from the third on (a goal's are 10 and on); the draft's new field moved what the
   stray read found, to a null. Bounded to the valve's fields.
