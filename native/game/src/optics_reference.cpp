@@ -1219,39 +1219,53 @@ void optics_stacks(OpticsScene &scene) {
 				put(static_cast<size_t>(2 + band_count + j), 1, stack.bends[j] ? 1.0 : 0.0);
 			}
 			std::map<double, int> ids; // routes as small whole numbers, in the order met
-			std::vector<shader::Ray> rays(static_cast<size_t>(samples) * 4);
-			for (int k = 0; k < band_count; ++k) {
+			// each band's rays followed on a thread of its own (no band's depend on another's), then written in order
+			std::vector<std::vector<shader::Ray>> band_rays(static_cast<size_t>(band_count));
+			std::vector<std::vector<double>> band_along(static_cast<size_t>(band_count));
+			in_pieces(band_count, [&](int k) {
+				const shader::Use use(scene);
 				const double y = 0.5 * (bands[static_cast<size_t>(k)] + bands[static_cast<size_t>(k) + 1]);
+				std::vector<shader::Ray> &rays = band_rays[static_cast<size_t>(k)];
+				std::vector<double> &alongs = band_along[static_cast<size_t>(k)];
+				rays.resize(static_cast<size_t>(samples) * 4);
+				alongs.assign(static_cast<size_t>(samples) * 4, 0.0);
 				for (int i = 0; i < samples; ++i) {
 					for (int n = 0; n < 4; ++n) {
 						rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = shader::chain_at(stack, y, first + i * 0.25, trace::map_nm(n / 3.0));
 					}
 				}
+				for (int i = 0; i + 1 < samples; ++i) {
+					for (int n = 0; n < 4; ++n) {
+						const shader::Ray &r = rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
+						const shader::Ray &next = rays[static_cast<size_t>(i + 1) * 4 + static_cast<size_t>(n)];
+						if (next.route == r.route) {
+							continue;
+						}
+						// where the route changes on the way to the next sample: by the map of the first body the two
+						// rays differ in, from how far from its axis each passes
+						double along = 0.5;
+						for (int j = 0; j < slot_count; ++j) {
+							if (r.bent[j] != next.bent[j] || r.way[j] != next.way[j]) {
+								const double lo = r.from_axis[j], hi = next.from_axis[j];
+								if (std::fabs(hi - lo) > 1e-9) {
+									const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
+									const double change = shader::map_change(shader::ref_at(stack, j, y), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
+									along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
+								}
+								break;
+							}
+						}
+						alongs[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = along;
+					}
+				}
+			});
+			for (int k = 0; k < band_count; ++k) {
 				followed += static_cast<int64_t>(samples) * 4;
 				for (int i = 0; i < samples; ++i) {
 					const size_t cell = cells_at + static_cast<size_t>(k * samples + i) * static_cast<size_t>(stride);
 					for (int n = 0; n < 4; ++n) {
-						const shader::Ray &r = rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
-						// where the route changes on the way to the next sample: by the map of the first body the
-						// two rays differ in, from how far from its axis each passes
-						double along = 0.0;
-						if (i + 1 < samples) {
-							const shader::Ray &next = rays[static_cast<size_t>(i + 1) * 4 + static_cast<size_t>(n)];
-							if (next.route != r.route) {
-								along = 0.5;
-								for (int j = 0; j < slot_count; ++j) {
-									if (r.bent[j] != next.bent[j] || r.way[j] != next.way[j]) {
-										const double lo = r.from_axis[j], hi = next.from_axis[j];
-										if (std::fabs(hi - lo) > 1e-9) {
-											const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
-											const double change = shader::map_change(shader::ref_at(stack, j, y), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
-											along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
-										}
-										break;
-									}
-								}
-							}
-						}
+						const shader::Ray &r = band_rays[static_cast<size_t>(k)][static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
+						const double along = band_along[static_cast<size_t>(k)][static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
 						const int id = ids.emplace(r.route, static_cast<int>(ids.size())).first->second;
 						put(cell, n, r.x);
 						put(cell + 1, n, id + 0.5 * along);
