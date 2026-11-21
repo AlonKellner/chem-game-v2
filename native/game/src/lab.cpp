@@ -1,4 +1,5 @@
 #include "lab/lab.hpp"
+#include "lab/control.hpp"
 #include "lab/glassware.hpp"
 
 #include "chem/builtin_ids.hpp"
@@ -30,6 +31,7 @@ std::string build_name() {
 namespace {
 
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
+constexpr int TRIAL_SECONDS = 3600; // a controller's trial, at most (GAME_SPEC §13.3, Stage 26)
 // what a hand moves between two vessels: liquid with what is dissolved in it, and solids; never gas
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
@@ -432,6 +434,87 @@ struct Lab::Impl {
 		controls.push_back(ControlSetting{ item_id, control, value, by, static_cast<int64_t>(world().step()) });
 	}
 
+	// A controller tunes itself (§13.3, Stage 26): what it controls, tried on two copies of the lab as it
+	// stands, every control rigged from it held full on in one and off in the other, read each second until the
+	// difference reaches half again the distance to the target, or levels off, or an hour passes; fitted, and
+	// SIMC's gains for its speed. Untuned, with the reason, when there is nothing to try or nothing moves.
+	void tune(int at) {
+		Part &p = parts[static_cast<size_t>(at)];
+		retune(p, false);
+		p.gain = p.tau = p.theta = 0.0;
+		std::vector<Rig> mine;
+		for (const Rig &r : rigs) {
+			if (r.from == p.id && r.follow) {
+				mine.push_back(r);
+			}
+		}
+		if (!p.watching || mine.empty()) {
+			return; // tuned once it is set and rigged
+		}
+		const std::optional<double> start = reading(p.quantity);
+		std::string why;
+		const std::string saved = start ? save().dump() : std::string();
+		std::unique_ptr<Lab> copies[2] = { saved.empty() ? nullptr : Lab::load(saved, why), saved.empty() ? nullptr : Lab::load(saved, why) };
+		const auto untuned = [&](const std::string &reason) { note(Notice::Warning, p.id, p.id + " is not tuned: " + reason); };
+		if (!copies[0] || !copies[1]) {
+			untuned(start ? "the lab could not be copied to try it" : "it reads nothing of " + p.quantity.item);
+			return;
+		}
+		for (int k = 0; k < 2; ++k) {
+			Lab &l = *copies[k];
+			l.set_checking(false);
+			bool ok = l.command(json{ { "do", "scrap" }, { "part", p.id } }.dump(), why); // its rigs go with it
+			for (const Rig &r : mine) {
+				ok = ok && l.command((r.control == "valve" ? json{ { "do", "valve" }, { "burner", r.item }, { "to", k == 0 ? 1.0 : 0.0 } }
+															: json{ { "do", "stir" }, { "vessel", r.item }, { "on", k == 0 } })
+											 .dump(),
+								   why);
+			}
+			if (!ok) {
+				untuned("what it controls could not be tried: " + why);
+				return;
+			}
+		}
+		const double distance = std::fabs(p.target - *start);
+		std::vector<double> t, r;
+		for (int second = 1; second <= TRIAL_SECONDS; ++second) {
+			if (!copies[0]->advance(60, why) || !copies[1]->advance(60, why)) {
+				break;
+			}
+			const std::optional<double> on = measure(copies[0]->view(), p.quantity), off = measure(copies[1]->view(), p.quantity);
+			if (!on || !off) {
+				break;
+			}
+			t.push_back(second);
+			r.push_back(*on - *off);
+			const double moved = std::fabs(r.back());
+			// far enough to hold the target, or levelled off: a third of the trial moved it by a hundredth
+			const size_t third = r.size() * 2 / 3;
+			if ((second >= 10 && distance > 0.0 && moved >= 1.5 * distance) ||
+					(second >= 60 && moved > 0.0 && std::fabs(r.back() - r[third]) < 0.01 * moved)) {
+				break;
+			}
+		}
+		ProcessModel m;
+		if (!fit_process(t, r, m)) {
+			untuned("nothing it controls moves " + label(LabView{}, p.quantity));
+			return;
+		}
+		const double span = m.integrating ? t.back() : m.tau;
+		const PiGains g = simc(m, closed_loop_time(m, static_cast<Speed>(p.speed), span), 2.0 * STEP_SECONDS);
+		p.gain = m.gain;
+		p.tau = m.integrating ? 0.0 : m.tau;
+		p.theta = m.theta;
+		retune(p, true);
+		p.kc = g.kc;
+		p.ti = g.ti;
+		p.period = std::clamp<int64_t>(std::llround(span / 10.0 / STEP_SECONDS), 600, 36000); // a tenth of its time: 10 s to 10 min
+		const std::string u = unit(p.quantity);
+		note(Notice::Event, p.id,
+				p.id + " tuned: " + (m.integrating ? text_of("%.3g ", m.gain) + u + " a second, full on" : text_of("%.3g ", m.gain) + u + " full on, " + text_of("over %.0f s", m.tau)) +
+						text_of(", after %.0f s; ", m.theta) + text_of("gain %.3g, ", g.kc) + text_of("integral time %.0f s", g.ti));
+	}
+
 	// a control set, at a step boundary, by a rig or by the player's command;
 	// false when it cannot be set now (a vessel off the bench is not stirred)
 	bool set_control(const std::string &item_id, const std::string &control, double value, const std::string &by) {
@@ -503,9 +586,23 @@ struct Lab::Impl {
 		std::vector<std::string> failing;
 		if (check) {
 			failing = check_G2(parts, wires, before);
+			if (failing.empty()) {
+				failing = check_G3(parts, wires, before);
+			}
+			if (failing.empty()) {
+				failing = check_G4(parts);
+			}
 		}
 		for (const RigAction &a : done.actions) {
 			const Rig &rig = rigs[a.rig];
+			if (a.follow) {
+				// a controller's rig: the control follows it where it differs, and nobody notes each step (Stage 26)
+				const std::optional<double> now = control_now(rig.item, rig.control);
+				if (now && std::fabs(*now - a.value) > 1e-12) {
+					set_control(rig.item, rig.control, a.value, rig.from);
+				}
+				continue;
+			}
 			if (set_control(rig.item, rig.control, a.value, rig.from)) {
 				note(Notice::Detail, rig.item,
 						rig.from + (rig.control == "valve" ? text_of(" set the valve of " + rig.item + " to %.0f%%", 100.0 * a.value)
@@ -585,7 +682,19 @@ struct Lab::Impl {
 			if (p.kind == PartKind::Writer) {
 				j["says"] = p.says;
 			}
-			if (p.kind == PartKind::Monitor) {
+			if (p.kind == PartKind::Controller) {
+				j["watching"] = p.watching;
+				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
+				j["target"] = num(p.target);
+				j["speed"] = p.speed;
+				j["tuned"] = p.tuned;
+				j["process"] = { num(p.gain), num(p.tau), num(p.theta) };
+				j["gains"] = { num(p.kc), num(p.ti) };
+				j["period"] = p.period;
+				j["state"] = { num(p.integral), num(p.level), num(p.duty) };
+				j["pwm"] = { p.phase, p.on_steps };
+				j["pulse"] = p.pulse;
+			} else if (p.kind == PartKind::Monitor) {
 				j["watching"] = p.watching;
 				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
 				j["compare"] = OPS[static_cast<int>(p.comparison.op)];
@@ -610,6 +719,9 @@ struct Lab::Impl {
 		for (const Rig &x : rigs) {
 			r.push_back({ { "from", x.from }, { "item", x.item }, { "control", x.control }, { "change", x.change }, { "on", maybe(x.on) }, { "off", maybe(x.off) }, { "any", maybe(x.any) },
 					{ "seen", x.seen } });
+			if (x.follow) {
+				r.back()["follow"] = true;
+			}
 		}
 		out["rigs"] = r;
 		json k = json::array();
@@ -662,7 +774,23 @@ struct Lab::Impl {
 			}
 			p.own = x.at("own").get<bool>();
 			p.out = x.at("out").get<bool>();
-			if (p.kind == PartKind::Monitor) {
+			if (p.kind == PartKind::Controller) {
+				p.watching = x.at("watching").get<bool>();
+				const json &q = x.at("quantity");
+				p.quantity = Quantity{ q.at("item").get<std::string>(), q.at("what").get<std::string>(), q.at("measure").get<std::string>() };
+				p.speed = x.at("speed").get<int>();
+				p.tuned = x.at("tuned").get<bool>();
+				p.period = x.at("period").get<int64_t>();
+				p.phase = x.at("pwm").at(0).get<int64_t>();
+				p.on_steps = x.at("pwm").at(1).get<int64_t>();
+				p.pulse = x.at("pulse").get<bool>();
+				if (!exact(x.at("target"), p.target) || !exact(x.at("process").at(0), p.gain) || !exact(x.at("process").at(1), p.tau) || !exact(x.at("process").at(2), p.theta) ||
+						!exact(x.at("gains").at(0), p.kc) || !exact(x.at("gains").at(1), p.ti) || !exact(x.at("state").at(0), p.integral) || !exact(x.at("state").at(1), p.level) ||
+						!exact(x.at("state").at(2), p.duty)) {
+					why = why.empty() ? "the save holds a controller that cannot be read" : why;
+					return false;
+				}
+			} else if (p.kind == PartKind::Monitor) {
 				p.watching = x.at("watching").get<bool>();
 				const json &q = x.at("quantity");
 				p.quantity = Quantity{ q.at("item").get<std::string>(), q.at("what").get<std::string>(), q.at("measure").get<std::string>() };
@@ -690,6 +818,7 @@ struct Lab::Impl {
 			r.control = x.at("control").get<std::string>();
 			r.change = x.at("change").get<bool>();
 			r.seen = x.at("seen").get<bool>();
+			r.follow = x.value("follow", false);
 			if (!maybe(x.at("on"), r.on) || !maybe(x.at("off"), r.off) || !maybe(x.at("any"), r.any)) {
 				return false;
 			}
@@ -1743,13 +1872,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		Part &p = parts[static_cast<size_t>(at)];
 		if (!senses(p.kind)) {
-			why = "\"" + p.id + "\" senses nothing: a monitor senses an item";
+			why = "\"" + p.id + "\" senses nothing: a monitor or a controller senses an item";
 			return false;
 		}
 		if (what == "unsense") {
 			p.quantity = Quantity{};
 			p.watching = false;
 			p.last.reset();
+			retune(p, false);
 			return true;
 		}
 		const std::string item = c.value("item", std::string());
@@ -1762,6 +1892,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.quantity = Quantity{ item, "", "g" };
 			p.watching = false;
 			p.last.reset();
+			retune(p, false);
 		}
 		return true;
 	}
@@ -1816,7 +1947,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.says = says;
 			return true;
 		}
-		if (p.kind != PartKind::Monitor) {
+		if (p.kind != PartKind::Monitor && p.kind != PartKind::Controller) {
 			why = std::string("a") + (p.kind == PartKind::Alarm ? "n alarm" : " circuit") + " has nothing to set";
 			return false;
 		}
@@ -1832,6 +1963,28 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (!valid(q, why)) {
 			return false;
+		}
+		if (p.kind == PartKind::Controller) {
+			// a target and a speed (Stage 26); then it tries what it controls, to tune itself
+			if (q.what == "met") {
+				why = "a controller holds a quantity of an item, not a goal";
+				return false;
+			}
+			if (!c.contains("target") || !c.at("target").is_number() || !std::isfinite(c.at("target").get<double>())) {
+				why = "a controller is set to a \"target\": the value it holds the quantity at";
+				return false;
+			}
+			const std::string speed = c.value("speed", std::string("normal"));
+			if (speed != "gentle" && speed != "normal" && speed != "fast") {
+				why = "a controller's \"speed\" is gentle, normal or fast";
+				return false;
+			}
+			p.watching = true;
+			p.quantity = q;
+			p.target = c.at("target").get<double>();
+			p.speed = speed == "gentle" ? 0 : speed == "normal" ? 1 : 2;
+			tune(at);
+			return true;
 		}
 		Comparison cmp;
 		if (!c.contains("compare") || !c.at("compare").is_string() || !op_of(c.at("compare").get<std::string>(), cmp.op)) {
@@ -1908,6 +2061,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			rigs.erase(there);
+			if (parts[static_cast<size_t>(from)].kind == PartKind::Controller) {
+				tune(from); // what it controls is not what it was
+			}
 			return true;
 		}
 		if (!sends(parts[static_cast<size_t>(from)].kind)) {
@@ -1924,6 +2080,25 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (there != rigs.end()) {
 			why = "a rig already runs from \"" + r.from + "\" to the " + r.control + " of \"" + r.item + "\"";
 			return false;
+		}
+		if (parts[static_cast<size_t>(from)].kind == PartKind::Controller) {
+			// it follows the controller's level: a valve to it, stirring by PWM (Stage 26)
+			if (r.control != "valve" && r.control != "stir") {
+				why = "a controller's rig follows its level: a burner's valve, or a vessel's stirring by PWM; a timer's reset cannot";
+				return false;
+			}
+			if (c.contains("on") || c.contains("off") || c.contains("change")) {
+				why = "a controller's rig has no settings: the control follows its level";
+				return false;
+			}
+			if (there != rigs.end()) {
+				why = "a rig already runs from \"" + r.from + "\" to the " + r.control + " of \"" + r.item + "\"";
+				return false;
+			}
+			r.follow = true;
+			rigs.push_back(r);
+			tune(from);
+			return true;
 		}
 		r.change = c.contains("change");
 		if (r.change && (c.contains("on") || c.contains("off"))) {
@@ -2937,6 +3112,15 @@ std::string Lab::digest() const {
 			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
 				hash.update_i64(p.notice_level); // what it hears, or writes, decides what is signalled
 			}
+			if (p.kind == PartKind::Controller) { // a bench without one digests as before (Stage 26)
+				for (const double v : { p.target, p.gain, p.tau, p.theta, p.kc, p.ti, p.integral, p.level, p.duty }) {
+					hash.update_double(v);
+				}
+				for (const int64_t v : { static_cast<int64_t>(p.speed), p.period, p.phase, p.on_steps }) {
+					hash.update_i64(v);
+				}
+				hash.update_u64((p.tuned ? 1u : 0u) | (p.pulse ? 2u : 0u));
+			}
 		}
 		for (const Wire &w : m.wires) {
 			text(w.from);
@@ -2946,7 +3130,7 @@ std::string Lab::digest() const {
 			text(r.from);
 			text(r.item);
 			text(r.control);
-			hash.update_u64((r.change ? 1u : 0u) | (r.seen ? 2u : 0u));
+			hash.update_u64((r.change ? 1u : 0u) | (r.seen ? 2u : 0u) | (r.follow ? 4u : 0u));
 			maybe(r.on);
 			maybe(r.off);
 			maybe(r.any);

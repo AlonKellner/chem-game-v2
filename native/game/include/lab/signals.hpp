@@ -21,14 +21,17 @@ namespace lab {
 // its level (§13.4), about its item if it names one. A writer writes a
 // notice of its own (its level, its words) when its input turns on: with
 // notice parts, the lab's notices are a bus parts post to and hear from.
-enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4, Writer = 5 };
-constexpr int PART_KINDS = 6;
+// A controller holds a quantity it senses at a target, by a level from 0 to 1
+// its rigs follow (Stage 26).
+enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4, Writer = 5, Controller = 6 };
+constexpr int PART_KINDS = 7;
+constexpr double STEP_SECONDS = 1.0 / 60.0;
 constexpr size_t MAX_SAYS = 80; // a writer's words, in bytes
-const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit", "notice", "writer"
+const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circuit", "notice", "writer", "controller"
 bool part_kind_of(std::string_view name, PartKind &kind);
 // whether a part sends a signal: an alarm and a writer only take one, a circuit's parts send theirs
 bool sends(PartKind kind);
-// whether a part senses an item (§13.3, Stage 26): a monitor
+// whether a part senses an item (§13.3, Stage 26): a monitor, a controller
 bool senses(PartKind kind);
 
 struct Part {
@@ -47,6 +50,20 @@ struct Part {
 	// a timer: its preset and what is left of it, in steps of 1/60 s
 	int64_t preset = 5 * 60 * 60;
 	int64_t left = 5 * 60 * 60;
+
+	// a controller (Stage 26): what it holds the quantity at, and how fast (0 gentle, 1 normal, 2 fast); set
+	// when `watching`. What its trial found (`tuned`): the process and the PI gains; its PWM period, in steps.
+	double target = 0.0;
+	int speed = 1;
+	bool tuned = false;
+	double gain = 0.0, tau = 0.0, theta = 0.0; // the process (lab/control.hpp: ProcessModel); tau 0: integrating
+	double kc = 0.0, ti = 0.0;
+	int64_t period = 0;
+	// its state: the error's integral (the unit times seconds), its level, and its PWM: the step in the period,
+	// the period's steps on (from its level at the period's start, `duty`), and whether this step is on
+	double integral = 0.0, level = 0.0, duty = 0.0;
+	int64_t phase = 0, on_steps = 0;
+	bool pulse = false;
 
 	// its state at the end of the last step
 	std::optional<double> last; // a monitor's last reading
@@ -70,6 +87,7 @@ struct Wire {
 struct Rig {
 	std::string from, item, control;
 	bool change = false; // set on either change of the signal; otherwise on its turning on and off
+	bool follow = false; // a controller's: the control follows its level (a valve) or its PWM (stirring), every step
 	std::optional<double> on, off, any; // `any`: the setting on a change
 	bool seen = false; // the signal it last acted on
 	bool operator==(const Rig &) const = default;
@@ -78,6 +96,7 @@ struct Rig {
 struct RigAction {
 	size_t rig = 0; // its index
 	double value = 0.0;
+	bool follow = false; // what a controller's rig follows: applied where the control differs, and noted by nobody
 };
 
 struct SignalStep {
@@ -107,6 +126,18 @@ bool enabled(const std::string &id, const std::vector<Wire> &wires, const std::v
 
 // A timer reset (by hand or by a rig): back to its preset, its signal off.
 void reset(Part &timer);
+
+// A controller's tuning found, or lost: its gains and PWM period from the process (Stage 26), its integral
+// and level from nothing.
+void retune(Part &controller, bool tuned);
+
+// Invariant G3 (GAME_SPEC §18): a controller's level is within 0 and 1, and 0 while its inputs, as they were
+// before, do not let it or it is unset or untuned; its own condition is its level above 0. Empty when it holds.
+std::vector<std::string> check_G3(const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Part> &before);
+// Invariant G4: a controller's PWM is on, in each period, for the steps its level at the period's start
+// gives: its on steps are that share of the period, rounded, and each step is on while the step's place in
+// the period is under them.
+std::vector<std::string> check_G4(const std::vector<Part> &parts);
 
 // Invariant G2 (GAME_SPEC §18): every part's signal is its own condition
 // while its inputs, as they were before, let it. Empty when it holds.

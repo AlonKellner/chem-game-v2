@@ -1627,13 +1627,16 @@ so the sessions' records are unchanged.
   - **Tuned by trying the process.** When it is set, and whenever a rig from it is made or taken
     off, it tries what it controls on a copy of the lab: the copy runs with every control rigged
     from it full on, and again full off, from the lab as it stands, until the difference between the
-    two readings reaches the distance to the target (twice over) or an hour of the lab's time
-    passes. That difference is fitted with a first-order process with a delay (its gain `K`, its
+    two readings reaches half again the distance to the target, or levels off (a third of the
+    trial moved it by under a hundredth), or an hour of the lab's time passes; it is read each second. That difference is fitted with a first-order process with a delay (its gain `K`, its
     time constant `tau`, its delay `theta`; a process that does not level off within the trial, as
     an integrator, its slope `K / tau`). The gains are Skogestad's SIMC rules for a PI controller
-    (Skogestad 2003): the closed loop's time `tau_c` is `tau` (gentle), `max(theta, tau / 4)`
-    (normal) or `theta` (fast, SIMC's tight choice); `Kc = tau / (K (tau_c + theta))`,
-    `Ti = min(tau, 4 (tau_c + theta))`. Its direction is the sign of `K`.
+    (Skogestad 2003): the closed loop's time `tau_c` is the process's own time `T` (gentle), a
+    quarter of it (normal) or a twentieth (fast), never under `theta` (SIMC's tight choice, which a
+    process with no delay would make endless); `T` is `tau`, or the trial's length for an
+    integrator; `Kc = tau / (K (tau_c + theta))`, `Ti = min(tau, 4 (tau_c + theta))`, or for an
+    integrator `Kc = 1 / (k' (tau_c + theta))`, `Ti = 4 (tau_c + theta)`; the delay is at least two
+    steps (a step to read, a step to act). Its direction is the sign of `K`.
   - **The law.** Each step, the error is the target less the reading; the level is
     `Kc (e + I / Ti)`, kept within 0 and 1; the integral `I` grows by the error times the step only
     while the level is not held at a limit it would pass (no wind-up). It starts at 0 when the
