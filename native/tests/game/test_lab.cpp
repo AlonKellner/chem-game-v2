@@ -6,6 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -739,4 +740,27 @@ TEST_CASE("lab: a drain comes off when either of its vessels is moved away, stow
 		REQUIRE_MESSAGE(run(*l, R"({"do": "move", "items": ["beaker"], "by": [6, -4]})", &why), why);
 		CHECK(drains(*l) == 0);
 	}
+}
+
+TEST_CASE("lab: every glass vessel of every bench has ISO 3819's least wall for its capacity, and the calibrated floor (Stage 23)") {
+	// ISO 3819:2015, Table 1 (low-form beakers): 50 mL 0.8 mm, 250 mL 1.1 mm, 500 mL 1.3 mm. The floors are
+	// calibrated: a supplier's 2.6 mm at 250 mL, the others in the ratio of the walls (docs/DATA_SOURCES.md)
+	const std::map<int, std::pair<double, double>> by_capacity = { { 50, { 0.8, 1.9 } }, { 250, { 1.1, 2.6 } }, { 500, { 1.3, 3.1 } } };
+	int vessels = 0;
+	for (const char *bench : { "data/benches/demo.json", "data/benches/lab.json" }) {
+		const nlohmann::json j = nlohmann::json::parse(read(bench));
+		for (const nlohmann::json &item : j.at("items")) {
+			if (item.value("wall", "") != "glass") {
+				continue;
+			}
+			CAPTURE(bench);
+			CAPTURE(item.at("id").get<std::string>());
+			const auto it = by_capacity.find(item.at("volume_ml").get<int>());
+			REQUIRE(it != by_capacity.end());
+			CHECK(item.at("wall_mm").get<double>() == it->second.first);
+			CHECK(item.at("floor_mm").get<double>() == it->second.second);
+			++vessels;
+		}
+	}
+	CHECK(vessels == 12);
 }

@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 24)
+
+- **Every number in `data/` has a known origin** (`data/sources.json`, ctest `data_sources` with
+  its self-test): measured, with the tests that hold it to its source and its row in
+  `docs/DATA_SOURCES.md`; calibrated, with why; or the game's design. A value with no entry, a
+  named test or row that does not exist, or an entry that matches nothing fails the gate.
+- **The audit's new checks**: the species table read back against its cited rows; molar masses
+  against CIAAW's atomic weights (now documented); molar volumes against the cited densities; the
+  apparent molar volumes against their densities; the hydrates' dissociation pressures against
+  NBS and Cotti et al.; malachite's activation energy in Seguin's range; three more of the CRC's
+  activity coefficients; water's absorption at 755–780 nm (Kou et al.); every glass vessel of
+  every bench at ISO 3819's wall. The bench's calibrated equipment is documented.
+
 ## 0.24.0 (2026-11-21, Stage 23)
 
 - §12: **measured colours**: copper sulfate solution's absorption from NBS Circular 484 (1949),

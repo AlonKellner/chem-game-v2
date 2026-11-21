@@ -5,6 +5,19 @@ Every physical constant and material property used by the game, with its source.
 principle 12). Molar masses are derived by the build from the formulas and the standard atomic
 weights of `data/elements.json`.
 
+**Atomic weights** (`data/elements.json`): the abridged standard atomic weights of CIAAW (IUPAC's
+Commission on Isotopic Abundances and Atomic Weights), "Abridged Standard Atomic Weights 2024"
+(ciaaw.org/abridged-atomic-weights.htm, after the "Atomic Weights 2021" report; read 2026-11-21):
+H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed.
+Check: each molar mass the build derives is these summed by the formula (water 18.015, the
+pentahydrate 249.677): `sources: molar masses are IUPAC's atomic weights`.
+
+**Every number in `data/` has an entry in `data/sources.json`** saying whether it is measured
+(with the tests that hold it to its source and the phrases of its row here), calibrated (why, and
+its row here) or a choice of the game's design; `tools/check_sources.py` (the ctest entries
+`data_sources` and `data_sources_self_test`) fails on a value with no entry, a named test or row
+that does not exist, and an entry that matches nothing.
+
 ## Verified species data (298.15 K, 1 bar)
 
 These rows are in `data/species.json` and used by the game. Sources:
@@ -30,6 +43,9 @@ These rows are in `data/species.json` and used by the game. Sources:
 | CuSO4(s) | −771.4 ± 1.2 | 109.2 ± 0.4 | 98.531 | NIST: CODATA (Chase lists −769.98 and 109.05); Cp from Chase's fit (298–2000 K) |
 | Cu2CO3(OH)2(s), malachite | −1053.95 ± 2.1 | 166.3 ± 2.5 | 154.3 ± 0.93 | ΔHf°: Richardson and Brown, *Enthalpy of Formation of Malachite*, U.S. Bureau of Mines RI 7851, 1974 (−251.9 ± 0.5 kcal/mol, HCl solution calorimetry). S° and Cp: Kiseleva, Ogorodova, Melchakova, Bisengalieva and Becturganov, Phys. Chem. Minerals 19, 322–333, 1992 (adiabatic calorimetry, 3.8–300 K) |
 | Glass, as SiO2 | −910.86 | 41.46 | 48.066 | ΔHf° and S° are quartz's (NIST: Chase; S° from its fit), a stand-in: the wall never reacts, so they cancel. Cp is ISO 3585's 0.8 kJ/kg·K × 60.083 g/mol |
+
+Check: every row read back from the table the build embeds, and the liquid water fit's Cp:
+`sources: every species' thermodynamic row is the one cited`.
 
 Differences from the planning draft: CuO's ΔHf° is −156.06 (the draft had −157.3, another
 compilation's value); glass Cp is 48.07 (the draft guessed about 50).
@@ -82,7 +98,10 @@ each row was read off the page image (retrieved 2026-11-18).
 
 The free energies give the hydrates' dissociation pressures at 25 °C: 7.80 torr (5 → 3), 5.14 torr
 (3 → 1) and 0.0104 torr (1 → 0). Cotti et al., *Cryst. Growth Des.* 2024 (doi
-10.1021/acs.cgd.4c00589), give 10 and 6 mbar for the first two (7.5 and 4.5 torr).
+10.1021/acs.cgd.4c00589), give 10 and 6 mbar for the first two (7.5 and 4.5 torr). The game's
+table gives 7.67, 5.17 and 0.0125 torr (10.2, 6.9 and 0.017 mbar): it keeps Atkins's pentahydrate
+and CODATA's anhydrous salt, which moves the last by a fifth. Check: within 2 %, 2 % and 25 % of
+NBS's, and 5 % and 20 % of Cotti's: `sources: the hydrates' dissociation pressures`.
 
 **Densities.** CuSO4·3H2O: 2.663 g/cm³ measured on synthetic bonattite (*Handbook of Mineralogy*,
 handbookofmineralogy.org/pdfs/bonattite.pdf; the structure gives 2.679 at 100 K, COD 7061267).
@@ -226,6 +245,11 @@ Densities give the molar volumes of solids and liquids (GAME_SPEC §6). Retrieve
 | Cu2CO3(OH)2(s) | 3.8 | The middle of the 3.6–4.0 range for malachite (Handbook of Mineralogy, Mindat, Webmineral, as cited by Wikipedia's infobox). **Medium confidence.** 5 g is 1.3 mL of a 250 mL flask |
 | Glass (wall) | 2.23 | ISO 3585. Not used: a wall takes no room inside its vessel |
 
+Check: each molar volume the build derives is the molar mass over these, the hydrates' included:
+`sources: molar masses are IUPAC's atomic weights, and molar volumes the cited densities`. The
+apparent molar volumes follow from the densities above within 3 %: `sources: the solutes' apparent
+molar volumes`.
+
 | Wall | Cp (J/mol·K) | Source |
 |---|---|---|
 | Latex, as C5H8 (natural rubber, the isoprene unit, 68.119 g/mol) | 130.1 | 1.91 J/g·K, the low end of NETZSCH's 1.91–2.08 J/g·K for natural rubber (analyzing-testing.netzsch.com); another compilation gives 1.55. A 2 g balloon is 3.8 J/K. ΔHf° and S° are set to 0: a wall never reacts, so they cancel |
@@ -359,6 +383,17 @@ by eye; measured spectra are a later stage).
 | A lamp, green; amber | 1.2 times the room's light at 530 nm (width 30); 1.5 at 600 nm (width 30) | the screen's green (#78c88c) and amber (#e0a040), brighter than the wall as a lamp is |
 | A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
 | A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
+
+**Calibrated equipment** (`data/benches/`): none is measured or checked against a source; each was
+chosen when the bench was built, so that the demo runs at a pace a person can follow.
+
+| Value | Where | Basis |
+|---|---|---|
+| A vessel's loss to the room, W/K (`loss`) | 0.1 (the condenser) to 0.9 (the flask) | chosen; free convection and radiation from a vessel of this size are of this order (not checked) |
+| A wall's mass, g (`wall_g`) | 40 (the jar) to 250 (the acid's bottle); 2 for the balloon | chosen; it holds the wall's heat. The flask's 100 g agrees with one supplier's 250 mL beaker (100 ± 10 g, below) |
+| The burner (`celsius`, `conductance`) | a reservoir at 1927 °C (2200 K), 0.25 W/K with its valve fully open | chosen: the flame as a hot body, not measured |
+| The condenser's coolant (`coolant`) | 15 °C, 10 W/K | chosen: tap water, a conductance that takes the steam the demo makes |
+| The balloon's capacity (`capacity_ml`) | 3000 mL | chosen: an ordinary party balloon of about 18 cm |
 
 **Calibrated floors (Stage 21)** (`data/benches/`, each glass vessel's `floor_mm`). No standard
 found gives a beaker's floor: ISO 3819 gives its wall alone.
