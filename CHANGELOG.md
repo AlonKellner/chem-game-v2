@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 24)
+## 0.25.0 (2026-11-21, Stage 24)
 
 - §12.3, §13, §20: **vessels in their whole shape**: glassware made to its standard (the low-form
   beaker, ISO 3819; the conical flask, ISO 1773; the screw-neck bottle, ISO 4796-1), its profile of

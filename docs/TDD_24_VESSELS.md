@@ -23,7 +23,7 @@ GAME_SPEC §12.3 (*A vessel's whole shape*), §13, §20; `docs/DATA_SOURCES.md` 
 | 24.5 | Maps for a shaped vessel's rows: upright bands one map, curved bands one every 4 px, each of one piece; made before the game runs (`chem_tool maps`, `make native`) | Done (the strict maps with rows measured and set aside: below) |
 | 24.6 | The pixel pass: a row's band found in one read; near the rims a row read along its own outline (smooth outlines); stacks cut at the bands, found by halving | Done |
 | 24.7 | The GPU host: the maps' store named; O4 on every picture; the pass's cost | Done (costs below) |
-| 24.8 | Pictures; the user judges by eye and signs off | Awaiting the user |
+| 24.8 | Pictures; the user judges by eye and signs off | Done: signed off 2026-11-21 (GAME_SPEC 0.25.0); the user still sees some pixelation, hard to describe: Stage 25 investigates |
 
 Decided by the user while building (2026-11-21):
 - **Split the renderer** (bending up and down): Stage 24 closes with the shapes, the capacities, the 3D
