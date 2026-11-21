@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 26)
+
+- §13.3: **sensing, drawn and guided**: a monitor senses one item, by a dashed line from its sensing
+  port, at its foot, onto a vessel, a balloon or a burner (`sense`, `unsense`); its settings open only
+  then, in steps of what the item has now: the kind (a material, the vessel, other), the material, the
+  measure, then the comparison. A material's amount (mol), a vessel's total mass and its solids are
+  quantities now. The tutorial teaches it (36 steps).
+- §13.3: **controllers**: a part that holds what it senses at a target, by a level from 0 to 1 its rigs
+  follow (a burner's valve to it, a vessel's stirring by PWM); the player sets the target and a speed
+  (gentle, normal, fast); it tunes itself by trying what it controls on two copies of the lab, fits the
+  response, and takes SIMC's PI gains (Skogestad 2003, held to its published margins), with no wind-up.
+  §18: G3 (its level), G4 (its PWM). Water in the flask held at 60 C within a degree at every speed.
+- §12.3: a square of the screen lists fifteen bodies, not seven: two signal parts side by side were
+  half hidden; a dashed line is one body.
+- A goal's value typed in the editor no longer reads past a valve's per cents (a crash, once the
+  editor's draft grew).
+- Open: a material's volume, a vessel's pressure; a controller tuned again as what it controls changes.
+
 ## 0.26.0 (2026-11-21, Stage 25)
 
 - §12.3: **a shaped vessel's rows read between two knots**, each along the row's own outline, the light
