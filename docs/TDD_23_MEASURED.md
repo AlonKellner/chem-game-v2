@@ -34,7 +34,7 @@ GAME_SPEC §7, §9, §12, §20; `docs/DATA_SOURCES.md`.
 | Malachite's decomposition | Aoki, Yamamoto, Koga, PCCP 23, 15107 (2021), ESI Tables S2, S3: two steps, Ea 147.6 kJ/mol, A 1.15e12 and 6.05e11 /s | high |
 | CuO in dilute sulfuric acid | Majima et al., Metall. Trans. B 11, 209 (1980) via Nicol and Akilan, Hydrometallurgy 178, 7 (2018), Table 4: 2.5e-7 mol/cm²/min at 0.2 M, 25 °C; half order in H⁺; surface controlled (no effect of agitation); Ea 52–86 kJ/mol across four acids | low (second-hand) |
 | The pentahydrate's growth | Tanimoto, Kobayashi, Fujita, Kagaku Kogaku 27, 424 (1963): surface step first order in the concentration difference, kr 0.030, 0.063, 0.120 m/h at 20, 30, 40 °C, Ea 51.5 kJ/mol; in series with mass transfer | high |
-| The pentahydrate's nucleation | no rate law; induction times (Sheng, PhD thesis, Leeds 2012, Table 5.2) fit B = 0.374 (S − 1)^3.07 per litre per second | medium |
+| The pentahydrate's nucleation | no rate law; induction times (Sheng, PhD thesis, Leeds 2012, Table 5.2) fit B = 0.3269 (S − 1)^3.109 per kg of water per second (the first crystal inside each of Sheng's measured ranges: `test_measured.cpp`) | medium |
 | Dehydration | Cheng et al., J. Therm. Anal. Calorim. 135, 2697 (2019), abstract: Ea 71.3, 112.1, 165.2 kJ/mol | medium |
 
 The full reports' source lists are kept with the rows in `docs/DATA_SOURCES.md` as each value is used.

@@ -194,3 +194,44 @@ TEST_CASE("measured: each dehydration's rate at its DTG peak is the first-order 
 		CHECK(std::abs(std::log10(k.prefactor) - row.cheng_log_a) < std::log10(5.2));
 	}
 }
+
+TEST_CASE("measured: the pentahydrate's first crystal appears at Sheng's induction times (Stage 23)") {
+	// Sheng 2012 (PhD thesis, Leeds), Table 5.2: a litre saturated at 30 C, held at 26, 27 and 28 C (S = 1.080,
+	// 1.058, 1.036 by concentration), first crystals after 6120-7200, 10600-20000 and 68000-84000 s. The fit counts
+	// each as one nucleus in 0.98 kg of water at the geometric mean time (least squares): a lower bound. The first
+	// crystal must appear inside each measured range.
+	const struct {
+		double celsius, s, first, last;
+	} rows[] = { { 26.0, 1.080, 6120.0, 7200.0 }, { 27.0, 1.058, 10600.0, 20000.0 }, { 28.0, 1.036, 68000.0, 84000.0 } };
+	const double thirty = saturation(303.15);
+	for (const auto &row : rows) {
+		CAPTURE(row.celsius);
+		const double kelvin = row.celsius + 273.15, ms = saturation(kelvin);
+		// the model's own supersaturation of Sheng's solution, against Sheng's
+		CHECK(near(thirty / ms, row.s, 0.004));
+		World::Builder b(builtin_species());
+		const CellId cell = b.add_cell("flask");
+		const CellId bath = b.add_reservoir("bath", kelvin);
+		b.add_edge(cell, bath, PHASES_NONE, 1e6);
+		const double water = 0.98 / 0.018015;
+		b.set_amount(cell, builtin::water, Amount{ quanta(water) }).set_amount(cell, builtin::copper_sulfate_aq, Amount{ quanta(row.s * ms * 0.98) });
+		b.set_temperature(cell, kelvin);
+		std::string why;
+		auto world = b.build(&why);
+		REQUIRE_MESSAGE(world.has_value(), why);
+		Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+		const double step = 10.0;
+		sim.set_step_seconds(step);
+		double seen = 0.0;
+		for (int s = 1; s <= 12000 && seen == 0.0; ++s) {
+			sim.step();
+			if (sim.world().particles(cell, builtin::copper_sulfate_pentahydrate) > 0) {
+				seen = s * step;
+			}
+		}
+		REQUIRE(seen > 0.0);
+		CHECK(seen >= row.first);
+		CHECK(seen <= row.last);
+		MESSAGE(row.celsius << " C: the first crystal after " << seen << " s (Sheng: " << row.first << "-" << row.last << " s)");
+	}
+}
