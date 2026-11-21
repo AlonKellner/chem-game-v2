@@ -52,6 +52,14 @@ struct IonCount {
 struct IonDef {
 	std::string_view name; // "SO4-2"; a neutral particle: its species' id
 	int32_t charge = 0;
+	double diffusion = 0.0; // its diffusion coefficient in water at 25 C, m^2/s; 0: not known (GAME_SPEC §7)
+};
+
+// The solvent's viscosity at one temperature (GAME_SPEC §7): what scales the
+// ions' diffusion away from 25 C.
+struct ViscosityPoint {
+	double kelvin = 0.0;
+	double pascal_seconds = 0.0;
 };
 
 // Pitzer's parameters of one cation and one anion (GAME_SPEC §10).
@@ -68,6 +76,7 @@ struct SolutionDef {
 	double b = 1.2;
 	std::vector<IonDef> ions;
 	std::vector<PairDef> pairs;
+	std::vector<ViscosityPoint> viscosity; // the solvent's, by rising temperature; empty: diffusion is not scaled
 };
 
 struct SpeciesDef {
@@ -123,11 +132,14 @@ struct Term {
 // Surface (GAME_SPEC §7, §9): the reaction happens at the surface of one of
 // its solids, `in`, a reactant (it dissolves) or a product (it grows):
 //
-//   rate = prefactor * e^(-activation / RT) * area * m_driver * mixing * affinity factor   [mol/s]
+//   at the surface:  prefactor * e^(-activation / RT) * area * m_driver^driver_order * affinity factor
+//   by transport:    area * (Sh D / d) * (C - C_eq) / nu   (Sh = 2 * mixing)
+//   rate: the two in series, 1 / rate = 1 / surface + 1 / transport   [mol/s]
 //
 // The area is that of the solid's particles, equal spheres:
-// (36 pi)^(1/3) N^(1/3) (n v)^(2/3). `driver`, if any, is a dissolved reactant
-// whose molality (its concentration, not its activity) the rate is proportional to. Where `in` is a product, new
+// (36 pi)^(1/3) N^(1/3) (n v)^(2/3), d their diameter. `driver`, if any, is a dissolved reactant
+// whose molality (its concentration, not its activity) the surface rate goes with; it is what transport
+// brings, or else the reaction's dissolved species (chem/sim.hpp). Where `in` is a product, new
 // particles form in a supersaturated solution, nucleation * (kg of solvent) *
 // (S - 1)^nucleation_order per second, S = e^(A/RT); each begins as one quantum.
 struct Kinetics {
@@ -139,6 +151,7 @@ struct Kinetics {
 	SpeciesId driver; // Surface: a dissolved reactant, or none
 	double nucleation = 0.0; // Surface: 1/kg/s
 	double nucleation_order = 0.0;
+	double driver_order = 1.0; // Surface: the surface rate goes with m_driver to this power
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {
@@ -147,8 +160,9 @@ constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation
 constexpr Kinetics equilibrium() {
 	return Kinetics{ Kinetics::Law::Equilibrium, SpeciesId{}, 0.0, 0.0, SpeciesId{}, 0.0, 0.0 };
 }
-constexpr Kinetics surface(SpeciesId in, double prefactor, double activation, SpeciesId driver = {}, double nucleation = 0.0, double nucleation_order = 0.0) {
-	return Kinetics{ Kinetics::Law::Surface, in, prefactor, activation, driver, nucleation, nucleation_order };
+constexpr Kinetics surface(SpeciesId in, double prefactor, double activation, SpeciesId driver = {}, double nucleation = 0.0, double nucleation_order = 0.0,
+		double driver_order = 1.0) {
+	return Kinetics{ Kinetics::Law::Surface, in, prefactor, activation, driver, nucleation, nucleation_order, driver_order };
 }
 
 struct ReactionDef {
@@ -208,7 +222,8 @@ public:
 	// ion out of range or a count that is not positive, or ions whose charges
 	// do not sum to its own; a pair is not one cation and one anion, or a
 	// parameter is not finite, or an alpha or b not positive; there are more
-	// than MAX_PARTICLES particles. A dissolved species that names no ions is
+	// than MAX_PARTICLES particles; an ion's diffusion coefficient is negative
+	// or not finite; the solvent's viscosity is not positive at rising temperatures. A dissolved species that names no ions is
 	// given a neutral particle of its own.
 	static std::optional<SpeciesTable> make(std::vector<ElementDef> elements, std::vector<SpeciesDef> species, std::string *why = nullptr,
 			SolutionDef solution = {});

@@ -202,7 +202,7 @@ TEST_CASE("tutorial: followed with its own gestures, step by step, it completes 
 		}
 		played += static_cast<int>(gestures.size());
 		// then the lab is waited on, as a player would
-		p.watch([&] { return p.tutorial().step != step || p.tutorial().state != TutorialView::Running; }, 3600);
+		p.watch([&] { return p.tutorial().step != step || p.tutorial().state != TutorialView::Running; }, 3 * 3600); // the crystals take two hours
 		CHECK(p.tutorial().state != TutorialView::Failed);
 		if (p.tutorial().state == TutorialView::Failed) {
 			FAIL(p.tutorial().failure);
@@ -254,7 +254,7 @@ TEST_CASE("tutorial: played as a person plays it, slowly, at the speed it asks f
 			}
 		}
 		// then waits, looking at the card every half second
-		step_limit = p.ui->lab().step() + 3600 * 60;
+		step_limit = p.ui->lab().step() + 3 * 3600 * 60; // the longest step: the crystals, two hours
 		while (p.tutorial().step == step && p.tutorial().state == TutorialView::Running) {
 			REQUIRE_MESSAGE(p.ui->lab().step() < step_limit, "waited too long on step " << step + 1 << ": " << title);
 			p.frames(45); // reading the card

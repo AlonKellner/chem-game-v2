@@ -98,7 +98,7 @@
 		{
 			"title": "Stir",
 			"text": "Click the flask to choose it, then \"stir\" in the column on the right.",
-			"why": "Stirring brings fresh acid to the surface of the grains.",
+			"why": "It keeps the grains in the acid and the liquid even. The acid reaches them far faster than they can use it, so it is their surface and its warmth that set the pace, not the stirring.",
 			"checks": [{"text": "the flask is stirred", "when": {"item": "flask", "stirred": true}}],
 			"play": [{"click": "item:flask"}, {"click": "stir:flask"}]
 		},
@@ -121,7 +121,7 @@
 		{
 			"title": "Stop stirring",
 			"text": "Choose the flask and click \"stirring\" to stop.",
-			"why": "Crystals grow larger and fewer from a still solution.",
+			"why": "Its work is done: the oxide is gone. (Stirring would bring the salt to growing crystals faster, but they grow well enough still.)",
 			"checks": [{"text": "the flask is not stirred", "when": {"item": "flask", "stirred": false}}],
 			"play": [{"click": "item:flask"}, {"click": "stir:flask"}]
 		},
@@ -221,8 +221,8 @@
 		},
 		{
 			"title": "Let the crystals grow",
-			"text": "Wait a few more minutes. Point at the flask: the readout counts the crystals.",
-			"why": "Near room temperature the solution is only slightly over saturation, and the last of the copper sulfate comes out slowly.",
+			"text": "Wait about two hours of the lab's time (at 600x, twelve seconds). Point at the flask: the readout counts the crystals.",
+			"why": "New crystals start rarely, so they are few, and the salt comes out onto them only as fast as it diffuses to them through the still solution: they grow large, and slowly.",
 			"checks": [{"text": "more than 8.9 g of crystals", "when": {"item": "flask", "species": "copper_sulfate_pentahydrate", "above_g": 8.9}}]
 		},
 		{

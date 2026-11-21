@@ -104,6 +104,100 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 // reaction never passes its own equilibrium, so each
 // application raises the entropy (T2), and at equilibrium nothing moves and
 // nothing is carried (D3).
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing) {
+	SurfaceSteps steps;
+	const Kinetics &kinetics = reaction.kinetics();
+	if (kinetics.law != Kinetics::Law::Surface || !(temperature > 0.0) || a == 0.0 || a != a) {
+		return steps;
+	}
+	const double rt = GAS_CONSTANT * temperature;
+	const bool forward = a > 0.0;
+	const double drive = forward ? a / rt : -a / rt; // |A| / RT
+	// at the surface: k(T) m_driver^q |f|
+	const double driver = table.has(kinetics.driver) ? molality(table, cell, kinetics.driver) : 1.0; // its concentration (GAME_SPEC §7)
+	steps.surface = kinetics.prefactor * exp(-kinetics.activation / rt) * (kinetics.driver_order == 1.0 ? driver : pow(driver, kinetics.driver_order)) * (1.0 - exp(-drive));
+	steps.transport = HUGE_VAL;
+	steps.both = steps.surface;
+	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it
+	SpeciesId carried = table.has(kinetics.driver) ? kinetics.driver : SpeciesId{};
+	for (const Term &t : reaction.terms()) {
+		if (!table.has(carried) && table.species(t.species).phase == Phase::Aqueous) {
+			carried = t.species;
+		}
+	}
+	const double d = particle_diameter(table, cell, kinetics.in);
+	const double coefficient = table.has(carried) ? diffusion(table, carried, temperature) : 0.0;
+	if (!(d > 0.0) || !(coefficient > 0.0)) {
+		return steps; // no particles yet (they nucleate), or a species whose diffusion is not known
+	}
+	const int32_t nu_signed = reaction.nu(carried);
+	const double nu = nu_signed < 0 ? -nu_signed : nu_signed;
+	// its concentration in the solvent, mol/m^3
+	double solvent = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		solvent += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * def.molar_volume : 0.0;
+	}
+	if (!(solvent > 0.0)) {
+		return steps;
+	}
+	// How far it is from C_eq, the concentration at which the reaction would be at equilibrium, all else held:
+	// Newton's steps in ln n on the affinity (its activity, coefficients and all), each from the affinity's
+	// slope there, until a step would move the gap by under 1%. Near equilibrium (growth, the usual case) one
+	// step; with none of it yet (a crystal dissolving into pure water) it starts from one quantum's worth.
+	const auto x = static_cast<size_t>(carried.index);
+	const bool used = forward == (nu_signed < 0); // this direction uses it up: it is carried to the surface
+	CellState here = cell;
+	const int64_t n = here.amount[x] > 0 ? here.amount[x] : static_cast<int64_t>(nu);
+	here.amount[x] = n;
+	bool defined = false;
+	double at = affinity(table, here, reaction.terms(), temperature, defined); // every reading from the one function: their differences are what counts
+	if (!defined || at != at || at == 0.0 || (at > 0.0) != forward) {
+		return steps;
+	}
+	double ratio = 0.0; // ln (C_eq / C)
+	if (at == HUGE_VAL || at == -HUGE_VAL) { // another species is absent: at equilibrium all of it is used, or none
+		if (!used) {
+			return steps;
+		}
+		ratio = -1e300;
+	}
+	for (int i = 0; i < 8 && ratio > -1e300; ++i) {
+		const double from = static_cast<double>(here.amount[x]);
+		const int64_t dn = here.amount[x] / 1000000 > 0 ? here.amount[x] / 1000000 : 1;
+		here.amount[x] += dn;
+		const double moved = affinity(table, here, reaction.terms(), temperature, defined);
+		const double slope = (moved - at) / log((from + static_cast<double>(dn)) / from); // J/mol per unit of ln n
+		if (!defined || !(slope != 0.0) || slope != slope) {
+			return steps;
+		}
+		const double step = -at / slope;
+		ratio += step;
+		if (ratio > 700.0) {
+			return steps; // it carries away far faster than the surface could make it
+		}
+		if (ratio < -20.0 || (step < 0.02 && step > -0.02)) {
+			break; // all of it used at equilibrium, or the gap within 1%
+		}
+		const double next = static_cast<double>(n) * exp(ratio);
+		if (!(next >= 1.0) || next > 9.0e18) {
+			break;
+		}
+		here.amount[x] = static_cast<int64_t>(next);
+		at = affinity(table, here, reaction.terms(), temperature, defined);
+		if (!defined || at != at || at == HUGE_VAL || at == -HUGE_VAL) {
+			return steps;
+		}
+	}
+	const double c = static_cast<double>(cell.amount[x]) * MOL_PER_QUANTUM / solvent;
+	const double c_eq = static_cast<double>(n) * MOL_PER_QUANTUM / solvent * (ratio < -700.0 ? 0.0 : exp(ratio));
+	const double gap = c > c_eq ? c - c_eq : c_eq - c;
+	steps.transport = 2.0 * mixing * coefficient / d * gap / nu;
+	steps.transported = true;
+	steps.both = steps.surface > 0.0 && steps.transport > 0.0 ? steps.surface * steps.transport / (steps.surface + steps.transport) : 0.0;
+	return steps;
+}
+
 void Simulation::react() {
 	const SpeciesTable &table = world_.species();
 	const auto cells = static_cast<size_t>(world_.cell_count());
@@ -145,19 +239,18 @@ void Simulation::react() {
 			}
 			const double rt = GAS_CONSTANT * probe.temperature();
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
-			const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
 			double wanted = 0.0; // quanta of extent, in the direction of the affinity
 			int64_t born = 0; // new particles, each one quantum of the solid
 			if (!surface) {
+				const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
 				wanted = static_cast<double>(have) / static_cast<double>(-reaction.nu(kinetics.in)) * (1.0 - exp(-rate * factor * step_seconds_));
 			} else {
 				const int32_t nu = reaction.nu(kinetics.in);
 				const double per = static_cast<double>(nu < 0 ? -nu : nu);
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
-				const double driver = table.has(kinetics.driver) ? molality(table, state, kinetics.driver) : 1.0; // its concentration (GAME_SPEC §7)
-				// mol/m^2/s of the solid, at its surface
-				const double flux = rate * driver * world_.meta(cell).mixing * factor * per;
+				// mol/m^2/s of the solid: at its surface and by transport, in series (GAME_SPEC §7), as they are at the step's start
+				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, world_.meta(cell).mixing).both * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
 				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
 				const double g = 4.835975862049409 * cbrt(static_cast<double>(state.particles[in])) * cbrt(solid.molar_volume * solid.molar_volume) * flux;

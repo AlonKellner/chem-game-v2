@@ -1,5 +1,21 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 23)
+
+- §12: **measured colours**: copper sulfate solution's absorption from NBS Circular 484 (1949),
+  malachite's reflectance from the USGS spectral library (GDS801).
+- §7: **a surface reaction is two steps in series**: the reaction at the surface (with an order
+  for its driver) and transport through the liquid, `(Sh D / d)(C − C_eq) / ν`, `C_eq` found from
+  the affinity itself. Stirring raises transport alone, no longer every surface rate.
+  - Ions' diffusion coefficients (Li and Gregory 1974), scaled as T / η by water's viscosity
+    (IAPWS 2008); Nernst–Hartley for the salt and the acid.
+- §7, §9, §20: **every rate measured**: malachite (Koga 2021), the oxide in acid (Majima 1980,
+  second-hand, flagged low), the pentahydrate's growth (Tanimoto 1963) and nucleation (fitted to
+  Sheng 2012's induction times, a lower bound), the dehydrations (Cheng 2019, Yu 2007).
+  - The oxide is controlled at its surface: stirring hardly speeds it; warmth does (69 kJ/mol).
+  - Crystals start rarely and grow by diffusion: the demo's crop is about 1,150 crystals of 1.9 mm
+    after two hours near room temperature (a million of 0.2 mm in fifteen minutes before).
+
 ## 0.23.0 (2026-11-21, Stage 22)
 
 Signed off by the user on 2026-11-21 ("Approved, proceed").

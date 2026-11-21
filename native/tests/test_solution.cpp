@@ -48,7 +48,7 @@ double molality(const World &world, CellId cell, SpeciesId solute) {
 	return world.amount(cell, solute).mol() / (world.amount(cell, builtin::water).mol() * 0.018015);
 }
 
-// the crystallisation with a fast surface, to reach equilibrium quickly
+// the crystallisation with a fast surface, to reach equilibrium quickly (stirred hard too: GAME_SPEC §7's transport)
 Reaction fast_crystallisation() {
 	std::string why;
 	auto r = Reaction::make(builtin_species(), "crystallisation", reaction(builtin::reaction::pentahydrate_crystallization).terms(), &why,
@@ -68,7 +68,7 @@ Saturated saturated(double kelvin, double dissolved) {
 	const CellId bath = b.add_reservoir("bath", kelvin);
 	b.add_edge(cell, bath, PHASES_NONE, 500.0);
 	b.set_amount(cell, builtin::water, mol(100.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_pentahydrate, mol(1.0));
-	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 1000000);
+	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 1000000).set_mixing(cell, 1000.0);
 	if (dissolved > 0.0) {
 		b.set_amount(cell, builtin::copper_sulfate_aq, mol(dissolved));
 	}
@@ -127,7 +127,7 @@ TEST_CASE("solution: dissolving the pentahydrate cools the solution (Stage 6)") 
 	World::Builder b(builtin_species());
 	const CellId cell = b.add_cell("beaker");
 	b.set_amount(cell, builtin::water, mol(100.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_pentahydrate, mol(0.05));
-	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 100000).set_temperature(cell, 298.15);
+	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 100000).set_mixing(cell, 1000.0).set_temperature(cell, 298.15);
 	Simulation sim(build(b), { fast_crystallisation() });
 	sim.set_checking(true);
 	const Totals genesis = totals(builtin_species(), sim.world().snapshot());
@@ -176,7 +176,7 @@ TEST_CASE("solution: a neutral solute lowers water's vapour pressure, so the sol
 	CHECK(lo - pure_lo == doctest::Approx(0.512).epsilon(0.03));
 }
 
-TEST_CASE("solution: copper oxide dissolves in the acid, faster stirred and faster warm (Stage 6)") {
+TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and hardly faster stirred (Stage 6; Stage 23: controlled at its surface)") {
 	const auto time_to_dissolve = [](double kelvin, double mixing, double fraction) {
 		World::Builder b(builtin_species());
 		const CellId cell = b.add_cell("flask");
@@ -204,19 +204,22 @@ TEST_CASE("solution: copper oxide dissolves in the acid, faster stirred and fast
 		CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 		return step * STEP_SECONDS;
 	};
-	const double still = time_to_dissolve(293.15, 1.0, 0.5);
-	const double stirred = time_to_dissolve(293.15, 3.0, 0.5);
-	const double warm = time_to_dissolve(353.15, 1.0, 0.5);
-	CHECK(still > 300.0); // minutes, cold and still
-	CHECK(still / stirred == doctest::Approx(3.0).epsilon(0.02)); // the rate is proportional to the stirring
-	CHECK(still / warm == doctest::Approx(std::exp(50000.0 / GAS_CONSTANT * (1.0 / 293.15 - 1.0 / 353.15))).epsilon(0.05)); // Arrhenius, 50 kJ/mol
-	MESSAGE("half of the oxide gone: " << still << " s still, " << stirred << " s stirred, " << warm << " s at 80 C");
+	const double cold = time_to_dissolve(333.15, 1.0, 0.5);
+	const double still = time_to_dissolve(353.15, 1.0, 0.5);
+	const double stirred = time_to_dissolve(353.15, 3.0, 0.5);
+	CHECK(still > 60.0); // a minute or more, even hot
+	// Majima et al. 1980: the rate does not depend on agitation; the acid reaches the 8 um grains far faster than they use it
+	CHECK(still / stirred == doctest::Approx(1.0).epsilon(0.03));
+	CHECK(still / stirred >= 1.0);
+	const Kinetics &law = reaction(builtin::reaction::copper_oxide_dissolution).kinetics();
+	CHECK(cold / still == doctest::Approx(std::exp(law.activation / GAS_CONSTANT * (1.0 / 333.15 - 1.0 / 353.15))).epsilon(0.05)); // Arrhenius
+	MESSAGE("half of the oxide gone: " << cold << " s at 60 C, " << still << " s at 80 C, " << stirred << " s stirred");
 }
 
 TEST_CASE("solution: with no acid left the oxide stops, and never runs backwards in pure water (Stage 6)") {
 	World::Builder b(builtin_species());
 	const CellId cell = b.add_cell("flask");
-	b.set_amount(cell, builtin::copper_oxide, mol(0.05)).set_particles(cell, builtin::copper_oxide, 1000);
+	b.set_amount(cell, builtin::copper_oxide, mol(0.05)).set_particles(cell, builtin::copper_oxide, 100000);
 	b.set_amount(cell, builtin::water, mol(5.0)).set_amount(cell, builtin::sulfuric_acid_aq, mol(0.01)).set_temperature(cell, 350.0);
 	Simulation sim(build(b), shipped());
 	sim.set_checking(true);
@@ -226,11 +229,14 @@ TEST_CASE("solution: with no acid left the oxide stops, and never runs backwards
 	// the acid is the limiting reagent: all but a trace of it is used
 	CHECK(sim.world().amount(cell, builtin::sulfuric_acid_aq).mol() < 1e-4);
 	CHECK(sim.world().amount(cell, builtin::copper_oxide).mol() == doctest::Approx(0.04).epsilon(0.01));
-	CHECK(sim.world().particles(cell, builtin::copper_oxide) == 1000); // the grains shrank, none vanished
+	CHECK(sim.world().particles(cell, builtin::copper_oxide) == 100000); // the grains shrank, none vanished
 }
 
-TEST_CASE("solution: slow cooling grows fewer, larger crystals than fast cooling (Stage 6)") {
-	// the same hot solution, 3 mol/kg, taken to 20 C through a weak and a strong link
+TEST_CASE("solution: slow cooling grows fewer, larger crystals than fast cooling, if only a little (Stage 6; Stage 23)") {
+	// the same hot solution, 3 mol/kg, taken to 20 C through a weak and a strong link. With measured nucleation
+	// (Stage 23) crystals start rarely and keep starting for hours, while the salt diffuses to the few there are:
+	// fast cooling's head start in supersaturation gives only some more of them. Twelve hours, at quarter-second
+	// steps (the counts are the same at the game's step), for the whole crop.
 	const auto cool = [](double conductance, int64_t &count, double &diameter, double &crop) {
 		World::Builder b(builtin_species());
 		const CellId cell = b.add_cell("flask");
@@ -239,9 +245,10 @@ TEST_CASE("solution: slow cooling grows fewer, larger crystals than fast cooling
 		b.set_amount(cell, builtin::water, mol(20.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_aq, mol(0.06));
 		b.set_amount(cell, builtin::glass, mol(1.5)).set_temperature(cell, 363.15);
 		Simulation sim(build(b), shipped());
+		sim.set_step_seconds(0.25);
 		sim.set_checking(true);
 		const Totals genesis = totals(builtin_species(), sim.world().snapshot());
-		for (int step = 0; step < 60 * 7200; ++step) {
+		for (int step = 0; step < 4 * 12 * 3600; ++step) {
 			sim.step();
 		}
 		count = sim.world().particles(cell, builtin::copper_sulfate_pentahydrate);
@@ -255,8 +262,8 @@ TEST_CASE("solution: slow cooling grows fewer, larger crystals than fast cooling
 	cool(0.15, slow_count, slow_size, slow_crop); // a time constant of 17 minutes
 	cool(5.0, fast_count, fast_size, fast_crop); // of 25 seconds
 	CHECK(slow_count > 0);
-	CHECK(fast_count > 3 * slow_count);
-	CHECK(slow_size > 1.4 * fast_size);
+	CHECK(fast_count > 1.1 * static_cast<double>(slow_count));
+	CHECK(slow_size > 1.03 * fast_size);
 	CHECK(slow_crop == doctest::Approx(fast_crop).epsilon(0.01)); // the same amount comes out: the same equilibrium
 	MESSAGE("slow: " << slow_count << " crystals of " << slow_size * 1e6 << " um; fast: " << fast_count << " of " << fast_size * 1e6 << " um; crop " << slow_crop * 249.677 << " g");
 }
@@ -469,7 +476,7 @@ TEST_CASE("solution: the acid lowers the salt's solubility: the common-ion effec
 	MESSAGE("15 C: " << water << " mol/kg in water, " << ratio << " of it with 1 mol/kg of acid");
 }
 
-TEST_CASE("solution: boiled down, crystals start near 10 g of water; boiled dry and heated on, the salt turns white (Stage 19)") {
+TEST_CASE("solution: boiled down, crystals start once well past saturation, near 7 g of water; boiled dry and heated on, the salt turns white (Stage 19; Stage 23)") {
 	// the demo's copper, 0.0452 mol of CuSO4 in 50 g of water, in a flask over
 	// a flame, its steam leaving to the room's air
 	World::Builder b(builtin_species());
@@ -501,8 +508,9 @@ TEST_CASE("solution: boiled down, crystals start near 10 g of water; boiled dry 
 			break;
 		}
 	}
-	CHECK(first > 8.0);
-	CHECK(first < 12.0);
+	// saturated near 100 C at 9.4 g of water (77 g of CuSO4 per 100 g); measured nucleation needs it well past that
+	CHECK(first > 6.0);
+	CHECK(first < 9.0);
 	CHECK(sim.world().amount(flask, builtin::copper_sulfate).mol() > 0.0451); // white: the anhydrous salt
 	CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 	MESSAGE("crystals start with " << first << " g of water; all anhydrous after " << step / 60 << " s at "

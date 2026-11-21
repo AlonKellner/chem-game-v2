@@ -51,6 +51,17 @@ double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellSta
 // shared equally among its particles, as spheres. 0 when there is none.
 double particle_diameter(const SpeciesTable &table, const CellState &cell, SpeciesId species);
 
+// The solvent's viscosity at T, Pa s (GAME_SPEC §7): the table's, read between
+// its points in the logarithm and held beyond its ends. 0 with no table.
+double solvent_viscosity(const SpeciesTable &table, double temperature);
+
+// A dissolved species' diffusion coefficient in the solvent at T, m^2/s
+// (GAME_SPEC §7): its particles moving together, sum(nu) / sum(nu / D_i) over
+// them (Nernst-Hartley, for a cation and an anion), each D_i measured at 25 C
+// and scaled as T / viscosity(T). 0 when it is not dissolved or a particle of
+// it has no coefficient: not known.
+double diffusion(const SpeciesTable &table, SpeciesId species, double temperature);
+
 // true when the cell holds a dissolved species and no liquid to hold it: not a
 // state a solution can be in (GAME_SPEC §9).
 bool dry_solute(const SpeciesTable &table, const CellState &cell);

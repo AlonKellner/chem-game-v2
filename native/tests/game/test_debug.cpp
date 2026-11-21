@@ -89,10 +89,10 @@ TEST_CASE("debug: each reaction says why it happens and what limits it: too cold
 		CHECK(r.explain.find("carbon dioxide") != std::string::npos);
 		INFO(r.limit);
 		CHECK(begins(r.limit, "too cold: "));
-		CHECK(r.limit.find("fast from about 35") != std::string::npos); // k e^(-Ea/RT) = 1/60 s near 357 C
+		CHECK(r.limit.find("fast from about 29") != std::string::npos); // k e^(-Ea/RT) = 1/60 s near 295 C (Stage 23: Koga's)
 		must(*l, R"({"do": "heat", "burner": "burner", "vessel": "flask"})");
 		must(*l, R"({"do": "valve", "burner": "burner", "to": 1})");
-		must(*l, R"({"do": "wait_until", "item": "flask", "above_c": 380, "timeout": 3600})");
+		must(*l, R"({"do": "wait_until", "item": "flask", "above_c": 300, "timeout": 3600})");
 		const lab::ItemDebug d = l->debug("flask");
 		r = reaction(d, "malachite_decomposition");
 		INFO(r.limit);
@@ -115,15 +115,15 @@ TEST_CASE("debug: each reaction says why it happens and what limits it: too cold
 		}
 		CHECK(reaction(l->debug("flask"), "malachite_decomposition").limit == "no Cu2CO3(OH)2(s) left");
 	}
-	SUBCASE("copper oxide: no acid, then its surface, then stirred") {
+	SUBCASE("copper oxide: no acid, then its surface, which stirring hardly speeds, then stirred") {
 		auto dry = one(R"({"copper_oxide": {"g": 2, "particles": 100000}})");
 		CHECK(reaction(dry->debug("flask"), "copper_oxide_dissolution").limit == "no H2SO4(aq) left");
 		auto l = one(R"({"water": {"g": 100}, "sulfuric_acid_aq": {"mol": 0.1}, "copper_oxide": {"g": 2, "particles": 100000}})");
 		const lab::ReactionDebug r = reaction(l->debug("flask"), "copper_oxide_dissolution");
 		INFO(r.limit);
-		CHECK(begins(r.limit, "limited by its surface: "));
-		CHECK(r.limit.find("cm2 of CuO(s), ") != std::string::npos);
-		CHECK(r.limit.find("of H2SO4(aq); stirring would make it 3 times faster") != std::string::npos);
+		CHECK(begins(r.limit, "limited at its surface: ")); // the reaction there, not the acid reaching it (Stage 23)
+		CHECK(r.limit.find("cm2 of CuO(s), 1 mol/kg of H2SO4(aq)") != std::string::npos);
+		CHECK(r.limit.find("; stirring would hardly speed it") != std::string::npos);
 		must(*l, R"({"do": "stir", "vessel": "flask", "on": true})");
 		CHECK(r.limit != reaction(l->debug("flask"), "copper_oxide_dissolution").limit);
 		CHECK(reaction(l->debug("flask"), "copper_oxide_dissolution").limit.find("; stirred") != std::string::npos);

@@ -93,11 +93,22 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "ion " + std::to_string(i) + " has no name");
 			return std::nullopt;
 		}
+		if (!(solution.ions[i].diffusion >= 0.0) || !finite(solution.ions[i].diffusion)) {
+			set_why(why, "ion " + std::string(solution.ions[i].name) + " has a diffusion coefficient that is negative or not finite");
+			return std::nullopt;
+		}
 		for (size_t j = 0; j < i; ++j) {
 			if (solution.ions[j].name == solution.ions[i].name) {
 				set_why(why, "ion " + std::string(solution.ions[i].name) + " is listed twice");
 				return std::nullopt;
 			}
+		}
+	}
+	for (size_t i = 0; i < solution.viscosity.size(); ++i) {
+		const ViscosityPoint &v = solution.viscosity[i];
+		if (!(v.kelvin > 0.0) || !finite(v.kelvin) || !(v.pascal_seconds > 0.0) || !finite(v.pascal_seconds) || (i > 0 && !(v.kelvin > solution.viscosity[i - 1].kelvin))) {
+			set_why(why, "the solvent's viscosity is a table of positive values at rising temperatures");
+			return std::nullopt;
 		}
 	}
 	const auto ion_count = static_cast<int32_t>(solution.ions.size());

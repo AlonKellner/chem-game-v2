@@ -1,8 +1,28 @@
 {
 	"format": "chem-solutions/1",
-	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. Sources: docs/DATA_SOURCES.md.",
+	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. Sources: docs/DATA_SOURCES.md.",
 	"a_phi": 0.392,
 	"b": 1.2,
+	"diffusion": {"note": "each ion's diffusion coefficient in water at infinite dilution, 25 C, m2/s (GAME_SPEC §7)", "source": "Li and Gregory 1974, Table 1", "H+1": 9.31e-9, "Cu+2": 7.33e-10, "SO4-2": 1.07e-9},
+	"viscosity": [
+		{"celsius": 0.01, "mpa_s": 1.7902},
+		{"celsius": 10, "mpa_s": 1.3055},
+		{"celsius": 20, "mpa_s": 1.0015},
+		{"celsius": 25, "mpa_s": 0.88997},
+		{"celsius": 30, "mpa_s": 0.79721},
+		{"celsius": 40, "mpa_s": 0.65278},
+		{"celsius": 50, "mpa_s": 0.5466},
+		{"celsius": 60, "mpa_s": 0.46613},
+		{"celsius": 70, "mpa_s": 0.40365},
+		{"celsius": 80, "mpa_s": 0.35416},
+		{"celsius": 90, "mpa_s": 0.31428},
+		{"celsius": 100, "mpa_s": 0.28169},
+		{"celsius": 110, "mpa_s": 0.25471},
+		{"celsius": 120, "mpa_s": 0.23211},
+		{"celsius": 130, "mpa_s": 0.213},
+		{"celsius": 140, "mpa_s": 0.19668},
+		{"celsius": 150, "mpa_s": 0.18262}
+	],
 	"pairs": [
 		{"cation": "Cu+2", "anion": "SO4-2", "beta0": 0.2358, "beta1": 2.485, "beta2": -47.35, "c_phi": 0, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974; their c_phi, -0.0012, left out: beyond 65 mol/kg it turns the water's activity back up"},
 		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"}

@@ -33,6 +33,19 @@ struct StepFlows {
 	size_t reactions = 0; // rated + equilibria
 };
 
+// A surface reaction's two steps in a cell (GAME_SPEC §7), each in moles of
+// its extent per m^2 of its solid per second, in the direction of the
+// affinity `a` (J/mol) at `temperature`: at the surface, k(T) m_driver^q |f|;
+// by transport, (Sh D / d)(C - C_eq) / nu, with Sh = 2 * mixing (infinity:
+// nothing limits transport); and the two in series. 0 for another law.
+struct SurfaceSteps {
+	double surface = 0.0;
+	double transport = 0.0;
+	double both = 0.0;
+	bool transported = false; // a species is carried, and transport has a finite rate
+};
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing);
+
 class Simulation {
 public:
 	// `reactions` are the ones that run on their own, in every cell, in this

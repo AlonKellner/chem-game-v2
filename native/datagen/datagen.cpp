@@ -306,6 +306,29 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		const json solutions_json = load(data / "solutions.json", "chem-solutions/1");
 		solution.a_phi = solutions_json.at("a_phi").get<double>();
 		solution.b = solutions_json.at("b").get<double>();
+		// each ion's diffusion coefficient at 25 C, and the solvent's viscosity (GAME_SPEC §7)
+		if (solutions_json.contains("diffusion")) {
+			for (const auto &[name, value] : solutions_json.at("diffusion").items()) {
+				if (name == "note" || name == "source") {
+					continue;
+				}
+				bool found = false;
+				for (chem::IonDef &ion : solution.ions) {
+					if (ion.name == name) {
+						ion.diffusion = value.get<double>();
+						found = true;
+					}
+				}
+				if (!found) {
+					fail(solutions_file, "a diffusion coefficient names ion " + name + ", which no species is made of");
+				}
+			}
+		}
+		if (solutions_json.contains("viscosity")) {
+			for (const json &v : solutions_json.at("viscosity")) {
+				solution.viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("mpa_s").get<double>() / 1000.0 });
+			}
+		}
 		for (const json &p : solutions_json.at("pairs")) {
 			const auto ion_of = [&](const char *key) {
 				const std::string name = p.at(key).get<std::string>();
@@ -384,6 +407,10 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				}
 				row.kinetics.nucleation = k.value("nucleation", 0.0);
 				row.kinetics.nucleation_order = k.value("nucleation_order", 0.0);
+				row.kinetics.driver_order = k.value("driver_order", 1.0);
+				if (!(row.kinetics.driver_order > 0.0) || (k.contains("driver_order") && !k.contains("driver"))) {
+					fail(reactions_file, "reaction " + row.id + ": a driver's order is positive, and only a reaction with a driver has one");
+				}
 			} else {
 				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
 			}
@@ -436,11 +463,22 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		cpp << " } } },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";
-	for (const IonRow &ion : ions) {
-		cpp << "\t{ " << quoted(ion.name) << ", " << ion.charge << " },\n";
+	for (const chem::IonDef &ion : solution.ions) {
+		char diffusion[40];
+		std::snprintf(diffusion, sizeof diffusion, "%.17g", ion.diffusion);
+		cpp << "\t{ " << quoted(std::string(ion.name)) << ", " << ion.charge << ", " << diffusion << " },\n";
 	}
 	if (ions.empty()) {
-		cpp << "\t{ \"none\", 0 },\n";
+		cpp << "\t{ \"none\", 0, 0.0 },\n";
+	}
+	cpp << "};\n\nconstexpr ViscosityPoint VISCOSITY[] = {\n";
+	for (const chem::ViscosityPoint &v : solution.viscosity) {
+		char point[80];
+		std::snprintf(point, sizeof point, "\t{ %.17g, %.17g },\n", v.kelvin, v.pascal_seconds);
+		cpp << point;
+	}
+	if (solution.viscosity.empty()) {
+		cpp << "\t{},\n";
 	}
 	cpp << "};\n\nconstexpr PairDef PAIRS[] = {\n";
 	for (const chem::PairDef &p : solution.pairs) {
@@ -454,20 +492,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 	char model[120];
 	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g;\n", solution.a_phi, solution.b);
-	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ";\n";
+	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size()
+		<< ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
 		cpp << "\t{ " << quoted(row.id) << ", { { ";
 		for (size_t i = 0; i < row.terms.size(); ++i) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
-		char kinetics[320];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g }",
+		char kinetics[360];
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g }",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
 						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
 						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
 				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
-				row.kinetics.nucleation_order);
+				row.kinetics.nucleation_order, row.kinetics.driver_order);
 		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
 	cpp << "};\n\n"
@@ -481,7 +520,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "const SpeciesTable &builtin_species() {\n"
 		<< "\tstatic const SpeciesTable table = [] {\n"
 		<< "\t\tstd::string why;\n"
-		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT) };\n"
+		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT),\n"
+		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT) };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"
