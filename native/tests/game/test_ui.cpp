@@ -947,3 +947,47 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	CHECK(t == doctest::Approx(60.0).epsilon(1.0 / 60.0));
 	well_formed(p.ui->draw());
 }
+
+TEST_CASE("ui: a vessel carried over another pours while the left button is held, tilting as it is held; the right button's menu sets it upside down, and its cap opens by the readout's slider (Stage 27)") {
+	Player p;
+	p.drag("item:flask", "square:11,8");
+	p.drag("item:acid", "square:4,8");
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	p.at("item:acid", ax, ay);
+	p.at("item:flask", fx, fy);
+	p.ui->pointer(ax, ay, true); // picked up
+	p.ui->pointer(ax, ay, false);
+	for (int k = 1; k <= 20; ++k) {
+		p.ui->pointer(ax + (fx - ax) * static_cast<float>(k) / 20.0f, ay + (fy - ay) * static_cast<float>(k) / 20.0f, false);
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml == 0.0);
+	p.ui->pointer(fx, fy, true); // held over the flask: it pours, tilting further each frame
+	for (int k = 0; k < 90; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("acid").tilt > 0.9);
+	p.ui->pointer(fx, fy, false); // let go: it stops, still in hand
+	const double poured = p.item("flask").liquid_ml;
+	CHECK(poured > 5.0);
+	CHECK(poured < 15.0 * 1.5);
+	CHECK(p.item("acid").pours_into < 0);
+	for (int k = 0; k < 30; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml == doctest::Approx(poured).epsilon(1e-3));
+	// the right button: the full menu; upside down, with its cap shut
+	p.ui->pointer(fx, fy, true, lab::Ui::ModRight);
+	p.ui->pointer(fx, fy, false, lab::Ui::ModRight);
+	p.click("panel:invert");
+	CHECK(p.item("acid").inverted);
+	CHECK(p.item("acid").cap == 0.0);
+	p.click("cap:acid@0.5"); // its cap, in the readout: half open
+	CHECK(p.item("acid").cap == doctest::Approx(0.5).epsilon(0.02));
+	const double before = p.item("flask").liquid_ml;
+	for (int k = 0; k < 120; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml > before + 2.0);
+	well_formed(p.ui->draw());
+}

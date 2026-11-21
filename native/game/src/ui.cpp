@@ -34,7 +34,7 @@ constexpr Rect OUTBOX{ 260, 760, 640, 300 };
 constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13.3), beside the outbox
 constexpr Rect EDITOR{ 440, 76, 720, 340 }; // a part's settings, or a rig's, being written
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
-constexpr Rect PANEL{ 600, 250, 440, 300 };
+constexpr Rect PANEL{ 600, 250, 440, 340 }; // the pour menu (Stage 27: and upside down, with a cap)
 constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
 constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
@@ -725,9 +725,11 @@ struct Ui::Impl {
 	// the selected item's name, for the item that is selected. Where the readout's rows begin:
 	float readout_top() const { return tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30; }
 	// a burner's valve: a slider, shut at its left and open at its right, while it is on the bench or under a vessel
+	// a burner's valve, or a vessel's cap set upside down over another (Stage 27): one slider, shut to open
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (index != selected || v.kind != "burner" || (v.place != "bench" && v.place != "under") || draft.edit != Draft::None) {
+		const bool cap = v.kind == "vessel" && v.inverted && v.pours_into >= 0;
+		if (index != selected || (v.kind != "burner" && !cap) || (v.place != "bench" && v.place != "under" && !cap) || draft.edit != Draft::None) {
 			return false;
 		}
 		r = Rect{ READOUT.x + 90, readout_top() + 96, 300, 18 };
@@ -751,6 +753,8 @@ struct Ui::Impl {
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
+	// upside down over it, with a cap: a placed pour (Stage 27)
+	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
 	// the solids of the vessel being emptied, each with its button
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
 		std::vector<std::pair<std::string, Rect>> out;
@@ -1120,6 +1124,14 @@ struct Ui::Impl {
 					return;
 				}
 			}
+			if (invert_button().has(x, y)) {
+				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
+					panel = false;
+					put_back(); // it stands upside down over the other now: its cap is in the readout, shut
+					choose_only(from);
+				}
+				return;
+			}
 			if (cancel_button().has(x, y) || !PANEL.has(x, y)) {
 				panel = false; // still in hand
 			}
@@ -1172,7 +1184,7 @@ struct Ui::Impl {
 				wide.y -= 6;
 				wide.h += 12;
 				if (wide.has(x, y)) {
-					if (!allowed_click("valve:" + id(i) + "@")) {
+					if (!allowed_click((view.items[static_cast<size_t>(i)].kind == "burner" ? "valve:" : "cap:") + id(i) + "@")) {
 						return;
 					}
 					valve_drag = i;
@@ -2434,7 +2446,11 @@ struct Ui::Impl {
 		}
 		double open = (x - r.x) / r.w;
 		open = open < 0 ? 0 : open > 1 ? 1 : open;
-		act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
+		if (view.items[static_cast<size_t>(valve_drag)].kind == "burner") {
+			act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
+		} else {
+			act({ { "do", "cap" }, { "item", id(valve_drag) }, { "to", open } });
+		}
 	}
 
 	// ------------------------------------------------------------- painting
@@ -3620,12 +3636,13 @@ struct Ui::Impl {
 			// its controls, while it is selected (GAME_SPEC §13.1: not on the bench)
 			Rect control;
 			if (valve_rect(showing, control)) {
-				text(READOUT.x + 16, control.y + 15, "valve", INK, 16);
+				const double open = v.kind == "burner" ? v.valve : v.cap;
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : "cap", INK, 16);
 				rect_fill(control, BUTTON);
-				const float knob = control.x + control.w * static_cast<float>(v.valve);
+				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
 				rect_fill(Rect{ knob - 4, control.y - 4, 8, control.h + 8 }, INK);
-				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * v.valve), DIM, 15);
+				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * open), DIM, 15);
 				y += 42;
 			} else if (stir_rect(showing, control)) {
 				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
@@ -3851,6 +3868,7 @@ struct Ui::Impl {
 		for (const auto &[species, r] : tip_buttons()) {
 			button(r, "tip in the " + species);
 		}
+		button(invert_button(), "upside down, with a cap");
 		button(cancel_button(), "cancel");
 	}
 };
@@ -4226,7 +4244,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = c.cy();
 		return true;
 	}
-	if (after("valve:", rest)) {
+	if (after("valve:", rest) || after("cap:", rest)) {
 		const size_t at = rest.find('@');
 		const int i = index_of(rest.substr(0, at));
 		Rect r;
@@ -4252,6 +4270,11 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:pour") {
 		return centre(Impl::pour_button());
+	}
+	if (what == "panel:invert") {
+		x = Impl::invert_button().cx();
+		y = Impl::invert_button().cy();
+		return m.panel;
 	}
 	if (what == "panel:cancel") {
 		return centre(Impl::cancel_button());
