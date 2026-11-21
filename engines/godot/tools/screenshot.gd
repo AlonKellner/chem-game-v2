@@ -155,9 +155,9 @@ func _play(dir: String) -> void:
 	_drag("item:condenser", "item:flask")
 	_drag("item:beaker", "square:19,12")
 	_drag("item:beaker", "item:condenser")
-	# a monitor on the flask's water, rigged to close the valve and wired to an alarm, as the tutorial asks (GAME_SPEC §13.3)
-	_drag("drawer:monitor", "square:1,1")
-	for what in ["edit:item:flask", "edit:quantity", "edit:pick:water", "edit:compare:below", "edit:value:0"]:
+	_drag("drawer:monitor", "square:1,1") # a monitor on the flask's water, rigged to the valve and wired to an alarm (§13.3)
+	_drag("sense:monitor1", "item:flask") # what it senses (Stage 26): its settings open
+	for what in ["edit:kind:material", "edit:material:water", "edit:measure:g", "edit:compare:below", "edit:value:0"]:
 		_click(what)
 	for c in "12":
 		_lab.key(0, c.unicode_at(0))

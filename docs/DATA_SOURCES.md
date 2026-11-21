@@ -445,6 +445,26 @@ world in pixels, since each item is drawn at its own scale. A solution's index i
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).
 **The room:** its white is 100 cd/m² (a white page in ordinary indoor light).
 
+## Controller tuning: SIMC (Stage 26)
+
+A controller's PI gains (`native/game/src/control.cpp`, GAME_SPEC §13.3) are Skogestad's SIMC rules:
+S. Skogestad, "Simple analytic rules for model reduction and PID controller tuning", *Journal of
+Process Control* 13 (2003) 291–309; read through the author's NTNU lecture slides ("SIMC Controller
+tuning", skoge.folk.ntnu.no, read 2026-11-21).
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| First-order process with a delay: `Kc`, `Ti` | `Kc = tau / (K (tau_c + theta))`, `Ti = min(tau, 4 (tau_c + theta))` | Skogestad 2003, eq. for "SIMC" PI | `control: SIMC's tight tuning ...` |
+| Integrating process: `Kc`, `Ti` | `Kc = 1 / (k' (tau_c + theta))`, `Ti = 4 (tau_c + theta)` | Skogestad 2003 | the same |
+| Tight control | `tau_c = theta` | Skogestad 2003 | the same |
+| Margins at `tau_c = theta`, a lag no longer than `8 theta` | gain margin 3.14 (π), phase margin 61.4° | Skogestad 2003 (the loop is `e^-theta s / (2 theta s)`, so it follows in closed form) | the test computes both from the tuning: π to 1e-6, 61.35° to 0.2% |
+| Margins at `tau_c = theta`, an integrator | gain margin 2.96, phase margin 46.9° | the lecture slides' table (Ms 1.70); from secondary sources, not the paper itself | the test: both to 0.5% |
+
+Chosen for the game, not from the source: the speeds' closed-loop times (gentle `T`, normal `T / 4`,
+fast `T / 20`, never under `theta`), the least delay (two steps), the PWM period (a tenth of `T`, 10 s
+to 10 min) and the trial's end (half again the distance to the target, levelled off, or an hour).
+The closed loop is held by `controller: water in the flask held at 60 C ...`.
+
 ## Constants
 
 CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).

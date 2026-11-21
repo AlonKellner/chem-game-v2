@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.26.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.27.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1184,7 +1184,7 @@ of every ray through its area, and its colour is their average (a box filter).
     it names by number, so fifty parts are one set. A vessel's set is its own.
   - **As many bodies as a bench of parts needs** (256), and a pixel finds its own without looking
     at all of them: the screen is cut into squares of 40 px, and each square lists the bodies that
-    reach into it (seven at most: the nearest the eye). What stands in a vessel's rows on a layer
+    reach into it (fifteen at most: the nearest the eye; Stage 26: with seven, two signal parts side by side, each a face, a lamp and ports, lost the first drawn of them, half a part unseen; a sensing line is one body, dashed by the pass). What stands in a vessel's rows on a layer
     behind it is found on the CPU, when the scene is composed, and is part of the vessel's
     signature.
   - **No lab thing is drawn over the pass.** What the screen draws flat is what is not in the
@@ -1550,7 +1550,7 @@ gestures, and a run with a tutorial is the same lab as one without.
   that is on the screen now (for a drag, both ends and an arrow), while a check that is not waited
   on is still open; with the item in hand, only where it goes.
 
-**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 35 steps; Stage 13 teaches the signals at the boil-down: a monitor on the flask's water, rigged to close the burner's valve and wired to an alarm.
+**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 36 steps; Stage 13 teaches the signals at the boil-down: a monitor sensing the flask (Stage 26), on its water, rigged to close the burner's valve and wired to an alarm.
 Its failures: the balloon burst; acid poured before the malachite has broken down (in liquid it
 never gets hot enough); the crystals overheated to a lower hydrate or the anhydrous salt; the
 balloon handed in without the CO₂, the beaker with more than water, the flask with its liquor or
@@ -1572,6 +1572,7 @@ that watch the lab and act on it (`lab/signals.hpp`):
 
 - **A timer** counts down.
 - **A monitor** compares a quantity.
+- **A controller** holds a quantity at a target, by a level it sets on a control (Stage 26).
 - **An alarm** stops the clock and shows the player what set it off.
 
 Parts are **wired** to each other and **rigged** to the lab's controls. Parts belong to the lab:
@@ -1595,9 +1596,20 @@ so the sessions' records are unchanged.
   - With inputs, a part is enabled while any of them is on: inputs in parallel are OR.
   - A part signals while its own condition holds and it is enabled. A chain of parts is therefore
     AND.
+- **Sensing** (Stage 26). A monitor and a controller **sense** one item: `sense {part, item}` and
+  `unsense {part}`. What it reads is a quantity of that item (`set`'s `what` and `measure`); sensing
+  another item forgets the quantity, and the part is unset until it is set again. A `set` that names
+  an `item` senses it too, so every session written before sensing reads as it did.
+  - **The quantities**, in three kinds:
+    - **a material** the item holds (a species, not its wall): its mass (`g`), amount (`mol`),
+      purity (`purity`), and for a solid its particle count (`count`) and size (`size`);
+    - **the vessel**: its temperature (`celsius`), the mass of all it holds (`mass_g`), its
+      liquid (`liquid_ml`), its solids (`solid_ml`), its solids and liquids (`condensed_ml`), its gas
+      (`gas_ml`);
+    - **other**: a balloon's fill (`fill`), a burner's valve (`valve`).
 - **A monitor** (`set {part, item, what, measure, compare, value | values}`):
-  - Its own condition is a comparison (§13.2's quantities and comparisons, purity included) of one
-    item's quantity, read every step.
+  - Its own condition is a comparison (§13.2's quantities and comparisons, purity included) of the
+    quantity it senses, read every step.
   - "Reaches" holds when the value lies between its last two readings, ends included.
   - A monitor not yet set signals nothing.
 - **A timer** (`set {part, seconds}`):
@@ -1606,6 +1618,31 @@ so the sessions' records are unchanged.
   - At zero its own condition holds, and stays held until the timer is reset.
   - Its **reset** control sets it back to its preset. Reset can be done by hand (`reset {timer}`)
     or by a rig, once per event.
+- **A controller** (`set {part, item, what, measure, target, speed}`; Stage 26):
+  - It senses a quantity, as a monitor does, and holds it at its **target**. The player chooses
+    only the target and a **speed**: `gentle`, `normal` or `fast`.
+  - Its output is a **level**, 0 to 1, computed every step. While its inputs do not let it, or
+    while it is not set or not tuned, its level is 0. It signals (to wires) while its level is above
+    0.
+  - **Tuned by trying the process.** When it is set, and whenever a rig from it is made or taken
+    off, it tries what it controls on a copy of the lab: the copy runs with every control rigged
+    from it full on, and again full off, from the lab as it stands, until the difference between the
+    two readings reaches half again the distance to the target, or levels off (a third of the
+    trial moved it by under a hundredth), or an hour of the lab's time passes; it is read each second. That difference is fitted with a first-order process with a delay (its gain `K`, its
+    time constant `tau`, its delay `theta`; a process that does not level off within the trial, as
+    an integrator, its slope `K / tau`). The gains are Skogestad's SIMC rules for a PI controller
+    (Skogestad 2003): the closed loop's time `tau_c` is the process's own time `T` (gentle), a
+    quarter of it (normal) or a twentieth (fast), never under `theta` (SIMC's tight choice, which a
+    process with no delay would make endless); `T` is `tau`, or the trial's length for an
+    integrator; `Kc = tau / (K (tau_c + theta))`, `Ti = min(tau, 4 (tau_c + theta))`, or for an
+    integrator `Kc = 1 / (k' (tau_c + theta))`, `Ti = 4 (tau_c + theta)`; the delay is at least two
+    steps (a step to read, a step to act). Its direction is the sign of `K`.
+  - **The law.** Each step, the error is the target less the reading; the level is
+    `Kc (e + I / Ti)`, kept within 0 and 1; the integral `I` grows by the error times the step only
+    while the level is not held at a limit it would pass (no wind-up). It starts at 0 when the
+    controller is set or tuned.
+  - A trial that finds nothing moves (no rig, or a control that changes nothing it senses) leaves it
+    untuned, with the reason in a notice; it writes a notice when it is tuned, with its gains.
 - **An alarm** has inputs and no output.
   - It rings in the step its input turns on, and rings until it is answered (`ack`, or the screen
     playing on).
@@ -1622,6 +1659,12 @@ so the sessions' records are unchanged.
     - a timer's `reset`: true.
   - It gives settings either for its source turning **on** and turning **off**, or for any
     **change**, never both. A setting left out, or null, leaves the control as it is.
+  - **A controller's rig follows its level** (`rig {from, item, control}`, no settings): a valve is
+    set to the level; stirring, an on-or-off control, is switched by **PWM**: in each period (a
+    tenth of the controller's `tau`, from 10 s to 10 min, in whole steps) it is on for the level's
+    share of the period, as the level stood at the period's start, then off. It acts in a step only
+    when the control differs from what it follows, and writes no notice for it. A timer's reset
+    cannot follow a level, and is refused.
   - **Events set state, and the last event wins.**
     - When a rig's source changes, as it was at the end of the step before, and the rig has a
       setting for that change, the setting is applied at the end of the step.
@@ -1633,13 +1676,17 @@ so the sessions' records are unchanged.
   - **The player is another input.** A `stir`, `valve` or `reset` command sets the control in the
     same way, and every rig stays attached.
   - The lab keeps each control's last setting, who made it (a part, or the player) and when.
-- **Invariants:** G1 and G2 (§18).
+- **Invariants:** G1 to G4 (§18).
 - **On the screen:**
   - **Making and placing.**
     - The drawer stands beside the outbox. A part dragged out of it is made on the square where it
       is let go, and its settings open.
     - A part shows its name, its state (a timer's time left, a monitor's comparison), a lamp lit
-      while it signals, and its port on its right.
+      while it signals, and its port on its right. A monitor and a controller have a second port,
+      at their foot: their **sensing port**.
+    - A drag from a sensing port onto a vessel, a balloon or a burner senses it: a **sensing line**,
+      dashed, unlike a wire or a rig, from the part's foot to the item, lit while the part reads it.
+      Its settings open.
     - A drag from a port is a wire:
       - onto a monitor or an alarm: a wire into it;
       - onto a timer: a choice, a wire into its input or a rig onto its reset;
@@ -1647,8 +1694,14 @@ so the sessions' records are unchanged.
     - Wires and rigs are drawn as lines, lit while their source signals.
     - Dropped on equipment or in the outbox, a part is refused, with the reason.
   - **The editor** (a panel like the pour panel):
-    - a monitor's: the item, the quantity (g, count, size or purity of a species), the comparison,
-      and values typed or nudged at three scales;
+    - a monitor's and a controller's open only on a part that senses an item (one that does not
+      says so, and how: "drag from its sensing port onto what it should watch"). Guided, each step a
+      short closed list of what the item has now, the next shown once the last is chosen:
+      1. the kind: a material, the vessel, other (a kind with nothing in it is not offered);
+      2. for a material, which of those the item holds now;
+      3. the measure (for a material: mass, amount, purity, and for a solid particles and size);
+      4. a monitor's comparison and values typed or nudged at three scales; a controller's target,
+         typed or nudged, and its speed;
     - a timer's: its preset, typed or nudged by a minute, ten seconds or a second;
     - a rig's: its form, and each setting, a choice or a valve's per cent.
 
@@ -1707,25 +1760,12 @@ so the sessions' records are unchanged.
       drawer, set, wired and rigged, also out to the bench; "up" opens the circuit around it, and
       "close" closes it. A part dragged out of the panel stays in it, with the reason.
 
-**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day; the notice part and the writer: Stage 16, §13.4).
+**Demo subset:** all of the above; signed off by the user on 2026-11-17 (circuits: Stage 14, signed off the same day; the notice part and the writer: Stage 16, §13.4). Sensing drawn and guided, and controllers: Stage 26 (asked for by the user, 2026-11-21: "placing monitors should be a good, guided and non overwhelming experience"; a controller's tuning is its target and a speed alone).
 **Full design, not yet built:**
-- controllers: a monitor with a target and PID gains whose output is a level, set on an analog
-  control or as PWM on a binary one.
-- **A monitor's sensing, drawn and guided** *(PLANNED; asked for by the user, 2026-11-21)*:
-  - What a monitor watches is a line of its own kind (unlike a wire's or a rig's), drawn from the
-    monitor to the watched vessel and placed by the same gesture as wires (dragged from a port onto
-    the vessel), not chosen from a list in the editor.
-  - Its settings show only once a vessel is watched, and only what is relevant to it: no species or
-    quantity the vessel does not hold now.
-  - The quantity is chosen in steps, each a short closed list:
-    1. the kind of quantity: of a material in the vessel, of the vessel itself, or other;
-    2. for a material, which of those in the vessel now;
-    3. the measure: for a material, its mass, amount, volume, purity, particle count or size; for the
-       vessel, its total mass, its liquid's volume, its solids' volume, its temperature, its pressure;
-    4. the comparison and the value.
-  - The aim: placing a monitor is guided and never overwhelming.
+- a material's volume and a vessel's pressure as quantities;
+- a controller tuned again as what it controls changes (it is tuned when it is set or rigged).
 
-**Status:** Stage 13; circuits Stage 14.
+**Status:** Stage 13; circuits Stage 14; sensing and controllers Stage 26.
 
 ### 13.4 Notices
 
@@ -2047,6 +2087,8 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the ends of the line's image are found by halving, on rays traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole. Through two layers likewise (Stage 21); a line seen only in a stack's rims, where rays part ways within a quarter of a pixel, keeps its light to 3%. The check's own rays are found wherever a landing moves more than a twentieth of a pixel between two of them: through two vessels an image can be far thinner than any even step | tolerance (1% of the line's light) | 20–21 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
+| G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
+| G4 | A control following a controller by PWM is on, over each whole period, for the steps the level at the period's start gives (its share of the period, rounded to a whole step) | exact | 26 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.

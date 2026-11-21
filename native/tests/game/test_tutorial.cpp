@@ -591,10 +591,14 @@ TEST_CASE("tutorial: in the part editor only the step's own settings are taken, 
 		return outlines == 1 && inside;
 	};
 	play_to("Watch the flask's water");
-	CHECK(pointed("edit:quantity")); // the flask is already chosen: then its quantity
-	p.click("edit:quantity");
-	CHECK(pointed("edit:pick:water"));
-	p.click("edit:pick:water");
+	CHECK(pointed("edit:kind:material")); // the flask is sensed: then the kind, the material, its measure (Stage 26)
+	float hidden_x = 0, hidden_y = 0;
+	CHECK_FALSE(p.ui->locate("edit:material:water", hidden_x, hidden_y)); // not shown yet: no kind is chosen
+	p.click("edit:kind:material");
+	CHECK(pointed("edit:material:water"));
+	p.click("edit:material:water");
+	CHECK(pointed("edit:measure:g"));
+	p.click("edit:measure:g");
 	REQUIRE(p.tutorial().title == "Below 12 g");
 	REQUIRE(editing());
 	CHECK(pointed("edit:value:0")); // "below" is already chosen: the value, until it reads 12

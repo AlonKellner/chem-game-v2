@@ -24,10 +24,12 @@ inline constexpr int HEADER_VECS = 4;
 inline constexpr int BODY_VECS = 8;
 // The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
 // round them) reach into it, in painting order, the nearest the eye last: its count and up to GRID_SLOTS
-// bodies, in two vec4s. A pixel looks at its square's bodies alone. Where more reach in, the nearest are kept.
-inline constexpr int GRID_SQUARE = 40, GRID_COLS = 48, GRID_ROWS = 27, GRID_SLOTS = 7;
+// bodies, in GRID_VECS vec4s. A pixel looks at its square's bodies alone. Where more reach in, the nearest are
+// kept (Stage 26: fifteen, not seven: two signal parts side by side, each a face, a lamp and ports, straddle
+// one square of the screen, and the first of them were left out, half a part unseen).
+inline constexpr int GRID_SQUARE = 40, GRID_COLS = 48, GRID_ROWS = 27, GRID_SLOTS = 15, GRID_VECS = 4;
 inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
-inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * 2;
+inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
 // the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts. MAP: where its
 // refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
@@ -129,13 +131,15 @@ struct OpticsBody {
 	// reflects and what it emits, which bends nothing.
 	//   Slab: its rectangle, the corners rounded by `size`; opaque, lit by the room's light.
 	//   Bar: every place within `size` / 2 of the line from (x0, y0) to (x1, y1); opaque. Its rectangle is
-	//        found from the line.
+	//        found from the line. With a `dash`, dashed along it: from its start, on for 0.6 of each `dash`
+	//        pixels, then off (a sensing line, §13.3, Stage 26).
 	//   Cone: a cone of glowing gas, its apex at its rectangle's top centre, its base its rectangle's bottom;
 	//         it emits along the path through it (its light is a multiple of the room's for each pixel of
 	//         path) and absorbs nothing.
 	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5 };
 	Shape shape = Item;
 	float size = 0.0f;
+	float dash = 0.0f; // a bar's dash and gap together (pixels); 0: unbroken
 	float x0 = 0.0f, y0 = 0.0f, x1 = 0.0f, y1 = 0.0f;
 	const char *surface = nullptr; // what it reflects: data/optics/media.json's surfaces (none: nothing)
 	// what it emits: an emitter's light, or toward another's by `toward`, times `strength` (none: nothing)

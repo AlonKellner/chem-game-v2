@@ -148,16 +148,24 @@
 		},
 		{
 			"title": "A monitor",
-			"text": "Drag a monitor out of the parts drawer, beside the outbox, onto a free square of the bench. Its settings open.",
+			"text": "Drag a monitor out of the parts drawer, beside the outbox, onto a free square of the bench.",
 			"why": "Boiling down is the step to watch: too far, and the crystals have nothing to grow from. A monitor watches a value for you while the clock runs fast.",
 			"checks": [{"text": "a monitor on the bench", "when": {"part": {"kind": "monitor"}}}],
 			"play": [{"drag": ["drawer:monitor", "square:1,1"]}]
 		},
 		{
+			"title": "Let it sense the flask",
+			"text": "Drag from the monitor's sensing port, the dot at its foot, onto the flask. Its settings open.",
+			"why": "A monitor reads what it senses: the dashed line from its foot shows what that is.",
+			"checks": [{"text": "it senses the flask", "when": {"editor": {"editing": "monitor", "item": "flask"}}}],
+			"play": [{"drag": ["sense:monitor1", "item:flask"]}]
+		},
+		{
 			"title": "Watch the flask's water",
-			"text": "Click \"flask\", then the quantity it watches (the temperature), and choose H2O(l): the flask's liquid water.",
-			"checks": [{"text": "it watches the water in the flask", "when": {"editor": {"editing": "monitor", "item": "flask", "what": "water"}}}],
-			"play": [{"click": "edit:item:flask"}, {"click": "edit:quantity"}, {"click": "edit:pick:water"}]
+			"text": "Click \"a material\", then H2O(l), the flask's liquid water, then \"mass\".",
+			"why": "The lists hold only what the flask has now: its materials, or the flask's own quantities, such as its temperature.",
+			"checks": [{"text": "it watches the mass of the water in the flask", "when": {"editor": {"editing": "monitor", "item": "flask", "what": "water", "measure": "g"}}}],
+			"play": [{"click": "edit:kind:material"}, {"click": "edit:material:water"}, {"click": "edit:measure:g"}]
 		},
 		{
 			"title": "Below 12 g",

@@ -56,6 +56,7 @@ struct ItemView {
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
 	double liquid_ml = 0.0;
+	double solid_ml = 0.0; // its solids, not its wall: what rests on its floor (Stage 26: not what is condensed less what is liquid, which counts a solute's volume as solid)
 	std::vector<SubstanceView> contents;
 	Part part; // a signal part (§13.3): its settings and state
 };

@@ -195,6 +195,16 @@
 				}
 			]
 		},
+		"controller_face": {
+			"base": 0.06,
+			"bands": [
+				{
+					"centre_nm": 565,
+					"width_nm": 90,
+					"peak": 0.3
+				}
+			]
+		},
 		"part_face": {
 			"base": 0.045
 		},
@@ -210,6 +220,16 @@
 		},
 		"wire": {
 			"base": 0.08
+		},
+		"sense": {
+			"base": 0.1,
+			"bands": [
+				{
+					"centre_nm": 530,
+					"width_nm": 60,
+					"peak": 0.3
+				}
+			]
 		},
 		"rig": {
 			"base": 0.15,

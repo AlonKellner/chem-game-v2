@@ -29,11 +29,17 @@ const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
 const int GRID_COLS = 48;
 const int GRID_ROWS = 27;
+const int GRID_SLOTS = 15; // a square's bodies, at most
+const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int ROWS_PER_SET = 6;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
+// the bodies a stack's rays are followed through, and read through: the same bound on the CPU, which makes the
+// stack, and on the GPU, which reads it (Stage 26: the GPU read six of them, and what stood behind a held vessel
+// past the sixth, a second part's face, was never seen)
+const int STACK_SLOTS = 12;
 const int WALL_ROWS = 1080;
 const int WALL_COLUMNS = 1920;
 const int WALL_ROW_BASE = 1;
@@ -121,13 +127,14 @@ struct PixelState {
 int square_at(vec2 p) {
 	int c = clamp(int(floor(p.x / GRID_SQUARE)), 0, GRID_COLS - 1);
 	int r = clamp(int(floor(p.y / GRID_SQUARE)), 0, GRID_ROWS - 1);
-	return GRID_BASE + 2 * (r * GRID_COLS + c);
+	return GRID_BASE + GRID_VECS * (r * GRID_COLS + c);
 }
 
 // the k-th body of a square
-int square_body(vec4 a, vec4 b, int k) {
-	float v = k == 0 ? a.y : (k == 1 ? a.z : (k == 2 ? a.w : (k == 3 ? b.x : (k == 4 ? b.y : (k == 5 ? b.z : b.w)))));
-	return int(v);
+int square_body(int square, int k) {
+	vec4 v = scene_vec(square + (k + 1) / 4);
+	int c = (k + 1) - 4 * ((k + 1) / 4);
+	return int(c == 0 ? v.x : (c == 1 ? v.y : (c == 2 ? v.z : v.w)));
 }
 
 // the set of spectra a body is made of
@@ -164,7 +171,16 @@ vec2 thing_at(vec4 form, vec4 rect, vec4 more, vec2 p) {
 		float t = clamp(((p.x - more.x) * ux + (p.y - more.y) * uy) / max(ux * ux + uy * uy, 1.0e-9), 0.0, 1.0);
 		float ex = p.x - (more.x + t * ux);
 		float ey = p.y - (more.y + t * uy);
-		return vec2(0.5 * form.z - sqrt(ex * ex + ey * ey), 0.0);
+		float across = 0.5 * form.z - sqrt(ex * ex + ey * ey);
+		if (form.w <= 0.0) {
+			return vec2(across, 0.0);
+		}
+		// dashed (Stage 26): on for 0.6 of each dash from its start; how far inside the dash it is, along
+		float along = t * sqrt(ux * ux + uy * uy);
+		float phase = along - form.w * floor(along / form.w);
+		float on = 0.6 * form.w;
+		float inside = phase <= on ? min(phase, on - phase) : -min(phase - on, form.w - phase);
+		return vec2(min(across, inside), 0.0);
 	}
 	// a cone, its apex at the top's centre: its round section there, seen from the side
 	float from_axis = p.x - (rect.x + rect.z * 0.5);
@@ -427,14 +443,12 @@ Path path_of(vec2 p, float size) {
 	vec4 behind = vec4(0.0); // whether a body of a layer behind the vessel stands in its rows (y), a signature of those (z)
 	// the bodies of the pixel's square of the screen (the scene lists them: a pixel looks at no other)
 	int square = square_at(p);
-	vec4 listed_a = scene_vec(square);
-	vec4 listed_b = scene_vec(square + 1);
-	int listed = int(listed_a.x);
-	for (int k = 0; k < 7; k++) {
+	int listed = int(scene_vec(square).x);
+	for (int k = 0; k < GRID_SLOTS; k++) {
 		if (k >= listed) {
 			break;
 		}
-		int i = square_body(listed_a, listed_b, k);
+		int i = square_body(square, k);
 		int at = HEADER_VECS + i * BODY_VECS;
 		vec4 rect = scene_vec(at);
 		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0 || p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {
@@ -943,6 +957,15 @@ float map_level(MapRef m, float x) {
 // c1, the square straight across the part (as a chord's is, exactly, where it rises as a root at a rim),
 // and the liquid's optical depth is `per_cm` a centimetre. The mean of e^(-per_cm c) over the part, in closed
 // form, as one chord's.
+// How much of the room's light what is stirred up in a vessel's liquid turns back, along a path through the
+// liquid as long as `chord_cm`: its extinction (MORE.x, a centimetre) over that path (Stage 26: along the path the
+// maps give, the vessel's own shape, not its rectangle as a cylinder: a conical flask's stirred suspension was a
+// grey rectangle past the cone's sides)
+float haze_along(int body, float chord_cm) {
+	int at = HEADER_VECS + body * BODY_VECS;
+	return scene_vec(at + 1).x < 0.5 ? 1.0 - exp(-scene_vec(at + 2).x * max(chord_cm, 0.0)) : 0.0;
+}
+
 float chord_of_part(float c0, float c1, float per_cm) {
 	float lo = min(c0, c1);
 	float hi = max(c0, c1);
@@ -971,6 +994,7 @@ struct Shade {
 	float haze;
 	float solid;
 	float room; // the room in front, which the surfaces turn back
+	int body; // the refracting one's
 };
 
 Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
@@ -990,6 +1014,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 		s.glass = glass;
 		s.haze = l.haze;
 		s.solid = l.solid;
+		s.body = body_of(l.body);
 		return s;
 	}
 	// through_layer, as a times what reaches it plus b
@@ -1020,6 +1045,7 @@ Shade shade_of(Path q, float nm) {
 	s.glass = 1.0;
 	s.haze = 0.0;
 	s.solid = 0.0;
+	s.body = 0;
 	s.room = scene_vec(2).y;
 	s = shade_layer(s, q, q.l0, 0, nm);
 	s = shade_layer(s, q, q.l1, 1, nm);
@@ -1037,7 +1063,10 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		float depth = liquid ? s.per_cm * chord_of_part(c0, c1, s.per_cm) : 0.0;
 		float through = exp(-depth);
 		seen = seen * through;
-		seen = mix(seen, s.colour * exp(-depth * 0.5), s.haze);
+		// its haze along these rays' own path through its liquid; none through its core as air
+		float k = scene_vec(HEADER_VECS + s.body * BODY_VECS + 2).x;
+		float haze = liquid ? haze_along(s.body, chord_of_part(c0, c1, max(k, 1.0e-6))) : 0.0;
+		seen = mix(seen, s.colour * exp(-depth * 0.5), haze);
 		seen = mix(seen, s.colour * through + s.glow * exp(-depth * 0.5), s.solid);
 		seen = seen * s.glass;
 	}
@@ -1420,7 +1449,7 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 	float gain = 1.0;
 	float added = 0.0;
 	float room = scene_vec(2).y;
-	for (int j = 0; j < 6; j++) {
+	for (int j = 0; j < STACK_SLOTS; j++) {
 		if (j >= slots) {
 			break;
 		}
@@ -1433,6 +1462,10 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 		int body = int(slot.x);
 		float cross_a = stack_value(a + at + 1, w_a, far_a + at + 1, w_far_a, on_a);
 		float cross_b = stack_value(b + at + 1, w_b, far_b + at + 1, w_far_b, on_b);
+		vec4 box = scene_vec(HEADER_VECS + body * BODY_VECS);
+		if (slot.y < 0.5 && (max(cross_a, cross_b) < box.x - 1.0 || min(cross_a, cross_b) > box.x + box.z + 1.0 || q.y < box.y - 1.0 - q.size || q.y > box.y + box.w + 1.0 + q.size)) {
+			continue; // a thing that bends nothing, which the rays cross nowhere: it does nothing to them
+		}
 		Layer l = layer_at(body, vec2(0.5 * (cross_a + cross_b), q.y), max(abs(cross_b - cross_a), 1.0e-3 * q.size), q.size);
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float per_cm = liquid_at(body, start, nm);
@@ -1442,6 +1475,7 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 			float chord_a = sqrt(max(stack_value(a + at + 3, w_a, far_a + at + 3, w_far_a, on_a), 0.0));
 			float chord_b = sqrt(max(stack_value(b + at + 3, w_b, far_b + at + 3, w_far_b, on_b), 0.0));
 			depth = per_cm * chord_of_part(chord_a, chord_b, per_cm);
+			l.haze = haze_along(body, chord_of_part(chord_a, chord_b, max(scene_vec(HEADER_VECS + body * BODY_VECS + 2).x, 1.0e-6)));
 			pass = 0.5 * (clamp(stack_value(a + at + 2, w_a, far_a + at + 2, w_far_a, on_a), 0.0, 1.0) + clamp(stack_value(b + at + 2, w_b, far_b + at + 2, w_far_b, on_b), 0.0, 1.0));
 		}
 		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 5 * ROW, nm), row_at(start + 2 * ROW, nm), depth, pass, room);
@@ -1636,7 +1670,7 @@ float other_band(Path q, float u0, float u1, float t, float one_nm) {
 
 // ---- a ray followed through the layers (GAME_SPEC §12.3, Stage 21): on the CPU, where a stack is made
 
-const int MAX_VISITS = 6; // the bodies one pixel's rays are followed through
+const int MAX_VISITS = STACK_SLOTS; // the bodies one pixel's rays are followed through
 const int MAX_STRIPS = 4; // the strips a pixel's height is read in, where bodies' tops, floors and surfaces cut it
 
 // The bodies a pixel's rays may meet, the nearest the eye first (a nearer layer's before a further one's;
