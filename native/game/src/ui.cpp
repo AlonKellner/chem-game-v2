@@ -32,7 +32,7 @@ constexpr Rect CABINET{ 0, 64, 240, 1016 };
 constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 640, 300 };
 constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13.3), beside the outbox
-constexpr Rect EDITOR{ 440, 76, 720, 300 }; // a part's settings, or a rig's, being written
+constexpr Rect EDITOR{ 440, 76, 720, 340 }; // a part's settings, or a rig's, being written
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 300 };
 constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
@@ -40,7 +40,9 @@ constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, th
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 
 constexpr uint32_t BACKGROUND = 0x2a2a2aff, GRID = 0x444444ff, GLASS = 0xffffffcc, INK = 0xe6e6e6ff, DIM = 0x9a9a9aff, PANEL_FILL = 0x383838ff, BUTTON = 0x505050ff,
-				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff, GUIDE = 0xffc83cff, GOOD = 0x78c88cff, BAD = 0xf05a5aff;
+				   BUTTON_ON = 0x3c7a4eff, WARN = 0xe0a040ff, GUIDE = 0xffc83cff, GOOD = 0x78c88cff, BAD = 0xf05a5aff,
+				   SENSE = 0x8fd6a4ff; // a sensing line in hand, and its highlight while the part reads (§13.3, Stage 26)
+constexpr float SENSE_DASH = 10.0f; // a sensing line's dash and gap, together: it is dashed, unlike a wire or a rig
 // on the lit wall: what is in the glass is seen by the light that comes through it (§12)
 constexpr uint32_t WALL = 0xdededeff, WALL_GRID = 0xc4c4c4ff, WALL_INK = 0x505050ff;
 constexpr double WALL_RADIANCE = 0.7305, DARK_RADIANCE = 0.0232; // the linear values of WALL and BACKGROUND
@@ -119,7 +121,8 @@ struct Draft {
 	int level = 2; // a notice part's, or a writer's
 	std::string says; // a writer's words, as typed
 	std::string part; // the part being set, or a rig's source
-	Quantity quantity; // a monitor's
+	Quantity quantity; // a monitor's: the item it senses, and what it reads (what and measure "" until chosen)
+	int kind = -1; // a monitor's: the kind of quantity chosen (lab::QuantityKind), -1 none yet (§13.3, Stage 26)
 	Comparison::Op op = Comparison::Below;
 	std::array<std::string, 2> text; // a monitor's values, as typed
 	std::string preset; // a timer's, as typed
@@ -179,7 +182,6 @@ constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (
 constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
 constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
 constexpr const char *OP_KEYS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
-constexpr const char *MEASURES[] = { "g", "count", "size", "purity" };
 constexpr const char *SIDES[] = { "on", "off", "change" };
 
 bool is_part_kind(const std::string &kind) {
@@ -225,13 +227,13 @@ struct Ui::Impl {
 	int selected = -1; // the last item chosen
 	// signals (§13.3): the part editor, a part being made or wired, what rang
 	Draft draft;
-	bool picking = false; // the monitor's list of quantities is open
 	int focus = -1; // the field typed into: 0, 1 a monitor's values; 2 a timer's preset; 3, 4, 5 a valve's setting on, off, on a change; 6 a writer's words, a goal's name; 10 + r a goal's term's value
 	int pick_row = -1; // the goal's term whose quantity is being picked
 	bool fresh = false; // the next key replaces the focused field
 	bool resume = false; // the clock was playing when the editor opened
 	int making = -1; // a part's kind, dragged out of the drawer
 	int wiring = -1; // the part whose port a wire is drawn from
+	int sensing = -1; // the part whose sensing port a sensing line is drawn from (§13.3, Stage 26)
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
 	std::string opened; // the circuit whose inside is shown (§13.3), "" for none
 	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
@@ -1209,6 +1211,24 @@ struct Ui::Impl {
 		r = Rect{ body.x + body.w - 5, body.cy() - 6, 12, 12 };
 		return true;
 	}
+	// a monitor's sensing port, at its foot (§13.3, Stage 26)
+	bool sense_rect(int index, Rect &r) const {
+		if (!is_part(index) || !senses(view.items[static_cast<size_t>(index)].part.kind) || !visible(index)) {
+			return false;
+		}
+		const Rect body = drawn(index);
+		r = Rect{ body.cx() - 6, body.y + body.h - 5, 12, 12 };
+		return true;
+	}
+	// where a sensing line meets what it senses: the side of its body nearer the part, low, where a vessel is
+	// widest
+	void sensed_point(int part, int item, float &x, float &y) const {
+		Rect port;
+		sense_rect(part, port);
+		const Rect r = drawn(item);
+		x = port.cx() < r.cx() ? r.x : r.x + r.w;
+		y = r.y + r.h * (view.items[static_cast<size_t>(item)].kind == "vessel" ? 0.8f : 0.5f);
+	}
 	// where a wire comes into a part, and where a rig acts on a control
 	void in_point(int index, float &x, float &y) const {
 		const Rect body = drawn(index);
@@ -1459,25 +1479,56 @@ struct Ui::Impl {
 		return out;
 	}
 	Rect says_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 174, 680, 30 }; }
-	Rect edit_quantity() const { return Rect{ EDITOR.x + 20, EDITOR.y + 108, 330, 30 }; }
-	Rect edit_measure(int k) const { return Rect{ EDITOR.x + 360 + static_cast<float>(k) * 70, EDITOR.y + 108, 64, 30 }; }
-	Rect edit_compare(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 96, EDITOR.y + 146, 92, 28 }; }
-	Rect edit_field(int f) const { return Rect{ EDITOR.x + 20 + static_cast<float>(f) * 180, EDITOR.y + 182, 140, 30 }; }
+	// a monitor's, guided (§13.3, Stage 26): the kind, then a choice of that kind (a material, or the vessel's
+	// quantity), a material's measure, then the comparison and its values
+	const ItemView &sensed() const {
+		static const ItemView none;
+		const int i = item_index(draft.quantity.item);
+		return i >= 0 ? view.items[static_cast<size_t>(i)] : none;
+	}
+	std::vector<QuantityKind> kinds_now() const { return kinds_of(sensed()); }
+	Rect kind_rect(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 156, EDITOR.y + 56, 150, 30 }; }
+	std::vector<std::string> choices_now() const {
+		return draft.kind < 0 ? std::vector<std::string>{} : quantities_of_kind(sensed(), static_cast<QuantityKind>(draft.kind));
+	}
+	int choice_rows() const {
+		const int n = static_cast<int>(choices_now().size());
+		return draft.kind < 0 ? 0 : std::max(1, (n + 5) / 6);
+	}
+	Rect choice_at(int i) const { return Rect{ EDITOR.x + 20 + static_cast<float>(i % 6) * 116, EDITOR.y + 94 + static_cast<float>(i / 6) * 34, 112, 30 }; }
+	bool material() const { return draft.kind == static_cast<int>(QuantityKind::Material); }
+	std::vector<std::string> measures_now() const {
+		return material() && !draft.quantity.what.empty() ? measures_of(sensed(), draft.quantity.what) : std::vector<std::string>{};
+	}
+	Rect measure_at(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 116, EDITOR.y + 94 + static_cast<float>(choice_rows()) * 34, 112, 30 }; }
+	bool quantity_chosen() const { return !draft.quantity.what.empty() && !draft.quantity.measure.empty(); }
+	float lower_y() const { return EDITOR.y + 100 + static_cast<float>(choice_rows()) * 34 + (measures_now().empty() ? 0.0f : 34.0f); }
+	Rect edit_compare(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 96, lower_y(), 92, 28 }; }
+	Rect edit_field(int f) const { return Rect{ EDITOR.x + 20 + static_cast<float>(f) * 180, lower_y() + 36, 140, 30 }; }
 	Rect edit_nudge(int k) const { // k in -3..-1, 1..3
 		const int at = k < 0 ? k + 3 : k + 2;
-		return Rect{ EDITOR.x + 356 + static_cast<float>(at) * 58, EDITOR.y + 182, 54, 30 };
+		return Rect{ EDITOR.x + 356 + static_cast<float>(at) * 58, lower_y() + 36, 54, 30 };
 	}
-	Rect pick_entry(int i) const {
-		const Rect q = edit_quantity();
-		return Rect{ q.x, q.y + q.h + 2 + static_cast<float>(i) * 28, q.w, 26 };
+	static std::string measure_name(const std::string &m) {
+		return m == "g" ? "mass" : m == "mol" ? "amount" : m == "count" ? "particles" : m == "size" ? "size" : "purity";
 	}
-	std::vector<Quantity> pickable() const {
-		const int item = item_index(draft.quantity.item);
-		return item >= 0 ? quantities_of(view.items[static_cast<size_t>(item)]) : std::vector<Quantity>{};
+	void choose_kind(QuantityKind k) {
+		draft.kind = static_cast<int>(k);
+		draft.quantity.what.clear();
+		draft.quantity.measure.clear();
+		const std::vector<std::string> c = choices_now();
+		if (c.size() == 1) {
+			choose_quantity(c.front());
+		}
 	}
-	bool species_quantity() const {
-		const std::string &w = draft.quantity.what;
-		return !(w == "celsius" || w == "gas_ml" || w == "condensed_ml" || w == "liquid_ml" || w == "valve" || w == "fill");
+	void choose_quantity(const std::string &what) {
+		Quantity q = draft.quantity;
+		q.what = what;
+		q.measure = material() ? std::string() : std::string("g");
+		draft.quantity = q;
+		if (!q.measure.empty()) {
+			set_quantity(q);
+		}
 	}
 	// a timer's preset
 	Rect preset_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 108, 200, 30 }; }
@@ -1531,7 +1582,6 @@ struct Ui::Impl {
 	void open_edit(const Draft &d) {
 		const bool was_open = draft.edit != Draft::None;
 		draft = d;
-		picking = false;
 		focus = -1;
 		message.clear();
 		// the clock waits while it is written: at 600x the moment could pass first
@@ -1542,7 +1592,6 @@ struct Ui::Impl {
 	}
 	void close_edit() {
 		draft = Draft{};
-		picking = false;
 		focus = -1;
 		if (resume && rung.empty()) {
 			paused = false;
@@ -1570,24 +1619,26 @@ struct Ui::Impl {
 		if (v.kind != "monitor") {
 			return;
 		}
+		// it reads what it senses: one that senses nothing says how (§13.3, Stage 26)
+		if (v.part.quantity.item.empty() || item_index(v.part.quantity.item) < 0) {
+			message = v.id + " senses nothing yet: drag from its sensing port, at its foot, onto what it should watch";
+			return;
+		}
 		d.edit = Draft::Monitor;
 		open_edit(d);
+		draft.quantity = v.part.quantity;
 		if (v.part.watching) {
-			draft.quantity = v.part.quantity;
+			draft.kind = static_cast<int>(kind_of(v.part.quantity));
 			draft.op = v.part.comparison.op;
 			draft.text = { plain(v.part.quantity, v.part.comparison.a), plain(v.part.quantity, v.part.comparison.b) };
 			return;
 		}
-		const std::vector<int> items = watchable();
-		draft.quantity = Quantity{};
-		for (const int i : items) {
-			if (view.items[static_cast<size_t>(i)].place == "bench") {
-				const std::vector<Quantity> qs = quantities_of(view.items[static_cast<size_t>(i)]);
-				if (!qs.empty()) {
-					set_quantity(qs.front());
-				}
-				break;
-			}
+		draft.quantity.what.clear();
+		draft.quantity.measure.clear();
+		// a step with one choice is taken
+		const std::vector<QuantityKind> kinds = kinds_of(sensed());
+		if (kinds.size() == 1) {
+			choose_kind(kinds.front());
 		}
 	}
 	void edit_rig(const std::string &source, const std::string &item_id, const std::string &control) {
@@ -1702,16 +1753,6 @@ struct Ui::Impl {
 			goal_edit_press(x, y);
 			return;
 		}
-		if (draft.edit == Draft::Monitor && picking) {
-			const std::vector<Quantity> qs = pickable();
-			for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
-				if (pick_entry(i).has(x, y) && allowed_click("edit:pick:" + qs[static_cast<size_t>(i)].what)) {
-					set_quantity(qs[static_cast<size_t>(i)]);
-				}
-			}
-			picking = false; // a click anywhere closes the list
-			return;
-		}
 		if (edit_cancel().has(x, y)) {
 			if (allowed_click("edit:cancel")) {
 				close_edit();
@@ -1739,33 +1780,38 @@ struct Ui::Impl {
 			return;
 		}
 		if (draft.edit == Draft::Monitor) {
-			const std::vector<int> items = watchable();
-			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-				if (edit_item(k).has(x, y)) {
-					if (!allowed_click("edit:item:" + id(items[static_cast<size_t>(k)]))) {
-						return;
-					}
-					const std::vector<Quantity> qs = quantities_of(view.items[static_cast<size_t>(items[static_cast<size_t>(k)])]);
-					if (!qs.empty()) {
-						set_quantity(qs.front());
+			// guided (§13.3, Stage 26): the kind, a choice of it, a material's measure; then the comparison
+			const std::vector<QuantityKind> kinds = kinds_now();
+			for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
+				if (kind_rect(k).has(x, y)) {
+					if (allowed_click(std::string("edit:kind:") + kind_name(kinds[static_cast<size_t>(k)]))) {
+						choose_kind(kinds[static_cast<size_t>(k)]);
 					}
 					return;
 				}
 			}
-			if (edit_quantity().has(x, y)) {
-				picking = allowed_click("edit:quantity");
+			const std::vector<std::string> choices = choices_now();
+			for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+				if (choice_at(i).has(x, y)) {
+					if (allowed_click(std::string(material() ? "edit:material:" : "edit:quantity:") + choices[static_cast<size_t>(i)])) {
+						choose_quantity(choices[static_cast<size_t>(i)]);
+					}
+					return;
+				}
+			}
+			const std::vector<std::string> measures = measures_now();
+			for (int k = 0; k < static_cast<int>(measures.size()); ++k) {
+				if (measure_at(k).has(x, y)) {
+					if (allowed_click("edit:measure:" + measures[static_cast<size_t>(k)])) {
+						Quantity q = draft.quantity;
+						q.measure = measures[static_cast<size_t>(k)];
+						set_quantity(q);
+					}
+					return;
+				}
+			}
+			if (!quantity_chosen()) {
 				return;
-			}
-			for (int k = 0; species_quantity() && k < 4; ++k) {
-				if (edit_measure(k).has(x, y)) {
-					if (!allowed_click(std::string("edit:measure:") + MEASURES[k])) {
-						return;
-					}
-					Quantity q = draft.quantity;
-					q.measure = MEASURES[k];
-					set_quantity(q);
-					return;
-				}
 			}
 			for (int k = 0; k < 7; ++k) {
 				if (edit_compare(k).has(x, y)) {
@@ -1993,6 +2039,17 @@ struct Ui::Impl {
 		}
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			Rect r;
+			if (sense_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
+				if (guided() && !asks_drag_from("sense:" + id(i))) {
+					not_now();
+					return true;
+				}
+				sensing = i;
+				return true;
+			}
+		}
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			Rect r;
 			if (port_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
 				if (guided() && !asks_drag_from("port:" + id(i))) {
 					not_now();
@@ -2049,6 +2106,27 @@ struct Ui::Impl {
 			const int made = static_cast<int>(view.items.size()) - 1;
 			choose_only(made);
 			edit_part(made);
+			if (guided() && senses(view.items[static_cast<size_t>(made)].part.kind)) {
+				message.clear(); // the step says how it senses
+			}
+		}
+	}
+	// a sensing line let go: onto a vessel, a balloon or a burner, which the part then senses, and its settings open
+	void drop_sensing(int source, float x, float y) {
+		const int target = item_at(x, y, -1, true);
+		if (target < 0) {
+			return;
+		}
+		if (!guided_signal_drop("sense:" + id(source), target, x, y)) {
+			return;
+		}
+		const ItemView &t = view.items[static_cast<size_t>(target)];
+		if (t.kind != "vessel" && t.kind != "balloon" && t.kind != "burner") {
+			message = id(source) + " senses a vessel, a balloon or a burner";
+			return;
+		}
+		if (act({ { "do", "sense" }, { "part", id(source) }, { "item", t.id } })) {
+			edit_part(item_index(id(source)));
 		}
 	}
 	// a wire let go: into a part's input, or a rig onto a control
@@ -2086,9 +2164,7 @@ struct Ui::Impl {
 			return;
 		}
 		if (key == Ui::KeyEscape) {
-			if (picking) {
-				picking = false;
-			} else if (allowed_click("edit:cancel")) {
+			if (allowed_click("edit:cancel")) {
 				close_edit();
 			}
 			return;
@@ -2123,7 +2199,7 @@ struct Ui::Impl {
 				fresh = false;
 			}
 		}
-		if (focus >= 3) {
+		if (focus >= 3 && focus <= 5) { // a valve's per cent (a goal's value, 10 and on, is no per cent: read past the three, once)
 			read_percent(focus - 3);
 		}
 	}
@@ -2325,6 +2401,9 @@ struct Ui::Impl {
 		if (port_rect(index, port)) {
 			circle(port.cx(), port.cy(), 5, p.out ? GOOD : WALL_INK);
 		}
+		if (sense_rect(index, port)) {
+			circle(port.cx(), port.cy(), 4, p.watching ? SENSE : WALL_INK);
+		}
 	}
 
 	// the open circuit: its grid, and what is in it
@@ -2370,6 +2449,21 @@ struct Ui::Impl {
 		return true;
 	}
 
+	// a sensing line's two ends: from the part's sensing port to what it senses, both on the bench
+	bool sensing_ends(int part, float &x0, float &y0, float &x1, float &y1) const {
+		Rect port;
+		if (!is_part(part) || !on_bench(part) || !sense_rect(part, port)) {
+			return false;
+		}
+		const int item = item_index(view.items[static_cast<size_t>(part)].part.quantity.item);
+		if (item < 0 || !on_bench(item) || is_part(item)) {
+			return false;
+		}
+		x0 = port.cx();
+		y0 = port.cy();
+		sensed_point(part, item, x1, y1);
+		return true;
+	}
 	// whether an item is on the bench (not in the cabinet, a circuit or the outbox)
 	bool on_bench(int index) const { return index >= 0 && view.items[static_cast<size_t>(index)].place == "bench"; }
 	// a rig's two ends on the screen: from its part's port to the control it works
@@ -2430,6 +2524,15 @@ struct Ui::Impl {
 		Rect port;
 		if (wiring >= 0 && port_rect(wiring, port)) {
 			line(port.cx(), port.cy(), px, py, GUIDE, 2);
+		}
+		if (sensing >= 0 && sense_rect(sensing, port)) {
+			line(port.cx(), port.cy(), px, py, SENSE, 2);
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (view.items[static_cast<size_t>(i)].part.watching && sensing_ends(i, x0, y0, x1, y1)) {
+				line(x0, y0, x1, y1, (SENSE & 0xffffff00u) | 0x70u, 1); // a highlight: it is reading
+			}
 		}
 		if (making >= 0) {
 			const Rect ghost{ px - 18, py - 18, 36, 36 };
@@ -2682,6 +2785,10 @@ struct Ui::Impl {
 			Rect r;
 			return port_rect(item_index(std::string(rest)), r) && found(r);
 		}
+		if (after("sense:", rest)) {
+			Rect r;
+			return sense_rect(item_index(std::string(rest)), r) && found(r);
+		}
 		if (what.substr(0, 5) == "part:") {
 			for (const auto &[name, r] : part_buttons()) {
 				if (name == what) {
@@ -2784,33 +2891,34 @@ struct Ui::Impl {
 			return false;
 		}
 		if (draft.edit == Draft::Monitor) {
-			if (picking) {
-				const std::vector<Quantity> qs = pickable();
-				for (int i = 0; sub("pick:") && i < static_cast<int>(qs.size()); ++i) {
-					if (qs[static_cast<size_t>(i)].what == more) {
-						return found(pick_entry(i));
+			if (sub("kind:")) {
+				const std::vector<QuantityKind> kinds = kinds_now();
+				for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
+					if (more == kind_name(kinds[static_cast<size_t>(k)])) {
+						return found(kind_rect(k));
 					}
 				}
 				return false;
 			}
-			if (sub("item:")) {
-				const std::vector<int> items = watchable();
-				for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-					if (id(items[static_cast<size_t>(k)]) == more) {
-						return found(edit_item(k));
+			if (sub(material() ? "material:" : "quantity:")) {
+				const std::vector<std::string> choices = choices_now();
+				for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+					if (more == choices[static_cast<size_t>(i)]) {
+						return found(choice_at(i));
 					}
 				}
 				return false;
-			}
-			if (rest == "quantity") {
-				return !draft.quantity.item.empty() && found(edit_quantity());
 			}
 			if (sub("measure:")) {
-				for (int k = 0; species_quantity() && k < 4; ++k) {
-					if (more == MEASURES[k]) {
-						return found(edit_measure(k));
+				const std::vector<std::string> measures = measures_now();
+				for (int k = 0; k < static_cast<int>(measures.size()); ++k) {
+					if (more == measures[static_cast<size_t>(k)]) {
+						return found(measure_at(k));
 					}
 				}
+				return false;
+			}
+			if (!quantity_chosen()) {
 				return false;
 			}
 			if (sub("compare:")) {
@@ -3022,13 +3130,10 @@ struct Ui::Impl {
 		};
 		std::string rest;
 		if (draft.edit == Draft::Monitor) {
-			if (after("edit:item:", rest)) {
-				return draft.quantity.item == rest;
+			if (after("edit:kind:", rest)) {
+				return draft.kind >= 0 && rest == kind_name(static_cast<QuantityKind>(draft.kind));
 			}
-			if (w == "edit:quantity") { // done once the list is open, or the quantity picked after it is
-				return picking || (i + 1 < gestures.size() && gestures[i + 1].what == "edit:pick:" + draft.quantity.what);
-			}
-			if (after("edit:pick:", rest)) {
+			if (after("edit:material:", rest) || after("edit:quantity:", rest)) {
 				return draft.quantity.what == rest;
 			}
 			if (after("edit:measure:", rest)) {
@@ -3186,6 +3291,9 @@ struct Ui::Impl {
 				if (port_rect(i, port)) {
 					thing(v.id, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
 				}
+				if (sense_rect(i, port)) {
+					thing(v.id, "sense port", OpticsBody::Slab, Rect{ port.cx() - 4, port.cy() - 4, 8, 8 }, 4.0f, "sense", nullptr, in_hand);
+				}
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
@@ -3214,6 +3322,18 @@ struct Ui::Impl {
 			}
 			bar(r.from + ">" + r.item + "." + r.control, "rig", x0, y0, x1, y1, 2.0f, "rig", false);
 			thing(r.from + ">" + r.item + "." + r.control, "knob", OpticsBody::Slab, Rect{ x1 - 4, y1 - 4, 8, 8 }, 4.0f, "rig", nullptr, false);
+		}
+		// what each monitor senses (§13.3, Stage 26): a dashed line, unlike a wire or a rig
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+			if (!sensing_ends(i, x0, y0, x1, y1)) {
+				continue;
+			}
+			const float dx = x1 - x0, dy = y1 - y0, length = std::sqrt(dx * dx + dy * dy);
+			for (int k = 0; static_cast<float>(k) * SENSE_DASH < length; ++k) {
+				const float a = static_cast<float>(k) * SENSE_DASH / length, b = std::min(1.0f, (static_cast<float>(k) * SENSE_DASH + SENSE_DASH * 0.6f) / length);
+				bar(id(i) + "~" + std::to_string(k), "sense", x0 + dx * a, y0 + dy * a, x0 + dx * b, y0 + dy * b, 2.0f, "sense", false);
+			}
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
 		OpticsRoom room;
@@ -3423,19 +3543,32 @@ struct Ui::Impl {
 		button(edit_done(), draft.edit == Draft::Rig ? "rig" : "set");
 		text(edit_done().x + 160, edit_done().y + 24, "click a value to type it; enter sets, escape cancels", DIM, 14);
 		if (draft.edit == Draft::Monitor) {
-			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " watches", INK, 22);
-			const std::vector<int> items = watchable();
-			for (int k = 0; k < static_cast<int>(items.size()); ++k) {
-				button(edit_item(k), id(items[static_cast<size_t>(k)]), id(items[static_cast<size_t>(k)]) == draft.quantity.item, 14);
+			// guided (§13.3, Stage 26): each step a short list of what the item has now, the next once it is chosen
+			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " watches " + draft.quantity.item, INK, 22);
+			if (quantity_chosen()) {
+				text(EDITOR.x + 340, EDITOR.y + 40, "now " + shown(draft.quantity, now(draft.quantity)), DIM, 15);
 			}
-			if (draft.quantity.item.empty()) {
-				text(EDITOR.x + 20, EDITOR.y + 128, "choose what it watches", DIM, 15);
+			const std::vector<QuantityKind> kinds = kinds_now();
+			for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
+				const QuantityKind kind = kinds[static_cast<size_t>(k)];
+				button(kind_rect(k), kind == QuantityKind::Material ? "a material" : kind == QuantityKind::Vessel ? "the " + sensed().kind : "other", draft.kind == static_cast<int>(kind), 15);
+			}
+			if (draft.kind < 0) {
+				text(EDITOR.x + 20, EDITOR.y + 114, "what kind of quantity should it watch?", DIM, 15);
 				return;
 			}
-			const std::string full = label(view, draft.quantity);
-			button(edit_quantity(), full.substr(full.find(": ") + 2) + "  v");
-			for (int k = 0; species_quantity() && k < 4; ++k) {
-				button(edit_measure(k), MEASURES[k], draft.quantity.measure == MEASURES[k]);
+			const std::vector<std::string> choices = choices_now();
+			for (int i = 0; i < static_cast<int>(choices.size()); ++i) {
+				const std::string &c = choices[static_cast<size_t>(i)];
+				button(choice_at(i), what_name(c), draft.quantity.what == c, 13);
+			}
+			const std::vector<std::string> measures = measures_now();
+			for (int k = 0; k < static_cast<int>(measures.size()); ++k) {
+				button(measure_at(k), measure_name(measures[static_cast<size_t>(k)]), draft.quantity.measure == measures[static_cast<size_t>(k)], 14);
+			}
+			if (!quantity_chosen()) {
+				text(EDITOR.x + 20, lower_y() + 20, material() && !draft.quantity.what.empty() ? "measured how?" : material() ? "which material?" : "which quantity?", DIM, 15);
+				return;
 			}
 			for (int k = 0; k < 7; ++k) {
 				button(edit_compare(k), op_name(OPS[k]), draft.op == OPS[k]);
@@ -3451,17 +3584,6 @@ struct Ui::Impl {
 			scales(draft.quantity, scale);
 			for (int k : { -3, -2, -1, 1, 2, 3 }) {
 				button(edit_nudge(k), (k < 0 ? "-" : "+") + nudge_label(scale[3 - (k < 0 ? -k : k)]));
-			}
-			text(edit_field(0).x, edit_field(0).y + 50, "now " + shown(draft.quantity, now(draft.quantity)), DIM, 14);
-			if (picking) {
-				const std::vector<Quantity> qs = pickable();
-				for (int i = 0; i < static_cast<int>(qs.size()); ++i) {
-					const Rect r = pick_entry(i);
-					rect_fill(r, rgba(20, 20, 20));
-					outline(r, GRID, 1);
-					const std::string name = label(view, qs[static_cast<size_t>(i)]);
-					text(r.x + 8, r.y + 19, name.substr(name.find(": ") + 2), INK, 15);
-				}
 			}
 		} else if (draft.edit == Draft::Goal) {
 			text(EDITOR.x + 20, EDITOR.y + 40, text_of("a goal for slot %.0f", draft.slot), INK, 22);
@@ -3619,6 +3741,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			const int from = m.wiring;
 			m.wiring = -1;
 			m.drop_wiring(from, x, y);
+		} else if (m.sensing >= 0) {
+			const int from = m.sensing;
+			m.sensing = -1;
+			m.drop_sensing(from, x, y);
 		} else if (m.drag >= 0 && m.moved) {
 			const int index = m.drag;
 			const bool several = m.carrying_group();

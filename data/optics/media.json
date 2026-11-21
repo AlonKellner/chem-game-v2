@@ -211,6 +211,16 @@
 		"wire": {
 			"base": 0.08
 		},
+		"sense": {
+			"base": 0.1,
+			"bands": [
+				{
+					"centre_nm": 530,
+					"width_nm": 60,
+					"peak": 0.3
+				}
+			]
+		},
 		"rig": {
 			"base": 0.15,
 			"bands": [

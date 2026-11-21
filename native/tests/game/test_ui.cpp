@@ -279,7 +279,7 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1); // the burner; two faces and two lamps; the monitor's port; the rig's knob
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob
 	CHECK(bars == 3); // the wire and the rig; the condenser's outlet, in the cabinet
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
@@ -636,11 +636,14 @@ TEST_CASE("ui: parts come out of the drawer, are set, wired and rigged with the 
 		return out;
 	};
 	float x = 0, y = 0;
-	// a monitor: its editor opens; the flask's temperature, between 30 and 40.5 C, typed and nudged
+	// a monitor: it senses the flask, and its editor opens; the flask's temperature, between 30 and 40.5 C, typed and nudged
 	p.drag("drawer:monitor", "square:1,1");
 	CHECK(kinds() == V{ "monitor1" });
 	CHECK(p.ui->selected() == "monitor1");
-	p.click("edit:item:flask");
+	CHECK(p.ui->message().find("sensing port") != std::string::npos); // it senses nothing yet: how to make it
+	p.drag("sense:monitor1", "item:flask");
+	p.click("edit:kind:vessel");
+	p.click("edit:quantity:celsius");
 	p.click("edit:compare:between");
 	p.click("edit:value:0");
 	p.ui->key(lab::Ui::KeyText, '3');
@@ -750,9 +753,10 @@ TEST_CASE("ui: a person boiling down at 600x: a monitor closes the valve at 10 g
 	p.drag("item:acid", "item:flask");
 	p.click("panel:pour");
 	p.drag("drawer:monitor", "square:1,1");
-	p.click("edit:item:flask");
-	p.click("edit:quantity");
-	p.click("edit:pick:water");
+	p.drag("sense:monitor1", "item:flask");
+	p.click("edit:kind:material");
+	p.click("edit:material:water");
+	p.click("edit:measure:g");
 	p.click("edit:compare:below");
 	p.click("edit:value:0");
 	p.ui->key(lab::Ui::KeyText, '1');
@@ -824,7 +828,7 @@ TEST_CASE("ui: chosen parts become a circuit, opened to work inside, nested, and
 	CHECK(p.item("timer1").row == 3);
 	p.drag("drawer:monitor", "inner:0,3"); // out of the drawer, into it
 	CHECK(p.item("monitor2").part.in == "circuit1");
-	p.click("edit:cancel");
+	CHECK_FALSE(p.ui->locate("edit:cancel", x, y)); // it senses nothing: its settings wait for that (Stage 26)
 	p.drag("port:timer1", "item:monitor1"); // a wire out of it, to the bench
 	CHECK(p.ui->lab().view().wires.size() == 2);
 	p.drag("item:alarm1", "square:12,1"); // out of the panel: it stays in

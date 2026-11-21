@@ -1550,7 +1550,7 @@ gestures, and a run with a tutorial is the same lab as one without.
   that is on the screen now (for a drag, both ends and an arrow), while a check that is not waited
   on is still open; with the item in hand, only where it goes.
 
-**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 35 steps; Stage 13 teaches the signals at the boil-down: a monitor on the flask's water, rigged to close the burner's valve and wired to an alarm.
+**Demo subset:** `data/tutorials/demo.json` over `data/benches/lab.json`: the demo in 36 steps; Stage 13 teaches the signals at the boil-down: a monitor sensing the flask (Stage 26), on its water, rigged to close the burner's valve and wired to an alarm.
 Its failures: the balloon burst; acid poured before the malachite has broken down (in liquid it
 never gets hot enough); the crystals overheated to a lower hydrate or the anhydrous salt; the
 balloon handed in without the CO₂, the beaker with more than water, the flask with its liquor or

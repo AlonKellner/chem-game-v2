@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <ctime>
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -509,9 +510,16 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 		}
 		l->set_checking(false);
 		std::string why;
-		const auto start = std::chrono::steady_clock::now();
+		// the thread's own time, not the clock's: the tests run side by side, and a moment waited for the CPU is
+		// not the monitors' (wall time, even the best of three, failed under the gate's load)
+		const auto thread_ms = [] {
+			timespec t{};
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+			return static_cast<double>(t.tv_sec) * 1e3 + static_cast<double>(t.tv_nsec) * 1e-6;
+		};
+		const double start = thread_ms();
 		REQUIRE(l->advance(6000, why));
-		return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count() / 10.0; // per 600 steps: one frame at 600x
+		return (thread_ms() - start) / 10.0; // per 600 steps: one frame at 600x
 	};
 	cost(true); // warm
 	// the best of three each, taken in turn: the tests run side by side, and a moment's load is not the monitors'
