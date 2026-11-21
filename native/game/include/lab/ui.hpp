@@ -46,7 +46,8 @@ public:
 	// The pointer, in screen pixels, whether its button is down, and the keys
 	// held with it: a click with one adds an item to the selection or takes it
 	// away (§13.1).
-	enum Mod : int32_t { ModShift = 1, ModCtrl = 2, ModMeta = 4, ModAny = 7 };
+	// keys held with the pointer, and its right button (Stage 27: the full menu over a vessel)
+	enum Mod : int32_t { ModShift = 1, ModCtrl = 2, ModMeta = 4, ModAny = 7, ModRight = 8 };
 	void pointer(float x, float y, bool down, int mods = 0);
 	// A key for the part editor's focused field (GAME_SPEC §13.3): text (a
 	// character, by its code point), backspace, enter (set), escape (cancel; with

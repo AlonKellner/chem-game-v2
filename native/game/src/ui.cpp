@@ -216,6 +216,13 @@ struct Ui::Impl {
 	std::vector<int> group;
 	bool marquee = false; // a rectangle being drawn from (press_x, press_y)
 	bool moved = false;
+	// carried (§13.1, Stage 27; asked for by the user, 2026-11-22): a click picks an item up, and it follows the
+	// pointer, no button held; the next click puts it down, or, over a vessel it can pour into, pours while held
+	bool carrying = false;
+	bool putting_down = false; // a press while carrying: its release puts it down
+	bool pouring = false; // a press over a vessel: a held pour, tilting while the button is held
+	double tilt = 0.0;
+	static constexpr double TILT_SECONDS = 1.5; // from upright to the full tilt, while the button is held
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
 	int hover = -1;
@@ -788,7 +795,18 @@ struct Ui::Impl {
 		selected = group.empty() ? -1 : group.back();
 	}
 	// a selection of several, the item in hand among them, being carried
-	bool carrying_group() const { return drag >= 0 && moved && group.size() > 1 && chosen(drag); }
+	bool carrying_group() const { return drag >= 0 && (moved || carrying) && group.size() > 1 && chosen(drag); }
+	bool carrying_group_of(int index) const { return group.size() > 1 && chosen(index); }
+	// whether a carried item is put down on its own place: there it is left as it was, chosen (Stage 27)
+	bool own_place(int index, float x, float y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.place != "bench") {
+			return rect(index).has(x, y);
+		}
+		const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+		const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+		return BENCH.has(x, y) && col == v.col && row == v.row;
+	}
 	Rect marquee_rect() const { return Rect{ std::fmin(press_x, px), std::fmin(press_y, py), std::fabs(px - press_x), std::fabs(py - press_y) }; }
 	// what a rectangle drawn on the bench takes: everything on the bench it touches
 	void take_marquee() {
@@ -937,6 +955,29 @@ struct Ui::Impl {
 	}
 
 	// what letting go of an item at a point does
+	// a vessel a carried one pours into: a vessel made as glassware, not a condenser, not itself
+	bool pours_into(int carried, int target) const {
+		if (carried < 0 || target < 0 || carried == target) {
+			return false;
+		}
+		const ItemView &a = view.items[static_cast<size_t>(carried)], &b = view.items[static_cast<size_t>(target)];
+		return a.kind == "vessel" && !a.glassware.empty() && b.kind == "vessel" && !b.condenser && b.place == "bench";
+	}
+	// what is in hand is set back on its place, as it was
+	void put_back() {
+		stop_pouring();
+		carrying = false;
+		putting_down = false;
+		drag = -1;
+	}
+	void stop_pouring() {
+		if (!pouring) {
+			return;
+		}
+		pouring = false;
+		tilt = 0.0;
+		act({ { "do", "unpour" }, { "item", id(drag) } });
+	}
 	void drop(int index, float x, float y) {
 		const ItemView v = view.items[static_cast<size_t>(index)];
 		const int target = item_at(x, y, index, true);
@@ -1063,6 +1104,7 @@ struct Ui::Impl {
 				}
 				if (act(command)) {
 					panel = false;
+					put_back(); // the menu acted for the vessel in hand: it is set back on its place (Stage 27)
 				}
 				return;
 			}
@@ -1073,12 +1115,13 @@ struct Ui::Impl {
 					}
 					if (act({ { "do", "tip" }, { "from", id(from) }, { "to", id(to) }, { "species", species }, { "all", true } })) {
 						panel = false;
+						put_back();
 					}
 					return;
 				}
 			}
 			if (cancel_button().has(x, y) || !PANEL.has(x, y)) {
-				panel = false;
+				panel = false; // still in hand
 			}
 			return;
 		}
@@ -1144,6 +1187,39 @@ struct Ui::Impl {
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
+		}
+		if (carrying && drag >= 0) {
+			// a press while carrying (Stage 27): over a vessel it pours into, a held pour, or with the right button
+			// the full menu; anywhere else its release puts it down
+			const int target = item_at(x, y, drag, true);
+			if (pours_into(drag, target)) {
+				if (mods & Ui::ModRight) {
+					if (guided() && !guided_drop(drag, target, x, y)) {
+						return;
+					}
+					panel = true;
+					from = drag;
+					to = target;
+					pour_fraction = view.items[static_cast<size_t>(drag)].liquid_ml > 50.0 ? 50.0 / view.items[static_cast<size_t>(drag)].liquid_ml : 1.0;
+					return;
+				}
+				if (guided()) {
+					not_now(); // a tutorial pours by the menu, an amount
+					return;
+				}
+				if (act({ { "do", "hold" }, { "item", id(drag) }, { "over", id(target) } })) {
+					pouring = true;
+					tilt = 0.0;
+				}
+				return;
+			}
+			if (!(mods & Ui::ModRight)) {
+				putting_down = true;
+			}
+			return;
+		}
+		if (mods & Ui::ModRight) {
+			return; // the menu is for a carried vessel over another
 		}
 		const int hit = item_at(x, y);
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
@@ -2204,6 +2280,12 @@ struct Ui::Impl {
 
 	void type(Ui::Key key, uint32_t codepoint) {
 		if (draft.edit == Draft::None) {
+			if (key == Ui::KeyEscape && carrying) {
+				stop_pouring();
+				carrying = false; // put back where it was (Stage 27)
+				drag = -1;
+				return;
+			}
 			if (key == Ui::KeyEscape && !panel) {
 				choose_only(-1);
 			}
@@ -3364,7 +3446,7 @@ struct Ui::Impl {
 			}
 		}
 		if (drag >= 0) {
-			add(drag, drawn(drag), moved);
+			add(drag, drawn(drag), moved || carrying);
 		}
 		// the wires and the rigs between things on the bench
 		for (const Wire &w : view.wires) {
@@ -3796,8 +3878,8 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 		m.press_x = x;
 		m.press_y = y;
 	}
-	if (m.drag >= 0 && (std::fabs(x - m.px) > 0 || std::fabs(y - m.py) > 0)) {
-		m.moved = true;
+	if (m.drag >= 0 && !m.carrying && down && (std::fabs(x - m.press_x) > 4 || std::fabs(y - m.press_y) > 4)) {
+		m.moved = true; // a drag, not a click: a hand shakes a little
 	}
 	m.px = x;
 	m.py = y;
@@ -3823,21 +3905,35 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			const int from = m.sensing;
 			m.sensing = -1;
 			m.drop_sensing(from, x, y);
-		} else if (m.drag >= 0 && m.moved) {
-			const int index = m.drag;
-			const bool several = m.carrying_group();
-			m.drag = -1;
-			if (several) {
-				m.drop_group(index, x, y);
-			} else {
-				m.drop(index, x, y);
+		} else if (m.drag >= 0 && m.carrying) {
+			// carried (Stage 27): a held pour ends; a click puts it down, on its own place too
+			if (m.pouring) {
+				m.stop_pouring();
+			} else if (m.putting_down) {
+				m.putting_down = false;
+				const int index = m.drag;
+				const bool several = m.carrying_group();
+				m.carrying = false;
+				m.drag = -1;
+				if (several) {
+					m.drop_group(index, x, y);
+				} else if (!m.own_place(index, x, y)) {
+					m.drop(index, x, y);
+				}
 			}
+		} else if (m.drag >= 0 && m.moved) {
+			m.drag = -1; // a drag over an item moves nothing (Stage 27: dragging is for wires, sensing, sliders, rectangles)
 		} else if (m.drag >= 0) {
-			// a click on it, without moving it, chooses it (§13.1); with a modifier, adds or takes it away
+			// a click on it picks it up, and chooses it (§13.1, Stage 27); with a modifier, adds it to the
+			// selection, or takes it away
 			if (mods & ModAny) {
 				m.toggle(m.drag);
+				m.drag = -1;
 			} else {
-				m.choose_only(m.drag);
+				if (!m.chosen(m.drag) || !m.carrying_group_of(m.drag)) {
+					m.choose_only(m.drag);
+				}
+				m.carrying = true;
 			}
 		} else if (m.marquee) {
 			if (std::fabs(x - m.press_x) > 3 || std::fabs(y - m.press_y) > 3) {
@@ -3847,7 +3943,9 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			}
 		}
 		m.marquee = false;
-		m.drag = -1;
+		if (!m.carrying) {
+			m.drag = -1;
+		}
 		m.valve_drag = -1;
 		m.slider_drag = false;
 	}
@@ -3862,6 +3960,11 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
+	if (m.pouring && m.down && m.drag >= 0 && seconds > 0.0) {
+		// a held pour tilts further while the button is held (Stage 27): its rate is its tilt's share
+		m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
+		m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
 		m.owed += seconds * m.speed * 60.0;
 		// no more than twenty simulated seconds a frame: beyond it the clock runs slow, never the picture

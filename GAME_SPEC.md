@@ -1480,18 +1480,25 @@ are in the readout's column, under what the selected item holds, for the item th
 vessel: its valve, a slider from shut to open). Nothing of them is on the grid; a tutorial's step
 that asks for one asks first for its item to be chosen.
 
-**Gestures.** Everything is a drag or a click:
+**Gestures.** Everything is a click or a drag. **An item is carried** (Stage 27; asked for by the user,
+2026-11-22): a click on it (pressed and let go over it) picks it up, and chooses it; it follows the
+pointer with no button held; the next click puts it down, as the table says; a click where it cannot
+go does nothing; a click on its own place, or Escape, puts it back. Over a vessel it pours into, the
+left button pours while it is held (a held pour, tilting as it is held; let go, it stops, and the
+vessel is still in hand), and the right button opens the full menu. Dragging is for wires, sensing,
+sliders and the selection's rectangle: a drag over an item moves nothing.
 
 | Gesture | Command |
 |---|---|
-| drag an item to a free cell of the bench | `place` |
-| drag an item to the cabinet | `stow` |
-| drag a burner onto a vessel | `heat` |
-| drag a balloon or a condenser onto a vessel | `attach` |
-| drag a vessel onto a condenser | `under` |
-| drag a vessel onto another vessel | opens the pour panel: a slider for how much liquid, `pour`; a button for each solid, `tip` |
-| drag an item onto a slot of the outbox | `submit` to that slot (§13.5) |
-| drag something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the drop means |
+| carry an item to a free cell of the bench | `place` |
+| carry an item to the cabinet | `stow` |
+| carry a burner onto a vessel | `heat` |
+| carry a balloon or a condenser onto a vessel | `attach` |
+| carry a vessel onto a condenser | `under` |
+| carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
+| carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
+| carry an item onto a slot of the outbox | `submit` to that slot (§13.5) |
+| carry something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the putting down means |
 | drag the slider beside a burner | `valve` |
 | click a vessel's stir button | `stir` |
 | drag a selection along the bench | `move` |

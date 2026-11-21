@@ -303,7 +303,8 @@ void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the sta
 		return;
 	}
 	try {
-		const int mods = ((down & CG_POINTER_SHIFT) ? lab::Ui::ModShift : 0) | ((down & CG_POINTER_CTRL) ? lab::Ui::ModCtrl : 0) | ((down & CG_POINTER_META) ? lab::Ui::ModMeta : 0);
+		const int mods = ((down & CG_POINTER_SHIFT) ? lab::Ui::ModShift : 0) | ((down & CG_POINTER_CTRL) ? lab::Ui::ModCtrl : 0) | ((down & CG_POINTER_META) ? lab::Ui::ModMeta : 0) |
+				((down & CG_POINTER_RIGHT) ? lab::Ui::ModRight : 0);
 		ui->ui->pointer(x, y, (down & CG_POINTER_DOWN) != 0, mods);
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());

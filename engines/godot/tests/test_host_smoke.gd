@@ -24,9 +24,12 @@ func _drag(what: String, to: String) -> void:
 	var b := _lab.locate(to)
 	assert_ne(a, Vector2(-1, -1), what + " is on the screen")
 	assert_ne(b, Vector2(-1, -1), to + " is on the screen")
-	_lab.pointer(a.x, a.y, false)
 	_lab.pointer(a.x, a.y, true)
-	_lab.pointer((a.x + b.x) / 2, (a.y + b.y) / 2, true)
+	if what.begins_with("item:"): # carried (Stage 27): a click picks it up, and a click puts it down
+		_lab.pointer(a.x, a.y, false)
+		b = _lab.locate(to)
+	else:
+		_lab.pointer((a.x + b.x) / 2, (a.y + b.y) / 2, true)
 	_lab.pointer(b.x, b.y, true)
 	_lab.pointer(b.x, b.y, false)
 

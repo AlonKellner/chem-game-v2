@@ -7,42 +7,42 @@
 		{
 			"part": "Stage 1: gas from malachite",
 			"title": "Set out the flask",
-			"text": "Drag the flask from the cabinet on the left onto a square of the bench.",
+			"text": "Click the flask in the cabinet on the left to pick it up, then click a square of the bench to put it down.",
 			"why": "Everything happens in this 250 mL flask: first the gas, then the solution, then the crystals.",
 			"checks": [{"text": "the flask stands on the bench", "when": {"item": "flask", "place": "bench"}}],
 			"play": [{"drag": ["item:flask", "square:11,12"]}]
 		},
 		{
 			"title": "A burner under the flask",
-			"text": "Drag the burner from the cabinet onto the flask.",
+			"text": "Pick up the burner in the cabinet, then click the flask: it goes under it.",
 			"why": "A burner heats the vessel it stands under. Chosen, its gas valve shows in the column on the right.",
 			"checks": [{"text": "the burner is under the flask", "when": {"item": "burner", "under": "flask"}}],
 			"play": [{"drag": ["item:burner", "item:flask"]}]
 		},
 		{
 			"title": "Bring the malachite",
-			"text": "Drag the jar from the cabinet onto a free square of the bench.",
+			"text": "Pick up the jar in the cabinet, then click a free square of the bench.",
 			"why": "The jar holds 5 g of malachite, a green copper carbonate mineral, as a powder.",
 			"checks": [{"text": "the jar stands on the bench", "when": {"item": "jar", "place": "bench"}}],
 			"play": [{"drag": ["item:jar", "square:4,13"]}]
 		},
 		{
 			"title": "Tip the malachite into the flask",
-			"text": "Drag the jar onto the flask. In the panel that opens, click \"tip in the malachite\".",
+			"text": "Pick up the jar, then right-click the flask. In the menu that opens, click \"tip in the malachite\".",
 			"why": "Malachite is Cu2CO3(OH)2. Heated, it breaks down into black copper oxide, carbon dioxide and water.",
 			"checks": [{"text": "all 5 g of malachite in the flask", "when": {"item": "flask", "species": "malachite", "above_g": 4.99}}],
 			"play": [{"drag": ["item:jar", "item:flask"]}, {"click": "panel:tip:malachite"}]
 		},
 		{
 			"title": "Catch the gas",
-			"text": "Drag the balloon from the cabinet onto the flask.",
+			"text": "Pick up the balloon in the cabinet, then click the flask.",
 			"why": "The balloon closes the flask's mouth: any gas that leaves the flask now goes into the balloon.",
 			"checks": [{"text": "the balloon is on the flask", "when": {"item": "balloon", "on": "flask"}}],
 			"play": [{"drag": ["item:balloon", "item:flask"]}]
 		},
 		{
 			"title": "Light the burner",
-			"text": "Click the burner to choose it, then drag its valve, in the column on the right, all the way open.",
+			"text": "Click the burner to choose it (it is picked up: click its place to set it back), then drag its valve, in the column on the right, all the way open.",
 			"why": "The flame is at about 1,900 C; the valve sets how much of its heat reaches the flask.",
 			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
 			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}]
@@ -62,7 +62,7 @@
 		},
 		{
 			"title": "Hand in the balloon",
-			"text": "Drag the balloon onto slot 1 of the outbox, at the bottom: its goal is carbon dioxide in the balloon.",
+			"text": "Pick up the balloon, then click slot 1 of the outbox, at the bottom: its goal is carbon dioxide in the balloon.",
 			"why": "Taking it off the flask seals it, with the carbon dioxide inside.",
 			"checks": [{"text": "the balloon is in slot 1", "when": {"item": "balloon", "submitted": true, "slot": 1}}],
 			"play": [{"drag": ["item:balloon", "slot:1"]}]
@@ -80,14 +80,14 @@
 		{
 			"part": "Stage 2: copper sulfate solution",
 			"title": "Bring the acid",
-			"text": "Drag the acid from the cabinet onto a free square of the bench.",
+			"text": "Pick up the acid in the cabinet, then click a free square of the bench.",
 			"why": "It is about 250 mL of 1 M sulfuric acid, H2SO4 in water.",
 			"checks": [{"text": "the acid stands on the bench", "when": {"item": "acid", "place": "bench"}}],
 			"play": [{"drag": ["item:acid", "square:7,12"]}]
 		},
 		{
 			"title": "Pour the acid onto the oxide",
-			"text": "Drag the acid onto the flask. The panel opens at 50 mL: click \"pour\".",
+			"text": "Pick up the acid, then right-click the flask. The menu opens at 50 mL: click \"pour\". (A left click on the flask pours by hand, while the button is held.)",
 			"why": "CuO + H2SO4 -> CuSO4 + H2O. About 45 mL reacts all the oxide; a little more makes sure none is left.",
 			"checks": [
 				{"text": "more than 45 mL of acid in the flask", "when": {"item": "flask", "liquid_above_ml": 45}},
@@ -128,20 +128,20 @@
 		{
 			"part": "Stage 3: water and crystals",
 			"title": "The condenser",
-			"text": "Drag the condenser from the cabinet onto the flask.",
+			"text": "Pick up the condenser in the cabinet, then click the flask.",
 			"why": "Its cold jacket turns the steam from the flask back into liquid water.",
 			"checks": [{"text": "the condenser is on the flask", "when": {"item": "condenser", "on": "flask"}}],
 			"play": [{"drag": ["item:condenser", "item:flask"]}]
 		},
 		{
 			"title": "A beaker for the water",
-			"text": "Drag the beaker from the cabinet onto a free square of the bench.",
+			"text": "Pick up the beaker in the cabinet, then click a free square of the bench.",
 			"checks": [{"text": "the beaker stands on the bench", "when": {"item": "beaker", "place": "bench"}}],
 			"play": [{"drag": ["item:beaker", "square:19,12"]}]
 		},
 		{
 			"title": "Under the outlet",
-			"text": "Drag the beaker onto the condenser: it stands under its outlet.",
+			"text": "Pick up the beaker, then click the condenser: it stands under its outlet.",
 			"why": "What condenses runs down into the beaker.",
 			"checks": [{"text": "the condenser drains into the beaker", "when": {"item": "condenser", "drains_to": "beaker"}}],
 			"play": [{"drag": ["item:beaker", "item:condenser"]}]
@@ -235,32 +235,32 @@
 		},
 		{
 			"title": "Take the condenser off",
-			"text": "Drag the condenser off the flask onto a free square of the bench. Moved away, its outlet no longer drips into the beaker.",
+			"text": "Pick up the condenser off the flask, then click a free square of the bench. Moved away, its outlet no longer drips into the beaker.",
 			"checks": [{"text": "the condenser is off the flask", "when": {"not": {"item": "condenser", "place": "on"}}}],
 			"play": [{"drag": ["item:condenser", "square:23,3"]}]
 		},
 		{
 			"title": "A beaker for the liquor",
-			"text": "Drag the waste beaker from the cabinet onto a free square of the bench.",
+			"text": "Pick up the waste beaker in the cabinet, then click a free square of the bench.",
 			"checks": [{"text": "the waste beaker stands on the bench", "when": {"item": "waste", "place": "bench"}}],
 			"play": [{"drag": ["item:waste", "square:23,12"]}]
 		},
 		{
 			"title": "Pour off the liquor",
-			"text": "Drag the flask onto the waste beaker. Drag the panel's slider to the right end, then click \"pour it all\".",
+			"text": "Pick up the flask, then right-click the waste beaker. Drag the menu's slider to the right end, then click \"pour it all\".",
 			"why": "The liquor holds the leftover acid and the copper sulfate still dissolved. Poured off, it leaves the crystals clean.",
 			"checks": [{"text": "no liquid left in the flask", "when": {"item": "flask", "liquid_below_ml": 0.01}}],
 			"play": [{"drag": ["item:flask", "item:waste"]}, {"click": "panel:slider@1"}, {"click": "panel:pour"}]
 		},
 		{
 			"title": "Hand in the water",
-			"text": "Drag the beaker onto slot 2: pure water in the beaker.",
+			"text": "Pick up the beaker, then click slot 2: pure water in the beaker.",
 			"checks": [{"text": "the beaker is in slot 2", "when": {"item": "beaker", "submitted": true, "slot": 2}}],
 			"play": [{"drag": ["item:beaker", "slot:2"]}]
 		},
 		{
 			"title": "Hand in the crystals",
-			"text": "Drag the flask onto slot 3: the crystals. The burner stays on the bench.",
+			"text": "Pick up the flask, then click slot 3: the crystals. The burner stays on the bench.",
 			"checks": [{"text": "the flask is in slot 3", "when": {"item": "flask", "submitted": true, "slot": 3}}],
 			"play": [{"drag": ["item:flask", "slot:3"]}]
 		}
