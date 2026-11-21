@@ -1735,6 +1735,36 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		return true;
 	}
+	if (what == "sense" || what == "unsense") {
+		// what a monitor reads, drawn from its sensing port (§13.3, Stage 26): another item forgets its quantity
+		int at = -1;
+		if (!part(c, "part", std::nullopt, at, why)) {
+			return false;
+		}
+		Part &p = parts[static_cast<size_t>(at)];
+		if (!senses(p.kind)) {
+			why = "\"" + p.id + "\" senses nothing: a monitor senses an item";
+			return false;
+		}
+		if (what == "unsense") {
+			p.quantity = Quantity{};
+			p.watching = false;
+			p.last.reset();
+			return true;
+		}
+		const std::string item = c.value("item", std::string());
+		const int i = find(item);
+		if (i < 0 || items[static_cast<size_t>(i)].kind == Kind::Tray) {
+			why = "a monitor senses a vessel, a balloon or a burner: there is no \"" + item + "\"";
+			return false;
+		}
+		if (p.quantity.item != item) {
+			p.quantity = Quantity{ item, "", "g" };
+			p.watching = false;
+			p.last.reset();
+		}
+		return true;
+	}
 	if (what == "set") {
 		int at = -1;
 		if (!part(c, "part", std::nullopt, at, why)) {
@@ -1791,11 +1821,13 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Quantity q;
-		q.item = c.value("item", std::string());
+		q.item = c.value("item", p.quantity.item); // what it senses, unless the command names an item: then it senses that
 		q.what = c.value("what", std::string());
 		q.measure = c.value("measure", std::string("g"));
 		if (q.what == "met" ? find_goal(q.item) < 0 : find(q.item) < 0 || items[static_cast<size_t>(find(q.item))].kind == Kind::Tray) {
-			why = q.what == "met" ? "a monitor reads \"met\" of a goal: there is no goal \"" + q.item + "\"" : "a monitor watches an item on the bench: there is no \"" + q.item + "\"";
+			why = q.what == "met"	? "a monitor reads \"met\" of a goal: there is no goal \"" + q.item + "\""
+					: q.item.empty() ? "\"" + p.id + "\" senses nothing: sense an item first, or name its \"item\""
+									 : "a monitor watches an item on the bench: there is no \"" + q.item + "\"";
 			return false;
 		}
 		if (!valid(q, why)) {

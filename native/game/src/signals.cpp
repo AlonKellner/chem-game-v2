@@ -34,6 +34,10 @@ bool part_kind_of(std::string_view name, PartKind &kind) {
 	return false;
 }
 
+bool senses(PartKind kind) {
+	return kind == PartKind::Monitor;
+}
+
 bool sends(PartKind kind) {
 	return kind != PartKind::Alarm && kind != PartKind::Writer && kind != PartKind::Circuit;
 }

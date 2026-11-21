@@ -22,6 +22,19 @@ std::optional<double> measure(const LabView &view, const Quantity &q);
 // temperature, gas, solids and liquids, liquid (a balloon then its fill);
 // then each species it holds (the masses); a burner its valve alone.
 std::vector<Quantity> quantities_of(const ItemView &item);
+// The guided choice of what a part senses (§13.3, Stage 26), each step a closed
+// list of what the item has now: the kinds with something in them; a kind's
+// quantities (a material: the species it holds, not its wall; the vessel:
+// its temperature, total mass, liquid, solids, solids and liquids, gas;
+// other: a balloon's fill, a burner's valve); a material's measures (g, mol,
+// purity; count and size for a solid).
+enum class QuantityKind { Material, Vessel, Other };
+QuantityKind kind_of(const Quantity &q);
+const char *kind_name(QuantityKind kind); // "material", "vessel", "other"
+std::vector<QuantityKind> kinds_of(const ItemView &item);
+std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind kind);
+std::vector<std::string> materials_of(const ItemView &item);
+std::vector<std::string> measures_of(const ItemView &item, const std::string &species);
 // "flask: temperature (C)", "flask: H2O(l) (g)"
 std::string label(const LabView &view, const Quantity &q);
 std::string unit(const Quantity &q);

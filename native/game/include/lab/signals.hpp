@@ -28,6 +28,8 @@ const char *part_kind_name(PartKind kind); // "timer", "monitor", "alarm", "circ
 bool part_kind_of(std::string_view name, PartKind &kind);
 // whether a part sends a signal: an alarm and a writer only take one, a circuit's parts send theirs
 bool sends(PartKind kind);
+// whether a part senses an item (§13.3, Stage 26): a monitor
+bool senses(PartKind kind);
 
 struct Part {
 	std::string id; // "monitor1"

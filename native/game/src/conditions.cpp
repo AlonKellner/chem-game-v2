@@ -2,6 +2,7 @@
 
 #include "chem/species.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 
@@ -10,7 +11,8 @@ namespace lab {
 namespace {
 
 bool fixed(const std::string &what) {
-	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "valve" || what == "fill" || what == "met";
+	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "valve" || what == "fill" ||
+			what == "met";
 }
 
 bool is_gas(const std::string &species) {
@@ -139,10 +141,21 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "liquid_ml") {
 		return v->liquid_ml;
 	}
-	double g = 0.0, count = 0.0, size = 0.0;
+	if (q.what == "solid_ml") { // what is condensed and not liquid (§13.3, Stage 26)
+		return std::max(0.0, v->condensed_ml - v->liquid_ml);
+	}
+	if (q.what == "mass_g") { // all it holds, its wall not
+		double all = 0.0;
+		for (const SubstanceView &s : v->contents) {
+			all += s.wall ? 0.0 : s.g;
+		}
+		return all;
+	}
+	double g = 0.0, mol = 0.0, count = 0.0, size = 0.0;
 	for (const SubstanceView &s : v->contents) {
 		if (s.species == q.what) {
 			g += s.g;
+			mol += s.mol;
 			count += static_cast<double>(s.particles);
 			size = s.size_um;
 		}
@@ -150,7 +163,7 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.measure == "purity") {
 		return 100.0 * purity(*v, q.what);
 	}
-	return q.measure == "count" ? count : q.measure == "size" ? size : g;
+	return q.measure == "count" ? count : q.measure == "size" ? size : q.measure == "mol" ? mol : g;
 }
 
 std::vector<Quantity> quantities_of(const ItemView &item) {
@@ -163,7 +176,7 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		out.push_back(Quantity{ item.id, "valve", "g" });
 		return out;
 	}
-	for (const char *what : { "celsius", "gas_ml", "condensed_ml", "liquid_ml" }) {
+	for (const char *what : { "celsius", "gas_ml", "condensed_ml", "liquid_ml", "solid_ml", "mass_g" }) {
 		out.push_back(Quantity{ item.id, what, "g" });
 	}
 	if (item.kind == "balloon") {
@@ -177,6 +190,71 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 	return out;
 }
 
+QuantityKind kind_of(const Quantity &q) {
+	if (q.what == "fill" || q.what == "valve" || q.what == "met") {
+		return QuantityKind::Other;
+	}
+	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
+}
+
+std::vector<std::string> materials_of(const ItemView &item) {
+	std::vector<std::string> out;
+	for (const SubstanceView &s : item.contents) {
+		if (!s.wall && s.g > 0.0 && std::find(out.begin(), out.end(), s.species) == out.end()) {
+			out.push_back(s.species);
+		}
+	}
+	return out;
+}
+
+std::vector<std::string> measures_of(const ItemView &item, const std::string &species) {
+	std::vector<std::string> out{ "g", "mol", "purity" };
+	for (const SubstanceView &s : item.contents) {
+		if (s.species == species && s.phase == 's' && !s.wall) {
+			out.insert(out.end(), { "count", "size" });
+			break;
+		}
+	}
+	return out;
+}
+
+std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind kind) {
+	std::vector<std::string> out;
+	if (kind == QuantityKind::Material) {
+		return item.kind == "vessel" || item.kind == "balloon" ? materials_of(item) : out;
+	}
+	for (const Quantity &q : quantities_of(item)) {
+		if (fixed(q.what) && kind_of(q) == kind) {
+			out.push_back(q.what);
+		}
+	}
+	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
+		static const char *const ORDER[] = { "celsius", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		std::vector<std::string> ordered;
+		for (const char *w : ORDER) {
+			if (std::find(out.begin(), out.end(), w) != out.end()) {
+				ordered.emplace_back(w);
+			}
+		}
+		return ordered;
+	}
+	return out;
+}
+
+std::vector<QuantityKind> kinds_of(const ItemView &item) {
+	std::vector<QuantityKind> out;
+	for (const QuantityKind k : { QuantityKind::Material, QuantityKind::Vessel, QuantityKind::Other }) {
+		if (!quantities_of_kind(item, k).empty()) {
+			out.push_back(k);
+		}
+	}
+	return out;
+}
+
+const char *kind_name(QuantityKind kind) {
+	return kind == QuantityKind::Material ? "material" : kind == QuantityKind::Vessel ? "vessel" : "other";
+}
+
 std::string unit(const Quantity &q) {
 	if (q.what == "celsius") {
 		return "C";
@@ -187,10 +265,13 @@ std::string unit(const Quantity &q) {
 	if (q.what == "met") {
 		return "";
 	}
+	if (q.what == "mass_g") {
+		return "g";
+	}
 	if (fixed(q.what)) {
 		return "mL";
 	}
-	return q.measure == "count" ? "" : q.measure == "size" ? "um" : q.measure == "purity" ? "%" : "g";
+	return q.measure == "count" ? "" : q.measure == "size" ? "um" : q.measure == "purity" ? "%" : q.measure == "mol" ? "mol" : "g";
 }
 
 std::string label(const LabView &, const Quantity &q) {
@@ -203,6 +284,10 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "solids and liquids";
 	} else if (q.what == "liquid_ml") {
 		what = "liquid";
+	} else if (q.what == "solid_ml") {
+		what = "solids";
+	} else if (q.what == "mass_g") {
+		what = "total mass";
 	} else if (q.what == "valve") {
 		what = "valve";
 	} else if (q.what == "fill") {
@@ -210,7 +295,7 @@ std::string label(const LabView &, const Quantity &q) {
 	} else if (q.what == "met") {
 		what = "met";
 	} else {
-		what = species_name(q.what) + (q.measure == "count" ? " particles" : q.measure == "size" ? " particle size" : q.measure == "purity" ? " purity" : "");
+		what = species_name(q.what) + (q.measure == "count" ? " particles" : q.measure == "size" ? " particle size" : q.measure == "purity" ? " purity" : q.measure == "mol" ? " amount" : "");
 	}
 	const std::string u = unit(q);
 	return q.item + ": " + what + (u.empty() ? "" : " (" + u + ")");
@@ -226,6 +311,12 @@ std::string shown(const Quantity &q, double value) {
 	if (q.measure == "purity") {
 		return fmt("%.3f %%", value);
 	}
+	if (q.what == "mass_g") {
+		return fmt("%.3f g", value);
+	}
+	if (q.measure == "mol" && !fixed(q.what)) {
+		return fmt("%.5f mol", value);
+	}
 	if (fixed(q.what)) {
 		return fmt("%.2f mL", value);
 	}
@@ -239,8 +330,12 @@ std::string shown(const Quantity &q, double value) {
 }
 
 void scales(const Quantity &q, double out[3]) {
-	const double g[3] = { 1.0, 0.1, 0.01 }, c[3] = { 10.0, 1.0, 0.1 }, n[3] = { 10000.0, 1000.0, 100.0 };
-	const double *pick = fixed(q.what) || q.measure == "size" ? c : q.measure == "count" ? n : g; // purity nudges as grams do
+	const double g[3] = { 1.0, 0.1, 0.01 }, c[3] = { 10.0, 1.0, 0.1 }, n[3] = { 10000.0, 1000.0, 100.0 }, m[3] = { 0.01, 0.001, 0.0001 };
+	const double *pick = q.what == "mass_g" ? g
+			: fixed(q.what) || q.measure == "size" ? c
+			: q.measure == "count"                ? n
+			: q.measure == "mol"                  ? m
+												  : g; // purity nudges as grams do
 	for (int i = 0; i < 3; ++i) {
 		out[i] = pick[i];
 	}
@@ -265,8 +360,8 @@ bool valid(const Quantity &q, std::string &why) {
 		why = "no quantity or species \"" + q.what + "\"";
 		return false;
 	}
-	if (q.measure != "g" && q.measure != "count" && q.measure != "size" && q.measure != "purity") {
-		why = "a species is measured as \"g\", \"count\", \"size\" or \"purity\"";
+	if (q.measure != "g" && q.measure != "mol" && q.measure != "count" && q.measure != "size" && q.measure != "purity") {
+		why = "a species is measured as \"g\", \"mol\", \"count\", \"size\" or \"purity\"";
 		return false;
 	}
 	return true;
