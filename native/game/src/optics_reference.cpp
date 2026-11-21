@@ -1072,8 +1072,21 @@ void optics_stacks(OpticsScene &scene) {
 		const auto vec = [&](int body, int which) { return &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + which) * 4]; };
 		const auto bends = [&](int body) { return vec(body, L::REFRACT)[3] > 0.5f && (vec(body, L::FORM)[0] < 0.5f || vec(body, L::FORM)[0] > 1.5f); };
 		int64_t followed = 0;
+		// a body's maps are of one piece: its one map, or every band of its table of rows' bands (Stage 24)
+		const auto one_piece = [&](int body) {
+			const float *map = vec(body, L::MAP);
+			if (map[3] >= 0.0f) {
+				return map[3] == 1.0f;
+			}
+			for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
+				if (scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4 + 2] != 1.0f) {
+					return false;
+				}
+			}
+			return true;
+		};
 		for (const int b : scene.chain_bodies) {
-			if (b < 0 || b >= count || !bends(b) || vec(b, L::MAP)[3] != 1.0f) {
+			if (b < 0 || b >= count || !bends(b) || !one_piece(b)) {
 				continue; // a map of several pieces (a prism) is read as one vessel's
 			}
 			const float *rect = vec(b, L::RECT);
@@ -1143,7 +1156,9 @@ void optics_stacks(OpticsScene &scene) {
 				stack.base[j] = stack.foot[j] - static_cast<double>(vec(o, L::REFRACT)[2]) / form[1];
 				if (stack.bends[j]) {
 					const float *map = vec(o, L::MAP);
-					const float *head = &scene.maps[static_cast<size_t>(map[0]) * 4];
+					// a table of rows' bands: its first band's map's head (every band's is alike)
+					const size_t first_map = map[3] >= 0.0f ? static_cast<size_t>(map[0]) : static_cast<size_t>(map[0]) + static_cast<size_t>(scene.maps[(static_cast<size_t>(map[0]) + 1) * 4 + 1]);
+					const float *head = &scene.maps[first_map * 4];
 					stack.map[j] = static_cast<int>(map[0]);
 					stack.coarse[j] = static_cast<int>(map[1]);
 					stack.left[j] = map[2];
@@ -1158,6 +1173,15 @@ void optics_stacks(OpticsScene &scene) {
 					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j], stack.base[j] }) {
 						if (e > top + 1e-4 && e < bottom - 1e-4) {
 							edges.push_back(e);
+						}
+					}
+					// and where each band of its rows ends, for one with a table of them (Stage 24)
+					if (map[3] < 0.0f) {
+						for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
+							const double e = stack.top[j] + scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
+							if (e > top + 1e-4 && e < bottom - 1e-4) {
+								edges.push_back(e);
+							}
 						}
 					}
 				}
@@ -1217,7 +1241,7 @@ void optics_stacks(OpticsScene &scene) {
 										const double lo = r.from_axis[j], hi = next.from_axis[j];
 										if (std::fabs(hi - lo) > 1e-9) {
 											const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
-											const double change = shader::map_change(shader::ref_at(stack, j), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
+											const double change = shader::map_change(shader::ref_at(stack, j, y), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
 											along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
 										}
 										break;

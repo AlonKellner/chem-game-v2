@@ -1,5 +1,6 @@
 // The truth in three dimensions (GAME_SPEC §12.3, Stage 24): each sub-pixel ray traced through a vessel's
 // whole shape by the general tracer, landing on the wall across and up.
+#include "lab/colour.hpp"
 #include "lab/glassware.hpp"
 #include "lab/optics_scene.hpp"
 
@@ -75,6 +76,14 @@ double row_at(const OpticsScene &scene, int which, double nm) {
 	return scene.rows[base + i] * (1.0 - f) + scene.rows[base + i + 1] * f;
 }
 
+double eye(const double a[3], const double b[3]) {
+	const auto seen = [](const double c[3]) {
+		return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2],
+				0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+	};
+	return lab::eye_difference(seen(a), seen(b));
+}
+
 } // namespace
 
 TEST_CASE("truth: through a beaker's upright band the truth's rays land where the glass cylinder's closed form puts them (Stage 24)") {
@@ -133,4 +142,32 @@ TEST_CASE("truth: a level line on the wall, seen through a conical flask's cone,
 	CHECK(most > 0.01);
 	CHECK(std::abs(darkest - static_cast<int>(line_y)) >= 2);
 	MESSAGE("the line on row " << line_y << " is seen most on row " << darkest);
+}
+
+TEST_CASE("renderer: through a beaker's upright band its pixels are the 3D truth's; a flask keeps a uniform wall as it is (Stage 24)") {
+	// a level ray through an upright band never meets the curves: the band's map is exact there, and the
+	// renderer's pixel (its footprint, read from the map) is the truth's (a grid of rays traced in three
+	// dimensions). A line drawn upright on the wall, seen through the glass, is the test of it.
+	const ItemView beaker = glassware("beaker", 250);
+	const OpticsScene scene = scene_of(beaker, { lab::OpticsShape{ X + 37.0f, 0.0f, 0.6f, 1000.0f, 0.05 }, lab::OpticsShape{ X + 61.3f, 0.0f, 1.4f, 1000.0f, 0.15 } });
+	const lab::glass::Vessel &g = *lab::glass::find("beaker", 250);
+	const float *form = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4];
+	const int row = static_cast<int>(Y + height_of("beaker", 250) - (g.floor + 0.4 * (g.level(100.0) - g.floor)) / form[1]);
+	// pixel by pixel on the eye metric (visible above 8): the renderer's colour against 64 exact rays a pixel
+	double worst = 0.0;
+	int compared = 0;
+	for (int x = static_cast<int>(X) + 3; x < static_cast<int>(X + W) - 3; x += sparse()) {
+		double shown[3], truth[3];
+		lab::optics_truth(scene, x, row, shown);
+		lab::optics_area_truth(scene, x, row, 8, truth);
+		worst = std::max(worst, eye(shown, truth));
+		++compared;
+	}
+	MESSAGE("through a beaker's upright band, " << compared << " pixels: worst " << worst << " on the eye metric");
+	CHECK(worst < lab::EYE_VISIBLE);
+	// O7, the renderer's own reading, through a flask's cone and neck
+	const ItemView flask = glassware("conical_flask", 250);
+	const OpticsScene through_flask = scene_of(flask);
+	const int h = static_cast<int>(height_of("conical_flask", 250));
+	CHECK(lab::check_O7(through_flask, static_cast<int>(X), static_cast<int>(Y), static_cast<int>(X + W), static_cast<int>(Y) + h, 0.6) == "");
 }

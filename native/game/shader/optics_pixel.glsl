@@ -295,6 +295,27 @@ float uncovered(Path q, int c) {
 
 // what the pixel at p looks through; `size` is how wide a sample it is, in pixels: 1 for a pixel (its
 // outlines blend by how much of it they cover), less for a sample of the truth (GAME_SPEC §12.3)
+// A body's map for the row `down` pixels below its top (GAME_SPEC §12.3, Stage 24). A vessel made as glassware
+// has a table of its rows' bands, its MAP's w minus their count: each band (where its rows end, its map's offset
+// from the table, its pieces, its whole pixels); a row reads its band's map. Any other body has one map.
+// The map's start among the maps (x) and its pieces in wavelength (y).
+vec4 map_for_row(vec4 map, float down) {
+	if (map.w >= 0.0) {
+		return vec4(map.x, map.w, 0.0, 0.0);
+	}
+	int bands = int(-map.w);
+	int table = int(map.x);
+	// the band the row's top is in, from the table's index of its whole rows; then on, while a band ends above
+	int rows = int(map_vec(table).y);
+	int k = int(map_vec(table + 1 + bands + clamp(int(floor(down)), 0, rows - 1)).x);
+	vec4 band = map_vec(table + 1 + k);
+	for (int step = 0; step < 4 && down >= band.x && k + 1 < bands; step++) {
+		k = k + 1;
+		band = map_vec(table + 1 + k);
+	}
+	return vec4(float(table) + band.y, band.z, 0.0, 0.0);
+}
+
 Path path_of(vec2 p, float size) {
 	Path q;
 	q.layers = 0;
@@ -356,10 +377,11 @@ Path path_of(vec2 p, float size) {
 				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // a prism's centre, which its corners are given from
 			}
 			vec4 map = scene_vec(at + 6);
-			q.rmap = int(map.x);
+			vec4 row_map = map_for_row(map, p.y - rect.y);
+			q.rmap = int(row_map.x);
 			q.rcoarse = int(map.y);
 			q.rleft = map.z;
-			q.rpieces = int(map.w);
+			q.rpieces = int(row_map.y);
 			vec4 map_head = map_vec(q.rmap);
 			q.rmedia = int(map_head.y);
 			q.rsamples = int(map_head.z);
@@ -1403,11 +1425,23 @@ float stack_band(Path q, float u0, float u1, float t, float one_nm) {
 	float bottom = q.y + 0.5 * q.size;
 	float light = 0.0;
 	float covered = 0.0;
-	for (int k = 0; k < 64; k++) {
-		if (k >= bands) {
+	// the first band reaching below the pixel's top, by halving (the bands are in order down the screen), then
+	// each band the pixel reaches into (a shaped vessel has one every two pixels where it curves: Stage 24)
+	int lo = 0;
+	int hi = bands;
+	for (int it = 0; it < 16 && lo < hi; it++) {
+		int mid = (lo + hi) / 2;
+		if (stack_vec(o + 2 + mid).y <= top) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+	for (int k = lo; k < bands; k++) {
+		vec4 rows = stack_vec(o + 2 + k);
+		if (rows.x >= bottom) {
 			break;
 		}
-		vec4 rows = stack_vec(o + 2 + k);
 		float share = (min(bottom, rows.y) - max(top, rows.x)) / q.size;
 		if (share > 0.0) {
 			light = light + share * stack_rows(q, profile, cells_at + (k * samples + index) * cell, cell, index, samples, slots_at, slots, u0, u1, t, one_nm);
@@ -1476,12 +1510,13 @@ struct Stack {
 	float gap; // between two layers' planes
 };
 
-MapRef ref_at(Stack s, int j) {
+MapRef ref_at(Stack s, int j, float y) {
+	vec4 row_map = map_for_row(vec4(float(s.map[j]), 0.0, 0.0, float(s.pieces[j])), y - s.top[j]);
 	MapRef m;
-	m.at = s.map[j];
+	m.at = int(row_map.x);
 	m.coarse = s.coarse[j];
 	m.samples = s.samples[j];
-	m.pieces = s.pieces[j];
+	m.pieces = int(row_map.y);
 	m.media = s.media[j];
 	m.left = s.left[j];
 	return m;
@@ -1555,7 +1590,8 @@ Stack stack_of(Path q, bool wanted) {
 		s.base[j] = s.foot[j] - refract.z / form.y;
 		if (s.bends[j]) {
 			vec4 map = scene_vec(at + 6);
-			vec4 map_head = map_vec(int(map.x));
+			// (a table of bands keeps its own; each band's map is laid out alike: read the first's head)
+			vec4 map_head = map_vec(int(map_for_row(map, 0.0).x));
 			s.map[j] = int(map.x);
 			s.coarse[j] = int(map.y);
 			s.left[j] = map.z;
@@ -1696,7 +1732,7 @@ Ray chain_at(Stack s, float y, float x, float nm) {
 		}
 		int core = core_of(s, j, y);
 		float b = r.from_axis[j];
-		Bend bend = map_at(ref_at(s, j), s.media[j] > 1 ? core : 0, b, nm);
+		Bend bend = map_at(ref_at(s, j, y), s.media[j] > 1 ? core : 0, b, nm);
 		if (bend.route < 0.5) {
 			continue; // past its outline after all
 		}

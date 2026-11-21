@@ -3,9 +3,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <atomic>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <thread>
 #include <numbers>
 
 namespace lab::trace {
@@ -41,14 +43,6 @@ bool within(const Patch &p, const Vec3 &at) {
 		}
 	}
 	return true;
-}
-
-// the torus's quartic along the ray: negative inside its tube
-double quartic(const Patch &p, const Vec3 &o, const Vec3 &u, double t) {
-	const Vec3 q = along(o, u, t);
-	const double rho2 = q.x * q.x + q.z * q.z, dy = q.y - p.cy;
-	const double s = rho2 + dy * dy + p.major * p.major - p.minor * p.minor;
-	return s * s - 4.0 * p.major * p.major * rho2;
 }
 
 // where t along the ray keeps rho^2 = |o + t u|^2 (across) within [r0^2, r1^2]: up to two intervals
@@ -100,18 +94,27 @@ double torus_hit(const Patch &p, const Vec3 &o, const Vec3 &u, double after) {
 		if (!(t1 > t0)) {
 			continue;
 		}
+		// the quartic's coefficients along the ray from the span's start (no cancellation from a far origin):
+		// S = rho^2 + (y - cy)^2 + major^2 - minor^2, P = S^2 - 4 major^2 rho^2
+		const Vec3 s0 = along(o, u, t0);
+		const double dy = s0.y - p.cy, m2 = p.major * p.major;
+		const double a2 = u.x * u.x + u.z * u.z, a1 = 2.0 * (s0.x * u.x + s0.z * u.z), a0 = s0.x * s0.x + s0.z * s0.z;
+		const double q2 = a2 + u.y * u.y, q1 = a1 + 2.0 * dy * u.y, q0 = a0 + dy * dy + m2 - p.minor * p.minor;
+		const double c4 = q2 * q2, c3 = 2.0 * q2 * q1, c2 = q1 * q1 + 2.0 * q2 * q0 - 4.0 * m2 * a2, c1 = 2.0 * q1 * q0 - 4.0 * m2 * a1, c0 = q0 * q0 - 4.0 * m2 * a0;
+		const auto f = [&](double tau) { return (((c4 * tau + c3) * tau + c2) * tau + c1) * tau + c0; };
 		constexpr int STEPS = 48;
-		double ta = t0, fa = quartic(p, o, u, ta);
+		const double length = t1 - t0;
+		double ta = 0.0, fa = f(ta);
 		for (int i = 1; i <= STEPS; ++i) {
-			const double tb = t0 + (t1 - t0) * i / STEPS, fb = quartic(p, o, u, tb);
+			const double tb = length * i / STEPS, fb = f(tb);
 			if ((fa < 0.0) != (fb < 0.0)) {
 				double lo = ta, hi = tb;
 				const bool rising = fb >= 0.0;
-				while (hi - lo > 1.0e-13 * std::max(1.0, std::fabs(hi))) {
+				while (hi - lo > 1.0e-13 * std::max(1.0, std::fabs(t0 + hi))) {
 					const double mid = 0.5 * (lo + hi);
-					((quartic(p, o, u, mid) >= 0.0) == rising ? hi : lo) = mid;
+					((f(mid) >= 0.0) == rising ? hi : lo) = mid;
 				}
-				const double t = 0.5 * (lo + hi);
+				const double t = t0 + 0.5 * (lo + hi);
 				if (t > after && within(p, along(o, u, t))) {
 					return t;
 				}
@@ -407,7 +410,7 @@ MapRay map_ray(const MapSpec &spec, double x, double nm, int medium) {
 	// its core: its liquid, the air over it, or (a third core: a vessel's floor) glass all through
 	const double glass = index_at(spec.glass_index, nm);
 	std::array<double, MAX_MEDIA> index{ 1.0, glass, liquid(spec, medium) ? index_at(spec.liquid_index, nm) : medium == 2 ? glass : 1.0, 1.0 };
-	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, 0.0, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
+	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, spec.y_cm, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
 	MapRay out;
 	out.landing = l.lands ? l.x / spec.cm_per_pixel : l.x;
 	out.pass = l.pass;
@@ -447,7 +450,7 @@ Map build_map(const MapSpec &spec) {
 	// MAP_LANDING_TOLERANCE as a shift of the image on the screen, or by MAP_NM_TOLERANCE as a shift in
 	// wavelength (where a ray leaves a face nearly along it, its landing runs away with the wavelength, and no
 	// cubic follows it: but the light there is spread as far, and a nanometre's twentieth of it is nothing).
-	map.pieces = 1;
+	map.pieces = std::max(1, spec.pieces_at_least);
 	{
 		constexpr int PROBES = 33;
 		for (int p = 0; p < PROBES; ++p) {
@@ -458,7 +461,7 @@ Map build_map(const MapSpec &spec) {
 				const MapRay here = map_ray(spec, x, 580.0, medium), beside = map_ray(spec, x + 1.0 / MAP_FINE, 580.0, medium);
 				map.rays += 2;
 				const double slope = std::max(1.0, std::fabs(beside.landing - here.landing) * MAP_FINE);
-				for (; map.pieces < MAP_PIECES_MOST;) {
+				for (; map.pieces < spec.pieces_most;) {
 					bool true_to_it = true;
 					for (int piece = 0; piece < map.pieces && true_to_it; ++piece) {
 						MapRay node[4];
@@ -638,7 +641,7 @@ Map build_map(const MapSpec &spec) {
 		}
 	}
 	int wanted = map.pieces;
-	while (wanted < MAP_PIECES_MOST && 0.5 * moved * map.pieces / wanted > MAP_LANDING_TOLERANCE) {
+	while (wanted < spec.pieces_most && 0.5 * moved * map.pieces / wanted > MAP_LANDING_TOLERANCE) {
 		wanted *= 2;
 	}
 	if (wanted > map.pieces) {
@@ -693,6 +696,113 @@ MapRay map_read(const Map &map, double x, double nm, int medium) {
 	out.pass = std::min(std::max(read(4), 0.0), 1.0);
 	out.chord = std::sqrt(std::max(read(8), 0.0));
 	out.route = static_cast<uint32_t>(whole(near[12 + (cubic ? 0 : node)]));
+	return out;
+}
+
+// ---- a shaped vessel's maps, a map for each band of its rows (Stage 24)
+
+RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double height) {
+	RowMap out;
+	const double cm = spec.cm_per_pixel;
+	// the bands: cut where any piece of the profile begins or ends
+	std::vector<double> cuts{ 0.0, height };
+	for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+		for (const glass::Piece &p : *chain) {
+			for (const double y : { p.a.y, p.b.y }) {
+				const double row = height - y / cm;
+				if (row > 0.0 && row < height) {
+					cuts.push_back(row);
+				}
+			}
+		}
+	}
+	std::sort(cuts.begin(), cuts.end());
+	cuts.erase(std::unique(cuts.begin(), cuts.end(), [](double a, double b) { return std::fabs(a - b) < 1e-9; }), cuts.end());
+	// a band is upright if every piece reaching into it is a vertical line: one map serves all its rows
+	const auto upright = [&](double top, double foot) {
+		const double y0 = (height - foot) * cm, y1 = (height - top) * cm;
+		for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+			for (const glass::Piece &p : *chain) {
+				const double lo = std::min(p.a.y, p.b.y), hi = std::max(p.a.y, p.b.y);
+				if (hi > y0 + 1e-12 && lo < y1 - 1e-12 && (p.arc || std::fabs(p.a.r - p.b.r) > 1e-12)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+	// the rows' bands: an upright band whole, a curved one in steps of at most ROW_STEP pixels
+	for (size_t b = 0; b + 1 < cuts.size(); ++b) {
+		const double top = cuts[b], foot = cuts[b + 1];
+		const int steps = upright(top, foot) ? 1 : std::max(1, static_cast<int>(std::ceil((foot - top) / ROW_STEP)));
+		for (int k = 1; k <= steps; ++k) {
+			out.ends.push_back(top + (foot - top) * k / steps);
+		}
+	}
+	// each band's map, traced at its middle row, the bands on the threads at once (none depends on another)
+	out.maps.resize(out.ends.size());
+	std::atomic<size_t> next{ 0 };
+	std::vector<std::thread> workers;
+	const unsigned threads = std::max(1u, std::min(static_cast<unsigned>(out.ends.size()), std::thread::hardware_concurrency()));
+	for (unsigned t = 0; t < threads; ++t) {
+		workers.emplace_back([&] {
+			for (size_t k = next.fetch_add(1); k < out.ends.size(); k = next.fetch_add(1)) {
+				const double from = k == 0 ? 0.0 : out.ends[k - 1];
+				MapSpec row = spec;
+				row.y_cm = (height - 0.5 * (from + out.ends[k])) * cm;
+				row.pieces_most = std::min(spec.pieces_most, ROW_PIECES_MOST);
+				out.maps[k] = build_map(row);
+			}
+		});
+	}
+	for (std::thread &w : workers) {
+		w.join();
+	}
+	for (const Map &m : out.maps) {
+		out.rays += m.rays;
+	}
+	return out;
+}
+
+MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium) {
+	MapSpec row = spec;
+	row.y_cm = (height - y) * spec.cm_per_pixel;
+	return map_ray(row, x, nm, medium);
+}
+
+MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium) {
+	size_t k = 0;
+	while (k + 1 < rows.ends.size() && y >= rows.ends[k]) {
+		++k;
+	}
+	return map_read(rows.maps[k], x, nm, medium);
+}
+
+std::vector<float> rows_block(const RowMap &rows) {
+	// [0] the rows' bands K, the whole rows R; [1 .. K] each band: where its rows end (pixels down from the
+	// body's top), where its map begins (vec4s from the table's start), its pieces in wavelength, its whole
+	// pixels across; [1 + K .. K + R] for each whole row, the band its top is in; then the maps
+	const size_t k = rows.ends.size(), whole = static_cast<size_t>(std::ceil(rows.ends.back())) + 1;
+	std::vector<float> out((1 + k + whole) * 4, 0.0f);
+	out[0] = static_cast<float>(k);
+	out[1] = static_cast<float>(whole);
+	size_t band = 0;
+	for (size_t r = 0; r < whole; ++r) {
+		while (band + 1 < k && static_cast<double>(r) >= rows.ends[band]) {
+			++band;
+		}
+		out[(1 + k + r) * 4] = static_cast<float>(band);
+	}
+	size_t at = 1 + k + whole;
+	for (size_t i = 0; i < k; ++i) {
+		const std::vector<float> block = map_block(rows.maps[i]);
+		out[(1 + i) * 4] = static_cast<float>(rows.ends[i]);
+		out[(1 + i) * 4 + 1] = static_cast<float>(at);
+		out[(1 + i) * 4 + 2] = static_cast<float>(rows.maps[i].pieces);
+		out[(1 + i) * 4 + 3] = static_cast<float>(rows.maps[i].coarse);
+		out.insert(out.end(), block.begin(), block.end());
+		at += block.size() / 4;
+	}
 	return out;
 }
 

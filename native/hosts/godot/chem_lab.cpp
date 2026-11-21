@@ -115,6 +115,8 @@ void ChemLab::_ready() {
 		godot::UtilityFunctions::push_error("ChemLab: cannot read the bench ", bench_path_);
 		return;
 	}
+	// the refraction maps made before the game runs (make native: chem_tool maps; GAME_SPEC §12.3, Stage 24)
+	cg_optics_store(godot::ProjectSettings::get_singleton()->globalize_path("res://data/maps").utf8().get_data());
 	ui_ = cg_ui_open(bench.utf8().get_data());
 	if (ui_ == nullptr) {
 		godot::UtilityFunctions::push_error("ChemLab: ", godot::String::utf8(cg_last_error()));

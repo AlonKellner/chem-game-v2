@@ -61,12 +61,15 @@ native:
 	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/chem.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
 
-# The Godot project reads only res://: the data is copied in (gitignored).
-godot-data:
+# The Godot project reads only res://: the data is copied in (gitignored). And the
+# refraction maps of every vessel made as glassware, made before the game runs
+# (GAME_SPEC §12.3, Stage 24: chem_tool maps; a table already made is kept).
+godot-data: core
 	mkdir -p $(GODOT_PROJECT)/data
-	rsync -a --delete data/ $(GODOT_PROJECT)/data/
+	rsync -a --delete --exclude maps/ data/ $(GODOT_PROJECT)/data/
 	mkdir -p $(GODOT_PROJECT)/shaders
 	cp native/game/shader/optics_pixel.glsl $(GODOT_PROJECT)/shaders/optics_pixel.glslinc
+	$(BUILD_CORE)/chem_tool maps $(GODOT_PROJECT)/data/maps data/benches/*.json
 
 # Debug extension (CHEM_ASSERT aborts). Writes the same library name, so it
 # replaces the RelWithDebInfo one until the next `make native`.

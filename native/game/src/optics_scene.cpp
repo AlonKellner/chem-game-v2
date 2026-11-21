@@ -8,6 +8,9 @@
 #include "lab/optics_trace.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <fstream>
+#include <mutex>
 #include <cmath>
 #include <map>
 #include <string>
@@ -97,6 +100,78 @@ double pool_depth(double ml, double r) {
 
 namespace {
 
+// the builder's version: a map made by another is not read
+constexpr uint64_t MAP_STORE_VERSION = 24003;
+
+std::mutex &store_lock() {
+	static std::mutex lock;
+	return lock;
+}
+std::string &store_directory() {
+	static std::string directory;
+	return directory;
+}
+std::string store_path(uint64_t key) {
+	char name[40];
+	std::snprintf(name, sizeof name, "%016llx.map", static_cast<unsigned long long>(fnv(&MAP_STORE_VERSION, sizeof MAP_STORE_VERSION, key)));
+	return store_directory() + "/" + name;
+}
+
+} // namespace
+
+void optics_store(const std::string &directory) {
+	const std::lock_guard<std::mutex> hold(store_lock());
+	store_directory() = directory;
+}
+
+bool optics_store_read(uint64_t key, std::vector<float> &block) {
+	const std::lock_guard<std::mutex> hold(store_lock());
+	if (store_directory().empty()) {
+		return false;
+	}
+	std::ifstream in(store_path(key), std::ios::binary);
+	uint64_t count = 0;
+	if (!in || !in.read(reinterpret_cast<char *>(&count), sizeof count) || count == 0 || count > (uint64_t{ 1 } << 28)) {
+		return false;
+	}
+	block.resize(static_cast<size_t>(count));
+	return static_cast<bool>(in.read(reinterpret_cast<char *>(block.data()), static_cast<std::streamsize>(count * sizeof(float))));
+}
+
+void optics_store_write(uint64_t key, const std::vector<float> &block) {
+	const std::lock_guard<std::mutex> hold(store_lock());
+	if (store_directory().empty() || block.empty()) {
+		return;
+	}
+	std::ofstream out(store_path(key), std::ios::binary | std::ios::trunc);
+	const uint64_t count = block.size();
+	out.write(reinterpret_cast<const char *>(&count), sizeof count);
+	out.write(reinterpret_cast<const char *>(block.data()), static_cast<std::streamsize>(count * sizeof(float)));
+}
+
+namespace {
+
+// A glassware vessel's table of maps (lab/optics_trace.hpp: rows_block), made once for its inputs and kept for
+// every scene; and, made ahead, read from the maps' store (GAME_SPEC §12.3, Stage 24: made before the game runs)
+std::vector<float> shaped_block(const trace::MapSpec &spec, const glass::Vessel &vessel, double height, uint64_t key) {
+	static std::mutex lock;
+	static std::map<uint64_t, std::vector<float>> made;
+	{
+		const std::lock_guard<std::mutex> hold(lock);
+		const auto found = made.find(key);
+		if (found != made.end()) {
+			return found->second;
+		}
+	}
+	std::vector<float> block;
+	if (!optics_store_read(key, block)) {
+		block = trace::rows_block(trace::build_rows(spec, vessel, height));
+		optics_store_write(key, block);
+	}
+	const std::lock_guard<std::mutex> hold(lock);
+	return made.emplace(key, std::move(block)).first->second;
+}
+
 // (in `t`, the scene's table being made: each body's MAP and the tag its pixels' histories follow)
 void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<float> &rows, int count) {
 	const double wall_px = t[2 * 4], gap_px = t[3 * 4];
@@ -114,6 +189,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 		const bool refracts = b < count && refract[3] > 0.5f && (form[0] < 0.5f || form[0] > 1.5f);
 		uint64_t key = 0;
 		trace::MapSpec spec;
+		const glass::Vessel *shaped = nullptr;
 		if (refracts) {
 			const bool prism = form[0] > 1.5f;
 			const double axis = rect[0] + rect[2] * 0.5 + (prism ? t[static_cast<size_t>(at + GLOW) * 4 + 2] : 0.0f);
@@ -131,6 +207,14 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 				spec.shape = trace::prism(corners);
 				spec.media = 1;
 				key = fnv(more, 4 * sizeof(float), fnv(glow, 3 * sizeof(float)));
+			} else if (const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)]) {
+				// glassware (Stage 24): its whole shape, a map for each band of its rows; its floor is in its shape
+				shaped = made;
+				spec.shape = trace::revolved_of(*made);
+				spec.media = 2;
+				spec.liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
+				const double sized[2] = { made->nominal_ml, static_cast<double>(rect[3]) };
+				key = fnv(made->kind.data(), made->kind.size(), fnv(sized, sizeof sized, fnv(spec.liquid_index, ROW * sizeof(float)))) ^ 0x9e3779b97f4a7c15ull;
 			} else {
 				spec.shape = trace::cylinder(rect[2] * 0.5 * form[1], refract[0]);
 				spec.media = refract[2] > 0.0f ? 3 : 2; // with a floor, a third core: glass all through
@@ -142,16 +226,16 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 		}
 		std::vector<float> &block = scene.map_blocks[static_cast<size_t>(b)];
 		if (scene.map_keys[static_cast<size_t>(b)] != key) {
-			block = refracts ? trace::map_block(trace::build_map(spec)) : std::vector<float>();
+			block = !refracts ? std::vector<float>() : shaped ? shaped_block(spec, *shaped, rect[3], key) : trace::map_block(trace::build_map(spec));
 			scene.map_keys[static_cast<size_t>(b)] = key;
 			maps_changed = true;
 		}
 		if (refracts) {
 			offsets[static_cast<size_t>(b)] = map_at;
 			put(at + MAP, 0, map_at);
-			put(at + MAP, 1, block[0]); // the whole pixels it spans
+			put(at + MAP, 1, shaped ? block[7] : block[0]); // the whole pixels it spans
 			put(at + MAP, 2, std::floor(spec.left - spec.grid) + spec.grid);
-			put(at + MAP, 3, block[3]); // its pieces in wavelength
+			put(at + MAP, 3, shaped ? -block[0] : block[3]); // its pieces in wavelength; or, a table of its rows' bands, minus their count
 			map_at += static_cast<int>(block.size() / 4);
 			// a pixel's history follows the map it looks through
 			const float tagged = t[static_cast<size_t>(at + IDS) * 4 + 1];
@@ -283,7 +367,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		++count;
 		const bool ball = v.kind == "balloon";
 		const double bottom = static_cast<double>(body.y) + body.h;
-		put(at + RECT, 0, body.x);
+		// a vessel made as glassware stands with its axis on a whole pixel (GAME_SPEC §12.3, Stage 24): its maps
+		// are then the same wherever it stands, and are made before the game runs
+		put(at + RECT, 0, v.glassware.empty() ? body.x : std::round(body.x + body.w / 2.0f) - body.w / 2.0f);
 		put(at + RECT, 1, body.y);
 		put(at + RECT, 2, body.w);
 		put(at + RECT, 3, body.h);
@@ -382,8 +468,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		const double solid_ml = v.condensed_ml > v.liquid_ml ? v.condensed_ml - v.liquid_ml : 0.0;
-		if (v.liquid_ml > 0.0) {
-			// a liquid's index is water's: the solutes' share is not modelled (GAME_SPEC §20)
+		if (v.liquid_ml > 0.0 || !v.glassware.empty()) {
+			// a liquid's index is water's: the solutes' share is not modelled (GAME_SPEC §20); a glassware vessel's
+			// liquid core is water's even while empty, so its maps are the same as it fills (Stage 24)
 			const Spectrum &n = chem::optics::refractive_index(chem::builtin_species().find("water"));
 			for (size_t i = 0; i < n.size(); ++i) {
 				liquid_index[i] = static_cast<float>(n[i]);
@@ -500,7 +587,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		if (!(refract[3] > 0.5f) || !(form[0] < 0.5f || form[0] > 1.5f)) {
 			continue;
 		}
-		bool wanted = refract[1] > 0.5f || t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + MAP) * 4 + 3] != 1.0f;
+		// a map of several pieces (a prism) is read by the general reading; a table of rows' bands is of one piece
+		// if each band's map is (Stage 24)
+		const float *map = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + MAP) * 4];
+		bool several = map[3] >= 0.0f ? map[3] != 1.0f : false;
+		for (int k = 0; map[3] < 0.0f && k < static_cast<int>(-map[3]); ++k) {
+			several = several || scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4 + 2] != 1.0f;
+		}
+		bool wanted = refract[1] > 0.5f || several;
 		for (int o = 0; o < count && !wanted; ++o) {
 			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
 			// across another that bends, on its own layer (one of a nearer layer covers the pixels they share)
