@@ -632,6 +632,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	if (scene.wall_key != wall_key || scene.wall.empty()) {
 		optics_wall(scene, room);
 		scene.wall_key = wall_key;
+		scene.wall[2] = tag(wall_key); // the pixels that show the wall alone follow it
 	}
 	put(3, 1, nearest);
 	place_maps(scene, t, rows, count);

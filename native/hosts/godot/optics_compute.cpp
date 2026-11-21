@@ -65,13 +65,20 @@ void main() {
 		return;
 	}
 #else
-	if (!near_any(p)) {
-		imageStore(shown_image, at, vec4(0.0));
-		return;
+	// no body here: the wall drawn there, written once for each wall (its state holds the wall's tag)
+	Path q;
+	bool bare = !near_any(p);
+	if (!bare) {
+		q = path_of(p, 1.0);
+		bare = q.cover <= 0.0;
 	}
-	Path q = path_of(p, 1.0);
-	if (q.cover <= 0.0) {
-		imageStore(shown_image, at, vec4(0.0));
+	if (bare) {
+		vec4 wall = wall_key();
+		if (imageLoad(key_image, at) != wall) {
+			imageStore(shown_image, at, wall_shown(p, 1.0));
+			imageStore(key_image, at, wall);
+			imageStore(aux_image, at, vec4(0.0));
+		}
 		return;
 	}
 #endif

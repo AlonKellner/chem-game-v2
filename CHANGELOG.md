@@ -10,9 +10,11 @@
   axis a whole pixel, exactly), and are made for the shelf's and the outbox's sizes too: placing a
   vessel cost up to 742 ms, now about 5. Maps lie where they were first put; the GPU is sent only what
   was added (`cg_optics.maps_changed_from`): lifting a vessel again sends nothing.
-- **No box around vessels**: the wall in the optical pass is on the pixels the host paints (each
-  shape on the pixels whose centres it covers, an outline centred on its edges); the bench's grid
-  lines, split into two half-dark rows around a vessel, are one row as beside it.
+- **No box around vessels**: the room and the bodies are one picture. The optical pass shows the wall
+  wherever no body is, so a window of any size scales them as one (the room was drawn sharp at the
+  window's pixels, the pass stretched); and the wall is on the pixels the host paints (each shape on
+  the pixels whose centres it covers, an outline centred on its edges).
+- Open, documented: a held vessel over a shaped one shows steps in what is behind (the stacks' bands).
 - Open, documented (docs/TDD_25_UPDOWN.md): coloured specks along vessels' floors and corners (maps of
   one piece in wavelength), and bending up and down in the renderer.
 

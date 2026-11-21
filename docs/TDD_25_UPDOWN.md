@@ -50,7 +50,7 @@ the count is the GPU's cache, which doubled the restarting pass at 63 maps a ves
 |---|---|---|
 | A pass where every history starts again | 2.2 ms | 5.5 ms |
 | The same, a vessel held over another | 20 ms | 27 ms |
-| A settled pass | 0 | 0 |
+| A settled pass | 0 | 0 (0.23 ms since the pass shows the room: each bare pixel's state is read) |
 
 Measured on the way: the restarting pass follows the maps' size (2.8 ms at 64 knots a vessel, 5.5 at
 96 or 128: the GPU's cache); cropping each knot to its outline saved little. A stack cut at every knot
@@ -95,15 +95,43 @@ and what changes is only what was added).
 
 ## A box around every vessel
 
-Seen by the user (2026-11-21). Within a vessel's rectangle, around its glass, the optical pass paints
-the wall itself; beside it the host's flat drawing shows. The bench's grid lines are one pixel wide on
-whole coordinates: the host paints the pixels whose centres a shape covers (one row), the wall's table
-took the shape exactly (half of two rows), so around each vessel the lines were paler and doubled: a
-box. And the host centres an outline's stroke on its edges, which the wall had inside them. Now each
-shape enters the wall on the pixels the host paints. Test: `test_wall_pixels.cpp` (every pixel of the
-wall is one colour drawn there, never a share of two; it fails on the old wall at every grid line).
+Seen by the user (2026-11-21), in two parts.
+- **The window's scale.** The project stretches to its window (`canvas_items`): the room (the draw
+  list's first part) was drawn at the window's own pixels, sharp, while the optical pass, a texture of
+  the game's 1920 x 1080, was stretched and smoothed. Within each vessel's rectangle, where the pass
+  paints the wall around the glass, the grid lines stood elsewhere and softer, and the rectangle's edge
+  showed. The screenshots render at exactly 1920 x 1080, where it does not show; a real window at
+  1500 x 844 (a Retina screen, scale 2) showed it plainly. Now the pass shows the wall wherever no body
+  is (`wall_shown`: the wall's mean over the pixel, read from the same table), written once for each
+  wall (a bare pixel's state holds the wall table's tag), so the room and the bodies are one picture,
+  scaled as one; the overlays stay sharp over it.
+- **Half pixels.** The grid lines are one pixel wide on whole coordinates: the host paints the pixels
+  whose centres a shape covers (one row), the wall's table took the shape exactly (half of two rows);
+  and the host centres an outline's stroke on its edges, which the wall had inside them. Now each
+  shape enters the wall on the pixels the host paints.
+
+Tests (`test_wall_pixels.cpp`): every pixel of the wall is one colour drawn there, never a share of
+two (it fails on the old wall at every grid line); the renderer's picture is the whole room, and
+around a vessel's glass, within its rectangle, each pixel is what it is with no vessel there.
 
 ## Open, for a later attempt
+
+**A held vessel over a shaped one: steps in what is behind.** Seen by the user (2026-11-21): carrying
+the beaker slowly over the flask, the flask's outline seen through it changes shape, as if lines
+became rectangles. The stacks (the rays of what is held, followed through what stands behind it, on
+the CPU) are bands of rows, each read at its middle; down a shaped vessel behind, they are cut at its
+knots no closer than two pixels, and in a cone's middle its knots are five to eight pixels apart. So
+the flask behind is read at one height for five to eight rows: its slanted outline is a staircase
+(the 3D truth, `optics_area_truth`, moves it a fraction of a pixel each row), whose steps move as the
+held vessel does. The renderer's own dense truth (`optics_truth`) has the same steps: it reads the
+same stacks.
+- **Ruled out: a band every row** where a shaped vessel's rows change (built, measured): right, but
+  compose while carrying went from 6 to 31 ms and the stacks from 7 to 40 MB, sent every frame.
+- **The fix, likely:** bands at the knots, as now, and a row between two bands read from both, each in
+  the measure of the outline of what is behind as seen through what is held (what the knots' reading
+  does with a vessel's own rims), mixed by the share of the way. The stacks would record, per band,
+  where the outlines behind are seen.
+
 
 **Coloured specks along a vessel's floor and corners** (the user's "pixelated in a way difficult to
 explain"). Seen beside the truth at a 250 mL beaker's lower corner: the truth's corner is a smooth dark
@@ -128,5 +156,14 @@ yet: a level line seen through a cone is where it is on the wall, not two or thr
 truth has it. The design (GAME_SPEC §12.3): the footprint a patch of the wall's rows, each read by its
 share; O8 held for a level line; stacks follow the drop.
 
-**O4** flags one or two pixels a picture where the GPU and the reference fall on opposite sides of a
-route's change between two knots (float against double).
+**O4** flags one to three pixels a picture where the GPU and the reference fall on opposite sides of a
+route's change between two knots (float against double). Where, in `make screenshots` (2026-11-21):
+(130, 475) and (130, 711), vessels drawn smaller on the cabinet's shelf, up to 18 on the eye metric;
+(401, 684), the floor of a beaker on the bench, 16. Since the grid lines are one row each (a sharp line
+seen through a rim), the count rose by one in some pictures; the largest difference did not.
+
+**A drag across a scaled window.** Pointer positions in the game's pixels are fractional when the
+window is not 1920 x 1080: a held vessel's top is then a fraction of a pixel, which the knots, the
+stacks and each pixel's history follow exactly (the reference renderer, one frame a move of 0.3 px, is
+within 0.02 of its truth). What shows while dragging is the stacks' steps (above) and the restarting
+histories' noise, not the fraction itself.

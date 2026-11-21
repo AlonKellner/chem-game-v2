@@ -125,7 +125,7 @@ const int MIDDLE = static_cast<int>(X + W / 2); // the column whose centre is th
 
 } // namespace
 
-TEST_CASE("optics: an empty vessel changes nothing, and outside it there is nothing (Stage 10)") {
+TEST_CASE("optics: an empty vessel changes nothing, and outside it the wall is shown as it is drawn (Stage 10; Stage 25: the room and the bodies one picture)") {
 	const ItemView v = vessel();
 	const OpticsScene scene = scene_of(v);
 	double rgba[4];
@@ -134,10 +134,13 @@ TEST_CASE("optics: an empty vessel changes nothing, and outside it there is noth
 	for (int c = 0; c < 3; ++c) {
 		CHECK(std::lround(rgba[c] * 255.0) == 0xde); // the wall's own colour: no seam around a vessel
 	}
-	lab::optics_pixel(scene, X - 20, Y + 50, rgba);
-	CHECK(rgba[3] == 0.0);
-	lab::optics_pixel(scene, MIDDLE, Y + H + 20, rgba);
-	CHECK(rgba[3] == 0.0);
+	for (const auto &at : { std::pair<int, int>{ static_cast<int>(X) - 20, static_cast<int>(Y) + 50 }, std::pair<int, int>{ MIDDLE, static_cast<int>(Y + H) + 20 } }) {
+		lab::optics_pixel(scene, at.first, at.second, rgba);
+		CHECK(rgba[3] == 1.0);
+		for (int c = 0; c < 3; ++c) {
+			CHECK(std::lround(rgba[c] * 255.0) == 0xde);
+		}
+	}
 	// clear water is as clear
 	ItemView water = vessel();
 	water.liquid_ml = water.condensed_ml = 100.0;
@@ -327,8 +330,13 @@ TEST_CASE("optics: a balloon is its rubber: red, paler as it stretches, deeper a
 	CHECK(b.l > a.l + 10.0);
 	CHECK(seen(large, x0 + 8, y0 + 70).l < b.l - 5.0); // the rim
 	double rgba[4];
-	lab::optics_pixel(large, x0 + 5, y0 + 5, rgba); // outside the circle, inside its rectangle
-	CHECK(rgba[3] == 0.0);
+	lab::optics_pixel(large, x0 + 5, y0 + 5, rgba); // outside the circle, inside its rectangle: the wall, as beside it
+	double beside[4];
+	lab::optics_pixel(large, x0 - 5, y0 + 5, beside);
+	CHECK(rgba[3] == 1.0);
+	for (int c = 0; c < 3; ++c) {
+		CHECK(rgba[c] == beside[c]);
+	}
 	// no solid is in it: the rubber is a wall, not a heap
 	CHECK(lab::difference(seen(large, x0 + 70, y0 + 137), seen(large, x0 + 70, y0 + 2)) < 1e-6);
 	// what condensed in it lies at the bottom, and water is clear

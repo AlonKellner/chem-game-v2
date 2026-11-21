@@ -764,7 +764,7 @@ void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]) {
 	for (int c = 0; c < 3; ++c) {
 		rgba[c] = srgb_encode(rgb[c]);
 	}
-	rgba[3] = optics_cover(scene, x, y) > 0.0 ? 1.0 : 0.0;
+	rgba[3] = 1.0; // the wall where no body is (GAME_SPEC §12.3: the room and the bodies one picture)
 }
 
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h) {

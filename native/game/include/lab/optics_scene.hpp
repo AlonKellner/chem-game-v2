@@ -57,7 +57,7 @@ inline constexpr int LIGHTS = 1;
 // The wall as a table (GAME_SPEC §12.3), in vec4s. The edges of everything drawn on it are its
 // breakpoints across; between two it is one radiance on any row of pixels (the shapes over a row's
 // height averaged). Rows alike share a profile.
-//   [0]                          breakpoints m, profiles, 0, 0
+//   [0]                          breakpoints m, profiles, the wall's tag (pixels that show it alone follow it), 0
 //   [WALL_ROW_BASE + y]          the profile of pixel row y (x)
 //   [WALL_COLUMN_BASE + c]       the cell that x = c is in: how many breakpoints are at or left of it (x)
 //   [WALL_BREAK_BASE + j]        breakpoint j (x), ascending

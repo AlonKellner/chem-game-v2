@@ -2624,8 +2624,26 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	return next;
 }
 
-// what the pixel shows: the fixed estimate and what its history adds; sRGB-encoded, alpha 0 where no body is
+// A pixel no body covers shows the wall drawn there, its mean over the pixel: the room and the bodies are one
+// picture at the screen's pixels (GAME_SPEC §12.3), which a host scales as one, so the wall seen through glass
+// and beside it cannot part
+vec4 wall_shown(vec2 p, float size) {
+	int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(p.y)), 0, WALL_ROWS - 1)).x);
+	float v = encode1(wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size));
+	return vec4(v, v, v, 1.0);
+}
+
+// the state of a pixel that shows the wall: the wall table's own tag, so it is shown again when the wall changes
+// (and matches no content: a body there starts its history)
+vec4 wall_key() {
+	return vec4(-1.0, wall_vec(0).z, -1.0, -1.0);
+}
+
+// what the pixel shows: the fixed estimate and what its history adds, sRGB-encoded; where no body is, the wall
 vec4 shown(Path q, PixelState s) {
+	if (q.cover <= 0.0) {
+		return wall_shown(vec2(q.x, q.y), q.size);
+	}
 	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
-	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), q.cover > 0.0 ? 1.0 : 0.0);
+	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }

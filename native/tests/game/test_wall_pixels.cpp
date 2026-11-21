@@ -62,3 +62,41 @@ TEST_CASE("wall pixels: every pixel of the wall is one colour the host paints th
 	CHECK(checked == 200 * 200 + 60 * 60);
 	CHECK(mixed == 0);
 }
+
+TEST_CASE("wall pixels: the renderer's picture is the whole room; around a vessel's glass, within its rectangle, each pixel is what it is with no vessel there (Stage 25)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read_file("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(0.0);
+	const lab::OpticsScene empty = ui->optics(); // the bench with nothing on it
+	REQUIRE_MESSAGE(ui->lab().command(R"({"do": "place", "item": "flask", "at": [10, 6]})", why), why);
+	ui->frame(0.0);
+	const lab::OpticsScene &scene = ui->optics();
+	float cx = 0, cy = 0;
+	REQUIRE(ui->locate("item:flask", cx, cy));
+	const int x0 = static_cast<int>(cx) - 70, y0 = static_cast<int>(cy) - 95, w = 140, h = 190;
+	lab::OpticsFrames frames(x0, y0, w, h), before(x0, y0, w, h);
+	for (int k = 0; k < 3; ++k) {
+		frames.frame(scene);
+		before.frame(empty);
+	}
+	int around = 0, apart = 0, unshown = 0;
+	for (int y = y0; y < y0 + h; ++y) {
+		for (int x = x0; x < x0 + w; ++x) {
+			double a[4], b[4];
+			frames.shown(scene, x, y, a);
+			unshown += a[3] < 1.0 ? 1 : 0;
+			if (lab::optics_cover(scene, x, y) > 0.0) {
+				continue; // the glass
+			}
+			before.shown(empty, x, y, b);
+			++around;
+			if (a[0] != b[0] || a[1] != b[1] || a[2] != b[2]) {
+				++apart;
+			}
+		}
+	}
+	CHECK(unshown == 0);
+	CHECK(around > 5000); // the flask's rectangle beside its cone, and around it
+	CHECK(apart == 0);
+}

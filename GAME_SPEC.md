@@ -965,9 +965,11 @@ light bends at each of its surfaces:
   point reads the wall where its ray lands. Outside a body the same shapes are the flat drawing,
   so a vessel's rim meets the wall with no seam where nothing bends. Each shape is on the pixels
   the host paints it on, those whose centres it covers (an outline's stroke centred on its edges),
-  so the wall a vessel's rectangle shows around its glass is the drawing beside it, pixel for pixel
-  (Stage 25: a line one pixel wide on a whole coordinate was two rows of half its darkness there, a
-  box around every vessel).
+  (a line one pixel wide on a whole coordinate is one row, not two of half its darkness). And the
+  pass shows the wall itself wherever no body is: **the room and the bodies are one picture** at the
+  game's pixels, which a host scales to its window as one (Stage 25: a window not of the game's own
+  size drew the room sharp at its own pixels and the pass stretched, so they met in a box around
+  every vessel). Only the overlays (text, panels, markers) are drawn at the window's own pixels.
 - **The glass.** Each vessel's wall is borosilicate glass, as thick as the vessel is made: a
   thickness of its own in the bench's data (`wall_mm`: ISO 3819's least wall for a beaker of its
   capacity, 0.8 mm at 50 mL, 1.1 mm at 250 mL; from Stage 24 each kind's own standard's: the
