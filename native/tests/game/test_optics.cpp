@@ -125,7 +125,7 @@ const int MIDDLE = static_cast<int>(X + W / 2); // the column whose centre is th
 
 } // namespace
 
-TEST_CASE("optics: an empty vessel changes nothing, and outside it there is nothing (Stage 10)") {
+TEST_CASE("optics: an empty vessel changes nothing, and outside it the wall is shown as it is drawn (Stage 10; Stage 25: the room and the bodies one picture)") {
 	const ItemView v = vessel();
 	const OpticsScene scene = scene_of(v);
 	double rgba[4];
@@ -134,10 +134,13 @@ TEST_CASE("optics: an empty vessel changes nothing, and outside it there is noth
 	for (int c = 0; c < 3; ++c) {
 		CHECK(std::lround(rgba[c] * 255.0) == 0xde); // the wall's own colour: no seam around a vessel
 	}
-	lab::optics_pixel(scene, X - 20, Y + 50, rgba);
-	CHECK(rgba[3] == 0.0);
-	lab::optics_pixel(scene, MIDDLE, Y + H + 20, rgba);
-	CHECK(rgba[3] == 0.0);
+	for (const auto &at : { std::pair<int, int>{ static_cast<int>(X) - 20, static_cast<int>(Y) + 50 }, std::pair<int, int>{ MIDDLE, static_cast<int>(Y + H) + 20 } }) {
+		lab::optics_pixel(scene, at.first, at.second, rgba);
+		CHECK(rgba[3] == 1.0);
+		for (int c = 0; c < 3; ++c) {
+			CHECK(std::lround(rgba[c] * 255.0) == 0xde);
+		}
+	}
 	// clear water is as clear
 	ItemView water = vessel();
 	water.liquid_ml = water.condensed_ml = 100.0;
@@ -327,8 +330,13 @@ TEST_CASE("optics: a balloon is its rubber: red, paler as it stretches, deeper a
 	CHECK(b.l > a.l + 10.0);
 	CHECK(seen(large, x0 + 8, y0 + 70).l < b.l - 5.0); // the rim
 	double rgba[4];
-	lab::optics_pixel(large, x0 + 5, y0 + 5, rgba); // outside the circle, inside its rectangle
-	CHECK(rgba[3] == 0.0);
+	lab::optics_pixel(large, x0 + 5, y0 + 5, rgba); // outside the circle, inside its rectangle: the wall, as beside it
+	double beside[4];
+	lab::optics_pixel(large, x0 - 5, y0 + 5, beside);
+	CHECK(rgba[3] == 1.0);
+	for (int c = 0; c < 3; ++c) {
+		CHECK(rgba[c] == beside[c]);
+	}
 	// no solid is in it: the rubber is a wall, not a heap
 	CHECK(lab::difference(seen(large, x0 + 70, y0 + 137), seen(large, x0 + 70, y0 + 2)) < 1e-6);
 	// what condensed in it lies at the bottom, and water is clear
@@ -428,7 +436,12 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
 				const float floor_px = rect[lab::optics_layout::REFRACT * 4 + 2] / rect[lab::optics_layout::FORM * 4 + 1];
 				const float floor_top = rect[1] + rect[3] - floor_px, surface = rect[lab::optics_layout::FORM * 4 + 2];
-				return seen(scene, x + rect[2] / 4, surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				const int px = static_cast<int>(x + rect[2] / 4), py = static_cast<int>(surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				// (Stage 25: a conical flask's curved base disperses a little; the renderer's colour there is its truth's)
+				double truth[3];
+				lab::optics_area_truth(scene, px, py, 8, truth);
+				CHECK(std::fabs(seen(scene, px, py).b - lab_of(truth).b) < 1.0);
+				return seen(scene, px, py);
 			}
 		}
 		FAIL("the flask is not in the scene");
@@ -439,7 +452,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	CHECK(list.above < static_cast<int32_t>(list.commands.size()));
 	CHECK(ui->optics().table[0] == 9); // five vessels, the jar, the balloon; the burner and the condenser's outlet (Stage 22)
 	const lab::CieLab empty = flask_colour();
-	CHECK(std::fabs(empty.b) < 0.5);
+	CHECK(std::fabs(empty.b) < 1.0); // nearly neutral (the base's glass disperses a little: Stage 25)
 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
 	lab::CieLab after_dissolving{}, boiled_down{};

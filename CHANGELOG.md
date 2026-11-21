@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## 0.26.0 (2026-11-21, Stage 25)
+
+- §12.3: **a shaped vessel's rows read between two knots**, each along the row's own outline, the light
+  through each mixed by the share of the way: lines seen through a cone curve smoothly (the bands of
+  four rows that jogged are gone). Knots refined in the rims' measure, at most 96, cropped to their
+  outlines, made before the game runs; maps hold each ray's drop.
+- **No maps made in play**: a glassware vessel's tables made ahead are found wherever it stands (its
+  axis a whole pixel, exactly), and are made for the shelf's and the outbox's sizes too: placing a
+  vessel cost up to 742 ms, now about 5. Maps lie where they were first put; the GPU is sent only what
+  was added (`cg_optics.maps_changed_from`): lifting a vessel again sends nothing.
+- **No box around vessels**: the room and the bodies are one picture. The optical pass shows the wall
+  wherever no body is, so a window of any size scales them as one (the room was drawn sharp at the
+  window's pixels, the pass stretched); and the wall is on the pixels the host paints (each shape on
+  the pixels whose centres it covers, an outline centred on its edges).
+- Open, documented: a held vessel over a shaped one shows steps in what is behind (the stacks' bands).
+- Open, documented (docs/TDD_25_UPDOWN.md): coloured specks along vessels' floors and corners (maps of
+  one piece in wavelength), and bending up and down in the renderer.
+
 ## 0.25.0 (2026-11-21, Stage 24)
 
 - §12.3, §13, §20: **vessels in their whole shape**: glassware made to its standard (the low-form

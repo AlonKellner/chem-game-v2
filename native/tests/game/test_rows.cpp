@@ -1,11 +1,12 @@
-// A shaped vessel's maps, a map for each band of its rows (GAME_SPEC §12.3, Stage 24): upright bands one map,
-// curved bands cut every ROW_STEP pixels; read against the rays themselves.
+// A shaped vessel's knots (GAME_SPEC §12.3, Stage 25): upright bands one map, curved bands refined in the rims'
+// measure; a row read between two knots, against the rays themselves.
 #include "lab/glassware.hpp"
 #include "lab/optics_trace.hpp"
 
 #include <doctest/doctest.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <random>
 #include <vector>
@@ -41,64 +42,55 @@ MapSpec spec_of(const glass::Vessel &v, double &height) {
 
 } // namespace
 
-TEST_CASE("rows: a shaped vessel's bands: every row of an upright band reads its rays within tolerance; a curved band's rows its middle row's (Stage 24)") {
+TEST_CASE("knots: a shaped vessel's rows read between two knots are its rays, across and up and down, within tolerance (Stage 25)") {
 	for (const auto &[kind, ml] : { std::pair{ "beaker", 250.0 }, std::pair{ "conical_flask", 250.0 }, std::pair{ "bottle", 500.0 } }) {
 		CAPTURE(kind);
 		const glass::Vessel &v = *glass::find(kind, ml);
 		double height = 0.0;
 		const MapSpec spec = spec_of(v, height);
 		const auto t0 = std::chrono::steady_clock::now();
-		const RowMap rows = build_rows(spec, v, height);
+		const KnotMap knots = build_knots(spec, v, height);
 		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-		REQUIRE(!rows.ends.empty());
-		CHECK(rows.ends.back() == doctest::Approx(height).epsilon(1e-12));
-		// no band of a curved part is taller than ROW_STEP
-		int upright = 0;
-		for (size_t k = 0; k < rows.ends.size(); ++k) {
-			const double tall = rows.ends[k] - (k == 0 ? 0.0 : rows.ends[k - 1]);
-			upright += tall > ROW_STEP + 1e-9 ? 1 : 0;
-		}
-		CHECK(upright >= 1); // a beaker's side, a flask's neck, a bottle's side and neck
-		std::mt19937_64 rng(5);
+		REQUIRE(knots.knots.size() >= 2);
+		CHECK(knots.knots.size() <= static_cast<size_t>(ROW_KNOTS_MOST) + 1);
+		std::mt19937_64 rng(11);
 		std::uniform_real_distribution<double> unit(0.0, 1.0);
-		double worst_upright = 0.0, worst_curved = 0.0;
-		int compared = 0, traced = 0, over = 0;
-		for (int i = 0; i < 4000; ++i) {
-			size_t k = static_cast<size_t>(unit(rng) * static_cast<double>(rows.ends.size()));
-			k = std::min(k, rows.ends.size() - 1);
-			const double from = k == 0 ? 0.0 : rows.ends[k - 1], tall = rows.ends[k] - from;
-			const bool whole = tall > ROW_STEP + 1e-9;
-			// in an upright band any row; in a curved band its middle row (what its map was traced at) or any
-			const double y = whole || i % 2 == 0 ? from + tall * (0.05 + 0.9 * unit(rng)) : from + 0.5 * tall;
-			const double x = -45.0 + 90.0 * unit(rng), nm = 382.0 + 396.0 * unit(rng);
+		double worst = 0.0, worst_drop = 0.0;
+		int compared = 0, over = 0;
+		for (int i = 0; i < 5000; ++i) {
+			const double x = -45.0 + 90.0 * unit(rng), y = height * unit(rng), nm = 382.0 + 396.0 * unit(rng);
 			const int medium = i % 2;
-			const MapRay exact = rows_ray(spec, height, x, y, nm, medium), read = rows_read(rows, x, y, nm, medium);
-			const double q = 1.0 / MAP_FINE, place = map_place(nm), piece = 1.0 / rows.maps[k].pieces;
-			const MapRay left = rows_ray(spec, height, x - q, y, nm, medium), right = rows_ray(spec, height, x + q, y, nm, medium);
-			const MapRay bluer = rows_ray(spec, height, x, y, map_nm(place - piece), medium), redder = rows_ray(spec, height, x, y, map_nm(place + piece), medium);
-			if (left.route != exact.route || right.route != exact.route || bluer.route != exact.route || redder.route != exact.route || exact.pass < 0.02 || std::fabs(exact.landing) > 1e4) {
+			// within a pixel of a rim a ray is its nearer knot's (GAME_SPEC §12.3)
+			const double y_cm = (height - y) * spec.cm_per_pixel, outer = v.radius_outside(y_cm) / spec.cm_per_pixel, inner = v.radius_inside(y_cm) / spec.cm_per_pixel;
+			if (std::fabs(std::fabs(x) - outer) < 1.0 || (inner > 0.0 && std::fabs(std::fabs(x) - inner) < 1.0)) {
 				continue;
 			}
-			const double error = std::fabs(read.landing - exact.landing) / std::max(1.0, std::fabs(right.landing - left.landing) * MAP_FINE / 2.0);
-			if (whole || y == from + 0.5 * tall) {
-				over += error > 3.0 * MAP_LANDING_TOLERANCE ? 1 : 0;
-				++traced;
-				worst_upright = std::max(worst_upright, error);
-			} else {
-				worst_curved = std::max(worst_curved, error);
+			const MapRay exact = rows_ray(spec, height, x, y, nm, medium), read = knots_read(knots, x, y, nm, medium);
+			const double q = 1.0 / MAP_FINE, place = map_place(nm), piece = 1.0;
+			const MapRay left = rows_ray(spec, height, x - q, y, nm, medium), right = rows_ray(spec, height, x + q, y, nm, medium);
+			const MapRay up = rows_ray(spec, height, x, y - q, nm, medium), down = rows_ray(spec, height, x, y + q, nm, medium);
+			const MapRay bluer = rows_ray(spec, height, x, y, map_nm(place - piece), medium), redder = rows_ray(spec, height, x, y, map_nm(place + piece), medium);
+			if (left.route != exact.route || right.route != exact.route || up.route != exact.route || down.route != exact.route || bluer.route != exact.route ||
+					redder.route != exact.route || exact.pass < 0.02 || std::fabs(exact.landing) > 1e4) {
+				continue;
 			}
+			const double slope = std::max({ 1.0, std::fabs(right.landing - left.landing) * MAP_FINE / 2.0, std::fabs(down.landing - up.landing) * MAP_FINE / 2.0 });
+			const double slope_drop = std::max({ 1.0, std::fabs(down.drop - up.drop) * MAP_FINE / 2.0, std::fabs(right.drop - left.drop) * MAP_FINE / 2.0 });
+			const double e = std::fabs(read.landing - exact.landing) / slope, ed = std::fabs(read.drop - exact.drop) / slope_drop;
+			over += e > 3.0 * ROW_TOLERANCE || ed > 3.0 * ROW_TOLERANCE ? 1 : 0;
+			worst = std::max(worst, e);
+			worst_drop = std::max(worst_drop, ed);
 			++compared;
 		}
-		int most_pieces = 0;
-		for (const Map &m : rows.maps) {
-			most_pieces = std::max(most_pieces, m.pieces);
+		size_t floats = 0;
+		for (const Map &m : knots.maps) {
+			floats += m.cells.size() + m.drops.size();
 		}
-		MESSAGE(kind << ": " << rows.ends.size() << " bands (" << upright << " upright, at most " << most_pieces << " pieces), " << rows.rays << " rays, " << ms << " ms; worst where traced " << worst_upright << " px (" << over << " of " << traced << " beyond tolerance)"
-					 << ", worst elsewhere in a curved band " << worst_curved << " px (bending up and down: Stage 25)");
+		MESSAGE(kind << ": " << knots.knots.size() << " knots, " << knots.maps.size() << " maps (" << floats * 4 / 1024 << " KB), " << knots.rays << " rays, " << ms << " ms; worst landing " << worst
+					 << " px, worst drop " << worst_drop << " px, " << over << " of " << compared << " beyond tolerance");
+		// rays that cross a vessel's base or its neck's joint by several routes within a quarter of a pixel, and the
+		// knots capped for the GPU's cache: a few in a hundred go astray
 		CHECK(compared > 1000);
-		// where a band's map was traced its rays are its own, but over a vessel's base and floor, where rays cross
-		// thick glass by several routes within a quarter of a pixel, and at its rims, where a row's outline is
-		// read straight between its whole rows': there a few go astray
-		CHECK(over <= traced / 50);
+		CHECK(over <= compared * 5 / 100);
 	}
 }

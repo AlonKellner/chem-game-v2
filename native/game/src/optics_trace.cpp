@@ -413,6 +413,7 @@ MapRay map_ray(const MapSpec &spec, double x, double nm, int medium) {
 	const Landing l = trace(spec.shape, Vec3{ x * spec.cm_per_pixel, spec.y_cm, -1000.0 }, Vec3{ 0.0, 0.0, 1.0 }, spec.wall_cm, index);
 	MapRay out;
 	out.landing = l.lands ? l.x / spec.cm_per_pixel : l.x;
+	out.drop = l.lands ? (spec.y_cm - l.y) / spec.cm_per_pixel : 0.0;
 	out.pass = l.pass;
 	out.chord = liquid(spec, medium) ? l.chord[CORE] : 0.0;
 	out.route = l.route;
@@ -482,6 +483,8 @@ Map build_map(const MapSpec &spec) {
 							const auto sq = [](const MapRay &r) { return r.chord * r.chord; };
 							true_to_it = std::fabs(thirds(node[0].landing, node[1].landing, node[2].landing, node[3].landing, g) - exact.landing) <=
 												 std::max(MAP_LANDING_TOLERANCE * slope, MAP_NM_TOLERANCE * per_nm) &&
+												std::fabs(thirds(node[0].drop, node[1].drop, node[2].drop, node[3].drop, g) - exact.drop) <=
+														std::max(MAP_LANDING_TOLERANCE * std::max(1.0, std::fabs(beside.drop - here.drop) * MAP_FINE), MAP_NM_TOLERANCE * std::fabs(node[third + 1].drop - node[third].drop) / std::max(nm[third + 1] - nm[third], 1e-9)) &&
 										 std::fabs(thirds(node[0].pass, node[1].pass, node[2].pass, node[3].pass, g) - exact.pass) <= MAP_PASS_TOLERANCE &&
 										 std::fabs(thirds(sq(node[0]), sq(node[1]), sq(node[2]), sq(node[3]), g) - sq(exact)) <= 0.01 * std::max(1.0, sq(exact));
 						}
@@ -541,6 +544,7 @@ Map build_map(const MapSpec &spec) {
 			const double spread = std::fabs(b.landing - a.landing), slope = std::max(1.0, spread * MAP_FINE / width);
 			const double allowed = std::min(MAP_LANDING_TOLERANCE * slope, std::max(0.25 * MAP_SLOPE_TOLERANCE * spread, 0.0005));
 			straight = a.route == m.route && b.route == m.route && std::fabs(m.landing - 0.5 * (a.landing + b.landing)) <= allowed &&
+					   std::fabs(m.drop - 0.5 * (a.drop + b.drop)) <= MAP_LANDING_TOLERANCE * std::max(1.0, std::fabs(b.drop - a.drop) * MAP_FINE / width) &&
 					   std::fabs(m.pass - 0.5 * (a.pass + b.pass)) <= MAP_PASS_TOLERANCE &&
 					   std::fabs(m.chord * m.chord - 0.5 * (a.chord * a.chord + b.chord * b.chord)) <= 0.01 * std::max(1.0, m.chord * m.chord);
 		}
@@ -559,6 +563,7 @@ Map build_map(const MapSpec &spec) {
 					const MapRay &a = ray(from, k), &b = ray(to, k);
 					MapRay &out = ray(i, k);
 					out.landing = a.landing + (b.landing - a.landing) * f;
+					out.drop = a.drop + (b.drop - a.drop) * f;
 					out.pass = a.pass + (b.pass - a.pass) * f;
 					out.chord = std::sqrt(a.chord * a.chord + (b.chord * b.chord - a.chord * a.chord) * f);
 					out.route = a.route;
@@ -649,6 +654,7 @@ Map build_map(const MapSpec &spec) {
 		continue; // again, finer
 	}
 	map.cells.resize(static_cast<size_t>(map.media) * static_cast<size_t>(n) * static_cast<size_t>(map.pieces) * MAP_CELL);
+	map.drops.resize(static_cast<size_t>(map.media) * static_cast<size_t>(n) * static_cast<size_t>(map.pieces) * 4);
 	for (int medium = 0; medium < map.media; ++medium) {
 		for (int i = 0; i < n; ++i) {
 			for (int piece = 0; piece < map.pieces; ++piece) {
@@ -659,6 +665,7 @@ Map build_map(const MapSpec &spec) {
 					cell[4 + k] = static_cast<float>(r.pass);
 					cell[8 + k] = static_cast<float>(r.chord * r.chord); // its square: straight across, where the chord rises as a root at a rim
 					cell[12 + k] = routes[static_cast<size_t>(i) * static_cast<size_t>(per) + static_cast<size_t>(medium * nodes + 3 * piece + k)];
+					map.drops[((static_cast<size_t>(medium) * static_cast<size_t>(n) + static_cast<size_t>(i)) * static_cast<size_t>(map.pieces) + static_cast<size_t>(piece)) * 4 + static_cast<size_t>(k)] = static_cast<float>(r.drop);
 				}
 			}
 		}
@@ -693,88 +700,15 @@ MapRay map_read(const Map &map, double x, double nm, int medium) {
 	const auto read = [&](int from) { return cubic ? thirds(across(from), across(from + 1), across(from + 2), across(from + 3), g) : across(from + node); };
 	MapRay out;
 	out.landing = read(0);
+	{
+		const size_t at_a = ((static_cast<size_t>(medium) * static_cast<size_t>(n) + static_cast<size_t>(i)) * static_cast<size_t>(map.pieces) + static_cast<size_t>(piece)) * 4;
+		const size_t at_b = at_a + static_cast<size_t>(map.pieces) * 4;
+		const auto drop = [&](int k) { return map.drops[at_a + static_cast<size_t>(k)] * (1.0 - f) + map.drops[at_b + static_cast<size_t>(k)] * f; };
+		out.drop = cubic ? thirds(drop(0), drop(1), drop(2), drop(3), g) : drop(node);
+	}
 	out.pass = std::min(std::max(read(4), 0.0), 1.0);
 	out.chord = std::sqrt(std::max(read(8), 0.0));
 	out.route = static_cast<uint32_t>(whole(near[12 + (cubic ? 0 : node)]));
-	return out;
-}
-
-// ---- a shaped vessel's maps, a map for each band of its rows (Stage 24)
-
-RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double height) {
-	RowMap out;
-	const double cm = spec.cm_per_pixel;
-	// the bands: cut where any piece of the profile begins or ends
-	std::vector<double> cuts{ 0.0, height };
-	for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
-		for (const glass::Piece &p : *chain) {
-			for (const double y : { p.a.y, p.b.y }) {
-				const double row = height - y / cm;
-				if (row > 0.0 && row < height) {
-					cuts.push_back(row);
-				}
-			}
-		}
-	}
-	std::sort(cuts.begin(), cuts.end());
-	cuts.erase(std::unique(cuts.begin(), cuts.end(), [](double a, double b) { return std::fabs(a - b) < 1e-9; }), cuts.end());
-	// a band is upright if every piece reaching into it is a vertical line: one map serves all its rows
-	const auto upright = [&](double top, double foot) {
-		const double y0 = (height - foot) * cm, y1 = (height - top) * cm;
-		for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
-			for (const glass::Piece &p : *chain) {
-				const double lo = std::min(p.a.y, p.b.y), hi = std::max(p.a.y, p.b.y);
-				if (hi > y0 + 1e-12 && lo < y1 - 1e-12 && (p.arc || std::fabs(p.a.r - p.b.r) > 1e-12)) {
-					return false;
-				}
-			}
-		}
-		return true;
-	};
-	// the rows' bands: an upright band whole, a curved one in steps of at most ROW_STEP pixels
-	for (size_t b = 0; b + 1 < cuts.size(); ++b) {
-		const double top = cuts[b], foot = cuts[b + 1];
-		const int steps = upright(top, foot) ? 1 : std::max(1, static_cast<int>(std::ceil((foot - top) / ROW_STEP)));
-		for (int k = 1; k <= steps; ++k) {
-			out.ends.push_back(top + (foot - top) * k / steps);
-		}
-	}
-	// each band's map, traced at its middle row, the bands on the threads at once (none depends on another)
-	out.maps.resize(out.ends.size());
-	std::atomic<size_t> next{ 0 };
-	std::vector<std::thread> workers;
-	const unsigned threads = std::max(1u, std::min(static_cast<unsigned>(out.ends.size()), std::thread::hardware_concurrency()));
-	for (unsigned t = 0; t < threads; ++t) {
-		workers.emplace_back([&] {
-			for (size_t k = next.fetch_add(1); k < out.ends.size(); k = next.fetch_add(1)) {
-				const double from = k == 0 ? 0.0 : out.ends[k - 1];
-				MapSpec row = spec;
-				row.y_cm = (height - 0.5 * (from + out.ends[k])) * cm;
-				row.pieces_most = std::min(spec.pieces_most, ROW_PIECES_MOST);
-				out.maps[k] = build_map(row);
-			}
-		});
-	}
-	for (std::thread &w : workers) {
-		w.join();
-	}
-	for (const Map &m : out.maps) {
-		out.rays += m.rays;
-	}
-	// the rims: where each band's map was traced, and in each whole row
-	const auto outer_at = [&](double y) { return vessel.radius_outside((height - y) * cm) / cm; };
-	const auto inner_at = [&](double y) { return vessel.radius_inside((height - y) * cm) / cm; };
-	for (size_t k = 0; k < out.ends.size(); ++k) {
-		const double mid = 0.5 * ((k == 0 ? 0.0 : out.ends[k - 1]) + out.ends[k]);
-		out.band_outer.push_back(outer_at(mid));
-		out.band_inner.push_back(inner_at(mid));
-	}
-	const size_t whole = static_cast<size_t>(std::ceil(height)) + 1;
-	for (size_t r = 0; r < whole; ++r) {
-		const double mid = std::min(static_cast<double>(r) + 0.5, height);
-		out.row_outer.push_back(outer_at(mid));
-		out.row_inner.push_back(inner_at(mid));
-	}
 	return out;
 }
 
@@ -805,52 +739,319 @@ double rim_place(double c, double outer, double inner) {
 
 } // namespace
 
-MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium) {
-	size_t k = 0;
-	while (k + 1 < rows.ends.size() && y >= rows.ends[k]) {
-		++k;
+// ---- a shaped vessel's knots: rows read between two maps, up and down too (Stage 25)
+
+namespace {
+
+struct Rims {
+	double outer = 0.0, inner = 0.0;
+};
+
+// a ray of a knot's map, read at the place c of the rims' measure, as a deflection (where it lands, less where
+// it came in)
+struct Read {
+	double deflection = 0.0, drop = 0.0, pass = 1.0, chord2 = 0.0;
+	uint32_t route = 0;
+	bool lands = true;
+};
+Read knot_read(const Map &map, Rims rims, double c, double nm, int medium) {
+	const double x = rim_place(c, rims.outer, rims.inner);
+	if (x < map.left || x > map.left + map.coarse) {
+		return Read{}; // past the body's rim: the identity
 	}
-	// the row's rims (straight between the middles of its whole rows), and the band's
-	const double d = std::max(y - 0.5, 0.0);
-	const size_t r = std::min(static_cast<size_t>(d), rows.row_outer.size() - 1), r1 = std::min(r + 1, rows.row_outer.size() - 1);
-	const double f = d - static_cast<double>(r);
-	const double outer = rows.row_outer[r] + (rows.row_outer[r1] - rows.row_outer[r]) * f, inner = rows.row_inner[r] + (rows.row_inner[r1] - rows.row_inner[r]) * f;
-	const double xb = outer > 0.0 && rows.band_outer[k] > 0.0 ? rim_place(rim_measure(x, outer, inner), rows.band_outer[k], rows.band_inner[k]) : x;
-	MapRay out = map_read(rows.maps[k], xb, nm, medium);
-	out.landing += x - xb;
+	const MapRay r = map_read(map, x, nm, medium);
+	return Read{ r.landing - x, r.drop, r.pass, r.chord * r.chord, r.route, std::fabs(r.landing) < 1e4 };
+}
+
+// whether the middle knot's map is the line between two knots' at w of the way (rows `span` pixels apart),
+// read at the same place in the rims' measure at every sample and node: the deflection and the drop within
+// MAP_LANDING_TOLERANCE as a shift of each one's own image, what passes and the chord within theirs. A route
+// that changes between them is split for (as across). Within a pixel of a rim each ray is its nearer knot's.
+bool between(const Map &a, Rims ra, const Map &m, Rims rm, const Map &b, Rims rb, double span, double w) {
+	const int n = m.samples(), nodes = 3 * m.pieces + 1;
+	for (int medium = 0; medium < m.media; ++medium) {
+		for (int i = 0; i < n; ++i) {
+			const double x = m.left + static_cast<double>(i) / MAP_FINE, off = std::fabs(x);
+			if (std::fabs(off - rm.outer) < 1.0 || (rm.inner > 0.0 && std::fabs(off - rm.inner) < 1.0)) {
+				continue;
+			}
+			const double c = rim_measure(x, rm.outer, rm.inner), c_beside = rim_measure(x + 1.0 / MAP_FINE, rm.outer, rm.inner);
+			for (int j = 0; j < nodes; ++j) {
+				const double nm = map_nm(static_cast<double>(j) / (nodes - 1));
+				const Read pa = knot_read(a, ra, c, nm, medium), pm = knot_read(m, rm, c, nm, medium), pb = knot_read(b, rb, c, nm, medium);
+				if (pa.route != pm.route || pb.route != pm.route) {
+					return false;
+				}
+				if (pm.pass < 0.02 || !pm.lands) {
+					continue;
+				}
+				const Read beside = knot_read(m, rm, c_beside, nm, medium);
+				const auto line = [w](double x0, double x1) { return x0 + (x1 - x0) * w; };
+				const double slope = std::max({ 1.0, std::fabs(beside.deflection - pm.deflection) * MAP_FINE, std::fabs(pb.deflection - pa.deflection) / span });
+				const double slope_drop = std::max({ 1.0, std::fabs(beside.drop - pm.drop) * MAP_FINE, std::fabs(pb.drop - pa.drop) / span });
+				if (std::fabs(pm.deflection - line(pa.deflection, pb.deflection)) > ROW_TOLERANCE * slope ||
+						std::fabs(pm.drop - line(pa.drop, pb.drop)) > ROW_TOLERANCE * slope_drop ||
+						std::fabs(pm.pass - line(pa.pass, pb.pass)) > std::max(MAP_PASS_TOLERANCE, MAP_LANDING_TOLERANCE * std::fabs(beside.pass - pm.pass) * MAP_FINE) ||
+						std::fabs(pm.chord2 - line(pa.chord2, pb.chord2)) > std::max(0.01 * std::max(1.0, pm.chord2), MAP_LANDING_TOLERANCE * std::fabs(beside.chord2 - pm.chord2) * MAP_FINE)) {
+					return false;
+				}
+			}
+		}
+	}
+	return true;
+}
+
+template <typename Job> void in_parallel(size_t count, const Job &job) {
+	std::atomic<size_t> next{ 0 };
+	std::vector<std::thread> workers;
+	const unsigned threads = std::max(1u, std::min(static_cast<unsigned>(count), std::thread::hardware_concurrency()));
+	for (unsigned t = 0; t < threads; ++t) {
+		workers.emplace_back([&] {
+			for (size_t i = next.fetch_add(1); i < count; i = next.fetch_add(1)) {
+				job(i);
+			}
+		});
+	}
+	for (std::thread &worker : workers) {
+		worker.join();
+	}
+}
+
+} // namespace
+
+KnotMap build_knots(const MapSpec &spec, const glass::Vessel &vessel, double height, int most) {
+	KnotMap out;
+	const double cm = spec.cm_per_pixel;
+	// the bands: cut where any piece of the profile begins or ends
+	std::vector<double> cuts{ 0.0, height };
+	for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+		for (const glass::Piece &p : *chain) {
+			for (const double y : { p.a.y, p.b.y }) {
+				const double row = height - y / cm;
+				if (row > 0.0 && row < height) {
+					cuts.push_back(row);
+				}
+			}
+		}
+	}
+	std::sort(cuts.begin(), cuts.end());
+	cuts.erase(std::unique(cuts.begin(), cuts.end(), [](double a, double b) { return std::fabs(a - b) < 1e-9; }), cuts.end());
+	const auto upright = [&](double top, double foot) {
+		const double y0 = (height - foot) * cm, y1 = (height - top) * cm;
+		for (const glass::Chain *chain : { &vessel.outside, &vessel.inside }) {
+			for (const glass::Piece &p : *chain) {
+				const double lo = std::min(p.a.y, p.b.y), hi = std::max(p.a.y, p.b.y);
+				if (hi > y0 + 1e-12 && lo < y1 - 1e-12 && (p.arc || std::fabs(p.a.r - p.b.r) > 1e-12)) {
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+	const auto rims_at = [&](double y) {
+		const double y_cm = (height - y) * cm;
+		return Rims{ vessel.radius_outside(y_cm) / cm, vessel.radius_inside(y_cm) / cm };
+	};
+	const auto map_at = [&](double y, bool cropped = true) {
+		MapSpec row = spec;
+		row.y_cm = (height - y) * cm;
+		row.pieces_most = std::min(spec.pieces_most, ROW_PIECES_MOST);
+		// a curved band's knot spans its own outline and a little more: a row between two knots is read in each
+		// inside its rims (the GPU's cache holds the maps of a scene the smaller they are); an upright band's one
+		// map spans the whole body, read cell by cell
+		if (cropped) {
+			const double reach = vessel.radius_outside(row.y_cm) / cm + 2.0;
+			row.left = std::max(spec.left, -reach);
+			row.right = std::min(spec.right, reach);
+		}
+		return build_map(row);
+	};
+	struct Knot {
+		double y;
+		int map;
+		bool level; // from it to the next knot one map, every ray level (an upright band)
+	};
+	std::vector<Knot> knots;
+	std::mutex lock;
+	const auto keep = [&](Map m) {
+		const std::lock_guard<std::mutex> hold(lock);
+		out.rays += m.rays;
+		out.maps.push_back(std::move(m));
+		return static_cast<int>(out.maps.size()) - 1;
+	};
+	struct Span {
+		double y0, y1;
+		int m0, m1;
+	};
+	const size_t bands = cuts.size() - 1;
+	std::vector<Span> ends(bands);
+	// each band's ends, traced just inside it (on a joint a ray runs along a flat ring or meets two pieces);
+	// an upright band one map at its middle, for both
+	in_parallel(bands, [&](size_t b) {
+		const double top = cuts[b], foot = cuts[b + 1];
+		if (upright(top, foot)) {
+			ends[b] = Span{ top, foot, keep(map_at(0.5 * (top + foot), false)), -1 };
+			return;
+		}
+		const double inside = std::min(1.0e-3, 0.25 * (foot - top));
+		Map a = map_at(top + inside), z = map_at(foot - inside);
+		const int ia = keep(std::move(a)), iz = keep(std::move(z));
+		ends[b] = Span{ top, foot, ia, iz };
+	});
+	std::vector<Span> open;
+	for (const Span &e : ends) {
+		if (e.m1 < 0) {
+			knots.push_back(Knot{ e.y0, e.m0, true });
+			knots.push_back(Knot{ e.y1, e.m0, false });
+			continue;
+		}
+		knots.push_back(Knot{ e.y0, e.m0, false });
+		knots.push_back(Knot{ e.y1, e.m1, false });
+		open.push_back(e);
+	}
+	// the curved bands' knots: each round, every open span's middle (and, past a pixel, its quarters) at once;
+	// a span whose middle is not the line between its ends is split there; no more than `most` knots
+	while (!open.empty() && static_cast<int>(knots.size()) < most) {
+		std::vector<Map> middles(open.size());
+		std::vector<char> straight(open.size(), 0);
+		in_parallel(open.size(), [&](size_t i) {
+			const Span &sp = open[i];
+			const double mid = 0.5 * (sp.y0 + sp.y1), span = sp.y1 - sp.y0;
+			middles[i] = map_at(mid);
+			const Map &m0 = out.maps[static_cast<size_t>(sp.m0)], &m1 = out.maps[static_cast<size_t>(sp.m1)];
+			bool ok = between(m0, rims_at(sp.y0), middles[i], rims_at(mid), m1, rims_at(sp.y1), span, 0.5);
+			for (const double w : { 0.25, 0.75 }) {
+				if (ok && span > 1.0) {
+					const double y = sp.y0 + w * span;
+					ok = between(m0, rims_at(sp.y0), map_at(y), rims_at(y), m1, rims_at(sp.y1), span, w);
+				}
+			}
+			straight[i] = ok ? 1 : 0;
+		});
+		std::vector<Span> next;
+		for (size_t i = 0; i < open.size(); ++i) {
+			const Span &sp = open[i];
+			if (straight[i] || static_cast<int>(knots.size()) >= most) {
+				continue;
+			}
+			const double mid = 0.5 * (sp.y0 + sp.y1);
+			const int mm = keep(std::move(middles[i]));
+			knots.push_back(Knot{ mid, mm, false });
+			if (mid - sp.y0 > 1.0 / MAP_FINE) {
+				next.push_back(Span{ sp.y0, mid, sp.m0, mm });
+				next.push_back(Span{ mid, sp.y1, mm, sp.m1 });
+			}
+		}
+		open = std::move(next);
+	}
+	// ascending; where two knots stand at one row (a band's foot, the next band's top), the next band's
+	std::stable_sort(knots.begin(), knots.end(), [](const Knot &a, const Knot &b) { return a.y < b.y; });
+	for (size_t k = 0; k < knots.size(); ++k) {
+		const Rims r = knots[k].level || (k > 0 && knots[k - 1].level && knots[k - 1].map == knots[k].map) ? rims_at(knots[k].y + (knots[k].level ? 1e-3 : -1e-3)) : rims_at(knots[k].y);
+		if (k > 0 && std::fabs(knots[k - 1].y - knots[k].y) < 1e-12) {
+			out.map_of.back() = knots[k].map;
+			out.level.back() = knots[k].level ? 1 : 0;
+			out.outer.back() = r.outer;
+			out.inner.back() = r.inner;
+			continue;
+		}
+		out.knots.push_back(knots[k].y);
+		out.map_of.push_back(knots[k].map);
+		out.level.push_back(knots[k].level ? 1 : 0);
+		out.outer.push_back(r.outer);
+		out.inner.push_back(r.inner);
+	}
+	const size_t whole = static_cast<size_t>(std::ceil(height)) + 1;
+	for (size_t r = 0; r < whole; ++r) {
+		const Rims rr = rims_at(std::min(static_cast<double>(r) + 0.5, height));
+		out.row_outer.push_back(rr.outer);
+		out.row_inner.push_back(rr.inner);
+	}
 	return out;
 }
 
-std::vector<float> rows_block(const RowMap &rows) {
-	// [0] the rows' bands K, the whole rows R; [1 .. K] each band: where its rows end (pixels down from the
-	// body's top), where its map begins (vec4s from the table's start), its pieces in wavelength, its whole
-	// pixels across; [1 + K .. K + R] for each whole row, the band its top is in; then the maps
-	const size_t k = rows.ends.size(), whole = static_cast<size_t>(std::ceil(rows.ends.back())) + 1;
+MapRay knots_read(const KnotMap &kn, double x, double y, double nm, int medium) {
+	const size_t n = kn.knots.size();
+	size_t k = 0;
+	while (k + 2 < n && kn.knots[k + 1] <= y) {
+		++k;
+	}
+	// the row's rims (straight between the middles of its whole rows)
+	const double d = std::max(y - 0.5, 0.0);
+	const size_t r = std::min(static_cast<size_t>(d), kn.row_outer.size() - 1), r1 = std::min(r + 1, kn.row_outer.size() - 1);
+	const double fr = d - static_cast<double>(r);
+	const double outer = kn.row_outer[r] + (kn.row_outer[r1] - kn.row_outer[r]) * fr, inner = kn.row_inner[r] + (kn.row_inner[r1] - kn.row_inner[r]) * fr;
+	const double c = outer > 0.0 ? rim_measure(x, outer, inner) : 0.0;
+	const auto at = [&](size_t j) {
+		const Map &m = kn.maps[static_cast<size_t>(kn.map_of[j])];
+		if (outer <= 0.0 || kn.outer[j] <= 0.0) {
+			const MapRay ray = map_read(m, x, nm, medium);
+			return Read{ ray.landing - x, ray.drop, ray.pass, ray.chord * ray.chord, ray.route, std::fabs(ray.landing) < 1e4 };
+		}
+		return knot_read(m, Rims{ kn.outer[j], kn.inner[j] }, c, nm, medium);
+	};
+	const Read p = at(k);
+	Read q = p;
+	double f = 0.0;
+	if (!kn.level[k] && n > 1) {
+		q = at(k + 1);
+		f = std::min(std::max((y - kn.knots[k]) / (kn.knots[k + 1] - kn.knots[k]), 0.0), 1.0);
+	}
+	MapRay out;
+	if (p.route != q.route || !p.lands || !q.lands) {
+		const Read &near = f < 0.5 ? p : q; // going different ways: the nearer knot's ray
+		out.landing = x + near.deflection;
+		out.drop = near.drop;
+		out.pass = near.pass;
+		out.chord = std::sqrt(std::max(0.0, near.chord2));
+		out.route = near.route;
+		return out;
+	}
+	out.landing = x + p.deflection + (q.deflection - p.deflection) * f;
+	out.drop = p.drop + (q.drop - p.drop) * f;
+	out.pass = p.pass + (q.pass - p.pass) * f;
+	out.chord = std::sqrt(std::max(0.0, p.chord2 + (q.chord2 - p.chord2) * f));
+	out.route = p.route;
+	return out;
+}
+
+std::vector<float> knots_block(const KnotMap &kn) {
+	// [0] the knots K, the whole rows R; [1 .. K] each knot (its row: pixels down from the body's top; where its
+	// map begins, in vec4s from the table's start; its pieces; 1 if from it to the next is one map, its rays
+	// level); [1 + K .. K + R] each whole row (the knot at or above its top; its outer rim; its inner, at its
+	// middle); [1 + K + R .. 2K + R] each knot's rims (outer, inner); then each map: its map_block, and after it
+	// its drops (a vec4 of the four nodes for each core, sample and piece)
+	const size_t k = kn.knots.size(), whole = kn.row_outer.size();
 	std::vector<float> out((1 + k + whole + k) * 4, 0.0f);
 	out[0] = static_cast<float>(k);
 	out[1] = static_cast<float>(whole);
-	size_t band = 0;
+	size_t knot = 0;
 	for (size_t r = 0; r < whole; ++r) {
-		while (band + 1 < k && static_cast<double>(r) >= rows.ends[band]) {
-			++band;
+		while (knot + 2 < k && kn.knots[knot + 1] <= static_cast<double>(r)) {
+			++knot;
 		}
-		out[(1 + k + r) * 4] = static_cast<float>(band);
-		out[(1 + k + r) * 4 + 1] = static_cast<float>(r < rows.row_outer.size() ? rows.row_outer[r] : 0.0);
-		out[(1 + k + r) * 4 + 2] = static_cast<float>(r < rows.row_inner.size() ? rows.row_inner[r] : 0.0);
+		out[(1 + k + r) * 4] = static_cast<float>(knot);
+		out[(1 + k + r) * 4 + 1] = static_cast<float>(kn.row_outer[r]);
+		out[(1 + k + r) * 4 + 2] = static_cast<float>(kn.row_inner[r]);
 	}
-	for (size_t i = 0; i < k; ++i) {
-		out[(1 + k + whole + i) * 4] = static_cast<float>(rows.band_outer[i]);
-		out[(1 + k + whole + i) * 4 + 1] = static_cast<float>(rows.band_inner[i]);
-	}
-	size_t at = 1 + k + whole + k;
-	for (size_t i = 0; i < k; ++i) {
-		const std::vector<float> block = map_block(rows.maps[i]);
-		out[(1 + i) * 4] = static_cast<float>(rows.ends[i]);
-		out[(1 + i) * 4 + 1] = static_cast<float>(at);
-		out[(1 + i) * 4 + 2] = static_cast<float>(rows.maps[i].pieces);
-		out[(1 + i) * 4 + 3] = static_cast<float>(rows.maps[i].coarse);
+	std::vector<size_t> at_map(kn.maps.size());
+	size_t at = out.size() / 4;
+	for (size_t m = 0; m < kn.maps.size(); ++m) {
+		at_map[m] = at;
+		const std::vector<float> block = map_block(kn.maps[m]);
 		out.insert(out.end(), block.begin(), block.end());
-		at += block.size() / 4;
+		out.insert(out.end(), kn.maps[m].drops.begin(), kn.maps[m].drops.end());
+		at = out.size() / 4;
+	}
+	for (size_t i = 0; i < k; ++i) {
+		const Map &m = kn.maps[static_cast<size_t>(kn.map_of[i])];
+		out[(1 + i) * 4] = static_cast<float>(kn.knots[i]);
+		out[(1 + i) * 4 + 1] = static_cast<float>(at_map[static_cast<size_t>(kn.map_of[i])]);
+		out[(1 + i) * 4 + 2] = static_cast<float>(m.pieces);
+		out[(1 + i) * 4 + 3] = kn.level[i] ? 1.0f : 0.0f;
+		out[(1 + k + whole + i) * 4] = static_cast<float>(kn.outer[i]);
+		out[(1 + k + whole + i) * 4 + 1] = static_cast<float>(kn.inner[i]);
+		out[(1 + k + whole + i) * 4 + 2] = static_cast<float>(m.left);
 	}
 	return out;
 }

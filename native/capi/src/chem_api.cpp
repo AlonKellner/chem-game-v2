@@ -375,6 +375,7 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->map_count = static_cast<int32_t>(scene.maps.size() / 4);
 	out->maps = scene.maps.data();
 	out->maps_revision = scene.maps_revision;
+	out->maps_changed_from = scene.maps_changed_from;
 	out->wall_count = static_cast<int32_t>(scene.wall.size() / 4);
 	out->wall = scene.wall.data();
 	out->wall_revision = scene.wall_revision;

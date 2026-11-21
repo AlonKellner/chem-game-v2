@@ -93,6 +93,12 @@ struct Path {
 	float rleft; // the map's first sample, pixels from the axis
 	vec4 rrims; // a shaped vessel's row read in its band's map (Stage 24): the row's rims, the band's; 0 where none is
 	float rdown; // a shaped vessel's: the pixel's row, from its top (its rows differ, so its history follows the row; 0 for any other)
+	int rmap2; // and the knot below the row, its map and span (Stage 25), and the share of the way to it (0: one map serves)
+	int rcoarse2;
+	int rsamples2;
+	float rleft2;
+	float rf;
+	vec4 rrims2;
 	float rwet; // how much of the pixel's height is under its liquid's surface
 	float rin; // how much of the pixel's height is between its top and its foot
 	float rfloor; // how much of the pixel's height is in its floor (glass all through: its map's third core)
@@ -297,52 +303,69 @@ float uncovered(Path q, int c) {
 
 // what the pixel at p looks through; `size` is how wide a sample it is, in pixels: 1 for a pixel (its
 // outlines blend by how much of it they cover), less for a sample of the truth (GAME_SPEC §12.3)
-// A body's map for the row `down` pixels below its top (GAME_SPEC §12.3, Stage 24). A vessel made as glassware
-// has a table of its rows' bands, its MAP's w minus their count: each band (where its rows end, its map's offset
-// from the table, its pieces, its whole pixels); an index of its whole rows (the band its top is in, its rims);
-// each band's rims. A row reads its band's map along its own outline. Any other body has one map.
-int band_for_row(vec4 map, float down) {
-	int bands = int(-map.w);
+// A shaped vessel's maps (GAME_SPEC §12.3, Stage 25): a table of knots down its height, its MAP's w minus their
+// count: each knot (its row, its map's offset from the table, its pieces, 1 if a level span begins at it); an
+// index of its whole rows (the knot at or above its top, its outer rim, its inner); each knot's rims. A row is
+// read between the knots around it, at the same place in the rims' measure. Any other body has one map.
+// The knot at or above the row `down` below the body's top (x), and the share of the way to the next (y: 0 in a
+// level span, where one map serves).
+vec4 knot_for_row(vec4 map, float down) {
+	int knots = int(-map.w);
 	int table = int(map.x);
 	int rows = int(map_vec(table).y);
-	int k = int(map_vec(table + 1 + bands + clamp(int(floor(down)), 0, rows - 1)).x);
-	for (int step = 0; step < 4 && down >= map_vec(table + 1 + k).x && k + 1 < bands; step++) {
+	int k = int(map_vec(table + 1 + knots + clamp(int(floor(down)), 0, rows - 1)).x);
+	for (int step = 0; step < 4 && k + 2 < knots && down >= map_vec(table + 2 + k).x; step++) {
 		k = k + 1;
 	}
-	return k;
+	vec4 here = map_vec(table + 1 + k);
+	vec4 next = map_vec(table + 1 + min(k + 1, knots - 1));
+	float f = (here.w > 0.5 || knots < 2) ? 0.0 : clamp((down - here.x) / max(next.x - here.x, 1.0e-6), 0.0, 1.0);
+	return vec4(float(k), f, 0.0, 0.0);
 }
 
-// the map's start among the maps (x) and its pieces in wavelength (y)
-vec4 map_for_row(vec4 map, float down) {
-	if (map.w >= 0.0) {
-		return vec4(map.x, map.w, 0.0, 0.0);
-	}
+// knot k's map: its start among the maps (x) and its pieces (y)
+vec4 knot_map(vec4 map, int k) {
 	int table = int(map.x);
-	vec4 band = map_vec(table + 1 + band_for_row(map, down));
-	return vec4(float(table) + band.y, band.z, 0.0, 0.0);
+	vec4 e = map_vec(table + 1 + k);
+	return vec4(float(table) + e.y, e.z, 0.0, 0.0);
 }
 
-// the row's rims (straight between the middles of its whole rows) and its band's: (row outer, row inner, band
-// outer, band inner); 0 where the row is read as it is (an upright band, any other body)
-vec4 rims_for_row(vec4 map, float down) {
-	if (map.w >= 0.0) {
-		return vec4(0.0);
-	}
-	int bands = int(-map.w);
+// the row's rims (straight between the middles of its whole rows) and knot k's: (row outer, row inner, knot
+// outer, knot inner); 0 where they are the same
+vec4 knot_rims(vec4 map, float down, int k) {
+	int knots = int(-map.w);
 	int table = int(map.x);
 	int rows = int(map_vec(table).y);
 	float d = max(down - 0.5, 0.0);
 	int r = min(int(floor(d)), rows - 1);
-	vec4 a = map_vec(table + 1 + bands + r);
-	vec4 b = map_vec(table + 1 + bands + min(r + 1, rows - 1));
+	vec4 a = map_vec(table + 1 + knots + r);
+	vec4 b = map_vec(table + 1 + knots + min(r + 1, rows - 1));
 	float f = d - float(r);
 	float outer = mix(a.y, b.y, f);
 	float inner = mix(a.z, b.z, f);
-	vec4 band = map_vec(table + 1 + bands + rows + band_for_row(map, down));
-	if (outer <= 0.0 || band.x <= 0.0 || (abs(outer - band.x) < 1.0e-4 && abs(inner - band.y) < 1.0e-4)) {
+	vec4 kr = map_vec(table + 1 + knots + rows + k);
+	if (outer <= 0.0 || kr.x <= 0.0 || (abs(outer - kr.x) < 1.0e-4 && abs(inner - kr.y) < 1.0e-4)) {
 		return vec4(0.0);
 	}
-	return vec4(outer, inner, band.x, band.y);
+	return vec4(outer, inner, kr.x, kr.y);
+}
+
+// knot k's span: its whole pixels (x), its samples (y), its first sample's place from the axis (z) (each knot's
+// map spans its own outline, and a little more)
+vec4 knot_span(vec4 map, int k) {
+	int knots = int(-map.w);
+	int table = int(map.x);
+	int rows = int(map_vec(table).y);
+	vec4 head = map_vec(int(knot_map(map, k).x));
+	return vec4(head.x, head.z, map_vec(table + 1 + knots + rows + k).z, 0.0);
+}
+
+// the map's start among the maps (x) and its pieces in wavelength (y): a table's, the knot at or above the row
+vec4 map_for_row(vec4 map, float down) {
+	if (map.w >= 0.0) {
+		return vec4(map.x, map.w, 0.0, 0.0);
+	}
+	return knot_map(map, int(knot_for_row(map, down).x));
 }
 
 // a place across a row in a measure both its rims keep: inside the inner rim from 0 to 1, through the glass from
@@ -365,18 +388,6 @@ float rim_place(float c, float outer, float inner) {
 	return side * (a <= 1.0 ? a * inner : (a <= 2.0 ? inner + (a - 1.0) * (outer - inner) : outer + (a - 2.0)));
 }
 
-const float RIM_NEAR = 2.0;
-const float RIM_FADE = 2.0;
-
-float rim_weight(vec4 rims, float x) {
-	float a = abs(x);
-	float near = min(abs(a - rims.x), rims.y > 0.0 ? abs(a - rims.y) : 1.0e9);
-	if (a > rims.y && a < rims.x) {
-		near = 0.0; // in the glass
-	}
-	return clamp(1.0 - (near - RIM_NEAR) / RIM_FADE, 0.0, 1.0);
-}
-
 Path path_of(vec2 p, float size) {
 	Path q;
 	q.layers = 0;
@@ -397,6 +408,12 @@ Path path_of(vec2 p, float size) {
 	q.rleft = 0.0;
 	q.rrims = vec4(0.0);
 	q.rdown = 0.0;
+	q.rmap2 = 0;
+	q.rcoarse2 = 0;
+	q.rsamples2 = 0;
+	q.rleft2 = 0.0;
+	q.rf = 0.0;
+	q.rrims2 = vec4(0.0);
 	q.rwet = 0.0;
 	q.rin = 0.0;
 	q.rfloor = 0.0;
@@ -440,13 +457,14 @@ Path path_of(vec2 p, float size) {
 				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // a prism's centre, which its corners are given from
 			}
 			vec4 map = scene_vec(at + 6);
-			vec4 row_map = map_for_row(map, p.y - rect.y);
-			q.rrims = rims_for_row(map, p.y - rect.y);
-			q.rdown = map.w < 0.0 ? p.y - rect.y : 0.0;
-			if (q.rrims.x > 0.0 && rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5))) <= 0.0 && rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5)) - 1.0) <= 0.0 &&
-					rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5)) + 1.0) <= 0.0) {
-				q.rrims = vec4(0.0); // far from the rims: the band's map as it is
+			if (map.w < 0.0) {
+				q.raxis = floor(q.raxis + 0.5); // glassware stands with its axis on a whole pixel, as its maps were made
 			}
+			float down = p.y - rect.y;
+			vec4 row_map = map_for_row(map, down);
+			q.rdown = map.w < 0.0 ? down : 0.0;
+			q.rrims = vec4(0.0);
+			q.rf = 0.0;
 			q.rmap = int(row_map.x);
 			q.rcoarse = int(map.y);
 			q.rleft = map.z;
@@ -454,6 +472,30 @@ Path path_of(vec2 p, float size) {
 			vec4 map_head = map_vec(q.rmap);
 			q.rmedia = int(map_head.y);
 			q.rsamples = int(map_head.z);
+			q.rmap2 = q.rmap;
+			q.rcoarse2 = q.rcoarse;
+			q.rsamples2 = q.rsamples;
+			q.rleft2 = q.rleft;
+			q.rrims2 = vec4(0.0);
+			if (map.w < 0.0) {
+				// between the knots around the row, each read along the row's own outline, each with its own span
+				vec4 kf = knot_for_row(map, down);
+				int knot = int(kf.x);
+				vec4 span = knot_span(map, knot);
+				q.rcoarse = int(span.x);
+				q.rsamples = int(span.y);
+				q.rleft = span.z;
+				q.rrims = knot_rims(map, down, knot);
+				q.rf = kf.y;
+				if (q.rf > 0.0) {
+					q.rmap2 = int(knot_map(map, knot + 1).x);
+					vec4 span2 = knot_span(map, knot + 1);
+					q.rcoarse2 = int(span2.x);
+					q.rsamples2 = int(span2.y);
+					q.rleft2 = span2.z;
+					q.rrims2 = knot_rims(map, down, knot + 1);
+				}
+			}
 			// what stands behind it, in its rows, on a layer further from the eye (the scene says, and signs it)
 			behind = scene_vec(at + 7);
 			// the rows of the pixel under its liquid's surface, and those between its top and its floor
@@ -699,30 +741,26 @@ struct MapRef {
 	int pieces;
 	int media;
 	float left;
-	vec4 rims; // a shaped vessel's row read in its band's map: (row outer, row inner, band outer, band inner); 0: as it is
+	vec4 rims; // a shaped vessel's row read in its knot's map: (row outer, row inner, knot outer, knot inner); 0: as it is
+	int at2; // the knot below the row: its map, its span, its rims, and the share of the way to it (0: one map serves)
+	int coarse2;
+	int samples2;
+	float left2;
+	vec4 rims2;
+	float f;
 };
 
-// A place across the row, in the band's map; and back (Stage 24). Near a rim (within RIM_NEAR pixels of either,
-// and through the glass between them) a row is read along its own outline, so the outline is where the glass
-// is; further in the band's map is read as it is (the two differ there by well under a pixel), the one fading
-// into the other over RIM_FADE pixels. A row read as it is takes the plain reading.
+// A place across the row, in a knot's map, at the same place in the rims' measure; and back (Stage 24, 25)
+float to_knot(vec4 rims, float x) {
+	return rims.x > 0.0 ? rim_place(rim_measure(x, rims.x, rims.y), rims.z, rims.w) : x;
+}
+
 float to_band(MapRef m, float x) {
-	if (m.rims.x <= 0.0) {
-		return x;
-	}
-	return mix(x, rim_place(rim_measure(x, m.rims.x, m.rims.y), m.rims.z, m.rims.w), rim_weight(m.rims, x));
+	return to_knot(m.rims, x);
 }
 
 float from_band(MapRef m, float xb) {
-	if (m.rims.x <= 0.0) {
-		return xb;
-	}
-	// to_band turned around: a few steps of the fixed point (exact where the weight is whole: at the rims)
-	float x = xb;
-	for (int i = 0; i < 4; i++) {
-		x = x - (to_band(m, x) - xb);
-	}
-	return x;
+	return m.rims.x > 0.0 ? rim_place(rim_measure(xb, m.rims.z, m.rims.w), m.rims.x, m.rims.y) : xb;
 }
 
 // the map of the vessel that bends the pixel's view
@@ -735,6 +773,12 @@ MapRef ref_of(Path q) {
 	m.media = q.rmedia;
 	m.left = q.rleft;
 	m.rims = q.rrims;
+	m.at2 = q.rmap2;
+	m.coarse2 = q.rcoarse2;
+	m.samples2 = q.rsamples2;
+	m.left2 = q.rleft2;
+	m.rims2 = q.rrims2;
+	m.f = q.rf;
 	return m;
 }
 
@@ -754,22 +798,22 @@ struct Edge {
 // half pixels), that sample's cell alone. Past the map's ends a ray misses the body and goes straight.
 // A route is a small whole number, and 0 is the ray that misses the body (the map's first sample is past
 // its outline): -1, past the map's ends, is that too.
-Edge edge_load(MapRef m, int medium, float x, int piece) {
+Edge edge_one(MapRef m, int at, int coarse, int samples, float left, vec4 rims, int medium, float x, int piece) {
 	Edge e;
 	e.land = vec4(x, x, x, x);
 	e.pass = vec4(1.0, 1.0, 1.0, 1.0);
 	e.chord = vec4(0.0, 0.0, 0.0, 0.0);
 	e.route = vec4(-1.0, -1.0, -1.0, -1.0);
-	// a shaped vessel's row: read at the same place along the band's outline; the ray keeps its deflection
-	float xb = to_band(m, x);
+	// a shaped vessel's row: read at the same place along the knot's outline; the ray keeps its deflection
+	float xb = to_knot(rims, x);
 	vec4 shift = vec4(x - xb);
-	float s = (xb - m.left) * MAP_FINE;
-	if (m.samples < 2 || s < 0.0 || s > float(m.samples - 1)) {
+	float s = (xb - left) * MAP_FINE;
+	if (samples < 2 || s < 0.0 || s > float(samples - 1)) {
 		return e;
 	}
-	int i = min(int(floor(s)), m.samples - 2);
+	int i = min(int(floor(s)), samples - 2);
 	float f = s - float(i);
-	int base = m.at + 1 + m.coarse + ((medium * m.samples + i) * m.pieces + piece) * 4;
+	int base = at + 1 + coarse + ((medium * samples + i) * m.pieces + piece) * 4;
 	vec4 r = map_vec(base + 3);
 	if (f > 0.0) {
 		int next = base + m.pieces * 4;
@@ -789,7 +833,7 @@ Edge edge_load(MapRef m, int medium, float x, int piece) {
 			r = r2;
 		} else if (f > 0.0) {
 			e.route = vec4(floor(r.x), floor(r.y), floor(r.z), floor(r.w));
-			if (i > 0 && i + 2 < m.samples) {
+			if (i > 0 && i + 2 < samples) {
 				// between two samples whose neighbours go the same way: the smooth curve through the four (a
 				// ray followed in from another body comes in anywhere, and a thin line's image is as bright as
 				// the landing's slope is small: the slope must be the map's, not a chord's of it)
@@ -820,6 +864,23 @@ Edge edge_load(MapRef m, int medium, float x, int piece) {
 	e.chord = map_vec(base + 2);
 	e.route = vec4(floor(r.x), floor(r.y), floor(r.z), floor(r.w));
 	return e;
+}
+
+// The ray at x through a body's map; a shaped vessel's row between two knots: the straight line between their
+// rays, each read along the row's own outline; where they go different ways, the nearer knot's (Stage 25)
+Edge edge_load(MapRef m, int medium, float x, int piece) {
+	Edge a = edge_one(m, m.at, m.coarse, m.samples, m.left, m.rims, medium, x, piece);
+	if (m.f <= 0.0) {
+		return a;
+	}
+	Edge b = edge_one(m, m.at2, m.coarse2, m.samples2, m.left2, m.rims2, medium, x, piece);
+	if (a.route.x != b.route.x || a.route.y != b.route.y || a.route.z != b.route.z || a.route.w != b.route.w) {
+		return m.f < 0.5 ? a : b;
+	}
+	a.land = mix(a.land, b.land, m.f);
+	a.pass = mix(a.pass, b.pass, m.f);
+	a.chord = mix(a.chord, b.chord, m.f);
+	return a;
 }
 
 // the cubic through four values at the thirds of a piece, at g of the way through it: what each value weighs
@@ -1611,15 +1672,44 @@ struct Stack {
 };
 
 MapRef ref_at(Stack s, int j, float y) {
-	vec4 row_map = map_for_row(vec4(float(s.map[j]), 0.0, 0.0, float(s.pieces[j])), y - s.top[j]);
+	vec4 map = vec4(float(s.map[j]), 0.0, 0.0, float(s.pieces[j]));
+	float down = y - s.top[j];
 	MapRef m;
-	m.at = int(row_map.x);
+	m.at = s.map[j];
 	m.coarse = s.coarse[j];
 	m.samples = s.samples[j];
-	m.pieces = int(row_map.y);
-	m.rims = rims_for_row(vec4(float(s.map[j]), 0.0, 0.0, float(s.pieces[j])), y - s.top[j]);
+	m.pieces = s.pieces[j];
 	m.media = s.media[j];
 	m.left = s.left[j];
+	m.rims = vec4(0.0);
+	m.at2 = m.at;
+	m.rims2 = vec4(0.0);
+	m.f = 0.0;
+	m.coarse2 = m.coarse;
+	m.samples2 = m.samples;
+	m.left2 = m.left;
+	if (map.w < 0.0) {
+		vec4 kf = knot_for_row(map, down);
+		int k = int(kf.x);
+		vec4 km = knot_map(map, k);
+		vec4 span = knot_span(map, k);
+		m.at = int(km.x);
+		m.pieces = int(km.y);
+		m.coarse = int(span.x);
+		m.samples = int(span.y);
+		m.left = span.z;
+		m.rims = knot_rims(map, down, k);
+		m.f = kf.y;
+		m.at2 = m.at;
+		if (m.f > 0.0) {
+			vec4 span2 = knot_span(map, k + 1);
+			m.at2 = int(knot_map(map, k + 1).x);
+			m.coarse2 = int(span2.x);
+			m.samples2 = int(span2.y);
+			m.left2 = span2.z;
+			m.rims2 = knot_rims(map, down, k + 1);
+		}
+	}
 	return m;
 }
 
@@ -1895,6 +1985,43 @@ struct Plain {
 	float straight; // the wall straight through, for the share of the pixel past the body's top or floor
 };
 
+// One knot's ray at x (pixels from the axis) in one core of a one-piece map, read at the same place along its
+// outline (rims), between the two samples around it: the straight line between them, or, where the route
+// changes between them, each side its own sample's (Stage 24, 25)
+struct Cell {
+	vec4 land;
+	vec4 pass;
+	vec4 chord;
+	vec4 routes;
+};
+
+Cell cell_on(int at, int coarse, int samples, float left, vec4 rims, int core, float x) {
+	float xb = to_knot(rims, x);
+	float sb = (xb - left) * MAP_FINE;
+	Cell c;
+	if (sb < 0.0 || sb > float(samples - 1)) {
+		// past the knot's map: the ray misses the body and goes straight
+		c.land = vec4(x);
+		c.pass = vec4(1.0);
+		c.chord = vec4(0.0);
+		c.routes = vec4(-1.0);
+		return c;
+	}
+	int i = clamp(int(floor(sb)), 0, samples - 2);
+	float f = clamp(sb - float(i), 0.0, 1.0);
+	int a = at + 1 + coarse + (core * samples + i) * 4;
+	vec4 ra = map_vec(a + 3);
+	vec4 rb = map_vec(a + 7);
+	if (floor(ra.x) != floor(rb.x)) {
+		f = f < 2.0 * fract(ra.x) ? 0.0 : 1.0;
+	}
+	c.land = mix(map_vec(a), map_vec(a + 4), f) + vec4(x - xb);
+	c.routes = f < 0.5 ? ra : rb;
+	c.pass = mix(map_vec(a + 1), map_vec(a + 5), f);
+	c.chord = mix(map_vec(a + 2), map_vec(a + 6), f);
+	return c;
+}
+
 Plain plain_of(Path q) {
 	Plain p;
 	p.ok = false;
@@ -1910,7 +2037,10 @@ Plain plain_of(Path q) {
 	}
 	float left = q.x - 0.5 - q.raxis;
 	float s = (left - q.rleft) * MAP_FINE;
-	if (s < 0.0 || abs(s - floor(s + 0.5)) > 1.0e-3 || s + MAP_FINE > float(q.rsamples) - 0.5) {
+	// a row read between knots takes each boundary where it falls, in or past its knot's map (Stage 25); one map's
+	// cells are read where the pixel's parts begin and end
+	bool knotted = q.rrims.x > 0.0 || q.rf > 0.0;
+	if (abs(s - floor(s + 0.5)) > 1.0e-3 || (!knotted && (s < 0.0 || s + MAP_FINE > float(q.rsamples) - 0.5))) {
 		return p;
 	}
 	p.profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(q.y)), 0, WALL_ROWS - 1)).x);
@@ -2003,25 +2133,27 @@ float plain_band(Path q, Plain p, float u0, float u1, float t, float one_nm) {
 				vec4 routes = map_vec(at + 3);
 				vec4 passes = map_vec(at + 1);
 				vec4 chords = map_vec(at + 2);
-				if (q.rrims.x > 0.0) {
-					// a shaped vessel's row near its rims, read along its own outline (Stage 24): the boundary's place in
-					// the band's map falls between two samples; the straight line between them (each side its own
-					// sample's ray where the route changes between them), the ray keeping its deflection
+				if (q.rrims.x > 0.0 || q.rf > 0.0) {
+					// a shaped vessel's curved row (Stage 24, 25): the boundary read along the row's own outline in each
+					// knot around it, between two of its samples, the straight line between the knots' rays (where they
+					// go different ways, the nearer knot's)
 					float x = q.x - 0.5 - q.raxis + float(k) / float(p.parts);
-					float xb = to_band(ref_of(q), x);
-					float sb = (xb - q.rleft) * MAP_FINE;
-					int i = clamp(int(floor(sb)), 0, q.rsamples - 2);
-					float f = clamp(sb - float(i), 0.0, 1.0);
-					int a = cell - p.first * 4 + i * 4;
-					vec4 ra = map_vec(a + 3);
-					vec4 rb = map_vec(a + 7);
-					if (floor(ra.x) != floor(rb.x)) {
-						f = f < 2.0 * fract(ra.x) ? 0.0 : 1.0;
+					int c = q.rmedia > 1 ? core : 0;
+					Cell a = cell_on(q.rmap, q.rcoarse, q.rsamples, q.rleft, q.rrims, c, x);
+					if (q.rf > 0.0) {
+						Cell b = cell_on(q.rmap2, q.rcoarse2, q.rsamples2, q.rleft2, q.rrims2, c, x);
+						if (floor(a.routes.x) == floor(b.routes.x) && floor(a.routes.y) == floor(b.routes.y) && floor(a.routes.z) == floor(b.routes.z) && floor(a.routes.w) == floor(b.routes.w)) {
+							a.land = mix(a.land, b.land, q.rf);
+							a.pass = mix(a.pass, b.pass, q.rf);
+							a.chord = mix(a.chord, b.chord, q.rf);
+						} else if (q.rf >= 0.5) {
+							a = b;
+						}
 					}
-					land = mix(map_vec(a), map_vec(a + 4), f) + vec4(x - xb);
-					routes = f < 0.5 ? ra : rb;
-					passes = mix(map_vec(a + 1), map_vec(a + 5), f);
-					chords = mix(map_vec(a + 2), map_vec(a + 6), f);
+					land = a.land;
+					routes = a.routes;
+					passes = a.pass;
+					chords = a.chord;
 				}
 				bool whole = floor(routes.y) == floor(routes.x) && floor(routes.z) == floor(routes.x) && floor(routes.w) == floor(routes.x);
 				vec4 weigh_p = whole ? cubic_p : near_p;
@@ -2095,6 +2227,25 @@ bool chained(Path q) {
 float band_light(Path q, float u0, float u1, float t, float one_nm) {
 	Plain plain = plain_of(q);
 	if (plain.ok) {
+		if (q.rf > 0.0) {
+			// a shaped vessel's row between two knots: the light through each knot's map (each read along the
+			// row's own outline), mixed by the share of the way (Stage 25): where the knots send a ray different
+			// ways, a fade, never a flip from one pixel to the next
+			Path qa = q;
+			qa.rf = 0.0;
+			Path qb = q;
+			qb.rmap = q.rmap2;
+			qb.rcoarse = q.rcoarse2;
+			qb.rsamples = q.rsamples2;
+			qb.rleft = q.rleft2;
+			qb.rrims = q.rrims2;
+			qb.rf = 0.0;
+			Plain pa = plain_of(qa);
+			Plain pb = plain_of(qb);
+			float la = pa.ok ? plain_band(qa, pa, u0, u1, t, one_nm) : plain_band(q, plain, u0, u1, t, one_nm);
+			float lb = pb.ok ? plain_band(qb, pb, u0, u1, t, one_nm) : la;
+			return mix(la, lb, q.rf);
+		}
 		return plain_band(q, plain, u0, u1, t, one_nm);
 	}
 	return other_band(q, u0, u1, t, one_nm);
@@ -2473,8 +2624,26 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	return next;
 }
 
-// what the pixel shows: the fixed estimate and what its history adds; sRGB-encoded, alpha 0 where no body is
+// A pixel no body covers shows the wall drawn there, its mean over the pixel: the room and the bodies are one
+// picture at the screen's pixels (GAME_SPEC §12.3), which a host scales as one, so the wall seen through glass
+// and beside it cannot part
+vec4 wall_shown(vec2 p, float size) {
+	int profile = int(wall_vec(WALL_ROW_BASE + clamp(int(floor(p.y)), 0, WALL_ROWS - 1)).x);
+	float v = encode1(wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size));
+	return vec4(v, v, v, 1.0);
+}
+
+// the state of a pixel that shows the wall: the wall table's own tag, so it is shown again when the wall changes
+// (and matches no content: a body there starts its history)
+vec4 wall_key() {
+	return vec4(-1.0, wall_vec(0).z, -1.0, -1.0);
+}
+
+// what the pixel shows: the fixed estimate and what its history adds, sRGB-encoded; where no body is, the wall
 vec4 shown(Path q, PixelState s) {
+	if (q.cover <= 0.0) {
+		return wall_shown(vec2(q.x, q.y), q.size);
+	}
 	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
-	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), q.cover > 0.0 ? 1.0 : 0.0);
+	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }

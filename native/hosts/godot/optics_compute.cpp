@@ -65,13 +65,20 @@ void main() {
 		return;
 	}
 #else
-	if (!near_any(p)) {
-		imageStore(shown_image, at, vec4(0.0));
-		return;
+	// no body here: the wall drawn there, written once for each wall (its state holds the wall's tag)
+	Path q;
+	bool bare = !near_any(p);
+	if (!bare) {
+		q = path_of(p, 1.0);
+		bare = q.cover <= 0.0;
 	}
-	Path q = path_of(p, 1.0);
-	if (q.cover <= 0.0) {
-		imageStore(shown_image, at, vec4(0.0));
+	if (bare) {
+		vec4 wall = wall_key();
+		if (imageLoad(key_image, at) != wall) {
+			imageStore(shown_image, at, wall_shown(p, 1.0));
+			imageStore(key_image, at, wall);
+			imageStore(aux_image, at, vec4(0.0));
+		}
 		return;
 	}
 #endif
@@ -193,38 +200,43 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	return true;
 }
 
-void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats) {
+void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats, int64_t from) {
 	const uint32_t bytes = static_cast<uint32_t>(floats > 0 ? floats : 0) * 4;
-	godot::PackedByteArray given;
-	if (bytes <= buffer.capacity && buffer.rid.is_valid()) {
-		if (bytes > 0) {
-			given.resize(bytes);
-			std::memcpy(given.ptrw(), data, bytes);
-			rd_->buffer_update(buffer.rid, 0, bytes, given);
+	// what is the same as the GPU has is not sent again
+	uint32_t start = buffer.rid.is_valid() ? static_cast<uint32_t>(std::clamp<int64_t>(from, 0, floats > 0 ? floats : 0)) * 4 : 0;
+	if (bytes > buffer.capacity || !buffer.rid.is_valid()) {
+		// larger than it was: a new buffer, with room to grow, and the uniform sets that name it made again; what
+		// the GPU has already is copied across on the GPU, and the room beyond is cleared there
+		for (godot::RID &set : uniforms_) {
+			if (set.is_valid()) {
+				rd_->free_rid(set);
+				set = godot::RID();
+			}
 		}
-		return;
-	}
-	// larger than it was: a new buffer, with room to grow, and the uniform sets that name it made again
-	for (godot::RID &set : uniforms_) {
-		if (set.is_valid()) {
-			rd_->free_rid(set);
-			set = godot::RID();
+		uint32_t capacity = std::max<uint32_t>(1024, buffer.capacity);
+		while (capacity < bytes) {
+			capacity *= 2;
 		}
+		const godot::RID made = rd_->storage_buffer_create(capacity);
+		start = std::min(start, buffer.capacity);
+		if (buffer.rid.is_valid()) {
+			if (start > 0) {
+				rd_->buffer_copy(buffer.rid, made, 0, 0, start);
+			}
+			rd_->free_rid(buffer.rid);
+		}
+		if (capacity > bytes) {
+			rd_->buffer_clear(made, bytes, capacity - bytes);
+		}
+		buffer.rid = made;
+		buffer.capacity = capacity;
 	}
-	if (buffer.rid.is_valid()) {
-		rd_->free_rid(buffer.rid);
+	if (bytes > start) {
+		godot::PackedByteArray given;
+		given.resize(bytes - start);
+		std::memcpy(given.ptrw(), reinterpret_cast<const uint8_t *>(data) + start, bytes - start);
+		rd_->buffer_update(buffer.rid, start, bytes - start, given);
 	}
-	uint32_t capacity = 1024;
-	while (capacity < bytes) {
-		capacity *= 2;
-	}
-	given.resize(capacity);
-	given.fill(0);
-	if (bytes > 0) {
-		std::memcpy(given.ptrw(), data, bytes);
-	}
-	buffer.rid = rd_->storage_buffer_create(capacity, given);
-	buffer.capacity = capacity;
 }
 
 void OpticsCompute::upload(const cg_optics &optics) {
@@ -239,7 +251,9 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		uploaded_ = optics.revision;
 	}
 	if (!have_scene_ || optics.maps_revision != uploaded_maps_) {
-		hold(maps_, optics.maps, 4 * optics.map_count);
+		// one revision on: only what changed (GAME_SPEC §12.3: maps lie where they were first put)
+		const bool next = have_scene_ && optics.maps_revision == uploaded_maps_ + 1;
+		hold(maps_, optics.maps, 4 * optics.map_count, next ? 4 * optics.maps_changed_from : 0);
 		uploaded_maps_ = optics.maps_revision;
 	}
 	if (!have_scene_ || optics.wall_revision != uploaded_wall_) {
