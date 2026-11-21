@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.26.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.27.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is

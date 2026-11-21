@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 26)
+## 0.27.0 (2026-11-22, Stage 26)
 
 - §13.3: **sensing, drawn and guided**: a monitor senses one item, by a dashed line from its sensing
   port, at its foot, onto a vessel, a balloon or a burner (`sense`, `unsense`); its settings open only

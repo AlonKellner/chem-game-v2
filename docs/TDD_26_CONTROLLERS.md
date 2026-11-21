@@ -21,7 +21,7 @@ GAME_SPEC §13.3 (*Sensing*, *A controller*, *A controller's rig follows its lev
 | 26.4 | Tuning: the fit, SIMC, the margins (gate test at the source's figures) | Done |
 | 26.5 | The controller in the lab: the law, PWM, follow rigs, the trial on copies, G3, G4, save, digest | Done |
 | 26.6 | The controller on the screen: drawer, editor, rigging, readout | Done |
-| 26.7 | The user's test and sign-off | |
+| 26.7 | The user's test and sign-off | Signed off by the user, 2026-11-22 |
 
 ## What was built
 
