@@ -63,6 +63,17 @@ and 46.9 for an integrator (`test_control.cpp`).
   signal parts side by side straddle one, and their faces, lamps and ports (and a dashed line drawn a
   dash a body) left the first drawn out. Now fifteen, a dashed line one body
   (`test_wall_pixels.cpp`).
+- **Only one part seen through a held vessel** (the user, 2026-11-21): a stack lists the bodies behind
+  a held vessel, the nearest first, and the GPU's reading of it stopped at the sixth (`stack_light`:
+  six, written in its loop); the CPU kept six. Behind a vessel held over two parts the first six were
+  the vessel, a sensing line and the last part's face, lamp and ports: the other part was never read.
+  Now `STACK_SLOTS` (12) on both sides; where more stand behind, those behind its own columns first,
+  the largest first (a face before its lamp); a slot the rays cross nowhere is passed over unread.
+  Carrying the flask over six parts: compose 4.5 ms, the stack 11.7 MB (6.1 at six slots).
+  `test_wall_pixels.cpp` holds two rows of three parts behind it: it fails at six. A vessel's pass
+  where every history starts again, held over another (`make screenshots`): 28.9 ms, now 32.0 (what
+  is behind it is read now, all of it); passing over a thing the rays do not cross is for things that
+  bend nothing (a vessel's slot passed over broke the layers' truth: 14.7 on the eye metric).
 - **A crash typing a goal's value**: the editor read a valve's per cent past its three settings for
   any focused field from the third on (a goal's are 10 and on); the draft's new field moved what the
   stray read found, to a null. Bounded to the valve's fields.

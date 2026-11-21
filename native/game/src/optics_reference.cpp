@@ -5,6 +5,7 @@
 #include "lab/colour.hpp"
 
 #include <algorithm>
+#include <tuple>
 #include <map>
 #include <cmath>
 #include <cstdint>
@@ -1104,11 +1105,17 @@ void optics_stacks(OpticsScene &scene) {
 				}
 			}
 			if (slots.size() > static_cast<size_t>(shader::MAX_VISITS)) {
-				// more than a ray is followed through: the nearest across are kept
+				// more than a ray is followed through: what stands behind its own columns before what is beside
+				// them, and there the largest first (a part's face before its lamp and its ports: Stage 26), then
+				// the nearest across
 				std::vector<int> nearest = slots;
 				std::stable_sort(nearest.begin(), nearest.end(), [&](int p, int q) {
-					const auto away = [&](int o) { return o == b ? -1.0 : std::fabs(vec(o, L::RECT)[0] + vec(o, L::RECT)[2] * 0.5 - centre); };
-					return away(p) < away(q);
+					const auto rank = [&](int o) {
+						const float *r = vec(o, L::RECT);
+						const bool behind = r[0] < rect[0] + rect[2] && r[0] + r[2] > rect[0];
+						return std::make_tuple(o == b ? 0 : 1, behind ? 0 : 1, -static_cast<double>(r[2]) * r[3], std::fabs(r[0] + r[2] * 0.5 - centre));
+					};
+					return rank(p) < rank(q);
 				});
 				nearest.resize(static_cast<size_t>(shader::MAX_VISITS));
 				std::vector<int> kept;

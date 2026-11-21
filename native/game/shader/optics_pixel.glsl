@@ -36,6 +36,10 @@ const int ROW = 401;
 const int ROWS_PER_SET = 6;
 const int LIGHT_ENTRIES = 4097;
 const int MAX_LAYERS = 4; // bodies one pixel looks through
+// the bodies a stack's rays are followed through, and read through: the same bound on the CPU, which makes the
+// stack, and on the GPU, which reads it (Stage 26: the GPU read six of them, and what stood behind a held vessel
+// past the sixth, a second part's face, was never seen)
+const int STACK_SLOTS = 12;
 const int WALL_ROWS = 1080;
 const int WALL_COLUMNS = 1920;
 const int WALL_ROW_BASE = 1;
@@ -1430,7 +1434,7 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 	float gain = 1.0;
 	float added = 0.0;
 	float room = scene_vec(2).y;
-	for (int j = 0; j < 6; j++) {
+	for (int j = 0; j < STACK_SLOTS; j++) {
 		if (j >= slots) {
 			break;
 		}
@@ -1443,6 +1447,10 @@ float stack_light(Path q, int slots_at, int slots, int a, vec4 w_a, int far_a, v
 		int body = int(slot.x);
 		float cross_a = stack_value(a + at + 1, w_a, far_a + at + 1, w_far_a, on_a);
 		float cross_b = stack_value(b + at + 1, w_b, far_b + at + 1, w_far_b, on_b);
+		vec4 box = scene_vec(HEADER_VECS + body * BODY_VECS);
+		if (slot.y < 0.5 && (max(cross_a, cross_b) < box.x - 1.0 || min(cross_a, cross_b) > box.x + box.z + 1.0 || q.y < box.y - 1.0 - q.size || q.y > box.y + box.w + 1.0 + q.size)) {
+			continue; // a thing that bends nothing, which the rays cross nowhere: it does nothing to them
+		}
 		Layer l = layer_at(body, vec2(0.5 * (cross_a + cross_b), q.y), max(abs(cross_b - cross_a), 1.0e-3 * q.size), q.size);
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float per_cm = liquid_at(body, start, nm);
@@ -1646,7 +1654,7 @@ float other_band(Path q, float u0, float u1, float t, float one_nm) {
 
 // ---- a ray followed through the layers (GAME_SPEC §12.3, Stage 21): on the CPU, where a stack is made
 
-const int MAX_VISITS = 6; // the bodies one pixel's rays are followed through
+const int MAX_VISITS = STACK_SLOTS; // the bodies one pixel's rays are followed through
 const int MAX_STRIPS = 4; // the strips a pixel's height is read in, where bodies' tops, floors and surfaces cut it
 
 // The bodies a pixel's rays may meet, the nearest the eye first (a nearer layer's before a further one's;

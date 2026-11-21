@@ -14,6 +14,9 @@
   §18: G3 (its level), G4 (its PWM). Water in the flask held at 60 C within a degree at every speed.
 - §12.3: a square of the screen lists fifteen bodies, not seven: two signal parts side by side were
   half hidden; a dashed line is one body.
+- §12.3: **everything behind a held vessel is seen through it**: the GPU read six of a stack's
+  bodies, so behind a held vessel only the last painted part showed (the user: "only one is ever
+  visible"); now twelve, on the CPU and the GPU alike, the largest kept first where more stand behind.
 - A goal's value typed in the editor no longer reads past a valve's per cents (a crash, once the
   editor's draft grew).
 - Open: a material's volume, a vessel's pressure; a controller tuned again as what it controls changes.

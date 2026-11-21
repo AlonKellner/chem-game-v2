@@ -5,6 +5,8 @@
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 #include <doctest/doctest.h>
+#include <chrono>
+#include <cstdio>
 #include <cmath>
 #include <fstream>
 #include <set>
@@ -131,4 +133,40 @@ TEST_CASE("wall pixels: signal parts side by side are each seen whole, a sensing
 		bars += scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS + lab::optics_layout::FORM) * 4] == 4.0f ? 1 : 0;
 	}
 	CHECK(bars == 2); // the sensing line; the condenser's outlet, in the cabinet
+}
+
+TEST_CASE("wall pixels: through a held vessel every part behind it is seen: two rows of three, each its face, not the wall (Stage 26)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read_file("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	// two rows of three parts: six faces, with their lamps and ports, behind the flask's width and height
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [6, 6]})", R"({"do": "part", "kind": "monitor", "at": [7, 6]})", R"({"do": "part", "kind": "alarm", "at": [8, 6]})",
+				 R"({"do": "part", "kind": "notice", "at": [6, 7]})", R"({"do": "part", "kind": "writer", "at": [7, 7]})", R"({"do": "part", "kind": "controller", "at": [8, 7]})",
+				 R"({"do": "place", "item": "flask", "at": [16, 8]})", R"({"do": "sense", "part": "monitor1", "item": "flask"})", R"({"do": "place", "item": "acid", "at": [22, 8]})" }) {
+		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
+	}
+	ui->frame(0.0);
+	float tx = 0, ty = 0, ax = 0, ay = 0, bx = 0, by = 0;
+	REQUIRE(ui->locate("item:timer1", tx, ty));
+	REQUIRE(ui->locate("item:alarm1", ax, ay));
+	REQUIRE(ui->locate("item:flask", bx, by));
+	// the flask carried over the three, as a hand does
+	ui->pointer(bx, by, true);
+	for (int k = 1; k <= 10; ++k) {
+		ui->pointer(bx + (0.5f * (tx + ax) - bx) * static_cast<float>(k) / 10.0f, by + (ty + 50.0f - by) * static_cast<float>(k) / 10.0f, true);
+	}
+	(void)ui->optics(); // its maps, for the hand's layer, made the first time
+	ui->pointer(0.5f * (tx + ax) + 0.4f, ty + 50.3f, true);
+	const auto t0 = std::chrono::steady_clock::now();
+	const lab::OpticsScene &scene = ui->optics();
+	MESSAGE("compose, carried over six parts: " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() << " ms, stacks "
+											   << scene.stacks.size() * 4 / 1024 << " KB");
+	for (const char *part : { "timer1", "monitor1", "alarm1", "notice1", "writer1", "controller1" }) {
+		float x = 0, y = 0;
+		REQUIRE(ui->locate(std::string("item:") + part, x, y));
+		double rgb[3];
+		lab::optics_truth(scene, static_cast<int>(x) - 6, static_cast<int>(y) + 6, rgb); // its face, clear of its lamp and ports
+		CAPTURE(std::string(part));
+		CHECK(rgb[1] < 0.4); // a dark face, not the lit wall (0.73)
+	}
 }
