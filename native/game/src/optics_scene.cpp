@@ -102,6 +102,9 @@ namespace {
 
 // the builder's version: a map made by another is not read
 constexpr uint64_t MAP_STORE_VERSION = 25006;
+// the maps no body looks through that are kept (vec4s: 16 MB), lest a vessel lifted and set down again sends
+// all the maps to the GPU again
+constexpr int64_t MAPS_IDLE_MOST = int64_t{ 1 } << 20;
 
 std::mutex &store_lock() {
 	static std::mutex lock;
@@ -178,11 +181,11 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
 	// Each refracting body's map: traced again only when its shape, its glass or its indices change; where
 	// it stands and what fills it change nothing
-	scene.map_keys.resize(static_cast<size_t>(MAX_BODIES), 0);
-	scene.map_blocks.resize(static_cast<size_t>(MAX_BODIES));
-	bool maps_changed = false;
-	std::vector<int> offsets(static_cast<size_t>(MAX_BODIES), -1);
-	int map_at = 0; // vec4s
+	scene.map_keys.assign(static_cast<size_t>(MAX_BODIES), 0);
+	std::vector<int> used(static_cast<size_t>(MAX_BODIES), -1); // each body's region of the maps
+	std::vector<double> spans(static_cast<size_t>(MAX_BODIES), 0.0);
+	std::vector<bool> shaped_of(static_cast<size_t>(MAX_BODIES), false);
+	int64_t changed_from = INT64_MAX; // vec4s: from where the maps change
 	for (int b = 0; b < MAX_BODIES; ++b) {
 		const int at = HEADER_VECS + b * BODY_VECS;
 		const float *rect = &t[static_cast<size_t>(at + RECT) * 4], *form = &t[static_cast<size_t>(at + FORM) * 4], *refract = &t[static_cast<size_t>(at + REFRACT) * 4];
@@ -192,11 +195,20 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 		const glass::Vessel *shaped = nullptr;
 		if (refracts) {
 			const bool prism = form[0] > 1.5f;
-			const double axis = rect[0] + rect[2] * 0.5 + (prism ? t[static_cast<size_t>(at + GLOW) * 4 + 2] : 0.0f);
+			const glass::Vessel *made = prism ? nullptr : scene.vessels[static_cast<size_t>(b)];
 			spec.cm_per_pixel = form[1];
-			spec.left = rect[0] - 1.0 - axis;
-			spec.right = rect[0] + rect[2] + 1.0 - axis;
-			spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
+			if (made != nullptr) {
+				// glassware stands with its axis on a whole pixel: its span from its width alone, as exact as the
+				// maps made ahead for it (the float rectangle's own sum is off a whole pixel by its rounding)
+				spec.left = -static_cast<double>(rect[2]) * 0.5 - 1.0;
+				spec.right = static_cast<double>(rect[2]) * 0.5 + 1.0;
+				spec.grid = 0.0;
+			} else {
+				const double axis = rect[0] + rect[2] * 0.5 + (prism ? t[static_cast<size_t>(at + GLOW) * 4 + 2] : 0.0f);
+				spec.left = rect[0] - 1.0 - axis;
+				spec.right = rect[0] + rect[2] + 1.0 - axis;
+				spec.grid = std::floor(axis) - axis; // the screen's pixels, from its axis
+			}
 			// the wall, from its own plane: a gap further for each layer nearer the eye (in its own centimetres)
 			spec.wall_cm = (wall_px + static_cast<double>(refract[1]) * gap_px) * spec.cm_per_pixel;
 			const int set = static_cast<int>(t[static_cast<size_t>(at + SET) * 4]);
@@ -207,7 +219,7 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 				spec.shape = trace::prism(corners);
 				spec.media = 1;
 				key = fnv(more, 4 * sizeof(float), fnv(glow, 3 * sizeof(float)));
-			} else if (const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)]) {
+			} else if (made != nullptr) {
 				// glassware (Stage 24): its whole shape, a map for each band of its rows; its floor is in its shape
 				shaped = made;
 				spec.shape = trace::revolved_of(*made);
@@ -224,31 +236,76 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 			const double span[6] = { spec.cm_per_pixel, spec.left, spec.right, spec.wall_cm, static_cast<double>(rect[2]), spec.grid };
 			key = fnv(span, sizeof span, fnv(spec.glass_index, ROW * sizeof(float), key)) | 1u;
 		}
-		std::vector<float> &block = scene.map_blocks[static_cast<size_t>(b)];
-		if (scene.map_keys[static_cast<size_t>(b)] != key) {
-			block = !refracts ? std::vector<float>() : shaped ? shaped_block(spec, *shaped, rect[3], key) : trace::map_block(trace::build_map(spec));
-			scene.map_keys[static_cast<size_t>(b)] = key;
-			maps_changed = true;
+		scene.map_keys[static_cast<size_t>(b)] = key;
+		if (!refracts) {
+			continue;
 		}
-		if (refracts) {
-			offsets[static_cast<size_t>(b)] = map_at;
-			put(at + MAP, 0, map_at);
-			put(at + MAP, 1, shaped ? block[static_cast<size_t>(block[5]) * 4] : block[0]); // the whole pixels it spans (a table: its first knot's map's)
-			put(at + MAP, 2, std::floor(spec.left - spec.grid) + spec.grid);
-			put(at + MAP, 3, shaped ? -block[0] : block[3]); // its pieces in wavelength; or, a table of its rows' bands, minus their count
-			map_at += static_cast<int>(block.size() / 4);
-			// a pixel's history follows the map it looks through
-			const float tagged = t[static_cast<size_t>(at + IDS) * 4 + 1];
-			put(at + IDS, 1, tag(fnv(&key, sizeof key, fnv(&tagged, sizeof tagged))));
+		// where its map lies in the maps: where it was made before (kept while it lies there), or after them
+		size_t region = 0;
+		while (region < scene.map_regions.size() && scene.map_regions[region].key != key) {
+			++region;
+		}
+		if (region == scene.map_regions.size()) {
+			const std::vector<float> block = shaped ? shaped_block(spec, *shaped, rect[3], key) : trace::map_block(trace::build_map(spec));
+			const int64_t end = static_cast<int64_t>(scene.maps.size() / 4);
+			scene.maps.insert(scene.maps.end(), block.begin(), block.end());
+			scene.map_regions.push_back(OpticsScene::MapRegion{ key, end, static_cast<int64_t>(block.size() / 4) });
+			changed_from = std::min(changed_from, end);
+		}
+		used[static_cast<size_t>(b)] = static_cast<int>(region);
+		spans[static_cast<size_t>(b)] = std::floor(spec.left - spec.grid) + spec.grid;
+		shaped_of[static_cast<size_t>(b)] = shaped != nullptr;
+	}
+	// those no body looks through are let go once they outweigh those that are (and a few MB): the maps made
+	// again from what is kept, from the start; till then a vessel set down and lifted again finds its maps there
+	int64_t live = 0;
+	std::vector<bool> kept(scene.map_regions.size(), false);
+	for (const int region : used) {
+		if (region >= 0 && !kept[static_cast<size_t>(region)]) {
+			kept[static_cast<size_t>(region)] = true;
+			live += scene.map_regions[static_cast<size_t>(region)].size;
 		}
 	}
-	if (maps_changed || static_cast<int>(scene.maps.size()) != map_at * 4) {
-		scene.maps.assign(static_cast<size_t>(map_at) * 4, 0.0f);
-		for (int b = 0; b < MAX_BODIES; ++b) {
-			if (offsets[static_cast<size_t>(b)] >= 0) {
-				std::copy(scene.map_blocks[static_cast<size_t>(b)].begin(), scene.map_blocks[static_cast<size_t>(b)].end(), scene.maps.begin() + static_cast<std::ptrdiff_t>(offsets[static_cast<size_t>(b)]) * 4);
+	const int64_t idle = static_cast<int64_t>(scene.maps.size() / 4) - live;
+	if (idle > live && idle > MAPS_IDLE_MOST) {
+		std::vector<float> maps;
+		std::vector<OpticsScene::MapRegion> regions;
+		std::vector<int> moved(scene.map_regions.size(), -1);
+		for (size_t r = 0; r < scene.map_regions.size(); ++r) {
+			if (kept[r]) {
+				const OpticsScene::MapRegion &old = scene.map_regions[r];
+				moved[r] = static_cast<int>(regions.size());
+				regions.push_back(OpticsScene::MapRegion{ old.key, static_cast<int64_t>(maps.size() / 4), old.size });
+				maps.insert(maps.end(), scene.maps.begin() + old.at * 4, scene.maps.begin() + (old.at + old.size) * 4);
 			}
 		}
+		for (int &region : used) {
+			region = region >= 0 ? moved[static_cast<size_t>(region)] : -1;
+		}
+		scene.maps = std::move(maps);
+		scene.map_regions = std::move(regions);
+		changed_from = 0;
+	}
+	for (int b = 0; b < MAX_BODIES; ++b) {
+		const int region = used[static_cast<size_t>(b)];
+		if (region < 0) {
+			continue;
+		}
+		const int at = HEADER_VECS + b * BODY_VECS;
+		const int64_t map_at = scene.map_regions[static_cast<size_t>(region)].at;
+		const float *block = &scene.maps[static_cast<size_t>(map_at) * 4];
+		const bool shaped = shaped_of[static_cast<size_t>(b)];
+		put(at + MAP, 0, static_cast<double>(map_at));
+		put(at + MAP, 1, shaped ? block[static_cast<size_t>(block[5]) * 4] : block[0]); // the whole pixels it spans (a table: its first knot's map's)
+		put(at + MAP, 2, spans[static_cast<size_t>(b)]);
+		put(at + MAP, 3, shaped ? -block[0] : block[3]); // its pieces in wavelength; or, a table of its rows' bands, minus their count
+		// a pixel's history follows the map it looks through
+		const uint64_t key = scene.map_keys[static_cast<size_t>(b)];
+		const float tagged = t[static_cast<size_t>(at + IDS) * 4 + 1];
+		put(at + IDS, 1, tag(fnv(&key, sizeof key, fnv(&tagged, sizeof tagged))));
+	}
+	if (changed_from != INT64_MAX) {
+		scene.maps_changed_from = changed_from;
 		++scene.maps_revision;
 	}
 }

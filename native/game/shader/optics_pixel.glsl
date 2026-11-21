@@ -457,6 +457,9 @@ Path path_of(vec2 p, float size) {
 				q.raxis = rect.x + rect.z * 0.5 + scene_vec(at + 3).z; // a prism's centre, which its corners are given from
 			}
 			vec4 map = scene_vec(at + 6);
+			if (map.w < 0.0) {
+				q.raxis = floor(q.raxis + 0.5); // glassware stands with its axis on a whole pixel, as its maps were made
+			}
 			float down = p.y - rect.y;
 			vec4 row_map = map_for_row(map, down);
 			q.rdown = map.w < 0.0 ? down : 0.0;

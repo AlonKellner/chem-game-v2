@@ -56,6 +56,43 @@ Measured on the way: the restarting pass follows the maps' size (2.8 ms at 64 kn
 96 or 128: the GPU's cache); cropping each knot to its outline saved little. A stack cut at every knot
 cost 40 ms held; every two pixels, 27.
 
+## Frame drops on placing a vessel, and after its contents change
+
+Found while the user tested (2026-11-21): the frame rate dropped when a vessel was first put on the
+bench, or after what it held changed.
+- **Placing: maps made in play.** The tables made ahead (`chem_tool maps`) are keyed by their inputs,
+  the span from the vessel's axis among them. On the bench the axis, a whole pixel, came back as
+  `rect.x + w / 2` in float, a few millionths off, so the key missed and the tables were made again
+  while the game ran: 742 ms for a 250 mL beaker. Vessels on the cabinet's shelf and in an outbox slot
+  are drawn smaller, and no table was made ahead at those sizes. Now a shaped vessel's span is from its
+  width alone and its axis a whole pixel (the shader rounds it too); `prepare_optics` makes every size
+  the screen draws (bench, shelf, slot), on both layers. Compose on placing: 742 ms → 5.7 ms.
+- **Placing and lifting: every map sent again.** Any new map laid out all the maps again (19 MB,
+  copied and sent to the GPU), and lifting a vessel (the nearer layer's tables) and setting it down did
+  so each time. Now maps lie where they were first put, new ones after them, and the scene tells from
+  where they changed (`maps_changed_from`, `cg_optics`); the host sends only that. Maps no body looks
+  through are kept until they outweigh those in use and 16 MB, then laid out again. A vessel lifted a
+  second time sends nothing. When the buffer must grow, the GPU copies what it has into the new one
+  and clears the room beyond (it was all sent again from the CPU, the empty room too).
+- **What is left on placing: the vessel's first estimate.** Every pixel of a vessel newly placed starts
+  its history in the same frame (64 points each, through two knots' maps): about 9 ms more than a
+  frame for a 250 mL flask, measured by placing it a second time, its maps already on the GPU.
+- **After contents change: the GPU.** The pixels' histories follow what a vessel holds: a pour costs
+  its pixels one frame like a vessel newly placed, then nothing; a reaction under way (malachite
+  heated, oxide dissolving at 600x) re-estimates its pixels every frame. Measured in the host (a
+  144 Hz display): no frame over the display's 6.9 ms while reacting.
+
+| In the host (an M3 Pro at 120 Hz: 8.3 ms a frame) | Worst frame |
+|---|---|
+| A 250 mL beaker placed, before | 742 ms in compose alone |
+| The flask placed, after: its maps new, or already on the GPU | 23, 17 ms |
+| The acid's bottle placed, after | 19 ms |
+| A pour, after | 13 ms |
+
+Tests: `test_maps_store.cpp` (a vessel finds the tables made ahead wherever it stands, is held, is in
+the cabinet or the outbox: nothing is made in play; a vessel lifted and set down again changes no map,
+and what changes is only what was added).
+
 ## Open, for a later attempt
 
 **Coloured specks along a vessel's floor and corners** (the user's "pixelated in a way difficult to

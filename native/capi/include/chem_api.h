@@ -229,6 +229,10 @@ typedef struct cg_optics {
 	int32_t stack_count;
 	const float *stacks; /* 4 * stack_count floats */
 	uint64_t stacks_revision;
+	/* The maps lie where they were first put: what changed at maps_revision is
+	 * from this vec4 on (0 when they were laid out again). A host one revision
+	 * behind need send only that. */
+	int64_t maps_changed_from;
 } cg_optics;
 
 /* Borrowed until the next call on this ui. */

@@ -55,7 +55,7 @@ private:
 		godot::RID rid;
 		uint32_t capacity = 0;
 	};
-	void hold(Buffer &buffer, const float *data, int32_t floats);
+	void hold(Buffer &buffer, const float *data, int32_t floats, int64_t from = 0); // from: the first float that changed
 	Buffer scene_, rows_, lines_, lights_, maps_, wall_, stacks_;
 	godot::RID asked_;
 	godot::RID state_[4];

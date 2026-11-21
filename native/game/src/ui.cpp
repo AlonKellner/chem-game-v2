@@ -625,6 +625,10 @@ struct Ui::Impl {
 		}
 	}
 
+	// how much smaller an item is drawn to fit the cabinet's shelf, and an outbox slot (its name under it)
+	static float cabinet_scale(float w, float h) { return std::fmin(1.0f, std::fmin(200.0f / w, (110.0f - 24.0f) / h)); }
+	static float outbox_scale(float w, float h) { return std::fmin(1.0f, std::fmin((100.0f - 12.0f) / w, 106.0f / h)); }
+
 	// its slot among the items of a place, in order
 	int slot(int index, const char *place) const {
 		int n = 0;
@@ -643,13 +647,13 @@ struct Ui::Impl {
 		size_of(v, w, h);
 		if (v.place == "cabinet") {
 			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * 118, 200, 110 };
-			const float scale = std::fmin(1.0f, std::fmin(box.w / w, (box.h - 24) / h));
+			const float scale = cabinet_scale(w, h);
 			return Rect{ box.cx() - w * scale / 2, box.y + box.h - 22 - h * scale, w * scale, h * scale };
 		}
 		if (v.place == "outbox") { // in its slot, below the goal (§13.5)
 			const Rect box = slot_rect(std::max(1, v.slot));
 			const Rect room{ box.x + 6, box.y + box.h - 128, box.w - 12, 106 }; // its name under it, in the slot
-			const float scale = std::fmin(1.0f, std::fmin(room.w / w, room.h / h));
+			const float scale = outbox_scale(w, h);
 			return Rect{ room.cx() - w * scale / 2, room.y + room.h - h * scale, w * scale, h * scale };
 		}
 		if (v.place == "on" && v.on >= 0) {
@@ -3716,14 +3720,24 @@ int Ui::prepare_optics() {
 		}
 		float w = 0, h = 0;
 		m.size_of(v, w, h);
-		// alone, its axis on a whole pixel, as the screen draws it: its maps are its anywhere
-		for (const int layer : { 0, 1 }) {
-			OpticsRoom room;
-			OpticsBody body{ &v, 100.0f - w / 2.0f, 100.0f, w, h };
-			body.layer = layer;
-			OpticsScene alone;
-			optics_compose(alone, room, { body });
-			++tables;
+		// at every size the screen draws it: on the bench, on the cabinet's shelf, in an outbox slot; standing or
+		// in hand (a vessel carried from the shelf keeps the shelf's size)
+		std::vector<float> scales{ 1.0f };
+		for (const float scale : { Impl::cabinet_scale(w, h), Impl::outbox_scale(w, h) }) {
+			if (std::find(scales.begin(), scales.end(), scale) == scales.end()) {
+				scales.push_back(scale);
+			}
+		}
+		for (const float scale : scales) {
+			// alone, its axis on a whole pixel, as the screen draws it: its maps are its anywhere
+			for (const int layer : { 0, 1 }) {
+				OpticsRoom room;
+				OpticsBody body{ &v, 100.0f - w * scale / 2.0f, 100.0f, w * scale, h * scale };
+				body.layer = layer;
+				OpticsScene alone;
+				optics_compose(alone, room, { body });
+				++tables;
+			}
 		}
 	}
 	return tables;

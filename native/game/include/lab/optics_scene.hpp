@@ -80,8 +80,15 @@ struct OpticsScene {
 	std::vector<float> maps; // vec4s: each refracting body's map (lab/optics_trace.hpp: map_block)
 	std::vector<float> wall; // vec4s: optics_layout's wall table
 	uint64_t maps_revision = 0, wall_revision = 0;
+	// Maps lie where they were first put, and new ones after them: what changed at the last revision is from
+	// maps_changed_from on (vec4s; 0 when they were laid out again), so a host sends the GPU only that
+	int64_t maps_changed_from = 0;
 	std::vector<uint64_t> map_keys; // what each body's map was traced for
-	std::vector<std::vector<float>> map_blocks;
+	struct MapRegion {
+		uint64_t key; // what it was traced for
+		int64_t at, size; // vec4s
+	};
+	std::vector<MapRegion> map_regions; // each map in `maps`, looked through or kept a while
 	uint64_t wall_key = 0; // what the wall's table was made from
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table

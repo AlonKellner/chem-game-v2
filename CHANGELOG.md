@@ -6,6 +6,10 @@
   through each mixed by the share of the way: lines seen through a cone curve smoothly (the bands of
   four rows that jogged are gone). Knots refined in the rims' measure, at most 96, cropped to their
   outlines, made before the game runs; maps hold each ray's drop.
+- **No maps made in play**: a glassware vessel's tables made ahead are found wherever it stands (its
+  axis a whole pixel, exactly), and are made for the shelf's and the outbox's sizes too: placing a
+  vessel cost up to 742 ms, now about 5. Maps lie where they were first put; the GPU is sent only what
+  was added (`cg_optics.maps_changed_from`): lifting a vessel again sends nothing.
 - Open, documented (docs/TDD_25_UPDOWN.md): coloured specks along vessels' floors and corners (maps of
   one piece in wavelength), and bending up and down in the renderer.
 
