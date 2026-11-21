@@ -93,6 +93,16 @@ Tests: `test_maps_store.cpp` (a vessel finds the tables made ahead wherever it s
 the cabinet or the outbox: nothing is made in play; a vessel lifted and set down again changes no map,
 and what changes is only what was added).
 
+## A box around every vessel
+
+Seen by the user (2026-11-21). Within a vessel's rectangle, around its glass, the optical pass paints
+the wall itself; beside it the host's flat drawing shows. The bench's grid lines are one pixel wide on
+whole coordinates: the host paints the pixels whose centres a shape covers (one row), the wall's table
+took the shape exactly (half of two rows), so around each vessel the lines were paler and doubled: a
+box. And the host centres an outline's stroke on its edges, which the wall had inside them. Now each
+shape enters the wall on the pixels the host paints. Test: `test_wall_pixels.cpp` (every pixel of the
+wall is one colour drawn there, never a share of two; it fails on the old wall at every grid line).
+
 ## Open, for a later attempt
 
 **Coloured specks along a vessel's floor and corners** (the user's "pixelated in a way difficult to

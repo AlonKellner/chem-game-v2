@@ -3228,19 +3228,31 @@ struct Ui::Impl {
 			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
 			return 0.2126 * lin(((c >> 24) & 0xff) / 255.0) + 0.7152 * lin(((c >> 16) & 0xff) / 255.0) + 0.0722 * lin(((c >> 8) & 0xff) / 255.0);
 		};
+		// each shape on the pixels the host paints it on: those whose centres it covers (a GPU's rule, without
+		// antialiasing), an outline's stroke centred on its edges; so the wall seen through a vessel is the wall
+		// drawn beside it, pixel for pixel (a line one pixel wide on a whole coordinate is one row, not two halves)
+		const auto shape = [&](double x0, double y0, double x1, double y1, double r) {
+			const double left = std::ceil(x0 - 0.5), right = std::ceil(x1 - 0.5), top = std::ceil(y0 - 0.5), bottom = std::ceil(y1 - 0.5);
+			if (right > left && bottom > top) {
+				room.shapes.push_back(OpticsShape{ static_cast<float>(left), static_cast<float>(top), static_cast<float>(right - left), static_cast<float>(bottom - top), r });
+			}
+		};
 		for (int i = 0; i < list.above; ++i) {
 			const DrawCommand &c = list.commands[static_cast<size_t>(i)];
 			const double r = radiance(c.color);
+			const double x = c.x, y = c.y, half = c.width / 2.0;
 			if (c.type == DrawCommand::Rect) {
-				room.shapes.push_back(OpticsShape{ c.x, c.y, c.w, c.h, r });
+				shape(x, y, x + c.w, y + c.h, r);
 			} else if (c.type == DrawCommand::Outline) {
-				room.shapes.push_back(OpticsShape{ c.x, c.y, c.w, c.width, r });
-				room.shapes.push_back(OpticsShape{ c.x, c.y + c.h - c.width, c.w, c.width, r });
-				room.shapes.push_back(OpticsShape{ c.x, c.y, c.width, c.h, r });
-				room.shapes.push_back(OpticsShape{ c.x + c.w - c.width, c.y, c.width, c.h, r });
-			} else if (c.type == DrawCommand::Line && (c.x == c.w || c.y == c.h)) { // straight across or up: a thin rectangle
-				const float x0 = std::min(c.x, c.w), y0 = std::min(c.y, c.h);
-				room.shapes.push_back(OpticsShape{ c.x == c.w ? x0 - c.width / 2 : x0, c.y == c.h ? y0 - c.width / 2 : y0, c.x == c.w ? c.width : std::fabs(c.w - c.x), c.y == c.h ? c.width : std::fabs(c.h - c.y), r });
+				const double right = x + c.w, bottom = y + c.h;
+				shape(x - half, y - half, right + half, y + half, r);
+				shape(x - half, bottom - half, right + half, bottom + half, r);
+				shape(x - half, y - half, x + half, bottom + half, r);
+				shape(right - half, y - half, right + half, bottom + half, r);
+			} else if (c.type == DrawCommand::Line && c.y == c.h) { // straight across or up: a thin rectangle
+				shape(std::min(x, static_cast<double>(c.w)), y - half, std::max(x, static_cast<double>(c.w)), y + half, r);
+			} else if (c.type == DrawCommand::Line && c.x == c.w) {
+				shape(x - half, std::min(y, static_cast<double>(c.h)), x + half, std::max(y, static_cast<double>(c.h)), r);
 			}
 		}
 		optics_compose(scene, room, bodies);

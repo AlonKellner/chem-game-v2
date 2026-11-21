@@ -963,7 +963,11 @@ light bends at each of its surfaces:
   (the bench's grid, the panels' edges: the draw list's first part), each a flat grey of its own
   radiance. The scene carries, for each body, the drawn shapes its bent rays can reach, and a
   point reads the wall where its ray lands. Outside a body the same shapes are the flat drawing,
-  so a vessel's rim meets the wall with no seam where nothing bends.
+  so a vessel's rim meets the wall with no seam where nothing bends. Each shape is on the pixels
+  the host paints it on, those whose centres it covers (an outline's stroke centred on its edges),
+  so the wall a vessel's rectangle shows around its glass is the drawing beside it, pixel for pixel
+  (Stage 25: a line one pixel wide on a whole coordinate was two rows of half its darkness there, a
+  box around every vessel).
 - **The glass.** Each vessel's wall is borosilicate glass, as thick as the vessel is made: a
   thickness of its own in the bench's data (`wall_mm`: ISO 3819's least wall for a beaker of its
   capacity, 0.8 mm at 50 mL, 1.1 mm at 250 mL; from Stage 24 each kind's own standard's: the
@@ -1705,6 +1709,19 @@ so the sessions' records are unchanged.
 **Full design, not yet built:**
 - controllers: a monitor with a target and PID gains whose output is a level, set on an analog
   control or as PWM on a binary one.
+- **A monitor's sensing, drawn and guided** *(PLANNED; asked for by the user, 2026-11-21)*:
+  - What a monitor watches is a line of its own kind (unlike a wire's or a rig's), drawn from the
+    monitor to the watched vessel and placed by the same gesture as wires (dragged from a port onto
+    the vessel), not chosen from a list in the editor.
+  - Its settings show only once a vessel is watched, and only what is relevant to it: no species or
+    quantity the vessel does not hold now.
+  - The quantity is chosen in steps, each a short closed list:
+    1. the kind of quantity: of a material in the vessel, of the vessel itself, or other;
+    2. for a material, which of those in the vessel now;
+    3. the measure: for a material, its mass, amount, volume, purity, particle count or size; for the
+       vessel, its total mass, its liquid's volume, its solids' volume, its temperature, its pressure;
+    4. the comparison and the value.
+  - The aim: placing a monitor is guided and never overwhelming.
 
 **Status:** Stage 13; circuits Stage 14.
 
