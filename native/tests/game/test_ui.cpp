@@ -870,3 +870,38 @@ TEST_CASE("ui: chosen parts become a circuit, opened to work inside, nested, and
 	CHECK(p.item("monitor2").place == "bench");
 	well_formed(p.ui->draw());
 }
+
+TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at 60 C and rigs it to the burner; at 600x the flask is held there (Stage 26)") {
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:burner", "item:flask");
+	p.drag("item:acid", "square:7,12");
+	p.drag("item:acid", "item:flask");
+	p.click("panel:pour");
+	p.drag("drawer:controller", "square:1,1");
+	CHECK(p.ui->message().find("sensing port") != std::string::npos);
+	p.drag("sense:controller1", "item:flask");
+	p.click("edit:kind:vessel");
+	p.click("edit:quantity:celsius");
+	p.click("edit:speed:fast");
+	p.click("edit:value:0");
+	p.ui->key(lab::Ui::KeyText, '6');
+	p.ui->key(lab::Ui::KeyText, '0');
+	p.click("edit:set");
+	CHECK(p.ui->message().empty());
+	CHECK(p.item("controller1").part.watching);
+	CHECK(p.item("controller1").part.target == 60.0);
+	CHECK(p.item("controller1").part.speed == 2);
+	CHECK_FALSE(p.item("controller1").part.tuned); // nothing rigged yet
+	p.drag("port:controller1", "item:burner"); // no settings: the valve follows its level
+	CHECK(p.ui->message().empty());
+	CHECK(p.item("controller1").part.tuned);
+	p.click("speed:600");
+	for (int frame = 0; frame < 60 * 10; ++frame) { // ten seconds of a person's watching: 100 minutes of the lab
+		p.ui->frame(1.0 / 60.0);
+	}
+	const double t = p.item("flask").celsius;
+	MESSAGE("the flask held at " << t << " C; the controller's level " << p.item("controller1").part.level);
+	CHECK(t == doctest::Approx(60.0).epsilon(1.0 / 60.0));
+	well_formed(p.ui->draw());
+}

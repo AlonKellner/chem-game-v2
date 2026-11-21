@@ -117,12 +117,13 @@ bool seconds_of(const std::string &text, double &seconds) {
 
 // the part editor (§13.3): what is being written, until it is set
 struct Draft {
-	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer, Goal } edit = None;
+	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer, Goal, Controller } edit = None;
 	int level = 2; // a notice part's, or a writer's
 	std::string says; // a writer's words, as typed
 	std::string part; // the part being set, or a rig's source
 	Quantity quantity; // a monitor's: the item it senses, and what it reads (what and measure "" until chosen)
 	int kind = -1; // a monitor's: the kind of quantity chosen (lab::QuantityKind), -1 none yet (§13.3, Stage 26)
+	int speed = 1; // a controller's: gentle, normal, fast; its target is text[0]
 	Comparison::Op op = Comparison::Below;
 	std::array<std::string, 2> text; // a monitor's values, as typed
 	std::string preset; // a timer's, as typed
@@ -139,14 +140,14 @@ struct Draft {
 constexpr Comparison::Op GOAL_OPS[] = { Comparison::AtLeast, Comparison::AtMost, Comparison::Above, Comparison::Below };
 constexpr const char *SPECIES_MEASURES[] = { "g", "purity", "count", "size" };
 
-constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer" };
+constexpr const char *DRAWN[] = { "timer", "monitor", "alarm", "notice", "writer", "controller" };
 
 // what a part's face is made of, by its kind (data/optics/media.json: surfaces; Stage 22): each kind its own
 // colour, so a part is known by how it looks, not by text written over the pass
 const char *face_of(const std::string &kind) {
-	if (kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "notice" || kind == "writer") {
-		static const std::string names[] = { "timer_face", "monitor_face", "alarm_face", "notice_face", "writer_face" };
-		const int k = kind == "timer" ? 0 : kind == "monitor" ? 1 : kind == "alarm" ? 2 : kind == "notice" ? 3 : 4;
+	if (kind == "timer" || kind == "monitor" || kind == "alarm" || kind == "notice" || kind == "writer" || kind == "controller") {
+		static const std::string names[] = { "timer_face", "monitor_face", "alarm_face", "notice_face", "writer_face", "controller_face" };
+		const int k = kind == "timer" ? 0 : kind == "monitor" ? 1 : kind == "alarm" ? 2 : kind == "notice" ? 3 : kind == "writer" ? 4 : 5;
 		return names[k].c_str();
 	}
 	return kind == "circuit" ? "circuit_face" : "part_face";
@@ -177,7 +178,8 @@ uint32_t surface_colour(const char *name) {
 	}
 	return out;
 }
-constexpr int DRAWN_KINDS = 5; // what the drawer holds
+constexpr int DRAWN_KINDS = 6; // what the drawer holds
+constexpr const char *SPEEDS_NAMED[] = { "gentle", "normal", "fast" }; // a controller's (§13.3, Stage 26)
 constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
 constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
 constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
@@ -484,7 +486,7 @@ struct Ui::Impl {
 		screen.broken = lab->failed();
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
-		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal" };
+		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal", "controller" };
 		screen.edit.editing = EDITING[draft.edit];
 		screen.edit.part = draft.part;
 		screen.edit.quantity = draft.quantity;
@@ -1201,7 +1203,7 @@ struct Ui::Impl {
 		return std::string(1, static_cast<char>(v.kind[0] - 'a' + 'A')) + digits;
 	}
 
-	static Rect drawer_rect(int k) { return Rect{ DRAWER.x + 14 + static_cast<float>(k) * 88, DRAWER.y + 46, 82, 110 }; }
+	static Rect drawer_rect(int k) { return Rect{ DRAWER.x + 14 + static_cast<float>(k) * 72, DRAWER.y + 46, 68, 110 }; }
 	// a part's output, on its right side; an alarm has none
 	bool port_rect(int index, Rect &r) const {
 		if (!is_part(index) || !sends(view.items[static_cast<size_t>(index)].part.kind) || !visible(index)) {
@@ -1445,6 +1447,9 @@ struct Ui::Impl {
 		return true;
 	}
 
+	// a controller's state, in a word: unset, untuned, or its level
+	static std::string controller_state(const Part &p) { return !p.watching ? "unset" : !p.tuned ? "untuned" : text_of("%.0f%%", 100.0 * p.level); }
+
 	// ---- the part editor: geometry
 	Rect edit_cancel() const { return Rect{ EDITOR.x + EDITOR.w - 116, EDITOR.y + 12, 96, 32 }; }
 	Rect edit_done() const { return Rect{ EDITOR.x + 20, EDITOR.y + EDITOR.h - 52, 140, 36 }; }
@@ -1504,6 +1509,9 @@ struct Ui::Impl {
 	bool quantity_chosen() const { return !draft.quantity.what.empty() && !draft.quantity.measure.empty(); }
 	float lower_y() const { return EDITOR.y + 100 + static_cast<float>(choice_rows()) * 34 + (measures_now().empty() ? 0.0f : 34.0f); }
 	Rect edit_compare(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 96, lower_y(), 92, 28 }; }
+	Rect pace_rect(int k) const { return Rect{ EDITOR.x + 90 + static_cast<float>(k) * 120, lower_y(), 114, 28 }; } // a controller's speed
+	bool sensing_edit() const { return draft.edit == Draft::Monitor || draft.edit == Draft::Controller; }
+	int value_fields() const { return draft.edit == Draft::Monitor && two_values(draft.op) ? 2 : 1; }
 	Rect edit_field(int f) const { return Rect{ EDITOR.x + 20 + static_cast<float>(f) * 180, lower_y() + 36, 140, 30 }; }
 	Rect edit_nudge(int k) const { // k in -3..-1, 1..3
 		const int at = k < 0 ? k + 3 : k + 2;
@@ -1616,7 +1624,7 @@ struct Ui::Impl {
 			open_edit(d);
 			return;
 		}
-		if (v.kind != "monitor") {
+		if (v.kind != "monitor" && v.kind != "controller") {
 			return;
 		}
 		// it reads what it senses: one that senses nothing says how (§13.3, Stage 26)
@@ -1624,13 +1632,14 @@ struct Ui::Impl {
 			message = v.id + " senses nothing yet: drag from its sensing port, at its foot, onto what it should watch";
 			return;
 		}
-		d.edit = Draft::Monitor;
+		d.edit = v.kind == "controller" ? Draft::Controller : Draft::Monitor;
+		d.speed = v.part.speed;
 		open_edit(d);
 		draft.quantity = v.part.quantity;
 		if (v.part.watching) {
 			draft.kind = static_cast<int>(kind_of(v.part.quantity));
 			draft.op = v.part.comparison.op;
-			draft.text = { plain(v.part.quantity, v.part.comparison.a), plain(v.part.quantity, v.part.comparison.b) };
+			draft.text = { plain(v.part.quantity, v.kind == "controller" ? v.part.target : v.part.comparison.a), plain(v.part.quantity, v.part.comparison.b) };
 			return;
 		}
 		draft.quantity.what.clear();
@@ -1658,7 +1667,22 @@ struct Ui::Impl {
 
 	// ---- setting it: the editor's lab command
 	void commit() {
-		if (draft.edit == Draft::Monitor) {
+		if (draft.edit == Draft::Controller) {
+			if (!allowed_click("edit:set")) {
+				return;
+			}
+			char *end = nullptr;
+			const double target = std::strtod(draft.text[0].c_str(), &end);
+			if (draft.text[0].empty() || end == nullptr || *end != '\0') {
+				message = "the target is not a number";
+				return;
+			}
+			const json c = { { "do", "set" }, { "part", draft.part }, { "item", draft.quantity.item }, { "what", draft.quantity.what }, { "measure", draft.quantity.measure },
+				{ "target", target }, { "speed", SPEEDS_NAMED[std::clamp(draft.speed, 0, 2)] } };
+			if (guided_commit(c) && act(c)) {
+				close_edit();
+			}
+		} else if (draft.edit == Draft::Monitor) {
 			if (!allowed_click("edit:set")) {
 				return;
 			}
@@ -1779,8 +1803,9 @@ struct Ui::Impl {
 			}
 			return;
 		}
-		if (draft.edit == Draft::Monitor) {
-			// guided (§13.3, Stage 26): the kind, a choice of it, a material's measure; then the comparison
+		if (sensing_edit()) {
+			// guided (§13.3, Stage 26): the kind, a choice of it, a material's measure; then the comparison, or a
+			// controller's speed and target
 			const std::vector<QuantityKind> kinds = kinds_now();
 			for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
 				if (kind_rect(k).has(x, y)) {
@@ -1813,7 +1838,15 @@ struct Ui::Impl {
 			if (!quantity_chosen()) {
 				return;
 			}
-			for (int k = 0; k < 7; ++k) {
+			for (int k = 0; draft.edit == Draft::Controller && k < 3; ++k) {
+				if (pace_rect(k).has(x, y)) {
+					if (allowed_click(std::string("edit:speed:") + SPEEDS_NAMED[k])) {
+						draft.speed = k;
+					}
+					return;
+				}
+			}
+			for (int k = 0; draft.edit == Draft::Monitor && k < 7; ++k) {
 				if (edit_compare(k).has(x, y)) {
 					if (allowed_click(std::string("edit:compare:") + OP_KEYS[k])) {
 						draft.op = OPS[k];
@@ -1821,7 +1854,7 @@ struct Ui::Impl {
 					return;
 				}
 			}
-			for (int f = 0; f < (two_values(draft.op) ? 2 : 1); ++f) {
+			for (int f = 0; f < value_fields(); ++f) {
 				if (edit_field(f).has(x, y)) {
 					if (allowed_click("edit:value:" + std::to_string(f))) {
 						focus = f;
@@ -1835,7 +1868,7 @@ struct Ui::Impl {
 					if (!allowed_click("edit:nudge:" + std::to_string(k))) {
 						return;
 					}
-					const int f = focus == 1 && two_values(draft.op) ? 1 : 0;
+					const int f = focus == 1 && value_fields() == 2 ? 1 : 0;
 					std::string &field = draft.text[static_cast<size_t>(f)];
 					double scale[3];
 					scales(draft.quantity, scale);
@@ -2139,13 +2172,26 @@ struct Ui::Impl {
 			return;
 		}
 		const ItemView &t = view.items[static_cast<size_t>(target)];
+		if (view.items[static_cast<size_t>(source)].kind == "controller" && !is_part(target)) {
+			// a controller's rig has no settings: the valve, or the stirring, follows its level (§13.3, Stage 26)
+			if (t.kind == "vessel" || t.kind == "burner") {
+				act({ { "do", "rig" }, { "from", id(source) }, { "item", t.id }, { "control", t.kind == "burner" ? "valve" : "stir" } });
+			} else {
+				message = id(source) + " is rigged to a burner's valve or a vessel's stirring";
+			}
+			return;
+		}
+		if (t.kind == "timer" && view.items[static_cast<size_t>(source)].kind == "controller") {
+			act({ { "do", "wire" }, { "from", id(source) }, { "to", t.id } }); // its level cannot reset a timer
+			return;
+		}
 		if (t.kind == "timer") {
 			Draft d;
 			d.edit = Draft::Choose;
 			d.part = id(source);
 			d.item = t.id;
 			open_edit(d);
-		} else if (t.kind == "monitor" || t.kind == "alarm" || t.kind == "notice" || t.kind == "writer") {
+		} else if (t.kind == "monitor" || t.kind == "alarm" || t.kind == "notice" || t.kind == "writer" || t.kind == "controller") {
 			act({ { "do", "wire" }, { "from", id(source) }, { "to", t.id } });
 		} else if (t.kind == "vessel") {
 			edit_rig(id(source), t.id, "stir");
@@ -2360,6 +2406,8 @@ struct Ui::Impl {
 					says += "  " + text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60));
 				} else if (v.kind == "monitor") {
 					says += p.watching ? "  " + std::string(op_name(p.comparison.op)) : "  unset";
+				} else if (v.kind == "controller") {
+					says += "  " + controller_state(p);
 				} else if (v.kind == "notice" || v.kind == "writer") {
 					says += "  " + std::string(level_name(static_cast<lab::Notice::Level>(p.notice_level)));
 				}
@@ -2393,6 +2441,8 @@ struct Ui::Impl {
 			text(r.x + 3, r.y + r.h - 4, text_of("%.0f:", static_cast<double>(seconds / 60)) + text_of("%02.0f", static_cast<double>(seconds % 60)), DIM, 10);
 		} else if (v.kind == "monitor") {
 			text(r.x + 3, r.y + r.h - 4, p.watching ? op_name(p.comparison.op) : "unset", DIM, 9);
+		} else if (v.kind == "controller") {
+			text(r.x + 3, r.y + r.h - 4, controller_state(p), DIM, 9);
 		} else if (v.kind == "notice" || v.kind == "writer") {
 			text(r.x + 3, r.y + r.h - 4, level_name(static_cast<lab::Notice::Level>(p.notice_level)), DIM, 9);
 		}
@@ -2618,16 +2668,17 @@ struct Ui::Impl {
 		rect_fill(DRAWER, PANEL_FILL);
 		outline(DRAWER, GRID, 1);
 		text(DRAWER.x + 14, DRAWER.y + 26, "parts: drag one onto the bench", INK, 17);
-		static const char *const SAYS[][2] = { { "counts", "down" }, { "watches", "a value" }, { "stops", "the clock" }, { "hears", "notices" }, { "writes", "a notice" } };
+		static const char *const SAYS[][2] = { { "counts", "down" }, { "watches", "a value" }, { "stops", "the clock" }, { "hears", "notices" }, { "writes", "a notice" },
+			{ "holds", "a value" } };
 		for (int k = 0; k < DRAWN_KINDS; ++k) {
 			const Rect r = drawer_rect(k);
 			rect_fill(r, BUTTON);
 			outline(r, GRID, 1);
-			rect_fill(Rect{ r.x + r.w - 26, r.y + 8, 18, 18 }, surface_colour(face_of(DRAWN[k]))); // how one looks on the bench
-			text(r.x + 8, r.y + 26, DRAWN[k], INK, 16);
-			text(r.x + 8, r.y + 54, std::string(1, static_cast<char>(DRAWN[k][0] - 'a' + 'A')), DIM, 22);
-			text(r.x + 8, r.y + 80, SAYS[k][0], DIM, 12);
-			text(r.x + 8, r.y + 96, SAYS[k][1], DIM, 12);
+			rect_fill(Rect{ r.x + r.w - 20, r.y + 32, 14, 14 }, surface_colour(face_of(DRAWN[k]))); // how one looks on the bench
+			text(r.x + 6, r.y + 22, DRAWN[k], INK, 13);
+			text(r.x + 6, r.y + 54, std::string(1, static_cast<char>(DRAWN[k][0] - 'a' + 'A')), DIM, 22);
+			text(r.x + 6, r.y + 80, SAYS[k][0], DIM, 12);
+			text(r.x + 6, r.y + 96, SAYS[k][1], DIM, 12);
 		}
 		if (!circuit_parts().empty()) {
 			const Rect c = create_circuit_rect();
@@ -2890,7 +2941,7 @@ struct Ui::Impl {
 			}
 			return false;
 		}
-		if (draft.edit == Draft::Monitor) {
+		if (sensing_edit()) {
 			if (sub("kind:")) {
 				const std::vector<QuantityKind> kinds = kinds_now();
 				for (int k = 0; k < static_cast<int>(kinds.size()); ++k) {
@@ -2921,8 +2972,16 @@ struct Ui::Impl {
 			if (!quantity_chosen()) {
 				return false;
 			}
+			if (sub("speed:")) {
+				for (int k = 0; draft.edit == Draft::Controller && k < 3; ++k) {
+					if (more == SPEEDS_NAMED[k]) {
+						return found(pace_rect(k));
+					}
+				}
+				return false;
+			}
 			if (sub("compare:")) {
-				for (int k = 0; k < 7; ++k) {
+				for (int k = 0; draft.edit == Draft::Monitor && k < 7; ++k) {
 					if (more == OP_KEYS[k]) {
 						return found(edit_compare(k));
 					}
@@ -2931,7 +2990,7 @@ struct Ui::Impl {
 			}
 			if (sub("value:")) {
 				const int f = number(more);
-				return (f == 0 || (f == 1 && two_values(draft.op))) && found(edit_field(f));
+				return f >= 0 && f < value_fields() && found(edit_field(f));
 			}
 			if (sub("nudge:")) {
 				const int k = number(more);
@@ -3129,7 +3188,10 @@ struct Ui::Impl {
 			return true;
 		};
 		std::string rest;
-		if (draft.edit == Draft::Monitor) {
+		if (sensing_edit()) {
+			if (after("edit:speed:", rest)) {
+				return draft.speed >= 0 && draft.speed < 3 && rest == SPEEDS_NAMED[draft.speed];
+			}
 			if (after("edit:kind:", rest)) {
 				return draft.kind >= 0 && rest == kind_name(static_cast<QuantityKind>(draft.kind));
 			}
@@ -3396,6 +3458,15 @@ struct Ui::Impl {
 							   : "watches nothing yet: edit it",
 						DIM, 15);
 				row(p.watching ? "now " + shown(p.quantity, now(p.quantity)) : "", DIM, 15);
+			} else if (v.kind == "controller") {
+				// what it holds, at what, how far it has it; and what its trial found (§13.3, Stage 26)
+				row(p.watching ? label(view, p.quantity) + " held at " + shown(p.quantity, p.target) + ", " + SPEEDS_NAMED[std::clamp(p.speed, 0, 2)]
+							   : "holds nothing yet: sense an item, then edit it",
+						DIM, 15);
+				row(!p.watching ? ""
+						: p.tuned ? "now " + shown(p.quantity, now(p.quantity)) + text_of(", level %.0f%%; ", 100.0 * p.level) + text_of("gain %.3g, ", p.kc) + text_of("integral %.0f s", p.ti)
+								  : "now " + shown(p.quantity, now(p.quantity)) + "; untuned: rig it to a valve or stirring",
+						DIM, 15);
 			} else if (v.kind == "circuit") {
 				int held = 0;
 				for (const ItemView &o : view.items) {
@@ -3450,7 +3521,9 @@ struct Ui::Impl {
 					const auto say = [&](const std::optional<double> &x) {
 						return !x ? std::string("leave") : r.control == "valve" ? text_of("%.0f%%", 100.0 * *x) : r.control == "stir" ? (*x > 0.5 ? "stir" : "stop") : std::string("reset");
 					};
-					row("rigged to " + r.item + "'s " + r.control + ": " + (r.change ? "on a change " + say(r.any) : "on " + say(r.on) + ", off " + say(r.off)), INK, 15);
+					row(r.follow ? "rigged to " + r.item + "'s " + r.control + (r.control == "valve" ? ": it follows the level" : ": by PWM, on for the level's share")
+								 : "rigged to " + r.item + "'s " + r.control + ": " + (r.change ? "on a change " + say(r.any) : "on " + say(r.on) + ", off " + say(r.off)),
+							INK, 15);
 					y += 5;
 				}
 			}
@@ -3539,9 +3612,9 @@ struct Ui::Impl {
 		}
 		button(edit_done(), draft.edit == Draft::Rig ? "rig" : "set");
 		text(edit_done().x + 160, edit_done().y + 24, "click a value to type it; enter sets, escape cancels", DIM, 14);
-		if (draft.edit == Draft::Monitor) {
+		if (sensing_edit()) {
 			// guided (§13.3, Stage 26): each step a short list of what the item has now, the next once it is chosen
-			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " watches " + draft.quantity.item, INK, 22);
+			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + (draft.edit == Draft::Controller ? " holds " : " watches ") + draft.quantity.item, INK, 22);
 			if (quantity_chosen()) {
 				text(EDITOR.x + 340, EDITOR.y + 40, "now " + shown(draft.quantity, now(draft.quantity)), DIM, 15);
 			}
@@ -3567,10 +3640,18 @@ struct Ui::Impl {
 				text(EDITOR.x + 20, lower_y() + 20, material() && !draft.quantity.what.empty() ? "measured how?" : material() ? "which material?" : "which quantity?", DIM, 15);
 				return;
 			}
-			for (int k = 0; k < 7; ++k) {
+			if (draft.edit == Draft::Controller) {
+				// its speed and its target: the game tunes it, by trying what it controls (§13.3, Stage 26)
+				text(EDITOR.x + 20, pace_rect(0).y + 20, "speed", DIM, 15);
+				for (int k = 0; k < 3; ++k) {
+					button(pace_rect(k), SPEEDS_NAMED[k], draft.speed == k);
+				}
+				text(edit_field(0).x + 146, edit_field(0).y + 21, "the target", DIM, 14);
+			}
+			for (int k = 0; draft.edit == Draft::Monitor && k < 7; ++k) {
 				button(edit_compare(k), op_name(OPS[k]), draft.op == OPS[k]);
 			}
-			const int fields = two_values(draft.op) ? 2 : 1;
+			const int fields = value_fields();
 			for (int f = 0; f < fields; ++f) {
 				field(edit_field(f), draft.text[static_cast<size_t>(f)], focus == f);
 			}
