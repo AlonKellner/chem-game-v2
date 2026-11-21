@@ -15,6 +15,24 @@ using lab::LabView;
 
 namespace {
 
+// the chain's pass runs only over vessels made as glassware standing on the bench (Stage 24: their curved rows
+// are read along their outlines), not over anything held
+bool only_glassware(const lab::OpticsScene &scene) {
+	namespace L = lab::optics_layout;
+	for (const int b : scene.chain_bodies) {
+		const float *map = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::MAP) * 4];
+		const float *refract = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::REFRACT) * 4];
+		if (map[3] >= 0.0f || refract[1] != 0.0f) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+namespace {
+
 std::string read(const std::string &relative) {
 	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	REQUIRE_MESSAGE(static_cast<bool>(in), relative);
@@ -188,9 +206,10 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 		}
 		return found;
 	};
-	// everything stands: one layer, and no pixel is the chain's
+	// everything stands: one layer, and the chain's pass runs over the glassware alone (its curved rows read
+	// along their outlines, Stage 24)
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
-	CHECK(p.ui->optics().chain.empty());
+	CHECK(only_glassware(p.ui->optics()));
 	float jx = 0, jy = 0, fx = 0, fy = 0;
 	p.at("item:jar", jx, jy);
 	p.at("item:flask", fx, fy);
@@ -215,19 +234,24 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	const int jar = body_of(held, 1.0f);
 	REQUIRE(jar >= 0);
 	CHECK(jar == static_cast<int>(held.table[0]) - 1); // painted over everything that stands
-	REQUIRE(held.chain.size() == 4); // its rectangle is where the chain's pass runs
+	// its rectangle is where the chain's pass runs
+	size_t at = held.chain_bodies.size();
+	for (size_t k = 0; k < held.chain_bodies.size(); ++k) {
+		at = held.chain_bodies[k] == jar ? k : at;
+	}
+	REQUIRE(at < held.chain_bodies.size());
 	const float *rect = &held.table[static_cast<size_t>(L::HEADER_VECS + jar * L::BODY_VECS + L::RECT) * 4];
-	CHECK(held.chain[0] <= rect[0]);
-	CHECK(held.chain[2] >= rect[0] + rect[2]);
+	CHECK(held.chain[at * 4] <= rect[0]);
+	CHECK(held.chain[at * 4 + 2] >= rect[0] + rect[2]);
 	// through the jar's glass, low in it, the flask's blue liquid behind: less of the red than beside the flask
 	const int px = static_cast<int>(rect[0] + rect[2] / 2), py = static_cast<int>(rect[1] + rect[3]) - 12;
 	const double through_both = lab::optics_through(held, px, py, 650.0);
 	CHECK(lab::optics_through(held, px, py, 650.0) == doctest::Approx(lab::optics_area_through(held, px, py, 650.0, 8)).epsilon(0.05));
-	// let go beside the flask: it stands again, on the bench's layer, and nothing is the chain's
+	// let go beside the flask: it stands again, on the bench's layer, and the chain's pass is the glassware's alone
 	p.ui->pointer(fx, fy, false);
 	p.ui->frame(1.0 / 60.0);
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
-	CHECK(p.ui->optics().chain.empty());
+	CHECK(only_glassware(p.ui->optics()));
 	MESSAGE("carried over the flask: through the jar and the flask's liquid at 650 nm, " << through_both << " of the room's light");
 	well_formed(p.ui->draw());
 }

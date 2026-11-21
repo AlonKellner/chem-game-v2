@@ -761,6 +761,20 @@ RowMap build_rows(const MapSpec &spec, const glass::Vessel &vessel, double heigh
 	for (const Map &m : out.maps) {
 		out.rays += m.rays;
 	}
+	// the rims: where each band's map was traced, and in each whole row
+	const auto outer_at = [&](double y) { return vessel.radius_outside((height - y) * cm) / cm; };
+	const auto inner_at = [&](double y) { return vessel.radius_inside((height - y) * cm) / cm; };
+	for (size_t k = 0; k < out.ends.size(); ++k) {
+		const double mid = 0.5 * ((k == 0 ? 0.0 : out.ends[k - 1]) + out.ends[k]);
+		out.band_outer.push_back(outer_at(mid));
+		out.band_inner.push_back(inner_at(mid));
+	}
+	const size_t whole = static_cast<size_t>(std::ceil(height)) + 1;
+	for (size_t r = 0; r < whole; ++r) {
+		const double mid = std::min(static_cast<double>(r) + 0.5, height);
+		out.row_outer.push_back(outer_at(mid));
+		out.row_inner.push_back(inner_at(mid));
+	}
 	return out;
 }
 
@@ -770,12 +784,41 @@ MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double n
 	return map_ray(row, x, nm, medium);
 }
 
+namespace {
+
+// a place across a row in a measure both its rims keep: inside the inner rim from 0 to 1, through the glass from
+// 1 to 2, past the outer rim 2 and the pixels beyond (no inner rim: 0 to 2 from the axis to the outer)
+double rim_measure(double x, double outer, double inner) {
+	const double a = std::fabs(x), sign = x < 0.0 ? -1.0 : 1.0;
+	if (inner < 1.0e-6) {
+		return sign * (a <= outer ? 2.0 * a / outer : 2.0 + (a - outer));
+	}
+	return sign * (a <= inner ? a / inner : a <= outer ? 1.0 + (a - inner) / (outer - inner) : 2.0 + (a - outer));
+}
+double rim_place(double c, double outer, double inner) {
+	const double a = std::fabs(c), sign = c < 0.0 ? -1.0 : 1.0;
+	if (inner < 1.0e-6) {
+		return sign * (a <= 2.0 ? 0.5 * a * outer : outer + (a - 2.0));
+	}
+	return sign * (a <= 1.0 ? a * inner : a <= 2.0 ? inner + (a - 1.0) * (outer - inner) : outer + (a - 2.0));
+}
+
+} // namespace
+
 MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium) {
 	size_t k = 0;
 	while (k + 1 < rows.ends.size() && y >= rows.ends[k]) {
 		++k;
 	}
-	return map_read(rows.maps[k], x, nm, medium);
+	// the row's rims (straight between the middles of its whole rows), and the band's
+	const double d = std::max(y - 0.5, 0.0);
+	const size_t r = std::min(static_cast<size_t>(d), rows.row_outer.size() - 1), r1 = std::min(r + 1, rows.row_outer.size() - 1);
+	const double f = d - static_cast<double>(r);
+	const double outer = rows.row_outer[r] + (rows.row_outer[r1] - rows.row_outer[r]) * f, inner = rows.row_inner[r] + (rows.row_inner[r1] - rows.row_inner[r]) * f;
+	const double xb = outer > 0.0 && rows.band_outer[k] > 0.0 ? rim_place(rim_measure(x, outer, inner), rows.band_outer[k], rows.band_inner[k]) : x;
+	MapRay out = map_read(rows.maps[k], xb, nm, medium);
+	out.landing += x - xb;
+	return out;
 }
 
 std::vector<float> rows_block(const RowMap &rows) {
@@ -783,7 +826,7 @@ std::vector<float> rows_block(const RowMap &rows) {
 	// body's top), where its map begins (vec4s from the table's start), its pieces in wavelength, its whole
 	// pixels across; [1 + K .. K + R] for each whole row, the band its top is in; then the maps
 	const size_t k = rows.ends.size(), whole = static_cast<size_t>(std::ceil(rows.ends.back())) + 1;
-	std::vector<float> out((1 + k + whole) * 4, 0.0f);
+	std::vector<float> out((1 + k + whole + k) * 4, 0.0f);
 	out[0] = static_cast<float>(k);
 	out[1] = static_cast<float>(whole);
 	size_t band = 0;
@@ -792,8 +835,14 @@ std::vector<float> rows_block(const RowMap &rows) {
 			++band;
 		}
 		out[(1 + k + r) * 4] = static_cast<float>(band);
+		out[(1 + k + r) * 4 + 1] = static_cast<float>(r < rows.row_outer.size() ? rows.row_outer[r] : 0.0);
+		out[(1 + k + r) * 4 + 2] = static_cast<float>(r < rows.row_inner.size() ? rows.row_inner[r] : 0.0);
 	}
-	size_t at = 1 + k + whole;
+	for (size_t i = 0; i < k; ++i) {
+		out[(1 + k + whole + i) * 4] = static_cast<float>(rows.band_outer[i]);
+		out[(1 + k + whole + i) * 4 + 1] = static_cast<float>(rows.band_inner[i]);
+	}
+	size_t at = 1 + k + whole + k;
 	for (size_t i = 0; i < k; ++i) {
 		const std::vector<float> block = map_block(rows.maps[i]);
 		out[(1 + i) * 4] = static_cast<float>(rows.ends[i]);

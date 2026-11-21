@@ -101,7 +101,7 @@ double pool_depth(double ml, double r) {
 namespace {
 
 // the builder's version: a map made by another is not read
-constexpr uint64_t MAP_STORE_VERSION = 24003;
+constexpr uint64_t MAP_STORE_VERSION = 24006;
 
 std::mutex &store_lock() {
 	static std::mutex lock;

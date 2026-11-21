@@ -97,7 +97,8 @@ TEST_CASE("rows: a shaped vessel's bands: every row of an upright band reads its
 					 << ", worst elsewhere in a curved band " << worst_curved << " px (bending up and down: Stage 25)");
 		CHECK(compared > 1000);
 		// where a band's map was traced its rays are its own, but over a vessel's base and floor, where rays cross
-		// thick glass by several routes within a quarter of a pixel: there a few go astray
-		CHECK(over <= traced / 100);
+		// thick glass by several routes within a quarter of a pixel, and at its rims, where a row's outline is
+		// read straight between its whole rows': there a few go astray
+		CHECK(over <= traced / 50);
 	}
 }

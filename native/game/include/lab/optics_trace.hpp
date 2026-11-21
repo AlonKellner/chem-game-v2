@@ -163,13 +163,17 @@ MapRay map_read(const Map &map, double x, double nm, int medium);
 // A vessel that is not upright everywhere sees each row differently. Its rows are cut into bands where its
 // profile's pieces begin and end; an upright band (every surface it crosses there a vertical cylinder) is
 // one map, the same at every row; a curved band is cut again every ROW_STEP pixels at most, each its own map,
-// traced at its middle row. A row reads its band's map: its rays bend across as there, and are taken as level
-// (bending up and down is Stage 25's).
+// traced at its middle row. A row reads its band's map along its own outline: a place across the row is read at
+// the same place in a measure both rims keep (inside the inner rim from the axis to it, through the glass from
+// it to the outer rim), in the band's middle row, and the ray keeps its deflection there. So the outline is
+// where the glass is in every row, never a step. Rays are taken as level (bending up and down is Stage 25's).
 inline constexpr double ROW_STEP = 4.0;
 inline constexpr int ROW_PIECES_MOST = 1; // one piece, as every upright vessel's: read by the plain reading, followed in stacks
 struct RowMap {
 	std::vector<double> ends; // where each band's rows end, pixels down from the body's top, ascending; the last its foot
 	std::vector<Map> maps; // each band's map
+	std::vector<double> band_outer, band_inner; // the rims where each band's map was traced, pixels (inner 0: none)
+	std::vector<double> row_outer, row_inner; // each whole row's rims, at its middle
 	int64_t rays = 0;
 };
 // `spec` as for one row, its shape the vessel's; `height` the body's height in pixels (its foot the vessel's base)
@@ -179,7 +183,8 @@ MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double n
 MapRay rows_read(const RowMap &rows, double x, double y, double nm, int medium);
 // The table as the renderer reads it: [0] the bands K and the whole rows R; [1 .. K] (where its rows end, its
 // map's offset in vec4s from the table's start, its pieces, its whole pixels); [1 + K .. K + R] for each whole
-// row the band its top is in; then each band's map_block.
+// row the band its top is in, its outer rim and its inner (at its middle); [1 + K + R .. 2K + R] each band's rims
+// (outer, inner); then each band's map_block.
 std::vector<float> rows_block(const RowMap &rows);
 
 // The map as the renderer reads it (lab/optics_scene.hpp lays the scene's maps out): vec4s.
