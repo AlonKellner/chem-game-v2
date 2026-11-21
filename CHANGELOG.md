@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 23)
+## 0.24.0 (2026-11-21, Stage 23)
 
 - §12: **measured colours**: copper sulfate solution's absorption from NBS Circular 484 (1949),
   malachite's reflectance from the USGS spectral library (GDS801).
@@ -15,6 +15,9 @@
   - The oxide is controlled at its surface: stirring hardly speeds it; warmth does (69 kJ/mol).
   - Crystals start rarely and grow by diffusion: the demo's crop is about 1,150 crystals of 1.9 mm
     after two hours near room temperature (a million of 0.2 mm in fifteen minutes before).
+- **Fetched data is held to its source**: every measured or fitted value has a gate test at its
+  source's own conditions (the kinetics, the transport, the first crystal inside Sheng's induction
+  times; NBS's absorbancies and USGS's reflectances read back through the model's spectra).
 
 ## 0.23.0 (2026-11-21, Stage 22)
 

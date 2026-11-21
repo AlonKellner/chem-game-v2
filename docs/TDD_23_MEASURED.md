@@ -21,8 +21,8 @@ GAME_SPEC §7, §9, §12, §20; `docs/DATA_SOURCES.md`.
 | 23.4 | The spec: the transport law, an order for the driver, nucleation | Done (GAME_SPEC §7, §9, §20) |
 | 23.5 | The core: transport in series with the surface; measured diffusion coefficients | Done |
 | 23.6 | The kinetics' values, each with an oracle test at its source's conditions | Done (`test_measured.cpp`) |
-| 23.7 | The demo and the tutorial; the goldens' evidence for the user | Evidence below; awaiting approval |
-| 23.8 | Pictures; the user judges and signs off | Pending |
+| 23.7 | The demo and the tutorial; the goldens' evidence for the user | Done: re-recorded with the user's approval |
+| 23.8 | Pictures; the user judges and signs off | Done: signed off 2026-11-21 (GAME_SPEC 0.24.0) |
 
 ## What the research found (2026-11-21)
 
