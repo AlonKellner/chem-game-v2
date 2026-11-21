@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## Unreleased (Stage 25)
+
+- §12.3: **a shaped vessel's rows read between two knots**, each along the row's own outline, the light
+  through each mixed by the share of the way: lines seen through a cone curve smoothly (the bands of
+  four rows that jogged are gone). Knots refined in the rims' measure, at most 96, cropped to their
+  outlines, made before the game runs; maps hold each ray's drop.
+- Open, documented (docs/TDD_25_UPDOWN.md): coloured specks along vessels' floors and corners (maps of
+  one piece in wavelength), and bending up and down in the renderer.
+
 ## 0.25.0 (2026-11-21, Stage 24)
 
 - §12.3, §13, §20: **vessels in their whole shape**: glassware made to its standard (the low-form

@@ -1247,7 +1247,8 @@ of every ray through its area, and its colour is their average (a box filter).
       in the band's middle row, and the ray keeps its deflection; two pixels further in, the band's
       map is read as it is (the two differ there by well under a pixel). The outline is where the
       glass is in every row, never a step; the plain reading reads between the band's samples there.
-    - **Rays bend up and down** (Stage 25; until then a curved row's rays were taken as level). Each map
+    - **Rays bend up and down** *(PLANNED: the maps hold each ray's drop from Stage 25; the renderer reads
+      rows as level until the footprint below is built)*. Each map
       also holds, for each of its rays at each node of its piece, how far below its own row it lands on
       the screen (its drop: media × samples × pieces × 4, after the cells), as a map holds where across.
       - **Knots, not bands.** A curved band's rows are read between two knots, each a map traced at its
@@ -2112,7 +2113,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |
 | Every optical spectrum is calibrated to the substance's known colour, not measured | Colours are right in kind (the blue of copper sulfate deepens as it should with concentration and depth); the exact hue is the calibration's. `docs/DATA_SOURCES.md` |
 | A balloon is a ball, whatever it is drawn as; a vessel is its glassware turned about its axis, with no spout, no thread and no cap; its floor is a slab of calibrated thickness, and what a standard leaves open of its curves is calibrated (Stage 24; until then every vessel was a cylinder) | A beaker pours over its whole brim; a bottle stands open |
-| A shaped vessel's maps are of one piece in wavelength, its knots at most `ROW_KNOTS_MOST`, and within a pixel of a rim each ray is its nearer knot's (Stage 25; in Stage 24 its curved rows were read as level, a band of four rows its middle row's map) | Over a vessel's base and at its rims a few rays in a hundred go astray by up to half a pixel |
+| A shaped vessel's maps are of one piece in wavelength, its knots at most `ROW_KNOTS_MOST`, and within a pixel of a rim each ray is its nearer knot's; its curved rows are read as level in the renderer (Stage 25: rows between two knots; in Stage 24 a band of four rows its middle row's map) | Over a vessel's floor and corners, where a ray's route changes part way through the spectrum, pixels are tinted by chance: coloured specks the truth does not have (docs/TDD_25_UPDOWN.md); a level line seen through a cone is not bent up or down; a few rays in a hundred at the rims go astray by up to half a pixel |
 | Glass, the acid and gases are perfectly clear; water absorbs as measured, and what it scatters is counted only as lost from the beam; nothing refracts (until Stage 11) | A clear liquid is seen by what it does to the light: it bends the view behind it otherwise than the air above it (until Stage 21 a line was drawn at its surface); metres of water would be blue, but the in-scattered light that makes a pool glow is not added |
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
