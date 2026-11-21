@@ -7,6 +7,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
+#include <mutex>
 #include <numbers>
 
 namespace lab::glass {
@@ -259,6 +261,43 @@ double Vessel::radius_outside(double y) const {
 
 double Vessel::radius_inside(double y) const {
 	return y < floor ? 0.0 : radius_on(inside, y);
+}
+
+double Vessel::widest() const {
+	double r = 0.0;
+	for (const Piece &p : outside) {
+		for (int i = 0; i <= 64; ++i) {
+			r = std::max(r, p.at(i / 64.0).r);
+		}
+		if (p.arc) {
+			// the circle's own extreme, if the arc reaches it
+			const double lo = std::min(p.t0, p.t1), hi = std::max(p.t0, p.t1);
+			for (int k = -2; k <= 2; ++k) {
+				if (k * 2.0 * pi >= lo && k * 2.0 * pi <= hi) {
+					r = std::max(r, p.centre.r + p.radius);
+				}
+			}
+		}
+	}
+	return r;
+}
+
+const Vessel *find(std::string_view kind, double nominal_ml) {
+	static std::mutex lock;
+	static std::vector<std::unique_ptr<Vessel>> made;
+	const std::lock_guard<std::mutex> hold(lock);
+	for (const auto &v : made) {
+		if (v->kind == kind && v->nominal_ml == nominal_ml) {
+			return v.get();
+		}
+	}
+	std::string why;
+	std::optional<Vessel> v = make(kind, nominal_ml, why);
+	if (!v) {
+		return nullptr;
+	}
+	made.push_back(std::make_unique<Vessel>(std::move(*v)));
+	return made.back().get();
 }
 
 std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string &why) {

@@ -420,13 +420,15 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 		float x = 0, y = 0;
 		REQUIRE(ui->locate("item:flask", x, y));
 		ui->frame(0.0);
-		// low in the flask, clear of the heap, over its floor of glass (Stage 21: what it holds rests on that)
+		// low in the flask, clear of the heap, over its floor of glass (Stage 21: what it holds rests on that),
+		// half way up its liquid (Stage 24: a conical flask's wide base holds what is left in a thin layer)
 		const lab::OpticsScene &scene = ui->optics();
 		const float *rect = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS) * 4];
 		for (int i = 0; i < static_cast<int>(scene.table[0]); ++i, rect += lab::optics_layout::BODY_VECS * 4) {
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
 				const float floor_px = rect[lab::optics_layout::REFRACT * 4 + 2] / rect[lab::optics_layout::FORM * 4 + 1];
-				return seen(scene, x + rect[2] / 4, rect[1] + rect[3] - floor_px - 4);
+				const float floor_top = rect[1] + rect[3] - floor_px, surface = rect[lab::optics_layout::FORM * 4 + 2];
+				return seen(scene, x + rect[2] / 4, surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
 			}
 		}
 		FAIL("the flask is not in the scene");

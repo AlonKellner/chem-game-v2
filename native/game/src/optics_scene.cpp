@@ -1,5 +1,6 @@
 // The renderer's table, from the state (GAME_SPEC §12).
 #include "lab/optics_scene.hpp"
+#include "lab/glassware.hpp"
 
 #include "chem/optics.hpp"
 #include "chem/species.hpp"
@@ -402,9 +403,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const double thickness = stretch * stretch;
 			put(at + MORE, 1, thickness < 0.125 ? 0.125 : thickness > 2.0 ? 2.0 : thickness);
 		} else {
-			// a cylinder of its volume and of the proportions it is drawn with
+			// glassware in its standard's shape (GAME_SPEC §12.3, Stage 24): its rectangle is its widest by its
+			// height; or, made to no standard, a cylinder of its volume and of the proportions it is drawn with
+			const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
 			const double aspect = static_cast<double>(body.h) / body.w;
-			const double d_cm = std::cbrt(4.0 * (v.volume_ml > 0.0 ? v.volume_ml : 1.0) / (PI * aspect));
+			const double d_cm = made ? 2.0 * made->widest() : std::cbrt(4.0 * (v.volume_ml > 0.0 ? v.volume_ml : 1.0) / (PI * aspect));
 			const double cm_per_px = d_cm / body.w;
 			const double floor_cm2 = PI * d_cm * d_cm / 4.0;
 			put(at + FORM, 1, cm_per_px);
@@ -419,14 +422,15 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			put(at + REFRACT, 2, floor_cm);
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
-				put(at + FORM, 2, bottom - (floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
+				// its level: where the inside below holds what is condensed (a cone fills faster as it narrows)
+				put(at + FORM, 2, bottom - (made ? made->level(v.condensed_ml) : floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
 			}
 			if (solid_ml > 0.0 && v.stirred && v.liquid_ml > 0.0) {
 				// stirred up: every particle shades its own cross-section, twice over
 				put(at + MORE, 0, EXTINCTION_EFFICIENCY * cross_section_cm2 / v.liquid_ml);
 			} else if (solid_ml > 0.0) {
 				// at rest: a heap at its angle of repose, a cone until it reaches the wall
-				const double heap_ml = solid_ml / PACKING, r_wall = d_cm / 2.0;
+				const double heap_ml = solid_ml / PACKING, r_wall = made ? made->radius_inside(made->floor + 0.25 * made->height) : d_cm / 2.0;
 				double r_base = std::cbrt(3.0 * heap_ml / (PI * REPOSE));
 				if (r_base > r_wall) {
 					r_base = (heap_ml / (2.0 * PI * REPOSE) + r_wall * r_wall * r_wall / 3.0) * 2.0 / (r_wall * r_wall);

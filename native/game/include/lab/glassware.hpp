@@ -54,10 +54,13 @@ struct Vessel {
 	double level(double cm3) const; // the height where the inside below holds cm3 (the brim if more)
 	double radius_outside(double y) const; // 0 outside [0, height]
 	double radius_inside(double y) const; // 0 outside [floor, height]
+	double widest() const; // the outside's greatest radius: a beaker's brim, a flask's base
 };
 
 // The vessel of a kind and nominal capacity, from data/glassware.json; none if there is no such row.
 std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string &why);
+// The same, made once and kept: null if there is no such row.
+const Vessel *find(std::string_view kind, double nominal_ml);
 // What the table offers: each kind and its capacities.
 struct Offer {
 	std::string kind, standard;

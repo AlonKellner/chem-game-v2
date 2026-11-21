@@ -155,16 +155,10 @@
 			"doc": ["Calibrated things of the lab"]
 		},
 		{
-			"data": ["benches/{demo.json,lab.json}/items/{flask,condenser,beaker,waste,jar,acid}/wall_mm"],
-			"measured": "ISO 3819, Table 1: the least wall of a beaker of the capacity",
-			"doc": ["ISO 3819"],
-			"tests": ["lab: every glass vessel of every bench has ISO 3819's least wall"]
-		},
-		{
-			"data": ["benches/{demo.json,lab.json}/items/{flask,condenser,beaker,waste,jar,acid}/floor_mm"],
-			"calibrated": "one supplier's 250 mL beaker; the others in the ratio of ISO 3819's walls",
-			"doc": ["Calibrated floors"],
-			"tests": ["lab: every glass vessel of every bench has ISO 3819's least wall for its capacity, and the calibrated floor"]
+			"data": ["benches/{demo.json,lab.json}/items/condenser/{wall_mm,floor_mm}"],
+			"calibrated": "the condenser, made to no standard yet: a 50 mL beaker's least wall (ISO 3819) and the calibrated floor",
+			"doc": ["The condenser keeps", "Calibrated floors"],
+			"tests": ["lab: a vessel's wall is as thick as its bench says"]
 		},
 		{
 			"data": [

@@ -350,7 +350,9 @@ balloon. These stay calibrated:
 | Latex | Transmittance of the reference thickness: 0.04, rising by 0.9 across 600 nm (width 18 nm) | A red balloon | low |
 | H₂SO₄(aq), glass, gases | None: clear | Their absorption in the visible is far below what a few centimetres show | high for these path lengths |
 
-**Verified wall thicknesses (Stage 20)** (`data/benches/`, each glass vessel's `wall_mm`):
+**Verified wall thicknesses (Stage 20)** (`data/benches/`, each glass vessel's `wall_mm`; from Stage 24
+each vessel's glassware gives its wall and floor, Glassware above. The condenser keeps the bench's
+own 0.8 mm and 1.9 mm, a 50 mL beaker's, until a condenser is made to its standard):
 
 | Vessel | Wall (mm) | Source |
 |---|---|---|

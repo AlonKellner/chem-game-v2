@@ -17,8 +17,8 @@ GAME_SPEC §12.3 (*A vessel's whole shape*), §13, §20; `docs/DATA_SOURCES.md` 
 | Phase | Topic | Status |
 |---|---|---|
 | 24.1 | Spec and sources: the three standards read from their own pages; what they leave open calibrated | Done |
-| 24.2 | The shape model: glassware data, profiles of lines and arcs, capacity, the liquid's level, the silhouette | |
-| 24.3 | The tracer: arcs as tori, traced numerically; profiles as patches | |
+| 24.2 | The shape model: glassware data, profiles of lines and arcs, capacity, the liquid's level, the silhouette; the benches' vessels made as glassware | Done; goldens re-recorded with the user's approval (below) |
+| 24.3 | The tracer: arcs as tori, traced numerically; profiles as patches | Done |
 | 24.4 | The truth in three dimensions, through the general tracer | |
 | 24.5 | Maps with rows: straight bands shared, curved bands their own; the cost of a build measured (gate: within a frame's budget) | |
 | 24.6 | The pixel pass: curved bands in the second pass, the footprint as a patch of the wall; the stacks traced in three dimensions | |
@@ -37,3 +37,25 @@ rules are in `docs/DATA_SOURCES.md`, Glassware. Two corrections to the spec's ea
 
 Checked on the way: ISO 3819:2015's table gives 1.1 mm for a 250 mL low-form beaker and 1.2 mm
 for its thick-walled type; the bench's 1.1 mm is right.
+
+## The condenser
+
+The condenser stands for a Liebig condenser, which is glassware of another standard; it is drawn
+tall and narrow (44 × 120 px). Made a beaker, its 42 × 60 mm profile could not be that shape, so it
+keeps the bench's own wall and floor and stays a cylinder of its volume until a condenser is made
+to its standard (decided while building, reported to the user with the goldens' evidence).
+
+## The goldens' evidence (approved by the user, 2026-11-21)
+
+Each vessel's cell holds its shape's capacity to the brim (or the neck's top): the flask 351 mL (was
+250), a 250 mL beaker 330 mL, a 50 mL beaker 75 mL, the bottle 663 mL. From `make demo`:
+
+| | Before | After |
+|---|---|---|
+| Simulated time | 9,167 s | 9,176 s (boiling down ends 9.5 s later) |
+| The flask's air | 246 mL | 347 mL |
+| The crystals | 9.207 g in 1,155 of 1.88 mm | 9.195 g in 1,146 of 1.89 mm |
+| The balloon | 751 mL, 65 % CO2 | 831 mL, 56 % CO2 (more of the flask's air pushed in) |
+| The flask's wall, the bottle's | 1.1 mm, 1.3 mm | 0.9 mm (ISO 1773), 1.5 mm (ISO 4796-1) |
+
+Every conservation total is exact, as before.

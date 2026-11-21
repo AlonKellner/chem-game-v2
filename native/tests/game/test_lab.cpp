@@ -1,5 +1,6 @@
 // The lab layer (GAME_SPEC §13): a bench driven by commands.
 #include "lab/lab.hpp"
+#include "lab/glassware.hpp"
 #include "lab/sha256.hpp"
 
 #include <doctest/doctest.h>
@@ -92,7 +93,9 @@ TEST_CASE("lab: the demo's bench opens with every vessel full of the room's air 
 	CHECK(report.at("step") == 0);
 	const json flask = item(report, "flask");
 	CHECK(flask.at("celsius").get<double>() == doctest::Approx(20.0).epsilon(1e-9));
-	CHECK(flask.at("gas_ml").get<double>() == doctest::Approx(250.0).epsilon(1e-6));
+	// a conical flask of 250 mL holds what its shape holds to its neck's top (GAME_SPEC §12.3, Stage 24)
+	CHECK(flask.at("gas_ml").get<double>() == doctest::Approx(lab::glass::find("conical_flask", 250)->capacity()).epsilon(1e-6));
+	CHECK(flask.at("gas_ml").get<double>() > 330.0);
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(5.0).epsilon(1e-9));
 	CHECK(item(report, "balloon").at("gas_ml").get<double>() == 0.0);
 	CHECK(grams(item(report, "acid"), "water") == doctest::Approx(240.5).epsilon(1e-9));
@@ -231,7 +234,7 @@ TEST_CASE("lab: pouring and tipping move exactly what was asked, with its heat (
 	}
 	// the flask is still exactly full: the liquid pushed air out
 	const json flask = item(report, "flask");
-	CHECK(flask.at("gas_ml").get<double>() + flask.at("condensed_ml").get<double>() == doctest::Approx(250.0).epsilon(1e-6));
+	CHECK(flask.at("gas_ml").get<double>() + flask.at("condensed_ml").get<double>() == doctest::Approx(lab::glass::find("conical_flask", 250)->capacity()).epsilon(1e-6));
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 }
 
@@ -543,8 +546,9 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 }
 
 TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its mass, and a save keeps it (Stage 20)") {
-	// what is seen through a vessel bends by its wall's thickness (GAME_SPEC §12.3): data of its own, ISO 3819's
-	// least wall for a beaker of its capacity
+	// what is seen through a vessel bends by its wall's thickness (GAME_SPEC §12.3): data of its own; from
+	// Stage 24 its glassware's standard's least wall (ISO 3819 for a beaker, ISO 1773 for a flask, ISO 4796-1
+	// for a bottle), and a floor 2.36 walls thick (calibrated)
 	auto lab = demo_bench();
 	const auto wall_mm = [](const lab::Lab &l, const char *id) {
 		for (const lab::ItemView &v : l.view().items) {
@@ -555,9 +559,10 @@ TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its ma
 		FAIL("no item " << id);
 		return -1.0;
 	};
-	CHECK(wall_mm(*lab, "jar") == 0.8); // 50 mL
-	CHECK(wall_mm(*lab, "flask") == 1.1); // 250 mL
-	CHECK(wall_mm(*lab, "acid") == 1.3); // 500 mL
+	CHECK(wall_mm(*lab, "jar") == doctest::Approx(0.8).epsilon(1e-12)); // a 50 mL beaker
+	CHECK(wall_mm(*lab, "flask") == doctest::Approx(0.9).epsilon(1e-12)); // a 250 mL conical flask
+	CHECK(wall_mm(*lab, "acid") == doctest::Approx(1.5).epsilon(1e-12)); // a 500 mL bottle
+	CHECK(wall_mm(*lab, "condenser") == 0.8); // made to no standard: its bench's own
 	CHECK(wall_mm(*lab, "balloon") == 0.0); // rubber: none given
 	// and its floor, glass all through (Stage 21)
 	const auto floor_mm = [](const lab::Lab &l, const char *id) {
@@ -568,15 +573,16 @@ TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its ma
 		}
 		return -1.0;
 	};
-	CHECK(floor_mm(*lab, "jar") == 1.9);
-	CHECK(floor_mm(*lab, "flask") == 2.6);
-	CHECK(floor_mm(*lab, "acid") == 3.1);
+	CHECK(floor_mm(*lab, "jar") == doctest::Approx(0.8 * 2.36).epsilon(1e-12));
+	CHECK(floor_mm(*lab, "flask") == doctest::Approx(0.9 * 2.36).epsilon(1e-12));
+	CHECK(floor_mm(*lab, "acid") == doctest::Approx(1.5 * 2.36).epsilon(1e-12));
+	CHECK(floor_mm(*lab, "condenser") == 1.9);
 	CHECK(floor_mm(*lab, "balloon") == 0.0);
 	std::string why;
 	auto again = lab::Lab::load(lab->save(), why);
 	REQUIRE_MESSAGE(again != nullptr, why);
-	CHECK(wall_mm(*again, "acid") == 1.3);
-	CHECK(floor_mm(*again, "acid") == 3.1);
+	CHECK(wall_mm(*again, "acid") == wall_mm(*lab, "acid"));
+	CHECK(floor_mm(*again, "acid") == floor_mm(*lab, "acid"));
 	CHECK(again->digest() == lab->digest());
 	// a save from before walls had a thickness loads, its walls of none
 	json old = json::parse(lab->save());
@@ -742,25 +748,39 @@ TEST_CASE("lab: a drain comes off when either of its vessels is moved away, stow
 	}
 }
 
-TEST_CASE("lab: every glass vessel of every bench has ISO 3819's least wall for its capacity, and the calibrated floor (Stage 23)") {
-	// ISO 3819:2015, Table 1 (low-form beakers): 50 mL 0.8 mm, 250 mL 1.1 mm, 500 mL 1.3 mm. The floors are
-	// calibrated: a supplier's 2.6 mm at 250 mL, the others in the ratio of the walls (docs/DATA_SOURCES.md)
-	const std::map<int, std::pair<double, double>> by_capacity = { { 50, { 0.8, 1.9 } }, { 250, { 1.1, 2.6 } }, { 500, { 1.3, 3.1 } } };
+TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its capacity, its wall and floor are its standard's (Stage 24)") {
+	// GAME_SPEC §12.3: the flask a conical flask (ISO 1773), the beakers and the jar low-form beakers (ISO 3819),
+	// the acid's a screw-neck bottle (ISO 4796-1); the condenser is made to no standard yet
+	const std::map<std::string, std::string> made_as = { { "flask", "conical_flask" }, { "beaker", "beaker" }, { "waste", "beaker" }, { "jar", "beaker" }, { "acid", "bottle" } };
 	int vessels = 0;
 	for (const char *bench : { "data/benches/demo.json", "data/benches/lab.json" }) {
-		const nlohmann::json j = nlohmann::json::parse(read(bench));
-		for (const nlohmann::json &item : j.at("items")) {
-			if (item.value("wall", "") != "glass") {
+		std::string why;
+		auto l = lab::Lab::open(read(bench), why);
+		REQUIRE_MESSAGE(l != nullptr, why);
+		for (const lab::ItemView &v : l->view().items) {
+			if (v.kind != "vessel" || v.condenser) {
 				continue;
 			}
 			CAPTURE(bench);
-			CAPTURE(item.at("id").get<std::string>());
-			const auto it = by_capacity.find(item.at("volume_ml").get<int>());
-			REQUIRE(it != by_capacity.end());
-			CHECK(item.at("wall_mm").get<double>() == it->second.first);
-			CHECK(item.at("floor_mm").get<double>() == it->second.second);
+			CAPTURE(v.id);
+			REQUIRE(made_as.count(v.id) == 1);
+			CHECK(v.glassware == made_as.at(v.id));
+			const lab::glass::Vessel *g = lab::glass::find(v.glassware, v.nominal_ml);
+			REQUIRE(g != nullptr);
+			CHECK(v.volume_ml == doctest::Approx(g->capacity()).epsilon(1e-9));
+			CHECK(v.volume_ml > 1.10 * v.nominal_ml);
+			CHECK(v.wall_mm == doctest::Approx(10.0 * g->wall).epsilon(1e-12));
+			CHECK(v.floor_mm == doctest::Approx(10.0 * g->floor).epsilon(1e-12));
 			++vessels;
 		}
 	}
-	CHECK(vessels == 12);
+	CHECK(vessels == 10);
+	// glassware no standard makes, or a wall given beside it, is refused with the reason
+	std::string why;
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "a", "kind": "vessel", "volume_ml": 75, "wall": "glass", "wall_g": 20, "glassware": "beaker"}]})", why) == nullptr);
+	CHECK(why.find("75") != std::string::npos);
+	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
+		{"id": "a", "kind": "vessel", "volume_ml": 50, "wall": "glass", "wall_g": 20, "glassware": "beaker", "wall_mm": 1.0}]})", why) == nullptr);
+	CHECK(why.find("glassware gives its wall") != std::string::npos);
 }

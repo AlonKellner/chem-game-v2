@@ -1,4 +1,5 @@
 #include "lab/ui.hpp"
+#include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
 
@@ -614,6 +615,10 @@ struct Ui::Impl {
 		} else if (v.condenser) {
 			w = 44;
 			h = 120;
+		} else if (const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml)) {
+			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
+			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
+			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
 		} else {
 			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.volume_ml));
 			h = w * 1.25f;

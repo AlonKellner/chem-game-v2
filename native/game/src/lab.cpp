@@ -1,4 +1,5 @@
 #include "lab/lab.hpp"
+#include "lab/glassware.hpp"
 
 #include "chem/builtin_ids.hpp"
 #include "chem/invariants.hpp"
@@ -57,6 +58,10 @@ struct Item {
 	double capacity = 0.0; // a balloon: the volume at which it bursts, m^3
 	double wall_mm = 0.0; // a vessel: how thick its wall is, for what is seen through it (GAME_SPEC §12.3); its heat is its wall's mass
 	double floor_mm = 0.0; // and its floor: glass all through, seen from the side
+	// a vessel made as a piece of glassware (GAME_SPEC §12.3, Stage 24): its kind and nominal capacity; its
+	// cell holds the glassware's capacity to the brim, and its wall and floor are the glassware's
+	std::string glassware;
+	double nominal_ml = 0.0;
 	bool burst = false;
 };
 
@@ -1099,6 +1104,8 @@ struct Lab::Impl {
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
 		v.floor_mm = item.floor_mm;
+		v.glassware = item.glassware;
+		v.nominal_ml = item.nominal_ml;
 		if (item.kind != Kind::Burner) {
 			const double kelvin = m.kelvin(item.cell);
 			v.celsius = kelvin - 273.15;
@@ -1317,7 +1324,24 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			}
 			item.kind = kind == "vessel" ? Kind::Vessel : Kind::Bag;
 			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
-			const double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
+			double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
+			item.nominal_ml = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() : 0.0;
+			std::optional<glass::Vessel> made;
+			if (item.kind == Kind::Vessel && j.contains("glassware")) {
+				// GAME_SPEC §12.3, Stage 24: its standard's shape, and what that shape holds to the brim
+				item.glassware = j.at("glassware").get<std::string>();
+				std::string no;
+				made = glass::make(item.glassware, item.nominal_ml, no);
+				if (!made) {
+					why = "item \"" + item.id + "\": " + no;
+					return nullptr;
+				}
+				if (j.contains("wall_mm") || j.contains("floor_mm")) {
+					why = "item \"" + item.id + "\": its glassware gives its wall and floor";
+					return nullptr;
+				}
+				volume = made->capacity() * 1e-6;
+			}
 			item.cell = item.kind == Kind::Vessel ? b.add_rigid_cell(item.id, volume) : b.add_cell(item.id);
 			const SpeciesId wall = table.find(j.at("wall").get<std::string>());
 			if (!table.has(wall) || !table.species(wall).wall) {
@@ -1325,8 +1349,8 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				return nullptr;
 			}
 			b.set_amount(item.cell, wall, amount(j.at("wall_g").get<double>() / (static_cast<double>(table.molar_mass_ug(wall)) * 1e-6)));
-			item.wall_mm = number(j, "wall_mm", 0.0);
-			item.floor_mm = number(j, "floor_mm", 0.0);
+			item.wall_mm = made ? made->wall * 10.0 : number(j, "wall_mm", 0.0);
+			item.floor_mm = made ? made->floor * 10.0 : number(j, "floor_mm", 0.0);
 			if (!(item.wall_mm >= 0.0) || !(item.floor_mm >= 0.0)) {
 				why = "item \"" + item.id + "\": a wall is no thinner than nothing, nor a floor";
 				return nullptr;
@@ -2974,7 +2998,7 @@ json Lab::Impl::save() const {
 				{ "heats", item.heats.index }, { "under", item.under }, { "valve", bits(item.valve) }, { "on", item.on }, { "joint", item.joint.index }, { "holds", item.holds },
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
 				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst }, { "slot", item.slot },
-				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) } });
+				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
 	}
 	bench["items"] = list;
 	json happened = json::array();
@@ -3089,7 +3113,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.h = j.value("h", 1);
 			item.burst = j.at("burst").get<bool>();
 			item.slot = j.value("slot", 0);
-			if (!from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)
+			item.glassware = j.value("glassware", "");
+			if ((j.contains("nominal_ml") && !from_bits(j.at("nominal_ml"), item.nominal_ml)) || !from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)
 					|| (j.contains("wall_mm") && !from_bits(j.at("wall_mm"), item.wall_mm)) || (j.contains("floor_mm") && !from_bits(j.at("floor_mm"), item.floor_mm))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
