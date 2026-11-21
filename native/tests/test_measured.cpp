@@ -2,6 +2,7 @@
 // conditions; the transport step from measured diffusion and water's viscosity.
 #include "chem/builtin_ids.hpp"
 #include "tables.hpp"
+#include "chem/optics.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
 
@@ -234,4 +235,45 @@ TEST_CASE("measured: the pentahydrate's first crystal appears at Sheng's inducti
 		CHECK(seen <= row.last);
 		MESSAGE(row.celsius << " C: the first crystal after " << seen << " s (Sheng: " << row.first << "-" << row.last << " s)");
 	}
+}
+
+TEST_CASE("measured: the copper sulfate standard's absorbancy is NBS Circular 484's, through the model's own spectrum (Stage 23)") {
+	// Gibson 1949, Table 4: 20.000 g CuSO4.5H2O and 10.0 ml H2SO4 a litre (0.07986 mol/L of copper), 10.00 mm, 25 C;
+	// the published absorbancy As every 10 nm, 380-750 nm (transcribed here apart from data/optics)
+	const double as[] = { 0.0035, 0.0028, 0.0023, 0.0019, 0.0016, 0.0014, 0.0012, 0.0011, 0.0011, 0.0012, 0.0014, 0.0018, 0.0026,
+		0.0038, 0.0055, 0.0079, 0.0111, 0.0155, 0.0216, 0.0292, 0.039, 0.0518, 0.068, 0.0885, 0.1125, 0.143, 0.18, 0.224, 0.274,
+		0.332, 0.392, 0.459, 0.527, 0.592, 0.656, 0.715, 0.768, 0.817 };
+	const optics::Spectrum &salt = optics::spectrum(builtin::copper_sulfate_aq);
+	REQUIRE(optics::kind(builtin::copper_sulfate_aq) == optics::Kind::Absorb);
+	const double molar = 0.07986, cm = 1.0;
+	for (int i = 0; i < 38; ++i) {
+		const int nm = 380 + 10 * i;
+		CAPTURE(nm);
+		CHECK(near(salt[static_cast<size_t>(nm - 380)] * molar * cm, as[i], 2e-4));
+	}
+	// between the rows, straight (650 and 660 nm)
+	CHECK(near(salt[275] * molar, 0.5 * (0.224 + 0.274), 2e-4));
+	// 760-780 nm: straight from NBS's 750 nm to Davenet et al.'s 12.05 L/mol/cm at 790 nm (interpolated, not measured)
+	CHECK(near(salt[400], 0.817 / molar + (12.05 - 0.817 / molar) * 30.0 / 40.0, 2e-4));
+}
+
+TEST_CASE("measured: malachite reflects as the USGS library's GDS801, through the model's own spectrum (Stage 23)") {
+	// splib07a Record 18922, 'Malachite GDS801 synthetic', absolute reflectance (transcribed here apart from data/optics)
+	const struct {
+		int nm;
+		double reflectance;
+	} rows[] = { { 380, 0.08832 }, { 450, 0.30105 }, { 520, 0.40302 }, { 600, 0.24569 }, { 650, 0.16524 }, { 700, 0.13033 }, { 780, 0.10932 } };
+	const optics::Spectrum &m = optics::spectrum(builtin::malachite);
+	REQUIRE(optics::kind(builtin::malachite) == optics::Kind::Reflect);
+	for (const auto &row : rows) {
+		CAPTURE(row.nm);
+		CHECK(near(m[static_cast<size_t>(row.nm - 380)], row.reflectance, 1e-6));
+	}
+	// its one peak, near 520 nm as other samples have it: green
+	size_t peak = 0;
+	for (size_t i = 0; i < m.size(); ++i) {
+		peak = m[i] > m[peak] ? i : peak;
+	}
+	CHECK(peak + 380 >= 510);
+	CHECK(peak + 380 <= 530);
 }

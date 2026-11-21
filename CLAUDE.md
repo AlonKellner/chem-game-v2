@@ -52,7 +52,7 @@ make sessions-check             # the sessions against their golden records (mak
 - Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`. The screen itself is tested natively (`native/tests/game/test_ui.cpp`), through `Ui::locate`.
 - **A script that runs on Godot's own thread never waits unbounded**: every loop in `engines/godot/tools/` has a limit, and a windowed Godot started from a shell is given a time limit (`perl -e 'alarm 90; exec @ARGV' godot …`). An unbounded wait froze the window once.
 - **Invariants over examples**: a property goes in the catalogue (GAME_SPEC §18) as a named check with a self-test that proves it fires on a corrupted trace.
-- **Measured data is held to its source**: every measured or fitted value in `data/` has a gate test that runs the model at the source's own conditions and checks what the source measured (the measured kinetics: `native/tests/test_measured.cpp`), so a change to the data or to the law that reads it fails the gate.
+- **Fetched data is documented and held to its source**: any data fetched from outside and used to change or fix the code (a measured or fitted value, a constant, a calibration) is documented in full (`docs/DATA_SOURCES.md`: the source, what was read, the fit, the confidence) and has a gate test that runs the model at the source's own conditions and checks what the source measured (the measured kinetics: `native/tests/test_measured.cpp`), so a change to the data or to the code that reads it fails the gate.
 - **Regression policy**: after Stage N, all tests from Stages 0 through N pass before proceeding.
 
 ## Stage Workflow
