@@ -1253,6 +1253,10 @@ of every ray through its area, and its colour is their average (a box filter).
       the rows interpolated in the rims' measure, each ray's drop, the footprint a patch of the
       wall's rows; built with the cost measured)*. Where a band is upright the renderer is the truth's
       within the eye's threshold (`renderer: through a beaker's upright band`).
+    - **A pixel's history follows its row.** Its key (§12.2) holds its row in a shaped vessel, whose
+      rows differ: moved up or down (the burner's stand lifting a flask), its pixels read their new
+      rows, never keep their old ones. A cylinder's rows are alike, and its pixels' histories survive
+      its moving as before.
     - **Made before the game runs.** A vessel made as glassware stands with its axis on a whole pixel
       and its liquid's index is water's whether it holds any or not, so its maps depend only on its
       glassware, its drawn size, its layer and the indices: `chem_tool maps` makes them for every

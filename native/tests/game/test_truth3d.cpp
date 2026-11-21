@@ -171,3 +171,32 @@ TEST_CASE("renderer: through a beaker's upright band its pixels are the 3D truth
 	const int h = static_cast<int>(height_of("conical_flask", 250));
 	CHECK(lab::check_O7(through_flask, static_cast<int>(X), static_cast<int>(Y), static_cast<int>(X + W), static_cast<int>(Y) + h, 0.6) == "");
 }
+
+TEST_CASE("frames: a shaped vessel moved up or down settles on its new picture, not its old rows (Stage 24)") {
+	// a cylinder's rows are alike, so a pixel's history survives its moving up or down; a flask's are not: a
+	// pixel's history follows its row in the vessel (the burner's stand lifting a flask showed its old rows)
+	const ItemView flask = glassware("conical_flask", 250);
+	const float h = height_of("conical_flask", 250);
+	lab::OpticsScene before, after;
+	lab::optics_compose(before, room(), { lab::OpticsBody{ &flask, X, Y + 60.0f, W, h } });
+	lab::optics_compose(after, room(), { lab::OpticsBody{ &flask, X, Y + 20.0f, W, h } });
+	const int x0 = static_cast<int>(X), y0 = static_cast<int>(Y), w = static_cast<int>(W), hh = static_cast<int>(h) + 70;
+	lab::OpticsFrames frames(x0, y0, w, hh, 64.0);
+	for (int k = 0; k < 40; ++k) {
+		frames.frame(before);
+	}
+	for (int k = 0; k < 40; ++k) {
+		frames.frame(after);
+	}
+	double worst = 0.0;
+	for (int y = y0 + 25; y < y0 + static_cast<int>(h); y += 4 * sparse()) {
+		for (int x = x0 + 20; x < x0 + 70; x += 4) {
+			double shown[3], truth[3];
+			frames.colour(after, x, y, shown);
+			lab::optics_truth(after, x, y, truth);
+			worst = std::max(worst, eye(shown, truth));
+		}
+	}
+	MESSAGE("a flask moved up 40 px: settled, worst " << worst << " on the eye metric from its new picture");
+	CHECK(worst < lab::EYE_VISIBLE);
+}

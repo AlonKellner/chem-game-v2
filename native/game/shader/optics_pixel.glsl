@@ -92,6 +92,7 @@ struct Path {
 	int rmedia;
 	float rleft; // the map's first sample, pixels from the axis
 	vec4 rrims; // a shaped vessel's row read in its band's map (Stage 24): the row's rims, the band's; 0 where none is
+	float rdown; // a shaped vessel's: the pixel's row, from its top (its rows differ, so its history follows the row; 0 for any other)
 	float rwet; // how much of the pixel's height is under its liquid's surface
 	float rin; // how much of the pixel's height is between its top and its foot
 	float rfloor; // how much of the pixel's height is in its floor (glass all through: its map's third core)
@@ -395,6 +396,7 @@ Path path_of(vec2 p, float size) {
 	q.rmedia = 0;
 	q.rleft = 0.0;
 	q.rrims = vec4(0.0);
+	q.rdown = 0.0;
 	q.rwet = 0.0;
 	q.rin = 0.0;
 	q.rfloor = 0.0;
@@ -440,6 +442,7 @@ Path path_of(vec2 p, float size) {
 			vec4 map = scene_vec(at + 6);
 			vec4 row_map = map_for_row(map, p.y - rect.y);
 			q.rrims = rims_for_row(map, p.y - rect.y);
+			q.rdown = map.w < 0.0 ? p.y - rect.y : 0.0;
 			if (q.rrims.x > 0.0 && rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5))) <= 0.0 && rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5)) - 1.0) <= 0.0 &&
 					rim_weight(q.rrims, abs(p.x - (rect.x + rect.z * 0.5)) + 1.0) <= 0.0) {
 				q.rrims = vec4(0.0); // far from the rims: the band's map as it is
@@ -499,7 +502,7 @@ Path path_of(vec2 p, float size) {
 	// where the view goes through a refracting body: where across it, and how much of the pixel is under its liquid and within it
 	if (q.refractor >= 0) {
 		q.key.x = q.key.x + 0.37 * (q.x - q.raxis) + 0.19 * q.rwet + 0.43 * q.rin + 0.29 * q.rfloor;
-		q.key.y = q.key.y + 0.31 * q.raxis;
+		q.key.y = q.key.y + 0.31 * q.raxis + 0.47 * q.rdown;
 		q.chain = bending > 1 || behind.y > 0.5;
 		if (q.chain) {
 			q.key.w = q.key.w + 0.73 * behind.z;
