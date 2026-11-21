@@ -1,0 +1,39 @@
+{
+	"format": "chem-glassware/1",
+	"note": "Each kind of vessel as its standard makes it (GAME_SPEC §12.3, A vessel's whole shape; docs/DATA_SOURCES.md, Glassware). sizes: the standard's row for a nominal capacity, mm. The rest is what the standard leaves open, calibrated within its words: shares of the outside diameter, or of the neck's, or of the wall; floor_per_wall: a floor as thick as this many walls.",
+	"kinds": [
+		{
+			"name": "beaker",
+			"standard": "ISO 3819",
+			"sizes": [
+				{"ml": 50, "diameter_mm": 42, "height_mm": 60, "wall_mm": 0.8, "corner": 0.10},
+				{"ml": 250, "diameter_mm": 70, "height_mm": 95, "wall_mm": 1.1, "corner": 0.175}
+			],
+			"brim": 0.10,
+			"flare_rise": 2.3,
+			"floor_per_wall": 2.36
+		},
+		{
+			"name": "conical_flask",
+			"standard": "ISO 1773",
+			"sizes": [
+				{"ml": 250, "diameter_mm": 85, "neck_mm": 34, "height_mm": 145, "wall_mm": 0.9}
+			],
+			"corner": 0.175,
+			"neck_length": 1.125,
+			"shoulder": 0.333,
+			"floor_per_wall": 2.36
+		},
+		{
+			"name": "bottle",
+			"standard": "ISO 4796-1",
+			"sizes": [
+				{"ml": 500, "diameter_mm": 86, "shoulder_mm": 110, "height_mm": 176, "wall_mm": 1.5, "neck_mm": 45, "neck_inside_mm": 33, "neck_height_mm": 50}
+			],
+			"corner": 0.10,
+			"shoulder": 0.20,
+			"neck_radius_mm": 2,
+			"floor_per_wall": 2.36
+		}
+	]
+}

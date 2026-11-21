@@ -88,9 +88,13 @@ target_compile_definitions(chem_core PUBLIC "CHEM_ASSERT_ABORTS=$<IF:$<CONFIG:De
 chem_apply_flags(chem_core)
 
 # --------------------------------------------------------------------- chem_lab
+# The glassware table (data/glassware.json, GAME_SPEC §12.3), embedded as text; read again when it changes.
+file(READ "${CHEM_DATA_DIR}/glassware.json" CHEM_GLASSWARE_JSON)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/glassware.json")
+configure_file(game/glassware_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/glassware_data.hpp" @ONLY)
 file(GLOB CHEM_LAB_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
 add_library(chem_lab STATIC ${CHEM_LAB_SOURCES})
-target_include_directories(chem_lab PUBLIC game/include)
+target_include_directories(chem_lab PUBLIC game/include "${CHEM_GEN_DIR}/lab_include")
 target_include_directories(chem_lab SYSTEM PUBLIC extern)
 target_link_libraries(chem_lab PUBLIC chem_core)
 set_target_properties(chem_lab PROPERTIES POSITION_INDEPENDENT_CODE ON)

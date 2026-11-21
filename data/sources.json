@@ -188,6 +188,28 @@
 			"design": "the bench: its grid, its room, where each thing stands, the vessels' capacities, what the demo starts with, its goals"
 		},
 		{
+			"data": [
+				"glassware.json/kinds/{beaker,conical_flask,bottle}/sizes/#/{ml,diameter_mm,height_mm,wall_mm}",
+				"glassware.json/kinds/conical_flask/sizes/#/neck_mm",
+				"glassware.json/kinds/bottle/sizes/#/shoulder_mm"
+			],
+			"measured": "ISO 3819, ISO 1773 and ISO 4796-1: each kind's row for its nominal capacity",
+			"doc": ["ISO 3819:1985", "ISO 1773:1997", "ISO 4796-1:2016"],
+			"tests": ["glassware: every kind's rows are its standard's", "capacity: the standards' own volumes"]
+		},
+		{
+			"data": [
+				"glassware.json/kinds/beaker/sizes/#/corner",
+				"glassware.json/kinds/beaker/{brim,flare_rise,floor_per_wall}",
+				"glassware.json/kinds/conical_flask/{corner,neck_length,shoulder,floor_per_wall}",
+				"glassware.json/kinds/bottle/sizes/#/{neck_mm,neck_inside_mm,neck_height_mm}",
+				"glassware.json/kinds/bottle/{corner,shoulder,neck_radius_mm,floor_per_wall}"
+			],
+			"calibrated": "what the standards leave open: the flare, the radii, the necks, the floors, chosen within their words",
+			"doc": ["Calibrated, within the standards' words"],
+			"tests": ["capacity: the standards' own volumes", "glassware: a profile is one smooth line"]
+		},
+		{
 			"data": ["sessions/demo.json/**", "tutorials/demo.json/**"],
 			"design": "scripts of the demo: waits, settings and checks"
 		}

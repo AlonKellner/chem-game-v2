@@ -404,7 +404,7 @@ Calibrated, within the standards' words (**low confidence**: chosen for a plausi
 | A beaker's base corner | 17.5 % of the diameter at 250 mL (the middle of 15 to 20 %); 10 % at 50 mL (at least 5 %) | ISO 3819 §8.3 |
 | A flask's base corner | 17.5 % of the greatest diameter | ISO 1773 §3.5.3: 15 to 20 % |
 | A flask's neck | 1.125 times its outside diameter long (the middle of 1 to 1.25); met by the cone in an arc of a third of the neck's diameter; a bead on its top, a half-round as thick as twice the wall | ISO 1773 §3.4.2, §3.5.2 |
-| A bottle's neck | outside 45 mm (GL 45), inside 33 mm (at least 27), 25 mm high, with a bead like the flask's | ISO 4796-1 Table 1, §5.2.6; the thread's own dimensions (DIN 168-1) not read |
+| A bottle's neck | outside 45 mm (GL 45), inside 33 mm (at least 27), 50 mm high (the thread and the plain neck under it), with a bead like the flask's | ISO 4796-1 Table 1, §5.2.6; the height set so that the bottle holds about 15 % more to the neck's base than to the turn of its shoulder (§3.3: the model gives 18 %; with a 25 mm neck it gave 38 %); the thread's own dimensions (DIN 168-1) not read |
 | A bottle's radii | at the base 10 % of its diameter; at the shoulder 20 %; where the cone meets the neck 2 mm | ISO 4796-1 §5.2.2 to §5.2.4 ("suitable", "as small as possible") |
 | A vessel's floor | 2.36 times its wall: 1.9 mm (50 mL beaker), 2.6 (250 mL beaker), 2.1 (conical flask), 3.5 (bottle) | The one supplier's 250 mL beaker below (a floor of 2.6 to a side of 1.1), as a ratio for every vessel; replaces Stage 21's floors (1.9, 2.6, 3.1 by capacity) |
 
