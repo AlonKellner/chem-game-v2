@@ -1,6 +1,7 @@
 {
 	"format": "chem-glassware/1",
 	"note": "Each kind of vessel as its standard makes it (GAME_SPEC §12.3, A vessel's whole shape; docs/DATA_SOURCES.md, Glassware). sizes: the standard's row for a nominal capacity, mm. The rest is what the standard leaves open, calibrated within its words: shares of the outside diameter, or of the neck's, or of the wall; floor_per_wall: a floor as thick as this many walls.",
+	"seals_mm": 40,
 	"kinds": [
 		{
 			"name": "beaker",
@@ -11,7 +12,9 @@
 			],
 			"brim": 0.10,
 			"flare_rise": 2.3,
-			"floor_per_wall": 2.36
+			"floor_per_wall": 2.36,
+			"pour_ml_s": 25,
+			"cap_bore_mm": 4
 		},
 		{
 			"name": "conical_flask",
@@ -22,7 +25,9 @@
 			"corner": 0.175,
 			"neck_length": 1.125,
 			"shoulder": 0.333,
-			"floor_per_wall": 2.36
+			"floor_per_wall": 2.36,
+			"pour_ml_s": 12,
+			"cap_bore_mm": 4
 		},
 		{
 			"name": "bottle",
@@ -33,7 +38,9 @@
 			"corner": 0.10,
 			"shoulder": 0.20,
 			"neck_radius_mm": 2,
-			"floor_per_wall": 2.36
+			"floor_per_wall": 2.36,
+			"pour_ml_s": 15,
+			"cap_bore_mm": 4
 		}
 	]
 }

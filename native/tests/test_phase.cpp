@@ -250,6 +250,42 @@ TEST_CASE("phase: distilled water runs into the beaker, and it is water alone (S
 	MESSAGE("distilled " << (liquid - left) * 18.015 << " g in ten minutes; " << collected * 18.015 << " g in the beaker; condenser at " << t - 273.15 << " C");
 }
 
+TEST_CASE("phase: a drain with a rate runs at most its rate's volume a step, its solutes in proportion, and its solids only where it passes them (Stage 27)") {
+	// 2 mol of water (36 mL) with a little copper sulfate dissolved and malachite at rest, over an open cell
+	World::Builder b(builtin_species());
+	const CellId upper = b.add_cell("upper");
+	const CellId lower = b.add_cell("lower");
+	b.add_edge(upper, lower, PHASES_GAS);
+	const EdgeId drain = b.add_drain(upper, lower);
+	b.set_amount(upper, builtin::water, mol(2.0)).set_amount(upper, builtin::copper_sulfate_aq, mol(0.01)).set_amount(upper, builtin::malachite, mol(0.02));
+	b.set_amount(upper, builtin::nitrogen, mol(0.01)).set_temperature(upper, 293.15);
+	b.set_amount(lower, builtin::nitrogen, mol(10.0)).set_temperature(lower, 293.15);
+	Simulation sim(build(b), shipped());
+	sim.set_checking(true);
+	const double rate = 6e-6; // 6 mL a second: 0.1 mL a step
+	REQUIRE(sim.world().set_drain(drain, rate, false) == Refusal::None);
+	sim.step();
+	// its share of the liquid: the rate's volume of the 36 mL; its solute in the same share (the water that ran
+	// partly evaporates into the dry gas below; what is dissolved does not)
+	const double share_of_liquid = rate * STEP_SECONDS / (2.0 * water().molar_volume);
+	CHECK(sim.world().amount(lower, builtin::copper_sulfate_aq).mol() == doctest::Approx(0.01 * share_of_liquid).epsilon(2e-2));
+	CHECK(sim.world().amount(upper, builtin::water).mol() == doctest::Approx(2.0 * (1.0 - share_of_liquid)).epsilon(1e-4));
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() == 0.0);
+	// passing solids: the same share of them
+	REQUIRE(sim.world().set_drain(drain, rate, true) == Refusal::None);
+	const double water_before = sim.world().amount(upper, builtin::water).mol(), malachite_before = sim.world().amount(upper, builtin::malachite).mol();
+	sim.step();
+	const double share = (water_before - sim.world().amount(upper, builtin::water).mol()) / water_before;
+	CHECK(share > 0.0);
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() == doctest::Approx(share * malachite_before).epsilon(1e-3));
+	// all of it again, below 0
+	REQUIRE(sim.world().set_drain(drain, -1.0, false) == Refusal::None);
+	sim.step();
+	CHECK(sim.world().amount(upper, builtin::water).mol() == 0.0);
+	// only a drain has a rate
+	CHECK(sim.world().set_drain(EdgeId{ 0 }, rate, false) == Refusal::UnknownEdge);
+}
+
 TEST_CASE("phase: a drain fills a rigid cell and no further (Stage 5)") {
 	// 2 mol of water (36 mL) above a 20 mL vessel
 	World::Builder b(builtin_species());

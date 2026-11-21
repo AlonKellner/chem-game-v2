@@ -186,7 +186,7 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 		if (rig.follow) {
 			// a controller's: its level, or its PWM, as it was at the end of the step before, every step
 			if (source != nullptr && source->kind == PartKind::Controller) {
-				out.actions.push_back(RigAction{ r, rig.control == "valve" ? source->level : source->pulse ? 1.0 : 0.0, true });
+				out.actions.push_back(RigAction{ r, rig.control == "valve" || rig.control == "cap" ? source->level : source->pulse ? 1.0 : 0.0, true });
 			}
 			continue;
 		}

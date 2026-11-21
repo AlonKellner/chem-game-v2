@@ -204,6 +204,10 @@
 			"tests": ["capacity: the standards' own volumes", "glassware: a profile is one smooth line"]
 		},
 		{
+			"data": ["glassware.json/kinds/{beaker,conical_flask,bottle}/{pour_ml_s,cap_bore_mm}", "glassware.json/seals_mm"],
+			"design": "pouring and fitting (Stage 27): a held pour's rate at full tilt by the mouth (a beaker's lip faster than a neck), the bore of the cap that fits each mouth, the widest mouth a balloon's or a condenser's fitting seals"
+		},
+		{
 			"data": ["sessions/demo.json/**", "tutorials/demo.json/**"],
 			"design": "scripts of the demo: waits, settings and checks"
 		}

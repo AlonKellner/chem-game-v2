@@ -150,9 +150,8 @@ TEST_CASE("lab: a refused command says why and changes nothing (Stage 7)") {
 		{ R"({"do": "heat", "burner": "flask", "vessel": "flask"})", "not a burner" },
 		{ R"({"do": "heat", "burner": "burner", "vessel": "kettle"})", "no \"kettle\"" },
 		{ R"({"do": "valve", "burner": "burner", "to": 2})", "between 0 and 1" },
-		{ R"({"do": "pour", "from": "flask", "to": "beaker", "all": true})", "nothing of that" },
+		{ R"({"do": "pour", "from": "flask", "to": "beaker", "all": true})", "holds no liquid" },
 		{ R"({"do": "pour", "from": "acid", "to": "flask", "ml": 900})", "does not hold that much" },
-		{ R"({"do": "pour", "from": "acid", "to": "jar", "ml": 200})", "does not fit" },
 		{ R"({"do": "pour", "from": "acid", "to": "acid", "all": true})", "itself" },
 		{ R"({"do": "pour", "from": "acid", "to": "flask"})", "\"ml\" or \"all\"" },
 		{ R"({"do": "tip", "from": "jar", "to": "flask", "species": "water", "all": true})", "not a solid" },
@@ -218,9 +217,11 @@ TEST_CASE("lab: pouring and tipping move exactly what was asked, with its heat (
 	const double share = 50.0 / (240.5 / 0.997048);
 	// (a few milligrams of the water are vapour over each liquid by now)
 	CHECK(grams(item(report, "flask"), "water") + grams(item(report, "flask"), "steam") == doctest::Approx(240.5 * share).epsilon(1e-4));
-	CHECK(grams(item(report, "flask"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * share).epsilon(1e-6));
+	// (the pour takes seconds, Stage 27: a little water evaporates from what is left meanwhile, and the last drops
+	// are that much stronger)
+	CHECK(grams(item(report, "flask"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * share).epsilon(1e-4));
 	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5 * (1.0 - share)).epsilon(1e-4));
-	CHECK(grams(item(report, "acid"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * (1.0 - share)).epsilon(1e-6));
+	CHECK(grams(item(report, "acid"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * (1.0 - share)).epsilon(1e-4));
 	CHECK(grams(item(report, "beaker"), "malachite") == doctest::Approx(2.0).epsilon(1e-9));
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(3.0).epsilon(1e-9));
 	// the powder's grains went with it, in proportion

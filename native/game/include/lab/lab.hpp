@@ -40,6 +40,11 @@ struct ItemView {
 	int under = -1; // a burner: index of the vessel over it
 	int holds = -1; // a vessel: index of what is on its mouth
 	int drains_to = -1; // a vessel: index of what stands under its outlet
+	// pouring (GAME_SPEC §13, Stage 27): the vessel it pours into (index; -1: none), held or upside down with a
+	// cap; a held pour's tilt (its share of the full), the cap's opening
+	int pours_into = -1;
+	bool inverted = false;
+	double tilt = 0.0, cap = 0.0;
 	bool condenser = false; // a vessel with a coolant
 	bool stirred = false;
 	bool submitted = false;

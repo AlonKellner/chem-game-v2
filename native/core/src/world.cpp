@@ -563,6 +563,19 @@ Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {
 	return Refusal::None;
 }
 
+Refusal World::set_drain(EdgeId edge, double rate, bool solids) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open || !edges_[static_cast<size_t>(edge.index)].drain) {
+		return Refusal::UnknownEdge;
+	}
+	Edge &e = edges_[static_cast<size_t>(edge.index)];
+	e.rate = rate;
+	e.phases = solids ? static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid)) : PHASES_LIQUID;
+	return Refusal::None;
+}
+
 Refusal World::disconnect(EdgeId edge) {
 	if (!ledger_.empty()) {
 		return Refusal::MidStep;

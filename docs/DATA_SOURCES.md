@@ -465,6 +465,21 @@ fast `T / 20`, never under `theta`), the least delay (two steps), the PWM period
 to 10 min) and the trial's end (half again the distance to the target, levelled off, or an hour).
 The closed loop is held by `controller: water in the flask held at 60 C ...`.
 
+## Pouring: an orifice (Stage 27)
+
+A vessel set upside down pours through its cap as a sharp-edged orifice under the head of its liquid
+(`native/game/src/lab.cpp`, GAME_SPEC §13): `Q = open × Cd × a × sqrt(2 g h)`, Torricelli's law with a
+discharge coefficient.
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| Discharge coefficient of a sharp-edged circular orifice | `Cd` = 0.61 | The standard textbook value, 0.60 to 0.62 for a sharp-edged orifice at high Reynolds number (e.g. F. M. White, *Fluid Mechanics*, the orifice's vena contracta, contraction ≈ 0.61, velocity ≈ 0.98–0.99) | `pour: upside down, its cap is an orifice ...`: one second's flow at the bottle's head against the law |
+| Gravity | 9.80665 m/s² | standard gravity (CGPM 1901) | the same |
+
+Chosen for the game (`data/glassware.json`, design in `data/sources.json`): each mouth's held-pour
+rate at full tilt (a beaker 25 mL/s, a flask 12, a bottle 15), the cap's bore (4 mm), the widest
+mouth a balloon's or a condenser's fitting seals (40 mm).
+
 ## Constants
 
 CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).

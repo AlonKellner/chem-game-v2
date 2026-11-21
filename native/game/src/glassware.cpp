@@ -255,6 +255,31 @@ double Vessel::level(double cm3) const {
 	return 0.5 * (lo + hi);
 }
 
+double Vessel::mouth() const {
+	return radius_inside(height - 1e-6);
+}
+
+double Vessel::head_inverted(double cm3) const {
+	// upside down, what it holds lies from its mouth: the depth over the mouth that holds cm3
+	if (cm3 <= 0.0) {
+		return 0.0;
+	}
+	const double all = capacity();
+	if (cm3 >= all) {
+		return height - floor;
+	}
+	double lo = 0.0, hi = height - floor;
+	for (int i = 0; i < 70; ++i) {
+		const double mid = 0.5 * (lo + hi);
+		((all - volume_below(height - mid)) < cm3 ? lo : hi) = mid;
+	}
+	return 0.5 * (lo + hi);
+}
+
+double seals() {
+	return table().at("seals_mm").get<double>() / 10.0;
+}
+
 double Vessel::radius_outside(double y) const {
 	return radius_on(outside, y);
 }
@@ -329,6 +354,8 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	v.height = mm("height_mm");
 	v.wall = mm("wall_mm");
 	v.floor = v.wall * k->at("floor_per_wall").get<double>();
+	v.pour_ml_s = k->at("pour_ml_s").get<double>();
+	v.cap_bore = k->at("cap_bore_mm").get<double>() / 10.0;
 	const double R = 0.5 * v.diameter, H = v.height, t = v.wall, f = v.floor;
 	std::vector<Corner> c;
 	std::vector<Piece> top; // what follows the polyline outside: a neck's bead
