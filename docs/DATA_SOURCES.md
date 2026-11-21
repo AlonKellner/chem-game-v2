@@ -384,6 +384,30 @@ by eye; measured spectra are a later stage).
 | A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
 | A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
 
+**Glassware (Stage 24)** (`data/glassware.json`): each vessel is made to its standard. Read
+2026-11-21 from the standards' own preview pages (standards.iteh.ai: the scanned pages rendered and
+read by eye, ISO 4796-1's from its text), every number as printed; each kind is held to its
+standard's capacity rule by `capacity: the standards' own volumes`, and each row is read back by
+`glassware: every kind's rows are its standard's`.
+
+| Kind | Standard | Row used | Rules used |
+|---|---|---|---|
+| Low-form beaker | ISO 3819:1985, *Laboratory glassware — Beakers*, Table "Basic dimensions" (the same figures, heights within 2 mm, in ISO 3819:2015's table as reproduced by Wikipedia's "Beaker (glassware)", citing DIN EN ISO 3819:2015-12) | 50 mL: outside diameter 42, overall height 60, least wall 0.8 mm; 250 mL: 70, 95, 1.1 mm (tolerances ±5 %, §8.2) | §5: the overflow capacity exceeds the nominal by 10 %, or the nominal level is at least 10 mm under the overflow, whichever is the greater; §7.2: the side "slightly flared near the brim in a smooth and regular curve", the brim's diameter "of the order of 5 to 15 % greater than the diameter of the body", its edge "finished in a plane parallel with that of the base"; §8.3: an external radius at the junction of base and side of 15 to 20 % of the external diameter from 250 mL, at least 5 % below |
+| Conical flask | ISO 1773:1997, *Laboratory glassware — Narrow-necked boiling flasks*, Table 1 | 250 mL: the body's outside diameter at its widest 85 ± 2, the neck's outside diameter 34 ± 1.5, overall height 145 ± 3, least wall 0.9 mm | §3.2: the nominal capacity is the series value nearest to but not above the real volume to the base of the neck (the series 25, 50, 100, 250, 500 …); §3.4.2: the neck's top "suitably reinforced"; §3.5.2: the neck 1 to 1.25 times its outside diameter long; §3.5.3: the radius where base meets side 15 to 20 % of the greatest outside diameter |
+| Screw-neck bottle | ISO 4796-1:2016, *Laboratory glassware — Bottles — Part 1: Screw-neck bottles*, Table 1 | 500 mL: total height 176, height to shoulder 110, outside diameter 86 (all "approx."), least wall 1.5 mm, inside neck diameter at least 27 mm | §3.2: the nominal capacity is what a bottle of average wall holds filled to the turn of the shoulder; §3.3: to the base of the neck about 15 % more; §5.2.2: a radius at the base, the side cylindrical (25 mL to 2 L); §5.2.3: a radius at the shoulder; §5.2.4: the upper portion conical, met by the neck in as small a radius as manufacture allows; §5.2.6: the neck finished with a strengthening lip. A 500 mL bottle's thread is GL 45 (DURAN's catalogue, dwk.com, 500 mL GL 45, 86 mm across) |
+
+Calibrated, within the standards' words (**low confidence**: chosen for a plausible vessel, to be judged by eye):
+
+| Value | Chosen | Basis |
+|---|---|---|
+| A beaker's brim | 10 % wider than its body (the middle of 5 to 15 %), flared over a rise of 2.3 times the widening, in one arc tangent to the side | ISO 3819 §7.2 gives the widening, not the curve; the rise makes the brim leave at about 47° |
+| A beaker's base corner | 17.5 % of the diameter at 250 mL (the middle of 15 to 20 %); 10 % at 50 mL (at least 5 %) | ISO 3819 §8.3 |
+| A flask's base corner | 17.5 % of the greatest diameter | ISO 1773 §3.5.3: 15 to 20 % |
+| A flask's neck | 1.125 times its outside diameter long (the middle of 1 to 1.25); met by the cone in an arc of a third of the neck's diameter; a bead on its top, a half-round as thick as twice the wall | ISO 1773 §3.4.2, §3.5.2 |
+| A bottle's neck | outside 45 mm (GL 45), inside 33 mm (at least 27), 25 mm high, with a bead like the flask's | ISO 4796-1 Table 1, §5.2.6; the thread's own dimensions (DIN 168-1) not read |
+| A bottle's radii | at the base 10 % of its diameter; at the shoulder 20 %; where the cone meets the neck 2 mm | ISO 4796-1 §5.2.2 to §5.2.4 ("suitable", "as small as possible") |
+| A vessel's floor | 2.36 times its wall: 1.9 mm (50 mL beaker), 2.6 (250 mL beaker), 2.1 (conical flask), 3.5 (bottle) | The one supplier's 250 mL beaker below (a floor of 2.6 to a side of 1.1), as a ratio for every vessel; replaces Stage 21's floors (1.9, 2.6, 3.1 by capacity) |
+
 **Calibrated equipment** (`data/benches/`): none is measured or checked against a source; each was
 chosen when the bench was built, so that the demo runs at a pace a person can follow.
 
