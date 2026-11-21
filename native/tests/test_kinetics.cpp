@@ -126,21 +126,22 @@ TEST_CASE("kinetics: malformed kinetics are refused (Stage 3)") {
 }
 
 TEST_CASE("kinetics: at a held temperature malachite decays exponentially at its Arrhenius rate (Stage 3)") {
-	// a trace of malachite in a large glass ballast held at 600 K: the heat of
+	// a trace of malachite in a large glass ballast held at 550 K: the heat of
 	// the reaction moves the temperature by microkelvins, far from equilibrium
 	World::Builder b(builtin_species());
 	const CellId cell = b.add_cell("cell");
-	const CellId bath = b.add_reservoir("bath", 600.0);
+	const CellId bath = b.add_reservoir("bath", 550.0);
 	b.add_edge(cell, bath, PHASES_NONE, 1e6);
 	b.set_amount(cell, builtin::malachite, mol(1e-6)).set_amount(cell, builtin::glass, mol(100.0)).set_amount(cell, builtin::nitrogen, mol(1.0));
-	b.set_temperature(cell, 600.0);
+	b.set_temperature(cell, 550.0);
 	Simulation sim(build(b), shipped());
 	sim.set_checking(true);
-	const double k = 4.7e10 * std::exp(-150000.0 / (GAS_CONSTANT * 600.0)); // about 4e-3 /s
+	const Kinetics &law = decomposition().kinetics();
+	const double k = law.prefactor * std::exp(-law.activation / (GAS_CONSTANT * 550.0)); // about 6e-3 /s
 	const double n0 = sim.world().amount(cell, builtin::malachite).mol();
 	const Totals genesis = totals(builtin_species(), sim.world().snapshot());
 	double worst = 0.0;
-	for (int step = 1; step <= 60000; ++step) { // 1000 s: four time constants
+	for (int step = 1; step <= 60000; ++step) { // 1000 s: six time constants
 		sim.step();
 		if (step % 3000 == 0) {
 			const double expected = n0 * std::exp(-k * step * STEP_SECONDS);
@@ -150,7 +151,7 @@ TEST_CASE("kinetics: at a held temperature malachite decays exponentially at its
 	CHECK(worst < 1e-6);
 	CHECK(sim.world().amount(cell, builtin::copper_oxide).quanta == 2 * (mol(1e-6).quanta - sim.world().amount(cell, builtin::malachite).quanta));
 	CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
-	MESSAGE("first-order decay at 600 K: k = " << k << " /s, worst error " << worst << " of the initial amount");
+	MESSAGE("first-order decay at 550 K: k = " << k << " /s, worst error " << worst << " of the initial amount");
 }
 
 TEST_CASE("kinetics: a reaction that could finish a million times over in one step simply finishes (Stage 3)") {
@@ -329,7 +330,7 @@ TEST_CASE("kinetics: halving the step halves the error (Stage 3)") {
 		Flask f = heated_flask(0.02);
 		Simulation sim(std::move(f.world), shipped());
 		sim.set_step_seconds(h);
-		const int steps = static_cast<int>(std::lround(128.0 / h));
+		const int steps = static_cast<int>(std::lround(64.0 / h));
 		for (int i = 0; i < steps; ++i) {
 			sim.step();
 		}
@@ -346,6 +347,6 @@ TEST_CASE("kinetics: halving the step halves the error (Stage 3)") {
 	// at the game's step the splitting error is that of a time shift of about one step
 	const double game = std::abs(left_after(STEP_SECONDS) - reference) / reference;
 	CHECK(game < 3e-3);
-	MESSAGE("convergence at 128 s: " << reference << " mol left; errors at h = 4, 2, 1 s: " << coarse << ", " << medium << ", " << fine
+	MESSAGE("convergence at 64 s: " << reference << " mol left; errors at h = 4, 2, 1 s: " << coarse << ", " << medium << ", " << fine
 										   << "; relative error at the game's step: " << game);
 }

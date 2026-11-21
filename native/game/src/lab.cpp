@@ -2578,12 +2578,22 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	const auto in = static_cast<size_t>(k.in.index);
 	const double mol = static_cast<double>(state.amount[in]) * MOL_PER_QUANTUM;
 	const double area = 4.835975862049409 * std::cbrt(static_cast<double>(state.particles[in])) * std::pow(mol * solid.molar_volume, 2.0 / 3.0); // m^2
-	std::string says = text_of("limited by its surface: %.3g cm2 of ", area * 1e4) + named(table, k.in);
-	if (table.has(k.driver)) {
-		says += text_of(", %.3g mol/kg of ", activity(table, state, k.driver)) + named(table, k.driver);
-	}
+	// which of its two steps holds it back (GAME_SPEC §7): the reaction at the surface, or transport to it
 	const double mixing = world.meta(cell).mixing;
-	says += mixing < 3.0 ? text_of("; stirring would make it %.0f times faster", 3.0 / mixing) : std::string("; stirred");
+	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, mixing);
+	const bool by_transport = steps.transported && steps.transport < steps.surface;
+	const bool alike = steps.transported && steps.transport < 3.0 * steps.surface && steps.surface < 3.0 * steps.transport;
+	std::string says = alike ? "limited by its surface and by transport to it alike: " : by_transport ? "limited by transport to its surface: " : "limited at its surface: ";
+	says += text_of("%.3g cm2 of ", area * 1e4) + named(table, k.in);
+	if (table.has(k.driver)) {
+		says += text_of(", %.3g mol/kg of ", molality(table, state, k.driver)) + named(table, k.driver);
+	}
+	if (mixing < STIRRED) {
+		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED).both / steps.both : 1.0;
+		says += faster < 1.05 ? std::string("; stirring would hardly speed it") : text_of("; stirring would make it %.1f times faster", faster);
+	} else {
+		says += "; stirred";
+	}
 	return says;
 }
 

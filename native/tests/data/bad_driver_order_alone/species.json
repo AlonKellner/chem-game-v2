@@ -1,0 +1,7 @@
+{"format": "chem-species/1", "species": [
+	{"id": "water", "formula": "H2O", "phase": "l"},
+	{"id": "hydrogen", "formula": "H2", "phase": "g"},
+	{"id": "oxygen", "formula": "O2", "phase": "g"},
+	{"id": "cupric", "formula": "Cu", "phase": "aq", "charge": 2},
+	{"id": "copper", "formula": "Cu", "phase": "s"}
+]}

@@ -184,19 +184,32 @@ The game uses 2.7 for CuSO4(aq) and 35.7 for H2SO4(aq): each taken where the dem
   colourless" (CuSO4), from COD 7061267–7061269.
 - No reliable source describes the monohydrate as a powder.
 
-## Calibrated kinetics (Stage 6)
+## Measured kinetics (Stage 23)
 
-None of these is measured. Each is chosen so the demo plays in minutes, and is labelled here and
-in GAME_SPEC §20.
+Each rate from a measurement, read 2026-11-21, with an oracle test at the source's own conditions
+(`native/tests/test_measured.cpp`). The fits were made through the model itself: its own
+solubility, activities and affinity (GAME_SPEC §7).
 
-| Process | Law | Parameters | Gives |
+| Process | Law | Parameters | Source and fit | Confidence |
+|---|---|---|---|---|
+| Malachite decomposing | first order in malachite | 6.05e11 /s, Ea 147.6 kJ/mol | Aoki, Yamamoto and Koga, *PCCP* 23, 15107 (2021), ESI Table S2: the second, main step (about 75% of the mass loss; Šesták–Berggren exponents m −0.13, n 1.04, p 0.75, close to first order), 5 mg in dry N₂. The first step (1.15e12 /s, 25% of the loss) is left out. Oracle: their isothermal run at 498 K, α = 0.99 after 589 min (ESI Fig. S8): 0.9991 | high |
+| CuO dissolving in sulfuric acid | at the surface, half order in the acid's molality; transport in series | 1.1417e8 mol/m²/s, Ea 69 kJ/mol | 2.5e-7 mol/cm²/min (4.17e-5 mol/m²/s) in 0.2 M acid at 25 °C, a rotating disk (Nicol and Akilan, *Hydrometallurgy* 178, 7, 2018, Table 4, citing Majima et al., *Metall. Trans. B* 11, 209, 1980); half order in H⁺ for H₂SO₄, surface controlled, independent of agitation (Majima's abstract). k(25 °C) = 4.17e-5 / 0.2^½ = 9.317e-5; Ea the middle of the abstract's 52–86 kJ/mol across four acids (which is sulfuric acid's is not said). Oracle: 4.17e-5 at Majima's conditions, twice it at four times the acid, stirring under 1% faster for 10 µm grains | **low**: second-hand, the table's time unit doubtful (its malachite entry is five times another of Nicol's), and the order is in H⁺'s activity there, the acid's concentration here |
+| Pentahydrate growing and dissolving | at the surface, transport in series | 3.105e8 mol/m²/s, Ea 58.79 kJ/mol | Tanimoto, Kobayashi and Fujita, *Kagaku Kogaku* 27, 424 (1963): the surface step N = kr (C − C_s), kr = 0.030, 0.063, 0.120 m/h at 20, 30, 40 °C (Table 1), in series with mass transfer (Eqs. 3, 4, 13). Fit: k_s = kr ΔC / f(A) at 1% over the model's saturation at each temperature (0.01027, 0.02349, 0.04789 mol/m²/s), then Arrhenius through the three (within 2.2%). Oracle: kr ΔC at each, within 3% | high for 20–40 °C; used at every temperature |
+| Pentahydrate nucleating | with the above | 0.3269 per kg of water per second × (S − 1)^3.109, S = e^(A/RT) | Sheng, PhD thesis, Leeds (2012), Table 5.2: induction times 6,120–7,200 s at S = 1.080 (26 °C), 10,600–20,000 s at 1.058 (27 °C), 68,000–84,000 s at 1.036 (28 °C), a litre saturated at 30 °C. Fit: each as one nucleus in 0.98 kg of water over the geometric mean time; S converted to the model's activity ratio at Sheng's concentration (the model's own S there is 1.0787, 1.0585, 1.0387). Least squares through the three (within 12%) | **medium, a lower bound**: a nucleus must grow before it is seen, so the true rate is higher; extrapolated far past S = 1.09. Lyall et al. (2004) give a metastable zone of 3–4 °C at 0.2–0.55 °C/min and an order near 1.7; Tanimoto et al. (1962) first nucleation near 3.5 wt% over saturation |
+| The trihydrate, monohydrate and anhydrous salt growing, dissolving and nucleating | surface, with nucleation | the pentahydrate's | no source gives them apart | **calibrated**: assumed equal |
+| The hydrates losing water, 5 → 3, 3 → 1, 1 → 0 | first order | Ea 71.26, 112.12, 165.23 kJ/mol; prefactors 1.926e8, 1.1198e13, 2.4291e14 /s | Ea: Cheng et al., *J. Therm. Anal. Calorim.* 135, 2697 (2019), abstract (n-th order, Ozawa and nonlinear regression; n 0.09, 0.18, 0.90). Each prefactor puts the step's first-order peak, k = β Ea / (R Tp²), at its DTG peak at 10 °C/min: 363.14, 393.39, 529.08 K (Yu Yuye, *Asian J. Chem.* 19, 2023, 2007, Table 2, 5–10 mg in flowing nitrogen). Cheng's own log₁₀ A (8.40, 13.23, 15.09) are within a factor of 1.3, 1.5 and 5.1 of these | medium |
+
+| Transport | Value | Source | Check |
 |---|---|---|---|
-| CuO dissolving in the acid | surface, driven by the acid's molality | 1.15e6 mol/m²/s, Ea 50 kJ/mol | 3.6 g in 2.5 million grains under 100 mL of 1 M acid: 99% gone in 37 min at 20 °C still, 11 min stirred (×3), 3 min warmed and stirred |
-| Pentahydrate growing and dissolving | surface | 3e-2 mol/m²/s, no activation energy | a crop finished about ten minutes after the burner goes off |
-| Pentahydrate nucleating | with the above | 2e6 per kg of water per second × (S − 1)³ | about 140,000 crystals of 0.3 mm from the demo's flask |
-| Pentahydrate losing its water (Stage 6, replaced) | first order, 5 → 0 | 7.5e7 /s, Ea 80 kJ/mol | 1e-2 /s at 150 °C, 5e-4 /s at 100 °C, a half-life of nine hours at 60 °C |
-| The trihydrate, monohydrate and anhydrous salt growing, dissolving and nucleating (Stage 19) | surface, with nucleation | the pentahydrate's: 3e-2 mol/m²/s, 2e6 per kg per second × (S − 1)³ | no source gives them apart |
-| The hydrates losing water, 5 → 3, 3 → 1, 1 → 0 (Stage 19) | first order | Ea 80 kJ/mol for each; prefactors 3.9e9, 4.3e8 and 4.5e5 /s | each step's rate constant at its DTG peak is the first-order peak condition at 10 °C/min, k = β Ea / (R Tp²): peaks at 90.0, 120.2 and 255.9 °C (Yu Yuye, *Asian J. Chem.* 19, 2023, 2007, Table 2, 5–10 mg in flowing nitrogen) |
+| Ions' diffusion coefficients in water at infinite dilution, 25 °C (`data/solutions.json`, `diffusion`) | H⁺ 9.31e-9, Cu²⁺ 7.33e-10, SO₄²⁻ 1.07e-9 m²/s | Li and Gregory, *Geochim. Cosmochim. Acta* 38, 703 (1974), Table 1 | Nernst–Hartley gives CuSO₄ 8.70e-10 and H₂SO₄ 2.61e-9 m²/s: `measured: water's viscosity, and the ions' diffusion` |
+| Water's viscosity, 0.01–150 °C (`data/solutions.json`, `viscosity`) | 17 points, 1.7902 mPa·s at 0.01 °C to 0.18262 at 150 °C; 0.88997 at 25 °C | NIST Chemistry WebBook, fluid properties at 0.5 MPa (Huber et al., IAPWS 2008, *J. Phys. Chem. Ref. Data* 38, 101, 2009), read 2026-11-21 | 45 °C read between points, 0.5973, against the WebBook's 0.59584 (0.25%) |
+| The Sherwood number | 2, times the stirring (3 stirred) | a sphere in still liquid, the diffusion limit | **calibrated**: no convection; stirring's factor is the game's |
+
+The kinetics calibrated for play before Stage 23, for the record: the oxide 1.15e6 mol/m²/s with
+Ea 50 kJ/mol, times the stirring; every hydrate's growth 3e-2 mol/m²/s with no activation energy,
+and nucleation 2e6 per kg per second × (S − 1)³ (about 140,000 crystals of 0.3 mm from the demo's
+flask, against about 1,150 of 1.9 mm now); the dehydrations Ea 80 kJ/mol each; malachite's
+prefactor 4.7e10 /s with Ea 150 kJ/mol.
 
 Dehydration temperatures in air, for comparison: two waters lost at 63 °C, two more at 109 °C,
 the last at 200 °C (Galwey and Green 1999; Wiberg 2001; as cited by Wikipedia).
@@ -226,7 +239,7 @@ does not change the demo.
 
 | Reaction | Law | Parameters | Source |
 |---|---|---|---|
-| Malachite decomposition | first order in malachite | Ea = 150 kJ/mol; prefactor 4.7e10 /s | Order about one and Ea 131–159 kJ/mol (31.4–38.1 kcal/mol) from thermogravimetry: *Canadian Mineralogist* 13, 127 (rruff.info/uploads/CM13_127.pdf). Ea is taken inside that range. **The prefactor is calibrated for play**, not measured: it gives rate constants of 1e-3 /s at 300 °C and 1.3e-2 /s at 350 °C, so 5 g decomposes in minutes over a burner |
+| Malachite decomposition | first order in malachite | Ea = 147.6 kJ/mol; prefactor 6.05e11 /s (Stage 23, above) | Koga's, inside the 131–159 kJ/mol (31.4–38.1 kcal/mol) of Seguin, *Canadian Mineralogist* 13, 127 (1975), whose rate constants are only drawn |
 
 **Oracle checked in Stage 5:** water's saturation properties, NIST Chemistry WebBook (IAPWS-95,
 Wagner and Pruss 2002), retrieved 2026-11-16, against what the table implies:
@@ -289,16 +302,22 @@ recall is uncertain), **low** (estimate or game calibration).
 | Water's refractive index n(λ), 20 °C (`media.json`, `indices`) | Daimon and Masumura (2007), Appl. Opt. 46, 3811: a four-term Sellmeier formula, 182–1129 nm, as given by refractiveindex.info (read 2026-11-17) | n at 589.3 nm comes out 1.3330 (the handbook's 1.3330 at 20 °C): `refraction: the indices` |
 | Borosilicate glass 3.3 (lab glassware: DURAN, Pyrex, BOROFLOAT 33): refractive index at six wavelengths, 435.8–656.3 nm; density 2.23 g/cm³ (`media.json`, `indices`) | SCHOTT BOROFLOAT 33 technical details (schott.com, read 2026-11-17): n = 1.48015, 1.47676, 1.47311, 1.47133, 1.46953, 1.46916; nd 1.47140; νe 65.41 ("reference values, not guaranteed") | A Cauchy fit (n = A + B/λ² + C/λ⁴) at build, within 2e-4 of every tabulated value; nd and νe come back: `refraction: the indices` |
 | Dense flint glass N-SF11 (the prism demo; `media.json`, `materials`): a three-term Sellmeier formula, 390–2500 nm (380–390 nm extrapolated) | SCHOTT Zemax catalogue 2017-01-20b, as given by refractiveindex.info (read 2026-11-17): B 1.73848403, 0.311168974, 1.17490871; C 0.0136068604, 0.0615960463, 121.922711 µm²; nd 1.78472, Vd 25.76 | n at 589.3 nm within 5e-4 of nd; a 60° prism's least deviation comes out 2 asin(n sin 30°) − 60°: `refraction: a 60-degree prism` |
+| Malachite, diffuse reflectance, 380–780 nm every 10 nm (`malachite.csv`; Stage 23) | USGS Spectral Library Version 7 (Kokaly et al. 2017, USGS Data Series 1035, doi:10.3133/ds1035; data doi:10.5066/F7RR1WDJ; public domain), splib07a Record 18922, "Malachite GDS801 synthetic" (Kremer Pigments dry powdered pigment), ASD FR spectrometer, absolute reflectance, 1 nm; spectral purity code 1a. Read 2026-11-21 from a mirror of the ASCII release (the USGS servers refused the connection), and read again independently by a second reader: the two agree at every 20 nm | Peaks at 0.40 near 520 nm as other samples do (a natural Bisbee sample 0.23, a synthetic Aldrich sample under 45 µm 0.47, ECOSTRESS C-7A 0.71: levels differ with grain size and sample). **High confidence for this sample**; a powder's level depends on its grain; every published row the model reads back: `measured: malachite reflects as the USGS library's GDS801` |
+| Copper sulfate solution, molar absorption coefficient (decadic), 350–750 nm (`copper_sulfate_aq.csv`; Stage 23) | NBS Circular 484 (K. S. Gibson, *Spectrophotometry (200 to 1,000 millimicrons)*, 1949), Table 4: the copper sulfate standard, 20.000 g CuSO₄·5H₂O and 10.0 ml H₂SO₄ (sp. gr. 1.835) a litre, 10.00 mm, 25 °C, absorbancy against the solvent, every 10 nm (after Davis and Gibson, NBS Misc. Publ. M114, 1931, Table 5: Beer's law holds from 5 to 40 g/l). Divided by 0.07986 mol/L (the salt assayed at 99.7 % of its copper) and 1 cm. Read 2026-11-21 by transcription from three scanned copies (Circular 484, NBS LC-1017 and its 1967 revision), each row checked against T = 10^−A; not read by eye here (the scans could not be rendered) | 750 nm gives 10.2, leading into 12.05 at 790 nm measured apart (Davenet et al., arXiv:2512.01458, 2025); peak near 805–815 nm (Qiu et al., PCCP 2015; Fonseca et al., J. Biomed. Opt. 22, 125007, 2017). **High confidence 550–750 nm; low below 500 nm**, where the absorbancy (0.001 to 0.009) is near its stated uncertainty (0.001). The Gaussian it replaces absorbed a third too much on the band's short side (3.9 against 2.8 at 650 nm); NBS's absorbancies from the model's own spectrum, 380–750 nm, and the interpolation to 790 nm: `measured: the copper sulfate standard's absorbancy is NBS Circular 484's` |
+| Copper sulfate solution, 760–780 nm | Straight between NBS's 750 nm (10.23) and Davenet et al.'s 12.05 at 790 nm (Table 2: nine solutions, a regression). **Interpolated, not measured**; the eye weighs these wavelengths at under a hundredth of 555 nm's | |
 | Water as an absorber | The coefficients above, summed (scattering counted as loss from the beam), over water's own 55.345 mol/L (997.05 g/L at 25 °C over 18.015 g/mol), as a decadic molar absorptivity: so a solution's water absorbs as much as there is of it | Not modelled: in-scattered light, the temperature dependence of a (at most 0.012 /m/°C, near 740 nm) |
 
 **Calibrated media** (`data/optics/media.json`). None of these spectra is measured: each is a
 simple shape placed so that the substance has the colour it is known to have. The numbers quoted
 as literature are from memory and were not checked against a source.
 
+Searched and **not found measured** (Stage 23: USGS splib07a, RELAB, ECOSTRESS, SSHADE, the
+Winnipeg C-TAPE workbooks, CSIRO, RRUFF, the literature): visible reflectance of CuO (tenorite), of
+the pentahydrate, the trihydrate, the monohydrate and the anhydrous salt, and of a red latex
+balloon. These stay calibrated:
+
 | Medium | Model | Basis | Confidence |
 |---|---|---|---|
-| CuSO₄(aq) | One Gaussian in wavenumber: centre 12,400 cm⁻¹ (806 nm), FWHM 4,700 cm⁻¹, peak ε 12 L/mol/cm | The d–d band of Cu(H₂O)₆²⁺: maximum near 800–810 nm with ε about 12 | peak medium, width low |
-| Malachite | Diffuse reflectance 0.06 plus a Gaussian of 0.42 at 525 nm (width 45 nm) | A green mineral pigment | low |
 | CuO | Diffuse reflectance 0.035, flat | A black powder | low |
 | CuSO₄·5H₂O | Diffuse reflectance 0.05 plus a Gaussian of 0.5 at 465 nm (width 55 nm) | Blue crystals | low |
 | CuSO₄·3H₂O | Diffuse reflectance 0.3 plus a Gaussian of 0.4 at 470 nm (width 70 nm) | "Pale blue" (*Handbook of Mineralogy*, bonattite) | low |

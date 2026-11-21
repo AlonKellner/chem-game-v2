@@ -321,6 +321,51 @@ double particle_diameter(const SpeciesTable &table, const CellState &cell, Speci
 	return cbrt(each * 6.0 / 3.14159265358979323846);
 }
 
+double solvent_viscosity(const SpeciesTable &table, double temperature) {
+	const std::vector<ViscosityPoint> &points = table.solution().viscosity;
+	if (points.empty()) {
+		return 0.0;
+	}
+	if (!(temperature > points.front().kelvin)) {
+		return points.front().pascal_seconds;
+	}
+	for (size_t i = 1; i < points.size(); ++i) {
+		if (temperature <= points[i].kelvin) {
+			const ViscosityPoint &a = points[i - 1], &b = points[i];
+			const double along = (temperature - a.kelvin) / (b.kelvin - a.kelvin);
+			return a.pascal_seconds * exp(along * log(b.pascal_seconds / a.pascal_seconds));
+		}
+	}
+	return points.back().pascal_seconds;
+}
+
+double diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {
+	const SpeciesDef &def = table.species(species);
+	if (def.phase != Phase::Aqueous || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	const SolutionDef &solution = table.solution();
+	double count = 0.0, resistance = 0.0;
+	for (const IonCount &ion : def.ions) {
+		if (ion.count <= 0) {
+			break;
+		}
+		const double d = solution.ions[static_cast<size_t>(ion.ion)].diffusion;
+		if (!(d > 0.0)) {
+			return 0.0;
+		}
+		count += ion.count;
+		resistance += ion.count / d;
+	}
+	if (!(count > 0.0)) {
+		return 0.0;
+	}
+	// Stokes-Einstein: D goes as T / viscosity, from its value at 25 C
+	const double at = solvent_viscosity(table, temperature), at25 = solvent_viscosity(table, 298.15);
+	const double scale = at > 0.0 && at25 > 0.0 ? temperature / 298.15 * at25 / at : 1.0;
+	return count / resistance * scale;
+}
+
 bool dry_solute(const SpeciesTable &table, const CellState &cell) {
 	const Mix mix = mix_of(table, cell);
 	return mix.dissolved > 0.0 && !(mix.liquid > 0.0);

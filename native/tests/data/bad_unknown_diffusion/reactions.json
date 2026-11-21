@@ -1,0 +1,1 @@
+{"format": "chem-reactions/1", "reactions": [{"id": "water_boiling", "equation": "H2O(l) -> H2O(g)", "kinetics": {"law": "equilibrium"}}]}

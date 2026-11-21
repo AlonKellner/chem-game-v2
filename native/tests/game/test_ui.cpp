@@ -511,7 +511,7 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	p.watch([&] { return p.grams("flask", "water") < 10.0; }, 1800);
 	p.click("valve:burner@0");
 	p.watch([&] { return p.item("flask").celsius < 21.0; }, 3600);
-	p.wait(900);
+	p.wait(7200); // the crystals grow for two hours (Stage 23: measured nucleation and transport)
 	p.drag("item:condenser", "square:23,3");
 	p.drag("item:waste", "square:23,12");
 	p.drag("item:flask", "item:waste");

@@ -9,24 +9,12 @@
 		},
 		"copper_sulfate_aq": {
 			"kind": "absorb",
-			"bands": [
-				{
-					"centre_cm1": 12400,
-					"fwhm_cm1": 4700,
-					"peak": 12
-				}
-			]
+			"table": "copper_sulfate_aq.csv",
+			"units": "L/mol/cm"
 		},
 		"malachite": {
 			"kind": "reflect",
-			"base": 0.06,
-			"bands": [
-				{
-					"centre_nm": 525,
-					"width_nm": 45,
-					"peak": 0.42
-				}
-			]
+			"table": "malachite.csv"
 		},
 		"copper_oxide": {
 			"kind": "reflect",

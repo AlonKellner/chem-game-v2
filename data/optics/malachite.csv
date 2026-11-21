@@ -1,0 +1,47 @@
+# Malachite, synthetic (Kremer Pigments dry powdered pigment): its diffuse reflectance, a fraction, every 10 nm.
+# USGS Spectral Library Version 7, splib07a Record 18922, 'Malachite GDS801 synthetic', ASD FR spectrometer, AREF (absolute
+# reflectance), 350-2500 nm at 1 nm; spectral purity code 1a (Kokaly et al. 2017, USGS Data Series 1035, doi:10.3133/ds1035;
+# data doi:10.5066/F7RR1WDJ; public domain). Read 2026-11-21 from a mirror of the ASCII release (the USGS servers refused the
+# connection): splib07a_Malachite_GDS801_synthetic_ASDFRa_AREF.txt with splib07a_Wavelengths_ASD_0.35-2.5_microns_2151_ch.txt.
+nm,reflectance
+380,0.08832
+390,0.11926
+400,0.15562
+410,0.19270
+420,0.22643
+430,0.25467
+440,0.27888
+450,0.30105
+460,0.32251
+470,0.34379
+480,0.36335
+490,0.38001
+500,0.39271
+510,0.40067
+520,0.40302
+530,0.39885
+540,0.38758
+550,0.36974
+560,0.34687
+570,0.32119
+580,0.29446
+590,0.26965
+600,0.24569
+610,0.22554
+620,0.20713
+630,0.19048
+640,0.17678
+650,0.16524
+660,0.15566
+670,0.14780
+680,0.14112
+690,0.13532
+700,0.13033
+710,0.12594
+720,0.12210
+730,0.11885
+740,0.11607
+750,0.11378
+760,0.11192
+770,0.11044
+780,0.10932

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.23.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.24.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -366,25 +366,51 @@ Stage 8 overflow and the balloon's capacity (§13).
   solution of that decay, `(n_in / |ν_in|)(1 − e^(−k |f| h))` in the direction of `f`: any rate is
   stable, and a reaction that could finish many times over in one step simply finishes.
 - **Surface law** (`"law": "surface"`): the reaction happens at the surface of one of its solids,
-  `in`, a reactant (it dissolves) or a product (it grows):
-  `r = k(T) · area · a_driver · mixing · f(A)`, with `k` in mol/m²/s.
+  `in`, a reactant (it dissolves) or a product (it grows). Two steps in series, each a rate per
+  square metre of the solid's surface, in moles of the reaction (Stage 23):
+  - **at the surface**, `s = k(T) · m_driver^q · f(A)`, with `k` in mol/m²/s and `q` the driver's
+    order (`"driver_order"`, 1 unless the data says otherwise: ½ for copper oxide in sulfuric
+    acid);
+  - **by transport** through the liquid, to the surface or away from it,
+    `t = (Sh · D / d) · |C − C_eq| / ν`: `D` the carried species' diffusion coefficient, `d` the
+    particles' diameter, `C` its concentration (mol per m³ of the solvent), `ν` its coefficient
+    in the reaction, `Sh` the Sherwood number: 2 for a sphere in still liquid, and `mixing` times
+    that. `C_eq` is the concentration at which the reaction would be at equilibrium with all else
+    held: what the surface is at when transport alone limits. It is found from the affinity
+    itself (Newton's steps in `ln n`, from the affinity's slope, until a step would move the gap
+    by under 1%: one or two near equilibrium), so activity coefficients count as they do
+    everywhere (§10). An absent species is read from one quantum's worth; where another species
+    is absent and the affinity infinite, `C_eq` is 0 for what the direction uses up, and
+    transport puts no limit on what it makes.
+  - The carried species is the driver, if any (the acid an oxide's dissolving uses up), else the
+    reaction's dissolved species (a crystal's salt).
+  - `1/r = 1/s + 1/t`, times the area. The slower step limits: a reaction controlled at its
+    surface (copper oxide in the acid) is hardly sped by stirring; one held back by transport (a
+    crystal of a millimetre growing) is, as far as transport is its limit. Both are read at the
+    step's start.
+  - **Diffusion**: a dissolved species' `D` is its particles' moving together,
+    `Σν_i / Σ(ν_i / D_i)` over them: for a cation and an anion, Nernst–Hartley's
+    `(|z+| + |z−|) D+ D− / (|z+| D+ + |z−| D−)`. Each ion's is measured at 25 °C and scaled as
+    `T / η(T)` with water's viscosity (Stokes–Einstein; `data/solutions.json`). A species with no
+    ions, or with an ion that has no coefficient, puts no limit on transport.
   - The **area** is that of the solid's particles as equal spheres:
     `(36π)^(1/3) N^(1/3) (n v)^(2/3)`, from its amount `n`, molar volume `v` and particle count `N`
     (§9).
-  - The **driver**, if any, is a dissolved reactant whose molality the rate is proportional to
+  - The **driver**, if any, is a dissolved reactant whose molality the surface step goes with
     (the acid, for an oxide dissolving in it). It is its concentration, not its activity: the
     rate counts what reaches the surface (Stage 19; with ideal solutions the two were the same).
-  - **Mixing** is the cell's stirring: 1 at rest. It multiplies this law's rates, which transport
-    limits, and nothing else.
+  - **Mixing** is the cell's stirring: 1 at rest. It multiplies the Sherwood number, and so the
+    transport step, and nothing else (Stage 23; until then it multiplied every surface rate).
   - With this area the cube root of the amount moves linearly in time, so the step is exact: a
     solid that would dissolve many times over in a step is simply gone.
 - A reaction runs in a cell only where every species it names has thermodynamic data.
 
 **Demo subset:** malachite decomposition `Cu2CO3(OH)2(s) → 2 CuO(s) + CO2(g) + H2O(g)`, first
-order in malachite; `CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` with a surface term and a stir
-factor.
+order in malachite; `CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` at its surface, half order in the
+acid, with transport in series.
 **Status:** Stage 3 implements the first-order law and the malachite decomposition, Stage 6 the
-surface law, stirring and the oxide's dissolution.
+surface law, stirring and the oxide's dissolution. Stage 23: transport in series with the surface
+step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
 
 ## 8. Phase change
 
@@ -447,8 +473,12 @@ crystals. The count is state, saved with the rest, but not a conserved quantity:
   Each nucleus begins as one quantum of the solid (a crystal of about 6 µm);
 - the mean size is derived: the solid's volume shared equally among its particles, as spheres.
 
-Growth and nucleation compete for the same supersaturation, so slow cooling gives few large
-crystals and fast cooling many small ones, without a rule saying so.
+Growth and nucleation compete for the same supersaturation, so slow cooling gives fewer, larger
+crystals and fast cooling more, smaller ones, without a rule saying so. With the measured rates
+(Stage 23) crystals start rarely, and keep starting for as long as the solution stays
+supersaturated, while the salt reaches the few there are by diffusion: the difference is some
+tenths, and a crop of millimetre crystals takes about two hours to come out near room
+temperature.
 
 **The four forms of the salt.**
 - CuSO₄·5H₂O, CuSO₄·3H₂O, CuSO₄·H₂O and CuSO₄ each crystallise from the solution, and dissolve
@@ -1961,13 +1991,14 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
 | Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no pH, no vapour of its own; its heat capacity is the pure liquid's |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
-| The hydrates lose their water in three first-order steps with calibrated rates | One activation energy for all three (80 kJ/mol), and prefactors that put each step's fastest rate at its thermogravimetric peak (90, 120 and 256 °C at 10 °C/min). The times are plausible, not measured |
+| The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
 | Pouring and tipping are instantaneous | No stream, no splash, no rate to control |
 | The bench opens out of equilibrium | The acid's water wets the air above it and the condenser cools to its coolant in the first seconds |
-| Kinetic parameters calibrated for play | Times are plausible, not measured. Malachite: Ea 150 kJ/mol is inside the measured 131–159; the prefactor is chosen so it decomposes in minutes at 300–350 °C. The oxide's dissolution, the crystals' growth and nucleation, and the dehydration are calibrated outright (`docs/DATA_SOURCES.md`) |
+| Kinetic parameters measured, some second-hand or extrapolated (Stage 23) | Malachite: Koga's main step, first order. The oxide's rate is second-hand (one table citing Majima), its activation energy the middle of the four acids' range, 52–86 kJ/mol; its order is in the acid's concentration, Majima's in the hydrogen ion's activity. Growth: Tanimoto's surface step from 20 to 40 °C, used at every temperature, and for the other hydrates too. Nucleation: fitted to Sheng's induction times as one nucleus each, at supersaturations under 1.09, extrapolated far beyond them; a lower bound, since a nucleus must grow to be seen (`docs/DATA_SOURCES.md`) |
+| Transport is diffusion to a sphere, `Sh = 2`, times the stirring | No convection from settling crystals or a warm flask; ions diffuse as at infinite dilution |
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
 | No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |
