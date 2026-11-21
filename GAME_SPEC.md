@@ -1184,7 +1184,7 @@ of every ray through its area, and its colour is their average (a box filter).
     it names by number, so fifty parts are one set. A vessel's set is its own.
   - **As many bodies as a bench of parts needs** (256), and a pixel finds its own without looking
     at all of them: the screen is cut into squares of 40 px, and each square lists the bodies that
-    reach into it (seven at most: the nearest the eye). What stands in a vessel's rows on a layer
+    reach into it (fifteen at most: the nearest the eye; Stage 26: with seven, two signal parts side by side, each a face, a lamp and ports, lost the first drawn of them, half a part unseen; a sensing line is one body, dashed by the pass). What stands in a vessel's rows on a layer
     behind it is found on the CPU, when the scene is composed, and is part of the vessel's
     signature.
   - **No lab thing is drawn over the pass.** What the screen draws flat is what is not in the

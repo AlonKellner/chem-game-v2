@@ -699,14 +699,14 @@ TEST_CASE("optics: a bench of two hundred bodies: each pixel finds its own throu
 		}
 	}
 	CHECK(compared > 80);
-	// a square lists the bodies that reach into it, the nearest the eye kept where more than seven do
-	std::vector<lab::OpticsBody> heap(10, lab::OpticsBody{ &items[0], 400.0f, 400.0f, 36.0f, 45.0f });
+	// a square lists the bodies that reach into it, the nearest the eye kept where more than fifteen do
+	std::vector<lab::OpticsBody> heap(18, lab::OpticsBody{ &items[0], 400.0f, 400.0f, 36.0f, 45.0f });
 	OpticsScene crowded;
 	lab::optics_compose(crowded, ROOM, heap);
-	const float *square = &crowded.table[static_cast<size_t>(L::GRID_BASE + 2 * (10 * L::GRID_COLS + 10)) * 4];
-	CHECK(square[0] == 7.0f);
+	const float *square = &crowded.table[static_cast<size_t>(L::GRID_BASE + L::GRID_VECS * (10 * L::GRID_COLS + 10)) * 4];
+	CHECK(square[0] == 15.0f);
 	CHECK(square[1] == 3.0f); // the three furthest are left out
-	CHECK(square[7] == 9.0f); // the nearest, last
+	CHECK(square[15] == 17.0f); // the nearest, last
 	// past the screen's edge a body is listed in the edge's squares, and its pixels found there
 	OpticsScene edge;
 	lab::optics_compose(edge, ROOM, { lab::OpticsBody{ &items[3], 1900.0f, 1050.0f, 36.0f, 45.0f } });

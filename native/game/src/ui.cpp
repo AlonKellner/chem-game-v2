@@ -3329,11 +3329,8 @@ struct Ui::Impl {
 			if (!sensing_ends(i, x0, y0, x1, y1)) {
 				continue;
 			}
-			const float dx = x1 - x0, dy = y1 - y0, length = std::sqrt(dx * dx + dy * dy);
-			for (int k = 0; static_cast<float>(k) * SENSE_DASH < length; ++k) {
-				const float a = static_cast<float>(k) * SENSE_DASH / length, b = std::min(1.0f, (static_cast<float>(k) * SENSE_DASH + SENSE_DASH * 0.6f) / length);
-				bar(id(i) + "~" + std::to_string(k), "sense", x0 + dx * a, y0 + dy * a, x0 + dx * b, y0 + dy * b, 2.0f, "sense", false);
-			}
+			bar(id(i) + ">sense", "sense", x0, y0, x1, y1, 2.0f, "sense", false);
+			bodies.back().dash = SENSE_DASH; // one body, dashed by the pass, not a body a dash
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
 		OpticsRoom room;

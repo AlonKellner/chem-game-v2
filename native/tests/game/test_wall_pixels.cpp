@@ -100,3 +100,35 @@ TEST_CASE("wall pixels: the renderer's picture is the whole room; around a vesse
 	CHECK(around > 5000); // the flask's rectangle beside its cone, and around it
 	CHECK(apart == 0);
 }
+
+TEST_CASE("wall pixels: signal parts side by side are each seen whole, a sensing line over them one body (Stage 26)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read_file("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	for (const char *c : { R"({"do": "part", "kind": "monitor", "at": [2, 2]})", R"({"do": "part", "kind": "monitor", "at": [3, 2]})", R"({"do": "part", "kind": "timer", "at": [2, 3]})",
+				 R"({"do": "part", "kind": "alarm", "at": [4, 2]})", R"({"do": "part", "kind": "monitor", "at": [3, 3]})", R"({"do": "place", "item": "flask", "at": [10, 6]})",
+				 R"({"do": "sense", "part": "monitor2", "item": "flask"})" }) {
+		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
+	}
+	ui->frame(0.0);
+	const lab::OpticsScene &scene = ui->optics();
+	// each part's face, across all of it: its left and right thirds, its top and its foot
+	for (const char *part : { "monitor1", "monitor2", "timer1", "alarm1", "monitor3" }) {
+		float x = 0, y = 0;
+		REQUIRE(ui->locate(std::string("item:") + part, x, y));
+		for (const float dx : { -10.0f, 0.0f, 10.0f }) {
+			for (const float dy : { -10.0f, 10.0f }) {
+				CAPTURE(part);
+				CAPTURE(dx);
+				CAPTURE(dy);
+				CHECK(lab::optics_cover(scene, static_cast<int>(x + dx), static_cast<int>(y + dy)) > 0.0);
+			}
+		}
+	}
+	// the sensing line is one body, however long
+	int bars = 0;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		bars += scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS + lab::optics_layout::FORM) * 4] == 4.0f ? 1 : 0;
+	}
+	CHECK(bars == 2); // the sensing line; the condenser's outlet, in the cabinet
+}

@@ -29,6 +29,8 @@ const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
 const int GRID_COLS = 48;
 const int GRID_ROWS = 27;
+const int GRID_SLOTS = 15; // a square's bodies, at most
+const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int ROWS_PER_SET = 6;
@@ -121,13 +123,14 @@ struct PixelState {
 int square_at(vec2 p) {
 	int c = clamp(int(floor(p.x / GRID_SQUARE)), 0, GRID_COLS - 1);
 	int r = clamp(int(floor(p.y / GRID_SQUARE)), 0, GRID_ROWS - 1);
-	return GRID_BASE + 2 * (r * GRID_COLS + c);
+	return GRID_BASE + GRID_VECS * (r * GRID_COLS + c);
 }
 
 // the k-th body of a square
-int square_body(vec4 a, vec4 b, int k) {
-	float v = k == 0 ? a.y : (k == 1 ? a.z : (k == 2 ? a.w : (k == 3 ? b.x : (k == 4 ? b.y : (k == 5 ? b.z : b.w)))));
-	return int(v);
+int square_body(int square, int k) {
+	vec4 v = scene_vec(square + (k + 1) / 4);
+	int c = (k + 1) - 4 * ((k + 1) / 4);
+	return int(c == 0 ? v.x : (c == 1 ? v.y : (c == 2 ? v.z : v.w)));
 }
 
 // the set of spectra a body is made of
@@ -164,7 +167,16 @@ vec2 thing_at(vec4 form, vec4 rect, vec4 more, vec2 p) {
 		float t = clamp(((p.x - more.x) * ux + (p.y - more.y) * uy) / max(ux * ux + uy * uy, 1.0e-9), 0.0, 1.0);
 		float ex = p.x - (more.x + t * ux);
 		float ey = p.y - (more.y + t * uy);
-		return vec2(0.5 * form.z - sqrt(ex * ex + ey * ey), 0.0);
+		float across = 0.5 * form.z - sqrt(ex * ex + ey * ey);
+		if (form.w <= 0.0) {
+			return vec2(across, 0.0);
+		}
+		// dashed (Stage 26): on for 0.6 of each dash from its start; how far inside the dash it is, along
+		float along = t * sqrt(ux * ux + uy * uy);
+		float phase = along - form.w * floor(along / form.w);
+		float on = 0.6 * form.w;
+		float inside = phase <= on ? min(phase, on - phase) : -min(phase - on, form.w - phase);
+		return vec2(min(across, inside), 0.0);
 	}
 	// a cone, its apex at the top's centre: its round section there, seen from the side
 	float from_axis = p.x - (rect.x + rect.z * 0.5);
@@ -427,14 +439,12 @@ Path path_of(vec2 p, float size) {
 	vec4 behind = vec4(0.0); // whether a body of a layer behind the vessel stands in its rows (y), a signature of those (z)
 	// the bodies of the pixel's square of the screen (the scene lists them: a pixel looks at no other)
 	int square = square_at(p);
-	vec4 listed_a = scene_vec(square);
-	vec4 listed_b = scene_vec(square + 1);
-	int listed = int(listed_a.x);
-	for (int k = 0; k < 7; k++) {
+	int listed = int(scene_vec(square).x);
+	for (int k = 0; k < GRID_SLOTS; k++) {
 		if (k >= listed) {
 			break;
 		}
-		int i = square_body(listed_a, listed_b, k);
+		int i = square_body(square, k);
 		int at = HEADER_VECS + i * BODY_VECS;
 		vec4 rect = scene_vec(at);
 		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0 || p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {

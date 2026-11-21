@@ -389,6 +389,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + MORE, 1, body.y0);
 				put(at + MORE, 2, body.x1);
 				put(at + MORE, 3, body.y1);
+				put(at + FORM, 3, body.dash);
 			}
 			put(at + RECT, 0, x);
 			put(at + RECT, 1, y);
@@ -692,7 +693,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		const int r0 = square(rect[1] - 1.5, GRID_ROWS), r1 = square(static_cast<double>(rect[1]) + rect[3] + 1.5, GRID_ROWS);
 		for (int r = r0; r <= r1; ++r) {
 			for (int c = c0; c <= c1; ++c) {
-				float *cell = &t[static_cast<size_t>(GRID_BASE + 2 * (r * GRID_COLS + c)) * 4];
+				float *cell = &t[static_cast<size_t>(GRID_BASE + GRID_VECS * (r * GRID_COLS + c)) * 4];
 				int n = static_cast<int>(cell[0]);
 				if (n == GRID_SLOTS) {
 					for (int k = 1; k < GRID_SLOTS; ++k) {
