@@ -72,7 +72,7 @@ TEST_CASE("pour: a held pour runs at its tilt's share of the vessel's rate, its 
 TEST_CASE("pour: upside down, its cap is an orifice under the head of liquid over it: Q = open x 0.61 x a sqrt(2 g h) (Torricelli; a sharp-edged orifice's discharge coefficient) (Stage 27)") {
 	auto l = demo();
 	ok(*l, R"({"do": "invert", "item": "acid", "over": "flask"})");
-	const lab::ItemView &acid = item(l->view(), "acid");
+	const lab::ItemView acid = item(l->view(), "acid"); // a copy: the view is a temporary
 	CHECK(acid.inverted);
 	CHECK(acid.cap == 0.0);
 	std::string why;
@@ -103,7 +103,7 @@ TEST_CASE("pour: upside down, its cap is an orifice under the head of liquid ove
 TEST_CASE("pour: poured past its brim, a solution spills into the tray and leaves its vessel full to the brim (Stage 27)") {
 	auto l = demo();
 	ok(*l, R"({"do": "pour", "from": "acid", "to": "jar", "ml": 200})"); // the 50 mL jar
-	const lab::ItemView &jar = item(l->view(), "jar");
+	const lab::ItemView jar = item(l->view(), "jar");
 	CHECK(jar.condensed_ml == doctest::Approx(jar.volume_ml).epsilon(1e-6));
 	CHECK(item(l->view(), "tray").liquid_ml > 100.0);
 	CHECK_FALSE(l->failed()); // V1: full, not under-full

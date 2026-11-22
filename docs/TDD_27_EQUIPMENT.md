@@ -21,7 +21,7 @@ GAME_SPEC §6 (drains with a rate), §12.3 (*A vessel turned*), §13 (pouring, s
 | 27.3 | The lab: `hold`, `invert`, `pour`, `cap`, `unpour`; the cap a control; adjacency by the mouth | Done; goldens re-recorded with approval |
 | 27.4 | The screen: carrying by clicks, the held pour, the menu, the cap's slider; the tutorial | Done |
 | 27.5 | Drawing: upside down (the truth's rays), the stream, the supports | Done; the tilt deferred (user, 2026-11-22) |
-| 27.6 | The user's test and sign-off | |
+| 27.6 | The user's test and sign-off | Signed off (2026-11-22) |
 
 ## Measured
 

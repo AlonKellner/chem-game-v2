@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 27)
+## 0.28.0 (2026-11-22, Stage 27)
 
 - §6, §13: **pouring is a control**: a vessel in a pouring position over another pours down a drain
   with a rate. Held (`hold`, `pour {rate}`): its tilt's share of the vessel's rate, its solids too at
