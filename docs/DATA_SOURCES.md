@@ -497,6 +497,21 @@ Chosen for the game (`data/glassware.json`, design in `data/sources.json`): each
 rate at full tilt (a beaker 25 mL/s, a flask 12, a bottle 15), the cap's bore (4 mm), the widest
 mouth a balloon's or a condenser's fitting seals (40 mm).
 
+## Glass and stoppers under pressure (Stage 28)
+
+Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass
+bursts, nor the force that holds a rubber stopper in a neck. Searched 2026-11-22.
+
+| Value | Used | Why |
+|---|---|---|
+| A bottle's glass, sealed by its screw cap | bursts past +300 kPa (`data/glassware.json`, `burst_kpa`) | DWK (DURAN): standard laboratory bottles are not designed to withstand pressure differentials; the *pressure plus+* bottle, a modified ISO 4796-1 geometry, is guaranteed from −1 to +1.5 bar (DIN EN 1595). A standard bottle is taken to fail at twice that guarantee |
+| A conical flask | +200 kPa | its flat sides and base: weaker than a bottle's round shoulders |
+| A beaker; a vessel made as no glassware (the condenser) | +150 kPa; +200 kPa | a beaker cannot be sealed (its mouth is too wide for a stopper); the condenser as a flask |
+| A rubber stopper | holds 30 N (`benches/lab.json`, `hold_n`): pops at that force over its neck's bore, +37 kPa in the flask's 32 mm neck | dry rubber on a syringe's glass barrel holds about 10 N (friction measured, ONdrugDelivery, vial stopper testing); one pushed into a neck by hand, three times that. A vacuum holds a stopper in: it never pops inward |
+
+Confidence: low; in the game's terms, the order of magnitude: a stopper pops well before the glass would
+burst; a capped bottle heated with water in it bursts near 144 °C (its water's saturation at +300 kPa).
+
 ## Constants
 
 CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).

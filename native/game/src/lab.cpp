@@ -38,7 +38,7 @@ constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (
 // what a hand moves between two vessels: liquid with what is dissolved in it, and solids; never gas
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
-enum class Kind { Vessel, Bag, Burner, Tray };
+enum class Kind { Vessel, Bag, Burner, Tray, Stopper }; // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber
 enum class Place { Cabinet, Bench, On, Under, Outbox }; // On: on a vessel's mouth. Under: a burner under a vessel
 
 struct Item {
@@ -74,7 +74,11 @@ struct Item {
 	// cell holds the glassware's capacity to the brim, and its wall and floor are the glassware's
 	std::string glassware;
 	double nominal_ml = 0.0;
-	bool burst = false;
+	bool burst = false; // a balloon, burst; a vessel, its glass burst (Stage 28): broken, empty, in the cabinet
+	// pressure (GAME_SPEC §13, Stage 28): a stopper's hold (the force its friction holds it in a neck by, N); an
+	// upright bottle's screw cap on, sealing it
+	double hold_n = 0.0;
+	bool screwed = false;
 };
 
 struct Event {
@@ -117,7 +121,7 @@ bool from_bits(const json &j, double &v) {
 	return true;
 }
 
-const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray" };
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper" };
 const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox" };
 
 double number(const json &j, const char *key, double fallback) {
@@ -137,6 +141,8 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
 	if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
+	} else if (kind == "stopper") {
+		w = h = 1;
 	} else if (kind == "balloon") {
 		w = 4;
 		h = 5;
@@ -221,6 +227,8 @@ struct Lab::Impl {
 	std::vector<uint8_t> present; // item * species: a solid, liquid or dissolved species is there
 	std::vector<uint8_t> running; // item * reaction with a rate law: it runs there
 	std::vector<uint8_t> boiling, full; // per item
+	std::vector<uint8_t> pressed, flowing; // per item (Stage 28): a sealed vessel near what gives way; a pour running
+	std::vector<double> water_g; // per item (Stage 28): its liquid water at the last reading
 	std::vector<uint8_t> touched; // per item: matter moved in or out by hand since the last reading
 	double tray_g = 0.0; // what the tray held at the last reading
 	bool restored_notices = false; // a load found them in its save
@@ -423,10 +431,22 @@ struct Lab::Impl {
 	}
 
 	// a control's value now; none when it is not one of the lab's
+	// an upright bottle's screw cap (Stage 28): one that fits it, nothing else on its mouth, not upside down
+	bool screw_cap(int i) const {
+		if (i < 0) {
+			return false;
+		}
+		const Item &x = items[static_cast<size_t>(i)];
+		const glass::Vessel *g = x.kind == Kind::Vessel ? glass::find(x.glassware, x.nominal_ml) : nullptr;
+		return g != nullptr && g->screw_cap && !x.burst && x.pours_into < 0 && (x.holds < 0 || x.screwed) && x.place != Place::Outbox;
+	}
 	std::optional<double> control_now(const std::string &item_id, const std::string &control) const {
 		const int i = find(item_id);
 		if (control == "cap" && i >= 0 && items[static_cast<size_t>(i)].pours_into >= 0 && items[static_cast<size_t>(i)].inverted) {
 			return items[static_cast<size_t>(i)].cap; // an upside-down vessel's cap (Stage 27)
+		}
+		if (control == "cap" && screw_cap(i)) {
+			return items[static_cast<size_t>(i)].screwed ? 0.0 : 1.0; // upright: on (0, sealed) or off (1)
 		}
 		if (control == "stir" && i >= 0 && items[static_cast<size_t>(i)].kind != Kind::Burner && items[static_cast<size_t>(i)].kind != Kind::Tray) {
 			return items[static_cast<size_t>(i)].stirred ? 1.0 : 0.0;
@@ -558,6 +578,22 @@ struct Lab::Impl {
 		if (control == "cap" && x.pours_into >= 0 && x.inverted) {
 			x.cap = std::clamp(value, 0.0, 1.0);
 			record(item_id, control, x.cap, by);
+			return true;
+		}
+		if (control == "cap" && screw_cap(i)) { // upright: screwed on, it seals the bottle; off, open to the room
+			const bool shut = value < 0.5;
+			if (shut != x.screwed) {
+				if (shut) {
+					if (x.mouth.index < 0 || world().disconnect(x.mouth) != Refusal::None) {
+						return false; // mid-step, or not at the room's pressure yet
+					}
+					x.mouth = EdgeId{};
+				} else {
+					world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+				}
+				x.screwed = shut;
+			}
+			record(item_id, control, shut ? 0.0 : 1.0, by);
 			return true;
 		}
 		if (control == "valve" && x.kind == Kind::Burner) {
@@ -907,8 +943,16 @@ struct Lab::Impl {
 			why = "\"" + t.id + "\" is pouring into \"" + x.id + "\"";
 			return false;
 		}
+		if (sealed(t) || (sealed(x) && !x.screwed)) { // nothing pours in or out of what is sealed (Stage 28)
+			why = "\"" + (sealed(t) ? t.id : x.id) + "\" is sealed: open it first";
+			return false;
+		}
 		if (!end_pour(static_cast<size_t>(thing), why) || !boundary(why)) {
 			return false;
+		}
+		if (x.screwed) { // a capped bottle tipped over another: its cap off first (upside down, the cap is the orifice)
+			world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+			x.screwed = false;
 		}
 		EdgeId edge;
 		if (world().connect_drain(x.cell, t.cell, &edge) != Refusal::None) {
@@ -1072,6 +1116,9 @@ struct Lab::Impl {
 		running.resize(items.size() * rated, 0);
 		boiling.resize(items.size(), 0);
 		full.resize(items.size(), 0);
+		pressed.resize(items.size(), 0);
+		flowing.resize(items.size(), 0);
+		water_g.resize(items.size(), 0.0);
 		touched.resize(items.size(), 0);
 		const std::span<const ReactionNote> notes = builtin_reaction_notes();
 		for (size_t i = 0; i < items.size(); ++i) {
@@ -1139,20 +1186,74 @@ struct Lab::Impl {
 					}
 				}
 			}
-			// boiling, and boiling dry
+			// boiling, and boiling dry: open, at 99.5 C; sealed (Stage 28), where its gas is nearly all steam, at
+			// whatever temperature its pressure lets it
 			const double kelvin_now = kelvin(x.cell), water = grams(x.cell, builtin::water);
-			if (!boiling[i] && water >= 0.05 && kelvin_now >= 273.15 + 99.5) {
+			double steam_share = 0.0;
+			if (sealed(x)) {
+				double gas = 0.0;
+				for (size_t k = 0; k < species; ++k) {
+					gas += t.species(SpeciesId{ static_cast<int32_t>(k) }).phase == Phase::Gas ? world().amount(x.cell, SpeciesId{ static_cast<int32_t>(k) }).mol() : 0.0;
+				}
+				steam_share = gas > 0.0 ? world().amount(x.cell, builtin::steam).mol() / gas : 0.0;
+			}
+			// sealed, it boils while its water goes to steam under a gas of steam (more than 10 ug a reading: its vapour's
+			// room is small, so heat raises it along its saturation and little goes to steam)
+			const bool going = water < water_g[i] - 1e-5;
+			water_g[i] = water;
+			const bool hot = sealed(x) ? steam_share >= 0.97 && going : kelvin_now >= 273.15 + 99.5;
+			const bool cooled = sealed(x) ? steam_share < 0.95 || !going : kelvin_now < 273.15 + 99.0;
+			if (!boiling[i] && water >= 0.05 && hot) {
 				boiling[i] = 1;
 				if (!quiet) {
-					note(Notice::Event, x.id, x.id + " boils");
+					note(Notice::Event, x.id, x.id + (sealed(x) ? text_of(" boils, sealed, at %.0f C", kelvin_now - 273.15) + text_of(" and %.0f kPa", pressure_pa(x) / 1000.0) : " boils"));
 				}
-			} else if (boiling[i] && (water < 0.05 || kelvin_now < 273.15 + 99.0)) {
+			} else if (boiling[i] && (water < 0.05 || cooled)) {
 				boiling[i] = 0;
 				if (!quiet) {
 					if (water < 0.05) {
 						note(Notice::Warning, x.id, x.id + " boiled dry: nothing is left for crystals to grow from");
 					} else {
 						note(Notice::Event, x.id, x.id + " stopped boiling");
+					}
+				}
+			}
+			// a sealed vessel near what gives way (Stage 28): its stopper's hold, or its glass
+			if (x.kind == Kind::Vessel && !x.burst) {
+				const double over = sealed(x) ? pressure_pa(x) - P_ATMOSPHERE : 0.0, limit = gives_way(x);
+				const bool stoppered = x.holds >= 0 && items[static_cast<size_t>(x.holds)].kind == Kind::Stopper && stopper_pops(items[static_cast<size_t>(x.holds)], x) <= glass_burst(x);
+				if (!pressed[i] && over >= 0.8 * limit) {
+					pressed[i] = 1;
+					if (!quiet) {
+						note(Notice::Warning, x.id, x.id + text_of(" is at %.0f kPa", (over + P_ATMOSPHERE) / 1000.0) + (stoppered ? ": its stopper pops" : ": its glass bursts")
+										+ text_of(" past %.0f kPa", (limit + P_ATMOSPHERE) / 1000.0));
+					}
+				} else if (pressed[i] && over < 0.7 * limit) {
+					pressed[i] = 0;
+				}
+			}
+			// a pour running, stopping, and its vessel run dry (Stage 28)
+			if (x.kind == Kind::Vessel) {
+				double rate = 0.0;
+				if (x.pours_into >= 0 && x.pour.index >= 0) {
+					rate = world().edges()[static_cast<size_t>(x.pour.index)].rate;
+				}
+				const double left_ml = liquid_m3(x.cell) * 1e6;
+				const bool runs = x.pours_into >= 0 && rate > 0.0 && left_ml > 0.05;
+				const std::string into = x.pours_into >= 0 ? items[static_cast<size_t>(x.pours_into)].id : std::string("it");
+				if (!flowing[i] && runs) {
+					flowing[i] = 1;
+					if (!quiet) {
+						note(Notice::Detail, x.id, x.id + " pours into " + into);
+					}
+				} else if (flowing[i] && !runs) {
+					flowing[i] = 0;
+					if (!quiet) {
+						if (left_ml <= 0.05) {
+							note(Notice::Event, x.id, x.id + " is empty: nothing more pours" + (x.pours_into >= 0 ? " into " + into : std::string()));
+						} else {
+							note(Notice::Detail, x.id, x.id + " stopped pouring");
+						}
 					}
 				}
 			}
@@ -1174,6 +1275,13 @@ struct Lab::Impl {
 		sim->clear_tally();
 	}
 
+	json water_bits() const {
+		json out = json::array();
+		for (const double g : water_g) {
+			out.push_back(bits(g));
+		}
+		return out;
+	}
 	json notices_json(bool exact) const {
 		json list = json::array();
 		for (const Notice &n : notices) {
@@ -1183,7 +1291,7 @@ struct Lab::Impl {
 			return list;
 		}
 		return { { "list", list }, { "read", notices_read }, { "present", present }, { "running", running }, { "boiling", boiling }, { "full", full }, { "touched", touched },
-			{ "tray_g", bits(tray_g) }, { "tally", sim->tally_all() } };
+			{ "tray_g", bits(tray_g) }, { "tally", sim->tally_all() }, { "pressed", pressed }, { "flowing", flowing }, { "water_g", water_bits() } };
 	}
 	bool notices_from(const json &j, std::string &why) {
 		for (const json &n : j.at("list")) {
@@ -1200,6 +1308,17 @@ struct Lab::Impl {
 		boiling = j.at("boiling").get<std::vector<uint8_t>>();
 		full = j.at("full").get<std::vector<uint8_t>>();
 		touched = j.at("touched").get<std::vector<uint8_t>>();
+		pressed = j.value("pressed", std::vector<uint8_t>{});
+		flowing = j.value("flowing", std::vector<uint8_t>{});
+		water_g.clear();
+		for (const json &w : j.value("water_g", json::array())) {
+			double g = 0.0;
+			if (!from_bits(w, g)) {
+				why = "the save holds a number that is not one";
+				return false;
+			}
+			water_g.push_back(g);
+		}
 		if (!from_bits(j.at("tray_g"), tray_g)) {
 			why = "the save holds a number that is not one";
 			return false;
@@ -1232,6 +1351,7 @@ struct Lab::Impl {
 				return false;
 			}
 		}
+		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (world().step() % READ_EVERY == 0) {
 			detect(false);
 		}
@@ -1241,6 +1361,105 @@ struct Lab::Impl {
 		}
 		burst_balloons();
 		return true;
+	}
+
+	// Pressure relieved (GAME_SPEC §13, Stage 28), right after a step, its ledger empty: a sealed vessel past what
+	// seals it gives way. A stopper pops out (its hold over the neck's bore, before its glass would go): the mouth
+	// open to the room again, the stopper beside it. Else its glass bursts: what is on it comes off, its gas goes
+	// into the room's air, the rest into the tray, and it is broken: empty, in the cabinet.
+	void relieve_pressure() {
+		for (size_t i = 0; i < items.size(); ++i) {
+			Item &v = items[i];
+			if (v.kind != Kind::Vessel || v.burst || !sealed(v)) {
+				continue;
+			}
+			const double over = pressure_pa(v) - P_ATMOSPHERE;
+			if (!(over > gives_way(v))) {
+				continue;
+			}
+			const double kpa = (over + P_ATMOSPHERE) / 1000.0;
+			const bool stoppered = v.holds >= 0 && items[static_cast<size_t>(v.holds)].kind == Kind::Stopper;
+			if (stoppered && stopper_pops(items[static_cast<size_t>(v.holds)], v) <= glass_burst(v)) {
+				const int s = v.holds;
+				Item &x = items[static_cast<size_t>(s)];
+				world().connect(v.cell, air, PHASES_GAS, &v.mouth);
+				v.holds = -1;
+				x.on = -1;
+				x.place = Place::Cabinet;
+				x.col = x.row = -1;
+				set_beside(s, v);
+				events.push_back(Event{ static_cast<int64_t>(world().step()), "popped", x.id });
+				note(Notice::Warning, v.id, x.id + " popped out of " + v.id + text_of(" at %.0f kPa", kpa));
+				continue;
+			}
+			shatter(i, kpa);
+		}
+	}
+	void shatter(size_t i, double kpa) {
+		Item &v = items[i];
+		const double kelvin_before = kelvin(v.cell);
+		if (v.holds >= 0) { // what is on its mouth comes off: a stopper, or a condenser sealed with it
+			Item &x = items[static_cast<size_t>(v.holds)];
+			if (x.joint.index >= 0) {
+				world().disconnect(x.joint);
+			}
+			x.on = -1;
+			x.joint = EdgeId{};
+			x.place = Place::Cabinet;
+			x.col = x.row = -1;
+			set_beside(v.holds, v);
+			v.holds = -1;
+		}
+		for (Item &b : items) { // a burner under it is set beside it
+			if (b.kind == Kind::Burner && b.under == static_cast<int>(i)) {
+				world().disconnect(b.heats);
+				b.under = -1;
+				b.heats = EdgeId{};
+				b.place = Place::Cabinet;
+				b.col = b.row = -1;
+				set_beside(static_cast<int>(&b - items.data()), v);
+			}
+		}
+		const auto edges = world().edges();
+		for (size_t e = 0; e < edges.size(); ++e) { // its drains, in and out
+			if (edges[e].open && edges[e].drain && (edges[e].a == v.cell || edges[e].b == v.cell)) {
+				world().disconnect(EdgeId{ static_cast<int32_t>(e) });
+			}
+		}
+		for (Item &u : items) {
+			u.drains_to = u.drains_to == static_cast<int>(i) ? -1 : u.drains_to;
+		}
+		v.drains_to = -1;
+		v.screwed = false;
+		if (v.mouth.index < 0) {
+			world().connect(v.cell, air, PHASES_GAS, &v.mouth);
+		}
+		// its contents out: the gas into the room's air, the rest into the tray
+		const CellState cell = world().snapshot_cell(v.cell);
+		std::vector<SpeciesAmount> gas, rest;
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (cell.amount[s] > 0 && !def.wall) {
+				(def.phase == Phase::Gas ? gas : rest).push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ cell.amount[s] } });
+			}
+		}
+		const double t = kelvin(v.cell); // opened: read as an expansion against the room
+		if (!gas.empty()) {
+			world().transfer(v.mouth, v.cell, gas, enthalpy_carried(table(), gas, t));
+		}
+		const int tray_at = find("tray");
+		EdgeId spill;
+		if (!rest.empty() && tray_at >= 0 && world().connect(v.cell, items[static_cast<size_t>(tray_at)].cell, HANDLED, &spill) == Refusal::None) {
+			world().transfer(spill, v.cell, rest, enthalpy_carried(table(), rest, t));
+		}
+		mid_step = true;
+		touched.resize(items.size(), 0);
+		touched[i] = 1;
+		v.burst = true;
+		v.place = Place::Cabinet;
+		v.col = v.row = -1;
+		events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", v.id });
+		note(Notice::Danger, v.id, v.id + text_of(" burst at %.0f kPa", kpa) + text_of(" (%.0f C): its contents went into the room and the tray", kelvin_before - 273.15));
 	}
 
 	// A balloon filled past its capacity bursts (GAME_SPEC §13): it comes off
@@ -1367,6 +1586,13 @@ struct Lab::Impl {
 		v.submitted = item.submitted;
 		v.slot = item.slot;
 		v.burst = item.burst;
+		v.screwed = item.screwed;
+		v.hold_n = item.hold_n;
+		if (item.kind == Kind::Vessel) {
+			v.pressure_kpa = m.pressure_pa(item) / 1000.0;
+			v.sealed = m.sealed(item);
+			v.gives_way_kpa = (m.gives_way(item) + P_ATMOSPHERE) / 1000.0;
+		}
 		v.valve = item.valve;
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
@@ -1377,7 +1603,7 @@ struct Lab::Impl {
 			const double kelvin = m.kelvin(item.cell);
 			v.celsius = kelvin - 273.15;
 			const CellState &cell = m.world().snapshot_cell(item.cell);
-			const Fill fill = fill_of(table, cell, kelvin);
+			const Fill fill = fill_of(table, cell, kelvin, &m.world().meta(item.cell));
 			v.gas_ml = fill.gas * 1e6;
 			v.condensed_ml = fill.condensed * 1e6;
 			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
@@ -1432,6 +1658,31 @@ struct Lab::Impl {
 		return t;
 	}
 
+	// pressure (GAME_SPEC §13, Stage 28): an item's, Pa (an open one's is the room's)
+	double pressure_pa(const Item &x) const {
+		if (x.kind == Kind::Burner || x.cell.index < 0) {
+			return P_ATMOSPHERE;
+		}
+		const Thermal t = thermal_state(table(), world().snapshot_cell(x.cell), &world().meta(x.cell));
+		return t.defined ? t.pressure : P_ATMOSPHERE;
+	}
+	bool sealed(const Item &x) const { return x.cell.index >= 0 && world().meta(x.cell).sealed; }
+	// how far over the room's a vessel's glass holds (Pa); what pushes a stopper out of a vessel's neck: its hold over the bore
+	double glass_burst(const Item &v) const {
+		const glass::Vessel *g = glass::find(v.glassware, v.nominal_ml);
+		return g != nullptr ? g->burst : glass::burst_default();
+	}
+	double stopper_pops(const Item &stopper, const Item &v) const {
+		const glass::Vessel *g = glass::find(v.glassware, v.nominal_ml);
+		const double r = (g != nullptr ? g->mouth() : 0.5 * glass::seals()) / 100.0;
+		return stopper.hold_n / (PI * r * r);
+	}
+	// what gives way first, sealed, and at what overpressure
+	double gives_way(const Item &v) const {
+		const bool stoppered = v.holds >= 0 && items[static_cast<size_t>(v.holds)].kind == Kind::Stopper;
+		return stoppered ? std::min(stopper_pops(items[static_cast<size_t>(v.holds)], v), glass_burst(v)) : glass_burst(v);
+	}
+
 	double grams(CellId cell, SpeciesId s) const { return world().amount(cell, s).mol() * static_cast<double>(table().molar_mass_ug(s)) * 1e-6; }
 
 	// the item named by a command's field, of the kind wanted
@@ -1450,6 +1701,10 @@ struct Lab::Impl {
 		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
 			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : "a vessel");
+			return false;
+		}
+		if (is == Kind::Vessel && items[static_cast<size_t>(index)].burst) {
+			why = "\"" + id + "\" is broken: its glass burst";
 			return false;
 		}
 		return true;
@@ -1588,11 +1843,12 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				impl->items.push_back(item);
 				continue;
 			}
-			if (kind != "vessel" && kind != "balloon") {
-				why = "item \"" + item.id + "\": a kind is vessel, balloon or burner";
+			if (kind != "vessel" && kind != "balloon" && kind != "stopper") {
+				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper or burner";
 				return nullptr;
 			}
-			item.kind = kind == "vessel" ? Kind::Vessel : Kind::Bag;
+			item.kind = kind == "vessel" ? Kind::Vessel : kind == "stopper" ? Kind::Stopper : Kind::Bag;
+			item.hold_n = item.kind == Kind::Stopper ? number(j, "hold_n", 30.0) : 0.0;
 			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
 			double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
 			item.nominal_ml = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() : 0.0;
@@ -1827,6 +2083,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
+		if (x.kind == Kind::Vessel && x.burst) {
+			why = "\"" + x.id + "\" is broken: its glass burst";
+			return false;
+		}
 		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
@@ -2528,10 +2788,17 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		if (!control_now(items[static_cast<size_t>(thing)].id, "cap")) {
-			why = "\"" + items[static_cast<size_t>(thing)].id + "\" has no cap: set it upside down over a vessel first";
+			why = "\"" + items[static_cast<size_t>(thing)].id + "\" has no cap: a bottle's screws on, upright; any vessel's opens, upside down over another";
 			return false;
 		}
-		return set_control(items[static_cast<size_t>(thing)].id, "cap", to, "player");
+		if (!boundary(why)) {
+			return false;
+		}
+		if (!set_control(items[static_cast<size_t>(thing)].id, "cap", to, "player")) {
+			why = "\"" + items[static_cast<size_t>(thing)].id + "\" is not at the room's pressure yet: it cannot be capped as it is";
+			return false;
+		}
+		return true;
 	}
 	if (what == "pour") {
 		// pouring is a control (§13, Stage 27): a held pour's tilt; or, from a script, an amount at full tilt, waited out
@@ -2629,6 +2896,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			return false;
 		}
+		if (sealed(items[static_cast<size_t>(from)]) || sealed(items[static_cast<size_t>(to)])) { // Stage 28
+			why = "\"" + items[static_cast<size_t>(sealed(items[static_cast<size_t>(from)]) ? from : to)].id + "\" is sealed: open it first";
+			return false;
+		}
 		const CellState &source = world().snapshot_cell(items[static_cast<size_t>(from)].cell);
 		std::vector<SpeciesAmount> amounts;
 		if (what == "pour") {
@@ -2697,7 +2968,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	if (what == "attach") {
 		int thing = -1, to = -1;
-		if (!item(c, "item", Kind::Vessel, thing, why) || !item(c, "to", Kind::Vessel, to, why)) {
+		const bool stopper = c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) >= 0
+				&& items[static_cast<size_t>(find(c.at("item").get<std::string>()))].kind == Kind::Stopper;
+		if (stopper) {
+			thing = find(c.at("item").get<std::string>());
+		}
+		if ((!stopper && !item(c, "item", Kind::Vessel, thing, why)) || !item(c, "to", Kind::Vessel, to, why)) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
@@ -2732,6 +3008,27 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!boundary(why)) {
 			return false;
 		}
+		if (x.kind == Kind::Stopper) { // a stopper seals the mouth (Stage 28): no way out for its gas
+			for (const Item &u : items) {
+				if (u.pours_into == to) {
+					why = "\"" + u.id + "\" is pouring into \"" + v.id + "\"";
+					return false;
+				}
+			}
+			if (v.pours_into >= 0 && !end_pour(static_cast<size_t>(to), why)) {
+				return false;
+			}
+			if (world().disconnect(v.mouth) != Refusal::None) {
+				why = "\"" + v.id + "\" is not at the room's pressure yet: it cannot be sealed as it is";
+				return false;
+			}
+			x.on = to;
+			x.place = Place::On;
+			x.col = x.row = -1;
+			v.holds = thing;
+			v.mouth = EdgeId{};
+			return true;
+		}
 		EdgeId joint;
 		world().connect(x.cell, v.cell, PHASES_GAS, &joint);
 		if (world().disconnect(v.mouth) != Refusal::None) {
@@ -2749,7 +3046,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	if (what == "detach") {
 		int thing = -1;
-		if (!item(c, "item", Kind::Vessel, thing, why)) {
+		if (c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) >= 0
+				&& items[static_cast<size_t>(find(c.at("item").get<std::string>()))].kind == Kind::Stopper) {
+			thing = find(c.at("item").get<std::string>()); // a stopper pulled out
+		} else if (!item(c, "item", Kind::Vessel, thing, why)) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
@@ -2763,7 +3063,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		EdgeId mouth;
 		world().connect(v.cell, air, PHASES_GAS, &mouth);
-		if (world().disconnect(x.joint) != Refusal::None) {
+		if (x.kind != Kind::Stopper && world().disconnect(x.joint) != Refusal::None) {
 			world().disconnect(mouth);
 			why = "that would seal \"" + x.id + "\"";
 			return false;
@@ -3481,6 +3781,12 @@ json Lab::Impl::save() const {
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
 				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst }, { "slot", item.slot },
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
+		if (item.kind == Kind::Stopper) { // a lab without a stopper or a cap on saves as before (Stage 28)
+			list.back()["hold_n"] = bits(item.hold_n);
+		}
+		if (item.screwed) {
+			list.back()["screwed"] = true;
+		}
 		if (item.pours_into >= 0) { // a lab without a pour saves as before (Stage 27)
 			list.back()["pours"] = { { "into", item.pours_into }, { "edge", item.pour.index }, { "inverted", item.inverted }, { "tilt", bits(item.tilt) }, { "cap", bits(item.cap) } };
 		}
@@ -3580,7 +3886,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Tray) || place < 0 || place > static_cast<int>(Place::Outbox)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Outbox)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -3613,6 +3919,11 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.burst = j.at("burst").get<bool>();
 			item.slot = j.value("slot", 0);
 			item.glassware = j.value("glassware", "");
+			item.screwed = j.value("screwed", false);
+			if (j.contains("hold_n") && !from_bits(j.at("hold_n"), item.hold_n)) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			if ((j.contains("nominal_ml") && !from_bits(j.at("nominal_ml"), item.nominal_ml)) || !from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)
 					|| (j.contains("wall_mm") && !from_bits(j.at("wall_mm"), item.wall_mm)) || (j.contains("floor_mm") && !from_bits(j.at("floor_mm"), item.floor_mm))) {
 				why = "the save holds a number that is not one";

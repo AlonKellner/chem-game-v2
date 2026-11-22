@@ -208,6 +208,16 @@
 			"design": "pouring and fitting (Stage 27): a held pour's rate at full tilt by the mouth (a beaker's lip faster than a neck), the bore of the cap that fits each mouth, the widest mouth a balloon's or a condenser's fitting seals"
 		},
 		{
+			"data": ["glassware.json/burst_kpa", "glassware.json/kinds/{beaker,conical_flask,bottle}/burst_kpa"],
+			"calibrated": "what the glass holds over the room's pressure, sealed, before it bursts (Stage 28): no laboratory standard rates ordinary glassware for pressure (DWK: standard bottles are not designed for pressure differentials; its pressure plus+ bottle, a modified ISO 4796-1 geometry, is guaranteed from -1 to +1.5 bar); a bottle taken to fail at twice that guarantee, a conical flask's flat sides and a beaker weaker",
+			"doc": ["Glass and stoppers under pressure"]
+		},
+		{
+			"data": ["benches/lab.json/items/stopper/{hold_n,wall_g,loss}"],
+			"calibrated": "a rubber stopper (Stage 28): the force its friction on the glass holds it in by, over its neck's bore, is the overpressure that pushes it out; dry rubber on a barrel holds about 10 N (a syringe's stopper), one pushed into a neck by hand more: 30 N, about +37 kPa in the flask's neck; its rubber's mass, a No. 6 stopper's",
+			"doc": ["Glass and stoppers under pressure"]
+		},
+		{
 			"data": ["sessions/demo.json/**", "tutorials/demo.json/**"],
 			"design": "scripts of the demo: waits, settings and checks"
 		}

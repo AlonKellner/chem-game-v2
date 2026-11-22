@@ -32,7 +32,7 @@ struct SubstanceView {
 
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray; a signal part: timer, monitor, alarm
+	std::string kind; // vessel, balloon, burner, tray, stopper; a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox
 	int col = -1, row = -1; // on the bench: its footprint's top-left square
 	int w = 1, h = 1; // its footprint, in squares
@@ -49,7 +49,14 @@ struct ItemView {
 	bool stirred = false;
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (§13.5)
-	bool burst = false;
+	bool burst = false; // a balloon, burst; a vessel, broken (its glass burst, Stage 28)
+	// pressure (GAME_SPEC §13, Stage 28): its own (an open one's the room's), kPa; sealed (no way out for its gas);
+	// an upright bottle's screw cap on; what it gives way at, sealed (its stopper's hold over its neck, or its
+	// glass's), kPa; a stopper's hold, N
+	double pressure_kpa = 101.325;
+	bool sealed = false, screwed = false;
+	double gives_way_kpa = 0.0;
+	double hold_n = 0.0;
 	double valve = 0.0; // a burner
 	double celsius = 0.0;
 	double volume_ml = 0.0; // a vessel's own
