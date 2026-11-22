@@ -154,6 +154,9 @@ struct ItemDebug {
 	std::vector<SpeciesDebug> species;
 	std::vector<FlowDebug> flows;
 	std::vector<ReactionDebug> reactions;
+	// Stage 28: a vessel's pressure and its pour, or a signal part's state (`part`), as lines
+	bool part = false;
+	std::vector<std::string> facts;
 };
 
 class Lab {

@@ -457,6 +457,11 @@ struct Lab::Impl {
 		return std::nullopt;
 	}
 
+	// a control that is another now (Stage 28: a cap upside down, an orifice, and upright, a screw cap): its last setting gone
+	void forget(const std::string &item_id, const std::string &control) {
+		controls.erase(std::remove_if(controls.begin(), controls.end(), [&](const ControlSetting &c) { return c.item == item_id && c.control == control; }), controls.end());
+	}
+
 	void record(const std::string &item_id, const std::string &control, double value, const std::string &by) {
 		for (ControlSetting &c : controls) {
 			if (c.item == item_id && c.control == control) {
@@ -468,6 +473,68 @@ struct Lab::Impl {
 	}
 
 	bool trial = false; // a copy a controller's trial runs (Stage 28)
+
+	// what a signal part is doing, for the debug panel (Stage 28)
+	std::vector<std::string> part_facts(const Part &p) const {
+		std::vector<std::string> out;
+		const LabView none;
+		const auto value = [&](const std::optional<double> &v) { return v ? shown(p.quantity, *v) : std::string("nothing"); };
+		switch (p.kind) {
+			case PartKind::Timer:
+				out.push_back(text_of("%.1f s left", static_cast<double>(p.left) * STEP_SECONDS) + text_of(" of %.1f s", static_cast<double>(p.preset) * STEP_SECONDS));
+				break;
+			case PartKind::Monitor:
+				if (!p.watching) {
+					out.push_back("not set: it senses nothing");
+					break;
+				}
+				out.push_back("senses " + label(none, p.quantity) + ", " + op_name(p.comparison.op) + " " + shown(p.quantity, p.comparison.a) +
+						(p.comparison.op == Comparison::Between || p.comparison.op == Comparison::Outside ? " and " + shown(p.quantity, p.comparison.b) : std::string()));
+				out.push_back("reads " + value(reading(p.quantity)) + (p.own ? ": its condition holds" : ": its condition does not hold"));
+				break;
+			case PartKind::Notice:
+				out.push_back(std::string("hears ") + level_name(static_cast<Notice::Level>(p.notice_level)) + " and above" + (p.quantity.item.empty() ? "" : ", about " + p.quantity.item) +
+						(p.contains.empty() ? "" : ", containing \"" + p.contains + "\""));
+				out.push_back(text_of("signals for %.2f s after one", static_cast<double>(p.hold) * STEP_SECONDS) + (p.out ? text_of(": on, %.2f s to go", static_cast<double>(p.held) * STEP_SECONDS) : ": off"));
+				break;
+			case PartKind::Writer:
+				out.push_back(std::string("writes a ") + level_name(static_cast<Notice::Level>(p.notice_level)) + " when its input turns " + (p.writes == 2 ? "on or off" : writes_name(p.writes)) +
+						(p.quantity.item.empty() ? "" : ", about " + p.quantity.item));
+				out.push_back("its words: " + (p.says.empty() ? p.id + " was signalled" : p.says));
+				break;
+			case PartKind::Alarm:
+				out.push_back(p.ringing ? "ringing" : "quiet");
+				break;
+			case PartKind::Circuit:
+				out.push_back("it holds parts; what is in it signals");
+				break;
+			case PartKind::Controller: {
+				static const char *const SPEEDS[] = { "gentle", "normal", "fast" };
+				if (!p.watching) {
+					out.push_back("not set: it senses nothing");
+					break;
+				}
+				const std::string u = unit(p.quantity);
+				out.push_back("holds " + label(none, p.quantity) + " at " + shown(p.quantity, p.target) + ", " + SPEEDS[std::clamp(p.speed, 0, 2)]);
+				if (!p.tuned) {
+					out.push_back("not tuned: rig what it controls, and set it");
+					break;
+				}
+				out.push_back(p.tau > 0.0 ? "its trial found: " + text_of("%.4g ", p.gain) + u + " full on, " + text_of("over %.0f s", p.tau) + text_of(", after %.1f s", p.theta)
+										  : "its trial found: " + text_of("%.4g ", p.gain) + u + " a second full on" + text_of(", after %.1f s", p.theta));
+				out.push_back(text_of("gain %.4g", p.kc) + text_of(", integral time %.0f s", p.ti) + text_of(", PWM period %.0f s", static_cast<double>(p.period) * STEP_SECONDS));
+				const std::optional<double> v = reading(p.quantity);
+				out.push_back("reads " + value(v) + (v ? text_of(", error %.4g", p.target - *v) : std::string()) + text_of(", integral %.4g", p.integral) +
+						text_of(", level %.3f", p.level) + text_of(" (PWM on %.0f", static_cast<double>(p.on_steps)) + text_of(" of %.0f steps)", static_cast<double>(p.period)));
+				out.push_back(text_of("tuned on %.1f g", p.basis_g) + text_of(" and %.0f J/K: tunes again past a tenth of either, or a material come or gone", p.basis_cp));
+				if (p.pinned > 0) {
+					out.push_back(text_of("held at a limit for %.0f s", static_cast<double>(p.pinned) * STEP_SECONDS));
+				}
+				break;
+			}
+		}
+		return out;
+	}
 
 	// what a controller's sensed item holds, as re-tuning compares it (Stage 28): its contents' mass, its heat
 	// capacity, the materials there
@@ -1079,6 +1146,7 @@ struct Lab::Impl {
 		x.pour = edge;
 		x.inverted = inverted;
 		x.tilt = x.cap = 0.0;
+		forget(x.id, "cap"); // the cap it has now is another control (Stage 28)
 		return true;
 	}
 
@@ -1096,6 +1164,7 @@ struct Lab::Impl {
 		x.pour = EdgeId{};
 		x.inverted = false;
 		x.tilt = x.cap = 0.0;
+		forget(x.id, "cap");
 		return true;
 	}
 	bool end_pours(int thing, std::string &why) {
@@ -3515,7 +3584,7 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	const double area = 4.835975862049409 * std::cbrt(static_cast<double>(state.particles[in])) * std::pow(mol * solid.molar_volume, 2.0 / 3.0); // m^2
 	// which of its two steps holds it back (GAME_SPEC §7): the reaction at the surface, or transport to it
 	const double mixing = world.meta(cell).mixing;
-	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, mixing);
+	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, mixing, &world.meta(cell));
 	const bool by_transport = steps.transported && steps.transport < steps.surface;
 	const bool alike = steps.transported && steps.transport < 3.0 * steps.surface && steps.surface < 3.0 * steps.transport;
 	std::string says = alike ? "limited by its surface and by transport to it alike: " : by_transport ? "limited by transport to its surface: " : "limited at its surface: ";
@@ -3524,7 +3593,7 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 		says += text_of(", %.3g mol/kg of ", molality(table, state, k.driver)) + named(table, k.driver);
 	}
 	if (mixing < STIRRED) {
-		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED).both / steps.both : 1.0;
+		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED, &world.meta(cell)).both / steps.both : 1.0;
 		says += faster < 1.05 ? std::string("; stirring would hardly speed it") : text_of("; stirring would make it %.1f times faster", faster);
 	} else {
 		says += "; stirred";
@@ -3551,13 +3620,38 @@ ItemDebug Lab::debug(const std::string &id) const {
 	ItemDebug out;
 	out.item = id;
 	const int i = m.find(id);
+	if (i < 0 && m.find_part(id) >= 0) { // a signal part (Stage 28): what it is doing
+		out.found = true;
+		out.part = true;
+		out.facts = m.part_facts(m.parts[static_cast<size_t>(m.find_part(id))]);
+		return out;
+	}
 	if (i < 0 || m.items[static_cast<size_t>(i)].kind == Kind::Burner) {
 		return out;
 	}
 	out.found = true;
-	const CellId cell = m.items[static_cast<size_t>(i)].cell;
+	const Item &x = m.items[static_cast<size_t>(i)];
+	const CellId cell = x.cell;
 	const CellState &state = world.snapshot_cell(cell);
-	const Thermal thermal = thermal_state(table, state);
+	const CellMeta &meta = world.meta(cell);
+	const Thermal thermal = thermal_state(table, state, &meta);
+	// its pressure, and its pour (Stage 28)
+	if (x.kind == Kind::Vessel) {
+		out.facts.push_back(m.sealed(x) ? text_of("sealed: %.1f kPa", thermal.pressure / 1000.0) + text_of(", giving way past %.0f kPa", (m.gives_way(x) + P_ATMOSPHERE) / 1000.0)
+										: text_of("open to the room: %.1f kPa", P_ATMOSPHERE / 1000.0));
+		if (x.pours_into >= 0 && x.pour.index >= 0) {
+			const double rate = world.edges()[static_cast<size_t>(x.pour.index)].rate * 1e6;
+			const std::string into = m.items[static_cast<size_t>(x.pours_into)].id;
+			if (x.inverted) {
+				const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+				const Fill fill = fill_of(table, state, thermal.temperature, &meta);
+				const double head = g != nullptr && fill.defined ? g->head_inverted(fill.condensed * 1e6) : 0.0;
+				out.facts.push_back("pours into " + into + text_of(" upside down: its cap %.0f%% open", 100.0 * x.cap) + text_of(" under %.1f cm of liquid", head) + text_of(": %.2f mL/s", rate));
+			} else {
+				out.facts.push_back("pours into " + into + text_of(" held, tilted %.0f%%", 100.0 * x.tilt) + text_of(": %.2f mL/s", rate));
+			}
+		}
+	}
 	out.has_temperature = thermal.defined;
 	out.celsius = thermal.temperature - 273.15;
 	out.heat_capacity = thermal.heat_capacity;
@@ -3586,7 +3680,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 		d.g = d.mol * static_cast<double>(table.molar_mass_ug(sid)) * 1e-6;
 		d.fraction = def.phase == Phase::Gas ? n / gas : def.phase == Phase::Solid ? 1.0 : n / solution;
 		d.molality = def.phase == Phase::Aqueous && liquid > 0.0 ? n / (liquid * MOL_PER_QUANTUM * 0.018015) * MOL_PER_QUANTUM : 0.0;
-		d.activity = activity(table, state, sid);
+		d.activity = activity(table, state, sid, &meta);
 		out.species.push_back(d);
 	}
 	// its flows in the last step, into it
@@ -3605,7 +3699,12 @@ ItemDebug Lab::debug(const std::string &id) const {
 			if (q == 0 && g == 0.0) {
 				continue;
 			}
-			out.flows.push_back(FlowDebug{ world.cell_name(other), PROCESS[p], sign * static_cast<double>(q) * JOULE_PER_QUANTUM / STEP_SECONDS, sign * g / STEP_SECONDS });
+			bool poured = false; // a drain that is a pour (Stage 28)
+			for (const Item &u : m.items) {
+				poured = poured || (u.pours_into >= 0 && u.pour.index == static_cast<int32_t>(e));
+			}
+			out.flows.push_back(FlowDebug{ world.cell_name(other), poured && p == static_cast<size_t>(Process::Drain) ? "pour" : PROCESS[p],
+					sign * static_cast<double>(q) * JOULE_PER_QUANTUM / STEP_SECONDS, sign * g / STEP_SECONDS });
 		}
 	}
 	// each reaction that names a species it holds
@@ -3640,7 +3739,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 			d.limit = "no temperature to weigh it at";
 		} else {
 			bool defined = false;
-			const double a = affinity(table, state, reaction.terms(), thermal.temperature, defined);
+			const double a = affinity(table, state, reaction.terms(), thermal.temperature, defined, &meta);
 			d.weighed = defined;
 			d.affinity_kj = a / 1000.0;
 			if (defined) {

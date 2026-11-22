@@ -430,10 +430,20 @@ struct Ui::Impl {
 		}
 		const ItemDebug d = lab->debug(id(selected));
 		if (!d.found) {
-			add(id(selected) + " holds nothing: a burner's flame, or a signal part", DIM);
+			add(id(selected) + " holds nothing: a burner's flame", DIM);
+			return out;
+		}
+		if (d.part) { // a signal part: what it is doing (Stage 28)
+			add(d.item, INK, 18);
+			for (const std::string &f : d.facts) {
+				add(f, INK, 13, 10);
+			}
 			return out;
 		}
 		add(d.item + (d.has_temperature ? text_of(": %.2f C", d.celsius) + text_of(", heat capacity %.1f J/K", d.heat_capacity) : ": no temperature"), INK, 18);
+		for (const std::string &f : d.facts) { // its pressure, its pour (Stage 28)
+			add(f, INK, 13, 10);
+		}
 		add("what it holds: mol, g, mole fraction in its mixture, molality, activity", DIM, 13);
 		for (const SpeciesDebug &s : d.species) {
 			std::string row = s.formula + text_of("  %.4g mol", s.mol) + text_of("  %.4g g", s.g) + text_of("  x %.4g", s.fraction);

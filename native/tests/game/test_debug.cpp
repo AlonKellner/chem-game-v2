@@ -238,3 +238,40 @@ TEST_CASE("debug: under a tutorial, a single step only while the tutorial lets t
 	CHECK(ui->lab().step() == before); // its first step asks for a gesture
 	CHECK(ui->message().find("The clock waits for you") != std::string::npos);
 }
+
+TEST_CASE("debug: a vessel's pressure, a pour as a pour (its kind, rate, cap and head), and what a signal part is doing (Stage 28)") {
+	std::string why;
+	auto l = lab::Lab::open(read("data/benches/demo.json"), why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	must(*l, R"({"do": "invert", "item": "acid", "over": "flask"})");
+	must(*l, R"({"do": "cap", "item": "acid", "to": 0.5})");
+	REQUIRE(l->advance(2, why));
+	const lab::ItemDebug acid = l->debug("acid");
+	const auto has = [](const lab::ItemDebug &d, const std::string &words) {
+		return std::any_of(d.facts.begin(), d.facts.end(), [&](const std::string &f) { return f.find(words) != std::string::npos; });
+	};
+	CHECK(has(acid, "open to the room: 101.3 kPa"));
+	CHECK(has(acid, "pours into flask upside down: its cap 50% open under"));
+	const lab::ItemDebug flask = l->debug("flask");
+	CHECK(std::any_of(flask.flows.begin(), flask.flows.end(), [](const lab::FlowDebug &f) { return f.process == "pour" && f.with == "acid" && f.grams_per_s > 0.0; }));
+	// a controller and a notice part, from the inside
+	must(*l, R"({"do": "part", "kind": "notice", "at": [0, 0]})");
+	must(*l, R"({"do": "set", "part": "notice1", "level": "event", "contains": "boils", "seconds": 3})");
+	const lab::ItemDebug notice = l->debug("notice1");
+	CHECK(notice.found);
+	CHECK(notice.part);
+	CHECK(has(notice, "containing \"boils\""));
+	CHECK(has(notice, "signals for 3.00 s after one: off"));
+	must(*l, R"({"do": "unpour", "item": "acid"})");
+	must(*l, R"({"do": "part", "kind": "controller", "at": [1, 0]})");
+	must(*l, R"({"do": "sense", "part": "controller1", "item": "flask"})");
+	must(*l, R"({"do": "heat", "burner": "burner", "vessel": "flask"})");
+	must(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
+	must(*l, R"({"do": "set", "part": "controller1", "what": "celsius", "target": 60, "speed": "normal"})");
+	REQUIRE_MESSAGE(l->advance(60, why), why);
+	const lab::ItemDebug c = l->debug("controller1");
+	CHECK(has(c, "holds flask: temperature (C) at 60.0 C, normal"));
+	CHECK(has(c, "its trial found:"));
+	CHECK(has(c, "gain "));
+	CHECK(has(c, "reads "));
+}
