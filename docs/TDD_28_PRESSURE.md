@@ -25,7 +25,7 @@ stoppers under pressure*).
 | 28.6 | The debug panel: pressure, pours, signal parts | Done |
 | 28.7 | The screen: the stopper, the cap's button and body, the readout, the editors, the cabinet's shelves | Done |
 | 28.8 | A session recorded (`data/sessions/pressure.json`) | Done |
-| 28.9 | The user's test and sign-off | |
+| 28.9 | The user's test and sign-off | Signed off (2026-11-22) |
 
 ## Decisions
 

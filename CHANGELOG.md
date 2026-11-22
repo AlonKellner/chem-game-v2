@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Unreleased (Stage 28)
+## 0.29.0 (2026-11-22, Stage 28)
 
 - §6, §8: **sealed cells**: a rigid cell with no gas path to an elastic one is sealed (V3 keeps the
   mark), its energy `U + P_atm V` (its enthalpy at an atmosphere: open cells, and every record, are
