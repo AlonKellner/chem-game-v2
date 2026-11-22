@@ -307,7 +307,7 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27)
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28)
 	CHECK(bars == 3 + 2); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
@@ -987,4 +987,39 @@ TEST_CASE("ui: a vessel carried over another pours while the left button is held
 	}
 	CHECK(p.item("flask").liquid_ml > before + 2.0);
 	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a person seals the flask with the stopper, carried onto its neck, and caps the acid bottle from its readout; the stopper is rubber at the flask's mouth, the cap on the bottle's, bodies of the pass (Stage 28)") {
+	Player p;
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:acid", "square:20,12");
+	p.drag("item:stopper", "item:flask"); // put down on the flask: into its neck
+	REQUIRE(p.item("stopper").place == "on");
+	CHECK(p.item("flask").sealed);
+	for (int k = 0; k < 10; ++k) { // the bench opens out of equilibrium: a moment for the acid's gas to settle at the room's pressure
+		p.ui->frame(1.0 / 60.0);
+	}
+	p.click("item:acid");
+	p.click("screw:acid");
+	INFO(p.ui->message());
+	CHECK(p.item("acid").screwed);
+	CHECK(p.item("acid").sealed);
+	p.ui->frame(0.0);
+	namespace L = lab::optics_layout;
+	const lab::OpticsScene &scene = p.ui->optics();
+	float fx = 0, fy = 0;
+	p.at("item:flask", fx, fy);
+	int at_mouth = 0;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
+		const float kind = scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4];
+		at_mouth += kind == 3.0f && std::fabs(rect[0] + rect[2] / 2 - fx) < 2.0f && rect[2] < 50.0f ? 1 : 0; // a slab across the flask's axis, narrow: the stopper
+	}
+	CHECK(at_mouth == 1);
+	p.click("screw:acid"); // off again
+	CHECK_FALSE(p.item("acid").sealed);
+	// pulled out: picked up off the neck and put down on the bench
+	p.drag("item:stopper", "square:2,14");
+	CHECK(p.item("stopper").place == "bench");
+	CHECK_FALSE(p.item("flask").sealed);
 }

@@ -148,7 +148,7 @@
 		},
 		{
 			"data": [
-				"optics/media.json/surfaces/{timer_face,monitor_face,alarm_face,notice_face,writer_face,controller_face,part_face,circuit_face,wire,sense,rig,burner_metal,outlet_glass,lamp_glass}/**",
+				"optics/media.json/surfaces/{timer_face,monitor_face,alarm_face,notice_face,writer_face,controller_face,part_face,circuit_face,wire,sense,rig,burner_metal,outlet_glass,lamp_glass,rubber,cap_plastic}/**",
 				"optics/media.json/emitters/{lamp_green,lamp_amber,flame_sooty,flame_blue}/**"
 			],
 			"calibrated": "the lab's things that are no substance: the colours the screen drew them in, until measured",

@@ -429,3 +429,48 @@ TEST_CASE("notices: a notice part hears only notices whose words contain its tex
 	REQUIRE_MESSAGE(again != nullptr, why);
 	CHECK(again->digest() == l->digest());
 }
+
+TEST_CASE("notices: on the screen, a notice part's text and seconds typed, and a writer set to write on its input turning off (Stage 28)") {
+	std::string why;
+	auto ui = lab::Ui::open(read("data/benches/demo.json"), why);
+	REQUIRE(ui != nullptr);
+	const auto at = [&](const std::string &what, float &x, float &y) { REQUIRE_MESSAGE(ui->locate(what, x, y), what); };
+	const auto click = [&](const std::string &what) {
+		float x = 0, y = 0;
+		at(what, x, y);
+		ui->pointer(x, y, true);
+		ui->pointer(x, y, false);
+	};
+	const auto drag = [&](const std::string &a, const std::string &b) {
+		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+		at(a, x0, y0);
+		at(b, x1, y1);
+		ui->pointer(x0, y0, true);
+		ui->pointer(x1, y1, true);
+		ui->pointer(x1, y1, false);
+	};
+	const auto part = [&](const std::string &id) {
+		const lab::LabView v = ui->lab().view();
+		const auto i = std::find_if(v.items.begin(), v.items.end(), [&](const lab::ItemView &x) { return x.id == id; });
+		REQUIRE(i != v.items.end());
+		return i->part;
+	};
+	const auto typed = [&](const std::string &text) {
+		for (const char ch : text) {
+			ui->key(lab::Ui::KeyText, static_cast<uint32_t>(static_cast<unsigned char>(ch)));
+		}
+	};
+	drag("drawer:notice", "square:0,0");
+	click("edit:level:event");
+	click("edit:contains");
+	typed("boils");
+	click("edit:seconds");
+	typed("2.5");
+	click("edit:set");
+	CHECK(part("notice1").contains == "boils");
+	CHECK(part("notice1").hold == 150);
+	drag("drawer:writer", "square:2,0");
+	click("edit:writes:off");
+	click("edit:set");
+	CHECK(part("writer1").writes == 1);
+}
