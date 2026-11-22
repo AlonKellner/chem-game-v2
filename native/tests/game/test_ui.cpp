@@ -307,8 +307,8 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob
-	CHECK(bars == 3); // the wire and the rig; the condenser's outlet, in the cabinet
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27)
+	CHECK(bars == 3 + 2); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
 	// and none of it is drawn over the pass: no polygon (a flame) anywhere, no circle (a lamp, a port, a knob) on

@@ -208,6 +208,7 @@ struct Ui::Impl {
 	float px = 0, py = 0;
 	bool down = false;
 	int drag = -1; // the item in hand
+	std::vector<ItemView> streams; // the pours' streams, this frame's (Stage 27): bodies of the pass, each a column of its liquid
 	float grab_x = 0, grab_y = 0; // where in it it was taken
 	int anchor_c = 0, anchor_r = 0; // the square of its footprint under the pointer
 	float press_x = 0, press_y = 0; // where the button went down
@@ -2831,6 +2832,8 @@ struct Ui::Impl {
 		} else if (v.place == "under") {
 			const Rect c = rect(index);
 			text(c.x, c.y + c.h + 18, label, WALL_INK, 14);
+		} else if (v.place == "bench" && v.inverted && v.pours_into >= 0) {
+			text(r.x + r.w + 6, r.y + 16, label, WALL_INK, 14); // upside down over another: beside it, where it is (Stage 27)
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
 			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
@@ -3476,6 +3479,74 @@ struct Ui::Impl {
 		}
 		if (drag >= 0) {
 			add(drag, drawn(drag), moved || carrying);
+		}
+		// supports that come with the glassware (§13, Stage 27): metal, bodies of the pass like everything that takes
+		// space; they hold, and change nothing else
+		const auto floor_of = [&](int i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const Rect f = v.place == "bench" ? foot(v) : rect(i);
+			return f.y + f.h;
+		};
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.kind != "burner" || v.under < 0 || i == drag || !on_bench(v.under)) {
+				continue;
+			}
+			// a vessel over a burner stands on a wire gauze over a tripod
+			const Rect pot = drawn(v.under), flame = drawn(i);
+			const float gauze = pot.y + pot.h, ground = flame.y + flame.h;
+			thing(v.id, "gauze", OpticsBody::Slab, Rect{ pot.x - 8, gauze, pot.w + 16, 3 }, 1.0f, "burner_metal", nullptr, false);
+			bar(v.id, "leg left", pot.x - 4, gauze + 2, pot.x - 14, ground, 3.0f, "burner_metal", false);
+			bar(v.id, "leg right", pot.x + pot.w + 4, gauze + 2, pot.x + pot.w + 14, ground, 3.0f, "burner_metal", false);
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const int under = v.place == "on" ? v.on : v.inverted ? v.pours_into : -1;
+			if (under < 0 || i == drag || !on_bench(under)) {
+				continue;
+			}
+			// held on a vessel's mouth, or upside down over it: a retort stand beside that vessel, a clamp across
+			const Rect held = drawn(i), base = drawn(under);
+			const float rod = base.x - 18, ground = floor_of(under), grip = held.y + held.h * (v.inverted ? 0.5f : 0.35f);
+			thing(v.id, "stand base", OpticsBody::Slab, Rect{ rod - 22, ground - 6, 44, 6 }, 2.0f, "burner_metal", nullptr, false);
+			bar(v.id, "stand rod", rod, ground - 6, rod, grip - 10, 3.0f, "burner_metal", false);
+			bar(v.id, "clamp", rod, grip, held.cx() - held.w * 0.3f, grip, 2.5f, "burner_metal", false);
+		}
+		// a pour's stream (Stage 27): a thin column of the liquid itself, from the mouth it leaves to where it lands
+		streams.clear();
+		streams.reserve(view.items.size());
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const bool flows = v.pours_into >= 0 && v.liquid_ml > 0.0 && (v.inverted ? v.cap > 0.0 : v.tilt > 0.0);
+			if (!flows) {
+				continue;
+			}
+			const ItemView &t = view.items[static_cast<size_t>(v.pours_into)];
+			const Rect from_r = drawn(i), to_r = drawn(v.pours_into);
+			float land = to_r.y + to_r.h;
+			if (const glass::Vessel *g = t.glassware.empty() ? nullptr : glass::find(t.glassware, t.nominal_ml); g != nullptr) {
+				land -= static_cast<float>(g->level(t.condensed_ml) * to_r.w / (2.0 * g->widest()));
+			}
+			const float x = v.inverted ? from_r.cx() : from_r.x + from_r.w - 3.0f, top = v.inverted ? from_r.y + from_r.h : from_r.y;
+			const float width = static_cast<float>(2.0 + 3.0 * (v.inverted ? v.cap : v.tilt));
+			if (land <= top + 2.0f) {
+				continue;
+			}
+			ItemView stream;
+			stream.id = v.id + "~stream";
+			stream.kind = "vessel";
+			stream.place = "bench";
+			stream.celsius = v.celsius;
+			stream.volume_ml = stream.condensed_ml = stream.liquid_ml = 1.0; // a column full of it
+			for (const SubstanceView &c : v.contents) {
+				if (!c.wall && (c.phase == 'l' || c.phase == 'a')) {
+					stream.contents.push_back(c);
+				}
+			}
+			streams.push_back(stream);
+			OpticsBody body{ &streams.back(), x - width / 2.0f, top, width, land - top };
+			body.layer = i == drag && (moved || carrying) ? 1 : 0;
+			bodies.push_back(body);
 		}
 		// the wires and the rigs between things on the bench
 		for (const Wire &w : view.wires) {
