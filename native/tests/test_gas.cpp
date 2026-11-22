@@ -245,21 +245,25 @@ TEST_CASE("gas: a flask that cannot draw enough is left under-full and marked st
 	CHECK(gas_mol(sim.world(), balloon) == 0.0);
 }
 
-TEST_CASE("gas: a rigid cell is never sealed, and a wall never moves or reacts (Stage 4)") {
+TEST_CASE("gas: a rigid cell with no gas path to an elastic one is sealed, the world keeping the mark as its edges change; a wall never moves or reacts (Stage 4, Stage 28)") {
 	std::string why;
 	{
-		World::Builder b(builtin_species()); // no gas path at all
+		World::Builder b(builtin_species()); // no gas path at all: sealed
 		const CellId flask = b.add_rigid_cell("flask", FLASK);
 		b.set_amount(flask, builtin::nitrogen, mol(0.01));
-		CHECK_FALSE(b.build(&why));
-		CHECK(why.find("gas path") != std::string::npos);
+		const auto w = b.build(&why);
+		REQUIRE_MESSAGE(w.has_value(), why);
+		CHECK(w->meta(flask).sealed);
 	}
 	{
 		World::Builder b(builtin_species()); // a liquid edge is not a gas path
 		const CellId flask = b.add_rigid_cell("flask", FLASK);
 		const CellId air = b.add_cell("air");
 		b.add_edge(flask, air, PHASES_LIQUID);
-		CHECK_FALSE(b.build(&why));
+		const auto w = b.build(&why);
+		REQUIRE_MESSAGE(w.has_value(), why);
+		CHECK(w->meta(flask).sealed);
+		CHECK_FALSE(w->meta(air).sealed);
 	}
 	{
 		World::Builder b(builtin_species()); // more water than the flask holds
@@ -292,12 +296,17 @@ TEST_CASE("gas: a rigid cell is never sealed, and a wall never moves or reacts (
 	const EdgeId vent = b.add_edge(tube, air, PHASES_GAS);
 	b.set_amount(flask, builtin::glass, mol(1.0));
 	World world = build(b);
-	CHECK(world.disconnect(vent) == Refusal::WouldSeal); // both cells would be sealed
-	CHECK(world.disconnect(neck) == Refusal::WouldSeal); // the flask would be
+	CHECK_FALSE(world.meta(flask).sealed);
+	REQUIRE(world.disconnect(vent) == Refusal::None); // both cells sealed together
+	CHECK(world.meta(flask).sealed);
+	CHECK(world.meta(tube).sealed);
 	EdgeId mouth;
-	REQUIRE(world.connect(flask, air, PHASES_GAS, &mouth) == Refusal::None);
-	CHECK(world.disconnect(neck) == Refusal::None); // now it has its own way out
-	CHECK(world.disconnect(mouth) == Refusal::WouldSeal);
+	REQUIRE(world.connect(flask, air, PHASES_GAS, &mouth) == Refusal::None); // a way out for both again
+	CHECK_FALSE(world.meta(flask).sealed);
+	CHECK_FALSE(world.meta(tube).sealed);
+	CHECK(world.disconnect(neck) == Refusal::None); // the tube sealed alone
+	CHECK(world.meta(tube).sealed);
+	CHECK_FALSE(world.meta(flask).sealed);
 	const SpeciesAmount glass[] = { { builtin::glass, Amount{ 10 } } };
 	REQUIRE(world.connect(flask, tube, PHASES_ALL) == Refusal::None);
 	CHECK(world.transfer(EdgeId{ 3 }, flask, glass, Energy{}) == Refusal::Wall);

@@ -119,7 +119,8 @@ bool seconds_of(const std::string &text, double &seconds) {
 struct Draft {
 	enum Edit { None, Monitor, Timer, Rig, Choose, Notice, Writer, Goal, Controller } edit = None;
 	int level = 2; // a notice part's, or a writer's
-	std::string says; // a writer's words, as typed
+	std::string says; // a writer's words, as typed; a notice part's text it hears for (Stage 28)
+	int writes = 0; // a writer's: on turning on, off, or on either change (Stage 28)
 	std::string part; // the part being set, or a rig's source
 	Quantity quantity; // a monitor's: the item it senses, and what it reads (what and measure "" until chosen)
 	int kind = -1; // a monitor's: the kind of quantity chosen (lab::QuantityKind), -1 none yet (§13.3, Stage 26)
@@ -430,10 +431,20 @@ struct Ui::Impl {
 		}
 		const ItemDebug d = lab->debug(id(selected));
 		if (!d.found) {
-			add(id(selected) + " holds nothing: a burner's flame, or a signal part", DIM);
+			add(id(selected) + " holds nothing: a burner's flame", DIM);
+			return out;
+		}
+		if (d.part) { // a signal part: what it is doing (Stage 28)
+			add(d.item, INK, 18);
+			for (const std::string &f : d.facts) {
+				add(f, INK, 13, 10);
+			}
 			return out;
 		}
 		add(d.item + (d.has_temperature ? text_of(": %.2f C", d.celsius) + text_of(", heat capacity %.1f J/K", d.heat_capacity) : ": no temperature"), INK, 18);
+		for (const std::string &f : d.facts) { // its pressure, its pour (Stage 28)
+			add(f, INK, 13, 10);
+		}
 		add("what it holds: mol, g, mole fraction in its mixture, molality, activity", DIM, 13);
 		for (const SpeciesDebug &s : d.species) {
 			std::string row = s.formula + text_of("  %.4g mol", s.mol) + text_of("  %.4g g", s.g) + text_of("  x %.4g", s.fraction);
@@ -622,6 +633,9 @@ struct Ui::Impl {
 		if (v.kind == "burner") {
 			w = 56;
 			h = 26;
+		} else if (v.kind == "stopper") { // a rubber bung (Stage 28)
+			w = 24;
+			h = 16;
 		} else if (v.kind == "balloon") {
 			const double r = v.burst ? 10.0 : std::fmin(90.0, 14.0 + 6.0 * std::cbrt(v.gas_ml + v.condensed_ml));
 			w = h = static_cast<float>(2.0 * r);
@@ -639,7 +653,15 @@ struct Ui::Impl {
 	}
 
 	// how much smaller an item is drawn to fit the cabinet's shelf, and an outbox slot (its name under it)
-	static float cabinet_scale(float w, float h) { return std::fmin(1.0f, std::fmin(200.0f / w, (110.0f - 24.0f) / h)); }
+	// a shelf of the cabinet, top to top: 118 px, or less to fit all a bench can put in it on the screen (Stage 28)
+	float shelf() const {
+		int n = 0;
+		for (const ItemView &v : view.items) {
+			n += v.kind != "tray" && !is_part_kind(v.kind) ? 1 : 0;
+		}
+		return std::fmin(118.0f, 970.0f / static_cast<float>(std::max(n, 1)));
+	}
+	float cabinet_scale(float w, float h) const { return std::fmin(1.0f, std::fmin(200.0f / w, (shelf() - 8.0f - 24.0f) / h)); }
 	static float outbox_scale(float w, float h) { return std::fmin(1.0f, std::fmin((100.0f - 12.0f) / w, 106.0f / h)); }
 
 	// its slot among the items of a place, in order
@@ -659,7 +681,7 @@ struct Ui::Impl {
 		float w = 0, h = 0;
 		size_of(v, w, h);
 		if (v.place == "cabinet") {
-			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * 118, 200, 110 };
+			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * shelf(), 200, shelf() - 8.0f };
 			const float scale = cabinet_scale(w, h);
 			return Rect{ box.cx() - w * scale / 2, box.y + box.h - 22 - h * scale, w * scale, h * scale };
 		}
@@ -668,6 +690,12 @@ struct Ui::Impl {
 			const Rect room{ box.x + 6, box.y + box.h - 128, box.w - 12, 106 }; // its name under it, in the slot
 			const float scale = outbox_scale(w, h);
 			return Rect{ room.cx() - w * scale / 2, room.y + room.h - h * scale, w * scale, h * scale };
+		}
+		if (v.place == "on" && v.on >= 0 && v.kind == "stopper") {
+			// in the neck (Stage 28): as wide as the mouth and a little more, half in it
+			const Rect holder = rect(v.on);
+			const float mouth = mouth_px(v.on) + 4;
+			return Rect{ holder.cx() - mouth / 2, holder.y - h * 0.5f, mouth, h };
 		}
 		if (v.place == "on" && v.on >= 0) {
 			const Rect holder = rect(v.on);
@@ -702,6 +730,15 @@ struct Ui::Impl {
 			}
 		}
 		return Rect{ c.cx() - w / 2, c.y + c.h - lift - h, w, h };
+	}
+
+	// a vessel's mouth across, in pixels as it is drawn (its glassware's inside at the mouth, or a third of it)
+	float mouth_px(int index) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		float w = 0, h = 0;
+		size_of(v, w, h);
+		const glass::Vessel *g = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+		return g != nullptr ? static_cast<float>(w * g->mouth() / g->widest()) : w / 3.0f;
 	}
 
 	// the item under a point, the topmost; not the tray, not `except`; with
@@ -750,6 +787,17 @@ struct Ui::Impl {
 			return false;
 		}
 		r = Rect{ READOUT.x + 16, readout_top() + 90, 90, 30 };
+		return true;
+	}
+
+	// an upright bottle's screw cap, on or off, while it is selected on the bench (Stage 28)
+	bool screw_rect(int index, Rect &r) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const glass::Vessel *g = v.kind == "vessel" && !v.glassware.empty() ? glass::find(v.glassware, v.nominal_ml) : nullptr;
+		if (index != selected || g == nullptr || !g->screw_cap || v.burst || v.pours_into >= 0 || v.holds >= 0 || v.place != "bench" || draft.edit != Draft::None) {
+			return false;
+		}
+		r = Rect{ READOUT.x + 116, readout_top() + 90, 140, 30 };
 		return true;
 	}
 
@@ -1037,7 +1085,7 @@ struct Ui::Impl {
 				}
 			} else if (t.kind != "vessel") {
 				message = "\"" + t.id + "\" takes nothing";
-			} else if (v.kind == "balloon" || v.condenser) {
+			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {
 				act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
 			} else if (t.condenser) {
 				act({ { "do", "under" }, { "item", v.id }, { "of", t.id } });
@@ -1204,6 +1252,13 @@ struct Ui::Impl {
 					return;
 				}
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
+				return;
+			}
+			if (screw_rect(i, r) && r.has(x, y)) {
+				if (!allowed_click("screw:" + id(i))) {
+					return;
+				}
+				act({ { "do", "cap" }, { "item", id(i) }, { "to", view.items[static_cast<size_t>(i)].screwed ? 1.0 : 0.0 } });
 				return;
 			}
 		}
@@ -1585,6 +1640,9 @@ struct Ui::Impl {
 		return out;
 	}
 	Rect says_field() const { return Rect{ EDITOR.x + 20, EDITOR.y + 174, 680, 30 }; }
+	// a notice part's seconds; a writer's choice of what of its input writes (Stage 28)
+	Rect hold_field() const { return Rect{ EDITOR.x + 140, EDITOR.y + 214, 110, 30 }; }
+	Rect writes_rect(int k) const { return Rect{ EDITOR.x + 20 + static_cast<float>(k) * 150, EDITOR.y + 214, 144, 30 }; }
 	// a monitor's, guided (§13.3, Stage 26): the kind, then a choice of that kind (a material, or the vessel's
 	// quantity), a material's measure, then the comparison and its values
 	const ItemView &sensed() const {
@@ -1721,7 +1779,9 @@ struct Ui::Impl {
 			d.edit = v.kind == "notice" ? Draft::Notice : Draft::Writer;
 			d.level = v.part.notice_level;
 			d.quantity.item = v.part.quantity.item;
-			d.says = v.part.says;
+			d.says = v.kind == "notice" ? v.part.contains : v.part.says;
+			d.writes = v.part.writes;
+			d.preset = text_of("%g", static_cast<double>(v.part.hold) / 60.0); // a notice part's seconds
 			open_edit(d);
 			return;
 		}
@@ -1824,7 +1884,13 @@ struct Ui::Impl {
 			if (!allowed_click("edit:set")) {
 				return;
 			}
-			const json c = { { "do", "set" }, { "part", draft.part }, { "level", level_name(static_cast<lab::Notice::Level>(draft.level)) }, { "item", draft.quantity.item } };
+			const double seconds = std::atof(draft.preset.c_str());
+			if (!(seconds > 0.0)) {
+				message = "it signals for some seconds after a notice: more than none";
+				return;
+			}
+			const json c = { { "do", "set" }, { "part", draft.part }, { "level", level_name(static_cast<lab::Notice::Level>(draft.level)) }, { "item", draft.quantity.item },
+				{ "contains", draft.says }, { "seconds", seconds } };
 			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
@@ -1841,7 +1907,7 @@ struct Ui::Impl {
 				return;
 			}
 			const json c = { { "do", "set" }, { "part", draft.part }, { "level", level_name(static_cast<lab::Notice::Level>(draft.level)) }, { "item", draft.quantity.item },
-				{ "says", draft.says } };
+				{ "says", draft.says }, { "writes", lab::writes_name(draft.writes) } };
 			if (guided_commit(c) && act(c)) {
 				close_edit();
 			}
@@ -2007,12 +2073,27 @@ struct Ui::Impl {
 					return;
 				}
 			}
-			if (draft.edit == Draft::Writer && says_field().has(x, y)) {
-				if (allowed_click("edit:says")) {
+			if (says_field().has(x, y)) { // a writer's words; a notice part's text (Stage 28)
+				if (allowed_click(draft.edit == Draft::Writer ? "edit:says" : "edit:contains")) {
 					focus = 6;
 					fresh = false; // words are added to, not replaced
 				}
 				return;
+			}
+			if (draft.edit == Draft::Notice && hold_field().has(x, y)) {
+				if (allowed_click("edit:seconds")) {
+					focus = 2;
+					fresh = true;
+				}
+				return;
+			}
+			for (int k = 0; draft.edit == Draft::Writer && k < 3; ++k) {
+				if (writes_rect(k).has(x, y)) {
+					if (allowed_click(std::string("edit:writes:") + lab::writes_name(k))) {
+						draft.writes = k;
+					}
+					return;
+				}
 			}
 		}
 		if (draft.edit == Draft::Timer) {
@@ -2384,7 +2465,7 @@ struct Ui::Impl {
 				static_cast<char>(0x80 | (codepoint & 0x3F)) };
 		}
 		const std::string typed = words + ch;
-		if (typed.size() <= MAX_SAYS && allowed_text(typed)) {
+		if (typed.size() <= (draft.edit == Draft::Notice ? lab::MAX_CONTAINS : MAX_SAYS) && allowed_text(typed)) {
 			words = typed;
 		}
 	}
@@ -3033,8 +3114,16 @@ struct Ui::Impl {
 			return true;
 		};
 		if (draft.edit == Draft::Notice || draft.edit == Draft::Writer) {
-			if (draft.edit == Draft::Writer && rest == "says") {
+			if ((draft.edit == Draft::Writer && rest == "says") || (draft.edit == Draft::Notice && rest == "contains")) {
 				return found(says_field());
+			}
+			if (draft.edit == Draft::Notice && rest == "seconds") {
+				return found(hold_field());
+			}
+			for (int k = 0; draft.edit == Draft::Writer && sub("writes:") && k < 3; ++k) {
+				if (more == lab::writes_name(k)) {
+					return found(writes_rect(k));
+				}
 			}
 			for (int k = 0; sub("level:") && k < 4; ++k) {
 				if (more == level_name(static_cast<lab::Notice::Level>(k))) {
@@ -3274,6 +3363,9 @@ struct Ui::Impl {
 				if (stir_rect(i, b)) {
 					buttons.push_back(b);
 				}
+				if (screw_rect(i, b)) {
+					buttons.push_back(b);
+				}
 			}
 			for (const Rect &b : buttons) {
 				if (b.has(x, y)) {
@@ -3426,11 +3518,17 @@ struct Ui::Impl {
 		};
 		const auto add = [&](int i, const Rect &r, bool in_hand) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
-			if (v.kind == "vessel" || v.kind == "balloon") {
+			if (v.kind == "stopper") { // rubber (Stage 28), opaque, lit by the room
+				thing(v.id, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
+			} else if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				bodies.push_back(body);
+				if (v.screwed) { // its screw cap on (Stage 28)
+					const float mouth = mouth_px(i) + 8;
+					thing(v.id, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
+				}
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
@@ -3502,7 +3600,7 @@ struct Ui::Impl {
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
 			const int under = v.place == "on" ? v.on : v.inverted ? v.pours_into : -1;
-			if (under < 0 || i == drag || !on_bench(under)) {
+			if (under < 0 || i == drag || !on_bench(under) || v.kind == "stopper") { // a stopper holds by its friction
 				continue;
 			}
 			// held on a vessel's mouth, or upside down over it: a retort stand beside that vessel, a clamp across
@@ -3730,19 +3828,35 @@ struct Ui::Impl {
 				y += 42;
 			} else if (stir_rect(showing, control)) {
 				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
+				Rect screw;
+				if (screw_rect(showing, screw)) {
+					button(screw, v.screwed ? "cap on" : "cap off", v.screwed, 15);
+				}
+				y += 42;
+			} else if (screw_rect(showing, control)) {
+				button(control, v.screwed ? "cap on" : "cap off", v.screwed, 15);
 				y += 42;
 			}
 			for (const ControlSetting &c : view.controls) {
 				if (c.item == v.id) {
-					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") + ", set by " + c.by +
+					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.control == "cap" ? text_of(" %.0f%% open", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") +
+									", set by " + c.by +
 									text_of(" at %.1f s", static_cast<double>(c.step) / 60.0),
 							DIM, 14);
 				}
 			}
 			if (v.kind == "burner") {
 				row(text_of("flame %.0f C, valve %.0f%%", v.celsius, 100.0 * v.valve));
+			} else if (v.kind == "stopper") {
+				row(v.on >= 0 ? "in the neck of " + view.items[static_cast<size_t>(v.on)].id + ": pull it out by picking it up" : "put it on a narrow neck to seal it", DIM, 15);
+				row(text_of("holds %.0f N", v.hold_n), DIM, 15);
 			} else {
-				row(text_of("%.2f C", v.celsius));
+				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()));
+				if (v.burst && v.kind == "vessel") {
+					row("broken: its glass burst", WARN, 15);
+				} else if (v.sealed) {
+					row(text_of("sealed: it gives way past %.0f kPa", v.gives_way_kpa), v.pressure_kpa > 0.8 * v.gives_way_kpa ? WARN : DIM, 15);
+				}
 				row(v.kind == "vessel" ? text_of("%.1f mL gas, %.2f mL solids and liquids", v.gas_ml, v.condensed_ml)
 									   : text_of("%.1f mL of %.0f mL", v.gas_ml + v.condensed_ml, v.capacity_ml));
 				for (const SubstanceView &s : v.contents) {
@@ -3888,7 +4002,11 @@ struct Ui::Impl {
 				button(level_rect(k), level_name(static_cast<lab::Notice::Level>(k)), draft.level == k);
 			}
 			field(says_field(), draft.says.empty() && focus != 6 ? std::string("(its words: click to type)") : draft.says, focus == 6);
-			text(EDITOR.x + 20, EDITOR.y + 230, "When its input turns on, it writes these words at that level; notice parts hear it.", DIM, 14);
+			static const char *const WRITES[] = { "when it turns on", "when it turns off", "on either change" };
+			for (int k = 0; k < 3; ++k) {
+				button(writes_rect(k), WRITES[k], draft.writes == k, 14);
+			}
+			text(EDITOR.x + 20, EDITOR.y + 270, "When its input changes so, it writes these words at that level; notice parts hear it.", DIM, 14);
 		} else if (draft.edit == Draft::Notice) {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " hears notices about", INK, 22);
 			const std::vector<std::string> items = about_list();
@@ -3899,8 +4017,12 @@ struct Ui::Impl {
 			for (int k = 0; k < 4; ++k) {
 				button(level_rect(k), std::string(level_name(static_cast<lab::Notice::Level>(k))) + (k < 3 ? " up" : ""), draft.level == k);
 			}
-			text(EDITOR.x + 20, EDITOR.y + 192, "It signals for a step when a notice at that level or above is written.", DIM, 15);
-			text(EDITOR.x + 20, EDITOR.y + 214, "Wire it to an alarm to stop the clock on, say, every warning.", DIM, 15);
+			field(says_field(), draft.says.empty() && focus != 6 ? std::string("(containing: click to type, or any words)") : draft.says, focus == 6);
+			text(EDITOR.x + 20, EDITOR.y + 235, "signals for", INK, 16);
+			field(hold_field(), draft.preset, focus == 2);
+			text(EDITOR.x + 260, EDITOR.y + 235, "seconds", INK, 16);
+			text(EDITOR.x + 20, EDITOR.y + 270, "It signals when a notice at that level or above is written, with those words in it.", DIM, 15);
+			text(EDITOR.x + 20, EDITOR.y + 292, "Wire it to an alarm to stop the clock on, say, every warning.", DIM, 15);
 		} else if (draft.edit == Draft::Timer) {
 			text(EDITOR.x + 20, EDITOR.y + 40, draft.part + " counts down from", INK, 22);
 			field(preset_field(), draft.preset, focus == 2);
@@ -4146,7 +4268,7 @@ int Ui::prepare_optics() {
 		// at every size the screen draws it: on the bench, on the cabinet's shelf, in an outbox slot; standing or
 		// in hand (a vessel carried from the shelf keeps the shelf's size)
 		std::vector<float> scales{ 1.0f };
-		for (const float scale : { Impl::cabinet_scale(w, h), Impl::outbox_scale(w, h) }) {
+		for (const float scale : { m.cabinet_scale(w, h), Impl::outbox_scale(w, h) }) {
 			if (std::find(scales.begin(), scales.end(), scale) == scales.end()) {
 				scales.push_back(scale);
 			}
@@ -4346,6 +4468,11 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const int i = index_of(rest);
 		Rect r;
 		return i >= 0 && m.stir_rect(i, r) && centre(r);
+	}
+	if (after("screw:", rest)) {
+		const int i = index_of(rest);
+		Rect r;
+		return i >= 0 && m.screw_rect(i, r) && centre(r);
 	}
 	Rect signal;
 	if (m.signal_rect(what, signal)) {

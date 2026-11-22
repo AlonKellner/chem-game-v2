@@ -278,6 +278,23 @@ Wagner and Pruss 2002), retrieved 2026-11-16, against what the table implies:
 Normal boiling point: NIST 373.1243 K; the table gives 373.586 K (100.44 °C). The difference is
 steam treated as an ideal gas with a constant heat capacity.
 
+**Oracle checked in Stage 28: boiling at a pressure.** NIST Chemistry WebBook, saturation properties
+of water by pressure (IAPWS-95), retrieved 2026-11-22, printed rows (6 digits). A sealed 250 mL flask
+holding 249 mL of water and nothing else stands at its saturation pressure; the model's against
+NIST's, at NIST's temperature (`native/tests/test_pressure.cpp`, tolerance 2.5%; confidence high):
+
+| T (K) | NIST p_sat (kPa) | Model, sealed (kPa) |
+|---|---|---|
+| 318.656 | 9.84724 | 9.817 (−0.3%) |
+| 332.990 | 19.7990 | 19.70 (−0.5%) |
+| 354.179 | 49.4258 | 48.93 (−1.0%) |
+| 372.876 | 100.431 | 98.82 (−1.6%) |
+| 392.820 | 196.604 | 191.7 (−2.5%) |
+
+The model falls further below the steam tables as the temperature rises: steam an ideal gas with a
+constant heat capacity. A sealed flask of boiling water cooled to 60 °C stands at 19.84 kPa (NIST
+19.946 at 333.15 K, −0.5%).
+
 **Oracle checked in Stage 3:** from the table the decomposition absorbs 106.5 kJ/mol and makes
 321.5 J/mol·K, so it is spontaneous above about 58 °C with both gases at 1 bar: stable on the
 shelf, unstable well below red heat, as observed.
@@ -479,6 +496,21 @@ discharge coefficient.
 Chosen for the game (`data/glassware.json`, design in `data/sources.json`): each mouth's held-pour
 rate at full tilt (a beaker 25 mL/s, a flask 12, a bottle 15), the cap's bore (4 mm), the widest
 mouth a balloon's or a condenser's fitting seals (40 mm).
+
+## Glass and stoppers under pressure (Stage 28)
+
+Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass
+bursts, nor the force that holds a rubber stopper in a neck. Searched 2026-11-22.
+
+| Value | Used | Why |
+|---|---|---|
+| A bottle's glass, sealed by its screw cap | bursts past +300 kPa (`data/glassware.json`, `burst_kpa`) | DWK (DURAN): standard laboratory bottles are not designed to withstand pressure differentials; the *pressure plus+* bottle, a modified ISO 4796-1 geometry, is guaranteed from −1 to +1.5 bar (DIN EN 1595). A standard bottle is taken to fail at twice that guarantee |
+| A conical flask | +200 kPa | its flat sides and base: weaker than a bottle's round shoulders |
+| A beaker; a vessel made as no glassware (the condenser) | +150 kPa; +200 kPa | a beaker cannot be sealed (its mouth is too wide for a stopper); the condenser as a flask |
+| A rubber stopper | holds 30 N (`benches/lab.json`, `hold_n`): pops at that force over its neck's bore, +37 kPa in the flask's 32 mm neck | dry rubber on a syringe's glass barrel holds about 10 N (friction measured, ONdrugDelivery, vial stopper testing); one pushed into a neck by hand, three times that. A vacuum holds a stopper in: it never pops inward |
+
+Confidence: low; in the game's terms, the order of magnitude: a stopper pops well before the glass would
+burst; a capped bottle heated with water in it bursts near 144 °C (its water's saturation at +300 kPa).
 
 ## Constants
 

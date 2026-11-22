@@ -105,7 +105,7 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 // reaction never passes its own equilibrium, so each
 // application raises the entropy (T2), and at equilibrium nothing moves and
 // nothing is carried (D3).
-SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing) {
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing, const CellMeta *meta) {
 	SurfaceSteps steps;
 	const Kinetics &kinetics = reaction.kinetics();
 	if (kinetics.law != Kinetics::Law::Surface || !(temperature > 0.0) || a == 0.0 || a != a) {
@@ -152,7 +152,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	const int64_t n = here.amount[x] > 0 ? here.amount[x] : static_cast<int64_t>(nu);
 	here.amount[x] = n;
 	bool defined = false;
-	double at = affinity(table, here, reaction.terms(), temperature, defined); // every reading from the one function: their differences are what counts
+	double at = affinity(table, here, reaction.terms(), temperature, defined, meta); // every reading from the one function: their differences are what counts
 	if (!defined || at != at || at == 0.0 || (at > 0.0) != forward) {
 		return steps;
 	}
@@ -167,7 +167,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 		const double from = static_cast<double>(here.amount[x]);
 		const int64_t dn = here.amount[x] / 1000000 > 0 ? here.amount[x] / 1000000 : 1;
 		here.amount[x] += dn;
-		const double moved = affinity(table, here, reaction.terms(), temperature, defined);
+		const double moved = affinity(table, here, reaction.terms(), temperature, defined, meta);
 		const double slope = (moved - at) / log((from + static_cast<double>(dn)) / from); // J/mol per unit of ln n
 		if (!defined || !(slope != 0.0) || slope != slope) {
 			return steps;
@@ -185,7 +185,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 			break;
 		}
 		here.amount[x] = static_cast<int64_t>(next);
-		at = affinity(table, here, reaction.terms(), temperature, defined);
+		at = affinity(table, here, reaction.terms(), temperature, defined, meta);
 		if (!defined || at != at || at == HUGE_VAL || at == -HUGE_VAL) {
 			return steps;
 		}
@@ -224,7 +224,7 @@ void Simulation::react() {
 				nucleation_remainder = 0.0;
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				remainder = 0.0;
@@ -251,7 +251,7 @@ void Simulation::react() {
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
 				// mol/m^2/s of the solid: at its surface and by transport, in series (GAME_SPEC §7), as they are at the step's start
-				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, world_.meta(cell).mixing).both * per;
+				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, world_.meta(cell).mixing, &world_.meta(cell)).both * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
 				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
 				const double g = 4.835975862049409 * cbrt(static_cast<double>(state.particles[in])) * cbrt(solid.molar_volume * solid.molar_volume) * flux;
@@ -414,13 +414,14 @@ void Simulation::conduct_heat() {
 // Liquids run down the drains (GAME_SPEC §6): all of the upper cell's liquid,
 // with what is dissolved in it, into the lower cell, carrying its enthalpy. A
 // rigid lower cell takes only what fits; the rest stays above. Kinematic: no
-// rate and no gravitational energy.
+// gravitational energy. A drain runs neither into nor out of a sealed cell
+// (Stage 28): no gas could make way for the liquid.
 void Simulation::drain_liquids() {
 	const SpeciesTable &table = world_.species();
 	const std::span<const Edge> edges = world_.edges();
 	for (size_t i = 0; i < edges.size(); ++i) {
 		const Edge edge = edges[i];
-		if (!edge.open || !edge.drain || world_.meta(edge.a).reservoir || world_.meta(edge.b).reservoir) {
+		if (!edge.open || !edge.drain || world_.meta(edge.a).reservoir || world_.meta(edge.b).reservoir || world_.meta(edge.a).sealed || world_.meta(edge.b).sealed) {
 			continue;
 		}
 		const CellState &upper = world_.snapshot_cell(edge.a);
@@ -483,8 +484,8 @@ void Simulation::overflow() {
 	for (int32_t c = 0; c < world_.cell_count(); ++c) {
 		const CellId cell{ c };
 		const CellMeta &meta = world_.meta(cell);
-		if (!meta.rigid) {
-			continue;
+		if (!meta.rigid || meta.sealed) {
+			continue; // a sealed cell lets nothing out (Stage 28)
 		}
 		const CellState &state = world_.snapshot_cell(cell);
 		const Fill fill = fill_of(table, state, T0);
@@ -551,7 +552,7 @@ bool Simulation::project(CellId cell) {
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				continue;
@@ -738,6 +739,95 @@ void Simulation::build_tree() {
 			}
 		}
 	}
+	// the sealed cells, group by group (Stage 28): none of them was reached
+	sealed_order_.clear();
+	sealed_groups_.clear();
+	for (size_t c = 0; c < cells; ++c) {
+		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
+		if (depth_[c] != -1 || m.reservoir || !m.rigid) {
+			continue;
+		}
+		const size_t begin = sealed_order_.size();
+		depth_[c] = 0;
+		sealed_order_.push_back(c);
+		for (size_t head = begin; head < sealed_order_.size(); ++head) {
+			const size_t at = sealed_order_[head];
+			for (size_t i = 0; i < edges.size(); ++i) {
+				const Edge &e = edges[i];
+				if (!e.open || (e.phases & PHASES_GAS) == 0 || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
+					continue;
+				}
+				const auto other = static_cast<size_t>(static_cast<size_t>(e.a.index) == at ? e.b.index : e.a.index);
+				if (depth_[other] == -1 && !world_.meta(CellId{ static_cast<int32_t>(other) }).reservoir) {
+					depth_[other] = depth_[at] + 1;
+					parent_[other] = static_cast<int32_t>(at);
+					parent_edge_[other] = static_cast<int32_t>(i);
+					sealed_order_.push_back(other);
+				}
+			}
+		}
+		sealed_groups_.emplace_back(begin, sealed_order_.size());
+	}
+}
+
+// Two cells sealed together share one pressure (GAME_SPEC §6, Stage 28): gas
+// runs from the one at the higher pressure into the other, at its own
+// composition and temperature, carrying its enthalpy, as much as leaves the
+// giver at no lower a pressure than the taker (to the last quantum: a
+// bisection on the share of its gas). true when any moved.
+bool Simulation::equalize(CellId cell, CellId up, EdgeId edge) {
+	const SpeciesTable &table = world_.species();
+	const Thermal a = thermal(cell), b = thermal(up);
+	if (!a.defined || !b.defined || a.pressure == b.pressure) {
+		return false;
+	}
+	const bool out = a.pressure > b.pressure;
+	const CellId giver = out ? cell : up, taker = out ? up : cell;
+	const double t_giver = out ? a.temperature : b.temperature;
+	const CellState gives = world_.snapshot_cell(giver), takes = world_.snapshot_cell(taker);
+	const CellMeta &mg = world_.meta(giver), &mt = world_.meta(taker);
+	std::vector<SpeciesAmount> amounts;
+	const auto share = [&](double f) {
+		amounts.clear();
+		for (size_t s = 0; s < gives.amount.size(); ++s) {
+			if (gives.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+				const auto n = static_cast<int64_t>(static_cast<double>(gives.amount[s]) * f);
+				if (n > 0) {
+					amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ n < gives.amount[s] ? n : gives.amount[s] } });
+				}
+			}
+		}
+	};
+	// the giver's pressure less the taker's, had the share f run
+	const auto gap = [&](double f) {
+		share(f);
+		CellState g = gives, t = takes;
+		for (const SpeciesAmount &x : amounts) {
+			g.amount[static_cast<size_t>(x.species.index)] -= x.amount.quanta;
+			t.amount[static_cast<size_t>(x.species.index)] += x.amount.quanta;
+		}
+		const Energy e = enthalpy_carried(table, amounts, t_giver);
+		g.energy -= e.quanta;
+		t.energy += e.quanta;
+		const Thermal tg = thermal_state(table, g, &mg), tt = thermal_state(table, t, &mt);
+		return tg.defined && tt.defined ? tg.pressure - tt.pressure : -1.0;
+	};
+	double lo = 0.0, hi = 1.0;
+	if (gap(hi) >= 0.0) {
+		lo = hi;
+	} else {
+		for (int i = 0; i < 60; ++i) {
+			const double middle = 0.5 * (lo + hi);
+			(gap(middle) >= 0.0 ? lo : hi) = middle;
+		}
+	}
+	share(lo);
+	if (amounts.empty()) {
+		return false;
+	}
+	const Refusal refused = transfer(edge, giver, amounts, enthalpy_carried(table, amounts, t_giver));
+	CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+	return true;
 }
 
 void Simulation::settle_cells() {
@@ -769,6 +859,23 @@ void Simulation::settle_cells() {
 			}
 		}
 	}
+	// the sealed cells (Stage 28): each at its equilibria, and a group at one pressure, deepest first, until no gas runs
+	for (const auto &[begin, end] : sealed_groups_) {
+		constexpr int ROUNDS = 8;
+		for (int round = 0; round < ROUNDS; ++round) {
+			bool moved = false;
+			for (size_t k = end; k-- > begin;) {
+				const size_t c = sealed_order_[k];
+				project(CellId{ static_cast<int32_t>(c) });
+				if (parent_[c] >= 0) {
+					moved = equalize(CellId{ static_cast<int32_t>(c) }, CellId{ parent_[c] }, EdgeId{ parent_edge_[c] }) || moved;
+				}
+			}
+			if (!moved) {
+				break;
+			}
+		}
+	}
 }
 
 // A cell's thermal state, derived once and kept until a primitive touches the
@@ -776,7 +883,7 @@ void Simulation::settle_cells() {
 const Thermal &Simulation::thermal(CellId cell) {
 	const auto c = static_cast<size_t>(cell.index);
 	if (!thermal_valid_[c]) {
-		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell));
+		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell), &world_.meta(cell));
 		thermal_valid_[c] = 1;
 	}
 	return thermal_[c];

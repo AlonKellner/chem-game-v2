@@ -20,6 +20,14 @@
 			"loss": 0.9
 		},
 		{
+			"id": "stopper",
+			"kind": "stopper",
+			"wall": "latex",
+			"wall_g": 8,
+			"hold_n": 30,
+			"loss": 0.1
+		},
+		{
 			"id": "balloon",
 			"kind": "balloon",
 			"wall": "latex",

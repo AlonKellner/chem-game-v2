@@ -241,6 +241,26 @@
 				}
 			]
 		},
+		"rubber": {
+			"base": 0.07,
+			"bands": [
+				{
+					"centre_nm": 630,
+					"width_nm": 90,
+					"peak": 0.22
+				}
+			]
+		},
+		"cap_plastic": {
+			"base": 0.05,
+			"bands": [
+				{
+					"centre_nm": 465,
+					"width_nm": 60,
+					"peak": 0.35
+				}
+			]
+		},
 		"burner_metal": {
 			"base": 0.12
 		},

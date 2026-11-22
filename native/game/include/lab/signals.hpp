@@ -17,10 +17,13 @@ namespace lab {
 
 // A circuit holds other parts, circuits too, compactly on one square (§13.3);
 // it signals nothing itself: what is in it signals as it would out of it.
-// A notice part signals for a step when the lab writes a notice at or above
-// its level (§13.4), about its item if it names one. A writer writes a
-// notice of its own (its level, its words) when its input turns on: with
-// notice parts, the lab's notices are a bus parts post to and hear from.
+// A notice part signals when the lab writes a notice at or above its level
+// (§13.4), about its item if it names one, its words containing its text if
+// it has one (Stage 28), for its hold: so many steps from the one it hears it
+// (one, unless set), another restarting it. A writer writes a notice of its
+// own (its level, its words) when its input turns on, or off, or either
+// (Stage 28): with notice parts, the lab's notices are a bus parts post to and
+// hear from.
 // A controller holds a quantity it senses at a target, by a level from 0 to 1
 // its rigs follow (Stage 26).
 enum class PartKind : int32_t { Timer = 0, Monitor = 1, Alarm = 2, Circuit = 3, Notice = 4, Writer = 5, Controller = 6 };
@@ -42,6 +45,12 @@ struct Part {
 	int inner_w = 0, inner_h = 0; // a circuit's own grid, in squares
 	int notice_level = 2; // a notice part's or a writer's: 0 detail, 1 event, 2 warning, 3 danger; its item is quantity.item ("" for any; a writer's own id)
 	std::string says; // a writer's words ("" for "<id> was signalled")
+	// a notice part's (Stage 28): the text a notice's words must contain to be heard ("" any); how long it signals
+	// for a notice it hears, in steps, from that step on (another restarts it); the steps of that still to go
+	std::string contains;
+	int64_t hold = 1, held = 0;
+	// a writer's (Stage 28): what of its input writes: 0 its turning on, 1 its turning off, 2 either
+	int writes = 0;
 
 	// a monitor: what it watches, once set
 	bool watching = false;
@@ -64,6 +73,14 @@ struct Part {
 	double integral = 0.0, level = 0.0, duty = 0.0;
 	int64_t phase = 0, on_steps = 0;
 	bool pulse = false;
+	// what it controls as its trial found it (Stage 28): the sensed item's contents' mass (g) and heat capacity
+	// (J/K), and the materials there (a bit for each species of a milligram or more); changed by a tenth, or a
+	// material come or gone, it tunes again. How long it has been held at a limit short of its target, in steps,
+	// and whether it has said so.
+	double basis_g = 0.0, basis_cp = 0.0;
+	uint64_t basis_has = 0;
+	int64_t pinned = 0;
+	bool pinned_said = false;
 
 	// its state at the end of the last step
 	std::optional<double> last; // a monitor's last reading
@@ -108,8 +125,12 @@ struct SignalStep {
 // What a monitor reads: a quantity now, none when it is not one of the lab's.
 using QuantityReader = std::function<std::optional<double>(const Quantity &)>;
 // What a notice part reads: whether the lab wrote a notice since the step
-// before at or above `level`, about `item` ("" for any).
-using NoticeReader = std::function<bool(int level, const std::string &item)>;
+// before at or above `level`, about `item` ("" for any), its words containing
+// `contains` ("" for any words).
+using NoticeReader = std::function<bool(int level, const std::string &item, const std::string &contains)>;
+constexpr size_t MAX_CONTAINS = 40; // a notice part's text, in bytes
+const char *writes_name(int writes); // "on", "off", "change"
+bool writes_of(std::string_view name, int &writes);
 
 // One step's signals (§13.3), at the step's end. Synchronous: every part reads
 // its inputs' signals as they were at the end of the step before, and all are

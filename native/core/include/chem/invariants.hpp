@@ -79,7 +79,8 @@ Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
 // energy * (T_from - T_to) > 0. A reaction advances only while its affinity
 // is positive and retreats only while it is negative: extent * A > 0. Gas
 // moves only out of a rigid cell that is over-full or into one that is
-// under-full.
+// under-full; between cells sealed together, only from the higher pressure
+// to the lower (Stage 28).
 Violations check_T1(const SpeciesTable &table, const StepTrace &trace);
 // T2. The world's entropy does not decrease: the sum over the cells that
 // changed of (S_after - S_before) >= -(1e-9 J/K + 4e-16 * the sum of their |S|),
@@ -96,12 +97,13 @@ Violations check_X2(const SpeciesTable &table, const StepTrace &trace);
 // S1. No NaN or infinity: every temperature and entropy of the trace is finite.
 Violations check_S1(const SpeciesTable &table, const StepTrace &trace);
 
-// V1. A rigid cell is exactly full: gas + solids and liquids = its volume,
+// V1. An open rigid cell is exactly full: gas + solids and liquids = its volume,
 // within the volume of one quantum of each gas species plus 1e-9 of the cell's.
 // Under-full is allowed only where the trace marks the cell starved.
 Violations check_V1(const SpeciesTable &table, const StepTrace &trace);
-// V3. No rigid cell is sealed: each has a path, along open gas edges, to an
-// elastic cell.
+// V3. A rigid cell is marked sealed exactly when it has no path, along open
+// gas edges, to an elastic cell (Stage 28: the world keeps the mark), and a
+// sealed cell that holds gas leaves it room: its pressure is defined.
 Violations check_V3(const SpeciesTable &table, const StepTrace &trace);
 
 // V2. No rigid cell holds more solids and liquids than its volume.

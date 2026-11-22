@@ -1,5 +1,30 @@
 # GAME_SPEC version history
 
+## 0.29.0 (2026-11-22, Stage 28)
+
+- §6, §8: **sealed cells**: a rigid cell with no gas path to an elastic one is sealed (V3 keeps the
+  mark), its energy `U + P_atm V` (its enthalpy at an atmosphere: open cells, and every record, are
+  unchanged), its pressure `n R T / V_free`, its equilibria and reactions at that pressure. Water
+  boils where the steam tables say at that pressure (within 2.5% of NIST from 10 kPa to 2 atm);
+  cells sealed together share one pressure (T1: gas from the higher to the lower); opened, a sealed
+  cell is at an atmosphere within the step. A cell is sealed only at the room's pressure (a starved
+  one is refused). No drain runs in or out of a sealed cell.
+- §13: **a rubber stopper** seals a neck and pops at its hold over the bore (30 N: +37 kPa in the
+  flask); **a bottle's screw cap** seals it, a control; **glass bursts** past its rating (+300 kPa a
+  bottle, +200 a flask; calibrated), its contents into the room and the tray, the vessel broken.
+  Nothing pours into or out of what is sealed. A session of it recorded (`data/sessions/pressure.json`).
+- §13.3: **a writer** writes on its input turning on, off, or either; **a notice part** hears only
+  notices containing its text, and signals for its seconds; **a controller** tunes again once what
+  it controls has changed by a tenth (no bump), warns when it cannot hold its target, and tries a
+  cap; a vessel's **pressure** and a material's **volume** are quantities.
+- §13.4: notices of pressure nearing what gives way, a stopper popping, glass bursting, a sealed
+  vessel boiling below 100 °C, a pour running, stopping and running dry; the tray's spill counts
+  what condenses in it as no spill.
+- §13.6: the debug panel gives a vessel's pressure and its pour as a pour, and what a signal part is
+  doing (a controller's trial, gains, error, integral, level).
+- §13.1: the stopper carried onto a neck; a bottle's cap button; the readout's pressure; the
+  notice part's and the writer's editors; the cabinet's shelves fit the bench.
+
 ## 0.28.0 (2026-11-22, Stage 27)
 
 - §6, §13: **pouring is a control**: a vessel in a pouring position over another pours down a drain

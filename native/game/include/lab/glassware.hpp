@@ -59,11 +59,17 @@ struct Vessel {
 	// its mouth, cm; its mouth's inside radius, cm; and, upside down with a volume in it, how deep the liquid
 	// stands over its mouth (the head an orifice there pours under), cm.
 	double pour_ml_s = 0.0, cap_bore = 0.0;
+	// Pressure (GAME_SPEC §13, Stage 28): how far over the room's its glass holds, Pa (sealed and past it, it
+	// bursts); whether a screw cap fits it, upright, to seal it (a bottle's thread)
+	double burst = 0.0;
+	bool screw_cap = false;
 	double mouth() const;
 	double head_inverted(double cm3) const;
 };
 // the widest mouth a balloon's or a condenser's fitting seals, cm (data/glassware.json: seals_mm)
 double seals();
+// how far over the room's a vessel made as no glassware holds, Pa (data/glassware.json: burst_kpa)
+double burst_default();
 
 // The vessel of a kind and nominal capacity, from data/glassware.json; none if there is no such row.
 std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string &why);

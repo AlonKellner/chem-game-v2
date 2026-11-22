@@ -1,0 +1,25 @@
+{
+	"format": "chem-session/1",
+	"note": "Pressure (GAME_SPEC §6, §13, Stage 28), played by a script: a flask boiled, stoppered and cooled falls below an atmosphere and boils below 100 C; heated again, its stopper pops; a bottle capped and heated bursts.",
+	"bench": "../benches/pressure.json",
+	"script": [
+		{"note": "the flask boiled, its air driven out by steam", "do": "heat", "burner": "burner", "vessel": "flask"},
+		{"do": "valve", "burner": "burner", "to": 1},
+		{"do": "wait_until", "item": "flask", "above_c": 100.3, "timeout": 900},
+		{"do": "wait", "seconds": 30},
+		{"note": "stoppered and cooled: a partial vacuum", "do": "unheat", "burner": "burner"},
+		{"do": "attach", "item": "stopper", "to": "flask"},
+		{"do": "wait_until", "item": "flask", "below_c": 70, "timeout": 3600},
+		{"note": "warmed a little: it boils, sealed, below 100 C", "do": "heat", "burner": "burner", "vessel": "flask"},
+		{"do": "valve", "burner": "burner", "to": 0.2},
+		{"do": "wait", "seconds": 30},
+		{"note": "heated hard: the stopper pops at its hold over the neck", "do": "valve", "burner": "burner", "to": 1},
+		{"do": "wait_until", "item": "flask", "above_c": 102, "timeout": 900},
+		{"do": "wait", "seconds": 20},
+		{"note": "the bottle capped and heated: its glass bursts", "do": "unheat", "burner": "burner"},
+		{"do": "cap", "item": "bottle", "to": 0},
+		{"do": "heat", "burner": "burner", "vessel": "bottle"},
+		{"do": "valve", "burner": "burner", "to": 1},
+		{"do": "wait", "seconds": 400}
+	]
+}

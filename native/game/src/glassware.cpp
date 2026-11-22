@@ -280,6 +280,10 @@ double seals() {
 	return table().at("seals_mm").get<double>() / 10.0;
 }
 
+double burst_default() {
+	return table().at("burst_kpa").get<double>() * 1000.0;
+}
+
 double Vessel::radius_outside(double y) const {
 	return radius_on(outside, y);
 }
@@ -356,6 +360,8 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	v.floor = v.wall * k->at("floor_per_wall").get<double>();
 	v.pour_ml_s = k->at("pour_ml_s").get<double>();
 	v.cap_bore = k->at("cap_bore_mm").get<double>() / 10.0;
+	v.burst = k->at("burst_kpa").get<double>() * 1000.0;
+	v.screw_cap = k->value("screw_cap", false);
 	const double R = 0.5 * v.diameter, H = v.height, t = v.wall, f = v.floor;
 	std::vector<Corner> c;
 	std::vector<Piece> top; // what follows the polyline outside: a neck's bead

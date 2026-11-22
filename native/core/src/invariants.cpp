@@ -42,6 +42,11 @@ bool finite(double v) {
 	return v - v == 0.0;
 }
 
+// the cell's kind as the trace has it (null: a trace built without kinds)
+const CellMeta *meta_of(const StepTrace &trace, size_t cell) {
+	return cell < trace.meta.size() ? &trace.meta[cell] : nullptr;
+}
+
 // A cell's temperature as the trace has it: a reservoir's fixed one, else
 // derived from the state. false when it has none.
 bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &kelvin) {
@@ -49,7 +54,7 @@ bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Sna
 		kelvin = trace.meta[cell].reservoir_temperature;
 		return true;
 	}
-	const Thermal t = thermal_state(table, state.cells[cell]);
+	const Thermal t = thermal_state(table, state.cells[cell], meta_of(trace, cell));
 	kelvin = t.temperature;
 	return t.defined;
 }
@@ -61,7 +66,7 @@ bool entropy_of(const SpeciesTable &table, const StepTrace &trace, const Snapsho
 	if (!temperature_of(table, trace, state, cell, kelvin) || !(kelvin > 0.0) || !finite(kelvin)) {
 		return false;
 	}
-	s = trace.meta[cell].reservoir ? static_cast<double>(state.cells[cell].energy) * JOULE_PER_QUANTUM / kelvin : entropy(table, state.cells[cell], kelvin);
+	s = trace.meta[cell].reservoir ? static_cast<double>(state.cells[cell].energy) * JOULE_PER_QUANTUM / kelvin : entropy(table, state.cells[cell], kelvin, meta_of(trace, cell));
 	return true;
 }
 
@@ -348,7 +353,16 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				gas_only = gas_only && table.has(d.species) && table.species(d.species).phase == Phase::Gas;
 			}
 			const auto to = static_cast<size_t>(entry.to.index);
-			if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid)) {
+			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
+				// cells sealed together (Stage 28): from the higher pressure to the lower
+				const Thermal a = thermal_state(table, replay.cells[from], &trace.meta[from]), b = thermal_state(table, replay.cells[to], &trace.meta[to]);
+				if (a.defined && b.defined && !(a.pressure > b.pressure) && out.size() < MAX_MESSAGES) {
+					char buffer[200];
+					std::snprintf(buffer, sizeof buffer, "T1: step %lld: transfer %lld moves gas from a sealed cell at %.9g Pa to one at %.9g Pa", static_cast<long long>(trace.step),
+							static_cast<long long>(i), a.pressure, b.pressure);
+					out.push_back(buffer);
+				}
+			} else if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid)) {
 				bool from_defined = false, to_defined = false;
 				const double from_excess = trace.meta[from].rigid ? gas_excess(table, trace.meta[from], replay.cells[from], from_defined) : 0.0;
 				const double to_excess = trace.meta[to].rigid ? gas_excess(table, trace.meta[to], replay.cells[to], to_defined) : 0.0;
@@ -375,7 +389,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 			}
 			if (whole) {
 				// the same probe the step asked, so the same sign
-				const AffinityProbe probe(table, replay.cells[from], std::span<const Term>(terms.data(), count));
+				const AffinityProbe probe(table, replay.cells[from], std::span<const Term>(terms.data(), count), meta_of(trace, from));
 				double a = 0.0;
 				if (probe.at(0.0, a) && !((entry.extent > 0 && a > 0.0) || (entry.extent < 0 && a < 0.0)) && out.size() < MAX_MESSAGES) {
 					char buffer[200];
@@ -441,9 +455,9 @@ Violations check_T3(const SpeciesTable &table, const StepTrace &trace) {
 		if (trace.meta[c].reservoir) {
 			continue;
 		}
-		const Thermal t = thermal_state(table, trace.after.cells[c]);
+		const Thermal t = thermal_state(table, trace.after.cells[c], meta_of(trace, c));
 		if (!t.defined) {
-			out.push_back(text("T3: step %lld: cell %lld has no temperature (a species without thermodynamic data, or no heat capacity)",
+			out.push_back(text("T3: step %lld: cell %lld has no temperature (a species without thermodynamic data, or no heat capacity, or sealed with no room for its gas)",
 					static_cast<long long>(trace.step), static_cast<long long>(c)));
 		} else if (!(t.temperature > 0.0)) {
 			out.push_back(text("T3: step %lld: cell %lld is not above 0 K", static_cast<long long>(trace.step), static_cast<long long>(c)));
@@ -511,10 +525,10 @@ Violations check_V1(const SpeciesTable &table, const StepTrace &trace) {
 	}
 	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
 		const CellMeta &meta = trace.meta[c];
-		if (!meta.rigid) {
-			continue;
+		if (!meta.rigid || meta.sealed) {
+			continue; // a sealed cell is full by definition: its pressure follows (Stage 28)
 		}
-		const Thermal thermal = thermal_state(table, trace.after.cells[c]);
+		const Thermal thermal = thermal_state(table, trace.after.cells[c], &meta);
 		if (!thermal.defined || !(thermal.temperature > 0.0)) {
 			continue; // T3 reports it
 		}
@@ -537,7 +551,7 @@ Violations check_V1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
-Violations check_V3(const SpeciesTable &, const StepTrace &trace) {
+Violations check_V3(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
 	if (trace.meta.size() != trace.after.cells.size()) {
 		return out; // a world without cell kinds has no rigid cells
@@ -547,9 +561,27 @@ Violations check_V3(const SpeciesTable &, const StepTrace &trace) {
 			return out; // C7's
 		}
 	}
+	std::vector<uint8_t> sealed(trace.meta.size(), 0);
 	for (const CellId cell : sealed_cells(trace.meta, trace.edges)) {
-		if (out.size() < MAX_MESSAGES) {
-			out.push_back(text("V3: step %lld: rigid cell %lld has no gas path to an elastic cell", static_cast<long long>(trace.step), static_cast<long long>(cell.index)));
+		sealed[static_cast<size_t>(cell.index)] = 1;
+	}
+	for (size_t c = 0; c < trace.meta.size() && out.size() < MAX_MESSAGES; ++c) {
+		const CellMeta &meta = trace.meta[c];
+		if (meta.sealed != (sealed[c] != 0)) {
+			out.push_back(text(meta.sealed ? "V3: step %lld: cell %lld is marked sealed, but it has a gas path to an elastic cell" : "V3: step %lld: cell %lld is marked open, but it has no gas path to an elastic cell",
+					static_cast<long long>(trace.step), static_cast<long long>(c)));
+			continue;
+		}
+		if (!meta.sealed) {
+			continue;
+		}
+		const Fill fill = fill_of(table, trace.after.cells[c], T0);
+		bool gas = false;
+		for (size_t s = 0; s < trace.after.cells[c].amount.size(); ++s) {
+			gas = gas || (trace.after.cells[c].amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas);
+		}
+		if (fill.defined && gas && !(fill.condensed < meta.volume)) {
+			out.push_back(text("V3: step %lld: sealed cell %lld leaves its gas no room: its pressure is not defined", static_cast<long long>(trace.step), static_cast<long long>(c)));
 		}
 	}
 	return out;
@@ -591,7 +623,7 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 			if (reaction.table() != &table) {
 				continue;
 			}
-			const AffinityProbe probe(table, cell, reaction.terms());
+			const AffinityProbe probe(table, cell, reaction.terms(), meta_of(trace, c));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				continue;
@@ -613,7 +645,7 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 					gas += static_cast<double>(cell.amount[s]);
 				}
 			}
-			const Thermal thermal = thermal_state(table, cell);
+			const Thermal thermal = thermal_state(table, cell, meta_of(trace, c));
 			double shift = 0.0; // in the log of the activities, summed over the reaction's gases
 			for (const Term &t : reaction.terms()) {
 				const auto n = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]);

@@ -3,13 +3,14 @@
 #include "chem/thermo.hpp"
 #include "chem/world.hpp"
 
+#include <utility>
 #include <vector>
 
 // The simulation: a world advanced one fixed step at a time by its processes
 // (GAME_SPEC §4.5): reactions inside the cells (§7, §9), heat conduction along the
 // edges (§5), liquids down the drains (§6), then every cell taken to its fast
-// equilibria (§8) and every rigid cell made exactly full (§6), and what
-// overflows spilled.
+// equilibria (§8), every open rigid cell made exactly full and the cells
+// sealed together at one pressure (§6), and what overflows spilled.
 // Every change goes through the world's two primitives. The
 // processes are applied in a fixed order, each from the state the last one
 // left; each application conserves exactly and runs down its own driving force.
@@ -44,7 +45,7 @@ struct SurfaceSteps {
 	double both = 0.0;
 	bool transported = false; // a species is carried, and transport has a finite rate
 };
-SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing);
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing, const CellMeta *meta = nullptr);
 
 class Simulation {
 public:
@@ -111,12 +112,16 @@ private:
 	void settle_cells();
 	bool project(CellId cell);
 	bool fill(CellId cell, CellId up, EdgeId edge, bool may_draw = true);
+	bool equalize(CellId cell, CellId up, EdgeId edge);
 
 	World world_;
 	std::vector<Reaction> reactions_; // with a rate law
 	std::vector<Reaction> equilibria_; // of the equilibrium law
 	std::vector<int32_t> depth_, parent_, parent_edge_; // settle()'s tree, kept to spare the allocations
 	std::vector<size_t> order_;
+	// the sealed cells (Stage 28), each group breadth first from its first cell; a group's root has parent -1
+	std::vector<size_t> sealed_order_;
+	std::vector<std::pair<size_t, size_t>> sealed_groups_; // [begin, end) in sealed_order_
 	bool tree_built_ = false;
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
