@@ -31,6 +31,15 @@ bool read(const std::filesystem::path &path, std::string &text) {
 // The measured results of the demo: what was submitted, and the conservation laws.
 void print_results(const json &report, const json &start) {
 	std::printf("\nmeasured after %.0f s of simulated time (%lld steps)\n", report.at("seconds").get<double>(), static_cast<long long>(report.at("step").get<int64_t>()));
+	bool warned = false; // what the lab warned of, and its dangers (GAME_SPEC §13.4)
+	for (const json &n : report.value("notices", json::array())) {
+		const std::string level = n.value("level", "");
+		if (level == "warning" || level == "danger") {
+			std::printf("%s  %8.1f s  %-7s %s\n", warned ? "" : "\n  warnings and dangers:\n", static_cast<double>(n.at("step").get<int64_t>()) / 60.0, level.c_str(),
+					n.at("says").get<std::string>().c_str());
+			warned = true;
+		}
+	}
 	for (const json &item : report.at("items")) {
 		if (item.at("kind") == "burner" || !item.at("submitted").get<bool>()) {
 			continue;

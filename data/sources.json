@@ -208,6 +208,14 @@
 			"design": "pouring and fitting (Stage 27): a held pour's rate at full tilt by the mouth (a beaker's lip faster than a neck), the bore of the cap that fits each mouth, the widest mouth a balloon's or a condenser's fitting seals"
 		},
 		{
+			"data": [
+				"benches/pressure.json/grid/#", "benches/pressure.json/room/*", "benches/pressure.json/items/{flask,bottle}/{loss,wall_g,volume_ml}",
+				"benches/pressure.json/items/{flask,bottle}/at/#", "benches/pressure.json/items/{flask,bottle}/contents/**", "benches/pressure.json/items/stopper/{hold_n,wall_g,loss}",
+				"benches/pressure.json/items/burner/{celsius,conductance}"
+			],
+			"design": "the pressure session's bench (Stage 28): the lab's flask, bottle, stopper and burner, with the values data/benches/lab.json gives them (sourced there), and water"
+		},
+		{
 			"data": ["glassware.json/burst_kpa", "glassware.json/kinds/{beaker,conical_flask,bottle}/burst_kpa"],
 			"calibrated": "what the glass holds over the room's pressure, sealed, before it bursts (Stage 28): no laboratory standard rates ordinary glassware for pressure (DWK: standard bottles are not designed for pressure differentials; its pressure plus+ bottle, a modified ISO 4796-1 geometry, is guaranteed from -1 to +1.5 bar); a bottle taken to fail at twice that guarantee, a conical flask's flat sides and a beaker weaker",
 			"doc": ["Glass and stoppers under pressure"]
@@ -218,7 +226,7 @@
 			"doc": ["Glass and stoppers under pressure"]
 		},
 		{
-			"data": ["sessions/demo.json/**", "tutorials/demo.json/**"],
+			"data": ["sessions/demo.json/**", "tutorials/demo.json/**", "sessions/pressure.json/**"],
 			"design": "scripts of the demo: waits, settings and checks"
 		}
 	]

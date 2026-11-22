@@ -1311,13 +1311,14 @@ struct Lab::Impl {
 				continue;
 			}
 			if (x.kind == Kind::Tray) {
+				// all it holds, its gas too: what condenses or boils in it is no spill (Stage 28: a burst's hot water)
 				double held = 0.0;
 				for (size_t k = 0; k < species; ++k) {
 					const SpeciesDef &def = t.species(SpeciesId{ static_cast<int32_t>(k) });
-					held += def.phase != Phase::Gas && !def.wall ? grams(x.cell, SpeciesId{ static_cast<int32_t>(k) }) : 0.0;
+					held += !def.wall ? grams(x.cell, SpeciesId{ static_cast<int32_t>(k) }) : 0.0;
 				}
 				if (!quiet && held > tray_g + 0.01) {
-					note(Notice::Warning, "tray", text_of("%.2f g spilled into the tray: a vessel overflowed", held - tray_g));
+					note(Notice::Warning, "tray", text_of("%.2f g spilled into the tray: a vessel overflowed, or broke", held - tray_g));
 				}
 				tray_g = held;
 				continue;
