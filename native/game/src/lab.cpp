@@ -467,6 +467,69 @@ struct Lab::Impl {
 		controls.push_back(ControlSetting{ item_id, control, value, by, static_cast<int64_t>(world().step()) });
 	}
 
+	bool trial = false; // a copy a controller's trial runs (Stage 28)
+
+	// what a controller's sensed item holds, as re-tuning compares it (Stage 28): its contents' mass, its heat
+	// capacity, the materials there
+	void basis_of(const std::string &id, double &g, double &cp, uint64_t &has) const {
+		g = cp = 0.0;
+		has = 0;
+		const int i = find(id);
+		if (i < 0 || items[static_cast<size_t>(i)].kind == Kind::Burner) {
+			return;
+		}
+		const CellId cell = items[static_cast<size_t>(i)].cell;
+		const CellState &state = world().snapshot_cell(cell);
+		for (size_t s = 0; s < state.amount.size() && s < 64; ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			const double grams_here = grams(cell, SpeciesId{ static_cast<int32_t>(s) });
+			if (!def.wall && def.phase != Phase::Gas) {
+				g += grams_here;
+				has |= grams_here >= 0.001 ? uint64_t{ 1 } << s : 0;
+			}
+		}
+		const Thermal t = thermal_state(table(), state, &world().meta(cell));
+		cp = t.defined ? t.heat_capacity : 0.0;
+	}
+
+	// Each reading (Stage 28): a controller tunes again where what it controls has changed since its trial (by a
+	// tenth of its contents' mass or of its heat capacity, or a material come or gone), once no pour into it or
+	// from it runs, its level carried over (no bump: its integral set to give it).
+	void watch_controllers() {
+		if (trial) {
+			return;
+		}
+		for (size_t k = 0; k < parts.size(); ++k) {
+			Part &p = parts[k];
+			if (p.kind != PartKind::Controller || !p.tuned || !p.watching) {
+				continue;
+			}
+			const int sensed = find(p.quantity.item);
+			bool pouring = false; // not while it is poured into or from: once it settles
+			for (const Item &x : items) {
+				pouring = pouring || (x.pours_into >= 0 && (x.pours_into == sensed || &x - items.data() == sensed));
+			}
+			if (pouring) {
+				continue;
+			}
+			double g = 0.0, cp = 0.0;
+			uint64_t has = 0;
+			basis_of(p.quantity.item, g, cp, has);
+			const auto off = [](double now, double was) { return std::fabs(now - was) > 0.1 * std::fabs(was) && std::fabs(now - was) > 1e-9; };
+			if (off(g, p.basis_g) || off(cp, p.basis_cp) || has != p.basis_has) {
+				const double level = p.level;
+				note(Notice::Detail, p.id, p.id + " tunes again: what it controls changed");
+				tune(static_cast<int>(k));
+				Part &q = parts[k];
+				const std::optional<double> value = reading(q.quantity);
+				if (q.tuned && value && q.kc != 0.0 && q.ti > 0.0) {
+					q.integral = q.ti * (level / q.kc - (q.target - *value));
+					q.level = level;
+				}
+			}
+		}
+	}
+
 	// A controller tunes itself (§13.3, Stage 26): what it controls, tried on two copies of the lab as it
 	// stands, every control rigged from it held full on in one and off in the other, read each second until the
 	// difference reaches half again the distance to the target, or levels off, or an hour passes; fitted, and
@@ -497,11 +560,12 @@ struct Lab::Impl {
 			Lab &l = *copies[k];
 			l.set_checking(false);
 			bool ok = l.command(json{ { "do", "scrap" }, { "part", p.id } }.dump(), why); // its rigs go with it
+			l.impl_->trial = true; // a copy tries; it does not tune its own controllers again (Stage 28)
 			for (const Rig &r : mine) {
-				ok = ok && l.command((r.control == "valve" ? json{ { "do", "valve" }, { "burner", r.item }, { "to", k == 0 ? 1.0 : 0.0 } }
-															: json{ { "do", "stir" }, { "vessel", r.item }, { "on", k == 0 } })
-											 .dump(),
-								   why);
+				const json c = r.control == "valve" ? json{ { "do", "valve" }, { "burner", r.item }, { "to", k == 0 ? 1.0 : 0.0 } }
+						: r.control == "cap"        ? json{ { "do", "cap" }, { "item", r.item }, { "to", k == 0 ? 1.0 : 0.0 } }
+													: json{ { "do", "stir" }, { "vessel", r.item }, { "on", k == 0 } };
+				ok = ok && l.command(c.dump(), why);
 			}
 			if (!ok) {
 				untuned("what it controls could not be tried: " + why);
@@ -542,6 +606,7 @@ struct Lab::Impl {
 		p.kc = g.kc;
 		p.ti = g.ti;
 		p.period = std::clamp<int64_t>(std::llround(span / 10.0 / STEP_SECONDS), 600, 36000); // a tenth of its time: 10 s to 10 min
+		basis_of(p.quantity.item, p.basis_g, p.basis_cp, p.basis_has);
 		const std::string u = unit(p.quantity);
 		note(Notice::Event, p.id,
 				p.id + " tuned: " + (m.integrating ? text_of("%.3g ", m.gain) + u + " a second, full on" : text_of("%.3g ", m.gain) + u + " full on, " + text_of("over %.0f s", m.tau)) +
@@ -607,6 +672,17 @@ struct Lab::Impl {
 		return false;
 	}
 
+	// a notice part's text in a notice's words, whatever their case (Stage 28)
+	static bool contains_text(const std::string &says, const std::string &text) {
+		const auto lower = [](std::string v) {
+			for (char &ch : v) {
+				ch = ch >= 'A' && ch <= 'Z' ? static_cast<char>(ch - 'A' + 'a') : ch;
+			}
+			return v;
+		};
+		return lower(says).find(lower(text)) != std::string::npos;
+	}
+
 	// the signals at a step's end; false when an invariant fails
 	bool signals_step(std::string &why) {
 		rang = false;
@@ -615,15 +691,31 @@ struct Lab::Impl {
 		}
 		const std::vector<Part> before = parts;
 		const size_t unread = notices_read;
-		const auto noticed = [this, unread](int level, const std::string &about) {
+		const auto noticed = [this, unread](int level, const std::string &about, const std::string &contains) {
 			for (size_t k = unread; k < notices.size(); ++k) {
-				if (static_cast<int>(notices[k].level) >= level && (about.empty() || notices[k].item == about)) {
+				if (static_cast<int>(notices[k].level) >= level && (about.empty() || notices[k].item == about) && (contains.empty() || contains_text(notices[k].says, contains))) {
 					return true;
 				}
 			}
 			return false;
 		};
 		const SignalStep done = evaluate(parts, wires, rigs, [this](const Quantity &q) { return reading(q); }, static_cast<int64_t>(world().step()), noticed);
+		for (Part &p : parts) { // a controller held at a limit short of its target (Stage 28)
+			if (p.kind != PartKind::Controller || !p.tuned || !p.watching) {
+				continue;
+			}
+			const std::optional<double> value = reading(p.quantity);
+			const double e = value ? p.target - *value : 0.0;
+			const bool all_on = p.level >= 1.0 - 1e-12 && p.kc * e > 0.0, none = p.level <= 1e-12 && p.kc * e < 0.0;
+			p.pinned = all_on || none ? p.pinned + 1 : 0;
+			if (p.pinned == 0) {
+				p.pinned_said = false;
+			} else if (p.pinned >= 60 * 60 && !p.pinned_said && !trial) {
+				p.pinned_said = true;
+				note(Notice::Warning, p.id, p.id + " cannot hold " + label(LabView{}, p.quantity) + text_of(" at %.4g", p.target) + ": what it controls is " + (all_on ? "full on" : "off") +
+								text_of(", and it reads %.4g", value ? *value : 0.0));
+			}
+		}
 		notices_read = notices.size();
 		for (size_t k = 0; k < parts.size() && k < before.size(); ++k) {
 			if (parts[k].kind == PartKind::Timer && parts[k].own && !before[k].own) {
@@ -735,6 +827,14 @@ struct Lab::Impl {
 			}
 			if (p.kind == PartKind::Writer) {
 				j["says"] = p.says;
+				if (p.writes != 0) {
+					j["writes"] = writes_name(p.writes);
+				}
+			}
+			if (p.kind == PartKind::Notice && (!p.contains.empty() || p.hold != 1 || p.held != 0)) { // Stage 28
+				j["contains"] = p.contains;
+				j["hold"] = p.hold;
+				j["held"] = p.held;
 			}
 			if (p.kind == PartKind::Controller) {
 				j["watching"] = p.watching;
@@ -748,6 +848,10 @@ struct Lab::Impl {
 				j["state"] = { num(p.integral), num(p.level), num(p.duty) };
 				j["pwm"] = { p.phase, p.on_steps };
 				j["pulse"] = p.pulse;
+				if (p.tuned) { // Stage 28: what it was tuned on, and how long it has been held at a limit
+					j["basis"] = { num(p.basis_g), num(p.basis_cp), p.basis_has };
+					j["pinned"] = { p.pinned, p.pinned_said };
+				}
 			} else if (p.kind == PartKind::Monitor) {
 				j["watching"] = p.watching;
 				j["quantity"] = { { "item", p.quantity.item }, { "what", p.quantity.what }, { "measure", p.quantity.measure } };
@@ -825,6 +929,10 @@ struct Lab::Impl {
 				p.notice_level = static_cast<int>(level);
 				p.quantity.item = x.value("about", std::string());
 				p.says = x.value("says", std::string());
+				writes_of(x.value("writes", std::string("on")), p.writes);
+				p.contains = x.value("contains", std::string());
+				p.hold = x.value("hold", int64_t{ 1 });
+				p.held = x.value("held", int64_t{ 0 });
 			}
 			p.own = x.at("own").get<bool>();
 			p.out = x.at("out").get<bool>();
@@ -838,6 +946,13 @@ struct Lab::Impl {
 				p.phase = x.at("pwm").at(0).get<int64_t>();
 				p.on_steps = x.at("pwm").at(1).get<int64_t>();
 				p.pulse = x.at("pulse").get<bool>();
+				if (x.contains("basis") && (!exact(x.at("basis").at(0), p.basis_g) || !exact(x.at("basis").at(1), p.basis_cp))) {
+					why = "the save holds a controller that cannot be read";
+					return false;
+				}
+				p.basis_has = x.contains("basis") ? x.at("basis").at(2).get<uint64_t>() : 0;
+				p.pinned = x.contains("pinned") ? x.at("pinned").at(0).get<int64_t>() : 0;
+				p.pinned_said = x.contains("pinned") && x.at("pinned").at(1).get<bool>();
 				if (!exact(x.at("target"), p.target) || !exact(x.at("process").at(0), p.gain) || !exact(x.at("process").at(1), p.tau) || !exact(x.at("process").at(2), p.theta) ||
 						!exact(x.at("gains").at(0), p.kc) || !exact(x.at("gains").at(1), p.ti) || !exact(x.at("state").at(0), p.integral) || !exact(x.at("state").at(1), p.level) ||
 						!exact(x.at("state").at(2), p.duty)) {
@@ -1354,6 +1469,7 @@ struct Lab::Impl {
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (world().step() % READ_EVERY == 0) {
 			detect(false);
+			watch_controllers();
 		}
 		if (!signals_step(why)) {
 			note(Notice::Danger, "", why + ": the lab stopped");
@@ -1620,6 +1736,15 @@ struct Lab::Impl {
 				row.wall = def.wall;
 				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
 				row.g = m.grams(item.cell, id);
+				if (def.phase == Phase::Gas) {
+					double gas = 0.0;
+					for (size_t k = 0; k < cell.amount.size(); ++k) {
+						gas += table.species(SpeciesId{ static_cast<int32_t>(k) }).phase == Phase::Gas ? static_cast<double>(cell.amount[k]) : 0.0;
+					}
+					row.ml = gas > 0.0 ? fill.gas * 1e6 * static_cast<double>(cell.amount[s]) / gas : 0.0;
+				} else if (!def.wall) {
+					row.ml = row.mol * def.molar_volume * 1e6;
+				}
 				if (def.phase == Phase::Solid && !def.wall) {
 					row.particles = cell.particles[s];
 					row.size_um = particle_diameter(table, cell, id) * 1e6;
@@ -2324,8 +2449,21 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				why = "there is no \"" + about + "\" for it to hear about";
 				return false;
 			}
+			const std::string contains = c.value("contains", std::string());
+			if (contains.size() > MAX_CONTAINS) {
+				why = text_of("a notice part's text is at most %.0f characters", static_cast<double>(MAX_CONTAINS));
+				return false;
+			}
+			const double seconds = number(c, "seconds", 1.0 / 60.0);
+			if (!(seconds > 0.0) || seconds > 3600.0) {
+				why = "a notice part signals for \"seconds\", more than none and at most an hour";
+				return false;
+			}
 			p.notice_level = static_cast<int>(level);
 			p.quantity.item = about;
+			p.contains = contains;
+			p.hold = std::max<int64_t>(1, static_cast<int64_t>(seconds * 60.0 + 0.5));
+			p.held = 0;
 			return true;
 		}
 		if (p.kind == PartKind::Writer) {
@@ -2343,9 +2481,15 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				why = text_of("a writer's words are at most %.0f characters", static_cast<double>(MAX_SAYS));
 				return false;
 			}
+			int writes = 0;
+			if (c.contains("writes") && (!c.at("writes").is_string() || !writes_of(c.at("writes").get<std::string>(), writes))) {
+				why = "a writer \"writes\" when its input turns \"on\", \"off\", or on either \"change\"";
+				return false;
+			}
 			p.notice_level = static_cast<int>(level);
 			p.quantity.item = about;
 			p.says = says;
+			p.writes = writes;
 			return true;
 		}
 		if (p.kind != PartKind::Monitor && p.kind != PartKind::Controller) {
@@ -3674,6 +3818,14 @@ std::string Lab::digest() const {
 			hash.update_i64(p.rang_at);
 			if (p.kind == PartKind::Notice || p.kind == PartKind::Writer) {
 				hash.update_i64(p.notice_level); // what it hears, or writes, decides what is signalled
+			}
+			if (p.kind == PartKind::Notice && (!p.contains.empty() || p.hold != 1 || p.held != 0)) { // Stage 28: a part as before digests as before
+				text(p.contains);
+				hash.update_i64(p.hold);
+				hash.update_i64(p.held);
+			}
+			if (p.kind == PartKind::Writer && p.writes != 0) {
+				hash.update_i64(p.writes);
 			}
 			if (p.kind == PartKind::Controller) { // a bench without one digests as before (Stage 26)
 				for (const double v : { p.target, p.gain, p.tau, p.theta, p.kc, p.ti, p.integral, p.level, p.duty }) {

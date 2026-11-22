@@ -94,6 +94,21 @@ void reset(Part &timer) {
 	timer.out = false;
 }
 
+const char *writes_name(int writes) {
+	static const char *const NAMES[] = { "on", "off", "change" };
+	return NAMES[writes >= 0 && writes <= 2 ? writes : 0];
+}
+
+bool writes_of(std::string_view name, int &writes) {
+	for (int k = 0; k < 3; ++k) {
+		if (name == writes_name(k)) {
+			writes = k;
+			return true;
+		}
+	}
+	return false;
+}
+
 SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, std::vector<Rig> &rigs, const QuantityReader &read, int64_t step, const NoticeReader &noticed) {
 	SignalStep out;
 	const std::vector<Part> before = parts;
@@ -134,13 +149,19 @@ SignalStep evaluate(std::vector<Part> &parts, const std::vector<Wire> &wires, st
 				p.own = p.out = false; // what is in it signals
 				break;
 			case PartKind::Notice:
-				p.own = noticed && noticed(p.notice_level, p.quantity.item);
+				// a notice heard sets its hold going; it is on while the hold lasts (Stage 28)
+				if (noticed && noticed(p.notice_level, p.quantity.item, p.contains)) {
+					p.held = p.hold > 0 ? p.hold : 1;
+				}
+				p.own = p.held > 0;
+				p.held = p.held > 0 ? p.held - 1 : 0;
 				p.out = p.own && on;
 				break;
 			case PartKind::Writer: {
 				const bool was = p.own;
 				p.own = any_on; // a writer with no input never writes
-				if (p.own && !was) {
+				const bool rose = p.own && !was, fell = !p.own && was;
+				if ((p.writes == 0 && rose) || (p.writes == 1 && fell) || (p.writes == 2 && (rose || fell))) {
 					out.written.push_back(p.id);
 				}
 				p.out = false;

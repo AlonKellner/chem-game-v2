@@ -169,3 +169,51 @@ TEST_CASE("controller: G3 and G4 fire on a corrupted controller (Stage 26)") {
 	counted.on_steps = 5;
 	CHECK_FALSE(lab::check_G4({ counted }).empty());
 }
+
+TEST_CASE("controller: what it controls changed by a pour (its contents' mass doubled), it tunes again, carrying its level over, and holds on; one held full on short of its target says so (Stage 28)") {
+	std::string why;
+	auto l = lab::Lab::open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000},
+	"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9, "at": [10, 6],
+			"contents": {"water": {"g": 80}}},
+		{"id": "jug", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "at": [18, 6],
+			"contents": {"water": {"g": 80}}},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})", why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	ok(*l, R"({"do": "heat", "burner": "burner", "vessel": "flask"})");
+	ok(*l, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
+	ok(*l, R"({"do": "sense", "part": "controller1", "item": "flask"})");
+	ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
+	ok(*l, R"({"do": "set", "part": "controller1", "what": "celsius", "target": 60, "speed": "normal"})");
+	const lab::Part first = item(l->view(), "controller1").part;
+	REQUIRE(first.tuned);
+	REQUIRE(l->advance(60 * 900, why));
+	CHECK(std::fabs(item(l->view(), "flask").celsius - 60.0) < 1.0);
+	const lab::LabView before = l->view();
+	const int tuned_before = static_cast<int>(std::count_if(before.notices.begin(), before.notices.end(), [](const lab::Notice &n) { return n.says.find("controller1 tuned") != std::string::npos; }));
+	ok(*l, R"({"do": "pour", "from": "jug", "to": "flask", "all": true})");
+	REQUIRE(l->advance(60, why));
+	const lab::LabView v = l->view();
+	const int tuned_after = static_cast<int>(std::count_if(v.notices.begin(), v.notices.end(), [](const lab::Notice &n) { return n.says.find("controller1 tuned") != std::string::npos; }));
+	CHECK(tuned_after == tuned_before + 1);
+	const lab::Part again = item(v, "controller1").part;
+	REQUIRE(again.tuned);
+	MESSAGE("tuned on 80 g: gain " << first.kc << ", tau " << first.tau << " s; again on 160 g: gain " << again.kc << ", tau " << again.tau << " s");
+	CHECK(again.kc != doctest::Approx(first.kc).epsilon(0.05)); // what it found is another process
+	double worst = 0.0;
+	for (int second = 0; second < 1800; ++second) {
+		REQUIRE(l->advance(60, why));
+		if (second > 1200) {
+			worst = std::max(worst, std::fabs(item(l->view(), "flask").celsius - 60.0));
+		}
+	}
+	CHECK(worst < 1.0);
+	// a target it cannot reach: water boils at 100 C
+	ok(*l, R"({"do": "set", "part": "controller1", "what": "celsius", "target": 150, "speed": "normal"})");
+	REQUIRE(l->advance(60 * 600, why));
+	bool said = false;
+	for (const lab::Notice &n : l->view().notices) {
+		said = said || n.says.find("controller1 cannot hold") != std::string::npos;
+	}
+	CHECK(said);
+	CHECK_FALSE(l->failed());
+}

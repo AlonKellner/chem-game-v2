@@ -28,6 +28,7 @@ struct SubstanceView {
 	double g = 0.0;
 	int64_t particles = 0;
 	double size_um = 0.0;
+	double ml = 0.0; // its volume (Stage 28): a solid's or a liquid's own, a solute's apparent, a gas's share of the gas
 };
 
 struct ItemView {

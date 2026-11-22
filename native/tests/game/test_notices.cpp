@@ -364,3 +364,68 @@ TEST_CASE("notices: a writer and a notice part on the screen: parts like the oth
 	CHECK(ui->locate("edit:says", x, y));
 	CHECK(ui->draw().text.find("low water") != std::string::npos);
 }
+
+TEST_CASE("notices: a writer writes when its input turns on, or off, or on either change (Stage 28)") {
+	auto l = open();
+	l->set_checking(true);
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "set", "part": "timer1", "seconds": 1})",
+				 R"({"do": "part", "kind": "writer", "at": [1, 0]})", R"({"do": "set", "part": "writer1", "level": "event", "says": "off now", "writes": "off"})",
+				 R"({"do": "part", "kind": "writer", "at": [2, 0]})", R"({"do": "set", "part": "writer2", "level": "event", "says": "changed", "writes": "change"})",
+				 R"({"do": "wire", "from": "timer1", "to": "writer1"})", R"({"do": "wire", "from": "timer1", "to": "writer2"})" }) {
+		must(*l, c);
+	}
+	std::string why;
+	REQUIRE(l->advance(120, why)); // the timer on at a second
+	CHECK(count(*l, Notice::Event, "off now") == 0);
+	CHECK(count(*l, Notice::Event, "changed") == 1);
+	must(*l, R"({"do": "reset", "timer": "timer1"})"); // off
+	REQUIRE(l->advance(3, why));
+	CHECK(count(*l, Notice::Event, "off now") == 1);
+	CHECK(count(*l, Notice::Event, "changed") == 2);
+	CHECK_FALSE(l->command(R"({"do": "set", "part": "writer1", "level": "event", "writes": "sometimes"})", why));
+	CHECK(why.find("\"off\"") != std::string::npos);
+	// saved and loaded, it writes as it did
+	auto again = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(again->digest() == l->digest());
+	const lab::LabView v = again->view();
+	const auto w = std::find_if(v.items.begin(), v.items.end(), [](const lab::ItemView &i) { return i.id == "writer1"; });
+	REQUIRE(w != v.items.end());
+	CHECK(w->part.writes == 1);
+}
+
+TEST_CASE("notices: a notice part hears only notices whose words contain its text, whatever their case, and signals for its seconds after one, another restarting them (Stage 28)") {
+	auto l = open();
+	l->set_checking(true);
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "set", "part": "timer1", "seconds": 1})",
+				 R"({"do": "part", "kind": "writer", "at": [1, 0]})", R"({"do": "set", "part": "writer1", "level": "event", "says": "The Kettle sings", "writes": "change"})",
+				 R"({"do": "part", "kind": "writer", "at": [2, 0]})", R"({"do": "set", "part": "writer2", "level": "event", "says": "something else"})",
+				 R"({"do": "wire", "from": "timer1", "to": "writer1"})", R"({"do": "wire", "from": "timer1", "to": "writer2"})",
+				 R"({"do": "part", "kind": "notice", "at": [3, 0]})", R"({"do": "set", "part": "notice1", "level": "event", "contains": "kettle sings", "seconds": 2})" }) {
+		must(*l, c);
+	}
+	const auto on = [&] {
+		const lab::LabView v = l->view();
+		return std::find_if(v.items.begin(), v.items.end(), [](const lab::ItemView &i) { return i.id == "notice1"; })->part.out;
+	};
+	std::string why;
+	REQUIRE(l->advance(62, why)); // the timer at zero on step 60, the writers write on 61, heard on 62
+	CHECK(on());
+	REQUIRE(l->advance(60, why));
+	CHECK(on()); // a second later, still: its two seconds
+	REQUIRE(l->advance(62, why));
+	CHECK_FALSE(on()); // past them
+	// another notice that contains it restarts them; one that does not, nothing
+	must(*l, R"({"do": "reset", "timer": "timer1"})");
+	REQUIRE(l->advance(3, why));
+	CHECK(on()); // writer1 wrote again on the change, off; writer2, writing on turning on, did not
+	REQUIRE(l->advance(122, why)); // the timer at zero again a second after the reset: writer1 on the change, heard, restarting them
+	CHECK(on());
+	REQUIRE(l->advance(60, why)); // two seconds after that second notice
+	CHECK_FALSE(on());
+	CHECK_FALSE(l->command(R"({"do": "set", "part": "notice1", "level": "event", "seconds": 0})", why));
+	CHECK_FALSE(l->command(nlohmann::json{ { "do", "set" }, { "part", "notice1" }, { "level", "event" }, { "contains", std::string(lab::MAX_CONTAINS + 1, 'x') } }.dump(), why));
+	auto again = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(again->digest() == l->digest());
+}

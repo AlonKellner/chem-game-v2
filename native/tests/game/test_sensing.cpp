@@ -88,9 +88,14 @@ TEST_CASE("sensing: the guided lists offer only what the item has now, by kind (
 	for (const lab::SubstanceView &s : flask.contents) {
 		CHECK((s.wall ? std::find(held.begin(), held.end(), s.species) == held.end() : true));
 	}
-	CHECK(lab::measures_of(flask, "malachite") == std::vector<std::string>{ "g", "mol", "purity", "count", "size" });
+	CHECK(lab::measures_of(flask, "malachite") == std::vector<std::string>{ "g", "mol", "ml", "purity", "count", "size" });
+	// a material's volume (Stage 28): its own, from its density
+	const double ml = *lab::measure(v, lab::Quantity{ "flask", "malachite", "ml" }), g = *lab::measure(v, lab::Quantity{ "flask", "malachite", "g" });
+	CHECK(ml > 0.0);
+	CHECK(g / ml == doctest::Approx(4.0).epsilon(0.05)); // malachite: about 4 g/mL
+	CHECK(*lab::measure(v, lab::Quantity{ "flask", "kpa", "g" }) == doctest::Approx(101.325)); // open: the room's pressure
 	// the vessel's own quantities, in order; other: a burner's valve, a balloon's fill
-	CHECK(lab::quantities_of_kind(flask, lab::QuantityKind::Vessel) == std::vector<std::string>{ "celsius", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" });
+	CHECK(lab::quantities_of_kind(flask, lab::QuantityKind::Vessel) == std::vector<std::string>{ "celsius", "kpa", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" });
 	CHECK(lab::kinds_of(burner) == std::vector<lab::QuantityKind>{ lab::QuantityKind::Other });
 	CHECK(lab::quantities_of_kind(burner, lab::QuantityKind::Other) == std::vector<std::string>{ "valve" });
 	CHECK(lab::quantities_of_kind(balloon, lab::QuantityKind::Other) == std::vector<std::string>{ "fill" });
