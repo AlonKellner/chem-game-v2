@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## 0.28.0 (2026-11-22, Stage 27)
+
+- §6, §13: **pouring is a control**: a vessel in a pouring position over another pours down a drain
+  with a rate. Held (`hold`, `pour {rate}`): its tilt's share of the vessel's rate, its solids too at
+  the full tilt; a script's `pour {ml | all}` waits it out and decants. Placed (`invert`, `cap`):
+  upside down over another, held by a stand, its cap an orifice under its head of liquid
+  (Torricelli, Cd 0.61, held to the law), a control rigged by parts and followed by controllers.
+  Goldens re-recorded with the user's approval (the pours take their time; the results unchanged).
+- §6: a drain may have a rate, and carry solids; a solution poured past a brim spills exactly its
+  excess (the overflow took a share of the liquid's volume alone, and left the vessel under-full).
+- §13.1: **an item is carried**: a click picks it up, a click puts it down; over a vessel the left
+  button pours while held, the right button opens the full menu (upside down, with a cap); the right
+  button on an item chooses it; dragging is for wires, sensing, sliders and rectangles.
+- §12.3: a vessel set upside down is drawn so, held to the 3D truth; a pour's stream; supports that
+  come with the glassware (a gauze over a tripod; a retort stand and a clamp).
+- §13: a balloon or a condenser seals a neck, not a beaker's mouth (adjacency, by the mouth).
+- Open: a held pour drawn tilted (the renderer reading a part-turned body).
+
 ## 0.27.0 (2026-11-22, Stage 26)
 
 - §13.3: **sensing, drawn and guided**: a monitor senses one item, by a dashed line from its sensing

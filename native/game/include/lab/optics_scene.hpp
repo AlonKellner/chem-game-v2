@@ -127,6 +127,7 @@ struct OpticsBody {
 	// its layer (GAME_SPEC §12.3): 0 stands on the bench's plane; each one more is a gap nearer the eye (what
 	// is held: 1). Up to OPTICS_LAYERS
 	int layer = 0;
+	bool flipped = false; // set upside down (Stage 27: a placed pour): its glass's rows from the other end
 	// A thing of the lab that is no vessel (GAME_SPEC §12.3, Stage 22): with no item, a shape made of what it
 	// reflects and what it emits, which bends nothing.
 	//   Slab: its rectangle, the corners rounded by `size`; opaque, lit by the room's light.

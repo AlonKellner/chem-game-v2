@@ -5,6 +5,7 @@
 #include "chem/math.hpp"
 #include "chem/thermo.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -440,17 +441,22 @@ void Simulation::drain_liquids() {
 			continue;
 		}
 		double fraction = 1.0;
+		if (edge.rate >= 0.0) { // a pour (Stage 27): at most its rate's volume this step
+			const double most = edge.rate * step_seconds_;
+			fraction = most >= runs ? 1.0 : most / runs;
+		}
 		const CellMeta &below = world_.meta(edge.b);
 		if (below.rigid && world_.spill().index < 0) { // with nowhere to spill, the rest stays above
 			const Fill fill = fill_of(table, world_.snapshot_cell(edge.b), T0);
 			const double room = fill.defined ? below.volume - fill.condensed : 0.0;
-			fraction = room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0;
+			fraction = std::min(fraction, room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0);
 		}
+		const bool solids = (edge.phases & phase_bit(Phase::Solid)) != 0;
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < upper.amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
-			if (upper.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+			if (upper.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous || (solids && def.phase == Phase::Solid))) {
 				const int64_t moves = fraction >= 1.0 ? upper.amount[s] : static_cast<int64_t>(static_cast<double>(upper.amount[s]) * fraction);
 				if (moves > 0) {
 					amounts.push_back(SpeciesAmount{ id, Amount{ moves } });
@@ -485,18 +491,21 @@ void Simulation::overflow() {
 		if (!fill.defined || !(fill.condensed > meta.volume)) {
 			continue;
 		}
-		double liquid = 0.0; // m^3
+		double liquid = 0.0, solids = 0.0; // m^3
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
-			if (state.amount[s] > 0 && def.phase == Phase::Liquid && !def.wall) {
-				liquid += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Solid)) {
+				(def.phase == Phase::Liquid ? liquid : solids) += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
 			}
 		}
 		if (!(liquid > 0.0)) {
 			continue; // solids alone: nothing can run out (V2 reports it)
 		}
-		const double excess = fill.condensed - meta.volume;
-		const double fraction = excess < liquid ? excess / liquid : 1.0;
+		// a share of the solution, what is dissolved in it as much as its liquid: of the solution's own volume
+		// (its solutes' volume with it), so that what runs out is the excess (Stage 27: of the liquid's alone, a
+		// solution spilled more than its excess, and left its vessel under-full)
+		const double excess = fill.condensed - meta.volume, solution = std::max(fill.condensed - solids, liquid);
+		const double fraction = excess < solution ? excess / solution : 1.0;
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };

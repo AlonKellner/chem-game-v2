@@ -359,8 +359,11 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const std::array<double, trace::MAX_MEDIA> index{ 1.0, n_glass, prism ? n_glass : n_in, 1.0 };
 	// from well before the body, on the line; the body's frame: cm from its axis, y up from its foot
 	const double back = 1000.0;
-	const trace::Vec3 u{ line.ux, -line.uy, line.uz };
-	const trace::Vec3 o{ (line.x - axis) * cm - back * u.x, (foot - line.y) * cm - back * u.y, (line.z - z_axis) * cm - back * u.z };
+	// upside down (Stage 27), its foot is its rectangle's top, and its up the screen's down
+	const bool flip = scene_vec(at + 7).w > 0.5;
+	const double base = flip ? static_cast<double>(rect.y) : foot, sense = flip ? -1.0 : 1.0;
+	const trace::Vec3 u{ line.ux, -sense * line.uy, line.uz };
+	const trace::Vec3 o{ (line.x - axis) * cm - back * u.x, sense * (base - line.y) * cm - back * u.y, (line.z - z_axis) * cm - back * u.z };
 	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
@@ -371,7 +374,7 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	out.pass = l.pass;
 	out.chord = liquid && !prism ? l.chord[trace::CORE] : 0.0;
 	out.out = l.left;
-	line = Line{ axis + l.at.x / cm, foot - l.at.y / cm, z_axis + l.at.z / cm, l.toward.x, -l.toward.y, l.toward.z };
+	line = Line{ axis + l.at.x / cm, base - sense * l.at.y / cm, z_axis + l.at.z / cm, l.toward.x, -sense * l.toward.y, l.toward.z };
 	return out;
 }
 
@@ -1190,7 +1193,8 @@ void optics_stacks(OpticsScene &scene) {
 					if (map[3] < 0.0f) {
 						double last = -1.0e9;
 						for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
-							const double e = stack.top[j] + scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
+							const double knot = scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
+							const double e = vec(o, L::SET)[3] > 0.5f ? stack.foot[j] - knot : stack.top[j] + knot; // upside down: from its foot (Stage 27)
 							if (e > top + 1e-4 && e < bottom - 1e-4 && e - last >= 2.0) {
 								edges.push_back(e);
 								last = e;

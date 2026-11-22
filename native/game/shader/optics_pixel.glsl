@@ -152,6 +152,16 @@ int set_in(int packed) {
 }
 
 
+// A body set upside down (Stage 27: a placed pour): its glass's rows from the other end. Its liquid's surface
+// and what rests on its cap stay the screen's own: they lie by the room, not by the glass.
+bool flipped(int body) {
+	return scene_vec(HEADER_VECS + body * BODY_VECS + 7).w > 0.5;
+}
+// how far down its own rows a screen row is, from its top (its base, upside down)
+float body_down(int body, vec4 rect, float y) {
+	return flipped(body) ? rect.y + rect.w - y : y - rect.y;
+}
+
 // What body i is at the place p of the screen, for a sample `across` wide and `up` high (pixels): how much
 // of the sample it covers (its outlines blend by that), and what the sample looks through there.
 // A thing of the lab at the place p (Stage 22): how far inside its outline p is (pixels; negative outside),
@@ -242,8 +252,14 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 		chord = sqrt(max(1.0 - dx * dx, 0.0));
 		// what it holds rests on its floor, which is glass all through
 		side = clamp(radius * (1.0 - abs(dx)) / across + 0.5, 0.0, 1.0);
-		ground = ground - scene_vec(at + 5).z / form.y;
-		under = clamp((p.y - ground) / up + 0.5, 0.0, 1.0);
+		float floor_px = scene_vec(at + 5).z / form.y;
+		if (flipped(i)) {
+			// upside down: its floor is at the top; what it holds lies on its cap, at the bottom
+			under = clamp((rect.y + floor_px - p.y) / up + 0.5, 0.0, 1.0);
+		} else {
+			ground = ground - floor_px;
+			under = clamp((p.y - ground) / up + 0.5, 0.0, 1.0);
+		}
 	} else {
 		// a ball: its skin is crossed twice, and aslant near the rim
 		float half_height = rect.w * 0.5;
@@ -474,7 +490,7 @@ Path path_of(vec2 p, float size) {
 			if (map.w < 0.0) {
 				q.raxis = floor(q.raxis + 0.5); // glassware stands with its axis on a whole pixel, as its maps were made
 			}
-			float down = p.y - rect.y;
+			float down = body_down(i, rect, p.y);
 			vec4 row_map = map_for_row(map, down);
 			q.rdown = map.w < 0.0 ? down : 0.0;
 			q.rrims = vec4(0.0);
@@ -516,7 +532,8 @@ Path path_of(vec2 p, float size) {
 			q.rwet = clamp((p.y - form.z) / size + 0.5, 0.0, 1.0);
 			q.rin = clamp(min(p.y - rect.y, rect.y + rect.w - p.y) / size + 0.5, 0.0, 1.0);
 			// and those in its floor, from the floor's top to the vessel's foot
-			q.rfloor = q.rmedia > 2 ? clamp((min(p.y + 0.5 * size, rect.y + rect.w) - max(p.y - 0.5 * size, rect.y + rect.w - bend.z / form.y)) / size, 0.0, 1.0) : 0.0;
+			float lo_floor = flipped(i) ? rect.y : rect.y + rect.w - bend.z / form.y, hi_floor = flipped(i) ? rect.y + bend.z / form.y : rect.y + rect.w;
+			q.rfloor = q.rmedia > 2 ? clamp((min(p.y + 0.5 * size, hi_floor) - max(p.y - 0.5 * size, lo_floor)) / size, 0.0, 1.0) : 0.0;
 		}
 		if (q.layers == 0) {
 			q.l0 = l;
@@ -1707,7 +1724,7 @@ struct Stack {
 
 MapRef ref_at(Stack s, int j, float y) {
 	vec4 map = vec4(float(s.map[j]), 0.0, 0.0, float(s.pieces[j]));
-	float down = y - s.top[j];
+	float down = body_down(s.body[j], scene_vec(HEADER_VECS + s.body[j] * BODY_VECS), y);
 	MapRef m;
 	m.at = s.map[j];
 	m.coarse = s.coarse[j];

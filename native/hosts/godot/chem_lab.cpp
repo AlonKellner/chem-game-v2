@@ -163,10 +163,11 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 		return;
 	}
 	const godot::Ref<godot::InputEventMouseButton> button = event;
-	if (button.is_valid() && button->get_button_index() == godot::MOUSE_BUTTON_LEFT) {
+	if (button.is_valid() && (button->get_button_index() == godot::MOUSE_BUTTON_LEFT || button->get_button_index() == godot::MOUSE_BUTTON_RIGHT)) {
 		down_ = button->is_pressed();
+		const bool right = button->get_button_index() == godot::MOUSE_BUTTON_RIGHT; // the full menu (Stage 27)
 		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(button->get_position());
-		cg_ui_pointer(ui_, at.x, at.y, state_of(button.ptr()));
+		cg_ui_pointer(ui_, at.x, at.y, state_of(button.ptr()) | (right ? CG_POINTER_RIGHT : 0));
 		return;
 	}
 	// keys for the screen's focused field (GAME_SPEC §13.3)

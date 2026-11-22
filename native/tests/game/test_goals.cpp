@@ -229,6 +229,14 @@ TEST_CASE("goals: on the screen: a slot for each, a drop onto a slot, the player
 	const auto drag = [&](const std::string &a, const std::string &b) {
 		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 		at(a, x0, y0);
+		if (a.rfind("item:", 0) == 0) { // carried: a click to pick it up, a click to put it down (Stage 27)
+			ui->pointer(x0, y0, true);
+			ui->pointer(x0, y0, false);
+			at(b, x1, y1);
+			ui->pointer(x1, y1, true);
+			ui->pointer(x1, y1, false);
+			return;
+		}
 		at(b, x1, y1);
 		ui->pointer(x0, y0, true);
 		ui->pointer(x1, y1, true);

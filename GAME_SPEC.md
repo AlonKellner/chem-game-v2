@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.27.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.28.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -321,7 +321,10 @@ conductance. Each step, after the reactions and the heat:
 
 **Drains.** A drain is a liquid edge with a direction (a condenser's outlet over a beaker). Each
 step all of the upper cell's liquid, with what is dissolved in it, runs into the lower cell,
-carrying its enthalpy.
+carrying its enthalpy. A drain may have a **rate** (Stage 27: a pour, §13): then each step at most
+that volume of the upper cell's liquid runs down, with what is dissolved in it in proportion, and,
+where the drain carries solids, the same share of the upper cell's solids; the rate is set between
+steps by whoever owns the drain.
 
 **Overflow.** A world may name one elastic cell where spills go (the bench's tray). A rigid cell
 that holds more solids and liquids than its volume then spills the excess of its liquid, with
@@ -1198,6 +1201,18 @@ of every ray through its area, and its colour is their average (a box filter).
     known by its colour, its lamp and, for a timer, its strip.)
   - Their spectra are calibrated, not measured (`docs/DATA_SOURCES.md`): simple shapes placed so
     that each thing has the colour it is known to have.
+- **A vessel turned** (Stage 27: pouring). A body may be turned in the screen's plane, about a
+  pivot: a held pour's tilt, a vessel set upside down. The eye looks along the axis it turns about,
+  so its glass is the same to every ray as when it stands: a pixel is read in the body's own frame
+  (its place turned back), its maps as they are, and where its rays land turned forward again.
+  Upside down, a row of its own is a row of the screen: the wall is read over it exactly; a revolved
+  body turned half a turn about its axis's point is its rows from the other end (Stage 27, built).
+  Part turned *(PLANNED)*: a ray's landing is turned onto a slanting line of the wall, read at its
+  points (a held pour is on the screen only while it pours). Its liquid's surface stays level in the room: in its
+  own frame a line, the liquid on the side away from the sky, each ray all in the liquid or all in
+  the air (the surface holds the eye's direction); where it lies for a volume, for each vessel and
+  turn, is found from the vessel's profile once and kept. A stream is a column of its liquid, no
+  glass: a thin cylinder body that refracts as one, its spectra its liquid's.
 - **A vessel's whole shape** (Stage 24). Every vessel is a piece of glassware made to its
   standard, and its shape is one model, shared: the lab's capacity, the liquid's level, the
   screen's silhouette and the tracer's surfaces are all read from it.
@@ -1397,9 +1412,38 @@ input to them, and a session script is a list of them.
   that does not fit, a connection that would seal a vessel (§6). One exception: a command that
   changes connections takes effect at a step boundary, so it first takes the lab to the end of a
   step in progress (at most one step, 1/60 s).
-- **Pouring and tipping are instantaneous**, along a handling connection that passes liquid and
-  solid and never gas. They leave a step in progress, so a change of connections after one takes
-  the lab to that step's end first.
+- **Tipping is instantaneous**, along a handling connection that passes solid and never gas. It
+  leaves a step in progress, so a change of connections after one takes the lab to that step's end
+  first.
+- **Pouring is a control** (Stage 27; asked for by the user, 2026-11-22). A vessel in a **pouring
+  position** over another pours down a drain with a rate (§6), which the control sets each step:
+  - **A held pour**: the player carries a vessel over another and tilts it, holding Space (the
+    pointer is carrying it). The tilt grows while Space is held, up to the vessel's own, and falls
+    back as it is let go; the vessel is drawn turned by it *(PLANNED: until the renderer reads a part
+    turned body, a held pour is drawn upright, its stream showing it pours; decided by the user,
+    2026-11-22)*. The rate is the tilt's share of the
+    vessel's pouring rate (`pour_ml_s` in `data/glassware.json`: a beaker's lip pours faster than a
+    flask's or a bottle's neck), its liquid with what is dissolved in it; at the full tilt its
+    solids go too. `pour {from, to, rate}` (0 to 1) sets it, and 0 ends it. A session's
+    `pour {from, to, ml | all}` is a held pour at full tilt that waits until that much has run.
+  - **A placed pour**: `invert {item, over}` stands a vessel upside down above another, its mouth
+    closed by a **cap**, held by a stand; `place`, `stow` or `submit` takes it off again, upright.
+    The cap is a control as a burner's valve is: `cap {item, to}` (0 shut to 1 open), a slider in
+    the readout, rigged from signal parts (`rig` its `cap`), followed by a controller. The flow is
+    an orifice's under the head of liquid above it, `Q = to × Cd × A sqrt(2 g h)` (Torricelli; `Cd`
+    0.61, a sharp-edged orifice; the cap's bore in `data/glassware.json`), its liquid with what is
+    dissolved in it; air comes in through the cap as liquid leaves (its gas stays open to the room).
+  - Either way the target fills and, filled past its brim, spills into the tray (§6); the stream is
+    drawn as a body of the pass, a thin column of the liquid itself (§12.3).
+- **Supports appear with the glassware** (Stage 27): a vessel over a burner stands on a tripod with
+  a wire gauze; what is on a vessel's mouth (a balloon, a condenser) and a vessel set upside down
+  are held by a retort stand and a clamp. They come and go with what they hold, are drawn by the
+  pass as metal, and change nothing else (the burner's conductance is calibrated with its gauze).
+- **Adjacency decides what joins what** (Stage 27), by each vessel's mouth (`data/glassware.json`):
+  a balloon or a condenser fits a neck no wider than it seals (a flask's, a bottle's), not a
+  beaker's rim; a vessel under an outlet, or under an inverted vessel, catches it if its mouth is
+  at least as wide as what drips; a burner goes under one vessel. A join that does not fit is
+  refused with the reason, naming the mouth.
 - **A balloon bursts** when its contents pass its capacity: it comes off the vessel it is on
   (whose mouth opens to the room), its gas is the room's, and it cannot be used again. The report
   lists it among the lab's events.
@@ -1439,18 +1483,25 @@ are in the readout's column, under what the selected item holds, for the item th
 vessel: its valve, a slider from shut to open). Nothing of them is on the grid; a tutorial's step
 that asks for one asks first for its item to be chosen.
 
-**Gestures.** Everything is a drag or a click:
+**Gestures.** Everything is a click or a drag. **An item is carried** (Stage 27; asked for by the user,
+2026-11-22): a click on it (pressed and let go over it) picks it up, and chooses it; it follows the
+pointer with no button held; the next click puts it down, as the table says; a click where it cannot
+go does nothing; a click on its own place, or Escape, puts it back. Over a vessel it pours into, the
+left button pours while it is held (a held pour, tilting as it is held; let go, it stops, and the
+vessel is still in hand), and the right button opens the full menu. Dragging is for wires, sensing,
+sliders and the selection's rectangle: a drag over an item moves nothing.
 
 | Gesture | Command |
 |---|---|
-| drag an item to a free cell of the bench | `place` |
-| drag an item to the cabinet | `stow` |
-| drag a burner onto a vessel | `heat` |
-| drag a balloon or a condenser onto a vessel | `attach` |
-| drag a vessel onto a condenser | `under` |
-| drag a vessel onto another vessel | opens the pour panel: a slider for how much liquid, `pour`; a button for each solid, `tip` |
-| drag an item onto a slot of the outbox | `submit` to that slot (§13.5) |
-| drag something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the drop means |
+| carry an item to a free cell of the bench | `place` |
+| carry an item to the cabinet | `stow` |
+| carry a burner onto a vessel | `heat` |
+| carry a balloon or a condenser onto a vessel | `attach` |
+| carry a vessel onto a condenser | `under` |
+| carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
+| carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
+| carry an item onto a slot of the outbox | `submit` to that slot (§13.5) |
+| carry something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the putting down means |
 | drag the slider beside a burner | `valve` |
 | click a vessel's stir button | `stir` |
 | drag a selection along the bench | `move` |
@@ -2157,7 +2208,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
-| Pouring and tipping are instantaneous | No stream, no splash, no rate to control |
+| Tipping is instantaneous; a pour's stream falls straight, with no splash; a held pour's tilt is the player's, not its liquid's | A stream lands where it falls; the rate is not the lip's flow, but the vessel's calibrated pouring rate by its tilt |
 | The bench opens out of equilibrium | The acid's water wets the air above it and the condenser cools to its coolant in the first seconds |
 | Kinetic parameters measured, some second-hand or extrapolated (Stage 23) | Malachite: Koga's main step, first order. The oxide's rate is second-hand (one table citing Majima), its activation energy the middle of the four acids' range, 52–86 kJ/mol; its order is in the acid's concentration, Majima's in the hydrogen ion's activity. Growth: Tanimoto's surface step from 20 to 40 °C, used at every temperature, and for the other hydrates too. Nucleation: fitted to Sheng's induction times as one nucleus each, at supersaturations under 1.09, extrapolated far beyond them; a lower bound, since a nucleus must grow to be seen (`docs/DATA_SOURCES.md`) |
 | Transport is diffusion to a sphere, `Sh = 2`, times the stirring | No convection from settling crystals or a warm flask; ions diffuse as at infinite dilution |

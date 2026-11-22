@@ -413,6 +413,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
 		rows.resize(static_cast<size_t>((set + 1) * ROWS_PER_SET * ROW), 0.0f);
 		put(at + SET, 0, set);
+		put(at + SET, 3, body.flipped ? 1.0 : 0.0); // upside down (Stage 27)
 		float *liquid = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
 		float *solid = &rows[static_cast<size_t>((set * ROWS_PER_SET + SOLID_ROW) * ROW)];
 		float *wall = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_ROW) * ROW)];
@@ -570,7 +571,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
 			if (v.liquid_ml > 0.0) {
 				// its level: where the inside below holds what is condensed (a cone fills faster as it narrows)
-				put(at + FORM, 2, bottom - (made ? made->level(v.condensed_ml) : floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
+				// upside down (Stage 27), it lies from its mouth, now at the bottom
+				put(at + FORM, 2, bottom - (made && body.flipped ? made->head_inverted(v.condensed_ml) : made ? made->level(v.condensed_ml) : floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
 			}
 			if (solid_ml > 0.0 && v.stirred && v.liquid_ml > 0.0) {
 				// stirred up: every particle shades its own cross-section, twice over

@@ -142,7 +142,8 @@ enum {
 	CG_POINTER_DOWN = 1,
 	CG_POINTER_SHIFT = 2,
 	CG_POINTER_CTRL = 4,
-	CG_POINTER_META = 8
+	CG_POINTER_META = 8,
+	CG_POINTER_RIGHT = 16 /* the right button: the full menu over a vessel (Stage 27) */
 };
 CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
 /* A frame of real time, in seconds: the lab advances by it times the speed

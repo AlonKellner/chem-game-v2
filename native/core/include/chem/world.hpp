@@ -52,6 +52,10 @@ struct Edge {
 	// A drain (GAME_SPEC §6): each step, the liquid of `a` and what is
 	// dissolved in it run down into `b` (a condenser's outlet over a beaker).
 	bool drain = false;
+	// A drain's rate (Stage 27: a pour): at most this volume of liquid a
+	// second (m^3/s), and with it the same share of the solids where the
+	// edge passes them; below 0, all of it each step.
+	double rate = -1.0;
 };
 
 // What a cell is, beside its state. A reservoir is an energy account at a
@@ -245,6 +249,9 @@ public:
 	// they are at its end, and one added during it is among them.
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
 	Refusal connect_drain(CellId from, CellId to, EdgeId *made = nullptr);
+	// A drain's rate (m^3 of liquid a second; below 0, all of it), and whether
+	// its solids go too (GAME_SPEC §6, Stage 27: a pour). Between steps.
+	Refusal set_drain(EdgeId edge, double rate, bool solids);
 	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);

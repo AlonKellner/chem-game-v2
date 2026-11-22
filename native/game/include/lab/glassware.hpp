@@ -55,7 +55,15 @@ struct Vessel {
 	double radius_outside(double y) const; // 0 outside [0, height]
 	double radius_inside(double y) const; // 0 outside [floor, height]
 	double widest() const; // the outside's greatest radius: a beaker's brim, a flask's base
+	// Pouring (GAME_SPEC §13, Stage 27): a held pour's rate at full tilt, mL/s; the bore of the cap that fits
+	// its mouth, cm; its mouth's inside radius, cm; and, upside down with a volume in it, how deep the liquid
+	// stands over its mouth (the head an orifice there pours under), cm.
+	double pour_ml_s = 0.0, cap_bore = 0.0;
+	double mouth() const;
+	double head_inverted(double cm3) const;
 };
+// the widest mouth a balloon's or a condenser's fitting seals, cm (data/glassware.json: seals_mm)
+double seals();
 
 // The vessel of a kind and nominal capacity, from data/glassware.json; none if there is no such row.
 std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string &why);

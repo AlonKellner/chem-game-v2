@@ -48,19 +48,45 @@ struct Pupil {
 			click("item:" + item.substr(0, item.find('@')));
 		}
 		at(what, x, y);
-		ui->pointer(x, y, false);
-		ui->pointer(x, y, true);
-		ui->pointer(x, y, false);
+		const int mods = what.rfind("item:", 0) == 0 ? lab::Ui::ModRight : 0; // an item is chosen by the right button (Stage 27)
+		ui->pointer(x, y, false, mods);
+		ui->pointer(x, y, true, mods);
+		ui->pointer(x, y, false, mods);
 	}
+	// what a drag names: an item is carried, a click to pick it up and a click to put it down (Stage 27), a vessel
+	// onto a vessel with the right button (the menu: what to pour or tip); from a port, the drawer or a slider, a drag
 	void drag(const std::string &what, const std::string &to) {
 		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 		at(what, x0, y0);
+		if (what.rfind("item:", 0) == 0) {
+			ui->pointer(x0, y0, false);
+			ui->pointer(x0, y0, true);
+			ui->pointer(x0, y0, false);
+			at(to, x1, y1);
+			const int mods = carried_onto_vessel(what.substr(5), to) ? lab::Ui::ModRight : 0;
+			ui->pointer(x1, y1, false, mods);
+			ui->pointer(x1, y1, true, mods);
+			ui->pointer(x1, y1, false, mods);
+			return;
+		}
 		at(to, x1, y1);
 		ui->pointer(x0, y0, false);
 		ui->pointer(x0, y0, true);
 		ui->pointer((x0 + x1) / 2, (y0 + y1) / 2, true);
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);
+	}
+	bool carried_onto_vessel(const std::string &id, const std::string &to) {
+		if (to.rfind("item:", 0) != 0) {
+			return false;
+		}
+		const lab::LabView v = ui->lab().view();
+		const lab::ItemView *a = nullptr, *b = nullptr;
+		for (const lab::ItemView &x : v.items) {
+			a = x.id == id ? &x : a;
+			b = x.id == to.substr(5) ? &x : b;
+		}
+		return a != nullptr && b != nullptr && a->kind == "vessel" && !a->glassware.empty() && b->kind == "vessel" && !b->condenser && b->place == "bench";
 	}
 	void type(const std::string &text) {
 		for (const char c : text) {
@@ -161,6 +187,21 @@ struct Pupil {
 			y1 = y0;
 		}
 		move(x0 - 200, y0 - 100, x0, y0, false);
+		if (g.what.rfind("item:", 0) == 0) {
+			// an item is carried (Stage 27): a click picks it up, it follows the pointer, a click puts it down (onto a
+			// vessel it pours into, with the right button: the menu); a click on it alone, put back where it was
+			ui->pointer(x0, y0, true);
+			ui->frame(1.0 / 60.0);
+			ui->pointer(x0, y0, false);
+			ui->frame(1.0 / 60.0);
+			move(x0, y0, x1, y1, false);
+			const int mods = g.drag && carried_onto_vessel(g.what.substr(5), g.to) ? lab::Ui::ModRight : 0;
+			ui->pointer(x1, y1, true, mods);
+			ui->frame(1.0 / 60.0);
+			ui->pointer(x1, y1, false, mods);
+			ui->frame(1.0 / 60.0);
+			return;
+		}
 		ui->pointer(x0, y0, true);
 		ui->frame(1.0 / 60.0);
 		move(x0, y0, x1, y1, true);

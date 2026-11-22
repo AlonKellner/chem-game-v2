@@ -10,20 +10,20 @@ var _view: SubViewport # the game's own 1920 x 1080, whatever the window is
 var _failed := false
 var _cost_only := false # a second argument, "cost": no pictures, no O4, the pass's cost alone
 
-func _drag(what: String, to: String) -> void:
+func _drag(what: String, to: String, menu := false) -> void: # an item: a click picks it up, a click (right: the menu) puts it down
 	var a := _lab.locate(what)
-	var b := _lab.locate(to)
-	_lab.pointer(a.x, a.y, false)
 	_lab.pointer(a.x, a.y, true)
-	_lab.pointer(b.x, b.y, true)
-	_lab.pointer(b.x, b.y, false)
+	_lab.pointer(a.x, a.y, not what.begins_with("item:"))
+	var b := _lab.locate(to)
+	_lab.pointer(b.x, b.y, true, 16 if menu else 0)
+	_lab.pointer(b.x, b.y, false, 16 if menu else 0)
 
 func _click(what: String) -> void:
 	if (what.begins_with("valve:") or what.begins_with("stir:")) and _lab.locate(what) == Vector2(-1, -1):
 		_click("item:" + what.get_slice(":", 1).get_slice("@", 0)) # its controls show for the item chosen
 	var a := _lab.locate(what)
-	_lab.pointer(a.x, a.y, true)
-	_lab.pointer(a.x, a.y, false)
+	_lab.pointer(a.x, a.y, true, 16 if what.begins_with("item:") else 0) # an item is chosen by the right button (Stage 27)
+	_lab.pointer(a.x, a.y, false, 16 if what.begins_with("item:") else 0)
 
 func _grams(id: String, species: String) -> float:
 	for item in JSON.parse_string(_lab.report())["items"]:
@@ -82,7 +82,6 @@ func _time(extra: int) -> float:
 	var ms := float(Time.get_ticks_usec() - start) / 20000.0
 	_lab.set_optics_extra(0)
 	return ms
-
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
@@ -118,13 +117,12 @@ func _cost(when: String, few_passes: int = 8, many_passes: int = 24) -> void:
 	many = await _time(many_passes)
 	_lab.set_optics_restarting(false)
 	print("%severy history starting again: a frame with %d more passes: %.2f ms; with %d: %.2f ms; one such pass: %.3f ms" % [when, few_passes, few, many_passes, many, (many - few) / float(many_passes - few_passes)])
-
 func _play(dir: String) -> void:
 	_click("pause")
 	_drag("item:flask", "square:11,12")
 	_drag("item:burner", "item:flask")
 	_drag("item:jar", "square:4,13")
-	_drag("item:jar", "item:flask")
+	_drag("item:jar", "item:flask", true)
 	_click("panel:tip:malachite")
 	_drag("item:balloon", "item:flask")
 	_click("valve:burner@1")
@@ -143,7 +141,7 @@ func _play(dir: String) -> void:
 		return
 	_click("pause")
 	_drag("item:acid", "square:7,12")
-	_drag("item:acid", "item:flask")
+	_drag("item:acid", "item:flask", true)
 	await _shoot(dir, "3_pour_panel") # nothing is clicked while the panel is open: a click outside it closes it
 	_click("panel:pour")
 	_click("stir:flask")
@@ -197,11 +195,12 @@ func _play(dir: String) -> void:
 	var from := _lab.locate("item:beaker")
 	var over := _lab.locate("item:flask")
 	_lab.pointer(from.x, from.y, true)
+	_lab.pointer(from.x, from.y, false) # picked up (Stage 27)
 	for i in 12: # a few moves, as a hand makes
-		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 70.0, (i + 1) / 12.0), true)
+		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 70.0, (i + 1) / 12.0), false)
 	await _shoot(dir, "14_held")
 	await _cost("a vessel held over another: ", 0, 1)
-	_lab.pointer(from.x, from.y, false) # carried back, and set down where it stood
+	_lab.key(3, 0) # put back where it stood (CG_KEY_ESCAPE)
 	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
 	_lab.queue_free()
 	await process_frame

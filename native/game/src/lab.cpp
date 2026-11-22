@@ -31,7 +31,10 @@ std::string build_name() {
 namespace {
 
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
-constexpr int TRIAL_SECONDS = 3600; // a controller's trial, at most (GAME_SPEC §13.3, Stage 26)
+constexpr int TRIAL_SECONDS = 3600;
+constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
+constexpr double GRAVITY = 9.80665; // m/s^2, standard
+constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (GAME_SPEC §13.3, Stage 26)
 // what a hand moves between two vessels: liquid with what is dissolved in it, and solids; never gas
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
@@ -51,6 +54,13 @@ struct Item {
 	EdgeId joint; // its edge to that vessel
 	int holds = -1; // a vessel: what is on its mouth
 	int drains_to = -1; // a vessel: what stands under its outlet
+	// pouring (GAME_SPEC §13, Stage 27): in a pouring position over a vessel, held or upside down with a cap; the
+	// drain it pours down; a held pour's tilt (its share of the full tilt), the cap's opening
+	int pours_into = -1;
+	EdgeId pour;
+	bool inverted = false;
+	double tilt = 0.0, cap = 0.0;
+	double pour_left_m3 = -1.0; // a scripted pour's liquid still to run (below 0: no limit); not saved: a command waits it out
 	bool stirred = false;
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (GAME_SPEC §13.5)
@@ -415,6 +425,9 @@ struct Lab::Impl {
 	// a control's value now; none when it is not one of the lab's
 	std::optional<double> control_now(const std::string &item_id, const std::string &control) const {
 		const int i = find(item_id);
+		if (control == "cap" && i >= 0 && items[static_cast<size_t>(i)].pours_into >= 0 && items[static_cast<size_t>(i)].inverted) {
+			return items[static_cast<size_t>(i)].cap; // an upside-down vessel's cap (Stage 27)
+		}
 		if (control == "stir" && i >= 0 && items[static_cast<size_t>(i)].kind != Kind::Burner && items[static_cast<size_t>(i)].kind != Kind::Tray) {
 			return items[static_cast<size_t>(i)].stirred ? 1.0 : 0.0;
 		}
@@ -542,6 +555,11 @@ struct Lab::Impl {
 			record(item_id, control, on ? 1.0 : 0.0, by);
 			return true;
 		}
+		if (control == "cap" && x.pours_into >= 0 && x.inverted) {
+			x.cap = std::clamp(value, 0.0, 1.0);
+			record(item_id, control, x.cap, by);
+			return true;
+		}
 		if (control == "valve" && x.kind == Kind::Burner) {
 			if (x.under >= 0) {
 				world().set_conductance(x.heats, x.full * value);
@@ -632,7 +650,7 @@ struct Lab::Impl {
 			out = (j.is_boolean() ? j.get<bool>() : j == "stir") ? 1.0 : 0.0;
 			return true;
 		}
-		if (control == "valve" && j.is_number() && j.get<double>() >= 0.0 && j.get<double>() <= 1.0) {
+		if ((control == "valve" || control == "cap") && j.is_number() && j.get<double>() >= 0.0 && j.get<double>() <= 1.0) {
 			out = j.get<double>();
 			return true;
 		}
@@ -843,7 +861,122 @@ struct Lab::Impl {
 
 	// ---- drains (§6, §13): a vessel under another's outlet leaves it when either is moved
 	// away, stowed or handed in; the drain comes off at a step boundary
+	// the volume of a cell's liquid species, m^3 (what a pour's amount is of)
+	double liquid_m3(CellId cell) const {
+		const CellState &state = world().snapshot_cell(cell);
+		double volume = 0.0;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (state.amount[s] > 0 && def.phase == Phase::Liquid && !def.wall) {
+				volume += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
+		}
+		return volume;
+	}
+	// A vessel into a pouring position over another (GAME_SPEC §13, Stage 27): held, or upside down with its cap
+	// shut; a drain from it into the other, its rate set each step
+	bool start_pour(int thing, int over, bool inverted, std::string &why) {
+		Item &x = items[static_cast<size_t>(thing)];
+		const Item &t = items[static_cast<size_t>(over)];
+		if (thing == over) {
+			why = "a vessel is not poured into itself";
+			return false;
+		}
+		if (x.kind != Kind::Vessel || t.kind != Kind::Vessel || glass::find(x.glassware, x.nominal_ml) == nullptr) {
+			why = "a vessel made as glassware pours, into a vessel";
+			return false;
+		}
+		if (x.place == Place::Outbox) { // from the bench, or straight from the cabinet, as a burner or a balloon is used
+			why = "\"" + x.id + "\" has been handed in";
+			return false;
+		}
+		if (!on_bench(t, why)) {
+			return false;
+		}
+		if (x.holds >= 0 || x.drains_to >= 0) {
+			why = "\"" + x.id + "\" has \"" + items[static_cast<size_t>(x.holds >= 0 ? x.holds : x.drains_to)].id + "\" on it or under it: take it away first";
+			return false;
+		}
+		for (const Item &b : items) {
+			if (inverted && b.kind == Kind::Burner && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
+				why = "\"" + x.id + "\" stands over \"" + b.id + "\": take the burner away first";
+				return false;
+			}
+		}
+		if (t.pours_into == thing) {
+			why = "\"" + t.id + "\" is pouring into \"" + x.id + "\"";
+			return false;
+		}
+		if (!end_pour(static_cast<size_t>(thing), why) || !boundary(why)) {
+			return false;
+		}
+		EdgeId edge;
+		if (world().connect_drain(x.cell, t.cell, &edge) != Refusal::None) {
+			why = "\"" + x.id + "\" cannot pour into \"" + t.id + "\"";
+			return false;
+		}
+		world().set_drain(edge, 0.0, false);
+		x.pours_into = over;
+		x.pour = edge;
+		x.inverted = inverted;
+		x.tilt = x.cap = 0.0;
+		return true;
+	}
+
+	// A pour ends (GAME_SPEC §13, Stage 27): its drain off, the vessel upright on its own square again
+	bool end_pour(size_t u, std::string &why) {
+		Item &x = items[u];
+		if (x.pours_into < 0) {
+			return true;
+		}
+		if (!boundary(why)) {
+			return false;
+		}
+		world().disconnect(x.pour);
+		x.pours_into = -1;
+		x.pour = EdgeId{};
+		x.inverted = false;
+		x.tilt = x.cap = 0.0;
+		return true;
+	}
+	bool end_pours(int thing, std::string &why) {
+		for (size_t u = 0; u < items.size(); ++u) {
+			if (items[u].pours_into >= 0 && (static_cast<int>(u) == thing || items[u].pours_into == thing) && !end_pour(u, why)) {
+				return false;
+			}
+		}
+		return true;
+	}
+	// a pour's rate this step: a held one's by its tilt, an upside-down one's an orifice's under its head
+	void set_pours() {
+		for (Item &x : items) {
+			if (x.pours_into < 0) {
+				continue;
+			}
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+			double rate = 0.0;
+			bool solids = false;
+			if (g != nullptr && !x.inverted) {
+				rate = x.tilt * g->pour_ml_s * 1e-6;
+				solids = x.tilt >= 1.0 - 1e-12 && x.pour_left_m3 < 0.0; // at a held pour's full tilt its solids go too; a scripted one decants
+			} else if (g != nullptr) {
+				const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+				const double head_m = fill.defined ? g->head_inverted(fill.condensed * 1e6) / 100.0 : 0.0;
+				const double bore_m = g->cap_bore / 100.0;
+				rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * head_m);
+				solids = true; // upside down, what rests lies on the cap
+			}
+			if (x.pour_left_m3 >= 0.0) {
+				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
+			}
+			world().set_drain(x.pour, rate, solids);
+		}
+	}
+
 	bool take_off_drains(int thing, std::string &why) {
+		if (!end_pours(thing, why)) { // a pour ends where a drain comes off (Stage 27)
+			return false;
+		}
 		for (size_t u = 0; u < items.size(); ++u) {
 			if (items[u].drains_to >= 0 && (static_cast<int>(u) == thing || items[u].drains_to == thing) && !take_off_drain(u, why)) {
 				return false;
@@ -1084,6 +1217,7 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
+		set_pours();
 		if (!check || !traceable) {
 			sim->advance();
 			untraced = true;
@@ -1225,6 +1359,10 @@ struct Lab::Impl {
 		v.under = item.under;
 		v.holds = item.holds;
 		v.drains_to = item.drains_to;
+		v.pours_into = item.pours_into;
+		v.inverted = item.inverted;
+		v.tilt = item.tilt;
+		v.cap = item.cap;
 		v.stirred = item.stirred;
 		v.submitted = item.submitted;
 		v.slot = item.slot;
@@ -2077,7 +2215,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		const bool targets = r.control == "reset" ? find_part(r.item) >= 0 && parts[static_cast<size_t>(find_part(r.item))].kind == PartKind::Timer
 								: control_now(r.item, r.control).has_value();
 		if (!targets) {
-			why = "there is no " + r.control + " on \"" + r.item + "\" to rig: a vessel's stir, a burner's valve, a timer's reset";
+			why = "there is no " + r.control + " on \"" + r.item + "\" to rig: a vessel's stir, a burner's valve, an upside-down vessel's cap, a timer's reset";
 			return false;
 		}
 		if (there != rigs.end()) {
@@ -2086,8 +2224,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (parts[static_cast<size_t>(from)].kind == PartKind::Controller) {
 			// it follows the controller's level: a valve to it, stirring by PWM (Stage 26)
-			if (r.control != "valve" && r.control != "stir") {
-				why = "a controller's rig follows its level: a burner's valve, or a vessel's stirring by PWM; a timer's reset cannot";
+			if (r.control != "valve" && r.control != "stir" && r.control != "cap") {
+				why = "a controller's rig follows its level: a burner's valve, a cap's opening, or a vessel's stirring by PWM; a timer's reset cannot";
 				return false;
 			}
 			if (c.contains("on") || c.contains("off") || c.contains("change")) {
@@ -2360,6 +2498,120 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		record(items[static_cast<size_t>(at)].id, "stir", on ? 1.0 : 0.0, "player");
 		return true;
 	}
+	if (what == "hold" || what == "invert") {
+		// a vessel in a pouring position over another: held, or upside down with its cap shut (§13, Stage 27)
+		int thing = -1, over = -1;
+		if (!item(c, "item", Kind::Vessel, thing, why) || !item(c, "over", Kind::Vessel, over, why)) {
+			return false;
+		}
+		return start_pour(thing, over, what == "invert", why);
+	}
+	if (what == "unpour") {
+		int thing = -1;
+		if (!item(c, "item", Kind::Vessel, thing, why)) {
+			return false;
+		}
+		if (items[static_cast<size_t>(thing)].pours_into < 0) {
+			why = "\"" + items[static_cast<size_t>(thing)].id + "\" is not over a vessel";
+			return false;
+		}
+		return end_pour(static_cast<size_t>(thing), why);
+	}
+	if (what == "cap") {
+		int thing = -1;
+		if (!item(c, "item", Kind::Vessel, thing, why)) {
+			return false;
+		}
+		const double to = number(c, "to", -1.0);
+		if (!(to >= 0.0 && to <= 1.0)) {
+			why = "a cap is opened \"to\" 0 (shut) to 1 (open)";
+			return false;
+		}
+		if (!control_now(items[static_cast<size_t>(thing)].id, "cap")) {
+			why = "\"" + items[static_cast<size_t>(thing)].id + "\" has no cap: set it upside down over a vessel first";
+			return false;
+		}
+		return set_control(items[static_cast<size_t>(thing)].id, "cap", to, "player");
+	}
+	if (what == "pour") {
+		// pouring is a control (§13, Stage 27): a held pour's tilt; or, from a script, an amount at full tilt, waited out
+		int from = -1;
+		if (!item(c, "from", Kind::Vessel, from, why)) {
+			return false;
+		}
+		bool started = false;
+		if (c.contains("to")) {
+			int to = -1;
+			if (!item(c, "to", Kind::Vessel, to, why)) {
+				return false;
+			}
+			if (items[static_cast<size_t>(from)].pours_into != to) {
+				if (!start_pour(from, to, false, why)) {
+					return false;
+				}
+				started = true;
+			}
+		}
+		Item &x = items[static_cast<size_t>(from)];
+		touched.resize(items.size(), 0);
+		touched[static_cast<size_t>(from)] = 1; // what a hand moves is not noticed as appearing
+		if (x.pours_into >= 0) {
+			touched[static_cast<size_t>(x.pours_into)] = 1;
+		}
+		if (x.pours_into < 0) {
+			why = "\"" + x.id + "\" is not over a vessel: name one, \"to\"";
+			return false;
+		}
+		if (x.inverted) {
+			why = "upside down, \"" + x.id + "\" pours through its cap: open the cap";
+			return false;
+		}
+		if (c.contains("rate")) {
+			const double rate = number(c, "rate", -1.0);
+			if (!(rate >= 0.0 && rate <= 1.0)) {
+				why = "a held pour's \"rate\" is 0 to 1: its tilt's share of the full";
+				return false;
+			}
+			x.tilt = rate;
+			return true;
+		}
+		const double volume = liquid_m3(x.cell);
+		const double wanted = c.value("all", false) ? volume : number(c, "ml", -1.0) * 1e-6;
+		if (!(wanted > 0.0)) {
+			if (started) {
+				end_pour(static_cast<size_t>(from), why);
+			}
+			why = c.value("all", false) ? "\"" + x.id + "\" holds no liquid" : "a pour is of a \"rate\", or of \"ml\" or \"all\"";
+			return false;
+		}
+		if (wanted > volume * (1.0 + 1e-9)) {
+			if (started) {
+				end_pour(static_cast<size_t>(from), why);
+			}
+			why = "\"" + x.id + "\" does not hold that much liquid";
+			return false;
+		}
+		// full tilt until that much has run (at most a minute of the lab past what its rate takes), then upright
+		const double full_rate = std::max(glass::find(x.glassware, x.nominal_ml)->pour_ml_s * 1e-6, 1e-12);
+		const int64_t most = static_cast<int64_t>((wanted / full_rate + 60.0) * 60.0);
+		x.tilt = 1.0;
+		double ran = 0.0; // what the drain was given to run: its rate's volume each step, not what evaporation took
+		for (int64_t k = 0; k < most; ++k) {
+			Item &y = items[static_cast<size_t>(from)];
+			const double left = wanted - ran, there = liquid_m3(y.cell);
+			if (!(left > wanted * 1e-9) || there <= 0.0) {
+				break;
+			}
+			y.pour_left_m3 = left;
+			ran += std::min({ full_rate * chem::STEP_SECONDS, left, there });
+			if (!step_once(why)) {
+				return false;
+			}
+		}
+		items[static_cast<size_t>(from)].pour_left_m3 = -1.0;
+		items[static_cast<size_t>(from)].tilt = 0.0;
+		return !started || end_pour(static_cast<size_t>(from), why);
+	}
 	if (what == "pour" || what == "tip") {
 		int from = -1, to = -1;
 		if (!item(c, "from", Kind::Vessel, from, why) || !item(c, "to", Kind::Vessel, to, why)) {
@@ -2460,6 +2712,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (x.burst) {
 			why = "\"" + x.id + "\" has burst";
+			return false;
+		}
+		// adjacency (Stage 27): its fitting seals a neck, not a wide mouth
+		if (const glass::Vessel *g = glass::find(v.glassware, v.nominal_ml); g != nullptr && 2.0 * g->mouth() > glass::seals()) {
+			why = "\"" + x.id + "\" does not seal \"" + v.id + "\"'s " + text_of("%.0f mm mouth", 20.0 * g->mouth()) + text_of(": it fits a neck up to %.0f mm", 10.0 * glass::seals());
 			return false;
 		}
 		if (x.place == Place::Outbox || !on_bench(v, why)) {
@@ -3077,6 +3334,9 @@ std::string Lab::digest() const {
 		hash.update_i64(e.b.index);
 		hash.update_u64(static_cast<uint64_t>(e.phases) | (e.open ? 0x100u : 0u) | (e.drain ? 0x200u : 0u));
 		hash.update_double(e.conductance);
+		if (e.rate >= 0.0) { // a pour's (Stage 27): a lab without one digests as before
+			hash.update_double(e.rate);
+		}
 	}
 	// the processes' carried remainders are state too (GAME_SPEC §4.5)
 	for (const std::vector<double> *carried : { &m.sim->heat_remainders(), &m.sim->reaction_remainders(), &m.sim->nucleation_remainders() }) {
@@ -3203,6 +3463,9 @@ json Lab::Impl::save() const {
 	json edges = json::array();
 	for (const Edge &e : w.edges()) {
 		edges.push_back({ { "a", e.a.index }, { "b", e.b.index }, { "phases", e.phases }, { "open", e.open }, { "drain", e.drain }, { "conductance", bits(e.conductance) } });
+		if (e.rate >= 0.0) {
+			edges.back()["rate"] = bits(e.rate);
+		}
 	}
 	out["edges"] = edges;
 	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
@@ -3218,6 +3481,9 @@ json Lab::Impl::save() const {
 				{ "drains_to", item.drains_to }, { "stirred", item.stirred }, { "submitted", item.submitted }, { "place", static_cast<int>(item.place) }, { "col", item.col },
 				{ "row", item.row }, { "w", item.w }, { "h", item.h }, { "capacity", bits(item.capacity) }, { "burst", item.burst }, { "slot", item.slot },
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
+		if (item.pours_into >= 0) { // a lab without a pour saves as before (Stage 27)
+			list.back()["pours"] = { { "into", item.pours_into }, { "edge", item.pour.index }, { "inverted", item.inverted }, { "tilt", bits(item.tilt) }, { "cap", bits(item.cap) } };
+		}
 	}
 	bench["items"] = list;
 	json happened = json::array();
@@ -3293,6 +3559,10 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.phases = e.at("phases").get<PhaseMask>();
 			edge.open = e.at("open").get<bool>();
 			edge.drain = e.at("drain").get<bool>();
+			if (e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			if (!from_bits(e.at("conductance"), edge.conductance)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
@@ -3324,6 +3594,16 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.on = j.at("on").get<int>();
 			item.holds = j.at("holds").get<int>();
 			item.drains_to = j.at("drains_to").get<int>();
+			if (j.contains("pours")) {
+				const json &pj = j.at("pours");
+				item.pours_into = pj.at("into").get<int>();
+				item.pour = EdgeId{ pj.at("edge").get<int32_t>() };
+				item.inverted = pj.at("inverted").get<bool>();
+				if (!from_bits(pj.at("tilt"), item.tilt) || !from_bits(pj.at("cap"), item.cap)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+			}
 			item.stirred = j.at("stirred").get<bool>();
 			item.submitted = j.at("submitted").get<bool>();
 			item.col = j.at("col").get<int>();

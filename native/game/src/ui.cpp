@@ -34,7 +34,7 @@ constexpr Rect OUTBOX{ 260, 760, 640, 300 };
 constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13.3), beside the outbox
 constexpr Rect EDITOR{ 440, 76, 720, 340 }; // a part's settings, or a rig's, being written
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
-constexpr Rect PANEL{ 600, 250, 440, 300 };
+constexpr Rect PANEL{ 600, 250, 440, 340 }; // the pour menu (Stage 27: and upside down, with a cap)
 constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
 constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
@@ -208,6 +208,7 @@ struct Ui::Impl {
 	float px = 0, py = 0;
 	bool down = false;
 	int drag = -1; // the item in hand
+	std::vector<ItemView> streams; // the pours' streams, this frame's (Stage 27): bodies of the pass, each a column of its liquid
 	float grab_x = 0, grab_y = 0; // where in it it was taken
 	int anchor_c = 0, anchor_r = 0; // the square of its footprint under the pointer
 	float press_x = 0, press_y = 0; // where the button went down
@@ -216,6 +217,13 @@ struct Ui::Impl {
 	std::vector<int> group;
 	bool marquee = false; // a rectangle being drawn from (press_x, press_y)
 	bool moved = false;
+	// carried (§13.1, Stage 27; asked for by the user, 2026-11-22): a click picks an item up, and it follows the
+	// pointer, no button held; the next click puts it down, or, over a vessel it can pour into, pours while held
+	bool carrying = false;
+	bool putting_down = false; // a press while carrying: its release puts it down
+	bool pouring = false; // a press over a vessel: a held pour, tilting while the button is held
+	double tilt = 0.0;
+	static constexpr double TILT_SECONDS = 1.5; // from upright to the full tilt, while the button is held
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
 	int hover = -1;
@@ -595,6 +603,7 @@ struct Ui::Impl {
 	// an item's footprint on the bench
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
+	static constexpr float INVERTED_GAP = 24; // an upside-down vessel's mouth above the mouth it pours into
 	// the square of an item's footprint its body's centre is on, as it would stand on the bench
 	void body_square(int index, int &c, int &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
@@ -664,6 +673,11 @@ struct Ui::Impl {
 			const Rect holder = rect(v.on);
 			return Rect{ holder.cx() - w / 2, holder.y - h - 4, w, h };
 		}
+		if (v.inverted && v.pours_into >= 0) {
+			// upside down over what it pours into, its mouth a little above that one's (Stage 27), held by a stand
+			const Rect below = rect(v.pours_into);
+			return Rect{ below.cx() - w / 2, below.y - INVERTED_GAP - h, w, h };
+		}
 		if (v.place == "under" && v.under >= 0) {
 			const Rect vessel = rect(v.under);
 			return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h + 64, w, h };
@@ -718,9 +732,11 @@ struct Ui::Impl {
 	// the selected item's name, for the item that is selected. Where the readout's rows begin:
 	float readout_top() const { return tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30; }
 	// a burner's valve: a slider, shut at its left and open at its right, while it is on the bench or under a vessel
+	// a burner's valve, or a vessel's cap set upside down over another (Stage 27): one slider, shut to open
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		if (index != selected || v.kind != "burner" || (v.place != "bench" && v.place != "under") || draft.edit != Draft::None) {
+		const bool cap = v.kind == "vessel" && v.inverted && v.pours_into >= 0;
+		if (index != selected || (v.kind != "burner" && !cap) || (v.place != "bench" && v.place != "under" && !cap) || draft.edit != Draft::None) {
 			return false;
 		}
 		r = Rect{ READOUT.x + 90, readout_top() + 96, 300, 18 };
@@ -744,6 +760,8 @@ struct Ui::Impl {
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
+	// upside down over it, with a cap: a placed pour (Stage 27)
+	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
 	// the solids of the vessel being emptied, each with its button
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
 		std::vector<std::pair<std::string, Rect>> out;
@@ -788,7 +806,18 @@ struct Ui::Impl {
 		selected = group.empty() ? -1 : group.back();
 	}
 	// a selection of several, the item in hand among them, being carried
-	bool carrying_group() const { return drag >= 0 && moved && group.size() > 1 && chosen(drag); }
+	bool carrying_group() const { return drag >= 0 && (moved || carrying) && group.size() > 1 && chosen(drag); }
+	bool carrying_group_of(int index) const { return group.size() > 1 && chosen(index); }
+	// whether a carried item is put down on its own place: there it is left as it was, chosen (Stage 27)
+	bool own_place(int index, float x, float y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.place != "bench") {
+			return rect(index).has(x, y);
+		}
+		const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+		const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+		return BENCH.has(x, y) && col == v.col && row == v.row;
+	}
 	Rect marquee_rect() const { return Rect{ std::fmin(press_x, px), std::fmin(press_y, py), std::fabs(px - press_x), std::fabs(py - press_y) }; }
 	// what a rectangle drawn on the bench takes: everything on the bench it touches
 	void take_marquee() {
@@ -937,6 +966,29 @@ struct Ui::Impl {
 	}
 
 	// what letting go of an item at a point does
+	// a vessel a carried one pours into: a vessel made as glassware, not a condenser, not itself
+	bool pours_into(int carried, int target) const {
+		if (carried < 0 || target < 0 || carried == target) {
+			return false;
+		}
+		const ItemView &a = view.items[static_cast<size_t>(carried)], &b = view.items[static_cast<size_t>(target)];
+		return a.kind == "vessel" && !a.glassware.empty() && b.kind == "vessel" && !b.condenser && b.place == "bench";
+	}
+	// what is in hand is set back on its place, as it was
+	void put_back() {
+		stop_pouring();
+		carrying = false;
+		putting_down = false;
+		drag = -1;
+	}
+	void stop_pouring() {
+		if (!pouring) {
+			return;
+		}
+		pouring = false;
+		tilt = 0.0;
+		act({ { "do", "unpour" }, { "item", id(drag) } });
+	}
 	void drop(int index, float x, float y) {
 		const ItemView v = view.items[static_cast<size_t>(index)];
 		const int target = item_at(x, y, index, true);
@@ -1063,6 +1115,7 @@ struct Ui::Impl {
 				}
 				if (act(command)) {
 					panel = false;
+					put_back(); // the menu acted for the vessel in hand: it is set back on its place (Stage 27)
 				}
 				return;
 			}
@@ -1073,12 +1126,21 @@ struct Ui::Impl {
 					}
 					if (act({ { "do", "tip" }, { "from", id(from) }, { "to", id(to) }, { "species", species }, { "all", true } })) {
 						panel = false;
+						put_back();
 					}
 					return;
 				}
 			}
+			if (invert_button().has(x, y) && (!guided() || asks_click("panel:invert"))) {
+				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
+					panel = false;
+					put_back(); // it stands upside down over the other now: its cap is in the readout, shut
+					choose_only(from);
+				}
+				return;
+			}
 			if (cancel_button().has(x, y) || !PANEL.has(x, y)) {
-				panel = false;
+				panel = false; // still in hand
 			}
 			return;
 		}
@@ -1129,7 +1191,7 @@ struct Ui::Impl {
 				wide.y -= 6;
 				wide.h += 12;
 				if (wide.has(x, y)) {
-					if (!allowed_click("valve:" + id(i) + "@")) {
+					if (!allowed_click((view.items[static_cast<size_t>(i)].kind == "burner" ? "valve:" : "cap:") + id(i) + "@")) {
 						return;
 					}
 					valve_drag = i;
@@ -1144,6 +1206,45 @@ struct Ui::Impl {
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
+		}
+		if (carrying && drag >= 0) {
+			// a press while carrying (Stage 27): over a vessel it pours into, a held pour, or with the right button
+			// the full menu; anywhere else its release puts it down
+			const int target = item_at(x, y, drag, true);
+			if (pours_into(drag, target)) {
+				if (mods & Ui::ModRight) {
+					if (guided() && !guided_drop(drag, target, x, y)) {
+						return;
+					}
+					panel = true;
+					from = drag;
+					to = target;
+					pour_fraction = view.items[static_cast<size_t>(drag)].liquid_ml > 50.0 ? 50.0 / view.items[static_cast<size_t>(drag)].liquid_ml : 1.0;
+					return;
+				}
+				if (guided()) {
+					not_now(); // a tutorial pours by the menu, an amount
+					return;
+				}
+				if (act({ { "do", "hold" }, { "item", id(drag) }, { "over", id(target) } })) {
+					pouring = true;
+					tilt = 0.0;
+				}
+				return;
+			}
+			if (!(mods & Ui::ModRight)) {
+				putting_down = true;
+			}
+			return;
+		}
+		if (mods & Ui::ModRight) {
+			// the right button on an item chooses it, not picking it up: its controls in the readout (Stage 27; asked
+			// for by the user, 2026-11-22)
+			const int chose = item_at(x, y);
+			if (chose >= 0) {
+				choose_only(chose); // as a click chose it before: it changes nothing in the lab, under a tutorial too
+			}
+			return;
 		}
 		const int hit = item_at(x, y);
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
@@ -2204,6 +2305,12 @@ struct Ui::Impl {
 
 	void type(Ui::Key key, uint32_t codepoint) {
 		if (draft.edit == Draft::None) {
+			if (key == Ui::KeyEscape && carrying) {
+				stop_pouring();
+				carrying = false; // put back where it was (Stage 27)
+				drag = -1;
+				return;
+			}
 			if (key == Ui::KeyEscape && !panel) {
 				choose_only(-1);
 			}
@@ -2352,7 +2459,11 @@ struct Ui::Impl {
 		}
 		double open = (x - r.x) / r.w;
 		open = open < 0 ? 0 : open > 1 ? 1 : open;
-		act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
+		if (view.items[static_cast<size_t>(valve_drag)].kind == "burner") {
+			act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
+		} else {
+			act({ { "do", "cap" }, { "item", id(valve_drag) }, { "to", open } });
+		}
 	}
 
 	// ------------------------------------------------------------- painting
@@ -2721,6 +2832,8 @@ struct Ui::Impl {
 		} else if (v.place == "under") {
 			const Rect c = rect(index);
 			text(c.x, c.y + c.h + 18, label, WALL_INK, 14);
+		} else if (v.place == "bench" && v.inverted && v.pours_into >= 0) {
+			text(r.x + r.w + 6, r.y + 16, label, WALL_INK, 14); // upside down over another: beside it, where it is (Stage 27)
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
 			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
@@ -3316,6 +3429,7 @@ struct Ui::Impl {
 			if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
+				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				bodies.push_back(body);
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
@@ -3364,7 +3478,75 @@ struct Ui::Impl {
 			}
 		}
 		if (drag >= 0) {
-			add(drag, drawn(drag), moved);
+			add(drag, drawn(drag), moved || carrying);
+		}
+		// supports that come with the glassware (§13, Stage 27): metal, bodies of the pass like everything that takes
+		// space; they hold, and change nothing else
+		const auto floor_of = [&](int i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const Rect f = v.place == "bench" ? foot(v) : rect(i);
+			return f.y + f.h;
+		};
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.kind != "burner" || v.under < 0 || i == drag || !on_bench(v.under)) {
+				continue;
+			}
+			// a vessel over a burner stands on a wire gauze over a tripod
+			const Rect pot = drawn(v.under), flame = drawn(i);
+			const float gauze = pot.y + pot.h, ground = flame.y + flame.h;
+			thing(v.id, "gauze", OpticsBody::Slab, Rect{ pot.x - 8, gauze, pot.w + 16, 3 }, 1.0f, "burner_metal", nullptr, false);
+			bar(v.id, "leg left", pot.x - 4, gauze + 2, pot.x - 14, ground, 3.0f, "burner_metal", false);
+			bar(v.id, "leg right", pot.x + pot.w + 4, gauze + 2, pot.x + pot.w + 14, ground, 3.0f, "burner_metal", false);
+		}
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const int under = v.place == "on" ? v.on : v.inverted ? v.pours_into : -1;
+			if (under < 0 || i == drag || !on_bench(under)) {
+				continue;
+			}
+			// held on a vessel's mouth, or upside down over it: a retort stand beside that vessel, a clamp across
+			const Rect held = drawn(i), base = drawn(under);
+			const float rod = base.x - 18, ground = floor_of(under), grip = held.y + held.h * (v.inverted ? 0.5f : 0.35f);
+			thing(v.id, "stand base", OpticsBody::Slab, Rect{ rod - 22, ground - 6, 44, 6 }, 2.0f, "burner_metal", nullptr, false);
+			bar(v.id, "stand rod", rod, ground - 6, rod, grip - 10, 3.0f, "burner_metal", false);
+			bar(v.id, "clamp", rod, grip, held.cx() - held.w * 0.3f, grip, 2.5f, "burner_metal", false);
+		}
+		// a pour's stream (Stage 27): a thin column of the liquid itself, from the mouth it leaves to where it lands
+		streams.clear();
+		streams.reserve(view.items.size());
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const bool flows = v.pours_into >= 0 && v.liquid_ml > 0.0 && (v.inverted ? v.cap > 0.0 : v.tilt > 0.0);
+			if (!flows) {
+				continue;
+			}
+			const ItemView &t = view.items[static_cast<size_t>(v.pours_into)];
+			const Rect from_r = drawn(i), to_r = drawn(v.pours_into);
+			float land = to_r.y + to_r.h;
+			if (const glass::Vessel *g = t.glassware.empty() ? nullptr : glass::find(t.glassware, t.nominal_ml); g != nullptr) {
+				land -= static_cast<float>(g->level(t.condensed_ml) * to_r.w / (2.0 * g->widest()));
+			}
+			const float x = v.inverted ? from_r.cx() : from_r.x + from_r.w - 3.0f, top = v.inverted ? from_r.y + from_r.h : from_r.y;
+			const float width = static_cast<float>(2.0 + 3.0 * (v.inverted ? v.cap : v.tilt));
+			if (land <= top + 2.0f) {
+				continue;
+			}
+			ItemView stream;
+			stream.id = v.id + "~stream";
+			stream.kind = "vessel";
+			stream.place = "bench";
+			stream.celsius = v.celsius;
+			stream.volume_ml = stream.condensed_ml = stream.liquid_ml = 1.0; // a column full of it
+			for (const SubstanceView &c : v.contents) {
+				if (!c.wall && (c.phase == 'l' || c.phase == 'a')) {
+					stream.contents.push_back(c);
+				}
+			}
+			streams.push_back(stream);
+			OpticsBody body{ &streams.back(), x - width / 2.0f, top, width, land - top };
+			body.layer = i == drag && (moved || carrying) ? 1 : 0;
+			bodies.push_back(body);
 		}
 		// the wires and the rigs between things on the bench
 		for (const Wire &w : view.wires) {
@@ -3538,12 +3720,13 @@ struct Ui::Impl {
 			// its controls, while it is selected (GAME_SPEC §13.1: not on the bench)
 			Rect control;
 			if (valve_rect(showing, control)) {
-				text(READOUT.x + 16, control.y + 15, "valve", INK, 16);
+				const double open = v.kind == "burner" ? v.valve : v.cap;
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : "cap", INK, 16);
 				rect_fill(control, BUTTON);
-				const float knob = control.x + control.w * static_cast<float>(v.valve);
+				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
 				rect_fill(Rect{ knob - 4, control.y - 4, 8, control.h + 8 }, INK);
-				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * v.valve), DIM, 15);
+				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * open), DIM, 15);
 				y += 42;
 			} else if (stir_rect(showing, control)) {
 				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
@@ -3769,6 +3952,9 @@ struct Ui::Impl {
 		for (const auto &[species, r] : tip_buttons()) {
 			button(r, "tip in the " + species);
 		}
+		if (!guided() || asks_click("panel:invert")) {
+			button(invert_button(), "upside down, with a cap");
+		}
 		button(cancel_button(), "cancel");
 	}
 };
@@ -3796,8 +3982,8 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 		m.press_x = x;
 		m.press_y = y;
 	}
-	if (m.drag >= 0 && (std::fabs(x - m.px) > 0 || std::fabs(y - m.py) > 0)) {
-		m.moved = true;
+	if (m.drag >= 0 && !m.carrying && down && (std::fabs(x - m.press_x) > 4 || std::fabs(y - m.press_y) > 4)) {
+		m.moved = true; // a drag, not a click: a hand shakes a little
 	}
 	m.px = x;
 	m.py = y;
@@ -3823,21 +4009,35 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			const int from = m.sensing;
 			m.sensing = -1;
 			m.drop_sensing(from, x, y);
-		} else if (m.drag >= 0 && m.moved) {
-			const int index = m.drag;
-			const bool several = m.carrying_group();
-			m.drag = -1;
-			if (several) {
-				m.drop_group(index, x, y);
-			} else {
-				m.drop(index, x, y);
+		} else if (m.drag >= 0 && m.carrying) {
+			// carried (Stage 27): a held pour ends; a click puts it down, on its own place too
+			if (m.pouring) {
+				m.stop_pouring();
+			} else if (m.putting_down) {
+				m.putting_down = false;
+				const int index = m.drag;
+				const bool several = m.carrying_group();
+				m.carrying = false;
+				m.drag = -1;
+				if (several) {
+					m.drop_group(index, x, y);
+				} else if (!m.own_place(index, x, y)) {
+					m.drop(index, x, y);
+				}
 			}
+		} else if (m.drag >= 0 && m.moved) {
+			m.drag = -1; // a drag over an item moves nothing (Stage 27: dragging is for wires, sensing, sliders, rectangles)
 		} else if (m.drag >= 0) {
-			// a click on it, without moving it, chooses it (§13.1); with a modifier, adds or takes it away
+			// a click on it picks it up, and chooses it (§13.1, Stage 27); with a modifier, adds it to the
+			// selection, or takes it away
 			if (mods & ModAny) {
 				m.toggle(m.drag);
+				m.drag = -1;
 			} else {
-				m.choose_only(m.drag);
+				if (!m.chosen(m.drag) || !m.carrying_group_of(m.drag)) {
+					m.choose_only(m.drag);
+				}
+				m.carrying = true;
 			}
 		} else if (m.marquee) {
 			if (std::fabs(x - m.press_x) > 3 || std::fabs(y - m.press_y) > 3) {
@@ -3847,7 +4047,9 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			}
 		}
 		m.marquee = false;
-		m.drag = -1;
+		if (!m.carrying) {
+			m.drag = -1;
+		}
 		m.valve_drag = -1;
 		m.slider_drag = false;
 	}
@@ -3862,6 +4064,11 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
+	if (m.pouring && m.down && m.drag >= 0 && seconds > 0.0) {
+		// a held pour tilts further while the button is held (Stage 27): its rate is its tilt's share
+		m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
+		m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
 		m.owed += seconds * m.speed * 60.0;
 		// no more than twenty simulated seconds a frame: beyond it the clock runs slow, never the picture
@@ -4123,7 +4330,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = c.cy();
 		return true;
 	}
-	if (after("valve:", rest)) {
+	if (after("valve:", rest) || after("cap:", rest)) {
 		const size_t at = rest.find('@');
 		const int i = index_of(rest.substr(0, at));
 		Rect r;
@@ -4149,6 +4356,11 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:pour") {
 		return centre(Impl::pour_button());
+	}
+	if (what == "panel:invert") {
+		x = Impl::invert_button().cx();
+		y = Impl::invert_button().cy();
+		return m.panel;
 	}
 	if (what == "panel:cancel") {
 		return centre(Impl::cancel_button());

@@ -61,19 +61,45 @@ struct Player {
 			click("item:" + item.substr(0, item.find('@')));
 		}
 		at(what, x, y);
-		ui->pointer(x, y, false);
-		ui->pointer(x, y, true);
-		ui->pointer(x, y, false);
+		const int mods = what.rfind("item:", 0) == 0 ? lab::Ui::ModRight : 0; // an item is chosen by the right button (Stage 27)
+		ui->pointer(x, y, false, mods);
+		ui->pointer(x, y, true, mods);
+		ui->pointer(x, y, false, mods);
 	}
+	// what a drag names: an item is carried, a click to pick it up and a click to put it down (Stage 27), a vessel
+	// onto a vessel with the right button (the menu: what to pour or tip); from a port, the drawer or a slider, a drag
 	void drag(const std::string &what, const std::string &to) {
 		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 		at(what, x0, y0);
+		if (what.rfind("item:", 0) == 0) {
+			ui->pointer(x0, y0, false);
+			ui->pointer(x0, y0, true);
+			ui->pointer(x0, y0, false);
+			at(to, x1, y1);
+			const int mods = carried_onto_vessel(what.substr(5), to) ? lab::Ui::ModRight : 0;
+			ui->pointer(x1, y1, false, mods);
+			ui->pointer(x1, y1, true, mods);
+			ui->pointer(x1, y1, false, mods);
+			return;
+		}
 		at(to, x1, y1);
 		ui->pointer(x0, y0, false);
 		ui->pointer(x0, y0, true);
 		ui->pointer((x0 + x1) / 2, (y0 + y1) / 2, true);
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);
+	}
+	bool carried_onto_vessel(const std::string &id, const std::string &to) {
+		if (to.rfind("item:", 0) != 0) {
+			return false;
+		}
+		const lab::LabView v = ui->lab().view();
+		const lab::ItemView *a = nullptr, *b = nullptr;
+		for (const lab::ItemView &x : v.items) {
+			a = x.id == id ? &x : a;
+			b = x.id == to.substr(5) ? &x : b;
+		}
+		return a != nullptr && b != nullptr && a->kind == "vessel" && !a->glassware.empty() && b->kind == "vessel" && !b->condenser && b->place == "bench";
 	}
 	// a click with keys held (lab::Ui::Mod)
 	void click_with(const std::string &what, int mods) {
@@ -168,10 +194,11 @@ TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, a
 	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.ui->message().find("stands there") != std::string::npos);
-	p.drag("item:beaker", "item:flask"); // onto the flask itself: the pour panel, with nothing to pour
+	p.drag("item:beaker", "item:flask"); // onto the flask itself, the right button: the menu, with nothing to pour
 	p.click("panel:cancel");
 	float x = 0, y = 0;
-	CHECK_FALSE(p.ui->locate("panel:cancel", x, y)); // closed
+	CHECK_FALSE(p.ui->locate("panel:cancel", x, y)); // closed; the beaker still in hand
+	p.ui->key(lab::Ui::KeyEscape); // put back where it was (Stage 27)
 	p.drag("item:beaker", "square:23,4");
 	CHECK(p.item("beaker").place == "bench");
 	p.drag("item:beaker", "cabinet");
@@ -213,15 +240,16 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	float jx = 0, jy = 0, fx = 0, fy = 0;
 	p.at("item:jar", jx, jy);
 	p.at("item:flask", fx, fy);
-	// pressed, not yet moved: it still stands
+	// pressed, not yet let go: it still stands
 	p.ui->pointer(jx, jy, false);
 	p.ui->pointer(jx, jy, true);
 	p.ui->frame(1.0 / 60.0);
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
-	// carried, a person's pace: about four pixels a frame, toward the flask
+	p.ui->pointer(jx, jy, false); // let go over it: picked up (Stage 27)
+	// carried, a person's pace: about four pixels a frame, toward the flask, no button held
 	const int frames = 50;
 	for (int k = 1; k <= frames; ++k) {
-		p.ui->pointer(jx + (fx - jx) * static_cast<float>(k) / frames, jy + (fy - jy) * static_cast<float>(k) / frames, true);
+		p.ui->pointer(jx + (fx - jx) * static_cast<float>(k) / frames, jy + (fy - jy) * static_cast<float>(k) / frames, false);
 		p.ui->frame(1.0 / 60.0);
 		REQUIRE(p.ui->optics().table[3 * 4 + 1] == 1.0f); // in hand all the way
 	}
@@ -247,8 +275,8 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	const int px = static_cast<int>(rect[0] + rect[2] / 2), py = static_cast<int>(rect[1] + rect[3]) - 12;
 	const double through_both = lab::optics_through(held, px, py, 650.0);
 	CHECK(lab::optics_through(held, px, py, 650.0) == doctest::Approx(lab::optics_area_through(held, px, py, 650.0, 8)).epsilon(0.05));
-	// let go beside the flask: it stands again, on the bench's layer, and the chain's pass is the glassware's alone
-	p.ui->pointer(fx, fy, false);
+	// put back (Escape, Stage 27): it stands again, on the bench's layer, and the chain's pass is the glassware's alone
+	p.ui->key(lab::Ui::KeyEscape);
 	p.ui->frame(1.0 / 60.0);
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
 	CHECK(only_glassware(p.ui->optics()));
@@ -279,8 +307,8 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob
-	CHECK(bars == 3); // the wire and the rig; the condenser's outlet, in the cabinet
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27)
+	CHECK(bars == 3 + 2); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
 	// and none of it is drawn over the pass: no polygon (a flame) anywhere, no circle (a lamp, a port, a knob) on
@@ -595,10 +623,21 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	p.click("square:1,1"); // a click on nothing lets go
 	CHECK(p.ui->selection().empty());
 	p.sweep(x0, y0, x1, y1);
-	// carried together, a frame at a time: three squares up
+	// carried together, a frame at a time: three squares up (picked up by a click on one of them, put down by
+	// another: Stage 27)
 	float bx = 0, by = 0;
 	p.at("item:beaker", bx, by);
-	p.sweep(bx, by, bx, by - 120);
+	const auto carry = [&](float dx, float dy) {
+		p.ui->pointer(bx, by, true);
+		p.ui->pointer(bx, by, false);
+		for (int i = 1; i <= 20; ++i) {
+			p.ui->pointer(bx + dx * static_cast<float>(i) / 20.0f, by + dy * static_cast<float>(i) / 20.0f, false);
+			p.ui->frame(1.0 / 60.0);
+		}
+		p.ui->pointer(bx + dx, by + dy, true);
+		p.ui->pointer(bx + dx, by + dy, false);
+	};
+	carry(0, -120);
 	CHECK(p.item("beaker").col == 18);
 	CHECK(p.item("beaker").row == 5);
 	CHECK(p.item("flask").col == 10);
@@ -606,7 +645,7 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	CHECK(p.ui->message().empty());
 	// the flask would land on the jar: neither moves, and the reason is shown
 	p.at("item:beaker", bx, by);
-	p.sweep(bx, by, bx - 280, by + 120);
+	carry(-280, 120);
 	CHECK(p.item("beaker").col == 18);
 	CHECK(p.item("flask").col == 10);
 	CHECK(p.ui->message().find("stands where \"flask\" would go") != std::string::npos);
@@ -903,5 +942,49 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	const double t = p.item("flask").celsius;
 	MESSAGE("the flask held at " << t << " C; the controller's level " << p.item("controller1").part.level);
 	CHECK(t == doctest::Approx(60.0).epsilon(1.0 / 60.0));
+	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a vessel carried over another pours while the left button is held, tilting as it is held; the right button's menu sets it upside down, and its cap opens by the readout's slider (Stage 27)") {
+	Player p;
+	p.drag("item:flask", "square:11,8");
+	p.drag("item:acid", "square:4,8");
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	p.at("item:acid", ax, ay);
+	p.at("item:flask", fx, fy);
+	p.ui->pointer(ax, ay, true); // picked up
+	p.ui->pointer(ax, ay, false);
+	for (int k = 1; k <= 20; ++k) {
+		p.ui->pointer(ax + (fx - ax) * static_cast<float>(k) / 20.0f, ay + (fy - ay) * static_cast<float>(k) / 20.0f, false);
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml == 0.0);
+	p.ui->pointer(fx, fy, true); // held over the flask: it pours, tilting further each frame
+	for (int k = 0; k < 90; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("acid").tilt > 0.9);
+	p.ui->pointer(fx, fy, false); // let go: it stops, still in hand
+	const double poured = p.item("flask").liquid_ml;
+	CHECK(poured > 5.0);
+	CHECK(poured < 15.0 * 1.5);
+	CHECK(p.item("acid").pours_into < 0);
+	for (int k = 0; k < 30; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml == doctest::Approx(poured).epsilon(1e-3));
+	// the right button: the full menu; upside down, with its cap shut
+	p.ui->pointer(fx, fy, true, lab::Ui::ModRight);
+	p.ui->pointer(fx, fy, false, lab::Ui::ModRight);
+	p.click("panel:invert");
+	CHECK(p.item("acid").inverted);
+	CHECK(p.item("acid").cap == 0.0);
+	p.click("cap:acid@0.5"); // its cap, in the readout: half open
+	CHECK(p.item("acid").cap == doctest::Approx(0.5).epsilon(0.02));
+	const double before = p.item("flask").liquid_ml;
+	for (int k = 0; k < 120; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("flask").liquid_ml > before + 2.0);
 	well_formed(p.ui->draw());
 }
