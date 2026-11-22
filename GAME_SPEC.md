@@ -1205,9 +1205,10 @@ of every ray through its area, and its colour is their average (a box filter).
   pivot: a held pour's tilt, a vessel set upside down. The eye looks along the axis it turns about,
   so its glass is the same to every ray as when it stands: a pixel is read in the body's own frame
   (its place turned back), its maps as they are, and where its rays land turned forward again.
-  Upside down, a row of its own is a row of the screen: the wall is read over it exactly. Part
-  turned, a ray's landing is turned onto a slanting line of the wall, read at its points (a held
-  pour is on the screen only while it pours). Its liquid's surface stays level in the room: in its
+  Upside down, a row of its own is a row of the screen: the wall is read over it exactly; a revolved
+  body turned half a turn about its axis's point is its rows from the other end (Stage 27, built).
+  Part turned *(PLANNED)*: a ray's landing is turned onto a slanting line of the wall, read at its
+  points (a held pour is on the screen only while it pours). Its liquid's surface stays level in the room: in its
   own frame a line, the liquid on the side away from the sky, each ray all in the liquid or all in
   the air (the surface holds the eye's direction); where it lies for a volume, for each vessel and
   turn, is found from the vessel's profile once and kept. A stream is a column of its liquid, no
@@ -1418,7 +1419,9 @@ input to them, and a session script is a list of them.
   position** over another pours down a drain with a rate (§6), which the control sets each step:
   - **A held pour**: the player carries a vessel over another and tilts it, holding Space (the
     pointer is carrying it). The tilt grows while Space is held, up to the vessel's own, and falls
-    back as it is let go; the vessel is drawn turned by it. The rate is the tilt's share of the
+    back as it is let go; the vessel is drawn turned by it *(PLANNED: until the renderer reads a part
+    turned body, a held pour is drawn upright, its stream showing it pours; decided by the user,
+    2026-11-22)*. The rate is the tilt's share of the
     vessel's pouring rate (`pour_ml_s` in `data/glassware.json`: a beaker's lip pours faster than a
     flask's or a bottle's neck), its liquid with what is dissolved in it; at the full tilt its
     solids go too. `pour {from, to, rate}` (0 to 1) sets it, and 0 ends it. A session's
