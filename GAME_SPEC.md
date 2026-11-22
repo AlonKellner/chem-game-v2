@@ -1439,7 +1439,8 @@ input to them, and a session script is a list of them.
 
 - **Refusals.** A command that cannot be done is refused with its reason, and changes nothing: an
   unknown item, the wrong kind of item, a mouth that is taken, more than a vessel holds, liquid
-  that does not fit, a connection that would seal a vessel (§6). One exception: a command that
+  that does not fit, a seal on a vessel not at the room's pressure (§6), a pour or a tip into or
+  out of a sealed vessel, anything done with a broken one. One exception: a command that
   changes connections takes effect at a step boundary, so it first takes the lab to the end of a
   step in progress (at most one step, 1/60 s).
 - **Tipping is instantaneous**, along a handling connection that passes solid and never gas. It
@@ -1477,6 +1478,28 @@ input to them, and a session script is a list of them.
 - **A balloon bursts** when its contents pass its capacity: it comes off the vessel it is on
   (whose mouth opens to the room), its gas is the room's, and it cannot be used again. The report
   lists it among the lab's events.
+- **Sealing, and what gives way** (Stage 28; asked for by the user, 2026-11-22). A vessel sealed has
+  its own pressure (§6), in its report and its readout.
+  - **A rubber stopper** (`attach {item: stopper, to}`, a bench item of kind `stopper`) seals a neck
+    no wider than a balloon's fitting seals (adjacency, above). Its friction holds it in by a force
+    (`hold_n`, 30 N, calibrated: `docs/DATA_SOURCES.md`): the pressure that pushes it out is that
+    force over its neck's bore, +37 kPa in the flask's. Past it, the stopper **pops** out, beside
+    the vessel, whose mouth is open to the room again. A vacuum only presses it in. `detach` pulls it
+    out by hand.
+  - **A screw cap** fits a bottle (its glassware's thread, `screw_cap`): upright, `cap {item, to}`
+    0 screws it on and seals it, 1 takes it off. It is a control as the upside-down cap is: a button
+    in the readout, rigged from parts, followed by a controller; set upside down, the bottle's cap
+    is the orifice of a placed pour, and screwed on it comes off first. It holds until the glass
+    gives way.
+  - **Glass bursts** past its rating over the room's pressure (`burst_kpa` in
+    `data/glassware.json`: a bottle +300 kPa, a flask +200, a beaker +150; calibrated): what is on
+    its mouth comes off, a burner under it is set beside it, its drains come off; its gas goes into
+    the room's air and the rest into the tray; and it is **broken**: empty, in the cabinet, refusing
+    every use. A danger.
+  - What gives way first is checked after every step: the stopper when it holds less than the
+    glass, else the glass. Nearing it (80 %), the lab warns (§13.4).
+  - Nothing pours or is tipped into or out of a sealed vessel (a held or placed pour, a scripted
+    one): a sealed vessel takes nothing through a drain (§6).
 - **Save and load.** A lab saves as text (`chem-save/1`): every amount, energy and particle
   count, the connections, the processes' carried remainders, where each item stands, and whether
   a step is in progress. Numbers that are not integers are saved as their bits. A loaded lab
@@ -1526,7 +1549,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | carry an item to a free cell of the bench | `place` |
 | carry an item to the cabinet | `stow` |
 | carry a burner onto a vessel | `heat` |
-| carry a balloon or a condenser onto a vessel | `attach` |
+| carry a balloon, a condenser or a stopper onto a vessel | `attach` (a stopper: into its neck, sealing it; Stage 28) |
 | carry a vessel onto a condenser | `under` |
 | carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
 | carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
@@ -1534,6 +1557,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | carry something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the putting down means |
 | drag the slider beside a burner | `valve` |
 | click a vessel's stir button | `stir` |
+| click a bottle's cap button, upright (Stage 28) | `cap` 0 (screwed on: sealed) or 1 (off) |
 | drag a selection along the bench | `move` |
 | drag a part out of the drawer | `part`, and its settings open (§13.3) |
 | drag from a part's port onto a part, a vessel, a burner | `wire`, or the rig's settings: `rig` |
@@ -1560,24 +1584,27 @@ picture.
 every step" checks them all. The readout's first line is the conservation laws: every element,
 mass and energy unchanged since the bench was opened, or not.
 
-**The readout** shows what the pointer is on: its temperature, the volume of its gas and of its
-solids and liquids, and each species' mass, particle count and size; then the lab's events and
-the last refusal.
+**The readout** shows what the pointer is on: its temperature, its pressure (Stage 28; sealed: what
+it gives way at, amber near it; broken: so), the volume of its gas and of its solids and liquids,
+and each species' mass, particle count and size; then the lab's events and the last refusal.
+**The cabinet's shelves** share its height among what the bench can put in it (Stage 28: 118 px
+each, or less).
 
 **Drawing.** What is in a vessel, and a balloon, is the optical pass of §12.3. The draw list is
 flat and in two parts, one under that pass and one over it: the room and its grid under; glass as
 lines, a liquid's surface as a line (a clear liquid is otherwise invisible until Stage 11's
 refraction), a flame by its valve, labels, the readout and panels over.
 
-**Full design, not yet built:** adjacency deciding what can join what; supports that appear with
-the glassware; pouring at a rate; a debug panel of the processes' rates and heat flows,
-single-stepping and exporting the state.
+**Full design, not yet built:** a balloon's tension against its stretch; a vacuum pump; siphons;
+glass that implodes under a vacuum; a stopper pushed into a neck that holds more than its friction
+(wired, or clamped).
 
 **Demo subset:** the benches of `data/benches/` (`demo.json` for the scripted session, `lab.json`
 for play: everything in the cabinet), the commands and the screen above.
 **Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
 places, the tray, bursting and save/load; Stage 9 the screen and the Godot host; Stage 13 the grid
-of squares and footprints, the selection and `move`.
+of squares and footprints, the selection and `move`; Stage 27 pouring as a control, supports and
+adjacency; Stage 28 sealing: the stopper, the screw cap, glass bursting.
 
 ### 13.2 The tutorial
 
@@ -1683,10 +1710,11 @@ so the sessions' records are unchanged.
   an `item` senses it too, so every session written before sensing reads as it did.
   - **The quantities**, in three kinds:
     - **a material** the item holds (a species, not its wall): its mass (`g`), amount (`mol`),
-      purity (`purity`), and for a solid its particle count (`count`) and size (`size`);
-    - **the vessel**: its temperature (`celsius`), the mass of all it holds (`mass_g`), its
-      liquid (`liquid_ml`), its solids (`solid_ml`), its solids and liquids (`condensed_ml`), its gas
-      (`gas_ml`);
+      volume (`ml`, Stage 28: a solid's or a liquid's own, a solute's apparent, a gas's share of the
+      gas), purity (`purity`), and for a solid its particle count (`count`) and size (`size`);
+    - **the vessel**: its temperature (`celsius`), its pressure (`kpa`, Stage 28: an open one's is
+      the room's), the mass of all it holds (`mass_g`), its liquid (`liquid_ml`), its solids
+      (`solid_ml`), its solids and liquids (`condensed_ml`), its gas (`gas_ml`);
     - **other**: a balloon's fill (`fill`), a burner's valve (`valve`).
 - **A monitor** (`set {part, item, what, measure, compare, value | values}`):
   - Its own condition is a comparison (§13.2's quantities and comparisons, purity included) of the
@@ -1723,7 +1751,18 @@ so the sessions' records are unchanged.
     while the level is not held at a limit it would pass (no wind-up). It starts at 0 when the
     controller is set or tuned.
   - A trial that finds nothing moves (no rig, or a control that changes nothing it senses) leaves it
-    untuned, with the reason in a notice; it writes a notice when it is tuned, with its gains.
+    untuned, with the reason in a notice; it writes a notice when it is tuned, with its gains. Its
+    rigs to a cap are tried as its valves are (Stage 28).
+  - **Tuned again as what it controls changes** (Stage 28; asked for by the user, 2026-11-22). Tuned,
+    it keeps what its item held at the trial: its contents' mass, its heat capacity, and which
+    materials are there (a milligram or more). At each reading of the detectors (§13.4), where
+    either has changed by a tenth, or a material has come or gone, and no pour into or out of the
+    item is running, it is tuned again on a copy of the lab as it stands now. Its level is carried
+    over: its integral is set to give it, with the new gains, so the loop goes on with no bump. The
+    trial's copies do not tune their own controllers again.
+  - **Held at a limit** short of its target for a minute (full on and still below, or off and still
+    above), it writes a warning, once, until it leaves the limit: "controller1 cannot hold flask:
+    temperature (C) at 150: what it controls is full on, and it reads 100.4".
 - **An alarm** has inputs and no output.
   - It rings in the step its input turns on, and rings until it is answered (`ack`, or the screen
     playing on).
@@ -1780,10 +1819,14 @@ so the sessions' records are unchanged.
       short closed list of what the item has now, the next shown once the last is chosen:
       1. the kind: a material, the vessel, other (a kind with nothing in it is not offered);
       2. for a material, which of those the item holds now;
-      3. the measure (for a material: mass, amount, purity, and for a solid particles and size);
+      3. the measure (for a material: mass, amount, volume, purity, and for a solid particles and
+         size);
       4. a monitor's comparison and values typed or nudged at three scales; a controller's target,
          typed or nudged, and its speed;
     - a timer's: its preset, typed or nudged by a minute, ten seconds or a second;
+    - a notice part's: its level, its item, the text a notice must contain (typed), and its seconds
+      (typed); a writer's: its level, its item, its words, and when it writes: as its input turns
+      on, off, or on either change (Stage 28);
     - a rig's: its form, and each setting, a choice or a valve's per cent.
 
     Enter sets it, escape cancels, and the clock waits while it is open.
@@ -1866,11 +1909,22 @@ says. The player may silence any level.
     up there (under a tenth of one): an event. Not when a hand moved it: an item poured or tipped
     from or into since the last reading writes no such notice.
   - **Boiling:** an item with liquid water at 99.5 °C or more boils, an event. It stops boiling
-    below 99 °C, an event, or it boils dry, a warning.
+    below 99 °C, an event, or it boils dry, a warning. **Sealed** (Stage 28), at whatever
+    temperature its pressure lets it: while its water goes to steam (more than 10 µg a reading)
+    under a gas that is steam (97 % or more), "flask boils, sealed, at 86 C and 61 kPa"; it stops as
+    its water stops going (it condenses as it cools) or its gas is less than 95 % steam.
   - **A balloon 80 % full or more:** a warning, once until it is below 70 % again.
-  - **A spill into the tray:** a warning.
+  - **A sealed vessel at 80 % of what gives way** (Stage 28), over the room's pressure: a warning,
+    once until it is below 70 % again: "flask is at 132 kPa: its stopper pops past 138 kPa".
+  - **A pour** (Stage 28): its running, a detail ("acid pours into flask"); its stopping, a detail;
+    its vessel run dry while it pours, an event ("acid is empty: nothing more pours into flask").
+  - **A spill into the tray:** a warning; what condenses or boils in the tray is no spill (its gas
+    is counted too).
 - **What happens at once:**
   - a balloon bursting, a danger;
+  - a stopper popping, a warning; a vessel's glass bursting, a danger (Stage 28);
+  - a controller tuned again, a detail, and its tuning, an event; one that cannot hold its target, a
+    warning (Stage 28);
   - an invariant failing, a danger;
   - a timer reaching zero, a detail;
   - a rig setting a control, a detail;
@@ -1879,18 +1933,24 @@ says. The player may silence any level.
 - **History, not state.** The notices, and what the detectors last saw, are saved and loaded:
   a loaded lab writes the same notices as one that was not saved. They are not in the digest. What
   is there when the bench opens is not news. The lab keeps the last 2000.
-- **The notice part** (§13.3, out of the drawer) signals for a step when the lab writes a notice
-  at or above its level, about its item if it names one: `set {part, level, item}`. Wired to an
-  alarm, it stops the clock on, say, every warning.
-- **The writer** (§13.3, out of the drawer) writes a notice of its own when its input turns on:
-  `set {part, level, says, item}`.
+- **The notice part** (§13.3, out of the drawer) signals when the lab writes a notice at or above
+  its level, about its item if it names one, its words **containing** its text if it has one
+  (Stage 28; whatever their case; at most 40 bytes): `set {part, level, item, contains, seconds}`.
+  It signals for its **seconds** after a notice it hears (one step unless set; at most an hour), from
+  the step it hears it; another restarts them. Wired to an alarm, it stops the clock on, say,
+  every warning; with "burst" and 30 s, a controller's rig can shut a valve for half a minute after
+  anything bursts.
+- **The writer** (§13.3, out of the drawer) writes a notice of its own when its input turns on, or
+  off, or on either change, as it is set (Stage 28; on by default): `set {part, level, says, item,
+  writes}`, `writes` one of `on`, `off`, `change`.
   - Its words are the player's, at most 80 bytes; with none, "writer1 was signalled".
   - It is about its item, or about itself when it names none, so a notice part can hear one writer
     alone.
-  - Like an alarm, it takes inputs and sends no signal; with no input it never writes. While its
-    input stays on it writes once; it writes again when the input turns off and on.
-  - Its notice is written at the end of the step its input turned on, and heard by notice parts
-    in the step after: one more link.
+  - Like an alarm, it takes inputs and sends no signal; with no input it never writes. It writes once
+    for each change it is set for: on its input turning on, a writer of `on` writes again only when
+    the input has turned off and on.
+  - Its notice is written at the end of the step its input changed, and heard by notice parts in
+    the step after: one more link.
   - So the notices are a bus: writers post to it, notice parts hear from it, and the lab posts
     its own notices beside theirs.
 - **On the screen:**
@@ -1958,7 +2018,10 @@ and each reaction's account of itself (`Lab::debug`).
   - They are kept whether the step was checked or not, are not state, and equal the ledger's sums
     (with T1's signs: heat from the hotter cell to the colder).
 - **For the item** (`Lab::debug(item)`):
-  - its temperature and heat capacity;
+  - its temperature and heat capacity (sealed, at constant volume);
+  - its pressure, open or sealed, and what it gives way at; its pour, as a pour: held (its tilt) or
+    upside down (its cap's opening and the head of liquid over it), and its rate; a pour's flow is
+    named a pour, not a drain (Stage 28);
   - **what it holds:** each species' amount and mass; its mole fraction in its own mixture (of the
     gas, of the solution); a solute's molality; its activity;
   - **its flows** in the last step, each with what is at the edge's other end and the process: heat
@@ -1987,7 +2050,14 @@ and each reaction's account of itself (`Lab::debug`).
   - "export" hands the host the lab's save (`chem-save/1`, `cg_ui_take_export`); the Godot host
     writes it to `user://saves/`. Loaded, it continues with the same digests (D2).
 
-**Demo subset:** all of the above. Signed off by the user on 2026-11-18 (Stage 18).
+- **For a signal part** (Stage 28; asked for by the user, 2026-11-22), what it is doing: a timer's
+  time left; a monitor's quantity, comparison and reading; a notice part's filter and hold, and
+  whether it is on; a writer's level, words and when it writes; a controller's quantity, target and
+  speed, the process its trial found, its gains and PWM period, its reading, error, integral, level
+  and PWM, what it was tuned on, and how long it has been held at a limit.
+
+**Demo subset:** all of the above. Signed off by the user on 2026-11-18 (Stage 18); vessels' pressure
+and pours, and signal parts, Stage 28.
 
 ## 14. C API and hosts
 
@@ -2250,6 +2320,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Steam is an ideal gas with a constant heat capacity | Water boils at 100.44 °C at 1 atm (373.124 K is 99.97 °C); its saturation pressure is within 2% from 25 to 100 °C |
 | Fast phase change has no barrier | No superheating, no supercooling, no fog: vapour condenses the moment it is saturated |
 | A drain is instantaneous and takes all the liquid | A condenser never holds a film of liquid for more than a step |
+| A stopper holds by a calibrated force over its neck's bore; glass bursts at a calibrated pressure over the room's; a vacuum never implodes glass nor draws a stopper in; a burst is at once, its contents split between the room's air (gas) and the tray (the rest) (Stage 28) | A stopper pops at +37 kPa in the flask, where a real one pops anywhere from a few kPa to a bar by how hard it was pushed; a bottle bursts at +300 kPa, where a real one may hold several times that or fail far below at a flaw (`docs/DATA_SOURCES.md`, low confidence) |
+| A sealed vessel boils while its water goes to steam under a gas that is nearly all steam; a vessel is sealed only at the room's pressure (Stage 28) | No superheating, no bumping; a flask stoppered while starved (its gas short of an atmosphere) is refused rather than given the vacuum it would have |
 | A burst balloon's gas is the room's at once | No bang, no jet |
 | One item to a grid cell, and position decides nothing | A beaker "under" a condenser is a connection, not a place |
 | A vessel's wall is at its contents' temperature | The balloon's rubber and the flask's glass add heat capacity and nothing else |

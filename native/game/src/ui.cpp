@@ -3839,7 +3839,8 @@ struct Ui::Impl {
 			}
 			for (const ControlSetting &c : view.controls) {
 				if (c.item == v.id) {
-					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") + ", set by " + c.by +
+					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.control == "cap" ? text_of(" %.0f%% open", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") +
+									", set by " + c.by +
 									text_of(" at %.1f s", static_cast<double>(c.step) / 60.0),
 							DIM, 14);
 				}
