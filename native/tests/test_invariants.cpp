@@ -350,7 +350,7 @@ TEST_CASE("invariants: a rigid cell that is not exactly full is detected: V1 (St
 	}
 }
 
-TEST_CASE("invariants: a sealed rigid cell is detected: V3 (Stage 4)") {
+TEST_CASE("invariants: a rigid cell sealed but not marked so is detected: V3 (Stage 4, Stage 28)") {
 	StepTrace t = clean_gas();
 	t.edges[0].open = false;
 	CHECK(has(check_all(builtin_species(), t), "V3"));

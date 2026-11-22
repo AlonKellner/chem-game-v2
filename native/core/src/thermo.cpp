@@ -8,7 +8,34 @@
 
 namespace chem {
 
-Thermal thermal_state(const SpeciesTable &table, const CellState &cell) {
+namespace {
+
+// A sealed cell's free volume, m^3: what its solids and liquids leave (false
+// when a condensed species' molar volume is unknown)
+bool free_volume(const SpeciesTable &table, const CellState &cell, const CellMeta &meta, double &free) {
+	const Fill fill = fill_of(table, cell, T0);
+	free = meta.volume - fill.condensed;
+	return fill.defined;
+}
+
+// the cell's gas, mol (walls are never gas)
+double gas_mol(const SpeciesTable &table, const CellState &cell) {
+	double gas = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+			gas += static_cast<double>(cell.amount[s]);
+		}
+	}
+	return gas * MOL_PER_QUANTUM;
+}
+
+bool is_sealed(const CellMeta *meta) {
+	return meta != nullptr && meta->sealed && meta->rigid && !meta->reservoir;
+}
+
+} // namespace
+
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta) {
 	Thermal out;
 	double formation = 0.0;
 	double capacity = 0.0;
@@ -25,6 +52,25 @@ Thermal thermal_state(const SpeciesTable &table, const CellState &cell) {
 		capacity += mol * def.cp;
 	}
 	if (!(capacity > 0.0)) {
+		return out;
+	}
+	if (is_sealed(meta)) {
+		// E = H(T) - n_gas R T + P_atm V_free: linear in T
+		double free = 0.0;
+		if (!free_volume(table, cell, *meta, free)) {
+			return out;
+		}
+		const double gas = gas_mol(table, cell);
+		const double cv = capacity - gas * GAS_CONSTANT;
+		if (!(free > 0.0) || !(cv > 0.0)) {
+			return out; // no room for its gas: no pressure (V3)
+		}
+		out.sealed = true;
+		out.free_volume = free;
+		out.heat_capacity = cv;
+		out.temperature = (static_cast<double>(cell.energy) * JOULE_PER_QUANTUM - P_ATMOSPHERE * free - formation + capacity * T0) / cv;
+		out.pressure = gas * GAS_CONSTANT * out.temperature / free;
+		out.defined = true;
 		return out;
 	}
 	out.defined = true;
@@ -81,6 +127,7 @@ struct Mix {
 	double dissolved = 0.0; // the particles' sum
 	std::array<double, MAX_PARTICLES> ln_gamma{};
 	double solvent_excess = 0.0; // the excess part of ln a of the solvent
+	double pressure_ratio = P_ATMOSPHERE / P_STANDARD; // the cell's pressure over the standard's (Stage 28: a sealed cell's own)
 };
 
 // g(x) = 2 (1 - (1 + x) e^-x) / x^2 and h(x) = e^-x - g(x), by their series
@@ -234,7 +281,7 @@ Presence log_activity(const SpeciesDef &def, double quanta, const Mix &mix, doub
 			if (!(quanta > 0.0) || !(mix.gas > 0.0)) {
 				return Presence::Absent;
 			}
-			ln = log(quanta / mix.gas * (P_ATMOSPHERE / P_STANDARD));
+			ln = log(quanta / mix.gas * mix.pressure_ratio);
 			return Presence::Present;
 		case Phase::Liquid:
 			if (!(mix.liquid > 0.0)) {
@@ -269,7 +316,7 @@ Presence log_activity(const SpeciesDef &def, double quanta, const Mix &mix, doub
 
 } // namespace
 
-Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature) {
+Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta) {
 	Fill out;
 	double gas = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
@@ -293,16 +340,20 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 		}
 		out.condensed += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
 	}
-	out.gas = gas * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / P_ATMOSPHERE;
+	out.gas = is_sealed(meta) ? meta->volume - out.condensed : gas * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / P_ATMOSPHERE;
 	out.defined = true;
 	return out;
 }
 
 double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined) {
 	defined = false;
-	const Thermal thermal = thermal_state(table, cell);
+	const Thermal thermal = thermal_state(table, cell, &meta);
 	if (!thermal.defined || !(thermal.temperature > 0.0)) {
 		return 0.0;
+	}
+	if (thermal.sealed) {
+		defined = true;
+		return 0.0; // full by definition: its pressure follows
 	}
 	const Fill fill = fill_of(table, cell, thermal.temperature);
 	if (!fill.defined) {
@@ -383,9 +434,26 @@ int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool
 	return most;
 }
 
-double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
+namespace {
+
+// a sealed cell's pressure over the standard's, at temperature T (its gas of `gas` quanta)
+double sealed_ratio(const SpeciesTable &table, const CellState &cell, const CellMeta &meta, double temperature, double gas) {
+	double free = 0.0;
+	if (!free_volume(table, cell, meta, free) || !(free > 0.0)) {
+		return INFINITE;
+	}
+	return gas * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / (free * P_STANDARD);
+}
+
+} // namespace
+
+double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species, const CellMeta *meta) {
 	double ln = 0.0;
-	const Presence presence = log_activity(table.species(species), static_cast<double>(cell.amount[static_cast<size_t>(species.index)]), mix_of(table, cell), ln);
+	Mix mix = mix_of(table, cell);
+	if (is_sealed(meta)) {
+		mix.pressure_ratio = thermal_state(table, cell, meta).pressure / P_STANDARD;
+	}
+	const Presence presence = log_activity(table.species(species), static_cast<double>(cell.amount[static_cast<size_t>(species.index)]), mix, ln);
 	return presence == Presence::Present ? exp(ln) : 0.0;
 }
 
@@ -394,9 +462,12 @@ double molality(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;
 }
 
-double entropy(const SpeciesTable &table, const CellState &cell, double temperature) {
+double entropy(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta) {
 	const double ln_t = log(temperature / T0);
-	const Mix mix = mix_of(table, cell);
+	Mix mix = mix_of(table, cell);
+	if (is_sealed(meta)) {
+		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
+	}
 	double total = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		if (cell.amount[s] <= 0) {
@@ -425,10 +496,13 @@ double combine(double standard, double mixing, double temperature, bool made_abs
 
 } // namespace
 
-double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined) {
+double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta) {
 	defined = false;
 	const double ln_t = log(temperature / T0);
-	const Mix mix = mix_of(table, cell);
+	Mix mix = mix_of(table, cell);
+	if (is_sealed(meta)) {
+		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
+	}
 	double standard = 0.0; // -sum of nu_i (h_i - T s_i) at unit activity
 	double mixing = 0.0; // sum of nu_i ln a_i
 	bool made_absent = false;
@@ -455,10 +529,10 @@ double affinity(const SpeciesTable &table, const CellState &cell, std::span<cons
 	return combine(standard, mixing, temperature, made_absent, consumed_absent);
 }
 
-AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) :
-		AffinityProbe(table, cell, terms, thermal_state(table, cell)) {}
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta) :
+		AffinityProbe(table, cell, terms, thermal_state(table, cell, meta), meta) {}
 
-AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal) {
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta) {
 	if (!thermal.defined || !(thermal.temperature > 0.0) || terms.size() > parts_.size()) {
 		return;
 	}
@@ -476,6 +550,9 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 		part.s0 = def.s0;
 		capacity_step_ += part.nu * def.cp * MOL_PER_QUANTUM;
 		formation_step_ += part.nu * def.hf * MOL_PER_QUANTUM;
+		if (def.phase != Phase::Gas && !def.wall) {
+			free_step_ -= part.nu * def.molar_volume * MOL_PER_QUANTUM; // what it makes takes room from the gas (Stage 28)
+		}
 		if (def.phase == Phase::Gas) {
 			gas_step_ += part.nu;
 		} else if (def.phase == Phase::Liquid) {
@@ -496,6 +573,8 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 	table_ = &table;
 	temperature_ = thermal.temperature;
 	capacity_ = thermal.heat_capacity;
+	sealed_ = thermal.sealed && is_sealed(meta);
+	free_ = thermal.free_volume;
 	defined_ = true;
 }
 
@@ -506,7 +585,23 @@ bool AffinityProbe::at(double extent, double &a) const {
 	// at fixed enthalpy, what the reaction takes as formation enthalpy it takes
 	// from the heat: C (T - T0) falls by extent * formation_step
 	double temperature = temperature_;
-	if (extent != 0.0) {
+	double ratio = P_ATMOSPHERE / P_STANDARD;
+	if (sealed_) {
+		// at fixed E = H(T) - n_gas R T + P_atm V_free: Cv(x) T(x) = Cv T - x (P_atm dV + dHf - dCp T0)
+		const double cv = capacity_ + extent * (capacity_step_ - gas_step_ * MOL_PER_QUANTUM * GAS_CONSTANT);
+		const double free = free_ + extent * free_step_;
+		if (!(cv > 0.0) || !(free > 0.0)) {
+			return false;
+		}
+		if (extent != 0.0) {
+			temperature = (capacity_ * temperature_ - extent * (P_ATMOSPHERE * free_step_ + formation_step_ - capacity_step_ * T0)) / cv;
+			if (!(temperature > 0.0)) {
+				return false;
+			}
+		}
+		const double gas = gas_ + extent * gas_step_;
+		ratio = (gas > 0.0 ? gas : 0.0) * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / (free * P_STANDARD);
+	} else if (extent != 0.0) {
 		const double capacity = capacity_ + extent * capacity_step_;
 		if (!(capacity > 0.0)) {
 			return false;
@@ -525,6 +620,7 @@ bool AffinityProbe::at(double extent, double &a) const {
 		mix.dissolved += mix.particles[j];
 	}
 	complete(*table_, mix);
+	mix.pressure_ratio = ratio;
 	const double ln_t = log(temperature / T0);
 	double standard = 0.0;
 	double mixing = 0.0;

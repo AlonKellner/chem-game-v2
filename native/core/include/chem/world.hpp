@@ -62,11 +62,13 @@ struct Edge {
 // fixed temperature (GAME_SPEC §4.2): it holds no matter, and its energy is
 // what it has received (negative: what it has given).
 //
-// A cell of matter is elastic or rigid (GAME_SPEC §6, the demo's subset: every
-// cell at one atmosphere). An elastic cell (a balloon, the open air) takes the
-// volume its contents need. A rigid cell (a flask) has a fixed volume: gas
-// leaves or enters it along its gas edges so that it is exactly full, and it
-// must always have a gas path to an elastic cell.
+// A cell of matter is elastic or rigid (GAME_SPEC §6). An elastic cell (a
+// balloon, the open air) takes the volume its contents need, at one
+// atmosphere. A rigid cell (a flask) has a fixed volume. Open, with a gas path
+// to an elastic cell, gas leaves or enters it along its gas edges so that it
+// is exactly full at one atmosphere. Sealed, with none (Stage 28), it holds
+// what it holds, and its pressure follows (chem/thermo.hpp); cells sealed
+// together share one pressure.
 struct CellMeta {
 	bool reservoir = false;
 	double reservoir_temperature = 0.0; // K
@@ -75,6 +77,9 @@ struct CellMeta {
 	// How well the cell is stirred (GAME_SPEC §7): 1 at rest. It multiplies
 	// the rates that transport limits (the surface law), never an equilibrium.
 	double mixing = 1.0;
+	// A rigid cell with no gas path to an elastic cell (Stage 28): kept by the
+	// world from its edges, not set (V3).
+	bool sealed = false;
 };
 
 struct SpeciesAmount {
@@ -129,12 +134,12 @@ enum class Refusal : int32_t {
 	Reservoir, // a reservoir holds energy, never matter
 	BadValue, // a number that is negative or not finite, or a particle count for what is not a solid
 	Wall, // a vessel's own material does not move
-	WouldSeal, // a rigid cell would lose its last gas path to an elastic cell
+	WouldSeal, // a rigid cell would be sealed while not full at the room's pressure (a starved one)
 };
 const char *refusal_text(Refusal r);
 
 // The rigid cells that have no path, along open edges that let gas through,
-// to an elastic cell of matter (GAME_SPEC §6: V3). Empty when none is sealed.
+// to an elastic cell of matter: the sealed ones (GAME_SPEC §6, V3).
 std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges);
 
 class World {
@@ -178,7 +183,7 @@ public:
 		// particle count for a species that is not a solid, or less than one
 		// for a solid that is there. A rigid cell: a volume that is not positive and
 		// finite, a condensed species of unknown molar volume, contents that do
-		// not fit, no gas path to an elastic cell.
+		// not fit. A rigid cell with no gas path to an elastic cell is sealed.
 		std::optional<World> build(std::string *why = nullptr) const;
 
 	private:
@@ -252,7 +257,9 @@ public:
 	// A drain's rate (m^3 of liquid a second; below 0, all of it), and whether
 	// its solids go too (GAME_SPEC §6, Stage 27: a pour). Between steps.
 	Refusal set_drain(EdgeId edge, double rate, bool solids);
-	// refused (WouldSeal) when a rigid cell would be left with no gas path to an elastic cell
+	// A rigid cell left with no gas path to an elastic cell is sealed (Stage
+	// 28), at the room's pressure: refused (WouldSeal) when it is not full there
+	// (a starved one: the partial vacuum would come from nowhere).
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);
 	// stirring: 1 at rest; between steps only
@@ -277,6 +284,7 @@ private:
 	World() = default;
 	bool known(CellId cell) const { return cell.index >= 0 && cell.index < cell_count(); }
 	void tend_particles(CellState &cell, SpeciesId species);
+	void refresh_sealed(); // each rigid cell's `sealed` from the edges (V3)
 
 	const SpeciesTable *table_ = nullptr;
 	std::vector<std::string> names_;

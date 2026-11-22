@@ -297,9 +297,11 @@ equipment that needs them (Stage 8).
 - **Consequences:** sealed flasks that pressurise and burst, vacuum distillation, boiling points
   that move with pressure, heating by compression.
 
-**Demo subset (the isobaric limit).** Every cell is at 1 atm. A cell of matter is **elastic** (a
-balloon, the open air: it takes the volume its contents need, `n_gas R T / P` plus its solids and
-liquids) or **rigid** (a flask: a fixed volume).
+**Demo subset (the isobaric limit, and sealed cells).** A cell of matter is **elastic** (a balloon,
+the open air: it takes the volume its contents need, `n_gas R T / P` plus its solids and liquids,
+at 1 atm) or **rigid** (a flask: a fixed volume). A rigid cell with a gas path to an elastic cell
+is **open**, at 1 atm; one with none is **sealed** (Stage 28), and its pressure follows from what
+it holds.
 
 Gas flow is not a rate: it is the algebraic condition that each rigid cell is exactly full, gas
 plus solids and liquids equal to its volume. This is the full model's limit of infinite
@@ -331,18 +333,43 @@ that holds more solids and liquids than its volume then spills the excess of its
 what is dissolved in it, into that cell, at the end of the step: it is left full to the brim. In
 a world with no such cell, a drain gives a rigid cell only what fits and the rest stays above.
 
-**No rigid cell is ever sealed:** each must have a gas path to an elastic cell. A world that breaks
-this is refused when built, and a disconnection that would break it is refused (`WouldSeal`).
+**Sealed cells** *(Stage 28)*. A rigid cell with no gas path, along open edges, to an elastic cell
+is sealed; the world keeps the mark as its edges change (V3).
+- **Its energy** is `E = U + P_atm V`: its internal energy and the room's work on its volume. With
+  its solids and liquids incompressible and its gas ideal, `E = H(T) - n_gas R T + P_atm V_free`,
+  `V_free` the volume its solids and liquids leave; its temperature follows (linear in `T`), and
+  heat raises it at constant volume (`Cv = Cp - n_gas R` for its gas). Full at 1 atm, `E` is its
+  enthalpy: so the stored integers of every open cell, and its temperature when it is sealed or
+  opened there, are unchanged.
+- **Its pressure** is `n_gas R T / V_free`; a sealed cell with gas and no free volume has none
+  (refused by V3). Each gas's activity is its partial pressure over the standard's (§4.6), so its
+  fast equilibria (§8) and its reactions run at that pressure: water boils where the steam tables
+  say it boils at that pressure (within 2.5% of NIST from 10 kPa to 2 atm), above 100 °C in a
+  flask heated sealed, below it in one cooled sealed (a partial vacuum).
+- **Cells sealed together** (gas edges between them, none to an elastic cell) share one pressure:
+  each step, after their equilibria, gas runs from the higher pressure to the lower, at the
+  giver's composition and temperature and carrying its enthalpy, until they are equal (T1). The
+  gas left behind cools as it expands; the gas pushed in warms.
+- **Opened**, a sealed cell is read as an open one: `E`, its enthalpy at 1 atm, is what a sudden
+  expansion against the room leaves (cooler, from above 1 atm; warmer, from below); then it is
+  settled as any open cell, within the step.
+- **Sealed at the room's pressure.** A cell becomes sealed only when it is full at 1 atm, as every
+  open cell is at a step's end; a starved one (below) is refused (`WouldSeal`): its vacuum would
+  come from nowhere.
+- **Nothing runs in or out but gas between cells sealed together:** a drain neither runs into nor
+  out of a sealed cell (no gas could make way for the liquid), and a sealed cell does not overflow.
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
 it consumes gas as fast as it arrives (it draws its fill at most eight times a step). In reality
-that is a partial vacuum; the demo's subset has no pressure below 1 atm to give it, so the cell is
-treated as at 1 atm. A cell is never left over-full.
+that is a partial vacuum; an open cell has no pressure below 1 atm to give it, so it is treated as
+at 1 atm (a sealed one has its own). A cell is never left over-full.
 
 Pouring and dripping are kinematic (no rate, no gravitational energy).
 **Status:** Stage 4 implements the demo subset for gas, Stage 5 the drains, Stage 7 pouring,
-Stage 8 overflow and the balloon's capacity (§13).
+Stage 8 overflow and the balloon's capacity (§13), Stage 28 sealed cells. Still to build: the
+balloon's tension law, gas flow at a finite conductance (valves, frits), hydrostatic head and
+gravitational energy, siphons, a vacuum pump.
 
 ## 7. Chemical kinetics
 
@@ -427,6 +454,9 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
   one-dimensional root; dry-out and total condensation are its clamped ends.
 - **Slow phase changes** (evaporation from a still surface into moving air, melting of a lump,
   sublimation) are kinetic, limited by transport through a boundary layer.
+- **Pressure shifts equilibria** through activity as well *(Stage 28: in a sealed cell, §6)*: a gas's
+  activity is its partial pressure, so water boils above 100 °C in a flask heated sealed and below
+  it in one cooled sealed; the boiling point at a pressure is a consequence, not a rule.
 - **Solutes shift equilibria** through activity: boiling-point elevation and freezing-point
   depression are consequences, not rules.
 - **Melting and freezing, sublimation, supercritical fluids** use the same construction with the
@@ -2109,13 +2139,13 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
-| T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4) | sign-exact | 2–4 |
+| T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4); between cells sealed together, only from the higher pressure to the lower (Stage 28) | sign-exact | 2–4, 28 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
 | P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: R T Σ\|ν_i\| N (1/n_i + 1/n_gas) over the reaction's gases, n_i each one's quanta and n_gas the cell's (Stage 19: before, 2 N R T / n_gas, which a minor gas exceeds: the steam over a cold condenser drawing dry air), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5, 19 |
-| V1 | A rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
+| V1 | An open rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No rigid cell holds more solids and liquids than its volume. In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8 |
-| V3 | No rigid cell is sealed: each has a path, along open gas edges, to an elastic cell (demo subset of §6) | exact | 4 |
+| V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed) | exact | 4, 28 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
@@ -2195,7 +2225,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 
 | Simplification | Size of the error |
 |---|---|
-| Every cell at 1 atm; balloon is a slack membrane | Ignores about 2 J of elastic energy against 2.35 kJ of reaction heat |
+| Every open cell at 1 atm; balloon is a slack membrane; gas between connected cells flows at once (infinite conductance); a sealed cell's solids and liquids are incompressible and their enthalpy does not depend on the pressure | Ignores about 2 J of elastic energy against 2.35 kJ of reaction heat; a sealed cell opened is at 1 atm within the step, its gas mixed as one (the gas left in a real vessel cools more, the gas let out less) |
 | No gravitational energy in the ledger | About 0.2 J per pour |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |

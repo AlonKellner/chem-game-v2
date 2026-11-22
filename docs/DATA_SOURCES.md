@@ -278,6 +278,23 @@ Wagner and Pruss 2002), retrieved 2026-11-16, against what the table implies:
 Normal boiling point: NIST 373.1243 K; the table gives 373.586 K (100.44 °C). The difference is
 steam treated as an ideal gas with a constant heat capacity.
 
+**Oracle checked in Stage 28: boiling at a pressure.** NIST Chemistry WebBook, saturation properties
+of water by pressure (IAPWS-95), retrieved 2026-11-22, printed rows (6 digits). A sealed 250 mL flask
+holding 249 mL of water and nothing else stands at its saturation pressure; the model's against
+NIST's, at NIST's temperature (`native/tests/test_pressure.cpp`, tolerance 2.5%; confidence high):
+
+| T (K) | NIST p_sat (kPa) | Model, sealed (kPa) |
+|---|---|---|
+| 318.656 | 9.84724 | 9.817 (−0.3%) |
+| 332.990 | 19.7990 | 19.70 (−0.5%) |
+| 354.179 | 49.4258 | 48.93 (−1.0%) |
+| 372.876 | 100.431 | 98.82 (−1.6%) |
+| 392.820 | 196.604 | 191.7 (−2.5%) |
+
+The model falls further below the steam tables as the temperature rises: steam an ideal gas with a
+constant heat capacity. A sealed flask of boiling water cooled to 60 °C stands at 19.84 kPa (NIST
+19.946 at 333.15 K, −0.5%).
+
 **Oracle checked in Stage 3:** from the table the decomposition absorbs 106.5 kJ/mol and makes
 321.5 J/mol·K, so it is spontaneous above about 58 °C with both gases at 1 bar: stable on the
 shelf, unstable well below red heat, as observed.

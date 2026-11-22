@@ -13,18 +13,33 @@ namespace chem {
 
 inline constexpr double T0 = 298.15; // K: the reference temperature of the species table
 inline constexpr double GAS_CONSTANT = 8.314462618; // J/mol/K (CODATA 2018)
-inline constexpr double P_ATMOSPHERE = 101325.0; // Pa: every cell's pressure in the demo (GAME_SPEC §6)
+inline constexpr double P_ATMOSPHERE = 101325.0; // Pa: the room's, and every cell's open to it (GAME_SPEC §6)
 inline constexpr double P_STANDARD = 100000.0; // Pa: the species table's standard pressure (1 bar)
 
+// A cell's thermal state. Open (a cell with a gas path to an elastic one, at
+// one atmosphere), its energy is its enthalpy H. Sealed (GAME_SPEC §6, Stage
+// 28: a rigid cell with no gas path to an elastic one), its energy is
+// E = U + P_atm V, its internal energy and the room's work on its volume: at
+// one atmosphere and full that is its enthalpy, so a cell sealed or opened
+// keeps its temperature there. With the condensed phases incompressible and
+// the gas ideal, E = H(T) - n_gas R T + P_atm V_free, V_free the volume its
+// solids and liquids leave, and its pressure is n_gas R T / V_free.
 struct Thermal {
 	// false when the cell holds a species without thermodynamic data, or its
-	// heat capacity is not positive: it then has no temperature
+	// heat capacity is not positive, or it is sealed and its solids and
+	// liquids leave no room for its gas: it then has no temperature
 	bool defined = false;
-	double heat_capacity = 0.0; // J/K: sum of n_i Cp_i
-	double temperature = 0.0; // K: T0 + (H - sum of n_i Hf_i) / heat capacity
+	// J/K: what heat raises its temperature by, dE/dT: sum of n_i Cp_i; a
+	// sealed cell's at constant volume, less n_gas R
+	double heat_capacity = 0.0;
+	double temperature = 0.0; // K: T0 + (H - sum of n_i Hf_i) / heat capacity; sealed, from E as above
+	double pressure = P_ATMOSPHERE; // Pa
+	bool sealed = false;
+	double free_volume = 0.0; // m^3: a sealed cell's V_free
 };
 
-Thermal thermal_state(const SpeciesTable &table, const CellState &cell);
+// `meta` is the cell's (null: open). A reservoir's is not asked for.
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta = nullptr);
 
 // The enthalpy, in J, of these amounts at temperature T: sum of n_i (Hf_i + Cp_i (T - T0)).
 // `ok` is false when a species present has no thermodynamic data.
@@ -34,17 +49,18 @@ struct Fill {
 	// false when the cell holds a condensed species (not a wall, not a solute)
 	// whose molar volume is unknown
 	bool defined = false;
-	double gas = 0.0; // m^3: n_gas R T / P, at one atmosphere
+	double gas = 0.0; // m^3: n_gas R T / P, at one atmosphere; a sealed cell's, the room its solids and liquids leave
 	double condensed = 0.0; // m^3: sum of n_i v_i over its solids and liquids (walls take no room)
 };
 
 // The volume the cell's contents take at temperature T (GAME_SPEC §6). Solutes
 // take their apparent molar volume (GAME_SPEC §10), or none if they have none.
-Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature);
+Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta = nullptr);
 
 // How far a rigid cell is from exactly full, in m^3: gas + condensed - volume.
 // Positive: over-full, gas must leave. Negative: under-full, gas must enter.
-// `defined` is false when the cell has no temperature or no defined fill.
+// `defined` is false when the cell has no temperature or no defined fill. A
+// sealed cell is full by definition: 0.
 double gas_excess(const SpeciesTable &table, const CellMeta &meta, const CellState &cell, bool &defined);
 
 // The diameter, in m, of one particle of a solid in the cell: its volume
@@ -75,9 +91,11 @@ int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool
 // The step and the invariants both ask this, with the same arithmetic.
 class AffinityProbe {
 public:
-	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
+	// At fixed energy: an open cell's enthalpy; a sealed cell's E, at its
+	// volume, its gas's pressure following what the extent makes and frees.
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta = nullptr);
 	// the same, given the cell's thermal state (as thermal_state() gives it)
-	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal);
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta = nullptr);
 	// false when the cell has no temperature or a species named has no thermodynamic data
 	bool defined() const { return defined_; }
 	// the cell's temperature before any of the reaction, K
@@ -105,17 +123,20 @@ private:
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
 	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
 	const SpeciesTable *table_ = nullptr; // its solution model
+	// sealed (Stage 28): its free volume before, and what a quantum of extent frees (m^3)
+	bool sealed_ = false;
+	double free_ = 0.0, free_step_ = 0.0;
 };
 
 // The activity of a species in the cell (GAME_SPEC §4.6). A gas: its partial
 // pressure over the standard pressure, y_i * P / P°, y_i its fraction of the
-// cell's gas, P one atmosphere. A solid: 1. A dissolved species: the product
+// cell's gas, P the cell's pressure (one atmosphere, or a sealed cell's). A solid: 1. A dissolved species: the product
 // over its particles of (m_j gamma_j)^nu_j, m_j the particle's molality (mol
 // per 55.51 mol of the cell's liquid: per kg of water) and gamma_j its
 // activity coefficient (GAME_SPEC §10). A liquid: the solvent, ln a = ln x_i -
 // phi (dissolved particles) / (liquid), which is 1 when nothing is dissolved
 // in it. 0 for a gas or a solute that is absent.
-double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species);
+double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species, const CellMeta *meta = nullptr);
 
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
@@ -128,7 +149,7 @@ Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the
 // mixing terms of its gas and of its solution).
-double entropy(const SpeciesTable &table, const CellState &cell, double temperature);
+double entropy(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta = nullptr);
 
 // The affinity of a change in the cell at temperature T, in J per mole of
 // extent: A = -sum of nu_i mu_i, with mu_i = h_i(T) - T s_i(T, a_i). Positive
@@ -137,6 +158,6 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 // is absent, -infinity when one it consumes is absent, 0 when both. `defined`
 // is false when a species it names has no thermodynamic data, or is dissolved
 // in a cell with no liquid.
-double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined);
+double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta = nullptr);
 
 } // namespace chem

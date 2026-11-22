@@ -234,6 +234,9 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		def.has_thermo = true;
 		def.hf = static_cast<double>(rng.range(-2000000, 500000));
 		def.cp = static_cast<double>(rng.range(10, 300));
+		if (def.phase == Phase::Gas && def.cp < 21.0) {
+			def.cp += 21.0; // an ideal gas's Cp is at least 5/2 R: its Cv at least 3/2 R (Stage 28: a sealed cell's heat capacity is Cv)
+		}
 		def.s0 = static_cast<double>(rng.range(1, 400));
 		if (volumes && (def.phase == Phase::Solid || def.phase == Phase::Liquid)) {
 			def.molar_volume = static_cast<double>(rng.range(5, 100)) * 1e-6;

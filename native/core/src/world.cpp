@@ -40,7 +40,7 @@ const char *refusal_text(Refusal r) {
 		case Refusal::Wall:
 			return "a vessel's own material does not move";
 		case Refusal::WouldSeal:
-			return "a rigid cell would lose its last gas path to an elastic cell";
+			return "a rigid cell would be sealed while it is not full at the room's pressure";
 	}
 	return "unknown refusal";
 }
@@ -194,6 +194,7 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		}
 	}
 	world.edges_ = edges_;
+	world.refresh_sealed();
 	for (const Set &s : amounts_) {
 		if (!known_cell(s.cell)) {
 			return refuse("an amount is set in a cell the world does not have");
@@ -253,11 +254,19 @@ std::optional<World> World::Builder::build(std::string *why) const {
 			return refuse("a temperature is positive and finite");
 		}
 		CellState &cell = world.cells_[static_cast<size_t>(s.cell.index)];
-		if (!thermal_state(*table_, cell).defined) {
-			return refuse("a temperature is set in a cell that cannot have one (a species without thermodynamic data, or no heat capacity)");
+		const CellMeta &m = world.meta_[static_cast<size_t>(s.cell.index)];
+		if (!thermal_state(*table_, cell, &m).defined) {
+			return refuse("a temperature is set in a cell that cannot have one (a species without thermodynamic data, or no heat capacity, or sealed with no room for its gas)");
 		}
 		bool ok = false;
-		const double joule = enthalpy_at(*table_, cell, s.temperature, ok);
+		double joule = enthalpy_at(*table_, cell, s.temperature, ok);
+		if (m.sealed) { // E = H(T) - n_gas R T + P_atm V_free (chem/thermo.hpp)
+			double gas = 0.0;
+			for (size_t k = 0; k < cell.amount.size(); ++k) {
+				gas += table_->species(SpeciesId{ static_cast<int32_t>(k) }).phase == Phase::Gas ? static_cast<double>(cell.amount[k]) * MOL_PER_QUANTUM : 0.0;
+			}
+			joule += -gas * GAS_CONSTANT * s.temperature + P_ATMOSPHERE * (m.volume - fill_of(*table_, cell, T0).condensed);
+		}
 		const Energy energy = energy_from_joule(joule, ok);
 		if (!ok) {
 			return refuse("a cell's enthalpy does not fit the integer range");
@@ -267,7 +276,7 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	}
 	if (world.thermal_) {
 		for (size_t c = 0; c < world.cells_.size(); ++c) {
-			if (!meta_[c].reservoir && !thermal_state(*table_, world.cells_[c]).defined) {
+			if (!meta_[c].reservoir && !thermal_state(*table_, world.cells_[c], &world.meta_[c]).defined) {
 				return refuse("in a world with temperatures every cell has one (a species without thermodynamic data, or no heat capacity)");
 			}
 		}
@@ -293,9 +302,6 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		if (fill.condensed > meta_[c].volume) {
 			return refuse("a rigid cell's solids and liquids do not fit in it");
 		}
-	}
-	if (!sealed_cells(meta_, edges_).empty()) {
-		return refuse("a rigid cell has no gas path to an elastic cell");
 	}
 	if (spill_.index >= 0) {
 		if (!known_cell(spill_) || meta_[static_cast<size_t>(spill_.index)].rigid || meta_[static_cast<size_t>(spill_.index)].reservoir) {
@@ -380,7 +386,7 @@ bool World::temperature(CellId cell, double &kelvin) const {
 		kelvin = m.reservoir_temperature;
 		return true;
 	}
-	const Thermal t = thermal_state(*table_, cells_[static_cast<size_t>(cell.index)]);
+	const Thermal t = thermal_state(*table_, cells_[static_cast<size_t>(cell.index)], &m);
 	kelvin = t.temperature;
 	return t.defined;
 }
@@ -544,6 +550,7 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, doubl
 	}
 	edges_.push_back(Edge{ a, b, phases, true, conductance });
 	++topology_version_;
+	refresh_sealed();
 	if (made != nullptr) {
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 	}
@@ -584,9 +591,23 @@ Refusal World::disconnect(EdgeId edge) {
 		return Refusal::UnknownEdge;
 	}
 	edges_[static_cast<size_t>(edge.index)].open = false;
-	if (!sealed_cells(meta_, edges_).empty()) {
-		edges_[static_cast<size_t>(edge.index)].open = true;
-		return Refusal::WouldSeal;
+	const std::vector<CellMeta> was = meta_;
+	refresh_sealed();
+	// a cell is sealed at the room's pressure: full, as every open cell is at a step's end (a starved one is not)
+	for (size_t c = 0; c < meta_.size() && thermal_; ++c) {
+		if (!meta_[c].sealed || was[c].sealed) {
+			continue;
+		}
+		bool defined = false;
+		const double excess = gas_excess(*table_, was[c], cells_[c], defined);
+		double kelvin = 0.0;
+		temperature(CellId{ static_cast<int32_t>(c) }, kelvin);
+		const double tolerance = static_cast<double>(table_->species_count() + 1) * MOL_PER_QUANTUM * GAS_CONSTANT * kelvin / P_ATMOSPHERE + 1e-9 * meta_[c].volume;
+		if (defined && (excess > tolerance || excess < -tolerance)) {
+			edges_[static_cast<size_t>(edge.index)].open = true;
+			meta_ = was;
+			return Refusal::WouldSeal;
+		}
 	}
 	++topology_version_;
 	return Refusal::None;
@@ -604,6 +625,15 @@ Refusal World::set_conductance(EdgeId edge, double conductance) {
 	}
 	edges_[static_cast<size_t>(edge.index)].conductance = conductance;
 	return Refusal::None;
+}
+
+void World::refresh_sealed() {
+	for (CellMeta &m : meta_) {
+		m.sealed = false;
+	}
+	for (const CellId c : sealed_cells(meta_, edges_)) {
+		meta_[static_cast<size_t>(c.index)].sealed = true;
+	}
 }
 
 void World::skip_step() {
