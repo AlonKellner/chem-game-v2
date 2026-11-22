@@ -48,13 +48,10 @@ struct Pupil {
 			click("item:" + item.substr(0, item.find('@')));
 		}
 		at(what, x, y);
-		ui->pointer(x, y, false);
-		ui->pointer(x, y, true);
-		ui->pointer(x, y, false);
-		if (what.rfind("item:", 0) == 0) { // chosen: picked up, and put back on its own place (Stage 27)
-			ui->pointer(x, y, true);
-			ui->pointer(x, y, false);
-		}
+		const int mods = what.rfind("item:", 0) == 0 ? lab::Ui::ModRight : 0; // an item is chosen by the right button (Stage 27)
+		ui->pointer(x, y, false, mods);
+		ui->pointer(x, y, true, mods);
+		ui->pointer(x, y, false, mods);
 	}
 	// what a drag names: an item is carried, a click to pick it up and a click to put it down (Stage 27), a vessel
 	// onto a vessel with the right button (the menu: what to pour or tip); from a port, the drawer or a slider, a drag

@@ -22,9 +22,8 @@ func _click(what: String) -> void:
 	if (what.begins_with("valve:") or what.begins_with("stir:")) and _lab.locate(what) == Vector2(-1, -1):
 		_click("item:" + what.get_slice(":", 1).get_slice("@", 0)) # its controls show for the item chosen
 	var a := _lab.locate(what)
-	for i in (2 if what.begins_with("item:") else 1): # an item chosen: picked up, and put back on its place (Stage 27)
-		_lab.pointer(a.x, a.y, true)
-		_lab.pointer(a.x, a.y, false)
+	_lab.pointer(a.x, a.y, true, 16 if what.begins_with("item:") else 0) # an item is chosen by the right button (Stage 27)
+	_lab.pointer(a.x, a.y, false, 16 if what.begins_with("item:") else 0)
 
 func _grams(id: String, species: String) -> float:
 	for item in JSON.parse_string(_lab.report())["items"]:

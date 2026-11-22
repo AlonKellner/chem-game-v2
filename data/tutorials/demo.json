@@ -42,7 +42,7 @@
 		},
 		{
 			"title": "Light the burner",
-			"text": "Click the burner to choose it (it is picked up: click its place to set it back), then drag its valve, in the column on the right, all the way open.",
+			"text": "Right-click the burner to choose it, then drag its valve, in the column on the right, all the way open.",
 			"why": "The flame is at about 1,900 C; the valve sets how much of its heat reaches the flask.",
 			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.95}}],
 			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}]
@@ -97,7 +97,7 @@
 		},
 		{
 			"title": "Stir",
-			"text": "Click the flask to choose it, then \"stir\" in the column on the right.",
+			"text": "Right-click the flask to choose it, then \"stir\" in the column on the right.",
 			"why": "It keeps the grains in the acid and the liquid even. The acid reaches them far faster than they can use it, so it is their surface and its warmth that set the pace, not the stirring.",
 			"checks": [{"text": "the flask is stirred", "when": {"item": "flask", "stirred": true}}],
 			"play": [{"click": "item:flask"}, {"click": "stir:flask"}]

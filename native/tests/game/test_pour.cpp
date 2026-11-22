@@ -119,3 +119,64 @@ TEST_CASE("adjacency: a balloon or a condenser seals a neck, not a beaker's wide
 	ok(*l, R"({"do": "detach", "item": "balloon"})");
 	ok(*l, R"({"do": "attach", "item": "balloon", "to": "acid"})"); // a bottle's neck
 }
+
+#include "chem/optics.hpp"
+#include "lab/colour.hpp"
+#include "lab/optics_scene.hpp"
+#include "lab/ui.hpp"
+
+TEST_CASE("pour: a vessel set upside down is drawn upside down over what it pours into: its glass flipped, its acid at its mouth, as the 3D truth's rays find it (Stage 27)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	for (const char *c : { R"({"do": "place", "item": "flask", "at": [10, 7]})", R"({"do": "place", "item": "acid", "at": [4, 7]})", R"({"do": "invert", "item": "acid", "over": "flask"})" }) {
+		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
+	}
+	ui->frame(0.0);
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	REQUIRE(ui->locate("item:acid", ax, ay));
+	REQUIRE(ui->locate("item:flask", fx, fy));
+	CHECK(ax == doctest::Approx(fx).epsilon(0.01)); // over it
+	CHECK(ay < fy);
+	const lab::OpticsScene &scene = ui->optics();
+	namespace L = lab::optics_layout;
+	int bottle = -1;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4 + 3] > 0.5f) {
+			bottle = b;
+		}
+	}
+	REQUIRE(bottle >= 0); // flipped
+	const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + bottle * L::BODY_VECS + L::RECT) * 4];
+	const float surface = scene.table[static_cast<size_t>(L::HEADER_VECS + bottle * L::BODY_VECS + L::FORM) * 4 + 2];
+	CHECK(surface > rect[1] + 0.3f * rect[3]); // its 241 mL lie toward its mouth, at the bottom
+	const auto eye = [](const double a[3], const double b[3]) {
+		const auto seen = [](const double c[3]) {
+			return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2],
+					0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+		};
+		return lab::eye_difference(seen(a), seen(b));
+	};
+	double worst = 0.0, sum = 0.0;
+	int compared = 0, visible = 0;
+	for (const float f : { 0.12f, 0.3f, 0.5f, 0.7f, 0.9f }) { // down the bottle: its base, now at the top; its shoulder; its acid; its neck
+		const int y = static_cast<int>(rect[1] + f * rect[3]);
+		for (int x = static_cast<int>(rect[0]) + 1; x < static_cast<int>(rect[0] + rect[2]); x += 3) {
+			if (lab::optics_cover(scene, x, y) <= 0.0) {
+				continue;
+			}
+			double shown[3], truth[3];
+			lab::optics_truth(scene, x, y, shown);
+			lab::optics_area_truth(scene, x, y, 6, truth);
+			const double e = eye(shown, truth);
+			worst = std::max(worst, e);
+			sum += e;
+			visible += e > lab::EYE_VISIBLE ? 1 : 0;
+			++compared;
+		}
+	}
+	MESSAGE(compared << " pixels of the bottle upside down: worst " << worst << " on the eye metric, mean " << sum / std::max(compared, 1) << ", " << visible << " visible");
+	CHECK(compared > 80);
+	CHECK(sum / compared < 1.5);
+	CHECK(visible <= compared / 100);
+}

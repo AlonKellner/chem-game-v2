@@ -602,6 +602,7 @@ struct Ui::Impl {
 	// an item's footprint on the bench
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
+	static constexpr float INVERTED_GAP = 24; // an upside-down vessel's mouth above the mouth it pours into
 	// the square of an item's footprint its body's centre is on, as it would stand on the bench
 	void body_square(int index, int &c, int &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
@@ -670,6 +671,11 @@ struct Ui::Impl {
 		if (v.place == "on" && v.on >= 0) {
 			const Rect holder = rect(v.on);
 			return Rect{ holder.cx() - w / 2, holder.y - h - 4, w, h };
+		}
+		if (v.inverted && v.pours_into >= 0) {
+			// upside down over what it pours into, its mouth a little above that one's (Stage 27), held by a stand
+			const Rect below = rect(v.pours_into);
+			return Rect{ below.cx() - w / 2, below.y - INVERTED_GAP - h, w, h };
 		}
 		if (v.place == "under" && v.under >= 0) {
 			const Rect vessel = rect(v.under);
@@ -1124,7 +1130,7 @@ struct Ui::Impl {
 					return;
 				}
 			}
-			if (invert_button().has(x, y)) {
+			if (invert_button().has(x, y) && (!guided() || asks_click("panel:invert"))) {
 				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
 					panel = false;
 					put_back(); // it stands upside down over the other now: its cap is in the readout, shut
@@ -1231,7 +1237,13 @@ struct Ui::Impl {
 			return;
 		}
 		if (mods & Ui::ModRight) {
-			return; // the menu is for a carried vessel over another
+			// the right button on an item chooses it, not picking it up: its controls in the readout (Stage 27; asked
+			// for by the user, 2026-11-22)
+			const int chose = item_at(x, y);
+			if (chose >= 0) {
+				choose_only(chose); // as a click chose it before: it changes nothing in the lab, under a tutorial too
+			}
+			return;
 		}
 		const int hit = item_at(x, y);
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
@@ -3414,6 +3426,7 @@ struct Ui::Impl {
 			if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
+				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				bodies.push_back(body);
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
@@ -3868,7 +3881,9 @@ struct Ui::Impl {
 		for (const auto &[species, r] : tip_buttons()) {
 			button(r, "tip in the " + species);
 		}
-		button(invert_button(), "upside down, with a cap");
+		if (!guided() || asks_click("panel:invert")) {
+			button(invert_button(), "upside down, with a cap");
+		}
 		button(cancel_button(), "cancel");
 	}
 };
