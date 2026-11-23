@@ -491,23 +491,24 @@ int prism_wrong(lab::PrismDemo &demo, lab::OpticsFrames &rendered, bool cuts, in
 
 } // namespace
 
-// Stage 35, OPEN: faults of the reading by a pixel's own rays, found when it became the default (the maps: no
-// pixel wrong; docs/TDD_29_TRACER.md has "8 or 9 pixels still visibly wrong after 40 frames" as open). Where the
-// slit is seen a pixel's rays part along the spectrum, so its fixed estimate is its middle ray's (the dark
-// room) and all it shows of the slit is what its rays' corrections find. As the test counts, against the one
-// reading: 5 of 121 pixels of the row visibly wrong after 40 frames, 37 of 119 after the turn; the same with
-// the cuts off. Against the truth's rays (optics_area_truth, 12 x 12) the same pixels, and not by grain:
-//   1. A pixel stops before a ray has found the slit. (946, 540): the truth's rays bring (-0.070, 0.055, 0.141),
-//      the pixel shows the room's 0.0021, 26 apart on the eye metric (8 is visible); its batches all found
-//      nothing, so its noise is nothing, and after 136 points in 6 frames it asks no more: the same at frame
-//      3,000. Five such at rest (916, 932, 942, 946, 996: 15 to 26 apart), at 40 frames and at 3,200.
-//   2. Turned, a pixel keeps what its rays found before the turn. Its fixed estimate is dark before and after,
-//      so its history is taken to hold (step_pixel: `keep`, the estimate's drift) and, being settled, it asks
-//      nothing: 114 of the row's 119 histories are not started again. (984, 540) goes on showing the red of
-//      the old turn (1.98, 0.23, -0.07) where the truth's rays bring (0.03, 0.00, 0.00), 140 apart; 37 of 119
-//      visibly off the truth's rays 40 frames after the turn, 10 still after 400. (Turned from the start, 4.)
-//   3. And a band's rays lie along a line through the pixel and the band (test_footprint.cpp, the case marked
-//      as this one is).
+// Stage 35, OPEN: a fault of the reading by a pixel's own rays, found when it became the default (the maps: no
+// pixel wrong). Where the slit is seen a pixel's rays part along the spectrum, so its fixed estimate is its
+// middle ray's (the dark room) and all it shows of the slit is what its rays' corrections find. As the test
+// counts, against the one reading: 3 to 5 of the row's pixels visibly wrong after 40 frames, 2 to 5 after the
+// turn (5 and 37 before two of the three causes were mended: a pixel that kept what its rays found before a
+// turn, step_pixel's `points = min(points, 1.0)` where its beam was traced again; and a band's rays lying
+// along a line through the pixel and the band, beam_read's place untied from the wavelength).
+//   What remains: a pixel stops before a ray has found the slit. (946, 540): the truth's rays bring
+//   (-0.070, 0.055, 0.141), the pixel shows the room's 0.0021, 26 apart on the eye metric (8 is visible); its
+//   batches all found nothing, so its noise is nothing and it asks no more. The cause, by the rays themselves
+//   (LAB_RAY_STATS=prism, test_cost.cpp): at 380 to 400 nm the pixel's ray is turned back inside the prism and
+//   does not land; from about 410 nm it lands, racing in from far along the wall (x 1493 at 420 nm, 1161 at
+//   440). The slit's image lies in that piece of the spectrum, between a node that is gone and one that lands,
+//   where the beam says nothing and no neighbouring node gives the sweep.
+//   The remedy (not built; docs/TDD_35_ONE.md, Open): cut the spectrum where the middle ray's route changes
+//   (found by halving between the nodes) and give each side a beam of its own, so each side's landings sweep
+//   and are integrated. It needs more than one beam in a pixel's record (KEPT_MOST > 1) and O13's bound of 96
+//   rays a pixel a frame looked at again.
 // It may fail so that the suite passes; it is not to be loosened.
 TEST_CASE("optics: a bent view sweeping across a drawn edge is read exactly: the prism's spectrum settles, and stays right when turned (Stage 11, 20)" * doctest::may_fail()) {
 	// A pixel sees the slit through a narrow window of wavelengths. Until Stage 20 each such window was found

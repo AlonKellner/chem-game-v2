@@ -382,30 +382,14 @@ TEST_CASE("O8: a thin line keeps its light through two layers: summed over the p
 	}
 }
 
-// Stage 35, OPEN: O8 does not hold through two layers by the reading of a pixel's own rays, found when it
-// became the default (the maps held all three). The check is the invariant's own, unchanged, on the
-// reference's reading at one wavelength (optics_through).
-//   The line at 226.4 on row 150: -0.0804861 for its rays' -0.0815361 (1.29%; O8 allows 1%). Its whole image
-//   is in one pixel (234, 150), whose rays all go one way; its beam lands straight enough to be read as its
-//   corners' quad (Stage 33: beam_fan, `straight`), which misjudges how much of the pixel the line's image
-//   covers. Read through its middle ray (LAB_BEAM_STRAIGHT=0) it is -0.081588.
-//   The line at 250.2 on row 200: -0.0356137 for -0.0361227 (1.41%).
-//   The line at 190.3 (seen in the rims) on row 150: -0.0626796 for -0.0669546 (6.4%; 3% allowed there).
-// The quad is the cause of all three: with no beam read as its corners' quad (LAB_BEAM_STRAIGHT=0, the reading
-// as it was before Stage 33) each of the twelve lines and rows of the case above and of this one holds, to 1%
-// but the faintest (281.9 on row 200, within what a rim is allowed).
-// And what the rays' corrections bring a pixel to over its frames is not the remedy: the mean, over the
-// points a pixel's frames take, of a band as thin as a wavelength comes to -0.0817 at (234, 150), right, but on
-// row 200 to -0.0309 for the line at 226.4, whose rays bring -0.0334 (7.6% out, the same after 4,096 points
-// and after 32,768; at pixel (221, 200) it makes the dark line add 0.0009 of light), and to -0.0360 for
-// -0.0403 at 262.4: where a beam is read through its middle ray, what a correction takes the beam to say of a
-// place (beam_at: each triangle of the fan evenly by area) is not what the beam's own reading weighs
-// (beam_fan, beam_wall: each row of a triangle alike), so their difference stays in the mean (with every beam
-// read as its corners' quad, LAB_BEAM_STRAIGHT=10, where the two agree, pixel (221, 200) comes to -0.0018 for
-// the truth's -0.0017). None of it is seen (thousandths of the room's white in a pixel); it is the line's
-// light that is not kept to 1%.
-// It may fail so that the suite passes; it is not to be loosened.
-TEST_CASE("O8: through two layers, three thin lines whose light the reading by a pixel's own rays does not keep (Stage 35)" * doctest::may_fail()) {
+// Stage 35: three lines the reading by a pixel's own rays did not keep when it became the default (1.29%, 1.41%
+// and, in the rims, 6.4% of their light lost; O8 allows 1% and 3%). Two things were not one: what a correction
+// takes the beam to say of a place (beam_at: each triangle of the fan evenly by area) and what the beam's own
+// reading weighed (beam_fan, beam_wall: each row of a triangle alike), so their difference stayed in the
+// mean; and a beam that lands straight was read as its corners' quad, which misjudges how much of the pixel a
+// thin line's image covers. Now a triangle's rows are weighed by their width (beam_wall's taper) and the
+// quad is the fixed estimate's alone (fan_quad).
+TEST_CASE("O8: through two layers, the three thin lines the reading by a pixel's own rays once lost (Stage 35)") {
 	CHECK(line_kept(226.4f, 150, false) == "");
 	CHECK(line_kept(250.2f, 200, false) == "");
 	CHECK(line_kept(190.3f, 150, true) == "");

@@ -306,14 +306,12 @@ TEST_CASE("footprint: a band's light is its wavelengths' together: the wall read
 // Stage 35, OPEN: a fault of the reading by a pixel's own rays, found when it became the default (the maps held
 // every pixel of this row to 3% in all but one band in 200). Where the slit is seen through the prism a pixel's
 // rays part along the spectrum: its beam is its middle ray alone, and a band is what its rays' corrections
-// bring over the frames. Their mean does not come to the band's light. A band's ray is taken at the place of
-// the pixel and at the wavelength of the band that the frame's one point gives (beam_read: across by 7 times the
-// point, down by 19 times it, the wavelength by the point itself), so over the frames a band's rays lie along a
-// line through the pixel and the band, not over them; and a slit seen in a narrow window of wavelengths that
-// moves across the pixel is counted too often or too seldom. Measured at pixels of row 540: 0.558 for 0.712,
-// 0.253 for 0.130, and 0.0021 (the dark room: no ray ever finds the slit) for 0.177, the same after 512 points
-// and after 262,144; with the place untied from the wavelength (512 thin bands across the band, 64 points
-// each) 0.711, 0.129, 0.178. It may fail so that the suite passes; it is not to be loosened.
+// bring over the frames. 16 of 704 bands are more than 3% off (29 while a band's rays lay along a line through
+// the pixel and the band: beam_read took the place from the same point as the wavelength; now the place is
+// its own). What remains is the piece of the spectrum between a node whose ray does not land (turned back
+// inside the prism) and the next, which does: the slit's image races through it and the beam says nothing
+// there (test_refraction.cpp, the case marked as this one is; docs/TDD_35_ONE.md, Open).
+// It may fail so that the suite passes; it is not to be loosened.
 TEST_CASE("footprint: where a prism's rays part along the spectrum, a band's light is its wavelengths' together too, by the mean of its rays over the frames (Stage 35)" * doctest::may_fail()) {
 	const Bands bands = prism_bands(false, 512);
 	CHECK(bands.compared > 500);

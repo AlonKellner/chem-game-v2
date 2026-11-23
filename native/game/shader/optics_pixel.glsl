@@ -3308,12 +3308,32 @@ bool beam_nodes_one_way(Beam b) {
 	return b.c0 == b.c1 && b.c1 == b.c2 && b.c2 == b.c3;
 }
 
+// whether the two nodes at the ends of a piece of the stretch (0, 1 or 2) go one way
+bool beam_piece_one_way(Beam b, float piece) {
+	return piece < 0.5 ? b.c0 == b.c1 : (piece < 1.5 ? b.c1 == b.c2 : b.c2 == b.c3);
+}
+
 vec4 beam_weights(Beam b, float g) {
 	if (beam_nodes_one_way(b)) {
 		return thirds_weights(g);
 	}
-	float k = clamp(floor(3.0 * g + 0.5), 0.0, 3.0);
-	return vec4(k < 0.5 ? 1.0 : 0.0, k > 0.5 && k < 1.5 ? 1.0 : 0.0, k > 1.5 && k < 2.5 ? 1.0 : 0.0, k > 2.5 ? 1.0 : 0.0);
+	// between two nodes that go one way, straight from the one to the other (the landing sweeps there, and a
+	// slit's image between them is in the sweep); between two that part, the nearer node
+	float at = clamp(3.0 * g, 0.0, 3.0);
+	float piece = min(floor(at), 2.0);
+	float t = at - piece;
+	if (!beam_piece_one_way(b, piece)) {
+		t = t < 0.5 ? 0.0 : 1.0;
+	}
+	return vec4(piece < 0.5 ? 1.0 - t : 0.0, piece < 0.5 ? t : (piece < 1.5 ? 1.0 - t : 0.0), piece < 0.5 ? 0.0 : (piece < 1.5 ? t : 1.0 - t), piece > 1.5 ? t : 0.0);
+}
+
+// whether the places ga and gb of a beam's stretch lie between the same two nodes, which go one way: the
+// landing sweeps straight from the one place to the other
+bool beam_sweeps(Beam b, float ga, float gb) {
+	float pa = min(floor(clamp(3.0 * ga, 0.0, 3.0)), 2.0);
+	float pb = min(floor(clamp(3.0 * gb, 0.0, 3.0)), 2.0);
+	return pa == pb && beam_piece_one_way(b, pa);
 }
 
 vec2 beam_shade(Beam b, vec4 wp, float nm) {
@@ -3369,9 +3389,10 @@ float wall_one(float x_lo, float x_hi, float y_lo, float y_hi) {
 }
 
 // The wall over a beam's footprint as a step of a band is crossed: its corners land at xa (the step's
-// beginning) and xb (its end), its top at `top` and its bottom at `bottom` (rows of the wall). Row by row of
+// beginning) and xb (its end), its top at `top` and its bottom at `bottom` (rows of the wall); `taper`: 1 where
+// the piece narrows to a point at its bottom, -1 at its top, 0 where it does not (a quad). Row by row of
 // the wall it crosses, each by its share of the footprint's height, the sweep across read exactly.
-float beam_wall(float top, float bottom, vec4 xa, vec4 xb) {
+float beam_wall(float top, float bottom, vec4 xa, vec4 xb, float taper) {
 	float lo = min(top, bottom);
 	float hi = max(top, bottom);
 	if (hi - lo < 1.0e-6) {
@@ -3393,7 +3414,12 @@ float beam_wall(float top, float bottom, vec4 xa, vec4 xb) {
 		}
 		float ym = 0.5 * (ya + yb);
 		float f = (ym - top) / (bottom - top);
-		sum = sum + (yb - ya) * swept_wall(beam_profile(ym), mix(xa.x, xa.z, f), mix(xa.y, xa.w, f), mix(xb.x, xb.z, f), mix(xb.y, xb.w, f));
+		// (a piece that narrows to a point is a triangle of the pixel: its rows weigh by their width there,
+		// which falls straight to nothing at the point. Stage 35: each row weighed alike, a thin line under the
+		// point's end of a piece was counted for more than its share of the pixel, and a pixel's mean was not its
+		// rays' mean by a part in fifteen of such a line.)
+		float weight = taper > 0.5 ? 2.0 * (1.0 - f) : (taper < -0.5 ? 2.0 * f : 1.0);
+		sum = sum + (yb - ya) * weight * swept_wall(beam_profile(ym), mix(xa.x, xa.z, f), mix(xa.y, xa.w, f), mix(xb.x, xb.z, f), mix(xb.y, xb.w, f));
 	}
 	return sum / (hi - lo);
 }
@@ -3421,7 +3447,7 @@ float beam_fan(Beam b, vec4 wa, vec4 wb, vec4 wp) {
 	float bc = dot(b.cx, wb);
 	float yc = dot(b.cy, wp);
 	if (b.form == 2) {
-		return beam_wall(yc, yc, vec4(ac), vec4(bc));
+		return beam_wall(yc, yc, vec4(ac), vec4(bc), 0.0);
 	}
 	float a0 = dot(b.x0, wa);
 	float a1 = dot(b.x1, wa);
@@ -3442,26 +3468,26 @@ float beam_fan(Beam b, vec4 wa, vec4 wb, vec4 wp) {
 	if (one >= 0.0) {
 		return one;
 	}
-	if (fan_quad || (b.one && b.straight)) {
-		// The footprint as its four corners' alone, from its top edge to its bottom one (Stage 33): the fixed
-		// estimate's, always; and that of a beam whose middle ray lands at the mean of its corners', where the
-		// fan through the middle is this quad (beam_at puts its rays so too, and the corrections are of this)
-		return beam_wall(0.5 * (y0 + y1), 0.5 * (y2 + y3), vec4(a0, a1, a2, a3), vec4(b0, b1, b2, b3));
+	if (fan_quad) {
+		// the fixed estimate's footprint (Stage 33): its four corners' alone, from its top edge to its bottom
+		// one. (Stage 35: a beam whose middle ray lands near the mean of its corners' was read so in its batches
+		// too; near is not at, and a thin line's light through two vessels was 1 to 6% out, where O8 asks 1.)
+		return beam_wall(0.5 * (y0 + y1), 0.5 * (y2 + y3), vec4(a0, a1, a2, a3), vec4(b0, b1, b2, b3), 0.0);
 	}
 	// above the middle, and below it
-	float wall = 0.25 * (beam_wall(0.5 * (y0 + y1), yc, vec4(a0, a1, ac, ac), vec4(b0, b1, bc, bc)) + beam_wall(yc, 0.5 * (y2 + y3), vec4(ac, ac, a2, a3), vec4(bc, bc, b2, b3)));
+	float wall = 0.25 * (beam_wall(0.5 * (y0 + y1), yc, vec4(a0, a1, ac, ac), vec4(b0, b1, bc, bc), 1.0) + beam_wall(yc, 0.5 * (y2 + y3), vec4(ac, ac, a2, a3), vec4(bc, bc, b2, b3), -1.0));
 	// to its left: from the left edge to the middle, above the middle's height and below
 	float f = abs(y2 - y0) > 1.0e-9 ? clamp((yc - y0) / (y2 - y0), 0.0, 1.0) : 0.5;
 	float ym = mix(y0, y2, f);
 	float ae = mix(a0, a2, f);
 	float be = mix(b0, b2, f);
-	wall = wall + 0.25 * (f * beam_wall(y0, ym, vec4(a0, a0, ae, ac), vec4(b0, b0, be, bc)) + (1.0 - f) * beam_wall(ym, y2, vec4(ae, ac, a2, a2), vec4(be, bc, b2, b2)));
+	wall = wall + 0.25 * (f * beam_wall(y0, ym, vec4(a0, a0, ae, ac), vec4(b0, b0, be, bc), -1.0) + (1.0 - f) * beam_wall(ym, y2, vec4(ae, ac, a2, a2), vec4(be, bc, b2, b2), 1.0));
 	// and to its right
 	f = abs(y3 - y1) > 1.0e-9 ? clamp((yc - y1) / (y3 - y1), 0.0, 1.0) : 0.5;
 	ym = mix(y1, y3, f);
 	ae = mix(a1, a3, f);
 	be = mix(b1, b3, f);
-	return wall + 0.25 * (f * beam_wall(y1, ym, vec4(a1, a1, ac, ae), vec4(b1, b1, bc, be)) + (1.0 - f) * beam_wall(ym, y3, vec4(ac, ae, a3, a3), vec4(bc, be, b3, b3)));
+	return wall + 0.25 * (f * beam_wall(y1, ym, vec4(a1, a1, ac, ae), vec4(b1, b1, bc, be), -1.0) + (1.0 - f) * beam_wall(ym, y3, vec4(ac, ae, a3, a3), vec4(bc, be, b3, b3), 1.0));
 }
 
 // (lo, hi) widened to hold the four of v
@@ -3511,6 +3537,9 @@ float beam_band(Beam b, float even, float g_lo, float g_hi, float nm0, float nm1
 		if (one_way) {
 			wa = thirds_weights((map_place(begin) - g_lo) / span);
 			wb = thirds_weights((map_place(end) - g_lo) / span);
+		} else if (beam_sweeps(b, (map_place(begin) - g_lo) / span, (map_place(end) - g_lo) / span)) {
+			wa = beam_weights(b, (map_place(begin) - g_lo) / span);
+			wb = beam_weights(b, (map_place(end) - g_lo) / span);
 		}
 		float wall = even;
 #ifdef OPTICS_STUB_FAN
@@ -3571,12 +3600,6 @@ vec2 beam_at(Beam b, vec2 s, vec4 w) {
 	if (b.form == 2) {
 		return c;
 	}
-	if (b.one && b.straight) {
-		// read as its corners' quad (beam_fan): across between its edges, its rows from its top edge's to its bottom's
-		float top = 0.5 * (dot(b.y0, w) + dot(b.y1, w));
-		float bottom = 0.5 * (dot(b.y2, w) + dot(b.y3, w));
-		return vec2(mix(mix(dot(b.x0, w), dot(b.x2, w), s.y), mix(dot(b.x1, w), dot(b.x3, w), s.y), s.x), mix(top, bottom, s.y));
-	}
 	float u = s.x - 0.5;
 	float v = s.y - 0.5;
 	bool upright = abs(v) >= abs(u); // in the triangle above the middle, or below it; else beside it
@@ -3622,8 +3645,9 @@ float beam_correction(Beam b, Path q, vec2 s, float nm0, float nm1, float nm, fl
 	vec2 said = beam_shade(b, wm, nm);
 	// (what the beam says of this place is what its band read: the band's sweep where its nodes go one way,
 	// the point's own node where they part)
-	vec2 at0 = beam_at(b, s, one_way ? thirds_weights((map_place(nm0) - g_lo) / span) : wm);
-	vec2 at1 = beam_at(b, s, one_way ? thirds_weights((map_place(nm1) - g_lo) / span) : wm);
+	bool sweeps = !one_way && beam_sweeps(b, (map_place(nm0) - g_lo) / span, (map_place(nm1) - g_lo) / span);
+	vec2 at0 = beam_at(b, s, one_way ? thirds_weights((map_place(nm0) - g_lo) / span) : (sweeps ? beam_weights(b, (map_place(nm0) - g_lo) / span) : wm));
+	vec2 at1 = beam_at(b, s, one_way ? thirds_weights((map_place(nm1) - g_lo) / span) : (sweeps ? beam_weights(b, (map_place(nm1) - g_lo) / span) : wm));
 	float wall_said = wall_span(beam_profile(0.5 * (at0.y + at1.y)), at0.x, at1.x);
 	float wall_traced = 0.0;
 	if (one_way && m.route == b.c0) {
@@ -3687,13 +3711,16 @@ vec3 beam_read(Beam b, float g_lo, float g_hi, float v_lo, float v_hi, int n, fl
 					// and a traced ray's correction (a pixel as an average over time, below), for one band in
 					// CORRECTION_STRIDE, standing for them all (Stage 33: the bands it has turn with the frames, so
 					// the mean over them is every band's); from a place of its own for each band, moving with the
-					// frame's point, so a batch's places lie evenly over the pixel. (The place moves across by seven
-					// times the point and down by nineteen times it, and the wavelength within the band by the point itself: over the frames each band's places cover the pixel. Down
+					// frame's point, so a batch's places lie evenly over the pixel. (The place moves across by 807
+					// times the point and down by 941 times it, and the wavelength within the band by the point itself: three
+					// that fill their cube together, the point stepping by 0.618 a frame and the two by 0.753 and 0.570. By 7
+					// and 19 a band's rays lay on seven lines of place against wavelength, and a slit's image between two of
+					// them was never found: Stage 35. over the frames each band's places cover the pixel. Down
 					// by 0.618 of it they lay on one line over 62% of the pixel's height, another for each band: a
 					// pixel whose rays go three ways settled on a tint where the truth is grey. Stage 33.)
 					float turn = float(k + 1) + 7.0 * float(r);
 					corrections_taken = corrections_taken + 1;
-					float correction = beam_correction(b, q, vec2(fract(0.7548776662466927 * turn + fract(7.0 * offset)), fract(0.5698402909980532 * turn + fract(19.0 * offset))), a.x + 380.0, c.x + 380.0, nm_point, g_lo, g_hi);
+					float correction = beam_correction(b, q, vec2(fract(0.7548776662466927 * turn + fract(807.0 * offset)), fract(0.5698402909980532 * turn + fract(941.0 * offset))), a.x + 380.0, c.x + 380.0, nm_point, g_lo, g_hi);
 					light = light + float(stride) * correction;
 				}
 				if (single) {
@@ -4114,7 +4141,7 @@ void keep_beam(int at, Beam b, float g_lo, float g_hi, float share, float conten
 	kept_put(at + 19, b.chord1);
 	kept_put(at + 20, vec4(float(b.layers), float(b.ways), b.bend, b.reach));
 	// (a route is 32 bits: in two halves, each a whole number a float holds)
-	kept_put(at + 21, vec4(float(b.c0 & 65535u), float(b.c0 >> 16), b.c0 == b.c1 && b.c1 == b.c2 && b.c2 == b.c3 ? 1.0 : 0.0, 0.0));
+	kept_put(at + 21, vec4(float(b.c0 & 65535u), float(b.c0 >> 16), (b.c0 == b.c1 ? 1.0 : 0.0) + (b.c1 == b.c2 ? 2.0 : 0.0) + (b.c2 == b.c3 ? 4.0 : 0.0), 0.0));
 	// the rows its rays passed in bodies that something lies in (all, where its rays part: what the corrections
 	// found for it came by other ways), and what lay in them
 	kept_put(at + 22, vec4(b.one ? b.span.x : -1.0e30, b.one ? b.span.y : 1.0e30, content, 0.0));
@@ -4151,9 +4178,15 @@ Beam kept_beam(int at) {
 	b.chord1 = kept_vec(at + 19);
 	b.c0 = uint(route.x) + (uint(route.y) << 16);
 	// (its other nodes' routes are kept as whether they are the first's: route.z)
-	b.c1 = route.z > 0.5 ? b.c0 : b.c0 ^ 1u;
-	b.c2 = b.c1;
-	b.c3 = b.c1;
+	// (its other nodes' routes are kept as which neighbours go one way: route.z, a bit a piece)
+	float same = route.z;
+	bool last = same > 3.5;
+	same = same - (last ? 4.0 : 0.0);
+	bool middle = same > 1.5;
+	same = same - (middle ? 2.0 : 0.0);
+	b.c1 = same > 0.5 ? b.c0 : b.c0 ^ 1u;
+	b.c2 = middle ? b.c1 : b.c1 ^ 2u;
+	b.c3 = last ? b.c2 : b.c2 ^ 4u;
 	b.r0 = b.c0;
 	b.r1 = b.c0;
 	b.r2 = b.c0;
@@ -5436,6 +5469,16 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 				points = points * pow(0.5, moved);
 				frames = min(frames, SETTLED_FRAMES);
 			}
+#ifdef OPTICS_KEPT
+			if (keep && beam_deferred) {
+				// Its rays have moved (Stage 35): what its batches found was by other rays. It is kept to show
+				// while the thing moves (beside a plain wall it is nearly what the new rays will find), with the
+				// weight of one point: what the pixel finds once it rests outweighs it. (Kept at its full weight
+				// where the estimate did not move, a pixel of the prism's spectrum showed after a turn what it
+				// had found before it, 140 from the truth, and asked for nothing.)
+				points = min(points, 1.0e9);
+			}
+#endif
 		}
 		if (!keep) {
 			d = vec3(0.0);

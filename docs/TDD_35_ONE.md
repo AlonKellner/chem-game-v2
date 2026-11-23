@@ -10,7 +10,7 @@ GAME_SPEC §12.2, §12.3, §18, §19, §20.
 
 | Phase | Topic | Status |
 |---|---|---|
-| 35.1 | The traced reading is the default (the reference, the host); the tests hold under it; the tests of the maps' own machinery are retired | |
+| 35.1 | The traced reading is the default (the reference, the host); the tests hold under it; the tests of the maps' own machinery are retired | Done |
 | 35.2 | The maps, knots, stacks and the store deleted from the lab layer, the C API, the hosts and the tools | |
 | 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | |
 | 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | |
@@ -129,6 +129,38 @@ maps and stacks; §20's rows on knots, stacks, map samples and the stack's readi
 itself is described today only in `docs/TDD_29_TRACER.md` and `docs/TDD_33_FAST.md`: its design moves
 into §12.3.
 
+## What 35.1 found, and what was mended
+
+With a pixel's own rays as the default reading, three tests failed for faults of the reading itself (not of
+the tests). Mended in the per-pixel source:
+
+- **O8 through two layers** (three thin lines 1.3% to 6.4% of their light out). A correction took the beam
+  to say one thing of a place (`beam_at`: each triangle of the fan evenly by area) and the beam's own
+  reading weighed another (`beam_wall`: each row of a triangle alike), so their difference stayed in the
+  mean; and a beam landing straight was read as its corners' quad. Now `beam_wall` weighs a triangle's
+  rows by their width (`taper`) and the quad is the fixed estimate's alone (`fan_quad`). The case passes.
+- **A band's rays along a line.** A correction's place in the pixel came from the same point as its
+  wavelength. Now the place is its own (the multipliers 807 and 941 in `beam_read`). Bands more than 3%
+  off where a prism's rays part: 29 of 704, then 16.
+- **A history kept through a turn.** A pixel whose fixed estimate was the same before and after its rays
+  moved kept what its batches had found. Now, where its beam was traced again and its history holds light
+  of its own, the history weighs one point (`step_pixel`). Wrong pixels 40 frames after the prism's turn:
+  37, then 5. (Dropped for every such pixel it cost a stir 2.4 ms a frame: every pixel of the liquid asked
+  again at every frame. It is dropped only where the history is more than a hundredth of what is shown.)
+- A beam's nodes that go different ways: `beam_weights` reads between two neighbouring nodes that go one
+  way, and the nearest node where they part (`beam_piece_one_way`), in place of a cubic through nodes of
+  other routes.
+
 ## Open
 
-- (as the phases find)
+- **The prism's slit, where a node's ray is turned back** (`test_refraction.cpp` "a bent view sweeping…",
+  3 pixels of the row wrong at rest and 5 after a turn; `test_footprint.cpp` "where a prism's rays part…",
+  16 of 704 bands; both marked `may_fail`, not to be loosened). At such a pixel the ray at 380 to 400 nm is
+  totally reflected inside the prism and does not land; from about 410 nm it lands, racing in from far
+  along the wall (at (946, 540): x 1493 at 420 nm, 1161 at 440). The slit's image lies in the piece of
+  the spectrum between the node that is gone and the first that lands, where the beam says nothing and
+  no ray of a correction happens on the narrow window. The probe: `LAB_RAY_STATS=prism ./lab_tests
+  -tc="*prism*"` (`test_cost.cpp`). The remedy, not built: cut the spectrum where the middle ray's route
+  changes (halving between the two nodes) and give each side a beam of its own, so the landing's sweep on
+  the lit side is integrated to its end. It needs more than one beam in a pixel's record
+  (`KEPT_MOST > 1`, `CG_OPTICS_KEPT_VECS`) and O13's bound of 96 rays a pixel a frame looked at again.

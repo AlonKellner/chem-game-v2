@@ -4,6 +4,7 @@
 #include "lab/optics_scene.hpp"
 #include "lab/optics_trace.hpp"
 #include "lab/play.hpp"
+#include "lab/prism_demo.hpp"
 #include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
@@ -412,6 +413,30 @@ TEST_CASE("cost: the tracer in single precision against double at the demo flask
 			}
 			std::printf("  (%d, %d): of %d rays %d go another way in single precision; of the others, apart by %.2g cm and %.2g in heading at most\n", x, y, rays, astray, worst_at, worst_toward);
 		}
+	}
+}
+
+// The prism's pixels that stop before a ray has found the slit (TDD 35): where each of a pixel's rays goes, by
+// wavelength (printed where LAB_RAY_STATS is prism).
+TEST_CASE("cost: where a prism pixel's rays go by wavelength (printed where LAB_RAY_STATS is prism) (Stage 35)") {
+	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "prism") {
+		return;
+	}
+	lab::PrismDemo demo;
+	const lab::OpticsScene scene = demo.optics();
+	for (const int x : { 946, 932, 960 }) {
+		std::printf("pixel (%d, 540):\n", x);
+		for (const double nm : { 380.0, 400.0, 420.0, 439.4, 460.0, 480.0, 500.0, 520.0, 541.2, 580.0, 620.0, 680.0, 780.0 }) {
+			std::printf("  %5.1f nm:", nm);
+			for (const double off : { 0.0, 0.5, 1.0 }) {
+				const lab::OpticsRay r = lab::optics_ray(scene, x + off, 540.5, nm);
+				std::printf("  at +%.1f lands %d (%.1f, %.1f) route %08x", off, r.lands ? 1 : 0, r.x, r.y, r.route[0]);
+			}
+			std::printf("\n");
+		}
+		double truth[3];
+		lab::optics_area_truth(scene, x, 540, 16, truth);
+		std::printf("  the truth of its area: %.4f %.4f %.4f\n", truth[0], truth[1], truth[2]);
 	}
 }
 
