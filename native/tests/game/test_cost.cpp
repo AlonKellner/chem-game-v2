@@ -240,6 +240,65 @@ TEST_CASE("cost: the reference's settled pixels at the demo flask's heel against
 	}
 }
 
+// How long a vessel held over another takes to settle once the hand is still: the frames until no pixel of the
+// sample is visibly off what it comes to, and until none reads anything (printed where LAB_RAY_STATS is held).
+TEST_CASE("cost: the frames a held vessel takes to settle once it is still (printed where LAB_RAY_STATS is held) (Stage 33)") {
+	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "held") {
+		return;
+	}
+	const Traced traced;
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	lab::Play play;
+	REQUIRE_MESSAGE(lab::Play::read(read("data/plays/cost.json"), play, why), why);
+	const int step = 4;
+	lab::OpticsFrames moving(step / 2, step / 2, 1920 / step, 1080 / step, 16.0, step), last(step / 2, step / 2, 1920 / step, 1080 / step, 16.0, step);
+	bool carried = false;
+	for (int i = 0; i < 6000 && play.next(*ui); ++i) {
+		ui->frame(1.0 / 120.0);
+		if (play.mark() == "carry") {
+			carried = true;
+			moving.frame(ui->optics()); // (as the pass has it: every frame of the carry)
+			last.frame(ui->optics());
+		} else if (carried) {
+			break; // the bottle is held over the flask
+		}
+	}
+	REQUIRE(carried);
+	const lab::OpticsScene scene = ui->optics();
+	const auto seen = [](const double c[3]) {
+		return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2], 0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+	};
+	// what it comes to
+	for (int f = 0; f < 1500; ++f) {
+		last.frame(scene);
+	}
+	int visible_until = 0, reads_until = -1;
+	for (int f = 0; f < 1500; ++f) {
+		moving.frame(scene);
+		int off = 0;
+		for (int y = step / 2; y < 1080; y += step) {
+			for (int x = step / 2; x < 1920; x += step) {
+				double a[3], b[3];
+				moving.colour(scene, x, y, a);
+				last.colour(scene, x, y, b);
+				off += lab::eye_difference(seen(a), seen(b)) > lab::EYE_VISIBLE ? 1 : 0;
+			}
+		}
+		if (f == 0 || f == 5 || f == 15 || f == 30 || f == 60 || f == 120 || f == 240) {
+			std::printf("frame %d: %d pixels of the sample visibly off what they come to, %lld reading\n", f, off, static_cast<long long>(moving.read()));
+		}
+		if (off > 0) {
+			visible_until = f + 1;
+		}
+		if (moving.read() == 0 && reads_until < 0) {
+			reads_until = f;
+		}
+	}
+	std::printf("visibly settled after %d frames; nothing read after %d\n", visible_until, reads_until);
+}
+
 namespace {
 
 // what the frames of one mark of the play cost: the pixels that read, and the rays they followed

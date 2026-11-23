@@ -5381,8 +5381,15 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	float want = 0.0;
 	if (points < 1.0 || frames < SETTLED_FRAMES) {
 		// a pixel through a stack starts with the least batch: its points cost several of one vessel's, and
-		// while what is held moves its history starts again every frame; once it is still it has the rest
-		want = max((q.chain ? float(LEAST_BATCH) : FRESH_POINTS) - points, 2.0);
+		// while what is held moves its history starts again every frame; once it is still it has the rest.
+		// (Where a pixel is read by its own rays a stack's points cost what any do, and it waits for nothing
+		// while it moves: it starts as any pixel. Else what is held, which is always a stack's, took four times
+		// as long to settle as what stands: Stage 33, the user's eye.)
+		bool dear = q.chain;
+#ifdef OPTICS_RAYS
+		dear = dear && !(rays_on() && beamed(q));
+#endif
+		want = max((dear ? float(LEAST_BATCH) : FRESH_POINTS) - points, 2.0);
 	} else {
 		want = max(max(noise / (TARGET * TARGET) - points, SETTLED_POINTS - points), 0.0);
 	}
@@ -5394,11 +5401,14 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 #ifdef OPTICS_KEPT
 	// A pixel whose rays all go one way is nearly its estimate already; one whose rays part (a rim, a surface) is
 	// not what it should be until its corrections come. Under a budget those have theirs first (Stage 33): the
-	// first asks an eighth of what it wants. With asks to spare each has what it asks.
+	// first asks an eighth of what it wants, until its batches show a need. With asks to spare each has what it asks.
 	if (kept_slot >= 0) {
 		vec4 record = kept_vec(kept_slot);
 		float kind = kept_vec(kept_slot + 1).w;
-		if (record.w > 0.5 && record.z == floor(q.x) + 1920.0 * floor(q.y) && kind - (kind > 7.5 ? 8.0 : 0.0) > 3.5) {
+		// (not one whose batches have shown that it is not: a thin bright line across it, which its beam's
+		// footprint misplaces a little, is found by its corrections alone, and it asks as a rim does)
+		bool in_need = points >= 2.0 * float(LEAST_BATCH) && noise / (TARGET * TARGET) > points;
+		if (record.w > 0.5 && record.z == floor(q.x) + 1920.0 * floor(q.y) && kind - (kind > 7.5 ? 8.0 : 0.0) > 3.5 && !in_need) {
 			ask = ask * 0.125;
 		}
 	}

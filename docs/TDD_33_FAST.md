@@ -325,6 +325,13 @@ of 17.6 (`test_kept.cpp`).
   moved) and 11,000 beams are traced (the rows that changed, and the pixels whose rays part, whose
   records stand through no change of what lies in a vessel), in the one frame of two that the
   simulation steps in.
+- **What is held settles as what stands** (the user's eye: thin bright lines through a held vessel took a
+  while). A held vessel's pixels are a stack's (something stands behind it in its rows), and a stack's
+  pixels began with a quarter of the points, a rule of the maps' reading, where a stack's points were
+  dear; and a pixel whose rays go one way asked an eighth even where its batches had shown a need (a
+  thin line its footprint misplaces). Neither now, where a pixel traces its rays. In the reference
+  (`test_cost.cpp`, `LAB_RAY_STATS=held`: the bottle carried over the flask, then held still): visibly
+  settled 6 frames after the hand stops, 27 before.
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.
