@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Not yet signed off (Stages 29 to 33, 2026-11-23; the version follows the user's sign-off)
+## 0.34.0 (2026-11-23, Stages 29 to 33; signed off by the user after playing: "Looks perfect", "Approved")
 
 - §12.3, §18 (Stage 33, in progress, `docs/TDD_33_FAST.md`): **the pass made fast.** On the GPU
   (M3 Pro, the play of `make pass-cost`), a frame's median: a vessel carried 62 to 8.5 ms, poured by

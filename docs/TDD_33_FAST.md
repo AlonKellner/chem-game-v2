@@ -23,7 +23,7 @@ GAME_SPEC §12.2, §12.3, §18 (O12 to O15), §19.
 | 33.4 | Beams kept; shape and colour keys; corners shared; O12 | Done, in the reference and on the GPU: corners shared; a pixel's record in a pool by rectangle; shape tags apart from content tags, a record kept through a change of what lies in a vessel that its rays pass by |
 | 33.5 | The pass's shape; the budget over frames | Done in part: a pixel stepped once a frame however many rectangles hold it; the chain's pass not run; pixels beyond a body's outline not its own; the rays' own budget, batches by tile. Not done: `path_of` once a pixel, beams traced counted in the budget |
 | 33.6 | The reserve, where a gate failed | Used: corrections wait a frame where a pixel's rays have moved; the fixed estimate reads a footprint as one quad; the wall read as one radiance where it is one (below) |
-| 33.7 | Pictures and O4 under this reading; the documents; the user's test | O4 under this reading: 2 pixels of 41,000 to 80,000 visibly off, at one place (Open); the user's test to come |
+| 33.7 | Pictures and O4 under this reading; the documents; the user's test | The user played it and signed off (2026-11-23). O4 on the GPU: 2 to 8 pixels of 41,000 to 80,000 visibly off, at three places (Open) |
 
 **Where it stands (2026-11-23, the second day's work): 8.3 to 8.4 ms a frame settled, carrying, pouring,
 resting and stirring (the medians; 62, 97 and 58 at Stage 32), against the 8.3 asked.** Single frames
