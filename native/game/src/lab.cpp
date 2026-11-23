@@ -1367,6 +1367,19 @@ struct Lab::Impl {
 		}
 		const double condensed = fill.condensed * 1e6, solid = solid_m3(x.cell) * 1e6, share = suspended(x);
 		const double sediment = (1.0 - share) * solid, mixture = std::max(condensed - sediment, 0.0);
+		if (!(sediment > 0.0) && !(x.swirl > 0.0)) {
+			// liquid alone, at rest: from the vessel's table at this turn (Stage 33; contents::plain_pour), so that a
+			// step's cost is a lookup and a frame's does not grow with the clock's speed
+			const contents::PlainPour plain = contents::plain_pour(g, p.turn, mixture, 1);
+			p.head_cm = mixture > 0.0 ? plain.head : 0.0;
+			if (plain.head > 0.0 && mixture > 0.0) {
+				const double over = std::max(mixture - plain.lip_holds, 0.0);
+				p.runs_ml_s = std::min(contents::over_brim(plain.brim, p.turn, plain.head), over / chem::STEP_SECONDS);
+				p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6;
+				p.carried = share;
+			}
+			return p;
+		}
 		const contents::Lying l = contents::lying(g, p.turn, mixture, sediment, x.swirl > 0.0 ? vortex(x) : 0.0, 1);
 		p.head_cm = l.liquid ? l.head : 0.0;
 		const double lip_holds = contents::below(g, p.turn, l.lip_level), brim = std::fabs(l.lip_x);

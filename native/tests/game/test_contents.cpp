@@ -215,3 +215,30 @@ TEST_CASE("contents: upside down, the liquid stands over the mouth as the Stage 
 		}
 	}
 }
+
+TEST_CASE("contents: a pour by hand's table says of a vessel of liquid what its lying does: how far it stands over the lip, and what the vessel holds below it (Stage 33)") {
+	double worst = 0.0;
+	int asked = 0;
+	for (const char *kind : { "beaker", "conical_flask", "bottle" }) {
+		const lab::glass::Vessel *g = lab::glass::find(kind, kind == std::string("bottle") ? 500.0 : 250.0);
+		REQUIRE(g != nullptr);
+		const double full = lab::contents::full_tilt(*g, 1);
+		for (int k = 1; k <= 9; ++k) {
+			const double turn = full * k / 10.0;
+			for (const double share : { 0.02, 0.1, 0.3, 0.5, 0.8, 0.97 }) {
+				const double liquid = share * g->capacity();
+				const lab::contents::Lying l = lab::contents::lying(*g, turn, liquid, 0.0, 0.0, 1);
+				const lab::contents::PlainPour p = lab::contents::plain_pour(*g, turn, liquid, 1);
+				CAPTURE(kind);
+				CAPTURE(turn);
+				CAPTURE(share);
+				CHECK(std::fabs(p.head - l.head) < 1e-4); // (a thousandth of a millimetre)
+				CHECK(std::fabs(p.lip_holds - lab::contents::held_at(*g, turn, 1)) < 1e-9 * g->capacity());
+				CHECK(p.brim == doctest::Approx(std::fabs(l.lip_x)));
+				worst = std::max(worst, std::fabs(p.head - l.head));
+				++asked;
+			}
+		}
+	}
+	MESSAGE(asked << " vessels, turns and fills: the table's level within " << worst * 1e4 << " thousandths of a millimetre of lying's");
+}

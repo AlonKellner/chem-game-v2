@@ -369,6 +369,15 @@ of 17.6 (`test_kept.cpp`).
   (2026-11-23), the demo's record made again**: every one of its 69 measured lines is the same, every
   command ends on the same step, and the digests of 7 of its 26 commands differ (12 to 18, while the
   flask is stirred); the pressure session's record is untouched.
+- **What a frame of pouring costs does not grow with the clock's speed** (the user's word).
+  `contents::plain_pour`: for a vessel of liquid alone (nothing at rest in it, no vortex) the level under
+  a volume is read from a table of the volume under 129 levels for the vessel at its turn, a cubic
+  between them that rises as the volume does; the lab's step asks that, not `lying`. Within 0.0007 mm of
+  `lying`'s level over three vessels, nine turns and six fills (`test_contents.cpp`). The CPU's part of a
+  frame through the whole pour by hand (`LAB_RAY_STATS=speed`): 0.6 ms at 1x, 1.4 to 2.6 ms at 600x
+  (52 to 135 ms while liquid ran); the pour's rate at 1x is the same to the hundredth of a mL/s; both
+  records reproduce. A vessel with sediment at rest or a stirred one is still asked in full at every
+  step.
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.

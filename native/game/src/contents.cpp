@@ -434,6 +434,68 @@ double full_tilt(const glass::Vessel &vessel, int side) {
 	return sense * hi;
 }
 
+PlainPour plain_pour(const glass::Vessel &vessel, double turn, double liquid_cm3, int side) {
+	constexpr int N = 128;
+	struct Table {
+		const glass::Vessel *vessel = nullptr;
+		double turn = 0.0;
+		int side = 0;
+		double lo = 0.0, hi = 0.0, lip_level = 0.0, lip_holds = 0.0, brim = 0.0;
+		double under[N + 1] = {}, slope[N + 1] = {}; // the volume under each level, and how fast it rises there (per level between two)
+	};
+	thread_local Table tables[4];
+	thread_local int next = 0;
+	const Table *t = nullptr;
+	for (const Table &k : tables) {
+		if (k.vessel == &vessel && k.turn == turn && k.side == side) {
+			t = &k;
+		}
+	}
+	if (t == nullptr) {
+		Table &k = tables[next];
+		next = (next + 1) % 4;
+		k.vessel = &vessel;
+		k.turn = turn;
+		k.side = side;
+		const Frame f = frame(turn);
+		reach(vessel, f, k.lo, k.hi);
+		const glass::Point inner = brim_inner(vessel);
+		const double lip_x = (side < 0 ? -1.0 : 1.0) * inner.r;
+		k.lip_level = f.level(lip_x, inner.y);
+		k.lip_holds = below(vessel, turn, k.lip_level);
+		k.brim = std::fabs(lip_x);
+		for (int i = 0; i <= N; ++i) {
+			k.under[i] = below(vessel, turn, k.lo + (k.hi - k.lo) * i / N);
+		}
+		// slopes that keep the cubic rising (Fritsch and Carlson): the harmonic mean of the rises on either side
+		for (int i = 0; i <= N; ++i) {
+			const double before = i > 0 ? k.under[i] - k.under[i - 1] : k.under[1] - k.under[0], after = i < N ? k.under[i + 1] - k.under[i] : before;
+			k.slope[i] = before > 0.0 && after > 0.0 ? 2.0 * before * after / (before + after) : 0.0;
+		}
+		t = &k;
+	}
+	double level = t->lo;
+	if (liquid_cm3 >= t->under[N]) {
+		level = t->hi;
+	} else if (liquid_cm3 > 0.0) {
+		int a = 0, b = N;
+		while (b - a > 1) {
+			const int mid = (a + b) / 2;
+			(t->under[mid] <= liquid_cm3 ? a : b) = mid;
+		}
+		// where between the two levels the cubic through them holds the volume (it rises: halved)
+		const double v0 = t->under[a], v1 = t->under[a + 1], s0 = t->slope[a], s1 = t->slope[a + 1];
+		double lo = 0.0, hi = 1.0;
+		for (int i = 0; i < 48; ++i) {
+			const double u = 0.5 * (lo + hi), u2 = u * u, u3 = u2 * u;
+			const double v = (2.0 * u3 - 3.0 * u2 + 1.0) * v0 + (u3 - 2.0 * u2 + u) * s0 + (-2.0 * u3 + 3.0 * u2) * v1 + (u3 - u2) * s1;
+			(v < liquid_cm3 ? lo : hi) = u;
+		}
+		level = t->lo + (t->hi - t->lo) * (a + 0.5 * (lo + hi)) / N;
+	}
+	return PlainPour{ level - t->lip_level, t->lip_holds, t->brim };
+}
+
 double over_brim(double brim, double turn, double head) {
 	if (!(head > 0.0) || !(brim > 0.0)) {
 		return 0.0;

@@ -100,6 +100,18 @@ inline constexpr double WEIR_CD = 0.6110154703516573;
 inline constexpr double GRAVITY = 980.665; // cm/s^2, standard
 double over_brim(double brim, double turn, double head);
 
+// What a pour by hand asks of a vessel that holds liquid alone, nothing at rest in it and no vortex (Stage 33):
+// how far its liquid stands over its lip (cm; under it: less than nothing), what it holds below the lip (cm3),
+// and how far the lip is from its axis. The level is read from a table: the volume under 129 levels for the
+// vessel at the turn (kept for the last four asked), a cubic between them that rises as the volume does. The lab
+// asks at every step of its clock, as many as 1,200 in a frame; from the table a step costs a search of seven
+// numbers, so what a frame of pouring costs does not grow with the clock's speed. Within a thousandth of a
+// millimetre of what lying() finds.
+struct PlainPour {
+	double head = 0.0, lip_holds = 0.0, brim = 0.0;
+};
+PlainPour plain_pour(const glass::Vessel &vessel, double turn, double liquid_cm3, int side);
+
 // ---- a liquid turning in its vessel (GAME_SPEC §11, Stage 32)
 
 // A stirred liquid turns, and its surface dips. For any swirl that turns in columns, its kinetic energy is the
