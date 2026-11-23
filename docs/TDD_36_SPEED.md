@@ -21,7 +21,7 @@ GAME_SPEC §13.1, §19.
 | 36.2 | The budget: `Ui::set_budget`, `set_clock`, `achieved`; `cg_ui_set_budget`; the Godot host's 3 ms; the speed kept shown | Done |
 | 36.3 | Cheaper steps | Done (what is below) |
 | 36.4 | The GPU's step frames | The spread tried and taken out; the scene sent by its changed pages |
-| 36.5 | GAME_SPEC §13.1, §19; `make gates`; the user's sign-off | |
+| 36.5 | GAME_SPEC §13.1, §19; `make gates`; the user's sign-off | `make gates` passed; awaiting the user |
 
 ## What is in the tree
 
