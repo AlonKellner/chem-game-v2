@@ -695,7 +695,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		return !made && floor_px > 0.0 && row >= foot - floor_px ? 2 : row >= vec_of(body, 1).z ? 0 : 1;
 	};
 	Line line{ x, y, -1.0e5, 0.0, 0.0, 1.0 };
-	bool lands = true;
+	bool lands = true, cut_off = false;
 	for (int last = count - 1; last >= 0 && lands;) {
 		const double layer = vec_of(last, 5).y, z = -layer * gap;
 		int first = last;
@@ -738,6 +738,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 						// an order that does not leave the grating
 						out.met.push_back(Met{ k, cross, cross_y, false, 0.0, 0.0, 0u, 0 });
 						lands = false;
+						cut_off = true;
 						out.x = 100000.0;
 						out.y = line.y;
 						break;
@@ -752,7 +753,17 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		}
 		last = first - 1;
 	}
-	if (lands) {
+	if (const double side = shader::scene_vec(3).z; side > 0.0 && !cut_off) {
+		// in a room (Stage 33): to whichever face it comes to, as the pass's own ray does
+		const shader::vec3 comes = shader::room_exit(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side, shader::scene_vec(3).w);
+		if (comes.x < 0.5) {
+			out.x = comes.y;
+			out.y = comes.z;
+		} else {
+			out.x = comes.x > 1.5 ? -100000.0 : 100000.0;
+			out.y = line.y;
+		}
+	} else if (lands) {
 		out.x = line.x + (wall - line.z) * line.ux / line.uz;
 		out.y = line.y + (wall - line.z) * line.uy / line.uz;
 	}
@@ -762,6 +773,16 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 // the wall at a point, from what is drawn on it (not from the renderer's table): the bench or the room,
 // then each shape in painting order
 double drawn_at(double x, double y) {
+	// (as the wall's table has it: far off to either side, where a ray that never reaches the wall is put; and
+	// beyond the screen's edges, the wall's plane as the room says. Stage 33: the truth read the darkness beside
+	// the bench at both, where the pass read the room.)
+	const OpticsScene &scene = *shader::current;
+	if (std::fabs(x) >= 5.0e4) {
+		return x < 0.0 ? scene.far_left : scene.far_right;
+	}
+	if (scene.wall_beyond >= 0.0 && (x < 0.0 || x >= optics_layout::WALL_COLUMNS || y < 0.0 || y >= optics_layout::WALL_ROWS)) {
+		return scene.wall_beyond;
+	}
 	const shader::vec4 head = shader::scene_vec(0), bench = shader::scene_vec(1);
 	double seen = x >= bench.x && x < bench.x + bench.z && y >= bench.y && y < bench.y + bench.w ? head.y : head.z;
 	const std::vector<float> &d = shader::current->drawn;
@@ -788,6 +809,12 @@ double drawn_over(double x0, double x1, double y0, double y1) {
 	cut(xs, x0, x1, bench.x + bench.z);
 	cut(ys, y0, y1, bench.y);
 	cut(ys, y0, y1, bench.y + bench.w);
+	for (const double edge : { 0.0, static_cast<double>(optics_layout::WALL_COLUMNS) }) {
+		cut(xs, x0, x1, edge); // (the screen's own edges: beyond them is the room's plane)
+	}
+	for (const double edge : { 0.0, static_cast<double>(optics_layout::WALL_ROWS) }) {
+		cut(ys, y0, y1, edge);
+	}
 	const std::vector<float> &d = shader::current->drawn;
 	for (size_t k = 0; k + 4 < d.size(); k += 5) {
 		if (d[k] < x1 && d[k] + d[k + 2] > x0 && d[k + 1] < y1 && d[k + 1] + d[k + 3] > y0) {

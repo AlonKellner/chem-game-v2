@@ -26,7 +26,7 @@ inline constexpr int MAX_BODIES = 256;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
 // bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
-// nearest layer any body is on, unused, unused
+// nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33)
 inline constexpr int HEADER_VECS = 4;
 inline constexpr int BODY_VECS = 8;
 // The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
@@ -114,6 +114,9 @@ struct OpticsScene {
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
 	std::vector<float> drawn;
+	// what the wall's table has far off to the left and to the right (where rays that reach a face's black cells,
+	// and its others, are put), and beyond the screen's edges (below 0: as it is at the edge): for the truth's own reading
+	double far_left = 0.0, far_right = 0.0, wall_beyond = -1.0;
 	// Where pixels may need more than one vessel's reading (GAME_SPEC §12.3, Stage 21): the rectangle of
 	// each body that bends and is on a layer nearer than the bench's, or has a map of several pieces, or
 	// stands across another of its own layer that bends: 4 floats a rectangle (left, top, right, bottom,
@@ -211,6 +214,12 @@ struct OpticsRoom {
 	// The wall beyond the screen, on every side: an endless plane of this radiance (Stage 33). A ray bent past the
 	// screen's edge lands on it. Below 0 (a scene made by hand): the wall as it is at the screen's edge, as before.
 	double beyond = -1.0;
+	// The room (Stage 33): a cube `cube` pixels on a side about the screen's middle, its back face the wall. A
+	// ray that leaves the last body it meets goes on to a face of it. Each face is ruled in cells `cube_cell`
+	// wide, and the cells along the cube's twelve edges are of the radiance `edge` (black): a ray bent far, as at
+	// a vessel's rim, comes to them. On the screen the wall is as it is drawn; elsewhere on a face it is
+	// `beyond`. 0: no room (the wall's plane without end, and `front` for a ray that never reaches it).
+	double cube = 0.0, cube_cell = 0.0, edge = 0.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
 

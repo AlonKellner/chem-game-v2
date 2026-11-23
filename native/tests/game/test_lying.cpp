@@ -226,7 +226,6 @@ TEST_CASE("lying: what a turned vessel shows is what the truth's rays bring: in 
 		for (int d = -36; d <= 36; d += 4 * sparse()) {
 			places.push_back({ static_cast<int>(mx) + d, static_cast<int>(my) });
 		}
-		int rim_let_by = 0;
 		for (const auto &[px, py] : places) {
 			if (lab::optics_cover(scene, px, py) <= 0.0) {
 				continue;
@@ -253,14 +252,7 @@ TEST_CASE("lying: what a turned vessel shows is what the truth's rays bring: in 
 			CAPTURE(k.oxide);
 			CAPTURE(px);
 			CAPTURE(py);
-			// (Open, TDD 33: at a vortex's rim, where a pixel's rays go three ways, the pass settles on a little more
-			// blue and green than its rays bring: 9 on the eye metric at two places of this row, 5 before a ray
-			// turned back showed the room in front. Those two are let by, to 10, and counted.)
-			if (e >= lab::EYE_VISIBLE && e < 10.0 && k.vortex > 0.5 && rim_let_by < 2) {
-				++rim_let_by;
-			} else {
-				CHECK(e < lab::EYE_VISIBLE);
-			}
+			CHECK(e < lab::EYE_VISIBLE);
 			worst = std::max(worst, e);
 			sum += e;
 			++compared;

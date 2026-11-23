@@ -2641,6 +2641,32 @@ uint route_mix(uint h, uint v) {
 	return (h ^ v) * 16777619u;
 }
 
+// The room (Stage 33): a cube about the screen's middle, `side` pixels on a side, its back face the wall. Where a
+// ray from p along u comes to it: 0, the wall, off the cells along its edges (y and z: where, on the screen's
+// own pixels); 1, another cell of another face; 2, a cell along one of the cube's twelve edges, which is black.
+vec3 room_exit(vec3 p, vec3 u, float wall, float side, float cell) {
+	float half_side = 0.5 * side;
+	vec3 lo = vec3(960.0 - half_side, 540.0 - half_side, wall - side);
+	vec3 hi = vec3(960.0 + half_side, 540.0 + half_side, wall);
+	float tx = abs(u.x) > 1.0e-9 ? ((u.x > 0.0 ? hi.x : lo.x) - p.x) / u.x : 1.0e30;
+	float ty = abs(u.y) > 1.0e-9 ? ((u.y > 0.0 ? hi.y : lo.y) - p.y) / u.y : 1.0e30;
+	float tz = abs(u.z) > 1.0e-9 ? ((u.z > 0.0 ? hi.z : lo.z) - p.z) / u.z : 1.0e30;
+	float t = max(min(tx, min(ty, tz)), 0.0);
+	vec3 h = vec3(p.x + t * u.x, p.y + t * u.y, p.z + t * u.z);
+	float ex = min(h.x - lo.x, hi.x - h.x);
+	float ey = min(h.y - lo.y, hi.y - h.y);
+	float ez = min(h.z - lo.z, hi.z - h.z);
+	bool by_z = tz <= tx && tz <= ty;
+	float from_edge = by_z ? min(ex, ey) : (tx <= ty ? min(ey, ez) : min(ex, ez));
+	if (from_edge < cell) {
+		return vec3(2.0, 0.0, 0.0);
+	}
+	if (by_z && u.z > 0.0) {
+		return vec3(0.0, h.x, h.y);
+	}
+	return vec3(1.0, 0.0, 0.0);
+}
+
 RayMet ray_met(vec2 p, float nm) {
 #ifdef OPTICS_RAY_HOOK
 	OPTICS_RAY_HOOK();
@@ -2665,6 +2691,7 @@ RayMet ray_met(vec2 p, float nm) {
 	vec3 lu = vec3(0.0, 0.0, 1.0);
 	uint h = 2166136261u;
 	bool lands = true;
+	bool cut_off = false; // an order that does not leave a grating: it goes nowhere
 	int last = count - 1;
 	r.x = p.x;
 	r.y = p.y;
@@ -2754,6 +2781,7 @@ RayMet ray_met(vec2 p, float nm) {
 			}
 			if (ended) {
 				lands = false;
+				cut_off = true;
 				r.x = 100000.0;
 				r.y = lp.y;
 				break;
@@ -2777,7 +2805,19 @@ RayMet ray_met(vec2 p, float nm) {
 		}
 		last = first - 1;
 	}
-	if (lands) {
+	float side = scene_vec(3).z;
+	if (side > 0.0 && !cut_off) {
+		// in a room: to whichever face it comes to; the wall where it reaches it, else far off to one side
+		vec3 comes = room_exit(lp, lu, wall, side, scene_vec(3).w);
+		if (comes.x < 0.5) {
+			r.x = comes.y;
+			r.y = comes.z;
+		} else {
+			r.x = comes.x > 1.5 ? -100000.0 : 100000.0;
+			r.y = lp.y;
+			h = route_mix(h, uint(comes.x) + 40u);
+		}
+	} else if (lands) {
 		r.x = lp.x + (wall - lp.z) * lu.x / lu.z;
 		r.y = lp.y + (wall - lp.z) * lu.y / lu.z;
 	}

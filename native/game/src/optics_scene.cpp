@@ -329,6 +329,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(1, 3, room.h);
 	put(2, 0, room.wall_px);
 	put(3, 0, room.gap_px);
+	put(3, 2, room.cube);
+	put(3, 3, room.cube_cell);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -1179,6 +1181,9 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 			paint(sh.x, sh.y, sh.w, sh.h, sh.radiance);
 		}
 	}
+	// (in a room: far to the left is where a ray that comes to a black cell of a face is put, far to the right
+	// one that comes to any other cell off the wall; with no room, both are the room in front)
+	const double far_left = room.cube > 0.0 ? room.edge : room.front, far_right = room.cube > 0.0 && room.beyond >= 0.0 ? room.beyond : room.front;
 	// A ray that leaves a body sideways or back toward the eye never reaches the wall: it is put far off to the
 	// side it goes (100,000 pixels), and what it shows is the room in front of the bench, which is what glass
 	// reflects (Stage 33). It read the wall's table there, which is the darkness beside the bench: grey patches
@@ -1193,9 +1198,12 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 				grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)] = static_cast<float>(room.beyond);
 			}
 		}
-		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1)] = static_cast<float>(room.front);
-		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(m)] = static_cast<float>(room.front);
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1)] = static_cast<float>(far_left);
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(m)] = static_cast<float>(far_right);
 	}
+	scene.far_left = far_left;
+	scene.far_right = far_right;
+	scene.wall_beyond = room.beyond;
 	// each row of pixels: the cells down that it crosses, each by its share of the row's height
 	std::vector<std::vector<float>> profiles;
 	std::map<std::vector<float>, int> known;
@@ -1216,7 +1224,8 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 		if (room.beyond >= 0.0 && (y == -1 || y == WALL_ROWS)) {
 			// the row over the screen and the row under it, which every row beyond them is read as: the endless plane
 			std::fill(blend.begin(), blend.end(), static_cast<float>(room.beyond));
-			blend[0] = blend[static_cast<size_t>(m)] = static_cast<float>(room.front);
+			blend[0] = static_cast<float>(far_left);
+			blend[static_cast<size_t>(m)] = static_cast<float>(far_right);
 		}
 		const auto found = known.emplace(blend, static_cast<int>(profiles.size()));
 		if (found.second) {

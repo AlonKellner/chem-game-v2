@@ -378,6 +378,19 @@ of 17.6 (`test_kept.cpp`).
   (52 to 135 ms while liquid ran); the pour's rate at 1x is the same to the hundredth of a mL/s; both
   records reproduce. A vessel with sediment at rest or a stirred one is still asked in full at every
   step.
+- **The room is a cube** (the user's word: endless white planes left a vessel all but unseen).
+  `OpticsRoom::cube`, `cube_cell`, `edge`; the scene's header, vec 3; `room_exit` in the per-pixel source,
+  which the truth's own following of a ray calls too. A cube 3,840 pixels on a side about the screen's
+  middle, its back face the wall; a ray that leaves the last body it meets goes on to a face. Each face
+  is ruled in sixteen cells across; a ray that comes to a cell along one of the cube's twelve edges
+  brings black, one that reaches the wall elsewhere lands on it as before (on the screen the wall as it
+  is drawn, beyond it the plane's white), and one that comes to another face brings that white. What
+  glass reflects is the faces' mean (0.55). The ruling's lines are not drawn off the screen.
+- **The truth reads the room the pass reads** (`drawn_at`, `drawn_over`): it read the wall from what is
+  drawn, and so the darkness beside the bench far off to the side and beyond the screen's edges, where
+  the pass's table had the room in front and the plane's white. That was the blue and green found at a
+  vortex's rim (a ray turned back brought 0.3 in the pass and 0.02 in the truth), and the test's
+  allowance for two pixels there is gone: the row holds, every pixel.
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.
@@ -403,15 +416,10 @@ known: that tree was never run through this check.
   metric. It is the single precision's: the reference, in double, settles there to within 1 of the
   truth (`test_cost.cpp`, `LAB_RAY_STATS=heel`; 3 to 4 on the row above). The heel is a fillet: the
   quartic's roots in single precision are the place to look.
-- **O4 on the GPU with the planes white**: 2 to 10 pixels visibly off in a picture (2 before), the
-  worst 14 to 17, at three places: the demo flask's heel (401, 684), and now (541, 530) and (135, 711),
-  where part of a pixel's rays land beyond the screen's edge, which is white where it was dark. The same
-  kind of pixel as the heel's; not looked into.
-- **At a vortex's rim the pass settles on more blue and green than its rays bring**: two pixels of
-  `test_lying.cpp`'s row, where a pixel's rays go three ways (to the wall near by, back to the room, far
-  off the screen): 9 on the eye metric against the truth, 5 before a ray turned back showed the room in
-  front. The pass's rays there are the truth's, ray for ray, and the pixel is settled, not grain. Its
-  cause is not found; the test lets those two by, to 10, and counts them.
+- **O4 on the GPU, in the cube room**: 2 to 8 pixels visibly off in a picture, at the same three
+  places: the demo flask's heel (401, 684), 14; (135, 711), 21; (541, 530), 31. In double the reference
+  settles on the truth at the heel, so there it is the single precision's; the other two are not looked
+  into. The room's black cells raise what a ray gone astray costs.
 - **Half a pixel of spread in single precision** between a ray and its neighbours in wavelength, through
   two vessels, in a few alignments (above): the cause is not found. The pass is spared its cost by a
   tolerance (`BEAM_BETWEEN 0.5`), which also means a prism's stretches are halved on the GPU only where

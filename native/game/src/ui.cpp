@@ -3791,7 +3791,16 @@ struct Ui::Impl {
 			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
 			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0);
 			const double share = 2.0 / sq - 1.0 / (sq * sq);
-			room.front = room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+			room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+			// The room is a cube twice the screen's width on a side, each face ruled in sixteen cells across, the
+			// cells along its twelve edges black (the user's word: endless white planes left a vessel all but
+			// unseen; rays bent far, as at a rim, come to the black cells). What glass reflects is the room as a
+			// whole: its faces' mean.
+			room.cube = 3840.0;
+			room.cube_cell = room.cube / 16.0;
+			room.edge = 0.0;
+			const double black = 1.0 - (14.0 / 16.0) * (14.0 / 16.0);
+			room.front = (1.0 - black) * room.beyond + black * room.edge;
 		}
 		paint();
 		const auto radiance = [](uint32_t c) {
