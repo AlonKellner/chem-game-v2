@@ -18,16 +18,6 @@ using lab::PrismDemo;
 
 namespace {
 
-// a pixel's own rays as an average over time, while these tests run (the maps know no grating)
-struct Reading {
-	int before;
-	Reading() :
-			before(lab::optics_reading(5)) {}
-	~Reading() { lab::optics_reading(before); }
-	Reading(const Reading &) = delete;
-	Reading &operator=(const Reading &) = delete;
-};
-
 constexpr double PI = 3.14159265358979323846;
 constexpr double SLIT_MIDDLE = PrismDemo::SLIT_X + PrismDemo::SLIT_W / 2.0;
 constexpr int ROW_Y = 540;
@@ -102,7 +92,6 @@ TEST_CASE("grating: a ray goes on in each order where the grating equation sends
 }
 
 TEST_CASE("grating: each order of the slit carries its share of the slit's light, at any wavelength: a quarter straight on, 1 / pi^2 in each first order (Stage 29)") {
-	const Reading reading;
 	const OpticsScene scene = held_before_the_slit();
 	const double slit_light = PrismDemo::SLIT_W * (PrismDemo::SLIT - PrismDemo::DARK);
 	for (const double nm : { 450.0, 600.0 }) {
@@ -123,7 +112,6 @@ TEST_CASE("grating: each order of the slit carries its share of the slit's light
 }
 
 TEST_CASE("grating: held before the slit it shows the slit, dimmed, and to each side its spectrum, violet nearest and red furthest (Stage 29)") {
-	const Reading reading;
 	const OpticsScene scene = held_before_the_slit();
 	const auto colour_at = [&](double x, double rgb[3]) { lab::optics_truth(scene, static_cast<int>(std::floor(x)), ROW_Y, rgb); };
 	double white[3], blue_left[3], red_left[3], blue_right[3], red_right[3], dark[3];
@@ -161,13 +149,11 @@ TEST_CASE("grating: held before the slit it shows the slit, dimmed, and to each 
 }
 
 TEST_CASE("grating: O7 holds through it: in a room as bright in front as behind, a ruled plate changes nothing (Stage 29)") {
-	const Reading reading;
 	const OpticsScene scene = held_before_the_slit();
 	CHECK(lab::check_O7(scene, static_cast<int>(SLIT_MIDDLE) - 136, ROW_Y - 3, static_cast<int>(SLIT_MIDDLE) + 136, ROW_Y + 3, 0.6) == "");
 }
 
 TEST_CASE("grating: frame by frame the picture comes to the truth: after four seconds no pixel of the orders is visibly wrong (Stage 29)") {
-	const Reading reading;
 	const OpticsScene scene = held_before_the_slit();
 	const int x0 = static_cast<int>(SLIT_MIDDLE) - 80, w = 160, y0 = ROW_Y - 2, h = 4;
 	lab::OpticsFrames frames(x0, y0, w, h);

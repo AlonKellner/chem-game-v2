@@ -38,16 +38,17 @@ inline constexpr int GRID_SQUARE = 40, GRID_COLS = 48, GRID_ROWS = 27, GRID_SLOT
 inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
-// the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts. MAP: where its
-// refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
-// (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
+// the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts.
+// Its vec4 6 is unused (it held where a body's refraction map lay, until Stage 35; the bodies are laid out as
+// they were).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
-// SET: the set of spectra it is made of (a row set of `rows`), whether a body of a layer behind it stands in
-// its rows (1 or 0), a signature of those (where they stand, what they are), unused.
+// SET: the set of spectra it is made of (a row set of `rows`), unused, a signature of the bodies of a layer
+// behind it that stand in its rows (where they stand, what they are and hold; 0: none), whether it is set
+// upside down.
 // FORM x is its shape: 0 a cylinder (a vessel), 1 a ball (a balloon), 2 a prism; 3 a slab, 4 a bar, 5 a cone
 // (Stage 22: FORM z its size, a slab's corners' radius or a bar's width; MORE a bar's two ends)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6, SET = 7;
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, SET = 7;
 // each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
@@ -96,20 +97,9 @@ struct OpticsScene {
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	uint64_t revision = 0; // changes when any of them does
-	// The refraction maps and the wall's table (GAME_SPEC §12.3): large, and seldom changed, so each has
-	// its own revision. A map is traced again only when its body's shape, glass or indices change.
-	std::vector<float> maps; // vec4s: each refracting body's map (lab/optics_trace.hpp: map_block)
+	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
-	uint64_t maps_revision = 0, wall_revision = 0;
-	// Maps lie where they were first put, and new ones after them: what changed at the last revision is from
-	// maps_changed_from on (vec4s; 0 when they were laid out again), so a host sends the GPU only that
-	int64_t maps_changed_from = 0;
-	std::vector<uint64_t> map_keys; // what each body's map was traced for
-	struct MapRegion {
-		uint64_t key; // what it was traced for
-		int64_t at, size; // vec4s
-	};
-	std::vector<MapRegion> map_regions; // each map in `maps`, looked through or kept a while
+	uint64_t wall_revision = 0;
 	uint64_t wall_key = 0; // what the wall's table was made from
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
@@ -117,22 +107,12 @@ struct OpticsScene {
 	// what the wall's table has far off to the left and to the right (where rays that reach a face's black cells,
 	// and its others, are put), and beyond the screen's edges (below 0: as it is at the edge): for the truth's own reading
 	double far_left = 0.0, far_right = 0.0, wall_beyond = -1.0;
-	// Where pixels may need more than one vessel's reading (GAME_SPEC §12.3, Stage 21): the rectangle of
-	// each body that bends and is on a layer nearer than the bench's, or has a map of several pieces, or
-	// stands across another of its own layer that bends: 4 floats a rectangle (left, top, right, bottom,
-	// whole pixels). A host whose pass over the screen leaves those pixels alone runs its second pass over
-	// these.
-	std::vector<float> chain;
-	std::vector<int> chain_bodies; // which body each rectangle is
-	// The stacks (GAME_SPEC §12.3, Stage 21): for each of those bodies whose map is of one piece, the rays
-	// that come in across it, followed through every body behind it (the chain) at the spectrum's four nodes,
-	// in each band of rows in which every body is one thing: vec4s, as native/game/shader/optics_pixel.glsl
-	// lays them out. Followed again only when a body of the stack moves or changes shape or index.
-	std::vector<float> stacks;
-	uint64_t stacks_revision = 0;
-	std::vector<uint64_t> stack_keys; // what each body's stack was followed for
-	std::vector<std::vector<float>> stack_blocks;
-	int64_t stack_rays = 0; // followed in the last compose that followed any
+	// Where pixels are read by their own rays (GAME_SPEC §12.3, Stage 29): the rectangle of each body that bends,
+	// and of each grating: 4 floats a rectangle (left, top, right, bottom, whole pixels). A host runs its passes
+	// over the corners and the pixels of these, after its pass over the whole screen, and lays its pool of kept
+	// beams out by them, one rectangle after another (Stage 33).
+	std::vector<float> rectangles;
+	std::vector<int> rectangle_bodies; // which body each rectangle is
 	// each body's glassware, if it is made as one (GAME_SPEC §12.3, Stage 24): its whole shape, which the truth
 	// traces (null: a cylinder, a prism, a ball, a thing of the lab)
 	std::vector<const glass::Vessel *> vessels;
@@ -226,23 +206,13 @@ struct OpticsRoom {
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
 inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
 
-// The maps' store (GAME_SPEC §12.3, Stage 24): a directory where maps made before the game runs are kept, each
-// under a key of everything it was traced for and of the builder's version; none until one is named. A map not
-// found there is made, and written there if it can be.
-void optics_store(const std::string &directory);
-bool optics_store_read(uint64_t key, std::vector<float> &block);
-void optics_store_write(uint64_t key, const std::vector<float> &block);
-
 // Fills the scene from the state (bodies in painting order, a nearer layer's over a further one's; those
 // past MAX_BODIES are left out). The revision moves only if the scene did.
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies);
-// The maps again, from the scene's own table and spectra: for a scene whose indices were changed after it
-// was composed (a map is traced for its body's indices).
-void optics_maps(OpticsScene &scene);
 // The wall's table and what is drawn on it, from the room (optics_compose calls it; O7 makes a wall of
 // its own with it).
 void optics_wall(OpticsScene &scene, const OpticsRoom &room);
-// The shapes, from the scene's own table (optics_compose and optics_maps call it).
+// The shapes, from the scene's own table (optics_compose calls it).
 void optics_shapes(OpticsScene &scene);
 
 // ---- the reference: the per-pixel source compiled as C++, in float64
@@ -311,13 +281,6 @@ int optics_body(const OpticsScene &scene, const std::string &id);
 OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm);
 // the same in one of the ways a ray goes on from a grating (0: straight on; 1, 2: its orders +1 and -1; 3, 4: +3 and -3)
 OpticsRay optics_ray_way(const OpticsScene &scene, double x, double y, double nm, int way);
-// Which reading the reference uses where a pixel looks through something that bends its view (while Stage 29 is
-// built): 0, the maps; 5, a pixel's own rays as an average over time. From LAB_BEAM at first (Stage 35: 5 where
-// it is not set); the reading before.
-int optics_reading(int mode);
-// whether a pixel's rays are traced in the pass now (the readings 4 and 5): the scene then keeps no stacks, and
-// every body that bends is read by the pass over the rectangles it names
-bool optics_traced();
 OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double nm);
 using OpticsRayOf = OpticsRay (*)(const OpticsScene &scene, double x, double y, double nm);
 // O9 (GAME_SPEC §18, Stage 29): the pass's rays are the truth's. At the middle and the corner of every `step`th

@@ -40,9 +40,9 @@ SKIP_GODOT=1 make gate          # every engine-free gate
 make gates                      # before a merge or a stage close: uncached, plus ASan+UBSan
 make native                     # the Godot extension, data copy, import
 ./run_tests_parallel.sh         # the Godot host's GUT suite
-make run                        # the game (the Godot host), with a pixel's rays traced in the pass (LAB_BEAM=5); make run LAB_BEAM=0: the maps' reading
+make run                        # the game (the Godot host)
 make screenshots                # pictures of the host through the demo -> build/screenshots (one with a vessel held over another), the GPU's settled optical pass against the truth on the eye metric (O4) and its cost (headless first, then a window for a few seconds, time-limited)
-make pass-cost                  # the optical pass's cost on the GPU (Stage 33): a play (data/plays/cost.json: settled, a vessel carried, poured by hand, stirred) timed mark by mark, then every history starting again; headless first, then a window, time-limited; LAB_BEAM=0: the maps' reading
+make pass-cost                  # the optical pass's cost on the GPU (Stage 33): a play (data/plays/cost.json: settled, a vessel carried, poured by hand, stirred) timed mark by mark, then every history starting again; headless first, then a window, time-limited
 make demo                       # the 3-stage demo, headless: the commands and what was measured
 make demo-bench                 # its step cost
 make sessions-check             # the sessions against their golden records (make sessions re-records: a behaviour change)

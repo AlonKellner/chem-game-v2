@@ -1039,14 +1039,6 @@ OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm) {
 	return optics_ray_way(scene, x, y, nm, 0);
 }
 
-int optics_reading(int) {
-	return 5;
-}
-
-bool optics_traced() {
-	return true;
-}
-
 OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double nm) {
 	OpticsRay out;
 	if (!shader::ready(scene)) {
@@ -1096,11 +1088,6 @@ std::string check_O9(const OpticsScene &scene, int x0, int y0, int x1, int y1, i
 		return "O9: the scene is not ready";
 	}
 	const OpticsRayOf read = ray != nullptr ? ray : optics_ray;
-	// (the truth as the reading by a pixel's own rays has it: what lies in a vessel traced)
-	struct Reading {
-		int before = optics_reading(5);
-		~Reading() { optics_reading(before); }
-	} reading;
 	// a millionth of a pixel of the screen (on the wall, that times how fast the landing moves there), and a
 	// hundred-millionth of how far the ray is sent (a ray thrown across the screen by a rim); a hundred-millionth
 	// of what passes, and of a centimetre of liquid. The two tracers are one method written twice, on the same

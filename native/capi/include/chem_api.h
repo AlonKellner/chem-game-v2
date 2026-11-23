@@ -155,14 +155,6 @@ CG_API void cg_ui_frame(cg_ui *ui, double seconds);
 CG_API cg_status cg_ui_play(cg_ui *ui, const char *play_json);
 CG_API const char *cg_ui_playing(cg_ui *ui);
 
-/* The refraction maps' store (GAME_SPEC §12.3, Stage 24): a directory where the
- * maps of the vessels made as glassware are kept, made before the game runs;
- * NULL or "": none. A map not found there is made, and written there if it can
- * be. cg_ui_prepare makes every vessel's maps of the bench now (each layer it can
- * be on) and so keeps them: how many tables, or -1. */
-CG_API void cg_optics_store(const char *directory);
-CG_API int32_t cg_ui_prepare(cg_ui *ui);
-
 enum {
 	CG_DRAW_RECT = 0, /* x, y, w, h: filled */
 	CG_DRAW_OUTLINE = 1, /* x, y, w, h; width */
@@ -201,9 +193,8 @@ CG_API cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out);
  * every frame, each pixel keeping its own history; these are its inputs, laid
  * out as lab/optics_scene.hpp says: the header and the bodies (vec_count
  * vec4s), each body's spectra at 1 nm (row_count floats), narrow lines
- * (line_count vec4s), the room light's energy table (light_count vec4s), each
- * refracting body's map (map_count vec4s) and the wall as a table (wall_count
- * vec4s). */
+ * (line_count vec4s), the room light's energy table (light_count vec4s) and
+ * the wall as a table (wall_count vec4s). */
 typedef struct cg_optics {
 	uint32_t size; /* sizeof(cg_optics), set by the caller */
 	int32_t vec_count; /* the scene is 4 * vec_count floats */
@@ -215,30 +206,17 @@ typedef struct cg_optics {
 	const float *lines; /* 4 * line_count floats */
 	int32_t light_count;
 	const float *lights; /* 4 * light_count floats */
-	/* The refraction maps and the wall's table (GAME_SPEC §12.3): large and seldom
-	 * changed, each with a revision of its own. */
-	int32_t map_count;
-	const float *maps; /* 4 * map_count floats */
-	uint64_t maps_revision;
+	/* The wall's table (GAME_SPEC §12.3): large and seldom changed, with a
+	 * revision of its own. */
 	int32_t wall_count;
 	const float *wall; /* 4 * wall_count floats */
 	uint64_t wall_revision;
-	/* Where a pixel may need more than one vessel's reading (GAME_SPEC §12.3, Stage
-	 * 21: what is held, a prism): chain_count rectangles of whole pixels (left,
-	 * top, right, bottom). A host whose pass over the screen is compiled without
-	 * those readings runs its second pass over these. They change with `revision`. */
-	int32_t chain_count;
-	const float *chain; /* 4 * chain_count floats */
-	/* The stacks: the rays of what is held, followed through what stands behind it
-	 * (stack_count vec4s, at least 16: where each body's begins), with a revision
-	 * of their own. */
-	int32_t stack_count;
-	const float *stacks; /* 4 * stack_count floats */
-	uint64_t stacks_revision;
-	/* The maps lie where they were first put: what changed at maps_revision is
-	 * from this vec4 on (0 when they were laid out again). A host one revision
-	 * behind need send only that. */
-	int64_t maps_changed_from;
+	/* Where pixels are read by their own rays (GAME_SPEC §12.3, Stage 29: through
+	 * anything that bends): rectangle_count rectangles of whole pixels (left, top,
+	 * right, bottom). A host runs its passes over the corners and the pixels of
+	 * these, after its pass over the whole screen. They change with `revision`. */
+	int32_t rectangle_count;
+	const float *rectangles; /* 4 * rectangle_count floats */
 	/* The shapes (GAME_SPEC §12.3, Stage 29): each bending body's surfaces, for a
 	 * host whose pass traces its rays live (shape_count vec4s), with a revision of
 	 * their own. */
@@ -249,7 +227,7 @@ typedef struct cg_optics {
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames
  * (GAME_SPEC §12.3, Stage 33): a record of this many vec4s for each pixel of a
- * rectangle of `chain`, written and read by the per-pixel source alone
+ * rectangle of `rectangles`, written and read by the per-pixel source alone
  * (kept_vec, kept_put), zero at first. */
 #define CG_OPTICS_KEPT_VECS 24
 /* And it gives the pixels read by their own rays a budget of their own: this

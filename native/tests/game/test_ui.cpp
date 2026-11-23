@@ -250,8 +250,8 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	// its rectangle is within one of those the pass over what bends runs on
 	const float *rect = &held.table[static_cast<size_t>(L::HEADER_VECS + jar * L::BODY_VECS + L::RECT) * 4];
 	bool within = false;
-	for (size_t k = 0; k + 3 < held.chain.size(); k += 4) {
-		within = within || (held.chain[k] <= rect[0] && held.chain[k + 1] <= rect[1] && held.chain[k + 2] >= rect[0] + rect[2] && held.chain[k + 3] >= rect[1] + rect[3]);
+	for (size_t k = 0; k + 3 < held.rectangles.size(); k += 4) {
+		within = within || (held.rectangles[k] <= rect[0] && held.rectangles[k + 1] <= rect[1] && held.rectangles[k + 2] >= rect[0] + rect[2] && held.rectangles[k + 3] >= rect[1] + rect[3]);
 	}
 	CHECK(within);
 	// through the jar's glass, low in it, the flask's blue liquid behind: less of the red than beside the flask
@@ -1095,22 +1095,11 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	well_formed(p.ui->draw());
 }
 
-// a pixel's own rays, traced, while a test runs: the reading that knows a vessel's turn (Stage 30)
-struct Traced {
-	int before;
-	Traced() :
-			before(lab::optics_reading(5)) {}
-	~Traced() { lab::optics_reading(before); }
-	Traced(const Traced &) = delete;
-	Traced &operator=(const Traced &) = delete;
-};
-
 int body_of(const lab::OpticsScene &scene, const std::string &id) {
 	return lab::optics_body(scene, id);
 }
 
 TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to where its lip is over the other's mouth and turns about its lip, and pours once its liquid reaches the lip; let go, it turns back and is in the hand again; the right button's menu sets it upside down (Stage 27, Stage 31)") {
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1188,7 +1177,6 @@ TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to
 }
 
 TEST_CASE("ui: a person pours by hand at their own pace: carries the bottle over slowly, holds, lets go as the acid runs, presses again before it is back upright, and lets go for good; the stream is the acid's, from the lip into the flask, while it runs and not after (Stage 31)") {
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1277,7 +1265,6 @@ TEST_CASE("ui: a picture of a pour by hand, by the truth's own rays (written whe
 	if (path == nullptr) {
 		return;
 	}
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1357,7 +1344,6 @@ TEST_CASE("ui: a person seals the flask with the stopper, carried onto its neck,
 }
 
 TEST_CASE("ui: the room is a cube whose edge cells are black: a ray comes to the wall, to a black cell along an edge or to a white one, by where it goes; the wall's table has the room's black and white far off; the pass's rays and the truth's go to the same places (Stage 33)") {
-	const Traced traced;
 	Player p;
 	p.click("pause");
 	p.drag("item:flask", "square:11,12");

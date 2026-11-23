@@ -31,7 +31,7 @@ public:
 	// RenderingDevice (the headless and Compatibility renderers) or it does not compile.
 	bool open(const godot::String &pixel_source, godot::String &why);
 	bool ready() const { return rd_ != nullptr; }
-	// The scene's buffers, when its revision has moved; its maps and its wall's table, when theirs have.
+	// The scene's buffers, when its revision has moved; its wall's table and its shapes, when theirs have.
 	void upload(const cg_optics &optics);
 	// One frame over the screen, `budget` points a pixel at most (on the render thread). `again`: the
 	// same frame run once more, for timing (no new total of asks, the same frame number).
@@ -59,19 +59,19 @@ private:
 	std::vector<int32_t> kept_base_;
 	// each pass's groups of pixels, across and down: pixels of a group wait for the one with most to do
 	int group_[PASSES][2] = { { 2, 32 }, { 2, 32 }, { 2, 32 } };
-	std::vector<float> chain_; // those rectangles: left, top, right, bottom
+	std::vector<float> rectangles_; // where pixels are read by their own rays: left, top, right, bottom
 	// a storage buffer and how many bytes it can hold: made anew, larger, when what it is given outgrows it
 	struct Buffer {
 		godot::RID rid;
 		uint32_t capacity = 0;
 	};
-	void hold(Buffer &buffer, const float *data, int32_t floats, int64_t from = 0); // from: the first float that changed
-	Buffer scene_, rows_, lines_, lights_, maps_, wall_, stacks_, shapes_;
+	void hold(Buffer &buffer, const float *data, int32_t floats);
+	Buffer scene_, rows_, lines_, lights_, wall_, shapes_;
 	godot::RID asked_;
 	godot::RID state_[4];
 	godot::RID shown_;
 	godot::Ref<godot::Texture2DRD> shown_texture_;
-	uint64_t uploaded_ = 0, uploaded_maps_ = 0, uploaded_wall_ = 0, uploaded_stacks_ = 0, uploaded_shapes_ = 0;
+	uint64_t uploaded_ = 0, uploaded_wall_ = 0, uploaded_shapes_ = 0;
 	bool have_scene_ = false;
 	int32_t frame_ = 0;
 	int32_t stamp_ = 0; // counts the runs of the passes (a pixel is stepped once in each)

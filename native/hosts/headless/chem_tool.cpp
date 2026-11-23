@@ -6,10 +6,6 @@
 
 #include <cstdio>
 #include <cstring>
-#include <sstream>
-#include <fstream>
-#include <filesystem>
-#include <chrono>
 
 int run_study(const char *name); // study.cpp
 int run_session(int argc, char **argv, bool bench); // run.cpp
@@ -32,8 +28,7 @@ int usage() {
 						 "  study spectrum        how many spectral bands the renderer needs\n"
 						 "  study tilt            what each vessel holds below its lip as it is turned, and what runs over it\n"
 						 "  study vortex          a turning liquid's vortex against its energy, E = (M g / A) V\n"
-						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n"
-						 "  maps DIR BENCH...     every glassware vessel's refraction maps, made before the game runs, into DIR\n");
+						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n");
 	return 2;
 }
 
@@ -52,31 +47,6 @@ int main(int argc, char **argv) {
 	}
 	if (std::strcmp(argv[1], "study") == 0 && argc >= 3) {
 		return run_study(argv[2]);
-	}
-	if (std::strcmp(argv[1], "maps") == 0 && argc >= 4) {
-		// GAME_SPEC §12.3, Stage 24: the maps' store, filled ahead; a table already there is read, not made again
-		std::error_code made;
-		std::filesystem::create_directories(argv[2], made);
-		cg_optics_store(argv[2]);
-		for (int i = 3; i < argc; ++i) {
-			std::ifstream in(argv[i]);
-			std::stringstream text;
-			text << in.rdbuf();
-			cg_ui *ui = cg_ui_open(text.str().c_str());
-			if (ui == nullptr) {
-				std::fprintf(stderr, "chem_tool: %s: %s\n", argv[i], cg_last_error());
-				return 1;
-			}
-			const auto t0 = std::chrono::steady_clock::now();
-			const int32_t tables = cg_ui_prepare(ui);
-			cg_ui_close(ui);
-			if (tables < 0) {
-				std::fprintf(stderr, "chem_tool: %s: %s\n", argv[i], cg_last_error());
-				return 1;
-			}
-			std::printf("%s: %d tables of maps in %s (%.0f ms)\n", argv[i], tables, argv[2], std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-		}
-		return 0;
 	}
 	if (std::strcmp(argv[1], "tables") == 0) {
 		static const char *const PHASE[] = { "s", "l", "g", "aq" };

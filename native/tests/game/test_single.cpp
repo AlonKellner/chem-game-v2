@@ -21,11 +21,6 @@ std::string read(const std::string &relative) {
 	return out.str();
 }
 
-struct Traced {
-	Traced() { lab::optics_reading(5); }
-	~Traced() { lab::optics_reading(0); }
-};
-
 // a tracer whose glass is another glass: every ray a little off (what O15 rules out)
 lab::OpticsPassage another_glass(const lab::OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core) {
 	return lab::optics_passage(scene, body, from, heading, n_glass + 0.01, n_core, true);
@@ -34,7 +29,6 @@ lab::OpticsPassage another_glass(const lab::OpticsScene &scene, int body, const 
 } // namespace
 
 TEST_CASE("single: the pass's rays in single precision are its rays in double, over the play's vessels; O15 fires on another glass (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);

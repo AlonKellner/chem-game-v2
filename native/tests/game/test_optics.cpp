@@ -475,13 +475,13 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 		}
 	}
 	// what a scene is known by: a command that leaves all of it as it was leaves every pixel as it was
-	std::array<uint64_t, 5> scanned{};
+	std::array<uint64_t, 3> scanned{};
 	for (const nlohmann::json &command : session.at("script")) {
 		REQUIRE_MESSAGE(ui->lab().command(command.dump(), why), why);
 		ui->frame(0.0);
 		const lab::OpticsScene &scene = ui->optics();
 		REQUIRE(lab::check_O1(scene) == "");
-		const std::array<uint64_t, 5> now{ scene.revision, scene.wall_revision, scene.shapes_revision, scene.maps_revision, scene.stacks_revision };
+		const std::array<uint64_t, 3> now{ scene.revision, scene.wall_revision, scene.shapes_revision };
 		if (scans == 0 || now != scanned) {
 			// (Stage 35: the pixels dealt one by one among the threads, the reference's scene in use each thread's
 			// own. Dealt by rows, a row a thread, the threads whose rows cross the vessels worked alone for most

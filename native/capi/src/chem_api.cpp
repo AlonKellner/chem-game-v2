@@ -316,26 +316,6 @@ void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the sta
 	}
 }
 
-void cg_optics_store(const char *directory) {
-	try {
-		lab::optics_store(directory != nullptr ? directory : "");
-	} catch (const std::exception &e) {
-		fail(CG_ERR_INTERNAL, e.what());
-	}
-}
-
-int32_t cg_ui_prepare(cg_ui *ui) {
-	if (ui == nullptr) {
-		return -1;
-	}
-	try {
-		return ui->ui->prepare_optics();
-	} catch (const std::exception &e) {
-		fail(CG_ERR_INTERNAL, e.what());
-		return -1;
-	}
-}
-
 void cg_ui_frame(cg_ui *ui, double seconds) {
 	if (ui == nullptr) {
 		return;
@@ -401,18 +381,11 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->lines = scene.lines.data();
 	out->light_count = static_cast<int32_t>(scene.lights.size() / 4);
 	out->lights = scene.lights.data();
-	out->map_count = static_cast<int32_t>(scene.maps.size() / 4);
-	out->maps = scene.maps.data();
-	out->maps_revision = scene.maps_revision;
-	out->maps_changed_from = scene.maps_changed_from;
 	out->wall_count = static_cast<int32_t>(scene.wall.size() / 4);
 	out->wall = scene.wall.data();
 	out->wall_revision = scene.wall_revision;
-	out->chain_count = static_cast<int32_t>(scene.chain.size() / 4);
-	out->chain = scene.chain.empty() ? nullptr : scene.chain.data();
-	out->stack_count = static_cast<int32_t>(scene.stacks.size() / 4);
-	out->stacks = scene.stacks.data();
-	out->stacks_revision = scene.stacks_revision;
+	out->rectangle_count = static_cast<int32_t>(scene.rectangles.size() / 4);
+	out->rectangles = scene.rectangles.empty() ? nullptr : scene.rectangles.data();
 	out->shape_count = static_cast<int32_t>(scene.shapes.size() / 4);
 	out->shapes = scene.shapes.data();
 	out->shapes_revision = scene.shapes_revision;

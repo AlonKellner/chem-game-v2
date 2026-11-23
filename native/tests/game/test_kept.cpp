@@ -23,17 +23,11 @@ std::string read(const std::string &relative) {
 	return out.str();
 }
 
-struct Traced {
-	Traced() { lab::optics_reading(5); }
-	~Traced() { lab::optics_reading(0); }
-};
-
 constexpr int STEP = 8;
 
 } // namespace
 
 TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12), the picture is the picture with none kept, and far fewer rays are followed (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -111,7 +105,6 @@ TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12),
 }
 
 TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame after frame, a beam kept through a change of what lies in a vessel is the beam traced afresh (O12), and the rays that pass the change by are not followed again (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -181,7 +174,6 @@ TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame
 }
 
 TEST_CASE("kept: O12 fires where a beam is kept for what has since moved; a change of colour alone traces no beam (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);

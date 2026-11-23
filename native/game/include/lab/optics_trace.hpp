@@ -6,9 +6,9 @@
 #include <cstdint>
 #include <vector>
 
-// The tracer and the refraction maps (GAME_SPEC §12.3, Stage 20). Rays are traced on the CPU,
-// in float64, through bodies made of surface patches; never in a pixel's loop. What a body does to
-// the view is traced once into a map, and the renderer reads the map.
+// The truth's tracer (GAME_SPEC §12.3, Stage 20). Rays are traced on the CPU, in float64, through bodies
+// made of surface patches. The renderer traces a pixel's rays by a tracer of its own, the same method written
+// again (native/game/shader/optics_pixel.glsl), and is held to this one ray by ray (O9).
 namespace lab::trace {
 
 // A body's media: 0 is the air outside it.
@@ -108,130 +108,5 @@ Shape ball(double radius);
 Shape revolved(const glass::Vessel &vessel);
 // The same, made once for each vessel and kept.
 const Shape &revolved_of(const glass::Vessel &vessel);
-
-// ---- a body's refraction map
-
-// What a map is traced for: the body, how it is drawn, and its indices at 1 nm from 380 nm (401
-// values each; null: 1).
-inline constexpr int MAP_PIECES_MOST = 64;
-struct MapSpec {
-	Shape shape;
-	double cm_per_pixel = 1.0;
-	double left = 0.0, right = 0.0; // the span to cover, in pixels from the body's axis
-	// where the screen's pixels lie: a pixel's edge is at `grid` from the axis, and at every whole pixel from
-	// there. The map's samples are laid on that grid's sixteenths: a pixel's parts begin and end on samples.
-	double grid = 0.0;
-	double wall_cm = 20.0;
-	int media = 2; // 2: its core as liquid, then as air; 3: and then as glass (a vessel's floor, seen from the side); 1: its core as air alone (a prism)
-	const float *glass_index = nullptr, *liquid_index = nullptr;
-	// Stage 24: the height the map's rays come in at (cm, the body's frame: up from a vessel's base), and the
-	// fewest pieces in wavelength it may have (so that a body's rows share them)
-	double y_cm = 0.0;
-	int pieces_at_least = 1;
-	// and the most it may have (a shaped vessel's bands: ROW_PIECES_MOST)
-	int pieces_most = MAP_PIECES_MOST;
-};
-
-// The map (GAME_SPEC §12.3): samples across the body, MAP_FINE a pixel; pieces in wavelength, even in
-// 1 / nm^2 from 380 to 780 nm (what glass and water disperse nearly straight in). For each core, sample and
-// piece a cell: the ray at the piece's four nodes (its ends and its thirds): where it lands (pixels from the
-// axis), what its surfaces pass, the square of its chord in the core (cm^2: straight across where the chord
-// rises as a root, at a rim); and its route (a small whole number, the same for rays that go the same way).
-// Within a piece a ray is the cubic through its four nodes: a vessel's whole spectrum is one piece, so one
-// cell is a ray at every wavelength. A ray whose route changes within a piece is its nearest node's there. And for each whole pixel across, its level: into
-// how many equal parts it must be read for the map to be straight within each (1, 2 or 4). The
-// format is even, so that a pass on the GPU can build it too (a stack of bodies that moves: later).
-inline constexpr int MAP_CELL = 16; // floats: four vec4s
-struct Map {
-	int media = 0, pieces = 0;
-	double left = 0.0; // the first sample's place, pixels from the axis
-	int coarse = 0; // whole pixels spanned: coarse * MAP_FINE + 1 samples
-	std::vector<float> level; // coarse
-	std::vector<float> bend; // coarse: how fast the landing bends in wavelength there, at most (pixels of the screen per nm^2)
-	// media * samples * pieces * MAP_CELL, by core, sample, piece: the landing at the four nodes; what passes;
-	// the chord squared; the route at each (with half of how far along the route changes before the next sample)
-	std::vector<float> cells;
-	// Stage 25: how far each ray lands below the row it came in on, on the screen (pixels), at the four nodes:
-	// media * samples * pieces * 4, laid after the cells
-	std::vector<float> drops;
-	int64_t rays = 0; // traced to build it
-	int samples() const;
-	const float *cell(int medium, int piece, int sample) const {
-		return &cells[((static_cast<size_t>(medium) * static_cast<size_t>(samples()) + static_cast<size_t>(sample)) * static_cast<size_t>(pieces) + static_cast<size_t>(piece)) * MAP_CELL];
-	}
-};
-
-inline constexpr int MAP_FINE = 4; // samples a pixel: a pixel is read in four parts at most
-// How far the map may put the image off, in pixels of the screen, within a part and within a piece: the
-// landing's error on the wall over how fast the landing moves across the body there (at least 1).
-inline constexpr double MAP_LANDING_TOLERANCE = 0.02;
-// Or, within a piece, how far off in wavelength (nm): where a landing runs away with the wavelength.
-inline constexpr double MAP_NM_TOLERANCE = 0.05;
-inline constexpr double MAP_PASS_TOLERANCE = 0.005;
-// How far apart the slopes of a part's two halves may be, as a share of the slope: a thin line's image is
-// as bright as the slope where it lands is small, so this is twice the error of its light: at most 4% of
-// it, half of what the eye sees of the brightest line there can be.
-inline constexpr double MAP_SLOPE_TOLERANCE = 0.08;
-// How far a band's sweep may stray from the true landing, in pixels of the screen, between two of its steps.
-inline constexpr double MAP_SWEEP_TOLERANCE = 0.02;
-
-// Where a wavelength is among a map's pieces: 0 at 380 nm, 1 at 780 nm, even in 1 / nm^2; and back.
-inline constexpr double MAP_PLACE_SPAN = 1.0 - (380.0 / 780.0) * (380.0 / 780.0);
-double map_place(double nm);
-double map_nm(double place);
-
-Map build_map(const MapSpec &spec);
-
-// One ray of the map's body, traced directly: at `x` pixels from the axis, a wavelength, a core.
-// What a cell holds, exactly: for the tests.
-struct MapRay {
-	double landing = 0.0, pass = 1.0, chord = 0.0;
-	uint32_t route = 0;
-	double drop = 0.0; // how far below its own row it lands, on the screen (pixels; Stage 25)
-};
-MapRay map_ray(const MapSpec &spec, double x, double nm, int medium);
-// The same read from the map: straight between two samples across (the nearer one's where the route
-// changes between them); in wavelength, the cubic through its piece's four nodes.
-MapRay map_read(const Map &map, double x, double nm, int medium);
-
-// ---- a shaped vessel's rows (GAME_SPEC §12.3, Stage 24, 25)
-
-inline constexpr int ROW_PIECES_MOST = 1; // one piece, as every upright vessel's: read by the plain reading, followed in stacks
-// One ray of a shaped vessel's map traced directly at `y` pixels down from its top (its foot the vessel's base).
-MapRay rows_ray(const MapSpec &spec, double height, double x, double y, double nm, int medium);
-
-// ---- a shaped vessel's knots: its rows read between two maps, bending up and down (GAME_SPEC §12.3, Stage 25)
-
-// Knots down a shaped vessel's height, each a map traced at its own row. An upright band is one map for its
-// whole height (its rays level). A curved band's knots are refined by halving where the middle row is not the
-// line between its neighbours, read at the same place in the rims' measure (the deflection, the drop, what
-// passes, the chord; the quarters too past a pixel; a route that changes split for), at most `most` knots.
-// A row is read between the two knots around it, at the same place in that measure.
-inline constexpr int ROW_KNOTS_MOST = 96;
-// How far a row between two knots may put the image off, up or down or across, as a shift on the screen
-// (pixels): far under what the eye sees, looser than a map across (whose fiftieth keeps a thin line's light)
-inline constexpr double ROW_TOLERANCE = 0.1;
-struct KnotMap {
-	std::vector<double> knots; // pixels down from the body's top, ascending: its top and its foot among them
-	std::vector<int> map_of; // which of the maps each knot is
-	std::vector<char> level; // from knot k to k + 1 one map, every ray level
-	std::vector<double> outer, inner; // the rims each knot's map was traced at, pixels
-	std::vector<double> row_outer, row_inner; // each whole row's rims, at its middle
-	std::vector<Map> maps;
-	int64_t rays = 0;
-};
-KnotMap build_knots(const MapSpec &spec, const glass::Vessel &vessel, double height, int most = ROW_KNOTS_MOST);
-MapRay knots_read(const KnotMap &knots, double x, double y, double nm, int medium);
-// The table as the renderer reads it: [0] (K knots, R whole rows); [1 .. K] (its row, its map's offset in vec4s
-// from the table's start, its pieces, 1 if a level span begins at it); [1 + K .. K + R] (the knot at or above
-// the row's top, its outer rim, its inner); [1 + K + R .. 2K + R] (each knot's rims); then each map's map_block
-// followed by its drops.
-std::vector<float> knots_block(const KnotMap &knots);
-
-// The map as the renderer reads it (lab/optics_scene.hpp lays the scene's maps out): vec4s.
-//   [0]                 coarse, media, samples, pieces
-//   [1 .. coarse]       each whole pixel's level (x), and how fast its landing bends in wavelength (y)
-//   then                the cells, four vec4s each, by core, sample, piece
-std::vector<float> map_block(const Map &map);
 
 } // namespace lab::trace

@@ -30,18 +30,12 @@ std::string read(const std::string &relative) {
 	return out.str();
 }
 
-struct Traced {
-	Traced() { lab::optics_reading(5); }
-	~Traced() { lab::optics_reading(0); }
-};
-
 } // namespace
 
 TEST_CASE("cost: a ray's work over the play's bench, at each of its marks (counts, printed where LAB_RAY_STATS is set) (Stage 33)") {
 	if (std::getenv("LAB_RAY_STATS") == nullptr) {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -80,7 +74,6 @@ TEST_CASE("cost: how passages through a shape end, and the truth with fewer meet
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "most") {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -158,7 +151,6 @@ TEST_CASE("cost: the rays of each pixel where a carried vessel comes over a stan
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "over") {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -218,7 +210,6 @@ TEST_CASE("cost: the reference's settled pixels at the demo flask's heel against
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "heel") {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -250,7 +241,6 @@ TEST_CASE("cost: the frames a held vessel takes to settle once it is still (prin
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "held") {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -330,7 +320,6 @@ TEST_CASE("cost: the CPU's part of a frame while pouring by hand, at 1x and at 6
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "speed") {
 		return;
 	}
-	const Traced traced;
 	for (const bool fast : { false, true }) {
 		std::string why;
 		std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
@@ -374,7 +363,6 @@ TEST_CASE("cost: the tracer in single precision against double at the demo flask
 	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "heel32") {
 		return;
 	}
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -489,7 +477,6 @@ TEST_CASE("cost: the rays a frame follows through the play, by its marks (printe
 	if (std::getenv("LAB_RAY_STATS") == nullptr) {
 		return;
 	}
-	const Traced traced;
 	const int step = 8;
 	const bool series = std::string(std::getenv("LAB_RAY_STATS")) == "series";
 	for (const auto &[mark, c] : play_cost(step, series ? 1 : 8)) {
@@ -501,7 +488,6 @@ TEST_CASE("cost: the rays a frame follows through the play, by its marks (printe
 }
 
 TEST_CASE("cost: through the play no pixel follows more rays in a frame than O13 allows, a frame's rays stay under what each mark's did, and a bench left alone comes to follow none (Stage 33)") {
-	const Traced traced;
 	const int step = 8;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
