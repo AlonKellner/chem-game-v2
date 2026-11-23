@@ -624,9 +624,30 @@ Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, do
 		if (holds(hi) <= liquid_cm3) {
 			lo = hi;
 		}
-		for (int i = 0; i < 50 && hi - lo > 1e-12 * span; ++i) {
-			const double mid = 0.5 * (lo + hi);
-			(holds(mid) < liquid_cm3 ? lo : hi) = mid;
+		// (by false position with Illinois's guard, to the same closeness as halving came to: what it holds rises
+		// smoothly with the level, and some ten volumes find it where halving took forty. Stage 33: a pour by
+		// hand asks at every step of the lab's clock.)
+		if (hi > lo) {
+			double f_lo = holds(lo) - liquid_cm3, f_hi = holds(hi) - liquid_cm3;
+			int last = 0;
+			for (int i = 0; i < 80 && hi - lo > 1e-12 * span; ++i) {
+				double mid = f_hi != f_lo ? hi - f_hi * (hi - lo) / (f_hi - f_lo) : 0.5 * (lo + hi);
+				if (!(mid > lo && mid < hi) || i % 8 == 7) {
+					mid = 0.5 * (lo + hi); // (and a halving now and then, where the curve has a corner)
+				}
+				const double f_mid = holds(mid) - liquid_cm3;
+				if (f_mid < 0.0) {
+					lo = mid;
+					f_lo = f_mid;
+					f_hi = last == -1 ? 0.5 * f_hi : f_hi;
+					last = -1;
+				} else {
+					hi = mid;
+					f_hi = f_mid;
+					f_lo = last == 1 ? 0.5 * f_lo : f_lo;
+					last = 1;
+				}
+			}
 		}
 		l.liquid_level = 0.5 * (lo + hi);
 		vortex_at(l.liquid_level, l.vortex, l.surface_area, l.depth);

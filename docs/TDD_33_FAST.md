@@ -365,8 +365,10 @@ of 17.6 (`test_kept.cpp`).
   by hand does not ask it: `lying` has a halving of its own for the liquid (the inside less the powder
   and the vortex under it). The same done there takes a frame of running liquid at 600x from 132 ms to
   52, and a frame held at the lip from 17 ms to 1; and the demo's record no longer reproduces (the level
-  differs in its last digits, and the stirring's work follows it). Not kept: a record's change is the
-  user's to approve.
+  differs in its last digits, and the stirring's work follows it). **Kept, with the user's approval
+  (2026-11-23), the demo's record made again**: every one of its 69 measured lines is the same, every
+  command ends on the same step, and the digests of 7 of its 26 commands differ (12 to 18, while the
+  flask is stirred); the pressure session's record is untouched.
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.
