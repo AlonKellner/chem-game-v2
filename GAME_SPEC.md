@@ -1491,6 +1491,8 @@ input to them, and a session script is a list of them.
 | `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it (a signal part too); refused where something stands, off the grid, or while the item is joined to another |
 | `move` | `items`, `by` [columns, rows] | several items and parts along the bench together, by one offset: all of them or none, with the reason (one would be off the grid, or land on something left behind) |
 | `stow` | `item` | back into the cabinet; a signal part back to the drawer |
+| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item as into the cabinet (its matter stays in the world and goes on as there; refused as `stow` is), a part with its settings kept and its wires and rigs to anything outside it taken off (a circuit with all it holds), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item to the cabinet, a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to the cabinet) and `restore` |
+| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, to where it stood: its square, or the cabinet. Where its square is taken an item goes to the cabinet, and a part stays in the trash and says so |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
@@ -1639,6 +1641,8 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 |---|---|
 | carry an item to a free cell of the bench | `place` |
 | carry an item to the cabinet | `stow` |
+| carry an item or a part to the trash (the box at the cabinet's foot), or Backspace with it in hand or chosen and nothing being typed (Stage 34) | `trash`; the last put there stands in the box and is taken up again as an item of the cabinet is (`place`, `stow`) |
+| the undo key (Ctrl+Z, Cmd+Z; Stage 34) | `restore`: the last put in the trash is back where it stood, and chosen |
 | carry a burner onto a vessel | `heat` |
 | carry a balloon, a condenser or a stopper onto a vessel | `attach` (a stopper: into its neck, sealing it; Stage 28) |
 | drag a line from the end of a condenser's outlet to a vessel (Stage 34: as a wire from a part's port; to another vessel, it is moved; let go on nothing, it comes off) | `under`, after `undrain` where it ran into another; `undrain` |

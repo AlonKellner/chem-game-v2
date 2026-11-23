@@ -667,6 +667,79 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	well_formed(p.ui->draw());
 }
 
+TEST_CASE("ui: what is not wanted goes in the trash, carried there or by Backspace; the last put there stands in it and is taken up again, and the undo key brings it back where it stood (Stage 34)") {
+	Player p;
+	p.click("pause");
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:beaker", "square:19,12");
+	const auto in_trash = [&] { return p.ui->lab().view().trash.size(); };
+	float tx = 0, ty = 0, x = 0, y = 0;
+	p.at("trash", tx, ty);
+	// carried to the trash and put down there
+	p.drag("item:beaker", "trash");
+	CHECK(p.item("beaker").place == "trash");
+	CHECK(in_trash() == 1);
+	REQUIRE(p.ui->locate("item:beaker", x, y)); // it stands in the trash's box
+	CHECK(std::fabs(x - tx) < 110.0f);
+	CHECK(y > ty - 30.0f);
+	well_formed(p.ui->draw());
+	p.ui->optics();
+	// chosen (a click with Shift held) and Backspace: the flask too; only the last put there is on the screen
+	const int flask_col = p.item("flask").col, flask_row = p.item("flask").row;
+	p.click_with("item:flask", lab::Ui::ModShift);
+	REQUIRE(p.ui->selection() == std::vector<std::string>{ "flask" });
+	p.ui->key(lab::Ui::KeyBackspace);
+	CHECK(p.item("flask").place == "trash");
+	CHECK(in_trash() == 2);
+	CHECK(p.ui->selection().empty());
+	CHECK(p.ui->locate("item:flask", x, y));
+	CHECK_FALSE(p.ui->locate("item:beaker", x, y));
+	// the undo key: the flask stands where it stood, chosen; the beaker is the trash's again
+	p.ui->key(lab::Ui::KeyUndo);
+	CHECK(p.item("flask").place == "bench");
+	CHECK(p.item("flask").col == flask_col);
+	CHECK(p.item("flask").row == flask_row);
+	CHECK(p.ui->selected() == "flask");
+	CHECK(in_trash() == 1);
+	CHECK(p.ui->locate("item:beaker", x, y));
+	// taken up out of the trash as out of the cabinet, and put down on a free square
+	p.ui->key(lab::Ui::KeyEscape);
+	p.drag("item:beaker", "square:16,12");
+	CHECK(p.item("beaker").place == "bench");
+	CHECK(in_trash() == 0);
+	// in hand, and Backspace: what is carried goes
+	p.at("item:beaker", x, y);
+	p.ui->pointer(x, y, true);
+	p.ui->pointer(x, y, false);
+	p.ui->pointer(x + 40.0f, y - 30.0f, false);
+	p.ui->key(lab::Ui::KeyBackspace);
+	CHECK(p.item("beaker").place == "trash");
+	// out of the trash into the cabinet
+	p.drag("item:beaker", "cabinet");
+	CHECK(p.item("beaker").place == "cabinet");
+	// a part: made, its editor closed, chosen, and Backspace: in the trash with its settings; the undo key brings it back
+	p.drag("drawer:timer", "square:2,2");
+	p.ui->key(lab::Ui::KeyBackspace); // (its editor is open: this is typed into it, and trashes nothing)
+	CHECK(p.item("timer1").place == "bench");
+	p.ui->key(lab::Ui::KeyEscape);
+	p.click_with("item:timer1", lab::Ui::ModShift);
+	if (p.ui->selection().empty()) {
+		p.click_with("item:timer1", lab::Ui::ModShift); // (chosen already when made: the click took it out)
+	}
+	REQUIRE(p.ui->selection() == std::vector<std::string>{ "timer1" });
+	p.ui->key(lab::Ui::KeyBackspace);
+	CHECK(p.item("timer1").place == "trash");
+	CHECK(p.ui->locate("item:timer1", x, y));
+	well_formed(p.ui->draw());
+	p.ui->optics();
+	p.ui->key(lab::Ui::KeyUndo);
+	CHECK(p.item("timer1").place == "bench");
+	CHECK(p.item("timer1").col == 2);
+	// nothing in the trash: the undo key says so
+	p.ui->key(lab::Ui::KeyUndo);
+	CHECK(p.ui->message().find("trash is empty") != std::string::npos);
+}
+
 TEST_CASE("ui: a condenser's outlet is led to a vessel by a line drawn from it, to another by another, and let go on nothing the line comes off (Stage 34)") {
 	Player p;
 	p.click("pause");

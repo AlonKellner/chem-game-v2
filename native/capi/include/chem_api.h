@@ -312,7 +312,9 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
 
 /* A key for the screen's focused field (GAME_SPEC §13.3): CG_KEY_TEXT with
  * the character's code point, or backspace, enter, escape. */
-enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3 };
+/* CG_KEY_UNDO (Stage 34): the host's undo chord (Ctrl+Z, Cmd+Z); it brings back what was last put in the
+ * trash. Backspace, with nothing being typed, puts what is chosen in the trash; a host sends Delete as it. */
+enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
 
 /* The signals on the bench (GAME_SPEC §13.3): timers, monitors, alarms, notice parts, writers, circuits.

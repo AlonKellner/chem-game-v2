@@ -1,5 +1,13 @@
 # GAME_SPEC version history
 
+## Not yet signed off (Stage 34, 2026-11-23; the version follows the user's sign-off)
+
+- §13, §13.1 (Stage 34, `docs/TDD_34_GESTURES.md`): **the screen's gestures.** A part is taken from
+  the drawer with a press and put down with another; a condenser's outlet is led to a vessel by a
+  line dragged from its end (`undrain` takes it off); **a trash**: `trash` and `restore`, 64 kept, an
+  item's matter staying in the world and a part's settings with it; on the screen its box at the
+  cabinet's foot, Backspace, and the undo key (`CG_KEY_UNDO`).
+
 ## 0.34.0 (2026-11-23, Stages 29 to 33; signed off by the user after playing: "Looks perfect", "Approved")
 
 - §12.3, §18 (Stage 33, in progress, `docs/TDD_33_FAST.md`): **the pass made fast.** On the GPU

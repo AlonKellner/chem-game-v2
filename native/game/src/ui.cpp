@@ -30,6 +30,7 @@ struct Rect {
 
 // the screen's fixed parts
 constexpr Rect CABINET{ 0, 64, 240, 1016 };
+constexpr Rect TRASH{ 10, 934, 220, 136 }; // at the cabinet's foot (Stage 34): what was put away last, to be taken up again
 constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 640, 300 };
 constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13.3), beside the outbox
@@ -672,7 +673,7 @@ struct Ui::Impl {
 		for (const ItemView &v : view.items) {
 			n += v.kind != "tray" && !is_part_kind(v.kind) ? 1 : 0;
 		}
-		return std::fmin(118.0f, 970.0f / static_cast<float>(std::max(n, 1)));
+		return std::fmin(118.0f, 820.0f / static_cast<float>(std::max(n, 1))); // (over the trash, Stage 34)
 	}
 	float cabinet_scale(float w, float h) const { return std::fmin(1.0f, std::fmin(200.0f / w, (shelf() - 8.0f - 24.0f) / h)); }
 	static float outbox_scale(float w, float h) { return std::fmin(1.0f, std::fmin((100.0f - 12.0f) / w, 106.0f / h)); }
@@ -693,6 +694,17 @@ struct Ui::Impl {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		float w = 0, h = 0;
 		size_of(v, w, h);
+		if (v.place == "trash") {
+			// in the trash's box, the last put there (the others are not on the screen), as small as fits it
+			if (index != trash_top()) {
+				return Rect{ -10000, -10000, 0, 0 };
+			}
+			if (is_part_kind(v.kind)) {
+				return Rect{ TRASH.cx() - 20, TRASH.y + TRASH.h - 56, 40, 40 };
+			}
+			const float scale = std::fmin(1.0f, std::fmin(200.0f / w, (TRASH.h - 44.0f) / h));
+			return Rect{ TRASH.cx() - w * scale / 2, TRASH.y + TRASH.h - 12 - h * scale, w * scale, h * scale };
+		}
 		if (v.place == "cabinet") {
 			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * shelf(), 200, shelf() - 8.0f };
 			const float scale = cabinet_scale(w, h);
@@ -917,8 +929,14 @@ struct Ui::Impl {
 	}
 	Rect circuit_close() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 106, p.y + 12, 90, 30 }; }
 	Rect circuit_up() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 206, p.y + 12, 90, 30 }; }
+	// what was last put in the trash (Stage 34): the one thing of the trash that is on the screen; -1: none
+	int trash_top() const { return view.trash.empty() ? -1 : view.trash.back(); }
+	bool hidden(int index) const { return view.items[static_cast<size_t>(index)].place == "trash" && index != trash_top(); }
 	bool visible(int index) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.place == "trash") {
+			return index == trash_top();
+		}
 		return v.place != "circuit" || (!opened.empty() && v.part.in == opened);
 	}
 	// what shows a part: itself, or the circuit around it that is on the screen; -1 for none
@@ -1050,6 +1068,13 @@ struct Ui::Impl {
 				standing.push_back(i);
 			}
 		}
+		if (TRASH.has(x, y)) {
+			for (const int i : std::vector<int>(standing)) {
+				act({ { "do", "trash" }, { "item", id(i) } });
+			}
+			choose_only(-1);
+			return;
+		}
 		if (CABINET.has(x, y)) {
 			for (const int i : standing) {
 				act({ { "do", "stow" }, { "item", id(i) } });
@@ -1111,7 +1136,12 @@ struct Ui::Impl {
 		if (is_part_kind(v.kind)) {
 			// a signal part: along the bench or within its open circuit, or back to the drawer
 			int inner_col = 0, inner_row = 0;
-			if (CABINET.has(x, y) || DRAWER.has(x, y)) {
+			if (TRASH.has(x, y)) {
+				if (v.place != "trash") {
+					act({ { "do", "trash" }, { "item", v.id } }); // (Stage 34: kept, with its settings, to be taken up again)
+				}
+				choose_only(-1);
+			} else if (CABINET.has(x, y) || DRAWER.has(x, y)) {
 				act({ { "do", "stow" }, { "item", v.id } });
 				choose_only(-1);
 			} else if (v.place == "circuit") {
@@ -1167,8 +1197,16 @@ struct Ui::Impl {
 			act(c);
 			return;
 		}
+		if (TRASH.has(x, y)) {
+			if (view.items[static_cast<size_t>(index)].place != "trash") {
+				act({ { "do", "trash" }, { "item", v.id } });
+				choose_only(-1);
+			}
+			return;
+		}
 		if (CABINET.has(x, y)) {
-			if (view.items[static_cast<size_t>(index)].place == "bench") {
+			const std::string &stood = view.items[static_cast<size_t>(index)].place;
+			if (stood == "bench" || stood == "trash") {
 				act({ { "do", "stow" }, { "item", v.id } });
 			}
 			return;
@@ -2504,6 +2542,49 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (draft.edit == Draft::None && (key == Ui::KeyBackspace || key == Ui::KeyUndo)) {
+			// Nothing being typed (Stage 34): Backspace puts what is in hand, or what is chosen, in the trash; the
+			// undo key brings back what was last put there. A tutorial's step asks for neither.
+			if (guided() || panel || making >= 0) {
+				if (guided()) {
+					not_now();
+				}
+				return;
+			}
+			if (key == Ui::KeyUndo) {
+				const int top = trash_top();
+				if (top < 0) {
+					message = "the trash is empty";
+					return;
+				}
+				const std::string back = id(top);
+				if (act({ { "do", "restore" } })) {
+					choose_only(item_index(back));
+				}
+				return;
+			}
+			std::vector<std::string> away;
+			if (carrying && drag >= 0) {
+				away.push_back(id(drag));
+				stop_pouring();
+				carrying = false;
+				drag = -1;
+			} else {
+				for (const int i : group) {
+					away.push_back(id(i));
+				}
+			}
+			for (const std::string &one : away) {
+				const int i = item_index(one);
+				if (i >= 0 && view.items[static_cast<size_t>(i)].place != "trash") {
+					act({ { "do", "trash" }, { "item", one } });
+				}
+			}
+			if (!away.empty()) {
+				choose_only(-1);
+			}
+			return;
+		}
 		if (draft.edit == Draft::None) {
 			if (key == Ui::KeyEscape && making >= 0) {
 				making = -1; // a part in hand goes back in the drawer
@@ -3070,6 +3151,13 @@ struct Ui::Impl {
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
+		outline(TRASH, WALL_GRID, 1);
+		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%d)", static_cast<int>(view.trash.size())), WALL_INK);
+		if (view.trash.empty()) {
+			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
+			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
+		}
 		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
 		paint_slots();
 		// the clock
@@ -3083,7 +3171,7 @@ struct Ui::Impl {
 		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
-			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit") {
+			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit" || hidden(i)) {
 				continue;
 			}
 			paint_item(i, drawn(i));
@@ -3466,7 +3554,11 @@ struct Ui::Impl {
 			}
 		}
 		if (what == "cabinet") {
-			r = CABINET;
+			r = Rect{ CABINET.x, CABINET.y, CABINET.w, TRASH.y - CABINET.y - 8 }; // (over the trash)
+			return true;
+		}
+		if (what == "trash") {
+			r = TRASH;
 			return true;
 		}
 		if (what == "outbox") {
@@ -3676,7 +3768,7 @@ struct Ui::Impl {
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 				}
-			} else if (is_part_kind(v.kind) && v.place == "bench") {
+			} else if (is_part_kind(v.kind) && (v.place == "bench" || (v.place == "trash" && i == trash_top()))) {
 				const bool circuit = v.kind == "circuit";
 				bool ringing = v.kind == "alarm" && v.part.ringing, lit = v.part.out;
 				if (circuit) {
@@ -3706,7 +3798,7 @@ struct Ui::Impl {
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
-			if (i != drag) {
+			if (i != drag && !hidden(i)) {
 				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
 			}
 		}
@@ -4577,7 +4669,12 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	std::string_view rest;
 	if (what == "cabinet") {
 		x = CABINET.cx();
-		y = CABINET.y + CABINET.h - 60;
+		y = TRASH.y - 30; // (over the trash, Stage 34)
+		return true;
+	}
+	if (what == "trash") {
+		x = TRASH.cx();
+		y = TRASH.y + 30;
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first

@@ -52,7 +52,7 @@ public:
 	// A key for the part editor's focused field (GAME_SPEC §13.3): text (a
 	// character, by its code point), backspace, enter (set), escape (cancel; with
 	// no editor open, let go of the selection).
-	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3 };
+	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3, KeyUndo = 4 };
 	void key(Key key, uint32_t codepoint = 0);
 	// A frame of real time: the lab advances by it times the speed. One step
 	// of each frame is checked against every invariant; all of them when the

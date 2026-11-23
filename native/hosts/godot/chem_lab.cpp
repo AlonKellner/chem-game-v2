@@ -194,7 +194,9 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 	const godot::Ref<godot::InputEventKey> key = event;
 	if (key.is_valid() && key->is_pressed()) {
 		const godot::Key code = key->get_keycode();
-		if (code == godot::KEY_BACKSPACE) {
+		if ((key->is_ctrl_pressed() || key->is_meta_pressed()) && code == godot::KEY_Z) {
+			cg_ui_key(ui_, CG_KEY_UNDO, 0); // (Stage 34: what was last put in the trash comes back)
+		} else if (code == godot::KEY_BACKSPACE || code == godot::KEY_DELETE) {
 			cg_ui_key(ui_, CG_KEY_BACKSPACE, 0);
 		} else if (code == godot::KEY_ENTER || code == godot::KEY_KP_ENTER) {
 			cg_ui_key(ui_, CG_KEY_ENTER, 0);

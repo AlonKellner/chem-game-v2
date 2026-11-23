@@ -515,7 +515,7 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 }
 
 void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
-	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_ESCAPE) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_UNDO) {
 		return;
 	}
 	try {
