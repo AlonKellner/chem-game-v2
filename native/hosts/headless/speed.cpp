@@ -124,7 +124,12 @@ int speed_study() {
 			}
 			bool ok = true;
 			for (const std::string &c : s.setup) {
+				const auto t = std::chrono::steady_clock::now();
 				ok = ok && command(*ui, c);
+				// (a command that took long: a controller's trial, a wait; once, at the first speed)
+				if (const double ms = ms_since(t); ms > 20.0 && asked == speeds[0]) {
+					std::printf("  (%s: %.0f ms)\n", c.substr(0, 60).c_str(), ms);
+				}
 			}
 			if (!ok) {
 				return 1;

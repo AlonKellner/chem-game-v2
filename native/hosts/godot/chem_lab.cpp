@@ -29,6 +29,9 @@
 #include <godot_cpp/variant/rect2.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+// the lab's steps' share of a frame, ms (Stage 36)
+constexpr double LAB_STEP_BUDGET_MS = 3.0;
+
 namespace chem_godot {
 
 namespace {
@@ -124,6 +127,9 @@ void ChemLab::_ready() {
 		godot::UtilityFunctions::push_error("ChemLab: ", godot::String::utf8(cg_last_error()));
 		return;
 	}
+	// A frame of the display (120 Hz: 8.3 ms) gives the lab's steps 3 ms of the CPU at most (Stage 36): the scene,
+	// the draw list and the optical pass have the rest, at any speed of the clock.
+	cg_ui_set_budget(ui_, LAB_STEP_BUDGET_MS);
 	if (!tutorial_path_.is_empty()) {
 		const godot::String tutorial = godot::FileAccess::get_file_as_string(tutorial_path_);
 		if (tutorial.is_empty() || cg_ui_tutor(ui_, tutorial.utf8().get_data()) != CG_OK) {

@@ -3174,6 +3174,10 @@ struct Ui::Impl {
 		button(reset_rect(), "reset");
 		const double seconds = static_cast<double>(view.step) / 60.0;
 		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
+		// where the frame's budget holds the clock back (Stage 36): the speed it keeps
+		if (budget_ms > 0.0 && !paused && achieved < 0.9 * speed) {
+			text(1220, 40, text_of("keeping %.0fx", achieved), WALL_INK, 14);
+		}
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit" || hidden(i)) {

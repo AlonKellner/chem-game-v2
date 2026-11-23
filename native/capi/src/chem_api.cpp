@@ -316,6 +316,12 @@ void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t down) { // down: the sta
 	}
 }
 
+void cg_ui_set_budget(cg_ui *ui, double ms) {
+	if (ui != nullptr) {
+		ui->ui->set_budget(ms);
+	}
+}
+
 void cg_ui_frame(cg_ui *ui, double seconds) {
 	if (ui == nullptr) {
 		return;
