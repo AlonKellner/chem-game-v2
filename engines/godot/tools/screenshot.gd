@@ -2,13 +2,12 @@ extends SceneTree
 
 # Screenshots of the host at moments of the demo (make screenshots -> build/screenshots/*.png), played with
 # the pointer as tests/test_host_smoke.gd plays. At each the optical pass alone, settled, is held to what each
-# pixel should show (GAME_SPEC §18: O4); and the GPU's time for one pass is measured.
-#   godot --path engines/godot -s tools/screenshot.gd -- <output directory> [cost]
+# pixel should show (GAME_SPEC §18: O4). (The pass's cost: tools/play.gd.)
+#   godot --path engines/godot -s tools/screenshot.gd -- <output directory>
 
 var _lab: ChemLab
 var _view: SubViewport # the game's own 1920 x 1080, whatever the window is
 var _failed := false
-var _cost_only := false # a second argument, "cost": no pictures, no O4, the pass's cost alone
 
 func _drag(what: String, to: String, menu := false) -> void: # an item: a click picks it up, a click (right: the menu) puts it down
 	var a := _lab.locate(what)
@@ -51,7 +50,7 @@ func _shoot(dir: String, name: String) -> void:
 	# the game is paused: the optical pass settles (each pixel's history), in a bounded number of frames
 	for i in 40:
 		await process_frame
-	if DisplayServer.get_name() == "headless" or _cost_only: # it paints nothing; or only the pass's cost is asked
+	if DisplayServer.get_name() == "headless": # it paints nothing
 		return
 	var image := _view.get_texture().get_image()
 	image.save_png(dir.path_join(name + ".png"))
@@ -70,23 +69,10 @@ func _shoot(dir: String, name: String) -> void:
 		if parity[2] > 0:
 			alone.save_png(dir.path_join(name + "_optics_alone.png"))
 
-# The time of a frame with the optical pass run `extra` more times: one pass is too quick to time alone, and a
-# display hands frames out in whole refreshes, so the cost of one is the slope between two heavy loads.
-func _time(extra: int) -> float:
-	_lab.set_optics_extra(extra)
-	for i in 5:
-		await process_frame
-	var start := Time.get_ticks_usec()
-	for i in 20:
-		await process_frame
-	var ms := float(Time.get_ticks_usec() - start) / 20000.0
-	_lab.set_optics_extra(0)
-	return ms
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
 	DirAccess.make_dir_recursive_absolute(dir)
-	_cost_only = args.size() > 1 and args[1] == "cost"
 	_view = SubViewport.new()
 	_view.size = Vector2i(1920, 1080)
 	_view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
@@ -100,23 +86,9 @@ func _initialize() -> void:
 	root.add_child(shown)
 	await process_frame
 	await _play(dir)
-	await _cost("")
 	print("screenshot.gd: done, at step ", JSON.parse_string(_lab.report())["step"])
 	quit(1 if _failed else 0)
 
-# the pass's cost on the GPU as the scene stands: settled, and with every pixel's history starting again
-func _cost(when: String, few_passes: int = 8, many_passes: int = 24) -> void:
-	if DisplayServer.get_name() == "headless":
-		return
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
-	var few := await _time(10)
-	var many := await _time(30)
-	print("%sa frame with 10 more optical passes: %.2f ms; with 30: %.2f ms; one settled pass at 1920 x 1080: %.3f ms" % [when, few, many, (many - few) / 20.0])
-	_lab.set_optics_restarting(true) # the worst frame: every pixel's history starts again
-	few = await _time(few_passes) # enough passes that both frames outlast a display refresh: fewer read as free
-	many = await _time(many_passes)
-	_lab.set_optics_restarting(false)
-	print("%severy history starting again: a frame with %d more passes: %.2f ms; with %d: %.2f ms; one such pass: %.3f ms" % [when, few_passes, few, many_passes, many, (many - few) / float(many_passes - few_passes)])
 func _play(dir: String) -> void:
 	_click("pause")
 	_drag("item:flask", "square:11,12")
@@ -199,7 +171,6 @@ func _play(dir: String) -> void:
 	for i in 12: # a few moves, as a hand makes
 		_lab.pointer(lerpf(from.x, over.x - 24.0, (i + 1) / 12.0), lerpf(from.y, over.y + 70.0, (i + 1) / 12.0), false)
 	await _shoot(dir, "14_held")
-	await _cost("a vessel held over another: ", 0, 1)
 	_lab.key(3, 0) # put back where it stood (CG_KEY_ESCAPE)
 	# Stage 14: signals and a circuit, on a bench of its own, without the tutorial
 	_lab.queue_free()

@@ -46,5 +46,6 @@ func _initialize() -> void:
 	_demo.pointer(990, 540, true)
 	_demo.pointer(990, 540, false)
 	await _shoot(dir, "3_moved")
+	_demo.pointer(1600, 800, true); _demo.pointer(1251, 540, true); _demo.pointer(1251, 540, false); await _shoot(dir, "4_grating") # the grating, dragged before the slit
 	print("prism_shot.gd: done")
 	quit(0)

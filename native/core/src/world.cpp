@@ -570,7 +570,7 @@ Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {
 	return Refusal::None;
 }
 
-Refusal World::set_drain(EdgeId edge, double rate, bool solids) {
+Refusal World::set_drain(EdgeId edge, double rate, double carried, double solids_rate) {
 	if (!ledger_.empty()) {
 		return Refusal::MidStep;
 	}
@@ -579,7 +579,9 @@ Refusal World::set_drain(EdgeId edge, double rate, bool solids) {
 	}
 	Edge &e = edges_[static_cast<size_t>(edge.index)];
 	e.rate = rate;
-	e.phases = solids ? static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid)) : PHASES_LIQUID;
+	e.carried = carried > 0.0 ? (carried < 1.0 ? carried : 1.0) : 0.0;
+	e.solids_rate = solids_rate > 0.0 ? solids_rate : 0.0;
+	e.phases = e.carried > 0.0 || e.solids_rate > 0.0 ? static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid)) : PHASES_LIQUID;
 	return Refusal::None;
 }
 
@@ -624,6 +626,20 @@ Refusal World::set_conductance(EdgeId edge, double conductance) {
 		return Refusal::BadValue;
 	}
 	edges_[static_cast<size_t>(edge.index)].conductance = conductance;
+	return Refusal::None;
+}
+
+Refusal World::set_power(EdgeId edge, double power) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	if (!(power == power) || power > 1.0e12 || power < -1.0e12) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].power = power;
 	return Refusal::None;
 }
 

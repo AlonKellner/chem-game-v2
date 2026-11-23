@@ -41,6 +41,23 @@ struct Shape {
 	std::vector<Patch> patches;
 };
 
+// What lies in a body's core (GAME_SPEC §12.3, Stage 30; lab/contents.hpp makes it), in the body's frame: its
+// liquid under a level of the room, less a vortex's cone hanging from that surface; its sediment under another
+// level, and a pile's cone standing on it. `up` is the room's up; a cone's base is an ellipse about its middle
+// (x, y), `across` along the level's line on the screen and `deep` into the depth. With this, a ray in the core
+// is in the liquid (medium 2: CORE), in the air over it (medium 3) or ends in the sediment, by where it is; and
+// it bends, or is turned back, at the liquid's surface and the vortex's.
+struct Inside {
+	double up_x = 0.0, up_y = 1.0;
+	bool liquid = false;
+	double liquid_level = 0.0;
+	double vortex = 0.0, vortex_across = 0.0, vortex_deep = 0.0, vortex_x = 0.0, vortex_y = 0.0; // its depth; 0: none
+	bool solid = false;
+	double solid_level = 0.0;
+	double pile = 0.0, pile_across = 0.0, pile_deep = 0.0, pile_x = 0.0, pile_y = 0.0; // its height; 0: none
+};
+inline constexpr int CORE_AIR = 3;
+
 // What becomes of one ray.
 struct Landing {
 	bool lands = false; // it leaves the body going away from the eye, and reaches the wall
@@ -56,12 +73,27 @@ struct Landing {
 	// whether it left the body (not still inside after every meeting allowed)
 	Vec3 at, toward;
 	bool left = true;
+	bool solid = false; // it ended in the sediment (Stage 30): what it shows is the sediment, lit by the room
 };
 
 // One ray from `origin` along `direction` (a unit vector) through the shape, to the wall's plane
 // z = wall; `index` is each medium's refractive index. At each surface it refracts by vector Snell,
 // losing what Fresnel reflects; where it cannot pass it is turned back, all of it.
-Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index);
+Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside = nullptr);
+// The meetings a ray is allowed in one shape (Stage 33). Straight through a vessel is four, through its
+// liquid's surface five, through a vortex and a floor more. Measured over the play (test_cost.cpp,
+// LAB_RAY_STATS=most): 2% of passages take more than eight. On the GPU a group of pixels pays for its longest
+// ray.
+inline constexpr int MEETINGS_MOST = 16;
+// How often a ray may be turned back inside one shape (total reflection). A ray through a vessel, its liquid's
+// surface, a vortex and a floor crosses many surfaces and is turned back at none: those are followed (to
+// MEETINGS_MOST). Light held in the glass of a rim or a fillet is turned back again and again: after
+// TURNS_MOST it goes straight on from where it is, as if the rest of the body were not there, and so does a ray
+// still inside after MEETINGS_MOST. (The user's call, 2026-11-23: with a ray simply ended after eight meetings
+// and bringing nothing, a vortex in a shallow liquid showed grey patches where its rays were cut short.)
+inline constexpr int TURNS_MOST = 4;
+// (a measurement's switch: the meetings a ray is allowed, and the times it may be turned back)
+void meetings_most(int most, int turns = TURNS_MOST);
 
 // An upright cylinder of radius `outer` (cm) with a wall of `glass` (cm) around its core; with no
 // glass, the core alone.

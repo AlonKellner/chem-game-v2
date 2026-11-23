@@ -411,6 +411,40 @@ void Simulation::conduct_heat() {
 	}
 }
 
+// Work (GAME_SPEC §11, Stage 32): along each edge with a power, that much
+// energy a second from its a to its b, whatever their temperatures: a
+// stirrer's work on the liquid it turns, which is heat there once the liquid
+// has come to rest (C5: one entry of the ledger, as a burner's heat is). What
+// is under a quantum is carried to the next step.
+void Simulation::do_work() {
+	const std::span<const Edge> edges = world_.edges();
+	for (size_t i = 0; i < edges.size(); ++i) {
+		const Edge edge = edges[i];
+		if (!edge.open || edge.power == 0.0) {
+			if (i < work_remainder_.size()) {
+				work_remainder_[i] = 0.0;
+			}
+			continue;
+		}
+		if (work_remainder_.size() < edges.size()) {
+			work_remainder_.resize(edges.size(), 0.0);
+		}
+		double &remainder = work_remainder_[i];
+		const double total = edge.power * step_seconds_ / JOULE_PER_QUANTUM + remainder;
+		constexpr double MOST = 1.0e18;
+		const bool within = total > -MOST && total < MOST;
+		const int64_t whole = static_cast<int64_t>(within ? total : total < 0.0 ? -MOST : MOST); // toward zero
+		remainder = within ? total - static_cast<double>(whole) : 0.0;
+		if (whole != 0) {
+			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, {}, Energy{ whole });
+			CHEM_ASSERT(refused == Refusal::None || refused == Refusal::Overflow, refusal_text(refused));
+			if (refused != Refusal::None) {
+				remainder = 0.0;
+			}
+		}
+	}
+}
+
 // Liquids run down the drains (GAME_SPEC §6): all of the upper cell's liquid,
 // with what is dissolved in it, into the lower cell, carrying its enthalpy. A
 // rigid lower cell takes only what fits; the rest stays above. Kinematic: no
@@ -429,7 +463,10 @@ void Simulation::drain_liquids() {
 		if (!thermal.defined) {
 			continue;
 		}
-		double runs = 0.0; // m^3 of liquid
+		const bool solids = (edge.phases & phase_bit(Phase::Solid)) != 0;
+		// (a drain made before Stage 31 passes solids by its phases alone: all of them, with the liquid)
+		const double carried = !solids ? 0.0 : edge.carried > 0.0 || edge.solids_rate > 0.0 ? edge.carried : 1.0;
+		double runs = 0.0, rests = 0.0; // m^3 of liquid, and of solids
 		bool known = true;
 		for (size_t s = 0; s < upper.amount.size(); ++s) {
 			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
@@ -437,12 +474,17 @@ void Simulation::drain_liquids() {
 				known = known && def.molar_volume > 0.0;
 				runs += static_cast<double>(upper.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
 			}
+			if (edge.solids_rate > 0.0 && upper.amount[s] > 0 && def.phase == Phase::Solid && !def.wall && def.molar_volume > 0.0) {
+				rests += static_cast<double>(upper.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
 		}
-		if (!known || !(runs > 0.0)) {
+		// the solids that run by themselves (Stage 31): at most their rate's volume this step, liquid or none
+		double own = rests > 0.0 ? std::min(1.0, edge.solids_rate * step_seconds_ / rests) : 0.0;
+		if (!known || (!(runs > 0.0) && !(own > 0.0))) {
 			continue;
 		}
-		double fraction = 1.0;
-		if (edge.rate >= 0.0) { // a pour (Stage 27): at most its rate's volume this step
+		double fraction = runs > 0.0 ? 1.0 : 0.0;
+		if (edge.rate >= 0.0 && runs > 0.0) { // a pour (Stage 27): at most its rate's volume this step
 			const double most = edge.rate * step_seconds_;
 			fraction = most >= runs ? 1.0 : most / runs;
 		}
@@ -450,18 +492,31 @@ void Simulation::drain_liquids() {
 		if (below.rigid && world_.spill().index < 0) { // with nowhere to spill, the rest stays above
 			const Fill fill = fill_of(table, world_.snapshot_cell(edge.b), T0);
 			const double room = fill.defined ? below.volume - fill.condensed : 0.0;
-			fraction = std::min(fraction, room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0);
+			if (runs > 0.0) {
+				fraction = std::min(fraction, room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0);
+			}
+			if (own > 0.0) {
+				const double left = room - fraction * runs;
+				own = std::min(own, left >= rests ? 1.0 : left > 0.0 ? left / rests : 0.0);
+			}
 		}
-		const bool solids = (edge.phases & phase_bit(Phase::Solid)) != 0;
+		// of each solid: the liquid's share of what it carries, and what runs by itself
+		const double solid_fraction = own > 0.0 ? std::min(1.0, carried * fraction + own) : carried * fraction;
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < upper.amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
-			if (upper.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous || (solids && def.phase == Phase::Solid))) {
-				const int64_t moves = fraction >= 1.0 ? upper.amount[s] : static_cast<int64_t>(static_cast<double>(upper.amount[s]) * fraction);
-				if (moves > 0) {
-					amounts.push_back(SpeciesAmount{ id, Amount{ moves } });
-				}
+			if (upper.amount[s] <= 0 || def.wall) {
+				continue;
+			}
+			const bool flows = def.phase == Phase::Liquid || def.phase == Phase::Aqueous;
+			if (!flows && !(solids && def.phase == Phase::Solid)) {
+				continue;
+			}
+			const double share = flows ? fraction : solid_fraction;
+			const int64_t moves = share >= 1.0 ? upper.amount[s] : static_cast<int64_t>(static_cast<double>(upper.amount[s]) * share);
+			if (moves > 0) {
+				amounts.push_back(SpeciesAmount{ id, Amount{ moves } });
 			}
 		}
 		if (!amounts.empty()) {
@@ -952,7 +1007,8 @@ void Simulation::begin_step() {
 	process_ = Process::Reaction;
 }
 
-void Simulation::restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation) {
+void Simulation::restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation, std::vector<double> work) {
+	work_remainder_ = std::move(work);
 	heat_remainder_ = std::move(heat);
 	reaction_remainder_ = std::move(reaction);
 	nucleation_remainder_ = std::move(nucleation);
@@ -965,6 +1021,8 @@ void Simulation::advance() {
 		react();
 		process_ = Process::Heat;
 		conduct_heat();
+		process_ = Process::Work;
+		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
 		process_ = Process::Settle;
@@ -987,6 +1045,8 @@ StepTrace Simulation::step() {
 		react();
 		process_ = Process::Heat;
 		conduct_heat();
+		process_ = Process::Work;
+		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
 		process_ = Process::Settle;

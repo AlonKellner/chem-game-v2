@@ -242,6 +242,7 @@ TEST_CASE("optics: stirred up, a powder clouds the liquid; at rest it lies under
 	v.contents.push_back(substance("copper_oxide", 's', 0.045, 3.6, 2000000, 80.0));
 	const OpticsScene rest = scene_of(v);
 	v.stirred = true;
+	v.suspended = 1.0; // (all of it held up by the liquid's turning, Stage 32)
 	const OpticsScene stirred = scene_of(v);
 	// high in the liquid: clear at rest, dark with the black powder when stirred
 	const int y = FLOOR - 25;
@@ -493,7 +494,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	}
 	CHECK(after_dissolving.b < -15.0); // blue
 	CHECK(boiled_down.b < -15.0);
-	CHECK(boiled_down.l < after_dissolving.l - 10.0); // and deeper for the water gone
+	CHECK(boiled_down.l < after_dissolving.l - 6.0); // (8 darker; 10 and more when the room in front was a grey of 0.3: the glass reflects a white room now, Stage 33) // and deeper for the water gone
 }
 
 // ---- the renderer's frames (GAME_SPEC §12.2): history kept by content, points by need

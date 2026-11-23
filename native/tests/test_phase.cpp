@@ -286,6 +286,64 @@ TEST_CASE("phase: a drain with a rate runs at most its rate's volume a step, its
 	CHECK(sim.world().set_drain(EdgeId{ 0 }, rate, false) == Refusal::UnknownEdge);
 }
 
+TEST_CASE("phase: a drain carries a share of the solids with its liquid, and solids run down it by themselves at a rate of their own, liquid or none (Stage 31)") {
+	World::Builder b(builtin_species());
+	const CellId upper = b.add_cell("upper");
+	const CellId lower = b.add_cell("lower");
+	b.add_edge(upper, lower, PHASES_GAS);
+	const EdgeId drain = b.add_drain(upper, lower);
+	b.set_amount(upper, builtin::water, mol(2.0)).set_amount(upper, builtin::malachite, mol(0.02));
+	b.set_amount(upper, builtin::nitrogen, mol(0.01)).set_temperature(upper, 293.15);
+	b.set_amount(lower, builtin::nitrogen, mol(10.0)).set_temperature(lower, 293.15);
+	Simulation sim(build(b), shipped());
+	sim.set_checking(true);
+	const SpeciesDef &malachite = builtin_species().species(builtin::malachite);
+	REQUIRE(malachite.molar_volume > 0.0);
+	// a quarter of the solids is suspended: of them, the liquid's own share goes with it
+	const double rate = 6e-6;
+	REQUIRE(sim.world().set_drain(drain, rate, 0.25) == Refusal::None);
+	double water_before = sim.world().amount(upper, builtin::water).mol(), solid_before = sim.world().amount(upper, builtin::malachite).mol();
+	sim.step();
+	const double share = rate * STEP_SECONDS / (water_before * water().molar_volume);
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() == doctest::Approx(0.25 * share * solid_before).epsilon(1e-6));
+	// sediment by itself: its rate's volume a step, whatever the liquid does (here none runs)
+	const double solids_rate = 3e-7; // 0.3 mL of malachite a second
+	REQUIRE(sim.world().set_drain(drain, 0.0, 0.0, solids_rate) == Refusal::None);
+	water_before = sim.world().amount(upper, builtin::water).mol();
+	solid_before = sim.world().amount(upper, builtin::malachite).mol();
+	const double below_before = sim.world().amount(lower, builtin::malachite).mol();
+	sim.step();
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() - below_before == doctest::Approx(solids_rate * STEP_SECONDS / malachite.molar_volume).epsilon(1e-6));
+	CHECK(sim.world().amount(upper, builtin::water).mol() == doctest::Approx(water_before).epsilon(1e-3)); // (but for what evaporates)
+	// both: what is carried and what runs by itself add up, and never more than there is
+	REQUIRE(sim.world().set_drain(drain, -1.0, 1.0, 1.0) == Refusal::None);
+	sim.step();
+	CHECK(sim.world().amount(upper, builtin::malachite).mol() == 0.0);
+	CHECK(sim.world().amount(upper, builtin::water).mol() == 0.0);
+}
+
+TEST_CASE("phase: dry solids run down a drain at their rate (Stage 31)") {
+	World::Builder b(builtin_species());
+	const CellId upper = b.add_cell("upper");
+	const CellId lower = b.add_cell("lower");
+	b.add_edge(upper, lower, PHASES_GAS);
+	const EdgeId drain = b.add_drain(upper, lower);
+	b.set_amount(upper, builtin::malachite, mol(0.02)).set_amount(upper, builtin::nitrogen, mol(0.01)).set_temperature(upper, 293.15);
+	b.set_amount(lower, builtin::nitrogen, mol(10.0)).set_temperature(lower, 293.15);
+	Simulation sim(build(b), shipped());
+	sim.set_checking(true);
+	const SpeciesDef &malachite = builtin_species().species(builtin::malachite);
+	// no rate of their own: a drain is for liquid, and there is none
+	sim.step();
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() == 0.0);
+	const double solids_rate = 3e-7;
+	REQUIRE(sim.world().set_drain(drain, 0.0, 0.0, solids_rate) == Refusal::None);
+	for (int k = 0; k < 10; ++k) {
+		sim.step();
+	}
+	CHECK(sim.world().amount(lower, builtin::malachite).mol() == doctest::Approx(10.0 * solids_rate * STEP_SECONDS / malachite.molar_volume).epsilon(1e-6));
+}
+
 TEST_CASE("phase: a drain fills a rigid cell and no further (Stage 5)") {
 	// 2 mol of water (36 mL) above a 20 mL vessel
 	World::Builder b(builtin_species());

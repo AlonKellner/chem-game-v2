@@ -1,4 +1,5 @@
 #include "lab/lab.hpp"
+#include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
 
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -31,6 +33,14 @@ std::string build_name() {
 namespace {
 
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
+// A stirrer (GAME_SPEC §11, Stage 32): the work it does on the liquid a second, W, and how long a liquid left
+// alone keeps turning, s (dE/dt = P - E / tau). The game's choices: a small stir bar at a few hundred turns a
+// minute; a beaker of water stops turning in a few seconds.
+constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
+// A source of work is a reservoir so hot that its energy carries no entropy (the limit of a heat reservoir as
+// its temperature grows without bound): what it gives is work, and the second law holds as it is checked (T1, T2).
+constexpr double WORK_KELVIN = 1.0e300;
+constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
 constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
@@ -39,7 +49,8 @@ constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
 enum class Kind { Vessel, Bag, Burner, Tray, Stopper }; // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber
-enum class Place { Cabinet, Bench, On, Under, Outbox }; // On: on a vessel's mouth. Under: a burner under a vessel
+// On: on a vessel's mouth. Under: a burner under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
+enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
 struct Item {
 	std::string id;
@@ -62,6 +73,16 @@ struct Item {
 	double tilt = 0.0, cap = 0.0;
 	double pour_left_m3 = -1.0; // a scripted pour's liquid still to run (below 0: no limit); not saved: a command waits it out
 	bool stirred = false;
+	// A stirred liquid's turning (GAME_SPEC §11, Stage 32): the edge its stirrer's work comes along, from the
+	// mains; its kinetic energy, J; the share of its solids it holds up. And what they were last worked out
+	// for (worked out again when the vessel holds something else; saved with the rest, so a lab loaded goes on
+	// exactly): the most energy it can hold, the power that holds all its solids up, W, how fast they settle
+	// (a share a second).
+	EdgeId stirs;
+	double swirl = 0.0, suspended = 0.0;
+	double swirl_for = std::numeric_limits<double>::quiet_NaN(), swirl_most = 0.0, swirl_lifts = 0.0, settles = 0.0;
+	// its vortex's share as last worked out, and for what (a view asks every step while a session waits)
+	mutable double share = 0.0, share_energy = -1.0, share_for = -1.0, share_held_up = -1.0;
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (GAME_SPEC §13.5)
 	Place place = Place::Cabinet;
@@ -85,6 +106,14 @@ struct Event {
 	int64_t step = 0;
 	std::string what;
 	std::string item;
+};
+
+// One element of the trash (GAME_SPEC §13, Stage 34): an item, or a signal part with all it holds. An item
+// remembers the square it stood on (none: it came from the cabinet); a part's square is its own.
+struct Binned {
+	std::string id;
+	bool part = false;
+	int col = -1, row = -1;
 };
 
 // a double as its bits, so that a save holds it exactly
@@ -122,7 +151,7 @@ bool from_bits(const json &j, double &v) {
 }
 
 const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper" };
-const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox" };
+const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 double number(const json &j, const char *key, double fallback) {
 	return j.contains(key) && j.at(key).is_number() ? j.at(key).get<double>() : fallback;
@@ -204,6 +233,7 @@ struct Lab::Impl {
 	int cols = 28, rows = 15; // the bench's grid, in squares
 	CellId air;
 	CellId room;
+	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
 	Totals genesis;
 	bool check = true;
 	bool broken = false;
@@ -217,6 +247,13 @@ struct Lab::Impl {
 	std::vector<Rig> rigs;
 	std::vector<ControlSetting> controls;
 	int64_t made[PART_KINDS] = {}; // the parts made of each kind, for their names
+	// the trash (GAME_SPEC §13, Stage 34): what was put in it, oldest first. An item in it is in the world as one
+	// in the cabinet is. A part in it, with all it holds, is out of `parts`: nothing evaluates it and it signals
+	// nothing; the wires and the resets among what a circuit holds are kept beside it
+	std::vector<Binned> trash;
+	std::vector<Part> binned;
+	std::vector<Wire> binned_wires;
+	std::vector<Rig> binned_rigs;
 	bool rang = false; // an alarm started ringing in the last step
 	// goals (GAME_SPEC §13.5): the bench's, then the player's; `met` as last noticed
 	std::vector<Goal> goals;
@@ -254,6 +291,16 @@ struct Lab::Impl {
 		}
 		return -1;
 	}
+	int find_binned(const std::string &id) const {
+		for (size_t i = 0; i < binned.size(); ++i) {
+			if (binned[i].id == id) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// a name in use: an item's, a part's, or that of a part in the trash
+	bool taken(const std::string &id) const { return find(id) >= 0 || find_part(id) >= 0 || find_binned(id) >= 0; }
 	// the name of what standing_in found: an item, or a part after the items
 	const std::string &name_of(int index) const {
 		return index < static_cast<int>(items.size()) ? items[static_cast<size_t>(index)].id : parts[static_cast<size_t>(index) - items.size()].id;
@@ -698,7 +745,7 @@ struct Lab::Impl {
 		}
 		Item &x = items[static_cast<size_t>(i)];
 		if (control == "stir") {
-			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox) {
+			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
 				return false;
 			}
 			const bool on = value > 0.5;
@@ -878,6 +925,20 @@ struct Lab::Impl {
 
 	// the signals as JSON: for a report (plain numbers), or a save (`exact`: numbers as their bits)
 	json signals_json(bool exact) const {
+		json out = links_json(parts, wires, rigs, exact);
+		json k = json::array();
+		for (const ControlSetting &x : controls) {
+			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", exact ? json(bits(x.value)) : json(x.value) }, { "by", x.by }, { "step", x.step } });
+		}
+		out["controls"] = k;
+		out["made"] = json::array();
+		for (const int64_t n : made) {
+			out["made"].push_back(n);
+		}
+		return out;
+	}
+	// parts, with the wires and the rigs from them: the lab's, or the trash's (Stage 34)
+	static json links_json(const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Rig> &rigs, bool exact) {
 		static const char *const OPS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
 		const auto num = [exact](double v) { return exact ? json(bits(v)) : json(v); };
 		const auto maybe = [&](const std::optional<double> &v) { return v ? num(*v) : json(nullptr); };
@@ -949,20 +1010,33 @@ struct Lab::Impl {
 			}
 		}
 		out["rigs"] = r;
-		json k = json::array();
-		for (const ControlSetting &x : controls) {
-			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
-		}
-		out["controls"] = k;
-		out["made"] = json::array();
-		for (const int64_t n : made) {
-			out["made"].push_back(n);
-		}
 		return out;
 	}
 
 	// a save's signals, back
 	bool signals_from(const json &j, std::string &why) {
+		if (!links_from(j, parts, wires, rigs, why)) {
+			return false;
+		}
+		for (const json &x : j.at("controls")) {
+			ControlSetting k;
+			k.item = x.at("item").get<std::string>();
+			k.control = x.at("control").get<std::string>();
+			k.by = x.at("by").get<std::string>();
+			k.step = x.at("step").get<int64_t>();
+			if (!from_bits(x.at("value"), k.value)) {
+				why = "the save's signals hold a number that is not one";
+				return false;
+			}
+			controls.push_back(k);
+		}
+		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
+			made[k] = j.at("made").at(k).get<int64_t>();
+		}
+		return true;
+	}
+	// a save's parts, wires and rigs, back: the lab's, or the trash's (Stage 34)
+	static bool links_from(const json &j, std::vector<Part> &parts, std::vector<Wire> &wires, std::vector<Rig> &rigs, std::string &why) {
 		const auto exact = [&](const json &v, double &out) { return from_bits(v, out) || (why = "the save's signals hold a number that is not one", false); };
 		const auto maybe = [&](const json &v, std::optional<double> &out) {
 			if (v.is_null()) {
@@ -1060,19 +1134,145 @@ struct Lab::Impl {
 			}
 			rigs.push_back(r);
 		}
-		for (const json &x : j.at("controls")) {
-			ControlSetting k;
-			k.item = x.at("item").get<std::string>();
-			k.control = x.at("control").get<std::string>();
-			k.by = x.at("by").get<std::string>();
-			k.step = x.at("step").get<int64_t>();
-			if (!exact(x.at("value"), k.value)) {
+		return true;
+	}
+
+	// ---- the trash (GAME_SPEC §13, Stage 34)
+
+	// in the trash: an item, a part, or a part in a circuit that is
+	bool in_trash(const std::string &id) const {
+		const int i = find(id);
+		return (i >= 0 && items[static_cast<size_t>(i)].place == Place::Trash) || find_binned(id) >= 0;
+	}
+	// its place in the trash's history; -1 for what is not an element of it
+	int trash_at(const std::string &id) const {
+		for (size_t k = 0; k < trash.size(); ++k) {
+			if (trash[k].id == id) {
+				return static_cast<int>(k);
+			}
+		}
+		return -1;
+	}
+	// the first of a command's names that is in the trash
+	bool names_trashed(const json &c, std::string &id) const {
+		for (const char *key : { "item", "vessel", "burner", "from", "to", "over", "of", "part", "timer", "alarm", "circuit", "in" }) {
+			if (c.contains(key) && c.at(key).is_string() && in_trash(c.at(key).get<std::string>())) {
+				id = c.at(key).get<std::string>();
+				return true;
+			}
+		}
+		for (const char *key : { "items", "parts" }) {
+			for (const json &name : c.contains(key) && c.at(key).is_array() ? c.at(key) : json::array()) {
+				if (name.is_string() && in_trash(name.get<std::string>())) {
+					id = name.get<std::string>();
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. The wires and the
+	// resets among what it holds go with it; those to anything outside come off, as `scrap` takes them off. It
+	// signals nothing there: its signal off, an alarm quiet, a monitor's last reading forgotten, a controller
+	// untuned (its rigs are off, as after `unrig`); a timer keeps what is left of it.
+	void bin_part(const std::string &id) {
+		const std::vector<std::string> held = held_by(parts, id);
+		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
+		for (const Wire &w : wires) {
+			if (inside(w.from) && inside(w.to)) {
+				binned_wires.push_back(w);
+			}
+		}
+		for (Rig r : rigs) {
+			if (inside(r.from) && r.control == "reset" && inside(r.item)) {
+				r.seen = false; // its source's signal is off: it acts from its next change
+				binned_rigs.push_back(r);
+			}
+		}
+		std::erase_if(wires, [&](const Wire &w) { return inside(w.from) || inside(w.to); });
+		std::erase_if(rigs, [&](const Rig &r) { return inside(r.from) || (r.control == "reset" && inside(r.item)); });
+		std::erase_if(controls, [&](const ControlSetting &s) { return inside(s.item); });
+		for (const std::string &name : held) {
+			Part p = parts[static_cast<size_t>(find_part(name))];
+			p.own = p.out = p.ringing = false;
+			p.held = 0;
+			p.last.reset();
+			if (p.kind == PartKind::Controller) {
+				retune(p, false);
+				p.gain = p.tau = p.theta = 0.0;
+				p.pinned = 0;
+				p.pinned_said = false;
+			}
+			binned.push_back(p);
+			std::erase_if(parts, [&](const Part &q) { return q.id == name; });
+		}
+	}
+	// A part out of the trash, with all it holds: among the lab's parts again (the last of them), and the wires
+	// and resets kept beside it. With `scrapped`, gone for good instead.
+	void unbin_part(const std::string &id, bool scrapped) {
+		const std::vector<std::string> held = held_by(binned, id);
+		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
+		for (const std::string &name : held) {
+			if (!scrapped) {
+				parts.push_back(binned[static_cast<size_t>(find_binned(name))]);
+			}
+			std::erase_if(binned, [&](const Part &q) { return q.id == name; });
+		}
+		for (const Wire &w : binned_wires) {
+			if (!scrapped && inside(w.from)) {
+				wires.push_back(w);
+			}
+		}
+		for (const Rig &r : binned_rigs) {
+			if (!scrapped && inside(r.from)) {
+				rigs.push_back(r);
+			}
+		}
+		std::erase_if(binned_wires, [&](const Wire &w) { return inside(w.from); });
+		std::erase_if(binned_rigs, [&](const Rig &r) { return inside(r.from); });
+	}
+	// an element leaves the trash's history
+	void forget_trash(const std::string &id) {
+		std::erase_if(trash, [&](const Binned &b) { return b.id == id; });
+	}
+	// Past its capacity the oldest leaves the trash for good: an item to the cabinet (it holds matter, which
+	// nothing destroys), a part scrapped with all it holds.
+	void trim_trash() {
+		while (trash.size() > static_cast<size_t>(TRASH_MOST)) {
+			const Binned oldest = trash.front();
+			trash.erase(trash.begin());
+			if (oldest.part) {
+				unbin_part(oldest.id, true);
+				note(Notice::Detail, "", "the trash is full: " + oldest.id + " left it for good");
+			} else {
+				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
+				note(Notice::Detail, oldest.id, "the trash is full: " + oldest.id + " went to the cabinet");
+			}
+		}
+	}
+	// the trash as JSON: its history, and the parts in it with what is kept beside them
+	json trash_json(bool exact) const {
+		json out = links_json(binned, binned_wires, binned_rigs, exact);
+		json list = json::array();
+		for (const Binned &b : trash) {
+			list.push_back({ { "id", b.id }, { "part", b.part }, { "at", { b.col, b.row } } });
+		}
+		out["list"] = list;
+		return out;
+	}
+	bool trash_from(const json &j, std::string &why) {
+		for (const json &x : j.at("list")) {
+			trash.push_back(Binned{ x.at("id").get<std::string>(), x.at("part").get<bool>(), x.at("at").at(0).get<int>(), x.at("at").at(1).get<int>() });
+		}
+		if (!links_from(j, binned, binned_wires, binned_rigs, why)) {
+			return false;
+		}
+		for (const Binned &b : trash) {
+			const int i = find(b.id);
+			if (b.part ? find_binned(b.id) < 0 : i < 0 || items[static_cast<size_t>(i)].place != Place::Trash) {
+				why = "the save's trash holds \"" + b.id + "\", which is not in it";
 				return false;
 			}
-			controls.push_back(k);
-		}
-		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
-			made[k] = j.at("made").at(k).get<int64_t>();
 		}
 		return true;
 	}
@@ -1175,29 +1375,259 @@ struct Lab::Impl {
 		}
 		return true;
 	}
-	// a pour's rate this step: a held one's by its tilt, an upside-down one's an orifice's under its head
+	double solid_m3(CellId cell) const {
+		const CellState &state = world().snapshot_cell(cell);
+		double volume = 0.0;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (state.amount[s] > 0 && def.phase == Phase::Solid && !def.wall) {
+				volume += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
+		}
+		return volume;
+	}
+	// The share of a vessel's solids its liquid holds up (the rest lies as sediment), and its vortex's share of
+	// the largest that fits (GAME_SPEC §13)
+	double suspended(const Item &x) const { return x.suspended; }
+	// (g: the liquid with what is dissolved in it)
+	double liquid_g(CellId cell) const {
+		const CellState &state = world().snapshot_cell(cell);
+		double g = 0.0;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const SpeciesDef &def = table().species(id);
+			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+				g += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * static_cast<double>(table().molar_mass_ug(id)) * 1e-6;
+			}
+		}
+		return g;
+	}
+	// what lies in a vessel as the contents' model takes it: the liquid with what is dissolved and suspended in
+	// it, and the sediment's own volume, cm^3
+	void lying_in(const Item &x, double &mixture, double &sediment) const {
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0, solid = solid_m3(x.cell) * 1e6;
+		sediment = (1.0 - x.suspended) * solid;
+		mixture = liquid_m3(x.cell) > 0.0 ? std::max(condensed - sediment, 0.0) : 0.0;
+	}
+	double turn_of(const Item &x) const {
+		const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+		return g != nullptr && x.pours_into >= 0 && !x.inverted ? x.tilt * contents::full_tilt(*g, 1) : x.pours_into >= 0 && x.inverted ? PI : 0.0;
+	}
+	contents::Swirl swirl_of(const Item &x) const {
+		const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+		if (g == nullptr || !(x.swirl > 0.0)) {
+			return contents::Swirl{};
+		}
+		double mixture = 0.0, sediment = 0.0;
+		lying_in(x, mixture, sediment);
+		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x.cell), x.swirl);
+	}
+	// (the same until its energy, what it holds or what it holds up has changed by a part in ten thousand)
+	double vortex(const Item &x) const {
+		if (!(x.swirl > 0.0)) {
+			return 0.0;
+		}
+		const auto near = [](double a, double b) { return std::fabs(a - b) <= 1e-4 * std::fabs(b); };
+		if (!(x.share_energy > 0.0) || !near(x.swirl, x.share_energy) || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-4)) {
+			x.share = swirl_of(x).share;
+			x.share_energy = x.swirl;
+			x.share_for = x.swirl_for;
+			x.share_held_up = x.suspended;
+		}
+		return x.share;
+	}
+	// A stirred liquid's turning, each step (GAME_SPEC §11, Stage 32). The stirrer does work on the liquid, which
+	// the mains give (the ledger's entry: it is heat in the liquid once the turning has died down, and the liquid
+	// is taken to have it at once). The turning's energy: dE/dt = P - E / tau, never more than the liquid can
+	// hold. What the turning holds up: grains fall through the liquid at Stokes' speed, and holding them up takes
+	// the power they would give up falling, their weight in the liquid times that speed; the turning has its
+	// dissipation, E / tau, to give, and holds up that share of them. Fine powder stays up in a liquid barely
+	// turning; coarse heavy grains ask for more than a stirrer gives. Let go, they settle at their speed.
+	void set_stirring() {
+		static const double keeps = std::exp(-chem::STEP_SECONDS / SWIRL_SECONDS);
+		for (Item &x : items) {
+			// (most vessels, most steps: not stirred, at rest, nothing to do)
+			const bool working = x.stirs.index >= 0 && world().edges()[static_cast<size_t>(x.stirs.index)].power != 0.0;
+			if (x.kind != Kind::Vessel || (!x.stirred && !working && !(x.swirl > 0.0) && !(x.suspended > 0.0))) {
+				continue;
+			}
+			const bool turning = x.stirred && liquid_m3(x.cell) > 0.0;
+			if (x.stirs.index >= 0 && turning != working) {
+				world().set_power(x.stirs, turning ? STIR_WATTS : 0.0);
+			}
+			if (!turning && !(x.swirl > 0.0) && !(x.suspended > 0.0)) {
+				continue;
+			}
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+			const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+			const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0;
+			const double solid = solid_m3(x.cell) * 1e6, liquid = liquid_m3(x.cell) * 1e6;
+			if (!(liquid > 0.0)) {
+				x.swirl = 0.0;
+				x.suspended = 0.0;
+				continue;
+			}
+			// what the liquid can hold, and what its solids take: worked out when it holds something else (within
+			// a part in a thousand), and when it is tilted
+			// (a signature of the three: each part in two hundred of its volume, each fiftieth of its solids, each
+			// thousandth of a radian is another)
+			const double holds = 1.0 + std::floor(200.0 * std::log(std::max(condensed, 1e-9))) + 1e4 * std::floor(50.0 * std::log(std::max(solid, 1e-9))) + 1e9 * std::floor(1000.0 * turn_of(x));
+			if (holds != x.swirl_for) {
+				x.swirl_for = holds;
+				const double mass = liquid_g(x.cell), density = mass / std::max(condensed - solid, 1e-9); // g/cm^3
+				double depth = 0.0; // cm, of liquid under the surface's middle
+				if (g != nullptr) {
+					const contents::Swirl most = contents::swirl(*g, turn_of(x), std::max(condensed - solid, 0.0), 0.0, mass, 0.0);
+					x.swirl_most = most.most;
+					depth = most.depth;
+				} else {
+					depth = std::cbrt(condensed); // a vessel made to no shape: as deep as it is wide
+					x.swirl_most = mass * 1e-3 * GRAVITY * depth * 1e-2 / 3.0;
+				}
+				// its solids: the power that holds them up (their weight in the liquid times the speed they fall at),
+				// and how fast they settle through the liquid's depth
+				x.swirl_lifts = 0.0;
+				x.settles = 0.0;
+				const CellState &state = world().snapshot_cell(x.cell);
+				double fall = 0.0, weight = 0.0; // m/s, by each solid's volume
+				for (size_t s = 0; s < state.amount.size(); ++s) {
+					const SpeciesId id{ static_cast<int32_t>(s) };
+					const SpeciesDef &def = table().species(id);
+					if (state.amount[s] <= 0 || def.wall || def.phase != Phase::Solid || !(def.molar_volume > 0.0)) {
+						continue;
+					}
+					const double volume = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume; // m^3
+					const double heavier = std::max(static_cast<double>(table().molar_mass_ug(id)) * 1e-9 / def.molar_volume - density * 1e3, 0.0); // kg/m^3
+					const double grain = particle_diameter(table(), state, id); // m
+					const double falls = heavier * GRAVITY * grain * grain / (18.0 * WATER_VISCOSITY); // m/s (Stokes)
+					x.swirl_lifts += heavier * GRAVITY * volume * falls;
+					fall += volume * falls;
+					weight += volume;
+				}
+				x.settles = weight > 0.0 && depth > 0.0 ? (fall / weight) / (depth * 1e-2) : 0.0;
+			}
+			x.swirl = std::min(x.swirl * keeps + (turning ? STIR_WATTS * SWIRL_SECONDS * (1.0 - keeps) : 0.0), x.swirl_most);
+			if (x.swirl < 1e-9) {
+				x.swirl = 0.0;
+			}
+			if (!(solid > 0.0)) {
+				x.suspended = 0.0;
+				continue;
+			}
+			const double gives = x.swirl / SWIRL_SECONDS; // W: what the turning dissipates
+			const double holds_up = x.swirl_lifts > 0.0 ? std::min(1.0, gives / x.swirl_lifts) : (x.swirl > 0.0 ? 1.0 : 0.0);
+			if (holds_up > x.suspended) {
+				x.suspended += (holds_up - x.suspended) * (1.0 - keeps); // stirred up as fast as the liquid turns
+				if (holds_up - x.suspended < 1e-3) {
+					x.suspended = holds_up; // (the last thousandth: there at once)
+				}
+			} else {
+				x.suspended = std::max(holds_up, x.suspended - x.settles * chem::STEP_SECONDS);
+			}
+			if (x.suspended < 1e-6) {
+				x.suspended = 0.0; // (the last of a haze: nothing to see, and the sediment is whole again)
+			}
+		}
+	}
+	// A pour by hand (GAME_SPEC §13, Stage 31), from what lies in the vessel at its tilt (lab/contents.hpp): what
+	// stands over the lip runs over the brim as over a weir, and never more in a step than stands over the lip.
+	// The liquid takes with it what is dissolved and what is suspended in it; the sediment runs by the same law
+	// once its flat section stands over the lip. m^3/s: of the liquid's own volume, and of the solids' own.
+	struct ByHand {
+		double turn = 0.0, head_cm = 0.0, liquid = 0.0, carried = 0.0, solids = 0.0, runs_ml_s = 0.0;
+	};
+	ByHand by_hand(const Item &x, const glass::Vessel &g) const {
+		ByHand p;
+		p.turn = x.tilt * contents::full_tilt(g, 1);
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		if (!fill.defined) {
+			return p;
+		}
+		const double condensed = fill.condensed * 1e6, solid = solid_m3(x.cell) * 1e6, share = suspended(x);
+		const double sediment = (1.0 - share) * solid, mixture = std::max(condensed - sediment, 0.0);
+		if (!(sediment > 0.0) && !(x.swirl > 0.0)) {
+			// liquid alone, at rest: from the vessel's table at this turn (Stage 33; contents::plain_pour), so that a
+			// step's cost is a lookup and a frame's does not grow with the clock's speed
+			const contents::PlainPour plain = contents::plain_pour(g, p.turn, mixture, 1);
+			p.head_cm = mixture > 0.0 ? plain.head : 0.0;
+			if (plain.head > 0.0 && mixture > 0.0) {
+				const double over = std::max(mixture - plain.lip_holds, 0.0);
+				p.runs_ml_s = std::min(contents::over_brim(plain.brim, p.turn, plain.head), over / chem::STEP_SECONDS);
+				p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6;
+				p.carried = share;
+			}
+			return p;
+		}
+		const contents::Lying l = contents::lying(g, p.turn, mixture, sediment, x.swirl > 0.0 ? vortex(x) : 0.0, 1);
+		p.head_cm = l.liquid ? l.head : 0.0;
+		const double lip_holds = contents::below(g, p.turn, l.lip_level), brim = std::fabs(l.lip_x);
+		if (l.liquid && l.head > 0.0 && mixture > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds, 0.0);
+			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, l.head), over / chem::STEP_SECONDS);
+			p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
+			p.carried = share;
+		}
+		if (l.solid && l.solid_head > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds, 0.0);
+			p.solids = contents::PACKING * std::min(contents::over_brim(brim, p.turn, l.solid_head), over / chem::STEP_SECONDS) * 1e-6;
+		}
+		return p;
+	}
+	// Whether anything can run over a held vessel's lip at its tilt: not while all that is in it is less than
+	// the vessel holds below its lip there (Stage 33). The lab asks at every step, 300 of them a frame at 600
+	// times the clock's speed, and how the contents lie is a search of sixty volumes: a vessel held turned and
+	// not yet pouring ran the screen at ten frames a second. What it holds below its lip is one volume, the same
+	// at every step of a frame (kept for the tilt it was asked at). A stirred liquid stands higher at the wall
+	// than its volume says, and is asked in full; so is one within a part in a thousand million of its lip.
+	bool may_run_over(const Item &x, const glass::Vessel &g) const {
+		if (x.swirl > 0.0) {
+			return true;
+		}
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		if (!fill.defined) {
+			return false; // (as by_hand: nothing runs)
+		}
+		struct Held {
+			const glass::Vessel *vessel = nullptr;
+			double turn = 0.0, holds = 0.0;
+		};
+		thread_local Held last;
+		const double turn = x.tilt * contents::full_tilt(g, 1);
+		if (last.vessel != &g || last.turn != turn) {
+			last = Held{ &g, turn, contents::held_at(g, turn, 1) };
+		}
+		return fill.condensed * 1e6 >= last.holds * (1.0 - 1.0e-9);
+	}
+	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
+	// an upside-down one's an orifice's under its head
 	void set_pours() {
 		for (Item &x : items) {
 			if (x.pours_into < 0) {
 				continue;
 			}
 			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
-			double rate = 0.0;
-			bool solids = false;
-			if (g != nullptr && !x.inverted) {
-				rate = x.tilt * g->pour_ml_s * 1e-6;
-				solids = x.tilt >= 1.0 - 1e-12 && x.pour_left_m3 < 0.0; // at a held pour's full tilt its solids go too; a scripted one decants
+			double rate = 0.0, solids = 0.0, solids_rate = 0.0;
+			if (g != nullptr && !x.inverted && x.pour_left_m3 >= 0.0) {
+				rate = x.tilt * g->pour_ml_s * 1e-6; // a script's pour: an amount at the vessel's rate, decanted
+			} else if (g != nullptr && !x.inverted && !may_run_over(x, *g)) {
+				rate = 0.0; // (nothing stands over its lip: what by_hand would say, without the search)
+			} else if (g != nullptr && !x.inverted) {
+				const ByHand p = by_hand(x, *g);
+				rate = p.liquid;
+				solids = p.carried;
+				solids_rate = p.solids;
 			} else if (g != nullptr) {
 				const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
 				const double head_m = fill.defined ? g->head_inverted(fill.condensed * 1e6) / 100.0 : 0.0;
 				const double bore_m = g->cap_bore / 100.0;
 				rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * head_m);
-				solids = true; // upside down, what rests lies on the cap
+				solids = 1.0; // upside down, what rests lies on the cap
 			}
 			if (x.pour_left_m3 >= 0.0) {
 				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
 			}
-			world().set_drain(x.pour, rate, solids);
+			world().set_drain(x.pour, rate, solids, solids_rate);
 		}
 	}
 
@@ -1241,11 +1671,11 @@ struct Lab::Impl {
 		}
 		return -1;
 	}
-	// a part, and everything a circuit holds, and what that holds
-	std::vector<std::string> held_by(const std::string &id) const {
+	// a part, and everything a circuit holds, and what that holds, among the lab's parts or the trash's
+	static std::vector<std::string> held_by(const std::vector<Part> &among, const std::string &id) {
 		std::vector<std::string> out{ id };
 		for (size_t k = 0; k < out.size(); ++k) {
-			for (const Part &p : parts) {
+			for (const Part &p : among) {
 				if (p.in == out[k]) {
 					out.push_back(p.id);
 				}
@@ -1521,6 +1951,7 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
+		set_stirring();
 		set_pours();
 		if (!check || !traceable) {
 			sim->advance();
@@ -1642,6 +2073,7 @@ struct Lab::Impl {
 		touched.resize(items.size(), 0);
 		touched[i] = 1;
 		v.burst = true;
+		forget_trash(v.id); // burst in the trash (Stage 34), it leaves it: broken, in the cabinet, as any
 		v.place = Place::Cabinet;
 		v.col = v.row = -1;
 		events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", v.id });
@@ -1739,8 +2171,8 @@ struct Lab::Impl {
 
 	// true when the item is on the bench, in use
 	bool on_bench(const Item &x, std::string &why) const {
-		if (x.place == Place::Cabinet || x.place == Place::Outbox) {
-			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : "in the outbox") + ", not on the bench";
+		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
+			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in the outbox") + ", not on the bench";
 			return false;
 		}
 		return true;
@@ -1758,6 +2190,10 @@ struct Lab::Impl {
 		v.place = PLACE_NAME[static_cast<int>(item.place)];
 		v.col = item.col;
 		v.row = item.row;
+		if (const int binned_at = item.place == Place::Trash ? trash_at(item.id) : -1; binned_at >= 0) {
+			v.col = trash[static_cast<size_t>(binned_at)].col; // in the trash (Stage 34): the square it goes back to
+			v.row = trash[static_cast<size_t>(binned_at)].row;
+		}
 		v.w = item.w;
 		v.h = item.h;
 		v.on = item.on;
@@ -1768,7 +2204,25 @@ struct Lab::Impl {
 		v.inverted = item.inverted;
 		v.tilt = item.tilt;
 		v.cap = item.cap;
+		if (item.pours_into >= 0 && item.inverted && item.pour.index >= 0) {
+			v.pours_ml_s = std::max(world().edges()[static_cast<size_t>(item.pour.index)].rate, 0.0) * 1e6;
+		}
+		if (item.pours_into >= 0 && !item.inverted) {
+			if (const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml); g != nullptr) {
+				const ByHand p = by_hand(item, *g);
+				v.turn = p.turn;
+				v.head_cm = p.head_cm;
+				v.pours_ml_s = item.pour_left_m3 >= 0.0 ? item.tilt * g->pour_ml_s : p.runs_ml_s;
+				v.pours_solid_ml_s = item.pour_left_m3 >= 0.0 ? 0.0 : p.solids * 1e6;
+			}
+		}
 		v.stirred = item.stirred;
+		if (item.swirl > 0.0 || item.suspended > 0.0) {
+			v.swirl_j = item.swirl;
+			v.swirl_most_j = item.swirl_most;
+			v.vortex = vortex(item);
+			v.suspended = item.suspended;
+		}
 		v.submitted = item.submitted;
 		v.slot = item.slot;
 		v.burst = item.burst;
@@ -1830,7 +2284,7 @@ struct Lab::Impl {
 			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
 			for (const Edge &e : m.world().edges()) {
 				const CellId other = e.a == item.cell ? e.b : e.b == item.cell ? e.a : CellId{};
-				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room)) {
+				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room) && !(other == m.mains)) {
 					bool burner = false;
 					for (const Item &b : m.items) {
 						burner = burner || (b.kind == Kind::Burner && b.cell == other);
@@ -2126,6 +2580,13 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		b.add_edge(tray.cell, impl->room, PHASES_NONE, 2.0);
 		b.set_spill(tray.cell);
 		impl->items.push_back(tray);
+		// the mains (Stage 32): what does the stirrers' work, along an edge to every vessel (no heat, no matter)
+		impl->mains = b.add_reservoir("mains", WORK_KELVIN);
+		for (Item &item : impl->items) {
+			if (item.kind == Kind::Vessel) {
+				item.stirs = b.add_edge(impl->mains, item.cell, PHASES_NONE, 0.0);
+			}
+		}
 	} catch (const std::exception &e) {
 		why = std::string("the bench is malformed: ") + e.what();
 		return nullptr;
@@ -2179,6 +2640,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	const std::string what = c.at("do").get<std::string>();
 
+	// what is in the trash (Stage 34) takes no command but those that take it out, a wait, and a rig taken off it
+	if (!trash.empty() && what != "trash" && what != "restore" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
+		std::string id;
+		if (names_trashed(c, id)) {
+			why = "\"" + id + "\" is in the trash: restore it first";
+			return false;
+		}
+	}
 	if (what == "wait") {
 		const auto steps = static_cast<int64_t>(number(c, "seconds", 0.0) * 60.0 + 0.5);
 		for (int64_t i = 0; i < steps; ++i) {
@@ -2256,8 +2725,31 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		return true;
 	}
 	if (what == "place") {
-		// from the cabinet onto the bench, or along it
+		// from the cabinet or the trash onto the bench, or along it
 		int thing = -1;
+		if (c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0) {
+			// a signal part carried out of the trash, with all it holds, onto a free square of the bench (Stage 34)
+			const std::string id = c.at("item").get<std::string>();
+			if (trash_at(id) < 0) {
+				why = "\"" + id + "\" is in \"" + binned[static_cast<size_t>(find_binned(id))].in + "\", in the trash: restore that";
+				return false;
+			}
+			if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
+				why = "a place is \"at\" [column, row]";
+				return false;
+			}
+			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+			if (!square_free(std::string(), col, row, -1, why)) {
+				return false;
+			}
+			unbin_part(id, false);
+			forget_trash(id);
+			Part &p = parts[static_cast<size_t>(find_part(id))];
+			p.in.clear();
+			p.col = col;
+			p.row = row;
+			return true;
+		}
 		if (c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) < 0 && find_part(c.at("item").get<std::string>()) >= 0) {
 			// a signal part, along the bench
 			Part &p = parts[static_cast<size_t>(find_part(c.at("item").get<std::string>()))];
@@ -2282,7 +2774,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is broken: its glass burst";
 			return false;
 		}
-		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0) {
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
@@ -2309,6 +2801,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) { // moved away from an outlet, or its outlet from what stood under it
 			return false;
 		}
+		forget_trash(x.id); // carried out of the trash (Stage 34)
 		x.place = Place::Bench;
 		x.col = col;
 		x.row = row;
@@ -2439,8 +2932,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (p.id.empty()) {
 			do {
 				p.id = std::string(part_kind_name(kind)) + std::to_string(++count);
-			} while (find(p.id) >= 0 || find_part(p.id) >= 0);
-		} else if (find(p.id) >= 0 || find_part(p.id) >= 0) {
+			} while (taken(p.id));
+		} else if (taken(p.id)) {
 			why = "\"" + p.id + "\" is taken";
 			return false;
 		}
@@ -2452,7 +2945,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!part(c, "part", std::nullopt, at, why)) {
 			return false;
 		}
-		for (const std::string &id : held_by(parts[static_cast<size_t>(at)].id)) { // a circuit goes with all it holds
+		for (const std::string &id : held_by(parts, parts[static_cast<size_t>(at)].id)) { // a circuit goes with all it holds
 			std::erase_if(wires, [&](const Wire &w) { return w.from == id || w.to == id; });
 			std::erase_if(rigs, [&](const Rig &r) { return r.from == id || (r.control == "reset" && r.item == id); });
 			std::erase_if(controls, [&](const ControlSetting &s) { return s.item == id; });
@@ -2757,8 +3250,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (k.id.empty()) {
 			do {
 				k.id = "circuit" + std::to_string(++made[static_cast<int>(PartKind::Circuit)]);
-			} while (find(k.id) >= 0 || find_part(k.id) >= 0);
-		} else if (find(k.id) >= 0 || find_part(k.id) >= 0) {
+			} while (taken(k.id));
+		} else if (taken(k.id)) {
 			why = "\"" + k.id + "\" is taken";
 			return false;
 		}
@@ -2874,11 +3367,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	if (what == "stow") {
 		int thing = -1;
 		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
-			why = "there is no such item to stow";
+			const bool binned_part = c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0;
+			why = binned_part ? "\"" + c.at("item").get<std::string>() + "\" is in the trash: restore it first" : "there is no such item to stow";
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
-		bool free = x.kind != Kind::Tray && x.place == Place::Bench && x.holds < 0;
+		bool free = x.kind != Kind::Tray && (x.place == Place::Bench || x.place == Place::Trash) && x.holds < 0; // from the trash too (Stage 34)
 		for (const Item &other : items) {
 			free = free && other.under != thing;
 		}
@@ -2889,8 +3383,107 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) {
 			return false;
 		}
+		forget_trash(x.id);
 		x.place = Place::Cabinet;
 		x.col = x.row = -1;
+		return true;
+	}
+	if (what == "trash") {
+		// into the trash (GAME_SPEC §13, Stage 34): an item from the bench or the cabinet, as it is stowed; a
+		// signal part with all it holds, its settings kept. Past the trash's capacity the oldest leaves it.
+		if (!c.contains("item") || !c.at("item").is_string()) {
+			why = "the command needs \"item\"";
+			return false;
+		}
+		const std::string id = c.at("item").get<std::string>();
+		if (in_trash(id)) {
+			why = "\"" + id + "\" is already in the trash";
+			return false;
+		}
+		const int thing = find(id);
+		if (thing < 0 && find_part(id) < 0) {
+			why = "there is no such item to trash";
+			return false;
+		}
+		if (thing < 0) {
+			bin_part(id);
+			trash.push_back(Binned{ id, true, -1, -1 });
+			trim_trash();
+			return true;
+		}
+		Item &x = items[static_cast<size_t>(thing)];
+		std::string no;
+		if (x.kind == Kind::Tray) {
+			no = "the tray is the bench's own: it does not go in the trash";
+		} else if (x.place == Place::Outbox) {
+			no = "\"" + x.id + "\" has been handed in";
+		} else if (x.place == Place::On || x.place == Place::Under) {
+			const int other = x.place == Place::On ? x.on : x.under;
+			no = "\"" + x.id + "\" is " + (x.place == Place::On ? "on" : "under") + " \"" + (other >= 0 ? items[static_cast<size_t>(other)].id : std::string("something")) + "\": take it away first";
+		} else if (x.holds >= 0) {
+			no = "\"" + x.id + "\" has \"" + items[static_cast<size_t>(x.holds)].id + "\" on it: take it off first";
+		}
+		for (const Item &other : items) {
+			if (no.empty() && other.under == thing) {
+				no = "\"" + x.id + "\" stands over \"" + other.id + "\": take the burner away first";
+			}
+		}
+		if (!no.empty()) {
+			why = no;
+			return false;
+		}
+		if (!take_off_drains(thing, why)) {
+			return false;
+		}
+		trash.push_back(Binned{ x.id, false, x.place == Place::Bench ? x.col : -1, x.place == Place::Bench ? x.row : -1 });
+		x.place = Place::Trash;
+		x.col = x.row = -1;
+		trim_trash();
+		return true;
+	}
+	if (what == "restore") {
+		// out of the trash, back where it was (Stage 34): the newest, or the one named
+		if (c.contains("item") && !c.at("item").is_string()) {
+			why = "a restore names an \"item\", or none: the newest in the trash";
+			return false;
+		}
+		if (!c.contains("item") && trash.empty()) {
+			why = "the trash is empty";
+			return false;
+		}
+		const std::string id = c.contains("item") ? c.at("item").get<std::string>() : trash.back().id;
+		const int at = trash_at(id);
+		if (at < 0) {
+			const int inner = find_binned(id);
+			why = inner >= 0 ? "\"" + id + "\" is in \"" + binned[static_cast<size_t>(inner)].in + "\", in the trash: restore that" : "\"" + id + "\" is not in the trash";
+			return false;
+		}
+		const Binned b = trash[static_cast<size_t>(at)];
+		if (b.part) {
+			// to its square, on the bench or in the circuit it was in; taken, it stays in the trash
+			const Part &p = binned[static_cast<size_t>(find_binned(id))];
+			std::string taken_by;
+			if (!square_free(p.in, p.col, p.row, -1, taken_by)) {
+				why = "\"" + id + "\" cannot go back where it was: " + taken_by + ". It stays in the trash: place it on a free square";
+				return false;
+			}
+			unbin_part(id, false);
+		} else {
+			// to its square, or to the cabinet: where it came from, or because its square is taken
+			Item &x = items[static_cast<size_t>(find(id))];
+			const int there = b.col >= 0 ? standing_in(b.col, b.row, x.w, x.h) : -1;
+			if (b.col >= 0 && there < 0 && on_grid(b.col, b.row, x.w, x.h) && !(x.kind == Kind::Vessel && x.burst)) {
+				x.place = Place::Bench;
+				x.col = b.col;
+				x.row = b.row;
+			} else {
+				x.place = Place::Cabinet;
+				if (there >= 0) {
+					note(Notice::Detail, x.id, x.id + " went to the cabinet: \"" + name_of(there) + "\" stands where it stood");
+				}
+			}
+		}
+		trash.erase(trash.begin() + at);
 		return true;
 	}
 	if (what == "heat") {
@@ -3312,6 +3905,18 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		upper.drains_to = thing;
 		return true;
 	}
+	if (what == "undrain") {
+		// what an outlet runs into is taken away from it (Stage 34): the line comes off, the vessels stay
+		int of = -1;
+		if (!item(c, "of", Kind::Vessel, of, why)) {
+			return false;
+		}
+		if (items[static_cast<size_t>(of)].drains_to < 0) {
+			why = "\"" + items[static_cast<size_t>(of)].id + "\" has nothing under its outlet";
+			return false;
+		}
+		return take_off_drain(static_cast<size_t>(of), why);
+	}
 	if (what == "goal" || what == "ungoal") {
 		int slot = 0;
 		if (!slot_of(c, slot, why)) {
@@ -3347,7 +3952,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		} else {
 			do {
 				g.id = "goal" + std::to_string(++goals_made);
-			} while (find_goal(g.id) >= 0 || find(g.id) >= 0 || find_part(g.id) >= 0);
+			} while (find_goal(g.id) >= 0 || taken(g.id));
 			goals.push_back(g);
 		}
 		detect_goals(false);
@@ -3495,6 +4100,20 @@ LabView Lab::view() const {
 			out.ringing.push_back(p.id);
 		}
 	}
+	// the trash (Stage 34): its parts after the lab's, with what circuits among them hold; its history, oldest first
+	for (const Part &p : m.binned) {
+		ItemView v;
+		v.id = p.id;
+		v.kind = part_kind_name(p.kind);
+		v.place = "trash";
+		v.col = p.col;
+		v.row = p.row;
+		v.part = p;
+		out.items.push_back(v);
+	}
+	for (const Binned &b : m.trash) {
+		out.trash.push_back(b.part ? static_cast<int>(m.items.size() + m.parts.size()) + m.find_binned(b.id) : m.find(b.id));
+	}
 	out.wires = m.wires;
 	out.rigs = m.rigs;
 	out.controls = m.controls;
@@ -3627,6 +4246,13 @@ ItemDebug Lab::debug(const std::string &id) const {
 		out.facts = m.part_facts(m.parts[static_cast<size_t>(m.find_part(id))]);
 		return out;
 	}
+	if (i < 0 && m.find_binned(id) >= 0) { // in the trash (Stage 34): what it is set to
+		out.found = true;
+		out.part = true;
+		out.facts = m.part_facts(m.binned[static_cast<size_t>(m.find_binned(id))]);
+		out.facts.insert(out.facts.begin(), "in the trash: it signals nothing");
+		return out;
+	}
 	if (i < 0 || m.items[static_cast<size_t>(i)].kind == Kind::Burner) {
 		return out;
 	}
@@ -3649,7 +4275,10 @@ ItemDebug Lab::debug(const std::string &id) const {
 				const double head = g != nullptr && fill.defined ? g->head_inverted(fill.condensed * 1e6) : 0.0;
 				out.facts.push_back("pours into " + into + text_of(" upside down: its cap %.0f%% open", 100.0 * x.cap) + text_of(" under %.1f cm of liquid", head) + text_of(": %.2f mL/s", rate));
 			} else {
-				out.facts.push_back("pours into " + into + text_of(" held, tilted %.0f%%", 100.0 * x.tilt) + text_of(": %.2f mL/s", rate));
+				const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+				const Lab::Impl::ByHand p = g != nullptr ? m.by_hand(x, *g) : Lab::Impl::ByHand{};
+				out.facts.push_back("pours into " + into + text_of(" held, turned %.0f degrees", p.turn * 180.0 / PI) +
+						(p.head_cm > 0.0 ? text_of(", its liquid %.1f mm over the lip", 10.0 * p.head_cm) : std::string(", its liquid not at the lip")) + text_of(": %.2f mL/s", rate));
 			}
 		}
 	}
@@ -3687,7 +4316,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 	// its flows in the last step, into it
 	const StepFlows &f = m.sim->flows();
 	const std::span<const Edge> edges = world.edges();
-	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow" };
+	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow", "work" };
 	for (size_t e = 0; e < edges.size() && (e + 1) * PROCESSES <= f.energy.size(); ++e) {
 		if (edges[e].a != cell && edges[e].b != cell) {
 			continue;
@@ -3840,6 +4469,9 @@ std::string Lab::report() const {
 	}
 	out["events"] = events;
 	out["signals"] = m.signals_json(false);
+	if (!m.trash.empty()) { // Stage 34
+		out["trash"] = m.trash_json(false);
+	}
 	out["notices"] = m.notices_json(false);
 	out["goals"] = m.goals_json(false);
 	// the conservation laws, as integers
@@ -3881,6 +4513,25 @@ std::string Lab::digest() const {
 		if (e.rate >= 0.0) { // a pour's (Stage 27): a lab without one digests as before
 			hash.update_double(e.rate);
 		}
+		if (e.solids_rate > 0.0 || (e.carried > 0.0 && e.carried < 1.0)) { // a pour by hand's (Stage 31)
+			hash.update_double(e.carried);
+			hash.update_double(e.solids_rate);
+		}
+		if (e.power != 0.0) { // a stirrer's work (Stage 32)
+			hash.update_double(e.power);
+		}
+	}
+	for (const Item &x : m.items) { // a liquid's turning, and what it holds up (Stage 32)
+		if (x.swirl > 0.0 || x.suspended > 0.0) {
+			hash.update_double(x.swirl);
+			hash.update_double(x.suspended);
+		}
+	}
+	if (!m.sim->work_remainders().empty()) {
+		hash.update_u64(m.sim->work_remainders().size());
+		for (const double v : m.sim->work_remainders()) {
+			hash.update_double(v);
+		}
 	}
 	// the processes' carried remainders are state too (GAME_SPEC §4.5)
 	for (const std::vector<double> *carried : { &m.sim->heat_remainders(), &m.sim->reaction_remainders(), &m.sim->nucleation_remainders() }) {
@@ -3890,16 +4541,16 @@ std::string Lab::digest() const {
 		}
 	}
 	// the signals, once there is a part (§13.3): what they will do is state too
-	if (!m.parts.empty()) {
-		const auto text = [&hash](const std::string &t) {
-			hash.update_u64(t.size());
-			hash.update(t.data(), t.size());
-		};
-		const auto maybe = [&hash](const std::optional<double> &v) {
-			hash.update_u64(v ? 1 : 0);
-			hash.update_double(v ? *v : 0.0);
-		};
-		for (const Part &p : m.parts) {
+	const auto text = [&hash](const std::string &t) {
+		hash.update_u64(t.size());
+		hash.update(t.data(), t.size());
+	};
+	const auto maybe = [&hash](const std::optional<double> &v) {
+		hash.update_u64(v ? 1 : 0);
+		hash.update_double(v ? *v : 0.0);
+	};
+	const auto links = [&](const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Rig> &rigs) {
+		for (const Part &p : parts) {
 			if (p.kind == PartKind::Circuit) {
 				continue; // where parts are kept, as where things stand, is not the world
 			}
@@ -3937,11 +4588,11 @@ std::string Lab::digest() const {
 				hash.update_u64((p.tuned ? 1u : 0u) | (p.pulse ? 2u : 0u));
 			}
 		}
-		for (const Wire &w : m.wires) {
+		for (const Wire &w : wires) {
 			text(w.from);
 			text(w.to);
 		}
-		for (const Rig &r : m.rigs) {
+		for (const Rig &r : rigs) {
 			text(r.from);
 			text(r.item);
 			text(r.control);
@@ -3950,6 +4601,29 @@ std::string Lab::digest() const {
 			maybe(r.off);
 			maybe(r.any);
 		}
+	};
+	if (!m.parts.empty()) {
+		links(m.parts, m.wires, m.rigs);
+	}
+	// the trash, once it holds something (Stage 34): its order, where each element goes back to, and its
+	// parts as they will be restored; a lab with an empty trash digests as before
+	if (!m.trash.empty()) {
+		text("trash");
+		hash.update_u64(m.trash.size());
+		for (const Binned &b : m.trash) {
+			text(b.id);
+			hash.update_u64(b.part ? 1 : 0);
+			hash.update_i64(b.col);
+			hash.update_i64(b.row);
+		}
+		hash.update_u64(m.binned.size());
+		for (const Part &p : m.binned) { // a part's remembered place: its square, and the circuit it lies in
+			text(p.id);
+			text(p.in);
+			hash.update_i64(p.col);
+			hash.update_i64(p.row);
+		}
+		links(m.binned, m.binned_wires, m.binned_rigs);
 	}
 	return hash.hex();
 }
@@ -4018,14 +4692,25 @@ json Lab::Impl::save() const {
 		if (e.rate >= 0.0) {
 			edges.back()["rate"] = bits(e.rate);
 		}
+		if (e.carried > 0.0 || e.solids_rate > 0.0) {
+			edges.back()["carried"] = bits(e.carried);
+			edges.back()["solids_rate"] = bits(e.solids_rate);
+		}
+		if (e.power != 0.0) {
+			edges.back()["power"] = bits(e.power);
+		}
 	}
 	out["edges"] = edges;
 	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
+	if (!sim->work_remainders().empty()) {
+		out["remainders"]["work"] = doubles(sim->work_remainders());
+	}
 	json bench;
 	bench["grid"] = { cols, rows };
 	bench["mid_step"] = mid_step;
 	bench["air"] = air.index;
 	bench["room"] = room.index;
+	bench["mains"] = mains.index;
 	json list = json::array();
 	for (const Item &item : items) {
 		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
@@ -4039,6 +4724,14 @@ json Lab::Impl::save() const {
 		if (item.screwed) {
 			list.back()["screwed"] = true;
 		}
+		if (item.stirs.index >= 0) { // (Stage 32)
+			list.back()["stirs"] = item.stirs.index;
+		}
+		if (item.swirl > 0.0 || item.suspended > 0.0) {
+			list.back()["swirl"] = bits(item.swirl);
+			list.back()["suspended"] = bits(item.suspended);
+			list.back()["swirl_holds"] = { bits(item.swirl_for), bits(item.swirl_most), bits(item.swirl_lifts), bits(item.settles) };
+		}
 		if (item.pours_into >= 0) { // a lab without a pour saves as before (Stage 27)
 			list.back()["pours"] = { { "into", item.pours_into }, { "edge", item.pour.index }, { "inverted", item.inverted }, { "tilt", bits(item.tilt) }, { "cap", bits(item.cap) } };
 		}
@@ -4050,6 +4743,9 @@ json Lab::Impl::save() const {
 	}
 	bench["events"] = happened;
 	bench["signals"] = signals_json(true);
+	if (!trash.empty()) { // a lab with an empty trash saves as before (Stage 34)
+		bench["trash"] = trash_json(true);
+	}
 	bench["notices"] = notices_json(true);
 	bench["goals"] = { { "list", goals_json(true) }, { "made", goals_made } };
 	out["bench"] = bench;
@@ -4074,7 +4770,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	}
 	const SpeciesTable &table = builtin_species();
 	auto impl = std::make_unique<Impl>();
-	std::vector<double> heat, reaction, nucleation;
+	std::vector<double> heat, reaction, nucleation, work;
 	std::optional<World> world;
 	try {
 		if (saved.at("species").get<int>() != table.species_count()) {
@@ -4117,7 +4813,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.phases = e.at("phases").get<PhaseMask>();
 			edge.open = e.at("open").get<bool>();
 			edge.drain = e.at("drain").get<bool>();
-			if (e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) {
+			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
+					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}
@@ -4134,11 +4831,12 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		impl->mid_step = bench.at("mid_step").get<bool>();
 		impl->air = CellId{ bench.at("air").get<int32_t>() };
 		impl->room = CellId{ bench.at("room").get<int32_t>() };
+		impl->mains = CellId{ bench.value("mains", -1) };
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Outbox)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -4163,6 +4861,13 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 				}
 			}
 			item.stirred = j.at("stirred").get<bool>();
+			item.stirs = EdgeId{ j.value("stirs", -1) };
+			if ((j.contains("swirl") && !from_bits(j.at("swirl"), item.swirl)) || (j.contains("suspended") && !from_bits(j.at("suspended"), item.suspended)) ||
+					(j.contains("swirl_holds") && (!from_bits(j.at("swirl_holds").at(0), item.swirl_for) || !from_bits(j.at("swirl_holds").at(1), item.swirl_most) ||
+														  !from_bits(j.at("swirl_holds").at(2), item.swirl_lifts) || !from_bits(j.at("swirl_holds").at(3), item.settles)))) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			item.submitted = j.at("submitted").get<bool>();
 			item.col = j.at("col").get<int>();
 			item.row = j.at("row").get<int>();
@@ -4192,6 +4897,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		if (bench.contains("signals") && !impl->signals_from(bench.at("signals"), why)) {
 			return nullptr;
 		}
+		if (bench.contains("trash") && !impl->trash_from(bench.at("trash"), why)) {
+			return nullptr;
+		}
+		for (const Item &x : impl->items) {
+			if (x.place == Place::Trash && impl->trash_at(x.id) < 0) {
+				why = "the save holds \"" + x.id + "\" in a trash that does not list it";
+				return nullptr;
+			}
+		}
 		if (bench.contains("notices") && !impl->notices_from(bench.at("notices"), why)) {
 			return nullptr;
 		}
@@ -4204,7 +4918,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			}
 		}
 		const json &remainders = saved.at("remainders");
-		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {
+		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation) ||
+				(remainders.contains("work") && !to_doubles(remainders.at("work"), work))) {
 			why = "the save holds a number that is not one";
 			return nullptr;
 		}
@@ -4221,20 +4936,20 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count &&
+		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";
 			return nullptr;
 		}
 	}
-	if (impl->air.index < 0 || impl->air.index >= cells || impl->room.index < 0 || impl->room.index >= cells) {
+	if (impl->air.index < 0 || impl->air.index >= cells || impl->room.index < 0 || impl->room.index >= cells || impl->mains.index >= cells) {
 		why = "the save's room is not in its world";
 		return nullptr;
 	}
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false);
-	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation));
+	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation), std::move(work));
 	impl->genesis = totals(table, impl->world().snapshot());
 	if (!impl->restored_notices) {
 		impl->detect(true); // a save from before notices: what the detectors see from now on

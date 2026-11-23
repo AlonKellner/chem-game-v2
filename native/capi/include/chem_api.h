@@ -149,6 +149,11 @@ CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
 /* A frame of real time, in seconds: the lab advances by it times the speed
  * chosen on the screen. */
 CG_API void cg_ui_frame(cg_ui *ui, double seconds);
+/* A play (Stage 33; lab/play.hpp, "chem-play/1"): what a hand does on the screen, as data. Once given, each
+ * cg_ui_frame first gives the screen that frame's gestures. cg_ui_playing: the mark of the frame last given
+ * ("" for none), or NULL when no play runs (none was given, or it is over). */
+CG_API cg_status cg_ui_play(cg_ui *ui, const char *play_json);
+CG_API const char *cg_ui_playing(cg_ui *ui);
 
 /* The refraction maps' store (GAME_SPEC §12.3, Stage 24): a directory where the
  * maps of the vessels made as glassware are kept, made before the game runs;
@@ -234,7 +239,23 @@ typedef struct cg_optics {
 	 * from this vec4 on (0 when they were laid out again). A host one revision
 	 * behind need send only that. */
 	int64_t maps_changed_from;
+	/* The shapes (GAME_SPEC §12.3, Stage 29): each bending body's surfaces, for a
+	 * host whose pass traces its rays live (shape_count vec4s), with a revision of
+	 * their own. */
+	int32_t shape_count;
+	const float *shapes; /* 4 * shape_count floats */
+	uint64_t shapes_revision;
 } cg_optics;
+
+/* A host whose pass traces its rays live keeps each pixel's beams between frames
+ * (GAME_SPEC §12.3, Stage 33): a record of this many vec4s for each pixel of a
+ * rectangle of `chain`, written and read by the per-pixel source alone
+ * (kept_vec, kept_put), zero at first. */
+#define CG_OPTICS_KEPT_VECS 24
+/* And it gives the pixels read by their own rays a budget of their own: this
+ * many points a frame over the whole screen (a point of theirs is a ray, or a
+ * quarter of one), their asks summed apart from the others'. */
+#define CG_OPTICS_RAY_POINTS 300000
 
 /* Borrowed until the next call on this ui. */
 CG_API cg_status cg_ui_optics(cg_ui *ui, cg_optics *out);
@@ -291,7 +312,9 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
 
 /* A key for the screen's focused field (GAME_SPEC §13.3): CG_KEY_TEXT with
  * the character's code point, or backspace, enter, escape. */
-enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3 };
+/* CG_KEY_UNDO (Stage 34): the host's undo chord (Ctrl+Z, Cmd+Z); it brings back what was last put in the
+ * trash. Backspace, with nothing being typed, puts what is chosen in the trash; a host sends Delete as it. */
+enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
 
 /* The signals on the bench (GAME_SPEC §13.3): timers, monitors, alarms, notice parts, writers, circuits.

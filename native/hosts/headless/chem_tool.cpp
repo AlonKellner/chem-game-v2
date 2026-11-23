@@ -30,6 +30,8 @@ int usage() {
 						 "  study dissolution     copper oxide under sulfuric acid: still, stirred, warmed\n"
 						 "  study crystals        the solution boiled down and left to cool\n"
 						 "  study spectrum        how many spectral bands the renderer needs\n"
+						 "  study tilt            what each vessel holds below its lip as it is turned, and what runs over it\n"
+						 "  study vortex          a turning liquid's vortex against its energy, E = (M g / A) V\n"
 						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n"
 						 "  maps DIR BENCH...     every glassware vessel's refraction maps, made before the game runs, into DIR\n");
 	return 2;

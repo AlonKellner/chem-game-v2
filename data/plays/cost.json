@@ -1,0 +1,26 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{"to": "item:flask", "button": "click"},
+		{"to": "square:11,12", "frames": 2, "button": "click"},
+		{"to": "item:jar", "button": "click"},
+		{"to": "square:4,13", "frames": 2, "button": "click"},
+		{"to": "item:jar", "button": "click"},
+		{"to": "item:flask", "frames": 2, "button": "right"},
+		{"to": "panel:tip:malachite", "button": "click"},
+		{"to": "item:acid", "button": "click"},
+		{"to": "square:7,12", "frames": 2, "button": "click"},
+		{"frames": 90},
+		{"frames": 60, "mark": "settled"},
+		{"to": "item:acid", "button": "click"},
+		{"to": "item:flask", "frames": 90, "mark": "carry"},
+		{"button": "down", "mark": "pour"},
+		{"frames": 420, "mark": "pour"},
+		{"button": "up"},
+		{"frames": 90, "mark": "rest"},
+		{"to": "square:7,12", "frames": 30, "button": "click"},
+		{"to": "item:flask", "button": "right"},
+		{"to": "stir:flask", "button": "click"},
+		{"frames": 360, "mark": "stir"}
+	]
+}

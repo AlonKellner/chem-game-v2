@@ -5,10 +5,12 @@
 #include "chem/optics.hpp"
 #include "chem/species.hpp"
 #include "lab/colour.hpp"
+#include "lab/contents.hpp"
 #include "lab/optics_trace.hpp"
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <mutex>
 #include <cmath>
@@ -189,7 +191,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 	for (int b = 0; b < MAX_BODIES; ++b) {
 		const int at = HEADER_VECS + b * BODY_VECS;
 		const float *rect = &t[static_cast<size_t>(at + RECT) * 4], *form = &t[static_cast<size_t>(at + FORM) * 4], *refract = &t[static_cast<size_t>(at + REFRACT) * 4];
-		const bool refracts = b < count && refract[3] > 0.5f && (form[0] < 0.5f || form[0] > 1.5f);
+		// (where a pixel's rays are traced in the pass, Stage 29, nothing reads a map: none is made)
+		const bool refracts = !optics_traced() && b < count && refract[3] > 0.5f && (form[0] < 0.5f || form[0] > 1.5f);
 		uint64_t key = 0;
 		trace::MapSpec spec;
 		const glass::Vessel *shaped = nullptr;
@@ -315,6 +318,8 @@ void place_maps(OpticsScene &scene, std::vector<float> &t, const std::vector<flo
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies) {
 	std::vector<float> t(static_cast<size_t>(SIZE_VECS) * 4, 0.0f), rows, lines(static_cast<size_t>(MAX_LINES) * 4, 0.0f);
 	const auto put = [&](int vec, int part, double v) { t[static_cast<size_t>(vec) * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
+	// how each body lies (Stage 30): the shapes' head carries it to the tracers
+	std::vector<double> lies(static_cast<size_t>(MAX_BODIES) * SHAPE_BLOCK * 4, 0.0);
 	put(0, 1, room.bench);
 	put(0, 2, room.elsewhere);
 	put(0, 3, LIGHTS);
@@ -324,6 +329,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(1, 3, room.h);
 	put(2, 0, room.wall_px);
 	put(3, 0, room.gap_px);
+	put(3, 2, room.cube);
+	put(3, 3, room.cube_cell);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -391,6 +398,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + MORE, 3, body.y1);
 				put(at + FORM, 3, body.dash);
 			}
+			if (body.shape == OpticsBody::Grating) {
+				put(at + MORE, 0, body.size); // its ruling's pitch, nm (Stage 29)
+			}
 			put(at + RECT, 0, x);
 			put(at + RECT, 1, y);
 			put(at + RECT, 2, w);
@@ -432,6 +442,40 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(at + RECT, 1, body.y);
 		put(at + RECT, 2, body.w);
 		put(at + RECT, 3, body.h);
+		{
+			// Where it stands upright, and how it is turned (Stage 30): upside down is half a turn about its middle.
+			// Turned, its rectangle in the scene is the one that holds all of it (the screen's squares and a pixel's
+			// path go by it); the tracers go by where it stands upright, turned back.
+			double *lie = &lies[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS) * SHAPE_BLOCK * 4];
+			const double upright_x = body.angle != 0.0f && !body.flipped ? body.x : t[static_cast<size_t>(at + RECT) * 4], angle = body.flipped ? PI : body.angle;
+			const double pivot_x = body.flipped ? upright_x + body.w / 2.0 : body.pivot_x, pivot_y = body.flipped ? body.y + body.h / 2.0 : body.pivot_y;
+			lie[3] = angle;
+			lie[4] = pivot_x;
+			lie[5] = pivot_y;
+			lie[6] = std::cos(angle);
+			lie[7] = std::sin(angle);
+			lie[8] = upright_x;
+			lie[9] = body.y;
+			lie[10] = body.w;
+			lie[11] = body.h;
+			lie[12] = -lie[7];
+			lie[13] = lie[6];
+			if (body.angle != 0.0f && !body.flipped) {
+				double x0 = 1e30, y0 = 1e30, x1 = -1e30, y1 = -1e30;
+				for (int corner = 0; corner < 4; ++corner) {
+					const double dx = upright_x + (corner % 2 == 1 ? body.w : 0.0f) - pivot_x, dy = body.y + (corner / 2 == 1 ? body.h : 0.0f) - pivot_y;
+					const double x = pivot_x + dx * lie[6] - dy * lie[7], y = pivot_y + dx * lie[7] + dy * lie[6];
+					x0 = std::min(x0, x);
+					y0 = std::min(y0, y);
+					x1 = std::max(x1, x);
+					y1 = std::max(y1, y);
+				}
+				put(at + RECT, 0, x0);
+				put(at + RECT, 1, y0);
+				put(at + RECT, 2, x1 - x0);
+				put(at + RECT, 3, y1 - y0);
+			}
+		}
 		put(at + FORM, 0, ball ? 1.0 : 0.0);
 		put(at + FORM, 2, bottom + 2.0); // no liquid: its surface is under the floor
 		put(at + REFRACT, 1, layer_of(body));
@@ -554,6 +598,36 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			// height; or, made to no standard, a cylinder of its volume and of the proportions it is drawn with
 			const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
 			scene.vessels[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS)] = made;
+			if (made != nullptr) {
+				// What lies in it (Stage 30; lab/contents.hpp), in its own frame: its liquid's level in the room and
+				// the vortex hanging from it, its sediment's flat section and pile. What is stirred up is in the
+				// liquid, not on the floor.
+				double *lie = &lies[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS) * SHAPE_BLOCK * 4];
+				const double sediment = (1.0 - (v.liquid_ml > 0.0 ? std::min(std::max(v.suspended, 0.0), 1.0) : 0.0)) * v.solid_ml;
+				const contents::Lying l = contents::lying(*made, lie[3], std::max(v.condensed_ml - sediment, 0.0), sediment, body.vortex, body.side);
+				// Drawn to a sixty-fourth of a pixel (Stage 33): what lies in a vessel moves by less at every step of
+				// the lab (a vortex nearing its size, a liquid losing vapour), and a pixel's rays are followed again
+				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
+				const double grain = 2.0 * made->widest() / body.w / 64.0;
+				const auto drawn = [&](double cm) { return std::round(cm / grain) * grain; };
+				lie[2] = 1.0;
+				lie[12] = l.up_x;
+				lie[13] = l.up_y;
+				lie[14] = l.liquid ? 1.0 : 0.0;
+				lie[15] = drawn(l.liquid_level);
+				lie[16] = drawn(l.vortex.height);
+				lie[17] = drawn(l.vortex.across);
+				lie[18] = drawn(l.vortex.deep);
+				lie[19] = l.solid ? 1.0 : 0.0;
+				lie[20] = drawn(l.vortex.x);
+				lie[21] = drawn(l.vortex.y);
+				lie[22] = drawn(l.solid_level);
+				lie[23] = drawn(l.pile.height);
+				lie[24] = drawn(l.pile.across);
+				lie[25] = drawn(l.pile.deep);
+				lie[26] = drawn(l.pile.x);
+				lie[27] = drawn(l.pile.y);
+			}
 			const double aspect = static_cast<double>(body.h) / body.w;
 			const double d_cm = made ? 2.0 * made->widest() : std::cbrt(4.0 * (v.volume_ml > 0.0 ? v.volume_ml : 1.0) / (PI * aspect));
 			const double cm_per_px = d_cm / body.w;
@@ -574,12 +648,15 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// upside down (Stage 27), it lies from its mouth, now at the bottom
 				put(at + FORM, 2, bottom - (made && body.flipped ? made->head_inverted(v.condensed_ml) : made ? made->level(v.condensed_ml) : floor_cm + v.condensed_ml / floor_cm2) / cm_per_px);
 			}
-			if (solid_ml > 0.0 && v.stirred && v.liquid_ml > 0.0) {
+			// what the liquid holds up of its solids (Stage 32), and what lies at rest
+			const double held_up = v.liquid_ml > 0.0 ? std::min(std::max(v.suspended, 0.0), 1.0) : 0.0, at_rest = (1.0 - held_up) * solid_ml;
+			if (solid_ml > 0.0 && held_up > 0.0) {
 				// stirred up: every particle shades its own cross-section, twice over
-				put(at + MORE, 0, EXTINCTION_EFFICIENCY * cross_section_cm2 / v.liquid_ml);
-			} else if (solid_ml > 0.0) {
+				put(at + MORE, 0, EXTINCTION_EFFICIENCY * held_up * cross_section_cm2 / v.liquid_ml);
+			}
+			if (at_rest > 0.0) {
 				// at rest: a heap at its angle of repose, a cone until it reaches the wall
-				const double heap_ml = solid_ml / PACKING, r_wall = made ? made->radius_inside(made->floor + 0.25 * made->height) : d_cm / 2.0;
+				const double heap_ml = at_rest / PACKING, r_wall = made ? made->radius_inside(made->floor + 0.25 * made->height) : d_cm / 2.0;
 				double r_base = std::cbrt(3.0 * heap_ml / (PI * REPOSE));
 				if (r_base > r_wall) {
 					r_base = (heap_ml / (2.0 * PI * REPOSE) + r_wall * r_wall * r_wall / 3.0) * 2.0 / (r_wall * r_wall);
@@ -602,6 +679,12 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);
 		h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it
 		h = fnv(&lines[static_cast<size_t>(first_line) * 4], static_cast<size_t>(line_count - first_line) * 4 * sizeof(float), h);
+		{
+			// how it lies (Stage 30): its turn, and what lies in it (the liquid's level, the vortex, the sediment)
+			const double *lie = &lies[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS) * SHAPE_BLOCK * 4];
+			h = fnv(&lie[2], 2 * sizeof(double), h);
+			h = fnv(&lie[12], 16 * sizeof(double), h);
+		}
 		put(at + IDS, 1, tag(h));
 		put(at + IDS, 2, first_line);
 		put(at + IDS, 3, line_count - first_line);
@@ -645,6 +728,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	for (int b = 0; b < count; ++b) {
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4], *refract = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4];
 		const float *form = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4];
+		// Stage 29: where a pixel's rays are traced in the pass (LAB_BEAM=4 or 5), every body that bends is read
+		// by the second pass, and a grating with them
+		const bool traced = optics_traced();
+		if (traced && form[0] > 5.5f) {
+			scene.chain.insert(scene.chain.end(), { std::floor(rect[0] - 2.0f), std::floor(rect[1] - 2.0f), std::ceil(rect[0] + rect[2] + 2.0f), std::ceil(rect[1] + rect[3] + 2.0f) });
+			scene.chain_bodies.push_back(b);
+			continue;
+		}
 		if (!(refract[3] > 0.5f) || !(form[0] < 0.5f || form[0] > 1.5f)) {
 			continue;
 		}
@@ -655,7 +746,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		for (int k = 0; map[3] < 0.0f && k < static_cast<int>(-map[3]); ++k) {
 			several = several || scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4 + 2] != 1.0f;
 		}
-		bool wanted = refract[1] > 0.5f || several;
+		bool wanted = refract[1] > 0.5f || several || traced;
 		for (int o = 0; o < count && !wanted; ++o) {
 			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
 			// across another that bends, on its own layer (one of a nearer layer covers the pixels they share)
@@ -687,6 +778,141 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(HEADER_VECS + b * BODY_VECS + SET, 1, lower ? 1.0 : 0.0);
 		put(HEADER_VECS + b * BODY_VECS + SET, 2, lower ? tag(h) : 0.0);
 	}
+	// Each body's tags (Stage 33; the shapes' head, its vec4s 7 to 9). Its shape tag: everything the way of a
+	// ray through its glass depends on, and nothing of its colour: where it stands and how (its rectangle, form,
+	// glass, layer), how it lies, its glass's and its liquid's indices, the vessel it is made as. Its content
+	// tag, where what lies in it is given: the liquid's level and its vortex, the sediment and its pile; now,
+	// and as the scene before this had it, with the rows of the screen between which the two differ (a level
+	// that rises changes nothing under where it was or over where it is). And for what stands behind it, in its
+	// rows, on a layer further from the eye, which its rays can reach: a signature of the shape tags, one of the
+	// content tags now and before, and all the rows that changed. A pixel's beams are kept while the shape tags
+	// of what it looks through are the same and what lies there has changed only on rows its rays do not pass.
+	{
+		const auto lie_of = [&](const std::vector<double> &from, int b) { return &from[static_cast<size_t>(b) * SHAPE_BLOCK * 4]; };
+		std::vector<float> shape_tag(static_cast<size_t>(count), 0.0f), content_tag(static_cast<size_t>(count), 0.0f), content_was(static_cast<size_t>(count), 0.0f);
+		std::vector<double> zone_lo(static_cast<size_t>(count), 1.0e30), zone_hi(static_cast<size_t>(count), -1.0e30);
+		// the scene before: each body by its id
+		const bool had = scene.table.size() == t.size() && scene.lies.size() == lies.size();
+		const int count_was = had ? std::min(static_cast<int>(scene.table[0]), MAX_BODIES) : 0;
+		std::vector<int> before(static_cast<size_t>(count), -1);
+		bool as_before = had && count_was == count;
+		for (int b = 0; b < count; ++b) {
+			const size_t at = static_cast<size_t>(HEADER_VECS + b * BODY_VECS) * 4;
+			const double *lie = lie_of(lies, b);
+			const bool given = lie[2] > 0.5; // what lies in it is traced: its liquid's surface and its heap are not the glass's
+			uint64_t h = fnv(&t[at + RECT * 4], 4 * sizeof(float));
+			h = fnv(&t[at + FORM * 4], (given ? 2 : 4) * sizeof(float), h);
+			if (!given) {
+				h = fnv(&t[at + MORE * 4], 4 * sizeof(float), h);
+			}
+			h = fnv(&t[at + REFRACT * 4], 4 * sizeof(float), h);
+			if (t[at + FORM * 4] > 1.5f) {
+				h = fnv(&t[at + GLOW * 4], 4 * sizeof(float), h); // (a prism's third corner)
+			}
+			const size_t set = static_cast<size_t>(t[at + SET * 4]);
+			if ((set + 1) * static_cast<size_t>(ROWS_PER_SET * ROW) <= rows.size()) {
+				h = fnv(&rows[(set * ROWS_PER_SET + 3) * ROW], 2 * ROW * sizeof(float), h); // its liquid's index and its glass's
+			}
+			h = fnv(lie + 2, (given ? 12 : 26) * sizeof(double), h);
+			const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)];
+			h = fnv(&made, sizeof made, h);
+			shape_tag[static_cast<size_t>(b)] = tag(h);
+			content_tag[static_cast<size_t>(b)] = given ? tag(fnv(lie + 14, 14 * sizeof(double))) : 0.0f;
+			for (int o = 0; o < count_was; ++o) {
+				if (scene.table[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + IDS) * 4] == t[at + IDS * 4]) {
+					before[static_cast<size_t>(b)] = o;
+					break;
+				}
+			}
+			const int o = before[static_cast<size_t>(b)];
+			as_before = as_before && o == b && static_cast<float>(lie_of(scene.lies, o)[30]) == content_tag[static_cast<size_t>(b)];
+		}
+		for (int b = 0; b < count && !as_before; ++b) {
+			const double *lie = lie_of(lies, b);
+			const int o = before[static_cast<size_t>(b)];
+			if (!(lie[2] > 0.5)) {
+				continue;
+			}
+			if (o < 0) {
+				content_was[static_cast<size_t>(b)] = -1.0f; // (new to the scene: nothing kept is its)
+				continue;
+			}
+			const double *was = lie_of(scene.lies, o);
+			content_was[static_cast<size_t>(b)] = static_cast<float>(was[30]);
+			if (content_was[static_cast<size_t>(b)] == content_tag[static_cast<size_t>(b)]) {
+				continue;
+			}
+			// The rows between which it differs. A place h cm up the room from its frame's origin is h / cm rows
+			// above where the origin is on the screen (the room's up in its frame is its turn's own).
+			const bool turned = lie[3] != 0.0;
+			const double c = turned ? lie[6] : 1.0, sn = turned ? lie[7] : 0.0, px = turned ? lie[4] : 0.0, py = turned ? lie[5] : 0.0;
+			const double cm = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4 + 1];
+			const double origin = py + (lie[8] + 0.5 * lie[10] - px) * sn + (lie[9] + lie[11] - py) * c;
+			double low = 1.0e300, high = -1.0e300;
+			if (!(cm > 0.0) || std::abs(lie[12] + sn) > 1.0e-6 || std::abs(lie[13] - c) > 1.0e-6) {
+				low = -1.0e300; // (not laid as this reads it: everywhere)
+				high = 1.0e300;
+			} else {
+				// its liquid: [14] whether, [15] its level, [16] to [18] its vortex, [20] and [21] the vortex's middle
+				if (was[14] != lie[14] || was[15] != lie[15] || was[16] != lie[16] || was[17] != lie[17] || was[18] != lie[18] || was[20] != lie[20] || was[21] != lie[21]) {
+					const bool both = was[14] > 0.5 && lie[14] > 0.5;
+					low = both ? std::min(was[15] - std::abs(was[16]), lie[15] - std::abs(lie[16])) : -1.0e300;
+					high = std::max(was[14] > 0.5 ? was[15] : -1.0e300, lie[14] > 0.5 ? lie[15] : -1.0e300);
+				}
+				// its sediment: [19] whether, [22] its level, [23] to [27] its pile
+				if (was[19] != lie[19] || was[22] != lie[22] || was[23] != lie[23] || was[24] != lie[24] || was[25] != lie[25] || was[26] != lie[26] || was[27] != lie[27]) {
+					const bool both = was[19] > 0.5 && lie[19] > 0.5;
+					low = std::min(low, both ? std::min(was[22], lie[22]) : -1.0e300);
+					high = std::max(high, std::max(was[19] > 0.5 ? was[22] + std::abs(was[23]) : -1.0e300, lie[19] > 0.5 ? lie[22] + std::abs(lie[23]) : -1.0e300));
+				}
+			}
+			if (high >= low) {
+				zone_lo[static_cast<size_t>(b)] = std::max(origin - high / std::max(cm, 1.0e-12) - 0.02, -1.0e30);
+				zone_hi[static_cast<size_t>(b)] = std::min(origin - low / std::max(cm, 1.0e-12) + 0.02, 1.0e30);
+			}
+		}
+		for (int b = 0; b < count; ++b) {
+			double *lie = &lies[static_cast<size_t>(b) * SHAPE_BLOCK * 4];
+			if (as_before) {
+				// (the scene composed again with nothing in it changed: what changed before it stands)
+				const double *was = lie_of(scene.lies, b);
+				lie[28] = shape_tag[static_cast<size_t>(b)];
+				for (int k = 29; k < 40; ++k) {
+					lie[k] = was[k];
+				}
+				// (what stands behind it may have moved: its signature of their shapes is made again below)
+			}
+			const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
+			const float layer = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4 + 1];
+			bool lower = false;
+			uint64_t h = 1469598103934665603ull, now = h, was = h;
+			double low = 1.0e30, high = -1.0e30;
+			for (int o = 0; o < count; ++o) {
+				const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
+				if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+					lower = true;
+					h = fnv(&shape_tag[static_cast<size_t>(o)], sizeof(float), h);
+					now = fnv(&content_tag[static_cast<size_t>(o)], sizeof(float), now);
+					was = fnv(&content_was[static_cast<size_t>(o)], sizeof(float), was);
+					low = std::min(low, zone_lo[static_cast<size_t>(o)]);
+					high = std::max(high, zone_hi[static_cast<size_t>(o)]);
+				}
+			}
+			lie[28] = shape_tag[static_cast<size_t>(b)];
+			lie[29] = lower ? tag(h) : 0.0;
+			if (as_before) {
+				continue;
+			}
+			lie[30] = content_tag[static_cast<size_t>(b)];
+			lie[31] = content_was[static_cast<size_t>(b)];
+			lie[32] = zone_lo[static_cast<size_t>(b)];
+			lie[33] = zone_hi[static_cast<size_t>(b)];
+			lie[34] = lower ? tag(now) : 0.0;
+			lie[35] = lower ? tag(was) : 0.0;
+			lie[36] = low;
+			lie[37] = high;
+		}
+	}
 	// the screen's squares: each the bodies that reach into it, in painting order, the nearest kept
 	for (int b = 0; b < count; ++b) {
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
@@ -708,13 +934,15 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 	}
+	scene.lies = std::move(lies);
 	if (t != scene.table || rows != scene.rows || lines != scene.lines) {
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
 		scene.lines = std::move(lines);
 		++scene.revision;
 	}
-	optics_stacks(scene); // the rays of what is held, followed through what stands behind it
+	optics_stacks(scene); // the rays of what is held, followed through what stands behind it (the maps' reading)
+	optics_shapes(scene);
 }
 
 void optics_maps(OpticsScene &scene) {
@@ -725,13 +953,195 @@ void optics_maps(OpticsScene &scene) {
 	++scene.revision;
 	scene.stack_keys.clear(); // followed for other maps
 	optics_stacks(scene);
+	optics_shapes(scene);
+}
+
+// The shapes (GAME_SPEC §12.3, Stage 29): [b], b < MAX_BODIES: where body b's shape begins (x), or -1 (it bends
+// nothing); then each shape once: [s] its patches (x) and how far from its axis it reaches (y), and six vec4s a patch: a and c; l and whether it is a
+// torus; its heights and its rings (lo.y, hi.y, rho_lo, rho_hi); its box across and in depth (lo.x, hi.x, lo.z,
+// hi.z); a torus's major, cy, minor, t_lo; its t_hi, the medium below it and the one above.
+void optics_shapes(OpticsScene &scene) {
+	if (scene.table.size() != static_cast<size_t>(SIZE_VECS) * 4) {
+		return;
+	}
+	const std::vector<float> &t = scene.table;
+	const int count = static_cast<int>(t[0]);
+	constexpr size_t HEAD = static_cast<size_t>(MAX_BODIES) * SHAPE_BLOCK * 4;
+	std::vector<double> out(HEAD, 0.0);
+	if (scene.lies.size() == HEAD) {
+		out = scene.lies;
+	}
+	for (int b = 0; b < MAX_BODIES; ++b) {
+		double *block = &out[static_cast<size_t>(b) * SHAPE_BLOCK * 4];
+		block[0] = -1.0;
+		if (block[6] == 0.0 && block[7] == 0.0) {
+			block[6] = 1.0; // (a body laid out by no compose: upright)
+			block[13] = 1.0;
+		}
+	}
+	const auto capped = [](double v) { return std::min(std::max(v, -1.0e30), 1.0e30); };
+	const auto put = [&](const trace::Shape &shape) {
+		const double at = static_cast<double>(out.size() / 4);
+		// Each patch's heights and rings as the pass culls by them (Stage 33): where the truth's patch leaves one
+		// open because its surface already says it (a flat ring's height; a cone's rings between its heights), it
+		// is given here, a hundredth of a millimetre wide of the surface, so that a ray tries only the surfaces
+		// at its own heights and distance from the axis. Nothing the truth's bounds let through is ruled out.
+		constexpr double WIDE = 1.0e-3;
+		struct Bounds {
+			double y_lo, y_hi, rho_lo, rho_hi;
+		};
+		std::vector<Bounds> bounds;
+		double reach = 0.0; // how far from its axis the shape reaches
+		for (const trace::Patch &p : shape.patches) {
+			Bounds b{ p.lo.y, p.hi.y, p.rho_lo, p.rho_hi };
+			const bool about_axis = !p.torus && p.l.x == 0.0 && p.l.z == 0.0 && p.a.x == p.a.z;
+			if (about_axis && p.a.x == 0.0 && p.a.y == 0.0 && p.l.y != 0.0) {
+				// a flat ring: y = -c / l.y
+				b.y_lo = std::max(b.y_lo, -p.c / p.l.y - WIDE);
+				b.y_hi = std::min(b.y_hi, -p.c / p.l.y + WIDE);
+			} else if (about_axis && p.a.x > 0.0 && p.rho_lo <= 0.0 && p.rho_hi > 1.0e29 && ((p.lo.y > -1.0e29 && p.hi.y < 1.0e29) || (p.a.y == 0.0 && p.l.y == 0.0))) {
+				// turned about the axis: rho^2 = -(a.y y^2 + l.y y + c) / a.x, between its heights
+				const auto rho2 = [&](double y) { return -(p.a.y * y * y + p.l.y * y + p.c) / p.a.x; };
+				const bool level = p.a.y == 0.0 && p.l.y == 0.0;
+				double least = level ? rho2(0.0) : std::min(rho2(p.lo.y), rho2(p.hi.y)), most = level ? rho2(0.0) : std::max(rho2(p.lo.y), rho2(p.hi.y));
+				const double turn = p.a.y != 0.0 ? -p.l.y / (2.0 * p.a.y) : 0.0;
+				if (!level && p.a.y != 0.0 && turn > p.lo.y && turn < p.hi.y) {
+					least = std::min(least, rho2(turn));
+					most = std::max(most, rho2(turn));
+				}
+				b.rho_lo = std::max(0.0, std::sqrt(std::max(least, 0.0)) - WIDE);
+				b.rho_hi = std::sqrt(std::max(most, 0.0)) + WIDE;
+				// (a cone's other nappe lies within the same rings: where rho would be below zero it is its mirror)
+				if (least < 0.0) {
+					b.rho_lo = 0.0;
+				}
+			}
+			double r = b.rho_hi;
+			if (r > 1.0e29 && std::abs(p.lo.x) < 1.0e29 && std::abs(p.hi.x) < 1.0e29 && std::abs(p.lo.z) < 1.0e29 && std::abs(p.hi.z) < 1.0e29) {
+				r = std::hypot(std::max(std::abs(p.lo.x), std::abs(p.hi.x)), std::max(std::abs(p.lo.z), std::abs(p.hi.z)));
+			}
+			reach = std::max(reach, r);
+			bounds.push_back(b);
+		}
+		reach = reach < 1.0e29 ? reach * (1.0 + 1.0e-6) + 1.0e-4 : 1.0e30;
+		// Its outline (Stage 33): a shape turned about its axis is seen from the side as its profile, so a pixel
+		// beyond the profile is not the body's, and follows no ray. The furthest from the axis any surface comes
+		// in each of OUTLINE_BANDS bands of its height, a hundredth of a millimetre wide; none (the heights both
+		// 0) for a shape with a surface not about the axis, or one without an end.
+		double foot = 1.0e300, top = -1.0e300;
+		bool outlined = !shape.patches.empty();
+		for (size_t i = 0; i < shape.patches.size(); ++i) {
+			const trace::Patch &p = shape.patches[i];
+			const bool about_axis = p.torus || (p.l.x == 0.0 && p.l.z == 0.0 && p.a.x == p.a.z);
+			outlined = outlined && about_axis && bounds[i].y_lo > -1.0e29 && bounds[i].y_hi < 1.0e29 && (p.torus || p.a.x != 0.0 || bounds[i].rho_hi < 1.0e29);
+			foot = std::min(foot, bounds[i].y_lo);
+			top = std::max(top, bounds[i].y_hi);
+		}
+		outlined = outlined && top > foot;
+		double outline[OUTLINE_BANDS] = {};
+		for (int band = 0; outlined && band < OUTLINE_BANDS; ++band) {
+			const double y0 = foot + (top - foot) * band / OUTLINE_BANDS - WIDE, y1 = foot + (top - foot) * (band + 1) / OUTLINE_BANDS + WIDE;
+			for (size_t i = 0; i < shape.patches.size(); ++i) {
+				const trace::Patch &p = shape.patches[i];
+				const double lo = std::max(y0, bounds[i].y_lo), hi = std::min(y1, bounds[i].y_hi);
+				if (lo > hi) {
+					continue;
+				}
+				double most = bounds[i].rho_hi;
+				if (p.torus) {
+					const double off = p.cy < lo ? lo - p.cy : (p.cy > hi ? p.cy - hi : 0.0);
+					most = std::min(most, p.major + std::sqrt(std::max(p.minor * p.minor - off * off, 0.0)));
+				} else if (p.a.x != 0.0) {
+					const auto rho2 = [&](double y) { return -(p.a.y * y * y + p.l.y * y + p.c) / p.a.x; };
+					double most2 = std::max(rho2(lo), rho2(hi));
+					const double turn = p.a.y != 0.0 ? -p.l.y / (2.0 * p.a.y) : lo;
+					if (turn > lo && turn < hi) {
+						most2 = std::max(most2, rho2(turn));
+					}
+					most = std::min(most, std::sqrt(std::max(most2, 0.0)));
+				}
+				outline[band] = std::max(outline[band], most + WIDE);
+			}
+		}
+		out.insert(out.end(), { static_cast<double>(shape.patches.size()), reach, outlined ? foot : 0.0, outlined ? top : 0.0 });
+		size_t k = 0;
+		for (const trace::Patch &p : shape.patches) {
+			const Bounds &b = bounds[k++];
+			out.insert(out.end(), { capped(p.a.x), capped(p.a.y), capped(p.a.z), capped(p.c), capped(p.l.x), capped(p.l.y), capped(p.l.z), p.torus ? 1.0 : 0.0, capped(b.y_lo), capped(b.y_hi),
+										  capped(b.rho_lo), capped(b.rho_hi), capped(p.lo.x), capped(p.hi.x), capped(p.lo.z), capped(p.hi.z), capped(p.major), capped(p.cy), capped(p.minor), capped(p.t_lo),
+										  capped(p.t_hi), static_cast<double>(p.below), static_cast<double>(p.above), 0.0 });
+		}
+		for (const double v : outline) {
+			out.push_back(capped(v));
+		}
+		return at;
+	};
+	std::map<const glass::Vessel *, double> made_at;
+	for (int b = 0; b < count && b < MAX_BODIES; ++b) {
+		const size_t at = static_cast<size_t>(HEADER_VECS + b * BODY_VECS) * 4;
+		const float *rect = &t[at + RECT * 4], *form = &t[at + FORM * 4], *more = &t[at + MORE * 4], *glow = &t[at + GLOW * 4], *refract = &t[at + REFRACT * 4];
+		const bool bends = refract[3] > 0.5f && (form[0] < 0.5f || form[0] > 1.5f) && form[0] < 2.5f;
+		if (!bends) {
+			continue;
+		}
+		const glass::Vessel *made = static_cast<size_t>(b) < scene.vessels.size() ? scene.vessels[static_cast<size_t>(b)] : nullptr;
+		double where = -1.0;
+		if (made != nullptr) {
+			const auto found = made_at.find(made);
+			where = found != made_at.end() ? found->second : (made_at[made] = put(trace::revolved_of(*made)));
+		} else if (form[0] > 1.5f) {
+			const double corners[3][2] = { { more[0], more[1] }, { more[2], more[3] }, { glow[0], glow[1] } };
+			where = put(trace::prism(corners));
+		} else {
+			where = put(trace::cylinder(static_cast<double>(rect[2]) * 0.5 * form[1], refract[0]));
+		}
+		out[static_cast<size_t>(b) * SHAPE_BLOCK * 4] = where;
+		out[static_cast<size_t>(b) * SHAPE_BLOCK * 4 + 1] = made != nullptr ? 1.0 : 0.0;
+		if (out[static_cast<size_t>(b) * SHAPE_BLOCK * 4 + 10] == 0.0) {
+			// (a scene whose table was set by hand: it stands as its rectangle says)
+			for (int k = 0; k < 4; ++k) {
+				out[static_cast<size_t>(b) * SHAPE_BLOCK * 4 + 8 + static_cast<size_t>(k)] = rect[k];
+			}
+		}
+	}
+	if (out != scene.shapes_exact) {
+		scene.shapes.assign(out.size(), 0.0f);
+		for (size_t i = 0; i < out.size(); ++i) {
+			scene.shapes[i] = static_cast<float>(out[i]);
+		}
+		scene.shapes_exact = std::move(out);
+		++scene.shapes_revision;
+	}
+}
+
+int optics_body(const OpticsScene &scene, const std::string &id) {
+	if (scene.table.empty()) {
+		return -1;
+	}
+	const float wanted = tag(fnv(id.data(), id.size()));
+	const int count = static_cast<int>(scene.table[0]);
+	for (int b = 0; b < count; ++b) {
+		if (scene.table[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + IDS) * 4] == wanted) {
+			return b;
+		}
+	}
+	return -1;
 }
 
 // The wall as a table (GAME_SPEC §12.3; lab/optics_scene.hpp lays it out).
+namespace {
+constexpr double FAR_OFF = 50000.0; // (pixels: half as far as a ray that never reaches the wall is put)
+} // namespace
+
 void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 	scene.drawn.clear();
 	// the breakpoints: every edge of the bench and of what is drawn, across and down
-	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w }, ys{ room.y, static_cast<double>(room.y) + room.h };
+	// (and far off to each side, FAR_OFF: beyond it is where a ray that never reaches the wall is put)
+	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w, -FAR_OFF, FAR_OFF }, ys{ room.y, static_cast<double>(room.y) + room.h };
+	if (room.beyond >= 0.0) {
+		xs.push_back(0.0); // (the screen's own edges: beyond them is the endless plane)
+		xs.push_back(static_cast<double>(WALL_COLUMNS));
+	}
 	for (const OpticsShape &sh : room.shapes) {
 		if (!(sh.w > 0.0f) || !(sh.h > 0.0f)) {
 			continue;
@@ -771,12 +1181,35 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 			paint(sh.x, sh.y, sh.w, sh.h, sh.radiance);
 		}
 	}
+	// (in a room: far to the left is where a ray that comes to a black cell of a face is put, far to the right
+	// one that comes to any other cell off the wall; with no room, both are the room in front)
+	const double far_left = room.cube > 0.0 ? room.edge : room.front, far_right = room.cube > 0.0 && room.beyond >= 0.0 ? room.beyond : room.front;
+	// A ray that leaves a body sideways or back toward the eye never reaches the wall: it is put far off to the
+	// side it goes (100,000 pixels), and what it shows is the room in front of the bench, which is what glass
+	// reflects (Stage 33). It read the wall's table there, which is the darkness beside the bench: grey patches
+	// where a vortex or a surface turned rays back, beside reflections of a room four times as bright.
+	// And the wall beyond the screen is an endless plane of one radiance, where the room says so (Stage 33, the
+	// user's word: the planes behind and in front are endless and white): every cell left of the screen and right
+	// of it, and (below) the rows over and under it.
+	for (int r = 0; r <= my; ++r) {
+		for (int j = 0; room.beyond >= 0.0 && j <= m; ++j) {
+			const bool left = j < m && xs[static_cast<size_t>(j)] <= 0.0, right = j > 0 && xs[static_cast<size_t>(j - 1)] >= static_cast<double>(WALL_COLUMNS);
+			if (left || right) {
+				grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)] = static_cast<float>(room.beyond);
+			}
+		}
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1)] = static_cast<float>(far_left);
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(m)] = static_cast<float>(far_right);
+	}
+	scene.far_left = far_left;
+	scene.far_right = far_right;
+	scene.wall_beyond = room.beyond;
 	// each row of pixels: the cells down that it crosses, each by its share of the row's height
 	std::vector<std::vector<float>> profiles;
 	std::map<std::vector<float>, int> known;
-	std::vector<int> row_profile(static_cast<size_t>(WALL_ROWS), 0);
+	std::vector<int> row_profile(static_cast<size_t>(WALL_ROWS + 2), 0); // (from the row over the screen to the row under it)
 	std::vector<float> blend(static_cast<size_t>(m + 1));
-	for (int y = 0; y < WALL_ROWS; ++y) {
+	for (int y = -1; y <= WALL_ROWS; ++y) {
 		std::fill(blend.begin(), blend.end(), 0.0f);
 		const int first = static_cast<int>(std::upper_bound(ys.begin(), ys.end(), static_cast<double>(y)) - ys.begin());
 		for (int r = first; r <= my; ++r) {
@@ -788,19 +1221,25 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 				blend[static_cast<size_t>(j)] += static_cast<float>((hi - lo) * grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)]);
 			}
 		}
+		if (room.beyond >= 0.0 && (y == -1 || y == WALL_ROWS)) {
+			// the row over the screen and the row under it, which every row beyond them is read as: the endless plane
+			std::fill(blend.begin(), blend.end(), static_cast<float>(room.beyond));
+			blend[0] = static_cast<float>(far_left);
+			blend[static_cast<size_t>(m)] = static_cast<float>(far_right);
+		}
 		const auto found = known.emplace(blend, static_cast<int>(profiles.size()));
 		if (found.second) {
 			profiles.push_back(blend);
 		}
-		row_profile[static_cast<size_t>(y)] = found.first->second;
+		row_profile[static_cast<size_t>(y + 1)] = found.first->second;
 	}
 	std::vector<float> &w = scene.wall;
 	const size_t cells = static_cast<size_t>(WALL_BREAK_BASE + m);
 	w.assign((cells + profiles.size() * static_cast<size_t>(m + 1)) * 4, 0.0f);
 	w[0] = static_cast<float>(m);
 	w[1] = static_cast<float>(profiles.size());
-	for (int y = 0; y < WALL_ROWS; ++y) {
-		w[static_cast<size_t>(WALL_ROW_BASE + y) * 4] = static_cast<float>(row_profile[static_cast<size_t>(y)]);
+	for (int y = -1; y <= WALL_ROWS; ++y) {
+		w[static_cast<size_t>(WALL_ROW_BASE + y) * 4] = static_cast<float>(row_profile[static_cast<size_t>(y + 1)]);
 	}
 	for (int c = 0; c < WALL_COLUMNS; ++c) {
 		w[static_cast<size_t>(WALL_COLUMN_BASE + c) * 4] = static_cast<float>(std::upper_bound(xs.begin(), xs.end(), static_cast<double>(c)) - xs.begin());

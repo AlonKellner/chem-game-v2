@@ -497,6 +497,31 @@ Chosen for the game (`data/glassware.json`, design in `data/sources.json`): each
 rate at full tilt (a beaker 25 mL/s, a flask 12, a bottle 15), the cap's bore (4 mm), the widest
 mouth a balloon's or a condenser's fitting seals (40 mm).
 
+## Pouring by hand: a round mouth (Stage 31)
+
+What runs out of a tilted vessel's mouth is Torricelli's speed over the wet part of the opening,
+contracted (`native/game/src/contents.cpp`, `over_brim`; GAME_SPEC §13): a sharp-crested weir under
+a small head, an orifice once the mouth is under liquid.
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| The contraction of a jet leaving a sharp-edged opening | `Cd` = π / (π + 2) = 0.6110 | Kirchhoff's free-streamline solution for a jet from a slot in a plane wall (G. Kirchhoff, 1869; given in Lamb, *Hydrodynamics*, and in Batchelor, *An Introduction to Fluid Dynamics*, under free streamlines). A theory's value, not a measurement; sharp-crested weirs and sharp-edged orifices are measured to discharge 0.60 to 0.62 of the ideal (Rehbock's weir formula tends to 0.611 for a high weir; the orifice's row above, 0.61). Written from these standard results, not fetched again for this stage. Confidence: good for a thin sharp lip at a head of some millimetres or more; a thick rounded lip and a head of a millimetre (surface tension) pass less | `pour: a round mouth is a weir under a small head and an orifice under a deep one ...`: the value, and the law against its closed forms at small heads, deep, on its side and upside down |
+| Gravity | 980.665 cm/s² | standard gravity (CGPM 1901) | the same |
+
+Chosen for the game (GAME_SPEC §13.1): how fast a held vessel tilts (to its full tilt in 2.5 s) and
+comes back upright (0.6 s).
+
+## Stirring: a liquid's turning and what it holds up (Stage 32)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| Water's dynamic viscosity at 20 °C, 0.1 MPa | `μ` = 1.0016 mPa·s | IAPWS, *Release on the IAPWS Formulation 2008 for the Viscosity of Ordinary Water Substance* (the value at 20 °C and 0.1 MPa, 1.0016 mPa·s, is the ISO/TR 3666:1998 reference value). Written from the standard value, not fetched again for this stage. Confidence: the value itself is known to 0.17%; used for every liquid at every temperature (GAME_SPEC §20) | `vortex: its turning holds a liquid's solids up ...`: a fine oxide's settling time in the lab against Stokes' speed with this viscosity, within 5% |
+| Stokes' settling speed | `v = (ρ_s − ρ) g d² / (18 μ)` | G. G. Stokes, 1851: a sphere falling slowly through a viscous liquid (its Reynolds number under about 1) | the same |
+
+Chosen for the game (`native/game/src/lab.cpp`; GAME_SPEC §11): the stirrer's work, 0.01 W (of the
+order of a 3 cm stir bar at 600 turns a minute, `Np ρ N³ d⁵` with a power number near 1: 0.02 W);
+how long a liquid left alone keeps turning, 1.5 s.
+
 ## Glass and stoppers under pressure (Stage 28)
 
 Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass

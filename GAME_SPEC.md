@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.29.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.35.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -324,9 +324,17 @@ conductance. Each step, after the reactions and the heat:
 **Drains.** A drain is a liquid edge with a direction (a condenser's outlet over a beaker). Each
 step all of the upper cell's liquid, with what is dissolved in it, runs into the lower cell,
 carrying its enthalpy. A drain may have a **rate** (Stage 27: a pour, §13): then each step at most
-that volume of the upper cell's liquid runs down, with what is dissolved in it in proportion, and,
-where the drain carries solids, the same share of the upper cell's solids; the rate is set between
-steps by whoever owns the drain.
+that volume of the upper cell's liquid runs down, with what is dissolved in it in proportion. Of
+the upper cell's solids the liquid takes with it its own share of what it **carries** (Stage 31: a
+share from 0 to 1, what is suspended in it; all of them through an upside-down vessel's mouth), and
+solids run down **by themselves** at a rate of their own (their own volume a second: sediment over
+a lip), liquid or none. The rates and the share are set between steps by whoever owns the drain.
+
+**Work** (Stage 32). An edge may have a **power**: that much energy a second crosses it from one
+end to the other whatever their temperatures. It is work, not heat: its source is a reservoir so
+hot that its energy carries no entropy (the limit of a heat reservoir as its temperature grows
+without bound; 10^300 K stands for it), so the second law holds as it is checked, by T1 and T2
+unchanged. A stirrer's work on the liquid it turns enters so (§11), from the lab's mains.
 
 **Overflow.** A world may name one elastic cell where spills go (the bench's tray). A rigid cell
 that holds more solids and liquids than its volume then spills the excess of its liquid, with
@@ -618,8 +626,48 @@ inside a cell.
     of stirring is heat in the liquid (C5), as a burner's is. The values (surface tension,
     viscosity, contact angle on glass) are rows of `docs/DATA_SOURCES.md` before they are used.
 
-**Demo subset:** none. Crystals nucleate in the bulk cell.
-**Status:** specified; after the demo.
+**What lies in a vessel** (Stages 30 to 32; `lab/contents.hpp`; asked for by the user, 2026-11-22).
+One model gives the lab's pour (§13) and the picture (§12.3) the same shapes, for a vessel turned by
+any angle about the eye's axis:
+
+- **A level** is a height along the room's up. Across each height the inside is a disc, so the part
+  of it under a level is a circular segment in closed form; summed along the axis, the volume under
+  a level, and by halving the level under which a volume lies. A level's cut through the inside is a
+  line as the eye sees it, with a middle, and a surface with an area.
+- **The liquid's surface** is level in the room at any turn, where the inside under it, less the
+  sediment under it and less the vortex, holds the liquid.
+- **Sediment** is a flat section with a **pile** on it: a cone standing on the section's cut, as
+  wide as the cut and as deep as gives it the cut's area, so its volume is that area times its
+  height over three whatever the vessel and the turn. The pile is as peaked as the angle of repose
+  allows (35°), and its peak is where the two hold the powder's bulk (the powder over its packing,
+  0.5). A little powder on a flat floor is a low cone across it; more raises the flat section;
+  turned, it lies in the low corner.
+- **A vortex** (Stage 32) is a cone hanging from the liquid's surface, centred on it. A stirred
+  liquid turns, and for any swirl that turns in columns its kinetic energy is the liquid's weight on
+  a unit of its surface times the volume the surface's dip displaces: `E = (M g / A) V` (the slope
+  of the surface balances the turning, `dh/dr = v² / g r`, and both sides are `∫ v² r dr`; each
+  column at the liquid's depth: `docs/TDD_32_VORTEX.md`). The cone
+  has the proportions of the space it has, the surface's ellipse by the depth `D` under its middle
+  (to the glass, or the sediment): its share `s` of that space displaces `s³ A D / 3`, so
+  `s = cbrt(E / E_most)` with `E_most = M g D / 3`. A heavier liquid holds more energy in a smaller
+  vortex; a shallow one cannot make a deep one; at `E_most` the vortex reaches the glass.
+- **The turning's energy**: `dE/dt = P − E / τ`, never more than `E_most`. The stirrer's work `P`
+  (0.01 W) is the mains' and enters the ledger (§6), heat in the liquid as a burner's is; a liquid
+  left alone keeps turning for `τ` (1.5 s). Both are the game's choices. A stirrer rigged by PWM
+  (§13.3) gives its duty's share.
+- **What the turning holds up.** A grain falls through the liquid at Stokes' speed,
+  `v = (ρ_s − ρ) g d² / 18 μ`; holding the solids up takes the power they would give up falling,
+  their weight in the liquid times that speed; the turning has its dissipation, `E / τ`, to give,
+  and holds up that share of them, the rest lying as sediment. Fine powder stays up in a liquid
+  barely turning; coarse heavy grains ask for more than the stirrer gives. Let go, they settle at
+  their speed through the liquid's depth. What is held up goes with a poured liquid (§6) and is a
+  haze in it (§12.3). Water's viscosity is a row of `docs/DATA_SOURCES.md`.
+- **H1, H2** (§18) hold what lies in a vessel to its amounts and to its bounds.
+
+Not built: the meniscus, sloshing, a paraboloid's vortex (a cone has its volume and its place).
+
+**Demo subset:** what lies in a vessel, as above. Crystals nucleate in the bulk cell.
+**Status:** Stages 30 to 32 implement it (`docs/TDD_30_CONTENTS.md`, `docs/TDD_32_VORTEX.md`); the rest is specified, after the demo.
 
 ## 12. Optics
 
@@ -1031,9 +1079,23 @@ light bends at each of its surfaces:
   takes, which Beer-Lambert reads.
 - **Fresnel.** At each surface the unpolarised reflectance of the two angles (`R`, from Fresnel's
   equations; at normal incidence `((n₁ − n₂)/(n₁ + n₂))²`) is turned away; what gets through all
-  four surfaces is `T = Π (1 − R)`. What is turned away shows the room in front of the bench,
-  whose radiance is calibrated (0.3 of the room's white): a vessel's rims, where light meets the
-  glass aslant, show more of the room and less of the wall, as glass on a bench does.
+  four surfaces is `T = Π (1 − R)`. What is turned away shows the room (below), as one
+  radiance, the mean of its faces: a vessel's rims, where light meets the glass aslant, show more
+  of the room and less of the wall, as glass on a bench does.
+- **The room** (Stage 33) is a cube about the screen's middle, twice the screen's width on a side
+  (3,840 px), its back face the wall. A ray that leaves the last body it meets goes on to a face.
+  Each face is ruled in sixteen cells across, and the cells along the cube's twelve edges are
+  black. Where the ray comes to one of those it brings black; where it reaches the wall elsewhere
+  it lands on it (on the screen, the wall as it is drawn; beyond the screen, the wall's white less
+  its ruling's share); where it comes to another face it brings that white. So a ray bent far, as
+  at a rim, is darker than the wall behind, and no ray ends in nothing. (Endless white planes,
+  tried first, left a vessel all but unseen; the darkness beside the bench, before them, gave grey
+  patches where a vortex turned rays back.)
+- **How far a ray is followed in one body** (Stage 33). It may be turned back (total reflection)
+  four times and meet sixteen surfaces; after either it goes straight on from where it is, as if
+  the rest of the body were not there, with what its surfaces have passed. Light held in the glass
+  of a rim is not followed to its end; a ray through a surface, a vortex and a floor is turned
+  back at none, and is followed.
 - **What it does not bend:** a heap of solid (its surface is seen as it lies), the balloon (thin
   rubber around gas), the liquid's surface. Up and down, from Stage 24, a vessel bends where its
   shape does (a flare, a corner, a cone, a shoulder, a lip); until then nothing bent up and down.
@@ -1231,18 +1293,32 @@ of every ray through its area, and its colour is their average (a box filter).
     known by its colour, its lamp and, for a timer, its strip.)
   - Their spectra are calibrated, not measured (`docs/DATA_SOURCES.md`): simple shapes placed so
     that each thing has the colour it is known to have.
-- **A vessel turned** (Stage 27: pouring). A body may be turned in the screen's plane, about a
-  pivot: a held pour's tilt, a vessel set upside down. The eye looks along the axis it turns about,
-  so its glass is the same to every ray as when it stands: a pixel is read in the body's own frame
-  (its place turned back), its maps as they are, and where its rays land turned forward again.
-  Upside down, a row of its own is a row of the screen: the wall is read over it exactly; a revolved
-  body turned half a turn about its axis's point is its rows from the other end (Stage 27, built).
-  Part turned *(PLANNED)*: a ray's landing is turned onto a slanting line of the wall, read at its
-  points (a held pour is on the screen only while it pours). Its liquid's surface stays level in the room: in its
-  own frame a line, the liquid on the side away from the sky, each ray all in the liquid or all in
-  the air (the surface holds the eye's direction); where it lies for a volume, for each vessel and
-  turn, is found from the vessel's profile once and kept. A stream is a column of its liquid, no
-  glass: a thin cylinder body that refracts as one, its spectra its liquid's.
+- **A vessel turned** (Stage 27: pouring; Stage 30). A body may be turned in the screen's plane by
+  any angle, about a pivot (a place of the screen): a pour by hand turns about its pouring lip, a
+  vessel set upside down is half a turn about its middle. The eye looks along the axis it turns
+  about, so its glass is the same to every ray as when it stands: both tracers take a ray into the
+  body's own frame (its place turned back about the pivot), follow it there, and turn where it
+  leaves forward again. The scene carries, for each body, where it stands upright, its turn and its
+  pivot, and its rectangle is the one that holds all of it turned. Only the reading that traces a
+  pixel's own rays (Stage 29) draws a part turn; the maps know a body upright or upside down.
+- **What lies in it** (Stage 30; §11). The core of a vessel made as glassware is not one medium: a
+  ray is in the sediment, the liquid or the air by where it is (under the sediment's flat section
+  or in its pile; under the liquid's surface and outside its vortex; else air), and the surfaces
+  between them are surfaces of the tracers, met only while the ray is in the core: the liquid's
+  level and the vortex's cone bend and turn back light as glass does (Snell, Fresnel, total
+  reflection), the sediment ends the ray, lit by the room through the liquid there and back. The
+  scene carries them in the vessel's own frame beside its turn. A pixel's history follows how its
+  body lies (its turn, its levels, its cones), as it follows what the body holds.
+- **A stream** (Stage 31) is a column of what pours, from the lip or the mouth it leaves straight
+  down to where it lands, thinning as it falls faster: what passes a second is the same at every
+  height, so its radius there is `sqrt(Q / (π sqrt(v0² + 2 g y)))`, from the speed it leaves at
+  (over a lip, `sqrt(2 g head)`). Drawn in short lengths, each as wide as it is there; its spectra
+  its liquid's, hazy with what it carries; a dry powder's is a column of the powder.
+- **Beyond the screen** (Stage 30; Stage 33). A ray may land past the screen's edges (a turned
+  vessel throws rays far): the wall's table has a row over the screen's rows and one under them,
+  and cells to the left and to the right, all the room's wall beyond the screen (above). Far off
+  to either side it has the two places a ray that comes to another face is put: black to the
+  left, white to the right. The truth reads the same room, from what is drawn and those rules.
 - **A vessel's whole shape** (Stage 24). Every vessel is a piece of glassware made to its
   standard, and its shape is one model, shared: the lab's capacity, the liquid's level, the
   screen's silhouette and the tracer's surfaces are all read from it.
@@ -1415,6 +1491,8 @@ input to them, and a session script is a list of them.
 | `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it (a signal part too); refused where something stands, off the grid, or while the item is joined to another |
 | `move` | `items`, `by` [columns, rows] | several items and parts along the bench together, by one offset: all of them or none, with the reason (one would be off the grid, or land on something left behind) |
 | `stow` | `item` | back into the cabinet; a signal part back to the drawer |
+| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item as into the cabinet (its matter stays in the world and goes on as there; refused as `stow` is), a part with its settings kept and its wires and rigs to anything outside it taken off (a circuit with all it holds), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item to the cabinet, a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to the cabinet) and `restore` |
+| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, to where it stood: its square, or the cabinet. Where its square is taken an item goes to the cabinet, and a part stays in the trash and says so |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
@@ -1424,6 +1502,7 @@ input to them, and a session script is a list of them.
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
+| `undrain` | `of` | takes away what a vessel's outlet runs into (Stage 34): the drain comes off, both vessels stay where they are |
 | `submit` | `item`, `slot` | hands it in, to a slot of the outbox (§13.5); it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench. With no `slot`, the first free slot without a goal, else the first free one; refused when the slot holds something, or none is free |
 | `goal` | `slot`, `name`, `terms` | the player's own goal for a slot (§13.5), made or changed; refused on a game goal's slot |
 | `ungoal` | `slot` | takes the player's goal off a slot; refused for a game goal |
@@ -1448,15 +1527,27 @@ input to them, and a session script is a list of them.
   first.
 - **Pouring is a control** (Stage 27; asked for by the user, 2026-11-22). A vessel in a **pouring
   position** over another pours down a drain with a rate (§6), which the control sets each step:
-  - **A held pour**: the player carries a vessel over another and tilts it, holding Space (the
-    pointer is carrying it). The tilt grows while Space is held, up to the vessel's own, and falls
-    back as it is let go; the vessel is drawn turned by it *(PLANNED: until the renderer reads a part
-    turned body, a held pour is drawn upright, its stream showing it pours; decided by the user,
-    2026-11-22)*. The rate is the tilt's share of the
-    vessel's pouring rate (`pour_ml_s` in `data/glassware.json`: a beaker's lip pours faster than a
-    flask's or a bottle's neck), its liquid with what is dissolved in it; at the full tilt its
-    solids go too. `pour {from, to, rate}` (0 to 1) sets it, and 0 ends it. A session's
-    `pour {from, to, ml | all}` is a held pour at full tilt that waits until that much has run.
+  - **A pour by hand** (Stage 31): the player carries a vessel over another and presses. The vessel
+    goes from the hand to where its pouring lip (the one nearer the other's axis) is over the middle
+    of the other's mouth, a little above it, and turns about that lip while the button is held, up
+    to its **full tilt** (the turn at which it holds nothing below its lip: 109° for the bottle);
+    let go, it turns back upright and is in the hand again, where the pour ends. It is drawn so
+    (§12.3). `pour {from, rate}` (0 to 1) sets the tilt's share of the full tilt.
+    What runs is what the geometry gives (§11): nothing until the liquid's surface stands over the
+    lip; then, each second, **Torricelli's speed over the wet part of the mouth's opening**,
+    `Q = Cd ∫ sqrt(2 g · depth) dA`, contracted as a jet from a sharp edge is (`Cd = π / (π + 2)`,
+    Kirchhoff). Short of lying on its side the liquid leaves level over the lip, through the
+    opening as seen from the side: a weir, for a small head `Cd sqrt(2g) (π/4) sqrt(2R / sin θ) h²`.
+    Turned further it leaves along the mouth's axis, through the opening itself; upside down that
+    is an orifice under the head. One integral; never more in a step than stands over the lip, so
+    the surface comes down to the lip and not under it. The vessels' own rates (below) are what
+    their mouths pass under a head of 5 to 6 mm.
+    With the liquid goes what is dissolved in it and the share of its solids it holds up (§11);
+    the sediment stays, **decanted**, until its flat section stands over the lip, and then runs by
+    the same law, by itself; a dry powder pours so too.
+  - **A script's pour**: `pour {from, to, ml | all}` is as it was (Stage 27): exactly that much, at
+    the vessel's own rate (`pour_ml_s` in `data/glassware.json`: a beaker's lip pours faster than a
+    flask's or a bottle's neck), its liquid with what is dissolved in it, decanted; then upright.
   - **A placed pour**: `invert {item, over}` stands a vessel upside down above another, its mouth
     closed by a **cap**, held by a stand; `place`, `stow` or `submit` takes it off again, upright.
     The cap is a control as a burner's valve is: `cap {item, to}` (0 shut to 1 open), a slider in
@@ -1540,17 +1631,21 @@ that asks for one asks first for its item to be chosen.
 2026-11-22): a click on it (pressed and let go over it) picks it up, and chooses it; it follows the
 pointer with no button held; the next click puts it down, as the table says; a click where it cannot
 go does nothing; a click on its own place, or Escape, puts it back. Over a vessel it pours into, the
-left button pours while it is held (a held pour, tilting as it is held; let go, it stops, and the
-vessel is still in hand), and the right button opens the full menu. Dragging is for wires, sensing,
+left button pours by hand while it is held (§13: the vessel goes to the other's mouth in a quarter
+of a second and tilts, to its full tilt in 2.5 s; let go, it is upright again in 0.6 s at most and
+back in the hand; pressed again before that, it tilts again), and the right button opens the full
+menu. Dragging is for wires, sensing,
 sliders and the selection's rectangle: a drag over an item moves nothing.
 
 | Gesture | Command |
 |---|---|
 | carry an item to a free cell of the bench | `place` |
 | carry an item to the cabinet | `stow` |
+| carry an item or a part to the trash (the box at the cabinet's foot), or Backspace with it in hand or chosen and nothing being typed (Stage 34) | `trash`; the last put there stands in the box and is taken up again as an item of the cabinet is (`place`, `stow`) |
+| the undo key (Ctrl+Z, Cmd+Z; Stage 34) | `restore`: the last put in the trash is back where it stood, and chosen |
 | carry a burner onto a vessel | `heat` |
 | carry a balloon, a condenser or a stopper onto a vessel | `attach` (a stopper: into its neck, sealing it; Stage 28) |
-| carry a vessel onto a condenser | `under` |
+| drag a line from the end of a condenser's outlet to a vessel (Stage 34: as a wire from a part's port; to another vessel, it is moved; let go on nothing, it comes off) | `under`, after `undrain` where it ran into another; `undrain` |
 | carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
 | carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
 | carry an item onto a slot of the outbox | `submit` to that slot (§13.5) |
@@ -1559,7 +1654,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | click a vessel's stir button | `stir` |
 | click a bottle's cap button, upright (Stage 28) | `cap` 0 (screwed on: sealed) or 1 (off) |
 | drag a selection along the bench | `move` |
-| drag a part out of the drawer | `part`, and its settings open (§13.3) |
+| press a part in the drawer, then press a free square (Stage 34: in hand between the two, as an item from the cabinet; Escape, or a press off the bench, puts it back); or drag it out | `part`, and its settings open (§13.3) |
 | drag from a part's port onto a part, a vessel, a burner | `wire`, or the rig's settings: `rig` |
 
 **The selection.**
@@ -2236,6 +2331,14 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | O7 | A uniform wall seen through any clear geometry is the wall's radiance: with absorption and reflection turned off, every pixel a body covers shows the wall's radiance (the radiance theorem). It fires on a renderer that weights the wall by the area its rays land on | tolerance (float32) | 20 |
 | O8 | A thin line keeps its light: what a line drawn on the wall adds to a row of pixels seen through a vessel, summed, is what its rays bring (its radiance step, times what each ray's path lets through, over the width of screen whose rays land on it: wider where the glass magnifies), wherever it lands; the ends of the line's image are found by halving, on rays traced exactly. It fires on centre sampling, which loses a line between two pixels' centres or counts it whole. Through two layers likewise (Stage 21); a line seen only in a stack's rims, where rays part ways within a quarter of a pixel, keeps its light to 3%. The check's own rays are found wherever a landing moves more than a twentieth of a pixel between two of them: through two vessels an image can be far thinner than any even step | tolerance (1% of the line's light) | 20–21 |
+| O9 | The pass's rays are the truth's (Stage 29: the pass traces a pixel's rays itself). The tracer of the per-pixel source and the truth's own tracer, one method written twice on the same surfaces, land a ray from any place of the screen at the same place of the wall, having met the same bodies with the same passing and the same chords: to a millionth of a pixel of the screen (on the wall, that times how fast the landing moves there) for all but one ray in fifty, and to a thousandth for every ray that goes the same way; rays the two send different ways (a ray that grazes a surface) are fewer than one in a hundred. It fires on a tracer whose glass bends the light as another wavelength's | tolerance | 29 |
+| O10 | A pixel's four nodes speak for each stretch of the spectrum it is read in (Stage 29: a pixel's rays are traced at four wavelengths of a stretch, and its bands read the cubic through them; where the ray traced between them is not where the cubic puts it, the stretch is halved). Where a pixel's middle ray goes one way at a stretch's four nodes, the cubic puts the ray at the wavelengths between where the ray traced there lands (to the sweep's tolerance, 0.02 of a pixel of the screen, and a hundredth of how far the landing sweeps along the stretch), passing as much through as much liquid, for all but one ray in fifty and to twenty times that for every ray; fewer than one in a hundred go another way between nodes that agree. It holds through a prism as through a vessel, and fires on a reading that never halves a stretch | tolerance | 29 |
+| O11 | A pixel's parts make it whole (Stage 29). However a pixel is cut to be read (in four where its rays part or do not land straight, at where they part, along the spectrum where its middle ray's way changes), what it is read from adds up to all of it, once, over the whole spectrum. With it, O7 is held over bands of the light as the pass reads them, not at single wavelengths alone: found so, the two sides of a cut were read at different wavelengths, and a sliver between them not at all. It fires on a reading that loses a millionth of a pixel | exact (1e-9) | 29 |
+| O12 | A kept beam is the beam (Stage 33). A pixel's beams are traced when its shape key moves (the shape tags of the bodies over it and of those its rays can reach behind them) and read from its record while it is the same. Every pixel whose record is for what it looks through now holds, value for value, the beams traced afresh, at every frame of scripted play (a vessel carried, turned and poured by hand, stirred); and the picture is, value for value, the picture with nothing kept and with each pixel's own corners. A record stands through a change of what lies in a vessel where the change is on rows of the screen its rays do not pass (each body's content tag, now and at the scene before, and the rows between which they differ; each ray the rows between which it met such a body): held frame after frame while a bottle pours into a flask and a flask is stirred. It fires where a liquid's level is moved under the same tags | exact | 33 |
+| O13 | A frame's rays are bounded (Stage 33). No pixel follows more than 96 rays in a frame (its beam's middle, and a correction a band of the most a frame reads, each cut at its lines); a bench left alone comes to follow none; through the play a frame's rays stay under what each mark's did. What a frame costs on the GPU is the rays it follows: with this the cost is held where no GPU runs. It fires on a bound a beam alone passes | exact (a count) | 33 |
+| O15 | The pass's rays in single precision are its rays in double (Stage 33). The tracer of a shape's surfaces, the same text the GPU runs, compiled with a float's arithmetic and the GPU's tolerances: over every body that bends, rays across it straight in and aslant, fewer than one in two hundred go another way, and of the rest all but one in a hundred leave within a thousandth of a centimetre and of a heading of where they leave in double. It fires on another glass | tolerance | 33 |
+| H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
+| H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
@@ -2297,6 +2400,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 |---|---|
 | Every open cell at 1 atm; balloon is a slack membrane; gas between connected cells flows at once (infinite conductance); a sealed cell's solids and liquids are incompressible and their enthalpy does not depend on the pressure | Ignores about 2 J of elastic energy against 2.35 kJ of reaction heat; a sealed cell opened is at 1 atm within the step, its gas mixed as one (the gas left in a real vessel cools more, the gas let out less) |
 | No gravitational energy in the ledger | About 0.2 J per pour |
+| A pile and a vortex are cones, each centred on its own level surface; no meniscus, no sloshing; a liquid's surface is level at once as its vessel turns | A real vortex is a paraboloid in a rigid turning and flatter beyond it: the cone has its volume and its depth's order, not its outline; a carried liquid does not swing |
+| A stirrer's work (0.01 W) and a liquid's turning time (1.5 s) are the game's choices; the work is heat in the liquid at once, not when the turning dies | 0.015 J of a liquid's turning, against the joules a minute of stirring adds |
+| Grains settle at Stokes' speed, through water's viscosity at 20 °C whatever the liquid and its temperature | Right for fine powder (a grain's Reynolds number under 1: under about 0.1 mm for the oxide); coarse grains really fall slower than this |
+| A pour by hand is an ideal jet's: no air coming in against the liquid (a full mouth does not glug), no surface tension at the lip (the last of it dribbles as the head falls, where a real lip holds a drop), the stream falls straight | A bottle turned right over empties in about 2 s where a real one takes 5 to 10 |
+| Sediment runs over a lip by the liquid's law | A powder really slides at once past its angle of repose, and not at all before it |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
@@ -2336,7 +2444,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
 | What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer; a footprint's width is taken as its mean across one step of a band's wavelengths; between a map's samples and within its pieces a ray is interpolated (within a fiftieth of a pixel of the screen); a pixel is read in four parts at most; at a route's change each side's wall is read where its own ray lands (a quarter of a pixel at most, of rays that graze a surface) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
-| The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
+| The room is a cube with black cells along its edges (twice the screen's width, sixteen cells across a face), what glass reflects is its faces' mean as one radiance, the ruling of its faces is not drawn off the screen, and the wall is 20 cm behind the vessels: all design, not measured | Rims are darker than the wall, as on a lit bench; how much is the room's own |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
 | Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; what the screen still draws over the pass (the burner and its flame, a condenser's outlet, signal parts, wires, labels) is not bent | A burner or a signal part is drawn over a vessel carried across it, not seen through it; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
 | A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |

@@ -136,14 +136,19 @@ prism-shots: native
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 
+# The game. A pixel's own rays are traced in the pass (LAB_BEAM=5: the reading that draws a vessel at any turn,
+# Stage 29 on); `make run LAB_BEAM=0` plays it with the maps' reading. Not exported: the tests keep their own.
+LAB_BEAM ?= 5
 run:
-	$(GODOT) --path $(GODOT_PROJECT)
+	LAB_BEAM=$(LAB_BEAM) $(GODOT) --path $(GODOT_PROJECT)
 
-# The optical pass's cost on the GPU, without the pictures or O4: a settled
-# pass, and one where every pixel's history starts again (docs/TDD_20_FOOTPRINTS.md).
+# The optical pass's cost on the GPU (Stage 33): a play (data/plays/cost.json: settled, a vessel carried, poured
+# by hand, stirred), each mark's frames timed, then frames where every pixel's history starts again. Headless
+# first (the play alone), then a window, time-limited. `make pass-cost LAB_BEAM=0`: the maps' reading.
+PLAY ?= data/plays/cost.json
 pass-cost: native
-	mkdir -p build/screenshots
-	perl -e 'alarm 90; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots cost
+	LAB_BEAM=$(LAB_BEAM) perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
+	LAB_BEAM=$(LAB_BEAM) perl -e 'alarm 150; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
 
 # Five screenshots of the host through the demo -> build/screenshots; at each,
 # the GPU's optical pass against the reference renderer (O4), and the GPU's

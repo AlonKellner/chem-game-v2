@@ -1,4 +1,5 @@
 #include "lab/ui.hpp"
+#include "lab/contents.hpp"
 #include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
@@ -29,6 +30,7 @@ struct Rect {
 
 // the screen's fixed parts
 constexpr Rect CABINET{ 0, 64, 240, 1016 };
+constexpr Rect TRASH{ 10, 934, 220, 136 }; // at the cabinet's foot (Stage 34): what was put away last, to be taken up again
 constexpr Rect BENCH{ 260, 120, 1120, 600 };
 constexpr Rect OUTBOX{ 260, 760, 640, 300 };
 constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13.3), beside the outbox
@@ -222,9 +224,19 @@ struct Ui::Impl {
 	// pointer, no button held; the next click puts it down, or, over a vessel it can pour into, pours while held
 	bool carrying = false;
 	bool putting_down = false; // a press while carrying: its release puts it down
-	bool pouring = false; // a press over a vessel: a held pour, tilting while the button is held
-	double tilt = 0.0;
-	static constexpr double TILT_SECONDS = 1.5; // from upright to the full tilt, while the button is held
+	// A press over a vessel: a pour by hand (Stage 27; Stage 31). What is in hand goes from the hand to where its
+	// lip is over the other's mouth, and turns about its lip while the button is held; let go, it turns back
+	// upright and comes back to the hand. `tilt`: its share of the full tilt; `eased`: how far from the hand
+	// (0) to the pouring place (1); `pour_side`: the lip it pours from, the one nearer the other's axis.
+	bool pouring = false;
+	int pour_over = -1, pour_side = 1;
+	double tilt = 0.0, eased = 0.0;
+	static constexpr double TILT_SECONDS = 2.5; // from upright to the full tilt, while the button is held
+	static constexpr double UNTILT_SECONDS = 0.6; // and back upright, let go
+	static constexpr double EASE_SECONDS = 0.25; // from the hand to the pouring place, and back
+	static constexpr float LIP_GAP = 10; // a pouring lip above the mouth it pours into
+	static constexpr int STREAM_LENGTHS = 8; // a stream is drawn in at most so many lengths, each its own width
+	static constexpr double STREAM_PI = 3.14159265358979323846;
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
 	int hover = -1;
@@ -242,9 +254,11 @@ struct Ui::Impl {
 	int pick_row = -1; // the goal's term whose quantity is being picked
 	bool fresh = false; // the next key replaces the focused field
 	bool resume = false; // the clock was playing when the editor opened
-	int making = -1; // a part's kind, dragged out of the drawer
+	int making = -1; // a part's kind, taken out of the drawer
+	bool making_carried = false; // and in hand, no button held (Stage 34): the next press puts it down
 	int wiring = -1; // the part whose port a wire is drawn from
 	int sensing = -1; // the part whose sensing port a sensing line is drawn from (§13.3, Stage 26)
+	int draining = -1; // the condenser whose outlet a line is drawn from, to the vessel it runs into (Stage 34)
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
 	std::string opened; // the circuit whose inside is shown (§13.3), "" for none
 	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
@@ -659,7 +673,7 @@ struct Ui::Impl {
 		for (const ItemView &v : view.items) {
 			n += v.kind != "tray" && !is_part_kind(v.kind) ? 1 : 0;
 		}
-		return std::fmin(118.0f, 970.0f / static_cast<float>(std::max(n, 1)));
+		return std::fmin(118.0f, 820.0f / static_cast<float>(std::max(n, 1))); // (over the trash, Stage 34)
 	}
 	float cabinet_scale(float w, float h) const { return std::fmin(1.0f, std::fmin(200.0f / w, (shelf() - 8.0f - 24.0f) / h)); }
 	static float outbox_scale(float w, float h) { return std::fmin(1.0f, std::fmin((100.0f - 12.0f) / w, 106.0f / h)); }
@@ -680,6 +694,17 @@ struct Ui::Impl {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		float w = 0, h = 0;
 		size_of(v, w, h);
+		if (v.place == "trash") {
+			// in the trash's box, the last put there (the others are not on the screen), as small as fits it
+			if (index != trash_top()) {
+				return Rect{ -10000, -10000, 0, 0 };
+			}
+			if (is_part_kind(v.kind)) {
+				return Rect{ TRASH.cx() - 20, TRASH.y + TRASH.h - 56, 40, 40 };
+			}
+			const float scale = std::fmin(1.0f, std::fmin(200.0f / w, (TRASH.h - 44.0f) / h));
+			return Rect{ TRASH.cx() - w * scale / 2, TRASH.y + TRASH.h - 12 - h * scale, w * scale, h * scale };
+		}
 		if (v.place == "cabinet") {
 			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * shelf(), 200, shelf() - 8.0f };
 			const float scale = cabinet_scale(w, h);
@@ -904,8 +929,14 @@ struct Ui::Impl {
 	}
 	Rect circuit_close() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 106, p.y + 12, 90, 30 }; }
 	Rect circuit_up() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 206, p.y + 12, 90, 30 }; }
+	// what was last put in the trash (Stage 34): the one thing of the trash that is on the screen; -1: none
+	int trash_top() const { return view.trash.empty() ? -1 : view.trash.back(); }
+	bool hidden(int index) const { return view.items[static_cast<size_t>(index)].place == "trash" && index != trash_top(); }
 	bool visible(int index) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.place == "trash") {
+			return index == trash_top();
+		}
 		return v.place != "circuit" || (!opened.empty() && v.part.in == opened);
 	}
 	// what shows a part: itself, or the circuit around it that is on the screen; -1 for none
@@ -968,11 +999,57 @@ struct Ui::Impl {
 	}
 
 	// where an item is drawn now: in hand, or carried with the selection
+	// a vessel's pouring lip and tip in its own rectangle, upright: from its left edge and from its top, pixels
+	bool lip_in(int index, int side, float &lip_x, float &lip_y, float &tip_x, float &tip_y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const glass::Vessel *g = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+		if (g == nullptr) {
+			return false;
+		}
+		float w = 0, h = 0;
+		size_of(v, w, h);
+		const double px_per_cm = w / (2.0 * g->widest());
+		const contents::Lip lip = contents::lip_of(*g, side);
+		lip_x = static_cast<float>(w / 2.0 + lip.lip_x * px_per_cm);
+		lip_y = static_cast<float>(h - lip.lip_y * px_per_cm);
+		tip_x = static_cast<float>(w / 2.0 + lip.tip_x * px_per_cm);
+		tip_y = static_cast<float>(h - lip.tip_y * px_per_cm);
+		return true;
+	}
+	// the lip a vessel in a pouring position pours from: the one nearer the axis of what it pours into
+	int side_of(int index) const {
+		if (index == drag && pouring) {
+			return pour_side;
+		}
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		return v.pours_into >= 0 && rect(v.pours_into).cx() < rect(index).cx() ? -1 : 1;
+	}
+	// How a vessel pouring by hand is turned (Stage 31): about its pouring tip, a place of the screen, by an angle
+	// clockwise as seen. False for what is not turned.
+	bool turned(int index, const Rect &r, float &angle, float &pivot_x, float &pivot_y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		float lx = 0, ly = 0, tx = 0, ty = 0;
+		if (v.pours_into < 0 || v.inverted || !(v.turn > 0.0) || !lip_in(index, side_of(index), lx, ly, tx, ty)) {
+			return false;
+		}
+		angle = static_cast<float>(side_of(index) * v.turn);
+		pivot_x = r.x + tx;
+		pivot_y = r.y + ty;
+		return true;
+	}
 	Rect drawn(int index) const {
 		Rect r = rect(index);
 		if (index == drag) {
 			r.x = px - grab_x;
 			r.y = py - grab_y;
+			float lx = 0, ly = 0, tx = 0, ty = 0;
+			if (pouring && pour_over >= 0 && eased > 0.0 && lip_in(index, pour_side, lx, ly, tx, ty)) {
+				// to where its tip is over the middle of the other's mouth, a little above it
+				const Rect over = rect(pour_over);
+				const float e = static_cast<float>(eased * eased * (3.0 - 2.0 * eased));
+				r.x += (over.cx() - tx - r.x) * e;
+				r.y += (over.y - LIP_GAP - ty - r.y) * e;
+			}
 		} else if (carrying_group() && chosen(index) && view.items[static_cast<size_t>(index)].place == "bench") {
 			r.x += px - press_x;
 			r.y += py - press_y;
@@ -990,6 +1067,13 @@ struct Ui::Impl {
 			if (view.items[static_cast<size_t>(i)].place == "bench") {
 				standing.push_back(i);
 			}
+		}
+		if (TRASH.has(x, y)) {
+			for (const int i : std::vector<int>(standing)) {
+				act({ { "do", "trash" }, { "item", id(i) } });
+			}
+			choose_only(-1);
+			return;
 		}
 		if (CABINET.has(x, y)) {
 			for (const int i : standing) {
@@ -1034,7 +1118,8 @@ struct Ui::Impl {
 			return;
 		}
 		pouring = false;
-		tilt = 0.0;
+		pour_over = -1;
+		tilt = eased = 0.0;
 		act({ { "do", "unpour" }, { "item", id(drag) } });
 	}
 	void drop(int index, float x, float y) {
@@ -1051,7 +1136,12 @@ struct Ui::Impl {
 		if (is_part_kind(v.kind)) {
 			// a signal part: along the bench or within its open circuit, or back to the drawer
 			int inner_col = 0, inner_row = 0;
-			if (CABINET.has(x, y) || DRAWER.has(x, y)) {
+			if (TRASH.has(x, y)) {
+				if (v.place != "trash") {
+					act({ { "do", "trash" }, { "item", v.id } }); // (Stage 34: kept, with its settings, to be taken up again)
+				}
+				choose_only(-1);
+			} else if (CABINET.has(x, y) || DRAWER.has(x, y)) {
 				act({ { "do", "stow" }, { "item", v.id } });
 				choose_only(-1);
 			} else if (v.place == "circuit") {
@@ -1088,7 +1178,8 @@ struct Ui::Impl {
 			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {
 				act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
 			} else if (t.condenser) {
-				act({ { "do", "under" }, { "item", v.id }, { "of", t.id } });
+				// (Stage 34: an outlet is led to a vessel by a line drawn from it, as a part's port is wired)
+				message = "drag a line from \"" + t.id + "\"'s outlet to the vessel it runs into";
 			} else {
 				// a vessel over a vessel: ask what to pour or tip
 				panel = true;
@@ -1106,8 +1197,16 @@ struct Ui::Impl {
 			act(c);
 			return;
 		}
+		if (TRASH.has(x, y)) {
+			if (view.items[static_cast<size_t>(index)].place != "trash") {
+				act({ { "do", "trash" }, { "item", v.id } });
+				choose_only(-1);
+			}
+			return;
+		}
 		if (CABINET.has(x, y)) {
-			if (view.items[static_cast<size_t>(index)].place == "bench") {
+			const std::string &stood = view.items[static_cast<size_t>(index)].place;
+			if (stood == "bench" || stood == "trash") {
 				act({ { "do", "stow" }, { "item", v.id } });
 			}
 			return;
@@ -1121,6 +1220,9 @@ struct Ui::Impl {
 	}
 
 	void press(float x, float y) {
+		if (making >= 0 && making_carried) {
+			return; // a part in hand (Stage 34): this press is where it goes, at its release
+		}
 		if (draft.edit != Draft::None) {
 			// the clock stays the player's while a part is set
 			if (!pause_rect().has(x, y) && !(speed_rect(0).has(x, y) || speed_rect(1).has(x, y) || speed_rect(2).has(x, y) || speed_rect(3).has(x, y))) {
@@ -1265,6 +1367,9 @@ struct Ui::Impl {
 		if (carrying && drag >= 0) {
 			// a press while carrying (Stage 27): over a vessel it pours into, a held pour, or with the right button
 			// the full menu; anywhere else its release puts it down
+			if (pouring) {
+				return; // let go and pressed again before it was back in the hand: it tilts again
+			}
 			const int target = item_at(x, y, drag, true);
 			if (pours_into(drag, target)) {
 				if (mods & Ui::ModRight) {
@@ -1281,9 +1386,12 @@ struct Ui::Impl {
 					not_now(); // a tutorial pours by the menu, an amount
 					return;
 				}
+				const float mine = drawn(drag).cx(), its = rect(target).cx();
 				if (act({ { "do", "hold" }, { "item", id(drag) }, { "over", id(target) } })) {
 					pouring = true;
-					tilt = 0.0;
+					pour_over = target;
+					pour_side = its < mine ? -1 : 1;
+					tilt = eased = 0.0;
 				}
 				return;
 			}
@@ -1370,6 +1478,20 @@ struct Ui::Impl {
 		return true;
 	}
 	// a monitor's sensing port, at its foot (§13.3, Stage 26)
+	// A condenser's outlet (Stage 34): its end, where the line to the vessel it runs into is drawn from and where
+	// it is taken hold of, as a part's port is.
+	bool outlet_rect(int index, Rect &r) const {
+		if (index < 0 || index >= static_cast<int>(view.items.size()) || !view.items[static_cast<size_t>(index)].condenser || index == drag) {
+			return false;
+		}
+		const std::string &place = view.items[static_cast<size_t>(index)].place;
+		if (place != "bench" && place != "on") {
+			return false; // (in the cabinet its outlet leads nowhere)
+		}
+		const Rect body = rect(index);
+		r = Rect{ body.x + body.w + 26 - 7, body.y + body.h + 14 - 7, 14, 14 };
+		return true;
+	}
 	bool sense_rect(int index, Rect &r) const {
 		if (!is_part(index) || !senses(view.items[static_cast<size_t>(index)].part.kind) || !visible(index)) {
 			return false;
@@ -2265,6 +2387,17 @@ struct Ui::Impl {
 		}
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			Rect r;
+			if (outlet_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
+				if (guided() && !asks_drag_from("outlet:" + id(i))) {
+					not_now();
+					return true;
+				}
+				draining = i;
+				return true;
+			}
+		}
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			Rect r;
 			if (port_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
 				if (guided() && !asks_drag_from("port:" + id(i))) {
 					not_now();
@@ -2344,6 +2477,30 @@ struct Ui::Impl {
 			edit_part(item_index(id(source)));
 		}
 	}
+	// An outlet's line let go (Stage 34): on a vessel, the outlet runs into it (taken first from what it ran into);
+	// on nothing, the line comes off.
+	void drop_draining(int source, float x, float y) {
+		const int target = item_at(x, y, source, true), now = view.items[static_cast<size_t>(source)].drains_to;
+		const std::string outlet_of = id(source);
+		if (target < 0) {
+			if (now >= 0 && !guided()) {
+				act({ { "do", "undrain" }, { "of", outlet_of } });
+			}
+			return;
+		}
+		if (!guided_signal_drop("outlet:" + outlet_of, target, x, y)) {
+			return;
+		}
+		const ItemView t = view.items[static_cast<size_t>(target)];
+		if (t.kind != "vessel" || t.condenser) {
+			message = "an outlet runs into a vessel";
+			return;
+		}
+		if (now == target || (now >= 0 && !act({ { "do", "undrain" }, { "of", outlet_of } }))) {
+			return;
+		}
+		act({ { "do", "under" }, { "item", t.id }, { "of", outlet_of } });
+	}
 	// a wire let go: into a part's input, or a rig onto a control
 	void drop_wiring(int source, float x, float y) {
 		const int target = item_at(x, y, -1, true);
@@ -2385,7 +2542,55 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (draft.edit == Draft::None && (key == Ui::KeyBackspace || key == Ui::KeyUndo)) {
+			// Nothing being typed (Stage 34): Backspace puts what is in hand, or what is chosen, in the trash; the
+			// undo key brings back what was last put there. A tutorial's step asks for neither.
+			if (guided() || panel || making >= 0) {
+				if (guided()) {
+					not_now();
+				}
+				return;
+			}
+			if (key == Ui::KeyUndo) {
+				const int top = trash_top();
+				if (top < 0) {
+					message = "the trash is empty";
+					return;
+				}
+				const std::string back = id(top);
+				if (act({ { "do", "restore" } })) {
+					choose_only(item_index(back));
+				}
+				return;
+			}
+			std::vector<std::string> away;
+			if (carrying && drag >= 0) {
+				away.push_back(id(drag));
+				stop_pouring();
+				carrying = false;
+				drag = -1;
+			} else {
+				for (const int i : group) {
+					away.push_back(id(i));
+				}
+			}
+			for (const std::string &one : away) {
+				const int i = item_index(one);
+				if (i >= 0 && view.items[static_cast<size_t>(i)].place != "trash") {
+					act({ { "do", "trash" }, { "item", one } });
+				}
+			}
+			if (!away.empty()) {
+				choose_only(-1);
+			}
+			return;
+		}
 		if (draft.edit == Draft::None) {
+			if (key == Ui::KeyEscape && making >= 0) {
+				making = -1; // a part in hand goes back in the drawer
+				making_carried = false;
+				return;
+			}
 			if (key == Ui::KeyEscape && carrying) {
 				stop_pouring();
 				carrying = false; // put back where it was (Stage 27)
@@ -2770,6 +2975,9 @@ struct Ui::Impl {
 		if (sensing >= 0 && sense_rect(sensing, port)) {
 			line(port.cx(), port.cy(), px, py, SENSE, 2);
 		}
+		if (draining >= 0 && outlet_rect(draining, port)) {
+			line(port.cx(), port.cy(), px, py, rgba(70, 120, 190, 230), 2);
+		}
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 			if (view.items[static_cast<size_t>(i)].part.watching && sensing_ends(i, x0, y0, x1, y1)) {
@@ -2859,7 +3067,7 @@ struct Ui::Impl {
 	void paint_drawer() {
 		rect_fill(DRAWER, PANEL_FILL);
 		outline(DRAWER, GRID, 1);
-		text(DRAWER.x + 14, DRAWER.y + 26, "parts: drag one onto the bench", INK, 17);
+		text(DRAWER.x + 14, DRAWER.y + 26, "parts: press one, then where it goes", INK, 17);
 		static const char *const SAYS[][2] = { { "counts", "down" }, { "watches", "a value" }, { "stops", "the clock" }, { "hears", "notices" }, { "writes", "a notice" },
 			{ "holds", "a value" } };
 		for (int k = 0; k < DRAWN_KINDS; ++k) {
@@ -2943,6 +3151,13 @@ struct Ui::Impl {
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
+		outline(TRASH, WALL_GRID, 1);
+		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%d)", static_cast<int>(view.trash.size())), WALL_INK);
+		if (view.trash.empty()) {
+			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
+			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
+		}
 		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
 		paint_slots();
 		// the clock
@@ -2956,7 +3171,7 @@ struct Ui::Impl {
 		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
-			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit") {
+			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit" || hidden(i)) {
 				continue;
 			}
 			paint_item(i, drawn(i));
@@ -3033,6 +3248,10 @@ struct Ui::Impl {
 		if (after("sense:", rest)) {
 			Rect r;
 			return sense_rect(item_index(std::string(rest)), r) && found(r);
+		}
+		if (after("outlet:", rest)) {
+			Rect r;
+			return outlet_rect(item_index(std::string(rest)), r) && found(r);
 		}
 		if (what.substr(0, 5) == "part:") {
 			for (const auto &[name, r] : part_buttons()) {
@@ -3335,7 +3554,11 @@ struct Ui::Impl {
 			}
 		}
 		if (what == "cabinet") {
-			r = CABINET;
+			r = Rect{ CABINET.x, CABINET.y, CABINET.w, TRASH.y - CABINET.y - 8 }; // (over the trash)
+			return true;
+		}
+		if (what == "trash") {
+			r = TRASH;
 			return true;
 		}
 		if (what == "outbox") {
@@ -3524,6 +3747,10 @@ struct Ui::Impl {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
+				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
+					body.side = side_of(i);
+				}
+				body.vortex = static_cast<float>(v.vortex); // a stirred liquid's (Stage 32)
 				bodies.push_back(body);
 				if (v.screwed) { // its screw cap on (Stage 28)
 					const float mouth = mouth_px(i) + 8;
@@ -3541,7 +3768,7 @@ struct Ui::Impl {
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 				}
-			} else if (is_part_kind(v.kind) && v.place == "bench") {
+			} else if (is_part_kind(v.kind) && (v.place == "bench" || (v.place == "trash" && i == trash_top()))) {
 				const bool circuit = v.kind == "circuit";
 				bool ringing = v.kind == "alarm" && v.part.ringing, lit = v.part.out;
 				if (circuit) {
@@ -3571,7 +3798,7 @@ struct Ui::Impl {
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
-			if (i != drag) {
+			if (i != drag && !hidden(i)) {
 				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
 			}
 		}
@@ -3610,13 +3837,16 @@ struct Ui::Impl {
 			bar(v.id, "stand rod", rod, ground - 6, rod, grip - 10, 3.0f, "burner_metal", false);
 			bar(v.id, "clamp", rod, grip, held.cx() - held.w * 0.3f, grip, 2.5f, "burner_metal", false);
 		}
-		// a pour's stream (Stage 27): a thin column of the liquid itself, from the mouth it leaves to where it lands
+		// A pour's stream (Stage 27; Stage 31): a column of what pours, from the lip or the mouth it leaves straight
+		// down to where it lands, thinning as it falls faster: what passes a second is the same at every height,
+		// so its radius there is sqrt(Q / (pi sqrt(v0^2 + 2 g y))). In short lengths, each as wide as it is there.
 		streams.clear();
-		streams.reserve(view.items.size());
+		streams.reserve(view.items.size() * static_cast<size_t>(STREAM_LENGTHS));
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
-			const bool flows = v.pours_into >= 0 && v.liquid_ml > 0.0 && (v.inverted ? v.cap > 0.0 : v.tilt > 0.0);
-			if (!flows) {
+			const double bulk = v.pours_solid_ml_s / contents::PACKING, runs = v.pours_ml_s + bulk;
+			const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+			if (v.pours_into < 0 || !(runs > 0.0) || made == nullptr) {
 				continue;
 			}
 			const ItemView &t = view.items[static_cast<size_t>(v.pours_into)];
@@ -3625,26 +3855,57 @@ struct Ui::Impl {
 			if (const glass::Vessel *g = t.glassware.empty() ? nullptr : glass::find(t.glassware, t.nominal_ml); g != nullptr) {
 				land -= static_cast<float>(g->level(t.condensed_ml) * to_r.w / (2.0 * g->widest()));
 			}
-			const float x = v.inverted ? from_r.cx() : from_r.x + from_r.w - 3.0f, top = v.inverted ? from_r.y + from_r.h : from_r.y;
-			const float width = static_cast<float>(2.0 + 3.0 * (v.inverted ? v.cap : v.tilt));
+			// where it leaves: an upside-down vessel's mouth; by hand, the lip, turned with the vessel
+			const double px_per_cm = from_r.w / (2.0 * made->widest());
+			float x = from_r.cx(), top = from_r.y + from_r.h;
+			double leaves = 0.0; // its speed as it leaves, cm/s
+			if (v.inverted) {
+				const double bore = 0.5 * made->cap_bore * std::sqrt(std::max(v.cap, 1e-6) * 0.61);
+				leaves = runs / (STREAM_PI * bore * bore);
+			} else {
+				float lx = 0, ly = 0, tx = 0, ty = 0, angle = 0, pivot_x = 0, pivot_y = 0;
+				if (!lip_in(i, side_of(i), lx, ly, tx, ty) || !turned(i, from_r, angle, pivot_x, pivot_y)) {
+					continue;
+				}
+				const float dx = lx - tx, dy = ly - ty;
+				x = pivot_x + dx * std::cos(angle) - dy * std::sin(angle);
+				top = pivot_y + dx * std::sin(angle) + dy * std::cos(angle);
+				leaves = std::sqrt(2.0 * contents::GRAVITY * std::max({ v.head_cm, 0.05 }));
+			}
 			if (land <= top + 2.0f) {
 				continue;
 			}
-			ItemView stream;
-			stream.id = v.id + "~stream";
-			stream.kind = "vessel";
-			stream.place = "bench";
-			stream.celsius = v.celsius;
-			stream.volume_ml = stream.condensed_ml = stream.liquid_ml = 1.0; // a column full of it
-			for (const SubstanceView &c : v.contents) {
-				if (!c.wall && (c.phase == 'l' || c.phase == 'a')) {
-					stream.contents.push_back(c);
+			const bool powder = !(v.pours_ml_s > 0.0); // sediment alone: a column of it
+			const int lengths = std::max(1, std::min(STREAM_LENGTHS, static_cast<int>((land - top) / 8.0f)));
+			for (int k = 0; k < lengths; ++k) {
+				const float y0 = top + (land - top) * static_cast<float>(k) / static_cast<float>(lengths), y1 = top + (land - top) * static_cast<float>(k + 1) / static_cast<float>(lengths);
+				const double fallen = 0.5 * (y0 + y1 - 2.0f * top) / px_per_cm;
+				const double radius = std::sqrt(runs / (STREAM_PI * std::sqrt(leaves * leaves + 2.0 * contents::GRAVITY * fallen)));
+				const float width = static_cast<float>(std::max(2.0 * radius * px_per_cm, 1.0));
+				ItemView stream;
+				stream.id = v.id + "~stream" + (k > 0 ? std::to_string(k) : std::string());
+				stream.kind = "vessel";
+				stream.place = "bench";
+				stream.celsius = v.celsius;
+				// a column full of it, as thick as it is wide; what it holds as its vessel does (a solution's colour is
+				// its concentration's, a suspension's haze its particles' in that much liquid)
+				const double across = width / px_per_cm;
+				stream.volume_ml = stream.condensed_ml = STREAM_PI * across * across / 4.0 * (y1 - y0) / px_per_cm;
+				stream.liquid_ml = powder ? 0.0 : v.liquid_ml;
+				// (with the liquid goes the share of the solids it holds up, a haze in it; sediment running with it too)
+				const bool hazy = !powder && (v.pours_solid_ml_s > 0.0 || v.suspended > 0.0);
+				stream.solid_ml = powder ? stream.volume_ml * 1000.0 : hazy ? v.solid_ml : 0.0;
+				stream.suspended = hazy ? (v.pours_solid_ml_s > 0.0 ? 1.0 : v.suspended) : 0.0;
+				for (const SubstanceView &c : v.contents) {
+					if (!c.wall && (powder ? c.phase == 's' : c.phase == 'l' || c.phase == 'a' || (c.phase == 's' && hazy))) {
+						stream.contents.push_back(c);
+					}
 				}
+				streams.push_back(stream);
+				OpticsBody body{ &streams.back(), x - width / 2.0f, y0, width, y1 - y0 };
+				body.layer = i == drag && (moved || carrying) ? 1 : 0;
+				bodies.push_back(body);
 			}
-			streams.push_back(stream);
-			OpticsBody body{ &streams.back(), x - width / 2.0f, top, width, land - top };
-			body.layer = i == drag && (moved || carrying) ? 1 : 0;
-			bodies.push_back(body);
 		}
 		// the wires and the rigs between things on the bench
 		for (const Wire &w : view.wires) {
@@ -3682,6 +3943,24 @@ struct Ui::Impl {
 		room.h = ROOM.h;
 		room.bench = WALL_RADIANCE;
 		room.elsewhere = DARK_RADIANCE;
+		// The wall behind and the room in front are endless white planes ruled as the bench is (the user's word,
+		// Stage 33). Beyond the screen and in front they are seen only far off or turned about, so as one
+		// radiance: the wall's, less what its ruling takes (a line a pixel wide each way in every square).
+		{
+			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0);
+			const double share = 2.0 / sq - 1.0 / (sq * sq);
+			room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+			// The room is a cube twice the screen's width on a side, each face ruled in sixteen cells across, the
+			// cells along its twelve edges black (the user's word: endless white planes left a vessel all but
+			// unseen; rays bent far, as at a rim, come to the black cells). What glass reflects is the room as a
+			// whole: its faces' mean.
+			room.cube = 3840.0;
+			room.cube_cell = room.cube / 16.0;
+			room.edge = 0.0;
+			const double black = 1.0 - (14.0 / 16.0) * (14.0 / 16.0);
+			room.front = (1.0 - black) * room.beyond + black * room.edge;
+		}
 		paint();
 		const auto radiance = [](uint32_t c) {
 			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
@@ -4119,9 +4398,14 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.turn(x);
 		}
 	} else if (released) {
-		if (m.making >= 0) {
+		if (m.making >= 0 && !m.making_carried && DRAWER.has(x, y)) {
+			// pressed and let go on the drawer (Stage 34): the part is in hand, as an item taken from the cabinet
+			// is, and the next press puts it down. (Pressed and dragged out, it goes where the button is let go.)
+			m.making_carried = true;
+		} else if (m.making >= 0) {
 			const int kind = m.making;
 			m.making = -1;
+			m.making_carried = false;
 			m.drop_making(kind, x, y);
 		} else if (m.wiring >= 0) {
 			const int from = m.wiring;
@@ -4131,10 +4415,14 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			const int from = m.sensing;
 			m.sensing = -1;
 			m.drop_sensing(from, x, y);
+		} else if (m.draining >= 0) {
+			const int from = m.draining;
+			m.draining = -1;
+			m.drop_draining(from, x, y);
 		} else if (m.drag >= 0 && m.carrying) {
-			// carried (Stage 27): a held pour ends; a click puts it down, on its own place too
+			// carried (Stage 27): let go, a pour by hand turns back upright (Stage 31: the frames bring it back, and
+			// it ends in the hand); a click puts it down, on its own place too
 			if (m.pouring) {
-				m.stop_pouring();
 			} else if (m.putting_down) {
 				m.putting_down = false;
 				const int index = m.drag;
@@ -4186,10 +4474,26 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
-	if (m.pouring && m.down && m.drag >= 0 && seconds > 0.0) {
-		// a held pour tilts further while the button is held (Stage 27): its rate is its tilt's share
-		m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
-		m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+	if (m.pouring && m.drag >= 0 && seconds > 0.0) {
+		// A pour by hand (Stage 27; Stage 31): to the pouring place, then tilting further while the button is held;
+		// let go, upright again, then back to the hand, where it ends
+		const double before = m.tilt;
+		if (m.down) {
+			m.eased = std::min(1.0, m.eased + seconds / Impl::EASE_SECONDS);
+			if (m.eased >= 1.0) {
+				m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
+			}
+		} else if (m.tilt > 0.0) {
+			m.tilt = std::max(0.0, m.tilt - seconds / Impl::UNTILT_SECONDS);
+		} else {
+			m.eased = std::max(0.0, m.eased - seconds / Impl::EASE_SECONDS);
+		}
+		if (m.tilt != before) {
+			m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+		}
+		if (!m.down && !(m.tilt > 0.0) && !(m.eased > 0.0)) {
+			m.stop_pouring();
+		}
 	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
 		m.owed += seconds * m.speed * 60.0;
@@ -4365,7 +4669,12 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	std::string_view rest;
 	if (what == "cabinet") {
 		x = CABINET.cx();
-		y = CABINET.y + CABINET.h - 60;
+		y = TRASH.y - 30; // (over the trash, Stage 34)
+		return true;
+	}
+	if (what == "trash") {
+		x = TRASH.cx();
+		y = TRASH.y + 30;
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first

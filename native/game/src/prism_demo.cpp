@@ -75,7 +75,28 @@ PrismDemo::PrismDemo() {
 	compose();
 }
 
+void PrismDemo::place_grating(float x, float y) {
+	gx_ = x;
+	gy_ = y;
+}
+
 void PrismDemo::pointer(float x, float y, bool down) {
+	if (down && !dragging_ && !dragging_grating_ && std::fabs(x - gx_) <= GRATING_W / 2 && std::fabs(y - gy_) <= GRATING_H / 2) {
+		// the grating, which lies nearer the eye than the prism where they overlap
+		dragging_grating_ = true;
+		grab_x_ = x - gx_;
+		grab_y_ = y - gy_;
+		return;
+	}
+	if (dragging_grating_) {
+		if (down) {
+			gx_ = x - grab_x_;
+			gy_ = y - grab_y_;
+		} else {
+			dragging_grating_ = false;
+		}
+		return;
+	}
 	if (down && !dragging_) {
 		const float *rect = &scene_.table[static_cast<size_t>(optics_layout::HEADER_VECS + optics_layout::RECT) * 4];
 		if (x >= rect[0] && x < rect[0] + rect[2] && y >= rect[1] && y < rect[1] + rect[3]) {
@@ -105,7 +126,12 @@ void PrismDemo::compose() {
 	room.shapes.push_back(OpticsShape{ SLIT_X, SLIT_Y, SLIT_W, SLIT_H, SLIT });
 	OpticsBody body{ &prism_, cx_ - SIDE / 2, cy_ - HEIGHT / 2, SIDE, HEIGHT };
 	body.turn = turn_;
-	optics_compose(scene_, room, { body });
+	// the grating: a ruled plate, on the bench's plane as the prism is
+	OpticsBody grating{ nullptr, gx_ - GRATING_W / 2, gy_ - GRATING_H / 2, GRATING_W, GRATING_H };
+	grating.shape = OpticsBody::Grating;
+	grating.size = static_cast<float>(GRATING_PITCH_NM);
+	grating.id = 0x67726174696e67ull;
+	optics_compose(scene_, room, { body, grating });
 }
 
 const OpticsScene &PrismDemo::optics() {
@@ -133,6 +159,17 @@ const DrawList &PrismDemo::draw() {
 	outline.w = rect[2];
 	outline.h = rect[3];
 	add(list_, outline);
+	// and the grating's plate
+	DrawCommand plate;
+	plate.type = DrawCommand::Outline;
+	plate.color = EDGE;
+	plate.width = 1;
+	plate.x = gx_ - GRATING_W / 2;
+	plate.y = gy_ - GRATING_H / 2;
+	plate.w = GRATING_W;
+	plate.h = GRATING_H;
+	add(list_, plate);
+	text(list_, plate.x + 6, plate.y + plate.h + 20, "a grating, 600 lines a millimetre: drag it before the slit", DIM, 15);
 	text(list_, 60, 70, "A prism of flint glass in a dark room, a slit of white light on the wall behind it", ACCENT, 24);
 	text(list_, 60, 104, "Drag the prism to move it; turn it with the mouse wheel or two fingers. Each pixel sees the slit only", INK, 17);
 	text(list_, 60, 128, "at the wavelengths the glass bends onto it: the colours settle over a few frames.", INK, 17);

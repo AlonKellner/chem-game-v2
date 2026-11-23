@@ -123,7 +123,7 @@ int main(void) {
 	}
 	/* Stage 20: the vessel's refraction map (its head: whole pixels spanned, two cores, 4 samples a pixel and one) and the wall's table */
 	if (optics.map_count < 1000 || optics.maps == NULL || optics.maps_revision == 0 || optics.maps[1] != 2.0f || optics.maps[2] != optics.maps[0] * 4.0f + 1.0f ||
-			optics.wall_count < 3001 || optics.wall == NULL || optics.wall_revision == 0) {
+			optics.wall_count < 3003 || optics.wall == NULL || optics.wall_revision == 0) {
 		fprintf(stderr, "the optical pass's scene has no refraction map for its vessel, or no table of the wall\n");
 		return 1;
 	}

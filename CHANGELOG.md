@@ -1,5 +1,59 @@
 # GAME_SPEC version history
 
+## 0.35.0 (2026-11-23, Stage 34; signed off by the user: "Approved, great work")
+
+- §13, §13.1 (Stage 34, `docs/TDD_34_GESTURES.md`): **the screen's gestures.** A part is taken from
+  the drawer with a press and put down with another; a condenser's outlet is led to a vessel by a
+  line dragged from its end (`undrain` takes it off); **a trash**: `trash` and `restore`, 64 kept, an
+  item's matter staying in the world and a part's settings with it; on the screen its box at the
+  cabinet's foot, Backspace, and the undo key (`CG_KEY_UNDO`).
+
+## 0.34.0 (2026-11-23, Stages 29 to 33; signed off by the user after playing: "Looks perfect", "Approved")
+
+- §12.3, §18 (Stage 33, in progress, `docs/TDD_33_FAST.md`): **the pass made fast.** On the GPU
+  (M3 Pro, the play of `make pass-cost`), a frame's median: a vessel carried 62 to 8.5 ms, poured by
+  hand 97 to 8.4, stirred 58 to 8.4, settled and at rest at the display's rate (8.3); single frames
+  still run to 14 to 16 ms at the simulation's steps where a stream runs and a reaction begins.
+  What is settling waits while a thing moves (a beam traced counts against the rays' budget), a
+  straight beam is read as its corners' quad, a plain pixel keeps its points through a change of
+  colour, and pixels whose rays part have the budget first. The torus in
+  closed form (its search was five sixths of the pass); a ray tries only the surfaces at its
+  heights, may be turned back four times in a shape and meet sixteen surfaces, and then goes
+  straight on as if the rest of the body were not there (the truth too); a correction is one ray, for one band in four where a beam's
+  rays go one way; the corners of neighbouring pixels are traced once, in a pass of their own; what
+  lies in a vessel is drawn to a sixty-fourth of a pixel; a pixel's beams are kept while what it
+  looks through is where it was, and through a change of what lies in a vessel on rows its rays do
+  not pass; a pixel whose rays have just moved shows its beam's reading alone that frame, and takes
+  its corrections once it rests (0.64% of pixel-frames visibly off while things move; for the
+  user's eye, `LAB_BEAM_AT_ONCE=1` the other way); a pixel beyond a turned vessel's outline is not
+  its pixel; the pixels read by rays have a budget of their own; the fixed estimate reads a
+  footprint as one quad, and a wall that is one under a footprint as that. O12 (a kept beam is the
+  beam), O13 (a frame's rays are bounded), O15 (the pass's rays in single precision are its rays in
+  double). A play: gestures as data (`lab/play.hpp`, `data/plays/cost.json`), timed by
+  `make pass-cost`. The two session records re-recorded with the user's approval (2026-11-23:
+  Stages 30 to 32's change of behaviour, evidence in `docs/TDD_32_VORTEX.md`).
+- §12.2, §12.3, §18 (Stage 29, `docs/TDD_29_TRACER.md`): **a pixel's own rays, traced in the pass**:
+  a pixel is its beam's exact reading and the average over time of its rays' corrections (off
+  unless `LAB_BEAM=5`; `make run` sets it); a diffraction grating in the prism demo; O9 (the pass's
+  rays are the truth's), O10 (four nodes speak for each stretch of the spectrum), O11 (a pixel's
+  parts make it whole), O7 over bands. Its cost on the GPU is left as it is, by the user's decision.
+- §11, §12.3, §18 (Stage 30, `docs/TDD_30_CONTENTS.md`): **what lies in a vessel, at any turn**
+  (`lab/contents.hpp`): the liquid's surface level in the room, sediment a flat section under a
+  pile, both tracers following a ray through liquid, air and sediment by where it is; a body turned
+  by any angle about a pivot; the wall's table reaches a row beyond the screen; H1, H2.
+- §6, §12.3, §13, §13.1, §20 (Stage 31, `docs/TDD_31_POUR.md`): **a pour by hand**: the vessel
+  turns about its lip over the other's mouth and pours what stands over the lip, Torricelli's speed
+  over the wet part of its mouth (a weir to an orifice, one law); a drain carries a share of the
+  solids with its liquid and solids run by themselves; decanting, a dry powder; a stream that thins
+  as it falls. A script's `pour {from, to, ml | all}` is unchanged.
+- §6, §11, §18, §20 (Stage 32, `docs/TDD_32_VORTEX.md`): **a stirred liquid's vortex**, a cone whose
+  size is its turning's energy, `E = (M g / A) V`, at most `M g D / 3`; **the stirrer's work is in
+  the ledger** (an edge's power, from a source of work: a reservoir whose energy carries no
+  entropy); the turning holds up the share of the solids its dissipation can (their weight in the
+  liquid times Stokes' speed), and they settle at that speed. **The two sessions' records change**
+  (the world has a cell more; the demo's stirred flask is 0.1 s quicker and its crystals 0.35 mg
+  more): shown in TDD 32, recorded again only with the user's approval.
+
 ## 0.29.0 (2026-11-22, Stage 28)
 
 - §6, §8: **sealed cells**: a rigid cell with no gas path to an elastic one is sealed (V3 keeps the

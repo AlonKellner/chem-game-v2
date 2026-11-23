@@ -5,6 +5,7 @@
 #include "lab/lab.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/play.hpp"
 #include "lab/ui.hpp"
 
 #include <cmath>
@@ -15,6 +16,8 @@
 
 struct cg_ui {
 	std::unique_ptr<lab::Ui> ui;
+	lab::Play play; // the gestures given before each frame, while it runs (Stage 33)
+	bool playing = false;
 	std::string text; // the last report handed out
 	std::vector<cg_part> parts; // the last parts handed out, and their strings
 	std::vector<std::string> part_text;
@@ -22,6 +25,8 @@ struct cg_ui {
 
 // the draw list crosses the boundary as it is
 static_assert(sizeof(cg_draw_command) == sizeof(lab::DrawCommand));
+static_assert(CG_OPTICS_KEPT_VECS == lab::optics_layout::KEPT_VECS);
+static_assert(CG_OPTICS_RAY_POINTS == lab::optics_layout::RAY_POINTS);
 static_assert(offsetof(cg_draw_command, x) == offsetof(lab::DrawCommand, x));
 static_assert(offsetof(cg_draw_command, first) == offsetof(lab::DrawCommand, first));
 
@@ -287,7 +292,7 @@ cg_ui *cg_ui_open(const char *bench_json) {
 			fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
 			return nullptr;
 		}
-		return new cg_ui{ std::move(made), {}, {}, {} };
+		return new cg_ui{ std::move(made), {}, false, {}, {}, {} };
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 		return nullptr;
@@ -336,10 +341,33 @@ void cg_ui_frame(cg_ui *ui, double seconds) {
 		return;
 	}
 	try {
+		if (ui->playing && !ui->play.next(*ui->ui)) {
+			ui->playing = false;
+		}
 		ui->ui->frame(seconds);
 	} catch (const std::exception &e) {
 		fail(CG_ERR_INTERNAL, e.what());
 	}
+}
+
+cg_status cg_ui_play(cg_ui *ui, const char *play_json) {
+	if (ui == nullptr || play_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_play: null argument");
+	}
+	try {
+		std::string why;
+		if (!lab::Play::read(play_json, ui->play, why)) {
+			return fail(CG_ERR_INVALID_ARGUMENT, ("cg_ui_play: " + why).c_str());
+		}
+		ui->playing = true;
+		return CG_OK;
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+const char *cg_ui_playing(cg_ui *ui) {
+	return ui != nullptr && ui->playing ? ui->play.mark().c_str() : nullptr;
 }
 
 cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
@@ -385,6 +413,9 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->stack_count = static_cast<int32_t>(scene.stacks.size() / 4);
 	out->stacks = scene.stacks.data();
 	out->stacks_revision = scene.stacks_revision;
+	out->shape_count = static_cast<int32_t>(scene.shapes.size() / 4);
+	out->shapes = scene.shapes.data();
+	out->shapes_revision = scene.shapes_revision;
 }
 
 void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
@@ -484,7 +515,7 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 }
 
 void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
-	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_ESCAPE) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_UNDO) {
 		return;
 	}
 	try {

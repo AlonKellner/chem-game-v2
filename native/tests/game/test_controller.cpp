@@ -110,13 +110,26 @@ TEST_CASE("controller: set, rigged and tuned; its rigs follow; untuned with the 
 	ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
 	CHECK(item(l->view(), "controller1").part.tuned);
 	CHECK(l->view().rigs.back().follow);
-	// stirring, by PWM: the flask's stirring changes nothing it senses: untuned, with the reason
-	auto s = heated();
+	// stirring, by PWM: the flask's stirring changes nothing of the beaker beside it, which it senses: untuned, with
+	// the reason
+	std::unique_ptr<lab::Lab> s = lab::Lab::open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000},
+		"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9, "contents": {"water": {"g": 100}}},
+			{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "contents": {"water": {"g": 50}}}]})",
+			why);
+	REQUIRE_MESSAGE(s != nullptr, why);
+	ok(*s, R"({"do": "place", "item": "flask", "at": [10, 6]})");
+	ok(*s, R"({"do": "place", "item": "beaker", "at": [16, 6]})");
 	ok(*s, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
-	ok(*s, R"({"do": "set", "part": "controller1", "item": "flask", "what": "celsius", "target": 50})");
+	ok(*s, R"({"do": "set", "part": "controller1", "item": "beaker", "what": "celsius", "target": 50})");
 	ok(*s, R"({"do": "rig", "from": "controller1", "item": "flask", "control": "stir"})");
 	CHECK_FALSE(item(s->view(), "controller1").part.tuned);
 	CHECK(s->view().notices.back().says.find("is not tuned") != std::string::npos);
+	// (of the flask itself it changes the temperature, a little: a stirrer's work is heat in the liquid, Stage 32)
+	auto w = heated();
+	ok(*w, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
+	ok(*w, R"({"do": "set", "part": "controller1", "item": "flask", "what": "celsius", "target": 50})");
+	ok(*w, R"({"do": "rig", "from": "controller1", "item": "flask", "control": "stir"})");
+	CHECK(item(w->view(), "controller1").part.tuned);
 	// the valve follows its level, a step behind; the controller writes no notice each step
 	const size_t notices = l->view().notices.size();
 	REQUIRE(l->advance(600, why));
