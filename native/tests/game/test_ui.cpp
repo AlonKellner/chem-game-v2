@@ -663,6 +663,54 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	well_formed(p.ui->draw());
 }
 
+TEST_CASE("ui: a part is taken from the drawer with a press and put down with another, as an item from the cabinet is; Escape puts it back (Stage 34)") {
+	Player p;
+	p.click("pause");
+	const auto parts = [&] {
+		int n = 0;
+		for (const ItemView &v : p.ui->lab().view().items) {
+			n += v.kind == "timer" || v.kind == "alarm" ? 1 : 0;
+		}
+		return n;
+	};
+	float dx = 0, dy = 0, sx = 0, sy = 0;
+	p.at("drawer:timer", dx, dy);
+	p.at("square:2,2", sx, sy);
+	// a press and its release on the drawer: nothing is made yet, the part is in hand and follows the pointer
+	p.ui->pointer(dx, dy, true);
+	p.ui->pointer(dx, dy, false);
+	CHECK(parts() == 0);
+	p.ui->pointer(0.5f * (dx + sx), 0.5f * (dy + sy), false);
+	p.ui->pointer(sx, sy, false);
+	CHECK(parts() == 0);
+	// the next press and release, on a square: there it is, chosen, its editor open
+	p.ui->pointer(sx, sy, true);
+	CHECK(parts() == 0);
+	p.ui->pointer(sx, sy, false);
+	CHECK(parts() == 1);
+	CHECK(p.ui->selected() == "timer1");
+	p.ui->key(lab::Ui::KeyEscape);
+	// another, and Escape with it in hand: back in the drawer, and the next press makes nothing
+	p.at("drawer:alarm", dx, dy);
+	p.ui->pointer(dx, dy, true);
+	p.ui->pointer(dx, dy, false);
+	p.ui->key(lab::Ui::KeyEscape);
+	p.at("square:5,2", sx, sy);
+	p.ui->pointer(sx, sy, true);
+	p.ui->pointer(sx, sy, false);
+	CHECK(parts() == 1);
+	// in hand, and put down off the bench: it goes back in the drawer
+	p.ui->pointer(dx, dy, true);
+	p.ui->pointer(dx, dy, false);
+	p.ui->pointer(dx, dy, true);
+	p.ui->pointer(dx, dy, false);
+	CHECK(parts() == 1);
+	// and dragged out as before: where the button is let go
+	p.drag("drawer:alarm", "square:5,2");
+	CHECK(parts() == 2);
+	well_formed(p.ui->draw());
+}
+
 TEST_CASE("ui: parts come out of the drawer, are set, wired and rigged with the pointer and the keys, and go back (Stage 13)") {
 	Player p;
 	p.click("pause");

@@ -253,7 +253,8 @@ struct Ui::Impl {
 	int pick_row = -1; // the goal's term whose quantity is being picked
 	bool fresh = false; // the next key replaces the focused field
 	bool resume = false; // the clock was playing when the editor opened
-	int making = -1; // a part's kind, dragged out of the drawer
+	int making = -1; // a part's kind, taken out of the drawer
+	bool making_carried = false; // and in hand, no button held (Stage 34): the next press puts it down
 	int wiring = -1; // the part whose port a wire is drawn from
 	int sensing = -1; // the part whose sensing port a sensing line is drawn from (§13.3, Stage 26)
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
@@ -1179,6 +1180,9 @@ struct Ui::Impl {
 	}
 
 	void press(float x, float y) {
+		if (making >= 0 && making_carried) {
+			return; // a part in hand (Stage 34): this press is where it goes, at its release
+		}
 		if (draft.edit != Draft::None) {
 			// the clock stays the player's while a part is set
 			if (!pause_rect().has(x, y) && !(speed_rect(0).has(x, y) || speed_rect(1).has(x, y) || speed_rect(2).has(x, y) || speed_rect(3).has(x, y))) {
@@ -2450,6 +2454,11 @@ struct Ui::Impl {
 
 	void type(Ui::Key key, uint32_t codepoint) {
 		if (draft.edit == Draft::None) {
+			if (key == Ui::KeyEscape && making >= 0) {
+				making = -1; // a part in hand goes back in the drawer
+				making_carried = false;
+				return;
+			}
 			if (key == Ui::KeyEscape && carrying) {
 				stop_pouring();
 				carrying = false; // put back where it was (Stage 27)
@@ -2923,7 +2932,7 @@ struct Ui::Impl {
 	void paint_drawer() {
 		rect_fill(DRAWER, PANEL_FILL);
 		outline(DRAWER, GRID, 1);
-		text(DRAWER.x + 14, DRAWER.y + 26, "parts: drag one onto the bench", INK, 17);
+		text(DRAWER.x + 14, DRAWER.y + 26, "parts: press one, then where it goes", INK, 17);
 		static const char *const SAYS[][2] = { { "counts", "down" }, { "watches", "a value" }, { "stops", "the clock" }, { "hears", "notices" }, { "writes", "a notice" },
 			{ "holds", "a value" } };
 		for (int k = 0; k < DRAWN_KINDS; ++k) {
@@ -4239,9 +4248,14 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.turn(x);
 		}
 	} else if (released) {
-		if (m.making >= 0) {
+		if (m.making >= 0 && !m.making_carried && DRAWER.has(x, y)) {
+			// pressed and let go on the drawer (Stage 34): the part is in hand, as an item taken from the cabinet
+			// is, and the next press puts it down. (Pressed and dragged out, it goes where the button is let go.)
+			m.making_carried = true;
+		} else if (m.making >= 0) {
 			const int kind = m.making;
 			m.making = -1;
+			m.making_carried = false;
 			m.drop_making(kind, x, y);
 		} else if (m.wiring >= 0) {
 			const int from = m.wiring;

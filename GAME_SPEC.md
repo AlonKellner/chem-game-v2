@@ -1649,7 +1649,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | click a vessel's stir button | `stir` |
 | click a bottle's cap button, upright (Stage 28) | `cap` 0 (screwed on: sealed) or 1 (off) |
 | drag a selection along the bench | `move` |
-| drag a part out of the drawer | `part`, and its settings open (§13.3) |
+| press a part in the drawer, then press a free square (Stage 34: in hand between the two, as an item from the cabinet; Escape, or a press off the bench, puts it back); or drag it out | `part`, and its settings open (§13.3) |
 | drag from a part's port onto a part, a vessel, a burner | `wire`, or the rig's settings: `rig` |
 
 **The selection.**
