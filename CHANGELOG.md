@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## 0.36.0 (2026-11-23, Stage 35; awaiting the user's sign-off)
+
+- §12.3, §11, §18, §19, §20 (Stage 35, `docs/TDD_35_ONE.md`): **one renderer.** A pixel's own rays,
+  traced in the pass (Stages 29 and 33), are the only reading. Removed: the refraction maps and
+  their knots, the tables of a held vessel's rays (stacks), the store of maps made before the game
+  ran (`chem_tool maps`, `cg_optics_store`, `cg_ui_prepare`), the second pass's readings, the
+  readings tried on the way (`LAB_BEAM` and its modes) and the measuring switches no gate needs;
+  4,450 lines. `cg_optics` names the rectangles the tracing passes run over (`rectangles`). The
+  picture did not change: the reference's numbers through the play are the same value for value,
+  the GPU's frame and its pixels off the truth as before.
+  Mended in the reading, found when it became the default: a thin line keeps its light through two
+  layers (`O8`: a footprint's rows weighed by their width); a correction's place in its pixel is not
+  tied to its wavelength. Open: a prism's slit where a ray is turned back inside the prism (3 pixels
+  of a row wrong at rest, 5 after a turn; two tests marked, not loosened).
+  §12.3 is rewritten for the one renderer: the tracer in the pass, a beam, a pixel as its beam's
+  reading and the mean of its rays' corrections, beams kept and corners shared, the rays' budget.
+
 ## 0.35.0 (2026-11-23, Stage 34; signed off by the user: "Approved, great work")
 
 - §13, §13.1 (Stage 34, `docs/TDD_34_GESTURES.md`): **the screen's gestures.** A part is taken from

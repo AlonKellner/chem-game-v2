@@ -3811,14 +3811,6 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 				points = points * pow(0.5, moved);
 				frames = min(frames, SETTLED_FRAMES);
 			}
-			if (keep && beam_deferred) {
-				// Its rays have moved (Stage 35): what its batches found was by other rays. It is kept to show
-				// while the thing moves (beside a plain wall it is nearly what the new rays will find), with the
-				// weight of one point: what the pixel finds once it rests outweighs it. (Kept at its full weight
-				// where the estimate did not move, a pixel of the prism's spectrum showed after a turn what it
-				// had found before it, 140 from the truth, and asked for nothing.)
-				points = min(points, 1.0e9);
-			}
 		}
 		if (!keep) {
 			d = vec3(0.0);

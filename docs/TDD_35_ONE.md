@@ -142,11 +142,14 @@ the tests). Mended in the per-pixel source:
 - **A band's rays along a line.** A correction's place in the pixel came from the same point as its
   wavelength. Now the place is its own (the multipliers 807 and 941 in `beam_read`). Bands more than 3%
   off where a prism's rays part: 29 of 704, then 16.
-- **A history kept through a turn.** A pixel whose fixed estimate was the same before and after its rays
-  moved kept what its batches had found. Now, where its beam was traced again and its history holds light
-  of its own, the history weighs one point (`step_pixel`). Wrong pixels 40 frames after the prism's turn:
-  37, then 5. (Dropped for every such pixel it cost a stir 2.4 ms a frame: every pixel of the liquid asked
-  again at every frame. It is dropped only where the history is more than a hundredth of what is shown.)
+- **A history kept through a turn: tried, and taken out.** A pixel whose fixed estimate is the same
+  before and after its rays move keeps what its batches found. Giving that history the weight of one
+  point where the beam was traced again (`step_pixel`) was tried twice. For every such pixel: the
+  prism's row had 0 to 3 wrong at rest and 2 to 5 after a turn, and a stir cost 2.4 ms a frame more
+  (every pixel of the liquid asked again at every frame: 10.7 ms for 8.4). Only where the history is
+  more than a hundredth of what is shown: the prism's counts were what they are without it (3 at rest,
+  5 after the turn) and the stir still cost 1.5 ms. Without it the counts are 3 and 5: it was the two
+  mends above and the one below that brought the turn's 37 to 5, so it is not in the source.
 - A beam's nodes that go different ways: `beam_weights` reads between two neighbouring nodes that go one
   way, and the nearest node where they part (`beam_piece_one_way`), in place of a cubic through nodes of
   other routes.

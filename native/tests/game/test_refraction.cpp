@@ -494,10 +494,9 @@ int prism_wrong(lab::PrismDemo &demo, lab::OpticsFrames &rendered, bool cuts, in
 // Stage 35, OPEN: a fault of the reading by a pixel's own rays, found when it became the default (the maps: no
 // pixel wrong). Where the slit is seen a pixel's rays part along the spectrum, so its fixed estimate is its
 // middle ray's (the dark room) and all it shows of the slit is what its rays' corrections find. As the test
-// counts, against the one reading: 3 to 5 of the row's pixels visibly wrong after 40 frames, 2 to 5 after the
-// turn (5 and 37 before two of the three causes were mended: a pixel that kept what its rays found before a
-// turn, step_pixel's `points = min(points, 1.0)` where its beam was traced again; and a band's rays lying
-// along a line through the pixel and the band, beam_read's place untied from the wavelength).
+// counts, against the one reading: 3 of the row's pixels visibly wrong after 40 frames, 5 after the turn (5
+// and 37 before a band's rays were untied from a line through the pixel and the band, beam_read's place, and
+// a ray between nodes of different routes was read between its neighbours that go one way, beam_weights).
 //   What remains: a pixel stops before a ray has found the slit. (946, 540): the truth's rays bring
 //   (-0.070, 0.055, 0.141), the pixel shows the room's 0.0021, 26 apart on the eye metric (8 is visible); its
 //   batches all found nothing, so its noise is nothing and it asks no more. The cause, by the rays themselves
