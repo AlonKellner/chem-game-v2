@@ -1136,6 +1136,10 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 	// the breakpoints: every edge of the bench and of what is drawn, across and down
 	// (and far off to each side, FAR_OFF: beyond it is where a ray that never reaches the wall is put)
 	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w, -FAR_OFF, FAR_OFF }, ys{ room.y, static_cast<double>(room.y) + room.h };
+	if (room.beyond >= 0.0) {
+		xs.push_back(0.0); // (the screen's own edges: beyond them is the endless plane)
+		xs.push_back(static_cast<double>(WALL_COLUMNS));
+	}
 	for (const OpticsShape &sh : room.shapes) {
 		if (!(sh.w > 0.0f) || !(sh.h > 0.0f)) {
 			continue;
@@ -1179,7 +1183,16 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 	// side it goes (100,000 pixels), and what it shows is the room in front of the bench, which is what glass
 	// reflects (Stage 33). It read the wall's table there, which is the darkness beside the bench: grey patches
 	// where a vortex or a surface turned rays back, beside reflections of a room four times as bright.
+	// And the wall beyond the screen is an endless plane of one radiance, where the room says so (Stage 33, the
+	// user's word: the planes behind and in front are endless and white): every cell left of the screen and right
+	// of it, and (below) the rows over and under it.
 	for (int r = 0; r <= my; ++r) {
+		for (int j = 0; room.beyond >= 0.0 && j <= m; ++j) {
+			const bool left = j < m && xs[static_cast<size_t>(j)] <= 0.0, right = j > 0 && xs[static_cast<size_t>(j - 1)] >= static_cast<double>(WALL_COLUMNS);
+			if (left || right) {
+				grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)] = static_cast<float>(room.beyond);
+			}
+		}
 		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1)] = static_cast<float>(room.front);
 		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(m)] = static_cast<float>(room.front);
 	}
@@ -1199,6 +1212,11 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 			for (int j = 0; j <= m; ++j) {
 				blend[static_cast<size_t>(j)] += static_cast<float>((hi - lo) * grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(j)]);
 			}
+		}
+		if (room.beyond >= 0.0 && (y == -1 || y == WALL_ROWS)) {
+			// the row over the screen and the row under it, which every row beyond them is read as: the endless plane
+			std::fill(blend.begin(), blend.end(), static_cast<float>(room.beyond));
+			blend[0] = blend[static_cast<size_t>(m)] = static_cast<float>(room.front);
 		}
 		const auto found = known.emplace(blend, static_cast<int>(profiles.size()));
 		if (found.second) {

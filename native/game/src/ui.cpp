@@ -3784,6 +3784,15 @@ struct Ui::Impl {
 		room.h = ROOM.h;
 		room.bench = WALL_RADIANCE;
 		room.elsewhere = DARK_RADIANCE;
+		// The wall behind and the room in front are endless white planes ruled as the bench is (the user's word,
+		// Stage 33). Beyond the screen and in front they are seen only far off or turned about, so as one
+		// radiance: the wall's, less what its ruling takes (a line a pixel wide each way in every square).
+		{
+			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0);
+			const double share = 2.0 / sq - 1.0 / (sq * sq);
+			room.front = room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+		}
 		paint();
 		const auto radiance = [](uint32_t c) {
 			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };

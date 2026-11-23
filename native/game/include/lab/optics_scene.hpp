@@ -208,6 +208,9 @@ struct OpticsRoom {
 	double wall_px = 284.0;
 	double gap_px = 120.0;
 	double front = 0.3; // the radiance of the room in front of the bench, which glass reflects
+	// The wall beyond the screen, on every side: an endless plane of this radiance (Stage 33). A ray bent past the
+	// screen's edge lands on it. Below 0 (a scene made by hand): the wall as it is at the screen's edge, as before.
+	double beyond = -1.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
 

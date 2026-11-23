@@ -352,6 +352,14 @@ of 17.6 (`test_kept.cpp`).
   their last answer: 1.4 ms a frame held and turning. The same to the bit: both session records
   reproduce. While liquid runs each step is still the search (130 ms a frame at 600x, for the few
   frames a bottle takes to empty; 10 ms at 60x).
+- **The wall beyond the screen and the room in front are endless white planes** (the user's word:
+  "white planes with a grid texture"; `OpticsRoom::beyond`, `front`, set by the screen to the wall's
+  radiance less what its ruling takes, 0.72). Beyond the screen's edges the wall was the darkness beside
+  the bench or the edge row carried on, and the room in front a grey of 0.3. On the screen the wall is as
+  it is drawn. The ruling itself is not carried on beyond the screen, nor seen in front: a ray that lands
+  there is spread over many squares. Glass reflects a white room now: rims and reflections are lighter,
+  and a dark liquid a little lighter (the demo's boiled-down flask is 8 darker than the dilute one in
+  L*, where it was over 10).
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.
@@ -377,6 +385,10 @@ known: that tree was never run through this check.
   metric. It is the single precision's: the reference, in double, settles there to within 1 of the
   truth (`test_cost.cpp`, `LAB_RAY_STATS=heel`; 3 to 4 on the row above). The heel is a fillet: the
   quartic's roots in single precision are the place to look.
+- **O4 on the GPU with the planes white**: 2 to 10 pixels visibly off in a picture (2 before), the
+  worst 14 to 17, at three places: the demo flask's heel (401, 684), and now (541, 530) and (135, 711),
+  where part of a pixel's rays land beyond the screen's edge, which is white where it was dark. The same
+  kind of pixel as the heel's; not looked into.
 - **At a vortex's rim the pass settles on more blue and green than its rays bring**: two pixels of
   `test_lying.cpp`'s row, where a pixel's rays go three ways (to the wall near by, back to the room, far
   off the screen): 9 on the eye metric against the truth, 5 before a ray turned back showed the room in

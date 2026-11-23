@@ -494,7 +494,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	}
 	CHECK(after_dissolving.b < -15.0); // blue
 	CHECK(boiled_down.b < -15.0);
-	CHECK(boiled_down.l < after_dissolving.l - 10.0); // and deeper for the water gone
+	CHECK(boiled_down.l < after_dissolving.l - 6.0); // (8 darker; 10 and more when the room in front was a grey of 0.3: the glass reflects a white room now, Stage 33) // and deeper for the water gone
 }
 
 // ---- the renderer's frames (GAME_SPEC §12.2): history kept by content, points by need
