@@ -360,6 +360,13 @@ of 17.6 (`test_kept.cpp`).
   there is spread over many squares. Glass reflects a white room now: rims and reflections are lighter,
   and a dark liquid a little lighter (the demo's boiled-down flask is 8 darker than the dilute one in
   L*, where it was over 10).
+- **The level under a volume from a table** (`contents::level_of`: the volume under 33 levels, kept
+  for a vessel at a turn, then false position with Illinois's guard): the records reproduce. But a pour
+  by hand does not ask it: `lying` has a halving of its own for the liquid (the inside less the powder
+  and the vortex under it). The same done there takes a frame of running liquid at 600x from 132 ms to
+  52, and a frame held at the lip from 17 ms to 1; and the demo's record no longer reproduces (the level
+  differs in its last digits, and the stirring's work follows it). Not kept: a record's change is the
+  user's to approve.
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.

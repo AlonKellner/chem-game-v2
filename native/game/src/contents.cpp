@@ -197,14 +197,67 @@ double level_of(const glass::Vessel &vessel, double turn, double cm3) {
 	if (cm3 <= 0.0) {
 		return lo;
 	}
-	if (below(vessel, turn, hi) <= cm3) {
+	// The volume under a level rises with the level, smoothly. So it is known at 33 levels for a vessel at a turn
+	// (kept for the last four asked: a pour by hand asks at every step of the lab's clock, 300 a frame at 600
+	// times its speed), the level sought lies between two of them, and from there it is found by false position
+	// with Illinois's guard, to a ten-million-millionth of the vessel's reach: some seven volumes, where halving
+	// from the whole reach took sixty (Stage 33).
+	constexpr int LEVELS = 32;
+	struct Known {
+		const glass::Vessel *vessel = nullptr;
+		double turn = 0.0;
+		double under[LEVELS + 1] = {};
+	};
+	thread_local Known known[4];
+	thread_local int next = 0;
+	const Known *table = nullptr;
+	for (const Known &k : known) {
+		if (k.vessel == &vessel && k.turn == turn) {
+			table = &k;
+		}
+	}
+	if (table == nullptr) {
+		Known &k = known[next];
+		next = (next + 1) % 4;
+		k.vessel = &vessel;
+		k.turn = turn;
+		for (int i = 0; i <= LEVELS; ++i) {
+			k.under[i] = below(vessel, turn, lo + (hi - lo) * i / LEVELS);
+		}
+		table = &k;
+	}
+	if (table->under[LEVELS] <= cm3) {
 		return hi;
 	}
-	for (int i = 0; i < 60; ++i) {
-		const double mid = 0.5 * (lo + hi);
-		(below(vessel, turn, mid) < cm3 ? lo : hi) = mid;
+	int at = 0;
+	while (at + 1 < LEVELS && table->under[at + 1] < cm3) {
+		++at;
 	}
-	return 0.5 * (lo + hi);
+	const double span = hi - lo;
+	double a = lo + span * at / LEVELS, b = lo + span * (at + 1) / LEVELS, fa = table->under[at] - cm3, fb = table->under[at + 1] - cm3;
+	int side = 0;
+	for (int i = 0; i < 80 && b - a > 1e-13 * span; ++i) {
+		double c = fb != fa ? b - fb * (b - a) / (fb - fa) : 0.5 * (a + b);
+		if (!(c > a && c < b)) {
+			c = 0.5 * (a + b);
+		}
+		const double fc = below(vessel, turn, c) - cm3;
+		if (fc < 0.0) {
+			a = c;
+			fa = fc;
+			fb = side == -1 ? 0.5 * fb : fb;
+			side = -1;
+		} else {
+			b = c;
+			fb = fc;
+			fa = side == 1 ? 0.5 * fa : fa;
+			side = 1;
+		}
+		if (fc == 0.0) {
+			return c;
+		}
+	}
+	return 0.5 * (a + b);
 }
 
 Cut cut(const glass::Vessel &vessel, double turn, double level) {
