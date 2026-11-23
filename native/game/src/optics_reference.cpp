@@ -1751,6 +1751,17 @@ void optics_even(int64_t count[3], bool reset) {
 	}
 }
 
+int optics_room_exit(const OpticsScene &scene, const double p[3], const double u[3], double landing[2]) {
+	if (!shader::ready(scene) || !(scene.table[3 * 4 + 2] > 0.0f)) {
+		return -1;
+	}
+	const shader::Use use(scene);
+	const shader::vec3 comes = shader::room_exit(shader::vec3(p[0], p[1], p[2]), shader::vec3(u[0], u[1], u[2]), shader::scene_vec(2).x, shader::scene_vec(3).z, shader::scene_vec(3).w);
+	landing[0] = comes.y;
+	landing[1] = comes.z;
+	return static_cast<int>(comes.x);
+}
+
 void optics_meetings_most(int most, int turns) {
 	shader::TRACE_MOST = most;
 	shader::TRACE_TURNS = turns;

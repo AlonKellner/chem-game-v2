@@ -1378,3 +1378,59 @@ TEST_CASE("ui: a person seals the flask with the stopper, carried onto its neck,
 	CHECK(p.item("stopper").place == "bench");
 	CHECK_FALSE(p.item("flask").sealed);
 }
+
+TEST_CASE("ui: the room is a cube whose edge cells are black: a ray comes to the wall, to a black cell along an edge or to a white one, by where it goes; the wall's table has the room's black and white far off; the pass's rays and the truth's go to the same places (Stage 33)") {
+	const Traced traced;
+	Player p;
+	p.click("pause");
+	p.drag("item:flask", "square:11,12");
+	p.ui->frame(0.0);
+	const lab::OpticsScene &scene = p.ui->optics();
+	namespace L = lab::optics_layout;
+	REQUIRE(scene.table[3 * 4 + 2] > 0.0f); // the room's side
+	CHECK(scene.table[3 * 4 + 3] == doctest::Approx(scene.table[3 * 4 + 2] / 16.0f));
+	CHECK(scene.far_left == 0.0); // a black cell
+	CHECK(scene.far_right > 0.6); // any other cell off the wall: the room's white
+	CHECK(scene.wall_beyond == doctest::Approx(scene.far_right));
+	// the room itself: a cube about the screen's middle, its back face the wall
+	const double side = scene.table[3 * 4 + 2], cell = scene.table[3 * 4 + 3], wall = scene.table[2 * 4], lo = 960.0 - 0.5 * side;
+	const auto comes = [&](double px, double py, double pz, double tx, double ty, double tz, double landing[2]) {
+		const double d = std::sqrt((tx - px) * (tx - px) + (ty - py) * (ty - py) + (tz - pz) * (tz - pz));
+		const double from[3] = { px, py, pz }, along[3] = { (tx - px) / d, (ty - py) / d, (tz - pz) / d };
+		return lab::optics_room_exit(scene, from, along, landing);
+	};
+	double at[2] = { 0.0, 0.0 };
+	// straight on from the screen's middle: the wall, where it looks
+	CHECK(comes(960, 540, 0, 960, 540, wall, at) == 0);
+	CHECK(at[0] == doctest::Approx(960.0));
+	CHECK(at[1] == doctest::Approx(540.0));
+	// to the wall beyond the screen, short of its edge cells: the wall, there; into a cell along its edge: black
+	CHECK(comes(960, 540, 0, lo + 1.5 * cell, 540, wall, at) == 0);
+	CHECK(at[0] == doctest::Approx(lo + 1.5 * cell));
+	CHECK(comes(960, 540, 0, lo + 0.5 * cell, 540, wall, at) == 2);
+	CHECK(comes(960, 540, 0, 960, 540 + 0.5 * side - 0.5 * cell, wall, at) == 2);
+	// sideways to the left face: white at its middle, black along its edge with the wall and its edge with the front
+	CHECK(comes(960, 540, wall - 0.5 * side, lo, 540, wall - 0.5 * side, at) == 1);
+	CHECK(comes(960, 540, wall - 0.5 * cell, lo, 540, wall - 0.5 * cell, at) == 2);
+	CHECK(comes(960, 540, wall - side + 0.5 * cell, lo, 540, wall - side + 0.5 * cell, at) == 2);
+	// up to the ceiling, and back to the front face: white at their middles, black in the front's corner
+	CHECK(comes(960, 540, wall - 0.5 * side, 960, 540 - 0.5 * side, wall - 0.5 * side, at) == 1);
+	CHECK(comes(960, 540, 0, 960, 540, wall - side, at) == 1);
+	CHECK(comes(960, 540, 0, lo + 0.5 * cell, 540 - 0.5 * side + 0.5 * cell, wall - side, at) == 2);
+	// and through a flask the pass's rays and the truth's go to the same places
+	float fx = 0, fy = 0;
+	p.at("item:flask", fx, fy);
+	int rays = 0, apart = 0;
+	for (int y = static_cast<int>(fy) - 70; y <= static_cast<int>(fy) + 70; y += 2) {
+		for (int x = static_cast<int>(fx) - 60; x <= static_cast<int>(fx) + 60; ++x) {
+			if (lab::optics_cover(scene, x, y) <= 0.0) {
+				continue;
+			}
+			const lab::OpticsRay mine = lab::optics_ray(scene, x + 0.5, y + 0.5, 550.0), exact = lab::optics_exact_ray(scene, x + 0.5, y + 0.5, 550.0);
+			++rays;
+			apart += (mine.x < -5.0e4) != (exact.x < -5.0e4) || (mine.x > 5.0e4) != (exact.x > 5.0e4) || (std::fabs(mine.x) < 5.0e4 && std::hypot(mine.x - exact.x, mine.y - exact.y) > 1.0) ? 1 : 0;
+		}
+	}
+	REQUIRE(rays > 2000);
+	CHECK(apart * 100 <= rays); // (a ray in a hundred at most: at a rim the two tracers part by a hair)
+}

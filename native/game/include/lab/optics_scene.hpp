@@ -373,6 +373,10 @@ void optics_work(int64_t work[9], bool reset);
 // How the passages through a shape ended on this thread (Stage 33), by their meetings (the last entry: 64 and
 // more): how many, how many of them still inside (dark), and the light the others carried out.
 void optics_ended(int64_t count[65], int64_t inside[65], double light[65], bool reset);
+// Where a ray from p along u (the screen's pixels; z away from the eye, the bench's plane 0) comes to the scene's
+// room (Stage 33): 0, the wall, off the cells along its edges (`landing`: where); 1, another cell of another face;
+// 2, a cell along one of the room's twelve edges, which is black; -1, the scene has no room.
+int optics_room_exit(const OpticsScene &scene, const double p[3], const double u[3], double landing[2]);
 // (a measurement's switch: the meetings a passage is allowed and the times it may be turned back, in the truth's
 // tracer and the pass's)
 void optics_meetings_most(int most, int turns);
