@@ -134,7 +134,7 @@ inline vec4 shape_vec(int i) {
 
 } // namespace shader32
 
-static_assert(shader32::TRACE_MOST == trace::MEETINGS_MOST, "the pass's tracer and the truth's allow a ray the same meetings");
+static_assert(shader32::TRACE_MOST == trace::MEETINGS_MOST && shader32::TRACE_TURNS == trace::TURNS_MOST, "the pass's tracer and the truth's allow a ray the same meetings and turns");
 
 OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core) {
 	OpticsPassage out;

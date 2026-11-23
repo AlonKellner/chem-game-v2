@@ -80,16 +80,20 @@ struct Landing {
 // z = wall; `index` is each medium's refractive index. At each surface it refracts by vector Snell,
 // losing what Fresnel reflects; where it cannot pass it is turned back, all of it.
 Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside = nullptr);
-// The meetings a ray is allowed in one shape (Stage 33): after them a ray still inside brings nothing of the
-// wall. Straight through a vessel is four, through its liquid's surface five; the rays that take more run
-// along the glass of a rim or a fillet, turned back again and again. Measured over the play (test_cost.cpp,
-// LAB_RAY_STATS=most): 2% of passages take more than eight, and against the truth of 128 meetings 1.2 to 1.9%
-// of the pixels read by rays differ visibly with eight allowed, all at rims and fillets (0.45% with 32;
-// 13 to 16% with four, where nothing is seen through a liquid's surface). On the GPU a group of pixels pays
-// for its longest ray, so the rays past eight cost a quarter of a frame.
-inline constexpr int MEETINGS_MOST = 8;
-// (a measurement's switch: the meetings a ray is allowed)
-void meetings_most(int most);
+// The meetings a ray is allowed in one shape (Stage 33). Straight through a vessel is four, through its
+// liquid's surface five, through a vortex and a floor more. Measured over the play (test_cost.cpp,
+// LAB_RAY_STATS=most): 2% of passages take more than eight. On the GPU a group of pixels pays for its longest
+// ray.
+inline constexpr int MEETINGS_MOST = 16;
+// How often a ray may be turned back inside one shape (total reflection). A ray through a vessel, its liquid's
+// surface, a vortex and a floor crosses many surfaces and is turned back at none: those are followed (to
+// MEETINGS_MOST). Light held in the glass of a rim or a fillet is turned back again and again: after
+// TURNS_MOST it goes straight on from where it is, as if the rest of the body were not there, and so does a ray
+// still inside after MEETINGS_MOST. (The user's call, 2026-11-23: with a ray simply ended after eight meetings
+// and bringing nothing, a vortex in a shallow liquid showed grey patches where its rays were cut short.)
+inline constexpr int TURNS_MOST = 4;
+// (a measurement's switch: the meetings a ray is allowed, and the times it may be turned back)
+void meetings_most(int most, int turns = TURNS_MOST);
 
 // An upright cylinder of radius `outer` (cm) with a wall of `glass` (cm) around its core; with no
 // glass, the core alone.

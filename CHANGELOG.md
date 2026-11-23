@@ -10,8 +10,8 @@
   straight beam is read as its corners' quad, a plain pixel keeps its points through a change of
   colour, and pixels whose rays part have the budget first. The torus in
   closed form (its search was five sixths of the pass); a ray tries only the surfaces at its
-  heights, and is allowed eight meetings in a shape (the truth too: rims and fillets a little darker
-  in 1 to 2% of a vessel's pixels); a correction is one ray, for one band in four where a beam's
+  heights, may be turned back four times in a shape and meet sixteen surfaces, and then goes
+  straight on as if the rest of the body were not there (the truth too); a correction is one ray, for one band in four where a beam's
   rays go one way; the corners of neighbouring pixels are traced once, in a pass of their own; what
   lies in a vessel is drawn to a sixty-fourth of a pixel; a pixel's beams are kept while what it
   looks through is where it was, and through a change of what lies in a vessel on rows its rays do

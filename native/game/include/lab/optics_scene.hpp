@@ -361,8 +361,9 @@ void optics_work(int64_t work[9], bool reset);
 // How the passages through a shape ended on this thread (Stage 33), by their meetings (the last entry: 64 and
 // more): how many, how many of them still inside (dark), and the light the others carried out.
 void optics_ended(int64_t count[65], int64_t inside[65], double light[65], bool reset);
-// (a measurement's switch: the meetings a passage is allowed, in the truth's tracer and the pass's)
-void optics_meetings_most(int most);
+// (a measurement's switch: the meetings a passage is allowed and the times it may be turned back, in the truth's
+// tracer and the pass's)
+void optics_meetings_most(int most, int turns);
 // (a measurement: the beams read over a wall that is one under them [0], and not: of rays that part [1], of the others [2])
 void optics_even(int64_t count[3], bool reset);
 using OpticsMade = double (*)(const OpticsScene &scene, int x, int y);

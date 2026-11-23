@@ -126,12 +126,14 @@ TEST_CASE("cost: how passages through a shape end, and the truth with fewer meet
 			}
 		}
 		std::vector<std::array<double, 3>> full(read.size());
-		lab::optics_meetings_most(128);
+		lab::optics_meetings_most(128, 128);
 		for (size_t k = 0; k < read.size(); ++k) {
 			lab::optics_area_truth(scene, read[k].first, read[k].second, 2, full[k].data());
 		}
-		for (const int most : { 32, 16, 12, 8, 6, 5, 4 }) {
-			lab::optics_meetings_most(most);
+		// (meetings allowed, times turned back allowed)
+		const std::pair<int, int> allowed[] = { { 32, 8 }, { 16, 8 }, { 16, 4 }, { 16, 2 }, { 12, 4 }, { 8, 4 } };
+		for (const auto &[most, turns] : allowed) {
+			lab::optics_meetings_most(most, turns);
 			int visible = 0;
 			double worst = 0.0, sum = 0.0;
 			for (size_t k = 0; k < read.size(); ++k) {
@@ -142,9 +144,9 @@ TEST_CASE("cost: how passages through a shape end, and the truth with fewer meet
 				worst = std::max(worst, e);
 				sum += e;
 			}
-			std::printf("  %3d meetings allowed: of %zu pixels read by rays, %d differ visibly from the truth of 128 (%.2f%%); worst %.1f, mean %.3f\n", most, read.size(), visible, 100.0 * visible / std::max<size_t>(read.size(), 1), worst, sum / std::max<size_t>(read.size(), 1));
+			std::printf("  %3d meetings and %d turns allowed: of %zu pixels read by rays, %d differ visibly from the truth of 128 of each (%.2f%%); worst %.1f, mean %.3f\n", most, turns, read.size(), visible, 100.0 * visible / std::max<size_t>(read.size(), 1), worst, sum / std::max<size_t>(read.size(), 1));
 		}
-		lab::optics_meetings_most(lab::trace::MEETINGS_MOST);
+		lab::optics_meetings_most(lab::trace::MEETINGS_MOST, lab::trace::TURNS_MOST);
 	}
 }
 

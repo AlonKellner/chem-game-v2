@@ -63,6 +63,12 @@ And from the second day (each measured below):
 
 - **Eight meetings allowed** in a shape, in both tracers (`trace::MEETINGS_MOST`, `TRACE_MOST`; the user's
   call: "4 or 8"). Four cannot be: a ray through a liquid's surface needs five.
+  **Replaced** (the user, having seen it: a vortex in a shallow liquid showed grey patches): a ray may be
+  turned back four times in a shape (`TURNS_MOST`, `TRACE_TURNS`) and meet sixteen surfaces; after either
+  it goes straight on from where it is, as if the rest of the body were not there, with what its surfaces
+  have passed. A ray through a surface, a vortex and a floor is turned back at none, and is followed;
+  nothing ends in darkness. Against 128 of each, 1.1 to 1.9% of the pixels read by rays differ visibly,
+  the same with 32 meetings and 8 turns; under 0.5% of passages take more than eight meetings.
 - **Corrections wait where rays have moved** (`beam_means`, `beam_deferred`; the user's call to try it): a
   pixel whose beam has just been traced, what it looks through having moved, shows its beam's reading
   alone that frame. A pixel whose colour alone changed has its beam kept (`beam_held`) and takes its

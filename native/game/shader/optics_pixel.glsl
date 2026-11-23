@@ -1818,9 +1818,11 @@ float other_band(Path q, float u0, float u1, float t, float one_nm) {
 // to each other ray by ray; a ray keeps a fixed, small state (no arrays).
 
 const int SHAPE_PATCH = 6;
-// The meetings a ray is allowed in one shape (Stage 33; lab/optics_trace.hpp: MEETINGS_MOST, and why eight).
+// The meetings a ray is allowed in one shape, and how often it may be turned back in it (Stage 33;
+// lab/optics_trace.hpp: MEETINGS_MOST, TURNS_MOST, and why). After either it goes straight on.
 #ifndef TRACE_MOST_SET
-const int TRACE_MOST = 8;
+const int TRACE_MOST = 16;
+const int TRACE_TURNS = 4;
 #endif
 
 vec3 ray_point(vec3 o, vec3 u, float t) {
@@ -2219,6 +2221,7 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 	r.span = vec2(1.0e30, -1.0e30);
 	int count = int(shape_vec(s).x);
 	int here = 0;
+	int turned = 0; // how often it has been turned back
 	float reach = shape_vec(s).y; // how far from its axis the shape reaches
 	for (int m = 0; m < TRACE_MOST; m++) {
 		float best = 1.0e30;
@@ -2352,6 +2355,10 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 				float ceta = c1 / c2;
 				float csin2 = ceta * ceta * (1.0 - ccos_i * ccos_i);
 				if (csin2 >= 1.0) {
+					turned = turned + 1;
+					if (turned > TRACE_TURNS) {
+						break; // turned back once too often: it goes on as it is (below)
+					}
 					u = vec3(u.x + 2.0 * ccos_i * cn.x, u.y + 2.0 * ccos_i * cn.y, u.z + 2.0 * ccos_i * cn.z);
 					r.route = r.route * uint(31) + uint(2 * (100 + which) + 1);
 					continue;
@@ -2420,6 +2427,10 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		float sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
 			// turned back, all of it
+			turned = turned + 1;
+			if (turned > TRACE_TURNS) {
+				break; // once too often: it goes on as it is (below)
+			}
 			u = vec3(u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z);
 			r.route = r.route * uint(31) + uint(2 * (hit + 1) + 1);
 			continue;
@@ -2444,11 +2455,11 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		return r;
 	}
 	if (here != 0) {
-		r.pass = 0.0; // still inside after every meeting allowed: nothing of the wall comes this way
+		// still inside, turned back more often than is allowed or after every meeting allowed: it goes straight
+		// on from where it is, as if the rest of the body were not there, with what its surfaces have passed
 		r.route = r.route * uint(31) + uint(7);
-		r.left = false;
 	}
-	if (!(here == 0 && u.z > 0.05)) {
+	if (!(u.z > 0.05)) {
 		r.route = r.route * uint(31) + uint(5);
 	}
 	return r;

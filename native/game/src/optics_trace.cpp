@@ -215,17 +215,19 @@ Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
 } // namespace
 
 namespace {
-int most_allowed = MEETINGS_MOST;
+int most_allowed = MEETINGS_MOST, turns_allowed = TURNS_MOST;
 } // namespace
 
-void meetings_most(int most) {
+void meetings_most(int most, int turns) {
 	most_allowed = most;
+	turns_allowed = turns;
 }
 
 Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside) {
 	Landing out;
 	int here = 0;
 	const int MOST = most_allowed;
+	int turned = 0; // how often it has been turned back
 	constexpr double NEAR = 1.0e-9; // a surface just left is not met again
 	constexpr double NUDGE = 1.0e-7; // how far to each side of a surface within the core the medium is asked
 	for (; out.meetings < MOST;) {
@@ -304,6 +306,9 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 				const double n1 = index[static_cast<size_t>(here)], n2 = index[static_cast<size_t>(there)];
 				const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 				if (sin2 >= 1.0) {
+					if (++turned > turns_allowed) {
+						break; // turned back once too often: it goes on as it is (below)
+					}
 					u = Vec3{ u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z };
 					out.route = out.route * 31u + static_cast<uint32_t>(2 * (100 + which) + 1);
 					continue;
@@ -359,6 +364,9 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
 			// turned back, all of it
+			if (++turned > turns_allowed) {
+				break; // once too often: it goes on as it is (below)
+			}
 			u = Vec3{ u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z };
 			out.route = out.route * 31u + static_cast<uint32_t>(2 * (hit + 1) + 1);
 			continue;
@@ -382,11 +390,12 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		return out;
 	}
 	if (here != 0) {
-		out.pass = 0.0; // still inside after every meeting allowed: nothing of the wall comes this way
+		// Still inside, turned back more often than is allowed or after every meeting allowed: it goes straight on
+		// from where it is, as if the rest of the body were not there, with what its surfaces have passed so far
+		// (Stage 33, the user's call: light held in the glass is not followed to its end, and is not darkness)
 		out.route = out.route * 31u + 7u;
-		out.left = false;
 	}
-	out.lands = here == 0 && u.z > 0.05;
+	out.lands = u.z > 0.05;
 	if (out.lands) {
 		const double t = (wall - o.z) / u.z;
 		out.x = o.x + t * u.x;

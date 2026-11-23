@@ -288,7 +288,7 @@ struct Beam;
 void even_hook(const Beam &b, double even);
 #define OPTICS_EVEN_HOOK(b, even) even_hook(b, even)
 // the meetings a passage is allowed (optics_meetings_most)
-int TRACE_MOST = trace::MEETINGS_MOST;
+int TRACE_MOST = trace::MEETINGS_MOST, TRACE_TURNS = trace::TURNS_MOST;
 #define TRACE_MOST_SET 1
 // what the whole pixel's beam was like, by kind: 0 read whole; 1 to 4 its rays go one way and its middle ray is
 // off by up to 0.02, 0.08, 0.32, more; 5 its rays part
@@ -1724,9 +1724,10 @@ void optics_even(int64_t count[3], bool reset) {
 	}
 }
 
-void optics_meetings_most(int most) {
+void optics_meetings_most(int most, int turns) {
 	shader::TRACE_MOST = most;
-	trace::meetings_most(most);
+	shader::TRACE_TURNS = turns;
+	trace::meetings_most(most, turns);
 }
 
 void optics_work(int64_t work[9], bool reset) {
