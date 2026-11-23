@@ -339,14 +339,17 @@ std::string check_O11(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 
+struct OpticsFramesCore; // (src/optics_frames.hpp)
 // The renderer's own frames over a rectangle of the screen, exactly as the GPU
 // runs them (GAME_SPEC §12.2): each pixel's history, its content key and fixed
 // estimate, its points by need under a budget per pixel.
 class OpticsFrames {
 public:
 	// (`step`: every step-th pixel across and down, from (x, y): a sample of a large rectangle; w and h are
-	// then how many across and down)
-	OpticsFrames(int x, int y, int w, int h, double budget = 16.0, int step = 1);
+	// then how many across and down. `single` (Stage 35): the whole per-pixel source in single precision with
+	// the GPU's own tolerances, as the GPU runs it, where no GPU runs: what a float's arithmetic makes of a
+	// pixel, beside what the reference's float64 makes of it.)
+	OpticsFrames(int x, int y, int w, int h, double budget = 16.0, int step = 1, bool single = false);
 	~OpticsFrames();
 	OpticsFrames(const OpticsFrames &) = delete;
 	OpticsFrames &operator=(const OpticsFrames &) = delete;
@@ -380,20 +383,17 @@ public:
 	bool kept_fresh(const OpticsScene &scene, int x, int y, bool &holds) const;
 
 private:
-	struct State;
 	int x_, y_, w_, h_;
 	int step_ = 1;
 	bool keeping_ = true;
 	bool sharing_ = true;
-	struct Corners;
-	Corners *corners_ = nullptr;
+	OpticsFramesCore *core_ = nullptr; // its pixels and their histories, in the arithmetic asked for
 	int64_t read_ = 0, rays_ = 0, most_rays_ = 0;
 	double budget_;
 	int frame_ = 0;
 	double asked_ = 0.0, points_ = 0.0;
 	double ray_asked_ = 0.0; // of asked_, by the pixels read by their own rays
 	double beams_traced_ = 0.0; // the pixels whose beams the last frame traced (counted against the rays' budget)
-	std::vector<State> *states_;
 	std::vector<uint8_t> restarted_;
 };
 
@@ -402,6 +402,14 @@ private:
 // the beams traced afresh: no pixel is read from beams of something that has since moved. `held`: how many
 // pixels had beams to hold (a check that held none checked nothing). "" when it holds.
 std::string check_O12(const OpticsFrames &frames, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int64_t *held = nullptr);
+// O16, the pass in single precision is the pass (GAME_SPEC §18, Stage 35): the whole per-pixel source compiled
+// with a float's arithmetic and the GPU's tolerances (`single`: OpticsFrames made so) comes, over the pixels of
+// a sample that bodies cover, to the colours it comes to in double (`exact`), both stepped through the same
+// frames: their mean under 1 apart on the eye metric, and fewer than one pixel in two hundred visibly apart.
+// (A pixel whose rays are chaotic, at a vessel's floor near its axis, is another draw in each arithmetic, and
+// about one in ten thousand of either stops visibly off the truth: docs/TDD_35_ONE.md.) `stats`: the pixels
+// compared, those visibly apart, the worst and the mean. "" when it holds.
+std::string check_O16(const OpticsFrames &exact, const OpticsFrames &single, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, double stats[4] = nullptr);
 
 // O13, a frame's rays are bounded (GAME_SPEC §18, Stage 33): in the frame last given, no pixel followed more
 // than `most` rays: its beam's middle, and a correction a band of the most bands a frame reads, each cut at

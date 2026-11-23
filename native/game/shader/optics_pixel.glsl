@@ -24,9 +24,6 @@
 //   vec4 corner_vec(int i), void corner_put(int i, vec4 v)   the lattice of pixel corners (below: corners shared)
 //   vec4 kept_vec(int i), void kept_put(int i, vec4 v)       the record of the pixel being read (below: beams kept)
 
-// (OPTICS_SHAPES_ALONE: only the tracer of one shape's surfaces is compiled, for holding it in single
-// precision to itself in double: lab/optics_scene.hpp, optics_passage)
-#ifndef OPTICS_SHAPES_ALONE
 const int HEADER_VECS = 4;
 const int BODY_VECS = 8;
 const int MAX_BODIES = 256;
@@ -849,7 +846,6 @@ vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth,
 	return vec2(pass * a, pass * b + (1.0 - pass) * room);
 }
 
-#endif // OPTICS_SHAPES_ALONE
 
 
 // ---- rays traced live (GAME_SPEC §12.3, Stage 29)
@@ -1506,7 +1502,6 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 	return r;
 }
 
-#ifndef OPTICS_SHAPES_ALONE
 // What one body does to a ray on its way through the one world of the screen's pixels (x across, y down, z
 // away from the eye): the ray it leaves on, how far along the ray it was met, what its surfaces passed, its
 // path in its liquid (cm). Its core: its liquid (0), the air over it (1), or glass all through (2).
@@ -3919,4 +3914,3 @@ vec4 shown(Path q, PixelState s) {
 	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }
-#endif // OPTICS_SHAPES_ALONE

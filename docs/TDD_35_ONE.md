@@ -13,8 +13,8 @@ GAME_SPEC §12.2, §12.3, §18, §19, §20.
 | 35.1 | The traced reading is the default (the reference, the host); the tests hold under it; the tests of the maps' own machinery are retired | Done |
 | 35.2 | The maps, knots, stacks and the store deleted from the lab layer, the C API, the hosts and the tools | Done |
 | 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | Done |
-| 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | The code done; GAME_SPEC and CLAUDE.md to rewrite |
-| 35.5 | The whole per-pixel source in single precision on the CPU, beside the reference (the GPU's pixels off the truth, TDD 33 *Open*) | |
+| 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | Done (GAME_SPEC 0.36.0) |
+| 35.5 | The whole per-pixel source in single precision on the CPU, beside the reference (the GPU's pixels off the truth, TDD 33 *Open*) | Done: O16; the pixels are not single precision's (below) |
 | 35.6 | `make gates`; the user's sign-off | |
 
 ## What the inventory found (2026-11-23, before 35.1)
@@ -200,8 +200,83 @@ Found on the way, and left as it is:
 - Comments and names of tests still speak of maps and the chain where they say what a test was written for
   (`test_footprint`, `test_layers`, `test_truth3d`, `test_refraction`).
 
+## The whole source in single precision (35.5)
+
+**What was built.**
+- `native/game/src/optics_pixel_host.inc`: what the reference wrapped the per-pixel source in (the shading
+  language's vectors, the scene's buffers, the hooks, the source, and the frames of a sample of pixels),
+  written on a number type `real` and included by each arithmetic in a namespace of its own:
+  `optics_reference.cpp` with `double` (`lab::shader`, as before: every test's numbers are what they
+  were), `optics_single.cpp` with `f32` (`lab::shader32`).
+- `f32`: a float that stays one. A literal is rounded to it before anything is done with it and nothing
+  is done in double on the way (the build has no fast math and joins no product to a sum). With it the
+  GPU's tolerances (`TRACE_NEAR` and the rest of the host's `TRACE_HEAD`, `BEAM_BETWEEN 0.5`), the shapes
+  as the floats the GPU is sent (`OpticsScene::shapes`, not `shapes_exact`), a pixel's state and its kept
+  beams as floats.
+- `OpticsFrames(x, y, w, h, budget, step, single)`: the same class in either arithmetic
+  (`src/optics_frames.hpp`: `OpticsFramesCore`, one made by each file). `OPTICS_SHAPES_ALONE` is gone
+  from the source: O15's tracer of one shape is the whole compile's.
+- `check_O16` (GAME_SPEC §18) and its test (`test_single.cpp`): over a sample of the play's bench,
+  settled and with the bottle held turned over the flask, both arithmetics stepped until neither asks
+  for more; 5 s.
+- `LAB_O4_PRINT=1 make screenshots` prints, at each pixel where the GPU's picture is visibly off, what
+  the pixel's own frames come to on the CPU in double and in single precision, beside the picture, the
+  one reading and the truth of the pixel's area.
+- It is not the GPU bit for bit: a GPU's compiler may join a product and a sum into one rounding, and
+  has its own sine and logarithm.
+
+**What it found: the GPU's pixels off the truth are not single precision's.**
+
+| The play's bench, every pixel (`LAB_SINGLE_STEP=1`), until no pixel asks | Pixels of bodies | Visibly apart, single against double | Visibly off the one reading: in double | in single precision |
+|---|---|---|---|---|
+| Settled | 44,207 | 6 (the worst 10.5; the mean 0.13) | 4 | 4 |
+| The bottle held, turned, over the flask | 45,024 | 6 (the worst 19; the mean 0.18) | 6 | 8 |
+| Settled, the stopping target halved (`TARGET` 1) | 44,207 | 6 | 4 | 3 |
+| The bottle held, the target halved (600 frames, the test's limit) | 45,024 | 1 | 0 | 1 |
+
+- **The source's own frames stop with about one pixel in ten thousand visibly off the truth, in double as
+  in single precision.** The GPU's settled pictures show 0, 5, 9 and 4 of 30,000 to 64,000
+  (`make screenshots`): the same handful. At the GPU's own off pixels the CPU's frames are off too, each
+  arithmetic its own way: at (669, 617) of the pour's picture the one reading is 0.342 0.341 0.337, the
+  GPU shows 0.262 0.371 0.287, the frames in single precision 0.293 0.365 0.284, in double 0.374 0.308
+  0.350.
+- Single precision and double part visibly at 6 pixels in 45,000 because those pixels' rays are chaotic
+  (a vessel's floor near its axis, a held vessel's rim over another's): each arithmetic is another draw
+  of the same mean. Everywhere else they are the same picture (the mean 0.13 to 0.18 apart, where 8 is
+  visible).
+- **Two causes, both in how a pixel decides it has enough** (`step_pixel`):
+  1. *The stopping rule's tail.* A pixel stops when its own estimate of its error is `TARGET` (2 on the
+     eye metric, where 8 is visible): four of its standard errors off is one draw in sixteen thousand,
+     a few pixels of a screen. Halving the target brought the held bottle's 6 to 0 (and 8 to 1): those
+     wanted only more points.
+  2. *A noise estimate that forgets.* On the settled bench the same 4 pixels stay off whatever the
+     target, after the same 199 frames: they ask for nothing more. They lie in one row of the flask
+     ((553, 532) to (584, 533), its floor's upper face). A pixel's noise is a running mean over its
+     last 16 batches (`noise + (trial - noise) / min(frames + 1, 16)`): where a correction is rarely
+     large (one ray in many finds another way through the floor), sixteen quiet batches leave no trace
+     of it, the pixel takes its least points (`SETTLED_POINTS`, 128) and stops on whatever the rare
+     rays it happened to draw made of its mean.
+- Earlier notes are answered by this: "not grain: the same after every history starts again"
+  (TDD 33) held because a pixel's draws are the same draws every time (its place and the frame's
+  number seed them), not because its mean had come to the truth.
+
 ## Open
 
+- **A pixel in ten thousand stops visibly off the truth** (O4 on the GPU: 0 to 9 pixels a picture; the
+  table above). Not a fault of precision or of the GPU. What would mend it, none of it tried:
+  - the noise as the mean over all of a pixel's batches (or the largest of the last few), so a rare large
+    correction is not forgotten: cause 2;
+  - a second, slower stage: a pixel settled to `TARGET` goes on asking for a fraction of a batch until its
+    error is a half or a quarter of it, under the same budget (4 or 16 times the points, at pixels whose
+    noise is not nothing: one in five). It must still come to ask for nothing (`done`), or a settled
+    pass is no longer free: cause 1;
+  - not `TARGET` alone: every pixel on a rim would take four times as long to stop, in competition with
+    pixels that have just moved.
+  To measure: `LAB_SINGLE_STEP=1 LAB_SINGLE_PRINT=1 ./lab_tests -sf="*test_single.cpp" -tc="O16*"`
+  (70 s; the last column is what must come to nothing), then `make screenshots` and `make pass-cost`.
+  The screenshot tool waits a fixed number of frames for a picture to settle: a slower second stage
+  needs that wait lengthened, or the tool will count pixels that are only not finished (seen with
+  `TARGET` 1: 19 in one picture).
 - **The prism's slit, where a node's ray is turned back** (`test_refraction.cpp` "a bent view sweeping…",
   3 pixels of the row wrong at rest and 5 after a turn; `test_footprint.cpp` "where a prism's rays part…",
   16 of 704 bands; both marked `may_fail`, not to be loosened). At such a pixel the ray at 380 to 400 nm is

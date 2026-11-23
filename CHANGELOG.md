@@ -16,6 +16,13 @@
   of a row wrong at rest, 5 after a turn; two tests marked, not loosened).
   §12.3 is rewritten for the one renderer: the tracer in the pass, a beam, a pixel as its beam's
   reading and the mean of its rays' corrections, beams kept and corners shared, the rays' budget.
+- §18 (Stage 35): **O16, the pass in single precision is the pass.** The whole per-pixel source
+  compiled in single precision on the CPU with the GPU's tolerances (`OpticsFrames` with `single`;
+  `src/optics_pixel_host.inc` is what both arithmetics wrap the source in), held to itself in double
+  over the play's bench. What it found of the GPU's few pixels off the truth (O4): they are not
+  single precision's. The source's own frames stop with about one pixel in ten thousand visibly
+  off, in double as in single (4 to 6 of 45,000 against the GPU's 0 to 9): the stopping rule's tail,
+  and a noise estimate that forgets a rare large correction. Open, with what would mend it.
 
 ## 0.35.0 (2026-11-23, Stage 34; signed off by the user: "Approved, great work")
 

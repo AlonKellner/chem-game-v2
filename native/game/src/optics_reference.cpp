@@ -3,6 +3,7 @@
 #include "lab/optics_trace.hpp"
 
 #include "lab/colour.hpp"
+#include "optics_frames.hpp"
 
 #include <algorithm>
 #include <tuple>
@@ -23,48 +24,9 @@ namespace lab {
 namespace shader {
 
 // what the shading language has and C++ has not, in float64
-using uint = std::uint32_t;
-struct vec2 {
-	double x = 0.0, y = 0.0;
-	vec2() = default;
-	vec2(double a, double b) :
-			x(a), y(b) {}
-};
-struct vec3 {
-	double x = 0.0, y = 0.0, z = 0.0;
-	vec3() = default;
-	explicit vec3(double a) :
-			x(a), y(a), z(a) {}
-	vec3(double a, double b, double c) :
-			x(a), y(b), z(c) {}
-};
-struct vec4 {
-	double x = 0.0, y = 0.0, z = 0.0, w = 0.0;
-	double &operator[](int i) { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
-	double operator[](int i) const { return i == 0 ? x : i == 1 ? y : i == 2 ? z : w; }
-	vec4() = default;
-	explicit vec4(double a) :
-			x(a), y(a), z(a), w(a) {}
-	vec4(double a, double b, double c, double d) :
-			x(a), y(b), z(c), w(d) {}
-};
-inline vec3 operator+(const vec3 &a, const vec3 &b) {
-	return vec3(a.x + b.x, a.y + b.y, a.z + b.z);
-}
-inline vec3 operator-(const vec3 &a, const vec3 &b) {
-	return vec3(a.x - b.x, a.y - b.y, a.z - b.z);
-}
-inline vec3 operator*(const vec3 &a, double s) {
-	return vec3(a.x * s, a.y * s, a.z * s);
-}
-inline vec3 operator/(const vec3 &a, double s) {
-	return vec3(a.x / s, a.y / s, a.z / s);
-}
-inline vec4 operator+(const vec4 &a, const vec4 &b) {
-	return vec4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
-}
-inline vec4 operator*(const vec4 &a, double s) {
-	return vec4(a.x * s, a.y * s, a.z * s, a.w * s);
+using real = double;
+inline double to_double(double a) {
+	return a;
 }
 inline double min(double a, double b) {
 	return a < b ? a : b;
@@ -120,135 +82,15 @@ inline double fract(double a) {
 inline double clamp(double v, double lo, double hi) {
 	return v < lo ? lo : v > hi ? hi : v;
 }
-inline double dot(const vec4 &a, const vec4 &b) {
-	return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
-}
-inline double mix(double a, double b, double t) {
-	return a * (1.0 - t) + b * t;
-}
-inline vec3 mix(const vec3 &a, const vec3 &b, double t) {
-	return a * (1.0 - t) + b * t;
-}
-inline vec4 mix(const vec4 &a, const vec4 &b, double t) {
-	return a * (1.0 - t) + b * t;
-}
-
-// the scene being drawn (one a thread: the comparison below runs on several)
-thread_local const OpticsScene *current = nullptr;
-inline vec4 scene_vec(int i) {
-	const float *v = &current->table[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline double row_value(int i) {
-	return current->rows[static_cast<size_t>(i)];
-}
-inline vec4 line_vec(int i) {
-	const float *v = &current->lines[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline vec4 light_vec(int i) {
-	const float *v = &current->lights[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline vec4 wall_vec(int i) {
-	const float *v = &current->wall[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-
-inline vec4 shape_vec(int i) {
-	const double *v = &current->shapes_exact[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline vec3 operator*(double s, const vec3 &a) {
-	return vec3(a.x * s, a.y * s, a.z * s);
-}
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wkeyword-macro"
-#endif
-// how many rays the pass's tracer followed on this thread (a count for the reference alone)
-thread_local int64_t rays_followed = 0;
-#define OPTICS_RAY_HOOK() (++rays_followed)
-// what the tracer did on this thread (Stage 33; lab/optics_scene.hpp: optics_work)
-thread_local int64_t work_done[8] = {};
-#define OPTICS_WORK_HOOK(k) (++work_done[k])
-#define OPTICS_THREAD thread_local
-// a pixel's kept beams (Stage 33): the record of the pixel being read, for the shared source's kept_vec and kept_put
-thread_local double *kept_now = nullptr;
-inline vec4 kept_vec(int i) {
-	const double *v = &kept_now[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline void kept_put(int i, const vec4 &v) {
-	double *to = &kept_now[static_cast<size_t>(i) * 4];
-	to[0] = v.x;
-	to[1] = v.y;
-	to[2] = v.z;
-	to[3] = v.w;
-}
-// the lattice of pixel corners (Stage 33): each corner's record, by its row and its place across; a corner
-// never traced reads as nothing, as the GPU's cleared buffer does
-using Lattice = std::vector<std::unordered_map<int, std::array<double, 16>>>;
-thread_local Lattice *lattice_now = nullptr;
-inline vec4 corner_vec(int i) {
-	const int corner = i / 4, k = i % 4;
-	const auto &row = (*lattice_now)[static_cast<size_t>(corner / 1921)];
-	const auto found = row.find(corner % 1921);
-	if (found == row.end()) {
-		return vec4(0.0);
-	}
-	const double *v = &found->second[static_cast<size_t>(k) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline void corner_put(int i, const vec4 &v) {
-	const int corner = i / 4, k = i % 4;
-	double *to = &(*lattice_now)[static_cast<size_t>(corner / 1921)][corner % 1921][static_cast<size_t>(k) * 4];
-	to[0] = v.x;
-	to[1] = v.y;
-	to[2] = v.z;
-	to[3] = v.w;
-}
-#define float double
-// (whether a stretch of the spectrum is halved where its nodes miss the ray between them: off for O10's own test)
-thread_local double beam_between = 0.02;
-#define BEAM_BETWEEN beam_between
-// the stretches of the spectrum the last pixel read was read in (for O10)
-thread_local std::vector<double> beam_stretches;
-#define OPTICS_STRETCH_HOOK(lo, hi) (beam_stretches.push_back(lo), beam_stretches.push_back(hi))
+#define OPTICS_HOST_NAMESPACE shader
+#define OPTICS_HOST_SHAPES(scene) (scene).shapes_exact
+#define OPTICS_HOST_BETWEEN 0.02
 #define TRACE_NEAR 1.0e-9
 #define TRACE_NUDGE 1.0e-7
 #define TRACE_SLACK 1.0e-9
 #define TRACE_FINE 1.0e-13
 #define TRACE_ROUGH 1.0e-9
-#include "../shader/optics_pixel.glsl"
-#undef float
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-
-static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_layout::BODY_VECS && ROW == optics_layout::ROW && ROWS_PER_SET == optics_layout::ROWS_PER_SET &&
-				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES,
-		"the per-pixel source and lab/optics_scene.hpp lay the scene out alike");
-static_assert(1 + KEPT_MOST * KEPT_BEAM == optics_layout::KEPT_VECS, "a pixel's kept beams are a record of KEPT_VECS");
-static_assert(TRACE_MOST == trace::MEETINGS_MOST && TRACE_TURNS == trace::TURNS_MOST, "the pass's tracer and the truth's allow a ray the same meetings and turns");
-
-struct Use {
-	explicit Use(const OpticsScene &s) {
-		current = &s;
-	}
-	~Use() { current = nullptr; }
-	Use(const Use &) = delete;
-	Use &operator=(const Use &) = delete;
-};
-
-bool ready(const OpticsScene &s) {
-	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() % static_cast<size_t>(optics_layout::ROWS_PER_SET * optics_layout::ROW) == 0 && !s.wall.empty() &&
-		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
-}
-
-Path at(int x, int y) {
-	return path_of(vec2(x + 0.5, y + 0.5), 1.0);
-}
+#include "optics_pixel_host.inc"
 
 } // namespace shader
 
@@ -323,39 +165,6 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 	return traced;
 }
 
-// The reference's heavy loops (thousands of exact rays a pixel) are dealt among the machine's threads: `count`
-// pieces, each done whole by one thread. A piece is the same piece on every machine and results are joined in
-// the pieces' order, so a sum comes out the same however many threads there are. The scene in use is each
-// thread's own (shader::current): a piece names its own.
-template <typename Piece>
-void in_pieces(int count, const Piece &piece) {
-	// half the machine's threads, six at most (measured on six fast cores and six slow ones: 20 s on one thread,
-	// 7.6 s on four, 14 s on twelve); or LAB_THREADS, where several such loops run side by side (ctest)
-	static const int most = [] {
-		const char *asked = std::getenv("LAB_THREADS");
-		const int n = asked != nullptr ? std::atoi(asked) : static_cast<int>(std::min(6u, std::thread::hardware_concurrency() / 2));
-		return n < 1 ? 1 : n > 64 ? 64 : n;
-	}();
-	const int threads = std::max(1, std::min(count, most));
-	if (threads == 1) {
-		for (int i = 0; i < count; ++i) {
-			piece(i);
-		}
-		return;
-	}
-	std::atomic<int> next{ 0 };
-	std::vector<std::thread> workers;
-	for (int t = 0; t < threads; ++t) {
-		workers.emplace_back([&] {
-			for (int i = next.fetch_add(1); i < count; i = next.fetch_add(1)) {
-				piece(i);
-			}
-		});
-	}
-	for (std::thread &w : workers) {
-		w.join();
-	}
-}
 
 // ---- the truth of a pixel's area (GAME_SPEC §12.3, Stage 20): its own tracer, not the renderer's
 
@@ -1399,190 +1208,100 @@ std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int 
 	return out;
 }
 
-// ---- the renderer's own frames
+// ---- the renderer's own frames (their pixels and histories: optics_pixel_host.inc, in the arithmetic asked for)
 
-struct OpticsFrames::Corners {
-	shader::Lattice rows = shader::Lattice(1082);
-};
+OpticsFramesCore *optics_frames_exact(int x, int y, int w, int h, int step) {
+	return new shader::Frames(x, y, w, h, step);
+}
 
-struct OpticsFrames::State {
-	shader::PixelState s;
-	// its beams as they are kept (the shared source's record: Stage 33); nothing kept at first
-	std::array<double, static_cast<size_t>(1 + KEPT_MOST * shader::KEPT_BEAM) * 4> kept{};
-};
-
-OpticsFrames::OpticsFrames(int x, int y, int w, int h, double budget, int step) :
-		x_(x), y_(y), w_(w > 0 ? w : 0), h_(h > 0 ? h : 0), step_(step > 0 ? step : 1), budget_(budget), states_(new std::vector<State>(static_cast<size_t>(w_) * static_cast<size_t>(h_))),
-		restarted_(static_cast<size_t>(w_) * static_cast<size_t>(h_), 0) {
-	corners_ = new Corners;
-	for (State &st : *states_) {
-		st.s.hist = st.s.prox = st.s.aux = shader::vec4(0.0);
-		st.s.key = shader::vec4(-1.0); // matches no content: the first frame starts every history
-	}
+OpticsFrames::OpticsFrames(int x, int y, int w, int h, double budget, int step, bool single) :
+		x_(x), y_(y), w_(w > 0 ? w : 0), h_(h > 0 ? h : 0), step_(step > 0 ? step : 1), budget_(budget), restarted_(static_cast<size_t>(w_) * static_cast<size_t>(h_), 0) {
+	core_ = single ? optics_frames_single(x_, y_, w_, h_, step_) : optics_frames_exact(x_, y_, w_, h_, step_);
 }
 
 OpticsFrames::~OpticsFrames() {
-	delete corners_;
-	delete states_;
+	delete core_;
 }
 
 void OpticsFrames::frame(const OpticsScene &scene) {
-	if (!shader::ready(scene)) {
+	OpticsFramesCore::Frame f;
+	f.number = frame_;
+	f.budget = budget_;
+	f.keeping = keeping_;
+	f.sharing = sharing_;
+	f.asked = asked_;
+	f.ray_asked = ray_asked_;
+	f.beams_traced = beams_traced_;
+	f.points = points_;
+	f.read = read_;
+	f.rays = rays_;
+	f.most_rays = most_rays_;
+	if (!core_->frame(scene, f, restarted_)) {
 		return;
 	}
-	// the screen's budget for the pixels read as the scene says, the rays' for those read by their own rays (of the
-	// whole screen's, the sample's share)
-	const double scale = shader::budget_scale(asked_ - ray_asked_, budget_, static_cast<double>(w_) * h_);
-	const double ray_scale = shader::budget_scale(ray_asked_, std::max(optics_layout::RAY_POINTS / (static_cast<double>(step_) * step_) - shader::RAY_POINTS_A_BEAM * beams_traced_, 0.0), 1.0);
-	// a row a piece: a pixel's step touches its own state alone
-	std::vector<double> asked_of(static_cast<size_t>(h_), 0.0), points_of(static_cast<size_t>(h_), 0.0), ray_asked_of(static_cast<size_t>(h_), 0.0), traced_of(static_cast<size_t>(h_), 0.0);
-	std::vector<int64_t> read_of(static_cast<size_t>(h_), 0), rays_of(static_cast<size_t>(h_), 0), most_of(static_cast<size_t>(h_), 0);
-	// The corners first (Stage 33; as the GPU's pass over the lattice before the pixels'): those of every pixel
-	// of the sample, a row of corners a piece (a corner's record is its row's)
-	std::vector<int> corner_rows;
-	if (sharing_) {
-		for (int row = 0; row < h_; ++row) {
-			for (int below = 0; below < 2; ++below) {
-				const int y = y_ + row * step_ + below;
-				if (corner_rows.empty() || corner_rows.back() < y) {
-					corner_rows.push_back(y);
-				}
-			}
-		}
-	}
-	std::vector<int64_t> corner_rays(corner_rows.size(), 0);
-	in_pieces(static_cast<int>(corner_rows.size()), [&](int piece) {
-		const shader::Use use(scene);
-		shader::lattice_now = &corners_->rows;
-		const int64_t before = shader::rays_followed;
-		const int y = corner_rows[static_cast<size_t>(piece)];
-		int last = -1;
-		for (int col = 0; col < w_; ++col) {
-			for (int right = 0; right < 2; ++right) {
-				const int x = x_ + col * step_ + right;
-				if (x > last) {
-					shader::corner_step(shader::vec2(x, y));
-					last = x;
-				}
-			}
-		}
-		corner_rays[static_cast<size_t>(piece)] = shader::rays_followed - before;
-		shader::lattice_now = nullptr;
-	});
-	in_pieces(h_, [&](int row) {
-		const shader::Use use(scene);
-		double &asked = asked_of[static_cast<size_t>(row)], &points = points_of[static_cast<size_t>(row)];
-		for (int col = 0; col < w_; ++col) {
-			const size_t i = static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col);
-			const int x = x_ + col * step_, y = y_ + row * step_;
-			const shader::Path q = shader::at(x, y);
-			restarted_[i] = 0;
-			if (q.cover <= 0.0) {
-				continue; // nothing here: the pixel keeps what it had, and asks nothing
-			}
-			shader::PixelState &st = (*states_)[i].s;
-			if (shader::done(q, st.key, st.aux)) {
-				st.aux.w = 0.0; // as the GPU, it does nothing; what it spent is nothing
-				continue;
-			}
-			const double before = st.hist.w;
-			const int64_t rays_before = shader::rays_followed;
-			shader::kept_now = (*states_)[i].kept.data();
-			shader::kept_slot = 0;
-			shader::kept_read = keeping_;
-			shader::lattice_now = &corners_->rows;
-			shader::lattice_on = sharing_;
-			const bool by_rays = shader::beamed(q);
-			st = shader::step_pixel(q, st, shader::vec2(x + 0.5, y + 0.5), frame_, by_rays ? ray_scale : scale);
-			shader::lattice_on = false;
-			shader::kept_slot = -1;
-			const int64_t followed = shader::rays_followed - rays_before;
-			++read_of[static_cast<size_t>(row)];
-			rays_of[static_cast<size_t>(row)] += followed;
-			most_of[static_cast<size_t>(row)] = std::max(most_of[static_cast<size_t>(row)], followed);
-			// a history that had points and is now one frame old (or none) started again
-			restarted_[i] = before > 0.0 && st.aux.y <= 1.0 ? 1 : 0;
-			asked += st.aux.z;
-			ray_asked_of[static_cast<size_t>(row)] += by_rays ? st.aux.z : 0.0;
-			traced_of[static_cast<size_t>(row)] += shader::beam_deferred ? 1.0 : 0.0;
-			points += st.aux.w;
-		}
-	});
-	double asked = 0.0, points = 0.0;
-	ray_asked_ = 0.0;
-	for (const double a : ray_asked_of) {
-		ray_asked_ += a;
-	}
-	beams_traced_ = 0.0;
-	for (const double a : traced_of) {
-		beams_traced_ += a;
-	}
-	read_ = rays_ = most_rays_ = 0;
-	for (int row = 0; row < h_; ++row) {
-		asked += asked_of[static_cast<size_t>(row)];
-		points += points_of[static_cast<size_t>(row)];
-		read_ += read_of[static_cast<size_t>(row)];
-		rays_ += rays_of[static_cast<size_t>(row)];
-		most_rays_ = std::max(most_rays_, most_of[static_cast<size_t>(row)]);
-	}
-	// (a corner is four pixels': in a sample each pixel has corners of its own, each counted as the quarter it is
-	// of a pixel's cost where the pixels lie side by side)
-	for (const int64_t r : corner_rays) {
-		rays_ += step_ > 1 ? r / 4 : r;
-	}
-	asked_ = asked;
-	points_ = points;
+	asked_ = f.asked;
+	ray_asked_ = f.ray_asked;
+	beams_traced_ = f.beams_traced;
+	points_ = f.points;
+	read_ = f.read;
+	rays_ = f.rays;
+	most_rays_ = f.most_rays;
 	++frame_;
 }
 
 void OpticsFrames::colour(const OpticsScene &scene, int x, int y, double rgb[3]) const {
-	rgb[0] = rgb[1] = rgb[2] = 0.0;
-	const int col = (x - x_) / step_, row = (y - y_) / step_;
-	if (!shader::ready(scene) || x < x_ || y < y_ || col >= w_ || row >= h_) {
-		return;
-	}
-	const shader::Use use(scene);
-	const shader::PixelState &st = (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s;
-	rgb[0] = st.prox.x + st.hist.x;
-	rgb[1] = st.prox.y + st.hist.y;
-	rgb[2] = st.prox.z + st.hist.z;
+	core_->colour(scene, x, y, rgb);
 }
 
 void OpticsFrames::shown(const OpticsScene &scene, int x, int y, double rgba[4]) const {
-	rgba[0] = rgba[1] = rgba[2] = rgba[3] = 0.0;
-	const int col = (x - x_) / step_, row = (y - y_) / step_;
-	if (!shader::ready(scene) || x < x_ || y < y_ || col >= w_ || row >= h_) {
-		return;
-	}
-	const shader::Use use(scene);
-	const shader::vec4 c = shader::shown(shader::at(x, y), (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s);
-	rgba[0] = c.x;
-	rgba[1] = c.y;
-	rgba[2] = c.z;
-	rgba[3] = c.w;
+	core_->shown(scene, x, y, rgba);
 }
 
 bool OpticsFrames::kept_fresh(const OpticsScene &scene, int x, int y, bool &holds) const {
-	holds = false;
-	const int col = (x - x_) / step_, row = (y - y_) / step_;
-	if (!shader::ready(scene) || x < x_ || y < y_ || col >= w_ || row >= h_ || (x - x_) % step_ != 0 || (y - y_) % step_ != 0) {
-		return true;
+	return core_->kept_fresh(scene, x, y, holds);
+}
+
+std::string check_O16(const OpticsFrames &exact, const OpticsFrames &single, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, double stats[4]) {
+	if (!shader::ready(scene) || step < 1) {
+		return "O16: the scene is not ready";
 	}
-	const shader::Use use(scene);
-	const shader::Path q = shader::at(x, y);
-	const auto &kept = (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].kept;
-	const double pixel = std::floor(q.x) + 1920.0 * std::floor(q.y);
-	if (!(kept[0] == q.shape.x && kept[1] == q.shape.y && kept[2] == pixel && kept[3] > 0.5)) {
-		return true; // nothing kept for what it looks through now: its next read traces
+	const auto seen = [](const double c[3]) {
+		return shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2], 0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+	};
+	int64_t covered = 0, apart = 0;
+	double worst = 0.0, sum = 0.0;
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			if (optics_cover(scene, x, y) < OPTICS_PARITY_COVER) {
+				continue;
+			}
+			double a[3], b[3];
+			exact.colour(scene, x, y, a);
+			single.colour(scene, x, y, b);
+			const double d = eye_difference(seen(a), seen(b));
+			++covered;
+			sum += d;
+			worst = std::max(worst, d);
+			apart += d > EYE_VISIBLE ? 1 : 0;
+		}
 	}
-	holds = true;
-	std::remove_const_t<std::remove_reference_t<decltype(kept)>> fresh{};
-	shader::kept_now = fresh.data();
-	shader::kept_slot = 0;
-	shader::beam_means(q, 0, 0.5, shader::cuts_none(), 0.0, 1.0, false, 0, false); // traced, and kept: nothing read
-	shader::kept_slot = -1;
-	shader::kept_now = nullptr;
-	return fresh == kept;
+	const double mean = covered > 0 ? sum / static_cast<double>(covered) : 0.0;
+	if (stats != nullptr) {
+		stats[0] = static_cast<double>(covered);
+		stats[1] = static_cast<double>(apart);
+		stats[2] = worst;
+		stats[3] = mean;
+	}
+	if (covered == 0) {
+		return "O16: no pixel of a body was compared";
+	}
+	if (mean > 1.0 || apart * 200 > covered) {
+		char buffer[240];
+		std::snprintf(buffer, sizeof buffer, "O16: in single precision %lld of %lld pixels are visibly not what they are in double (the worst %.1f on the eye metric, the mean %.2f)", static_cast<long long>(apart), static_cast<long long>(covered), worst,
+				mean);
+		return buffer;
+	}
+	return "";
 }
 
 std::string check_O13(const OpticsFrames &frames, int64_t most) {
@@ -1629,11 +1348,7 @@ int OpticsFrames::frames() const {
 }
 
 double OpticsFrames::spent(int x, int y) const {
-	const int col = (x - x_) / step_, row = (y - y_) / step_;
-	if (x < x_ || y < y_ || col >= w_ || row >= h_) {
-		return 0.0;
-	}
-	return (*states_)[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s.aux.w;
+	return core_->spent(x, y);
 }
 
 bool OpticsFrames::restarted(int x, int y) const {
@@ -1678,8 +1393,19 @@ OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int 
 			if (d > EYE_VISIBLE && std::getenv("LAB_O4_PRINT") != nullptr) { // (a measurement: what the two are, where they part)
 				double area[3];
 				optics_area_truth(scene, col, row, 8, area);
-				std::fprintf(stderr, "O4 (%d, %d): %.1f apart; the picture %.3f %.3f %.3f, the reference's reading %.3f %.3f %.3f, the truth of its area %.3f %.3f %.3f\n", col, row, d, lin[0], lin[1], lin[2], rgb[0], rgb[1], rgb[2], area[0],
-						area[1], area[2]);
+				// and what the pixel's own frames come to, in double and in single precision (Stage 35): the source
+				// as the GPU runs it, where no GPU runs
+				double settled[2][3];
+				for (int single = 0; single < 2; ++single) {
+					OpticsFrames frames(col, row, 1, 1, 16.0, 1, single == 1);
+					for (int f = 0; f < 240; ++f) {
+						frames.frame(scene);
+					}
+					frames.colour(scene, col, row, settled[single]);
+				}
+				std::fprintf(stderr,
+						"O4 (%d, %d): %.1f apart; the picture %.3f %.3f %.3f, the reference's reading %.3f %.3f %.3f, the truth of its area %.3f %.3f %.3f, its frames in double %.3f %.3f %.3f, in single precision %.3f %.3f %.3f\n", col,
+						row, d, lin[0], lin[1], lin[2], rgb[0], rgb[1], rgb[2], area[0], area[1], area[2], settled[0][0], settled[0][1], settled[0][2], settled[1][0], settled[1][1], settled[1][2]);
 			}
 		}
 	}
