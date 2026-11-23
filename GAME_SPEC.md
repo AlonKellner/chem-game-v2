@@ -1079,9 +1079,23 @@ light bends at each of its surfaces:
   takes, which Beer-Lambert reads.
 - **Fresnel.** At each surface the unpolarised reflectance of the two angles (`R`, from Fresnel's
   equations; at normal incidence `((n₁ − n₂)/(n₁ + n₂))²`) is turned away; what gets through all
-  four surfaces is `T = Π (1 − R)`. What is turned away shows the room in front of the bench,
-  whose radiance is calibrated (0.3 of the room's white): a vessel's rims, where light meets the
-  glass aslant, show more of the room and less of the wall, as glass on a bench does.
+  four surfaces is `T = Π (1 − R)`. What is turned away shows the room (below), as one
+  radiance, the mean of its faces: a vessel's rims, where light meets the glass aslant, show more
+  of the room and less of the wall, as glass on a bench does.
+- **The room** (Stage 33) is a cube about the screen's middle, twice the screen's width on a side
+  (3,840 px), its back face the wall. A ray that leaves the last body it meets goes on to a face.
+  Each face is ruled in sixteen cells across, and the cells along the cube's twelve edges are
+  black. Where the ray comes to one of those it brings black; where it reaches the wall elsewhere
+  it lands on it (on the screen, the wall as it is drawn; beyond the screen, the wall's white less
+  its ruling's share); where it comes to another face it brings that white. So a ray bent far, as
+  at a rim, is darker than the wall behind, and no ray ends in nothing. (Endless white planes,
+  tried first, left a vessel all but unseen; the darkness beside the bench, before them, gave grey
+  patches where a vortex turned rays back.)
+- **How far a ray is followed in one body** (Stage 33). It may be turned back (total reflection)
+  four times and meet sixteen surfaces; after either it goes straight on from where it is, as if
+  the rest of the body were not there, with what its surfaces have passed. Light held in the glass
+  of a rim is not followed to its end; a ray through a surface, a vortex and a floor is turned
+  back at none, and is followed.
 - **What it does not bend:** a heap of solid (its surface is seen as it lies), the balloon (thin
   rubber around gas), the liquid's surface. Up and down, from Stage 24, a vessel bends where its
   shape does (a flare, a corner, a cone, a shoulder, a lip); until then nothing bent up and down.
@@ -1300,9 +1314,11 @@ of every ray through its area, and its colour is their average (a box filter).
   height, so its radius there is `sqrt(Q / (π sqrt(v0² + 2 g y)))`, from the speed it leaves at
   (over a lip, `sqrt(2 g head)`). Drawn in short lengths, each as wide as it is there; its spectra
   its liquid's, hazy with what it carries; a dry powder's is a column of the powder.
-- **Beyond the screen** (Stage 30). A ray may land past the screen's top or bottom (a turned
-  vessel throws rays far): the wall's table has a row over the screen's rows and one under them, the
-  wall as it is just past the screen's edge.
+- **Beyond the screen** (Stage 30; Stage 33). A ray may land past the screen's edges (a turned
+  vessel throws rays far): the wall's table has a row over the screen's rows and one under them,
+  and cells to the left and to the right, all the room's wall beyond the screen (above). Far off
+  to either side it has the two places a ray that comes to another face is put: black to the
+  left, white to the right. The truth reads the same room, from what is drawn and those rules.
 - **A vessel's whole shape** (Stage 24). Every vessel is a piece of glassware made to its
   standard, and its shape is one model, shared: the lab's capacity, the liquid's level, the
   screen's silhouette and the tracer's surfaces are all read from it.
@@ -2423,7 +2439,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
 | What a vessel's surfaces reflect shows the room in front, one radiance, not traced; a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer; a footprint's width is taken as its mean across one step of a band's wavelengths; between a map's samples and within its pieces a ray is interpolated (within a fiftieth of a pixel of the screen); a pixel is read in four parts at most; at a route's change each side's wall is read where its own ray lands (a quarter of a pixel at most, of rays that graze a surface) | A rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; the interpolation is far under what the eye sees (`O4`) |
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
-| The room in front of the bench, which glass reflects, is one radiance (0.3 of the room's white), and the wall is 20 cm behind the vessels: both calibrated, not measured | Rims are darker than the wall, as on a lit bench; how much is the calibration's |
+| The room is a cube with black cells along its edges (twice the screen's width, sixteen cells across a face), what glass reflects is its faces' mean as one radiance, the ruling of its faces is not drawn off the screen, and the wall is 20 cm behind the vessels: all design, not measured | Rims are darker than the wall, as on a lit bench; how much is the room's own |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
 | Through a stack a pixel is read in four parts, a ray between the spectrum's four nodes is the cubic through them (its nearest node's where its route changes among them), the bodies are read once a band, and a pixel starts its history with 16 points; a body that is not round is read in a stack as it is seen straight on; a vessel inside another is not built; what the screen still draws over the pass (the burner and its flame, a condenser's outlet, signal parts, wires, labels) is not bent | A burner or a signal part is drawn over a vessel carried across it, not seen through it; a colour fringe at the image of a rim behind is in four steps of the spectrum; a thin line seen only in a stack's rims keeps its light to 3% |
 | A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
