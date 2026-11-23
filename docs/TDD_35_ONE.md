@@ -15,7 +15,7 @@ GAME_SPEC §12.2, §12.3, §18, §19, §20.
 | 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | Done |
 | 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | Done (GAME_SPEC 0.36.0) |
 | 35.5 | The whole per-pixel source in single precision on the CPU, beside the reference (the GPU's pixels off the truth, TDD 33 *Open*) | Done: O16; the pixels are not single precision's (below) |
-| 35.6 | `make gates`; the user's sign-off | |
+| 35.6 | `make gates`; the user's sign-off | `make gates` passed (uncached, ASan+UBSan) on the stage's last code; awaiting the user |
 
 ## What the inventory found (2026-11-23, before 35.1)
 
@@ -259,6 +259,28 @@ Found on the way, and left as it is:
 - Earlier notes are answered by this: "not grain: the same after every history starts again"
   (TDD 33) held because a pixel's draws are the same draws every time (its place and the frame's
   number seed them), not because its mean had come to the truth.
+
+## At the stage's end (2026-11-23, M3 Pro, 1920 x 1080)
+
+- `make pass-cost`, a frame's median: settled 8.34 ms, carry 8.37, pour 8.37, rest 8.33, stir 8.39 (the
+  display's rate); every history starting again 19.2.
+- `make screenshots`, all fourteen pictures (the tool had stopped at the boiling since Stage 34: its
+  script still led the condenser's outlet by pressing the beaker onto the condenser; it drags the
+  outlet's line now). Pixels visibly off the truth of those in bodies:
+
+  | Picture | Pixels in bodies | Visibly off | The largest |
+  |---|---|---|---|
+  | 1_set_up | 30,027 | 0 | 7 |
+  | 2_decomposing | 46,123 | 5 | 10 |
+  | 3_pour_panel | 40,561 | 9 | 11 |
+  | 6_monitor_editor | 65,882 | 4 | 9 |
+  | 4_boiling | 69,120 | 10 | 10 |
+  | 5_crystals, 10_notices, 13_debug | 68,642 | 11 | 15 |
+  | 14_held (a vessel held over another) | 63,634 | 20 | 13 |
+  | 7_chosen, 8_circuit, 9_circuit_open, 11_writer, 12_goal_editor | 26,739 to 29,951 | 0 | 7 to 8 |
+
+  One to three pixels in ten thousand where vessels hold liquid: the open item below, in double as on
+  the GPU.
 
 ## Open
 

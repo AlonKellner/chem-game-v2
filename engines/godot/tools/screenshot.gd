@@ -124,7 +124,7 @@ func _play(dir: String) -> void:
 	_click("stir:flask")
 	_drag("item:condenser", "item:flask")
 	_drag("item:beaker", "square:19,12")
-	_drag("item:beaker", "item:condenser")
+	_drag("outlet:condenser", "item:beaker") # its outlet led by a line dragged from its end (Stage 34)
 	_drag("drawer:monitor", "square:1,1") # a monitor on the flask's water, rigged to the valve and wired to an alarm (§13.3)
 	_drag("sense:monitor1", "item:flask") # what it senses (Stage 26): its settings open
 	for what in ["edit:kind:material", "edit:material:water", "edit:measure:g", "edit:compare:below", "edit:value:0"]:
