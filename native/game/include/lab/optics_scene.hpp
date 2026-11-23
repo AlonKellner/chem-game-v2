@@ -38,16 +38,17 @@ inline constexpr int GRID_SQUARE = 40, GRID_COLS = 48, GRID_ROWS = 27, GRID_SLOT
 inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
-// the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts. MAP: where its
-// refraction map is in the scene's maps (vec4s), the whole pixels it spans, its first sample's place
-// (pixels from its axis), its pieces in wavelength (lab/optics_trace.hpp lays a map out).
+// the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts.
+// Its vec4 6 is unused (it held where a body's refraction map lay, until Stage 35; the bodies are laid out as
+// they were).
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
-// SET: the set of spectra it is made of (a row set of `rows`), whether a body of a layer behind it stands in
-// its rows (1 or 0), a signature of those (where they stand, what they are), unused.
+// SET: the set of spectra it is made of (a row set of `rows`), unused, a signature of the bodies of a layer
+// behind it that stand in its rows (where they stand, what they are and hold; 0: none), whether it is set
+// upside down.
 // FORM x is its shape: 0 a cylinder (a vessel), 1 a ball (a balloon), 2 a prism; 3 a slab, 4 a bar, 5 a cone
 // (Stage 22: FORM z its size, a slab's corners' radius or a bar's width; MORE a bar's two ends)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, MAP = 6, SET = 7;
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, SET = 7;
 // each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
@@ -96,20 +97,9 @@ struct OpticsScene {
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	uint64_t revision = 0; // changes when any of them does
-	// The refraction maps and the wall's table (GAME_SPEC §12.3): large, and seldom changed, so each has
-	// its own revision. A map is traced again only when its body's shape, glass or indices change.
-	std::vector<float> maps; // vec4s: each refracting body's map (lab/optics_trace.hpp: map_block)
+	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
-	uint64_t maps_revision = 0, wall_revision = 0;
-	// Maps lie where they were first put, and new ones after them: what changed at the last revision is from
-	// maps_changed_from on (vec4s; 0 when they were laid out again), so a host sends the GPU only that
-	int64_t maps_changed_from = 0;
-	std::vector<uint64_t> map_keys; // what each body's map was traced for
-	struct MapRegion {
-		uint64_t key; // what it was traced for
-		int64_t at, size; // vec4s
-	};
-	std::vector<MapRegion> map_regions; // each map in `maps`, looked through or kept a while
+	uint64_t wall_revision = 0;
 	uint64_t wall_key = 0; // what the wall's table was made from
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
@@ -117,22 +107,12 @@ struct OpticsScene {
 	// what the wall's table has far off to the left and to the right (where rays that reach a face's black cells,
 	// and its others, are put), and beyond the screen's edges (below 0: as it is at the edge): for the truth's own reading
 	double far_left = 0.0, far_right = 0.0, wall_beyond = -1.0;
-	// Where pixels may need more than one vessel's reading (GAME_SPEC §12.3, Stage 21): the rectangle of
-	// each body that bends and is on a layer nearer than the bench's, or has a map of several pieces, or
-	// stands across another of its own layer that bends: 4 floats a rectangle (left, top, right, bottom,
-	// whole pixels). A host whose pass over the screen leaves those pixels alone runs its second pass over
-	// these.
-	std::vector<float> chain;
-	std::vector<int> chain_bodies; // which body each rectangle is
-	// The stacks (GAME_SPEC §12.3, Stage 21): for each of those bodies whose map is of one piece, the rays
-	// that come in across it, followed through every body behind it (the chain) at the spectrum's four nodes,
-	// in each band of rows in which every body is one thing: vec4s, as native/game/shader/optics_pixel.glsl
-	// lays them out. Followed again only when a body of the stack moves or changes shape or index.
-	std::vector<float> stacks;
-	uint64_t stacks_revision = 0;
-	std::vector<uint64_t> stack_keys; // what each body's stack was followed for
-	std::vector<std::vector<float>> stack_blocks;
-	int64_t stack_rays = 0; // followed in the last compose that followed any
+	// Where pixels are read by their own rays (GAME_SPEC §12.3, Stage 29): the rectangle of each body that bends,
+	// and of each grating: 4 floats a rectangle (left, top, right, bottom, whole pixels). A host runs its passes
+	// over the corners and the pixels of these, after its pass over the whole screen, and lays its pool of kept
+	// beams out by them, one rectangle after another (Stage 33).
+	std::vector<float> rectangles;
+	std::vector<int> rectangle_bodies; // which body each rectangle is
 	// each body's glassware, if it is made as one (GAME_SPEC §12.3, Stage 24): its whole shape, which the truth
 	// traces (null: a cylinder, a prism, a ball, a thing of the lab)
 	std::vector<const glass::Vessel *> vessels;
@@ -226,25 +206,13 @@ struct OpticsRoom {
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
 inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
 
-// The maps' store (GAME_SPEC §12.3, Stage 24): a directory where maps made before the game runs are kept, each
-// under a key of everything it was traced for and of the builder's version; none until one is named. A map not
-// found there is made, and written there if it can be.
-void optics_store(const std::string &directory);
-bool optics_store_read(uint64_t key, std::vector<float> &block);
-void optics_store_write(uint64_t key, const std::vector<float> &block);
-
 // Fills the scene from the state (bodies in painting order, a nearer layer's over a further one's; those
 // past MAX_BODIES are left out). The revision moves only if the scene did.
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies);
-// The maps again, from the scene's own table and spectra: for a scene whose indices were changed after it
-// was composed (a map is traced for its body's indices).
-void optics_maps(OpticsScene &scene);
 // The wall's table and what is drawn on it, from the room (optics_compose calls it; O7 makes a wall of
 // its own with it).
 void optics_wall(OpticsScene &scene, const OpticsRoom &room);
-// The stacks, from the scene's own table, spectra and maps (optics_compose and optics_maps call it).
-void optics_stacks(OpticsScene &scene);
-// The shapes, from the scene's own table (optics_compose and optics_maps call it).
+// The shapes, from the scene's own table (optics_compose calls it).
 void optics_shapes(OpticsScene &scene);
 
 // ---- the reference: the per-pixel source compiled as C++, in float64
@@ -258,9 +226,6 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm);
 // And the wavelength at a share of the light's energy.
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t);
 double optics_share_nm(const OpticsScene &scene, double u);
-// optics_through by the general reading alone (GAME_SPEC §12.3): a pixel through a map of one piece is
-// drawn by a reading made for it, and the two must agree.
-double optics_through_general(const OpticsScene &scene, int x, int y, double nm);
 double optics_cover(const OpticsScene &scene, int x, int y);
 // Where the pixel's view meets the wall at a wavelength (GAME_SPEC §12.3: bent by the vessel it looks
 // through, if any), on the screen; what the vessel's surfaces let through; the chord of liquid crossed (cm).
@@ -316,12 +281,6 @@ int optics_body(const OpticsScene &scene, const std::string &id);
 OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm);
 // the same in one of the ways a ray goes on from a grating (0: straight on; 1, 2: its orders +1 and -1; 3, 4: +3 and -3)
 OpticsRay optics_ray_way(const OpticsScene &scene, double x, double y, double nm, int way);
-// Which reading the reference uses where a pixel looks through something that bends its view (while Stage 29 is
-// built): 0, the maps; 5, a pixel's own rays as an average over time. From LAB_BEAM at first; the reading before.
-int optics_reading(int mode);
-// whether a pixel's rays are traced in the pass now (the readings 4 and 5): the scene then keeps no stacks, and
-// every body that bends is read by the pass over the rectangles it names
-bool optics_traced();
 OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double nm);
 using OpticsRayOf = OpticsRay (*)(const OpticsScene &scene, double x, double y, double nm);
 // O9 (GAME_SPEC §18, Stage 29): the pass's rays are the truth's. At the middle and the corner of every `step`th
@@ -352,7 +311,6 @@ struct OpticsPassage {
 	double pass = 1.0, chord = 0.0, first = 0.0; // what its surfaces passed; its path in the liquid; how far to the shape
 	uint32_t route = 0;
 	int meetings = 0;
-	int most = 0; // the meetings allowed
 	bool left = true, solid = false;
 };
 OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single);
@@ -370,18 +328,10 @@ std::string check_O15(const OpticsScene &scene, OpticsPassageOf single = nullptr
 // [8] those that used every meeting allowed. The frame rate's measure where no GPU runs: what a ray costs is
 // what it tries.
 void optics_work(int64_t work[9], bool reset);
-// How the passages through a shape ended on this thread (Stage 33), by their meetings (the last entry: 64 and
-// more): how many, how many of them still inside (dark), and the light the others carried out.
-void optics_ended(int64_t count[65], int64_t inside[65], double light[65], bool reset);
 // Where a ray from p along u (the screen's pixels; z away from the eye, the bench's plane 0) comes to the scene's
 // room (Stage 33): 0, the wall, off the cells along its edges (`landing`: where); 1, another cell of another face;
 // 2, a cell along one of the room's twelve edges, which is black; -1, the scene has no room.
 int optics_room_exit(const OpticsScene &scene, const double p[3], const double u[3], double landing[2]);
-// (a measurement's switch: the meetings a passage is allowed and the times it may be turned back, in the truth's
-// tracer and the pass's)
-void optics_meetings_most(int most, int turns);
-// (a measurement: the beams read over a wall that is one under them [0], and not: of rays that part [1], of the others [2])
-void optics_even(int64_t count[3], bool reset);
 using OpticsMade = double (*)(const OpticsScene &scene, int x, int y);
 // O11 (Stage 29): a pixel's parts make it whole. However a pixel is cut (in four, at where its rays part,
 // along the spectrum), what it is read from adds up to all of it, once. "" when it holds.
@@ -389,14 +339,17 @@ std::string check_O11(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 
+struct OpticsFramesCore; // (src/optics_frames.hpp)
 // The renderer's own frames over a rectangle of the screen, exactly as the GPU
 // runs them (GAME_SPEC §12.2): each pixel's history, its content key and fixed
 // estimate, its points by need under a budget per pixel.
 class OpticsFrames {
 public:
 	// (`step`: every step-th pixel across and down, from (x, y): a sample of a large rectangle; w and h are
-	// then how many across and down)
-	OpticsFrames(int x, int y, int w, int h, double budget = 16.0, int step = 1);
+	// then how many across and down. `single` (Stage 35): the whole per-pixel source in single precision with
+	// the GPU's own tolerances, as the GPU runs it, where no GPU runs: what a float's arithmetic makes of a
+	// pixel, beside what the reference's float64 makes of it.)
+	OpticsFrames(int x, int y, int w, int h, double budget = 16.0, int step = 1, bool single = false);
 	~OpticsFrames();
 	OpticsFrames(const OpticsFrames &) = delete;
 	OpticsFrames &operator=(const OpticsFrames &) = delete;
@@ -430,20 +383,17 @@ public:
 	bool kept_fresh(const OpticsScene &scene, int x, int y, bool &holds) const;
 
 private:
-	struct State;
 	int x_, y_, w_, h_;
 	int step_ = 1;
 	bool keeping_ = true;
 	bool sharing_ = true;
-	struct Corners;
-	Corners *corners_ = nullptr;
+	OpticsFramesCore *core_ = nullptr; // its pixels and their histories, in the arithmetic asked for
 	int64_t read_ = 0, rays_ = 0, most_rays_ = 0;
 	double budget_;
 	int frame_ = 0;
 	double asked_ = 0.0, points_ = 0.0;
 	double ray_asked_ = 0.0; // of asked_, by the pixels read by their own rays
 	double beams_traced_ = 0.0; // the pixels whose beams the last frame traced (counted against the rays' budget)
-	std::vector<State> *states_;
 	std::vector<uint8_t> restarted_;
 };
 
@@ -452,6 +402,14 @@ private:
 // the beams traced afresh: no pixel is read from beams of something that has since moved. `held`: how many
 // pixels had beams to hold (a check that held none checked nothing). "" when it holds.
 std::string check_O12(const OpticsFrames &frames, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int64_t *held = nullptr);
+// O16, the pass in single precision is the pass (GAME_SPEC §18, Stage 35): the whole per-pixel source compiled
+// with a float's arithmetic and the GPU's tolerances (`single`: OpticsFrames made so) comes, over the pixels of
+// a sample that bodies cover, to the colours it comes to in double (`exact`), both stepped through the same
+// frames: their mean under 1 apart on the eye metric, and fewer than one pixel in two hundred visibly apart.
+// (A pixel whose rays are chaotic, at a vessel's floor near its axis, is another draw in each arithmetic, and
+// about one in ten thousand of either stops visibly off the truth: docs/TDD_35_ONE.md.) `stats`: the pixels
+// compared, those visibly apart, the worst and the mean. "" when it holds.
+std::string check_O16(const OpticsFrames &exact, const OpticsFrames &single, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, double stats[4] = nullptr);
 
 // O13, a frame's rays are bounded (GAME_SPEC §18, Stage 33): in the frame last given, no pixel followed more
 // than `most` rays: its beam's middle, and a correction a band of the most bands a frame reads, each cut at

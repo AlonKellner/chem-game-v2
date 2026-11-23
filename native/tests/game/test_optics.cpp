@@ -8,13 +8,19 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include <array>
+#include <atomic>
 #include <cmath>
 #include <fstream>
 #include <sstream>
 #include <thread>
+#include <utility>
+#include <vector>
 
 using lab::ItemView;
 using lab::OpticsScene;
@@ -460,29 +466,44 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
 	lab::CieLab after_dissolving{}, boiled_down{};
-	int n = 0;
+	int n = 0, scans = 0;
+	// every seventeenth pixel across and down (under the sanitizers, sparsely across: 801 wavelengths a pixel)
+	std::vector<std::pair<int, int>> places;
+	for (int y = 100; y < 1080; y += 17) {
+		for (int x = 3; x < 1400; x += 17 * sparse()) {
+			places.push_back({ x, y });
+		}
+	}
+	// what a scene is known by: a command that leaves all of it as it was leaves every pixel as it was
+	std::array<uint64_t, 3> scanned{};
 	for (const nlohmann::json &command : session.at("script")) {
 		REQUIRE_MESSAGE(ui->lab().command(command.dump(), why), why);
 		ui->frame(0.0);
 		const lab::OpticsScene &scene = ui->optics();
 		REQUIRE(lab::check_O1(scene) == "");
-		// (rows dealt among threads: the reference's scene in use is each thread's own)
-		std::vector<std::string> said(12);
-		std::vector<std::thread> threads;
-		for (size_t t = 0; t < said.size(); ++t) {
-			threads.emplace_back([&, t] {
-				for (int y = 100 + 17 * static_cast<int>(t); y < 1080 && said[t].empty(); y += 17 * static_cast<int>(said.size())) {
-					for (int x = 3; x < 1400 && said[t].empty(); x += 17) {
-						said[t] = lab::check_O2(scene, x, y);
+		const std::array<uint64_t, 3> now{ scene.revision, scene.wall_revision, scene.shapes_revision };
+		if (scans == 0 || now != scanned) {
+			// (Stage 35: the pixels dealt one by one among the threads, the reference's scene in use each thread's
+			// own. Dealt by rows, a row a thread, the threads whose rows cross the vessels worked alone for most
+			// of the scan, read as it now is by each pixel's own rays: 10 s a command, 3 s so.)
+			std::vector<std::string> said(12);
+			std::vector<std::thread> threads;
+			std::atomic<size_t> next{ 0 };
+			for (size_t t = 0; t < said.size(); ++t) {
+				threads.emplace_back([&, t] {
+					for (size_t i = next.fetch_add(1); i < places.size() && said[t].empty(); i = next.fetch_add(1)) {
+						said[t] = lab::check_O2(scene, places[i].first, places[i].second);
 					}
-				}
-			});
-		}
-		for (std::thread &t : threads) {
-			t.join();
-		}
-		for (const std::string &o2 : said) {
-			REQUIRE_MESSAGE(o2.empty(), o2 << " after command " << n);
+				});
+			}
+			for (std::thread &t : threads) {
+				t.join();
+			}
+			for (const std::string &o2 : said) {
+				REQUIRE_MESSAGE(o2.empty(), o2 << " after command " << n);
+			}
+			scanned = now;
+			++scans;
 		}
 		if (command.value("do", "") == "stir" && !command.at("on").get<bool>()) {
 			after_dissolving = flask_colour();
@@ -492,6 +513,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 		}
 		++n;
 	}
+	CHECK(scans > 20); // every command's scene but those that are the scene before them (26 commands, 23 scenes)
 	CHECK(after_dissolving.b < -15.0); // blue
 	CHECK(boiled_down.b < -15.0);
 	CHECK(boiled_down.l < after_dissolving.l - 6.0); // (8 darker; 10 and more when the room in front was a grey of 0.3: the glass reflects a white room now, Stage 33) // and deeper for the water gone

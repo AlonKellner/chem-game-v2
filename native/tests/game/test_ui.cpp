@@ -20,24 +20,6 @@ using lab::LabView;
 
 namespace {
 
-// the chain's pass runs only over vessels made as glassware standing on the bench (Stage 24: their curved rows
-// are read along their outlines), not over anything held
-bool only_glassware(const lab::OpticsScene &scene) {
-	namespace L = lab::optics_layout;
-	for (const int b : scene.chain_bodies) {
-		const float *map = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::MAP) * 4];
-		const float *refract = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::REFRACT) * 4];
-		if (map[3] >= 0.0f || refract[1] != 0.0f) {
-			return false;
-		}
-	}
-	return true;
-}
-
-} // namespace
-
-namespace {
-
 std::string read(const std::string &relative) {
 	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	REQUIRE_MESSAGE(static_cast<bool>(in), relative);
@@ -217,8 +199,8 @@ TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, a
 
 TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands behind it is seen through it (Stage 21)") {
 	// A person picks the jar up and carries it slowly over the flask, a few pixels a frame, and holds it there:
-	// while it is in hand it is a layer nearer the eye, the pixels it covers are the chain's, and the flask's
-	// liquid is seen through it. Set down, it stands again.
+	// while it is in hand it is a layer nearer the eye, the pixels it covers are among those the pass over what
+	// bends runs on, and the flask's liquid is seen through it. Set down, it stands again.
 	namespace L = lab::optics_layout;
 	Player p;
 	p.drag("item:flask", "square:11,12");
@@ -238,10 +220,8 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 		}
 		return found;
 	};
-	// everything stands: one layer, and the chain's pass runs over the glassware alone (its curved rows read
-	// along their outlines, Stage 24)
+	// everything stands: one layer
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
-	CHECK(only_glassware(p.ui->optics()));
 	float jx = 0, jy = 0, fx = 0, fy = 0;
 	p.at("item:jar", jx, jy);
 	p.at("item:flask", fx, fy);
@@ -267,24 +247,21 @@ TEST_CASE("ui: an item carried by a person is the hand's layer, and what stands 
 	const int jar = body_of(held, 1.0f);
 	REQUIRE(jar >= 0);
 	CHECK(jar == static_cast<int>(held.table[0]) - 1); // painted over everything that stands
-	// its rectangle is where the chain's pass runs
-	size_t at = held.chain_bodies.size();
-	for (size_t k = 0; k < held.chain_bodies.size(); ++k) {
-		at = held.chain_bodies[k] == jar ? k : at;
-	}
-	REQUIRE(at < held.chain_bodies.size());
+	// its rectangle is within one of those the pass over what bends runs on
 	const float *rect = &held.table[static_cast<size_t>(L::HEADER_VECS + jar * L::BODY_VECS + L::RECT) * 4];
-	CHECK(held.chain[at * 4] <= rect[0]);
-	CHECK(held.chain[at * 4 + 2] >= rect[0] + rect[2]);
+	bool within = false;
+	for (size_t k = 0; k + 3 < held.rectangles.size(); k += 4) {
+		within = within || (held.rectangles[k] <= rect[0] && held.rectangles[k + 1] <= rect[1] && held.rectangles[k + 2] >= rect[0] + rect[2] && held.rectangles[k + 3] >= rect[1] + rect[3]);
+	}
+	CHECK(within);
 	// through the jar's glass, low in it, the flask's blue liquid behind: less of the red than beside the flask
 	const int px = static_cast<int>(rect[0] + rect[2] / 2), py = static_cast<int>(rect[1] + rect[3]) - 12;
 	const double through_both = lab::optics_through(held, px, py, 650.0);
 	CHECK(lab::optics_through(held, px, py, 650.0) == doctest::Approx(lab::optics_area_through(held, px, py, 650.0, 8)).epsilon(0.05));
-	// put back (Escape, Stage 27): it stands again, on the bench's layer, and the chain's pass is the glassware's alone
+	// put back (Escape, Stage 27): it stands again, on the bench's layer
 	p.ui->key(lab::Ui::KeyEscape);
 	p.ui->frame(1.0 / 60.0);
 	CHECK(p.ui->optics().table[3 * 4 + 1] == 0.0f);
-	CHECK(only_glassware(p.ui->optics()));
 	MESSAGE("carried over the flask: through the jar and the flask's liquid at 650 nm, " << through_both << " of the room's light");
 	well_formed(p.ui->draw());
 }
@@ -1118,22 +1095,11 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	well_formed(p.ui->draw());
 }
 
-// a pixel's own rays, traced, while a test runs: the reading that knows a vessel's turn (Stage 30)
-struct Traced {
-	int before;
-	Traced() :
-			before(lab::optics_reading(5)) {}
-	~Traced() { lab::optics_reading(before); }
-	Traced(const Traced &) = delete;
-	Traced &operator=(const Traced &) = delete;
-};
-
 int body_of(const lab::OpticsScene &scene, const std::string &id) {
 	return lab::optics_body(scene, id);
 }
 
 TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to where its lip is over the other's mouth and turns about its lip, and pours once its liquid reaches the lip; let go, it turns back and is in the hand again; the right button's menu sets it upside down (Stage 27, Stage 31)") {
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1211,7 +1177,6 @@ TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to
 }
 
 TEST_CASE("ui: a person pours by hand at their own pace: carries the bottle over slowly, holds, lets go as the acid runs, presses again before it is back upright, and lets go for good; the stream is the acid's, from the lip into the flask, while it runs and not after (Stage 31)") {
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1300,7 +1265,6 @@ TEST_CASE("ui: a picture of a pour by hand, by the truth's own rays (written whe
 	if (path == nullptr) {
 		return;
 	}
-	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -1380,7 +1344,6 @@ TEST_CASE("ui: a person seals the flask with the stopper, carried onto its neck,
 }
 
 TEST_CASE("ui: the room is a cube whose edge cells are black: a ray comes to the wall, to a black cell along an edge or to a white one, by where it goes; the wall's table has the room's black and white far off; the pass's rays and the truth's go to the same places (Stage 33)") {
-	const Traced traced;
 	Player p;
 	p.click("pause");
 	p.drag("item:flask", "square:11,12");

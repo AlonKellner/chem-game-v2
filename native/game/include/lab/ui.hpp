@@ -63,10 +63,6 @@ public:
 	const DrawList &draw();
 	// What the optical pass shows now (GAME_SPEC §12).
 	const OpticsScene &optics();
-	// The maps of every vessel made as glassware, at each layer it can be on (standing on the bench, in the
-	// hand), made now and so kept, and written to the maps' store if one is named (optics_store; GAME_SPEC
-	// §12.3, Stage 24): the expensive part of the pass done before the game runs. Returns how many tables.
-	int prepare_optics();
 
 	Lab &lab();
 	// A tutorial over the lab (GAME_SPEC §13.2): its card above the readout,

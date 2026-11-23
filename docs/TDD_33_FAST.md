@@ -412,6 +412,9 @@ known: that tree was never run through this check.
 
 ## Open
 
+- **(Answered in Stage 35: `docs/TDD_35_ONE.md`, *The whole source in single precision*. The two items on
+  O4 below are not single precision's: the source's own frames stop with one pixel in ten thousand off
+  the truth, in double too.)**
 - **O4 under this reading**: 2 pixels at a flask's heel, (401, 684) of the demo's bench, 16 on the eye
   metric. It is the single precision's: the reference, in double, settles there to within 1 of the
   truth (`test_cost.cpp`, `LAB_RAY_STATS=heel`; 3 to 4 on the row above). The heel is a fillet: the

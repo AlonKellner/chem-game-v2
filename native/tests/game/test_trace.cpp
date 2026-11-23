@@ -1,12 +1,9 @@
-// The tracer and the refraction maps (GAME_SPEC §12.3, Stage 20): rays through surface patches, held to
-// closed forms; a map read against the rays themselves.
+// The tracer (GAME_SPEC §12.3, Stage 20): rays through surface patches, held to closed forms.
 #include "lab/optics_trace.hpp"
 
 #include <doctest/doctest.h>
 
-#include <chrono>
 #include <cmath>
-#include <vector>
 
 using namespace lab::trace;
 
@@ -96,114 +93,4 @@ TEST_CASE("trace: rays bend up and down too: a ball of glass focuses at n R / (2
 		CHECK(std::fabs(across.y) < 1e-15);
 		CHECK(std::fabs(up.x) < 1e-15);
 	}
-}
-
-namespace {
-
-// a dispersive index like glass's or water's: n = a + b / nm^2
-std::vector<float> cauchy(double a, double b) {
-	std::vector<float> out(401);
-	for (int i = 0; i < 401; ++i) {
-		out[static_cast<size_t>(i)] = static_cast<float>(a + b / ((380.0 + i) * (380.0 + i)));
-	}
-	return out;
-}
-
-} // namespace
-
-TEST_CASE("map: a vessel's map, read anywhere and at any wavelength, is its rays within tolerance; a pixel's level tells where it bends (Stage 20)") {
-	const std::vector<float> glass = cauchy(1.4580, 4200.0), water = cauchy(1.3240, 3050.0);
-	MapSpec spec;
-	spec.shape = cylinder(3.2, 0.2);
-	spec.cm_per_pixel = 6.4 / 90.0;
-	spec.left = -47.0;
-	spec.right = 47.0;
-	spec.glass_index = glass.data();
-	spec.liquid_index = water.data();
-	const auto t0 = std::chrono::steady_clock::now();
-	const Map map = build_map(spec);
-	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-	REQUIRE(map.media == 2);
-	CHECK(map.coarse == 94);
-	double worst = 0.0, worst_pass = 0.0;
-	int compared = 0;
-	for (int medium = 0; medium < 2; ++medium) {
-		for (double x = -46.9; x < 46.9; x += 0.0613) {
-			for (const double nm : { 383.0, 441.5, 523.25, 610.0, 707.7, 776.0 }) {
-				const MapRay exact = map_ray(spec, x, nm, medium), read = map_read(map, x, nm, medium);
-				// a ray is its neighbours' kind unless its route changes within a sixteenth of a pixel of it
-				const MapRay before = map_ray(spec, x - 1.0 / MAP_FINE, nm, medium), after = map_ray(spec, x + 1.0 / MAP_FINE, nm, medium);
-				if (before.route != exact.route || after.route != exact.route || exact.pass < 0.02) {
-					continue;
-				}
-				// the error as a shift of the image on the screen: over how fast the landing moves across
-				const double slope = std::max(1.0, std::fabs(after.landing - before.landing) * MAP_FINE / 2.0);
-				worst = std::max(worst, std::fabs(read.landing - exact.landing) / slope);
-				worst_pass = std::max(worst_pass, std::fabs(read.pass - exact.pass));
-				CHECK(std::fabs(read.chord - exact.chord) < 0.03);
-				++compared;
-			}
-		}
-	}
-	CHECK(compared > 10000);
-	CHECK(worst < 3.0 * MAP_LANDING_TOLERANCE);
-	CHECK(worst_pass < 3.0 * MAP_PASS_TOLERANCE);
-	// straight in the middle, bent at the rims
-	CHECK(map.level[47] == 1.0f);
-	CHECK(map.level[2] > 1.0f);
-	CHECK(map.level[0] == 1.0f); // past the rim: the identity
-	CHECK(map_read(map, -46.5, 550.0, 0).landing == doctest::Approx(-46.5).epsilon(1e-6));
-	int bent = 0;
-	for (const float l : map.level) {
-		bent += l > 1.0f ? 1 : 0;
-	}
-	MESSAGE("a 250 mL vessel's map: " << map.pieces << " pieces in wavelength, " << map.samples() << " samples, " << bent << " of " << map.coarse << " pixels bent, " << map.rays << " rays, "
-									  << ms << " ms; worst landing " << worst << " px, worst pass " << worst_pass);
-	CHECK(map.rays < 150000);
-}
-
-TEST_CASE("map: a prism of flint glass, its light spread thousands of pixels: read by the cubics of its pieces (Stage 20)") {
-	const std::vector<float> flint = cauchy(1.7400, 13600.0);
-	const double side = 5.0, h = side * std::sqrt(3.0) / 2.0;
-	// on its side, its apex across, turned a little: rays pass in one slanted face and out the other
-	const double turn = 1.5707963267948966 - 0.35, base[3][2] = { { -side / 2.0, -h / 3.0 }, { side / 2.0, -h / 3.0 }, { 0.0, 2.0 * h / 3.0 } };
-	double corners[3][2];
-	for (int c = 0; c < 3; ++c) {
-		corners[c][0] = base[c][0] * std::cos(turn) - base[c][1] * std::sin(turn);
-		corners[c][1] = base[c][0] * std::sin(turn) + base[c][1] * std::cos(turn);
-	}
-	MapSpec spec;
-	spec.shape = prism(corners);
-	spec.cm_per_pixel = 5.0 / 200.0;
-	spec.left = -101.0;
-	spec.right = 101.0;
-	spec.wall_cm = 60.0;
-	spec.media = 1;
-	spec.glass_index = flint.data();
-	const auto t0 = std::chrono::steady_clock::now();
-	const Map map = build_map(spec);
-	const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-	double worst = 0.0;
-	int compared = 0;
-	for (double x = -99.0; x < 99.0; x += 0.731) {
-		for (const double nm : { 391.0, 455.5, 533.0, 640.25, 771.0 }) {
-			const MapRay exact = map_ray(spec, x, nm, 0), read = map_read(map, x, nm, 0);
-			const MapRay before = map_ray(spec, x - 1.0 / MAP_FINE, nm, 0), after = map_ray(spec, x + 1.0 / MAP_FINE, nm, 0);
-			// and unless its route changes within a piece of the map's of its wavelength (there it is its nearest node's)
-			const double place = map_place(nm), piece = 1.0 / map.pieces;
-			const MapRay bluer = map_ray(spec, x, map_nm(place - piece), 0), redder = map_ray(spec, x, map_nm(place + piece), 0);
-			if (before.route == exact.route && after.route == exact.route && bluer.route == exact.route && redder.route == exact.route && exact.pass > 0.02 && std::fabs(exact.landing) < 5e4) {
-				const double slope = std::max(1.0, std::fabs(after.landing - before.landing) * MAP_FINE / 2.0);
-				// where a ray leaves a face nearly along it, its landing runs away with the wavelength: there the map
-				// is held to a shift in wavelength (MAP_NM_TOLERANCE) instead
-				const double per_nm = std::fabs(map_ray(spec, x, nm + 0.05, 0).landing - map_ray(spec, x, nm - 0.05, 0).landing) / 0.1;
-				const double error = std::fabs(read.landing - exact.landing);
-				worst = std::max(worst, error > 3.0 * MAP_NM_TOLERANCE * per_nm ? error / slope : 0.0);
-				++compared;
-			}
-		}
-	}
-	CHECK(compared > 100);
-	CHECK(worst < 3.0 * MAP_LANDING_TOLERANCE);
-	MESSAGE("a prism's map: " << map.pieces << " pieces in wavelength, " << map.rays << " rays, " << ms << " ms; worst landing " << worst << " px");
 }

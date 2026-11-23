@@ -4559,39 +4559,6 @@ const OpticsScene &Ui::optics() {
 	return impl_->scene;
 }
 
-int Ui::prepare_optics() {
-	Impl &m = *impl_;
-	const LabView view = m.lab->view();
-	int tables = 0;
-	for (const ItemView &v : view.items) {
-		if (v.kind != "vessel" || v.glassware.empty()) {
-			continue;
-		}
-		float w = 0, h = 0;
-		m.size_of(v, w, h);
-		// at every size the screen draws it: on the bench, on the cabinet's shelf, in an outbox slot; standing or
-		// in hand (a vessel carried from the shelf keeps the shelf's size)
-		std::vector<float> scales{ 1.0f };
-		for (const float scale : { m.cabinet_scale(w, h), Impl::outbox_scale(w, h) }) {
-			if (std::find(scales.begin(), scales.end(), scale) == scales.end()) {
-				scales.push_back(scale);
-			}
-		}
-		for (const float scale : scales) {
-			// alone, its axis on a whole pixel, as the screen draws it: its maps are its anywhere
-			for (const int layer : { 0, 1 }) {
-				OpticsRoom room;
-				OpticsBody body{ &v, 100.0f - w * scale / 2.0f, 100.0f, w * scale, h * scale };
-				body.layer = layer;
-				OpticsScene alone;
-				optics_compose(alone, room, { body });
-				++tables;
-			}
-		}
-	}
-	return tables;
-}
-
 Lab &Ui::lab() {
 	return *impl_->lab;
 }

@@ -263,7 +263,6 @@ TEST_CASE("vortex: saved in the middle of its turning and loaded, a lab goes on 
 }
 
 TEST_CASE("vortex: on the screen a stirred vessel's liquid has its vortex, a cone the pass traces, and its powder is a haze in the liquid while it turns (Stage 32)") {
-	const int before = lab::optics_reading(5);
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(R"({"format": "chem-bench/2", "room": {"celsius": 20}, "items": [
 		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
@@ -299,5 +298,4 @@ TEST_CASE("vortex: on the screen a stirred vessel's liquid has its vortex, a con
 		REQUIRE(ui->locate("item:beaker", x, y));
 		CHECK(lab::check_O9(scene, static_cast<int>(x) - 50, static_cast<int>(y) - 60, static_cast<int>(x) + 50, static_cast<int>(y) + 60, 5) == "");
 	}
-	lab::optics_reading(before);
 }

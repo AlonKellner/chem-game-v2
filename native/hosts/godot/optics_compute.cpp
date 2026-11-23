@@ -9,12 +9,9 @@
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
-#include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
 #include <cstdlib>
-#include <cstdio>
 #include <cstring>
 
 namespace chem_godot {
@@ -35,9 +32,7 @@ layout(set = 0, binding = 6, rgba32f) uniform restrict image2D prox_image;
 layout(set = 0, binding = 7, rgba32f) uniform restrict image2D aux_image;
 layout(set = 0, binding = 8, rgba8) uniform restrict image2D shown_image;
 layout(set = 0, binding = 9, std430) restrict buffer AskBuffer { uint total[6]; } ask_buffer;
-layout(set = 0, binding = 10, std430) restrict readonly buffer MapBuffer { vec4 v[]; } map_buffer;
 layout(set = 0, binding = 11, std430) restrict readonly buffer WallBuffer { vec4 v[]; } wall_buffer;
-layout(set = 0, binding = 12, std430) restrict readonly buffer StackBuffer { vec4 v[]; } stack_buffer;
 layout(set = 0, binding = 13, std430) restrict readonly buffer ShapeBuffer { vec4 v[]; } shape_buffer;
 layout(set = 0, binding = 14, std430) restrict buffer CornerBuffer { vec4 v[]; } corner_buffer;
 layout(set = 0, binding = 15, std430) restrict buffer KeptBuffer { vec4 v[]; } kept_buffer;
@@ -46,9 +41,7 @@ vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
 vec4 line_vec(int i) { return line_buffer.v[i]; }
 vec4 light_vec(int i) { return light_buffer.v[i]; }
-vec4 map_vec(int i) { return map_buffer.v[i]; }
 vec4 wall_vec(int i) { return wall_buffer.v[i]; }
-vec4 stack_vec(int i) { return stack_buffer.v[i]; }
 vec4 shape_vec(int i) { return shape_buffer.v[i]; }
 vec4 corner_vec(int i) { return corner_buffer.v[i]; }
 void corner_put(int i, vec4 v) { corner_buffer.v[i] = v; }
@@ -57,13 +50,8 @@ void kept_put(int i, vec4 v) { kept_buffer.v[i] = v; }
 // ---- the per-pixel source (native/game/shader/optics_pixel.glsl)
 )";
 
-// Stage 29: a pixel's own rays traced in the pass (LAB_BEAM=5): the tracer's tolerances in single precision
+// A pixel's own rays are traced in the pass (Stage 29): the tracer's tolerances in single precision
 const char *const TRACE_HEAD = R"(
-#define OPTICS_RAYS 1
-#define OPTICS_TRACE 1
-#define OPTICS_NODES 1
-#define OPTICS_LATTICE 1
-#define OPTICS_KEPT 1
 #define TRACE_NEAR 2.0e-5
 #define TRACE_NUDGE 1.0e-4
 #define TRACE_SLACK 2.0e-5
@@ -73,18 +61,14 @@ const char *const TRACE_HEAD = R"(
 // rounding alone, and at the reference's 0.02 a carried vessel's pixels halved to 64 stretches, 1,300 rays each,
 // for nothing: 30 ms frames, Stage 33)
 #define BEAM_BETWEEN 0.5
-bool rays_on() { return true; }
 )";
-// LAB_BEAM_DRY: the reading built into the shader but never run (a pixel is never read by it): how long the
-// shader takes to build, apart from what its passes cost
-const char *const TRACE_LIVE = "bool rays_nodes() { return true; }\n";
-const char *const TRACE_DRY = "bool rays_nodes() { return scene_buffer.v[0].x < 0.0; }\n";
 
 const char *const WRAPPER_TAIL = R"(
 layout(local_size_x = OPTICS_GROUP_X, local_size_y = OPTICS_GROUP_Y, local_size_z = 1) in;
 // ---- one invocation a pixel
-// The pass over the whole screen is compiled without the chain (OPTICS_CHAIN), and leaves the pixels that
-// need it alone; the chain's pass, over the rectangles where they can be, takes those and no others.
+// The pass over the whole screen (OPTICS_SCREEN_PASS) is compiled without the reading by a pixel's own rays, and
+// leaves the pixels that are read by it alone; the beams' pass (OPTICS_BEAM_PASS), over the rectangles where they
+// can be, takes those and no others.
 #ifdef OPTICS_CORNER_PASS
 // The corners' pass (Stage 33): one invocation a corner of the lattice, over a rectangle's corners (its pixels'
 // and one more across and down), before the pixels' passes read them.
@@ -102,7 +86,7 @@ void main() {
 		return;
 	}
 	vec2 p = vec2(float(at.x) + 0.5, float(at.y) + 0.5);
-#if defined(OPTICS_CHAIN) || defined(OPTICS_BEAM_PASS)
+#ifdef OPTICS_BEAM_PASS
 	if (!near_any(p)) {
 		return;
 	}
@@ -147,20 +131,9 @@ void main() {
 		return;
 	}
 #else
-#ifdef OPTICS_CHAIN
-	if (!chained(q)) {
-		return;
-	}
-#ifdef OPTICS_RAYS
 	if (beamed(q)) {
 		return; // the beams' own pass reads it
 	}
-#endif
-#else
-	if (chained(q)) {
-		return;
-	}
-#endif
 #endif
 #ifdef OPTICS_BEAM_PASS
 	// a pixel within two bodies' rectangles is stepped in the first's pass alone (Stage 33): once a frame, as a
@@ -178,21 +151,17 @@ void main() {
 #else
 	float scale = budget_scale(float(ask_buffer.total[params.parity]), params.budget, params.pixels);
 #endif
-#if defined(OPTICS_BEAM_PASS) && defined(OPTICS_LATTICE)
+#ifdef OPTICS_BEAM_PASS
 	lattice_on = true; // its corners were traced by the pass before this one
-#endif
-#if defined(OPTICS_BEAM_PASS) && defined(OPTICS_KEPT)
 	// its record among its rectangle's (Stage 33), if the rectangle has room in the pool
 	kept_slot = params.kept < 0 ? -1 : (params.kept + (at.y - params.top) * (params.right - params.left) + (at.x - params.left)) * (1 + KEPT_MOST * KEPT_BEAM);
 #endif
 	s = step_pixel(q, s, p, params.frame, scale);
 #ifdef OPTICS_BEAM_PASS
 	s.aux.w = float(params.stamp);
-#ifdef OPTICS_KEPT
 	if (beam_deferred) {
 		atomicAdd(ask_buffer.total[5 - params.parity], 1u);
 	}
-#endif
 #endif
 	imageStore(hist_image, at, s.hist);
 	imageStore(key_image, at, s.key);
@@ -221,7 +190,7 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], shader_[0], shader_[1], shader_[2], shader_[3], corners_, kept_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, maps_.rid, wall_.rid, stacks_.rid, shapes_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], pipeline_[0], pipeline_[1], pipeline_[2], shader_[0], shader_[1], shader_[2], corners_, kept_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, wall_.rid, shapes_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -253,53 +222,30 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 		why = "the per-pixel source is missing (res://shaders/optics_pixel.glslinc: make native copies it)";
 		return false;
 	}
-	// the source twice: without the chain for the pass over the screen, with it for the chain's own pass
+	// the source once for each pass: over the screen, over the beams' rectangles, over their corners
 	rd_ = rd;
-	const char *beam = std::getenv("LAB_BEAM");
-	const bool traced = beam != nullptr && std::atoi(beam) == 5;
-	passes_ = traced ? 4 : 2;
 	if (const char *asked = std::getenv("LAB_RAY_POINTS")) {
 		ray_points_ = static_cast<float>(std::atof(asked));
 	}
-	// (LAB_BEAM_GROUP=x,y: the beams' pass's groups, for measuring)
-	if (const char *asked = std::getenv("LAB_BEAM_GROUP")) {
-		int x = 0, y = 0;
-		if (std::sscanf(asked, "%d,%d", &x, &y) == 2 && x > 0 && y > 0 && x * y <= 1024) {
-			group_[2][0] = x;
-			group_[2][1] = y;
-		}
-	}
-	for (int pass = 0; pass < passes_; ++pass) {
+	for (int pass = 0; pass < PASSES; ++pass) {
 		godot::Ref<godot::RDShaderSource> source;
 		source.instantiate();
 		source->set_language(RenderingDevice::SHADER_LANGUAGE_GLSL);
 		source->set_stage_source(RenderingDevice::SHADER_STAGE_COMPUTE,
-				godot::String(WRAPPER_HEAD) + godot::String(traced ? TRACE_HEAD : "") + godot::String(traced ? (std::getenv("LAB_BEAM_DRY") != nullptr ? TRACE_DRY : TRACE_LIVE) : "") + (std::getenv("LAB_BEAM_STUB") != nullptr ? godot::String("#define OPTICS_STUB_") + godot::String(std::getenv("LAB_BEAM_STUB")).replace(",", " 1\n#define OPTICS_STUB_") + " 1\n" : godot::String("")) + godot::String(std::getenv("LAB_BEAM_AT_ONCE") != nullptr ? "#define CORRECTIONS_AT_ONCE true\n" : "") + (std::getenv("LAB_BEAM_DEFINE") != nullptr ? godot::String("#define ") + godot::String(std::getenv("LAB_BEAM_DEFINE")) + "\n" : godot::String("")) + godot::String(pass == 1 ? "#define OPTICS_CHAIN 1\n" : (pass == 2 ? "#define OPTICS_BEAM_PASS 1\n" : (pass == 3 ? "#define OPTICS_CORNER_PASS 1\n" : ""))) + "#define OPTICS_GROUP_X " + godot::String::num_int64(group_[pass][0]) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(group_[pass][1]) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
-		// LAB_BEAM_TIMES: how long each stage of the shader's build takes (the GLSL to SPIR-V, the shader, the pipeline)
-		const bool timed = std::getenv("LAB_BEAM_TIMES") != nullptr;
-		const uint64_t t0 = godot::Time::get_singleton()->get_ticks_msec();
+				godot::String(WRAPPER_HEAD) + godot::String(TRACE_HEAD) + godot::String(pass == BEAMS ? "#define OPTICS_BEAM_PASS 1\n" : (pass == CORNERS ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_CORNER_PASS 1\n" : "#define OPTICS_SCREEN_PASS 1\n")) + "#define OPTICS_GROUP_X " + godot::String::num_int64(GROUP_X) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(GROUP_Y) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
 		const godot::Ref<godot::RDShaderSPIRV> spirv = rd->shader_compile_spirv_from_source(source);
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": SPIR-V in ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 		if (spirv.is_null() || !spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE).is_empty()) {
 			why = "the optical pass does not compile: " + (spirv.is_null() ? godot::String("no SPIR-V") : spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE));
 			release();
 			return false;
 		}
-		shader_[pass] = rd_->shader_create_from_spirv(spirv, pass == 1 ? "chem optical pass: the chain" : (pass == 2 ? "chem optical pass: the beams" : (pass == 3 ? "chem optical pass: the corners" : "chem optical pass")));
+		shader_[pass] = rd_->shader_create_from_spirv(spirv, pass == BEAMS ? "chem optical pass: the beams" : (pass == CORNERS ? "chem optical pass: the corners" : "chem optical pass"));
 		if (!shader_[pass].is_valid()) {
 			why = "the optical pass's shader was not created";
 			release();
 			return false;
 		}
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": shader at ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 		pipeline_[pass] = rd_->compute_pipeline_create(shader_[pass]);
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": pipeline at ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 	}
 	for (godot::RID &s : state_) {
 		s = image(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
@@ -316,13 +262,11 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	return true;
 }
 
-void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats, int64_t from) {
+void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats) {
 	const uint32_t bytes = static_cast<uint32_t>(floats > 0 ? floats : 0) * 4;
-	// what is the same as the GPU has is not sent again
-	uint32_t start = buffer.rid.is_valid() ? static_cast<uint32_t>(std::clamp<int64_t>(from, 0, floats > 0 ? floats : 0)) * 4 : 0;
 	if (bytes > buffer.capacity || !buffer.rid.is_valid()) {
-		// larger than it was: a new buffer, with room to grow, and the uniform sets that name it made again; what
-		// the GPU has already is copied across on the GPU, and the room beyond is cleared there
+		// larger than it was: a new buffer, with room to grow, and the uniform sets that name it made again; the
+		// room beyond what it is given is cleared
 		for (godot::RID &set : uniforms_) {
 			if (set.is_valid()) {
 				rd_->free_rid(set);
@@ -334,11 +278,7 @@ void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats, int6
 			capacity *= 2;
 		}
 		const godot::RID made = rd_->storage_buffer_create(capacity);
-		start = std::min(start, buffer.capacity);
 		if (buffer.rid.is_valid()) {
-			if (start > 0) {
-				rd_->buffer_copy(buffer.rid, made, 0, 0, start);
-			}
 			rd_->free_rid(buffer.rid);
 		}
 		if (capacity > bytes) {
@@ -347,14 +287,11 @@ void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats, int6
 		buffer.rid = made;
 		buffer.capacity = capacity;
 	}
-	if (std::getenv("LAB_UPLOADS") != nullptr && bytes > start) { // (a measurement: what is sent to the GPU, and when)
-		std::printf("frame %d: buffer %d sends %u of %u bytes\n", frame_, static_cast<int>(&buffer - &scene_), bytes - start, bytes);
-	}
-	if (bytes > start) {
+	if (bytes > 0) {
 		godot::PackedByteArray given;
-		given.resize(bytes - start);
-		std::memcpy(given.ptrw(), reinterpret_cast<const uint8_t *>(data) + start, bytes - start);
-		rd_->buffer_update(buffer.rid, start, bytes - start, given);
+		given.resize(bytes);
+		std::memcpy(given.ptrw(), data, bytes);
+		rd_->buffer_update(buffer.rid, 0, bytes, given);
 	}
 }
 
@@ -369,19 +306,9 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		hold(lights_, optics.lights, 4 * optics.light_count);
 		uploaded_ = optics.revision;
 	}
-	if (!have_scene_ || optics.maps_revision != uploaded_maps_) {
-		// one revision on: only what changed (GAME_SPEC §12.3: maps lie where they were first put)
-		const bool next = have_scene_ && optics.maps_revision == uploaded_maps_ + 1;
-		hold(maps_, optics.maps, 4 * optics.map_count, next ? 4 * optics.maps_changed_from : 0);
-		uploaded_maps_ = optics.maps_revision;
-	}
 	if (!have_scene_ || optics.wall_revision != uploaded_wall_) {
 		hold(wall_, optics.wall, 4 * optics.wall_count);
 		uploaded_wall_ = optics.wall_revision;
-	}
-	if (!have_scene_ || optics.stacks_revision != uploaded_stacks_) {
-		hold(stacks_, optics.stacks, 4 * optics.stack_count);
-		uploaded_stacks_ = optics.stacks_revision;
 	}
 	if (!have_scene_ || optics.shapes_revision != uploaded_shapes_) {
 		hold(shapes_, optics.shapes, 4 * optics.shape_count);
@@ -393,8 +320,8 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		zero.fill(0);
 		asked_ = rd_->storage_buffer_create(24, zero);
 	}
-	// where the chain's pass runs
-	chain_.assign(optics.chain, optics.chain + (optics.chain != nullptr && optics.chain_count > 0 ? 4 * optics.chain_count : 0));
+	// where the passes over the pixels read by their own rays run
+	rectangles_.assign(optics.rectangles, optics.rectangles + (optics.rectangles != nullptr && optics.rectangle_count > 0 ? 4 * optics.rectangle_count : 0));
 	if (!corners_.is_valid()) {
 		// the lattice of pixel corners (Stage 33), over the whole screen: nothing traced at first
 		const uint32_t bytes = 1921u * 1081u * 4u * 16u;
@@ -408,11 +335,11 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		constexpr int64_t MOST = int64_t(384) * 1024 * 1024 / (CG_OPTICS_KEPT_VECS * 16); // records
 		kept_base_.clear();
 		int64_t records = 0;
-		for (size_t i = 0; i + 3 < chain_.size(); i += 4) {
-			const int64_t left = std::max(0, static_cast<int32_t>(chain_[i])), top = std::max(0, static_cast<int32_t>(chain_[i + 1]));
-			const int64_t right = std::min(WIDTH, static_cast<int32_t>(chain_[i + 2])), bottom = std::min(HEIGHT, static_cast<int32_t>(chain_[i + 3]));
+		for (size_t i = 0; i + 3 < rectangles_.size(); i += 4) {
+			const int64_t left = std::max(0, static_cast<int32_t>(rectangles_[i])), top = std::max(0, static_cast<int32_t>(rectangles_[i + 1]));
+			const int64_t right = std::min(WIDTH, static_cast<int32_t>(rectangles_[i + 2])), bottom = std::min(HEIGHT, static_cast<int32_t>(rectangles_[i + 3]));
 			const int64_t area = std::max<int64_t>(right - left, 0) * std::max<int64_t>(bottom - top, 0);
-			const bool room = passes_ > 2 && records + area <= MOST;
+			const bool room = records + area <= MOST;
 			kept_base_.push_back(room ? static_cast<int32_t>(records) : -1);
 			records += room ? area : 0;
 		}
@@ -432,7 +359,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 			rd_->buffer_clear(kept_, 0, bytes);
 		}
 	}
-	if (!uniforms_[0].is_valid() || !uniforms_[1].is_valid() || (passes_ > 2 && (!uniforms_[2].is_valid() || !uniforms_[3].is_valid()))) {
+	if (!uniforms_[0].is_valid() || !uniforms_[1].is_valid() || !uniforms_[2].is_valid()) {
 		godot::TypedArray<godot::RDUniform> uniforms;
 		const auto add = [&](RenderingDevice::UniformType type, int binding, const godot::RID &id) {
 			godot::Ref<godot::RDUniform> u;
@@ -451,13 +378,11 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		}
 		add(RenderingDevice::UNIFORM_TYPE_IMAGE, 8, shown_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 9, asked_);
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 10, maps_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 11, wall_.rid);
-		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 12, stacks_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 13, shapes_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 14, corners_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 15, kept_);
-		for (int pass = 0; pass < passes_; ++pass) {
+		for (int pass = 0; pass < PASSES; ++pass) {
 			if (uniforms_[pass].is_valid()) {
 				rd_->free_rid(uniforms_[pass]);
 			}
@@ -495,13 +420,6 @@ void OpticsCompute::run(double budget, bool again) {
 		int32_t pad;
 	};
 	stamp_ = stamp_ % 16000000 + 1; // (a float holds it exactly; 0 is no run)
-	if (std::getenv("LAB_UPLOADS") != nullptr) { // (a measurement: the rectangles the passes run over)
-		std::printf("frame %d: rectangles", frame_);
-		for (size_t i = 0; i + 3 < chain_.size(); i += 4) {
-			std::printf(" %.0f,%.0f-%.0f,%.0f", chain_[i], chain_[i + 1], chain_[i + 2], chain_[i + 3]);
-		}
-		std::printf("\n");
-	}
 	const int64_t list = rd_->compute_list_begin();
 	const auto pass_over = [&](int pass, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t kept = -1) {
 		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, 0 };
@@ -514,29 +432,22 @@ void OpticsCompute::run(double budget, bool again) {
 		// groups two pixels wide and thirty-two tall: a vessel's pixels in one column are read in the same
 		// number of parts, and pixels run together wait for the one with most to do (measured: 8 x 8, 1.72 ms
 		// a pass where every history starts again; 2 x 32, 1.56)
-		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + group_[pass][0] - 1) / group_[pass][0]), static_cast<uint32_t>((bottom - top + group_[pass][1] - 1) / group_[pass][1]), 1);
+		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + GROUP_X - 1) / GROUP_X), static_cast<uint32_t>((bottom - top + GROUP_Y - 1) / GROUP_Y), 1);
 	};
-	// the whole screen, with one vessel's reading alone: what a pass costs follows what its shader could do, so
-	// the other readings are not in it (measured: with them, a settled pass 0.58 ms and a restarting one 2.15;
+	// the whole screen, with nothing of the reading by a pixel's own rays: what a pass costs follows what its shader
+	// could do (measured, Stage 21: with the other readings in it, a settled pass 0.58 ms and a restarting one 2.15;
 	// without, nothing and 1.56)
-	pass_over(0, 0, 0, WIDTH, HEIGHT);
-	// then the other readings (a prism's map of many pieces; a stack), over the rectangles where pixels can need them
-	for (size_t i = 0; i + 3 < chain_.size(); i += 4) {
-		const int32_t left = std::max(0, static_cast<int32_t>(chain_[i])), top = std::max(0, static_cast<int32_t>(chain_[i + 1]));
-		const int32_t right = std::min(WIDTH, static_cast<int32_t>(chain_[i + 2])), bottom = std::min(HEIGHT, static_cast<int32_t>(chain_[i + 3]));
+	pass_over(SCREEN, 0, 0, WIDTH, HEIGHT);
+	// then, over each rectangle where pixels can be read by their own rays: the corners of its pixels first (Stage
+	// 33), then the pixels (Stage 29)
+	for (size_t i = 0; i + 3 < rectangles_.size(); i += 4) {
+		const int32_t left = std::max(0, static_cast<int32_t>(rectangles_[i])), top = std::max(0, static_cast<int32_t>(rectangles_[i + 1]));
+		const int32_t right = std::min(WIDTH, static_cast<int32_t>(rectangles_[i + 2])), bottom = std::min(HEIGHT, static_cast<int32_t>(rectangles_[i + 3]));
 		if (right > left && bottom > top) {
-			if (passes_ <= 2) {
-				rd_->compute_list_add_barrier(list);
-				pass_over(1, left, top, right, bottom);
-			}
-			// (where a pixel's rays are traced, the chain's pass has no pixel: every pixel a vessel bends is the beams')
-			if (passes_ > 2) {
-				// the corners of its pixels first (Stage 33), then the pixels read by their own rays (Stage 29)
-				rd_->compute_list_add_barrier(list);
-				pass_over(3, left, top, right + 1, bottom + 1);
-				rd_->compute_list_add_barrier(list);
-				pass_over(2, left, top, right, bottom, i / 4 < kept_base_.size() ? kept_base_[i / 4] : -1);
-			}
+			rd_->compute_list_add_barrier(list);
+			pass_over(CORNERS, left, top, right + 1, bottom + 1);
+			rd_->compute_list_add_barrier(list);
+			pass_over(BEAMS, left, top, right, bottom, i / 4 < kept_base_.size() ? kept_base_[i / 4] : -1);
 		}
 	}
 	rd_->compute_list_end();

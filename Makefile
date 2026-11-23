@@ -61,15 +61,14 @@ native:
 	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/chem.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
 
-# The Godot project reads only res://: the data is copied in (gitignored). And the
-# refraction maps of every vessel made as glassware, made before the game runs
-# (GAME_SPEC §12.3, Stage 24: chem_tool maps; a table already made is kept).
-godot-data: core
+# The Godot project reads only res://: the data is copied in (gitignored), and the
+# per-pixel source. (maps/ is left as it is: the refraction maps a build before
+# Stage 35 made there; nothing makes or reads them now.)
+godot-data:
 	mkdir -p $(GODOT_PROJECT)/data
 	rsync -a --delete --exclude maps/ data/ $(GODOT_PROJECT)/data/
 	mkdir -p $(GODOT_PROJECT)/shaders
 	cp native/game/shader/optics_pixel.glsl $(GODOT_PROJECT)/shaders/optics_pixel.glslinc
-	$(BUILD_CORE)/chem_tool maps $(GODOT_PROJECT)/data/maps data/benches/*.json
 
 # Debug extension (CHEM_ASSERT aborts). Writes the same library name, so it
 # replaces the RelWithDebInfo one until the next `make native`.
@@ -136,19 +135,17 @@ prism-shots: native
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 
-# The game. A pixel's own rays are traced in the pass (LAB_BEAM=5: the reading that draws a vessel at any turn,
-# Stage 29 on); `make run LAB_BEAM=0` plays it with the maps' reading. Not exported: the tests keep their own.
-LAB_BEAM ?= 5
+# The game.
 run:
-	LAB_BEAM=$(LAB_BEAM) $(GODOT) --path $(GODOT_PROJECT)
+	$(GODOT) --path $(GODOT_PROJECT)
 
 # The optical pass's cost on the GPU (Stage 33): a play (data/plays/cost.json: settled, a vessel carried, poured
 # by hand, stirred), each mark's frames timed, then frames where every pixel's history starts again. Headless
-# first (the play alone), then a window, time-limited. `make pass-cost LAB_BEAM=0`: the maps' reading.
+# first (the play alone), then a window, time-limited.
 PLAY ?= data/plays/cost.json
 pass-cost: native
-	LAB_BEAM=$(LAB_BEAM) perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
-	LAB_BEAM=$(LAB_BEAM) perl -e 'alarm 150; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
+	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
+	perl -e 'alarm 150; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
 
 # Five screenshots of the host through the demo -> build/screenshots; at each,
 # the GPU's optical pass against the reference renderer (O4), and the GPU's

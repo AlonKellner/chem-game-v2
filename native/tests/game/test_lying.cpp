@@ -22,16 +22,6 @@ using lab::SubstanceView;
 
 namespace {
 
-// a pixel's own rays as an average over time, while these tests run (the maps know no turn)
-struct Reading {
-	int before;
-	Reading() :
-			before(lab::optics_reading(5)) {}
-	~Reading() { lab::optics_reading(before); }
-	Reading(const Reading &) = delete;
-	Reading &operator=(const Reading &) = delete;
-};
-
 constexpr double PI = 3.14159265358979323846;
 constexpr float X = 300, Y = 200, W = 90;
 
@@ -161,7 +151,6 @@ TEST_CASE("O9: turned, with liquid, sediment and a vortex in it, the pass's rays
 }
 
 TEST_CASE("O7: a uniform wall stays as it is through a vessel at any turn, across its liquid's surface and its vortex (Stage 30)") {
-	const Reading reading;
 	const ItemView item = beaker(110.0, 0.0);
 	for (const double angle : { 0.5, 1.1 }) {
 		CAPTURE(angle);
@@ -175,7 +164,6 @@ TEST_CASE("O7: a uniform wall stays as it is through a vessel at any turn, acros
 }
 
 TEST_CASE("lying: a ray into the sediment ends there, and shows it; beside the pile it goes on through the liquid (Stage 30)") {
-	const Reading reading;
 	const ItemView item = beaker(100.0, 6.0);
 	const lab::glass::Vessel *g = lab::glass::find("beaker", 250);
 	const OpticsScene scene = scene_of(item, 0.0);
@@ -203,7 +191,6 @@ TEST_CASE("lying: a ray into the sediment ends there, and shows it; beside the p
 }
 
 TEST_CASE("lying: what a turned vessel shows is what the truth's rays bring: in its liquid, across its surface, in its pile and its vortex (Stage 30)") {
-	const Reading reading;
 	const lab::glass::Vessel *g = lab::glass::find("beaker", 250);
 	double worst = 0.0, sum = 0.0;
 	int compared = 0;

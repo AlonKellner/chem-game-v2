@@ -23,17 +23,11 @@ std::string read(const std::string &relative) {
 	return out.str();
 }
 
-struct Traced {
-	Traced() { lab::optics_reading(5); }
-	~Traced() { lab::optics_reading(0); }
-};
-
 constexpr int STEP = 8;
 
 } // namespace
 
 TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12), the picture is the picture with none kept, and far fewer rays are followed (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -111,7 +105,6 @@ TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12),
 }
 
 TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame after frame, a beam kept through a change of what lies in a vessel is the beam traced afresh (O12), and the rays that pass the change by are not followed again (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -123,6 +116,7 @@ TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame
 	std::string mark;
 	int in_mark = 0, frames = 0, changes = 0;
 	int64_t rays = 0, rays_everywhere = 0, held_most = 0;
+	double again = 0.0, again_everywhere = 0.0; // pixels whose beams a frame traced again
 	for (int i = 0; i < 6000 && play.next(*ui); ++i) {
 		ui->frame(1.0 / 120.0);
 		in_mark = play.mark() == mark ? in_mark + 1 : 0;
@@ -159,6 +153,8 @@ TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame
 		++frames;
 		rays += kept.rays();
 		rays_everywhere += everywhere.rays();
+		again += kept.beams_traced();
+		again_everywhere += everywhere.beams_traced();
 		int64_t held = 0;
 		const std::string o12 = lab::check_O12(kept, scene, STEP / 2, STEP / 2, 1920, 1080, STEP, &held);
 		CHECK_MESSAGE(o12 == "", "frame " << i << " (" << mark << " " << in_mark << "): " << o12);
@@ -171,11 +167,13 @@ TEST_CASE("kept: while a bottle pours into a flask and a flask is stirred, frame
 	CHECK(changes > 30); // (what lies in the vessels did change, frame after frame)
 	CHECK(held_most > 300);
 	MESSAGE(frames << " frames, " << changes << " of them with a change of what lies in a vessel: " << rays << " rays followed, " << rays_everywhere << " were every such change everywhere");
-	CHECK(rays * 10 < rays_everywhere * 8); // (a quarter fewer: the rest are the stream, the corrections, and the rays that do pass the change)
+	MESSAGE("beams traced again: " << again << ", " << again_everywhere << " were every such change everywhere");
+	// (the beams, not all the rays: a pixel whose rays have moved finds its corrections again once it rests, as
+	// many in either case, Stage 35)
+	CHECK(again * 10.0 < again_everywhere * 7.0);
 }
 
 TEST_CASE("kept: O12 fires where a beam is kept for what has since moved; a change of colour alone traces no beam (Stage 33)") {
-	const Traced traced;
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);

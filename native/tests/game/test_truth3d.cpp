@@ -189,15 +189,21 @@ TEST_CASE("frames: a shaped vessel moved up or down settles on its new picture, 
 		frames.frame(after);
 	}
 	double worst = 0.0;
+	int looked = 0;
 	for (int y = y0 + 25; y < y0 + static_cast<int>(h); y += 4 * sparse()) {
 		for (int x = x0 + 20; x < x0 + 70; x += 4) {
+			if (lab::optics_cover(after, x, y) <= 0.0) {
+				continue; // beside its neck and its cone (Stage 26: a flask is its shape, not its rectangle): the wall, which the frames do not hold
+			}
 			double shown[3], truth[3];
 			frames.colour(after, x, y, shown);
 			lab::optics_truth(after, x, y, truth);
 			worst = std::max(worst, eye(shown, truth));
+			++looked;
 		}
 	}
-	MESSAGE("a flask moved up 40 px: settled, worst " << worst << " on the eye metric from its new picture");
+	MESSAGE("a flask moved up 40 px: settled, " << looked << " pixels, worst " << worst << " on the eye metric from its new picture");
+	CHECK(looked > 250 / sparse());
 	CHECK(worst < lab::EYE_VISIBLE);
 }
 

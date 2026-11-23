@@ -155,12 +155,11 @@ TEST_CASE("wall pixels: through a held vessel every part behind it is seen: two 
 	for (int k = 1; k <= 10; ++k) {
 		ui->pointer(bx + (0.5f * (tx + ax) - bx) * static_cast<float>(k) / 10.0f, by + (ty + 50.0f - by) * static_cast<float>(k) / 10.0f, true);
 	}
-	(void)ui->optics(); // its maps, for the hand's layer, made the first time
+	(void)ui->optics(); // the scene with the flask in the hand's layer, made the first time
 	ui->pointer(0.5f * (tx + ax) + 0.4f, ty + 50.3f, true);
 	const auto t0 = std::chrono::steady_clock::now();
 	const lab::OpticsScene &scene = ui->optics();
-	MESSAGE("compose, carried over six parts: " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() << " ms, stacks "
-											   << scene.stacks.size() * 4 / 1024 << " KB");
+	MESSAGE("compose, carried over six parts: " << std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count() << " ms");
 	for (const char *part : { "timer1", "monitor1", "alarm1", "notice1", "writer1", "controller1" }) {
 		float x = 0, y = 0;
 		REQUIRE(ui->locate(std::string("item:") + part, x, y));
