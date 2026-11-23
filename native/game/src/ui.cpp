@@ -257,6 +257,7 @@ struct Ui::Impl {
 	bool making_carried = false; // and in hand, no button held (Stage 34): the next press puts it down
 	int wiring = -1; // the part whose port a wire is drawn from
 	int sensing = -1; // the part whose sensing port a sensing line is drawn from (§13.3, Stage 26)
+	int draining = -1; // the condenser whose outlet a line is drawn from, to the vessel it runs into (Stage 34)
 	std::vector<std::string> rung, chain; // the alarms that rang, and the parts that set them off, until the clock plays
 	std::string opened; // the circuit whose inside is shown (§13.3), "" for none
 	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
@@ -1147,7 +1148,8 @@ struct Ui::Impl {
 			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {
 				act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
 			} else if (t.condenser) {
-				act({ { "do", "under" }, { "item", v.id }, { "of", t.id } });
+				// (Stage 34: an outlet is led to a vessel by a line drawn from it, as a part's port is wired)
+				message = "drag a line from \"" + t.id + "\"'s outlet to the vessel it runs into";
 			} else {
 				// a vessel over a vessel: ask what to pour or tip
 				panel = true;
@@ -1438,6 +1440,20 @@ struct Ui::Impl {
 		return true;
 	}
 	// a monitor's sensing port, at its foot (§13.3, Stage 26)
+	// A condenser's outlet (Stage 34): its end, where the line to the vessel it runs into is drawn from and where
+	// it is taken hold of, as a part's port is.
+	bool outlet_rect(int index, Rect &r) const {
+		if (index < 0 || index >= static_cast<int>(view.items.size()) || !view.items[static_cast<size_t>(index)].condenser || index == drag) {
+			return false;
+		}
+		const std::string &place = view.items[static_cast<size_t>(index)].place;
+		if (place != "bench" && place != "on") {
+			return false; // (in the cabinet its outlet leads nowhere)
+		}
+		const Rect body = rect(index);
+		r = Rect{ body.x + body.w + 26 - 7, body.y + body.h + 14 - 7, 14, 14 };
+		return true;
+	}
 	bool sense_rect(int index, Rect &r) const {
 		if (!is_part(index) || !senses(view.items[static_cast<size_t>(index)].part.kind) || !visible(index)) {
 			return false;
@@ -2333,6 +2349,17 @@ struct Ui::Impl {
 		}
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			Rect r;
+			if (outlet_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
+				if (guided() && !asks_drag_from("outlet:" + id(i))) {
+					not_now();
+					return true;
+				}
+				draining = i;
+				return true;
+			}
+		}
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			Rect r;
 			if (port_rect(i, r) && Rect{ r.x - 4, r.y - 4, r.w + 8, r.h + 8 }.has(x, y)) {
 				if (guided() && !asks_drag_from("port:" + id(i))) {
 					not_now();
@@ -2411,6 +2438,30 @@ struct Ui::Impl {
 		if (act({ { "do", "sense" }, { "part", id(source) }, { "item", t.id } })) {
 			edit_part(item_index(id(source)));
 		}
+	}
+	// An outlet's line let go (Stage 34): on a vessel, the outlet runs into it (taken first from what it ran into);
+	// on nothing, the line comes off.
+	void drop_draining(int source, float x, float y) {
+		const int target = item_at(x, y, source, true), now = view.items[static_cast<size_t>(source)].drains_to;
+		const std::string outlet_of = id(source);
+		if (target < 0) {
+			if (now >= 0 && !guided()) {
+				act({ { "do", "undrain" }, { "of", outlet_of } });
+			}
+			return;
+		}
+		if (!guided_signal_drop("outlet:" + outlet_of, target, x, y)) {
+			return;
+		}
+		const ItemView t = view.items[static_cast<size_t>(target)];
+		if (t.kind != "vessel" || t.condenser) {
+			message = "an outlet runs into a vessel";
+			return;
+		}
+		if (now == target || (now >= 0 && !act({ { "do", "undrain" }, { "of", outlet_of } }))) {
+			return;
+		}
+		act({ { "do", "under" }, { "item", t.id }, { "of", outlet_of } });
 	}
 	// a wire let go: into a part's input, or a rig onto a control
 	void drop_wiring(int source, float x, float y) {
@@ -2843,6 +2894,9 @@ struct Ui::Impl {
 		if (sensing >= 0 && sense_rect(sensing, port)) {
 			line(port.cx(), port.cy(), px, py, SENSE, 2);
 		}
+		if (draining >= 0 && outlet_rect(draining, port)) {
+			line(port.cx(), port.cy(), px, py, rgba(70, 120, 190, 230), 2);
+		}
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
 			if (view.items[static_cast<size_t>(i)].part.watching && sensing_ends(i, x0, y0, x1, y1)) {
@@ -3106,6 +3160,10 @@ struct Ui::Impl {
 		if (after("sense:", rest)) {
 			Rect r;
 			return sense_rect(item_index(std::string(rest)), r) && found(r);
+		}
+		if (after("outlet:", rest)) {
+			Rect r;
+			return outlet_rect(item_index(std::string(rest)), r) && found(r);
 		}
 		if (what.substr(0, 5) == "part:") {
 			for (const auto &[name, r] : part_buttons()) {
@@ -4265,6 +4323,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			const int from = m.sensing;
 			m.sensing = -1;
 			m.drop_sensing(from, x, y);
+		} else if (m.draining >= 0) {
+			const int from = m.draining;
+			m.draining = -1;
+			m.drop_draining(from, x, y);
 		} else if (m.drag >= 0 && m.carrying) {
 			// carried (Stage 27): let go, a pour by hand turns back upright (Stage 31: the frames bring it back, and
 			// it ends in the hand); a click puts it down, on its own place too

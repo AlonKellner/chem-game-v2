@@ -3589,6 +3589,18 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		upper.drains_to = thing;
 		return true;
 	}
+	if (what == "undrain") {
+		// what an outlet runs into is taken away from it (Stage 34): the line comes off, the vessels stay
+		int of = -1;
+		if (!item(c, "of", Kind::Vessel, of, why)) {
+			return false;
+		}
+		if (items[static_cast<size_t>(of)].drains_to < 0) {
+			why = "\"" + items[static_cast<size_t>(of)].id + "\" has nothing under its outlet";
+			return false;
+		}
+		return take_off_drain(static_cast<size_t>(of), why);
+	}
 	if (what == "goal" || what == "ungoal") {
 		int slot = 0;
 		if (!slot_of(c, slot, why)) {

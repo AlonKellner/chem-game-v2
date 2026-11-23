@@ -1500,6 +1500,7 @@ input to them, and a session script is a list of them.
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
+| `undrain` | `of` | takes away what a vessel's outlet runs into (Stage 34): the drain comes off, both vessels stay where they are |
 | `submit` | `item`, `slot` | hands it in, to a slot of the outbox (§13.5); it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench. With no `slot`, the first free slot without a goal, else the first free one; refused when the slot holds something, or none is free |
 | `goal` | `slot`, `name`, `terms` | the player's own goal for a slot (§13.5), made or changed; refused on a game goal's slot |
 | `ungoal` | `slot` | takes the player's goal off a slot; refused for a game goal |
@@ -1640,7 +1641,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | carry an item to the cabinet | `stow` |
 | carry a burner onto a vessel | `heat` |
 | carry a balloon, a condenser or a stopper onto a vessel | `attach` (a stopper: into its neck, sealing it; Stage 28) |
-| carry a vessel onto a condenser | `under` |
+| drag a line from the end of a condenser's outlet to a vessel (Stage 34: as a wire from a part's port; to another vessel, it is moved; let go on nothing, it comes off) | `under`, after `undrain` where it ran into another; `undrain` |
 | carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
 | carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
 | carry an item onto a slot of the outbox | `submit` to that slot (§13.5) |

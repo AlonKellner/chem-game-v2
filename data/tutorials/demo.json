@@ -141,10 +141,10 @@
 		},
 		{
 			"title": "Under the outlet",
-			"text": "Pick up the beaker, then click the condenser: it stands under its outlet.",
+			"text": "Press the end of the condenser's outlet and drag to the beaker: the outlet runs into it.",
 			"why": "What condenses runs down into the beaker.",
 			"checks": [{"text": "the condenser drains into the beaker", "when": {"item": "condenser", "drains_to": "beaker"}}],
-			"play": [{"drag": ["item:beaker", "item:condenser"]}]
+			"play": [{"drag": ["outlet:condenser", "item:beaker"]}]
 		},
 		{
 			"title": "A monitor",

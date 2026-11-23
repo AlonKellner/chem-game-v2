@@ -562,7 +562,11 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	// ---- stage 3: water and crystals
 	p.drag("item:condenser", "item:flask");
 	p.drag("item:beaker", "square:19,12");
+	// (Stage 34) a vessel carried onto the condenser is not led under its outlet: the line is drawn from the outlet
 	p.drag("item:beaker", "item:condenser");
+	CHECK(p.item("condenser").drains_to < 0);
+	CHECK(p.ui->message().find("outlet") != std::string::npos);
+	p.drag("outlet:condenser", "item:beaker");
 	CHECK(p.item("condenser").drains_to >= 0);
 	p.click("valve:burner@1");
 	p.watch([&] { return p.grams("flask", "water") < 10.0; }, 1800);
@@ -661,6 +665,49 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	CHECK(p.item("beaker").place == "cabinet");
 	CHECK(p.item("jar").place == "bench");
 	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a condenser's outlet is led to a vessel by a line drawn from it, to another by another, and let go on nothing the line comes off (Stage 34)") {
+	Player p;
+	p.click("pause");
+	p.drag("item:flask", "square:11,12");
+	p.drag("item:condenser", "item:flask");
+	p.drag("item:beaker", "square:19,12");
+	p.drag("item:acid", "square:16,12");
+	REQUIRE(p.item("condenser").on >= 0);
+	float ox = 0, oy = 0, bx = 0, by = 0;
+	p.at("outlet:condenser", ox, oy);
+	p.at("item:beaker", bx, by);
+	// taken by its outlet and drawn to the beaker: a line follows the pointer, and the outlet runs into the beaker
+	p.ui->pointer(ox, oy, true);
+	p.ui->pointer(0.5f * (ox + bx), 0.5f * (oy + by), true);
+	well_formed(p.ui->draw());
+	p.ui->pointer(bx, by, true);
+	p.ui->pointer(bx, by, false);
+	const auto into = [&] {
+		const int to = p.item("condenser").drains_to;
+		return to >= 0 ? p.ui->lab().view().items[static_cast<size_t>(to)].id : std::string();
+	};
+	CHECK(into() == "beaker");
+	CHECK(p.item("beaker").place == "bench"); // (the beaker stays where it stands)
+	// drawn again to the bottle: taken from the beaker, led to the bottle
+	p.drag("outlet:condenser", "item:acid");
+	CHECK(into() == "acid");
+	// to a thing that is no vessel: said, and as it was
+	p.drag("item:burner", "square:4,12");
+	p.drag("outlet:condenser", "item:burner");
+	CHECK(into() == "acid");
+	CHECK(p.ui->message().find("vessel") != std::string::npos);
+	// let go on nothing: the line comes off
+	p.drag("outlet:condenser", "square:2,3");
+	CHECK(into().empty());
+	// a session's command takes it off too, and says when there is nothing to take
+	p.drag("outlet:condenser", "item:beaker");
+	std::string why;
+	CHECK(p.ui->lab().command(R"({"do": "undrain", "of": "condenser"})", why));
+	CHECK(into().empty());
+	CHECK_FALSE(p.ui->lab().command(R"({"do": "undrain", "of": "condenser"})", why));
+	CHECK(why.find("nothing under its outlet") != std::string::npos);
 }
 
 TEST_CASE("ui: a part is taken from the drawer with a press and put down with another, as an item from the cabinet is; Escape puts it back (Stage 34)") {
