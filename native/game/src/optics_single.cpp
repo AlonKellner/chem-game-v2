@@ -120,7 +120,6 @@ inline vec4 shape_vec(int i) {
 #endif
 #define float f32
 #define OPTICS_SHAPES_ALONE 1
-#define OPTICS_TRACE 1
 // the GPU's tolerances (native/hosts/godot/optics_compute.cpp: TRACE_HEAD)
 #define TRACE_NEAR 2.0e-5
 #define TRACE_NUDGE 1.0e-4

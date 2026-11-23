@@ -854,7 +854,6 @@ vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth,
 
 #endif // OPTICS_SHAPES_ALONE
 
-#ifdef OPTICS_TRACE
 
 // ---- rays traced live (GAME_SPEC §12.3, Stage 29)
 //
@@ -2011,12 +2010,11 @@ struct Beam {
 // A pixel's beam is its middle ray and its four corners', and a corner is four pixels'. So the corners' rays are
 // traced once, in a pass of their own over the lattice of pixel corners before the pixels' (corner_step), each
 // kept until the shape key at its place moves; a pixel's beam is then nine rays, not twenty-one. The includer's
-// corner_vec and corner_put (where OPTICS_LATTICE is defined) hold four vec4s a corner, corner (X, Y) at
+// corner_vec and corner_put hold four vec4s a corner, corner (X, Y) at
 // 4 (1921 Y + X): where its ray lands at the four nodes (x, then y); its route at the first node in two halves,
 // the second with 65536 added where the ray goes that way at every node, and the shape key it was traced
 // for. Its rays are those of the whole spectrum's nodes and of a grating's first way: a beam of another
 // stretch or way traces its own corners, as any beam does where there is no lattice.
-#ifdef OPTICS_LATTICE
 OPTICS_THREAD bool lattice_on = false;
 
 int corner_at(vec2 corner) {
@@ -2074,7 +2072,6 @@ void corner_step(vec2 corner) {
 	corner_put(at + 2, vec4(float(route & 65535u), float(route >> 16) + (same ? 65536.0 : 0.0), key.x, key.y));
 	corner_put(at + 3, vec4(span.x, span.y, content.x, 0.0));
 }
-#endif
 
 // a body the beam's middle ray met, as it lies where the ray crossed its layer (met: the body, how it was met,
 // where)
@@ -2197,10 +2194,8 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 	b.span = vec2(1.0e30, -1.0e30);
 	uint route = 0u;
 	int points = kind == 2 ? 1 : 5;
-#ifdef OPTICS_LATTICE
 	// (a whole pixel's beam over the whole spectrum, in a grating's first way: its corners are the lattice's)
 	bool latticed = lattice_on && kind == 0 && g_lo <= 0.0 && g_hi >= 1.0 && ray_way == 0 && p1.x - p0.x == 1.0 && p2.y - p0.y == 1.0;
-#endif
 #ifdef OPTICS_STUB_TRACE
 	points = 0;
 	b.cx = vec4(p0.x + p1.x + p2.x + p3.x + pc.x + fa.x + fb.x + g_lo + g_hi + float(only));
@@ -2246,7 +2241,6 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 				p = j == 0 ? vec2(0.25 * (c0.x + c1.x + c2.x + c3.x), 0.25 * (c0.y + c1.y + c2.y + c3.y)) : (j == 1 ? c0 : (j == 2 ? c1 : (j == 3 ? c2 : c3)));
 			}
 			RayMet m;
-#ifdef OPTICS_LATTICE
 			if (latticed && j > 0) {
 				int at = corner_at(p);
 				vec4 kept_route = corner_vec(at + 2);
@@ -2260,9 +2254,6 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 			} else {
 				m = ray_met(p, place_nm(mix(g_lo, g_hi, float(w) / 3.0)));
 			}
-#else
-			m = ray_met(p, place_nm(mix(g_lo, g_hi, float(w) / 3.0)));
-#endif
 			b.span = vec2(min(b.span.x, m.span.x), max(b.span.y, m.span.y));
 			bool head = j == 0 && (kind == 2 || w == 0);
 			if (head) {
@@ -3144,7 +3135,7 @@ struct BeamPair {
 // A pixel's beams are what its rays do, and its rays go the same way until what it looks through moves: its
 // shape key (path_of: the shape tags of the bodies over it and of those its rays can reach behind them). So a
 // beam is traced when that key moves, not whenever the pixel reads: it is written to the pixel's record (the
-// includer's kept_vec and kept_put, where OPTICS_KEPT is defined; `kept_slot`, where the pixel's record
+// includer's kept_vec and kept_put; `kept_slot`, where the pixel's record
 // begins, or -1 for a pixel with none), and read from there while the key is the same. A change of colour
 // alone (a reaction, a haze) traces nothing; a pixel not yet settled traces only its corrections. The record:
 // [0] the shape key it was traced for (x, y), the pixel (z), how many beams it holds (w; 0: none yet; -1:
@@ -3157,7 +3148,6 @@ struct BeamPair {
 // moves its pixels cost a beam each; once it is still they take their corrections as ever, and settle to the
 // same picture. A pixel whose colour alone changes has its beam kept and takes its corrections at once: what
 // changes colour for minutes (a reaction) must not go without them.
-#ifdef OPTICS_KEPT
 OPTICS_THREAD int kept_slot = -1;
 OPTICS_THREAD bool beam_deferred = false; // the pixel's beam was traced now, and its first corrections wait
 OPTICS_THREAD bool beam_held = false; // the pixel's beam was kept, and its fixed estimate alone was read
@@ -3256,7 +3246,6 @@ Beam kept_beam(int at) {
 	b.span = vec2(passed.x, passed.y);
 	return b;
 }
-#endif
 
 BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float u_last, bool single, int rays, bool fixed_too) {
 	BeamPair pair;
@@ -3274,7 +3263,6 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 	int way = 0;
 	int ways = 1;
 	bool finished = false;
-#ifdef OPTICS_KEPT
 	// its beams as they were kept, while what it looks through is where it was; else traced, and kept
 	bool keeping = kept_slot >= 0 && !single && u_first <= 0.0 && u_last >= 1.0;
 	float pixel = floor(q.x) + 1920.0 * floor(q.y);
@@ -3358,7 +3346,6 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 			n = 0;
 		}
 	}
-#endif
 	for (int trial = 0; trial < 256; trial++) {
 		if (finished) {
 			break;
@@ -3399,7 +3386,6 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 				b.bend = 0.0;
 			}
 			float share_of_way = ways > 1 ? way_share(way) : 1.0;
-#ifdef OPTICS_KEPT
 			if (keeping) {
 				if (kept < KEPT_MOST) {
 					keep_beam(kept_slot + 1 + kept * KEPT_BEAM, b, g_lo, g_hi, share_of_way, q.content.x);
@@ -3408,7 +3394,6 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 					fits = false;
 				}
 			}
-#endif
 			if (n > 0) {
 				sum = sum + beam_read(b, g_lo, g_hi, g_lo, g_hi, n, offset, cuts, u_first, u_last, single, 0.0, q, rays) * share_of_way;
 			}
@@ -3434,11 +3419,9 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 		}
 	}
 	ray_way = 0;
-#ifdef OPTICS_KEPT
 	if (keeping) {
 		kept_put(kept_slot, vec4(q.shape.x, q.shape.y, pixel, fits ? float(kept) : -1.0));
 	}
-#endif
 	pair.moving = sum;
 	return pair;
 }
@@ -3447,13 +3430,6 @@ vec4 beam_mean(Path q, int n, float offset, Cuts cuts, float u_first, float u_la
 	vec3 light = beam_means(q, n, offset, cuts, u_first, u_last, single, rays, false).moving;
 	return vec4(light.x, light.y, light.z, 1.0);
 }
-
-
-#endif // OPTICS_SHAPES_ALONE
-#endif // OPTICS_TRACE
-
-#ifndef OPTICS_SHAPES_ALONE
-
 
 // whether the pixel is read by its own rays (Stage 29): through anything that bends its view
 bool beamed(Path q) {
@@ -3842,17 +3818,13 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	// content keeps changing has them every frame).
 	bool both = false;
 	vec3 early = vec3(0.0);
-#ifdef OPTICS_TRACE
 	corrections_taken = 0;
-#endif
 	float seed = fract(0.7548776662 * p.x + 0.56984029 * p.y);
 	float moving_point = fract(seed + 0.6180339887 * float(frame % 8192));
 	bool kept_whole = false;
-#ifdef OPTICS_KEPT
 	beam_deferred = false;
 	beam_held = false;
 	beam_one_way = false;
-#endif
 	if (s.key.x != q.key.x || s.key.y != q.key.y || s.key.z != q.key.z || s.key.w != q.key.w) {
 		vec3 now = vec3(0.0);
 #if defined(OPTICS_BEAM_PASS)
@@ -3876,14 +3848,12 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		spent = spent + float(PROXY_POINTS + cuts.count);
 		bool keep = false;
 		bool plain = false;
-#ifdef OPTICS_KEPT
 		// Its rays go as they went, all of them one way, and what its batches found beyond the estimate is less
 		// than an eye sees (Stage 33): a pixel that is its estimate. A change of colour leaves it so: what it
 		// found is carried on in proportion to the light there is now, and it keeps its points. So a liquid that
 		// changes colour at every step (a reaction) starts again only the histories of pixels whose rays part (a
 		// rim shows more of the wall as its liquid darkens: that is found again), not every pixel of its vessel.
 		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && eye(lab_of(prox), lab_of(prox + d)) < 1.0;
-#endif
 		if (s.key.z == q.key.z && points > 0.0) {
 			float moved = eye(lab_of(prox), lab_of(now));
 			drift = drift + moved;
@@ -3897,7 +3867,6 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 				points = points * pow(0.5, moved);
 				frames = min(frames, SETTLED_FRAMES);
 			}
-#ifdef OPTICS_KEPT
 			if (keep && beam_deferred) {
 				// Its rays have moved (Stage 35): what its batches found was by other rays. It is kept to show
 				// while the thing moves (beside a plain wall it is nearly what the new rays will find), with the
@@ -3906,7 +3875,6 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 				// had found before it, 140 from the truth, and asked for nothing.)
 				points = min(points, 1.0e9);
 			}
-#endif
 		}
 		if (!keep) {
 			d = vec3(0.0);
@@ -3929,7 +3897,6 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	// less than a point) the chance of one; under a budget, a batch is drawn with the chance that keeps the
 	// points spent to the points the budget allows
 	float ask = want < 1.0 ? want * float(LEAST_BATCH) : max(want, float(LEAST_BATCH));
-#ifdef OPTICS_KEPT
 	// A pixel whose rays all go one way is nearly its estimate already; one whose rays part (a rim, a surface) is
 	// not what it should be until its corrections come. Under a budget those have theirs first (Stage 33): the
 	// first asks an eighth of what it wants, until its batches show a need. With asks to spare each has what it asks.
@@ -3943,7 +3910,6 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 			ask = ask * 0.125;
 		}
 	}
-#endif
 	float scaled = ask * scale;
 	float chance = hash01(int(p.x), int(p.y), frame);
 	// Whether it has a batch this frame, where the budget gives fewer than one to each: by its tile of the screen
@@ -3954,37 +3920,29 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	float turn = hash01(int(p.x) / BATCH_TILE_X + 7919, int(p.y) / BATCH_TILE_Y + 104729, frame);
 	int n = scaled >= float(LEAST_BATCH) ? int(floor(scaled + chance)) : (turn < scaled / float(LEAST_BATCH) ? LEAST_BATCH : 0);
 	want = ask;
-#ifdef OPTICS_KEPT
 	kept_whole = beam_held;
-#endif
 	if (both && kept_whole) {
 		both = false; // its beam was kept: the batch, if it needs one, is read from the record
 	}
 	if (both) {
 		// (a pixel whose rays have just moved is its beam's reading alone this frame: beam_means, Stage 33)
 		n = LEAST_BATCH;
-#ifdef OPTICS_KEPT
 		if (beam_deferred) {
 			n = 0;
 		}
-#endif
 	}
 	if (n > 0) {
 		vec3 est = early;
 		if (!both) {
-#ifdef OPTICS_TRACE
 			corrections_taken = 0;
-#endif
 			est = batch(q, n, moving_point, cuts);
 		}
 		spent = spent + float(n + cuts.count);
 		// what the batch adds to the history: its bands, or, read by its own rays, the corrections it took
 		float took = float(n);
-#ifdef OPTICS_TRACE
 		if (corrections_taken > 0) {
 			took = float(corrections_taken);
 		}
-#endif
 		if (points >= 1.0) {
 			float dev = eye(lab_of(prox + d), lab_of(est));
 			float trial = dev * dev / (1.0 / took + 1.0 / points);

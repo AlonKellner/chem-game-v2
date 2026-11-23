@@ -246,7 +246,6 @@ inline void kept_put(int i, const vec4 &v) {
 	to[2] = v.z;
 	to[3] = v.w;
 }
-#define OPTICS_KEPT 1
 // the lattice of pixel corners (Stage 33): each corner's record, by its row and its place across; a corner
 // never traced reads as nothing, as the GPU's cleared buffer does
 using Lattice = std::vector<std::unordered_map<int, std::array<double, 16>>>;
@@ -269,11 +268,7 @@ inline void corner_put(int i, const vec4 &v) {
 	to[2] = v.z;
 	to[3] = v.w;
 }
-#define OPTICS_LATTICE 1
 #define float double
-#define OPTICS_RAYS 1
-#define OPTICS_TRACE 1
-#define OPTICS_NODES 1
 // (how small a part is made before it is cut, by the environment while it is being settled: LAB_BEAM_DEEPEST,
 // LAB_BEAM_CUT_AT, LAB_BEAM_STRAIGHT)
 #define BEAM_DEEPEST beam_setting(0)

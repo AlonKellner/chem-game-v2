@@ -59,11 +59,6 @@ void kept_put(int i, vec4 v) { kept_buffer.v[i] = v; }
 
 // A pixel's own rays are traced in the pass (Stage 29): the tracer's tolerances in single precision
 const char *const TRACE_HEAD = R"(
-#define OPTICS_RAYS 1
-#define OPTICS_TRACE 1
-#define OPTICS_NODES 1
-#define OPTICS_LATTICE 1
-#define OPTICS_KEPT 1
 #define TRACE_NEAR 2.0e-5
 #define TRACE_NUDGE 1.0e-4
 #define TRACE_SLACK 2.0e-5
@@ -163,21 +158,17 @@ void main() {
 #else
 	float scale = budget_scale(float(ask_buffer.total[params.parity]), params.budget, params.pixels);
 #endif
-#if defined(OPTICS_BEAM_PASS) && defined(OPTICS_LATTICE)
+#ifdef OPTICS_BEAM_PASS
 	lattice_on = true; // its corners were traced by the pass before this one
-#endif
-#if defined(OPTICS_BEAM_PASS) && defined(OPTICS_KEPT)
 	// its record among its rectangle's (Stage 33), if the rectangle has room in the pool
 	kept_slot = params.kept < 0 ? -1 : (params.kept + (at.y - params.top) * (params.right - params.left) + (at.x - params.left)) * (1 + KEPT_MOST * KEPT_BEAM);
 #endif
 	s = step_pixel(q, s, p, params.frame, scale);
 #ifdef OPTICS_BEAM_PASS
 	s.aux.w = float(params.stamp);
-#ifdef OPTICS_KEPT
 	if (beam_deferred) {
 		atomicAdd(ask_buffer.total[5 - params.parity], 1u);
 	}
-#endif
 #endif
 	imageStore(hist_image, at, s.hist);
 	imageStore(key_image, at, s.key);
