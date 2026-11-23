@@ -11,9 +11,9 @@ GAME_SPEC §12.2, §12.3, §18, §19, §20.
 | Phase | Topic | Status |
 |---|---|---|
 | 35.1 | The traced reading is the default (the reference, the host); the tests hold under it; the tests of the maps' own machinery are retired | Done |
-| 35.2 | The maps, knots, stacks and the store deleted from the lab layer, the C API, the hosts and the tools | |
-| 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | |
-| 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | |
+| 35.2 | The maps, knots, stacks and the store deleted from the lab layer, the C API, the hosts and the tools | Done |
+| 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | Done |
+| 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | The code done; GAME_SPEC and CLAUDE.md to rewrite |
 | 35.5 | The whole per-pixel source in single precision on the CPU, beside the reference (the GPU's pixels off the truth, TDD 33 *Open*) | |
 | 35.6 | `make gates`; the user's sign-off | |
 
@@ -150,6 +150,52 @@ the tests). Mended in the per-pixel source:
 - A beam's nodes that go different ways: `beam_weights` reads between two neighbouring nodes that go one
   way, and the nearest node where they part (`beam_piece_one_way`), in place of a cubic through nodes of
   other routes.
+
+## What 35.2 to 35.4 did (2026-11-23)
+
+In the inventory's order: the guards first (the reference reads a pixel by its own rays whatever `LAB_BEAM`
+says; a scene is ready without a stacks' directory; the traced branches are left out by a macro of the host's
+pass over the screen, `OPTICS_SCREEN_PASS`, where they were let in by the follower's); then the per-pixel
+source; the macros every compilation defines folded away (`OPTICS_TRACE`, `OPTICS_RAYS`, `OPTICS_NODES`,
+`OPTICS_KEPT`, `OPTICS_LATTICE`: the reference's binary came out the same, byte for byte); the lab layer, the C
+API, the hosts and the tools; the switches and hooks. The per-pixel source: 5,609 lines, then 3,930.
+
+The picture did not change. Held before and after each step: every assertion's values of twenty of the lab's
+test files (`lab_tests -s`), the play's series frame by frame (`LAB_RAY_STATS=series`), the prism's probe, all the
+same to the last digit; `chem_tool study frames` the same; the GPU's O4 counts the same (0, 5, 9 and 4 pixels
+visibly off the truth in the four pictures); the pass's cost, back to back three times each: 8.31 to 8.37 ms
+before and 8.32 to 8.40 after for the five marks (the display's rate), a restarting frame 17.8 to 18.1 ms before
+and 17.7 to 17.8 after.
+
+Where it departs from the inventory:
+
+- **The signature of what stands behind a vessel is kept** (the scene's `SET` z, and in a pixel's key). The
+  inventory had it go with the stacks, as read by `path_of` alone; but it is the one thing in a pixel's key
+  that says a body its bent rays reach, and which does not stand behind the pixel itself, has changed colour
+  (the shape and content tags say where such a body stands and what lies in it, not what it is made of).
+  Without it such a pixel of a held vessel would have nothing to do while the flask behind it reacts.
+  What went from the key: the pixel's place across its vessel, the vessel's axis, and how much of the pixel is
+  under the liquid and within the vessel (`raxis`, `rwet`, `rin`; `rfloor` and `rdown` were nothing once no map
+  was made). The play's series did not move by a pixel.
+- **A body's vec4 6 (the map's) is unused, not gone**: the bodies are laid out as they were, and every reader
+  (the source, the reference, the tests) names the others by number.
+- **`OPTICS_WORK_HOOK` and `optics_work` are kept**: the first case of `test_cost.cpp` prints a ray's work at
+  each mark wherever `LAB_RAY_STATS` is set, `series` among them.
+- `body_down` went with the rows it served; `OpticsPassage::most` with the counts that read it.
+- `engines/godot/data/maps/` is left where it is (generated, not tracked); nothing makes or reads it, and
+  `godot-data` still keeps it out of what it deletes (`--exclude maps/`), until it is removed by hand.
+- `chem_tool study frames` keeps its own switches (`CHEM_FRAMES_NARROW`, `_ONLY`, `_WHERE`).
+
+Found on the way, and left as it is:
+
+- `step_pixel`: "the history weighs one point" (above) is written `points = min(points, 1.0e9)`, which does
+  nothing (a history holds 4,096 points at most). The picture is as the gates and the play have it; whether
+  the line was meant as `1.0` is to be settled with the prism's slit.
+- `through_layer` (the per-pixel source) is read by nothing, and was not before.
+- `make screenshots`: its play gives up "waiting for the solution to boil down", headless and in a window,
+  before and after this work; the four pictures before that are taken and compared.
+- Comments and names of tests still speak of maps and the chain where they say what a test was written for
+  (`test_footprint`, `test_layers`, `test_truth3d`, `test_refraction`).
 
 ## Open
 
