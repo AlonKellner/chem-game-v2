@@ -941,7 +941,6 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		scene.lines = std::move(lines);
 		++scene.revision;
 	}
-	optics_stacks(scene); // the rays of what is held, followed through what stands behind it (the maps' reading)
 	optics_shapes(scene);
 }
 
@@ -951,8 +950,6 @@ void optics_maps(OpticsScene &scene) {
 	}
 	place_maps(scene, scene.table, scene.rows, static_cast<int>(scene.table[0]));
 	++scene.revision;
-	scene.stack_keys.clear(); // followed for other maps
-	optics_stacks(scene);
 	optics_shapes(scene);
 }
 

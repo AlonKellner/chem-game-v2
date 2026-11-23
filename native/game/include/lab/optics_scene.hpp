@@ -242,8 +242,6 @@ void optics_maps(OpticsScene &scene);
 // The wall's table and what is drawn on it, from the room (optics_compose calls it; O7 makes a wall of
 // its own with it).
 void optics_wall(OpticsScene &scene, const OpticsRoom &room);
-// The stacks, from the scene's own table, spectra and maps (optics_compose and optics_maps call it).
-void optics_stacks(OpticsScene &scene);
 // The shapes, from the scene's own table (optics_compose and optics_maps call it).
 void optics_shapes(OpticsScene &scene);
 
@@ -258,9 +256,6 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm);
 // And the wavelength at a share of the light's energy.
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t);
 double optics_share_nm(const OpticsScene &scene, double u);
-// optics_through by the general reading alone (GAME_SPEC §12.3): a pixel through a map of one piece is
-// drawn by a reading made for it, and the two must agree.
-double optics_through_general(const OpticsScene &scene, int x, int y, double nm);
 double optics_cover(const OpticsScene &scene, int x, int y);
 // Where the pixel's view meets the wall at a wavelength (GAME_SPEC §12.3: bent by the vessel it looks
 // through, if any), on the screen; what the vessel's surfaces let through; the chord of liquid crossed (cm).

@@ -150,37 +150,11 @@ inline vec4 light_vec(int i) {
 	const float *v = &current->lights[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
-inline vec4 map_vec(int i) {
-	if (static_cast<size_t>(i) * 4 + 3 >= current->maps.size()) {
-		// beyond what the maps hold, nothing: as the GPU's buffer is, cleared past its data (where a pixel's rays
-		// are traced, Stage 29, no map is made, and a pixel's path reads none of what it looks for there)
-		return vec4(0.0);
-	}
-	const float *v = &current->maps[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
-inline vec4 stack_vec(int i) {
-	const float *v = &current->stacks[static_cast<size_t>(i) * 4];
-	return vec4(v[0], v[1], v[2], v[3]);
-}
 inline vec4 wall_vec(int i) {
 	const float *v = &current->wall[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
 
-// The reading is one (Stage 35): a pixel through anything that bends its view is read by its own rays, as an
-// average over time.
-struct Path;
-double ray_band(Path q, double u0, double u1, double t, double one_nm);
-bool rays_on() {
-	return true;
-}
-bool rays_nodes() {
-	return true;
-}
-bool rays_mean() {
-	return true;
-}
 inline vec4 shape_vec(int i) {
 	const double *v = &current->shapes_exact[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -188,38 +162,6 @@ inline vec4 shape_vec(int i) {
 inline vec3 operator*(double s, const vec3 &a) {
 	return vec3(a.x * s, a.y * s, a.z * s);
 }
-struct OracleRay {
-	double x = 0.0, y = 0.0; // where it lands on the wall
-	double a = 1.0, b = 0.0; // what the bodies on its way do to the wall's light at its wavelength: a times it plus b
-	uint64_t route = 0;
-};
-struct BeamKey {
-	double x, y, nm;
-	bool operator==(const BeamKey &o) const { return x == o.x && y == o.y && nm == o.nm; }
-};
-struct BeamHash {
-	size_t operator()(const BeamKey &k) const {
-		uint64_t h = 1469598103934665603ull;
-		for (const double v : { k.x, k.y, k.nm }) {
-			uint64_t bits;
-			std::memcpy(&bits, &v, sizeof bits);
-			h = (h ^ bits) * 1099511628211ull;
-			h ^= h >> 29;
-		}
-		return static_cast<size_t>(h);
-	}
-};
-thread_local std::unordered_map<BeamKey, OracleRay, BeamHash> beam_rays;
-std::atomic<int64_t> beam_traced{ 0 }, beam_bands{ 0 };
-struct BeamReport {
-	~BeamReport() {
-		if (beam_bands.load() > 0 && std::getenv("LAB_BEAM_COUNT") != nullptr) {
-			std::printf("beams: %lld bands, %lld rays traced, %.2f a band\n", static_cast<long long>(beam_bands.load()), static_cast<long long>(beam_traced.load()),
-					static_cast<double>(beam_traced.load()) / static_cast<double>(beam_bands.load()));
-		}
-	}
-} beam_report;
-
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wkeyword-macro"
@@ -330,7 +272,6 @@ inline void corner_put(int i, const vec4 &v) {
 #define OPTICS_LATTICE 1
 #define float double
 #define OPTICS_RAYS 1
-#define OPTICS_RAYS_ORACLE 1
 #define OPTICS_TRACE 1
 #define OPTICS_NODES 1
 // (how small a part is made before it is cut, by the environment while it is being settled: LAB_BEAM_DEEPEST,
@@ -365,8 +306,6 @@ thread_local std::vector<double> beam_stretches;
 #define TRACE_SLACK 1.0e-9
 #define TRACE_FINE 1.0e-13
 #define TRACE_ROUGH 1.0e-9
-#define OPTICS_CHAIN 1 // the reference reads every pixel: a prism's and a stack's too (the host compiles those apart)
-#define OPTICS_FOLLOW 1 // and follows the rays of a stack, which runs on the CPU alone
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)
@@ -387,7 +326,6 @@ static_assert(1 + KEPT_MOST * KEPT_BEAM == optics_layout::KEPT_VECS, "a pixel's 
 struct Use {
 	explicit Use(const OpticsScene &s) {
 		current = &s;
-		beam_rays.clear();
 	}
 	~Use() { current = nullptr; }
 	Use(const Use &) = delete;
@@ -411,14 +349,6 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm) {
 	}
 	const shader::Use use(scene);
 	return shader::band_light(shader::at(x, y), 0.0, 0.0, 0.0, nm);
-}
-
-double optics_through_general(const OpticsScene &scene, int x, int y, double nm) {
-	if (!shader::ready(scene)) {
-		return 0.0;
-	}
-	const shader::Use use(scene);
-	return shader::general_band(shader::at(x, y), 0.0, 0.0, 0.0, nm);
 }
 
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t) {
@@ -469,34 +399,19 @@ OpticsBend optics_bend(const OpticsScene &scene, int x, int y, double nm) {
 	if (q.refractor < 0) {
 		return OpticsBend{ q.x, 1.0, 0.0 };
 	}
-	if (shader::rays_nodes() && shader::beamed(q)) {
-		// its own ray, traced (Stage 29)
-		const shader::RayMet m = shader::ray_met(shader::vec2(q.x, q.y), nm);
-		OpticsBend traced{ m.x, 1.0, 0.0 };
-		bool first = true;
-		for (int k = 0; k < m.count; ++k) {
-			const shader::vec4 slot = shader::met_slot(m, k);
-			if (slot.y > 0.5) {
-				traced.pass *= slot.z;
-				traced.chord = first ? slot.w : traced.chord;
-				first = false;
-			}
-		}
-		return traced;
-	}
-	// the pixel's central ray, followed through every layer; in the row its centre is in
-	const shader::Stack stack = shader::stack_of(q, true);
-	const shader::Ray r = shader::chain_at(stack, q.y, q.x, nm);
-	OpticsBend out{ r.x, 1.0, 0.0 };
+	// its own ray, traced (Stage 29)
+	const shader::RayMet m = shader::ray_met(shader::vec2(q.x, q.y), nm);
+	OpticsBend traced{ m.x, 1.0, 0.0 };
 	bool first = true;
-	for (int j = 0; j < stack.count; ++j) {
-		if (r.bent[j]) {
-			out.pass *= r.pass[j];
-			out.chord = first ? r.chord[j] : out.chord; // its chord in the nearest body that bent it
+	for (int k = 0; k < m.count; ++k) {
+		const shader::vec4 slot = shader::met_slot(m, k);
+		if (slot.y > 0.5) {
+			traced.pass *= slot.z;
+			traced.chord = first ? slot.w : traced.chord; // its chord in the nearest body that bent it
 			first = false;
 		}
 	}
-	return out;
+	return traced;
 }
 
 // The reference's heavy loops (thousands of exact rays a pixel) are dealt among the machine's threads: `count`
@@ -545,8 +460,8 @@ struct Line {
 
 // What one body does to a ray, traced exactly in three dimensions by the general tracer (vector Snell,
 // Fresnel at every crossing, turned back where it cannot pass), through the body's own surfaces: its
-// glassware's whole profile, or a glass cylinder, or the prism's faces. Independent of the renderer's maps,
-// footprints and chain: it takes a ray from anywhere.
+// glassware's whole profile, or a glass cylinder, or the prism's faces. Independent of the renderer's beams
+// and footprints: it takes a ray from anywhere.
 struct Exact {
 	bool met = false; // the ray met the body
 	double entry = 0.0; // how far along the line, from where it was given (pixels)
@@ -570,9 +485,8 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const double *block = shader::current->shapes_exact.size() >= static_cast<size_t>(body + 1) * optics_layout::SHAPE_BLOCK * 4 ? &shader::current->shapes_exact[static_cast<size_t>(body) * optics_layout::SHAPE_BLOCK * 4] : nullptr;
 	const shader::vec4 held = scene_vec(at);
 	const double rect_x = block ? block[8] : held.x, rect_y = block ? block[9] : held.y, rect_w = block ? block[10] : held.z, rect_h = block ? block[11] : held.w;
-	// (what lies in it is traced where the pixels are read by their own rays; where they are read by the maps,
-	// its liquid's surface is a row of the screen, as the maps have it, until the maps go)
-	const bool turned = block != nullptr && block[3] != 0.0, lies = block != nullptr && block[2] > 0.5 && shader::rays_nodes();
+	// (what lies in it is traced where the scene gives it: its liquid's surface, its sediment)
+	const bool turned = block != nullptr && block[3] != 0.0, lies = block != nullptr && block[2] > 0.5;
 	const bool liquid = core == 0 || lies;
 	const bool prism = form.x > 1.5;
 	const double cm = form.y, rr = rect_w * 0.5 * cm, rt = scene_vec(at + 5).x;
@@ -847,7 +761,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			double chord = m.chord;
 			if (m.bent) {
 				l.haze = shader::haze_along(m.body, m.chord); // along its own path through the liquid (Stage 26)
-				if (shader::rays_nodes() && shader::lies_in(m.body)) {
+				if (shader::lies_in(m.body)) {
 					// what lies in it is traced (Stage 30): its sediment is where the ray ended, lit by the room
 					// through the liquid there and back
 					l.solid = m.solid ? 1.0 : 0.0;
@@ -866,199 +780,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	return total;
 }
 
-// ---- Stage 29, spike A: a band as a beam of rays
-
-// one ray of the beam: traced exactly through every body, and what they do to the wall's light at its wavelength
-shader::OracleRay oracle_ray(double x, double y, double nm) {
-	const shader::BeamKey key{ x, y, nm };
-	if (const auto found = shader::beam_rays.find(key); found != shader::beam_rays.end()) {
-		return found->second;
-	}
-	shader::beam_traced.fetch_add(1, std::memory_order_relaxed);
-	const ExactRay ray = exact_ray(x, y, nm);
-	const double room = shader::scene_vec(2).y;
-	shader::OracleRay out;
-	uint64_t h = 1469598103934665603ull;
-	const auto mixed = [&h](uint64_t v) { h = (h ^ v) * 1099511628211ull; };
-	double a = 1.0, b = 0.0;
-	for (const Met &m : ray.met) {
-		shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), 1.0e-3, 1.0e-3);
-		if (m.bent) {
-			l.haze = shader::haze_along(m.body, m.chord);
-		}
-		const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
-		const double per_cm = shader::liquid_at(m.body, start, nm);
-		const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
-				per_cm * (m.bent ? m.chord : l.depth_cm), m.pass, room);
-		b += a * does.y;
-		a *= does.x;
-		if (m.bent || l.cover > 0.5) {
-			mixed(static_cast<uint64_t>(m.body) * 8 + (m.bent ? 1 : 0) + (l.solid > 0.5 ? 2 : 0) + (l.depth_cm > 0.0 ? 4 : 0));
-			mixed(m.route);
-			mixed(static_cast<uint64_t>(m.core));
-		}
-	}
-	out.x = ray.x;
-	out.y = ray.y;
-	out.a = a;
-	out.b = b;
-	out.route = h;
-	if (shader::beam_rays.size() > (1u << 18)) {
-		shader::beam_rays.clear();
-	}
-	shader::beam_rays.emplace(key, out);
-	return out;
-}
-
-int oracle_profile(double y) {
-	return shader::wall_profile(y);
-}
-
-// A corner of the beam: its ray at the band's two ends (where the wall is swept) and at its point (what gets through)
-struct OracleCorner {
-	shader::OracleRay r0, r1, rp;
-	bool one() const { return r0.route == r1.route && r0.route == rp.route; }
-};
-OracleCorner oracle_corner(double x, double y, double nm0, double nm1, double nm) {
-	return OracleCorner{ oracle_ray(x, y, nm0), oracle_ray(x, y, nm1), oracle_ray(x, y, nm) };
-}
-// a corner alone: its own ray's light, the wall along its own sweep
-double oracle_alone(const OracleCorner &c) {
-	return c.rp.a * shader::wall_span(oracle_profile(c.rp.y), c.r0.x, c.r1.x) + c.rp.b;
-}
-
-const double ORACLE_STRAIGHT = 0.005; // pixels: how far a part's middle ray may land from half way between its ends' (the maps' tolerance is 0.02 on a quarter of a pixel)
-// whether the ray in the middle goes the way of the two beside it and lands half way between them
-bool oracle_straight(const shader::OracleRay &m, const shader::OracleRay &a, const shader::OracleRay &b) {
-	return m.route == a.route && std::fabs(m.x - 0.5 * (a.x + b.x)) <= ORACLE_STRAIGHT && std::fabs(m.y - 0.5 * (a.y + b.y)) <= ORACLE_STRAIGHT;
-}
-
-const int ORACLE_DEPTH = 2; // a part whose rays go different ways is halved this many times, then cut where they part
-
-// two corners that go one way: the wall over the footprint between them as the band is crossed
-double oracle_foot(const OracleCorner &a, const OracleCorner &b) {
-	const double wall = shader::swept_wall(oracle_profile(0.5 * (a.rp.y + b.rp.y)), a.r0.x, b.r0.x, a.r1.x, b.r1.x);
-	return 0.5 * (a.rp.a + b.rp.a) * wall + 0.5 * (a.rp.b + b.rp.b);
-}
-bool oracle_together(const OracleCorner &a, const OracleCorner &b) {
-	return a.one() && b.one() && a.rp.route == b.rp.route;
-}
-
-// Between two places of the pixel whose rays go different ways: where they part is found by halving, and each
-// side is its own footprint, from its end's ray to the last ray that goes its way.
-double oracle_edge(double ax, double ay, double bx, double by, double nm0, double nm1, double nm) {
-	const OracleCorner a = oracle_corner(ax, ay, nm0, nm1, nm), b = oracle_corner(bx, by, nm0, nm1, nm);
-	if (oracle_together(a, b)) {
-		return oracle_foot(a, b);
-	}
-	double lo = 0.0, hi = 1.0;
-	for (int it = 0; it < 10; ++it) {
-		const double mid = 0.5 * (lo + hi);
-		if (oracle_ray(shader::mix(ax, bx, mid), shader::mix(ay, by, mid), nm).route == a.rp.route) {
-			lo = mid;
-		} else {
-			hi = mid;
-		}
-	}
-	const OracleCorner a_edge = oracle_corner(shader::mix(ax, bx, lo), shader::mix(ay, by, lo), nm0, nm1, nm), b_edge = oracle_corner(shader::mix(ax, bx, hi), shader::mix(ay, by, hi), nm0, nm1, nm);
-	const double share = 0.5 * (lo + hi);
-	return share * (oracle_together(a, a_edge) ? oracle_foot(a, a_edge) : oracle_alone(a)) + (1.0 - share) * (oracle_together(b, b_edge) ? oracle_foot(b_edge, b) : oracle_alone(b));
-}
-
-// two corners across, at one height: the wall over the footprint between them as the band is crossed
-double oracle_across(double x0, double x1, double y, double nm0, double nm1, double nm, int depth) {
-	const OracleCorner l = oracle_corner(x0, y, nm0, nm1, nm), r = oracle_corner(x1, y, nm0, nm1, nm);
-	const double xm = 0.5 * (x0 + x1);
-	const bool together = oracle_together(l, r);
-	if (together && (depth >= ORACLE_DEPTH || oracle_straight(oracle_ray(xm, y, nm), l.rp, r.rp))) {
-		return oracle_foot(l, r);
-	}
-	if (depth >= ORACLE_DEPTH) {
-		return oracle_edge(x0, y, x1, y, nm0, nm1, nm);
-	}
-	return 0.5 * (oracle_across(x0, xm, y, nm0, nm1, nm, depth + 1) + oracle_across(xm, x1, y, nm0, nm1, nm, depth + 1));
-}
-
-// four corners: the wall over the footprint, row by row of the wall it crosses
-double oracle_patch(double x0, double x1, double y0, double y1, double nm0, double nm1, double nm, int depth) {
-	const OracleCorner tl = oracle_corner(x0, y0, nm0, nm1, nm), tr = oracle_corner(x1, y0, nm0, nm1, nm), bl = oracle_corner(x0, y1, nm0, nm1, nm), br = oracle_corner(x1, y1, nm0, nm1, nm);
-	const double xm = 0.5 * (x0 + x1), ym = 0.5 * (y0 + y1);
-	const bool together = oracle_together(tl, tr) && oracle_together(bl, br) && tl.rp.route == bl.rp.route;
-	if (together && (depth >= ORACLE_DEPTH || (oracle_straight(oracle_ray(xm, ym, nm), tl.rp, br.rp) && oracle_straight(oracle_ray(xm, ym, nm), tr.rp, bl.rp)))) {
-		const double top = 0.5 * (tl.rp.y + tr.rp.y), bottom = 0.5 * (bl.rp.y + br.rp.y);
-		const int rows = shader::clamp(static_cast<int>(std::ceil(std::fabs(bottom - top) - 1.0e-9)), 1, 8);
-		double wall = 0.0;
-		for (int i = 0; i < rows; ++i) {
-			const double f = (i + 0.5) / rows;
-			wall += shader::swept_wall(oracle_profile(shader::mix(top, bottom, f)), shader::mix(tl.r0.x, bl.r0.x, f), shader::mix(tr.r0.x, br.r0.x, f), shader::mix(tl.r1.x, bl.r1.x, f),
-					shader::mix(tr.r1.x, br.r1.x, f));
-		}
-		return 0.25 * (tl.rp.a + tr.rp.a + bl.rp.a + br.rp.a) * wall / rows + 0.25 * (tl.rp.b + tr.rp.b + bl.rp.b + br.rp.b);
-	}
-	if (depth >= ORACLE_DEPTH) {
-		// where its rays part across, its top and its bottom edges each cut there; where they part up and down, its sides
-		if (!oracle_together(tl, tr) || !oracle_together(bl, br)) {
-			return 0.5 * (oracle_edge(x0, y0, x1, y0, nm0, nm1, nm) + oracle_edge(x0, y1, x1, y1, nm0, nm1, nm));
-		}
-		return 0.5 * (oracle_edge(x0, y0, x0, y1, nm0, nm1, nm) + oracle_edge(x1, y0, x1, y1, nm0, nm1, nm));
-	}
-	return 0.25 * (oracle_patch(x0, xm, y0, ym, nm0, nm1, nm, depth + 1) + oracle_patch(xm, x1, y0, ym, nm0, nm1, nm, depth + 1) + oracle_patch(x0, xm, ym, y1, nm0, nm1, nm, depth + 1) +
-						  oracle_patch(xm, x1, ym, y1, nm0, nm1, nm, depth + 1));
-}
-
 } // namespace
-
-namespace shader {
-
-// one straight step of a band's wavelengths, read by the mode's beam
-double oracle_step(const Path &q, double nm0, double nm1, double nm, double sx, double sy) {
-	const double half = 0.5 * q.size;
-	switch (5) {
-		case 1: {
-			const OracleRay r = oracle_ray(q.x - half + sx * q.size, q.y - half + sy * q.size, nm);
-			return r.a * wall_span(oracle_profile(r.y), r.x, r.x) + r.b;
-		}
-		case 2:
-			return oracle_across(q.x - half, q.x + half, q.y - half + sy * q.size, nm0, nm1, nm, 0);
-		default:
-			return oracle_patch(q.x - half, q.x + half, q.y - half, q.y + half, nm0, nm1, nm, 0);
-	}
-}
-
-// A band from nm0 to nm1 in straight steps (as the maps' reading sweeps a band, GAME_SPEC §12.3): where the
-// pixel's middle ray, half way through, does not land half way between its ends' (0.02 of a pixel, the maps'
-// sweep tolerance) or goes another way, the band is halved, sixteen steps at most; each step weighed by its
-// share of the light's energy, its point t of the way through it. x: the light times its weight; y: the weight.
-vec2 oracle_steps(const Path &q, double nm0, double nm1, double nm, double t, double sx, double sy, int depth) {
-	if (depth < 4 && nm1 != nm0) {
-		const double mid = 0.5 * (nm0 + nm1);
-		const OracleRay a = oracle_ray(q.x, q.y, nm0), b = oracle_ray(q.x, q.y, nm1), m = oracle_ray(q.x, q.y, mid);
-		if (m.route != a.route || m.route != b.route || std::fabs(m.x - 0.5 * (a.x + b.x)) > 0.02 || std::fabs(m.y - 0.5 * (a.y + b.y)) > 0.02) {
-			const vec2 first = oracle_steps(q, nm0, mid, mix(nm0, mid, t), t, sx, sy, depth + 1), second = oracle_steps(q, mid, nm1, mix(mid, nm1, t), t, sx, sy, depth + 1);
-			return vec2(first.x + second.x, first.y + second.y);
-		}
-	}
-	const double weight = depth == 0 ? 1.0 : max(share_of(max(nm0, nm1)) - share_of(min(nm0, nm1)), 0.0);
-	return vec2(weight * oracle_step(q, nm0, nm1, nm, sx, sy), weight);
-}
-
-double ray_band(Path q, double u0, double u1, double t, double one_nm) {
-	beam_bands.fetch_add(1, std::memory_order_relaxed);
-	const double nm0 = nm_at(u0, one_nm), nm1 = nm_at(u1, one_nm), nm = nm_at(mix(u0, u1, t), one_nm);
-	// where in the pixel a band's rays are taken, where they are not its corners: a place of its own for each
-	// band, moving with the frame's point (none for one wavelength alone: the pixel's middle)
-	const double sx = one_nm > 0.0 ? 0.5 : fract(u0 * 64.0 * 0.7548776662466927 + t), sy = one_nm > 0.0 ? 0.5 : fract(u0 * 64.0 * 0.5698402909980532 + 0.6180339887498949 * t);
-	const vec2 sum = oracle_steps(q, nm0, nm1, nm, t, sx, sy, 0);
-	return sum.y > 0.0 ? sum.x / sum.y : 0.0;
-}
-
-} // namespace shader
-
-// how many rays the beams traced and how many bands they read, since the last asking (spike A's measure)
-void optics_beam_counts(int64_t &rays, int64_t &bands) {
-	rays = shader::beam_traced.exchange(0);
-	bands = shader::beam_bands.exchange(0);
-}
 
 double optics_area_through(const OpticsScene &scene, int x, int y, double nm, int grid) {
 	if (!shader::ready(scene) || grid < 1) {
@@ -1327,7 +1049,7 @@ int optics_reading(int) {
 }
 
 bool optics_traced() {
-	return shader::rays_nodes();
+	return true;
 }
 
 OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double nm) {
@@ -1907,7 +1629,7 @@ void OpticsFrames::frame(const OpticsScene &scene) {
 	// The corners first (Stage 33; as the GPU's pass over the lattice before the pixels'): those of every pixel
 	// of the sample, a row of corners a piece (a corner's record is its row's)
 	std::vector<int> corner_rows;
-	if (sharing_ && shader::rays_mean()) {
+	if (sharing_) {
 		for (int row = 0; row < h_; ++row) {
 			for (int below = 0; below < 2; ++below) {
 				const int y = y_ + row * step_ + below;
@@ -1958,8 +1680,8 @@ void OpticsFrames::frame(const OpticsScene &scene) {
 			shader::kept_slot = 0;
 			shader::kept_read = keeping_;
 			shader::lattice_now = &corners_->rows;
-			shader::lattice_on = sharing_ && shader::rays_mean();
-			const bool by_rays = shader::rays_mean() && shader::beamed(q);
+			shader::lattice_on = sharing_;
+			const bool by_rays = shader::beamed(q);
 			st = shader::step_pixel(q, st, shader::vec2(x + 0.5, y + 0.5), frame_, by_rays ? ray_scale : scale);
 			shader::lattice_on = false;
 			shader::kept_slot = -1;
@@ -2257,275 +1979,6 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 		}
 	}
 	return "";
-}
-
-// ---- the stacks (GAME_SPEC §12.3, Stage 21): the rays of a vessel with bodies behind it, followed here
-
-namespace {
-
-uint64_t fnv_of(const void *data, size_t size, uint64_t h = 1469598103934665603ull) {
-	const auto *bytes = static_cast<const unsigned char *>(data);
-	for (size_t i = 0; i < size; ++i) {
-		h = (h ^ bytes[i]) * 1099511628211ull;
-	}
-	return h;
-}
-
-} // namespace
-
-void optics_stacks(OpticsScene &scene) {
-	namespace L = optics_layout;
-	const size_t directory = static_cast<size_t>(L::MAX_BODIES) * 4;
-	std::vector<float> out(directory, 0.0f);
-	for (int b = 0; b < L::MAX_BODIES; ++b) {
-		out[static_cast<size_t>(b) * 4] = -1.0f;
-	}
-	scene.stack_keys.resize(static_cast<size_t>(L::MAX_BODIES), 0);
-	scene.stack_blocks.resize(static_cast<size_t>(L::MAX_BODIES));
-	std::vector<bool> has(static_cast<size_t>(L::MAX_BODIES), false);
-	if (scene.table.size() == static_cast<size_t>(L::SIZE_VECS) * 4 && scene.rows.size() % static_cast<size_t>(L::ROWS_PER_SET * L::ROW) == 0 && !scene.wall.empty()) {
-		if (scene.stacks.size() < directory) {
-			scene.stacks = out; // following a ray reads no stack; the pixel's path may look for one
-		}
-		const shader::Use use(scene);
-		const int count = static_cast<int>(scene.table[0]);
-		const auto vec = [&](int body, int which) { return &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + which) * 4]; };
-		const auto bends = [&](int body) { return vec(body, L::REFRACT)[3] > 0.5f && (vec(body, L::FORM)[0] < 0.5f || vec(body, L::FORM)[0] > 1.5f); };
-		int64_t followed = 0;
-		// a body's maps are of one piece: its one map, or every band of its table of rows' bands (Stage 24)
-		const auto one_piece = [&](int body) {
-			const float *map = vec(body, L::MAP);
-			if (map[3] >= 0.0f) {
-				return map[3] == 1.0f;
-			}
-			for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
-				if (scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4 + 2] != 1.0f) {
-					return false;
-				}
-			}
-			return true;
-		};
-		// (where a pixel's rays are traced in the pass, Stage 29, nothing reads a stack: none is followed)
-		const bool traced = shader::rays_nodes();
-		for (const int b : scene.chain_bodies) {
-			if (traced || b < 0 || b >= count || !bends(b) || !one_piece(b)) {
-				continue; // a map of several pieces (a prism) is read as one vessel's
-			}
-			const float *rect = vec(b, L::RECT);
-			const double layer = vec(b, L::REFRACT)[1], top = rect[1] - 2.0, bottom = static_cast<double>(rect[1]) + rect[3] + 2.0, centre = rect[0] + rect[2] * 0.5;
-			// its slots, the nearest the eye first (the last painted of the nearest layer): itself; what stands
-			// behind it, in its rows; what stands across it on its own layer; what bends nothing in front of it
-			std::vector<int> slots;
-			for (int o = count - 1; o >= 0; --o) {
-				const float *other = vec(o, L::RECT);
-				const double other_layer = vec(o, L::REFRACT)[1];
-				const bool rows = other[1] < bottom && static_cast<double>(other[1]) + other[3] > top;
-				const bool across = other[0] < rect[0] + rect[2] + 2.0f && other[0] + other[2] + 2.0f > rect[0];
-				if (o == b || (rows && (other_layer < layer || (across && (other_layer == layer || !bends(o)))))) {
-					slots.push_back(o);
-				}
-			}
-			if (slots.size() > static_cast<size_t>(shader::MAX_VISITS)) {
-				// more than a ray is followed through: what stands behind its own columns before what is beside
-				// them, and there the largest first (a part's face before its lamp and its ports: Stage 26), then
-				// the nearest across
-				std::vector<int> nearest = slots;
-				std::stable_sort(nearest.begin(), nearest.end(), [&](int p, int q) {
-					const auto rank = [&](int o) {
-						const float *r = vec(o, L::RECT);
-						const bool behind = r[0] < rect[0] + rect[2] && r[0] + r[2] > rect[0];
-						return std::make_tuple(o == b ? 0 : 1, behind ? 0 : 1, -static_cast<double>(r[2]) * r[3], std::fabs(r[0] + r[2] * 0.5 - centre));
-					};
-					return rank(p) < rank(q);
-				});
-				nearest.resize(static_cast<size_t>(shader::MAX_VISITS));
-				std::vector<int> kept;
-				for (const int o : slots) {
-					if (std::find(nearest.begin(), nearest.end(), o) != nearest.end()) {
-						kept.push_back(o);
-					}
-				}
-				slots = kept;
-			}
-			// what it is followed for: where each of its bodies stands, its shape, its surface, its map
-			uint64_t key = fnv_of(&scene.table[2 * 4], 2 * 4 * sizeof(float));
-			for (const int o : slots) {
-				key = fnv_of(vec(o, L::RECT), 4 * sizeof(float), key);
-				key = fnv_of(vec(o, L::FORM), 3 * sizeof(float), key);
-				key = fnv_of(vec(o, L::REFRACT), 4 * sizeof(float), key);
-				key = fnv_of(vec(o, L::MAP), 4 * sizeof(float), key);
-				const uint64_t map_key = static_cast<size_t>(o) < scene.map_keys.size() ? scene.map_keys[static_cast<size_t>(o)] : 0;
-				key = fnv_of(&map_key, sizeof map_key, key);
-				key = fnv_of(&o, sizeof o, key);
-			}
-			key |= 1u;
-			has[static_cast<size_t>(b)] = true;
-			std::vector<float> &block = scene.stack_blocks[static_cast<size_t>(b)];
-			if (scene.stack_keys[static_cast<size_t>(b)] == key && !block.empty()) {
-				continue;
-			}
-			scene.stack_keys[static_cast<size_t>(b)] = key;
-			// the stack as a ray is followed through it
-			shader::Stack stack = shader::stack_of(shader::path_of(shader::vec2(rect[0], rect[1]), 1.0), false);
-			int bending = 0;
-			std::vector<double> edges{ top, bottom };
-			for (size_t j = 0; j < slots.size(); ++j) {
-				const int o = slots[j];
-				const float *r = vec(o, L::RECT), *form = vec(o, L::FORM);
-				stack.body[j] = o;
-				stack.layer[j] = vec(o, L::REFRACT)[1];
-				stack.bends[j] = bends(o);
-				stack.round[j] = form[0] < 0.5f;
-				stack.axis[j] = r[0] + r[2] * 0.5 + (form[0] > 1.5f ? static_cast<double>(vec(o, L::GLOW)[2]) : 0.0);
-				stack.radius[j] = r[2] * 0.5;
-				stack.top[j] = r[1];
-				stack.foot[j] = static_cast<double>(r[1]) + r[3];
-				stack.surface[j] = form[2];
-				stack.base[j] = stack.foot[j] - static_cast<double>(vec(o, L::REFRACT)[2]) / form[1];
-				if (stack.bends[j]) {
-					const float *map = vec(o, L::MAP);
-					// a table of rows' bands: its first band's map's head (every band's is alike)
-					const size_t first_map = map[3] >= 0.0f ? static_cast<size_t>(map[0]) : static_cast<size_t>(map[0]) + static_cast<size_t>(scene.maps[(static_cast<size_t>(map[0]) + 1) * 4 + 1]);
-					const float *head = &scene.maps[first_map * 4];
-					stack.map[j] = static_cast<int>(map[0]);
-					stack.coarse[j] = static_cast<int>(map[1]);
-					stack.left[j] = map[2];
-					stack.pieces[j] = static_cast<int>(map[3]);
-					stack.media[j] = static_cast<int>(head[1]);
-					stack.samples[j] = static_cast<int>(head[2]);
-					if (bending == 0) {
-						stack.first = static_cast<int>(j);
-					}
-					++bending;
-					// its rows change what it is: a band ends at its top, its floor and its surface
-					for (const double e : { stack.top[j], stack.foot[j], stack.surface[j], stack.base[j] }) {
-						if (e > top + 1e-4 && e < bottom - 1e-4) {
-							edges.push_back(e);
-						}
-					}
-					// and, for one with a table of knots, every two pixels at most down its height (Stage 25: within a
-					// band of the stack its rows are read at the band's middle; knots crowd where rays graze)
-					if (map[3] < 0.0f) {
-						double last = -1.0e9;
-						for (int k = 0; k < static_cast<int>(-map[3]); ++k) {
-							const double knot = scene.maps[(static_cast<size_t>(map[0]) + 1 + static_cast<size_t>(k)) * 4];
-							const double e = vec(o, L::SET)[3] > 0.5f ? stack.foot[j] - knot : stack.top[j] + knot; // upside down: from its foot (Stage 27)
-							if (e > top + 1e-4 && e < bottom - 1e-4 && e - last >= 2.0) {
-								edges.push_back(e);
-								last = e;
-							}
-						}
-					}
-				}
-			}
-			stack.count = static_cast<int>(slots.size());
-			stack.chained = bending > 1;
-			std::sort(edges.begin(), edges.end());
-			std::vector<double> bands; // tops, then the last bottom
-			for (const double e : edges) {
-				if (bands.empty() || e > bands.back() + 1e-4) {
-					bands.push_back(e);
-				}
-			}
-			const int band_count = static_cast<int>(bands.size()) - 1, slot_count = stack.count;
-			// its samples: four a pixel, on the screen's own quarter pixels, from a pixel before its first to one after its last
-			const int px_min = static_cast<int>(std::floor(rect[0] - 1.0f)), px_max = static_cast<int>(std::floor(rect[0] + rect[2] + 1.0f));
-			const int first = px_min - 1, coarse = px_max - px_min + 3, samples = coarse * 4 + 1, stride = 2 + 4 * slot_count;
-			const size_t cells_at = static_cast<size_t>(2 + band_count + slot_count);
-			block.assign((cells_at + static_cast<size_t>(band_count) * static_cast<size_t>(samples) * static_cast<size_t>(stride)) * 4, 0.0f);
-			const auto put = [&](size_t vec4_at, int part, double v) { block[vec4_at * 4 + static_cast<size_t>(part)] = static_cast<float>(v); };
-			put(0, 0, coarse);
-			put(0, 1, band_count);
-			put(0, 2, samples);
-			put(0, 3, slot_count);
-			put(1, 0, first);
-			for (int k = 0; k < band_count; ++k) {
-				put(static_cast<size_t>(2 + k), 0, bands[static_cast<size_t>(k)]);
-				put(static_cast<size_t>(2 + k), 1, bands[static_cast<size_t>(k) + 1]);
-			}
-			for (int j = 0; j < slot_count; ++j) {
-				put(static_cast<size_t>(2 + band_count + j), 0, stack.body[j]);
-				put(static_cast<size_t>(2 + band_count + j), 1, stack.bends[j] ? 1.0 : 0.0);
-			}
-			std::map<double, int> ids; // routes as small whole numbers, in the order met
-			// each band's rays followed on a thread of its own (no band's depend on another's), then written in order
-			std::vector<std::vector<shader::Ray>> band_rays(static_cast<size_t>(band_count));
-			std::vector<std::vector<double>> band_along(static_cast<size_t>(band_count));
-			in_pieces(band_count, [&](int k) {
-				const shader::Use use(scene);
-				const double y = 0.5 * (bands[static_cast<size_t>(k)] + bands[static_cast<size_t>(k) + 1]);
-				std::vector<shader::Ray> &rays = band_rays[static_cast<size_t>(k)];
-				std::vector<double> &alongs = band_along[static_cast<size_t>(k)];
-				rays.resize(static_cast<size_t>(samples) * 4);
-				alongs.assign(static_cast<size_t>(samples) * 4, 0.0);
-				for (int i = 0; i < samples; ++i) {
-					for (int n = 0; n < 4; ++n) {
-						rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = shader::chain_at(stack, y, first + i * 0.25, trace::map_nm(n / 3.0));
-					}
-				}
-				for (int i = 0; i + 1 < samples; ++i) {
-					for (int n = 0; n < 4; ++n) {
-						const shader::Ray &r = rays[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
-						const shader::Ray &next = rays[static_cast<size_t>(i + 1) * 4 + static_cast<size_t>(n)];
-						if (next.route == r.route) {
-							continue;
-						}
-						// where the route changes on the way to the next sample: by the map of the first body the two
-						// rays differ in, from how far from its axis each passes
-						double along = 0.5;
-						for (int j = 0; j < slot_count; ++j) {
-							if (r.bent[j] != next.bent[j] || r.way[j] != next.way[j]) {
-								const double lo = r.from_axis[j], hi = next.from_axis[j];
-								if (std::fabs(hi - lo) > 1e-9) {
-									const int core = stack.media[j] > 1 ? std::max(shader::core_of(stack, j, y), 0) : 0;
-									const double change = shader::map_change(shader::ref_at(stack, j, y), core, std::min(lo, hi), std::max(lo, hi), trace::map_nm(n / 3.0));
-									along = std::min(std::max((change - lo) / (hi - lo), 0.0), 1.0);
-								}
-								break;
-							}
-						}
-						alongs[static_cast<size_t>(i) * 4 + static_cast<size_t>(n)] = along;
-					}
-				}
-			});
-			for (int k = 0; k < band_count; ++k) {
-				followed += static_cast<int64_t>(samples) * 4;
-				for (int i = 0; i < samples; ++i) {
-					const size_t cell = cells_at + static_cast<size_t>(k * samples + i) * static_cast<size_t>(stride);
-					for (int n = 0; n < 4; ++n) {
-						const shader::Ray &r = band_rays[static_cast<size_t>(k)][static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
-						const double along = band_along[static_cast<size_t>(k)][static_cast<size_t>(i) * 4 + static_cast<size_t>(n)];
-						const int id = ids.emplace(r.route, static_cast<int>(ids.size())).first->second;
-						put(cell, n, r.x);
-						put(cell + 1, n, id + 0.5 * along);
-						for (int j = 0; j < slot_count; ++j) {
-							const size_t at = cell + 2 + static_cast<size_t>(4 * j);
-							put(at, n, r.bent[j] ? 2.0 : r.seen[j] ? 1.0 : 0.0);
-							put(at + 1, n, r.cross[j]);
-							put(at + 2, n, r.pass[j]);
-							put(at + 3, n, r.chord[j] * r.chord[j]);
-						}
-					}
-				}
-			}
-		}
-		if (followed > 0) {
-			scene.stack_rays = followed;
-		}
-	}
-	for (int b = 0; b < L::MAX_BODIES; ++b) {
-		if (!has[static_cast<size_t>(b)]) {
-			scene.stack_keys[static_cast<size_t>(b)] = 0;
-			scene.stack_blocks[static_cast<size_t>(b)].clear();
-			continue;
-		}
-		out[static_cast<size_t>(b) * 4] = static_cast<float>(out.size() / 4);
-		out.insert(out.end(), scene.stack_blocks[static_cast<size_t>(b)].begin(), scene.stack_blocks[static_cast<size_t>(b)].end());
-	}
-	if (out != scene.stacks) {
-		scene.stacks = std::move(out);
-		++scene.stacks_revision;
-	}
 }
 
 } // namespace lab
