@@ -15,7 +15,7 @@ GAME_SPEC §12.2, §12.3, §18, §19, §20.
 | 35.3 | The old readings deleted from the per-pixel source; the pixel's path pruned of map data | Done |
 | 35.4 | The measuring switches and hooks that no gate needs removed; GAME_SPEC and CLAUDE.md rewritten for one renderer | Done (GAME_SPEC 0.36.0) |
 | 35.5 | The whole per-pixel source in single precision on the CPU, beside the reference (the GPU's pixels off the truth, TDD 33 *Open*) | Done: O16; the pixels are not single precision's (below) |
-| 35.6 | `make gates`; the user's sign-off | `make gates` passed (uncached, ASan+UBSan) on the stage's last code; awaiting the user |
+| 35.6 | `make gates`; the user's sign-off | Done: `make gates` passed; signed off by the user (2026-11-23) |
 
 ## What the inventory found (2026-11-23, before 35.1)
 

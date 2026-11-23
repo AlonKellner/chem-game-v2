@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.36.0 (2026-11-23, Stage 35; awaiting the user's sign-off)
+## 0.36.0 (2026-11-23, Stage 35; signed off by the user: "Stage 35 is approved")
 
 - §12.3, §11, §18, §19, §20 (Stage 35, `docs/TDD_35_ONE.md`): **one renderer.** A pixel's own rays,
   traced in the pass (Stages 29 and 33), are the only reading. Removed: the refraction maps and
