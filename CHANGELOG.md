@@ -10,9 +10,9 @@
   searches; a sediment's lie kept apart and found from a table per turn. Cheaper, not the same to the bit
   (the picture and a hand pour; not in a record): a hand pour's lie anchored on its volumes, the vortex's
   share by the secant. At 600×: a stirred vessel poured by hand 140 ms a frame to 4.7; three monitors and a
-  controller 11 to 3.4; a controller's trial 1.2 s to 54 ms. The host sends a scene's buffers by their
-  changed pages (a restart's frame 22 to 12.5 ms). The spread of a step's pixels over two frames was built,
-  did nothing on the GPU, and was taken out. `chem_tool study speed`; the cost play runs on at 600×.
+  controller 11 to 3.4; a controller's trial 1.2 s to 54 ms. Two things for the GPU's frames at the
+  lab's steps were built, did nothing there, and were taken out: the spread of a step's pixels over two
+  frames, and sending only the changed pages of the scene. `chem_tool study speed`; the cost play runs on at 600×.
 
 ## 0.36.0 (2026-11-23, Stage 35; signed off by the user: "Stage 35 is approved")
 

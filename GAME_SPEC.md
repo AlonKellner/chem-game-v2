@@ -2366,8 +2366,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   is 3 ms of steps and the scene composed (under 1 ms), and every one keeps 600× but the monitored
   dissolving (553×) and the stirred pour, which keeps 600× over its frames but has single steps of up
   to 18 ms while it pours. `make pass-cost`'s play runs on at 600× (its mark `fast`): 8.3 ms a frame,
-  the worst 12; a frame in which every history starts again 12.5 ms (22 before the host sent only the
-  changed pages of the scene).
+  the worst 13.4. At 1× the frames of the lab's steps while a vessel is stirred or poured into run to 18
+  and 23 ms (open: `docs/TDD_36_SPEED.md`).
 
 ## 20. Declared simplifications of the demo
 

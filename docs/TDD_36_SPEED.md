@@ -20,7 +20,7 @@ GAME_SPEC §13.1, §19.
 | 36.1 | Measuring: `chem_tool study speed`; a mark at 600× in the cost play | Done |
 | 36.2 | The budget: `Ui::set_budget`, `set_clock`, `achieved`; `cg_ui_set_budget`; the Godot host's 3 ms; the speed kept shown | Done |
 | 36.3 | Cheaper steps | Done (what is below) |
-| 36.4 | The GPU's step frames | The spread tried and taken out; the scene sent by its changed pages |
+| 36.4 | The GPU's step frames | The spread tried and taken out; the scene sent by its changed pages tried and taken out |
 | 36.5 | GAME_SPEC §13.1, §19; `make gates`; the user's sign-off | `make gates` passed; awaiting the user |
 
 ## What is in the tree
@@ -63,8 +63,6 @@ GAME_SPEC §13.1, §19.
   share kept until its energy has changed by a hundredth (it was a ten-thousandth), going between as the cube
   root of the energy. Neither is in a session's record: the vortex's share is the picture's and a hand pour's.
 - **`contents::below`** keeps its last four answers (a pour asks for the lip's and the surface's in turn).
-- **The host sends a scene's buffers by their changed pages** (`OpticsCompute::hold`: pages of a thousand
-  floats compared with what the buffer holds).
 - The cost play goes on at 600× after the stir (its mark `fast`, 360 frames).
 
 The session records are unchanged (`make sessions-check`, digest for digest).
@@ -86,8 +84,8 @@ At 1× every scene's frame is under 1.1 ms (the stirred pour was 16.8). A contro
 set, and when what it controls has changed by a tenth) was 1.2 s inside one step; it is 54 ms.
 
 `make pass-cost` (the Godot host, the window): a frame's median 8.3 ms in every mark, 600× included
-(`fast`: the worst 12.2); a frame in which every history starts again 12.5 ms (22 before the host sent
-only the changed pages).
+(`fast`: the worst 13.4); the worst frames of the pour and the stir at 1×, 22.6 and 18.2, at the lab's
+steps (below); a frame in which every history starts again 23 ms.
 
 ## The GPU's step frames, and the spread that was taken out (36.4)
 
@@ -102,9 +100,13 @@ same worst frames with it on and off, twice each (stir's worst 14.4 and 13.7 off
 step frames' cost is not the pixels' work, and the spread was taken out (with it an exception O12 would
 have needed: a record a change old in a pixel put off).
 
-What it is: not the scene's upload alone (sending only changed pages took the stir's worst from 21 to
-14.6 ms and the restart from 22 to 12.5, and the alternation stayed); not the CPU (the game's frame, the
-scene, the pass sent and the list painted are 0 to 1 ms each). The device's timestamps
+What it is: not the scene's upload, as far as sending less of it shows. The host sent only the pages of
+a scene's buffers that had changed (a thousand floats each): the frames looked better (the stir's worst
+14.6 ms, a restart 12.5), but the pictures were wrong, a vessel held over another 3,215 pixels off the
+truth (`make screenshots`, found in Stage 37): a run of changed pages that reached a buffer's short last
+page was never sent. Mended, the frames were what they had been (the restart 23 ms, the stir's worst 18),
+and it was taken out: it bought nothing. Not the CPU either (the game's frame, the scene, the pass sent
+and the list painted are 0 to 1 ms each). The device's timestamps
 (`capture_timestamp`) came back empty on this backend, so the pass's own time a frame is not known. The
 sum of two frames is two periods of the display: the throughput is the display's, the frames uneven.
 
