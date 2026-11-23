@@ -121,15 +121,16 @@ int main(void) {
 		fprintf(stderr, "the optical pass's scene is not one vessel in 115 vectors, with its spectra, its lines and the room light's table\n");
 		return 1;
 	}
-	/* Stage 20: the vessel's refraction map (its head: whole pixels spanned, two cores, 4 samples a pixel and one) and the wall's table */
-	if (optics.map_count < 1000 || optics.maps == NULL || optics.maps_revision == 0 || optics.maps[1] != 2.0f || optics.maps[2] != optics.maps[0] * 4.0f + 1.0f ||
-			optics.wall_count < 3003 || optics.wall == NULL || optics.wall_revision == 0) {
-		fprintf(stderr, "the optical pass's scene has no refraction map for its vessel, or no table of the wall\n");
+	/* Stage 20: the wall's table */
+	if (optics.wall_count < 3003 || optics.wall == NULL || optics.wall_revision == 0) {
+		fprintf(stderr, "the optical pass's scene has no table of the wall\n");
 		return 1;
 	}
-	/* Stage 21: nothing is held, so no pixel needs a ray followed through several bodies */
-	if (optics.chain_count != 0 || optics.stack_count != 256 || optics.stacks == NULL || optics.stacks[0] != -1.0f) {
-		fprintf(stderr, "the optical pass's scene asks for a second pass, or has a stack, with nothing held\n");
+	/* Stage 35: a pixel's own rays are traced in the pass, over the rectangle of each body that bends: the cup's, a
+	 * little more than its rectangle (the scene's body 0: x, y, w, h) */
+	const float *cup = optics.table + 4 * 4;
+	if (optics.chain_count != 1 || optics.chain == NULL || optics.chain[0] > cup[0] || optics.chain[1] > cup[1] || optics.chain[2] < cup[0] + cup[2] || optics.chain[3] < cup[1] + cup[3]) {
+		fprintf(stderr, "the optical pass's scene does not name the cup's rectangle for the pass over what bends\n");
 		return 1;
 	}
 	optics.size = 0;

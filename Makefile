@@ -64,12 +64,14 @@ native:
 # The Godot project reads only res://: the data is copied in (gitignored). And the
 # refraction maps of every vessel made as glassware, made before the game runs
 # (GAME_SPEC §12.3, Stage 24: chem_tool maps; a table already made is kept).
+# (Stage 35: made under the maps' reading, LAB_BEAM=0, which alone reads them: the reading by a pixel's own rays,
+# now the one where LAB_BEAM is not set, makes none, and `make run LAB_BEAM=0` would make them in play.)
 godot-data: core
 	mkdir -p $(GODOT_PROJECT)/data
 	rsync -a --delete --exclude maps/ data/ $(GODOT_PROJECT)/data/
 	mkdir -p $(GODOT_PROJECT)/shaders
 	cp native/game/shader/optics_pixel.glsl $(GODOT_PROJECT)/shaders/optics_pixel.glslinc
-	$(BUILD_CORE)/chem_tool maps $(GODOT_PROJECT)/data/maps data/benches/*.json
+	LAB_BEAM=0 $(BUILD_CORE)/chem_tool maps $(GODOT_PROJECT)/data/maps data/benches/*.json
 
 # Debug extension (CHEM_ASSERT aborts). Writes the same library name, so it
 # replaces the RelWithDebInfo one until the next `make native`.

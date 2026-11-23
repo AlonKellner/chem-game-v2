@@ -171,12 +171,13 @@ inline vec4 wall_vec(int i) {
 // Stage 29, spike A: a band read as a beam of rays traced live, beside the maps' readings (LAB_BEAM: 0 the
 // maps, 1 a point, 2 two corners across, 3 four corners). The rays are the exact tracer's here; the reading
 // is what is being measured.
+// Stage 35: the reading is a pixel's own rays (5) unless LAB_BEAM names another (0: the maps, until they go).
 struct Path;
 double ray_band(Path q, double u0, double u1, double t, double one_nm);
 int &beam_mode_set() {
 	static int mode = [] {
 		const char *asked = std::getenv("LAB_BEAM");
-		return asked != nullptr ? std::atoi(asked) : 0;
+		return asked != nullptr ? std::atoi(asked) : 5;
 	}();
 	return mode;
 }

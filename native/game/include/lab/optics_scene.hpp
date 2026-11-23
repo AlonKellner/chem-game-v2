@@ -317,7 +317,8 @@ OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm);
 // the same in one of the ways a ray goes on from a grating (0: straight on; 1, 2: its orders +1 and -1; 3, 4: +3 and -3)
 OpticsRay optics_ray_way(const OpticsScene &scene, double x, double y, double nm, int way);
 // Which reading the reference uses where a pixel looks through something that bends its view (while Stage 29 is
-// built): 0, the maps; 5, a pixel's own rays as an average over time. From LAB_BEAM at first; the reading before.
+// built): 0, the maps; 5, a pixel's own rays as an average over time. From LAB_BEAM at first (Stage 35: 5 where
+// it is not set); the reading before.
 int optics_reading(int mode);
 // whether a pixel's rays are traced in the pass now (the readings 4 and 5): the scene then keeps no stacks, and
 // every body that bends is read by the pass over the rectangles it names

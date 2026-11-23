@@ -255,8 +255,9 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	}
 	// the source twice: without the chain for the pass over the screen, with it for the chain's own pass
 	rd_ = rd;
+	// (Stage 35: a pixel's own rays are traced in the pass unless LAB_BEAM names another reading: 0, the maps)
 	const char *beam = std::getenv("LAB_BEAM");
-	const bool traced = beam != nullptr && std::atoi(beam) == 5;
+	const bool traced = beam == nullptr || std::atoi(beam) == 5;
 	passes_ = traced ? 4 : 2;
 	if (const char *asked = std::getenv("LAB_RAY_POINTS")) {
 		ray_points_ = static_cast<float>(std::atof(asked));
