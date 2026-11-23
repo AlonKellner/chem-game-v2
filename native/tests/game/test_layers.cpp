@@ -388,9 +388,12 @@ TEST_CASE("O8: a thin line keeps its light through two layers: summed over the p
 //   The line at 226.4 on row 150: -0.0804861 for its rays' -0.0815361 (1.29%; O8 allows 1%). Its whole image
 //   is in one pixel (234, 150), whose rays all go one way; its beam lands straight enough to be read as its
 //   corners' quad (Stage 33: beam_fan, `straight`), which misjudges how much of the pixel the line's image
-//   covers. Read through its middle ray (LAB_BEAM_STRAIGHT=0) it is -0.081588, and O8 holds.
+//   covers. Read through its middle ray (LAB_BEAM_STRAIGHT=0) it is -0.081588.
 //   The line at 250.2 on row 200: -0.0356137 for -0.0361227 (1.41%).
 //   The line at 190.3 (seen in the rims) on row 150: -0.0626796 for -0.0669546 (6.4%; 3% allowed there).
+// The quad is the cause of all three: with no beam read as its corners' quad (LAB_BEAM_STRAIGHT=0, the reading
+// as it was before Stage 33) each of the twelve lines and rows of the case above and of this one holds, to 1%
+// but the faintest (281.9 on row 200, within what a rim is allowed).
 // And what the rays' corrections bring a pixel to over its frames is not the remedy: the mean, over the
 // points a pixel's frames take, of a band as thin as a wavelength comes to -0.0817 at (234, 150), right, but on
 // row 200 to -0.0309 for the line at 226.4, whose rays bring -0.0334 (7.6% out, the same after 4,096 points
