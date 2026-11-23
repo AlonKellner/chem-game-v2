@@ -402,7 +402,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		out.y = o.y + t * u.y;
 	} else {
 		// it leaves sideways or back toward the eye: far off the wall, on the side it goes
-		out.x = u.x < 0.0 ? -1.0e5 : 1.0e5;
+		out.x = 1.0e5; // (one place for all of them: what they show is the room in front, whichever way they go; Stage 33)
 		out.y = o.y;
 		out.route = out.route * 31u + 5u;
 	}

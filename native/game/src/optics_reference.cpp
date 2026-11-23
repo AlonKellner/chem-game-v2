@@ -722,7 +722,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid });
 				if (!e.out || line.uz <= 0.05) {
 					lands = false;
-					out.x = line.ux < 0.0 ? -100000.0 : 100000.0;
+					out.x = 100000.0;
 					out.y = line.y;
 					break;
 				}
@@ -738,7 +738,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 						// an order that does not leave the grating
 						out.met.push_back(Met{ k, cross, cross_y, false, 0.0, 0.0, 0u, 0 });
 						lands = false;
-						out.x = line.ux < 0.0 ? -100000.0 : 100000.0;
+						out.x = 100000.0;
 						out.y = line.y;
 						break;
 					}
@@ -1129,7 +1129,7 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 		room.y = scene.table[5];
 		room.w = scene.table[6];
 		room.h = scene.table[7];
-		room.bench = room.elsewhere = radiance;
+		room.bench = room.elsewhere = room.front = radiance; // (the room in front is what a ray that never reaches the wall shows)
 		optics_wall(even, room);
 	}
 	for (int b = 0; b < static_cast<int>(even.rows.size()) / (L::ROWS_PER_SET * L::ROW); ++b) {

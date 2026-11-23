@@ -2754,7 +2754,7 @@ RayMet ray_met(vec2 p, float nm) {
 			}
 			if (ended) {
 				lands = false;
-				r.x = lu.x < 0.0 ? -100000.0 : 100000.0;
+				r.x = 100000.0;
 				r.y = lp.y;
 				break;
 			}
@@ -2769,7 +2769,7 @@ RayMet ray_met(vec2 p, float nm) {
 				lu = met.toward;
 				if (gone) {
 					lands = false;
-					r.x = lu.x < 0.0 ? -100000.0 : 100000.0;
+					r.x = 100000.0; // (one place for every ray that never reaches the wall: it shows the room in front)
 					r.y = lp.y;
 					break;
 				}
@@ -3259,6 +3259,23 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 
 // what the bodies the beam's middle ray met do to the wall's light at nm: a times it plus b (x, y); wp: the
 // nodes' weights there
+// The nodes' weights at g of the way through a beam's stretch of the spectrum. A cubic through the four, where
+// its middle ray goes one way at all of them. Where it does not (it reaches the wall at some wavelengths and is
+// turned back at others) nothing lies between two nodes: each wavelength is read at the node nearest it, that
+// node's own ray (Stage 33). A cubic through a landing on the wall and the place a ray that never reaches it is
+// put sweeps the whole wall between, and such a pixel settled on a colour that was not its rays' mean.
+bool beam_nodes_one_way(Beam b) {
+	return b.c0 == b.c1 && b.c1 == b.c2 && b.c2 == b.c3;
+}
+
+vec4 beam_weights(Beam b, float g) {
+	if (beam_nodes_one_way(b)) {
+		return thirds_weights(g);
+	}
+	float k = clamp(floor(3.0 * g + 0.5), 0.0, 3.0);
+	return vec4(k < 0.5 ? 1.0 : 0.0, k > 0.5 && k < 1.5 ? 1.0 : 0.0, k > 1.5 && k < 2.5 ? 1.0 : 0.0, k > 2.5 ? 1.0 : 0.0);
+}
+
 vec2 beam_shade(Beam b, vec4 wp, float nm) {
 	float room = scene_vec(2).y;
 	float a = 1.0;
@@ -3434,7 +3451,8 @@ float beam_flat(Beam b) {
 // cubic's landing, each weighed by its share of the band's energy.
 float beam_band(Beam b, float even, float g_lo, float g_hi, float nm0, float nm1, float t, float nm_point, float nm_share) {
 	float span = max(g_hi - g_lo, 1.0e-9);
-	int steps = nm1 != nm0 ? map_steps(b.bend, abs(nm1 - nm0)) : 1;
+	bool one_way = beam_nodes_one_way(b);
+	int steps = nm1 != nm0 && one_way ? map_steps(b.bend, abs(nm1 - nm0)) : 1; // (a band of nodes that part is read at its point's node)
 	float total = 0.0;
 	float weights = 0.0;
 	float begin = nm0;
@@ -3447,9 +3465,13 @@ float beam_band(Beam b, float even, float g_lo, float g_hi, float nm0, float nm1
 		float nm = steps > 1 ? mix(begin, end, t) : nm_point;
 		float u_end = steps > 1 ? share_of(end) : 1.0;
 		float weight = max(u_end - u_begin, 0.0);
-		vec4 wa = thirds_weights((map_place(begin) - g_lo) / span);
-		vec4 wb = thirds_weights((map_place(end) - g_lo) / span);
-		vec4 wp = thirds_weights((map_place(nm) - g_lo) / span);
+		vec4 wp = beam_weights(b, (map_place(nm) - g_lo) / span);
+		vec4 wa = wp;
+		vec4 wb = wp;
+		if (one_way) {
+			wa = thirds_weights((map_place(begin) - g_lo) / span);
+			wb = thirds_weights((map_place(end) - g_lo) / span);
+		}
 		float wall = even;
 #ifdef OPTICS_STUB_FAN
 		wall = 1.0;
@@ -3555,13 +3577,16 @@ float beam_correction(Beam b, Path q, vec2 s, float nm0, float nm1, float nm, fl
 	ray_way = way;
 	vec2 traced = ray_shade(m, nm);
 	float span = max(g_hi - g_lo, 1.0e-9);
-	vec4 wm = thirds_weights((map_place(nm) - g_lo) / span);
+	bool one_way = beam_nodes_one_way(b);
+	vec4 wm = beam_weights(b, (map_place(nm) - g_lo) / span);
 	vec2 said = beam_shade(b, wm, nm);
-	vec2 at0 = beam_at(b, s, thirds_weights((map_place(nm0) - g_lo) / span));
-	vec2 at1 = beam_at(b, s, thirds_weights((map_place(nm1) - g_lo) / span));
+	// (what the beam says of this place is what its band read: the band's sweep where its nodes go one way,
+	// the point's own node where they part)
+	vec2 at0 = beam_at(b, s, one_way ? thirds_weights((map_place(nm0) - g_lo) / span) : wm);
+	vec2 at1 = beam_at(b, s, one_way ? thirds_weights((map_place(nm1) - g_lo) / span) : wm);
 	float wall_said = wall_span(beam_profile(0.5 * (at0.y + at1.y)), at0.x, at1.x);
 	float wall_traced = 0.0;
-	if (m.route == b.c0) {
+	if (one_way && m.route == b.c0) {
 		vec2 at = beam_at(b, s, wm);
 		wall_traced = wall_span(beam_profile(m.y + 0.5 * (at0.y + at1.y) - at.y), m.x + at0.x - at.x, m.x + at1.x - at.x);
 	} else {
@@ -3622,10 +3647,13 @@ vec3 beam_read(Beam b, float g_lo, float g_hi, float v_lo, float v_hi, int n, fl
 					// and a traced ray's correction (a pixel as an average over time, below), for one band in
 					// CORRECTION_STRIDE, standing for them all (Stage 33: the bands it has turn with the frames, so
 					// the mean over them is every band's); from a place of its own for each band, moving with the
-					// frame's point, so a batch's places lie evenly over the pixel
+					// frame's point, so a batch's places lie evenly over the pixel. (The place moves across by seven
+					// times the point and down by nineteen times it, and the wavelength within the band by the point itself: over the frames each band's places cover the pixel. Down
+					// by 0.618 of it they lay on one line over 62% of the pixel's height, another for each band: a
+					// pixel whose rays go three ways settled on a tint where the truth is grey. Stage 33.)
 					float turn = float(k + 1) + 7.0 * float(r);
 					corrections_taken = corrections_taken + 1;
-					float correction = beam_correction(b, q, vec2(fract(0.7548776662466927 * turn + offset), fract(0.5698402909980532 * turn + 0.6180339887498949 * offset)), a.x + 380.0, c.x + 380.0, nm_point, g_lo, g_hi);
+					float correction = beam_correction(b, q, vec2(fract(0.7548776662466927 * turn + fract(7.0 * offset)), fract(0.5698402909980532 * turn + fract(19.0 * offset))), a.x + 380.0, c.x + 380.0, nm_point, g_lo, g_hi);
 					light = light + float(stride) * correction;
 				}
 				if (single) {
@@ -4046,7 +4074,7 @@ void keep_beam(int at, Beam b, float g_lo, float g_hi, float share, float conten
 	kept_put(at + 19, b.chord1);
 	kept_put(at + 20, vec4(float(b.layers), float(b.ways), b.bend, b.reach));
 	// (a route is 32 bits: in two halves, each a whole number a float holds)
-	kept_put(at + 21, vec4(float(b.c0 & 65535u), float(b.c0 >> 16), 0.0, 0.0));
+	kept_put(at + 21, vec4(float(b.c0 & 65535u), float(b.c0 >> 16), b.c0 == b.c1 && b.c1 == b.c2 && b.c2 == b.c3 ? 1.0 : 0.0, 0.0));
 	// the rows its rays passed in bodies that something lies in (all, where its rays part: what the corrections
 	// found for it came by other ways), and what lay in them
 	kept_put(at + 22, vec4(b.one ? b.span.x : -1.0e30, b.one ? b.span.y : 1.0e30, content, 0.0));
@@ -4082,9 +4110,10 @@ Beam kept_beam(int at) {
 	b.pass1 = kept_vec(at + 18);
 	b.chord1 = kept_vec(at + 19);
 	b.c0 = uint(route.x) + (uint(route.y) << 16);
-	b.c1 = b.c0;
-	b.c2 = b.c0;
-	b.c3 = b.c0;
+	// (its other nodes' routes are kept as whether they are the first's: route.z)
+	b.c1 = route.z > 0.5 ? b.c0 : b.c0 ^ 1u;
+	b.c2 = b.c1;
+	b.c3 = b.c1;
 	b.r0 = b.c0;
 	b.r1 = b.c0;
 	b.r2 = b.c0;

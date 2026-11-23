@@ -1127,10 +1127,15 @@ int optics_body(const OpticsScene &scene, const std::string &id) {
 }
 
 // The wall as a table (GAME_SPEC §12.3; lab/optics_scene.hpp lays it out).
+namespace {
+constexpr double FAR_OFF = 50000.0; // (pixels: half as far as a ray that never reaches the wall is put)
+} // namespace
+
 void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 	scene.drawn.clear();
 	// the breakpoints: every edge of the bench and of what is drawn, across and down
-	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w }, ys{ room.y, static_cast<double>(room.y) + room.h };
+	// (and far off to each side, FAR_OFF: beyond it is where a ray that never reaches the wall is put)
+	std::vector<double> xs{ room.x, static_cast<double>(room.x) + room.w, -FAR_OFF, FAR_OFF }, ys{ room.y, static_cast<double>(room.y) + room.h };
 	for (const OpticsShape &sh : room.shapes) {
 		if (!(sh.w > 0.0f) || !(sh.h > 0.0f)) {
 			continue;
@@ -1169,6 +1174,14 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 		if (sh.w > 0.0f && sh.h > 0.0f) {
 			paint(sh.x, sh.y, sh.w, sh.h, sh.radiance);
 		}
+	}
+	// A ray that leaves a body sideways or back toward the eye never reaches the wall: it is put far off to the
+	// side it goes (100,000 pixels), and what it shows is the room in front of the bench, which is what glass
+	// reflects (Stage 33). It read the wall's table there, which is the darkness beside the bench: grey patches
+	// where a vortex or a surface turned rays back, beside reflections of a room four times as bright.
+	for (int r = 0; r <= my; ++r) {
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1)] = static_cast<float>(room.front);
+		grid[static_cast<size_t>(r) * static_cast<size_t>(m + 1) + static_cast<size_t>(m)] = static_cast<float>(room.front);
 	}
 	// each row of pixels: the cells down that it crosses, each by its share of the row's height
 	std::vector<std::vector<float>> profiles;
