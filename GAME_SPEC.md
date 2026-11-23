@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.36.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.37.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1620,7 +1620,12 @@ panel closes it.
 
 **The clock:** pause; 1×, 10×, 60×, 600×; reset. A frame advances the lab by its real time times
 the speed, at most twenty simulated seconds a frame: beyond that the clock runs slow, never the
-picture.
+picture. **A frame's cost is the same at any speed** (Stage 36): a host gives the lab's steps a budget of
+the CPU's time in a frame (`cg_ui_set_budget`; the Godot host 3 ms of a 120 Hz display's 8.3), and a
+frame runs whole steps until it has spent it; what it could not run is run in the next frames, no more
+than one frame's worth carried. Where a moment is heavy the clock keeps a lower speed for it, shown
+beside the clock ("keeping 212x"), and the picture keeps its frames. The steps are the same 1/60 s steps
+however they fall into frames (§3; `D1`), so a lab is the same at any speed and any budget.
 
 **Invariants on the screen.** One step of every frame is checked against every invariant; "check
 every step" checks them all. The readout's first line is the conservation laws: every element,
@@ -2352,7 +2357,17 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   - A pour by hand at 600 times real time: 1.4 to 2.6 ms of a frame on the CPU (100 to 135 before:
     the liquid's level searched at every step).
   - The measurements, and what each mechanism gave: `docs/TDD_33_FAST.md`.
-- Timing is evidence, recorded per stage; it is not a gate.
+- **Stage 36** (`chem_tool study speed`: the screen's frame on the CPU, scene by scene, at 1×, 60× and 600×,
+  and at 600× under the host's budget of 3 ms; `docs/TDD_36_SPEED.md`). At 600× with no budget, before
+  the stage and after: the bench still 0.7 ms a frame; decomposing 0.9; dissolving stirred 2.1 (its
+  worst 8.6) and 2.0 (3.6); with three monitors and a controller 11 (its worst 1.2 s, a controller's
+  trial) and 3.4 (4.3); boiling into the condenser 2.0; a vessel of water and sediment poured by hand
+  2.8 and 0.55; the same stirred 140 (its worst 9.7 s) and 4.7. Under the budget every scene's frame
+  is 3 ms of steps and the scene composed (under 1 ms), and every one keeps 600× but the monitored
+  dissolving (553×) and the stirred pour, which keeps 600× over its frames but has single steps of up
+  to 18 ms while it pours. `make pass-cost`'s play runs on at 600× (its mark `fast`): 8.3 ms a frame,
+  the worst 12; a frame in which every history starts again 12.5 ms (22 before the host sent only the
+  changed pages of the scene).
 
 ## 20. Declared simplifications of the demo
 

@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.37.0 (2026-11-23, Stage 36; awaiting the user's sign-off)
+
+- §13.1, §19 (Stage 36, `docs/TDD_36_SPEED.md`): **a frame's cost the same at any speed.** A host gives
+  the lab's steps a budget of the CPU's time in a frame (`cg_ui_set_budget`; the Godot host 3 ms): a frame
+  runs whole steps of 1/60 s until it has spent it and carries the rest, a frame's worth at most; a heavy
+  moment keeps a lower speed, shown beside the clock. The steps are the steps however they fall (D1); the
+  session records are unchanged. Cheaper steps, the same values: a part's reading without the shape
+  searches; a sediment's lie kept apart and found from a table per turn. Cheaper, not the same to the bit
+  (the picture and a hand pour; not in a record): a hand pour's lie anchored on its volumes, the vortex's
+  share by the secant. At 600×: a stirred vessel poured by hand 140 ms a frame to 4.7; three monitors and a
+  controller 11 to 3.4; a controller's trial 1.2 s to 54 ms. The host sends a scene's buffers by their
+  changed pages (a restart's frame 22 to 12.5 ms). The spread of a step's pixels over two frames was built,
+  did nothing on the GPU, and was taken out. `chem_tool study speed`; the cost play runs on at 600×.
+
 ## 0.36.0 (2026-11-23, Stage 35; signed off by the user: "Stage 35 is approved")
 
 - §12.3, §11, §18, §19, §20 (Stage 35, `docs/TDD_35_ONE.md`): **one renderer.** A pixel's own rays,
