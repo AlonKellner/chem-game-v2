@@ -2158,6 +2158,12 @@ OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int 
 				out.worst_y = row;
 			}
 			out.over += d > EYE_VISIBLE ? 1 : 0;
+			if (d > EYE_VISIBLE && std::getenv("LAB_O4_PRINT") != nullptr) { // (a measurement: what the two are, where they part)
+				double area[3];
+				optics_area_truth(scene, col, row, 8, area);
+				std::fprintf(stderr, "O4 (%d, %d): %.1f apart; the picture %.3f %.3f %.3f, the reference's reading %.3f %.3f %.3f, the truth of its area %.3f %.3f %.3f\n", col, row, d, lin[0], lin[1], lin[2], rgb[0], rgb[1], rgb[2], area[0],
+						area[1], area[2]);
+			}
 		}
 	}
 	return out;

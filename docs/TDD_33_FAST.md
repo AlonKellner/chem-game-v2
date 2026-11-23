@@ -416,10 +416,20 @@ known: that tree was never run through this check.
   metric. It is the single precision's: the reference, in double, settles there to within 1 of the
   truth (`test_cost.cpp`, `LAB_RAY_STATS=heel`; 3 to 4 on the row above). The heel is a fillet: the
   quartic's roots in single precision are the place to look.
-- **O4 on the GPU, in the cube room**: 2 to 8 pixels visibly off in a picture, at the same three
-  places: the demo flask's heel (401, 684), 14; (135, 711), 21; (541, 530), 31. In double the reference
-  settles on the truth at the heel, so there it is the single precision's; the other two are not looked
-  into. The room's black cells raise what a ray gone astray costs.
+- **O4 on the GPU, in the cube room**: 2 to 8 pixels visibly off in a picture, at the same places: the
+  demo flask's floor near its axis (401, 684), 14; (135, 711), 21; (541, 530), 31. What is known
+  (`LAB_O4_PRINT=1 make screenshots` prints the picture, the reference's reading and the truth of the
+  pixel's area at each):
+  - the truth there is a neutral grey (0.56 at (541, 530)) and the GPU's picture is tinted (0.68, 0.91,
+    0.20: greener than anything in the room is bright), so its bands have not the same light;
+  - it is not grain: after every history is started again and 120 frames more, the picture is the same
+    to three digits. The GPU comes to another answer there;
+  - it is not the tracer in one body: at the flask's floor single precision and double go the same way,
+    ray for ray, and leave within 3e-5 of the same heading (`test_cost.cpp`, `LAB_RAY_STATS=heel32`);
+  - in double the reference's frames settle within 2 of the truth at the same pixels, with the GPU's
+    tolerance for halving a stretch (0.5) as with its own (0.02).
+  To find it: the whole per-pixel source in single precision on the CPU (`optics_single.cpp` has the
+  tracer of a shape alone), run beside the reference at those pixels.
 - **Half a pixel of spread in single precision** between a ray and its neighbours in wavelength, through
   two vessels, in a few alignments (above): the cause is not found. The pass is spared its cost by a
   tolerance (`BEAM_BETWEEN 0.5`), which also means a prism's stretches are halved on the GPU only where

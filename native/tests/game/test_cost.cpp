@@ -235,9 +235,11 @@ TEST_CASE("cost: the reference's settled pixels at the demo flask's heel against
 			const auto seen = [](const double c[3]) {
 				return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2], 0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
 			};
-			std::printf(" %5.1f", lab::eye_difference(seen(shown), seen(truth)));
+			double once[3];
+			lab::optics_truth(scene, x, y, once);
+			std::printf(" %5.1f/%-5.1f", lab::eye_difference(seen(shown), seen(truth)), lab::eye_difference(seen(once), seen(truth)));
 		}
-		std::printf("   (row %d, x 397 to 405: the reference settled against the truth, on the eye metric)\n", y);
+		std::printf("   (row %d, x 397 to 405: the reference settled against the truth / its one reading against the truth, on the eye metric)\n", y);
 	}
 }
 
@@ -362,6 +364,54 @@ TEST_CASE("cost: the CPU's part of a frame while pouring by hand, at 1x and at 6
 			}
 		}
 		std::printf("%s: over %d frames of the pour, the game's frame %.2f ms, the scene composed %.2f ms\n", fast ? "600x" : "1x", timed, frame_ms / std::max(timed, 1), scene_ms / std::max(timed, 1));
+	}
+}
+
+// The pixels of the demo flask's heel the GPU has visibly off the truth (O4, TDD 33): the pass's tracer there in
+// single precision against itself in double, ray by ray across the pixels (printed where LAB_RAY_STATS is heel32).
+TEST_CASE("cost: the tracer in single precision against double at the demo flask's heel (printed where LAB_RAY_STATS is heel32) (Stage 33)") {
+	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "heel32") {
+		return;
+	}
+	const Traced traced;
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(1.0 / 60.0);
+	const lab::OpticsScene scene = ui->optics();
+	namespace L = lab::optics_layout;
+	// the body whose rectangle holds (401, 684) and that bends
+	int body = -1;
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS) * 4];
+		if (scene.shapes[static_cast<size_t>(b) * L::SHAPE_BLOCK * 4] >= 0.0f && 401.0f >= rect[0] && 401.0f < rect[0] + rect[2] && 684.0f >= rect[1] && 684.0f < rect[1] + rect[3]) {
+			body = b;
+		}
+	}
+	REQUIRE(body >= 0);
+	const float *rect = &scene.shapes[static_cast<size_t>(body) * L::SHAPE_BLOCK * 4 + 8];
+	const double cm = scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + L::FORM) * 4 + 1], axis = rect[0] + 0.5 * rect[2], base = rect[1] + rect[3];
+	std::printf("body %d: its rectangle upright %.1f, %.1f, %.1f by %.1f; %.5f cm a pixel\n", body, rect[0], rect[1], rect[2], rect[3], cm);
+	const double u[3] = { 0.0, 0.0, 1.0 };
+	for (int y = 682; y <= 686; ++y) {
+		for (int x = 399; x <= 403; ++x) {
+			int rays = 0, astray = 0;
+			double worst_at = 0.0, worst_toward = 0.0;
+			for (int j = 0; j < 8; ++j) {
+				for (int i = 0; i < 8; ++i) {
+					const double from[3] = { (x + (i + 0.5) / 8.0 - axis) * cm, (base - (y + (j + 0.5) / 8.0)) * cm, -40.0 };
+					const lab::OpticsPassage d = lab::optics_passage(scene, body, from, u, 1.47, 1.333, false), s = lab::optics_passage(scene, body, from, u, 1.47, 1.333, true);
+					++rays;
+					if (d.route != s.route || d.left != s.left) {
+						++astray;
+					} else {
+						worst_at = std::max(worst_at, std::hypot(d.at[0] - s.at[0], d.at[1] - s.at[1], d.at[2] - s.at[2]));
+						worst_toward = std::max(worst_toward, std::hypot(d.toward[0] - s.toward[0], d.toward[1] - s.toward[1], d.toward[2] - s.toward[2]));
+					}
+				}
+			}
+			std::printf("  (%d, %d): of %d rays %d go another way in single precision; of the others, apart by %.2g cm and %.2g in heading at most\n", x, y, rays, astray, worst_at, worst_toward);
+		}
 	}
 }
 
