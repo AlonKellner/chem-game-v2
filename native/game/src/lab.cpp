@@ -1382,6 +1382,31 @@ struct Lab::Impl {
 		}
 		return p;
 	}
+	// Whether anything can run over a held vessel's lip at its tilt: not while all that is in it is less than
+	// the vessel holds below its lip there (Stage 33). The lab asks at every step, 300 of them a frame at 600
+	// times the clock's speed, and how the contents lie is a search of sixty volumes: a vessel held turned and
+	// not yet pouring ran the screen at ten frames a second. What it holds below its lip is one volume, the same
+	// at every step of a frame (kept for the tilt it was asked at). A stirred liquid stands higher at the wall
+	// than its volume says, and is asked in full; so is one within a part in a thousand million of its lip.
+	bool may_run_over(const Item &x, const glass::Vessel &g) const {
+		if (x.swirl > 0.0) {
+			return true;
+		}
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		if (!fill.defined) {
+			return false; // (as by_hand: nothing runs)
+		}
+		struct Held {
+			const glass::Vessel *vessel = nullptr;
+			double turn = 0.0, holds = 0.0;
+		};
+		thread_local Held last;
+		const double turn = x.tilt * contents::full_tilt(g, 1);
+		if (last.vessel != &g || last.turn != turn) {
+			last = Held{ &g, turn, contents::held_at(g, turn, 1) };
+		}
+		return fill.condensed * 1e6 >= last.holds * (1.0 - 1.0e-9);
+	}
 	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
 	// an upside-down one's an orifice's under its head
 	void set_pours() {
@@ -1393,6 +1418,8 @@ struct Lab::Impl {
 			double rate = 0.0, solids = 0.0, solids_rate = 0.0;
 			if (g != nullptr && !x.inverted && x.pour_left_m3 >= 0.0) {
 				rate = x.tilt * g->pour_ml_s * 1e-6; // a script's pour: an amount at the vessel's rate, decanted
+			} else if (g != nullptr && !x.inverted && !may_run_over(x, *g)) {
+				rate = 0.0; // (nothing stands over its lip: what by_hand would say, without the search)
 			} else if (g != nullptr && !x.inverted) {
 				const ByHand p = by_hand(x, *g);
 				rate = p.liquid;

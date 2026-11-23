@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -297,6 +298,71 @@ TEST_CASE("cost: the frames a held vessel takes to settle once it is still (prin
 		}
 	}
 	std::printf("visibly settled after %d frames; nothing read after %d\n", visible_until, reads_until);
+}
+
+namespace {
+double poured(lab::Ui &ui) {
+	const lab::LabView view = ui.lab().view();
+	for (const lab::ItemView &i : view.items) {
+		if (i.id == "acid") {
+			return i.pours_ml_s;
+		}
+	}
+	return 0.0;
+}
+double turned(lab::Ui &ui) {
+	const lab::LabView view = ui.lab().view();
+	for (const lab::ItemView &i : view.items) {
+		if (i.id == "acid") {
+			return i.turn;
+		}
+	}
+	return 0.0;
+}
+} // namespace
+
+// What a frame of the screen costs the CPU while a bottle pours by hand, at the clock's own speed and at 600
+// times it (printed where LAB_RAY_STATS is speed).
+TEST_CASE("cost: the CPU's part of a frame while pouring by hand, at 1x and at 600x (printed where LAB_RAY_STATS is speed) (Stage 33)") {
+	if (std::getenv("LAB_RAY_STATS") == nullptr || std::string(std::getenv("LAB_RAY_STATS")) != "speed") {
+		return;
+	}
+	const Traced traced;
+	for (const bool fast : { false, true }) {
+		std::string why;
+		std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
+		REQUIRE_MESSAGE(ui != nullptr, why);
+		lab::Play play;
+		REQUIRE_MESSAGE(lab::Play::read(read("data/plays/cost.json"), play, why), why);
+		std::string mark;
+		int in_mark = 0;
+		double frame_ms = 0.0, scene_ms = 0.0;
+		int timed = 0;
+		for (int i = 0; i < 6000 && play.next(*ui); ++i) {
+			in_mark = play.mark() == mark ? in_mark + 1 : 0;
+			mark = play.mark();
+			if (fast && mark == "settled" && in_mark == 5) {
+				ui->pointer(670.0f, 32.0f, true); // the 600x button (the play's own pointer is back at the next frame)
+				ui->pointer(670.0f, 32.0f, false);
+				play.next(*ui);
+			}
+			const auto t0 = std::chrono::steady_clock::now();
+			ui->frame(1.0 / 120.0);
+			const auto t1 = std::chrono::steady_clock::now();
+			ui->optics();
+			const auto t2 = std::chrono::steady_clock::now();
+			if ((mark == "pour" && in_mark % 60 == 0) || ((mark == "settled" || mark == "carry" || mark == "rest" || mark == "stir") && in_mark == 40)) {
+				std::printf("  (%s)", mark.c_str());
+				std::printf("  pour frame %d: the game's frame %.2f ms, the scene %.2f ms; the bottle pours %.2f mL/s, turned %.2f\n", in_mark, std::chrono::duration<double, std::milli>(t1 - t0).count(), std::chrono::duration<double, std::milli>(t2 - t1).count(), poured(*ui), turned(*ui));
+			}
+			if (mark == "pour") {
+				frame_ms += std::chrono::duration<double, std::milli>(t1 - t0).count();
+				scene_ms += std::chrono::duration<double, std::milli>(t2 - t1).count();
+				++timed;
+			}
+		}
+		std::printf("%s: over %d frames of the pour, the game's frame %.2f ms, the scene composed %.2f ms\n", fast ? "600x" : "1x", timed, frame_ms / std::max(timed, 1), scene_ms / std::max(timed, 1));
+	}
 }
 
 namespace {

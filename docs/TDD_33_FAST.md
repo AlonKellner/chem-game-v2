@@ -332,6 +332,26 @@ of 17.6 (`test_kept.cpp`).
   thin line its footprint misplaces). Neither now, where a pixel traces its rays. In the reference
   (`test_cost.cpp`, `LAB_RAY_STATS=held`: the bottle carried over the flask, then held still): visibly
   settled 6 frames after the hand stops, 27 before.
+- **A ray that never reaches the wall shows the room in front** (the user's eye: grey sections, where a
+  vortex or a surface turns rays back). Such a ray was put 100,000 pixels off to the side it went, and
+  the pass read the wall's table there: the darkness beside the bench (0.02), beside reflections of a
+  room of 0.3. The truth always had it as the room in front. Now the table's cells beyond 50,000 pixels
+  are the room in front, and every such ray is put at one place (rays of one pixel turned back to the
+  left and to the right made a footprint as wide as the table). O7's even room is even in front too.
+- **A band's correction places cover the pixel** (`beam_read`): across by seven times the frame's point
+  and down by nineteen times it. They lay on one line over 62% of the pixel's height, another for each
+  band, and moved across in step with the wavelength within the band.
+- **A beam whose middle ray's nodes part** (it reaches the wall at some wavelengths and not at others)
+  is read at each wavelength's nearest node (`beam_weights`), in its bands and in its corrections alike:
+  a cubic through a landing and the far place swept the whole wall between.
+- **A pour by hand at 600 times the clock's speed ran at ten frames a second** (`test_cost.cpp`,
+  `LAB_RAY_STATS=speed`: 100 ms of the CPU a frame). The lab asks how a held vessel's contents lie at
+  every step, 300 a frame, and each answer is a search of sixty volumes (0.33 ms). Now nothing is asked
+  while all that is in the vessel is less than it holds below its lip at its tilt
+  (`Lab::Impl::may_run_over`; one volume, kept for the tilt), and `contents::lying` and `below` keep
+  their last answer: 1.4 ms a frame held and turning. The same to the bit: both session records
+  reproduce. While liquid runs each step is still the search (130 ms a frame at 600x, for the few
+  frames a bottle takes to empty; 10 ms at 60x).
 - Not tried: the wall as a texture (a batch's reading must be the integral its corrections are of; the
   estimate's is already one quad); rays on a sparse lattice and a ray's derivatives (the rays fit a
   frame; they would pay for corrections at once); an outline pixel as its covered share.
@@ -357,6 +377,11 @@ known: that tree was never run through this check.
   metric. It is the single precision's: the reference, in double, settles there to within 1 of the
   truth (`test_cost.cpp`, `LAB_RAY_STATS=heel`; 3 to 4 on the row above). The heel is a fillet: the
   quartic's roots in single precision are the place to look.
+- **At a vortex's rim the pass settles on more blue and green than its rays bring**: two pixels of
+  `test_lying.cpp`'s row, where a pixel's rays go three ways (to the wall near by, back to the room, far
+  off the screen): 9 on the eye metric against the truth, 5 before a ray turned back showed the room in
+  front. The pass's rays there are the truth's, ray for ray, and the pixel is settled, not grain. Its
+  cause is not found; the test lets those two by, to 10, and counts them.
 - **Half a pixel of spread in single precision** between a ray and its neighbours in wavelength, through
   two vessels, in a few alignments (above): the cause is not found. The pass is spared its cost by a
   tolerance (`BEAM_BETWEEN 0.5`), which also means a prism's stretches are halved on the GPU only where

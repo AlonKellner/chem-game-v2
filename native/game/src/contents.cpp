@@ -103,7 +103,27 @@ double Cone::volume() const {
 	return base_area() * height / 3.0;
 }
 
+namespace {
+double below_made(const glass::Vessel &vessel, double turn, double level);
+} // namespace
+
+// (what was asked last is kept, on each thread, as lying's is: what a vessel holds below its lip is asked at
+// every step of a pour by hand)
 double below(const glass::Vessel &vessel, double turn, double level) {
+	struct Asked {
+		const glass::Vessel *vessel = nullptr;
+		double turn = 0.0, level = 0.0, answer = 0.0;
+	};
+	thread_local Asked last;
+	if (last.vessel != &vessel || last.turn != turn || last.level != level) {
+		last = Asked{ &vessel, turn, level, below_made(vessel, turn, level) };
+	}
+	return last.answer;
+}
+
+namespace {
+
+double below_made(const glass::Vessel &vessel, double turn, double level) {
 	const Frame f = frame(turn);
 	if (std::fabs(f.s) < 1e-12) {
 		// upright: what is under a height; or upside down: what is over one
@@ -167,6 +187,8 @@ double below(const glass::Vessel &vessel, double turn, double level) {
 	}
 	return volume;
 }
+
+} // namespace
 
 double level_of(const glass::Vessel &vessel, double turn, double cm3) {
 	const Frame f = frame(turn);
@@ -417,7 +439,37 @@ Swirl swirl(const glass::Vessel &vessel, double turn, double liquid_cm3, double 
 	return out;
 }
 
+namespace {
+Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, double solid_cm3, double vortex, int side);
+} // namespace
+
+// (What was asked last is kept, on each thread: a vessel held turned over another is asked at every step of the
+// lab's clock, 300 of them a frame at 600 times its speed, and each answer is a search of sixty volumes. While
+// nothing in the vessel changes the question is the same to the bit, and so is the answer. Stage 33: a pour by
+// hand at 600x ran at ten frames a second.)
 Lying lying(const glass::Vessel &vessel, double turn, double liquid_cm3, double solid_cm3, double vortex, int side) {
+	struct Asked {
+		const glass::Vessel *vessel = nullptr;
+		double turn = 0.0, liquid = 0.0, solid = 0.0, vortex = 0.0;
+		int side = 0;
+		Lying answer;
+	};
+	thread_local Asked last;
+	if (last.vessel != &vessel || last.turn != turn || last.liquid != liquid_cm3 || last.solid != solid_cm3 || last.vortex != vortex || last.side != side) {
+		last.answer = lying_made(vessel, turn, liquid_cm3, solid_cm3, vortex, side);
+		last.vessel = &vessel;
+		last.turn = turn;
+		last.liquid = liquid_cm3;
+		last.solid = solid_cm3;
+		last.vortex = vortex;
+		last.side = side;
+	}
+	return last.answer;
+}
+
+namespace {
+
+Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, double solid_cm3, double vortex, int side) {
 	Lying l;
 	const Frame f = frame(turn);
 	l.turn = turn;
@@ -531,6 +583,8 @@ Lying lying(const glass::Vessel &vessel, double turn, double liquid_cm3, double 
 	l.head = l.liquid ? l.liquid_level - l.lip_level : -span;
 	return l;
 }
+
+} // namespace
 
 std::string check_H1(const glass::Vessel &vessel, const Lying &l, double liquid_cm3, double solid_cm3) {
 	char buffer[240];
