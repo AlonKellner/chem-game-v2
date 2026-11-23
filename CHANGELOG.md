@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Not yet signed off (Stage 34, 2026-11-23; the version follows the user's sign-off)
+## 0.35.0 (2026-11-23, Stage 34; signed off by the user: "Approved, great work")
 
 - §13, §13.1 (Stage 34, `docs/TDD_34_GESTURES.md`): **the screen's gestures.** A part is taken from
   the drawer with a press and put down with another; a condenser's outlet is led to a vessel by a

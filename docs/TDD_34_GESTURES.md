@@ -19,7 +19,7 @@ GAME_SPEC §13 (the commands `undrain`, `trash`, `restore`), §13.1 (the gesture
 | 34.2 | A condenser's outlet: a line dragged from its end; `undrain` | Done (`test_ui.cpp`; the tutorial's step) |
 | 34.3 | The lab's trash: `trash`, `restore`, 64 kept, saved and digested only when not empty | Done (`test_trash.cpp`, 11 cases; both records reproduce) |
 | 34.4 | The trash on the screen: its box, carrying to and from it, Backspace, the undo key through the C API and the host | Done (`test_ui.cpp`) |
-| 34.5 | The user plays it | |
+| 34.5 | The user plays it | Signed off (2026-11-23) |
 
 ## What is in the tree
 
