@@ -49,7 +49,8 @@ constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
 enum class Kind { Vessel, Bag, Burner, Tray, Stopper }; // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber
-enum class Place { Cabinet, Bench, On, Under, Outbox }; // On: on a vessel's mouth. Under: a burner under a vessel
+// On: on a vessel's mouth. Under: a burner under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
+enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
 struct Item {
 	std::string id;
@@ -107,6 +108,14 @@ struct Event {
 	std::string item;
 };
 
+// One element of the trash (GAME_SPEC §13, Stage 34): an item, or a signal part with all it holds. An item
+// remembers the square it stood on (none: it came from the cabinet); a part's square is its own.
+struct Binned {
+	std::string id;
+	bool part = false;
+	int col = -1, row = -1;
+};
+
 // a double as its bits, so that a save holds it exactly
 std::string bits(double v) {
 	static const char digits[] = "0123456789abcdef";
@@ -142,7 +151,7 @@ bool from_bits(const json &j, double &v) {
 }
 
 const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper" };
-const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox" };
+const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 double number(const json &j, const char *key, double fallback) {
 	return j.contains(key) && j.at(key).is_number() ? j.at(key).get<double>() : fallback;
@@ -238,6 +247,13 @@ struct Lab::Impl {
 	std::vector<Rig> rigs;
 	std::vector<ControlSetting> controls;
 	int64_t made[PART_KINDS] = {}; // the parts made of each kind, for their names
+	// the trash (GAME_SPEC §13, Stage 34): what was put in it, oldest first. An item in it is in the world as one
+	// in the cabinet is. A part in it, with all it holds, is out of `parts`: nothing evaluates it and it signals
+	// nothing; the wires and the resets among what a circuit holds are kept beside it
+	std::vector<Binned> trash;
+	std::vector<Part> binned;
+	std::vector<Wire> binned_wires;
+	std::vector<Rig> binned_rigs;
 	bool rang = false; // an alarm started ringing in the last step
 	// goals (GAME_SPEC §13.5): the bench's, then the player's; `met` as last noticed
 	std::vector<Goal> goals;
@@ -275,6 +291,16 @@ struct Lab::Impl {
 		}
 		return -1;
 	}
+	int find_binned(const std::string &id) const {
+		for (size_t i = 0; i < binned.size(); ++i) {
+			if (binned[i].id == id) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+	// a name in use: an item's, a part's, or that of a part in the trash
+	bool taken(const std::string &id) const { return find(id) >= 0 || find_part(id) >= 0 || find_binned(id) >= 0; }
 	// the name of what standing_in found: an item, or a part after the items
 	const std::string &name_of(int index) const {
 		return index < static_cast<int>(items.size()) ? items[static_cast<size_t>(index)].id : parts[static_cast<size_t>(index) - items.size()].id;
@@ -719,7 +745,7 @@ struct Lab::Impl {
 		}
 		Item &x = items[static_cast<size_t>(i)];
 		if (control == "stir") {
-			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox) {
+			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
 				return false;
 			}
 			const bool on = value > 0.5;
@@ -899,6 +925,20 @@ struct Lab::Impl {
 
 	// the signals as JSON: for a report (plain numbers), or a save (`exact`: numbers as their bits)
 	json signals_json(bool exact) const {
+		json out = links_json(parts, wires, rigs, exact);
+		json k = json::array();
+		for (const ControlSetting &x : controls) {
+			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", exact ? json(bits(x.value)) : json(x.value) }, { "by", x.by }, { "step", x.step } });
+		}
+		out["controls"] = k;
+		out["made"] = json::array();
+		for (const int64_t n : made) {
+			out["made"].push_back(n);
+		}
+		return out;
+	}
+	// parts, with the wires and the rigs from them: the lab's, or the trash's (Stage 34)
+	static json links_json(const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Rig> &rigs, bool exact) {
 		static const char *const OPS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
 		const auto num = [exact](double v) { return exact ? json(bits(v)) : json(v); };
 		const auto maybe = [&](const std::optional<double> &v) { return v ? num(*v) : json(nullptr); };
@@ -970,20 +1010,33 @@ struct Lab::Impl {
 			}
 		}
 		out["rigs"] = r;
-		json k = json::array();
-		for (const ControlSetting &x : controls) {
-			k.push_back({ { "item", x.item }, { "control", x.control }, { "value", num(x.value) }, { "by", x.by }, { "step", x.step } });
-		}
-		out["controls"] = k;
-		out["made"] = json::array();
-		for (const int64_t n : made) {
-			out["made"].push_back(n);
-		}
 		return out;
 	}
 
 	// a save's signals, back
 	bool signals_from(const json &j, std::string &why) {
+		if (!links_from(j, parts, wires, rigs, why)) {
+			return false;
+		}
+		for (const json &x : j.at("controls")) {
+			ControlSetting k;
+			k.item = x.at("item").get<std::string>();
+			k.control = x.at("control").get<std::string>();
+			k.by = x.at("by").get<std::string>();
+			k.step = x.at("step").get<int64_t>();
+			if (!from_bits(x.at("value"), k.value)) {
+				why = "the save's signals hold a number that is not one";
+				return false;
+			}
+			controls.push_back(k);
+		}
+		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
+			made[k] = j.at("made").at(k).get<int64_t>();
+		}
+		return true;
+	}
+	// a save's parts, wires and rigs, back: the lab's, or the trash's (Stage 34)
+	static bool links_from(const json &j, std::vector<Part> &parts, std::vector<Wire> &wires, std::vector<Rig> &rigs, std::string &why) {
 		const auto exact = [&](const json &v, double &out) { return from_bits(v, out) || (why = "the save's signals hold a number that is not one", false); };
 		const auto maybe = [&](const json &v, std::optional<double> &out) {
 			if (v.is_null()) {
@@ -1081,19 +1134,145 @@ struct Lab::Impl {
 			}
 			rigs.push_back(r);
 		}
-		for (const json &x : j.at("controls")) {
-			ControlSetting k;
-			k.item = x.at("item").get<std::string>();
-			k.control = x.at("control").get<std::string>();
-			k.by = x.at("by").get<std::string>();
-			k.step = x.at("step").get<int64_t>();
-			if (!exact(x.at("value"), k.value)) {
+		return true;
+	}
+
+	// ---- the trash (GAME_SPEC §13, Stage 34)
+
+	// in the trash: an item, a part, or a part in a circuit that is
+	bool in_trash(const std::string &id) const {
+		const int i = find(id);
+		return (i >= 0 && items[static_cast<size_t>(i)].place == Place::Trash) || find_binned(id) >= 0;
+	}
+	// its place in the trash's history; -1 for what is not an element of it
+	int trash_at(const std::string &id) const {
+		for (size_t k = 0; k < trash.size(); ++k) {
+			if (trash[k].id == id) {
+				return static_cast<int>(k);
+			}
+		}
+		return -1;
+	}
+	// the first of a command's names that is in the trash
+	bool names_trashed(const json &c, std::string &id) const {
+		for (const char *key : { "item", "vessel", "burner", "from", "to", "over", "of", "part", "timer", "alarm", "circuit", "in" }) {
+			if (c.contains(key) && c.at(key).is_string() && in_trash(c.at(key).get<std::string>())) {
+				id = c.at(key).get<std::string>();
+				return true;
+			}
+		}
+		for (const char *key : { "items", "parts" }) {
+			for (const json &name : c.contains(key) && c.at(key).is_array() ? c.at(key) : json::array()) {
+				if (name.is_string() && in_trash(name.get<std::string>())) {
+					id = name.get<std::string>();
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. The wires and the
+	// resets among what it holds go with it; those to anything outside come off, as `scrap` takes them off. It
+	// signals nothing there: its signal off, an alarm quiet, a monitor's last reading forgotten, a controller
+	// untuned (its rigs are off, as after `unrig`); a timer keeps what is left of it.
+	void bin_part(const std::string &id) {
+		const std::vector<std::string> held = held_by(parts, id);
+		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
+		for (const Wire &w : wires) {
+			if (inside(w.from) && inside(w.to)) {
+				binned_wires.push_back(w);
+			}
+		}
+		for (Rig r : rigs) {
+			if (inside(r.from) && r.control == "reset" && inside(r.item)) {
+				r.seen = false; // its source's signal is off: it acts from its next change
+				binned_rigs.push_back(r);
+			}
+		}
+		std::erase_if(wires, [&](const Wire &w) { return inside(w.from) || inside(w.to); });
+		std::erase_if(rigs, [&](const Rig &r) { return inside(r.from) || (r.control == "reset" && inside(r.item)); });
+		std::erase_if(controls, [&](const ControlSetting &s) { return inside(s.item); });
+		for (const std::string &name : held) {
+			Part p = parts[static_cast<size_t>(find_part(name))];
+			p.own = p.out = p.ringing = false;
+			p.held = 0;
+			p.last.reset();
+			if (p.kind == PartKind::Controller) {
+				retune(p, false);
+				p.gain = p.tau = p.theta = 0.0;
+				p.pinned = 0;
+				p.pinned_said = false;
+			}
+			binned.push_back(p);
+			std::erase_if(parts, [&](const Part &q) { return q.id == name; });
+		}
+	}
+	// A part out of the trash, with all it holds: among the lab's parts again (the last of them), and the wires
+	// and resets kept beside it. With `scrapped`, gone for good instead.
+	void unbin_part(const std::string &id, bool scrapped) {
+		const std::vector<std::string> held = held_by(binned, id);
+		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
+		for (const std::string &name : held) {
+			if (!scrapped) {
+				parts.push_back(binned[static_cast<size_t>(find_binned(name))]);
+			}
+			std::erase_if(binned, [&](const Part &q) { return q.id == name; });
+		}
+		for (const Wire &w : binned_wires) {
+			if (!scrapped && inside(w.from)) {
+				wires.push_back(w);
+			}
+		}
+		for (const Rig &r : binned_rigs) {
+			if (!scrapped && inside(r.from)) {
+				rigs.push_back(r);
+			}
+		}
+		std::erase_if(binned_wires, [&](const Wire &w) { return inside(w.from); });
+		std::erase_if(binned_rigs, [&](const Rig &r) { return inside(r.from); });
+	}
+	// an element leaves the trash's history
+	void forget_trash(const std::string &id) {
+		std::erase_if(trash, [&](const Binned &b) { return b.id == id; });
+	}
+	// Past its capacity the oldest leaves the trash for good: an item to the cabinet (it holds matter, which
+	// nothing destroys), a part scrapped with all it holds.
+	void trim_trash() {
+		while (trash.size() > static_cast<size_t>(TRASH_MOST)) {
+			const Binned oldest = trash.front();
+			trash.erase(trash.begin());
+			if (oldest.part) {
+				unbin_part(oldest.id, true);
+				note(Notice::Detail, "", "the trash is full: " + oldest.id + " left it for good");
+			} else {
+				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
+				note(Notice::Detail, oldest.id, "the trash is full: " + oldest.id + " went to the cabinet");
+			}
+		}
+	}
+	// the trash as JSON: its history, and the parts in it with what is kept beside them
+	json trash_json(bool exact) const {
+		json out = links_json(binned, binned_wires, binned_rigs, exact);
+		json list = json::array();
+		for (const Binned &b : trash) {
+			list.push_back({ { "id", b.id }, { "part", b.part }, { "at", { b.col, b.row } } });
+		}
+		out["list"] = list;
+		return out;
+	}
+	bool trash_from(const json &j, std::string &why) {
+		for (const json &x : j.at("list")) {
+			trash.push_back(Binned{ x.at("id").get<std::string>(), x.at("part").get<bool>(), x.at("at").at(0).get<int>(), x.at("at").at(1).get<int>() });
+		}
+		if (!links_from(j, binned, binned_wires, binned_rigs, why)) {
+			return false;
+		}
+		for (const Binned &b : trash) {
+			const int i = find(b.id);
+			if (b.part ? find_binned(b.id) < 0 : i < 0 || items[static_cast<size_t>(i)].place != Place::Trash) {
+				why = "the save's trash holds \"" + b.id + "\", which is not in it";
 				return false;
 			}
-			controls.push_back(k);
-		}
-		for (size_t k = 0; k < static_cast<size_t>(PART_KINDS) && k < j.at("made").size(); ++k) {
-			made[k] = j.at("made").at(k).get<int64_t>();
 		}
 		return true;
 	}
@@ -1492,11 +1671,11 @@ struct Lab::Impl {
 		}
 		return -1;
 	}
-	// a part, and everything a circuit holds, and what that holds
-	std::vector<std::string> held_by(const std::string &id) const {
+	// a part, and everything a circuit holds, and what that holds, among the lab's parts or the trash's
+	static std::vector<std::string> held_by(const std::vector<Part> &among, const std::string &id) {
 		std::vector<std::string> out{ id };
 		for (size_t k = 0; k < out.size(); ++k) {
-			for (const Part &p : parts) {
+			for (const Part &p : among) {
 				if (p.in == out[k]) {
 					out.push_back(p.id);
 				}
@@ -1894,6 +2073,7 @@ struct Lab::Impl {
 		touched.resize(items.size(), 0);
 		touched[i] = 1;
 		v.burst = true;
+		forget_trash(v.id); // burst in the trash (Stage 34), it leaves it: broken, in the cabinet, as any
 		v.place = Place::Cabinet;
 		v.col = v.row = -1;
 		events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", v.id });
@@ -1991,8 +2171,8 @@ struct Lab::Impl {
 
 	// true when the item is on the bench, in use
 	bool on_bench(const Item &x, std::string &why) const {
-		if (x.place == Place::Cabinet || x.place == Place::Outbox) {
-			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : "in the outbox") + ", not on the bench";
+		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
+			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in the outbox") + ", not on the bench";
 			return false;
 		}
 		return true;
@@ -2010,6 +2190,10 @@ struct Lab::Impl {
 		v.place = PLACE_NAME[static_cast<int>(item.place)];
 		v.col = item.col;
 		v.row = item.row;
+		if (const int binned_at = item.place == Place::Trash ? trash_at(item.id) : -1; binned_at >= 0) {
+			v.col = trash[static_cast<size_t>(binned_at)].col; // in the trash (Stage 34): the square it goes back to
+			v.row = trash[static_cast<size_t>(binned_at)].row;
+		}
 		v.w = item.w;
 		v.h = item.h;
 		v.on = item.on;
@@ -2456,6 +2640,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	const std::string what = c.at("do").get<std::string>();
 
+	// what is in the trash (Stage 34) takes no command but those that take it out, a wait, and a rig taken off it
+	if (!trash.empty() && what != "trash" && what != "restore" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
+		std::string id;
+		if (names_trashed(c, id)) {
+			why = "\"" + id + "\" is in the trash: restore it first";
+			return false;
+		}
+	}
 	if (what == "wait") {
 		const auto steps = static_cast<int64_t>(number(c, "seconds", 0.0) * 60.0 + 0.5);
 		for (int64_t i = 0; i < steps; ++i) {
@@ -2533,8 +2725,31 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		return true;
 	}
 	if (what == "place") {
-		// from the cabinet onto the bench, or along it
+		// from the cabinet or the trash onto the bench, or along it
 		int thing = -1;
+		if (c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0) {
+			// a signal part carried out of the trash, with all it holds, onto a free square of the bench (Stage 34)
+			const std::string id = c.at("item").get<std::string>();
+			if (trash_at(id) < 0) {
+				why = "\"" + id + "\" is in \"" + binned[static_cast<size_t>(find_binned(id))].in + "\", in the trash: restore that";
+				return false;
+			}
+			if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
+				why = "a place is \"at\" [column, row]";
+				return false;
+			}
+			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+			if (!square_free(std::string(), col, row, -1, why)) {
+				return false;
+			}
+			unbin_part(id, false);
+			forget_trash(id);
+			Part &p = parts[static_cast<size_t>(find_part(id))];
+			p.in.clear();
+			p.col = col;
+			p.row = row;
+			return true;
+		}
 		if (c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) < 0 && find_part(c.at("item").get<std::string>()) >= 0) {
 			// a signal part, along the bench
 			Part &p = parts[static_cast<size_t>(find_part(c.at("item").get<std::string>()))];
@@ -2559,7 +2774,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is broken: its glass burst";
 			return false;
 		}
-		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench) || x.holds >= 0) {
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
@@ -2586,6 +2801,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) { // moved away from an outlet, or its outlet from what stood under it
 			return false;
 		}
+		forget_trash(x.id); // carried out of the trash (Stage 34)
 		x.place = Place::Bench;
 		x.col = col;
 		x.row = row;
@@ -2716,8 +2932,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (p.id.empty()) {
 			do {
 				p.id = std::string(part_kind_name(kind)) + std::to_string(++count);
-			} while (find(p.id) >= 0 || find_part(p.id) >= 0);
-		} else if (find(p.id) >= 0 || find_part(p.id) >= 0) {
+			} while (taken(p.id));
+		} else if (taken(p.id)) {
 			why = "\"" + p.id + "\" is taken";
 			return false;
 		}
@@ -2729,7 +2945,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!part(c, "part", std::nullopt, at, why)) {
 			return false;
 		}
-		for (const std::string &id : held_by(parts[static_cast<size_t>(at)].id)) { // a circuit goes with all it holds
+		for (const std::string &id : held_by(parts, parts[static_cast<size_t>(at)].id)) { // a circuit goes with all it holds
 			std::erase_if(wires, [&](const Wire &w) { return w.from == id || w.to == id; });
 			std::erase_if(rigs, [&](const Rig &r) { return r.from == id || (r.control == "reset" && r.item == id); });
 			std::erase_if(controls, [&](const ControlSetting &s) { return s.item == id; });
@@ -3034,8 +3250,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (k.id.empty()) {
 			do {
 				k.id = "circuit" + std::to_string(++made[static_cast<int>(PartKind::Circuit)]);
-			} while (find(k.id) >= 0 || find_part(k.id) >= 0);
-		} else if (find(k.id) >= 0 || find_part(k.id) >= 0) {
+			} while (taken(k.id));
+		} else if (taken(k.id)) {
 			why = "\"" + k.id + "\" is taken";
 			return false;
 		}
@@ -3151,11 +3367,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	if (what == "stow") {
 		int thing = -1;
 		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
-			why = "there is no such item to stow";
+			const bool binned_part = c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0;
+			why = binned_part ? "\"" + c.at("item").get<std::string>() + "\" is in the trash: restore it first" : "there is no such item to stow";
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
-		bool free = x.kind != Kind::Tray && x.place == Place::Bench && x.holds < 0;
+		bool free = x.kind != Kind::Tray && (x.place == Place::Bench || x.place == Place::Trash) && x.holds < 0; // from the trash too (Stage 34)
 		for (const Item &other : items) {
 			free = free && other.under != thing;
 		}
@@ -3166,8 +3383,107 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) {
 			return false;
 		}
+		forget_trash(x.id);
 		x.place = Place::Cabinet;
 		x.col = x.row = -1;
+		return true;
+	}
+	if (what == "trash") {
+		// into the trash (GAME_SPEC §13, Stage 34): an item from the bench or the cabinet, as it is stowed; a
+		// signal part with all it holds, its settings kept. Past the trash's capacity the oldest leaves it.
+		if (!c.contains("item") || !c.at("item").is_string()) {
+			why = "the command needs \"item\"";
+			return false;
+		}
+		const std::string id = c.at("item").get<std::string>();
+		if (in_trash(id)) {
+			why = "\"" + id + "\" is already in the trash";
+			return false;
+		}
+		const int thing = find(id);
+		if (thing < 0 && find_part(id) < 0) {
+			why = "there is no such item to trash";
+			return false;
+		}
+		if (thing < 0) {
+			bin_part(id);
+			trash.push_back(Binned{ id, true, -1, -1 });
+			trim_trash();
+			return true;
+		}
+		Item &x = items[static_cast<size_t>(thing)];
+		std::string no;
+		if (x.kind == Kind::Tray) {
+			no = "the tray is the bench's own: it does not go in the trash";
+		} else if (x.place == Place::Outbox) {
+			no = "\"" + x.id + "\" has been handed in";
+		} else if (x.place == Place::On || x.place == Place::Under) {
+			const int other = x.place == Place::On ? x.on : x.under;
+			no = "\"" + x.id + "\" is " + (x.place == Place::On ? "on" : "under") + " \"" + (other >= 0 ? items[static_cast<size_t>(other)].id : std::string("something")) + "\": take it away first";
+		} else if (x.holds >= 0) {
+			no = "\"" + x.id + "\" has \"" + items[static_cast<size_t>(x.holds)].id + "\" on it: take it off first";
+		}
+		for (const Item &other : items) {
+			if (no.empty() && other.under == thing) {
+				no = "\"" + x.id + "\" stands over \"" + other.id + "\": take the burner away first";
+			}
+		}
+		if (!no.empty()) {
+			why = no;
+			return false;
+		}
+		if (!take_off_drains(thing, why)) {
+			return false;
+		}
+		trash.push_back(Binned{ x.id, false, x.place == Place::Bench ? x.col : -1, x.place == Place::Bench ? x.row : -1 });
+		x.place = Place::Trash;
+		x.col = x.row = -1;
+		trim_trash();
+		return true;
+	}
+	if (what == "restore") {
+		// out of the trash, back where it was (Stage 34): the newest, or the one named
+		if (c.contains("item") && !c.at("item").is_string()) {
+			why = "a restore names an \"item\", or none: the newest in the trash";
+			return false;
+		}
+		if (!c.contains("item") && trash.empty()) {
+			why = "the trash is empty";
+			return false;
+		}
+		const std::string id = c.contains("item") ? c.at("item").get<std::string>() : trash.back().id;
+		const int at = trash_at(id);
+		if (at < 0) {
+			const int inner = find_binned(id);
+			why = inner >= 0 ? "\"" + id + "\" is in \"" + binned[static_cast<size_t>(inner)].in + "\", in the trash: restore that" : "\"" + id + "\" is not in the trash";
+			return false;
+		}
+		const Binned b = trash[static_cast<size_t>(at)];
+		if (b.part) {
+			// to its square, on the bench or in the circuit it was in; taken, it stays in the trash
+			const Part &p = binned[static_cast<size_t>(find_binned(id))];
+			std::string taken_by;
+			if (!square_free(p.in, p.col, p.row, -1, taken_by)) {
+				why = "\"" + id + "\" cannot go back where it was: " + taken_by + ". It stays in the trash: place it on a free square";
+				return false;
+			}
+			unbin_part(id, false);
+		} else {
+			// to its square, or to the cabinet: where it came from, or because its square is taken
+			Item &x = items[static_cast<size_t>(find(id))];
+			const int there = b.col >= 0 ? standing_in(b.col, b.row, x.w, x.h) : -1;
+			if (b.col >= 0 && there < 0 && on_grid(b.col, b.row, x.w, x.h) && !(x.kind == Kind::Vessel && x.burst)) {
+				x.place = Place::Bench;
+				x.col = b.col;
+				x.row = b.row;
+			} else {
+				x.place = Place::Cabinet;
+				if (there >= 0) {
+					note(Notice::Detail, x.id, x.id + " went to the cabinet: \"" + name_of(there) + "\" stands where it stood");
+				}
+			}
+		}
+		trash.erase(trash.begin() + at);
 		return true;
 	}
 	if (what == "heat") {
@@ -3636,7 +3952,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		} else {
 			do {
 				g.id = "goal" + std::to_string(++goals_made);
-			} while (find_goal(g.id) >= 0 || find(g.id) >= 0 || find_part(g.id) >= 0);
+			} while (find_goal(g.id) >= 0 || taken(g.id));
 			goals.push_back(g);
 		}
 		detect_goals(false);
@@ -3784,6 +4100,20 @@ LabView Lab::view() const {
 			out.ringing.push_back(p.id);
 		}
 	}
+	// the trash (Stage 34): its parts after the lab's, with what circuits among them hold; its history, oldest first
+	for (const Part &p : m.binned) {
+		ItemView v;
+		v.id = p.id;
+		v.kind = part_kind_name(p.kind);
+		v.place = "trash";
+		v.col = p.col;
+		v.row = p.row;
+		v.part = p;
+		out.items.push_back(v);
+	}
+	for (const Binned &b : m.trash) {
+		out.trash.push_back(b.part ? static_cast<int>(m.items.size() + m.parts.size()) + m.find_binned(b.id) : m.find(b.id));
+	}
 	out.wires = m.wires;
 	out.rigs = m.rigs;
 	out.controls = m.controls;
@@ -3914,6 +4244,13 @@ ItemDebug Lab::debug(const std::string &id) const {
 		out.found = true;
 		out.part = true;
 		out.facts = m.part_facts(m.parts[static_cast<size_t>(m.find_part(id))]);
+		return out;
+	}
+	if (i < 0 && m.find_binned(id) >= 0) { // in the trash (Stage 34): what it is set to
+		out.found = true;
+		out.part = true;
+		out.facts = m.part_facts(m.binned[static_cast<size_t>(m.find_binned(id))]);
+		out.facts.insert(out.facts.begin(), "in the trash: it signals nothing");
 		return out;
 	}
 	if (i < 0 || m.items[static_cast<size_t>(i)].kind == Kind::Burner) {
@@ -4132,6 +4469,9 @@ std::string Lab::report() const {
 	}
 	out["events"] = events;
 	out["signals"] = m.signals_json(false);
+	if (!m.trash.empty()) { // Stage 34
+		out["trash"] = m.trash_json(false);
+	}
 	out["notices"] = m.notices_json(false);
 	out["goals"] = m.goals_json(false);
 	// the conservation laws, as integers
@@ -4201,16 +4541,16 @@ std::string Lab::digest() const {
 		}
 	}
 	// the signals, once there is a part (§13.3): what they will do is state too
-	if (!m.parts.empty()) {
-		const auto text = [&hash](const std::string &t) {
-			hash.update_u64(t.size());
-			hash.update(t.data(), t.size());
-		};
-		const auto maybe = [&hash](const std::optional<double> &v) {
-			hash.update_u64(v ? 1 : 0);
-			hash.update_double(v ? *v : 0.0);
-		};
-		for (const Part &p : m.parts) {
+	const auto text = [&hash](const std::string &t) {
+		hash.update_u64(t.size());
+		hash.update(t.data(), t.size());
+	};
+	const auto maybe = [&hash](const std::optional<double> &v) {
+		hash.update_u64(v ? 1 : 0);
+		hash.update_double(v ? *v : 0.0);
+	};
+	const auto links = [&](const std::vector<Part> &parts, const std::vector<Wire> &wires, const std::vector<Rig> &rigs) {
+		for (const Part &p : parts) {
 			if (p.kind == PartKind::Circuit) {
 				continue; // where parts are kept, as where things stand, is not the world
 			}
@@ -4248,11 +4588,11 @@ std::string Lab::digest() const {
 				hash.update_u64((p.tuned ? 1u : 0u) | (p.pulse ? 2u : 0u));
 			}
 		}
-		for (const Wire &w : m.wires) {
+		for (const Wire &w : wires) {
 			text(w.from);
 			text(w.to);
 		}
-		for (const Rig &r : m.rigs) {
+		for (const Rig &r : rigs) {
 			text(r.from);
 			text(r.item);
 			text(r.control);
@@ -4261,6 +4601,29 @@ std::string Lab::digest() const {
 			maybe(r.off);
 			maybe(r.any);
 		}
+	};
+	if (!m.parts.empty()) {
+		links(m.parts, m.wires, m.rigs);
+	}
+	// the trash, once it holds something (Stage 34): its order, where each element goes back to, and its
+	// parts as they will be restored; a lab with an empty trash digests as before
+	if (!m.trash.empty()) {
+		text("trash");
+		hash.update_u64(m.trash.size());
+		for (const Binned &b : m.trash) {
+			text(b.id);
+			hash.update_u64(b.part ? 1 : 0);
+			hash.update_i64(b.col);
+			hash.update_i64(b.row);
+		}
+		hash.update_u64(m.binned.size());
+		for (const Part &p : m.binned) { // a part's remembered place: its square, and the circuit it lies in
+			text(p.id);
+			text(p.in);
+			hash.update_i64(p.col);
+			hash.update_i64(p.row);
+		}
+		links(m.binned, m.binned_wires, m.binned_rigs);
 	}
 	return hash.hex();
 }
@@ -4380,6 +4743,9 @@ json Lab::Impl::save() const {
 	}
 	bench["events"] = happened;
 	bench["signals"] = signals_json(true);
+	if (!trash.empty()) { // a lab with an empty trash saves as before (Stage 34)
+		bench["trash"] = trash_json(true);
+	}
 	bench["notices"] = notices_json(true);
 	bench["goals"] = { { "list", goals_json(true) }, { "made", goals_made } };
 	out["bench"] = bench;
@@ -4470,7 +4836,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Outbox)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -4530,6 +4896,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		}
 		if (bench.contains("signals") && !impl->signals_from(bench.at("signals"), why)) {
 			return nullptr;
+		}
+		if (bench.contains("trash") && !impl->trash_from(bench.at("trash"), why)) {
+			return nullptr;
+		}
+		for (const Item &x : impl->items) {
+			if (x.place == Place::Trash && impl->trash_at(x.id) < 0) {
+				why = "the save holds \"" + x.id + "\" in a trash that does not list it";
+				return nullptr;
+			}
 		}
 		if (bench.contains("notices") && !impl->notices_from(bench.at("notices"), why)) {
 			return nullptr;

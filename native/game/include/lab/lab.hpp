@@ -34,8 +34,8 @@ struct SubstanceView {
 struct ItemView {
 	std::string id;
 	std::string kind; // vessel, balloon, burner, tray, stopper; a signal part: timer, monitor, alarm
-	std::string place; // cabinet, bench, on, under, outbox
-	int col = -1, row = -1; // on the bench: its footprint's top-left square
+	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
+	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
 	int under = -1; // a burner: index of the vessel over it
@@ -101,6 +101,10 @@ bool level_of(std::string_view name, Notice::Level &level);
 // as terms on what is there; met while a slot holds an item and every term
 // holds of it, measured live.
 constexpr int OUTBOX_SLOTS = 6;
+// The trash (GAME_SPEC §13, Stage 34): what `trash` puts away and `restore` brings back where it was, the
+// newest first. It holds this many elements; one more, and the oldest leaves it for good: an item to the
+// cabinet (what holds matter is never destroyed), a signal part scrapped.
+constexpr int TRASH_MOST = 64;
 struct GoalTerm {
 	Quantity quantity; // no item: whatever is handed in to the slot
 	Comparison comparison; // never "reaches": a goal is a state, not an event
@@ -122,7 +126,12 @@ struct LabView {
 	bool conserved = true; // every total is what it was at the start
 	double mass_g = 0.0;
 	double energy_j = 0.0;
-	std::vector<ItemView> items; // the equipment, then the signal parts, in the order they were made
+	// the equipment, then the signal parts, in the order they were made (one restored from the trash comes last),
+	// then the parts in the trash (Stage 34: place "trash"; with a circuit, what it holds, their `part.in` its id)
+	std::vector<ItemView> items;
+	// the trash's elements, oldest first, as indices into `items`: the last is the newest, what `restore` brings
+	// back; a circuit is one element, with what it holds
+	std::vector<int> trash;
 	std::vector<std::string> events; // "the balloon burst at 12.5 s"
 	// signals (§13.3)
 	std::vector<Wire> wires;
