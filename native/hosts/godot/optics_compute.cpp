@@ -286,12 +286,39 @@ void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats) {
 		}
 		buffer.rid = made;
 		buffer.capacity = capacity;
+		buffer.sent.clear();
 	}
-	if (bytes > 0) {
-		godot::PackedByteArray given;
-		given.resize(bytes);
-		std::memcpy(given.ptrw(), data, bytes);
-		rd_->buffer_update(buffer.rid, 0, bytes, given);
+	// Only the pages (a thousand floats) that differ from what the buffer holds are sent (Stage 36): a step of the
+	// lab changes a vessel or two, and the whole scene, 400 kB, sent at every step held the frames of a 120 Hz
+	// display that had one to 12 ms and more, the others 5.
+	const size_t count = static_cast<size_t>(floats > 0 ? floats : 0);
+	if (buffer.sent.size() != count) {
+		buffer.sent.assign(data, data + count);
+		if (bytes > 0) {
+			godot::PackedByteArray given;
+			given.resize(bytes);
+			std::memcpy(given.ptrw(), data, bytes);
+			rd_->buffer_update(buffer.rid, 0, bytes, given);
+		}
+		return;
+	}
+	constexpr size_t PAGE = 1024;
+	size_t from = count; // the first page of the changed run
+	for (size_t at = 0; at <= count; at += PAGE) {
+		const size_t n = std::min(PAGE, count - std::min(at, count));
+		const bool changed = at < count && std::memcmp(&buffer.sent[at], data + at, n * sizeof(float)) != 0;
+		if (changed && from == count) {
+			from = at;
+		}
+		if (!changed && from != count) {
+			const size_t floats_run = std::min(at, count) - from;
+			std::memcpy(&buffer.sent[from], data + from, floats_run * sizeof(float));
+			godot::PackedByteArray given;
+			given.resize(static_cast<int64_t>(floats_run * sizeof(float)));
+			std::memcpy(given.ptrw(), data + from, floats_run * sizeof(float));
+			rd_->buffer_update(buffer.rid, static_cast<uint32_t>(from * sizeof(float)), static_cast<uint32_t>(floats_run * sizeof(float)), given);
+			from = count;
+		}
 	}
 }
 

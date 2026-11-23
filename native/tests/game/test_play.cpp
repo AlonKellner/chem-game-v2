@@ -47,7 +47,7 @@ TEST_CASE("play: a play that is not one is refused, with the reason (Stage 33)")
 	CHECK_FALSE(play.over());
 }
 
-TEST_CASE("play: the play a host times sets the bench up, carries the bottle, pours it by hand and stirs (Stage 33)") {
+TEST_CASE("play: the play a host times sets the bench up, carries the bottle, pours it by hand and stirs, then runs at 600x (Stage 33, 36)") {
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/lab.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -69,6 +69,7 @@ TEST_CASE("play: the play a host times sets the bench up, carries the bottle, po
 	CHECK(frames["carry"] == 90);
 	CHECK(frames["pour"] == 421);
 	CHECK(frames["stir"] == 360);
+	CHECK(frames["fast"] == 360); // (Stage 36: and on at 600 times the clock's speed)
 	const lab::LabView view = ui->lab().view();
 	const lab::ItemView &flask = item(view, "flask");
 	const lab::ItemView &acid = item(view, "acid");

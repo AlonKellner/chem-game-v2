@@ -64,6 +64,7 @@ private:
 	struct Buffer {
 		godot::RID rid;
 		uint32_t capacity = 0;
+		std::vector<float> sent; // what it holds (Stage 36: only what changed is sent again)
 	};
 	void hold(Buffer &buffer, const float *data, int32_t floats);
 	Buffer scene_, rows_, lines_, lights_, wall_, shapes_;

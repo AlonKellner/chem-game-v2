@@ -21,6 +21,8 @@
 		{"to": "square:7,12", "frames": 30, "button": "click"},
 		{"to": "item:flask", "button": "right"},
 		{"to": "stir:flask", "button": "click"},
-		{"frames": 360, "mark": "stir"}
+		{"frames": 360, "mark": "stir"},
+		{"to": "speed:600", "button": "click"},
+		{"frames": 360, "mark": "fast"}
 	]
 }
