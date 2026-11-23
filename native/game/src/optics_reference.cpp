@@ -168,32 +168,18 @@ inline vec4 wall_vec(int i) {
 	return vec4(v[0], v[1], v[2], v[3]);
 }
 
-// Stage 29, spike A: a band read as a beam of rays traced live, beside the maps' readings (LAB_BEAM: 0 the
-// maps, 1 a point, 2 two corners across, 3 four corners). The rays are the exact tracer's here; the reading
-// is what is being measured.
-// Stage 35: the reading is a pixel's own rays (5) unless LAB_BEAM names another (0: the maps, until they go).
+// The reading is one (Stage 35): a pixel through anything that bends its view is read by its own rays, as an
+// average over time.
 struct Path;
 double ray_band(Path q, double u0, double u1, double t, double one_nm);
-int &beam_mode_set() {
-	static int mode = [] {
-		const char *asked = std::getenv("LAB_BEAM");
-		return asked != nullptr ? std::atoi(asked) : 5;
-	}();
-	return mode;
-}
-int beam_mode() {
-	return beam_mode_set();
-}
 bool rays_on() {
-	return beam_mode() > 0;
+	return true;
 }
-// 4: a pixel's own rays, at four wavelengths, traced by the shared source's own tracer (as the GPU does)
 bool rays_nodes() {
-	return beam_mode() == 4 || beam_mode() == 5;
+	return true;
 }
-// 5: a pixel as the beam's exact reading and the average of its rays' corrections (an average over time)
 bool rays_mean() {
-	return beam_mode() == 5;
+	return true;
 }
 inline vec4 shape_vec(int i) {
 	const double *v = &current->shapes_exact[static_cast<size_t>(i) * 4];
@@ -410,7 +396,6 @@ struct Use {
 
 bool ready(const OpticsScene &s) {
 	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() % static_cast<size_t>(optics_layout::ROWS_PER_SET * optics_layout::ROW) == 0 && !s.wall.empty() &&
-		   s.stacks.size() >= static_cast<size_t>(optics_layout::MAX_BODIES) * 4 &&
 		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
 
@@ -1028,7 +1013,7 @@ namespace shader {
 // one straight step of a band's wavelengths, read by the mode's beam
 double oracle_step(const Path &q, double nm0, double nm1, double nm, double sx, double sy) {
 	const double half = 0.5 * q.size;
-	switch (beam_mode()) {
+	switch (5) {
 		case 1: {
 			const OracleRay r = oracle_ray(q.x - half + sx * q.size, q.y - half + sy * q.size, nm);
 			return r.a * wall_span(oracle_profile(r.y), r.x, r.x) + r.b;
@@ -1045,7 +1030,7 @@ double oracle_step(const Path &q, double nm0, double nm1, double nm, double sx, 
 // sweep tolerance) or goes another way, the band is halved, sixteen steps at most; each step weighed by its
 // share of the light's energy, its point t of the way through it. x: the light times its weight; y: the weight.
 vec2 oracle_steps(const Path &q, double nm0, double nm1, double nm, double t, double sx, double sy, int depth) {
-	if (beam_mode() > 1 && depth < 4 && nm1 != nm0) {
+	if (depth < 4 && nm1 != nm0) {
 		const double mid = 0.5 * (nm0 + nm1);
 		const OracleRay a = oracle_ray(q.x, q.y, nm0), b = oracle_ray(q.x, q.y, nm1), m = oracle_ray(q.x, q.y, mid);
 		if (m.route != a.route || m.route != b.route || std::fabs(m.x - 0.5 * (a.x + b.x)) > 0.02 || std::fabs(m.y - 0.5 * (a.y + b.y)) > 0.02) {
@@ -1337,10 +1322,8 @@ OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm) {
 	return optics_ray_way(scene, x, y, nm, 0);
 }
 
-int optics_reading(int mode) {
-	const int before = shader::beam_mode_set();
-	shader::beam_mode_set() = mode;
-	return before;
+int optics_reading(int) {
+	return 5;
 }
 
 bool optics_traced() {

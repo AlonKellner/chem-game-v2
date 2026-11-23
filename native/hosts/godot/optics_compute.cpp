@@ -74,6 +74,7 @@ const char *const TRACE_HEAD = R"(
 // for nothing: 30 ms frames, Stage 33)
 #define BEAM_BETWEEN 0.5
 bool rays_on() { return true; }
+bool rays_mean() { return true; }
 )";
 // LAB_BEAM_DRY: the reading built into the shader but never run (a pixel is never read by it): how long the
 // shader takes to build, apart from what its passes cost
@@ -275,7 +276,7 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 		source.instantiate();
 		source->set_language(RenderingDevice::SHADER_LANGUAGE_GLSL);
 		source->set_stage_source(RenderingDevice::SHADER_STAGE_COMPUTE,
-				godot::String(WRAPPER_HEAD) + godot::String(traced ? TRACE_HEAD : "") + godot::String(traced ? (std::getenv("LAB_BEAM_DRY") != nullptr ? TRACE_DRY : TRACE_LIVE) : "") + (std::getenv("LAB_BEAM_STUB") != nullptr ? godot::String("#define OPTICS_STUB_") + godot::String(std::getenv("LAB_BEAM_STUB")).replace(",", " 1\n#define OPTICS_STUB_") + " 1\n" : godot::String("")) + godot::String(std::getenv("LAB_BEAM_AT_ONCE") != nullptr ? "#define CORRECTIONS_AT_ONCE true\n" : "") + (std::getenv("LAB_BEAM_DEFINE") != nullptr ? godot::String("#define ") + godot::String(std::getenv("LAB_BEAM_DEFINE")) + "\n" : godot::String("")) + godot::String(pass == 1 ? "#define OPTICS_CHAIN 1\n" : (pass == 2 ? "#define OPTICS_BEAM_PASS 1\n" : (pass == 3 ? "#define OPTICS_CORNER_PASS 1\n" : ""))) + "#define OPTICS_GROUP_X " + godot::String::num_int64(group_[pass][0]) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(group_[pass][1]) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
+				godot::String(WRAPPER_HEAD) + godot::String(traced ? TRACE_HEAD : "") + godot::String(traced ? (std::getenv("LAB_BEAM_DRY") != nullptr ? TRACE_DRY : TRACE_LIVE) : "") + (std::getenv("LAB_BEAM_STUB") != nullptr ? godot::String("#define OPTICS_STUB_") + godot::String(std::getenv("LAB_BEAM_STUB")).replace(",", " 1\n#define OPTICS_STUB_") + " 1\n" : godot::String("")) + godot::String(std::getenv("LAB_BEAM_AT_ONCE") != nullptr ? "#define CORRECTIONS_AT_ONCE true\n" : "") + (std::getenv("LAB_BEAM_DEFINE") != nullptr ? godot::String("#define ") + godot::String(std::getenv("LAB_BEAM_DEFINE")) + "\n" : godot::String("")) + godot::String(pass == 2 ? "#define OPTICS_BEAM_PASS 1\n" : "#define OPTICS_SCREEN_PASS 1\n") + godot::String(pass == 1 ? "#define OPTICS_CHAIN 1\n" : (pass == 2 ? "#define OPTICS_BEAM_PASS 1\n" : (pass == 3 ? "#define OPTICS_CORNER_PASS 1\n" : ""))) + "#define OPTICS_GROUP_X " + godot::String::num_int64(group_[pass][0]) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(group_[pass][1]) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
 		// LAB_BEAM_TIMES: how long each stage of the shader's build takes (the GLSL to SPIR-V, the shader, the pipeline)
 		const bool timed = std::getenv("LAB_BEAM_TIMES") != nullptr;
 		const uint64_t t0 = godot::Time::get_singleton()->get_ticks_msec();

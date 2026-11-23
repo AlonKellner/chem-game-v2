@@ -5016,8 +5016,11 @@ bool chained(Path q) {
 
 Cuts cuts_none();
 
+// (OPTICS_SCREEN_PASS: the host's pass over the whole screen, which leaves the pixels read by their own rays to
+// the pass made for them (OPTICS_BEAM_PASS), is compiled without their reading: what a pass costs on the GPU
+// follows what its shader could do. The reference defines neither, and reads every pixel.)
 float band_light(Path q, float u0, float u1, float t, float one_nm) {
-#if defined(OPTICS_NODES) && defined(OPTICS_FOLLOW)
+#ifndef OPTICS_SCREEN_PASS
 	if (rays_nodes() && beamed(q)) {
 		// one wavelength: read exactly, each part followed to where its rays part (the limit the average over
 		// time comes to; the reference's checks are of it)
@@ -5174,7 +5177,7 @@ vec3 batch(Path q, int n, float offset, Cuts cuts) {
 	vec4 beams = beam_mean(q, n, offset, cuts, 0.0, 1.0, false, n == PROXY_POINTS && offset == 0.5 ? 0 : 1);
 	return to_linear_srgb(vec3(beams.x, beams.y, beams.z));
 #else
-#if defined(OPTICS_NODES) && defined(OPTICS_FOLLOW)
+#ifndef OPTICS_SCREEN_PASS
 	if (rays_nodes() && beamed(q)) {
 		// (the fixed estimate is the eight bands read at their middles: the beam's own reading, no ray more)
 		vec4 light = rays_mean() ? beam_mean(q, n, offset, cuts, 0.0, 1.0, false, n == PROXY_POINTS && offset == 0.5 ? 0 : 1) : beam_sum(q, n, offset, cuts, 0.0, 1.0, false, 0.0);
@@ -5214,7 +5217,7 @@ vec3 batch(Path q, int n, float offset, Cuts cuts) {
 
 // the colour itself: the light's shares, each its own band, read at its middle
 vec3 truth(Path q, int shares) {
-#if defined(OPTICS_NODES) && defined(OPTICS_FOLLOW)
+#ifndef OPTICS_SCREEN_PASS
 	if (rays_nodes() && beamed(q)) {
 		vec4 light = rays_mean() ? beam_mean(q, shares, 0.5, cuts_none(), 0.0, 1.0, false, 1) : beam_sum(q, shares, 0.5, cuts_none(), 0.0, 1.0, false, 0.0);
 		return to_linear_srgb(vec3(light.x, light.y, light.z));
@@ -5433,7 +5436,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		early = to_linear_srgb(pair.moving);
 		both = true;
 #else
-#if defined(OPTICS_NODES) && defined(OPTICS_FOLLOW)
+#ifndef OPTICS_SCREEN_PASS
 		if (rays_mean() && beamed(q)) {
 			BeamPair pair = beam_means(q, LEAST_BATCH, moving_point, cuts, 0.0, 1.0, false, 1, true);
 			now = to_linear_srgb(pair.fixed_estimate);
