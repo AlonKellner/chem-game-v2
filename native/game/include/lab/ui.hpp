@@ -5,6 +5,7 @@
 #include "lab/tutorial.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -58,6 +59,18 @@ public:
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.
 	void frame(double seconds);
+	// A frame's time for the lab's steps (Stage 36; GAME_SPEC §13.1), in milliseconds of the CPU: a frame runs
+	// whole steps of 1/60 s until it has spent it, and what it could not run is run in the next frames (no more
+	// than one frame's worth is carried), so a frame costs the same at any speed of the clock and a heavy moment
+	// runs the clock slower, never the picture. 0 (as opened): no budget, every step a frame asks is run (up to
+	// twenty seconds' worth). The steps are the same steps however they fall into frames (D1).
+	void set_budget(double ms);
+	// what the budget is measured by: milliseconds, from any start (a test gives its own; by default the
+	// steady clock)
+	void set_clock(std::function<double()> ms_now);
+	// the clock's speed the lab has kept to over the last frames (the speed chosen, or less where the budget
+	// held it back); 0 while paused
+	double achieved() const;
 	// What to paint now: the commands under the optical pass, the pass itself
 	// (what is in the vessels and the balloons, from optics()), the commands over it.
 	const DrawList &draw();

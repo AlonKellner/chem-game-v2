@@ -28,7 +28,8 @@ int usage() {
 						 "  study spectrum        how many spectral bands the renderer needs\n"
 						 "  study tilt            what each vessel holds below its lip as it is turned, and what runs over it\n"
 						 "  study vortex          a turning liquid's vortex against its energy, E = (M g / A) V\n"
-						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n");
+						 "  study frames          the renderer's false positives and negatives, with and without band cuts\n"
+						 "  study speed           what a frame of the screen costs the CPU at 1x, 60x and 600x, scene by scene\n");
 	return 2;
 }
 

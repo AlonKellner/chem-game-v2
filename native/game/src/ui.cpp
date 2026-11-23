@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -207,6 +208,10 @@ struct Ui::Impl {
 	bool paused = false;
 	bool check_every_step = false;
 	double owed = 0.0; // steps not yet taken
+	// the frame's budget for the lab's steps (Stage 36): 0, none
+	double budget_ms = 0.0;
+	std::function<double()> clock_ms = [] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
+	double achieved = 0.0; // the clock's speed kept to, over the last frames
 	// the pointer
 	float px = 0, py = 0;
 	bool down = false;
@@ -4496,15 +4501,17 @@ void Ui::frame(double seconds) {
 		}
 	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
-		m.owed += seconds * m.speed * 60.0;
+		const double asked = seconds * m.speed * 60.0;
+		m.owed += asked;
 		// no more than twenty simulated seconds a frame: beyond it the clock runs slow, never the picture
-		auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
-		m.owed = m.owed < 1200.0 ? m.owed - static_cast<double>(steps) : 0.0;
+		const auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
 		std::string why;
-		bool ok = true, first = true;
+		bool ok = true, first = true, stopped = false;
+		int64_t done = 0;
 		// one step of every frame against every invariant; all of them when asked; and
 		// the lab stops at the end of a step in which an alarm rang (§13.3)
 		const auto run = [&](int64_t n) {
+			const int64_t before = m.lab->step();
 			m.lab->set_checking(first || m.check_every_step);
 			ok = m.lab->advance(first && !m.check_every_step ? 1 : n, why, true);
 			m.lab->set_checking(false);
@@ -4512,31 +4519,54 @@ void Ui::frame(double seconds) {
 				ok = m.lab->advance(n - 1, why, true);
 			}
 			first = false;
+			done += m.lab->step() - before;
 			if (ok && m.lab->rang()) {
+				stopped = true;
 				m.ring();
 			}
 		};
+		// Under a budget (Stage 36) the steps are run in pieces, each as many as the time left is likely to hold
+		// at what the steps so far have cost, until it is spent: at least one step a frame.
+		const double start = m.budget_ms > 0.0 ? m.clock_ms() : 0.0;
+		const auto spent = [&] { return m.budget_ms > 0.0 && m.clock_ms() - start >= m.budget_ms; };
+		const auto piece = [&](int64_t left, int64_t most) {
+			if (!(m.budget_ms > 0.0)) {
+				return std::min(left, most);
+			}
+			if (done < 9) {
+				return std::min<int64_t>(left, done == 0 ? 1 : 8); // (the first is checked: the next few say what a step costs)
+			}
+			const double each = std::max((m.clock_ms() - start) / static_cast<double>(done), 1e-6);
+			const auto fits = static_cast<int64_t>((m.budget_ms - (m.clock_ms() - start)) / each);
+			return std::clamp<int64_t>(fits, 1, std::min(left, most));
+		};
 		if (!m.tutorial) {
-			if (steps > 0) {
-				run(steps);
+			while (ok && done < steps && !stopped && !(done > 0 && spent())) {
+				run(piece(steps - done, steps));
 			}
 		} else {
 			// a tutorial's clock stands while its step asks for a gesture (§13.2): the lab
 			// advances a second at a time, and stops in the second where a wait ends
-			while (ok && steps > 0 && !m.held() && !m.paused) {
-				const int64_t n = steps < 60 ? steps : 60;
-				run(n);
-				steps -= n;
+			while (ok && done < steps && !m.held() && !m.paused && !stopped && !(done > 0 && spent())) {
+				run(piece(steps - done, 60));
 				m.refresh();
 				m.follow();
 			}
 		}
+		// what was not run is carried, no more than one frame's worth: beyond it the clock runs slow
+		m.owed = m.owed < 1200.0 ? std::min(m.owed - static_cast<double>(done), std::max(asked, 1.0)) : 0.0;
+		if (stopped) {
+			m.owed = std::min(m.owed, std::max(m.owed - std::floor(m.owed), 0.0)); // (stopped by an alarm: the frame's other steps are not owed)
+		}
+		m.achieved = 0.9 * m.achieved + 0.1 * (static_cast<double>(done) / 60.0 / seconds);
 		if (m.held() || m.paused) {
 			m.owed = 0.0;
 		}
 		if (!ok) {
 			m.message = why;
 		}
+	} else if (m.paused) {
+		m.achieved = 0.0;
 	}
 	m.clock += seconds > 0.0 ? seconds : 0.0;
 	m.refresh();
@@ -4597,6 +4627,20 @@ void Ui::key(Key key, uint32_t codepoint) {
 
 const std::string &Ui::message() const {
 	return impl_->message;
+}
+
+void Ui::set_budget(double ms) {
+	impl_->budget_ms = ms > 0.0 ? ms : 0.0;
+}
+
+void Ui::set_clock(std::function<double()> ms_now) {
+	if (ms_now) {
+		impl_->clock_ms = std::move(ms_now);
+	}
+}
+
+double Ui::achieved() const {
+	return impl_->achieved;
 }
 
 double Ui::speed() const {

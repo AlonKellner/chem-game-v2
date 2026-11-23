@@ -319,7 +319,7 @@ struct Lab::Impl {
 			return std::nullopt;
 		}
 		LabView one;
-		one.items.push_back(item_view(items[static_cast<size_t>(i)]));
+		one.items.push_back(item_view(items[static_cast<size_t>(i)], false));
 		return measure(one, q);
 	}
 
@@ -1423,19 +1423,21 @@ struct Lab::Impl {
 		lying_in(x, mixture, sediment);
 		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x.cell), x.swirl);
 	}
-	// (the same until its energy, what it holds or what it holds up has changed by a part in ten thousand)
+	// (worked out again when what it holds has changed (its signature, set_stirring's), or what it holds up by a
+	// thousandth, or its energy by a hundredth; between, its share goes as the cube root of its energy, as it
+	// does where the depth under it is the same. Stage 36: a turning liquid's energy changes at every step, and a
+	// share is a dozen searches of how the contents lie)
 	double vortex(const Item &x) const {
 		if (!(x.swirl > 0.0)) {
 			return 0.0;
 		}
-		const auto near = [](double a, double b) { return std::fabs(a - b) <= 1e-4 * std::fabs(b); };
-		if (!(x.share_energy > 0.0) || !near(x.swirl, x.share_energy) || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-4)) {
+		if (!(x.share_energy > 0.0) || std::fabs(x.swirl - x.share_energy) > 1e-2 * x.share_energy || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-3)) {
 			x.share = swirl_of(x).share;
 			x.share_energy = x.swirl;
 			x.share_for = x.swirl_for;
 			x.share_held_up = x.suspended;
 		}
-		return x.share;
+		return x.share < 1.0 ? std::min(1.0, x.share * std::cbrt(x.swirl / x.share_energy)) : 1.0;
 	}
 	// A stirred liquid's turning, each step (GAME_SPEC §11, Stage 32). The stirrer does work on the liquid, which
 	// the mains give (the ledger's entry: it is heat in the liquid once the turning has died down, and the liquid
@@ -1559,17 +1561,30 @@ struct Lab::Impl {
 			}
 			return p;
 		}
-		const contents::Lying l = contents::lying(g, p.turn, mixture, sediment, x.swirl > 0.0 ? vortex(x) : 0.0, 1);
-		p.head_cm = l.liquid ? l.head : 0.0;
+		// How the contents lie is worked out for the liquid to the nearest 256th of the vessel's capacity, the
+		// sediment to the nearest 1024th and the vortex to the nearest 256th of its share (Stage 36): between, the
+		// liquid's surface stands over it by what is more over the surface's area, and what is more of either runs.
+		// A step's cost is then most often a lookup while a pour runs, and the answer is what the contents are,
+		// whatever came before.
+		// (the last sixteenth of the vessel's capacity of liquid, and of a sixteenth of that of sediment, exactly:
+		// where little is left the anchor would be as much again as what lies there)
+		const double unit = g.capacity() / 256.0;
+		const double near_mixture = mixture < 16.0 * unit ? mixture : std::round(mixture / unit) * unit;
+		const double near_sediment = sediment < 4.0 * unit ? sediment : std::round(sediment / (unit / 4.0)) * (unit / 4.0);
+		const double near_vortex = x.swirl > 0.0 ? std::round(256.0 * vortex(x)) / 256.0 : 0.0;
+		const contents::Lying l = contents::lying(g, p.turn, near_mixture, near_sediment, near_vortex, 1);
+		const double more = l.liquid && l.surface_area > 0.0 ? (mixture - near_mixture) / l.surface_area : 0.0; // cm, up
+		const double head = l.head + more;
+		p.head_cm = l.liquid ? head : 0.0;
 		const double lip_holds = contents::below(g, p.turn, l.lip_level), brim = std::fabs(l.lip_x);
-		if (l.liquid && l.head > 0.0 && mixture > 0.0) {
-			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds, 0.0);
-			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, l.head), over / chem::STEP_SECONDS);
+		if (l.liquid && head > 0.0 && mixture > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds + (mixture - near_mixture), 0.0);
+			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, head), over / chem::STEP_SECONDS);
 			p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
 			p.carried = share;
 		}
 		if (l.solid && l.solid_head > 0.0) {
-			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds, 0.0);
+			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds + (sediment - near_sediment) / contents::PACKING, 0.0);
 			p.solids = contents::PACKING * std::min(contents::over_brim(brim, p.turn, l.solid_head), over / chem::STEP_SECONDS) * 1e-6;
 		}
 		return p;
@@ -2180,7 +2195,10 @@ struct Lab::Impl {
 
 	json save() const;
 
-	ItemView item_view(const Item &item) const {
+	// (`shaped`: with how what is in it lies, a pour by hand's and a vortex's searches; a reading of a quantity,
+	// which reads none of them, leaves them out: at every step, for every monitor, at 600 times the clock's speed,
+	// they were most of the frame. Stage 36)
+	ItemView item_view(const Item &item, bool shaped = true) const {
 		const Impl &m = *this;
 		const SpeciesTable &table = m.table();
 		static const char PHASE[] = { 's', 'l', 'g', 'a' };
@@ -2207,7 +2225,7 @@ struct Lab::Impl {
 		if (item.pours_into >= 0 && item.inverted && item.pour.index >= 0) {
 			v.pours_ml_s = std::max(world().edges()[static_cast<size_t>(item.pour.index)].rate, 0.0) * 1e6;
 		}
-		if (item.pours_into >= 0 && !item.inverted) {
+		if (item.pours_into >= 0 && !item.inverted && shaped) {
 			if (const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml); g != nullptr) {
 				const ByHand p = by_hand(item, *g);
 				v.turn = p.turn;
@@ -2220,7 +2238,7 @@ struct Lab::Impl {
 		if (item.swirl > 0.0 || item.suspended > 0.0) {
 			v.swirl_j = item.swirl;
 			v.swirl_most_j = item.swirl_most;
-			v.vortex = vortex(item);
+			v.vortex = shaped ? vortex(item) : 0.0;
 			v.suspended = item.suspended;
 		}
 		v.submitted = item.submitted;

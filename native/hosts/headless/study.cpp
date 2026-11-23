@@ -479,6 +479,7 @@ int crystals() {
 int spectrum_study(); // spectrum.cpp
 int frames_study(); // frames.cpp
 int tilt_study(); // lying.cpp
+int speed_study(); // speed.cpp
 int vortex_study();
 
 int run_study(const char *name) {
@@ -487,6 +488,9 @@ int run_study(const char *name) {
 	}
 	if (std::strcmp(name, "spectrum") == 0) {
 		return spectrum_study();
+	}
+	if (std::strcmp(name, "speed") == 0) {
+		return speed_study();
 	}
 	if (std::strcmp(name, "tilt") == 0) {
 		return tilt_study();
