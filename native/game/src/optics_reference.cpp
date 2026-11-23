@@ -166,72 +166,12 @@ inline vec3 operator*(double s, const vec3 &a) {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wkeyword-macro"
 #endif
-inline int beam_setting(int which) {
-	static const int deepest = [] {
-		const char *asked = std::getenv("LAB_BEAM_DEEPEST");
-		return asked != nullptr ? std::atoi(asked) : 2;
-	}();
-	static const int cut_at = [] {
-		const char *asked = std::getenv("LAB_BEAM_CUT_AT");
-		return asked != nullptr ? std::atoi(asked) : 0;
-	}();
-	static const int most = [] {
-		const char *asked = std::getenv("LAB_BEAM_MOST");
-		return asked != nullptr ? std::atoi(asked) : 100000;
-	}();
-	return which == 0 ? deepest : which == 1 ? cut_at : most;
-}
-inline double beam_straight_setting() {
-	static const double v = [] {
-		const char *asked = std::getenv("LAB_BEAM_STRAIGHT");
-		return asked != nullptr ? std::atof(asked) : 0.05;
-	}();
-	return v;
-}
 // how many rays the pass's tracer followed on this thread (a count for the reference alone)
 thread_local int64_t rays_followed = 0;
 #define OPTICS_RAY_HOOK() (++rays_followed)
 // what the tracer did on this thread (Stage 33; lab/optics_scene.hpp: optics_work)
 thread_local int64_t work_done[8] = {};
 #define OPTICS_WORK_HOOK(k) (++work_done[k])
-// how passages through a shape ended (Stage 33; optics_ended): by their meetings, how many, how many of them
-// still inside, and the light the others carried out
-thread_local int64_t ended_count[65] = {}, ended_inside[65] = {};
-thread_local double ended_light[65] = {};
-inline void ended_hook(int meetings, double pass, bool inside) {
-	const int m = meetings < 64 ? meetings : 64;
-	++ended_count[m];
-	if (inside) {
-		++ended_inside[m];
-	} else {
-		ended_light[m] += pass;
-	}
-}
-#define OPTICS_ENDED_HOOK(m, pass, inside) ended_hook(m, pass, inside)
-// (a measurement: how many beams are read over a wall that is one under them, and how many not, by why)
-thread_local int64_t even_count[4] = {};
-thread_local int64_t swept_count = 0, steps_count[17] = {}, straight_count[4] = {};
-#define OPTICS_SWEPT_HOOK() (++swept_count)
-#define OPTICS_STEPS_HOOK(n, steps) (++steps_count[steps])
-struct Beam;
-void even_hook(const Beam &b, double even);
-#define OPTICS_EVEN_HOOK(b, even) even_hook(b, even)
-// the meetings a passage is allowed (optics_meetings_most)
-int TRACE_MOST = trace::MEETINGS_MOST, TRACE_TURNS = trace::TURNS_MOST;
-#define TRACE_MOST_SET 1
-// what the whole pixel's beam was like, by kind: 0 read whole; 1 to 4 its rays go one way and its middle ray is
-// off by up to 0.02, 0.08, 0.32, more; 5 its rays part
-thread_local int64_t beam_kinds[6] = {};
-thread_local int64_t side_kinds[6] = {};
-inline void beam_stat(int level, bool one, double off) {
-	if (level == 0) {
-		++beam_kinds[!one ? 5 : off <= 0.005 ? 0 : off <= 0.02 ? 1 : off <= 0.08 ? 2 : off <= 0.32 ? 3 : 4];
-	}
-	if (level == 3) {
-		++side_kinds[!one ? 5 : off <= 0.05 ? 0 : off <= 0.1 ? 1 : off <= 0.2 ? 2 : off <= 0.5 ? 3 : 4];
-	}
-}
-#define OPTICS_STAT_HOOK(level, one, off) beam_stat(level, one, off)
 #define OPTICS_THREAD thread_local
 // a pixel's kept beams (Stage 33): the record of the pixel being read, for the shared source's kept_vec and kept_put
 thread_local double *kept_now = nullptr;
@@ -269,27 +209,6 @@ inline void corner_put(int i, const vec4 &v) {
 	to[3] = v.w;
 }
 #define float double
-// (how small a part is made before it is cut, by the environment while it is being settled: LAB_BEAM_DEEPEST,
-// LAB_BEAM_CUT_AT, LAB_BEAM_STRAIGHT)
-#define BEAM_DEEPEST beam_setting(0)
-#define BEAM_CUT_AT beam_setting(1)
-#define BEAM_STRAIGHT beam_straight_setting()
-#define BEAM_RAYS_MOST beam_setting(2)
-// (for measuring what a band's correction in every frame would look like: LAB_BEAM_STRIDE=1)
-inline int correction_stride() {
-	static const int v = [] {
-		const char *asked = std::getenv("LAB_BEAM_STRIDE");
-		return asked != nullptr && std::atoi(asked) > 0 ? std::atoi(asked) : 4;
-	}();
-	return v;
-}
-#define CORRECTION_STRIDE correction_stride()
-// (a measurement's switch: a pixel whose content has just changed takes its corrections at once, as before Stage 33)
-inline bool corrections_at_once() {
-	static const bool v = std::getenv("LAB_BEAM_AT_ONCE") != nullptr;
-	return v;
-}
-#define CORRECTIONS_AT_ONCE corrections_at_once()
 // (whether a stretch of the spectrum is halved where its nodes miss the ray between them: off for O10's own test)
 thread_local double beam_between = 0.02;
 #define BEAM_BETWEEN beam_between
@@ -307,16 +226,11 @@ thread_local std::vector<double> beam_stretches;
 #pragma clang diagnostic pop
 #endif
 
-inline void even_hook(const Beam &b, double even) {
-	++even_count[even >= 0.0 ? 0 : (b.form == 2 ? 1 : 2)];
-	if (even < 0.0 && b.form != 2) {
-		++straight_count[b.straight ? 0 : (b.off <= 0.1 ? 1 : (b.off <= 0.3 ? 2 : 3))];
-	}
-}
 static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_layout::BODY_VECS && ROW == optics_layout::ROW && ROWS_PER_SET == optics_layout::ROWS_PER_SET &&
 				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES,
 		"the per-pixel source and lab/optics_scene.hpp lay the scene out alike");
 static_assert(1 + KEPT_MOST * KEPT_BEAM == optics_layout::KEPT_VECS, "a pixel's kept beams are a record of KEPT_VECS");
+static_assert(TRACE_MOST == trace::MEETINGS_MOST && TRACE_TURNS == trace::TURNS_MOST, "the pass's tracer and the truth's allow a ray the same meetings and turns");
 
 struct Use {
 	explicit Use(const OpticsScene &s) {
@@ -1142,9 +1056,6 @@ std::string check_O9(const OpticsScene &scene, int x0, int y0, int x1, int y1, i
 				static_cast<long long>(loose));
 		return buffer;
 	}
-	if (std::getenv("LAB_O9_COUNTS") != nullptr) {
-		std::printf("O9: %lld rays, %lld another way, %lld loose\n", static_cast<long long>(rays), static_cast<long long>(astray), static_cast<long long>(loose));
-	}
 	return "";
 }
 
@@ -1182,8 +1093,7 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 	// Almost every ray is within those; where a rim or a floor's corner throws the light about, a ray may be
 	// up to twenty times further out, and one in fifty at most.
 	constexpr double LOOSE = 20.0;
-	int64_t probes = 0, astray = 0, pixels = 0, loose = 0, pieces = 0, stretches_all = 0, shortest = 0;
-	double furthest = 0.0;
+	int64_t probes = 0, astray = 0, pixels = 0, loose = 0, stretches_all = 0, shortest = 0;
 	char buffer[360];
 	for (int y = y0; y < y1; y += step > 0 ? step : 1) {
 		for (int x = x0; x < x1; x += step > 0 ? step : 1) {
@@ -1209,7 +1119,6 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 				}
 				pixels += counted ? 0 : 1;
 				counted = true;
-				++pieces;
 				const auto bent_of = [](const shader::RayMet &m, int which) {
 					int seen = 0;
 					for (int k = 0; k < m.count; ++k) {
@@ -1260,7 +1169,6 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 						worst = std::max({ worst, std::fabs(pass - t.z) / PASS, std::fabs(std::sqrt(std::max(chord2, 0.0)) - t.w) / (CHORD * std::max(t.w, 0.1)) });
 					}
 					loose += worst > 1.0 ? 1 : 0;
-					furthest = std::max(furthest, worst);
 					if (worst > LOOSE) {
 						std::snprintf(buffer, sizeof buffer, "O10: at pixel (%d, %d), %.0f nm, the nodes of the stretch from %.4f to %.4f put the ray at (%.4f, %.4f); traced there it lands at (%.4f, %.4f) (%.2f of what is allowed)", x, y,
 								nm, g_lo, g_hi, cx, cy, traced.x, traced.y, worst);
@@ -1282,10 +1190,6 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 	if (shortest * 10 > stretches_all) {
 		std::snprintf(buffer, sizeof buffer, "O10: %lld of %lld stretches are as short as they are made", static_cast<long long>(shortest), static_cast<long long>(stretches_all));
 		return buffer;
-	}
-	if (std::getenv("LAB_O9_COUNTS") != nullptr) {
-		std::printf("O10: %lld pixels, %lld stretches (%lld as short as made, of %lld), %lld rays, %lld another way, %lld loose, the furthest %.2f of what is allowed\n", static_cast<long long>(pixels),
-				static_cast<long long>(pieces), static_cast<long long>(shortest), static_cast<long long>(stretches_all), static_cast<long long>(probes), static_cast<long long>(astray), static_cast<long long>(loose), furthest);
 	}
 	return "";
 }
@@ -1321,7 +1225,6 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 	out.meetings = t.meetings;
 	out.left = t.left;
 	out.solid = t.solid;
-	out.most = shader::TRACE_MOST;
 	return out;
 }
 
@@ -1337,8 +1240,7 @@ std::string check_O15(const OpticsScene &scene, OpticsPassageOf single) {
 	}
 	const OpticsPassageOf held = single != nullptr ? single : passage_single;
 	constexpr double CLOSE = 1.0e-3;
-	int64_t rays = 0, astray = 0, loose = 0, long_single = 0, long_double = 0, last_single = 0, last_double = 0;
-	std::array<int64_t, 8> apart{};
+	int64_t rays = 0, astray = 0, loose = 0;
 	for (int body = 0; body < optics_layout::MAX_BODIES; ++body) {
 		const double *head = &scene.shapes_exact[static_cast<size_t>(body) * optics_layout::SHAPE_BLOCK * 4];
 		if (head[0] < 0.0) {
@@ -1368,15 +1270,6 @@ std::string check_O15(const OpticsScene &scene, OpticsPassageOf single) {
 					const OpticsPassage d = optics_passage(scene, body, from, u, 1.47, 1.333, false);
 					const OpticsPassage s = held(scene, body, from, u, 1.47, 1.333);
 					++rays;
-					long_single += s.meetings > 8 ? 1 : 0;
-					long_double += d.meetings > 8 ? 1 : 0;
-					last_single += s.meetings >= s.most ? 1 : 0;
-					last_double += d.meetings >= d.most ? 1 : 0;
-					if (s.route == d.route && s.left == d.left && s.solid == d.solid && d.left) {
-						// (how far apart the two leave, in direction: by decades, from 1e-8)
-						const double off = std::hypot(s.toward[0] - d.toward[0], s.toward[1] - d.toward[1], s.toward[2] - d.toward[2]);
-						++apart[static_cast<size_t>(std::min(std::max(static_cast<int>(std::floor(std::log10(std::max(off, 1.0e-30)))) + 8, 0), 7))];
-					}
 					if (s.route != d.route || s.left != d.left || s.solid != d.solid) {
 						++astray;
 					} else if (d.left && (std::hypot(s.at[0] - d.at[0], s.at[1] - d.at[1], s.at[2] - d.at[2]) > CLOSE || std::hypot(s.toward[0] - d.toward[0], s.toward[1] - d.toward[1], s.toward[2] - d.toward[2]) > CLOSE)) {
@@ -1385,12 +1278,6 @@ std::string check_O15(const OpticsScene &scene, OpticsPassageOf single) {
 				}
 			}
 		}
-	}
-	if (std::getenv("LAB_O9_COUNTS") != nullptr) {
-		std::printf("O15: rays that go the same way leave apart in direction by under 1e-7: %lld, to 1e-6: %lld, to 1e-5: %lld, to 1e-4: %lld, to 1e-3: %lld, to 1e-2: %lld, more: %lld\n", static_cast<long long>(apart[0]),
-				static_cast<long long>(apart[1]), static_cast<long long>(apart[2]), static_cast<long long>(apart[3]), static_cast<long long>(apart[4]), static_cast<long long>(apart[5]), static_cast<long long>(apart[6] + apart[7]));
-		std::printf("O15: %lld rays, %lld another way in single precision, %lld loose; past eight meetings %lld single and %lld double; to the last allowed %lld and %lld\n", static_cast<long long>(rays),
-				static_cast<long long>(astray), static_cast<long long>(loose), static_cast<long long>(long_single), static_cast<long long>(long_double), static_cast<long long>(last_single), static_cast<long long>(last_double));
 	}
 	if (rays == 0) {
 		return "O15: no body of the scene bends";
@@ -1404,41 +1291,6 @@ std::string check_O15(const OpticsScene &scene, OpticsPassageOf single) {
 	return "";
 }
 
-void optics_ended(int64_t count[65], int64_t inside[65], double light[65], bool reset) {
-	for (int i = 0; i < 65; ++i) {
-		count[i] = shader::ended_count[i];
-		inside[i] = shader::ended_inside[i];
-		light[i] = shader::ended_light[i];
-		if (reset) {
-			shader::ended_count[i] = 0;
-			shader::ended_inside[i] = 0;
-			shader::ended_light[i] = 0.0;
-		}
-	}
-}
-
-void optics_even(int64_t count[3], bool reset) {
-	if (std::getenv("LAB_EVEN_PRINT") != nullptr) {
-		std::printf("swept walls %lld; beams read by the steps a band of 40 nm takes:", static_cast<long long>(shader::swept_count));
-		for (int i = 1; i <= 16; ++i) {
-			std::printf(" %lld", static_cast<long long>(shader::steps_count[i]));
-			shader::steps_count[i] = 0;
-		}
-		std::printf("\nof the beams over a wall that is not one, whose rays go one way: straight %lld, off by up to 0.1 of their reach %lld, to 0.3 %lld, more %lld\n", static_cast<long long>(shader::straight_count[0]),
-				static_cast<long long>(shader::straight_count[1]), static_cast<long long>(shader::straight_count[2]), static_cast<long long>(shader::straight_count[3]));
-		for (int64_t &c : shader::straight_count) {
-			c = 0;
-		}
-		shader::swept_count = 0;
-	}
-	for (int i = 0; i < 3; ++i) {
-		count[i] = shader::even_count[i];
-		if (reset) {
-			shader::even_count[i] = 0;
-		}
-	}
-}
-
 int optics_room_exit(const OpticsScene &scene, const double p[3], const double u[3], double landing[2]) {
 	if (!shader::ready(scene) || !(scene.table[3 * 4 + 2] > 0.0f)) {
 		return -1;
@@ -1448,12 +1300,6 @@ int optics_room_exit(const OpticsScene &scene, const double p[3], const double u
 	landing[0] = comes.y;
 	landing[1] = comes.z;
 	return static_cast<int>(comes.x);
-}
-
-void optics_meetings_most(int most, int turns) {
-	shader::TRACE_MOST = most;
-	shader::TRACE_TURNS = turns;
-	trace::meetings_most(most, turns);
 }
 
 void optics_work(int64_t work[9], bool reset) {
@@ -1466,23 +1312,6 @@ void optics_work(int64_t work[9], bool reset) {
 	}
 	if (reset) {
 		shader::rays_followed = 0;
-	}
-}
-
-void optics_beam_kinds(int64_t kinds[6], bool reset) {
-	if (std::getenv("LAB_RAY_STATS") != nullptr && reset) {
-		std::printf("sides: straight %lld; one way but off by up to 0.1: %lld, 0.2: %lld, 0.5: %lld, more: %lld; rays part: %lld\n", static_cast<long long>(shader::side_kinds[0]),
-				static_cast<long long>(shader::side_kinds[1]), static_cast<long long>(shader::side_kinds[2]), static_cast<long long>(shader::side_kinds[3]), static_cast<long long>(shader::side_kinds[4]),
-				static_cast<long long>(shader::side_kinds[5]));
-		for (int64_t &k : shader::side_kinds) {
-			k = 0;
-		}
-	}
-	for (int i = 0; i < 6; ++i) {
-		kinds[i] = shader::beam_kinds[i];
-		if (reset) {
-			shader::beam_kinds[i] = 0;
-		}
 	}
 }
 

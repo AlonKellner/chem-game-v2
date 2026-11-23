@@ -820,9 +820,6 @@ float flat_band(Path q, float u0, float u1, float t, float one_nm) {
 // a at the step's beginning, at b0 and b at its end. The mean, along each ray's sweep, of the row's integral,
 // the footprint's width taken as its mean: exact, however many edges the sweep crosses.
 float swept_wall(int profile, float a0, float a, float b0, float b) {
-#ifdef OPTICS_SWEPT_HOOK
-	OPTICS_SWEPT_HOOK();
-#endif
 	float w0 = a - a0;
 	float w1 = b - b0;
 	if (w0 * w1 < 0.0) {
@@ -869,10 +866,8 @@ vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth,
 const int SHAPE_PATCH = 6;
 // The meetings a ray is allowed in one shape, and how often it may be turned back in it (Stage 33;
 // lab/optics_trace.hpp: MEETINGS_MOST, TURNS_MOST, and why). After either it goes straight on.
-#ifndef TRACE_MOST_SET
 const int TRACE_MOST = 16;
 const int TRACE_TURNS = 4;
-#endif
 
 vec3 ray_point(vec3 o, vec3 u, float t) {
 	return vec3(o.x + t * u.x, o.y + t * u.y, o.z + t * u.z);
@@ -1495,9 +1490,6 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 	}
 	r.at = o;
 	r.toward = u;
-#ifdef OPTICS_ENDED_HOOK
-	OPTICS_ENDED_HOOK(r.meetings, r.pass, here != 0 && !r.solid);
-#endif
 	if (r.solid) {
 		// it ended in the sediment: it reaches no wall, and what its surfaces passed is what lights the sediment
 		r.left = false;
@@ -1889,23 +1881,18 @@ RayMet ray_met(vec2 p, float nm) {
 // middle ray too, so this bounds what is left over, not the whole of the bend): a share of a pixel of the wall,
 // or of the footprint's own size where that is more than a pixel (near a rim one pixel of the screen sees
 // hundreds of the wall's: what matters there is the share of the footprint that is misplaced)
-#ifndef BEAM_STRAIGHT
 #define BEAM_STRAIGHT 0.05
-#endif
 // How small a part whose rays part is made before it is cut where they do: 0, the pixel itself is cut; 1, its
 // quarters; 2, their quarters.
-#ifndef BEAM_DEEPEST
 #define BEAM_DEEPEST 2
-#endif
 // and how small a part whose rays part is made at least: the pixel itself is cut (measured over a bench of four
 // vessels, a pixel then follows 51 rays on average, 420 at most; cut only as quarters of quarters, 195 and 5,700;
 // O7, O8 and O11 hold either way, and O8 fails if a bent part is quartered only once)
-#ifndef BEAM_CUT_AT
 #define BEAM_CUT_AT 0
-#endif
 // How many rays a pixel may follow before what is left of it is read as it lies: a part whose rays still part
 // by its middle ray alone, at each node (a pixel on a rim holds many thin bands of rays that go different
 // ways, and following each to its edges costs thousands of rays for a pixel that shows their blur)
+#define BEAM_RAYS_MOST 100000
 // How far from where its nodes' cubic puts it a pixel's middle ray may land, traced half way between them: the
 // sweep's tolerance, of a pixel of the wall or of the footprint's size; and a hundredth of how far its
 // landing sweeps along the stretch. Beyond it the stretch of the spectrum is halved. (0 or less: never, the
@@ -1913,16 +1900,11 @@ RayMet ray_met(vec2 p, float nm) {
 #ifndef BEAM_BETWEEN
 #define BEAM_BETWEEN 0.02
 #endif
-#ifndef BEAM_RAYS_MOST
-#define BEAM_RAYS_MOST 100000
-#endif
 
 // Where a beam's rays all go one way (four pixels in five), one band in so many has a traced ray's correction in
 // a frame (Stage 33), weighed as so many: the rays are the pass's cost, the corrections there are next to
 // nothing, and the mean over the frames is the same.
-#ifndef CORRECTION_STRIDE
 #define CORRECTION_STRIDE 4
-#endif
 // (how many corrections the batch last read took: what it adds to a pixel's history is that many points, not its
 // bands: a pixel is done when its corrections are enough, however thinly they were taken. Measured on the GPU:
 // counted by its bands, a pixel whose rays part over a sliver of it was called done before a ray had found the
@@ -2196,10 +2178,6 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 	int points = kind == 2 ? 1 : 5;
 	// (a whole pixel's beam over the whole spectrum, in a grating's first way: its corners are the lattice's)
 	bool latticed = lattice_on && kind == 0 && g_lo <= 0.0 && g_hi >= 1.0 && ray_way == 0 && p1.x - p0.x == 1.0 && p2.y - p0.y == 1.0;
-#ifdef OPTICS_STUB_TRACE
-	points = 0;
-	b.cx = vec4(p0.x + p1.x + p2.x + p3.x + pc.x + fa.x + fb.x + g_lo + g_hi + float(only));
-#else
 	for (int j = 0; j < 5; j++) {
 		if (j >= points) {
 			break;
@@ -2290,7 +2268,6 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 			}
 		}
 	}
-#endif
 	if (kind == 2) {
 		// one ray: the same at every node, and its corners its own
 		b.cx = vec4(b.cx[only]);
@@ -2583,18 +2560,10 @@ float beam_band(Beam b, float even, float g_lo, float g_hi, float nm0, float nm1
 			wb = beam_weights(b, (map_place(end) - g_lo) / span);
 		}
 		float wall = even;
-#ifdef OPTICS_STUB_FAN
-		wall = 1.0;
-#else
 		if (even < 0.0) {
 			wall = beam_fan(b, wa, wb, wp);
 		}
-#endif
-#ifdef OPTICS_STUB_SHADE
-		vec2 ab = vec2(1.0, 0.0);
-#else
 		vec2 ab = beam_shade(b, wp, nm);
-#endif
 		total = total + weight * (ab.x * wall + ab.y);
 		weights = weights + weight;
 		begin = end;
@@ -2705,9 +2674,6 @@ float beam_correction(Beam b, Path q, vec2 s, float nm0, float nm1, float nm, fl
 // the beam's own stretch of the spectrum (places v_lo to v_hi). Each band's exact colour times what gets
 // through (X, Y, Z); or, `single`, each part by its share of the whole (x); or one wavelength alone.
 vec3 beam_read(Beam b, float g_lo, float g_hi, float v_lo, float v_hi, int n, float offset, Cuts cuts, float u_first, float u_last, bool single, float one_nm, Path q, int rays) {
-#ifdef OPTICS_STUB_READ
-	return vec3(b.cx.x + b.x0.y + b.pass0.z + g_lo + g_hi + v_lo + v_hi + float(n) + offset + cuts.u[0] + u_first + u_last + (single ? 1.0 : 0.0) + one_nm, 0.0, 0.0); // (finding what a shader's build time is spent on)
-#else
 	if (one_nm > 0.0) {
 		float g = map_place(one_nm);
 		bool mine = g >= v_lo && (g < v_hi || v_hi >= 1.0);
@@ -2724,10 +2690,6 @@ vec3 beam_read(Beam b, float g_lo, float g_hi, float v_lo, float v_hi, int n, fl
 	int stride = b.form == 2 ? 1 : CORRECTION_STRIDE;
 	int turned = int(fract(offset * 89.0 + 0.3) * float(stride)); // which bands have a ray, this frame
 	float even = beam_flat(b); // the wall under its footprint, where it is one (`flat` is a word of GLSL's)
-#ifdef OPTICS_EVEN_HOOK
-	OPTICS_EVEN_HOOK(b, even);
-	OPTICS_STEPS_HOOK(n, map_steps(b.bend, 40.0));
-#endif
 	for (int k = 0; k < 4096; k++) {
 		if (k >= n) {
 			break;
@@ -2777,16 +2739,12 @@ vec3 beam_read(Beam b, float g_lo, float g_hi, float v_lo, float v_hi, int n, fl
 		}
 	}
 	return sum;
-#endif
 }
 
 // Where, between two rays, the way changes: halving from the ray at pa and the place ga of the spectrum
 // toward the one at pb and gb. The last share of the way found to go the first one's way (x), and the first
 // found not to (y); both 1 where the two go one way.
 vec2 beam_cut(vec2 pa, float ga, vec2 pb, float gb) {
-#ifdef OPTICS_STUB_CUT
-	return vec2(pa.x + ga, pb.x + gb);
-#else
 	float lo = 0.0;
 	float hi = 1.0;
 	uint route = 0u;
@@ -2807,16 +2765,12 @@ vec2 beam_cut(vec2 pa, float ga, vec2 pb, float gb) {
 		}
 	}
 	return vec2(lo, hi);
-#endif
 }
 
 // A pixel's light through what bends its view, by its beams: over the bands batch() reads (n of them, their
 // points at `offset`, cut at `cuts`: X, Y, Z), or over one band from u_first to u_last (`single`: its light
 // in x), or at one wavelength (x). In w: how much of the pixel the beams read made up (1: all of it).
 vec4 beam_sum(Path q, int n, float offset, Cuts cuts, float u_first, float u_last, bool single, float one_nm) {
-#ifdef OPTICS_STUB_SUM
-	return vec4(q.x + float(n) + offset + cuts.u[0] + u_first + u_last + (single ? 1.0 : 0.0) + one_nm);
-#else
 	vec3 sum = vec3(0.0);
 	float made = 0.0;
 	float half_size = 0.5 * q.size;
@@ -2967,9 +2921,6 @@ vec4 beam_sum(Path q, int n, float offset, Cuts cuts, float u_first, float u_las
 			Beam b = beam_trace(kind, side, p0, p1, p2, p3, pc, fa, fb, g_lo, g_hi, in_, level == 0);
 			b.share = part;
 			spent = spent + (kind == 2 ? 1 : 20);
-#ifdef OPTICS_STAT_HOOK
-			OPTICS_STAT_HOOK(level, b.one, b.off);
-#endif
 			// (a stretch is not made shorter than a 16th of the spectrum: then it is read as it is. A ray that a
 			// rim's bead throws about lands pixels away for a nanometre's change: no stretch is short enough)
 			bool long_enough = level == 0 && g_hi - g_lo > 1.0 / 16.0;
@@ -3100,7 +3051,6 @@ vec4 beam_sum(Path q, int n, float offset, Cuts cuts, float u_first, float u_las
 		}
 	}
 	return vec4(sum.x, sum.y, sum.z, made);
-#endif
 }
 
 // ---- a pixel as an average over time (GAME_SPEC §12.3, Stage 29)
@@ -3337,11 +3287,7 @@ BeamPair beam_means(Path q, int n, float offset, Cuts cuts, float u_first, float
 		// traced now, its rays having moved: its first corrections wait a frame (unless its beams were found
 		// not to fit a record: such a pixel is traced at every read, and cannot tell its rays' moving from its
 		// colour's changing)
-		bool at_once = false;
-#ifdef CORRECTIONS_AT_ONCE
-		at_once = CORRECTIONS_AT_ONCE;
-#endif
-		if (fixed_too && !at_once && !held && !(head.z == pixel && head.w < -0.5)) {
+		if (fixed_too && !held && !(head.z == pixel && head.w < -0.5)) {
 			beam_deferred = true;
 			n = 0;
 		}
@@ -3777,10 +3723,8 @@ float eye(vec3 p, vec3 q) {
 // of it, and what is settling beside it waits until it rests (Stage 33)
 const float RAY_POINTS_A_BEAM = 8.0;
 
-#ifndef BATCH_TILE_X
 #define BATCH_TILE_X 2
 #define BATCH_TILE_Y 32
-#endif
 
 // a number in [0, 1) for a pixel and a frame, the same on any machine
 float hash01(int x, int y, int frame) {

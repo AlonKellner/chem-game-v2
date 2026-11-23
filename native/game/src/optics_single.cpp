@@ -162,7 +162,6 @@ OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const do
 	out.meetings = t.meetings;
 	out.left = t.left;
 	out.solid = t.solid;
-	out.most = shader32::TRACE_MOST;
 	return out;
 }
 

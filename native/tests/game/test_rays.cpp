@@ -11,17 +11,11 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <vector>
 
 using lab::ItemView;
 using lab::OpticsScene;
 using lab::SubstanceView;
-
-namespace lab {
-void optics_beam_kinds(int64_t kinds[6], bool reset);
-}
 
 namespace {
 
@@ -146,49 +140,4 @@ TEST_CASE("O7: through every kind of glassware and a held vessel a uniform wall 
 	CHECK(lab::check_O7(scene, 225, 95, 335, 240, 0.6) == "");
 	CHECK(lab::check_O7(scene, 97, 95, 109, 240, 0.6) == "");
 	CHECK(lab::check_O7(scene, 400, 95, 412, 330, 0.6) == "");
-}
-
-TEST_CASE("rays: how many a pixel follows to be read once, over a bench (a count, printed where LAB_RAY_STATS is set) (Stage 29)") {
-	if (std::getenv("LAB_RAY_STATS") == nullptr) {
-		return;
-	}
-	const std::vector<Stood> things = bench();
-	const OpticsScene scene = scene_of(things);
-	std::vector<int64_t> counts;
-	int64_t kinds[6];
-	lab::optics_beam_kinds(kinds, true);
-	int64_t work[9];
-	lab::optics_work(work, true);
-	for (int y = 95; y < 335; ++y) {
-		for (int x = 95; x < 465; ++x) {
-			const int64_t rays = lab::optics_rays_for(scene, x, y);
-			if (rays > 0) {
-				counts.push_back(rays);
-			}
-		}
-	}
-	lab::optics_beam_kinds(kinds, true);
-	std::printf("whole pixels: read whole %lld; one way but off by up to 0.02: %lld, 0.08: %lld, 0.32: %lld, more: %lld; rays part: %lld\n", static_cast<long long>(kinds[0]), static_cast<long long>(kinds[1]),
-			static_cast<long long>(kinds[2]), static_cast<long long>(kinds[3]), static_cast<long long>(kinds[4]), static_cast<long long>(kinds[5]));
-	lab::optics_work(work, true);
-	const double rays_all = static_cast<double>(std::max<int64_t>(work[0], 1));
-	std::printf("a ray's work: %lld rays; a ray tries %.2f bodies, searches %.2f meetings, tries %.1f quadrics and %.1f tori, solves %.2f tori's quartics, makes %.2f roots exact; past eight meetings %.2f%%, to the last allowed %.2f%%\n",
-			static_cast<long long>(work[0]), static_cast<double>(work[1]) / rays_all, static_cast<double>(work[2]) / rays_all, static_cast<double>(work[3]) / rays_all, static_cast<double>(work[4]) / rays_all,
-			static_cast<double>(work[5]) / rays_all, static_cast<double>(work[6]) / rays_all, 100.0 * static_cast<double>(work[7]) / rays_all, 100.0 * static_cast<double>(work[8]) / rays_all);
-	std::sort(counts.begin(), counts.end());
-	double total = 0.0;
-	for (const int64_t c : counts) {
-		total += static_cast<double>(c);
-	}
-	const auto at = [&](double share) { return counts[static_cast<size_t>(share * static_cast<double>(counts.size() - 1))]; };
-	int64_t whole = 0, over_100 = 0, over_1000 = 0;
-	for (const int64_t c : counts) {
-		whole += c <= 20 ? 1 : 0;
-		over_100 += c > 100 ? 1 : 0;
-		over_1000 += c > 1000 ? 1 : 0;
-	}
-	std::printf("rays a pixel: %zu pixels, mean %.1f, median %lld, 90%% %lld, 99%% %lld, most %lld; read whole (20 rays) %.1f%%, over 100 rays %.1f%%, over 1000 rays %.1f%%\n", counts.size(),
-			total / static_cast<double>(counts.size()), static_cast<long long>(at(0.5)), static_cast<long long>(at(0.9)), static_cast<long long>(at(0.99)), static_cast<long long>(counts.back()),
-			100.0 * static_cast<double>(whole) / static_cast<double>(counts.size()), 100.0 * static_cast<double>(over_100) / static_cast<double>(counts.size()),
-			100.0 * static_cast<double>(over_1000) / static_cast<double>(counts.size()));
 }

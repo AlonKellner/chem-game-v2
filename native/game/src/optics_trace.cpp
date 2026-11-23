@@ -212,19 +212,10 @@ Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
 
 } // namespace
 
-namespace {
-int most_allowed = MEETINGS_MOST, turns_allowed = TURNS_MOST;
-} // namespace
-
-void meetings_most(int most, int turns) {
-	most_allowed = most;
-	turns_allowed = turns;
-}
-
 Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside) {
 	Landing out;
 	int here = 0;
-	const int MOST = most_allowed;
+	const int MOST = MEETINGS_MOST;
 	int turned = 0; // how often it has been turned back
 	constexpr double NEAR = 1.0e-9; // a surface just left is not met again
 	constexpr double NUDGE = 1.0e-7; // how far to each side of a surface within the core the medium is asked
@@ -304,7 +295,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 				const double n1 = index[static_cast<size_t>(here)], n2 = index[static_cast<size_t>(there)];
 				const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 				if (sin2 >= 1.0) {
-					if (++turned > turns_allowed) {
+					if (++turned > TURNS_MOST) {
 						break; // turned back once too often: it goes on as it is (below)
 					}
 					u = Vec3{ u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z };
@@ -362,7 +353,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
 			// turned back, all of it
-			if (++turned > turns_allowed) {
+			if (++turned > TURNS_MOST) {
 				break; // once too often: it goes on as it is (below)
 			}
 			u = Vec3{ u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z };

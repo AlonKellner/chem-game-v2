@@ -57,8 +57,8 @@ private:
 	godot::RID kept_;
 	int64_t kept_capacity_ = 0; // records
 	std::vector<int32_t> kept_base_;
-	// each pass's groups of pixels, across and down: pixels of a group wait for the one with most to do
-	int group_[PASSES][2] = { { 2, 32 }, { 2, 32 }, { 2, 32 } };
+	// a pass's groups of pixels, across and down: pixels of a group wait for the one with most to do
+	static constexpr int GROUP_X = 2, GROUP_Y = 32;
 	std::vector<float> rectangles_; // where pixels are read by their own rays: left, top, right, bottom
 	// a storage buffer and how many bytes it can hold: made anew, larger, when what it is given outgrows it
 	struct Buffer {

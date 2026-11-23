@@ -9,12 +9,9 @@
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/typed_array.hpp>
-#include <godot_cpp/classes/time.hpp>
-#include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
 #include <cstdlib>
-#include <cstdio>
 #include <cstring>
 
 namespace chem_godot {
@@ -230,27 +227,13 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	if (const char *asked = std::getenv("LAB_RAY_POINTS")) {
 		ray_points_ = static_cast<float>(std::atof(asked));
 	}
-	// (LAB_BEAM_GROUP=x,y: the beams' pass's groups, for measuring)
-	if (const char *asked = std::getenv("LAB_BEAM_GROUP")) {
-		int x = 0, y = 0;
-		if (std::sscanf(asked, "%d,%d", &x, &y) == 2 && x > 0 && y > 0 && x * y <= 1024) {
-			group_[BEAMS][0] = x;
-			group_[BEAMS][1] = y;
-		}
-	}
 	for (int pass = 0; pass < PASSES; ++pass) {
 		godot::Ref<godot::RDShaderSource> source;
 		source.instantiate();
 		source->set_language(RenderingDevice::SHADER_LANGUAGE_GLSL);
 		source->set_stage_source(RenderingDevice::SHADER_STAGE_COMPUTE,
-				godot::String(WRAPPER_HEAD) + godot::String(TRACE_HEAD) + (std::getenv("LAB_BEAM_STUB") != nullptr ? godot::String("#define OPTICS_STUB_") + godot::String(std::getenv("LAB_BEAM_STUB")).replace(",", " 1\n#define OPTICS_STUB_") + " 1\n" : godot::String("")) + godot::String(std::getenv("LAB_BEAM_AT_ONCE") != nullptr ? "#define CORRECTIONS_AT_ONCE true\n" : "") + (std::getenv("LAB_BEAM_DEFINE") != nullptr ? godot::String("#define ") + godot::String(std::getenv("LAB_BEAM_DEFINE")) + "\n" : godot::String("")) + godot::String(pass == BEAMS ? "#define OPTICS_BEAM_PASS 1\n" : (pass == CORNERS ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_CORNER_PASS 1\n" : "#define OPTICS_SCREEN_PASS 1\n")) + "#define OPTICS_GROUP_X " + godot::String::num_int64(group_[pass][0]) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(group_[pass][1]) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
-		// LAB_BEAM_TIMES: how long each stage of the shader's build takes (the GLSL to SPIR-V, the shader, the pipeline)
-		const bool timed = std::getenv("LAB_BEAM_TIMES") != nullptr;
-		const uint64_t t0 = godot::Time::get_singleton()->get_ticks_msec();
+				godot::String(WRAPPER_HEAD) + godot::String(TRACE_HEAD) + godot::String(pass == BEAMS ? "#define OPTICS_BEAM_PASS 1\n" : (pass == CORNERS ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_CORNER_PASS 1\n" : "#define OPTICS_SCREEN_PASS 1\n")) + "#define OPTICS_GROUP_X " + godot::String::num_int64(GROUP_X) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(GROUP_Y) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
 		const godot::Ref<godot::RDShaderSPIRV> spirv = rd->shader_compile_spirv_from_source(source);
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": SPIR-V in ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 		if (spirv.is_null() || !spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE).is_empty()) {
 			why = "the optical pass does not compile: " + (spirv.is_null() ? godot::String("no SPIR-V") : spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE));
 			release();
@@ -262,13 +245,7 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 			release();
 			return false;
 		}
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": shader at ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 		pipeline_[pass] = rd_->compute_pipeline_create(shader_[pass]);
-		if (timed) {
-			godot::UtilityFunctions::print("optics: pass ", pass, ": pipeline at ", godot::Time::get_singleton()->get_ticks_msec() - t0, " ms");
-		}
 	}
 	for (godot::RID &s : state_) {
 		s = image(RenderingDevice::DATA_FORMAT_R32G32B32A32_SFLOAT);
@@ -309,9 +286,6 @@ void OpticsCompute::hold(Buffer &buffer, const float *data, int32_t floats) {
 		}
 		buffer.rid = made;
 		buffer.capacity = capacity;
-	}
-	if (std::getenv("LAB_UPLOADS") != nullptr && bytes > 0) { // (a measurement: what is sent to the GPU, and when)
-		std::printf("frame %d: buffer %d sends %u bytes\n", frame_, static_cast<int>(&buffer - &scene_), bytes);
 	}
 	if (bytes > 0) {
 		godot::PackedByteArray given;
@@ -446,13 +420,6 @@ void OpticsCompute::run(double budget, bool again) {
 		int32_t pad;
 	};
 	stamp_ = stamp_ % 16000000 + 1; // (a float holds it exactly; 0 is no run)
-	if (std::getenv("LAB_UPLOADS") != nullptr) { // (a measurement: the rectangles the passes run over)
-		std::printf("frame %d: rectangles", frame_);
-		for (size_t i = 0; i + 3 < rectangles_.size(); i += 4) {
-			std::printf(" %.0f,%.0f-%.0f,%.0f", rectangles_[i], rectangles_[i + 1], rectangles_[i + 2], rectangles_[i + 3]);
-		}
-		std::printf("\n");
-	}
 	const int64_t list = rd_->compute_list_begin();
 	const auto pass_over = [&](int pass, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t kept = -1) {
 		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, 0 };
@@ -465,7 +432,7 @@ void OpticsCompute::run(double budget, bool again) {
 		// groups two pixels wide and thirty-two tall: a vessel's pixels in one column are read in the same
 		// number of parts, and pixels run together wait for the one with most to do (measured: 8 x 8, 1.72 ms
 		// a pass where every history starts again; 2 x 32, 1.56)
-		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + group_[pass][0] - 1) / group_[pass][0]), static_cast<uint32_t>((bottom - top + group_[pass][1] - 1) / group_[pass][1]), 1);
+		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + GROUP_X - 1) / GROUP_X), static_cast<uint32_t>((bottom - top + GROUP_Y - 1) / GROUP_Y), 1);
 	};
 	// the whole screen, with nothing of the reading by a pixel's own rays: what a pass costs follows what its shader
 	// could do (measured, Stage 21: with the other readings in it, a settled pass 0.58 ms and a restarting one 2.15;
