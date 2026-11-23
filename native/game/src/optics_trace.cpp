@@ -128,11 +128,106 @@ double torus_hit(const Patch &p, const Vec3 &o, const Vec3 &u, double after) {
 
 } // namespace
 
-Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index) {
+namespace {
+
+// what is at a place in a core: its liquid (CORE), the air over it (CORE_AIR), or its sediment (4)
+constexpr int SEDIMENT = 4;
+int medium_at(const Inside &in, const Vec3 &p) {
+	const double level = in.up_x * p.x + in.up_y * p.y;
+	// (how far across from a cone's middle, along the level's line: the room's up turned a quarter round)
+	const auto in_cone = [&](double x, double y, double across, double deep, double narrowing) {
+		if (!(narrowing >= 0.0) || !(across > 0.0) || !(deep > 0.0)) {
+			return false;
+		}
+		const double q = ((p.x - x) * in.up_y - (p.y - y) * in.up_x) / across, w = p.z / deep;
+		return q * q + w * w <= narrowing * narrowing;
+	};
+	if (in.solid && (level <= in.solid_level || (in.pile > 0.0 && level - in.solid_level <= in.pile && in_cone(in.pile_x, in.pile_y, in.pile_across, in.pile_deep, 1.0 - (level - in.solid_level) / in.pile)))) {
+		return SEDIMENT;
+	}
+	if (in.liquid && level <= in.liquid_level &&
+			!(in.vortex > 0.0 && in.liquid_level - level <= in.vortex && in_cone(in.vortex_x, in.vortex_y, in.vortex_across, in.vortex_deep, 1.0 - (in.liquid_level - level) / in.vortex))) {
+		return CORE;
+	}
+	return CORE_AIR;
+}
+
+// the surfaces within a core that a ray from o along u may cross (up to six places along it), and at one of
+// them the surface's normal: 0 the liquid's level, 1 the sediment's, 2 the vortex's cone, 3 the pile's
+int inside_crossings(const Inside &in, const Vec3 &o, const Vec3 &u, double t[6], int which[6]) {
+	int count = 0;
+	const double level = in.up_x * o.x + in.up_y * o.y, rising = in.up_x * u.x + in.up_y * u.y;
+	if (in.liquid && std::fabs(rising) > 1.0e-14) {
+		t[count] = (in.liquid_level - level) / rising;
+		which[count++] = 0;
+	}
+	if (in.solid && std::fabs(rising) > 1.0e-14) {
+		t[count] = (in.solid_level - level) / rising;
+		which[count++] = 1;
+	}
+	const auto cone = [&](int kind, double x, double y, double across, double deep, double h0, double h1) {
+		if (!(across > 0.0) || !(deep > 0.0)) {
+			return;
+		}
+		// q^2 + w^2 = h^2, each straight along the ray
+		const double q0 = ((o.x - x) * in.up_y - (o.y - y) * in.up_x) / across, q1 = (u.x * in.up_y - u.y * in.up_x) / across, w0 = o.z / deep, w1 = u.z / deep;
+		const double a = q1 * q1 + w1 * w1 - h1 * h1, b = 2.0 * (q0 * q1 + w0 * w1 - h0 * h1), c = q0 * q0 + w0 * w0 - h0 * h0;
+		if (std::fabs(a) < 1.0e-14) {
+			if (std::fabs(b) > 1.0e-14) {
+				t[count] = -c / b;
+				which[count++] = kind;
+			}
+			return;
+		}
+		const double disc = b * b - 4.0 * a * c;
+		if (disc >= 0.0) {
+			const double q = -0.5 * (b + (b < 0.0 ? -1.0 : 1.0) * std::sqrt(disc));
+			t[count] = q / a;
+			which[count++] = kind;
+			if (q != 0.0) {
+				t[count] = c / q;
+				which[count++] = kind;
+			}
+		}
+	};
+	if (in.liquid && in.vortex > 0.0) {
+		cone(2, in.vortex_x, in.vortex_y, in.vortex_across, in.vortex_deep, 1.0 - (in.liquid_level - level) / in.vortex, rising / in.vortex);
+	}
+	if (in.solid && in.pile > 0.0) {
+		cone(3, in.pile_x, in.pile_y, in.pile_across, in.pile_deep, 1.0 - (level - in.solid_level) / in.pile, -rising / in.pile);
+	}
+	return count;
+}
+
+Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
+	if (which < 2) {
+		return Vec3{ in.up_x, in.up_y, 0.0 };
+	}
+	const bool vortex = which == 2;
+	const double x = vortex ? in.vortex_x : in.pile_x, y = vortex ? in.vortex_y : in.pile_y, across = vortex ? in.vortex_across : in.pile_across, deep = vortex ? in.vortex_deep : in.pile_deep;
+	const double level = in.up_x * p.x + in.up_y * p.y;
+	const double q = ((p.x - x) * in.up_y - (p.y - y) * in.up_x) / across, w = p.z / deep;
+	const double h = vortex ? 1.0 - (in.liquid_level - level) / in.vortex : 1.0 - (level - in.solid_level) / in.pile, slope = vortex ? 1.0 / in.vortex : -1.0 / in.pile;
+	// the gradient of q^2 + w^2 - h^2
+	return Vec3{ 2.0 * q * in.up_y / across - 2.0 * h * slope * in.up_x, -2.0 * q * in.up_x / across - 2.0 * h * slope * in.up_y, 2.0 * w / deep };
+}
+
+} // namespace
+
+namespace {
+int most_allowed = MEETINGS_MOST;
+} // namespace
+
+void meetings_most(int most) {
+	most_allowed = most;
+}
+
+Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside) {
 	Landing out;
 	int here = 0;
-	constexpr int MOST = 32;
+	const int MOST = most_allowed;
 	constexpr double NEAR = 1.0e-9; // a surface just left is not met again
+	constexpr double NUDGE = 1.0e-7; // how far to each side of a surface within the core the medium is asked
 	for (; out.meetings < MOST;) {
 		double best = 1.0e300;
 		int hit = -1;
@@ -174,6 +269,55 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 				}
 			}
 		}
+		if (inside != nullptr && (here == CORE || here == CORE_AIR)) {
+			// within the core (Stage 30): the nearest place before the glass where what the ray is in changes
+			double places[6];
+			int kinds[6];
+			const int count = inside_crossings(*inside, o, u, places, kinds);
+			double nearest = best;
+			int which = -1;
+			for (int k = 0; k < count; ++k) {
+				if (places[k] > NEAR && places[k] < nearest && medium_at(*inside, along(o, u, places[k] - NUDGE)) != medium_at(*inside, along(o, u, places[k] + NUDGE))) {
+					nearest = places[k];
+					which = kinds[k];
+				}
+			}
+			if (which >= 0) {
+				out.chord[static_cast<size_t>(here)] += nearest;
+				o = along(o, u, nearest);
+				++out.meetings;
+				const int there = medium_at(*inside, along(o, u, NUDGE));
+				if (there == SEDIMENT) {
+					out.solid = true;
+					out.route = out.route * 31u + static_cast<uint32_t>(200 + which);
+					break;
+				}
+				Vec3 n = inside_normal(*inside, which, o);
+				const double length = std::sqrt(dot(n, n));
+				if (!(length > 0.0)) {
+					continue;
+				}
+				n = Vec3{ n.x / length, n.y / length, n.z / length };
+				if (dot(n, u) > 0.0) {
+					n = Vec3{ -n.x, -n.y, -n.z };
+				}
+				const double n1 = index[static_cast<size_t>(here)], n2 = index[static_cast<size_t>(there)];
+				const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
+				if (sin2 >= 1.0) {
+					u = Vec3{ u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z };
+					out.route = out.route * 31u + static_cast<uint32_t>(2 * (100 + which) + 1);
+					continue;
+				}
+				const double cos_t = std::sqrt(1.0 - sin2);
+				const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+				out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
+				const double k = eta * cos_i - cos_t;
+				u = Vec3{ eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z };
+				here = there;
+				out.route = out.route * 31u + static_cast<uint32_t>(2 * (100 + which));
+				continue;
+			}
+		}
 		if (hit < 0) {
 			break;
 		}
@@ -194,10 +338,19 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		}
 		n = Vec3{ n.x / length, n.y / length, n.z / length };
 		const bool rising = dot(n, u) > 0.0; // from f < 0 to f > 0
-		const int there = rising ? p.above : p.below;
-		if (there == here) {
+		int there = rising ? p.above : p.below;
+		if (there == (here == CORE_AIR ? CORE : here)) {
 			out.mismatched += std::fabs(dot(n, u)) > 1.0e-6 ? 1 : 0;
 			continue; // grazing, or a surface between two parts of one medium
+		}
+		if (inside != nullptr && there == CORE) {
+			// into the core (Stage 30): its liquid, the air over it, or the sediment lying against the glass
+			there = medium_at(*inside, along(o, u, NUDGE));
+			if (there == SEDIMENT) {
+				out.solid = true;
+				out.route = out.route * 31u + static_cast<uint32_t>(2 * (hit + 1)) + 300u;
+				break;
+			}
 		}
 		if (rising) {
 			n = Vec3{ -n.x, -n.y, -n.z }; // against the ray
@@ -220,6 +373,14 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 	}
 	out.at = o;
 	out.toward = u;
+	if (out.solid) {
+		// it ended in the sediment: it reaches no wall, and what its surfaces passed is what lights the sediment
+		out.left = false;
+		out.lands = false;
+		out.x = u.x < 0.0 ? -1.0e5 : 1.0e5;
+		out.y = o.y;
+		return out;
+	}
 	if (here != 0) {
 		out.pass = 0.0; // still inside after every meeting allowed: nothing of the wall comes this way
 		out.route = out.route * 31u + 7u;

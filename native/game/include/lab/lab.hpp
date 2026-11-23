@@ -46,8 +46,18 @@ struct ItemView {
 	int pours_into = -1;
 	bool inverted = false;
 	double tilt = 0.0, cap = 0.0;
+	// what a held pour's tilt is in the room (Stage 31): the vessel's turn about its lip, radians (its tilt's share
+	// of the turn at which it is poured out), and how far its liquid stands over the lip, cm (0 or less: not at it)
+	double turn = 0.0, head_cm = 0.0;
+	// what runs down its pour now: liquid with what is dissolved and suspended in it, and sediment by itself (its
+	// solids' own volume)
+	double pours_ml_s = 0.0, pours_solid_ml_s = 0.0;
 	bool condenser = false; // a vessel with a coolant
 	bool stirred = false;
+	// A stirred liquid's turning (GAME_SPEC §11, Stage 32): its kinetic energy and the most it can hold, J; its
+	// vortex's share (0 to 1) of the largest that fits; and the share of its solids the liquid holds up (the rest
+	// lies as sediment)
+	double swirl_j = 0.0, swirl_most_j = 0.0, vortex = 0.0, suspended = 0.0;
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (§13.5)
 	bool burst = false; // a balloon, burst; a vessel, broken (its glass burst, Stage 28)

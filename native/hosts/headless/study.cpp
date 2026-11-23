@@ -478,6 +478,8 @@ int crystals() {
 
 int spectrum_study(); // spectrum.cpp
 int frames_study(); // frames.cpp
+int tilt_study(); // lying.cpp
+int vortex_study();
 
 int run_study(const char *name) {
 	if (std::strcmp(name, "frames") == 0) {
@@ -485,6 +487,12 @@ int run_study(const char *name) {
 	}
 	if (std::strcmp(name, "spectrum") == 0) {
 		return spectrum_study();
+	}
+	if (std::strcmp(name, "tilt") == 0) {
+		return tilt_study();
+	}
+	if (std::strcmp(name, "vortex") == 0) {
+		return vortex_study();
 	}
 	if (std::strcmp(name, "cooling") == 0) {
 		return cooling();
@@ -504,6 +512,6 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "crystals") == 0) {
 		return crystals();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals)\n", name);
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

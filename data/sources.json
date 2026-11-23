@@ -228,6 +228,10 @@
 		{
 			"data": ["sessions/demo.json/**", "tutorials/demo.json/**", "sessions/pressure.json/**"],
 			"design": "scripts of the demo: waits, settings and checks"
+		},
+		{
+			"data": ["plays/cost.json/**"],
+			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display"
 		}
 	]
 }

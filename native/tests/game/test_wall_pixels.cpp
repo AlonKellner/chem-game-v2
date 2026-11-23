@@ -180,6 +180,7 @@ TEST_CASE("wall pixels: a suspension stirred up in a conical flask is in the fla
 				 R"({"do": "stir", "vessel": "flask", "on": true})" }) {
 		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
 	}
+	REQUIRE(ui->lab().advance(300, why)); // five seconds: the liquid turns, and holds the powder up (Stage 32)
 	ui->frame(0.0);
 	const lab::OpticsScene &scene = ui->optics();
 	// the same bench with no flask: what is behind it

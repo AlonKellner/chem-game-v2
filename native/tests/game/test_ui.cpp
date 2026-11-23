@@ -5,10 +5,15 @@
 
 #include <doctest/doctest.h>
 
+#include <atomic>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <thread>
+#include <vector>
 
 using lab::ItemView;
 using lab::LabView;
@@ -945,7 +950,22 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	well_formed(p.ui->draw());
 }
 
-TEST_CASE("ui: a vessel carried over another pours while the left button is held, tilting as it is held; the right button's menu sets it upside down, and its cap opens by the readout's slider (Stage 27)") {
+// a pixel's own rays, traced, while a test runs: the reading that knows a vessel's turn (Stage 30)
+struct Traced {
+	int before;
+	Traced() :
+			before(lab::optics_reading(5)) {}
+	~Traced() { lab::optics_reading(before); }
+	Traced(const Traced &) = delete;
+	Traced &operator=(const Traced &) = delete;
+};
+
+int body_of(const lab::OpticsScene &scene, const std::string &id) {
+	return lab::optics_body(scene, id);
+}
+
+TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to where its lip is over the other's mouth and turns about its lip, and pours once its liquid reaches the lip; let go, it turns back and is in the hand again; the right button's menu sets it upside down (Stage 27, Stage 31)") {
+	const Traced traced;
 	Player p;
 	p.drag("item:flask", "square:11,8");
 	p.drag("item:acid", "square:4,8");
@@ -959,16 +979,49 @@ TEST_CASE("ui: a vessel carried over another pours while the left button is held
 		p.ui->frame(1.0 / 60.0);
 	}
 	CHECK(p.item("flask").liquid_ml == 0.0);
-	p.ui->pointer(fx, fy, true); // held over the flask: it pours, tilting further each frame
-	for (int k = 0; k < 90; ++k) {
+	p.ui->pointer(fx, fy, true); // held over the flask: to the pouring place, then tilting further each frame
+	for (int k = 0; k < 60; ++k) {
 		p.ui->frame(1.0 / 60.0);
 	}
-	CHECK(p.item("acid").tilt > 0.9);
-	p.ui->pointer(fx, fy, false); // let go: it stops, still in hand
-	const double poured = p.item("flask").liquid_ml;
-	CHECK(poured > 5.0);
-	CHECK(poured < 15.0 * 1.5);
+	// a second in: turned, its liquid not yet at its lip (the bottle is half full), nothing poured
+	const lab::ItemView early = p.item("acid");
+	CHECK(early.pours_into >= 0);
+	CHECK(early.tilt > 0.2);
+	CHECK(early.tilt < 0.4);
+	CHECK(early.turn > 0.3);
+	CHECK(early.head_cm <= 0.0);
+	CHECK(p.item("flask").liquid_ml == 0.0);
+	{
+		// drawn turned about its lip, which is over the middle of the flask's mouth, a little above it
+		const lab::OpticsScene &scene = p.ui->optics();
+		const int body = body_of(scene, "acid");
+		REQUIRE(body >= 0);
+		const double *lie = &scene.lies[static_cast<size_t>(body) * lab::optics_layout::SHAPE_BLOCK * 4];
+		CHECK(lie[3] == doctest::Approx(early.turn).epsilon(1e-6)); // (it came from the left: it pours from its right lip, clockwise)
+		float flask_x = 0, flask_y = 0;
+		p.at("item:flask", flask_x, flask_y);
+		CHECK(lie[4] == doctest::Approx(flask_x).epsilon(0.01));
+		CHECK(lie[5] < flask_y);
+		CHECK(lab::check_O1(scene) == "");
+	}
+	for (int k = 0; k < 120; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("acid").tilt == 1.0); // three seconds held: at its full tilt
+	const double running = p.item("flask").liquid_ml;
+	CHECK(running > 20.0);
+	p.ui->pointer(fx, fy, false); // let go: it turns back upright, and the pour ends in the hand
+	for (int k = 0; k < 20; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	CHECK(p.item("acid").tilt < 0.5);
+	CHECK(p.item("acid").pours_into >= 0); // (on its way back)
+	for (int k = 0; k < 50; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
 	CHECK(p.item("acid").pours_into < 0);
+	const double poured = p.item("flask").liquid_ml;
+	CHECK(poured >= running);
 	for (int k = 0; k < 30; ++k) {
 		p.ui->frame(1.0 / 60.0);
 	}
@@ -987,6 +1040,140 @@ TEST_CASE("ui: a vessel carried over another pours while the left button is held
 	}
 	CHECK(p.item("flask").liquid_ml > before + 2.0);
 	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a person pours by hand at their own pace: carries the bottle over slowly, holds, lets go as the acid runs, presses again before it is back upright, and lets go for good; the stream is the acid's, from the lip into the flask, while it runs and not after (Stage 31)") {
+	const Traced traced;
+	Player p;
+	p.drag("item:flask", "square:11,8");
+	p.drag("item:acid", "square:4,8");
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	p.at("item:acid", ax, ay);
+	p.at("item:flask", fx, fy);
+	const auto frames = [&](int n, float x, float y, bool held) {
+		for (int k = 0; k < n; ++k) {
+			// a hand is never still: the pointer wanders a pixel or two
+			p.ui->pointer(x + static_cast<float>((k * 7) % 3 - 1), y + static_cast<float>((k * 5) % 3 - 1), held);
+			p.ui->frame(1.0 / 60.0);
+			REQUIRE(lab::check_O1(p.ui->optics()) == "");
+			REQUIRE_FALSE(p.ui->lab().failed());
+		}
+	};
+	const auto stream = [&]() { return body_of(p.ui->optics(), "acid~stream"); };
+	p.ui->pointer(ax, ay, true);
+	p.ui->pointer(ax, ay, false);
+	for (int k = 1; k <= 90; ++k) { // a second and a half on the way
+		const float t = static_cast<float>(k) / 90.0f;
+		p.ui->pointer(ax + (fx - ax) * t, ay + (fy - ay) * t, false);
+		p.ui->frame(1.0 / 60.0);
+	}
+	frames(20, fx, fy, false); // over it, a moment
+	CHECK(stream() < 0);
+	p.ui->pointer(fx, fy, true);
+	// held until the acid runs: the first of it comes when the lip is down to it
+	int waited = 0;
+	while (waited < 400 && !(p.item("acid").pours_ml_s > 0.0)) {
+		frames(1, fx, fy, true);
+		++waited;
+	}
+	REQUIRE(waited < 400);
+	MESSAGE("held " << waited / 60.0 << " s before the acid ran: the bottle turned " << p.item("acid").turn * 180.0 / M_PI << " degrees");
+	CHECK(p.item("acid").turn > 1.2);
+	frames(12, fx, fy, true); // and a moment more
+	{
+		// the stream: a column from the bottle's lip down into the flask, of the acid itself
+		const lab::OpticsScene &scene = p.ui->optics();
+		const int s = stream();
+		REQUIRE(s >= 0);
+		namespace L = lab::optics_layout;
+		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + s * L::BODY_VECS + L::RECT) * 4];
+		float flask_x = 0, flask_y = 0;
+		p.at("item:flask", flask_x, flask_y);
+		CHECK(std::abs(rect[0] + rect[2] / 2.0f - flask_x) < 8.0f); // over the flask's mouth
+		CHECK(rect[2] >= 1.0f);
+		CHECK(rect[2] < 24.0f); // (well narrower than the bottle's mouth, 40 pixels)
+		// it thins as it falls: its last length is no wider than its first
+		int last = s;
+		for (int k = 1; k < 8; ++k) {
+			const int next = body_of(scene, "acid~stream" + std::to_string(k));
+			last = next >= 0 ? next : last;
+		}
+		CHECK(last != s);
+		CHECK(scene.table[static_cast<size_t>(L::HEADER_VECS + last * L::BODY_VECS + L::RECT) * 4 + 2] <= rect[2]);
+	}
+	const double first = p.item("flask").liquid_ml;
+	CHECK(first > 0.0);
+	// let go: it turns back, and before it is upright the button is pressed again: it tilts again, and pours on
+	frames(8, fx, fy, false);
+	CHECK(p.item("acid").pours_into >= 0);
+	p.ui->pointer(fx, fy, true);
+	frames(40, fx, fy, true);
+	CHECK(p.item("acid").pours_into >= 0);
+	CHECK(p.item("acid").pours_ml_s > 0.0);
+	CHECK(p.item("flask").liquid_ml > first);
+	// let go for good: upright, in the hand, no stream; and put down where it stood
+	frames(80, fx, fy, false);
+	CHECK(p.item("acid").pours_into < 0);
+	CHECK(stream() < 0);
+	const double poured = p.item("flask").liquid_ml;
+	frames(30, fx, fy, false);
+	CHECK(p.item("flask").liquid_ml == doctest::Approx(poured).epsilon(1e-3));
+	float home_x = 0, home_y = 0;
+	p.at("square:4,8", home_x, home_y);
+	frames(30, home_x, home_y, false);
+	p.ui->pointer(home_x, home_y, true);
+	p.ui->pointer(home_x, home_y, false);
+	CHECK(p.item("acid").place == "bench");
+	well_formed(p.ui->draw());
+}
+
+TEST_CASE("ui: a picture of a pour by hand, by the truth's own rays (written where LAB_PICTURE names a file, as a PPM) (Stage 31)") {
+	const char *path = std::getenv("LAB_PICTURE");
+	if (path == nullptr) {
+		return;
+	}
+	const Traced traced;
+	Player p;
+	p.drag("item:flask", "square:11,8");
+	p.drag("item:acid", "square:4,8");
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	p.at("item:acid", ax, ay);
+	p.at("item:flask", fx, fy);
+	p.ui->pointer(ax, ay, true);
+	p.ui->pointer(ax, ay, false);
+	p.ui->pointer(fx, fy, false);
+	p.ui->frame(1.0 / 60.0);
+	p.ui->pointer(fx, fy, true);
+	const int held = std::getenv("LAB_PICTURE_FRAMES") != nullptr ? std::atoi(std::getenv("LAB_PICTURE_FRAMES")) : 150;
+	for (int k = 0; k < held; ++k) {
+		p.ui->frame(1.0 / 60.0);
+	}
+	const lab::OpticsScene scene = p.ui->optics();
+	const int x0 = static_cast<int>(fx) - 260, y0 = static_cast<int>(fy) - 330, w = 420, h = 480;
+	std::vector<double> rgb(static_cast<size_t>(w) * h * 3, 0.0);
+	std::vector<std::thread> threads;
+	std::atomic<int> next{ 0 };
+	for (unsigned t = 0; t < std::max(1u, std::thread::hardware_concurrency()); ++t) {
+		threads.emplace_back([&] {
+			for (int y = next.fetch_add(1); y < h; y = next.fetch_add(1)) {
+				for (int x = 0; x < w; ++x) {
+					lab::optics_area_truth(scene, x0 + x, y0 + y, 1, &rgb[(static_cast<size_t>(y) * w + x) * 3]);
+				}
+			}
+		});
+	}
+	for (std::thread &t : threads) {
+		t.join();
+	}
+	std::FILE *out = std::fopen(path, "wb");
+	REQUIRE(out != nullptr);
+	std::fprintf(out, "P6\n%d %d\n255\n", w, h);
+	for (size_t i = 0; i < rgb.size(); ++i) {
+		const double v = std::min(std::max(rgb[i], 0.0), 1.0), encoded = v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+		std::fputc(static_cast<int>(encoded * 255.0 + 0.5), out);
+	}
+	std::fclose(out);
+	MESSAGE("the bottle turned " << p.item("acid").turn * 180.0 / M_PI << " degrees, pouring " << p.item("acid").pours_ml_s << " mL/s");
 }
 
 TEST_CASE("ui: a person seals the flask with the stopper, carried onto its neck, and caps the acid bottle from its readout; the stopper is rubber at the flask's mouth, the cap on the bottle's, bodies of the pass (Stage 28)") {

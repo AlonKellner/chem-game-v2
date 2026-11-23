@@ -22,8 +22,8 @@ inline constexpr double STEP_SECONDS = 1.0 / 60.0;
 
 // The last step's flows (GAME_SPEC §13.6): what the step's primitives moved,
 // summed by process. Kept whether the step was traced or not; not state.
-enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4 };
-inline constexpr size_t PROCESSES = 5;
+enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5 };
+inline constexpr size_t PROCESSES = 6;
 struct StepFlows {
 	// per edge and process (edge * PROCESSES + process): from the edge's a to its b
 	std::vector<int64_t> energy; // quanta
@@ -80,7 +80,9 @@ public:
 	const std::vector<double> &reaction_remainders() const { return reaction_remainder_; }
 	const std::vector<double> &nucleation_remainders() const { return nucleation_remainder_; }
 	// puts back the remainders of a saved simulation, as the three above gave them
-	void restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation);
+	void restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation, std::vector<double> work = {});
+	// what the work along each edge still owes, under a quantum (Stage 32): state, as the others are
+	const std::vector<double> &work_remainders() const { return work_remainder_; }
 	// the reactions of the equilibrium law (what invariant P1 is checked for)
 	const std::vector<Reaction> &equilibria() const { return equilibria_; }
 	// the reactions with a rate law, in the order the tally counts them
@@ -105,6 +107,7 @@ private:
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
 	void react();
 	void conduct_heat();
+	void do_work();
 	void drain_liquids();
 	void overflow();
 	void settle();
@@ -125,6 +128,7 @@ private:
 	bool tree_built_ = false;
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
+	std::vector<double> work_remainder_; // per edge; empty while no edge has done work
 	std::vector<double> reaction_remainder_;
 	std::vector<double> nucleation_remainder_;
 	std::vector<int64_t> tally_; // cell * reactions + reaction

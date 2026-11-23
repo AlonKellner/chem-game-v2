@@ -3,6 +3,10 @@
 #include "chem_optics_demo.hpp"
 #include "draw_list.hpp"
 
+#include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/engine.hpp>
@@ -148,7 +152,23 @@ void ChemLab::_ready() {
 
 void ChemLab::_process(double delta) {
 	if (ui_ != nullptr) {
-		cg_ui_frame(ui_, delta);
+		// a play's frames are timed from one _process to the next, each under the mark it was given
+		const uint64_t now = godot::Time::get_singleton()->get_ticks_usec();
+		if (!mark_.is_empty() && last_usec_ != 0) {
+			Timed *t = timed_for(mark_);
+			t->frame_ms.push_back(static_cast<double>(now - last_usec_) / 1000.0);
+			t->ui_ms.push_back(ui_ms_);
+			t->scene_ms.push_back(scene_ms_);
+			t->pass_ms.push_back(pass_ms_);
+			t->paint_ms.push_back(paint_ms_);
+			paint_ms_ = 0.0;
+		}
+		last_usec_ = now;
+		// (a play's frames are a 120 Hz display's, whatever this machine makes of them: the same play each time)
+		cg_ui_frame(ui_, cg_ui_playing(ui_) != nullptr ? 1.0 / 120.0 : delta);
+		ui_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - now) / 1000.0;
+		const char *mark = cg_ui_playing(ui_);
+		mark_ = mark != nullptr ? godot::String::utf8(mark) : godot::String();
 		keep_export();
 		if (compute_.ready()) {
 			godot::RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ChemLab::optics_frame));
@@ -306,13 +326,72 @@ void ChemLab::set_optics_restarting(bool on) {
 	optics_restarting_ = on;
 }
 
+ChemLab::Timed *ChemLab::timed_for(const godot::String &mark) {
+	for (Timed &t : timed_) {
+		if (t.mark == mark) {
+			return &t;
+		}
+	}
+	timed_.push_back(Timed{ mark, {}, {}, {}, {}, {} });
+	return &timed_.back();
+}
+
+bool ChemLab::play(const godot::String &play_json) {
+	timed_.clear();
+	mark_ = godot::String();
+	return ui_ != nullptr && cg_ui_play(ui_, play_json.utf8().get_data()) == CG_OK;
+}
+
+bool ChemLab::playing() const {
+	return ui_ != nullptr && cg_ui_playing(ui_) != nullptr;
+}
+
+godot::Array ChemLab::played() const {
+	godot::Array out;
+	if (!compute_.ready() && godot::DisplayServer::get_singleton() != nullptr && godot::DisplayServer::get_singleton()->get_name() != "headless") {
+		// (a window with no optical pass: its frames are not the pass's, and are not given as if they were)
+		godot::UtilityFunctions::push_error("ChemLab: the optical pass is off, so the play's frames were not timed: ", optics_why_);
+		return out;
+	}
+	const auto of = [](std::vector<double> v, bool worst) {
+		if (v.empty()) {
+			return -1.0;
+		}
+		std::sort(v.begin(), v.end());
+		return worst ? v.back() : v[v.size() / 2];
+	};
+	for (const Timed &t : timed_) {
+		if (std::getenv("LAB_PLAY_SERIES") != nullptr) { // every frame of the mark, in order (ms)
+			std::printf("%s:", t.mark.utf8().get_data());
+			for (size_t i = 0; i < t.frame_ms.size(); ++i) {
+				std::printf("%s%.0f", i % 30 == 0 ? "\n  " : " ", t.frame_ms[i]);
+			}
+			std::printf("\n the game's frame, the scene composed, the pass sent, the list painted (CPU):");
+			for (size_t i = 0; i < t.frame_ms.size(); ++i) {
+				std::printf("%s%.0f/%.0f/%.0f/%.0f", i % 20 == 0 ? "\n  " : " ", t.ui_ms[i], t.scene_ms[i], t.pass_ms[i], t.paint_ms[i]);
+			}
+			std::printf("\n");
+		}
+		godot::Array row;
+		row.push_back(t.mark);
+		row.push_back(static_cast<int64_t>(t.frame_ms.size()));
+		row.push_back(of(t.frame_ms, false));
+		row.push_back(of(t.frame_ms, true));
+		out.push_back(row);
+	}
+	return out;
+}
+
 // one frame of the optical pass: the scene's buffers when they have changed, then every pixel
 void ChemLab::optics_frame() {
 	cg_optics optics;
 	optics.size = sizeof optics;
+	const uint64_t began = godot::Time::get_singleton()->get_ticks_usec();
 	if (ui_ == nullptr || cg_ui_optics(ui_, &optics) != CG_OK) {
 		return;
 	}
+	const uint64_t composed = godot::Time::get_singleton()->get_ticks_usec();
+	scene_ms_ = static_cast<double>(composed - began) / 1000.0;
 	compute_.upload(optics);
 	if (optics_restarting_) {
 		compute_.restart();
@@ -324,6 +403,7 @@ void ChemLab::optics_frame() {
 		}
 		compute_.run(optics_budget_, true);
 	}
+	pass_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - composed) / 1000.0;
 }
 
 void ChemLab::_draw() {
@@ -338,11 +418,13 @@ void ChemLab::paint(godot::CanvasItem *on, bool above) {
 	if (ui_ == nullptr || on == nullptr || !flat_visible_) {
 		return;
 	}
+	const uint64_t began = godot::Time::get_singleton()->get_ticks_usec();
 	cg_draw_list list;
 	list.size = sizeof list;
 	if (cg_ui_draw(ui_, &list) == CG_OK) {
 		paint_list(on, list, above);
 	}
+	paint_ms_ += static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - began) / 1000.0;
 }
 
 void ChemLab::_bind_methods() {
@@ -374,6 +456,9 @@ void ChemLab::_bind_methods() {
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::FLOAT, "optics_budget"), "set_optics_budget", "get_optics_budget");
 	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_extra", "passes"), &ChemLab::set_optics_extra);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_optics_restarting", "on"), &ChemLab::set_optics_restarting);
+	godot::ClassDB::bind_method(godot::D_METHOD("play", "play_json"), &ChemLab::play);
+	godot::ClassDB::bind_method(godot::D_METHOD("playing"), &ChemLab::playing);
+	godot::ClassDB::bind_method(godot::D_METHOD("played"), &ChemLab::played);
 	godot::ClassDB::bind_method(godot::D_METHOD("optics_frame"), &ChemLab::optics_frame);
 	godot::ClassDB::bind_method(godot::D_METHOD("_paint_over"), &ChemLab::paint_over);
 }

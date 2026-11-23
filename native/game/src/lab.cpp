@@ -1,4 +1,5 @@
 #include "lab/lab.hpp"
+#include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
 
@@ -15,6 +16,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -31,6 +33,14 @@ std::string build_name() {
 namespace {
 
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
+// A stirrer (GAME_SPEC §11, Stage 32): the work it does on the liquid a second, W, and how long a liquid left
+// alone keeps turning, s (dE/dt = P - E / tau). The game's choices: a small stir bar at a few hundred turns a
+// minute; a beaker of water stops turning in a few seconds.
+constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
+// A source of work is a reservoir so hot that its energy carries no entropy (the limit of a heat reservoir as
+// its temperature grows without bound): what it gives is work, and the second law holds as it is checked (T1, T2).
+constexpr double WORK_KELVIN = 1.0e300;
+constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
 constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
@@ -62,6 +72,16 @@ struct Item {
 	double tilt = 0.0, cap = 0.0;
 	double pour_left_m3 = -1.0; // a scripted pour's liquid still to run (below 0: no limit); not saved: a command waits it out
 	bool stirred = false;
+	// A stirred liquid's turning (GAME_SPEC §11, Stage 32): the edge its stirrer's work comes along, from the
+	// mains; its kinetic energy, J; the share of its solids it holds up. And what they were last worked out
+	// for (worked out again when the vessel holds something else; saved with the rest, so a lab loaded goes on
+	// exactly): the most energy it can hold, the power that holds all its solids up, W, how fast they settle
+	// (a share a second).
+	EdgeId stirs;
+	double swirl = 0.0, suspended = 0.0;
+	double swirl_for = std::numeric_limits<double>::quiet_NaN(), swirl_most = 0.0, swirl_lifts = 0.0, settles = 0.0;
+	// its vortex's share as last worked out, and for what (a view asks every step while a session waits)
+	mutable double share = 0.0, share_energy = -1.0, share_for = -1.0, share_held_up = -1.0;
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (GAME_SPEC §13.5)
 	Place place = Place::Cabinet;
@@ -204,6 +224,7 @@ struct Lab::Impl {
 	int cols = 28, rows = 15; // the bench's grid, in squares
 	CellId air;
 	CellId room;
+	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
 	Totals genesis;
 	bool check = true;
 	bool broken = false;
@@ -1175,29 +1196,219 @@ struct Lab::Impl {
 		}
 		return true;
 	}
-	// a pour's rate this step: a held one's by its tilt, an upside-down one's an orifice's under its head
+	double solid_m3(CellId cell) const {
+		const CellState &state = world().snapshot_cell(cell);
+		double volume = 0.0;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (state.amount[s] > 0 && def.phase == Phase::Solid && !def.wall) {
+				volume += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
+		}
+		return volume;
+	}
+	// The share of a vessel's solids its liquid holds up (the rest lies as sediment), and its vortex's share of
+	// the largest that fits (GAME_SPEC §13)
+	double suspended(const Item &x) const { return x.suspended; }
+	// (g: the liquid with what is dissolved in it)
+	double liquid_g(CellId cell) const {
+		const CellState &state = world().snapshot_cell(cell);
+		double g = 0.0;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const SpeciesDef &def = table().species(id);
+			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+				g += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * static_cast<double>(table().molar_mass_ug(id)) * 1e-6;
+			}
+		}
+		return g;
+	}
+	// what lies in a vessel as the contents' model takes it: the liquid with what is dissolved and suspended in
+	// it, and the sediment's own volume, cm^3
+	void lying_in(const Item &x, double &mixture, double &sediment) const {
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0, solid = solid_m3(x.cell) * 1e6;
+		sediment = (1.0 - x.suspended) * solid;
+		mixture = liquid_m3(x.cell) > 0.0 ? std::max(condensed - sediment, 0.0) : 0.0;
+	}
+	double turn_of(const Item &x) const {
+		const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+		return g != nullptr && x.pours_into >= 0 && !x.inverted ? x.tilt * contents::full_tilt(*g, 1) : x.pours_into >= 0 && x.inverted ? PI : 0.0;
+	}
+	contents::Swirl swirl_of(const Item &x) const {
+		const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+		if (g == nullptr || !(x.swirl > 0.0)) {
+			return contents::Swirl{};
+		}
+		double mixture = 0.0, sediment = 0.0;
+		lying_in(x, mixture, sediment);
+		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x.cell), x.swirl);
+	}
+	// (the same until its energy, what it holds or what it holds up has changed by a part in ten thousand)
+	double vortex(const Item &x) const {
+		if (!(x.swirl > 0.0)) {
+			return 0.0;
+		}
+		const auto near = [](double a, double b) { return std::fabs(a - b) <= 1e-4 * std::fabs(b); };
+		if (!(x.share_energy > 0.0) || !near(x.swirl, x.share_energy) || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-4)) {
+			x.share = swirl_of(x).share;
+			x.share_energy = x.swirl;
+			x.share_for = x.swirl_for;
+			x.share_held_up = x.suspended;
+		}
+		return x.share;
+	}
+	// A stirred liquid's turning, each step (GAME_SPEC §11, Stage 32). The stirrer does work on the liquid, which
+	// the mains give (the ledger's entry: it is heat in the liquid once the turning has died down, and the liquid
+	// is taken to have it at once). The turning's energy: dE/dt = P - E / tau, never more than the liquid can
+	// hold. What the turning holds up: grains fall through the liquid at Stokes' speed, and holding them up takes
+	// the power they would give up falling, their weight in the liquid times that speed; the turning has its
+	// dissipation, E / tau, to give, and holds up that share of them. Fine powder stays up in a liquid barely
+	// turning; coarse heavy grains ask for more than a stirrer gives. Let go, they settle at their speed.
+	void set_stirring() {
+		static const double keeps = std::exp(-chem::STEP_SECONDS / SWIRL_SECONDS);
+		for (Item &x : items) {
+			// (most vessels, most steps: not stirred, at rest, nothing to do)
+			const bool working = x.stirs.index >= 0 && world().edges()[static_cast<size_t>(x.stirs.index)].power != 0.0;
+			if (x.kind != Kind::Vessel || (!x.stirred && !working && !(x.swirl > 0.0) && !(x.suspended > 0.0))) {
+				continue;
+			}
+			const bool turning = x.stirred && liquid_m3(x.cell) > 0.0;
+			if (x.stirs.index >= 0 && turning != working) {
+				world().set_power(x.stirs, turning ? STIR_WATTS : 0.0);
+			}
+			if (!turning && !(x.swirl > 0.0) && !(x.suspended > 0.0)) {
+				continue;
+			}
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+			const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+			const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0;
+			const double solid = solid_m3(x.cell) * 1e6, liquid = liquid_m3(x.cell) * 1e6;
+			if (!(liquid > 0.0)) {
+				x.swirl = 0.0;
+				x.suspended = 0.0;
+				continue;
+			}
+			// what the liquid can hold, and what its solids take: worked out when it holds something else (within
+			// a part in a thousand), and when it is tilted
+			// (a signature of the three: each part in two hundred of its volume, each fiftieth of its solids, each
+			// thousandth of a radian is another)
+			const double holds = 1.0 + std::floor(200.0 * std::log(std::max(condensed, 1e-9))) + 1e4 * std::floor(50.0 * std::log(std::max(solid, 1e-9))) + 1e9 * std::floor(1000.0 * turn_of(x));
+			if (holds != x.swirl_for) {
+				x.swirl_for = holds;
+				const double mass = liquid_g(x.cell), density = mass / std::max(condensed - solid, 1e-9); // g/cm^3
+				double depth = 0.0; // cm, of liquid under the surface's middle
+				if (g != nullptr) {
+					const contents::Swirl most = contents::swirl(*g, turn_of(x), std::max(condensed - solid, 0.0), 0.0, mass, 0.0);
+					x.swirl_most = most.most;
+					depth = most.depth;
+				} else {
+					depth = std::cbrt(condensed); // a vessel made to no shape: as deep as it is wide
+					x.swirl_most = mass * 1e-3 * GRAVITY * depth * 1e-2 / 3.0;
+				}
+				// its solids: the power that holds them up (their weight in the liquid times the speed they fall at),
+				// and how fast they settle through the liquid's depth
+				x.swirl_lifts = 0.0;
+				x.settles = 0.0;
+				const CellState &state = world().snapshot_cell(x.cell);
+				double fall = 0.0, weight = 0.0; // m/s, by each solid's volume
+				for (size_t s = 0; s < state.amount.size(); ++s) {
+					const SpeciesId id{ static_cast<int32_t>(s) };
+					const SpeciesDef &def = table().species(id);
+					if (state.amount[s] <= 0 || def.wall || def.phase != Phase::Solid || !(def.molar_volume > 0.0)) {
+						continue;
+					}
+					const double volume = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume; // m^3
+					const double heavier = std::max(static_cast<double>(table().molar_mass_ug(id)) * 1e-9 / def.molar_volume - density * 1e3, 0.0); // kg/m^3
+					const double grain = particle_diameter(table(), state, id); // m
+					const double falls = heavier * GRAVITY * grain * grain / (18.0 * WATER_VISCOSITY); // m/s (Stokes)
+					x.swirl_lifts += heavier * GRAVITY * volume * falls;
+					fall += volume * falls;
+					weight += volume;
+				}
+				x.settles = weight > 0.0 && depth > 0.0 ? (fall / weight) / (depth * 1e-2) : 0.0;
+			}
+			x.swirl = std::min(x.swirl * keeps + (turning ? STIR_WATTS * SWIRL_SECONDS * (1.0 - keeps) : 0.0), x.swirl_most);
+			if (x.swirl < 1e-9) {
+				x.swirl = 0.0;
+			}
+			if (!(solid > 0.0)) {
+				x.suspended = 0.0;
+				continue;
+			}
+			const double gives = x.swirl / SWIRL_SECONDS; // W: what the turning dissipates
+			const double holds_up = x.swirl_lifts > 0.0 ? std::min(1.0, gives / x.swirl_lifts) : (x.swirl > 0.0 ? 1.0 : 0.0);
+			if (holds_up > x.suspended) {
+				x.suspended += (holds_up - x.suspended) * (1.0 - keeps); // stirred up as fast as the liquid turns
+				if (holds_up - x.suspended < 1e-3) {
+					x.suspended = holds_up; // (the last thousandth: there at once)
+				}
+			} else {
+				x.suspended = std::max(holds_up, x.suspended - x.settles * chem::STEP_SECONDS);
+			}
+			if (x.suspended < 1e-6) {
+				x.suspended = 0.0; // (the last of a haze: nothing to see, and the sediment is whole again)
+			}
+		}
+	}
+	// A pour by hand (GAME_SPEC §13, Stage 31), from what lies in the vessel at its tilt (lab/contents.hpp): what
+	// stands over the lip runs over the brim as over a weir, and never more in a step than stands over the lip.
+	// The liquid takes with it what is dissolved and what is suspended in it; the sediment runs by the same law
+	// once its flat section stands over the lip. m^3/s: of the liquid's own volume, and of the solids' own.
+	struct ByHand {
+		double turn = 0.0, head_cm = 0.0, liquid = 0.0, carried = 0.0, solids = 0.0, runs_ml_s = 0.0;
+	};
+	ByHand by_hand(const Item &x, const glass::Vessel &g) const {
+		ByHand p;
+		p.turn = x.tilt * contents::full_tilt(g, 1);
+		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
+		if (!fill.defined) {
+			return p;
+		}
+		const double condensed = fill.condensed * 1e6, solid = solid_m3(x.cell) * 1e6, share = suspended(x);
+		const double sediment = (1.0 - share) * solid, mixture = std::max(condensed - sediment, 0.0);
+		const contents::Lying l = contents::lying(g, p.turn, mixture, sediment, x.swirl > 0.0 ? vortex(x) : 0.0, 1);
+		p.head_cm = l.liquid ? l.head : 0.0;
+		const double lip_holds = contents::below(g, p.turn, l.lip_level), brim = std::fabs(l.lip_x);
+		if (l.liquid && l.head > 0.0 && mixture > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds, 0.0);
+			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, l.head), over / chem::STEP_SECONDS);
+			p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
+			p.carried = share;
+		}
+		if (l.solid && l.solid_head > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds, 0.0);
+			p.solids = contents::PACKING * std::min(contents::over_brim(brim, p.turn, l.solid_head), over / chem::STEP_SECONDS) * 1e-6;
+		}
+		return p;
+	}
+	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
+	// an upside-down one's an orifice's under its head
 	void set_pours() {
 		for (Item &x : items) {
 			if (x.pours_into < 0) {
 				continue;
 			}
 			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
-			double rate = 0.0;
-			bool solids = false;
-			if (g != nullptr && !x.inverted) {
-				rate = x.tilt * g->pour_ml_s * 1e-6;
-				solids = x.tilt >= 1.0 - 1e-12 && x.pour_left_m3 < 0.0; // at a held pour's full tilt its solids go too; a scripted one decants
+			double rate = 0.0, solids = 0.0, solids_rate = 0.0;
+			if (g != nullptr && !x.inverted && x.pour_left_m3 >= 0.0) {
+				rate = x.tilt * g->pour_ml_s * 1e-6; // a script's pour: an amount at the vessel's rate, decanted
+			} else if (g != nullptr && !x.inverted) {
+				const ByHand p = by_hand(x, *g);
+				rate = p.liquid;
+				solids = p.carried;
+				solids_rate = p.solids;
 			} else if (g != nullptr) {
 				const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
 				const double head_m = fill.defined ? g->head_inverted(fill.condensed * 1e6) / 100.0 : 0.0;
 				const double bore_m = g->cap_bore / 100.0;
 				rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * head_m);
-				solids = true; // upside down, what rests lies on the cap
+				solids = 1.0; // upside down, what rests lies on the cap
 			}
 			if (x.pour_left_m3 >= 0.0) {
 				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
 			}
-			world().set_drain(x.pour, rate, solids);
+			world().set_drain(x.pour, rate, solids, solids_rate);
 		}
 	}
 
@@ -1521,6 +1732,7 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
+		set_stirring();
 		set_pours();
 		if (!check || !traceable) {
 			sim->advance();
@@ -1768,7 +1980,25 @@ struct Lab::Impl {
 		v.inverted = item.inverted;
 		v.tilt = item.tilt;
 		v.cap = item.cap;
+		if (item.pours_into >= 0 && item.inverted && item.pour.index >= 0) {
+			v.pours_ml_s = std::max(world().edges()[static_cast<size_t>(item.pour.index)].rate, 0.0) * 1e6;
+		}
+		if (item.pours_into >= 0 && !item.inverted) {
+			if (const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml); g != nullptr) {
+				const ByHand p = by_hand(item, *g);
+				v.turn = p.turn;
+				v.head_cm = p.head_cm;
+				v.pours_ml_s = item.pour_left_m3 >= 0.0 ? item.tilt * g->pour_ml_s : p.runs_ml_s;
+				v.pours_solid_ml_s = item.pour_left_m3 >= 0.0 ? 0.0 : p.solids * 1e6;
+			}
+		}
 		v.stirred = item.stirred;
+		if (item.swirl > 0.0 || item.suspended > 0.0) {
+			v.swirl_j = item.swirl;
+			v.swirl_most_j = item.swirl_most;
+			v.vortex = vortex(item);
+			v.suspended = item.suspended;
+		}
 		v.submitted = item.submitted;
 		v.slot = item.slot;
 		v.burst = item.burst;
@@ -1830,7 +2060,7 @@ struct Lab::Impl {
 			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
 			for (const Edge &e : m.world().edges()) {
 				const CellId other = e.a == item.cell ? e.b : e.b == item.cell ? e.a : CellId{};
-				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room)) {
+				if (other.index >= 0 && e.open && m.world().meta(other).reservoir && !(other == m.room) && !(other == m.mains)) {
 					bool burner = false;
 					for (const Item &b : m.items) {
 						burner = burner || (b.kind == Kind::Burner && b.cell == other);
@@ -2126,6 +2356,13 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		b.add_edge(tray.cell, impl->room, PHASES_NONE, 2.0);
 		b.set_spill(tray.cell);
 		impl->items.push_back(tray);
+		// the mains (Stage 32): what does the stirrers' work, along an edge to every vessel (no heat, no matter)
+		impl->mains = b.add_reservoir("mains", WORK_KELVIN);
+		for (Item &item : impl->items) {
+			if (item.kind == Kind::Vessel) {
+				item.stirs = b.add_edge(impl->mains, item.cell, PHASES_NONE, 0.0);
+			}
+		}
 	} catch (const std::exception &e) {
 		why = std::string("the bench is malformed: ") + e.what();
 		return nullptr;
@@ -3649,7 +3886,10 @@ ItemDebug Lab::debug(const std::string &id) const {
 				const double head = g != nullptr && fill.defined ? g->head_inverted(fill.condensed * 1e6) : 0.0;
 				out.facts.push_back("pours into " + into + text_of(" upside down: its cap %.0f%% open", 100.0 * x.cap) + text_of(" under %.1f cm of liquid", head) + text_of(": %.2f mL/s", rate));
 			} else {
-				out.facts.push_back("pours into " + into + text_of(" held, tilted %.0f%%", 100.0 * x.tilt) + text_of(": %.2f mL/s", rate));
+				const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+				const Lab::Impl::ByHand p = g != nullptr ? m.by_hand(x, *g) : Lab::Impl::ByHand{};
+				out.facts.push_back("pours into " + into + text_of(" held, turned %.0f degrees", p.turn * 180.0 / PI) +
+						(p.head_cm > 0.0 ? text_of(", its liquid %.1f mm over the lip", 10.0 * p.head_cm) : std::string(", its liquid not at the lip")) + text_of(": %.2f mL/s", rate));
 			}
 		}
 	}
@@ -3687,7 +3927,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 	// its flows in the last step, into it
 	const StepFlows &f = m.sim->flows();
 	const std::span<const Edge> edges = world.edges();
-	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow" };
+	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow", "work" };
 	for (size_t e = 0; e < edges.size() && (e + 1) * PROCESSES <= f.energy.size(); ++e) {
 		if (edges[e].a != cell && edges[e].b != cell) {
 			continue;
@@ -3881,6 +4121,25 @@ std::string Lab::digest() const {
 		if (e.rate >= 0.0) { // a pour's (Stage 27): a lab without one digests as before
 			hash.update_double(e.rate);
 		}
+		if (e.solids_rate > 0.0 || (e.carried > 0.0 && e.carried < 1.0)) { // a pour by hand's (Stage 31)
+			hash.update_double(e.carried);
+			hash.update_double(e.solids_rate);
+		}
+		if (e.power != 0.0) { // a stirrer's work (Stage 32)
+			hash.update_double(e.power);
+		}
+	}
+	for (const Item &x : m.items) { // a liquid's turning, and what it holds up (Stage 32)
+		if (x.swirl > 0.0 || x.suspended > 0.0) {
+			hash.update_double(x.swirl);
+			hash.update_double(x.suspended);
+		}
+	}
+	if (!m.sim->work_remainders().empty()) {
+		hash.update_u64(m.sim->work_remainders().size());
+		for (const double v : m.sim->work_remainders()) {
+			hash.update_double(v);
+		}
 	}
 	// the processes' carried remainders are state too (GAME_SPEC §4.5)
 	for (const std::vector<double> *carried : { &m.sim->heat_remainders(), &m.sim->reaction_remainders(), &m.sim->nucleation_remainders() }) {
@@ -4018,14 +4277,25 @@ json Lab::Impl::save() const {
 		if (e.rate >= 0.0) {
 			edges.back()["rate"] = bits(e.rate);
 		}
+		if (e.carried > 0.0 || e.solids_rate > 0.0) {
+			edges.back()["carried"] = bits(e.carried);
+			edges.back()["solids_rate"] = bits(e.solids_rate);
+		}
+		if (e.power != 0.0) {
+			edges.back()["power"] = bits(e.power);
+		}
 	}
 	out["edges"] = edges;
 	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
+	if (!sim->work_remainders().empty()) {
+		out["remainders"]["work"] = doubles(sim->work_remainders());
+	}
 	json bench;
 	bench["grid"] = { cols, rows };
 	bench["mid_step"] = mid_step;
 	bench["air"] = air.index;
 	bench["room"] = room.index;
+	bench["mains"] = mains.index;
 	json list = json::array();
 	for (const Item &item : items) {
 		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
@@ -4038,6 +4308,14 @@ json Lab::Impl::save() const {
 		}
 		if (item.screwed) {
 			list.back()["screwed"] = true;
+		}
+		if (item.stirs.index >= 0) { // (Stage 32)
+			list.back()["stirs"] = item.stirs.index;
+		}
+		if (item.swirl > 0.0 || item.suspended > 0.0) {
+			list.back()["swirl"] = bits(item.swirl);
+			list.back()["suspended"] = bits(item.suspended);
+			list.back()["swirl_holds"] = { bits(item.swirl_for), bits(item.swirl_most), bits(item.swirl_lifts), bits(item.settles) };
 		}
 		if (item.pours_into >= 0) { // a lab without a pour saves as before (Stage 27)
 			list.back()["pours"] = { { "into", item.pours_into }, { "edge", item.pour.index }, { "inverted", item.inverted }, { "tilt", bits(item.tilt) }, { "cap", bits(item.cap) } };
@@ -4074,7 +4352,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	}
 	const SpeciesTable &table = builtin_species();
 	auto impl = std::make_unique<Impl>();
-	std::vector<double> heat, reaction, nucleation;
+	std::vector<double> heat, reaction, nucleation, work;
 	std::optional<World> world;
 	try {
 		if (saved.at("species").get<int>() != table.species_count()) {
@@ -4117,7 +4395,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.phases = e.at("phases").get<PhaseMask>();
 			edge.open = e.at("open").get<bool>();
 			edge.drain = e.at("drain").get<bool>();
-			if (e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) {
+			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
+					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}
@@ -4134,6 +4413,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		impl->mid_step = bench.at("mid_step").get<bool>();
 		impl->air = CellId{ bench.at("air").get<int32_t>() };
 		impl->room = CellId{ bench.at("room").get<int32_t>() };
+		impl->mains = CellId{ bench.value("mains", -1) };
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
@@ -4163,6 +4443,13 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 				}
 			}
 			item.stirred = j.at("stirred").get<bool>();
+			item.stirs = EdgeId{ j.value("stirs", -1) };
+			if ((j.contains("swirl") && !from_bits(j.at("swirl"), item.swirl)) || (j.contains("suspended") && !from_bits(j.at("suspended"), item.suspended)) ||
+					(j.contains("swirl_holds") && (!from_bits(j.at("swirl_holds").at(0), item.swirl_for) || !from_bits(j.at("swirl_holds").at(1), item.swirl_most) ||
+														  !from_bits(j.at("swirl_holds").at(2), item.swirl_lifts) || !from_bits(j.at("swirl_holds").at(3), item.settles)))) {
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			item.submitted = j.at("submitted").get<bool>();
 			item.col = j.at("col").get<int>();
 			item.row = j.at("row").get<int>();
@@ -4204,7 +4491,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			}
 		}
 		const json &remainders = saved.at("remainders");
-		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation)) {
+		if (!to_doubles(remainders.at("heat"), heat) || !to_doubles(remainders.at("reaction"), reaction) || !to_doubles(remainders.at("nucleation"), nucleation) ||
+				(remainders.contains("work") && !to_doubles(remainders.at("work"), work))) {
 			why = "the save holds a number that is not one";
 			return nullptr;
 		}
@@ -4221,20 +4509,20 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count &&
+		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";
 			return nullptr;
 		}
 	}
-	if (impl->air.index < 0 || impl->air.index >= cells || impl->room.index < 0 || impl->room.index >= cells) {
+	if (impl->air.index < 0 || impl->air.index >= cells || impl->room.index < 0 || impl->room.index >= cells || impl->mains.index >= cells) {
 		why = "the save's room is not in its world";
 		return nullptr;
 	}
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false);
-	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation));
+	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation), std::move(work));
 	impl->genesis = totals(table, impl->world().snapshot());
 	if (!impl->restored_notices) {
 		impl->detect(true); // a save from before notices: what the detectors see from now on

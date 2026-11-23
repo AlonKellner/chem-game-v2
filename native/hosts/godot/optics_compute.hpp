@@ -48,7 +48,16 @@ private:
 	godot::RenderingDevice *rd_ = nullptr;
 	// two passes of one source (GAME_SPEC §12.3): [0] over the whole screen, compiled without the chain; [1] the
 	// chain, over the rectangles of the bodies whose pixels can need it
-	godot::RID shader_[2], pipeline_[2], uniforms_[2];
+	godot::RID shader_[4], pipeline_[4], uniforms_[4]; // the screen's pass, the chain's, the beams' (Stage 29), and the corners' (Stage 33)
+	godot::RID corners_; // the lattice of pixel corners: three vec4s a corner (Stage 33)
+	// each pixel's kept beams (Stage 33): a record for every pixel of the rectangles, one rectangle after another;
+	// where each begins, in records (-1: there was no room for it, and its beams are traced at every read)
+	godot::RID kept_;
+	int64_t kept_capacity_ = 0; // records
+	std::vector<int32_t> kept_base_;
+	int passes_ = 2;
+	// each pass's groups of pixels, across and down: pixels of a group wait for the one with most to do
+	int group_[4][2] = { { 2, 32 }, { 2, 32 }, { 2, 32 }, { 2, 32 } };
 	std::vector<float> chain_; // those rectangles: left, top, right, bottom
 	// a storage buffer and how many bytes it can hold: made anew, larger, when what it is given outgrows it
 	struct Buffer {
@@ -56,14 +65,16 @@ private:
 		uint32_t capacity = 0;
 	};
 	void hold(Buffer &buffer, const float *data, int32_t floats, int64_t from = 0); // from: the first float that changed
-	Buffer scene_, rows_, lines_, lights_, maps_, wall_, stacks_;
+	Buffer scene_, rows_, lines_, lights_, maps_, wall_, stacks_, shapes_;
 	godot::RID asked_;
 	godot::RID state_[4];
 	godot::RID shown_;
 	godot::Ref<godot::Texture2DRD> shown_texture_;
-	uint64_t uploaded_ = 0, uploaded_maps_ = 0, uploaded_wall_ = 0, uploaded_stacks_ = 0;
+	uint64_t uploaded_ = 0, uploaded_maps_ = 0, uploaded_wall_ = 0, uploaded_stacks_ = 0, uploaded_shapes_ = 0;
 	bool have_scene_ = false;
 	int32_t frame_ = 0;
+	int32_t stamp_ = 0; // counts the runs of the passes (a pixel is stepped once in each)
+	float ray_points_ = static_cast<float>(CG_OPTICS_RAY_POINTS); // the rays' budget (LAB_RAY_POINTS: another, for measuring)
 	int32_t parity_ = 0;
 };
 

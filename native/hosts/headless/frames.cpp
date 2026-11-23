@@ -43,6 +43,16 @@ struct Tally {
 
 // One scenario's region, measured every `step` pixels: each frame `update(f, scene)` sets the scene.
 Tally run(int x, int y, int w, int h, int step, int frames, bool cuts, const std::function<void(int, OpticsScene &)> &update, double budget = 16.0) {
+	// Stage 29, spike A: a narrower region and fewer frames, for readings too slow on the CPU to run whole
+	if (const char *narrow = std::getenv("CHEM_FRAMES_NARROW"); narrow != nullptr) {
+		int nx = x, nw = w, nstep = step, nframes = frames;
+		if (std::sscanf(narrow, "%d,%d,%d,%d", &nx, &nw, &nstep, &nframes) == 4) {
+			x = nx;
+			w = nw;
+			step = nstep;
+			frames = nframes;
+		}
+	}
 	lab::OpticsFrames rendered(x, y, w, h, budget);
 	OpticsScene scene;
 	struct Px {

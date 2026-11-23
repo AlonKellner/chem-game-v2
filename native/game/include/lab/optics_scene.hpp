@@ -15,6 +15,13 @@
 namespace lab {
 
 namespace optics_layout {
+// The shapes' head (Stage 29, 30): SHAPE_BLOCK vec4s a body: its shape's start (-1: it bends nothing), whether it
+// is made as glassware, whether what lies in it is given, its turn (radians, clockwise as seen); the turn's
+// pivot (pixels) and its cosine and sine; its rectangle upright; the room's up in its frame (x, y), whether it
+// holds liquid, the liquid's level (cm along up); its vortex's depth, half width and half depth, whether it
+// holds sediment; the vortex's middle (x, y), the sediment's level, its pile's height; the pile's half width
+// and half depth, its middle (x, y).
+inline constexpr int SHAPE_BLOCK = 10;
 inline constexpr int MAX_BODIES = 256;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
@@ -60,7 +67,9 @@ inline constexpr int LIGHTS = 1;
 // breakpoints across; between two it is one radiance on any row of pixels (the shapes over a row's
 // height averaged). Rows alike share a profile.
 //   [0]                          breakpoints m, profiles, the wall's tag (pixels that show it alone follow it), 0
-//   [WALL_ROW_BASE + y]          the profile of pixel row y (x)
+//   [WALL_ROW_BASE + y]          the profile of pixel row y (x), for y from -1 to WALL_ROWS: the screen's rows,
+//                                the row over them and the row under them (where a ray lands beyond the screen
+//                                it reads the wall as it is just past the screen's edge, Stage 30)
 //   [WALL_COLUMN_BASE + c]       the cell that x = c is in: how many breakpoints are at or left of it (x)
 //   [WALL_BREAK_BASE + j]        breakpoint j (x), ascending
 //   then, a profile after another, m + 1 cells each: cell j is from breakpoint j - 1 to breakpoint j
@@ -68,7 +77,17 @@ inline constexpr int LIGHTS = 1;
 //                                (its radiance, the profile's integral from breakpoint 0 to the cell's
 //                                left end in two parts, coarse and fine: their sum, exactly; 0)
 inline constexpr int WALL_ROWS = 1080, WALL_COLUMNS = 1920;
-inline constexpr int WALL_ROW_BASE = 1, WALL_COLUMN_BASE = WALL_ROW_BASE + WALL_ROWS, WALL_BREAK_BASE = WALL_COLUMN_BASE + WALL_COLUMNS;
+inline constexpr int WALL_ROW_BASE = 2, WALL_COLUMN_BASE = WALL_ROW_BASE + WALL_ROWS + 1, WALL_BREAK_BASE = WALL_COLUMN_BASE + WALL_COLUMNS;
+// A shape's outline (Stage 33), after its patches: how far from its axis it reaches in each of this many bands
+// of its height (its head says between which heights: z and w).
+inline constexpr int OUTLINE_BANDS = 32;
+// The rays' budget (Stage 33): the points a frame gives, over the whole screen, to the pixels read by their own
+// rays, whose points are rays (a correction each, or one in four where a beam's rays go one way). Asks above it
+// are scaled down as the screen's budget scales the others': a vessel that has just come to rest takes its first
+// corrections over a few frames, none of them long.
+inline constexpr double RAY_POINTS = 300000.0;
+// A pixel's kept beams (Stage 33): the vec4s of one pixel's record (the per-pixel source says what they hold).
+inline constexpr int KEPT_VECS = 24;
 } // namespace optics_layout
 
 struct OpticsScene {
@@ -114,6 +133,18 @@ struct OpticsScene {
 	// each body's glassware, if it is made as one (GAME_SPEC §12.3, Stage 24): its whole shape, which the truth
 	// traces (null: a cylinder, a prism, a ball, a thing of the lab)
 	std::vector<const glass::Vessel *> vessels;
+	// The shapes (GAME_SPEC §12.3, Stage 29): each bending body's surfaces, as the tracer's patches, for the
+	// renderer that traces its rays live: vec4s, as native/game/shader/optics_pixel.glsl lays them out (where
+	// each body's begins, then each shape once). They change with a body's kind, size or glass, not its place.
+	std::vector<float> shapes;
+	uint64_t shapes_revision = 0;
+	// the same in double precision, for the reference: a ray that grazes a rim is thrown about by its surfaces,
+	// and a surface's last digit in single precision moves where it lands by a pixel (what the GPU's picture may
+	// differ by there is O4's to bound; the pass's tracer itself is held to the truth's ray by ray, O9)
+	std::vector<double> shapes_exact;
+	// How each body lies (Stage 30), 40 numbers a body, as the shapes' head lays them out: where it stands
+	// upright, how it is turned and about where, and what lies in it (lab/contents.hpp), in its own frame.
+	std::vector<double> lies;
 };
 
 // One vessel or balloon as the screen places it.
@@ -127,6 +158,12 @@ struct OpticsBody {
 	// its layer (GAME_SPEC §12.3): 0 stands on the bench's plane; each one more is a gap nearer the eye (what
 	// is held: 1). Up to OPTICS_LAYERS
 	int layer = 0;
+	// Turned about the eye's axis (Stage 30: a held pour's tilt): by `angle`, clockwise as seen, about the pivot (a
+	// place of the screen); its rectangle is where it would stand upright. What it pours from: its right lip (1)
+	// or its left (-1). And its liquid's vortex: its share (0 to 1) of the largest that fits.
+	float angle = 0.0f, pivot_x = 0.0f, pivot_y = 0.0f;
+	int side = 1;
+	float vortex = 0.0f;
 	bool flipped = false; // set upside down (Stage 27: a placed pour): its glass's rows from the other end
 	// A thing of the lab that is no vessel (GAME_SPEC §12.3, Stage 22): with no item, a shape made of what it
 	// reflects and what it emits, which bends nothing.
@@ -137,7 +174,7 @@ struct OpticsBody {
 	//   Cone: a cone of glowing gas, its apex at its rectangle's top centre, its base its rectangle's bottom;
 	//         it emits along the path through it (its light is a multiple of the room's for each pixel of
 	//         path) and absorbs nothing.
-	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5 };
+	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5, Grating = 6 };
 	Shape shape = Item;
 	float size = 0.0f;
 	float dash = 0.0f; // a bar's dash and gap together (pixels); 0: unbroken
@@ -195,6 +232,8 @@ void optics_maps(OpticsScene &scene);
 void optics_wall(OpticsScene &scene, const OpticsRoom &room);
 // The stacks, from the scene's own table, spectra and maps (optics_compose and optics_maps call it).
 void optics_stacks(OpticsScene &scene);
+// The shapes, from the scene's own table (optics_compose and optics_maps call it).
+void optics_shapes(OpticsScene &scene);
 
 // ---- the reference: the per-pixel source compiled as C++, in float64
 
@@ -243,6 +282,93 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through = nullptr);
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
+
+// ---- a pixel's own rays (GAME_SPEC §12.3, Stage 29)
+
+// One ray from the eye straight in at a place of the screen, at a wavelength: where it lands on the wall, and
+// what it met that bent it, the nearest first (three at most): which body, what its surfaces passed, its path
+// in its liquid (cm); whether it reaches the wall.
+struct OpticsRay {
+	double x = 0.0, y = 0.0;
+	bool lands = true;
+	int bent = 0;
+	int body[3] = { -1, -1, -1 };
+	double pass[3] = { 1.0, 1.0, 1.0 }, chord[3] = { 0.0, 0.0, 0.0 };
+	uint32_t route[2] = { 0, 0 }; // the first two's own routes through their surfaces
+	int ways = 1; // in how many ways it could go on from a grating it met
+	bool solid = false; // it ended in a vessel's sediment (Stage 30)
+};
+// which body of the scene an item is (by its id, as its tag was made from it), or -1
+int optics_body(const OpticsScene &scene, const std::string &id);
+// by the pass's own tracer (native/game/shader/optics_pixel.glsl, in float64), and by the truth's
+OpticsRay optics_ray(const OpticsScene &scene, double x, double y, double nm);
+// the same in one of the ways a ray goes on from a grating (0: straight on; 1, 2: its orders +1 and -1; 3, 4: +3 and -3)
+OpticsRay optics_ray_way(const OpticsScene &scene, double x, double y, double nm, int way);
+// Which reading the reference uses where a pixel looks through something that bends its view (while Stage 29 is
+// built): 0, the maps; 5, a pixel's own rays as an average over time. From LAB_BEAM at first; the reading before.
+int optics_reading(int mode);
+// whether a pixel's rays are traced in the pass now (the readings 4 and 5): the scene then keeps no stacks, and
+// every body that bends is read by the pass over the rectangles it names
+bool optics_traced();
+OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double nm);
+using OpticsRayOf = OpticsRay (*)(const OpticsScene &scene, double x, double y, double nm);
+// O9 (GAME_SPEC §18, Stage 29): the pass's rays are the truth's. At the middle and the corner of every `step`th
+// pixel of [x0, x1) x [y0, y1), at three wavelengths, the pass's tracer and the truth's land their ray at the
+// same place and meet the same bodies with the same passing and the same chords; rays the two send different
+// ways (a ray that grazes a surface) are few. "" when it holds.
+std::string check_O9(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, OpticsRayOf ray = nullptr);
+// The stretches of the spectrum a pixel is read in (places: 0 at 380 nm, 1 at 780 nm; a pair a stretch), as its
+// reading cut and halved it; and as it would be if stretches were never halved (O10's own test).
+std::vector<double> optics_stretches(const OpticsScene &scene, int x, int y);
+std::vector<double> optics_stretches_unhalved(const OpticsScene &scene, int x, int y);
+using OpticsStretches = std::vector<double> (*)(const OpticsScene &scene, int x, int y);
+// O10 (Stage 29): a pixel's four nodes speak for each stretch of the spectrum it is read in. Where a pixel's
+// middle ray goes one way at a stretch's four nodes, the cubic through them puts the ray at the wavelengths
+// between where the ray traced there lands (to the sweep's tolerance), passing as much, through as much
+// liquid; and few rays go another way between nodes that agree. "" when it holds.
+std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, OpticsStretches stretches = nullptr);
+// How much of the pixel its beams made up, over the whole spectrum (1: all of it, once); 1 where the pixel is
+// not read by beams.
+double optics_made(const OpticsScene &scene, int x, int y);
+// How many rays the pass's tracer follows to read the pixel once (0 where it is not read by beams).
+int64_t optics_rays_for(const OpticsScene &scene, int x, int y);
+// One ray through one body's shape by the pass's own tracer of surfaces (Stage 33), in the body's frame (cm from
+// its axis, y up from its foot, z away from the eye; what lies in the body traced where it is given): in double,
+// as the reference follows it, or (`single`) in single precision with the GPU's tolerances, as the GPU does.
+struct OpticsPassage {
+	double at[3] = { 0.0, 0.0, 0.0 }, toward[3] = { 0.0, 0.0, 1.0 }; // where it last was and which way it went on
+	double pass = 1.0, chord = 0.0, first = 0.0; // what its surfaces passed; its path in the liquid; how far to the shape
+	uint32_t route = 0;
+	int meetings = 0;
+	int most = 0; // the meetings allowed
+	bool left = true, solid = false;
+};
+OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single);
+// O15, the pass's rays in single precision are its rays in double (GAME_SPEC §18, Stage 33): over every body of
+// the scene that bends, rays across it straight in and aslant; fewer than one in two hundred go another way
+// in single precision, and of the rest all but one in a hundred leave within a thousandth of a centimetre and
+// of a heading of where they leave in double. (A ray that takes many meetings to leave is thrown wide by the
+// last digit of its first: those are the hundredth.) `single`: the tracer held (null: the pass's own in single
+// precision). "" when it holds.
+using OpticsPassageOf = OpticsPassage (*)(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core);
+std::string check_O15(const OpticsScene &scene, OpticsPassageOf single = nullptr);
+// What the pass's tracer has done on this thread (Stage 33), as counts: [0] rays followed; [1] bodies a ray
+// tried; [2] meetings searched for; [3] quadric surfaces tried; [4] tori tried; [5] tori whose quartic was
+// solved; [6] roots of those made exact; [7] passages through a shape that went on past eight meetings;
+// [8] those that used every meeting allowed. The frame rate's measure where no GPU runs: what a ray costs is
+// what it tries.
+void optics_work(int64_t work[9], bool reset);
+// How the passages through a shape ended on this thread (Stage 33), by their meetings (the last entry: 64 and
+// more): how many, how many of them still inside (dark), and the light the others carried out.
+void optics_ended(int64_t count[65], int64_t inside[65], double light[65], bool reset);
+// (a measurement's switch: the meetings a passage is allowed, in the truth's tracer and the pass's)
+void optics_meetings_most(int most);
+// (a measurement: the beams read over a wall that is one under them [0], and not: of rays that part [1], of the others [2])
+void optics_even(int64_t count[3], bool reset);
+using OpticsMade = double (*)(const OpticsScene &scene, int x, int y);
+// O11 (Stage 29): a pixel's parts make it whole. However a pixel is cut (in four, at where its rays part,
+// along the spectrum), what it is read from adds up to all of it, once. "" when it holds.
+std::string check_O11(const OpticsScene &scene, int x0, int y0, int x1, int y1, OpticsMade made = nullptr);
 // A rectangle of the screen, 8 bits a channel, rows from the top, of the truth.
 std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int w, int h);
 
@@ -251,7 +377,9 @@ std::vector<uint8_t> optics_picture(const OpticsScene &scene, int x, int y, int 
 // estimate, its points by need under a budget per pixel.
 class OpticsFrames {
 public:
-	OpticsFrames(int x, int y, int w, int h, double budget = 16.0);
+	// (`step`: every step-th pixel across and down, from (x, y): a sample of a large rectangle; w and h are
+	// then how many across and down)
+	OpticsFrames(int x, int y, int w, int h, double budget = 16.0, int step = 1);
 	~OpticsFrames();
 	OpticsFrames(const OpticsFrames &) = delete;
 	OpticsFrames &operator=(const OpticsFrames &) = delete;
@@ -262,21 +390,59 @@ public:
 	void colour(const OpticsScene &scene, int x, int y, double rgb[3]) const;
 	double points() const; // the points spent in the last frame, all pixels
 	double asked() const; // the points asked for in the last frame
+	double beams_traced() const { return beams_traced_; } // the pixels whose beams the last frame traced
 	int frames() const;
 	// whether pixel (x, y)'s history started again in the last frame
 	bool restarted(int x, int y) const;
 	// the points pixel (x, y) spent in the last frame
 	double spent(int x, int y) const;
+	// What the last frame cost (Stage 33; GAME_SPEC §18: O13): the pixels that read anything, the rays they
+	// followed in all, and the most one pixel followed.
+	int64_t read() const { return read_; }
+	int64_t rays() const { return rays_; }
+	int64_t most_rays() const { return most_rays_; }
+	// Whether a pixel's beams are kept from frame to frame (Stage 33; as the GPU keeps them), or traced at every
+	// read: the same picture, for holding one to the other.
+	void keep(bool on) { keeping_ = on; }
+	// Whether the corners of neighbouring pixels are shared (Stage 33; the lattice, traced before the pixels as the
+	// GPU's pass over it), or each pixel traces its own: the same beams.
+	void share(bool on) { sharing_ = on; }
+	// O12's reading: whether pixel (x, y)'s kept beams are those of what it looks through now (its record is for
+	// its shape key), and if so whether they are, value for value, the beams traced afresh. A pixel with none
+	// kept, or kept for another key, has nothing to hold: fresh is true.
+	bool kept_fresh(const OpticsScene &scene, int x, int y, bool &holds) const;
 
 private:
 	struct State;
 	int x_, y_, w_, h_;
+	int step_ = 1;
+	bool keeping_ = true;
+	bool sharing_ = true;
+	struct Corners;
+	Corners *corners_ = nullptr;
+	int64_t read_ = 0, rays_ = 0, most_rays_ = 0;
 	double budget_;
 	int frame_ = 0;
 	double asked_ = 0.0, points_ = 0.0;
+	double ray_asked_ = 0.0; // of asked_, by the pixels read by their own rays
+	double beams_traced_ = 0.0; // the pixels whose beams the last frame traced (counted against the rays' budget)
 	std::vector<State> *states_;
 	std::vector<uint8_t> restarted_;
 };
+
+// O12, a kept beam is the beam (GAME_SPEC §18, Stage 33): every pixel of the sample (every `step`-th from
+// (x0, y0), the frames' own sample) whose kept beams are for what it looks through now holds, value for value,
+// the beams traced afresh: no pixel is read from beams of something that has since moved. `held`: how many
+// pixels had beams to hold (a check that held none checked nothing). "" when it holds.
+std::string check_O12(const OpticsFrames &frames, const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int64_t *held = nullptr);
+
+// O13, a frame's rays are bounded (GAME_SPEC §18, Stage 33): in the frame last given, no pixel followed more
+// than `most` rays: its beam's middle, and a correction a band of the most bands a frame reads, each cut at
+// the pixel's lines (a vessel's pixel; a prism's or a grating's reads its spectrum in stretches, each a beam).
+// What a frame costs is the rays it follows: with this, and the pixels that read, a frame's cost is bounded
+// where no GPU runs. "" when it holds.
+inline constexpr int64_t OPTICS_RAYS_MOST = 96;
+std::string check_O13(const OpticsFrames &frames, int64_t most = OPTICS_RAYS_MOST);
 
 // A picture of the whole screen from somewhere else (a GPU, settled), held to
 // the truth where a body covers at least OPTICS_PARITY_COVER of the pixel (O4),

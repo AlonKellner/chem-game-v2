@@ -18,6 +18,8 @@
 #include <godot_cpp/variant/string.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 
+#include <vector>
+
 namespace chem_godot {
 
 class ChemLab : public godot::Node2D {
@@ -72,6 +74,13 @@ public:
 	// again before each frame's pass (the worst frame: everything changed at once).
 	void set_optics_extra(int passes);
 	void set_optics_restarting(bool on);
+	// A play (Stage 33; "chem-play/1"): gestures given to the screen frame by frame, and each of its marks
+	// timed: played() gives, for each mark in the order met, [mark, frames, a frame's median and worst
+	// time (ms, from one _process to the next; the device's own timestamps give nothing on Metal)]. A
+	// display hands frames out in whole refreshes: a frame at its rate reads as its refresh, not less.
+	bool play(const godot::String &play_json);
+	bool playing() const;
+	godot::Array played() const;
 
 	void _ready() override;
 	void _process(double delta) override;
@@ -100,6 +109,16 @@ private:
 	double optics_budget_ = 16.0;
 	int optics_extra_ = 0;
 	bool optics_restarting_ = false;
+	struct Timed {
+		godot::String mark;
+		std::vector<double> frame_ms;
+		std::vector<double> ui_ms, scene_ms, pass_ms, paint_ms; // of it, on the CPU: the game's frame, the scene composed, the pass sent, the list painted
+	};
+	double ui_ms_ = 0.0, scene_ms_ = 0.0, pass_ms_ = 0.0, paint_ms_ = 0.0;
+	std::vector<Timed> timed_; // a play's marks
+	Timed *timed_for(const godot::String &mark);
+	godot::String mark_; // of the frame given last
+	uint64_t last_usec_ = 0;
 	bool flat_visible_ = true;
 };
 

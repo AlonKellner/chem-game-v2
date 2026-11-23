@@ -53,9 +53,18 @@ struct Edge {
 	// dissolved in it run down into `b` (a condenser's outlet over a beaker).
 	bool drain = false;
 	// A drain's rate (Stage 27: a pour): at most this volume of liquid a
-	// second (m^3/s), and with it the same share of the solids where the
-	// edge passes them; below 0, all of it each step.
+	// second (m^3/s); below 0, all of it each step. With the liquid goes its
+	// own share of `carried` of the cell's solids (Stage 31: what is suspended
+	// in it; 1: all the solids are, as an upside-down vessel's). And solids
+	// run by themselves, `solids_rate` of their own volume a second (m^3/s:
+	// sediment over a lip), liquid or none.
 	double rate = -1.0;
+	double carried = 0.0;
+	double solids_rate = 0.0;
+	// Work done along it (GAME_SPEC §11, Stage 32: a stirrer's), W, from a to
+	// b; below 0, from b to a. Energy that crosses whatever the two ends'
+	// temperatures: it is not heat.
+	double power = 0.0;
 };
 
 // What a cell is, beside its state. A reservoir is an energy account at a
@@ -254,14 +263,18 @@ public:
 	// they are at its end, and one added during it is among them.
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
 	Refusal connect_drain(CellId from, CellId to, EdgeId *made = nullptr);
-	// A drain's rate (m^3 of liquid a second; below 0, all of it), and whether
-	// its solids go too (GAME_SPEC §6, Stage 27: a pour). Between steps.
-	Refusal set_drain(EdgeId edge, double rate, bool solids);
+	// A drain's rate (m^3 of liquid a second; below 0, all of it), the share
+	// of the cell's solids that goes with its liquid (0 to 1), and the solids
+	// that run by themselves (m^3 of their own volume a second) (GAME_SPEC §6,
+	// Stage 27: a pour; Stage 31). Between steps.
+	Refusal set_drain(EdgeId edge, double rate, double carried, double solids_rate = 0.0);
 	// A rigid cell left with no gas path to an elastic cell is sealed (Stage
 	// 28), at the room's pressure: refused (WouldSeal) when it is not full there
 	// (a starved one: the partial vacuum would come from nowhere).
 	Refusal disconnect(EdgeId edge);
 	Refusal set_conductance(EdgeId edge, double conductance);
+	// the work done along an edge, W, from its a to its b (Stage 32); between steps
+	Refusal set_power(EdgeId edge, double power);
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
 	// A solid's particle count: not conserved, so not a primitive. The

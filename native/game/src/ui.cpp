@@ -1,4 +1,5 @@
 #include "lab/ui.hpp"
+#include "lab/contents.hpp"
 #include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
@@ -222,9 +223,19 @@ struct Ui::Impl {
 	// pointer, no button held; the next click puts it down, or, over a vessel it can pour into, pours while held
 	bool carrying = false;
 	bool putting_down = false; // a press while carrying: its release puts it down
-	bool pouring = false; // a press over a vessel: a held pour, tilting while the button is held
-	double tilt = 0.0;
-	static constexpr double TILT_SECONDS = 1.5; // from upright to the full tilt, while the button is held
+	// A press over a vessel: a pour by hand (Stage 27; Stage 31). What is in hand goes from the hand to where its
+	// lip is over the other's mouth, and turns about its lip while the button is held; let go, it turns back
+	// upright and comes back to the hand. `tilt`: its share of the full tilt; `eased`: how far from the hand
+	// (0) to the pouring place (1); `pour_side`: the lip it pours from, the one nearer the other's axis.
+	bool pouring = false;
+	int pour_over = -1, pour_side = 1;
+	double tilt = 0.0, eased = 0.0;
+	static constexpr double TILT_SECONDS = 2.5; // from upright to the full tilt, while the button is held
+	static constexpr double UNTILT_SECONDS = 0.6; // and back upright, let go
+	static constexpr double EASE_SECONDS = 0.25; // from the hand to the pouring place, and back
+	static constexpr float LIP_GAP = 10; // a pouring lip above the mouth it pours into
+	static constexpr int STREAM_LENGTHS = 8; // a stream is drawn in at most so many lengths, each its own width
+	static constexpr double STREAM_PI = 3.14159265358979323846;
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
 	int hover = -1;
@@ -968,11 +979,57 @@ struct Ui::Impl {
 	}
 
 	// where an item is drawn now: in hand, or carried with the selection
+	// a vessel's pouring lip and tip in its own rectangle, upright: from its left edge and from its top, pixels
+	bool lip_in(int index, int side, float &lip_x, float &lip_y, float &tip_x, float &tip_y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const glass::Vessel *g = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+		if (g == nullptr) {
+			return false;
+		}
+		float w = 0, h = 0;
+		size_of(v, w, h);
+		const double px_per_cm = w / (2.0 * g->widest());
+		const contents::Lip lip = contents::lip_of(*g, side);
+		lip_x = static_cast<float>(w / 2.0 + lip.lip_x * px_per_cm);
+		lip_y = static_cast<float>(h - lip.lip_y * px_per_cm);
+		tip_x = static_cast<float>(w / 2.0 + lip.tip_x * px_per_cm);
+		tip_y = static_cast<float>(h - lip.tip_y * px_per_cm);
+		return true;
+	}
+	// the lip a vessel in a pouring position pours from: the one nearer the axis of what it pours into
+	int side_of(int index) const {
+		if (index == drag && pouring) {
+			return pour_side;
+		}
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		return v.pours_into >= 0 && rect(v.pours_into).cx() < rect(index).cx() ? -1 : 1;
+	}
+	// How a vessel pouring by hand is turned (Stage 31): about its pouring tip, a place of the screen, by an angle
+	// clockwise as seen. False for what is not turned.
+	bool turned(int index, const Rect &r, float &angle, float &pivot_x, float &pivot_y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		float lx = 0, ly = 0, tx = 0, ty = 0;
+		if (v.pours_into < 0 || v.inverted || !(v.turn > 0.0) || !lip_in(index, side_of(index), lx, ly, tx, ty)) {
+			return false;
+		}
+		angle = static_cast<float>(side_of(index) * v.turn);
+		pivot_x = r.x + tx;
+		pivot_y = r.y + ty;
+		return true;
+	}
 	Rect drawn(int index) const {
 		Rect r = rect(index);
 		if (index == drag) {
 			r.x = px - grab_x;
 			r.y = py - grab_y;
+			float lx = 0, ly = 0, tx = 0, ty = 0;
+			if (pouring && pour_over >= 0 && eased > 0.0 && lip_in(index, pour_side, lx, ly, tx, ty)) {
+				// to where its tip is over the middle of the other's mouth, a little above it
+				const Rect over = rect(pour_over);
+				const float e = static_cast<float>(eased * eased * (3.0 - 2.0 * eased));
+				r.x += (over.cx() - tx - r.x) * e;
+				r.y += (over.y - LIP_GAP - ty - r.y) * e;
+			}
 		} else if (carrying_group() && chosen(index) && view.items[static_cast<size_t>(index)].place == "bench") {
 			r.x += px - press_x;
 			r.y += py - press_y;
@@ -1034,7 +1091,8 @@ struct Ui::Impl {
 			return;
 		}
 		pouring = false;
-		tilt = 0.0;
+		pour_over = -1;
+		tilt = eased = 0.0;
 		act({ { "do", "unpour" }, { "item", id(drag) } });
 	}
 	void drop(int index, float x, float y) {
@@ -1265,6 +1323,9 @@ struct Ui::Impl {
 		if (carrying && drag >= 0) {
 			// a press while carrying (Stage 27): over a vessel it pours into, a held pour, or with the right button
 			// the full menu; anywhere else its release puts it down
+			if (pouring) {
+				return; // let go and pressed again before it was back in the hand: it tilts again
+			}
 			const int target = item_at(x, y, drag, true);
 			if (pours_into(drag, target)) {
 				if (mods & Ui::ModRight) {
@@ -1281,9 +1342,12 @@ struct Ui::Impl {
 					not_now(); // a tutorial pours by the menu, an amount
 					return;
 				}
+				const float mine = drawn(drag).cx(), its = rect(target).cx();
 				if (act({ { "do", "hold" }, { "item", id(drag) }, { "over", id(target) } })) {
 					pouring = true;
-					tilt = 0.0;
+					pour_over = target;
+					pour_side = its < mine ? -1 : 1;
+					tilt = eased = 0.0;
 				}
 				return;
 			}
@@ -3524,6 +3588,10 @@ struct Ui::Impl {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
+				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
+					body.side = side_of(i);
+				}
+				body.vortex = static_cast<float>(v.vortex); // a stirred liquid's (Stage 32)
 				bodies.push_back(body);
 				if (v.screwed) { // its screw cap on (Stage 28)
 					const float mouth = mouth_px(i) + 8;
@@ -3610,13 +3678,16 @@ struct Ui::Impl {
 			bar(v.id, "stand rod", rod, ground - 6, rod, grip - 10, 3.0f, "burner_metal", false);
 			bar(v.id, "clamp", rod, grip, held.cx() - held.w * 0.3f, grip, 2.5f, "burner_metal", false);
 		}
-		// a pour's stream (Stage 27): a thin column of the liquid itself, from the mouth it leaves to where it lands
+		// A pour's stream (Stage 27; Stage 31): a column of what pours, from the lip or the mouth it leaves straight
+		// down to where it lands, thinning as it falls faster: what passes a second is the same at every height,
+		// so its radius there is sqrt(Q / (pi sqrt(v0^2 + 2 g y))). In short lengths, each as wide as it is there.
 		streams.clear();
-		streams.reserve(view.items.size());
+		streams.reserve(view.items.size() * static_cast<size_t>(STREAM_LENGTHS));
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
-			const bool flows = v.pours_into >= 0 && v.liquid_ml > 0.0 && (v.inverted ? v.cap > 0.0 : v.tilt > 0.0);
-			if (!flows) {
+			const double bulk = v.pours_solid_ml_s / contents::PACKING, runs = v.pours_ml_s + bulk;
+			const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+			if (v.pours_into < 0 || !(runs > 0.0) || made == nullptr) {
 				continue;
 			}
 			const ItemView &t = view.items[static_cast<size_t>(v.pours_into)];
@@ -3625,26 +3696,57 @@ struct Ui::Impl {
 			if (const glass::Vessel *g = t.glassware.empty() ? nullptr : glass::find(t.glassware, t.nominal_ml); g != nullptr) {
 				land -= static_cast<float>(g->level(t.condensed_ml) * to_r.w / (2.0 * g->widest()));
 			}
-			const float x = v.inverted ? from_r.cx() : from_r.x + from_r.w - 3.0f, top = v.inverted ? from_r.y + from_r.h : from_r.y;
-			const float width = static_cast<float>(2.0 + 3.0 * (v.inverted ? v.cap : v.tilt));
+			// where it leaves: an upside-down vessel's mouth; by hand, the lip, turned with the vessel
+			const double px_per_cm = from_r.w / (2.0 * made->widest());
+			float x = from_r.cx(), top = from_r.y + from_r.h;
+			double leaves = 0.0; // its speed as it leaves, cm/s
+			if (v.inverted) {
+				const double bore = 0.5 * made->cap_bore * std::sqrt(std::max(v.cap, 1e-6) * 0.61);
+				leaves = runs / (STREAM_PI * bore * bore);
+			} else {
+				float lx = 0, ly = 0, tx = 0, ty = 0, angle = 0, pivot_x = 0, pivot_y = 0;
+				if (!lip_in(i, side_of(i), lx, ly, tx, ty) || !turned(i, from_r, angle, pivot_x, pivot_y)) {
+					continue;
+				}
+				const float dx = lx - tx, dy = ly - ty;
+				x = pivot_x + dx * std::cos(angle) - dy * std::sin(angle);
+				top = pivot_y + dx * std::sin(angle) + dy * std::cos(angle);
+				leaves = std::sqrt(2.0 * contents::GRAVITY * std::max({ v.head_cm, 0.05 }));
+			}
 			if (land <= top + 2.0f) {
 				continue;
 			}
-			ItemView stream;
-			stream.id = v.id + "~stream";
-			stream.kind = "vessel";
-			stream.place = "bench";
-			stream.celsius = v.celsius;
-			stream.volume_ml = stream.condensed_ml = stream.liquid_ml = 1.0; // a column full of it
-			for (const SubstanceView &c : v.contents) {
-				if (!c.wall && (c.phase == 'l' || c.phase == 'a')) {
-					stream.contents.push_back(c);
+			const bool powder = !(v.pours_ml_s > 0.0); // sediment alone: a column of it
+			const int lengths = std::max(1, std::min(STREAM_LENGTHS, static_cast<int>((land - top) / 8.0f)));
+			for (int k = 0; k < lengths; ++k) {
+				const float y0 = top + (land - top) * static_cast<float>(k) / static_cast<float>(lengths), y1 = top + (land - top) * static_cast<float>(k + 1) / static_cast<float>(lengths);
+				const double fallen = 0.5 * (y0 + y1 - 2.0f * top) / px_per_cm;
+				const double radius = std::sqrt(runs / (STREAM_PI * std::sqrt(leaves * leaves + 2.0 * contents::GRAVITY * fallen)));
+				const float width = static_cast<float>(std::max(2.0 * radius * px_per_cm, 1.0));
+				ItemView stream;
+				stream.id = v.id + "~stream" + (k > 0 ? std::to_string(k) : std::string());
+				stream.kind = "vessel";
+				stream.place = "bench";
+				stream.celsius = v.celsius;
+				// a column full of it, as thick as it is wide; what it holds as its vessel does (a solution's colour is
+				// its concentration's, a suspension's haze its particles' in that much liquid)
+				const double across = width / px_per_cm;
+				stream.volume_ml = stream.condensed_ml = STREAM_PI * across * across / 4.0 * (y1 - y0) / px_per_cm;
+				stream.liquid_ml = powder ? 0.0 : v.liquid_ml;
+				// (with the liquid goes the share of the solids it holds up, a haze in it; sediment running with it too)
+				const bool hazy = !powder && (v.pours_solid_ml_s > 0.0 || v.suspended > 0.0);
+				stream.solid_ml = powder ? stream.volume_ml * 1000.0 : hazy ? v.solid_ml : 0.0;
+				stream.suspended = hazy ? (v.pours_solid_ml_s > 0.0 ? 1.0 : v.suspended) : 0.0;
+				for (const SubstanceView &c : v.contents) {
+					if (!c.wall && (powder ? c.phase == 's' : c.phase == 'l' || c.phase == 'a' || (c.phase == 's' && hazy))) {
+						stream.contents.push_back(c);
+					}
 				}
+				streams.push_back(stream);
+				OpticsBody body{ &streams.back(), x - width / 2.0f, y0, width, y1 - y0 };
+				body.layer = i == drag && (moved || carrying) ? 1 : 0;
+				bodies.push_back(body);
 			}
-			streams.push_back(stream);
-			OpticsBody body{ &streams.back(), x - width / 2.0f, top, width, land - top };
-			body.layer = i == drag && (moved || carrying) ? 1 : 0;
-			bodies.push_back(body);
 		}
 		// the wires and the rigs between things on the bench
 		for (const Wire &w : view.wires) {
@@ -4132,9 +4234,9 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.sensing = -1;
 			m.drop_sensing(from, x, y);
 		} else if (m.drag >= 0 && m.carrying) {
-			// carried (Stage 27): a held pour ends; a click puts it down, on its own place too
+			// carried (Stage 27): let go, a pour by hand turns back upright (Stage 31: the frames bring it back, and
+			// it ends in the hand); a click puts it down, on its own place too
 			if (m.pouring) {
-				m.stop_pouring();
 			} else if (m.putting_down) {
 				m.putting_down = false;
 				const int index = m.drag;
@@ -4186,10 +4288,26 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
-	if (m.pouring && m.down && m.drag >= 0 && seconds > 0.0) {
-		// a held pour tilts further while the button is held (Stage 27): its rate is its tilt's share
-		m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
-		m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+	if (m.pouring && m.drag >= 0 && seconds > 0.0) {
+		// A pour by hand (Stage 27; Stage 31): to the pouring place, then tilting further while the button is held;
+		// let go, upright again, then back to the hand, where it ends
+		const double before = m.tilt;
+		if (m.down) {
+			m.eased = std::min(1.0, m.eased + seconds / Impl::EASE_SECONDS);
+			if (m.eased >= 1.0) {
+				m.tilt = std::min(1.0, m.tilt + seconds / Impl::TILT_SECONDS);
+			}
+		} else if (m.tilt > 0.0) {
+			m.tilt = std::max(0.0, m.tilt - seconds / Impl::UNTILT_SECONDS);
+		} else {
+			m.eased = std::max(0.0, m.eased - seconds / Impl::EASE_SECONDS);
+		}
+		if (m.tilt != before) {
+			m.act({ { "do", "pour" }, { "from", m.id(m.drag) }, { "rate", m.tilt } });
+		}
+		if (!m.down && !(m.tilt > 0.0) && !(m.eased > 0.0)) {
+			m.stop_pouring();
+		}
 	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
 		m.owed += seconds * m.speed * 60.0;
