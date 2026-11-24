@@ -151,6 +151,28 @@ func test_the_engines_mouse_reaches_the_screen() -> void:
 	await wait_process_frames(5)
 	assert_eq(int(JSON.parse_string(_lab.report())["step"]), paused_at, "paused: the clock stands")
 
+func test_the_wheel_a_pinch_and_a_key_reach_the_rooms_view() -> void:
+	# (Stage 42: the wheel zooms the room about the pointer, a pinch too; Home sees it whole again)
+	var at := _lab.locate("square:10,6")
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_UP
+	wheel.pressed = true
+	wheel.factor = 1.0
+	wheel.position = at
+	wheel.global_position = at
+	get_viewport().push_input(wheel, true)
+	assert_almost_eq(_lab.get_view_scale(), 1.25, 0.001, "a notch of the wheel: a quarter closer")
+	var pinch := InputEventMagnifyGesture.new()
+	pinch.factor = 2.0
+	pinch.position = at
+	get_viewport().push_input(pinch, true)
+	assert_almost_eq(_lab.get_view_scale(), 2.5, 0.001, "a pinch")
+	var home := InputEventKey.new()
+	home.pressed = true
+	home.keycode = KEY_HOME
+	get_viewport().push_input(home, true)
+	assert_eq(_lab.get_view_scale(), 1.0, "the whole room again")
+
 func test_the_optical_pass_lies_between_the_two_flat_layers() -> void:
 	# (GAME_SPEC §12.2: a compute shader over the whole screen, which needs a GPU: headless it is
 	# off and says why; its settled picture against the truth: make screenshots)

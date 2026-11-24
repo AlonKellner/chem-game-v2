@@ -498,8 +498,30 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	}
 }
 
+void cg_ui_zoom(cg_ui *ui, float x, float y, float factor) {
+	if (ui != nullptr) {
+		ui->ui->zoom(x, y, factor);
+	}
+}
+
+void cg_ui_pan(cg_ui *ui, float dx, float dy) {
+	if (ui != nullptr) {
+		ui->ui->pan(dx, dy);
+	}
+}
+
+void cg_ui_view(cg_ui *ui, float view[3]) {
+	if (ui == nullptr || view == nullptr) {
+		return;
+	}
+	const lab::View v = ui->ui->view();
+	view[0] = v.scale;
+	view[1] = v.x;
+	view[2] = v.y;
+}
+
 void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
-	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_UNDO) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_VIEW) {
 		return;
 	}
 	try {

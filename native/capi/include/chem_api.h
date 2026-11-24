@@ -320,8 +320,16 @@ CG_API const char *cg_ui_experiment(cg_ui *ui);
  * the character's code point, or backspace, enter, escape. */
 /* CG_KEY_UNDO (Stage 34): the host's undo chord (Ctrl+Z, Cmd+Z); it brings back what was last put in the
  * trash. Backspace, with nothing being typed, puts what is chosen in the trash; a host sends Delete as it. */
-enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4 };
+/* CG_KEY_VIEW (Stage 42): the host's key for the whole room again, at 1x. */
+enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4, CG_KEY_VIEW = 5 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
+
+/* The view of the room (GAME_SPEC §13.1, Stage 42): zoomed by `factor` about a point of the screen (a wheel's
+ * notch, a pinch; over a panel nothing), moved by a hand's drag of (dx, dy) screen pixels, and what it is: its
+ * scale and the layout's point at the room's top-left corner (view[3]). */
+CG_API void cg_ui_zoom(cg_ui *ui, float x, float y, float factor);
+CG_API void cg_ui_pan(cg_ui *ui, float dx, float dy);
+CG_API void cg_ui_view(cg_ui *ui, float view[3]);
 
 /* The signals on the bench (GAME_SPEC §13.3): timers, monitors, alarms, notice parts, writers, circuits.
  * Borrowed until the next call on this ui. */
