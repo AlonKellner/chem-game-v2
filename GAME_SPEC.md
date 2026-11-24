@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.48.0 (history: `CHANGELOG.md`; 0.47.0 is another stage's, in progress). This file is the single source of truth for the design.
+Version 0.48.0 (history: `CHANGELOG.md`; with 0.47.0, merged after it). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -378,6 +378,41 @@ Pouring and dripping are kinematic (no rate, no gravitational energy).
 Stage 8 overflow and the balloon's capacity (§13), Stage 28 sealed cells. Still to build: the
 balloon's tension law, gas flow at a finite conductance (valves, frits), hydrostatic head and
 gravitational energy, siphons, a vacuum pump.
+
+**The vertical dimension** (Stage 47; `chem/sim.hpp`, `src/strata.cpp`; `docs/TDD_47_COLUMN.md`; asked for by the
+user, 2026-11-24: "allowing for things like water and oil to not mix permanently, but for them to have some heat
+transfer"; "adjacent cells should have a gradient between them, not always a crisp line").
+- **A column.** A vessel of a standard shape is a column: its own rigid cell (its wall, its gas, the uppermost of
+  its liquid) and, under it, layer cells, each a homogeneous layer of liquid with what is dissolved in it and its
+  solids. Joined by column edges, which are no gas path (no gas tree, no sealing runs along them). The column's
+  cross-section is its floor's.
+- **Grown as it needs.** A vessel starts as one cell. A column with no spare layer, where a steep step wants one,
+  grows by four empty layers under its bottom at the next step's start (from the state alone: a saved lab grows as
+  an unsaved one); one a gentle pour needs grows the same way. Emptied layers stay as spares (a world's cell ids are
+  never reused). The only bound is physical: no layer is split below half a millimetre.
+- **Each step** (the column's process, after the drains and before settling):
+  - gas in a layer rises to the layer over it, carrying its enthalpy;
+  - the layers in use stay together under the top: one with no liquid over it rises into that place;
+  - solids sink to the lowest liquid;
+  - two layers merge where the lower is the lighter (it overturns: convective adjustment), or where they are alike
+    and no steep step is beside them (one is enough); a stirred column is one cell;
+  - two layers that stay exchange what is dissolved down its gradient (Fick's law across the distance between
+    their middles, each species' own diffusion coefficient, §7) and heat (by conduction, k A / dz, the solvent's
+    conductivity; the edge's conductance set at the step's start);
+  - where two neighbours differ steeply (a kelvin, or a thousandth of the solution's mass in a species) and a
+    spare layer is there, the thicker splits into two halves, which then evolve apart. A gradient is resolved by
+    thin homogeneous layers, never by a cell that is not one: cells stay homogeneous (§4.2);
+  - the top is the size its layers leave it.
+- **What is lighter.** A layer's density is its liquid's and its solutes' mass over their volume, the table's
+  molar volumes scaled by the solvent's own expansion from 25 °C (Lienhard's water, `data/solutions.json`'s
+  `solvent`).
+- **In the lab.** A layered vessel reads as a whole (its contents, its temperature as they would come to mixed); the
+  readout and the debug panel say how it is layered. A gentle pour (`"gentle": true`, or a trickle by hand, no more
+  than 2 mL/s) pushes the liquid there down a place and lands as a layer of its own; a faster pour stirs it in. A
+  burner under a layered vessel heats its lowest layer. A bench may start a vessel layered (`"layers"`, from the top
+  down). Saved and loaded, a column goes on exactly.
+- **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height.
+- **L1** (§18) holds a column together.
 
 ## 7. Chemical kinetics
 
@@ -847,7 +882,9 @@ the format does not change:
 A flask of solution is: the glass (absorb, and refract), the contents (absorb: the composition;
 scatter: what is suspended; reflect: what lies on the bottom), the glass again. A container with
 several layers (two liquids that do not mix, a crust on the wall, a coating, a liquid stratified
-after a pour) adds layers, or gives one layer a gradient.
+after a pour) adds layers, or gives one layer a gradient. (Built for a vessel's column, Stage 47: a band of each
+layer's own liquid, its row of the body's spectra, read at the pixel's height; the band table a row of the body's
+set, `lab/optics_scene.hpp`'s `BANDS_ROW`.)
 
 **The live composition is a spectral texture.** A cell's species with optical spectra are its
 channels and their concentrations its weights, uniform over a homogeneous cell (§2, principle 8).
@@ -2342,7 +2379,9 @@ each about one property of matter; not yet a lesson in a principle, but the grou
 stand on.
 
 - **The catalogue** (`data/experiments.json`, `chem-experiments/1`): each experiment's id, title,
-  a summary, its bench and its tutorial (`null` for none), as paths from the catalogue's folder. A
+  a summary, its bench and its tutorial (`null` for none), as paths from the catalogue's folder; or a scene of
+  the optics alone (Stage 47: `"scene": "prism"`, the prism and the grating), which the screen shows in place
+  of the lab, the list over it, the wheel turning the prism. Past eight the list has two columns. A
   host reads it and hands the screen its text with a reader of the paths (`Ui::experiments`,
   `cg_ui_experiments`); every experiment is opened then, and a catalogue with one that cannot be
   is refused whole.
@@ -2384,6 +2423,10 @@ stand on.
   - `fizz`, *a gas from a solid* (§9, Stage 44): 2 g of malachite tipped into 50 mL of 1 M acid
     under a balloon dissolves in about two minutes; 0.009 mol of carbon dioxide leaves it, 0.12 g
     of it into the balloon with 220 mL of gas, the rest in the flask's own air; the acid turns blue.
+  - `layers`, *two liquids, layered* (§6, Stage 47): green nickel sulfate over denser blue copper
+    sulfate in a beaker, no tutorial: the clock at 600x blurs their boundary as each diffuses into the
+    other (about a centimetre in ten hours), a stirrer mixes them, a burner under it heats the lower.
+  - `prism`, *light through a prism and a grating* (§12.3, Stage 47): the optics demo, now in the list.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -2553,7 +2596,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
 | T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4); between cells sealed together, only from the higher pressure to the lower (Stage 28) | sign-exact | 2–4, 28 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |
-| T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0 | exact | 2 |
+| T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0. An empty cell (Stage 47: a column's spare layer) has none and holds no energy | exact | 2, 47 |
 | P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: R T Σ\|ν_i\| N (1/n_i + 1/n_gas) over the reaction's gases, n_i each one's quanta and n_gas the cell's (Stage 19: before, 2 N R T / n_gas, which a minor gas exceeds: the steam over a cold condenser drawing dry air), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5, 19 |
 | V1 | An open rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No rigid cell holds more solids and liquids than its volume. In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8 |
@@ -2598,6 +2641,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O26 | A camera's search finds every pixel's hottest and coldest (Stage 48): a step at a time (every second sensor pixel, each a 2 × 2 square of them, at 8 bands; then the 3 × 3 squares about the four hottest and coldest at 16; its centre's spot), the hottest and coldest within 0.05 K of brute force over every sensor pixel at 16 bands, a one-pixel hot stream too. It fires on the first pass alone, which misses the stream's own pixel | 0.05 K | 48 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | B1 | A vessel's bubbles lie in its liquid: they end from its floor to its surface, their extinction and holdup are no less than nothing and the holdup under one, and the heat its steam bubbles take is no more than its floor took (Stage 45) | exact | 45 |
+| L1 | A vessel's column holds together: the layers in use are one run under its top (nothing under an empty layer), its top is no larger than the vessel, and the column holds no more than fits in it (Stage 47) | exact | 47 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
@@ -2707,7 +2751,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Boiling's bubbles are derived each step from a vessel's floor and its bulk, over the floor's whole area, as a haze (Stage 45) | A bulk that superheats, bumping, boiling chips and the onset's hysteresis are not modelled; bubbles rise in a column the floor's width, not narrowing with the vessel; at a strong flame the floor boils from the start (450 W through 34 cm² is more than convection carries at any bulk temperature); a bubble does not grow as the pressure falls up the column, nor merge |
 | The long-wave range (Stage 46): the room one temperature, its wall, cube and room in front a black body; fused silica for the lab's glass; grey emissivities; a flame a grey gas and its soot, calibrated; the sensor's response flat over 8–14 µm | A camera sees no hot thing in a glass's reflection; borosilicate's weaker Reststrahlen band reads a few per cent more emissive than silica's 0.79; a real flame's CO₂ and H₂O bands are lines, not grey |
 | A thermal camera (Stage 48): one sensor pixel a layout pixel, every frame; no noise of its own, no lens's blur, no frame rate; its search a few times a second; its overlay a 3 × 5 font | A real camera's 160 × 120 or 320 × 240 pixels, its NETD of about 0.05 K and its 9 Hz are a better experience left out (the user's word: "same resolution and frame rate as the rest of the rendered lab") |
-| One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
+| A vessel's column (Stage 47): layers homogeneous, the column's cross-section its floor's, its volumes the table's at 25 °C | A layer's buoyancy reads the solvent's measured expansion, but its volume does not change with it; an overturn mixes the two layers whole (no plume); a pour lays nothing at its boundary but what it pours (a gentle one) or stirs all in (a fast one), no entrainment between; water does not diffuse back against a solute; a conical flask's narrowing is not in its layers' thicknesses; a band ignores the narrow lines of its liquid |
+| One temperature per vessel (a vessel of no standard shape; any vessel while it is mixed) | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |

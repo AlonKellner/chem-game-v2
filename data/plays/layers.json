@@ -1,0 +1,51 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{
+			"to": "menu:experiments",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"to": "experiment:layers",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"frames": 120,
+			"mark": "start",
+			"shot": "layers-start"
+		},
+		{
+			"to": "speed:600",
+			"frames": 5,
+			"button": "click"
+		},
+		{
+			"frames": 720,
+			"mark": "diffusing",
+			"shot": "layers-diffusing"
+		},
+		{
+			"to": "speed:1",
+			"frames": 5,
+			"button": "click"
+		},
+		{
+			"do": {
+				"do": "stir",
+				"vessel": "beaker",
+				"on": true
+			}
+		},
+		{
+			"frames": 240,
+			"mark": "stirred",
+			"shot": "layers-stirred"
+		},
+		{
+			"frames": 10,
+			"mark": "stirred"
+		}
+	]
+}
