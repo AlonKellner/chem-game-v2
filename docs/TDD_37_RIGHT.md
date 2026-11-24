@@ -9,7 +9,7 @@ cleanup). The open items: `docs/TDD_35_ONE.md` (Open), `docs/TDD_33_FAST.md` (Op
 | Phase | Topic | Status |
 |---|---|---|
 | 37.1 | The pixels that stop off the truth (O4 on the GPU) | Measured; the screenshot tool's wait lengthened; open |
-| 37.2 | The prism's slit, where a node's ray is turned back | |
+| 37.2 | The prism's slit, where a node's ray is turned back | Tried: right, and too dear as it stands; open |
 | 37.3 | An upside-down vessel by the general model | |
 | 37.4 | Speed: the ideas of TDD 33, each measured | |
 | 37.5 | `make gates`; the user's sign-off | |
@@ -51,3 +51,25 @@ Open: 0 to 8 pixels a picture of 30,000 to 69,000 visibly off on the GPU after s
 rule's tail as the CPU has it. To try: the GPU's tiles of batches (`BATCH_TILE_*`: a pixel's batches come
 with its tile's, and a tile that rarely has one under the rays' budget), and `LAB_O4_PRINT=1 make
 screenshots` at the new wait.
+
+## 37.2 The prism's slit
+
+The remedy recorded in Stage 35: cut the spectrum where the middle ray's route changes. In
+`beam_means` a stretch of the spectrum was halved only for a beam whose rays all go one way; tried, a stretch
+is halved too where the middle ray's four nodes have not one route (`b.c0` to `b.c3`).
+
+| Halved for a route change down to | The slit (`test_refraction.cpp`, "a bent view sweeping…") | Bands 3% off of 704 (`test_footprint.cpp`) | O13 through the play (96 allowed) | O10 on the prism |
+|---|---|---|---|---|
+| (not: as it is) | 3 pixels wrong at rest, 5 after the turn | 16 | holds | holds |
+| a 64th of the spectrum | none wrong | 9 | 386 to 488 rays a pixel in a frame | 550 of 1,270 stretches as short as they are made |
+| an eighth | none wrong | 9 | 194 to 214 | 110 of 840 |
+
+So it is the remedy for the slit, and a pixel at a vessel's rim, where a ray's way changes with the
+wavelength too (dispersion moves where light is turned back), is read in several stretches. With a record
+of one beam (`KEPT_MOST 1`) a pixel of several stretches does not fit it and is traced at every read, and a
+frame's rays at a rim run to twice O13's bound. Not taken. What it needs: records of several beams
+(`KEPT_MOST`, `CG_OPTICS_KEPT_VECS`, the pool's size), so a pixel's stretches are traced when it changes and
+not at every read; then O13 looked at again (the frame a thing moves still traces them all: a bound by
+stretch, or the extra stretches put off to the next frames); then the GPU's cost measured (`make pass-cost`,
+the prism's own `make prism-shots`); and O10's own case restated for stretches cut at a route's change.
+The two prism cases stay marked `may_fail`.
