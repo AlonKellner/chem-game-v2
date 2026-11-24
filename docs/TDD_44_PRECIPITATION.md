@@ -17,7 +17,7 @@ experiments) and §20.
 | 44.3 | The gates: solubility constants against NIST SRD 46 and wateq4f, the rates at their sources' conditions, `chem_tool study precipitation` | Done |
 | 44.4 | Two experiments: a precipitate, a gas from a solid | Done |
 | 44.5 | The goldens: every digest moves (a species added), and the demo's leftover malachite dissolves | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
-| 44.6 | GAME_SPEC 0.44.0, `make gates`, the user's sign-off | `make gates` passed (347 s: ASan+UBSan 347, ctest 212, Godot 12 of 12); awaiting sign-off |
+| 44.6 | GAME_SPEC 0.44.0, `make gates`, the user's sign-off | `make gates` passed (347 s: ASan+UBSan 347, ctest 212, Godot 12 of 12); signed off by the user, 2026-11-24 ("Stage 44 is approved, merge and proceed") |
 
 ## 44.1 The data
 

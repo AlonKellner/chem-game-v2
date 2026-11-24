@@ -2267,8 +2267,9 @@ stand on.
     of it into the balloon with 220 mL of gas, the rest in the flask's own air; the acid turns blue.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
-  the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation; freezing and
-  melting; pressure and temperature; humidity and saturation; and the lessons' own mechanics (a
+  the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
+  melting; pressure and temperature; humidity and saturation; the vertical dimension (a vessel as a column of
+  layers); two liquids (oil and water); and the lessons' own mechanics (a
   measurement log, a prediction, a plot).
 
 **Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).

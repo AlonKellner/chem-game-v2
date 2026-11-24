@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.44.0 (2026-11-24, Stage 44)
+## 0.44.0 (2026-11-24, Stage 44; signed off by the user: "Stage 44 is approved, merge and proceed")
 
 - §9 (Stage 44, `docs/TDD_44_PRECIPITATION.md`): **precipitation and gas**.
   - Copper hydroxide, Cu(OH)₂(s) (SKB TR-00-13's row: log \*Ks 8.55 against the evaluated 8.64 to 8.67), comes
@@ -16,6 +16,9 @@
   - `chem_tool study precipitation`: the titration, every mixture at the closed form; the half-lives at theirs.
 - §8: each fast equilibrium is probed again only once its cell has changed since (up to sixteen rounds); §9's
   particles: a precipitate comes as grains of its own size (`grain_um`).
+- `docs/EXPERIMENTS_ROADMAP.md`: area 3 planned in full (bubbles from a heated floor's film, collapsing in a
+  cooler bulk, quasi-steady, a scattering gradient), and two new areas, 8 the vertical dimension and 9 two
+  liquids (the user's questions, 2026-11-24).
 - §13.7: the experiments `precipitate` (a precipitate, black with heat, blue again in acid) and `fizz` (a gas
   from a solid into a balloon). §20: the hydrolysis's trace solid, the oxide's rate in a base, the pH's range.
 

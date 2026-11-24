@@ -106,19 +106,63 @@ cloud as it falls (its turbidity), and other precipitates (Ksp of each: barium s
 
 ## 3. Boiling, bubbling and agitation
 
+The user, 2026-11-24 (after Stage 44): "When a solution is boiling it should have gas bubbles at the very
+least, acting similarly to suspended particles, diffusing light. Also, the amount of bubbles should depend on
+the depth of the liquid. [...] if it's heated from the bottom - the bubbles are created there, then they rise
+and spread their heat to their surroundings, condensing back into liquid as they rise. Depending on the
+temperature distribution of the liquid as well as the temperature and size of the bubbles, they might not even
+reach the surface at all, but end at some midpoint." Agreed plan: this area is the next stage, "bubbles and
+the heated floor"; the full vertical dimension (area 8) and two liquids (area 9) are stages of their own after
+it.
+
+**Today.** Boiling is a fast equilibrium on a vessel as one well-mixed cell: the steam leaves the liquid for
+the vessel's gas at once, and nothing is seen. A gas a reaction makes in a liquid (the malachite's carbon
+dioxide, Stage 44) leaves at once too. Only stirred powder scatters inside a liquid.
+
+**The model: one bulk, and a film at the heated floor.** Heated from below a liquid is unstable: its warm
+bottom rises, and natural convection keeps the bulk within a little of one temperature. What is not uniform is
+a thin thermal boundary layer against the hot floor, about a millimetre, which can stand above the boiling point
+while the bulk is well below it. So:
+- **A floor film** (§11's wall film): a thin cell between the burner's floor and the bulk, heated through the
+  glass and giving its heat to the bulk through a natural-convection coefficient (a Rayleigh correlation, its
+  source a row of `docs/DATA_SOURCES.md`).
+- **Bubbles start in the film** once it passes the boiling point at the floor's depth (the liquid's weight on
+  it, about 0.3 K higher for 10 cm of water) plus the superheat a bubble needs to start on that surface:
+  a few kelvin on scratched glass, more on smooth glass (bumping), little on a boiling chip.
+- **They rise and condense.** A bubble rises at its terminal speed (about 0.2 to 0.3 m/s for a few
+  millimetres) and gives its latent heat to a bulk cooler than its own boiling point, so it shrinks and
+  collapses after a length set by that subcooling: roughly a millimetre at 10 K under, a centimetre at 1 K,
+  ten at 0.1 K (estimates; each to be held to its source). Before the bulk boils, bubbles die near the floor
+  (the kettle "sings"); within a few tenths of a kelvin of boiling, they reach the surface and the vessel
+  boils. The latent heat they carry is a transfer from the film to the bulk: conserved, and the way a boiling
+  vessel actually moves its heat up.
+- **Depth matters twice**: a deeper column holds more bubbles at once for the same steam (a longer path), and
+  its floor boils a little hotter.
+- **Bubbles are quasi-steady, not state.** A bubble lives a tenth of a second; the temperatures change over
+  minutes. Each step the population follows from the steam made, the rise speed and the collapse length: a
+  holdup (the gas's share of the liquid) at each height, from the floor to where they end.
+- **What is seen:** the bubbles are a scattering layer of the optical pass (§12), its density a gradient up
+  the vessel's height, as stirred powder is a haze (`everything-physical-is-spectral`).
+- **A gas a reaction makes** in a liquid leaves through bubbles the same way, from where it is made, with no
+  collapse (it does not condense): the fizz of `fizz`.
+
 **Experiments**
-- Boiling chips against bumping.
-- Bubbles of steam, and of a gas a reaction gives off.
-- Stirring against sloshing.
-- A vortex, which is already built (§11, Stage 32).
+- Heating water: bubbles that collapse near the floor first, then reach the surface at the boil.
+- Deep against shallow: the same burner, more bubbles in the deeper one.
+- Boiling chips against bumping: a smooth vessel superheats, then boils in a burst.
+- The fizz of a gas a reaction makes.
+- Stirring against sloshing; a vortex, which is already built (§11, Stage 32).
 
 **What the simulation lacks**
+- The floor film, and the floor's own boiling point under the liquid's weight (§20: every open cell at 1 atm).
 - Superheating: fast phase change has no barrier. §20 reads "No superheating, no supercooling, no fog".
 - Nucleation sites: chips, scratches.
-- Bubbles as bodies in the optical pass (§11, §12), and gas leaving a liquid at a finite rate.
+- Bubbles in the optical pass (§11, §12), and gas leaving a liquid at a finite rate.
 - Sloshing: §11 reads "not built".
 
-**Data to source:** the superheat a smooth glass vessel takes before it bumps. Calibrated, with why.
+**Data to source:** a natural-convection correlation for a heated floor; bubble departure size and rise speed
+in water; a bubble's condensation in subcooled water; the superheat at which glass and a boiling chip start
+bubbles (calibrated, with why); light scattering by bubbles (geometric optics: extinction efficiency 2).
 
 **Depends on:** nothing. The optics are the larger part (`defer-hard-renderer-issues`: find the cause,
 document it, move on).
@@ -217,3 +261,59 @@ These are not chemistry, but every principle lesson will need them.
   overlay. It is not physical, so it does not go through the optical pass.
 - **Lessons in order.** The catalogue grows prerequisites and a player's progress. That progress is
   the first state outside the lab that needs saving.
+
+## 8. The vertical dimension
+
+The user, 2026-11-24: "What would it take to correctly model vertical temperature distribution in a vessel?
+[...] I do want to accurately simulate the vertical dimension of vessels at some point, allowing for things
+like water and oil to not mix permanently, but for them to have some heat transfer." A stage of its own,
+after area 3.
+
+**When a vessel is not one temperature.** Heated from below it nearly is (area 3). Heated from above, cooled
+from below, or holding layers of different densities, it is stably stratified, and it stays so: conduction
+alone takes hours to even out 5 cm of water (L² over water's diffusivity, about 1.4e-7 m²/s).
+
+**The model: a column of layers.**
+- A vessel's liquid is a stack of horizontal layers, each a cell of the closed world with its own composition
+  and temperature: well mixed across, varying only up the height (the one-dimensional model of lakes and
+  tanks). The vessel's shape gives each layer's height from its volume (`lab/contents.hpp`, Stages 30 to 32).
+- **Convective adjustment**: where a layer is lighter than the one above it, they mix (fast, by a Rayleigh
+  correlation's rate); where it is heavier, heat passes by conduction alone (water's 0.6 W/m·K).
+- **Adaptive layers**: layers whose states are the same merge, so a well-mixed vessel is one cell and costs
+  what it costs today; a layer splits off only when a gradient appears.
+- **The liquid's weight**: each layer's pressure, and so its boiling point, from the liquid above it.
+- **What touches what**: the burner heats the bottom layer, the walls lose heat from each layer they bound,
+  the gas meets the top layer, solids settle into the bottom one, stirring mixes the column (the turning's
+  energy, Stage 32), a pour by hand takes the top layer first.
+- **Kept**: layers are cells, so conservation comes with `transfer` and `transform`. New invariants: the
+  layers' volumes sum to the liquid's; no unstable layering outlasts the adjustment (as P1 holds the fast
+  equilibria).
+- **Seen**: each layer a layer of the optical pass (§12's stack of layers, which already provides for "a
+  liquid stratified after a pour").
+
+**Experiments**
+- Warm water poured gently over cold: it stays on top, and the boundary blurs over hours.
+- Heated from above (a lamp) against below: the one stratifies, the other mixes.
+- A denser salt solution under water.
+
+**Cost**: every golden moves; the one-cell closed forms of the boiling, cooling and distillation studies are
+derived again; more cells to a vessel only where a gradient stands.
+
+**Depends on:** area 3's floor film (the heated floor's boundary layer is the column's lowest layer).
+
+## 9. Two liquids
+
+After area 8. Water and an oil do not mix, yet pass heat between them.
+- **A second liquid phase.** The simulation's liquid is one phase with water as its solvent (§10). Two
+  liquids need liquid-liquid equilibrium (which pairs mix and how much), and an oil species with its data.
+- **Separation**: shaken, two liquids are an emulsion; its droplets rise or settle at Stokes' speed and
+  coalesce, and the column becomes two layers (area 8), the lighter on top.
+- **Between the layers**: heat by conduction and each layer's own convection; a dissolved species shares
+  itself between them by its partition coefficient (extraction).
+- **Seen**: an emulsion is a cloud (droplets scatter, as bubbles do); the interface is a surface the optical
+  pass traces (§11's liquid surface).
+
+**Experiments**: oil on water; shaken and let settle; heated from below through the oil; iodine or a dye
+shared between the layers (an extraction).
+
+**Depends on:** area 8.
