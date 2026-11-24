@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.45.0 (2026-11-24, Stage 45)
+
+- §11 (Stage 45, `docs/TDD_45_BUBBLES.md`): **boiling's bubbles** (`lab/bubbles.hpp`, `data/boiling.json`).
+  - A vessel heated from below is one bulk and a film at its floor: the floor's heat shared between natural
+    convection (Raithby and Hollands) and nucleate boiling (Rohsenow).
+  - Bubbles start where the glass's cavities hold a nucleus at the floor's pressure, the liquid's weight on it.
+  - They leave at Fritz's size, rise at Baz-Rodríguez's speed, and condense in a cooler bulk (Chen and
+    Mayinger), gone a fraction of a millimetre up in cold water, at the surface at the boil.
+  - Derived each step from the burner's flow, not state: the world, its digest and the goldens are unchanged.
+  - Seen as a white haze from the floor up to where they end, their extinction times 1 − g (0.85, Flatau et
+    al.); a reaction's gas as bubbles to the surface.
+- §12.2: a body's vec4 6 holds a vessel's bubbles; the per-pixel source reads them wherever a haze is.
+- §13.3: `bubbles_cm`, how high a vessel's bubbles reach. §13.7: the experiment `boiling`. §18: B1. §20.
+
 ## 0.44.0 (2026-11-24, Stage 44; signed off by the user: "Stage 44 is approved, merge and proceed")
 
 - §9 (Stage 44, `docs/TDD_44_PRECIPITATION.md`): **precipitation and gas**.
