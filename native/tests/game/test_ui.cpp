@@ -289,7 +289,7 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42)
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3 + 2); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42); the thermal camera's case and its dark screen, in the cabinet (Stage 48)
 	CHECK(bars == 3 + 2 + 6 + 1 + 6); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27); the viewer's probe in its holder: its ring, its handle, its cable (Stage 42)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");

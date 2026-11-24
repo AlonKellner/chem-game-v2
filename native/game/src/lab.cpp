@@ -11,6 +11,7 @@
 #include "chem/version.hpp"
 #include "lab/conditions.hpp"
 #include "lab/sha256.hpp"
+#include "lab/thermal.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -52,7 +53,7 @@ constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(P
 
 // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber; a viewer (Stage 42): the spectral
 // viewer, an instrument that holds no matter (no cell, no edge: it changes nothing in the world)
-enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer };
+enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal };
 // On: on a vessel's mouth. Under: a burner under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
 enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
@@ -108,11 +109,12 @@ struct Item {
 	std::string probe_on;
 	bool probe_room = false;
 	double probe_u = 0.0, probe_v = 0.0;
+	ThermalSettings thermal; // a thermal camera (Stage 48): its frame and settings
 };
 
 // whether an item holds matter of its own (a burner's cell is its flame, a viewer has none)
 bool holds_matter(const Item &x) {
-	return x.kind != Kind::Burner && x.kind != Kind::Viewer;
+	return x.kind != Kind::Burner && x.kind != Kind::Viewer && x.kind != Kind::Thermal;
 }
 
 struct Event {
@@ -163,7 +165,7 @@ bool from_bits(const json &j, double &v) {
 	return true;
 }
 
-const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer" };
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal" };
 const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 double number(const json &j, const char *key, double fallback) {
@@ -183,6 +185,9 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
 	if (kind == "viewer") {
 		w = 7; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
+		h = 4;
+	} else if (kind == "thermal") {
+		w = 5; // a thermal camera (Stage 48): its case and screen
 		h = 4;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
@@ -2312,6 +2317,10 @@ struct Lab::Impl {
 	// keeps it: it comes back with them.
 	void release_probes() {
 		for (Item &v : items) {
+			if (v.kind == Kind::Thermal && v.place != Place::Bench) {
+				v.thermal.frame_room = false; // a camera off the bench: its frame goes back over its screen (Stage 48)
+				continue;
+			}
 			if (v.kind != Kind::Viewer || (v.probe_on.empty() && !v.probe_room)) {
 				continue;
 			}
@@ -2400,7 +2409,8 @@ struct Lab::Impl {
 		v.probe_room = item.probe_room;
 		v.probe_u = item.probe_u;
 		v.probe_v = item.probe_v;
-		if (item.kind == Kind::Viewer) {
+		v.thermal = item.thermal;
+		if (item.kind == Kind::Viewer || item.kind == Kind::Thermal) {
 			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // it stands in the room's air
 		} else if (item.kind != Kind::Burner) {
 			const double kelvin = m.kelvin(item.cell);
@@ -2579,7 +2589,7 @@ struct Lab::Impl {
 		const Kind is = items[static_cast<size_t>(index)].kind;
 		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
-			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : "a vessel");
+			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : kind == Kind::Thermal ? "a thermal camera" : "a vessel");
 			return false;
 		}
 		if (is == Kind::Vessel && items[static_cast<size_t>(index)].burst) {
@@ -2722,14 +2732,14 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				impl->items.push_back(item);
 				continue;
 			}
-			if (kind == "viewer") {
-				// the spectral viewer (Stage 42): no matter, no cell, no edge; its probe in its holder
-				item.kind = Kind::Viewer;
+			if (kind == "viewer" || kind == "thermal") {
+				// the spectral viewer (Stage 42), a thermal camera (Stage 48): no matter, no cell, no edge
+				item.kind = kind == "viewer" ? Kind::Viewer : Kind::Thermal;
 				impl->items.push_back(item);
 				continue;
 			}
 			if (kind != "vessel" && kind != "balloon" && kind != "stopper") {
-				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner or viewer";
+				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner, viewer or thermal";
 				return nullptr;
 			}
 			item.kind = kind == "vessel" ? Kind::Vessel : kind == "stopper" ? Kind::Stopper : Kind::Bag;
@@ -4078,6 +4088,91 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		v.probe_v = v.probe_on.empty() && !v.probe_room ? 0.0 : w;
 		return true;
 	}
+	if (what == "frame") {
+		// a thermal camera's frame (GAME_SPEC §13, Stage 48): fixed on the room ("room": its top-left in the bench's
+		// squares from the bench's top-left corner), or back over the camera's own screen ("home"). It reads always.
+		int at = -1;
+		if (!item(c, "item", Kind::Thermal, at, why)) {
+			return false;
+		}
+		Item &v = items[static_cast<size_t>(at)];
+		if (!on_bench(v, why)) {
+			return false;
+		}
+		if (c.value("home", false)) {
+			v.thermal.frame_room = false;
+			v.thermal.frame_x = v.thermal.frame_y = 0.0;
+			return true;
+		}
+		const json &a = c.contains("room") ? c.at("room") : json();
+		if (!a.is_array() || a.size() != 2 || !a.at(0).is_number() || !a.at(1).is_number() || !std::isfinite(a.at(0).get<double>()) || !std::isfinite(a.at(1).get<double>())) {
+			why = "a frame is put on the room at \"room\": two numbers (the bench's squares), or sent \"home\"";
+			return false;
+		}
+		v.thermal.frame_room = true;
+		v.thermal.frame_x = a.at(0).get<double>();
+		v.thermal.frame_y = a.at(1).get<double>();
+		return true;
+	}
+	if (what == "thermal") {
+		// a thermal camera's settings (Stage 48): each given is set, each checked first; none changes the world
+		int at = -1;
+		if (!item(c, "item", Kind::Thermal, at, why)) {
+			return false;
+		}
+		ThermalSettings t = items[static_cast<size_t>(at)].thermal;
+		const auto number_in = [&](const char *key, double lo, double hi, double &to) {
+			if (!c.contains(key)) {
+				return true;
+			}
+			if (!c.at(key).is_number() || !(c.at(key).get<double>() >= lo && c.at(key).get<double>() <= hi)) {
+				why = std::string("a camera's \"") + key + "\" is a number from " + text_of("%g", lo) + " to " + text_of("%g", hi);
+				return false;
+			}
+			to = c.at(key).get<double>();
+			return true;
+		};
+		const auto one_of = [&](const char *key, const std::vector<std::string> &names, std::string &to) {
+			if (!c.contains(key)) {
+				return true;
+			}
+			if (!c.at(key).is_string() || std::find(names.begin(), names.end(), c.at(key).get<std::string>()) == names.end()) {
+				std::string list;
+				for (const std::string &n : names) {
+					list += (list.empty() ? "" : ", ") + n;
+				}
+				why = std::string("a camera's \"") + key + "\" is one of " + list;
+				return false;
+			}
+			to = c.at(key).get<std::string>();
+			return true;
+		};
+		std::string range = t.locked ? "lock" : "auto";
+		double reflected = t.reflected_c.value_or(20.0);
+		if (!one_of("palette", thermal_palette_names(), t.palette) || !number_in("emissivity", 0.1, 1.0, t.emissivity) || !number_in("level_c", -50.0, 2000.0, t.level_c) ||
+				!number_in("span_c", 1.0, 2000.0, t.span_c) || !one_of("gain", { "auto", "high", "low" }, t.gain) || !one_of("range", { "auto", "lock" }, range)) {
+			return false;
+		}
+		if (c.contains("reflected_c")) {
+			if (c.at("reflected_c").is_string() && c.at("reflected_c").get<std::string>() == "room") {
+				t.reflected_c.reset();
+			} else if (number_in("reflected_c", -50.0, 500.0, reflected)) {
+				t.reflected_c = reflected;
+			} else {
+				return false;
+			}
+		}
+		if (c.contains("markers")) {
+			if (!c.at("markers").is_boolean()) {
+				why = "a camera's \"markers\" is true or false";
+				return false;
+			}
+			t.markers = c.at("markers").get<bool>();
+		}
+		t.locked = range == "lock";
+		items[static_cast<size_t>(at)].thermal = t;
+		return true;
+	}
 	if (what == "attach") {
 		int thing = -1, to = -1;
 		const bool stopper = c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) >= 0
@@ -4744,6 +4839,20 @@ std::string Lab::report() const {
 			items.push_back(j);
 			continue;
 		}
+		if (item.kind == Kind::Thermal) {
+			// a thermal camera (Stage 48): where it stands, where its frame is, its settings
+			const ThermalSettings &t = item.thermal;
+			j["kind"] = "thermal";
+			j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+			if (item.place == Place::Bench) {
+				j["at"] = { item.col, item.row };
+			}
+			j["frame"] = t.frame_room ? json{ { "room", { t.frame_x, t.frame_y } } } : json("home");
+			j["settings"] = { { "palette", t.palette }, { "emissivity", t.emissivity }, { "reflected_c", t.reflected_c ? json(*t.reflected_c) : json("room") }, { "markers", t.markers },
+				{ "range", t.locked ? "lock" : "auto" }, { "level_c", t.level_c }, { "span_c", t.span_c }, { "gain", t.gain } };
+			items.push_back(j);
+			continue;
+		}
 		if (item.kind == Kind::Viewer) {
 			// the spectral viewer (Stage 42): where it stands, and where its probe is fixed
 			j["kind"] = "viewer";
@@ -5094,6 +5203,12 @@ json Lab::Impl::save() const {
 			list.back()["suspended"] = bits(item.suspended);
 			list.back()["swirl_holds"] = { bits(item.swirl_for), bits(item.swirl_most), bits(item.swirl_lifts), bits(item.settles) };
 		}
+		if (item.kind == Kind::Thermal) { // a camera's frame and settings (Stage 48)
+			const ThermalSettings &t = item.thermal;
+			list.back()["thermal"] = { { "room", t.frame_room }, { "at", { bits(t.frame_x), bits(t.frame_y) } }, { "palette", t.palette }, { "emissivity", bits(t.emissivity) },
+				{ "reflected", t.reflected_c ? json(bits(*t.reflected_c)) : json(nullptr) }, { "markers", t.markers }, { "locked", t.locked }, { "level", bits(t.level_c) },
+				{ "span", bits(t.span_c) }, { "gain", t.gain } };
+		}
 		if (item.kind == Kind::Viewer && (!item.probe_on.empty() || item.probe_room)) { // a lab without a viewer saves as before (Stage 42)
 			list.back()["probe"] = { { "on", item.probe_on }, { "room", item.probe_room }, { "at", { bits(item.probe_u), bits(item.probe_v) } } };
 		}
@@ -5212,7 +5327,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Viewer) || place < 0 || place > static_cast<int>(Place::Trash)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Thermal) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -5253,6 +5368,24 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.slot = j.value("slot", 0);
 			item.glassware = j.value("glassware", "");
 			item.screwed = j.value("screwed", false);
+			if (j.contains("thermal")) {
+				const json &tj = j.at("thermal");
+				ThermalSettings &t = item.thermal;
+				double reflected = 0.0;
+				t.frame_room = tj.at("room").get<bool>();
+				t.palette = tj.at("palette").get<std::string>();
+				t.markers = tj.at("markers").get<bool>();
+				t.locked = tj.at("locked").get<bool>();
+				t.gain = tj.at("gain").get<std::string>();
+				if (!from_bits(tj.at("at").at(0), t.frame_x) || !from_bits(tj.at("at").at(1), t.frame_y) || !from_bits(tj.at("emissivity"), t.emissivity) || !from_bits(tj.at("level"), t.level_c) ||
+						!from_bits(tj.at("span"), t.span_c) || (!tj.at("reflected").is_null() && !from_bits(tj.at("reflected"), reflected))) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				if (!tj.at("reflected").is_null()) {
+					t.reflected_c = reflected;
+				}
+			}
 			if (j.contains("probe")) {
 				const json &pj = j.at("probe");
 				item.probe_on = pj.at("on").get<std::string>();
@@ -5343,7 +5476,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = (item.kind == Kind::Viewer ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
+		const bool refs = (item.kind == Kind::Viewer || item.kind == Kind::Thermal ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";

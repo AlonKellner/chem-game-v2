@@ -1770,6 +1770,35 @@ bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, d
 	return true;
 }
 
+double optics_lwir_signal(const OpticsScene &scene, double x, double y, double size, int bands, uint32_t hide) {
+	if (!shader::ready(scene) || bands < 1) {
+		return 1.0;
+	}
+	const shader::Use use(scene);
+	shader::range_fixed = true;
+	shader::band_range = 1;
+	shader::ray_hide = static_cast<int>(hide);
+	const shader::vec2 p(x, y);
+	const shader::Path q = shader::path_of(p, size);
+	double sum = 0.0;
+	for (int j = 0; j < bands; ++j) {
+		const double nm = shader::share((j + 0.5) / bands).x + 380.0;
+		if (q.layers == 0) {
+			sum += 1.0;
+		} else if (q.refractor >= 0 || q.ways) {
+			const shader::RayMet m = shader::ray_met(p, nm);
+			const shader::vec2 t = shader::ray_shade(m, nm);
+			sum += t.x + t.y;
+		} else {
+			sum += shader::along(q, nm, 1.0, 0.0, 0.0, false, 1.0);
+		}
+	}
+	shader::range_fixed = false;
+	shader::ray_hide = 0;
+	shader::band_range = 0;
+	return sum / bands;
+}
+
 bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	using namespace optics_layout;
 	optics_truth(scene, x, y, rgb); // what is in front of the display, and its face, in the visible
@@ -1821,8 +1850,7 @@ bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	// as the camera reads it, and shows it
 	const double own = (signal - (1.0 - h0.z) * h0.w) / std::max(static_cast<double>(h0.z), 1e-6);
 	const double t = std::clamp((shader::infrared_kelvin(own) - h1.x) / std::max(static_cast<double>(h1.y - h1.x), 1e-6), 0.0, 1.0) * (RELAY_PALETTE - 1);
-	const int k = std::min(static_cast<int>(std::floor(t)), RELAY_PALETTE - 2);
-	const shader::vec4 w = shader::mix(shader::image_vec(b + RELAY_HEAD_VECS + k), shader::image_vec(b + RELAY_HEAD_VECS + k + 1), t - k);
+	const shader::vec4 w = shader::relay_drive(q.relay, t, p);
 	const shader::vec3 st = shader::relay_stripes(q.relay, p, 1.0);
 	const double drive[3] = { w.x * st.x, w.y * st.y, w.z * st.z };
 	for (int c = 0; c < 3; ++c) {

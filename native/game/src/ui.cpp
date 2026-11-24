@@ -4,6 +4,7 @@
 
 #include "lab/conditions.hpp"
 #include "lab/spectrometer.hpp"
+#include "lab/thermal.hpp"
 #include "lab/view.hpp"
 
 #include "chem/optics.hpp"
@@ -16,6 +17,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <map>
 #include <utility>
 
@@ -248,7 +250,7 @@ struct Ui::Impl {
 	}
 	// whether a name of the screen (Ui::locate) is of the room: what stands in it and its places, not a panel's
 	bool room_name(std::string_view what) const {
-		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:" };
+		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:", "frame:", "lens:" };
 		for (const char *prefix : ROOMS) {
 			const std::string_view p(prefix);
 			if (what.substr(0, p.size()) != p) {
@@ -274,6 +276,24 @@ struct Ui::Impl {
 		bool plotted = false;
 	};
 	std::map<std::string, ViewerState> viewers;
+	// a thermal camera's (Stage 48): its search, what it last read, the span it shows, what its screen is given
+	struct CameraState {
+		ThermalSearch search;
+		ThermalFrame searched;
+		bool searching = false;
+		ThermalReading last;
+		double hottest_c = 0.0, coldest_c = 0.0, centre_c = 0.0;
+		ThermalSpan span;
+		ThermalOverlay overlay;
+		OpticsRelay relay;
+	};
+	std::map<std::string, CameraState> cameras;
+	mutable std::deque<OpticsRelay> relays_at_view; // (its relay at the view: the scene points at these)
+	static constexpr int CAMERA_READS = 600; // a frame's reads of the scene for a camera's search
+	// a camera's frame in hand (Stage 48): which camera's, and where on it the pointer took it
+	int framing = -1;
+	bool frame_in_hand = false;
+	float frame_dx = 0.0f, frame_dy = 0.0f;
 	OpticsScene reading;
 	double reading_ms = -1.0e30;
 	static constexpr double PROBE_BUDGET_MS = 2.0; // a frame's time for the probes' rays, all of them
@@ -311,6 +331,9 @@ struct Ui::Impl {
 	static constexpr double STREAM_PI = 3.14159265358979323846;
 	int valve_drag = -1; // the burner whose valve is being turned
 	bool slider_drag = false;
+	// the cabinet (Stage 48): its first row on the screen, and whether its scroll bar is held
+	int cabinet_from = 0;
+	bool cabinet_scrolling = false;
 	int hover = -1;
 	// the pour panel
 	bool panel = false;
@@ -848,7 +871,10 @@ struct Ui::Impl {
 
 	// how large an item is drawn
 	void size_of(const ItemView &v, float &w, float &h) const {
-		if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
+		if (v.kind == "thermal") { // its case and its screen (Stage 48)
+			w = CAMERA_W;
+			h = CAMERA_H;
+		} else if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
 			w = VIEWER_W;
 			h = VIEWER_H;
 		} else if (v.kind == "burner") {
@@ -1003,16 +1029,195 @@ struct Ui::Impl {
 		act(c);
 	}
 
-	// how much smaller an item is drawn to fit the cabinet's shelf, and an outbox slot (its name under it)
-	// a shelf of the cabinet, top to top: 118 px, or less to fit all a bench can put in it on the screen (Stage 28)
-	float shelf() const {
+	// ---- a thermal camera (GAME_SPEC §13.1, Stage 48)
+	// its case, and its screen in it (smaller in the cabinet, as all of it is); its sensor's frame is the screen's size
+	static constexpr float CAMERA_W = 190, CAMERA_H = 150;
+	static Rect camera_screen(const Rect &r) {
+		const float s = r.w / CAMERA_W;
+		return Rect{ r.x + 19 * s, r.y + 10 * s, 152 * s, 114 * s };
+	}
+	// the bit its bodies are hidden from its own rays by: one a camera
+	uint32_t camera_bit(int index) const {
+		int k = 0;
+		for (int i = 0; i < index; ++i) {
+			k += view.items[static_cast<size_t>(i)].kind == "thermal" ? 1 : 0;
+		}
+		return 1u << (k % 24);
+	}
+	// its frame: in hand, where the pointer has it; fixed on the room, there; else over its own screen
+	Rect camera_frame(int index) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const Rect screen = camera_screen(drawn(index));
+		if (framing == index) {
+			return Rect{ px - frame_dx, py - frame_dy, screen.w, screen.h };
+		}
+		if (v.thermal.frame_room) {
+			return Rect{ BENCH.x + static_cast<float>(v.thermal.frame_x) * square(), BENCH.y + static_cast<float>(v.thermal.frame_y) * square(), screen.w, screen.h };
+		}
+		return screen;
+	}
+	// what takes the frame up: its handle, a tab over its top right corner
+	Rect frame_handle(int index) const {
+		const Rect f = camera_frame(index);
+		return Rect{ f.x + f.w - 18, f.y - 12, 18, 12 };
+	}
+	bool frame_grab(int index, float x, float y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.kind != "thermal" || v.place != "bench" || hidden(index)) {
+			return false;
+		}
+		const Rect h = frame_handle(index);
+		return Rect{ h.x - 4, h.y - 4, h.w + 8, h.h + 8 }.has(x, y);
+	}
+	// letting go of a frame: more than half over its own screen, home (see-through); else fixed on the room there
+	void drop_frame(int index, float x, float y) {
+		framing = -1;
+		frame_in_hand = false;
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const Rect screen = camera_screen(drawn(index)), f{ x - frame_dx, y - frame_dy, screen.w, screen.h };
+		const float over = std::fmax(0.0f, std::fmin(f.x + f.w, screen.x + screen.w) - std::fmax(f.x, screen.x)) * std::fmax(0.0f, std::fmin(f.y + f.h, screen.y + screen.h) - std::fmax(f.y, screen.y));
+		if (over > 0.5f * screen.w * screen.h) {
+			act({ { "do", "frame" }, { "item", v.id }, { "home", true } });
+		} else {
+			act({ { "do", "frame" }, { "item", v.id }, { "room", { (f.x - BENCH.x) / square(), (f.y - BENCH.y) / square() } } });
+		}
+	}
+	// Its controls in the readout, while it is selected on the bench (Stage 48): each a button, its name (locate's
+	// "readout:camera:<name>"), what it says, the command it sends, whether it is on
+	struct CameraButton {
+		Rect r;
+		std::string name, label;
+		json command;
+		bool on = false;
+	};
+	std::vector<CameraButton> camera_buttons(int index) const {
+		std::vector<CameraButton> out;
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (index != selected || v.kind != "thermal" || v.place != "bench" || draft.edit != Draft::None) {
+			return out;
+		}
+		const ThermalSettings &t = v.thermal;
+		const float x0 = READOUT.x + 16, y0 = readout_top() + 40;
+		const auto set = [&](json fields) {
+			fields["do"] = "thermal";
+			fields["item"] = v.id;
+			return fields;
+		};
+		static const char *const SHORT[] = { "iron", "white", "black", "rainbow", "arctic" };
+		const std::vector<std::string> &names = thermal_palette_names();
+		for (size_t k = 0; k < names.size() && k < 5; ++k) {
+			out.push_back({ Rect{ x0 + static_cast<float>(k) * 92, y0, 86, 28 }, "palette:" + names[k], SHORT[k], set({ { "palette", names[k] } }), t.palette == names[k] });
+		}
+		const auto round2 = [](double x) { return std::round(x * 100.0) / 100.0; };
+		const CameraState *st = cameras.count(v.id) ? &cameras.at(v.id) : nullptr;
+		const double reflected = t.reflected_c.value_or(view.room_celsius);
+		const double lo = st ? st->span.low_c : t.level_c - 0.5 * t.span_c, hi = st ? st->span.high_c : t.level_c + 0.5 * t.span_c;
+		const float y1 = y0 + 36, y2 = y0 + 72, y3 = y0 + 108;
+		out.push_back({ Rect{ x0, y1, 110, 28 }, "markers", t.markers ? "marks on" : "marks off", set({ { "markers", !t.markers } }), t.markers });
+		out.push_back({ Rect{ x0 + 118, y1, 130, 28 }, "gain", "gain " + t.gain, set({ { "gain", t.gain == "auto" ? "high" : t.gain == "high" ? "low" : "auto" } }), t.gain != "auto" });
+		if (t.frame_room) {
+			out.push_back({ Rect{ x0 + 256, y1, 120, 28 }, "home", "frame home", json{ { "do", "frame" }, { "item", v.id }, { "home", true } }, false });
+		}
+		out.push_back({ Rect{ x0, y2, 34, 28 }, "emissivity:-", "-", set({ { "emissivity", std::max(0.1, round2(t.emissivity - 0.01)) } }), false });
+		out.push_back({ Rect{ x0 + 130, y2, 34, 28 }, "emissivity:+", "+", set({ { "emissivity", std::min(1.0, round2(t.emissivity + 0.01)) } }), false });
+		out.push_back({ Rect{ x0 + 190, y2, 34, 28 }, "reflected:-", "-", set({ { "reflected_c", std::round(reflected) - 1.0 } }), false });
+		out.push_back({ Rect{ x0 + 330, y2, 34, 28 }, "reflected:+", "+", set({ { "reflected_c", std::round(reflected) + 1.0 } }), false });
+		// its range: auto, or locked where it shows now; locked, its level and span
+		out.push_back({ Rect{ x0, y3, 70, 28 }, "range", t.locked ? "LOCK" : "AUTO",
+			t.locked ? set({ { "range", "auto" } }) : set({ { "range", "lock" }, { "level_c", std::round((lo + hi) * 5.0) / 10.0 }, { "span_c", std::max(1.0, std::round((hi - lo) * 10.0) / 10.0) } }), t.locked });
+		if (t.locked) {
+			out.push_back({ Rect{ x0 + 80, y3, 34, 28 }, "level:-", "-", set({ { "level_c", t.level_c - 5.0 } }), false });
+			out.push_back({ Rect{ x0 + 200, y3, 34, 28 }, "level:+", "+", set({ { "level_c", t.level_c + 5.0 } }), false });
+			out.push_back({ Rect{ x0 + 244, y3, 34, 28 }, "span:-", "-", set({ { "span_c", std::max(1.0, t.span_c - 5.0) } }), false });
+			out.push_back({ Rect{ x0 + 360, y3, 34, 28 }, "span:+", "+", set({ { "span_c", t.span_c + 5.0 } }), false });
+		}
+		return out;
+	}
+
+	// what its screen is given: its frame, how it reads, the span it shows, the palette, what it shows over its picture
+	void camera_relay(int index) {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		CameraState &st = cameras[v.id];
+		const Rect f = camera_frame(index), screen = camera_screen(drawn(index));
+		OpticsRelay &r = st.relay;
+		r.frame_x = f.x;
+		r.frame_y = f.y;
+		r.emissivity = v.thermal.emissivity;
+		r.reflected_kelvin = v.thermal.reflected_c ? *v.thermal.reflected_c + 273.15 : 0.0;
+		r.low_kelvin = st.span.low_c + 273.15;
+		r.high_kelvin = st.span.high_c + 273.15;
+		r.palette = thermal_palette(v.thermal.palette);
+		r.bit = camera_bit(index);
+		thermal_overlay(v.thermal, st.span, st.last, st.hottest_c, st.coldest_c, st.centre_c, static_cast<int>(std::lround(screen.w)), static_cast<int>(std::lround(screen.h)), st.overlay);
+		r.lcd_w = st.overlay.w;
+		r.lcd_h = st.overlay.h;
+		r.overlay = st.overlay.rgb;
+		r.overlay_mask = st.overlay.mask;
+		r.overlay_hash = st.overlay.hash;
+		uint64_t h = std::hash<std::string>{}(v.thermal.palette);
+		for (const double x : { v.thermal.emissivity, r.reflected_kelvin, r.low_kelvin, r.high_kelvin }) {
+			h = (h ^ std::hash<double>{}(x)) * 1099511628211ull;
+		}
+		r.hash = h;
+	}
+	// a frame's step of its search over the reading scene (the room laid out), and what it found: its temperatures and the
+	// span it shows them over
+	void camera_read(int index) {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		CameraState &st = cameras[v.id];
+		const Rect f = camera_frame(index);
+		const ThermalFrame frame{ f.x, f.y, static_cast<int>(std::lround(f.w)), static_cast<int>(std::lround(f.h)), camera_bit(index) };
+		if (!st.searching || frame.x != st.searched.x || frame.y != st.searched.y || frame.w != st.searched.w || frame.h != st.searched.h) {
+			st.search.start(frame);
+			st.searched = frame;
+			st.searching = true;
+		}
+		if (!st.search.step(reading, CAMERA_READS)) {
+			return;
+		}
+		st.last = st.search.reading();
+		const double room_k = view.room_celsius + 273.15, reflected = v.thermal.reflected_c ? *v.thermal.reflected_c + 273.15 : room_k;
+		st.hottest_c = thermal_celsius(st.last.hottest.signal, room_k, v.thermal.emissivity, reflected);
+		st.coldest_c = thermal_celsius(st.last.coldest.signal, room_k, v.thermal.emissivity, reflected);
+		st.centre_c = thermal_celsius(st.last.centre.signal, room_k, v.thermal.emissivity, reflected);
+		st.span = thermal_span(v.thermal, st.coldest_c, st.hottest_c, st.span);
+	}
+
+	// ---- the cabinet (Stage 48): every item in a square box of one size, two to a row, its name under it; as many rows
+	// as fit over the trash on the screen, scrolled a whole row at a time (by the wheel over it, or its bar)
+	static constexpr float CAB_BOX = 100, CAB_ROW = 124, CAB_TOP = 96, CAB_BOTTOM = TRASH.y - 8, CAB_BAR_X = CABINET.x + CABINET.w - 12;
+	static int cabinet_shown_rows() { return static_cast<int>((CAB_BOTTOM - CAB_TOP) / CAB_ROW); }
+	int cabinet_rows() const {
 		int n = 0;
 		for (const ItemView &v : view.items) {
-			n += v.kind != "tray" && !is_part_kind(v.kind) ? 1 : 0;
+			n += v.place == "cabinet" && v.kind != "tray" ? 1 : 0;
 		}
-		return std::fmin(118.0f, 820.0f / static_cast<float>(std::max(n, 1))); // (over the trash, Stage 34)
+		return (n + 1) / 2;
 	}
-	float cabinet_scale(float w, float h) const { return std::fmin(1.0f, std::fmin(200.0f / w, (shelf() - 8.0f - 24.0f) / h)); }
+	int cabinet_most_from() const { return std::max(cabinet_rows() - cabinet_shown_rows(), 0); }
+	void cabinet_scroll(int rows) { cabinet_from = std::clamp(cabinet_from + rows, 0, cabinet_most_from()); }
+	// the box of the k-th item in the cabinet (none where its row is scrolled out of sight)
+	std::optional<Rect> cabinet_box(int k) const {
+		const int row = k / 2 - std::clamp(cabinet_from, 0, cabinet_most_from());
+		if (row < 0 || row >= cabinet_shown_rows()) {
+			return std::nullopt;
+		}
+		return Rect{ CABINET.x + 10 + static_cast<float>(k % 2) * (CAB_BOX + 8), CAB_TOP + static_cast<float>(row) * CAB_ROW, CAB_BOX, CAB_BOX };
+	}
+	// its scroll bar (none while every row is on the screen): the track, and the thumb on it
+	Rect cabinet_track() const { return Rect{ CAB_BAR_X, CAB_TOP, 8, static_cast<float>(cabinet_shown_rows()) * CAB_ROW - 24 }; }
+	Rect cabinet_thumb() const {
+		const Rect t = cabinet_track();
+		const float share = static_cast<float>(cabinet_shown_rows()) / static_cast<float>(std::max(cabinet_rows(), 1));
+		const float h = std::fmax(t.h * std::fmin(share, 1.0f), 24.0f);
+		const float at = cabinet_most_from() > 0 ? static_cast<float>(std::clamp(cabinet_from, 0, cabinet_most_from())) / static_cast<float>(cabinet_most_from()) : 0.0f;
+		return Rect{ t.x, t.y + (t.h - h) * at, t.w, h };
+	}
+	// the bar held at y: the row whose share of the track y is at
+	void cabinet_scroll_to(float y) {
+		const Rect t = cabinet_track();
+		cabinet_from = static_cast<int>(std::lround(std::clamp((y - t.y) / std::fmax(t.h, 1.0f), 0.0f, 1.0f) * static_cast<float>(cabinet_most_from())));
+	}
 	static float outbox_scale(float w, float h) { return std::fmin(1.0f, std::fmin((100.0f - 12.0f) / w, 106.0f / h)); }
 
 	// its slot among the items of a place, in order
@@ -1043,9 +1248,13 @@ struct Ui::Impl {
 			return Rect{ TRASH.cx() - w * scale / 2, TRASH.y + TRASH.h - 12 - h * scale, w * scale, h * scale };
 		}
 		if (v.place == "cabinet") {
-			const Rect box{ 20, 96 + static_cast<float>(slot(index, "cabinet")) * shelf(), 200, shelf() - 8.0f };
-			const float scale = cabinet_scale(w, h);
-			return Rect{ box.cx() - w * scale / 2, box.y + box.h - 22 - h * scale, w * scale, h * scale };
+			// in its box, as large as fits it, standing on the box's floor (Stage 48)
+			const std::optional<Rect> box = cabinet_box(slot(index, "cabinet"));
+			if (!box) {
+				return Rect{ -10000, -10000, 0, 0 };
+			}
+			const float scale = std::fmin(1.0f, std::fmin((CAB_BOX - 8.0f) / w, (CAB_BOX - 8.0f) / h));
+			return Rect{ box->cx() - w * scale / 2, box->y + box->h - 4 - h * scale, w * scale, h * scale };
 		}
 		if (v.place == "outbox") { // in its slot, below the goal (§13.5)
 			const Rect box = slot_rect(std::max(1, v.slot));
@@ -1270,7 +1479,10 @@ struct Ui::Impl {
 	Rect circuit_up() const { const Rect p = circuit_panel(); return Rect{ p.x + p.w - 206, p.y + 12, 90, 30 }; }
 	// what was last put in the trash (Stage 34): the one thing of the trash that is on the screen; -1: none
 	int trash_top() const { return view.trash.empty() ? -1 : view.trash.back(); }
-	bool hidden(int index) const { return view.items[static_cast<size_t>(index)].place == "trash" && index != trash_top(); }
+	bool hidden(int index) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		return (v.place == "trash" && index != trash_top()) || (v.place == "cabinet" && !cabinet_box(slot(index, "cabinet"))); // (scrolled out of sight: Stage 48)
+	}
 	bool visible(int index) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		if (v.place == "trash") {
@@ -1559,6 +1771,15 @@ struct Ui::Impl {
 	}
 
 	void press(float x, float y) {
+		if (framing >= 0 && frame_in_hand) {
+			drop_frame(framing, x, y); // a frame in hand (Stage 48): this press is where it goes
+			return;
+		}
+		if (cabinet_most_from() > 0 && Rect{ CAB_BAR_X - 6, CAB_TOP, 20, cabinet_track().h }.has(x, y) && drag < 0) {
+			cabinet_scrolling = true; // the cabinet's bar, held (Stage 48)
+			cabinet_scroll_to(y);
+			return;
+		}
 		if (probing >= 0 && probe_in_hand) {
 			drop_probing(probing, x, y); // a probe in hand (Stage 42): this press is where it goes
 			return;
@@ -1699,6 +1920,14 @@ struct Ui::Impl {
 					}
 					valve_drag = i;
 					turn(x);
+					return;
+				}
+			}
+			for (const CameraButton &b : camera_buttons(i)) {
+				if (b.r.has(x, y)) {
+					if (allowed_click("readout:camera:" + b.name)) {
+						act(b.command); // a thermal camera's control (Stage 48)
+					}
 					return;
 				}
 			}
@@ -2725,6 +2954,18 @@ struct Ui::Impl {
 	// a drag from the drawer, or from a part's port, begins
 	bool begin_signal_drag(float x, float y) {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			if (frame_grab(i, x, y)) { // a thermal camera's frame, by its handle (Stage 48)
+				if (guided() && !asks_drag_from("frame:" + id(i))) {
+					not_now();
+					return true;
+				}
+				const Rect f = camera_frame(i);
+				framing = i;
+				frame_in_hand = false;
+				frame_dx = x - f.x;
+				frame_dy = y - f.y;
+				return true;
+			}
 			if (probe_grab(i, x, y)) { // a spectral viewer's probe (Stage 42)
 				if (guided() && !asks_drag_from("probe:" + id(i))) {
 					not_now();
@@ -2960,6 +3201,11 @@ struct Ui::Impl {
 			if (key == Ui::KeyEscape && probing >= 0) {
 				probing = -1; // a probe in hand goes back where it was (Stage 42)
 				probe_in_hand = false;
+				return;
+			}
+			if (key == Ui::KeyEscape && framing >= 0) {
+				framing = -1; // a camera's frame in hand goes back where it was (Stage 48)
+				frame_in_hand = false;
 				return;
 			}
 			if (key == Ui::KeyEscape && making >= 0) {
@@ -3508,7 +3754,7 @@ struct Ui::Impl {
 			// outlet. No outline is drawn over the pass (Stage 21): a line the screen draws is not bent by what is
 			// held before it.
 		}
-		const std::string label = v.kind == "burner" || v.kind == "viewer" ? v.id : v.id + text_of("  %.0f C", v.celsius);
+		const std::string label = v.kind == "burner" || v.kind == "viewer" || v.kind == "thermal" ? v.id : v.id + text_of("  %.0f C", v.celsius);
 		if (index == drag) {
 			return;
 		}
@@ -3527,6 +3773,11 @@ struct Ui::Impl {
 		} else if (v.place == "bench") {
 			const Rect c = foot(v);
 			text(c.x + 2, c.y + c.h - 10, label, WALL_INK, 14);
+		} else if (v.place == "cabinet") {
+			const std::optional<Rect> box = cabinet_box(slot(index, "cabinet"));
+			if (box) {
+				text(box->x + 2, box->y + box->h + 16, label, WALL_INK, 13); // under its box (Stage 48)
+			}
 		} else {
 			text(r.x, r.y + r.h + 18, label, WALL_INK, 15);
 		}
@@ -3562,6 +3813,11 @@ struct Ui::Impl {
 		list.above = static_cast<int32_t>(list.commands.size());
 		room_paint = 2; // over the room: its names and highlights, placed by the view
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		if (cabinet_most_from() > 0) {
+			// its scroll bar (Stage 48): where its rows on the screen are among all of them
+			rect_fill(cabinet_track(), WALL_GRID);
+			rect_fill(cabinet_thumb(), cabinet_scrolling ? INK : WALL_INK);
+		}
 		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
 		outline(TRASH, WALL_GRID, 1);
 		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%.0f)", static_cast<double>(view.trash.size())), WALL_INK);
@@ -4207,6 +4463,29 @@ struct Ui::Impl {
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
+			} else if (v.kind == "thermal") {
+				// a thermal camera (Stage 48): its case and its screen, hidden from its own rays; on the bench (switched on)
+				// its screen shows what its frame sees, and its frame, away from it, is four thin bars; its handle's tab
+				const float s = r.w / CAMERA_W;
+				const uint32_t bit = camera_bit(i);
+				const bool on = v.place == "bench";
+				bodies[thing(v.id, "case", OpticsBody::Slab, r, 6.0f * s, "viewer_case", nullptr, in_hand)].hidden = bit;
+				const size_t k = thing(v.id, "screen", on ? OpticsBody::Sensor : OpticsBody::Slab, camera_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				bodies[k].hidden = bit;
+				if (on) {
+					camera_relay(i);
+					bodies[k].relay = &cameras[v.id].relay;
+					const Rect f = camera_frame(i), tab = frame_handle(i);
+					const bool away = v.thermal.frame_room || framing == i;
+					if (away) {
+						const float x0 = f.x - 1, y0 = f.y - 1, x1 = f.x + f.w + 1, y1 = f.y + f.h + 1;
+						for (const auto &[a, b, c, d] : { std::array<float, 4>{ x0, y0, x1, y0 }, { x1, y0, x1, y1 }, { x1, y1, x0, y1 }, { x0, y1, x0, y0 } }) {
+							bar(v.id, "frame", a, b, c, d, 2.0f, "rig", framing == i);
+							bodies.back().hidden = bit;
+						}
+					}
+					bodies[thing(v.id, "tab", OpticsBody::Slab, tab, 2.0f, "rig", nullptr, framing == i)].hidden = bit;
+				}
 			} else if (v.kind == "viewer") {
 				// the spectral viewer (Stage 42): its case, its screen showing its picture, its probe's holder
 				const float s = r.w / VIEWER_W;
@@ -4532,6 +4811,7 @@ struct Ui::Impl {
 	// The bodies at the view (Stage 42): placed and sized by it, their depths with them; every one of them, those past
 	// the room's part of the screen too (Stage 46: the scene is the whole room at any view)
 	std::vector<OpticsBody> at_view(const std::vector<OpticsBody> &bodies) const {
+		relays_at_view.clear();
 		std::vector<OpticsBody> out;
 		out.reserve(bodies.size());
 		const float scale = vw.scale;
@@ -4550,6 +4830,13 @@ struct Ui::Impl {
 				b.size *= scale; // (a grating's is its ruling's pitch, in nanometres)
 			}
 			b.dash *= scale;
+			if (b.relay != nullptr) {
+				// a sensor's display (Stage 48): its frame where the view puts it
+				relays_at_view.push_back(*b.relay);
+				relays_at_view.back().frame_x = sx(b.relay->frame_x);
+				relays_at_view.back().frame_y = sy(b.relay->frame_y);
+				b.relay = &relays_at_view.back();
+			}
 			out.push_back(b); // (Stage 46: every body, on the screen or off it: a sensor's frame may be anywhere in the room)
 		}
 		return out;
@@ -4577,13 +4864,16 @@ struct Ui::Impl {
 	// screen's picture plotted from what its probe has read (shown at the next frame: on its own screen, a probe
 	// reads the frame before)
 	void read_probes(const std::vector<OpticsBody> &bodies, size_t probes_from, size_t probes_to, const OpticsRoom &room) {
-		std::vector<int> showing;
+		std::vector<int> showing, cams;
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (view.items[static_cast<size_t>(i)].kind == "viewer" && view.items[static_cast<size_t>(i)].place == "bench") {
 				showing.push_back(i); // (switched on: on the bench)
 			}
+			if (view.items[static_cast<size_t>(i)].kind == "thermal" && view.items[static_cast<size_t>(i)].place == "bench") {
+				cams.push_back(i); // a thermal camera (Stage 48), switched on
+			}
 		}
-		if (showing.empty()) {
+		if (showing.empty() && cams.empty()) {
 			return;
 		}
 		const double now = clock_ms();
@@ -4620,6 +4910,9 @@ struct Ui::Impl {
 				plot_spectrum(st.probe.curve(), st.probe.read_count(), st.picture);
 				st.plotted = true;
 			}
+		}
+		for (const int i : cams) {
+			camera_read(i); // a step of each camera's search (Stage 48)
 		}
 	}
 
@@ -4752,7 +5045,40 @@ struct Ui::Impl {
 							DIM, 14);
 				}
 			}
-			if (v.kind == "viewer") {
+			if (v.kind == "thermal") {
+				// a thermal camera (Stage 48): its controls, where its frame is, what it reads
+				const std::vector<CameraButton> buttons = camera_buttons(showing);
+				for (const CameraButton &b : buttons) {
+					button(b.r, b.label, b.on, 14);
+				}
+				const ThermalSettings &t = v.thermal;
+				if (!buttons.empty()) {
+					const float y2 = readout_top() + 112, y3 = readout_top() + 148;
+					text(READOUT.x + 16 + 40, y2 + 19, text_of("e %.2f", t.emissivity), INK, 15);
+					text(READOUT.x + 16 + 230, y2 + 19, text_of("refl %.0f C", t.reflected_c.value_or(view.room_celsius)), INK, 15);
+					if (t.locked) {
+						text(READOUT.x + 16 + 118, y3 + 19, text_of("%.0f C", t.level_c), INK, 15);
+						text(READOUT.x + 16 + 282, y3 + 19, text_of("+-%.0f", 0.5 * t.span_c), INK, 15);
+					}
+					y = std::max(y, y3 + 50);
+				}
+				row(framing == showing ? "its frame in hand: it reads where it is"
+						: t.frame_room ? "its frame on the room" + text_of(", %.1f squares across, ", t.frame_x) + text_of("%.1f down", t.frame_y)
+									   : "its frame over its screen: it sees what is behind it",
+						DIM, 15);
+				if (v.place != "bench") {
+					row("off: put it on the bench to read", DIM, 15);
+				} else if (const auto found = cameras.find(v.id); found != cameras.end() && found->second.last.done) {
+					const CameraState &st = found->second;
+					row(text_of("hottest %.1f C", st.hottest_c) + text_of(" at (%.0f, ", st.last.hottest.x) + text_of("%.0f)", st.last.hottest.y), rgba(255, 110, 90), 16);
+					row(text_of("coldest %.1f C", st.coldest_c) + text_of(" at (%.0f, ", st.last.coldest.x) + text_of("%.0f)", st.last.coldest.y), rgba(110, 160, 255), 16);
+					row(text_of("centre %.1f C", st.centre_c), INK, 16);
+					row(text_of("shows %.1f", st.span.low_c) + text_of(" to %.1f C", st.span.high_c) + ", gain " + st.span.gain + (st.span.over ? (st.span.gain == "low" ? ", past 650 C" : ", past 150 C") : ""),
+							st.span.over ? WARN : DIM, 15);
+				} else {
+					row("reading...", DIM, 15);
+				}
+			} else if (v.kind == "viewer") {
 				// the spectral viewer (Stage 42): where its probe is, how much it has read, and the peak
 				Rect home;
 				if (probe_home_rect(showing, home)) {
@@ -5061,13 +5387,25 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 	if (pressed) {
 		m.press(x, y);
 	} else if (down) {
-		if (m.slider_drag) {
+		if (m.cabinet_scrolling) {
+			m.cabinet_scroll_to(y);
+		} else if (m.slider_drag) {
 			m.slide(x);
 		} else if (m.valve_drag >= 0) {
 			m.turn(x);
 		}
 	} else if (released) {
-		if (m.probing >= 0 && !m.probe_in_hand) {
+		if (m.cabinet_scrolling) {
+			m.cabinet_scrolling = false;
+		} else if (m.framing >= 0 && !m.frame_in_hand) {
+			// a camera's frame (Stage 48): pressed and let go where it was, it is in hand, and the next press puts it
+			// down; pressed and moved, it goes where the button is let go
+			if (std::fabs(x - m.press_x) > 4 || std::fabs(y - m.press_y) > 4) {
+				m.drop_frame(m.framing, x, y);
+			} else {
+				m.frame_in_hand = true;
+			}
+		} else if (m.probing >= 0 && !m.probe_in_hand) {
 			// a probe (Stage 42): pressed and let go where it was, it is in hand, and the next press puts it down;
 			// pressed and moved, it goes where the button is let go
 			if (std::fabs(x - m.press_x) > 4 || std::fabs(y - m.press_y) > 4) {
@@ -5404,6 +5742,10 @@ void Ui::key(Key key, uint32_t codepoint) {
 
 void Ui::zoom(float x, float y, float factor) {
 	Impl &m = *impl_;
+	if (CABINET.has(x, y) && factor > 0.0f && factor != 1.0f && std::isfinite(factor)) {
+		m.cabinet_scroll(factor > 1.0f ? -1 : 1); // the wheel over the cabinet scrolls it, a row a notch (Stage 48)
+		return;
+	}
 	if (!(factor > 0.0f) || !std::isfinite(factor) || !m.room_at(x, y)) {
 		return; // (over a panel, the screen's own: not the room's)
 	}
@@ -5439,6 +5781,16 @@ ViewRoom Ui::view_room() {
 
 const std::string &Ui::message() const {
 	return impl_->message;
+}
+
+bool Ui::thermal(std::string_view camera, ThermalShown &out) const {
+	const auto found = impl_->cameras.find(std::string(camera));
+	if (found == impl_->cameras.end() || !found->second.last.done) {
+		return false;
+	}
+	const Impl::CameraState &st = found->second;
+	out = ThermalShown{ st.hottest_c, st.coldest_c, st.centre_c, st.last.hottest.x, st.last.hottest.y, st.last.coldest.x, st.last.coldest.y, st.span.low_c, st.span.high_c, st.span.gain, st.span.over };
+	return true;
 }
 
 void Ui::set_infrared(bool on) {
@@ -5572,6 +5924,18 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const std::string rest_uv(s.substr(a + 1));
 		return std::sscanf(rest_uv.c_str(), "%lf,%lf", &u, &v) == 2;
 	};
+	if (after("frame:", rest) || after("lens:", rest)) {
+		// a thermal camera's frame's handle (Stage 48); or the middle of its frame
+		const bool handle = after("frame:", rest);
+		const int i = index_of(rest);
+		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "thermal" || m.view.items[static_cast<size_t>(i)].place != "bench" || !m.visible(i)) {
+			return false;
+		}
+		const Rect r = handle ? m.frame_handle(i) : m.camera_frame(i);
+		x = r.cx();
+		y = r.cy();
+		return true;
+	}
 	if (after("probe:", rest)) {
 		const int i = index_of(rest);
 		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
@@ -5593,12 +5957,25 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		double u = 0.5, v = 0.5;
 		at_uv(rest, name, u, v);
 		const int i = index_of(name);
-		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
+		if (i < 0 || (m.view.items[static_cast<size_t>(i)].kind != "viewer" && m.view.items[static_cast<size_t>(i)].kind != "thermal") || !m.visible(i)) {
 			return false;
 		}
-		const Rect sc = Impl::viewer_screen(m.drawn(i)), r = m.drawn(i);
+		// (a viewer's screen, or a thermal camera's: Stage 48)
+		const Rect sc = m.view.items[static_cast<size_t>(i)].kind == "thermal" ? Impl::camera_screen(m.drawn(i)) : Impl::viewer_screen(m.drawn(i)), r = m.drawn(i);
 		m.place_on(i, (sc.x + u * sc.w - r.x) / r.w, (sc.y + v * sc.h - r.y) / r.h, x, y);
 		return true;
+	}
+	if (after("readout:camera:", rest)) {
+		// a thermal camera's control (Stage 48), while it is selected on the bench
+		if (m.selected < 0) {
+			return false;
+		}
+		for (const Impl::CameraButton &b : m.camera_buttons(m.selected)) {
+			if (b.name == rest) {
+				return centre(b.r);
+			}
+		}
+		return false;
 	}
 	if (what == "readout:probe:holder") {
 		Rect r;
@@ -5619,7 +5996,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (after("item:", rest)) {
 		const int i = index_of(rest);
-		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && m.visible(i) && centre(m.rect(i));
+		return i >= 0 && m.view.items[static_cast<size_t>(i)].kind != "tray" && m.visible(i) && !m.hidden(i) && centre(m.rect(i)); // (not scrolled out of the cabinet's sight: Stage 48)
 	}
 	if (what == "notices") {
 		return centre(Impl::notices_button());

@@ -108,6 +108,10 @@
 		{
 			"id": "viewer",
 			"kind": "viewer"
+		},
+		{
+			"id": "camera",
+			"kind": "thermal"
 		}
 	],
 	"goals": [

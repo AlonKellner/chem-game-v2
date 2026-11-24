@@ -4247,7 +4247,7 @@ vec4 infrared_shown(float signal) {
 // [0] the sensor pixel's mean signal (on the room's scale), its points, the sum of its squared deviations, the tag
 // of what it read (what lies under the sensor pixel, the camera's settings); [1] to [3] its three primaries' light at
 // full weight through what is in front, linear sRGB over the pixel, the tag of that front (w).
-const int RELAY_HEAD_VECS = 4;
+const int RELAY_HEAD_VECS = 5;
 const int RELAY_PALETTE = 256;
 const int RELAY_RECORD = 4;
 const float RELAY_SETTLED = 128.0; // points before a sensor pixel may stop
@@ -4439,6 +4439,24 @@ vec3 relay_stripes(int body, vec2 p, float size) {
 				   max(min(u1, i + 1.0 - gap) - max(u0, i + 2.0 / 3.0 + gap), 0.0)) * (down / area);
 }
 
+// what the display's primaries are driven to at p: its palette's colour at t (0 to RELAY_PALETTE - 1), or its overlay
+// where that is (Stage 48: the camera's scale, numbers and marks), by how much of the LCD pixel under p it is
+vec4 relay_drive(int body, float t, vec2 p) {
+	int b = relay_block(body);
+	int k = min(int(floor(t)), RELAY_PALETTE - 2);
+	vec4 w = mix(image_vec(b + RELAY_HEAD_VECS + k), image_vec(b + RELAY_HEAD_VECS + k + 1), t - float(k));
+	vec4 h4 = image_vec(b + 4);
+	if (h4.z > 0.5) {
+		vec4 rect = scene_vec(HEADER_VECS + body * BODY_VECS);
+		float px = image_vec(b + 1).w;
+		int i = clamp(int(floor((p.x - rect.x) / px)), 0, int(h4.x) - 1);
+		int j = clamp(int(floor((p.y - rect.y) / px)), 0, int(h4.y) - 1);
+		vec4 o = image_vec(int(h4.z) + j * int(h4.x) + i);
+		w = mix(w, vec4(o.x, o.y, o.z, 0.0), o.w);
+	}
+	return w;
+}
+
 // what the display adds to the pixel: its primaries, driven to its palette's colour of its sensor pixel's temperature,
 // through what is in front (linear sRGB); nothing until it has read
 vec3 relay_light(Path q) {
@@ -4455,8 +4473,7 @@ vec3 relay_light(Path q) {
 	// the camera's temperature: the signal less the room it reflects, over its emissivity, as a black body's
 	float own = (rec.x - (1.0 - h0.z) * h0.w) / max(h0.z, 1.0e-6);
 	float t = clamp((infrared_kelvin(own) - h1.x) / max(h1.y - h1.x, 1.0e-6), 0.0, 1.0) * float(RELAY_PALETTE - 1);
-	int k = min(int(floor(t)), RELAY_PALETTE - 2);
-	vec4 w = mix(image_vec(b + RELAY_HEAD_VECS + k), image_vec(b + RELAY_HEAD_VECS + k + 1), t - float(k));
+	vec4 w = relay_drive(q.relay, t, vec2(q.x, q.y));
 	vec3 st = relay_stripes(q.relay, vec2(q.x, q.y), q.size);
 	vec4 r0 = relay_vec(relay_slot + 1);
 	vec4 r1 = relay_vec(relay_slot + 2);

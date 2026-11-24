@@ -201,3 +201,20 @@ func test_the_debug_panels_export_is_written_to_user_saves() -> void:
 	var saved: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(path))
 	assert_eq(saved["format"], "chem-save/1")
 	DirAccess.remove_absolute(path)
+
+func test_a_thermal_camera_its_frame_carried_and_the_cabinet_scrolled_by_the_wheel() -> void:
+	# (Stage 48) taken from the cabinet; its frame's handle dragged onto the room: fixed there
+	_drag("item:camera", "square:16,2")
+	assert_eq(_item("camera")["place"], "bench")
+	assert_eq(_item("camera")["frame"], "home", "its frame over its own screen at first")
+	_drag("frame:camera", "square:4,8")
+	assert_true(_item("camera")["frame"] is Dictionary, "its frame on the room")
+	# the wheel over the cabinet scrolls it: the room's view stays as it was
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	wheel.factor = 1.0
+	wheel.position = Vector2(120, 500)
+	wheel.global_position = wheel.position
+	get_viewport().push_input(wheel, true)
+	assert_eq(_lab.get_view_scale(), 1.0, "the cabinet's wheel is not the room's")

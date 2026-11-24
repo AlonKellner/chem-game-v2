@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.46.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.48.0 (history: `CHANGELOG.md`; 0.47.0 is another stage's, in progress). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1548,6 +1548,28 @@ drawer). Items:
   where its probe is fixed (on an item or a part, at a place of it in its own frame; on the room;
   in its holder), or where it is carried. Off the bench (in the cabinet, the trash, the outbox) it
   is off, its screen dark.
+- **thermal** (Stage 48): a thermal camera, an 8–14 µm microbolometer's (§12.4), an instrument with no cell
+  and no edge, like the viewer.
+  - **Its frame.** A rectangle the size of its screen. Over its own screen by default (see-through: it shows
+    what is behind it, and goes with it), or fixed on the room, where it stays when the camera moves. It
+    goes back over its screen when the camera leaves the bench.
+  - **Its screen** shows each of its frame's sensor pixels (the layout's pixels there) as the renderer's
+    sensor display: the band's mean signal, a temperature by its emissivity and the room it reflects, a
+    colour of its palette over its span. Over that it shows:
+    - its palette's scale with the span's ends;
+    - its centre's cross and spot reading;
+    - its emissivity and AUTO or LOCK;
+    - ">150" or ">650" past its gain;
+    - with its marks on, a red mark on its hottest pixel and a blue one on its coldest, with their
+      temperatures.
+  - **Its search** for those runs a step a frame over the room laid out (`lab/thermal.hpp`, O26).
+  - **Its settings**: a palette (iron bow, white hot, black hot, rainbow, arctic: `data/thermal.json`); an
+    emissivity (0.10 to 1.00, 0.95 at first); a reflected temperature (the room's at first); marks on or off;
+    its range auto (its hottest to its coldest, moved only past half a kelvin or 3 %) or locked to a level
+    and span; its gain auto, high (−20 to 150 °C) or low (0 to 650 °C; auto: low above 140 °C, high again
+    below 120 °C).
+  - Its own body is hidden from its rays: it does not see itself, and sees every other instrument.
+  - Off the bench it is off, its screen dark.
 - **the tray:** the bench's own, under everything: where what overflows goes (§6).
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
@@ -1590,6 +1612,8 @@ input to them, and a session script is a list of them.
 | `pour` | `from`, `to`, `ml` or `all` | moves liquid, with what is dissolved in it in proportion, and its enthalpy |
 | `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
 | `probe` | `viewer`, `on`, `at` | (Stage 42) fixes a viewer's probe: `on` an item or a part (its id; the viewer itself too: it reads its own screen, a frame late), at `at` [u, v] of it in its own frame (0 to 1 across and down its rectangle upright; 0.5, 0.5 without); with `at` alone, on the room at that point (in squares from the bench's top-left corner); with neither, back in its holder. Refused for a viewer off the bench, or on what is in the trash or is not there. It goes back to its holder when what it is on leaves the lab (a part scrapped, the trash emptied) or the viewer leaves the bench. Saved; not digested: it acts on nothing in the world |
+| `frame` | `item`, `room` or `home` | (Stage 48) fixes a thermal camera's frame on the room, its top-left at `room` [x, y] in squares from the bench's top-left corner; or sends it `home`, over the camera's own screen. Refused for a camera off the bench. Saved; not digested |
+| `thermal` | `item`, any of `palette`, `emissivity`, `reflected_c` (a number, or "room"), `markers`, `range` ("auto", "lock"), `level_c`, `span_c`, `gain` ("auto", "high", "low") | (Stage 48) a thermal camera's settings, each checked first (a refused command changes none of them). Saved; not digested |
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
@@ -1709,6 +1733,26 @@ lab command here, so it is the same on every host and is tested without one.
 **Layout** (1920 × 1080): the cabinet on the left; the bench's grid of squares in the middle; the
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
+
+**The cabinet** (Stage 48: the user's word). Every item is in a box of one size (100 px square), two to a
+row, as large as fits it, its name under it.
+- As many rows as fit over the trash are shown, scrolled a whole row at a time: by the wheel over the cabinet
+  (a notch a row; over the room the wheel zooms), or by its bar, dragged.
+- What is scrolled out of sight is not on the screen.
+- Instruments in it are off (their screens dark).
+
+**A thermal camera's frame** (Stage 48) is taken up by its handle, a tab over its top-right corner, as the
+viewer's probe is:
+- pressed and dragged, it goes where it is let go; pressed and let go in place, it is in hand until the next
+  press;
+- carried, the screen shows where it is, live;
+- let go more than half over its own screen, it goes home; anywhere else, it is fixed on the room there;
+- Escape puts a frame in hand back where it was.
+
+Its controls are in the readout, while it is selected: the palette's chips, marks on and off, the gain, "frame
+home", the emissivity and the reflected temperature − and +, AUTO or LOCK (locking at the span it shows), and the
+level and span − and +. The readout says where its frame is, its hottest and coldest and where they are, its
+centre, and the span it shows at what gain.
 
 **An item's controls are not on the bench** (Stage 22, signed off by the user on 2026-11-21; asked for on 2026-11-20).
 Until Stage 22 a vessel's "stir" button and a burner's valve stood on the grid beside the item,
@@ -2551,6 +2595,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O23 | The long-wave light's table is its integral (Stage 46): its whole is the closed-form series of the band's Planck integral at the room's temperature, and a camera's temperature from a signal round-trips to a millikelvin from 230 to 2500 K at any emissivity from 0.1 to 1. It fires on a table built a kelvin off | 1 mK; 1e-9 | 46 |
 | O24 | The long-wave range changes nothing in the visible (Stage 46): with every body below 500 K, the visible picture with the range present is the picture without it, bit for bit. It fires on a visible θ that is not exactly zero below 500 K | exact | 46 |
 | O25 | A sensor's pixel is its truth (Stage 46): a settled pixel over a sensor's screen is within 8 on the eye metric of the front's filter times the palette of the temperature from its sensor pixel's band signal (the truth's own tracer, integrated over the band) plus the front's own light. It fires on a frame a pixel off, a continuation read in the visible, the palette applied per point rather than to the mean, and a key without what lies beyond | 8 (eye metric) | 46 |
+| O26 | A camera's search finds every pixel's hottest and coldest (Stage 48): a step at a time (every second sensor pixel, each a 2 × 2 square of them, at 8 bands; then the 3 × 3 squares about the four hottest and coldest at 16; its centre's spot), the hottest and coldest within 0.05 K of brute force over every sensor pixel at 16 bands, a one-pixel hot stream too. It fires on the first pass alone, which misses the stream's own pixel | 0.05 K | 48 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | B1 | A vessel's bubbles lie in its liquid: they end from its floor to its surface, their extinction and holdup are no less than nothing and the holdup under one, and the heat its steam bubbles take is no more than its floor took (Stage 45) | exact | 45 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
@@ -2661,6 +2706,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sediment runs over a lip by the liquid's law | A powder really slides at once past its angle of repose, and not at all before it |
 | Boiling's bubbles are derived each step from a vessel's floor and its bulk, over the floor's whole area, as a haze (Stage 45) | A bulk that superheats, bumping, boiling chips and the onset's hysteresis are not modelled; bubbles rise in a column the floor's width, not narrowing with the vessel; at a strong flame the floor boils from the start (450 W through 34 cm² is more than convection carries at any bulk temperature); a bubble does not grow as the pressure falls up the column, nor merge |
 | The long-wave range (Stage 46): the room one temperature, its wall, cube and room in front a black body; fused silica for the lab's glass; grey emissivities; a flame a grey gas and its soot, calibrated; the sensor's response flat over 8–14 µm | A camera sees no hot thing in a glass's reflection; borosilicate's weaker Reststrahlen band reads a few per cent more emissive than silica's 0.79; a real flame's CO₂ and H₂O bands are lines, not grey |
+| A thermal camera (Stage 48): one sensor pixel a layout pixel, every frame; no noise of its own, no lens's blur, no frame rate; its search a few times a second; its overlay a 3 × 5 font | A real camera's 160 × 120 or 320 × 240 pixels, its NETD of about 0.05 K and its 9 Hz are a better experience left out (the user's word: "same resolution and frame rate as the rest of the rendered lab") |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |

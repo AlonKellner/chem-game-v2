@@ -388,7 +388,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + MORE, 1, 2.0);
 				relays.push_back(ScreenAt{ &body, image_next });
 				relay_bodies.push_back((at - HEADER_VECS) / BODY_VECS);
-				image_next += RELAY_VECS;
+				const bool overlaid = body.relay->lcd_w > 0 && body.relay->lcd_h > 0 && body.relay->overlay.size() == static_cast<size_t>(body.relay->lcd_w * body.relay->lcd_h * 3) &&
+						body.relay->overlay_mask.size() == static_cast<size_t>(body.relay->lcd_w * body.relay->lcd_h);
+				image_next += RELAY_VECS + (overlaid ? body.relay->lcd_w * body.relay->lcd_h : 0);
 			}
 			put(at + KELVIN_VEC, KELVIN_PART, body.kelvin > 0.0 ? body.kelvin : room.kelvin); // Stage 46
 			put(at + HIDDEN_VEC, HIDDEN_PART, body.hidden);
@@ -743,7 +745,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		for (const ScreenAt &sc : relays) {
 			key = fnv(&sc.start, sizeof sc.start, key); // (a sensor display's block is written below, every time)
+			key = fnv(&sc.body->relay->lcd_w, 2 * sizeof(int), key);
 		}
+		key = fnv(&image_next, sizeof image_next, key);
 		if (key != scene.images_key || ((screens.empty() && relays.empty()) != scene.images.empty())) {
 			scene.images.assign(static_cast<size_t>(std::max(image_next, 1)) * 4, 0.0f);
 			scene.image_weights.clear();
@@ -803,7 +807,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const OpticsRelay &relay = *b.relay;
 			const int body = relay_bodies[r];
 			const float *rect = &t[static_cast<size_t>(HEADER_VECS + body * BODY_VECS + RECT) * 4];
-			std::vector<float> block(static_cast<size_t>(RELAY_VECS) * 4, 0.0f);
+			const bool overlaid = relay.lcd_w > 0 && relay.lcd_h > 0 && relay.overlay.size() == static_cast<size_t>(relay.lcd_w * relay.lcd_h * 3) &&
+					relay.overlay_mask.size() == static_cast<size_t>(relay.lcd_w * relay.lcd_h);
+			const int lcd = overlaid ? relay.lcd_w * relay.lcd_h : 0;
+			std::vector<float> block(static_cast<size_t>(RELAY_VECS + lcd) * 4, 0.0f);
 			const double room_signal = chem::optics::band_signal(room.kelvin);
 			const double reflected = relay.reflected_kelvin > 0.0 ? relay.reflected_kelvin : room.kelvin;
 			block[0] = relay.frame_x - rect[0];
@@ -824,11 +831,38 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			block[13] = static_cast<float>(bottom - top);
 			block[14] = static_cast<float>(SCREEN_FILL_X); // its subpixels, as the viewer's
 			block[15] = static_cast<float>(SCREEN_FILL_Y);
+			if (overlaid) {
+				// what it shows over its picture (Stage 48): each LCD pixel's drive, and how much of it the overlay is
+				block[16] = static_cast<float>(relay.lcd_w);
+				block[17] = static_cast<float>(relay.lcd_h);
+				block[18] = static_cast<float>(relays[r].start + RELAY_VECS);
+				thread_local std::unordered_map<uint32_t, std::array<float, 3>> drives;
+				for (int k = 0; k < lcd; ++k) {
+					float *to = &block[static_cast<size_t>(RELAY_VECS + k) * 4];
+					to[3] = relay.overlay_mask[static_cast<size_t>(k)];
+					if (!(to[3] > 0.0f)) {
+						continue;
+					}
+					const uint8_t *code = &relay.overlay[static_cast<size_t>(k) * 3];
+					const uint32_t colour = static_cast<uint32_t>(code[0]) << 16 | static_cast<uint32_t>(code[1]) << 8 | code[2];
+					auto found = drives.find(colour);
+					if (found == drives.end()) {
+						std::array<float, 3> d{};
+						optics_screen_drive(code, d.data());
+						found = drives.emplace(colour, d).first;
+					}
+					to[0] = found->second[0];
+					to[1] = found->second[1];
+					to[2] = found->second[2];
+				}
+			}
 			pool += (right - left) * (bottom - top);
 			// what lies under its frame: each body there, where it is, what it is and holds, how hot (none hidden from it)
-			uint64_t under = fnv(&relay.hash, sizeof relay.hash);
-			under = fnv(&relay.frame_x, 2 * sizeof(float), under);
+			// (what its sensor reads: what lies under its frame, where its frame is, the room; not how it shows it, which
+			// changes what it shows and reads nothing again: Stage 48)
+			uint64_t under = fnv(&relay.frame_x, 2 * sizeof(float));
 			under = fnv(&room.kelvin, sizeof room.kelvin, under);
+			under = fnv(&relay.bit, sizeof relay.bit, under);
 			for (int o = 0; o < count; ++o) {
 				const size_t at = static_cast<size_t>(HEADER_VECS + o * BODY_VECS) * 4;
 				const float *other = &t[at + RECT * 4];
@@ -860,9 +894,12 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				std::copy(block.begin(), block.end(), to);
 				changed = true;
 			}
-			// its pixels follow what lies under its frame
+			// its pixels follow what lies under its frame, and how it shows it (its settings, its span, its overlay)
 			const size_t ids = static_cast<size_t>(HEADER_VECS + body * BODY_VECS + IDS) * 4 + 1;
-			t[ids] = tag(fnv(&block[12], sizeof(float), static_cast<uint64_t>(t[ids])));
+			uint64_t shows = fnv(&block[12], sizeof(float), static_cast<uint64_t>(t[ids]));
+			shows = fnv(&relay.hash, sizeof relay.hash, shows);
+			shows = fnv(&relay.overlay_hash, sizeof relay.overlay_hash, shows);
+			t[ids] = tag(shows);
 		}
 		scene.relay_pool = pool;
 		if (changed) {
