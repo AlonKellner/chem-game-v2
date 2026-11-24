@@ -12,7 +12,7 @@ cleanup). The open items: `docs/TDD_35_ONE.md` (Open), `docs/TDD_33_FAST.md` (Op
 | 37.2 | The prism's slit, where a node's ray is turned back | Tried: right, and too dear as it stands; open |
 | 37.3 | An upside-down vessel by the general model | Looked at; left as it is (below) |
 | 37.4 | Speed: the ideas of TDD 33, each measured | No target left to measure them on (below) |
-| 37.5 | `make gates`; the user's sign-off | |
+| 37.5 | `make gates`; the user's sign-off | `make gates` passed; awaiting the user |
 
 ## 37.1 The pixels that stop off the truth
 
