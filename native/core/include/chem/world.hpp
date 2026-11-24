@@ -186,7 +186,7 @@ public:
 		// the rigid cell at its head: its whole volume and its cross-section.
 		CellId add_layer_cell(std::string name);
 		EdgeId add_column_edge(CellId lower, CellId upper);
-		Builder &set_column(CellId top, double area);
+		Builder &set_column(CellId top, double area, double whole = 0.0); // whole: the vessel's volume (0: its own now)
 		// an edge exactly as given: closed, a drain, any conductance (for a saved world)
 		EdgeId add_edge_as(const Edge &edge);
 		// Where what overflows goes (GAME_SPEC §6): an elastic cell. With one,
@@ -284,6 +284,10 @@ public:
 	// they are at its end, and one added during it is among them.
 	Refusal connect(CellId a, CellId b, PhaseMask phases, EdgeId *made = nullptr, double conductance = 0.0);
 	Refusal connect_drain(CellId from, CellId to, EdgeId *made = nullptr);
+	// A column grows (GAME_SPEC §6, Stage 47): a layer cell added under `lower` (the column's bottom: its top, or its
+	// last layer), empty, joined to it by a column's edge; between steps only, never inside a step's processes (a
+	// world's cells are its build's and these). The new cell's id, or an invalid one with the refusal in *why.
+	CellId add_layer_under(CellId lower, Refusal *why = nullptr);
 	// A drain's rate (m^3 of liquid a second; below 0, all of it), the share
 	// of the cell's solids that goes with its liquid (0 to 1), and the solids
 	// that run by themselves (m^3 of their own volume a second) (GAME_SPEC §6,

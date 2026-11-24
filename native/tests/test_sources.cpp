@@ -18,7 +18,7 @@ bool near(double a, double b, double rel) {
 }
 
 // IUPAC's abridged standard atomic weights (CIAAW), g/mol
-constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990;
+constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990, NI = 58.693;
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -62,6 +62,8 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		// dH with CODATA's elements (Stage 44: JANAF 1966's row makes it more stable than CuO and water, as no
 		// solubility measured does)
 		{ builtin::copper_hydroxide, -443.99, 87.0, 87.85 },
+		// NBS 1982, p. 2-167, NiSO4 "ai" (Stage 47); NBS gives no heat capacity: CuSO4(aq)'s, a stand-in
+		{ builtin::nickel_sulfate_aq, -963.2, -108.8, 211.81 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -94,6 +96,7 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::nitrogen, 2 * N, 0.0 },
 		{ builtin::sodium_hydroxide_aq, NA + O + H, 0.0 }, // Stage 43
 		{ builtin::sodium_sulfate_aq, 2 * NA + S + 4 * O, 0.0 },
+		{ builtin::nickel_sulfate_aq, NI + S + 4 * O, 0.0 }, // Stage 47
 		{ builtin::copper_hydroxide, CU + 2 * O + 2 * H, 3.93 }, // spertiniite, measured: Handbook of Mineralogy (Stage 44)
 	};
 	for (const auto &row : rows) {

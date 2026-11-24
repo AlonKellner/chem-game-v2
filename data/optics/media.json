@@ -12,6 +12,26 @@
 			"table": "copper_sulfate_aq.csv",
 			"units": "L/mol/cm"
 		},
+		"nickel_sulfate_aq": {
+			"kind": "absorb",
+			"bands": [
+				{
+					"centre_cm1": 25381,
+					"fwhm_cm1": 2200,
+					"peak": 4.72
+				},
+				{
+					"centre_cm1": 15385,
+					"fwhm_cm1": 1800,
+					"peak": 1.504
+				},
+				{
+					"centre_cm1": 13928,
+					"fwhm_cm1": 1800,
+					"peak": 1.815
+				}
+			]
+		},
 		"malachite": {
 			"kind": "reflect",
 			"table": "malachite.csv"

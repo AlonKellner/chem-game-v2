@@ -5,6 +5,7 @@
 #include "lab/glassware.hpp"
 
 #include "chem/builtin_ids.hpp"
+#include "chem/error.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
@@ -42,6 +43,7 @@ constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
 // A source of work is a reservoir so hot that its energy carries no entropy (the limit of a heat reservoir as
 // its temperature grows without bound): what it gives is work, and the second law holds as it is checked (T1, T2).
 constexpr double WORK_KELVIN = 1.0e300;
+constexpr double GENTLE_POUR = 2e-6; // m^3/s: a pour no faster than this lays its liquid on what is there (a design value)
 constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
 constexpr int TRIAL_PER_STEP = 2; // a trial's seconds run at each of the lab's steps (Stage 39): what a step costs is bounded
@@ -61,6 +63,7 @@ struct Item {
 	std::string id;
 	Kind kind = Kind::Vessel;
 	CellId cell; // a vessel's or a bag's contents; a burner's flame
+	bool landed = false; // pouring: a gentle pour of it has laid its liquid on the other's as a layer of its own
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -1404,8 +1407,8 @@ struct Lab::Impl {
 	// ---- drains (§6, §13): a vessel under another's outlet leaves it when either is moved
 	// away, stowed or handed in; the drain comes off at a step boundary
 	// the volume of a cell's liquid species, m^3 (what a pour's amount is of)
-	double liquid_m3(CellId cell) const {
-		const CellState &state = world().snapshot_cell(cell);
+	double liquid_m3(CellId cell) const { return liquid_m3(world().snapshot_cell(cell)); }
+	double liquid_m3(const CellState &state) const {
 		double volume = 0.0;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
@@ -1485,6 +1488,7 @@ struct Lab::Impl {
 		}
 		world().disconnect(x.pour);
 		x.pours_into = -1;
+		x.landed = false;
 		x.pour = EdgeId{};
 		x.inverted = false;
 		x.tilt = x.cap = 0.0;
@@ -1499,8 +1503,8 @@ struct Lab::Impl {
 		}
 		return true;
 	}
-	double solid_m3(CellId cell) const {
-		const CellState &state = world().snapshot_cell(cell);
+	double solid_m3(CellId cell) const { return solid_m3(world().snapshot_cell(cell)); }
+	double solid_m3(const CellState &state) const {
 		double volume = 0.0;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
@@ -1514,8 +1518,8 @@ struct Lab::Impl {
 	// the largest that fits (GAME_SPEC §13)
 	double suspended(const Item &x) const { return x.suspended; }
 	// (g: the liquid with what is dissolved in it)
-	double liquid_g(CellId cell) const {
-		const CellState &state = world().snapshot_cell(cell);
+	double liquid_g(CellId cell) const { return liquid_g(world().snapshot_cell(cell)); }
+	double liquid_g(const CellState &state) const {
 		double g = 0.0;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
@@ -1529,10 +1533,10 @@ struct Lab::Impl {
 	// what lies in a vessel as the contents' model takes it: the liquid with what is dissolved and suspended in
 	// it, and the sediment's own volume, cm^3
 	void lying_in(const Item &x, double &mixture, double &sediment) const {
-		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
-		const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0, solid = solid_m3(x.cell) * 1e6;
+		const Fill held = fill(x);
+		const double condensed = held.defined ? held.condensed * 1e6 : 0.0, solid = solid_m3(x) * 1e6;
 		sediment = (1.0 - x.suspended) * solid;
-		mixture = liquid_m3(x.cell) > 0.0 ? std::max(condensed - sediment, 0.0) : 0.0;
+		mixture = liquid_m3(x) > 0.0 ? std::max(condensed - sediment, 0.0) : 0.0;
 	}
 	double turn_of(const Item &x) const {
 		const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
@@ -1545,7 +1549,7 @@ struct Lab::Impl {
 		}
 		double mixture = 0.0, sediment = 0.0;
 		lying_in(x, mixture, sediment);
-		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x.cell), x.swirl);
+		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x), x.swirl);
 	}
 	// (worked out again when what it holds has changed (its signature, set_stirring's), or what it holds up by a
 	// thousandth, or its energy by a hundredth; between, its share goes as the cube root of its energy, as it
@@ -1578,7 +1582,7 @@ struct Lab::Impl {
 			if (x.kind != Kind::Vessel || (!x.stirred && !working && !(x.swirl > 0.0) && !(x.suspended > 0.0))) {
 				continue;
 			}
-			const bool turning = x.stirred && liquid_m3(x.cell) > 0.0;
+			const bool turning = x.stirred && liquid_m3(x) > 0.0;
 			if (x.stirs.index >= 0 && turning != working) {
 				world().set_power(x.stirs, turning ? STIR_WATTS : 0.0);
 			}
@@ -1586,9 +1590,9 @@ struct Lab::Impl {
 				continue;
 			}
 			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
-			const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
-			const double condensed = fill.defined ? fill.condensed * 1e6 : 0.0;
-			const double solid = solid_m3(x.cell) * 1e6, liquid = liquid_m3(x.cell) * 1e6;
+			const Fill held = fill(x);
+			const double condensed = held.defined ? held.condensed * 1e6 : 0.0;
+			const double solid = solid_m3(x) * 1e6, liquid = liquid_m3(x) * 1e6;
 			if (!(liquid > 0.0)) {
 				x.swirl = 0.0;
 				x.suspended = 0.0;
@@ -1601,7 +1605,7 @@ struct Lab::Impl {
 			const double holds = 1.0 + std::floor(200.0 * std::log(std::max(condensed, 1e-9))) + 1e4 * std::floor(50.0 * std::log(std::max(solid, 1e-9))) + 1e9 * std::floor(1000.0 * turn_of(x));
 			if (holds != x.swirl_for) {
 				x.swirl_for = holds;
-				const double mass = liquid_g(x.cell), density = mass / std::max(condensed - solid, 1e-9); // g/cm^3
+				const double mass = liquid_g(x), density = mass / std::max(condensed - solid, 1e-9); // g/cm^3
 				double depth = 0.0; // cm, of liquid under the surface's middle
 				if (g != nullptr) {
 					const contents::Swirl most = contents::swirl(*g, turn_of(x), std::max(condensed - solid, 0.0), 0.0, mass, 0.0);
@@ -1666,11 +1670,11 @@ struct Lab::Impl {
 	ByHand by_hand(const Item &x, const glass::Vessel &g) const {
 		ByHand p;
 		p.turn = x.tilt * contents::full_tilt(g, 1);
-		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
-		if (!fill.defined) {
+		const Fill held = fill(x);
+		if (!held.defined) {
 			return p;
 		}
-		const double condensed = fill.condensed * 1e6, solid = solid_m3(x.cell) * 1e6, share = suspended(x);
+		const double condensed = held.condensed * 1e6, solid = solid_m3(x) * 1e6, share = suspended(x);
 		const double sediment = (1.0 - share) * solid, mixture = std::max(condensed - sediment, 0.0);
 		if (!(sediment > 0.0) && !(x.swirl > 0.0)) {
 			// liquid alone, at rest: from the vessel's table at this turn (Stage 33; contents::plain_pour), so that a
@@ -1680,7 +1684,7 @@ struct Lab::Impl {
 			if (plain.head > 0.0 && mixture > 0.0) {
 				const double over = std::max(mixture - plain.lip_holds, 0.0);
 				p.runs_ml_s = std::min(contents::over_brim(plain.brim, p.turn, plain.head), over / chem::STEP_SECONDS);
-				p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6;
+				p.liquid = p.runs_ml_s * (liquid_m3(x) * 1e6 / mixture) * 1e-6;
 				p.carried = share;
 			}
 			return p;
@@ -1704,7 +1708,7 @@ struct Lab::Impl {
 		if (l.liquid && head > 0.0 && mixture > 0.0) {
 			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds + (mixture - near_mixture), 0.0);
 			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, head), over / chem::STEP_SECONDS);
-			p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
+			p.liquid = p.runs_ml_s * (liquid_m3(x) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
 			p.carried = share;
 		}
 		if (l.solid && l.solid_head > 0.0) {
@@ -1766,7 +1770,95 @@ struct Lab::Impl {
 			if (x.pour_left_m3 >= 0.0) {
 				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
 			}
+			// a gentle pour (Stage 47: a trickle, no more than GENTLE_POUR) lays what it pours on the liquid there as a
+			// layer of its own, as a syrup is layered under a spirit; a faster one stirs it in as it lands
+			if (rate > 0.0 && rate <= GENTLE_POUR && !x.landed && x.pour_left_m3 < 0.0) {
+				push_surface(items[static_cast<size_t>(x.pours_into)]);
+				x.landed = true;
+			}
 			world().set_drain(x.pour, rate, solids, solids_rate);
+		}
+	}
+
+	// the column's edge from a layer up to the cell over it
+	EdgeId column_edge(CellId lower, CellId upper) const {
+		const std::span<const Edge> edges = world().edges();
+		for (size_t i = 0; i < edges.size(); ++i) {
+			if (edges[i].open && edges[i].column && edges[i].a == lower && edges[i].b == upper) {
+				return EdgeId{ static_cast<int32_t>(i) };
+			}
+		}
+		return EdgeId{};
+	}
+	// A vessel's liquid pushed down a place (Stage 47), so that what lands on it next is a layer of its own: its
+	// layers each down one (the lowest must be spare), then its own cell's liquid, with what is dissolved and lies in
+	// it, into the layer under it. Nothing to push, or no spare layer: nothing is done.
+	void push_surface(Item &t) {
+		if (!(world().meta(t.cell).column_volume > 0.0) || !(liquid_m3(t.cell) > 0.0)) {
+			return;
+		}
+		std::vector<CellId> layers = layers_of(t);
+		if (layers.empty() || layered_cell(layers.back())) {
+			// no spare layer: the column grows a block (Stage 47: as many as it needs, a few at a time)
+			CellId bottom = layers.empty() ? t.cell : layers.back();
+			for (int k = 0; k < COLUMN_BLOCK; ++k) {
+				bottom = world().add_layer_under(bottom);
+			}
+			layers = layers_of(t);
+		}
+		const size_t n = layers.size();
+		const auto all_of = [&](CellId from, CellId to, EdgeId edge) {
+			const CellState &c = world().snapshot_cell(from);
+			std::vector<SpeciesAmount> amounts;
+			for (size_t s = 0; s < c.amount.size(); ++s) {
+				if (c.amount[s] != 0) {
+					amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ c.amount[s] } });
+				}
+			}
+			if (!amounts.empty()) {
+				const Refusal refused = world().transfer(edge, from, amounts, Energy{ c.energy });
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+			(void)to;
+		};
+		for (size_t k = n - 1; k >= 1; --k) {
+			if (layered_cell(layers[k - 1])) {
+				all_of(layers[k - 1], layers[k], column_edge(layers[k], layers[k - 1]));
+			}
+		}
+		const CellState &top = world().snapshot_cell(t.cell);
+		std::vector<SpeciesAmount> down;
+		for (size_t s = 0; s < top.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (top.amount[s] > 0 && !def.wall && def.phase != Phase::Gas) {
+				down.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ top.amount[s] } });
+			}
+		}
+		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), t.cell, down, enthalpy_carried(table(), down, kelvin(t.cell)));
+		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+	}
+	// A burner under a layered vessel heats its lowest layer (Stage 47): its edge follows it, at a step boundary
+	void follow_columns() {
+		for (Item &b : items) {
+			if (b.kind != Kind::Burner || b.under < 0 || b.heats.index < 0) {
+				continue;
+			}
+			const Item &v = items[static_cast<size_t>(b.under)];
+			CellId target = v.cell;
+			for (const CellId c : layers_of(v)) {
+				if (layered_cell(c)) {
+					target = c;
+				}
+			}
+			const Edge &e = world().edges()[static_cast<size_t>(b.heats.index)];
+			if (e.a == target) {
+				continue;
+			}
+			const double conductance = e.conductance;
+			world().disconnect(b.heats);
+			if (world().connect(target, b.cell, PHASES_NONE, &b.heats, conductance) != Refusal::None) {
+				b.heats = EdgeId{};
+			}
 		}
 	}
 
@@ -1902,7 +1994,7 @@ struct Lab::Impl {
 					continue;
 				}
 				uint8_t &was = present[i * species + k];
-				const double g = grams(x.cell, s);
+				const double g = grams(x, s);
 				if (!was && g >= 0.001) {
 					was = 1;
 					if (!quiet && !by_hand) {
@@ -1992,7 +2084,7 @@ struct Lab::Impl {
 				if (x.pours_into >= 0 && x.pour.index >= 0) {
 					rate = world().edges()[static_cast<size_t>(x.pour.index)].rate;
 				}
-				const double left_ml = liquid_m3(x.cell) * 1e6;
+				const double left_ml = liquid_m3(x) * 1e6;
 				const bool runs = x.pours_into >= 0 && rate > 0.0 && left_ml > 0.05;
 				const std::string into = x.pours_into >= 0 ? items[static_cast<size_t>(x.pours_into)].id : std::string("it");
 				if (!flowing[i] && runs) {
@@ -2092,6 +2184,7 @@ struct Lab::Impl {
 		mid_step = false;
 		set_stirring();
 		set_pours();
+		follow_columns();
 		if (!check || !traceable) {
 			sim->advance();
 			untraced = true;
@@ -2413,10 +2506,16 @@ struct Lab::Impl {
 		if (item.kind == Kind::Viewer || item.kind == Kind::Thermal) {
 			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // it stands in the room's air
 		} else if (item.kind != Kind::Burner) {
-			const double kelvin = m.kelvin(item.cell);
+			// a layered vessel (Stage 47) reads as a whole: its column's contents, at the temperature they come to
+			const bool layered = item.kind == Kind::Vessel && m.layered(item);
+			const CellState column = layered ? m.whole(item) : CellState{};
+			const double kelvin = layered ? m.kelvin(item) : m.kelvin(item.cell);
 			v.celsius = kelvin - 273.15;
-			const CellState &cell = m.world().snapshot_cell(item.cell);
-			const Fill fill = fill_of(table, cell, kelvin, &m.world().meta(item.cell));
+			const CellState &cell = layered ? column : m.world().snapshot_cell(item.cell);
+			const Fill fill = layered ? m.fill(item) : fill_of(table, cell, kelvin, &m.world().meta(item.cell));
+			if (layered) {
+				m.layers_into(item, v);
+			}
 			if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 				v.ph = p;
 			}
@@ -2438,7 +2537,7 @@ struct Lab::Impl {
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.wall = def.wall;
 				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
-				row.g = m.grams(item.cell, id);
+				row.g = m.grams(item, id);
 				if (def.phase == Phase::Gas) {
 					double gas = 0.0;
 					for (size_t k = 0; k < cell.amount.size(); ++k) {
@@ -2506,7 +2605,9 @@ struct Lab::Impl {
 			}
 			const Edge &e = edges[static_cast<size_t>(b.heats.index)];
 			const size_t slot = static_cast<size_t>(b.heats.index) * PROCESSES + static_cast<size_t>(Process::Heat);
-			if ((e.a == item.cell || e.b == item.cell) && slot < flows.energy.size()) {
+			const std::vector<CellId> column = layers_of(item);
+			const bool ours = e.a == item.cell || e.b == item.cell || std::find(column.begin(), column.end(), e.a) != column.end();
+			if (ours && slot < flows.energy.size()) {
 				f.heat_w += (e.b == item.cell ? 1.0 : -1.0) * static_cast<double>(flows.energy[slot]) * JOULE_PER_QUANTUM / sim->step_seconds();
 			}
 		}
@@ -2573,6 +2674,125 @@ struct Lab::Impl {
 	}
 
 	double grams(CellId cell, SpeciesId s) const { return world().amount(cell, s).mol() * static_cast<double>(table().molar_mass_ug(s)) * 1e-6; }
+
+	// a vessel's column's layers (GAME_SPEC §6, Stage 47), from the top down: the world's column edges under its cell
+	std::vector<CellId> layers_of(const Item &x) const {
+		std::vector<CellId> out;
+		const std::span<const Edge> edges = world().edges();
+		for (CellId at = x.cell;;) {
+			CellId next{};
+			for (const Edge &e : edges) {
+				if (e.open && e.column && e.b == at) {
+					next = e.a;
+					break;
+				}
+			}
+			if (next.index < 0) {
+				return out;
+			}
+			out.push_back(next);
+			at = next;
+		}
+	}
+
+	// A vessel as a whole (GAME_SPEC §6, Stage 47): its own cell and the layers of its column, as one; its own cell
+	// alone while no layer is in use (a mixed vessel reads as it always did)
+	bool layered(const Item &x) const {
+		for (const CellId c : layers_of(x)) {
+			for (const int64_t a : world().snapshot_cell(c).amount) {
+				if (a != 0) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+	CellState whole(const Item &x) const {
+		CellState out = world().snapshot_cell(x.cell);
+		for (const CellId c : layers_of(x)) {
+			const CellState &l = world().snapshot_cell(c);
+			for (size_t s = 0; s < out.amount.size(); ++s) {
+				out.amount[s] += l.amount[s];
+				out.particles[s] += l.particles[s];
+			}
+			out.energy += l.energy;
+		}
+		return out;
+	}
+	double liquid_m3(const Item &x) const { return layered(x) ? liquid_m3(whole(x)) : liquid_m3(x.cell); }
+	double solid_m3(const Item &x) const { return layered(x) ? solid_m3(whole(x)) : solid_m3(x.cell); }
+	double liquid_g(const Item &x) const { return layered(x) ? liquid_g(whole(x)) : liquid_g(x.cell); }
+	double grams(const Item &x, SpeciesId s) const {
+		if (!layered(x)) {
+			return grams(x.cell, s);
+		}
+		double g = grams(x.cell, s);
+		for (const CellId c : layers_of(x)) {
+			g += grams(c, s);
+		}
+		return g;
+	}
+	// its column's layers for the view, from the top down: each one's liquid, solids, temperature and contents
+	void layers_into(const Item &x, ItemView &v) const {
+		static const char PHASE[] = { 's', 'l', 'g', 'a' };
+		const auto one = [&](CellId c) {
+			LayerView l;
+			const CellState &state = world().snapshot_cell(c);
+			l.liquid_ml = liquid_m3(state) * 1e6;
+			l.solid_ml = solid_m3(state) * 1e6;
+			l.celsius = kelvin(c) - 273.15;
+			for (size_t s = 0; s < state.amount.size(); ++s) {
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				const SpeciesDef &def = table().species(id);
+				if (state.amount[s] <= 0 || def.wall || def.phase == Phase::Gas) {
+					continue;
+				}
+				SubstanceView row;
+				row.species = std::string(def.id);
+				row.formula = std::string(def.formula);
+				row.phase = PHASE[static_cast<int>(def.phase)];
+				row.mol = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
+				row.g = grams(c, id);
+				row.ml = def.phase == Phase::Solid || def.phase == Phase::Liquid || def.phase == Phase::Aqueous ? row.mol * def.molar_volume * 1e6 : 0.0;
+				l.contents.push_back(row);
+			}
+			return l;
+		};
+		v.layers.push_back(one(x.cell));
+		for (const CellId c : layers_of(x)) {
+			if (layered_cell(c)) {
+				v.layers.push_back(one(c));
+			}
+		}
+	}
+	bool layered_cell(CellId c) const {
+		for (const int64_t a : world().snapshot_cell(c).amount) {
+			if (a != 0) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// its temperature as a whole: what it would come to mixed (its heat over its heat capacity)
+	double kelvin(const Item &x) const {
+		if (!layered(x)) {
+			return kelvin(x.cell);
+		}
+		const Thermal t = thermal_state(table(), whole(x));
+		return t.defined ? t.temperature : kelvin(x.cell);
+	}
+	// what it holds as a whole, at its temperature as a whole: its own gas, every layer's solids and liquids
+	Fill fill(const Item &x) const {
+		if (!layered(x)) {
+			return fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell), &world().meta(x.cell));
+		}
+		Fill f = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell), &world().meta(x.cell));
+		for (const CellId c : layers_of(x)) {
+			const Fill l = fill_of(table(), world().snapshot_cell(c), kelvin(c));
+			f.condensed += l.defined ? l.condensed : 0.0;
+		}
+		return f;
+	}
 
 	// the item named by a command's field, of the kind wanted
 	bool item(const json &c, const char *key, Kind kind, int &index, std::string &why) const {
@@ -2764,6 +2984,21 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				volume = made->capacity() * 1e-6;
 			}
 			item.cell = item.kind == Kind::Vessel ? b.add_rigid_cell(item.id, volume) : b.add_cell(item.id);
+			std::vector<CellId> built; // its column's layers, as many as its bench lists (Stage 47)
+			if (made) {
+				// its column: no layer until it is layered (they are made as it needs them); its cross-section its floor's
+				const double r = made->radius_inside(made->floor + 1e-3) * 1e-2;
+				b.set_column(item.cell, 3.14159265358979323846 * r * r);
+				if (j.contains("layers") && j.at("layers").is_array()) {
+					CellId over = item.cell;
+					for (size_t k = 1; k < j.at("layers").size(); ++k) {
+						const CellId layer = b.add_layer_cell(item.id + ".layer" + std::to_string(k));
+						b.add_column_edge(layer, over);
+						built.push_back(layer);
+						over = layer;
+					}
+				}
+			}
 			const SpeciesId wall = table.find(j.at("wall").get<std::string>());
 			if (!table.has(wall) || !table.species(wall).wall) {
 				why = "item \"" + item.id + "\": its wall is not a wall species";
@@ -2777,22 +3012,42 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				return nullptr;
 			}
 			double condensed = 0.0;
-			if (j.contains("contents")) {
-				for (const auto &[name, spec] : j.at("contents").items()) {
+			// what it holds; or, layered (Stage 47), what each layer holds from the top down, the first its own cell's
+			std::vector<std::pair<CellId, const json *>> holds;
+			if (j.contains("layers")) {
+				if (j.contains("contents") || !j.at("layers").is_array() || j.at("layers").empty() || j.at("layers").size() > built.size() + 1) {
+					why = "item \"" + item.id + "\": its layers are a list of what each holds, from the top down (a vessel of a standard shape), and no contents beside";
+					return nullptr;
+				}
+				for (size_t k = 0; k < j.at("layers").size(); ++k) {
+					holds.push_back({ k == 0 ? item.cell : built[k - 1], &j.at("layers")[k] });
+				}
+			} else if (j.contains("contents")) {
+				holds.push_back({ item.cell, &j.at("contents") });
+			}
+			for (const auto &[into, what] : holds) {
+				for (const auto &[name, spec] : what->items()) {
 					const SpeciesId id = table.find(name);
 					if (!table.has(id) || table.species(id).wall) {
 						why = "item \"" + item.id + "\": there is no species \"" + name + "\" to put in it";
 						return nullptr;
 					}
+					if (into != item.cell && table.species(id).phase == Phase::Gas) {
+						why = "item \"" + item.id + "\": a layer under its top holds no gas";
+						return nullptr;
+					}
 					const double mol = mol_of(table, id, spec);
-					b.set_amount(item.cell, id, amount(mol));
+					b.set_amount(into, id, amount(mol));
 					if (spec.contains("particles")) {
-						b.set_particles(item.cell, id, spec.at("particles").get<int64_t>());
+						b.set_particles(into, id, spec.at("particles").get<int64_t>());
 					}
 					const SpeciesDef &def = table.species(id);
 					if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
 						condensed += mol * def.molar_volume;
 					}
+				}
+				if (into != item.cell) {
+					b.set_temperature(into, room_kelvin);
 				}
 			}
 			if (item.kind == Kind::Vessel) {
@@ -2930,7 +3185,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!item(c, "item", Kind::Vessel, at, why)) {
 			return false;
 		}
-		const CellId cell = items[static_cast<size_t>(at)].cell;
+		const Item &held_item = items[static_cast<size_t>(at)]; // (its column as a whole, Stage 47)
 		SpeciesId species;
 		if (c.contains("species")) {
 			species = table().find(c.at("species").get<std::string>());
@@ -2941,16 +3196,16 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		const auto reached = [&]() {
 			if (c.contains("below_g")) {
-				return grams(cell, species) < c.at("below_g").get<double>();
+				return grams(held_item, species) < c.at("below_g").get<double>();
 			}
 			if (c.contains("above_g")) {
-				return grams(cell, species) > c.at("above_g").get<double>();
+				return grams(held_item, species) > c.at("above_g").get<double>();
 			}
 			if (c.contains("below_c")) {
-				return kelvin(cell) - 273.15 < c.at("below_c").get<double>();
+				return kelvin(held_item) - 273.15 < c.at("below_c").get<double>();
 			}
 			if (c.contains("above_c")) {
-				return kelvin(cell) - 273.15 > c.at("above_c").get<double>();
+				return kelvin(held_item) - 273.15 > c.at("above_c").get<double>();
 			}
 			return true;
 		};
@@ -4881,10 +5136,19 @@ std::string Lab::report() const {
 		}
 		j["stirred"] = item.stirred;
 		j["on"] = item.on >= 0 ? json(m.items[static_cast<size_t>(item.on)].id) : json(nullptr);
-		const double kelvin = m.kelvin(item.cell);
+		const bool layered = item.kind == Kind::Vessel && m.layered(item); // (Stage 47: as a whole)
+		const CellState column = layered ? m.whole(item) : CellState{};
+		const double kelvin = layered ? m.kelvin(item) : m.kelvin(item.cell);
 		j["celsius"] = kelvin - 273.15;
-		const CellState &cell = m.world().snapshot_cell(item.cell);
-		const Fill fill = fill_of(table, cell, kelvin);
+		const CellState &cell = layered ? column : m.world().snapshot_cell(item.cell);
+		const Fill fill = layered ? m.fill(item) : fill_of(table, cell, kelvin);
+		if (layered) {
+			int used = 1; // its own cell, and each layer that holds something
+			for (const CellId c : m.layers_of(item)) {
+				used += m.layered_cell(c) ? 1 : 0;
+			}
+			j["layers"] = used;
+		}
 		if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 			j["ph"] = p; // Stage 43
 		}
@@ -4903,7 +5167,7 @@ std::string Lab::report() const {
 			row["phase"] = PHASE[static_cast<int>(def.phase)];
 			row["wall"] = def.wall;
 			row["mol"] = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
-			row["g"] = m.grams(item.cell, id);
+			row["g"] = m.grams(item, id);
 			if (def.phase == Phase::Solid && !def.wall) {
 				row["particles"] = cell.particles[s];
 				row["size_um"] = particle_diameter(table, cell, id) * 1e6;
@@ -5151,6 +5415,12 @@ json Lab::Impl::save() const {
 		cell["rigid"] = meta.rigid;
 		cell["volume"] = bits(meta.volume);
 		cell["mixing"] = bits(meta.mixing);
+		if (meta.layer) { // (Stage 47)
+			cell["layer"] = true;
+		}
+		if (meta.column_volume > 0.0) {
+			cell["column"] = { bits(meta.column_volume), bits(meta.column_area) };
+		}
 		cell["amount"] = state.amount;
 		cell["energy"] = state.energy;
 		cell["particles"] = state.particles;
@@ -5160,6 +5430,9 @@ json Lab::Impl::save() const {
 	json edges = json::array();
 	for (const Edge &e : w.edges()) {
 		edges.push_back({ { "a", e.a.index }, { "b", e.b.index }, { "phases", e.phases }, { "open", e.open }, { "drain", e.drain }, { "conductance", bits(e.conductance) } });
+		if (e.column) { // (Stage 47)
+			edges.back()["column"] = true;
+		}
 		if (e.rate >= 0.0) {
 			edges.back()["rate"] = bits(e.rate);
 		}
@@ -5195,9 +5468,13 @@ json Lab::Impl::save() const {
 		if (item.screwed) {
 			list.back()["screwed"] = true;
 		}
+		if (item.landed) { // (Stage 47)
+			list.back()["landed"] = true;
+		}
 		if (item.stirs.index >= 0) { // (Stage 32)
 			list.back()["stirs"] = item.stirs.index;
 		}
+
 		if (item.swirl > 0.0 || item.suspended > 0.0) {
 			list.back()["swirl"] = bits(item.swirl);
 			list.back()["suspended"] = bits(item.suspended);
@@ -5278,7 +5555,17 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			}
 			const std::string name = cell.at("name").get<std::string>();
 			const CellId id = cell.at("reservoir").get<bool>() ? b.add_reservoir(name, reservoir_temperature)
-					: cell.at("rigid").get<bool>() ? b.add_rigid_cell(name, volume) : b.add_cell(name);
+					: cell.at("rigid").get<bool>()			  ? b.add_rigid_cell(name, volume)
+					: cell.value("layer", false)			  ? b.add_layer_cell(name)
+															  : b.add_cell(name);
+			if (cell.contains("column")) { // a column's top (Stage 47)
+				double whole = 0.0, area = 0.0;
+				if (!from_bits(cell.at("column").at(0), whole) || !from_bits(cell.at("column").at(1), area)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				b.set_column(id, area, whole);
+			}
 			const auto amount = cell.at("amount").get<std::vector<int64_t>>();
 			const auto particles = cell.at("particles").get<std::vector<int64_t>>();
 			if (amount.size() != species || particles.size() != species) {
@@ -5304,6 +5591,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.phases = e.at("phases").get<PhaseMask>();
 			edge.open = e.at("open").get<bool>();
 			edge.drain = e.at("drain").get<bool>();
+			edge.column = e.value("column", false);
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
 					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power))) {
 				why = "the save holds a number that is not one";
@@ -5334,6 +5622,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.kind = static_cast<Kind>(kind);
 			item.place = static_cast<Place>(place);
 			item.cell = CellId{ j.at("cell").get<int32_t>() };
+			item.landed = j.value("landed", false);
+
 			item.mouth = EdgeId{ j.at("mouth").get<int32_t>() };
 			item.heats = EdgeId{ j.at("heats").get<int32_t>() };
 			item.joint = EdgeId{ j.at("joint").get<int32_t>() };

@@ -36,7 +36,7 @@ struct Bench {
 
 // a beaker of 250 mL open to the room, its column of seven layers; `fill` puts what each holds (0 the top)
 template <typename Fill>
-Bench beaker(Fill fill, bool column = true) {
+Bench beaker(Fill fill, bool column = true, int layers = LAYERS) {
 	const SpeciesTable &table = builtin_species();
 	World::Builder b(table);
 	Bench out;
@@ -47,7 +47,7 @@ Bench beaker(Fill fill, bool column = true) {
 	b.set_amount(out.top, builtin::glass, amount_of(80.0 / 60.08));
 	CellId over = out.top;
 	if (column) {
-		for (int i = 0; i < LAYERS; ++i) {
+		for (int i = 0; i < layers; ++i) {
 			const CellId layer = b.add_layer_cell("beaker layer " + std::to_string(i + 1));
 			b.add_column_edge(layer, over);
 			out.layers.push_back(layer);
@@ -97,10 +97,28 @@ bool empty(const Bench &b, CellId c) {
 	return true;
 }
 
+// the column's layers as it is now (it grows as it needs: Stage 47), from the top down
+std::vector<CellId> column(const Bench &b) {
+	std::vector<CellId> out;
+	for (CellId at = b.top;;) {
+		CellId next{};
+		for (const Edge &e : b.sim->world().edges()) {
+			if (e.open && e.column && e.b == at) {
+				next = e.a;
+			}
+		}
+		if (next.index < 0) {
+			return out;
+		}
+		out.push_back(next);
+		at = next;
+	}
+}
+
 // the lowest layer that holds anything (the top when none does)
 CellId lowest(const Bench &b) {
 	CellId out = b.top;
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		if (!empty(b, c)) {
 			out = c;
 		}
@@ -110,7 +128,7 @@ CellId lowest(const Bench &b) {
 
 int used(const Bench &b) {
 	int n = 0;
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		n += empty(b, c) ? 0 : 1;
 	}
 	return n;
@@ -171,7 +189,7 @@ TEST_CASE("column: a denser solution under water stays under it, and what is dis
 	// (and some of it the trace of hydroxide its hydrolysis makes in pure water, Stage 44)
 	const auto copper = [&](CellId c) { return mol(b, c, builtin::copper_sulfate_aq) + mol(b, c, builtin::copper_hydroxide); };
 	double rose = copper(b.top);
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		rose += c == lowest(b) ? 0.0 : copper(c);
 	}
 	MESSAGE("the first step moves " << rose << " mol up; Fick: " << expected);
@@ -181,12 +199,12 @@ TEST_CASE("column: a denser solution under water stays under it, and what is dis
 	CHECK(used(b) >= 1);
 	// all the copper still there
 	double total = copper(b.top);
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		total += copper(c);
 	}
 	CHECK(total == doctest::Approx(0.075).epsilon(1e-9));
 	double over = density(b, b.top);
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		if (!empty(b, c)) {
 			const double d = density(b, c);
 			CHECK(d >= over * (1.0 - 1e-6));
@@ -244,7 +262,7 @@ TEST_CASE("column: a steep step is resolved into thinner layers, each homogeneou
 	CHECK(used(b) >= 6); // the step resolved by thinner layers next to it (half-millimetre ones, a smooth profile)
 	MESSAGE("after ten minutes " << used(b) << " layers under the top");
 	double over = density(b, b.top);
-	for (const CellId c : b.layers) {
+	for (const CellId c : column(b)) {
 		if (!empty(b, c)) {
 			CHECK(density(b, c) >= over * (1.0 - 1e-6));
 			over = density(b, c);
@@ -270,5 +288,25 @@ TEST_CASE("invariants: L1 fires on a layer holding something under an empty one,
 	StepTrace warm = good;
 	warm.after.cells[static_cast<size_t>(b.layers[6].index)].energy = 5;
 	CHECK_FALSE(check_T3(builtin_species(), warm).empty());
+}
+
+TEST_CASE("column: a column grows as it needs, a block of four layers at a time, and a mixed one never does (Stage 47)") {
+	// built with one layer: a dense solution under water
+	const auto fill = [](World::Builder &w, Bench &x) {
+		water(w, x.top, 100.0, 293.15);
+		w.set_amount(x.layers[0], builtin::water, amount_of(100.0 / 18.015)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.15)).set_temperature(x.layers[0], 293.15);
+	};
+	Bench b = beaker(fill, true, 1);
+	CHECK(column(b).size() == 1);
+	run(b, 1);
+	CHECK(column(b).size() == 1 + COLUMN_BLOCK); // the step wanted a spare layer to split into
+	run(b, 600);
+	CHECK(column(b).size() > 1 + COLUMN_BLOCK); // and more, as the gradient is resolved
+	CHECK((column(b).size() - 1) % COLUMN_BLOCK == 0);
+	MESSAGE("after ten seconds the column has " << column(b).size() << " layers, " << used(b) << " in use");
+	// a mixed vessel: none
+	Bench mixed = beaker([](World::Builder &w, Bench &x) { water(w, x.top, 150.0, 330.0); }, true, 0);
+	run(mixed, 600);
+	CHECK(column(mixed).empty());
 }
 

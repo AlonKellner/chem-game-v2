@@ -24,6 +24,8 @@ inline constexpr double STEP_SECONDS = 1.0 / 60.0;
 // summed by process. Kept whether the step was traced or not; not state.
 enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5, Column = 6 };
 inline constexpr size_t PROCESSES = 7;
+// a column grows by this many layers at a time (Stage 47; a design value)
+inline constexpr int COLUMN_BLOCK = 4;
 struct StepFlows {
 	// per edge and process (edge * PROCESSES + process): from the edge's a to its b
 	std::vector<int64_t> energy; // quanta
@@ -124,6 +126,7 @@ private:
 		std::vector<EdgeId> up; // up[i]: from cells[i + 1] to cells[i]
 	};
 	void find_columns();
+	void grow_columns(); // at the step's start: a column with no spare layer that a steep step wants grows a block
 	void configure_columns(); // at the step's start: the conductances between layers
 	void stratify(); // in the step: gas up, solids down, layers merged, split, exchanging what is dissolved
 	void stratify(const Column &column);

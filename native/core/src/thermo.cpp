@@ -198,11 +198,13 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 		const double b_ionic = (p.beta1 * h1 + p.beta2 * h2) / ionic; // dB/dI
 		const double zc = static_cast<double>(model.ions[c].charge), za = static_cast<double>(-model.ions[a].charge);
 		const double c_ca = p.c_phi / (2.0 * std::sqrt(zc * za));
-		f += 2.0 * mm * (b_ca + z_sum * c_ca);
-		d[c] += 2.0 * m[a] * (b_ca + z_sum * c_ca);
-		d[a] += 2.0 * m[c] * (b_ca + z_sum * c_ca);
+		// m_c m_a (2 B + Z C), Z the sum over every ion of m |z| (Pitzer 1991; until Stage 47 this read 2 m_c m_a (B + Z C),
+		// which counts C twice: no pair with a C^phi was gated where it shows, 2:2 salts above 0.5 mol/kg)
+		f += mm * (2.0 * b_ca + z_sum * c_ca);
+		d[c] += m[a] * (2.0 * b_ca + z_sum * c_ca);
+		d[a] += m[c] * (2.0 * b_ca + z_sum * c_ca);
 		d_ionic += 2.0 * mm * b_ionic;
-		d_z += 2.0 * mm * c_ca;
+		d_z += mm * c_ca;
 	}
 	double weighted = 0.0;
 	for (size_t j = 0; j < n; ++j) {

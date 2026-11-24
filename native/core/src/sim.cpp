@@ -1035,6 +1035,7 @@ int64_t Simulation::tally(size_t reaction, CellId cell) const {
 
 // what was derived before the step may be stale: a host may have changed the world between steps
 void Simulation::begin_step() {
+	grow_columns(); // (Stage 47: before anything is sized by the cells)
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	thermal_.resize(cells);
 	thermal_valid_.assign(cells, 0);

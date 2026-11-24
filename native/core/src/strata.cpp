@@ -114,8 +114,9 @@ void Simulation::find_columns() {
 		}
 	}
 	for (size_t c = 0; c < cells; ++c) {
-		if (below[c] < 0 || is_lower[c]) {
-			continue; // the head of a column is over a layer and under none
+		// the head of a column: its top, over a layer or not yet (a vessel's column has none until it is layered)
+		if (is_lower[c] || !(world_.meta(CellId{ static_cast<int32_t>(c) }).column_volume > 0.0)) {
+			continue;
 		}
 		Column column;
 		column.top = CellId{ static_cast<int32_t>(c) };
@@ -126,6 +127,36 @@ void Simulation::find_columns() {
 			column.cells.push_back(CellId{ static_cast<int32_t>(at) });
 		}
 		columns_.push_back(std::move(column));
+	}
+}
+
+// At the step's start (Stage 47): a column with no spare layer, whose steep step wants one, grows by a block of
+// COLUMN_BLOCK empty layers under its bottom. From the state alone, so a saved lab grows as an unsaved one does.
+void Simulation::grow_columns() {
+	find_columns();
+	const SpeciesTable &table = world_.species();
+	std::vector<CellId> grow;
+	for (const Column &col : columns_) {
+		const size_t n = col.cells.size();
+		if (n > 1 && empty(world_.snapshot_cell(col.cells[n - 1]))) {
+			continue; // a spare one there
+		}
+		const double area = world_.meta(col.top).column_area;
+		for (size_t i = 0; i + 1 < n && area > 0.0; ++i) {
+			const CellState &u = world_.snapshot_cell(col.cells[i]), &l = world_.snapshot_cell(col.cells[i + 1]);
+			const Thermal tu = thermal_state(table, u, &world_.meta(col.cells[i])), tl = thermal_state(table, l);
+			if (tu.defined && tl.defined && holds(table, u, Phase::Liquid) && holds(table, l, Phase::Liquid) &&
+					contrast(table, u, tu.temperature, l, tl.temperature) > SPLIT_ABOVE &&
+					std::max(solution_m3(table, u), solution_m3(table, l)) / area > 2.0 * THINNEST) {
+				grow.push_back(col.cells[n - 1]);
+				break;
+			}
+		}
+	}
+	for (CellId bottom : grow) {
+		for (int k = 0; k < COLUMN_BLOCK; ++k) {
+			bottom = world_.add_layer_under(bottom);
+		}
 	}
 }
 

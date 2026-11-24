@@ -136,10 +136,10 @@ EdgeId World::Builder::add_column_edge(CellId lower, CellId upper) {
 	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 }
 
-World::Builder &World::Builder::set_column(CellId top, double area) {
+World::Builder &World::Builder::set_column(CellId top, double area, double whole) {
 	if (top.index >= 0 && static_cast<size_t>(top.index) < meta_.size()) {
 		CellMeta &m = meta_[static_cast<size_t>(top.index)];
-		m.column_volume = m.column_volume > 0.0 ? m.column_volume : m.volume;
+		m.column_volume = whole > 0.0 ? whole : m.volume;
 		m.column_area = area;
 	}
 	return *this;
@@ -598,6 +598,41 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, doubl
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 	}
 	return Refusal::None;
+}
+
+CellId World::add_layer_under(CellId lower, Refusal *why) {
+	const auto refuse = [&](Refusal r) {
+		if (why != nullptr) {
+			*why = r;
+		}
+		return CellId{};
+	};
+	// (between steps, a command's transfers already in the step's ledger: an empty cell changes no total, and the
+	// step's trace starts with it empty; never inside a step's processes)
+	if (!known(lower)) {
+		return refuse(Refusal::UnknownCell);
+	}
+	const CellMeta &over = meta_[static_cast<size_t>(lower.index)];
+	if (!over.layer && !(over.column_volume > 0.0)) {
+		return refuse(Refusal::BadValue); // a column grows under its top or its last layer
+	}
+	const auto species = static_cast<size_t>(table_->species_count());
+	names_.push_back(names_[static_cast<size_t>(lower.index)] + "+");
+	CellMeta m;
+	m.layer = true;
+	meta_.push_back(m);
+	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
+	cells_.push_back(none);
+	before_.cells.push_back(none); // (the step's trace starts with it, empty)
+	const CellId made{ static_cast<int32_t>(cells_.size() - 1) };
+	Edge e{ made, lower, PHASES_ALL, true, 0.0 };
+	e.column = true;
+	edges_.push_back(e);
+	++topology_version_;
+	if (why != nullptr) {
+		*why = Refusal::None;
+	}
+	return made;
 }
 
 Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {

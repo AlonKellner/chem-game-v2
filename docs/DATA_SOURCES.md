@@ -449,6 +449,27 @@ row of a vessel's spectra, as it reads every other medium's.
 **Water's own boiling** is the table's (GAME_SPEC §8): the floor's boiling point is the table's saturation at the
 pressure there, the room's plus ρ g h, lowered by the solution's water activity.
 
+## Nickel sulfate (Stage 47)
+
+Green nickel sulfate in solution, `nickel_sulfate_aq`: the second coloured liquid, for a column that holds two apart
+(GAME_SPEC §6). In solution only: no solid nickel salt is made. All of it read 2026-11-24.
+
+| Datum | Value | Source | Gate |
+|---|---|---|---|
+| Ni's atomic weight | 58.693 (abridged; 58.6934(4)) | CIAAW | molar masses |
+| NiSO4 "ai" ΔfH°, S° | −963.2 kJ/mol, −108.8 J/mol·K (ΔfG° −790.3) | NBS 1982, p. 2-167; the sum of Ni²⁺ "ao" (−54.0, −128.9, p. 2-166) and SO₄²⁻ | the cited rows |
+| Its heat capacity | 211.81 J/mol·K, a stand-in | NBS gives none: copper sulfate's (calibrated) | |
+| Pitzer's pair Ni²⁺/SO₄²⁻ | β0 0.1702, β1 2.907, β2 −40.06, Cφ 0.0366, α1 1.4, α2 12 | Pitzer and Mayorga 1974 (LBL-2282, Table I), to 2.5 mol/kg | γ± against the CRC's 0.150, 0.105, 0.063, 0.043 at 0.1, 0.2, 0.5, 1.0 mol/kg, within 5 % |
+| Ni²⁺'s diffusion at infinite dilution | 6.61e-10 m²/s | the CRC (Vanýsek): ½Ni²⁺ λ 49.6, D 0.661e-5 cm²/s, read second-hand (a search snippet); RTλ/zF² gives 6.60e-10 | |
+| Its apparent molar volume | 0.81 cm³/mol | Krumgalz, Pogorelsky and Pitzer 1996 (JPCRD 25, 663), Table 5: V° −15.22 and its Pitzer volume terms, at 1 mol/kg (the game holds one volume; at 0.5 mol/kg the source's is −2.66) | density at 1 mol/kg 1.1504 g/cm³, within 0.3 % |
+| Its colour | three Gaussian bands in wavenumber, 25 381, 15 385, 13 928 cm⁻¹ (FWHM 2200, 1800, 1800; peaks 4.72, 1.504, 1.815) | Shigematsu et al. 1960, Table 1: 394 nm 4.72, 650 nm 1.80, 718 nm 2.06 L/mol/cm (Ni²⁺ in water and in sulfuric acid alike); the widths read from his Fig. 1 (calibrated); Burke et al. 1972 (J. Res. NBS 76A, 469): 5.15 at 394 nm in sulfate | each maximum within 3 to 5 %, and within 10 % of Burke's |
+
+**A fault found on the way.** Pitzer's third-virial term in the game read 2 m_c m_a (B + Z C), with Z over every
+ion, where it is m_c m_a (2B + Z C) (Pitzer 1991). C counted twice. No pair with a Cφ had been gated where it
+shows: copper sulfate's and the acid's Cφ are 0, and sodium hydroxide's and sulfate's are small. Nickel sulfate's
+γ± at 1 mol/kg read 9 % over the CRC's, 5.6 % over Pitzer and Mayorga's own. Fixed in Stage 47; the sodium salts'
+gates (Stage 43) hold as before.
+
 ## Measured kinetics (Stage 23)
 
 Each rate from a measurement, read 2026-11-21, with an oracle test at the source's own conditions

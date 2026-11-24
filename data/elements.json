@@ -9,6 +9,6 @@
 		{"symbol": "Si", "mass": "28.085"},
 		{"symbol": "S", "mass": "32.06"},
 		{"symbol": "Cu", "mass": "63.546"},
-		{"symbol": "Na", "mass": "22.990"}
+		{"symbol": "Na", "mass": "22.990"}, {"symbol": "Ni", "mass": "58.693"}
 	]
 }
