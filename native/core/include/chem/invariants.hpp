@@ -121,6 +121,10 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 // The change of the world's entropy over the step, in J/K (what T2 bounds).
 double entropy_change(const SpeciesTable &table, const StepTrace &trace);
 
+// L1 (Stage 47): a vessel's column holds together: the layers in use are one run under its top (nothing under an
+// empty layer), and the top is no larger than the vessel, nor does the column hold more than fits in it.
+Violations check_L1(const SpeciesTable &table, const StepTrace &trace);
+
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
 // `equilibria`: the reactions of the equilibrium law the simulation runs (P1).

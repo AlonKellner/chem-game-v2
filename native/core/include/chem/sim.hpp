@@ -22,8 +22,8 @@ inline constexpr double STEP_SECONDS = 1.0 / 60.0;
 
 // The last step's flows (GAME_SPEC §13.6): what the step's primitives moved,
 // summed by process. Kept whether the step was traced or not; not state.
-enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5 };
-inline constexpr size_t PROCESSES = 6;
+enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5, Column = 6 };
+inline constexpr size_t PROCESSES = 7;
 struct StepFlows {
 	// per edge and process (edge * PROCESSES + process): from the edge's a to its b
 	std::vector<int64_t> energy; // quanta
@@ -116,6 +116,19 @@ private:
 	bool project(CellId cell);
 	bool fill(CellId cell, CellId up, EdgeId edge, bool may_draw = true);
 	bool equalize(CellId cell, CellId up, EdgeId edge);
+	// the vertical dimension (GAME_SPEC §6, Stage 47; src/strata.cpp): each vessel's column, top first, and the
+	// edge from each layer up to the one over it
+	struct Column {
+		CellId top;
+		std::vector<CellId> cells; // [0] the top, [1] the layer under it, ...
+		std::vector<EdgeId> up; // up[i]: from cells[i + 1] to cells[i]
+	};
+	void find_columns();
+	void configure_columns(); // at the step's start: the conductances between layers
+	void stratify(); // in the step: gas up, solids down, layers merged, split, exchanging what is dissolved
+	void stratify(const Column &column);
+	std::vector<Column> columns_;
+	uint64_t columns_version_ = UINT64_MAX;
 
 	World world_;
 	std::vector<Reaction> reactions_; // with a rate law

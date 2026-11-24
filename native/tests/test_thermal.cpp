@@ -77,11 +77,19 @@ TEST_CASE("thermal: worlds that cannot have temperatures are refused (Stage 2)")
 		CHECK(why.find("thermodynamic data") != std::string::npos);
 	}
 	{
-		World::Builder b(builtin_species()); // an empty cell beside a thermal one
+		// an empty cell beside a thermal one is no longer refused (Stage 47: a column's layer while it is mixed has
+		// no temperature and holds no energy); one that holds energy and no matter still is
+		World::Builder b(builtin_species());
 		const CellId c = b.add_cell("c");
 		b.add_cell("empty");
 		b.set_amount(c, builtin::water, mol(1.0)).set_temperature(c, 300.0);
-		CHECK_FALSE(b.build(&why));
+		CHECK(b.build(&why));
+		World::Builder warm(builtin_species());
+		const CellId d = warm.add_cell("c");
+		const CellId e = warm.add_cell("energy alone");
+		warm.set_amount(d, builtin::water, mol(1.0)).set_temperature(d, 300.0);
+		warm.set_energy(e, Energy{ 1000 });
+		CHECK_FALSE(warm.build(&why));
 	}
 	{
 		World::Builder b(builtin_species());
