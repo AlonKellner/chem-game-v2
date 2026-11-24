@@ -15,7 +15,7 @@
   item in a box of one size, instruments off in it.
 - §18: O26. §20: the camera's simplifications.
 
-## 0.47.0 (2026-11-24, Stage 47; merged after 0.48.0)
+## 0.47.0 (2026-11-24, Stage 47; merged after 0.48.0; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 47, `docs/TDD_47_COLUMN.md`): **the vertical dimension**. A vessel of a standard shape is a column:
   - its own cell, with layer cells under it, grown four at a time as a gradient needs them; a vessel starts as one
