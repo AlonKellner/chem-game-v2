@@ -30,6 +30,7 @@ struct cg_ui {
 // the draw list crosses the boundary as it is
 static_assert(sizeof(cg_draw_command) == sizeof(lab::DrawCommand));
 static_assert(CG_OPTICS_KEPT_VECS == lab::optics_layout::KEPT_VECS);
+static_assert(CG_OPTICS_RELAY_VECS == lab::optics_layout::RELAY_RECORD);
 static_assert(CG_OPTICS_RAY_POINTS == lab::optics_layout::RAY_POINTS);
 static_assert(offsetof(cg_draw_command, x) == offsetof(lab::DrawCommand, x));
 static_assert(offsetof(cg_draw_command, first) == offsetof(lab::DrawCommand, first));
@@ -396,6 +397,7 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->room[1] = room.y;
 	out->room[2] = room.x + room.w;
 	out->room[3] = room.y + room.h;
+	out->relay_pool = scene.relay_pool;
 	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 	out->table = scene.table.data();
 	out->revision = scene.revision;

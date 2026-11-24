@@ -1754,6 +1754,97 @@ bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, d
 	return true;
 }
 
+bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
+	using namespace optics_layout;
+	optics_truth(scene, x, y, rgb); // what is in front of the display, and its face, in the visible
+	if (!shader::ready(scene)) {
+		return false;
+	}
+	const shader::Use use(scene);
+	const shader::vec2 p(x + 0.5, y + 0.5);
+	const shader::Path q = shader::path_of(p, 1.0);
+	if (q.relay < 0) {
+		return false;
+	}
+	const int b = shader::relay_block(q.relay);
+	const shader::vec4 h0 = shader::image_vec(b), h1 = shader::image_vec(b + 1);
+	// its primaries through its front, every share of the visible light its own band
+	double a[3][3] = {};
+	shader::band_range = 0;
+	const int bands = 1024;
+	for (int j = 0; j < bands; ++j) {
+		const shader::vec4 lo = shader::share(static_cast<double>(j) / bands), hi = shader::share(static_cast<double>(j + 1) / bands);
+		const double nm = shader::share((j + 0.5) / bands).x + 380.0, through = shader::relay_through(q, nm);
+		for (int c = 0; c < 3; ++c) {
+			const double light = through * shader::relay_primary(b, c, nm);
+			const shader::vec3 lin = shader::to_linear_srgb(shader::vec3((hi.y - lo.y) * light, (hi.z - lo.z) * light, (hi.w - lo.w) * light));
+			a[c][0] += lin.x;
+			a[c][1] += lin.y;
+			a[c][2] += lin.z;
+		}
+	}
+	// its sensor pixel's mean long-wave light, by the truth's own tracer: a grid over the pixel, every share its band
+	const shader::vec3 sensor = shader::relay_sensor(q.relay, p);
+	shader::range_fixed = true;
+	shader::band_range = 1;
+	shader::ray_hide = static_cast<int>(h1.z);
+	const int grid = 6, shares = 96;
+	double sum = 0.0;
+	for (int i = 0; i < grid; ++i) {
+		for (int k = 0; k < grid; ++k) {
+			const shader::vec2 at(sensor.x + ((i + 0.5) / grid - 0.5) * sensor.z, sensor.y + ((k + 0.5) / grid - 0.5) * sensor.z);
+			for (int j = 0; j < shares; ++j) {
+				sum += exact_through(at, 1.0e-3, shader::share((j + 0.5) / shares).x + 380.0);
+			}
+		}
+	}
+	shader::range_fixed = false;
+	shader::ray_hide = 0;
+	shader::band_range = 0;
+	const double signal = sum / (grid * grid * shares);
+	// as the camera reads it, and shows it
+	const double own = (signal - (1.0 - h0.z) * h0.w) / std::max(static_cast<double>(h0.z), 1e-6);
+	const double t = std::clamp((shader::infrared_kelvin(own) - h1.x) / std::max(static_cast<double>(h1.y - h1.x), 1e-6), 0.0, 1.0) * (RELAY_PALETTE - 1);
+	const int k = std::min(static_cast<int>(std::floor(t)), RELAY_PALETTE - 2);
+	const shader::vec4 w = shader::mix(shader::image_vec(b + RELAY_HEAD_VECS + k), shader::image_vec(b + RELAY_HEAD_VECS + k + 1), t - k);
+	const shader::vec3 st = shader::relay_stripes(q.relay, p, 1.0);
+	const double drive[3] = { w.x * st.x, w.y * st.y, w.z * st.z };
+	for (int c = 0; c < 3; ++c) {
+		for (int ch = 0; ch < 3; ++ch) {
+			rgb[ch] += a[c][ch] * drive[c];
+		}
+	}
+	return true;
+}
+
+std::string check_O25(const OpticsScene &scene, const OpticsFrames &frames, int x0, int y0, int x1, int y1, int step) {
+	char text[240];
+	int read = 0;
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			double truth[3], rgba[4];
+			if (!optics_relay_truth(scene, x, y, truth)) {
+				continue;
+			}
+			frames.shown(scene, x, y, rgba);
+			const shader::Use use(scene);
+			const auto decode = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+			const shader::vec3 seen(decode(rgba[0]), decode(rgba[1]), decode(rgba[2]));
+			const double off = shader::eye(shader::lab_of(seen), shader::lab_of(shader::gamut(shader::vec3(truth[0], truth[1], truth[2]))));
+			++read;
+			if (!(off <= 8.0)) {
+				std::snprintf(text, sizeof text, "O25: the display's pixel (%d, %d) is %.2f from its truth on the eye metric (shows %.4f %.4f %.4f, truth %.4f %.4f %.4f)", x, y, off, seen.x,
+						seen.y, seen.z, truth[0], truth[1], truth[2]);
+				return text;
+			}
+		}
+	}
+	if (read == 0) {
+		return "O25: no pixel of the region is a sensor display's";
+	}
+	return "";
+}
+
 std::string check_O1(const OpticsScene &scene) {
 	using namespace optics_layout;
 	if (!shader::ready(scene)) {
@@ -1775,7 +1866,7 @@ std::string check_O1(const OpticsScene &scene) {
 			const size_t base = static_cast<size_t>(static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4]) * ROWS_PER_SET * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
 			// (a screen's glow is its image's: its row is -1, Stage 42)
-			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
+			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] < 1.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
 			const double glow = scene.rows[base + GLOW_ROW * ROW];
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(glow >= 0.0 || (imaged && glow == -1.0))) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
@@ -1801,7 +1892,7 @@ std::string check_O1(const OpticsScene &scene) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
 		}
-		if (scene.table[body + static_cast<size_t>(MORE) * 4 + 1] > 0.5f && scene.table[body + static_cast<size_t>(FORM) * 4] == 3.0f) {
+		if (scene.table[body + static_cast<size_t>(MORE) * 4 + 1] > 0.5f && scene.table[body + static_cast<size_t>(MORE) * 4 + 1] < 1.5f && scene.table[body + static_cast<size_t>(FORM) * 4] == 3.0f) {
 			// a screen (Stage 42): its image's channels no less than nothing, its weights within [0, 1], its rows'
 			// sums its weights'
 			const int img = static_cast<int>(scene.table[body + static_cast<size_t>(MORE) * 4]);

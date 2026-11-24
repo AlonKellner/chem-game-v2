@@ -77,6 +77,8 @@ private:
 	// where each begins, in records (-1: there was no room for it, and its beams are traced at every read)
 	godot::RID kept_;
 	int64_t kept_capacity_ = 0; // records
+	godot::RID relay_; // the sensor displays' pixels' records (Stage 46)
+	int64_t relay_capacity_ = 0, relay_pool_ = -1;
 	std::vector<int32_t> kept_base_;
 	// a pass's groups of pixels, across and down: pixels of a group wait for the one with most to do
 	static constexpr int GROUP_X = 2, GROUP_Y = 32;

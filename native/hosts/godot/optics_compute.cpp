@@ -42,6 +42,7 @@ layout(set = 0, binding = 18, rgba32f) uniform restrict readonly image2D anchor_
 layout(set = 0, binding = 19, rgba32f) uniform restrict readonly image2D anchor_aux;
 layout(set = 0, binding = 20, rgba8) uniform restrict readonly image2D anchor_seen;
 layout(set = 0, binding = 21, rgba8) uniform restrict readonly image2D whole_seen;
+layout(set = 0, binding = 22, std430) restrict buffer RelayBuffer { vec4 v[]; } relay_buffer;
 layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; int pad2; vec4 view_now; vec4 view_from; vec4 room; int mode; int pad3; int pad4; int pad5; } params;
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
@@ -54,6 +55,8 @@ void corner_put(int i, vec4 v) { corner_buffer.v[i] = v; }
 vec4 kept_vec(int i) { return kept_buffer.v[i]; }
 void kept_put(int i, vec4 v) { kept_buffer.v[i] = v; }
 vec4 image_vec(int i) { return image_buffer.v[i]; }
+vec4 relay_vec(int i) { return relay_buffer.v[i]; }
+void relay_put(int i, vec4 v) { relay_buffer.v[i] = v; }
 // the pixels as they were at the view before it moved (Stage 42): hist, prox, aux, and what they showed (linear)
 float anchor_linear(float v) { return v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4); }
 vec4 anchor_vec(int which, int x, int y) {
@@ -171,6 +174,7 @@ void main() {
 		if (imageLoad(shown_image, at).w < 0.5) {
 			s.hist = imageLoad(hist_image, at);
 			s.prox = imageLoad(prox_image, at);
+			relay_slot = q.relay >= 0 ? relay_slot_at(q.relay, p) : -1;
 			imageStore(shown_image, at, shown(q, s));
 		}
 		return;
@@ -207,6 +211,9 @@ void main() {
 	kept_slot = params.kept < 0 ? -1 : (params.kept + (at.y - params.top) * (params.right - params.left) + (at.x - params.left)) * (1 + KEPT_MOST * KEPT_BEAM);
 #endif
 	s = step_pixel(q, s, p, params.frame, scale);
+	// a sensor's display: its record's step (Stage 46), what it asks for added to the pixel's
+	relay_slot = q.relay >= 0 ? relay_slot_at(q.relay, p) : -1;
+	s.aux.z = s.aux.z + relay_step(q, p, params.frame);
 #ifdef OPTICS_BEAM_PASS
 	s.aux.w = float(params.stamp);
 	if (beam_deferred) {
@@ -240,7 +247,7 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], shader_[0], shader_[1], shader_[2], shader_[3], corners_, kept_, scene_.rid, rows_.rid,
+	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], shader_[0], shader_[1], shader_[2], shader_[3], corners_, kept_, relay_, scene_.rid, rows_.rid,
 				 lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, anchor_[0], anchor_[1], anchor_[2], anchor_[3], whole_, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
@@ -430,6 +437,25 @@ void OpticsCompute::upload(const cg_optics &optics) {
 			rd_->buffer_clear(kept_, 0, bytes);
 		}
 	}
+	// the sensor displays' pixels' records (Stage 46): as many as the scene asks, all zero again when that changes
+	if (!relay_.is_valid() || optics.relay_pool != relay_pool_) {
+		const int64_t records = std::max<int64_t>(optics.relay_pool, 1);
+		if (!relay_.is_valid() || records > relay_capacity_) {
+			for (godot::RID &set : uniforms_) {
+				if (set.is_valid()) {
+					rd_->free_rid(set);
+					set = godot::RID();
+				}
+			}
+			if (relay_.is_valid()) {
+				rd_->free_rid(relay_);
+			}
+			relay_capacity_ = std::max<int64_t>(records, 1024);
+			relay_ = rd_->storage_buffer_create(static_cast<uint32_t>(relay_capacity_ * CG_OPTICS_RELAY_VECS * 16));
+		}
+		rd_->buffer_clear(relay_, 0, static_cast<uint32_t>(relay_capacity_ * CG_OPTICS_RELAY_VECS * 16));
+		relay_pool_ = optics.relay_pool;
+	}
 	if (!uniforms_[0].is_valid() || !uniforms_[1].is_valid() || !uniforms_[2].is_valid() || !uniforms_[3].is_valid()) {
 		godot::TypedArray<godot::RDUniform> uniforms;
 		const auto add = [&](RenderingDevice::UniformType type, int binding, const godot::RID &id) {
@@ -458,6 +484,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		add(RenderingDevice::UNIFORM_TYPE_IMAGE, 21, whole_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 14, corners_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 15, kept_);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 22, relay_);
 		for (int pass = 0; pass < PASSES; ++pass) {
 			if (uniforms_[pass].is_valid()) {
 				rd_->free_rid(uniforms_[pass]);

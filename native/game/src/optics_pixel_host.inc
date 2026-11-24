@@ -112,6 +112,18 @@ thread_local int64_t work_done[8] = {};
 #define OPTICS_THREAD thread_local
 // a pixel's kept beams (Stage 33): the record of the pixel being read, for the shared source's kept_vec and kept_put
 thread_local real *kept_now = nullptr;
+thread_local real *relay_now = nullptr; // a sensor display's pixel's record (Stage 46)
+inline vec4 relay_vec(int i) {
+	const real *v = &relay_now[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
+inline void relay_put(int i, const vec4 &v) {
+	real *to = &relay_now[static_cast<size_t>(i) * 4];
+	to[0] = v.x;
+	to[1] = v.y;
+	to[2] = v.z;
+	to[3] = v.w;
+}
 inline vec4 kept_vec(int i) {
 	const real *v = &kept_now[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -176,6 +188,7 @@ static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_l
 				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES,
 		"the per-pixel source and lab/optics_scene.hpp lay the scene out alike");
 static_assert(1 + KEPT_MOST * KEPT_BEAM == optics_layout::KEPT_VECS, "a pixel's kept beams are a record of KEPT_VECS");
+static_assert(RELAY_HEAD_VECS == optics_layout::RELAY_HEAD_VECS && RELAY_PALETTE == optics_layout::RELAY_PALETTE && RELAY_RECORD == optics_layout::RELAY_RECORD, "a sensor display's block and record");
 static_assert(TRACE_MOST == trace::MEETINGS_MOST && TRACE_TURNS == trace::TURNS_MOST, "the pass's tracer and the truth's allow a ray the same meetings and turns");
 
 struct Use {
@@ -231,6 +244,8 @@ struct Frames final : OpticsFramesCore {
 		PixelState s;
 		// its beams as they are kept (the shared source's record: Stage 33); nothing kept at first
 		std::array<real, static_cast<size_t>(1 + KEPT_MOST * KEPT_BEAM) * 4> kept{};
+		// and its record as a sensor display's pixel (Stage 46)
+		std::array<real, static_cast<size_t>(optics_layout::RELAY_RECORD) * 4> relay{};
 	};
 	int x_, y_, w_, h_, step_;
 	Lattice corners_ = Lattice(1082);
@@ -322,6 +337,13 @@ struct Frames final : OpticsFramesCore {
 				st = step_pixel(q, st, vec2(x + 0.5, y + 0.5), f.number, by_rays ? ray_scale : scale);
 				lattice_on = false;
 				kept_slot = -1;
+				if (q.relay >= 0) {
+					// a sensor's display: its record's step (Stage 46), what it asks for added to the pixel's
+					relay_now = states_[i].relay.data();
+					relay_slot = 0;
+					st.aux.z = st.aux.z + relay_step(q, vec2(x + 0.5, y + 0.5), f.number);
+					relay_slot = -1;
+				}
 				const int64_t followed = rays_followed - rays_before;
 				++read_of[static_cast<size_t>(row)];
 				rays_of[static_cast<size_t>(row)] += followed;
@@ -375,7 +397,10 @@ struct Frames final : OpticsFramesCore {
 			return;
 		}
 		const Use use(scene);
+		relay_now = const_cast<real *>(st->relay.data());
+		relay_slot = 0;
 		const vec4 c = lab::OPTICS_HOST_NAMESPACE::shown(at(x, y), st->s);
+		relay_slot = -1;
 		rgba[0] = to_double(c.x);
 		rgba[1] = to_double(c.y);
 		rgba[2] = to_double(c.z);

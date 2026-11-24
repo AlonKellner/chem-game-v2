@@ -117,6 +117,18 @@ inline constexpr int KEPT_VECS = 26;
 // weights (linear, 0 to 1: red, green, blue, 0), the first 0. A thing that emits one is a slab whose set's glow
 // is -1 and whose MORE is (where its image begins, 1, 0, 0).
 inline constexpr int IMAGE_HEAD_VECS = 2;
+// A sensor's display (GAME_SPEC §12.4, Stage 46: a thermal camera's screen) is a slab whose MORE is (where its block
+// begins in the images' buffer, 2, 0, 0); its block: (the frame's offset from the screen, pixels across and down; the
+// emissivity it reads by; the reflected light's signal over the room's), (the palette's span, its low and high
+// temperatures, K; the bit it is hidden from its own rays by; a layout pixel's width, which is an LCD pixel and a
+// sensor pixel), (where its pixels' records begin in the pool, its rectangle on the screen: left, top, width), (its
+// settings' and what lies under its frame's tag, its rectangle's height, how much of its third of an LCD pixel a
+// subpixel fills across and how much down); RELAY_PALETTE entries of what its primaries are driven to for each
+// palette colour (red, green, blue, 0), low to high; then its three primaries' light, ROW values each, four to a vec4.
+inline constexpr int RELAY_HEAD_VECS = 4, RELAY_PALETTE = 256;
+inline constexpr int RELAY_VECS = RELAY_HEAD_VECS + RELAY_PALETTE + (3 * ROW + 3) / 4;
+// a sensor display's pixel's record in the pool (the per-pixel source says what it holds)
+inline constexpr int RELAY_RECORD = 4;
 inline constexpr double SCREEN_FILL_X = 0.8, SCREEN_FILL_Y = 0.9;
 } // namespace optics_layout
 
@@ -165,6 +177,22 @@ struct OpticsScene {
 	uint64_t images_revision = 0;
 	uint64_t images_key = 0;
 	std::vector<float> image_weights;
+	// how many records the sensor displays' pixels have in the pool (Stage 46: RELAY_RECORD vec4s each)
+	int relay_pool = 0;
+};
+
+// A sensor display's settings (GAME_SPEC §12.4, Stage 46): a thermal camera's screen shows, at each of its pixels, the
+// long-wave light at the matching point of its frame (the screen's size, `frame_x`, `frame_y` its top-left on the
+// screen) as its camera reads it: a temperature from the band's signal, by `emissivity` and the room's light reflected
+// at `reflected_kelvin` (0: the room's), and that temperature a colour of `palette` (linear RGB, low to high over
+// [low_kelvin, high_kelvin]). Its rays pass by the bodies hidden by `bit` (its own).
+struct OpticsRelay {
+	float frame_x = 0.0f, frame_y = 0.0f;
+	double emissivity = 0.95, reflected_kelvin = 0.0;
+	double low_kelvin = 288.15, high_kelvin = 388.15;
+	std::array<std::array<float, 3>, 256> palette{};
+	uint32_t bit = 1;
+	uint64_t hash = 0; // its settings: a new one is a new reading
 };
 
 // One vessel or balloon as the screen places it.
@@ -198,7 +226,8 @@ struct OpticsBody {
 	//           pixels as the screen is to show them (8-bit sRGB, row by row), shown over its rectangle; its face
 	//           the screen's black glass. The screen drives its three primaries to show each pixel's colour
 	//           (optics_screen_drive). It is made again only when `image_hash` changes.
-	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5, Grating = 6, Screen = 7 };
+	//   Sensor: a slab that shows what a sensor reads (Stage 46: a thermal camera's screen), by its `relay`.
+	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5, Grating = 6, Screen = 7, Sensor = 8 };
 	Shape shape = Item;
 	float size = 0.0f;
 	float dash = 0.0f; // a bar's dash and gap together (pixels); 0: unbroken
@@ -216,6 +245,7 @@ struct OpticsBody {
 	double kelvin = 0.0;
 	// the rays it is hidden from (bits; Stage 46: a sensor's own body from its frame)
 	uint32_t hidden = 0;
+	const OpticsRelay *relay = nullptr; // a sensor display's (Stage 46)
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;
@@ -364,6 +394,16 @@ std::string check_O23(const chem::optics::EnergyTable &light, double room_kelvin
 // O24: the visible picture is the same with the long-wave range there: every `step`th pixel of the region's colour
 // (optics_truth) in the two scenes, bit for bit. "" when it is.
 std::string check_O24(const OpticsScene &with, const OpticsScene &without, int x0, int y0, int x1, int y1, int step);
+
+// A sensor display's pixel's truth (Stage 46): what is in front of it (optics_truth), and through it the display's
+// primaries driven to its palette's colour of its sensor pixel's temperature, that pixel's mean long-wave light
+// integrated by the truth's own tracer over a grid of it at every share of the band (linear sRGB; false: the pixel
+// is no display's, and rgb is its optics_truth).
+bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]);
+class OpticsFrames;
+// O25 (GAME_SPEC §18): a sensor's pixel is its truth: every `step`th display pixel of the region, as `frames` show it
+// settled, within 8 of its truth on the eye metric. "" when it holds.
+std::string check_O25(const OpticsScene &scene, const OpticsFrames &frames, int x0, int y0, int x1, int y1, int step);
 
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);

@@ -358,3 +358,75 @@ TEST_CASE("long-wave: one scene is the whole room at any view: a point off the s
 	CHECK(off_screen > 100);
 	CHECK(read > 1000);
 }
+
+namespace {
+
+// a grey ramp, black to white (linear), for a display under test
+lab::OpticsRelay grey_relay(float frame_x, float frame_y) {
+	lab::OpticsRelay r;
+	r.frame_x = frame_x;
+	r.frame_y = frame_y;
+	r.low_kelvin = 290.0;
+	r.high_kelvin = 380.0;
+	for (int k = 0; k < 256; ++k) {
+		const float v = static_cast<float>(k) / 255.0f;
+		r.palette[static_cast<size_t>(k)] = { v, v, v };
+	}
+	r.bit = 1;
+	r.hash = 7;
+	return r;
+}
+
+// a camera: its case (hidden from its own rays) and its display; and what it looks at: a warm vessel, a hot face
+struct Camera {
+	ItemView warm = vessel("warm", 250.0, 100.0, 60.0);
+	lab::OpticsRelay relay = grey_relay(180.0f, 140.0f);
+	double face_kelvin = 343.15; // (within the palette's span)
+	std::vector<OpticsBody> bodies() const {
+		OpticsBody case_body = thing(OpticsBody::Slab, 96, 296, 48, 38, "viewer_case", 0.0);
+		case_body.hidden = 1;
+		OpticsBody display = thing(OpticsBody::Sensor, 100, 300, 40, 30, "lcd_black", 0.0);
+		display.size = 1.0f;
+		display.hidden = 1;
+		display.relay = &relay;
+		return { thing(OpticsBody::Slab, 150, 110, 60, 60, "part_face", face_kelvin), OpticsBody{ &warm, 200, 100, 90, 112.5f }, case_body, display };
+	}
+};
+
+} // namespace
+
+TEST_CASE("long-wave: a sensor's display shows its frame's long-wave light, settled to its truth (O25, Stage 46)") {
+	Camera cam;
+	const std::vector<OpticsBody> bodies = cam.bodies();
+	const OpticsScene scene = compose(room(0), bodies);
+	CHECK(scene.relay_pool == 40 * 30);
+	lab::OpticsFrames frames(100, 300, 40, 30);
+	for (int f = 0; f < 60; ++f) {
+		frames.frame(scene);
+	}
+	CHECK(frames.asked() == 0.0); // settled
+	const int step = sparse() ? 3 : 1;
+	CHECK(lab::check_O25(scene, frames, 100, 300, 140, 330, step) == "");
+	// what it shows: the face's left edge, the vessel's glass at 60 C, the room between
+	double rgba[4];
+	frames.shown(scene, 105, 305, rgba);
+	const double face = rgba[0];
+	frames.shown(scene, 136, 315, rgba);
+	const double glass = rgba[0];
+	MESSAGE("the display shows the hot face at " << face << ", the vessel's glass at " << glass);
+	CHECK(face > glass);
+	// it fires: the frame a pixel off (what the display shows is of the frame's place, pixel for pixel)
+	Camera moved;
+	moved.relay.frame_x += 1.0f;
+	const OpticsScene off = compose(room(0), moved.bodies());
+	CHECK(lab::check_O25(off, frames, 100, 300, 140, 330, 1) != "");
+	// and what lies beyond is in its key: the face hotter, the display reads it again and settles to it
+	Camera hotter;
+	hotter.face_kelvin = 368.15;
+	const OpticsScene hot = compose(room(0), hotter.bodies());
+	CHECK(lab::check_O25(hot, frames, 100, 300, 140, 330, 1) != "");
+	for (int f = 0; f < 60; ++f) {
+		frames.frame(hot);
+	}
+	CHECK(lab::check_O25(hot, frames, 100, 300, 140, 330, step) == "");
+}

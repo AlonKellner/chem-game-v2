@@ -101,6 +101,9 @@ struct Path {
 	int refractor; // that body, or -1
 	// a grating is in its way (Stage 29): its rays go on in several ways there, and are followed
 	bool ways;
+	// a sensor's display it looks at (Stage 46), or -1; and which of its layers that is (those after it are in front)
+	int relay;
+	int relay_k;
 };
 
 // a pixel's state between frames
@@ -120,6 +123,7 @@ struct PixelState {
 OPTICS_THREAD int band_range = 0;
 // the bodies a ray passes by (Stage 46: bits of a body's HEAT y; a sensor's rays do not see its own body)
 OPTICS_THREAD int ray_hide = 0;
+OPTICS_THREAD bool range_fixed = false; // (a sensor's continuation reads in the range it set, whatever the pass's)
 bool hidden(int body) {
 	return ray_hide != 0 && (int(scene_vec(HEADER_VECS + body * BODY_VECS + 6).y) & ray_hide) != 0;
 }
@@ -402,7 +406,11 @@ bool beyond_outline(int i, vec2 p, float size) {
 // outlines blend by how much of it they cover), less for a sample of the truth (GAME_SPEC §12.3)
 Path path_of(vec2 p, float size) {
 	Path q;
-	band_range = scene_vec(4).w > 0.5 ? 1 : 0; // the range the whole pass is read in (Stage 46: the debug infrared view)
+	if (!range_fixed) {
+		band_range = scene_vec(4).w > 0.5 ? 1 : 0; // the range the whole pass is read in (Stage 46: the debug infrared view)
+	}
+	q.relay = -1;
+	q.relay_k = -1;
 	q.layers = 0;
 	q.cover = 0.0;
 	q.glow = vec3(0.0);
@@ -449,6 +457,10 @@ Path path_of(vec2 p, float size) {
 		}
 		if (scene_vec(at + 5).w > 0.5) {
 			q.refractor = i; // a vessel bends the view: the nearest the eye of those the pixel looks through
+		}
+		if (form.x > 2.5 && form.x < 3.5 && scene_vec(at + 2).y > 1.5) {
+			q.relay = i; // a sensor's display (Stage 46)
+			q.relay_k = q.layers;
 		}
 		if (q.layers == 0) {
 			q.l0 = l;
@@ -4168,6 +4180,237 @@ vec4 infrared_shown(float signal) {
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }
 
+// ---- a sensor's display (GAME_SPEC §12.4, Stage 46): a thermal camera's screen
+//
+// Where a pixel looks at a sensor's display, what is in front of it is read as anything is, in the visible (the
+// display's own face is a slab, lit by the room: its black glass); and at the display the reading goes on, in the
+// long-wave range, at the matching point of the camera's frame, with the camera's own body hidden from it. The
+// display shows its sensor pixel's mean band signal as its camera reads it, a temperature, a colour of its palette,
+// its primaries driven to it, seen through what is in front. Each pixel of the display keeps a record in the pool
+// (the includer's relay_vec and relay_put, at `relay_slot`; -1: none, and the display is dark):
+// [0] the sensor pixel's mean signal (on the room's scale), its points, the sum of its squared deviations, the tag
+// of what it read (what lies under the sensor pixel, the camera's settings); [1] to [3] its three primaries' light at
+// full weight through what is in front, linear sRGB over the pixel, the tag of that front (w).
+const int RELAY_HEAD_VECS = 4;
+const int RELAY_PALETTE = 256;
+const int RELAY_RECORD = 4;
+const float RELAY_SETTLED = 128.0; // points before a sensor pixel may stop
+const float RELAY_PRECISION = 1.0e-3; // the standard error of its mean signal it is brought to, relative (some 0.06 K)
+const float RELAY_MOST = 1024.0; // and the most it reads (a sensor pixel across an edge: its places are spread evenly)
+OPTICS_THREAD int relay_slot = -1;
+
+int relay_block(int body) {
+	return int(scene_vec(HEADER_VECS + body * BODY_VECS + 2).x);
+}
+
+// the record of the display's pixel at p in the pool, laid out by the display's rectangle on the screen (-1: none)
+int relay_slot_at(int body, vec2 p) {
+	int b = relay_block(body);
+	vec4 pool = image_vec(b + 2);
+	vec4 more = image_vec(b + 3);
+	int x = int(floor(p.x)) - int(pool.y);
+	int y = int(floor(p.y)) - int(pool.z);
+	if (x < 0 || y < 0 || x >= int(pool.w) || y >= int(more.y)) {
+		return -1;
+	}
+	return (int(pool.x) + y * int(pool.w) + x) * RELAY_RECORD;
+}
+
+// the sensor pixel the display's pixel at p shows: the frame's layout pixel matching the display's under p (its
+// middle on the screen, and its width)
+vec3 relay_sensor(int body, vec2 p) {
+	vec4 rect = scene_vec(HEADER_VECS + body * BODY_VECS);
+	int b = relay_block(body);
+	vec4 h0 = image_vec(b);
+	float px = image_vec(b + 1).w;
+	float i = floor((p.x - rect.x) / px);
+	float j = floor((p.y - rect.y) / px);
+	return vec3(rect.x + h0.x + (i + 0.5) * px, rect.y + h0.y + (j + 0.5) * px, px);
+}
+
+// one point of the long-wave light at the place f of the room, at nm (the range already the long-wave's, the
+// sensor's bodies hidden): what is there, read as any point is; the room's black body where there is nothing
+float relay_point(vec2 f, float nm) {
+	Path q = path_of(f, 1.0e-3);
+	if (q.layers == 0) {
+		return 1.0;
+	}
+	if (q.refractor >= 0 || q.ways) {
+		RayMet m = ray_met(f, nm);
+		vec2 t = ray_shade(m, nm);
+		return t.x + t.y; // (the wall is the room's black body: 1)
+	}
+	return along(q, nm, 1.0, 0.0, 0.0, false, 1.0);
+}
+
+Layer layer_k(Path q, int k) {
+	return k == 0 ? q.l0 : (k == 1 ? q.l1 : (k == 2 ? q.l2 : q.l3));
+}
+
+// what passes through the layers in front of the display at nm, over the pixel, of what its face sends: its share of
+// the pixel times what each layer before it lets through
+float relay_through(Path q, float nm) {
+	Layer face = layer_k(q, q.relay_k);
+	float a = face.solid;
+	for (int k = 0; k < MAX_LAYERS; k++) {
+		if (k <= q.relay_k || k >= q.layers) {
+			continue;
+		}
+		Layer l = layer_k(q, k);
+		int start = set_in(l.body);
+		float per_cm = liquid_at(body_of(l.body), start, nm);
+		float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
+		a = a * exp(-per_cm * (l.depth_cm + l.glowing)) * (1.0 - l.haze) * (1.0 - l.solid) * glass;
+	}
+	return a;
+}
+
+// the display's primary c's light at nm (a multiple of the room's light), at full weight
+float relay_primary(int b, int c, float nm) {
+	float x = clamp(nm - 380.0, 0.0, 400.0);
+	int i = min(int(floor(x)), 399);
+	int at = (b + RELAY_HEAD_VECS + RELAY_PALETTE) * 4 + c * ROW + i;
+	float lo = image_vec(at / 4)[at - 4 * (at / 4)];
+	float hi = image_vec((at + 1) / 4)[(at + 1) - 4 * ((at + 1) / 4)];
+	return mix(lo, hi, x - float(i));
+}
+
+// One frame of a display's pixel's record (after its step: the pixel's own colour is its front's): its front's filter
+// when that has changed, and points of its sensor pixel's long-wave light while it asks for them. What it asks for
+// next (points).
+float relay_step(Path q, vec2 p, int frame) {
+	if (q.relay < 0 || relay_slot < 0) {
+		return 0.0;
+	}
+	int b = relay_block(q.relay);
+	vec4 h1 = image_vec(b + 1);
+	vec4 h3 = image_vec(b + 3);
+	// its front's filter, each primary's light through it, over the visible light's shares (64 bands, at their middles)
+	float front_tag = q.key.x + 1.31 * q.key.y + 0.71 * q.key.z + 0.37 * q.key.w;
+	if (relay_vec(relay_slot + 1).w != front_tag) {
+		band_range = 0;
+		vec3 xyz0 = vec3(0.0);
+		vec3 xyz1 = vec3(0.0);
+		vec3 xyz2 = vec3(0.0);
+		for (int j = 0; j < 64; j++) {
+			vec4 lo = share(float(j) / 64.0);
+			vec4 hi = share(float(j + 1) / 64.0);
+			float nm = share((float(j) + 0.5) / 64.0).x + 380.0;
+			vec3 band = vec3(hi.y - lo.y, hi.z - lo.z, hi.w - lo.w) * relay_through(q, nm);
+			xyz0 = xyz0 + band * relay_primary(b, 0, nm);
+			xyz1 = xyz1 + band * relay_primary(b, 1, nm);
+			xyz2 = xyz2 + band * relay_primary(b, 2, nm);
+		}
+		vec3 c0 = to_linear_srgb(xyz0);
+		vec3 c1 = to_linear_srgb(xyz1);
+		vec3 c2 = to_linear_srgb(xyz2);
+		relay_put(relay_slot + 1, vec4(c0.x, c0.y, c0.z, front_tag));
+		relay_put(relay_slot + 2, vec4(c1.x, c1.y, c1.z, front_tag));
+		relay_put(relay_slot + 3, vec4(c2.x, c2.y, c2.z, front_tag));
+	}
+	// the sensor pixel it shows, and what lies under it there (its key in the long-wave range, its own bodies hidden)
+	vec3 sensor = relay_sensor(q.relay, p);
+	range_fixed = true;
+	band_range = 1;
+	ray_hide = int(h1.z);
+	Path f = path_of(vec2(sensor.x, sensor.y), sensor.z);
+	float tag = f.key.x * 1.37 + f.key.y * 0.71 + f.key.z * 0.13 + f.key.w * 0.29 + h3.x * 0.011 + sensor.x * 1.0e-3 + sensor.y * 7.0e-6;
+	vec4 rec = relay_vec(relay_slot);
+	if (rec.w != tag) {
+		rec = vec4(0.0, 0.0, 0.0, tag);
+	}
+	float mean = rec.x;
+	float points = rec.y;
+	float m2 = rec.z;
+	float want = points < RELAY_SETTLED ? RELAY_SETTLED - points : 0.0;
+	if (points >= 2.0) {
+		float precision = RELAY_PRECISION * max(mean, 1.0e-3);
+		want = max(want, m2 / (points - 1.0) / (precision * precision) - points);
+	}
+	int n = want > 0.0 ? int(clamp(want, 16.0, 64.0)) : 0;
+	if (points >= RELAY_MOST) {
+		n = 0;
+	}
+	float seed = fract(0.7548776662 * p.x + 0.56984029 * p.y + 0.31 * float(frame % 97));
+	for (int k = 0; k < 64; k++) {
+		if (k >= n) {
+			break;
+		}
+		float index = points + 1.0;
+		// a place of the sensor pixel and a share of the long-wave light, each its own low-discrepancy sequence
+		vec2 s = vec2(fract(seed + 0.7548776662 * index), fract(seed * 1.618034 + 0.5698402909 * index));
+		float u = fract(seed * 2.414214 + 0.6180339887 * index);
+		float nm = share(u).x + 380.0;
+		float v = relay_point(vec2(sensor.x + (s.x - 0.5) * sensor.z, sensor.y + (s.y - 0.5) * sensor.z), nm);
+		// the mean and the squared deviations, a point at a time (Welford)
+		points = index;
+		float d = v - mean;
+		mean = mean + d / points;
+		m2 = m2 + d * (v - mean);
+	}
+	range_fixed = false;
+	ray_hide = 0;
+	band_range = scene_vec(4).w > 0.5 ? 1 : 0;
+	relay_put(relay_slot, vec4(mean, points, m2, tag));
+	if (points >= RELAY_MOST) {
+		return 0.0;
+	}
+	float more = points < RELAY_SETTLED ? RELAY_SETTLED - points : 0.0;
+	if (points >= 2.0) {
+		float precision = RELAY_PRECISION * max(mean, 1.0e-3);
+		more = max(more, m2 / (points - 1.0) / (precision * precision) - points);
+	}
+	return max(more, 0.0);
+}
+
+// how much of each subpixel of the display's LCD pixel under p a sample `size` across about p covers, over the
+// sample (the display's LCD pixels are its layout pixels; each subpixel a third across, its fill lit)
+vec3 relay_stripes(int body, vec2 p, float size) {
+	vec4 rect = scene_vec(HEADER_VECS + body * BODY_VECS);
+	int b = relay_block(body);
+	float px = image_vec(b + 1).w;
+	vec4 h3 = image_vec(b + 3);
+	float u0 = (p.x - 0.5 * size - rect.x) / px;
+	float u1 = (p.x + 0.5 * size - rect.x) / px;
+	float v0 = (p.y - 0.5 * size - rect.y) / px;
+	float v1 = (p.y + 0.5 * size - rect.y) / px;
+	float i = floor((p.x - rect.x) / px);
+	float j = floor((p.y - rect.y) / px);
+	float gap = (1.0 - h3.z) / 6.0;
+	float down = max(min(v1, j + 0.5 * (1.0 + h3.w)) - max(v0, j + 0.5 * (1.0 - h3.w)), 0.0);
+	float area = max((u1 - u0) * (v1 - v0), 1.0e-20);
+	return vec3(max(min(u1, i + 1.0 / 3.0 - gap) - max(u0, i + gap), 0.0), max(min(u1, i + 2.0 / 3.0 - gap) - max(u0, i + 1.0 / 3.0 + gap), 0.0),
+				   max(min(u1, i + 1.0 - gap) - max(u0, i + 2.0 / 3.0 + gap), 0.0)) * (down / area);
+}
+
+// what the display adds to the pixel: its primaries, driven to its palette's colour of its sensor pixel's temperature,
+// through what is in front (linear sRGB); nothing until it has read
+vec3 relay_light(Path q) {
+	if (q.relay < 0 || relay_slot < 0) {
+		return vec3(0.0);
+	}
+	vec4 rec = relay_vec(relay_slot);
+	if (!(rec.y > 0.0)) {
+		return vec3(0.0);
+	}
+	int b = relay_block(q.relay);
+	vec4 h0 = image_vec(b);
+	vec4 h1 = image_vec(b + 1);
+	// the camera's temperature: the signal less the room it reflects, over its emissivity, as a black body's
+	float own = (rec.x - (1.0 - h0.z) * h0.w) / max(h0.z, 1.0e-6);
+	float t = clamp((infrared_kelvin(own) - h1.x) / max(h1.y - h1.x, 1.0e-6), 0.0, 1.0) * float(RELAY_PALETTE - 1);
+	int k = min(int(floor(t)), RELAY_PALETTE - 2);
+	vec4 w = mix(image_vec(b + RELAY_HEAD_VECS + k), image_vec(b + RELAY_HEAD_VECS + k + 1), t - float(k));
+	vec3 st = relay_stripes(q.relay, vec2(q.x, q.y), q.size);
+	vec4 r0 = relay_vec(relay_slot + 1);
+	vec4 r1 = relay_vec(relay_slot + 2);
+	vec4 r2 = relay_vec(relay_slot + 3);
+	float red = w.x * st.x;
+	float green = w.y * st.y;
+	float blue = w.z * st.z;
+	return vec3(r0.x * red + r1.x * green + r2.x * blue, r0.y * red + r1.y * green + r2.y * blue, r0.z * red + r1.z * green + r2.z * blue);
+}
+
 // A pixel no body covers shows the wall drawn there, its mean over the pixel: the room and the bodies are one
 // picture at the screen's pixels (GAME_SPEC §12.3), which a host scales as one, so the wall seen through glass
 // and beside it cannot part
@@ -4288,6 +4531,7 @@ vec4 shown(Path q, PixelState s) {
 		// the debug infrared view (Stage 46): the band signal's mean, its temperature, its colour
 		return infrared_shown((s.prox.x + s.hist.x + s.prox.y + s.hist.y + s.prox.z + s.hist.z) / 3.0);
 	}
-	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
+	// (and a sensor's display, what it shows through what is in front of it: Stage 46)
+	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z) + relay_light(q));
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }

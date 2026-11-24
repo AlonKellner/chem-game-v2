@@ -244,6 +244,9 @@ typedef struct cg_optics {
 	float view_now[4];
 	int32_t view_moving;
 	float room[4]; /* the room's part of the screen, which the view is of: left, top, right, bottom */
+	/* Stage 46: how many records the sensor displays' pixels have in a pool of their own (a host keeps
+	 * CG_OPTICS_RELAY_VECS vec4s for each, zero at first; the per-pixel source lays them out) */
+	int32_t relay_pool;
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames
@@ -251,6 +254,7 @@ typedef struct cg_optics {
  * rectangle of `rectangles`, written and read by the per-pixel source alone
  * (kept_vec, kept_put), zero at first. */
 #define CG_OPTICS_KEPT_VECS 26
+#define CG_OPTICS_RELAY_VECS 4
 /* And it gives the pixels read by their own rays a budget of their own: this
  * many points a frame over the whole screen (a point of theirs is a ray, or a
  * quarter of one), their asks summed apart from the others'. */

@@ -297,6 +297,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		int start;
 	};
 	std::vector<ScreenAt> screens;
+	std::vector<ScreenAt> relays; // the sensor displays (Stage 46), and where each one's block begins
+	std::vector<int> relay_bodies;
 	int image_next = 0;
 	for (const OpticsBody *each : ordered) {
 		const OpticsBody &body = *each;
@@ -310,6 +312,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const int at = HEADER_VECS + count * BODY_VECS;
 			++count;
 			const bool screen = body.shape == OpticsBody::Screen && body.image != nullptr && body.image_w > 0 && body.image_h > 0;
+			const bool sensor = body.shape == OpticsBody::Sensor && body.relay != nullptr;
 			const std::string made = screen ? "screen|" + std::to_string(screens.size()) + "|" + (body.surface ? body.surface : "")
 											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
 			auto found = shared.find(made);
@@ -378,9 +381,17 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				screens.push_back(ScreenAt{ &body, image_next });
 				image_next += IMAGE_HEAD_VECS + (3 * ROW + 3) / 4 + body.image_h * (body.image_w + 1);
 			}
+			if (sensor) {
+				// a sensor's display (Stage 46): where its block begins in the images' buffer
+				put(at + MORE, 0, image_next);
+				put(at + MORE, 1, 2.0);
+				relays.push_back(ScreenAt{ &body, image_next });
+				relay_bodies.push_back((at - HEADER_VECS) / BODY_VECS);
+				image_next += RELAY_VECS;
+			}
 			put(at + HEAT, 0, body.kelvin > 0.0 ? body.kelvin : room.kelvin); // Stage 46
 			put(at + HEAT, 1, body.hidden);
-			put(at + FORM, 0, body.shape == OpticsBody::Screen ? static_cast<int>(OpticsBody::Slab) : static_cast<int>(body.shape));
+			put(at + FORM, 0, body.shape == OpticsBody::Screen || body.shape == OpticsBody::Sensor ? static_cast<int>(OpticsBody::Slab) : static_cast<int>(body.shape));
 			put(at + FORM, 1, 1.0);
 			put(at + FORM, 2, body.size);
 			put(at + REFRACT, 1, layer_of(body));
@@ -541,7 +552,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			if (s.species == "water" && v.liquid_ml > 0.0 && s.phase != 's' && s.phase != 'g') {
 				// water in the long-wave (Stage 46): its absorption by its share of the liquid's volume
 				for (int i = 0; i < LWIR_ROW; ++i) {
-					lw[LIQUID_ROW * LWIR_ROW + i] += static_cast<float>(media.water_alpha[static_cast<size_t>(i)] * std::min(s.ml / v.liquid_ml, 1.0));
+					lw[LIQUID_ROW * LWIR_ROW + i] += static_cast<float>(media.water_alpha[static_cast<size_t>(i)] * (s.ml > 0.0 ? std::min(s.ml / v.liquid_ml, 1.0) : 1.0)); // (no volume given: the liquid is its water)
 				}
 			}
 			if (kind == Kind::Absorb && v.liquid_ml > 0.0 && s.phase != 's' && s.phase != 'g') {
@@ -712,7 +723,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			key = fnv(&sc.body->image_h, sizeof sc.body->image_h, key);
 			key = fnv(&sc.start, sizeof sc.start, key);
 		}
-		if (key != scene.images_key || (screens.empty() != scene.images.empty())) {
+		for (const ScreenAt &sc : relays) {
+			key = fnv(&sc.start, sizeof sc.start, key); // (a sensor display's block is written below, every time)
+		}
+		if (key != scene.images_key || ((screens.empty() && relays.empty()) != scene.images.empty())) {
 			scene.images.assign(static_cast<size_t>(std::max(image_next, 1)) * 4, 0.0f);
 			scene.image_weights.clear();
 			const std::array<std::array<double, 401>, 3> &light = panel().primaries;
@@ -760,6 +774,80 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			scene.images_key = key;
+			++scene.images_revision;
+		}
+		// The sensor displays' blocks (Stage 46), written whenever anything in them changes: where their frames are,
+		// their settings, and a tag of what lies under each frame (a pixel of the display follows it)
+		bool changed = false;
+		int pool = 0;
+		for (size_t r = 0; r < relays.size(); ++r) {
+			const OpticsBody &b = *relays[r].body;
+			const OpticsRelay &relay = *b.relay;
+			const int body = relay_bodies[r];
+			const float *rect = &t[static_cast<size_t>(HEADER_VECS + body * BODY_VECS + RECT) * 4];
+			std::vector<float> block(static_cast<size_t>(RELAY_VECS) * 4, 0.0f);
+			const double room_signal = chem::optics::band_signal(room.kelvin);
+			const double reflected = relay.reflected_kelvin > 0.0 ? relay.reflected_kelvin : room.kelvin;
+			block[0] = relay.frame_x - rect[0];
+			block[1] = relay.frame_y - rect[1];
+			block[2] = static_cast<float>(relay.emissivity);
+			block[3] = static_cast<float>(chem::optics::band_signal(reflected) / room_signal);
+			block[4] = static_cast<float>(relay.low_kelvin);
+			block[5] = static_cast<float>(relay.high_kelvin);
+			block[6] = static_cast<float>(relay.bit);
+			block[7] = static_cast<float>(room.pixel);
+			// its pixels' records: its rectangle as far as it is on the screen
+			const int left = std::clamp(static_cast<int>(std::floor(rect[0])), 0, WALL_COLUMNS), top = std::clamp(static_cast<int>(std::floor(rect[1])), 0, WALL_ROWS);
+			const int right = std::clamp(static_cast<int>(std::ceil(rect[0] + rect[2])), 0, WALL_COLUMNS), bottom = std::clamp(static_cast<int>(std::ceil(rect[1] + rect[3])), 0, WALL_ROWS);
+			block[8] = static_cast<float>(pool);
+			block[9] = static_cast<float>(left);
+			block[10] = static_cast<float>(top);
+			block[11] = static_cast<float>(right - left);
+			block[13] = static_cast<float>(bottom - top);
+			block[14] = static_cast<float>(SCREEN_FILL_X); // its subpixels, as the viewer's
+			block[15] = static_cast<float>(SCREEN_FILL_Y);
+			pool += (right - left) * (bottom - top);
+			// what lies under its frame: each body there, where it is, what it is and holds, how hot (none hidden from it)
+			uint64_t under = fnv(&relay.hash, sizeof relay.hash);
+			under = fnv(&relay.frame_x, 2 * sizeof(float), under);
+			under = fnv(&room.kelvin, sizeof room.kelvin, under);
+			for (int o = 0; o < count; ++o) {
+				const size_t at = static_cast<size_t>(HEADER_VECS + o * BODY_VECS) * 4;
+				const float *other = &t[at + RECT * 4];
+				const bool hidden = (static_cast<uint32_t>(t[at + HEAT * 4 + 1]) & relay.bit) != 0;
+				if (!hidden && other[0] < relay.frame_x + rect[2] + 2.0f && other[0] + other[2] + 2.0f > relay.frame_x && other[1] < relay.frame_y + rect[3] + 2.0f && other[1] + other[3] + 2.0f > relay.frame_y) {
+					under = fnv(&t[at], 4 * 4 * sizeof(float), under); // its rectangle, form, more and glow
+					under = fnv(&t[at + IDS * 4], 2 * sizeof(float), under);
+					under = fnv(&t[at + HEAT * 4], sizeof(float), under);
+				}
+			}
+			block[12] = tag(under);
+			// what its primaries are driven to for each colour of its palette
+			for (int k = 0; k < RELAY_PALETTE; ++k) {
+				uint8_t code[3];
+				for (int c = 0; c < 3; ++c) {
+					const double v = std::clamp(static_cast<double>(relay.palette[static_cast<size_t>(k)][static_cast<size_t>(c)]), 0.0, 1.0);
+					code[c] = static_cast<uint8_t>(std::lround(255.0 * (v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055)));
+				}
+				optics_screen_drive(code, &block[static_cast<size_t>(RELAY_HEAD_VECS + k) * 4]);
+			}
+			const std::array<std::array<double, 401>, 3> &light = panel().primaries;
+			for (int c = 0; c < 3; ++c) {
+				for (int i = 0; i < ROW; ++i) {
+					block[static_cast<size_t>(RELAY_HEAD_VECS + RELAY_PALETTE) * 4 + static_cast<size_t>(c * ROW + i)] = static_cast<float>(light[static_cast<size_t>(c)][static_cast<size_t>(i)]);
+				}
+			}
+			float *to = &scene.images[static_cast<size_t>(relays[r].start) * 4];
+			if (!std::equal(block.begin(), block.end(), to)) {
+				std::copy(block.begin(), block.end(), to);
+				changed = true;
+			}
+			// its pixels follow what lies under its frame
+			const size_t ids = static_cast<size_t>(HEADER_VECS + body * BODY_VECS + IDS) * 4 + 1;
+			t[ids] = tag(fnv(&block[12], sizeof(float), static_cast<uint64_t>(t[ids])));
+		}
+		scene.relay_pool = pool;
+		if (changed) {
 			++scene.images_revision;
 		}
 	}
