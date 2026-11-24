@@ -2369,6 +2369,9 @@ struct Lab::Impl {
 			v.celsius = kelvin - 273.15;
 			const CellState &cell = m.world().snapshot_cell(item.cell);
 			const Fill fill = fill_of(table, cell, kelvin, &m.world().meta(item.cell));
+			if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
+				v.ph = p;
+			}
 			v.gas_ml = fill.gas * 1e6;
 			v.condensed_ml = fill.condensed * 1e6;
 			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
@@ -4413,6 +4416,10 @@ ItemDebug Lab::debug(const std::string &id) const {
 	if (x.kind == Kind::Vessel) {
 		out.facts.push_back(m.sealed(x) ? text_of("sealed: %.1f kPa", thermal.pressure / 1000.0) + text_of(", giving way past %.0f kPa", (m.gives_way(x) + P_ATMOSPHERE) / 1000.0)
 										: text_of("open to the room: %.1f kPa", P_ATMOSPHERE / 1000.0));
+		// its liquid's pH, and what sets it (Stage 43)
+		if (double p = 0.0; thermal.defined && chem::ph(table, state, thermal.temperature, p)) {
+			out.facts.push_back(text_of("pH %.2f", p) + text_of(" (Kw %.3g at its temperature)", chem::water_ionisation(table, thermal.temperature)));
+		}
 		if (x.pours_into >= 0 && x.pour.index >= 0) {
 			const double rate = world.edges()[static_cast<size_t>(x.pour.index)].rate * 1e6;
 			const std::string into = m.items[static_cast<size_t>(x.pours_into)].id;
@@ -4583,6 +4590,9 @@ std::string Lab::report() const {
 		j["celsius"] = kelvin - 273.15;
 		const CellState &cell = m.world().snapshot_cell(item.cell);
 		const Fill fill = fill_of(table, cell, kelvin);
+		if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
+			j["ph"] = p; // Stage 43
+		}
 		j["gas_ml"] = fill.gas * 1e6;
 		j["condensed_ml"] = fill.condensed * 1e6;
 		json contents = json::array();
@@ -4947,12 +4957,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	std::vector<double> heat, reaction, nucleation, work;
 	std::optional<World> world;
 	try {
-		if (saved.at("species").get<int>() != table.species_count()) {
-			why = "the save was made with other data: it counts a different number of species";
+		// the tables grow only at their end (Stage 43): a save made with fewer species is the same table's first,
+		// and those added since are absent from it
+		const int saved_species = saved.at("species").get<int>();
+		if (saved_species < 1 || saved_species > table.species_count()) {
+			why = "the save was made with other data: it counts more species than the tables have";
 			return nullptr;
 		}
 		World::Builder b(table);
-		const auto species = static_cast<size_t>(table.species_count());
+		const auto species = static_cast<size_t>(saved_species);
 		for (const json &cell : saved.at("cells")) {
 			double reservoir_temperature = 0.0, volume = 0.0, mixing = 1.0;
 			if (!from_bits(cell.at("reservoir_temperature"), reservoir_temperature) || !from_bits(cell.at("volume"), volume) || !from_bits(cell.at("mixing"), mixing)) {

@@ -1764,7 +1764,7 @@ struct Ui::Impl {
 	Rect goal_pick(int i) const { return Rect{ EDITOR.x + 20, term_y(pick_row) + 32 + static_cast<float>(i) * 26, 250, 24 }; }
 	bool goal_species(int r) const {
 		const std::string &w = draft.terms[static_cast<size_t>(r)].quantity.what;
-		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml");
+		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml" || w == "ph");
 	}
 	void goal_edit_press(float x, float y) {
 		if (pick_row >= 0) {
@@ -4284,7 +4284,7 @@ struct Ui::Impl {
 				row(v.on >= 0 ? "in the neck of " + view.items[static_cast<size_t>(v.on)].id + ": pull it out by picking it up" : "put it on a narrow neck to seal it", DIM, 15);
 				row(text_of("holds %.0f N", v.hold_n), DIM, 15);
 			} else {
-				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()));
+				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
 				if (v.burst && v.kind == "vessel") {
 					row("broken: its glass burst", WARN, 15);
 				} else if (v.sealed) {

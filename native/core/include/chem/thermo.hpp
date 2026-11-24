@@ -138,6 +138,17 @@ private:
 // in it. 0 for a gas or a solute that is absent.
 double activity(const SpeciesTable &table, const CellState &cell, SpeciesId species, const CellMeta *meta = nullptr);
 
+// Water's ionisation constant at temperature T (GAME_SPEC §9, Stage 43): Kw = a(H+) a(OH-) / a(H2O), from the
+// table's ionisation at 25 C and its heat capacity held constant. 0 for a table without it.
+double water_ionisation(const SpeciesTable &table, double temperature);
+
+// The cell's pH at temperature T (GAME_SPEC §9, Stage 43): -log10 a(H+). The strong acids and bases are fully
+// dissociated, and the neutralisation between them is a fast equilibrium, so what is left over of one sets the
+// hydrogen ions' molality; water's own ionisation adds what it adds, the free ions solving
+// (m_H + x)(m_OH + x) gamma_H gamma_OH = Kw a(H2O). Each particle's activity coefficient is Pitzer's (§10).
+// false, and `ph` left, where the cell holds no liquid or its table no ionisation of water.
+bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &ph);
+
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species);

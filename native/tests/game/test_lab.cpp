@@ -620,9 +620,12 @@ TEST_CASE("lab: a save that is not one is refused (Stage 8)") {
 	json saved = json::parse(lab->save());
 	{
 		json other = saved;
-		other["species"] = 3; // made with other data
+		other["species"] = saved["species"].get<int>() + 1; // made with other data: more species than the tables have
 		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
 		CHECK(why.find("other data") != std::string::npos);
+		other["species"] = 3; // fewer, but its cells hold more than three (a save from before the tables grew holds as many as it says: Stage 43)
+		CHECK(lab::Lab::load(other.dump(), why) == nullptr);
+		CHECK(why.find("do not match") != std::string::npos);
 	}
 	{
 		json other = saved;

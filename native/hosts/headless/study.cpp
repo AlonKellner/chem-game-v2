@@ -571,6 +571,73 @@ int solution_heat() {
 	return status;
 }
 
+// Stage 43: a titration (GAME_SPEC §9). 25 mL of 1 M sulfuric acid and 1 M sodium hydroxide added to it, mixed
+// at 20 C and settled in a step: the pH against what is left over of either, the warmth against the heat of the
+// waters made. The neutralisation is a fast equilibrium, so each mixture is the step's end.
+int neutralisation() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const auto hf = [&](SpeciesId x) { return table.species(x).hf; };
+	const auto cp = [&](SpeciesId x) { return table.species(x).cp; };
+	const double heat = hf(builtin::sodium_sulfate_aq) + 2.0 * hf(builtin::water) - hf(builtin::sulfuric_acid_aq) - 2.0 * hf(builtin::sodium_hydroxide_aq) +
+			(cp(builtin::sodium_sulfate_aq) + 2.0 * cp(builtin::water) - cp(builtin::sulfuric_acid_aq) - 2.0 * cp(builtin::sodium_hydroxide_aq)) * (293.15 - T0);
+	std::printf("25 mL of 1 M sulfuric acid (0.025 mol in 24.05 g of water), 1 M sodium hydroxide (0.001 mol in 0.96 g of water a mL) added, mixed at 20 C\n");
+	std::printf("H2SO4(aq) + 2 NaOH(aq) -> Na2SO4(aq) + 2 H2O(l): %.2f kJ at 20 C, %.2f kJ a water; Kw %.4g at 20 C (pKw %.3f)\n\n", heat * 1e-3, heat * 5e-4,
+			water_ionisation(table, 293.15), -std::log10(water_ionisation(table, 293.15)));
+	std::printf("%8s %10s %12s %12s %10s %12s %10s\n", "base mL", "pH", "ideal pH", "C", "closed C", "Na2SO4 mol", "invariants");
+	int status = 0;
+	for (int ml = 0; ml <= 70; ml += (ml >= 44 && ml < 56) ? 1 : 4) {
+		const double base = 0.001 * ml, water = (24.05 + 0.96 * ml) / 18.015;
+		World::Builder b(table);
+		const CellId beaker = b.add_cell("beaker");
+		b.set_amount(beaker, builtin::water, amount_from_mol(water, ok)).set_amount(beaker, builtin::sulfuric_acid_aq, amount_from_mol(0.025, ok));
+		if (base > 0.0) {
+			b.set_amount(beaker, builtin::sodium_hydroxide_aq, amount_from_mol(base, ok));
+		}
+		b.set_temperature(beaker, 293.15);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		Simulation sim(std::move(*world), shipped());
+		const Totals genesis = totals(table, sim.world().snapshot());
+		std::vector<Reaction> equilibria;
+		for (const Reaction &r : builtin_reactions()) {
+			if (r.kinetics().law == Kinetics::Law::Equilibrium) {
+				equilibria.push_back(r);
+			}
+		}
+		const StepTrace trace = sim.step();
+		const bool clean = check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis;
+		const CellState &end = sim.world().snapshot_cell(beaker);
+		double kelvin = 0.0, p = 0.0;
+		sim.world().temperature(beaker, kelvin);
+		if (!ph(table, end, kelvin, p)) {
+			std::fprintf(stderr, "chem_tool: no pH\n");
+			return 1;
+		}
+		const double made = std::min(0.025, 0.5 * base);
+		const double closed = 20.0 - made * heat / thermal_state(table, end).heat_capacity;
+		// the ideal: what is left over at unit activity, or water's own ions
+		const double kg = water * 0.018015, left = (0.05 - base) / kg;
+		const double kw = water_ionisation(table, kelvin);
+		const double ideal = left > 0.0 ? -std::log10(0.5 * left + std::sqrt(0.25 * left * left + kw)) : -std::log10(kw / (-0.5 * left + std::sqrt(0.25 * left * left + kw)));
+		std::printf("%8d %10.3f %12.3f %12.3f %10.3f %12.5f %10s\n", ml, p, ideal, kelvin - 273.15, closed, static_cast<double>(end.amount[static_cast<size_t>(builtin::sodium_sulfate_aq.index)]) * MOL_PER_QUANTUM,
+				clean ? "hold" : "BROKEN");
+		status |= clean ? 0 : 1;
+		status |= std::abs(kelvin - 273.15 - closed) < 0.02 ? 0 : 1;
+		// the jump: acid a mL short of the equivalence, near neutral at it, base a mL past (at it, the single ions'
+		// activity coefficients, Pitzer's convention, put it 0.2 from pKw / 2: docs/TDD_43_ACIDITY.md, Open)
+		if ((ml == 49 && !(p < 3.0)) || (ml == 50 && !(std::abs(p - 7.0) < 0.3)) || (ml == 51 && !(p > 11.0))) {
+			status |= 1;
+		}
+	}
+	std::printf("\n%s\n", status == 0 ? "every mixture settled with its invariants holding, within 0.02 K of the closed form; the pH jumps across 50 mL" : "A MIXTURE FAILED");
+	return status;
+}
+
 } // namespace
 
 int spectrum_study(); // spectrum.cpp
@@ -616,6 +683,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "solution_heat") == 0) {
 		return solution_heat();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, spectrum, frames, tilt, vortex)\n", name);
+	if (std::strcmp(name, "neutralisation") == 0) {
+		return neutralisation();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

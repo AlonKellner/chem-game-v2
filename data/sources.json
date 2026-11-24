@@ -3,7 +3,7 @@
 	"note": "Where each number in data/ comes from (CLAUDE.md, 'Fetched data is documented and held to its source'; tools/check_sources.py, the ctest entry data_sources). Every numeric value under data/ (a JSON number or decimal string; a CSV table as a whole) must match an entry's pattern. A pattern is a path: the file, then keys; an array of objects is keyed by each one's id, symbol or name, any other array by '#'. '{a,b}' is any of its names; '*' and '**' only as the last segment (one key; anything below), so a new file, species, reaction, item or medium matches nothing until it is entered here. An entry is measured (tests: the TEST_CASEs that hold it to its source; doc: phrases docs/DATA_SOURCES.md must contain), calibrated (why; doc; tests optional) or design (why: a choice of the game, not a claim about the world).",
 	"entries": [
 		{
-			"data": ["elements.json/elements/{H,C,N,O,Si,S,Cu}/mass"],
+			"data": ["elements.json/elements/{H,C,N,O,Si,S,Cu,Na}/mass"],
 			"measured": "CIAAW's abridged standard atomic weights",
 			"doc": ["CIAAW"],
 			"tests": ["sources: molar masses are IUPAC's atomic weights"]
@@ -36,6 +36,18 @@
 			"tests": ["sources: every species' thermodynamic row is the one cited", "solution: the data oracle: saturated copper sulfate"]
 		},
 		{
+			"data": ["species.json/species/{sodium_hydroxide_aq,sodium_sulfate_aq}/thermo/*"],
+			"measured": "NBS 1982 (Wagman et al.): NaOH and Na2SO4 'ai', each the sum of its ions",
+			"doc": ["Acids and bases (Stage 43)", "Wagman et al."],
+			"tests": ["sources: every species' thermodynamic row is the one cited", "acidity: the neutralisation gives out 55.84 kJ"]
+		},
+		{
+			"data": ["solutions.json/water_ionisation/*"],
+			"measured": "NBS 1982's OH-(aq) and H2O(l); held to IAPWS R11-24's pKw from 0 to 100 C",
+			"doc": ["Acids and bases (Stage 43)", "IAPWS R11-24"],
+			"tests": ["measured: water's ionisation constant is IAPWS R11-24's"]
+		},
+		{
 			"data": ["species.json/species/latex/thermo/*"],
 			"measured": "NETZSCH's heat capacity of natural rubber; a wall never reacts, so its formation terms are 0",
 			"doc": ["NETZSCH"],
@@ -54,14 +66,14 @@
 			"tests": ["sources: the solutes' apparent molar volumes"]
 		},
 		{
-			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq}/ions/*"],
+			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq,sodium_hydroxide_aq,sodium_sulfate_aq}/ions/*"],
 			"design": "a dissolved salt's ions, counted from its formula"
 		},
 		{
 			"data": ["solutions.json/{a_phi,b}", "solutions.json/pairs/#/*"],
-			"measured": "Pitzer and Mayorga; the acid's set fitted to Staples",
-			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples"],
-			"tests": ["solution: the data oracle: copper sulfate and the acid as electrolytes", "solution: the acid lowers the salt's solubility"]
+			"measured": "Pitzer and Mayorga; the acid's set fitted to Staples; the base's and its salt's held to Hamer and Wu and to Goldberg",
+			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples", "Hamer and Wu", "Goldberg 1981"],
+			"tests": ["solution: the data oracle: copper sulfate and the acid as electrolytes", "solution: the acid lowers the salt's solubility", "measured: sodium hydroxide's and sodium sulfate's mean activity coefficients"]
 		},
 		{
 			"data": ["solutions.json/diffusion/*", "solutions.json/viscosity/#/*"],

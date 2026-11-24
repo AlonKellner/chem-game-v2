@@ -16,6 +16,8 @@
 		{"id": "copper_sulfate_monohydrate", "formula": "CuSO4.H2O", "phase": "s", "density": 3.382, "thermo": {"hf_kj": -1085.83, "cp": 134, "s0": 146.0}},
 		{"id": "copper_sulfate", "formula": "CuSO4", "phase": "s", "density": 3.603, "thermo": {"hf_kj": -771.4, "cp": 98.531, "s0": 109.2}},
 		{"id": "glass", "formula": "SiO2", "phase": "s", "wall": true, "thermo": {"hf_kj": -910.86, "cp": 48.066, "s0": 41.46}},
-		{"id": "latex", "formula": "C5H8", "phase": "s", "wall": true, "thermo": {"hf_kj": 0, "cp": 130.1, "s0": 0}}
+		{"id": "latex", "formula": "C5H8", "phase": "s", "wall": true, "thermo": {"hf_kj": 0, "cp": 130.1, "s0": 0}},
+		{"id": "sodium_hydroxide_aq", "formula": "NaOH", "phase": "aq", "ions": {"Na+1": 1, "OH-1": 1}, "thermo": {"hf_kj": -470.114, "cp": -102.1, "s0": 48.1}},
+		{"id": "sodium_sulfate_aq", "formula": "Na2SO4", "phase": "aq", "ions": {"Na+1": 2, "SO4-2": 1}, "thermo": {"hf_kj": -1389.51, "cp": -201, "s0": 138.1}}
 	]
 }

@@ -18,7 +18,7 @@ bool near(double a, double b, double rel) {
 }
 
 // IUPAC's abridged standard atomic weights (CIAAW), g/mol
-constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546;
+constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990;
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -56,6 +56,8 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		{ builtin::sulfuric_acid_aq, -909.27, 20.1, 138.9 }, // Atkins's SO4 2-(aq); Cp a stand-in
 		{ builtin::copper_sulfate_aq, -835.990, -51.520, 211.81 }, // fitted to the CRC's solubility (Stage 19)
 		{ builtin::latex, 0.0, 0.0, 130.1 }, // NETZSCH's 1.91 J/g/K
+		{ builtin::sodium_hydroxide_aq, -470.114, 48.1, -102.1 }, // NBS 1982, p. 2-299, NaOH "ai" (Stage 43)
+		{ builtin::sodium_sulfate_aq, -1389.51, 138.1, -201.0 }, // NBS 1982, p. 2-307, Na2SO4 "ai"
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -86,6 +88,8 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::copper_sulfate_monohydrate, CU + S + 4 * O + (2 * H + O), 3.382 }, // its structure at 100 K
 		{ builtin::carbon_dioxide, C + 2 * O, 0.0 },
 		{ builtin::nitrogen, 2 * N, 0.0 },
+		{ builtin::sodium_hydroxide_aq, NA + O + H, 0.0 }, // Stage 43
+		{ builtin::sodium_sulfate_aq, 2 * NA + S + 4 * O, 0.0 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);

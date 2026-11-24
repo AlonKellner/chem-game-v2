@@ -8,7 +8,8 @@ weights of `data/elements.json`.
 **Atomic weights** (`data/elements.json`): the abridged standard atomic weights of CIAAW (IUPAC's
 Commission on Isotopic Abundances and Atomic Weights), "Abridged Standard Atomic Weights 2024"
 (ciaaw.org/abridged-atomic-weights.htm, after the "Atomic Weights 2021" report; read 2026-11-21):
-H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed.
+H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed;
+Na 22.990 (Stage 43, the same table).
 Check: each molar mass the build derives is these summed by the formula (water 18.015, the
 pentahydrate 249.677): `sources: molar masses are IUPAC's atomic weights`.
 
@@ -208,6 +209,87 @@ The game uses 2.7 for CuSO4(aq) and 35.7 for H2SO4(aq): each taken where the dem
 - Single crystals are "clear grayish blue" (CuSO4·3H2O), "clear light blue" (CuSO4·H2O) and "clear
   colourless" (CuSO4), from COD 7061267–7061269.
 - No reliable source describes the monohydrate as a powder.
+
+## Acids and bases (Stage 43)
+
+Sodium hydroxide, its salt with the acid, and water's own ionisation, for the pH (GAME_SPEC §9). All of it
+was read 2026-11-24.
+
+**Thermodynamic rows.** NBS tables (Wagman et al., *J. Phys. Chem. Ref. Data* 11, Suppl. 2, 1982), read
+from the scanned pages, 298.15 K, 0.1 MPa:
+
+| Species | NBS row, page | ΔfH° kJ/mol | S° J/mol·K | Cp° J/mol·K |
+|---|---|---|---|---|
+| OH⁻(aq) | ao, 2-38 | −229.994 | −10.75 | −148.5 |
+| Na⁺(aq) | ao, 2-299 | −240.12 | 59.0 | 46.4 |
+| SO₄²⁻(aq) | ao, 2-57 | −909.27 | 20.1 | −293 |
+| NaOH(aq), `sodium_hydroxide_aq` | ai, 2-299 | **−470.114** | **48.1** | **−102.1** |
+| Na₂SO₄(aq), `sodium_sulfate_aq` | ai, 2-307 | **−1389.51** | **138.1** | **−201** |
+
+- Each salt's row is the sum of its ions, except NaOH's S°: the ions sum to 48.25, and NBS tabulates 48.1.
+- The rows are NBS's, as the acid's are (its SO₄²⁻), and not CODATA's (Cox, Wagman and Medvedev 1989:
+  OH⁻ −230.015, Na⁺ −240.34). One table, not two.
+- Neither salt has an apparent molar volume in the game. Each takes no room (NaOH's is about −5 cm³/mol at
+  infinite dilution): a declared simplification.
+- **The heat of the neutralisation follows.** H₂SO₄(aq) + 2 NaOH(aq) → Na₂SO₄(aq) + 2 H₂O(l) gives
+  **−111.672 kJ**, that is, −55.836 kJ for each water. That is the ionisation of water backwards.
+  - NBS's "in n H₂O" rows (pp. 2-58, 2-300, 2-307) give −133.6 kJ for the same reaction at about
+    0.55 mol/kg.
+  - Most of the difference is the bisulfate the acid holds, which dissociates as it is neutralised:
+    HSO₄⁻ → H⁺ + SO₄²⁻ gives −21.93 kJ/mol (NBS).
+  - The game's acid is fully dissociated (GAME_SPEC §20), so it gives the infinite-dilution heat.
+
+**Water's ionisation.** `solutions.json`'s `water_ionisation`, H₂O(l) → H⁺(aq) + OH⁻(aq), from NBS's OH⁻ and
+H₂O(l) rows (H₂O: −285.830, −237.129, 75.291):
+
+| Quantity | Value |
+|---|---|
+| ΔH° | **55.836 kJ/mol** |
+| ΔG° | **79.885 kJ/mol** (pKw 13.995 at 25 °C) |
+| ΔCp | **−223.8 J/mol·K**, held constant |
+
+Against **IAPWS R11-24** (2024, which replaced R11-07; Arcis et al., *J. Phys. Chem. Ref. Data* 53, 023103),
+pKw at saturation, Table 3, stated uncertainty 0.05:
+
+| °C | 0 | 25 | 50 | 75 | 100 |
+|---|---|---|---|---|---|
+| IAPWS R11-24 | 14.95 | 13.99 | 13.26 | 12.70 | 12.25 |
+| the model | 14.937 | 13.995 | 13.275 | 12.724 | 12.303 |
+
+Gate: within 0.06 at each, `measured: water's ionisation constant is IAPWS R11-24's`.
+
+**Pitzer's parameters** (`solutions.json`'s pairs), 25 °C, α 2, b 1.2. From Pitzer and Mayorga, *J. Phys. Chem.*
+77, 2300 (1973), the LBL preprint's tables, read:
+
+| Pair | β0 | β1 | Cφ | Valid to |
+|---|---|---|---|---|
+| Na⁺/OH⁻ (Table I) | 0.0864 | 0.253 | 0.0044 | 6 mol/kg |
+| Na⁺/SO₄²⁻ (Table VI) | 0.01958 | 1.113 | 0.004974 | 4 mol/kg |
+
+- Table VI prints Na⁺/SO₄²⁻ as (4/3)β0 0.0261, (4/3)β1 1.484 and (2^(5/2)/3)Cφ 0.00938. The β0, β1 and Cφ
+  above are those divided back.
+- There are no mixing terms (θ, ψ), as for the other pairs.
+
+Mean activity coefficients, the gate at 2.5 % (`measured: sodium hydroxide's and sodium sulfate's mean
+activity coefficients`):
+
+| Solution | Source | γ± |
+|---|---|---|
+| NaOH 0.5 mol/kg | Hamer and Wu, *J. Phys. Chem. Ref. Data* 1, 1047 (1972), Table 19 | 0.685 |
+| NaOH 1.0 mol/kg | Hamer and Wu, Table 19 | 0.674 |
+| Na₂SO₄ 0.1 mol/kg | Goldberg 1981, *J. Phys. Chem. Ref. Data* 10, 671 | 0.4457 |
+| Na₂SO₄ 0.5 mol/kg | Goldberg 1981 | 0.2684 |
+| Na₂SO₄ 1.0 mol/kg | Goldberg 1981 | 0.2040 |
+
+**The pH** is derived, not stored (GAME_SPEC §9). It is −log₁₀ of the hydrogen ions' activity:
+- Their molality is what is left of the acid's over the base's, and water's own ions solve
+  (m_H + x)(m_OH + x)·γ_H·γ_OH = Kw·a(H₂O).
+- Each γ is Pitzer's single-ion coefficient: a convention, as every single-ion activity is.
+- The acid's fitted activity gives 0.01 mol/kg sulfuric acid a pH of 1.86, against about 1.87 measured. There,
+  the bisulfate holds a share of the hydrogen back.
+
+**Not used (not verified):** the CRC's limiting diffusion coefficients of Na⁺ and OH⁻ (1.334e-9, 5.273e-9 m²/s)
+could not be read from the CRC page. They are not needed: no surface reaction of these ions is modelled.
 
 ## Measured kinetics (Stage 23)
 

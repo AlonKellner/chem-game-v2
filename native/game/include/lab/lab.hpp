@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -70,6 +71,8 @@ struct ItemView {
 	double hold_n = 0.0;
 	double valve = 0.0; // a burner
 	double celsius = 0.0;
+	// its liquid's pH (GAME_SPEC §9, Stage 43): -log10 a(H+); none without a liquid
+	std::optional<double> ph;
 	double volume_ml = 0.0; // a vessel's own
 	double capacity_ml = 0.0; // a balloon's
 	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)

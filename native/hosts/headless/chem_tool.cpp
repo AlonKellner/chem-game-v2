@@ -26,6 +26,7 @@ int usage() {
 						 "  study dissolution     copper oxide under sulfuric acid: still, stirred, warmed\n"
 						 "  study crystals        the solution boiled down and left to cool\n"
 						 "  study solution_heat   copper sulfate dissolved: the anhydrous salt warms the water, the pentahydrate cools it\n"
+						 "  study neutralisation  a titration: sodium hydroxide into sulfuric acid, the pH and the warmth\n"
 						 "  study spectrum        how many spectral bands the renderer needs\n"
 						 "  study tilt            what each vessel holds below its lip as it is turned, and what runs over it\n"
 						 "  study vortex          a turning liquid's vortex against its energy, E = (M g / A) V\n"

@@ -12,7 +12,7 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met";
+			what == "fill" || what == "met" || what == "ph";
 }
 
 bool is_gas(const std::string &species) {
@@ -147,6 +147,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "kpa") { // its pressure (Stage 28): an open vessel's is the room's
 		return v->pressure_kpa;
 	}
+	if (q.what == "ph") { // its liquid's (Stage 43): none without one
+		return v->ph;
+	}
 	if (q.what == "mass_g") { // all it holds, its wall not
 		double all = 0.0;
 		for (const SubstanceView &s : v->contents) {
@@ -185,6 +188,9 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 	}
 	if (item.kind == "vessel") {
 		out.push_back(Quantity{ item.id, "kpa", "g" }); // Stage 28
+		if (item.ph) {
+			out.push_back(Quantity{ item.id, "ph", "g" }); // Stage 43: while it holds a liquid
+		}
 	}
 	if (item.kind == "balloon") {
 		out.push_back(Quantity{ item.id, "fill", "g" });
@@ -236,7 +242,7 @@ std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind k
 		}
 	}
 	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
-		static const char *const ORDER[] = { "celsius", "kpa", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		static const char *const ORDER[] = { "celsius", "kpa", "ph", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
 		std::vector<std::string> ordered;
 		for (const char *w : ORDER) {
 			if (std::find(out.begin(), out.end(), w) != out.end()) {
@@ -269,7 +275,7 @@ std::string unit(const Quantity &q) {
 	if (q.what == "valve" || q.what == "fill") {
 		return "%";
 	}
-	if (q.what == "met") {
+	if (q.what == "met" || q.what == "ph") {
 		return "";
 	}
 	if (q.what == "mass_g") {
@@ -300,6 +306,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "total mass";
 	} else if (q.what == "kpa") {
 		what = "pressure";
+	} else if (q.what == "ph") {
+		what = "pH";
 	} else if (q.what == "valve") {
 		what = "valve";
 	} else if (q.what == "fill") {
@@ -329,6 +337,9 @@ std::string shown(const Quantity &q, double value) {
 	if (q.what == "kpa") {
 		return fmt("%.1f kPa", value);
 	}
+	if (q.what == "ph") {
+		return fmt("pH %.2f", value);
+	}
 	if (q.measure == "ml" && !fixed(q.what)) {
 		return fmt("%.2f mL", value);
 	}
@@ -349,7 +360,7 @@ std::string shown(const Quantity &q, double value) {
 
 void scales(const Quantity &q, double out[3]) {
 	const double g[3] = { 1.0, 0.1, 0.01 }, c[3] = { 10.0, 1.0, 0.1 }, n[3] = { 10000.0, 1000.0, 100.0 }, m[3] = { 0.01, 0.001, 0.0001 };
-	const double *pick = q.what == "mass_g" ? g
+	const double *pick = q.what == "mass_g" || q.what == "ph" ? g
 			: fixed(q.what) || q.measure == "size" || q.measure == "ml" ? c
 			: q.measure == "count"                ? n
 			: q.measure == "mol"                  ? m
@@ -360,7 +371,7 @@ void scales(const Quantity &q, double out[3]) {
 }
 
 std::vector<std::string> goal_quantities() {
-	std::vector<std::string> out{ "celsius", "liquid_ml", "gas_ml" };
+	std::vector<std::string> out{ "celsius", "liquid_ml", "gas_ml", "ph" };
 	for (const chem::SpeciesDef &s : chem::builtin_species().all_species()) {
 		if (!s.wall) {
 			out.emplace_back(s.id);
