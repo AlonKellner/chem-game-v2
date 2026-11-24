@@ -177,6 +177,31 @@ Path at(int x, int y) {
 	return path_of(vec2(x + 0.5, y + 0.5), 1.0);
 }
 
+// How wide a point is, in pixels, as the pass's rays read the bodies they meet (ray_shade's layer_at).
+constexpr double POINT_SIZE = 1.0e-3;
+
+// One ray's light at one wavelength through the point p of the screen (Stage 42: the spectrum probe's sample;
+// GAME_SPEC §12), by the pass's own source: where nothing bends it, the bodies as they lie at the point and the
+// wall there; else the ray traced through every body to where it lands, through a grating each of its ways by
+// its share. A factor of the room's light, as optics_through.
+real point_light(vec2 p, real nm) {
+	const Path q = path_of(p, POINT_SIZE);
+	if (!beamed(q)) {
+		return flat_band(q, 0.0, 0.0, 0.0, nm);
+	}
+	real light = 0.0;
+	int ways = 1;
+	for (int way = 0; way < ways; ++way) {
+		ray_way = way;
+		const RayMet m = ray_met(p, nm);
+		ways = way == 0 ? m.ways : ways;
+		const vec2 t = ray_shade(m, nm);
+		light = light + (ways > 1 ? way_share(way) : 1.0) * (t.x * wall_point(vec2(m.x, m.y)) + t.y);
+	}
+	ray_way = 0;
+	return light;
+}
+
 // ---- the frames of a sample of pixels (optics_frames.hpp; lab/optics_scene.hpp: OpticsFrames)
 
 struct Frames final : OpticsFramesCore {

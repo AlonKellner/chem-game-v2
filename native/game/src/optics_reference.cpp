@@ -102,6 +102,27 @@ double optics_through(const OpticsScene &scene, int x, int y, double nm) {
 	return shader::band_light(shader::at(x, y), 0.0, 0.0, 0.0, nm);
 }
 
+double optics_point(const OpticsScene &scene, double x, double y, double nm) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	return shader::point_light(shader::vec2(x, y), nm);
+}
+
+void optics_point_key(const OpticsScene &scene, double x, double y, double size, double key[4]) {
+	key[0] = key[1] = key[2] = key[3] = 0.0;
+	if (!shader::ready(scene)) {
+		return;
+	}
+	const shader::Use use(scene);
+	const shader::Path q = shader::path_of(shader::vec2(x, y), size);
+	key[0] = q.key.x;
+	key[1] = q.key.y;
+	key[2] = q.key.z;
+	key[3] = q.key.w + 0.31 * q.shape.x + 0.37 * q.shape.y + 0.41 * q.content.x + 0.43 * q.content.y + 0.47 * q.back + 0.53 * shader::wall_vec(0).z;
+}
+
 double optics_band(const OpticsScene &scene, int x, int y, double u0, double u1, double t) {
 	if (!shader::ready(scene)) {
 		return 0.0;
@@ -517,6 +538,14 @@ double optics_area_through(const OpticsScene &scene, int x, int y, double nm, in
 		sum += r;
 	}
 	return sum / (grid * grid);
+}
+
+double optics_point_truth(const OpticsScene &scene, double x, double y, double nm) {
+	if (!shader::ready(scene)) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	return exact_through(shader::vec2(x, y), shader::POINT_SIZE, nm);
 }
 
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {

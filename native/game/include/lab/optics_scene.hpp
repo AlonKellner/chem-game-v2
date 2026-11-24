@@ -257,6 +257,13 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 // bring (traced exactly; the ends of the line's image found by halving, the light between them summed by
 // Simpson's rule), wherever the line lands. "" when it holds.
 std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through = nullptr);
+// One ray's light at one wavelength through the point (x, y) of the screen, a factor of the room's light as
+// optics_through (Stage 42: the spectrum probe's sample, GAME_SPEC §12): by the pass's own source, and by the
+// truth's own tracer. And the content key of what a sample `size` across about the point looks through, as a
+// pixel's history keys it (its bodies, their shapes and contents, the backdrop and the wall's tag).
+double optics_point(const OpticsScene &scene, double x, double y, double nm);
+double optics_point_truth(const OpticsScene &scene, double x, double y, double nm);
+void optics_point_key(const OpticsScene &scene, double x, double y, double size, double key[4]);
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 
