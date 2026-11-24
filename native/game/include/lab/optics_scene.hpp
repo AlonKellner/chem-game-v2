@@ -132,8 +132,11 @@ inline constexpr int IMAGE_HEAD_VECS = 2;
 // sensor pixel), (where its pixels' records begin in the pool, its rectangle on the screen: left, top, width), (its
 // settings' and what lies under its frame's tag, its rectangle's height, how much of its third of an LCD pixel a
 // subpixel fills across and how much down); RELAY_PALETTE entries of what its primaries are driven to for each
-// palette colour (red, green, blue, 0), low to high; then its three primaries' light, ROW values each, four to a vec4.
-inline constexpr int RELAY_HEAD_VECS = 4, RELAY_PALETTE = 256;
+// palette colour (red, green, blue, 0), low to high; then its three primaries' light, ROW values each, four to a vec4;
+// (Stage 48) its fifth head vec4: its LCD's pixels across and down, where its overlay begins (0: none), 0; and its
+// overlay, a vec4 an LCD pixel row by row: what its primaries are driven to there (red, green, blue) and how much of
+// the pixel it is (the palette's colour shows through the rest: the camera's scale, numbers and marks).
+inline constexpr int RELAY_HEAD_VECS = 5, RELAY_PALETTE = 256;
 inline constexpr int RELAY_VECS = RELAY_HEAD_VECS + RELAY_PALETTE + (3 * ROW + 3) / 4;
 // a sensor display's pixel's record in the pool (the per-pixel source says what it holds)
 inline constexpr int RELAY_RECORD = 4;
@@ -201,6 +204,12 @@ struct OpticsRelay {
 	std::array<std::array<float, 3>, 256> palette{};
 	uint32_t bit = 1;
 	uint64_t hash = 0; // its settings: a new one is a new reading
+	// (Stage 48) what it shows over its picture, an LCD pixel a layout pixel: lcd_w by lcd_h, 8-bit sRGB row by row,
+	// and how much of each pixel it is (0 to 1); none where empty
+	int lcd_w = 0, lcd_h = 0;
+	std::vector<uint8_t> overlay;
+	std::vector<float> overlay_mask;
+	uint64_t overlay_hash = 0;
 };
 
 // One vessel or balloon as the screen places it.

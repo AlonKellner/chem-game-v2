@@ -78,4 +78,18 @@ double thermal_celsius(double signal, double room_kelvin, double emissivity, dou
 // "" when it does.
 std::string check_O26(const ThermalReading &search, const ThermalReading &brute, double room_kelvin, double emissivity, double reflected_kelvin);
 
+// What a camera's screen shows over its picture (Stage 48), an LCD pixel a sensor pixel: its palette's scale on the
+// right (hottest up) with its span's ends, its centre's cross and spot reading, its emissivity and whether its range is
+// auto or locked, ">150" or ">650" past its gain, and, with its markers on, a red mark on its hottest pixel and a blue
+// one on its coldest with their temperatures. 8-bit sRGB and how much of each pixel it is (an OpticsRelay's overlay).
+struct ThermalOverlay {
+	int w = 0, h = 0;
+	std::vector<uint8_t> rgb;
+	std::vector<float> mask;
+	uint64_t hash = 0;
+};
+// (the temperatures, C; `reading` not done: no marks yet)
+void thermal_overlay(const ThermalSettings &settings, const ThermalSpan &span, const ThermalReading &reading, double hottest_c, double coldest_c, double centre_c, int w, int h,
+		ThermalOverlay &out);
+
 } // namespace lab

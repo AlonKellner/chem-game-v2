@@ -1850,8 +1850,7 @@ bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	// as the camera reads it, and shows it
 	const double own = (signal - (1.0 - h0.z) * h0.w) / std::max(static_cast<double>(h0.z), 1e-6);
 	const double t = std::clamp((shader::infrared_kelvin(own) - h1.x) / std::max(static_cast<double>(h1.y - h1.x), 1e-6), 0.0, 1.0) * (RELAY_PALETTE - 1);
-	const int k = std::min(static_cast<int>(std::floor(t)), RELAY_PALETTE - 2);
-	const shader::vec4 w = shader::mix(shader::image_vec(b + RELAY_HEAD_VECS + k), shader::image_vec(b + RELAY_HEAD_VECS + k + 1), t - k);
+	const shader::vec4 w = shader::relay_drive(q.relay, t, p);
 	const shader::vec3 st = shader::relay_stripes(q.relay, p, 1.0);
 	const double drive[3] = { w.x * st.x, w.y * st.y, w.z * st.z };
 	for (int c = 0; c < 3; ++c) {

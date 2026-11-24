@@ -90,6 +90,17 @@ public:
 	// temperature a colour (the debug panel's "infrared"); off as opened.
 	void set_infrared(bool on);
 	bool infrared() const;
+	// What a thermal camera on the bench last read (Stage 48): its hottest, coldest and centre (C) and where its hottest
+	// and coldest are (its sensor pixels from its frame's top-left), the span it shows and at what gain; false until
+	// its first reading.
+	struct ThermalShown {
+		double hottest_c = 0.0, coldest_c = 0.0, centre_c = 0.0;
+		int hot_x = 0, hot_y = 0, cold_x = 0, cold_y = 0;
+		double low_c = 0.0, high_c = 0.0;
+		std::string gain;
+		bool over = false;
+	};
+	bool thermal(std::string_view camera, ThermalShown &out) const;
 	// what the budget is measured by: milliseconds, from any start (a test gives its own; by default the
 	// steady clock)
 	void set_clock(std::function<double()> ms_now);

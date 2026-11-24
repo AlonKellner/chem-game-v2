@@ -226,6 +226,130 @@ double thermal_celsius(double signal, double room_kelvin, double emissivity, dou
 	return chem::optics::brightness_kelvin(signal * chem::optics::band_signal(room_kelvin), emissivity, reflected_kelvin) - 273.15;
 }
 
+namespace {
+
+// a 3 x 5 font: what the camera's screen writes (a row a byte, its three low bits, the leftmost the highest)
+const uint8_t *glyph(char c) {
+	static const uint8_t digits[10][5] = { { 7, 5, 5, 5, 7 }, { 2, 6, 2, 2, 7 }, { 7, 1, 7, 4, 7 }, { 7, 1, 7, 1, 7 }, { 5, 5, 7, 1, 1 }, { 7, 4, 7, 1, 7 }, { 7, 4, 7, 5, 7 }, { 7, 1, 1, 2, 2 },
+		{ 7, 5, 7, 5, 7 }, { 7, 5, 7, 1, 7 } };
+	static const std::map<char, std::array<uint8_t, 5>> letters{ { '-', { 0, 0, 7, 0, 0 } }, { '.', { 0, 0, 0, 0, 2 } }, { '>', { 4, 2, 1, 2, 4 } }, { 'C', { 7, 4, 4, 4, 7 } },
+		{ 'A', { 2, 5, 7, 5, 5 } }, { 'U', { 5, 5, 5, 5, 7 } }, { 'T', { 7, 2, 2, 2, 2 } }, { 'O', { 7, 5, 5, 5, 7 } }, { 'L', { 4, 4, 4, 4, 7 } }, { 'K', { 5, 5, 6, 5, 5 } },
+		{ 'E', { 7, 4, 6, 4, 7 } }, { 'S', { 7, 4, 7, 1, 7 } }, { 'P', { 7, 5, 7, 4, 4 } }, { 'H', { 5, 5, 7, 5, 5 } } };
+	if (c >= '0' && c <= '9') {
+		return digits[c - '0'];
+	}
+	const auto found = letters.find(c);
+	return found != letters.end() ? found->second.data() : nullptr;
+}
+
+struct Canvas {
+	ThermalOverlay &o;
+	void put(int x, int y, const std::array<uint8_t, 3> &c) {
+		if (x < 0 || y < 0 || x >= o.w || y >= o.h) {
+			return;
+		}
+		const size_t k = static_cast<size_t>(y) * static_cast<size_t>(o.w) + static_cast<size_t>(x);
+		o.rgb[k * 3] = c[0];
+		o.rgb[k * 3 + 1] = c[1];
+		o.rgb[k * 3 + 2] = c[2];
+		o.mask[k] = 1.0f;
+	}
+	static int width(const std::string &s) { return s.empty() ? 0 : 4 * static_cast<int>(s.size()) - 1; }
+	// a string from (x, y), its top left, over a shadow a pixel down and right (readable on any colour)
+	void write(int x, int y, const std::string &s, const std::array<uint8_t, 3> &c) {
+		for (int pass = 0; pass < 2; ++pass) {
+			for (size_t i = 0; i < s.size(); ++i) {
+				const uint8_t *g = glyph(s[i]);
+				for (int row = 0; g != nullptr && row < 5; ++row) {
+					for (int col = 0; col < 3; ++col) {
+						if ((g[row] >> (2 - col)) & 1) {
+							put(x + 4 * static_cast<int>(i) + col + (pass == 0 ? 1 : 0), y + row + (pass == 0 ? 1 : 0), pass == 0 ? std::array<uint8_t, 3>{ 0, 0, 0 } : c);
+						}
+					}
+				}
+			}
+		}
+	}
+};
+
+std::string degrees(double c) {
+	char text[32];
+	std::snprintf(text, sizeof text, std::fabs(c) < 100.0 ? "%.1fC" : "%.0fC", c);
+	return text;
+}
+
+uint8_t code_of(float linear) {
+	const double v = std::clamp(static_cast<double>(linear), 0.0, 1.0);
+	return static_cast<uint8_t>(std::lround(255.0 * (v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055)));
+}
+
+} // namespace
+
+void thermal_overlay(const ThermalSettings &settings, const ThermalSpan &span, const ThermalReading &reading, double hottest_c, double coldest_c, double centre_c, int w, int h,
+		ThermalOverlay &out) {
+	out.w = w;
+	out.h = h;
+	out.rgb.assign(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)) * 3, 0);
+	out.mask.assign(static_cast<size_t>(std::max(w, 0)) * static_cast<size_t>(std::max(h, 0)), 0.0f);
+	if (w < 24 || h < 24) {
+		out.hash = 0;
+		return;
+	}
+	Canvas c{ out };
+	const std::array<uint8_t, 3> white{ 255, 255, 255 };
+	// the scale: the palette, hottest up, and its span's ends
+	const auto &palette = thermal_palette(settings.palette);
+	const int top = 9, bottom = h - 9;
+	for (int y = top; y < bottom; ++y) {
+		const auto &e = palette[static_cast<size_t>(std::clamp(static_cast<int>(std::lround(255.0 * (bottom - 1 - y) / std::max(bottom - 1 - top, 1))), 0, 255))];
+		for (int x = w - 7; x < w - 2; ++x) {
+			c.put(x, y, { code_of(e[0]), code_of(e[1]), code_of(e[2]) });
+		}
+	}
+	const std::string high = degrees(span.high_c), low = degrees(span.low_c);
+	c.write(w - 2 - Canvas::width(high), 1, high, white);
+	c.write(w - 2 - Canvas::width(low), h - 7, low, white);
+	// the centre's cross, and its spot's reading
+	const int mx = w / 2, my = h / 2;
+	for (int d = 2; d <= 5; ++d) {
+		c.put(mx - d, my, white);
+		c.put(mx + d, my, white);
+		c.put(mx, my - d, white);
+		c.put(mx, my + d, white);
+	}
+	c.write(2, 1, "SP" + degrees(centre_c), white);
+	char e[16];
+	std::snprintf(e, sizeof e, "E%.2f", settings.emissivity);
+	c.write(2, h - 7, std::string(e) + (settings.locked ? " LOCK" : " AUTO"), white);
+	if (span.over) {
+		const std::string over = span.gain == "low" ? ">650" : ">150";
+		c.write(mx - Canvas::width(over) / 2, 1, over, { 255, 80, 60 });
+	}
+	// the hottest and the coldest, each a mark (a triangle, up and down) and its temperature
+	if (settings.markers && reading.done) {
+		const auto mark = [&](const ThermalSpot &s, double celsius, bool up, const std::array<uint8_t, 3> &colour) {
+			for (int row = 0; row < 4; ++row) {
+				for (int dx = -row; dx <= row; ++dx) {
+					c.put(s.x + dx, up ? s.y + 1 + row : s.y - 1 - row, colour);
+				}
+			}
+			const std::string t = degrees(celsius);
+			const int tx = std::clamp(s.x + 5, 1, w - 10 - Canvas::width(t)), ty = std::clamp(up ? s.y + 1 : s.y - 6, 8, h - 15);
+			c.write(tx, ty, t, colour);
+		};
+		mark(reading.hottest, hottest_c, true, { 255, 60, 40 });
+		mark(reading.coldest, coldest_c, false, { 70, 140, 255 });
+	}
+	uint64_t hash = 1469598103934665603ull;
+	for (const uint8_t b : out.rgb) {
+		hash = (hash ^ b) * 1099511628211ull;
+	}
+	for (const float m : out.mask) {
+		hash = (hash ^ (m > 0.0f ? 1u : 0u)) * 1099511628211ull;
+	}
+	out.hash = hash;
+}
+
 std::string check_O26(const ThermalReading &search, const ThermalReading &brute, double room_kelvin, double emissivity, double reflected_kelvin) {
 	char text[240];
 	const double hot = thermal_celsius(search.hottest.signal, room_kelvin, emissivity, reflected_kelvin), hot_b = thermal_celsius(brute.hottest.signal, room_kelvin, emissivity, reflected_kelvin);

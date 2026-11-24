@@ -1,0 +1,25 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{"do": {"do": "place", "item": "flask", "at": [10, 4]}},
+		{"do": {"do": "place", "item": "burner", "at": [10, 11]}},
+		{"do": {"do": "valve", "burner": "burner", "to": 1.0}},
+		{"do": {"do": "place", "item": "beaker", "at": [5, 7]}},
+		{"do": {"do": "place", "item": "camera", "at": [15, 3]}},
+		{"to": "speed:60", "button": "click"},
+		{"frames": 240, "mark": "warming"},
+		{"to": "speed:1", "button": "click"},
+		{"frames": 90, "mark": "see-through", "shot": "thermal-see-through"},
+		{"frames": 10, "mark": "see-through"},
+		{"to": "frame:camera", "frames": 20, "button": "down"},
+		{"to": "item:burner@0.5,-0.6", "frames": 90, "mark": "carry"},
+		{"button": "up"},
+		{"do": {"do": "move", "items": ["camera"], "by": [5, 6]}},
+		{"frames": 120, "mark": "frame-moved", "shot": "thermal-frame-moved"},
+		{"frames": 10, "mark": "frame-moved"},
+		{"to": "screen:camera@0.5,0.5", "frames": 20},
+		{"frames": 12, "zoom": 1.25, "mark": "zoom"},
+		{"frames": 90, "mark": "rest", "shot": "thermal-screen-14x"},
+		{"frames": 10, "mark": "rest"}
+	]
+}
