@@ -169,6 +169,12 @@ olympiads-xyz-bg.vercel.app (edition not shown). The row is "CuSO4 12.4 14.4 16.
 - For reference, the ions' sum in NBS is −844.50 kJ/mol and −79.5 J/mol·K.
 - The positive Cp is an effective value. It carries the temperature dependence of the activity
   coefficients, which the model holds at 25 °C.
+- **Its heats of solution** (Stage 41, `chem_tool study solution_heat`; derived, not fitted, and no new data):
+  - CuSO₄(s) → CuSO₄(aq) gives **−64.59 kJ/mol**, so the water warms.
+  - CuSO₄·5H₂O(s) → CuSO₄(aq) + 5 H₂O(l) gives **+14.56 kJ/mol**, so the water cools.
+  - NBS's ions (−844.50) would give −73.1 and +6.0 kJ/mol at infinite dilution. The game has no heat of
+    dilution (GAME_SPEC §20), and the fit to solubility carries the solution's enthalpy where the demo uses it.
+  - The signs, and which salt warms, are the measured ones.
 
 | °C | 0 | 10 | 20 | 25 | 30 | 40 | 50 | 60 | 70 | 80 | 90 | 100 |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
