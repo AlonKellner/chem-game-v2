@@ -62,7 +62,10 @@ inline constexpr int CORE_AIR = 3;
 struct Landing {
 	bool lands = false; // it leaves the body going away from the eye, and reaches the wall
 	double x = 0.0, y = 0.0; // where, on the wall's plane
-	double pass = 1.0; // what its surfaces let through (Fresnel at each crossing)
+	double pass = 1.0; // what its surfaces let through (Fresnel at each crossing), less what its media took in
+	// (Stage 46) what its media took in on the way (each medium's `absorb`, per cm), and what its surfaces turned
+	// away: pass + absorbed + turned = 1 (O22)
+	double absorbed = 0.0, turned = 0.0;
 	std::array<double, MAX_MEDIA> chord{}; // its path in each medium, cm
 	uint32_t route = 0; // the surfaces it crossed and where it was turned back: the same for rays that go the same way
 	int meetings = 0;
@@ -79,7 +82,9 @@ struct Landing {
 // One ray from `origin` along `direction` (a unit vector) through the shape, to the wall's plane
 // z = wall; `index` is each medium's refractive index. At each surface it refracts by vector Snell,
 // losing what Fresnel reflects; where it cannot pass it is turned back, all of it.
-Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside = nullptr);
+// (Stage 46) `absorb`: each medium's absorption per cm (none: nothing absorbs).
+Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside = nullptr,
+		const std::array<double, MAX_MEDIA> *absorb = nullptr);
 // The meetings a ray is allowed in one shape (Stage 33). Straight through a vessel is four, through its
 // liquid's surface five, through a vortex and a floor more. Measured over the play (Stage 33): 2% of passages
 // take more than eight. On the GPU a group of pixels pays for its longest ray.

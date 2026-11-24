@@ -135,6 +135,7 @@ struct LabView {
 	bool conserved = true; // every total is what it was at the start
 	double mass_g = 0.0;
 	double energy_j = 0.0;
+	double room_celsius = 20.0; // the room's air (Stage 46: what the long-wave range sees as its light)
 	// the equipment, then the signal parts, in the order they were made (one restored from the trash comes last),
 	// then the parts in the trash (Stage 34: place "trash"; with a circuit, what it holds, their `part.in` its id)
 	std::vector<ItemView> items;

@@ -1,6 +1,7 @@
 // The reference renderer: the per-pixel source compiled as C++, in float64 (GAME_SPEC §12, §12.2).
 #include "lab/optics_scene.hpp"
 #include "lab/optics_trace.hpp"
+#include "chem/optics.hpp"
 
 #include "lab/colour.hpp"
 #include "optics_frames.hpp"
@@ -205,6 +206,7 @@ struct Exact {
 	bool met = false; // the ray met the body
 	double entry = 0.0; // how far along the line, from where it was given (pixels)
 	double pass = 1.0, chord = 0.0; // what its surfaces passed; its path in the liquid (cm)
+	double absorbed = 0.0, turned = 0.0; // what its glass took in, and its surfaces turned away (Stage 46)
 	int meetings = 0;
 	bool out = true; // it left the body (not still inside after every meeting allowed)
 	uint32_t route = 0; // the surfaces it crossed
@@ -280,7 +282,11 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const double lux = line.ux * c + line.uy * s, luy = -line.ux * s + line.uy * c;
 	const trace::Vec3 u{ lux, -sense * luy, line.uz };
 	const trace::Vec3 o{ (lx - axis) * cm - back * u.x, sense * (base - ly) * cm - back * u.y, (line.z - z_axis) * cm - back * u.z };
-	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr);
+	// what its glass takes in per cm (Stage 46: nothing in the visible); a prism's core is its glass, and so is a
+	// cylinder's floor
+	const double alpha = row_at(start + 2 * optics_layout::ROW, nm);
+	const std::array<double, trace::MAX_MEDIA> absorb{ 0.0, alpha, prism || core == 2 ? alpha : 0.0, 0.0 };
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
 		return out;
@@ -288,6 +294,8 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	out.met = true;
 	out.entry = (l.chord[0] - back) / cm;
 	out.pass = l.pass;
+	out.absorbed = l.absorbed;
+	out.turned = l.turned;
 	out.chord = liquid && !prism ? l.chord[trace::CORE] : 0.0;
 	out.out = l.left;
 	out.route = l.route;
@@ -309,6 +317,7 @@ struct Met {
 	uint32_t route = 0;
 	int core = 0;
 	bool solid = false; // it ended in this body's sediment (Stage 30)
+	double absorbed = 0.0; // what its glass took in (Stage 46)
 };
 struct ExactRay {
 	double x = 0.0, y = 0.0;
@@ -358,7 +367,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		for (int k = last; k >= first; --k) {
 			if (k == hit) {
 				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, line);
-				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid });
+				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid, e.absorbed });
 				if (!e.out || line.uz <= 0.05) {
 					lands = false;
 					out.x = 100000.0;
@@ -412,6 +421,9 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 // the wall at a point, from what is drawn on it (not from the renderer's table): the bench or the room,
 // then each shape in painting order
 double drawn_at(double x, double y) {
+	if (shader::band_range == 1) {
+		return 1.0; // the long-wave room is one black body (Stage 46)
+	}
 	// (as the wall's table has it: far off to either side, where a ray that never reaches the wall is put; and
 	// beyond the screen's edges, the wall's plane as the room says. Stage 33: the truth read the darkness beside
 	// the bench at both, where the pass read the room.)
@@ -437,6 +449,9 @@ double drawn_at(double x, double y) {
 // their edges into cells, each one radiance, read by drawn_at at its middle (Stage 22: a line thinner than
 // the truth's own samples was counted by how many of them it caught)
 double drawn_over(double x0, double x1, double y0, double y1) {
+	if (shader::band_range == 1) {
+		return 1.0; // the long-wave room is one black body (Stage 46)
+	}
 	const shader::vec4 bench = shader::scene_vec(1);
 	std::vector<double> xs{ x0, x1 }, ys{ y0, y1 };
 	const auto cut = [](std::vector<double> &at, double lo, double hi, double v) {
@@ -530,7 +545,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	if (q.layers == 0 || (q.refractor < 0 && !q.ways)) {
 		return shader::along(q, nm, 1.0, 0.0, 0.0, false, size > 1.0e-3 ? drawn_over(p.x - half, p.x + half, p.y - half, p.y + half) : drawn_at(p.x, p.y));
 	}
-	const double room = shader::scene_vec(2).y;
+	const double room = shader::room_front();
 	// (through a grating: every way the ray goes on in, each by its share)
 	double total = 0.0;
 	int ways = 1;
@@ -557,7 +572,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
 			}
 			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
-					per_cm * (m.bent ? chord : l.depth_cm), m.pass, room);
+					per_cm * (m.bent ? chord : l.depth_cm + l.glowing), m.pass, m.absorbed, room, shader::theta_of(nm, shader::body_kelvin(m.body)));
 			b += a * does.y;
 			a *= does.x;
 		}
@@ -1195,7 +1210,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 	if (s < 0) {
 		return out;
 	}
-	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1);
+	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0);
 	out.at[0] = t.at.x;
 	out.at[1] = t.at.y;
 	out.at[2] = t.at.z;
@@ -1634,7 +1649,7 @@ std::string check_O1(const OpticsScene &scene) {
 		return "O1: more bodies than the scene holds";
 	}
 	char text[200];
-	const int sets = static_cast<int>(scene.rows.size()) / (ROWS_PER_SET * ROW);
+	const int sets = static_cast<int>(scene.table[3]) / (ROWS_PER_SET * ROW); // (then their long-wave rows: Stage 46)
 	for (int i = 0; i < count; ++i) {
 		const float set = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4];
 		if (!(set >= 0.0f) || set >= static_cast<float>(sets) || set != std::floor(set)) {
@@ -1649,6 +1664,18 @@ std::string check_O1(const OpticsScene &scene) {
 			const double glow = scene.rows[base + GLOW_ROW * ROW];
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(glow >= 0.0 || (imaged && glow == -1.0))) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
+				return text;
+			}
+		}
+		for (int k = 0; k < LWIR_ROW; ++k) {
+			// its long-wave rows (Stage 46): absorptions no less than nothing, a reflectance within [0, 1], indices at
+			// least 1, no light of its own
+			const size_t base = static_cast<size_t>(scene.table[3]) + static_cast<size_t>(static_cast<int>(set) * ROWS_PER_SET * LWIR_ROW + k);
+			const double liquid = scene.rows[base + LIQUID_ROW * LWIR_ROW], solid = scene.rows[base + SOLID_ROW * LWIR_ROW], wall = scene.rows[base + WALL_ROW * LWIR_ROW];
+			const double n_liquid = scene.rows[base + LIQUID_INDEX_ROW * LWIR_ROW], n_wall = scene.rows[base + WALL_INDEX_ROW * LWIR_ROW], glow = scene.rows[base + GLOW_ROW * LWIR_ROW];
+			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(n_liquid >= 1.0) || !(n_wall >= 1.0) || glow != 0.0) {
+				std::snprintf(text, sizeof text, "O1: body %d at %g nm: a long-wave row out of its range (depth %g, wall %g, reflectance %g, n %g, %g, light %g)", i,
+						chem::optics::lwir_nm(k), liquid, wall, solid, n_liquid, n_wall, glow);
 				return text;
 			}
 		}

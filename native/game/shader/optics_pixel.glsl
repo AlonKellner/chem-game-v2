@@ -39,8 +39,10 @@ const int GRID_SLOTS = 15; // a square's bodies, at most
 const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
+const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
 const int ROWS_PER_SET = 6;
 const int LIGHT_ENTRIES = 4097;
+const int LIGHT_SIZE = LIGHT_ENTRIES + ROW; // a light's table, then the way back (Stage 46: two lights, one a range)
 const int MAX_LAYERS = 4; // bodies one pixel looks through
 const int WALL_ROWS = 1080;
 const int WALL_COLUMNS = 1920;
@@ -108,6 +110,19 @@ struct PixelState {
 	vec4 prox; // the fixed estimate (linear sRGB), and how far it has moved since the history began
 	vec4 aux; // the noise of one point (eye metric, squared), frames in the history, points asked for, points spent
 };
+
+// The range of the spectrum a point is read in (GAME_SPEC §12.4, Stage 46): 0 the visible, 1 the long-wave infrared,
+// 8-14 um. Its light, its places along the spectrum, the wall and the room in front follow it; a row is read in the
+// segment its wavelength falls in.
+#ifndef OPTICS_THREAD
+#define OPTICS_THREAD
+#endif
+OPTICS_THREAD int band_range = 0;
+
+// a body's temperature (K; Stage 46)
+float body_kelvin(int body) {
+	return scene_vec(HEADER_VECS + body * BODY_VECS + 6).x;
+}
 
 // the shares of the light's energy at which a pixel's bands are cut (GAME_SPEC §12.2: cuts_of), ascending
 const int MAX_CUTS = 24;
@@ -379,6 +394,7 @@ bool beyond_outline(int i, vec2 p, float size) {
 // outlines blend by how much of it they cover), less for a sample of the truth (GAME_SPEC §12.3)
 Path path_of(vec2 p, float size) {
 	Path q;
+	band_range = scene_vec(4).w > 0.5 ? 1 : 0; // the range the whole pass is read in (Stage 46: the debug infrared view)
 	q.layers = 0;
 	q.cover = 0.0;
 	q.glow = vec3(0.0);
@@ -394,7 +410,7 @@ Path path_of(vec2 p, float size) {
 	vec4 head = scene_vec(0);
 	vec4 bench = scene_vec(1);
 	bool on_bench = p.x >= bench.x && p.x < bench.x + bench.z && p.y >= bench.y && p.y < bench.y + bench.w;
-	q.back = on_bench ? head.y : head.z;
+	q.back = band_range == 1 ? 1.0 : (on_bench ? head.y : head.z);
 	q.edge = 0.0;
 	// the bodies of the pixel's square of the screen (the scene lists them: a pixel looks at no other)
 	int square = square_at(p);
@@ -439,6 +455,11 @@ Path path_of(vec2 p, float size) {
 		vec4 ids = scene_vec(at + 4);
 		float w = 1.0 + 0.6180339887 * float(i);
 		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * l.cover) * w, (l.solid + 7.0 * l.wall + 0.13 * l.glowing) * w, ids.x, ids.y * w);
+		// its temperature, where its light depends on it (Stage 46): in the long-wave, and in the visible from 500 K
+		float kelvin = body_kelvin(i);
+		if (band_range == 1 || kelvin >= 500.0) {
+			q.key.w = q.key.w + 0.00137 * kelvin * w;
+		}
 		// (10: SHAPE_BLOCK; its vec4s 7 and 8: the body's tags, and where what lies in it changed)
 		vec4 tags = shape_vec(i * 10 + 7);
 		vec4 changed = shape_vec(i * 10 + 8);
@@ -448,6 +469,9 @@ Path path_of(vec2 p, float size) {
 	}
 	// what glows is a light in the pass (each body's glow at 1 nm); its colour is in the key so that a pixel shows it anew
 	q.key.y = q.key.y + 13.0 * q.back + 0.001 * (q.glow.x + 2.0 * q.glow.y + 3.0 * q.glow.z);
+	// and the range it is read in (Stage 46): its rays go other ways there
+	q.key.x = q.key.x + 0.37 * float(band_range);
+	q.shape = vec2(q.shape.x + 0.41 * float(band_range), q.shape.y);
 	// Where an opaque thing covers part of the pixel and no vessel bends its view, the wall shows only where it
 	// is uncovered: read over those parts (four across, each by its uncovered share), once, here (Stage 22: a
 	// thin line under the covered part is not seen)
@@ -489,6 +513,13 @@ bool near_any(vec2 p) {
 // ---- what gets through at one wavelength
 
 float row_at(int start, float nm) {
+	if (nm > 7000.0) {
+		// the long-wave segment (Stage 46): row (start / ROW) of the long-wave rows, which begin at the header's base
+		float y = clamp((nm - 8000.0) / 20.0, 0.0, 300.0);
+		int j = min(int(floor(y)), 299);
+		int base = int(scene_vec(0).w) + (start / ROW) * LWIR_ROW;
+		return row_value(base + j) * (1.0 - (y - float(j))) + row_value(base + j + 1) * (y - float(j));
+	}
 	float x = clamp(nm - 380.0, 0.0, 400.0);
 	int i = min(int(floor(x)), 399);
 	float f = x - float(i);
@@ -497,6 +528,9 @@ float row_at(int start, float nm) {
 
 float liquid_at(int body, int rows, float nm) {
 	float depth = row_at(rows, nm);
+	if (nm > 7000.0) {
+		return depth; // (narrow lines are the visible's)
+	}
 	vec4 ids = scene_vec(HEADER_VECS + body * BODY_VECS + 4);
 	int first = int(ids.z);
 	int count = int(ids.w);
@@ -584,6 +618,9 @@ float wall_between(WallAt r, WallAt w) {
 
 // the mean radiance of the row from a to b
 float wall_span(int profile, float a, float b) {
+	if (band_range == 1) {
+		return 1.0; // the long-wave room is one black body (Stage 46): the wall is its light, wherever it is read
+	}
 	float lo = min(a, b);
 	float hi = max(a, b);
 	WallAt w = wall_at(profile, lo);
@@ -633,6 +670,11 @@ float wall_mean(int profile, WallAt r, WallAt at0, float x0, WallAt at1, float x
 // where a wavelength is along the spectrum: 0 at 380 nm, 1 at 780 nm, even in 1 / nm^2 (what glass and
 // water disperse nearly straight in)
 float map_place(float nm) {
+	if (band_range == 1) {
+		// the long-wave range (Stage 46): 0 at 8000 nm, 1 at 14000 nm, alike
+		float l = 8000.0 / clamp(nm, 8000.0, 14000.0);
+		return clamp((1.0 - l * l) / 0.6734693878, 0.0, 1.0);
+	}
 	float r = 380.0 / clamp(nm, 380.0, 780.0);
 	return clamp((1.0 - r * r) / 0.7626561473, 0.0, 1.0);
 }
@@ -687,7 +729,38 @@ struct Shade {
 	float solid;
 	float room; // the room in front, which the surfaces turn back
 	int body; // the refracting one's
+	float theta; // what it emits by (Stage 46)
 };
+
+// ---- what a body emits by its temperature (GAME_SPEC §12.4, Stage 46: Kirchhoff)
+
+// the radiance of the room in front, which the surfaces turn back: in the long-wave the room's black body, 1
+float room_front() {
+	return band_range == 1 ? 1.0 : scene_vec(2).y;
+}
+
+// A black body's radiance at `kelvin` over the light's at nm: in the long-wave the ratio of two black bodies' (the
+// room is one: exactly 1 at its temperature); in the visible Planck's law over the room's light there, nothing below
+// 500 K (not a millionth of the room's light).
+float theta_of(float nm, float kelvin) {
+	float room = scene_vec(4).z;
+	if (nm > 7000.0) {
+		if (kelvin == room) {
+			return 1.0;
+		}
+		float c = 14387769.0 / nm; // the second radiation constant, nm K, over the wavelength
+		return (exp(c / room) - 1.0) / (exp(c / max(kelvin, 1.0)) - 1.0);
+	}
+	if (kelvin < 500.0) {
+		return 0.0;
+	}
+	float x = clamp(nm - 380.0, 0.0, 400.0);
+	int i = min(int(floor(x)), 399);
+	float light = mix(light_vec(LIGHT_ENTRIES + i).y, light_vec(LIGHT_ENTRIES + i + 1).y, x - float(i));
+	float m = nm * 1.0e-3; // micrometres
+	// 2 h c^2 / wavelength^5 / (e^(c2 / wavelength T) - 1), W / m2 / sr / nm
+	return 1.191042972e5 / (m * m * m * m * m) / (exp(14387.769 / (m * kelvin)) - 1.0) / max(light, 1.0e-30);
+}
 
 // ---- an image a thing emits by (GAME_SPEC §12.1: image weights; Stage 42, the spectral viewer's screen)
 //
@@ -800,8 +873,10 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
 	float glow = glow_of(body_of(l.body), start, vec2(q.x, q.y), q.size, q.size, nm, l.solid); // what its solids glow with, a multiple of the room's light
+	float theta = theta_of(nm, body_kelvin(body_of(l.body)));
 	if (body_of(l.body) == q.refractor && !s.own) {
 		s.own = true;
+		s.theta = theta;
 		s.per_cm = per_cm;
 		s.colour = colour;
 		s.glow = glow;
@@ -814,10 +889,11 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	// what one body does to the light that reaches it (Beer-Lambert through its liquid; what is suspended in it
 	// turns the room's light back from half way in; what lies in it is lit and seen there and back; it glows; and
 	// its wall), as a times what reaches it plus b
-	float depth = per_cm * l.depth_cm;
+	float depth = per_cm * (l.depth_cm + l.glowing); // (a glowing thing's absorption is per pixel of its path: Stage 46)
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
 	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * glass;
+	b = b + theta * (1.0 - a - colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * glass);
 	if (s.own) {
 		s.b_front = a * s.b_front + b;
 		s.a_front = a * s.a_front;
@@ -842,7 +918,8 @@ Shade shade_of(Path q, float nm) {
 	s.haze = 0.0;
 	s.solid = 0.0;
 	s.body = 0;
-	s.room = scene_vec(2).y;
+	s.room = room_front();
+	s.theta = 0.0;
 	s = shade_layer(s, q, q.l0, 0, nm);
 	s = shade_layer(s, q, q.l1, 1, nm);
 	s = shade_layer(s, q, q.l2, 2, nm);
@@ -865,6 +942,10 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		seen = mix(seen, s.colour * exp(-depth * 0.5), haze);
 		seen = mix(seen, s.colour * through + s.glow * exp(-depth * 0.5), s.solid);
 		seen = seen * s.glass;
+		// (Stage 46) what it passes and what it turns back, and the rest it emits
+		float own_a = through * (1.0 - haze) * (1.0 - s.solid) * s.glass;
+		float own_r = ((s.colour * exp(-depth * 0.5) * haze) * (1.0 - s.solid) + s.colour * through * s.solid) * s.glass;
+		seen = seen + s.theta * (1.0 - own_a - own_r);
 	}
 	if (q.refractor >= 0) {
 		seen = pass * seen + (1.0 - pass) * s.room;
@@ -891,6 +972,12 @@ float nm_at(float u, float one_nm) {
 
 // the share of the light's energy up to a wavelength: the table the other way
 float share_of(float nm) {
+	if (band_range == 1) {
+		// the long-wave light's (Stage 46): at each 20 nm from 8000 nm
+		float y = clamp((nm - 8000.0) / 20.0, 0.0, 300.0);
+		int j = min(int(floor(y)), 299);
+		return mix(light_vec(LIGHT_SIZE + LIGHT_ENTRIES + j).x, light_vec(LIGHT_SIZE + LIGHT_ENTRIES + j + 1).x, y - float(j));
+	}
 	float x = clamp(nm - 380.0, 0.0, 400.0);
 	int i = min(int(floor(x)), 399);
 	return mix(light_vec(LIGHT_ENTRIES + i).x, light_vec(LIGHT_ENTRIES + i + 1).x, x - float(i));
@@ -909,6 +996,9 @@ float flat_band(Path q, float u0, float u1, float t, float one_nm) {
 // a at the step's beginning, at b0 and b at its end. The mean, along each ray's sweep, of the row's integral,
 // the footprint's width taken as its mean: exact, however many edges the sweep crosses.
 float swept_wall(int profile, float a0, float a, float b0, float b) {
+	if (band_range == 1) {
+		return 1.0;
+	}
 	float w0 = a - a0;
 	float w1 = b - b0;
 	if (w0 * w1 < 0.0) {
@@ -930,12 +1020,16 @@ float swept_wall(int profile, float a0, float a, float b0, float b) {
 // plus y. Through `depth` (optical) of its liquid; its haze turns the room's light back from half way in; a
 // heap in it is lit and seen through it, and glows (`glow`, a multiple of the room's light) through half of
 // it; its wall; and its surfaces pass `pass` of all that, the rest showing the room in front.
-vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth, float pass, float room) {
+// (Stage 46) What it neither passes nor turns away it emits, `theta` times (Kirchhoff, GAME_SPEC §12.4); and of what
+// its surfaces do not pass, `absorbed` was taken in by its glass, which emits as much, the rest turned away.
+vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth, float pass, float absorbed, float room, float theta) {
 	float skin = exp(-skin_depth * l.wall);
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * skin;
 	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * skin;
-	return vec2(pass * a, pass * b + (1.0 - pass) * room);
+	float r = colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * skin;
+	b = b + theta * (1.0 - a - r);
+	return vec2(pass * a, pass * b + (1.0 - pass - absorbed) * room + absorbed * theta);
 }
 
 
@@ -1325,6 +1419,8 @@ struct Traced {
 	vec3 at;
 	vec3 toward;
 	float pass;
+	float absorbed; // what its glass took in (Stage 46: glass is opaque in the long-wave)
+	float turned; // what its surfaces turned away (pass + absorbed + turned = 1: O22)
 	float chord;
 	float first;
 	uint route;
@@ -1339,11 +1435,15 @@ float trace_index(int medium, float n_glass, float n_core) {
 
 // (`block`: the body's place in the shapes' head, if what lies in its core is given there; else -1, and its core
 // is one thing, of the index n_core)
-Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block) {
+// (`alpha_glass`, `alpha_core`: the glass's absorption per cm, and the core's where the core is glass, a prism's;
+// Stage 46)
+Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block, float alpha_glass, float alpha_core) {
 	Traced r;
 	vec3 o = from;
 	vec3 u = heading;
 	r.pass = 1.0;
+	r.absorbed = 0.0;
+	r.turned = 0.0;
 	r.chord = 0.0;
 	r.first = 0.0;
 	r.route = uint(0);
@@ -1498,6 +1598,7 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 				float ccos_t = sqrt(1.0 - csin2);
 				float crs = (c1 * ccos_i - c2 * ccos_t) / (c1 * ccos_i + c2 * ccos_t);
 				float crp = (c1 * ccos_t - c2 * ccos_i) / (c1 * ccos_t + c2 * ccos_i);
+				r.turned = r.turned + r.pass * 0.5 * (crs * crs + crp * crp);
 				r.pass = r.pass * (1.0 - 0.5 * (crs * crs + crp * crp));
 				float ck = ceta * ccos_i - ccos_t;
 				u = vec3(ceta * u.x + ck * cn.x, ceta * u.y + ck * cn.y, ceta * u.z + ck * cn.z);
@@ -1519,6 +1620,11 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		if (here == 2) {
 			r.chord = r.chord + best;
 		}
+		// what the glass takes in along the way (Stage 46: nothing in the visible, where alpha is 0)
+		float alpha = here == 1 ? alpha_glass : (here == 2 ? alpha_core : 0.0);
+		float kept = exp(-alpha * best);
+		r.absorbed = r.absorbed + r.pass * (1.0 - kept);
+		r.pass = r.pass * kept;
 		o = ray_point(o, u, best);
 		r.meetings = r.meetings + 1;
 		r.span = vec2(min(r.span.x, trace_level.x * o.x + trace_level.y * o.y), max(r.span.y, trace_level.x * o.x + trace_level.y * o.y));
@@ -1570,6 +1676,7 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		float cos_t = sqrt(1.0 - sin2);
 		float rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t);
 		float rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+		r.turned = r.turned + r.pass * 0.5 * (rs * rs + rp * rp);
 		r.pass = r.pass * (1.0 - 0.5 * (rs * rs + rp * rp));
 		float k = eta * cos_i - cos_t;
 		u = vec3(eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z);
@@ -1602,6 +1709,8 @@ struct BodyMet {
 	bool met;
 	float entry;
 	float pass;
+	float absorbed; // (Stage 46)
+	float turned;
 	float chord;
 	bool left;
 	bool solid; // it ended in the body's sediment (Stage 30)
@@ -1615,6 +1724,8 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	e.met = false;
 	e.entry = 0.0;
 	e.pass = 1.0;
+	e.absorbed = 0.0;
+	e.turned = 0.0;
 	e.chord = 0.0;
 	e.left = true;
 	e.solid = false;
@@ -1640,6 +1751,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	int start = set_of(body) * ROWS_PER_SET * ROW;
 	float n_glass = row_at(start + 4 * ROW, nm);
 	float n_in = core == 0 || lies ? row_at(start + 3 * ROW, nm) : (core == 2 ? n_glass : 1.0);
+	float alpha = row_at(start + 2 * ROW, nm); // its glass's absorption per cm (Stage 46)
 	// The body's frame: cm from its axis, y up from its foot. Turned (Stage 30; upside down is half a turn), the
 	// line is turned back about the pivot first, and the line it leaves on turned forward again.
 	float c = turned ? turn.z : 1.0;
@@ -1655,7 +1767,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	float back = reach - dot3(vec3(-p.x, rect.w * 0.5 * cm - p.y, -p.z), u);
 	vec3 o = vec3(p.x - back * u.x, p.y - back * u.y, p.z - back * u.z);
 	trace_level = vec2(sn / cm, -c / cm);
-	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1);
+	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1, alpha, prism || core == 2 ? alpha : 0.0);
 	if (l.meetings == 0) {
 		return e;
 	}
@@ -1666,6 +1778,8 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	}
 	e.entry = (l.first - back) / cm;
 	e.pass = l.pass;
+	e.absorbed = l.absorbed;
+	e.turned = l.turned;
 	e.chord = (core == 0 || lies) && !prism ? l.chord : 0.0;
 	e.left = l.left;
 	e.solid = l.solid;
@@ -1717,6 +1831,7 @@ struct RayMet {
 	vec4 s3;
 	vec4 w01;
 	vec4 w23;
+	vec4 absorb; // what each one's glass took in (Stage 46)
 	vec2 span; // the rows of the screen between which it met bodies that something lies in (Stage 33)
 	// each one's own route through its surfaces (the first two that bent it): for holding a ray to the truth's
 	uint t0;
@@ -1724,7 +1839,8 @@ struct RayMet {
 	int ways; // in how many ways it could go on from a grating it met (1: it met none)
 };
 
-RayMet met_put(RayMet r, int k, vec4 slot, vec2 where) {
+RayMet met_put(RayMet r, int k, vec4 slot, vec2 where, float absorbed) {
+	r.absorb = vec4(k == 0 ? absorbed : r.absorb.x, k == 1 ? absorbed : r.absorb.y, k == 2 ? absorbed : r.absorb.z, k == 3 ? absorbed : r.absorb.w);
 	if (k == 0) {
 		r.s0 = slot;
 		r.w01 = vec4(where.x, where.y, r.w01.z, r.w01.w);
@@ -1808,6 +1924,7 @@ RayMet ray_met(vec2 p, float nm) {
 	r.s3 = r.s0;
 	r.w01 = vec4(0.0);
 	r.w23 = vec4(0.0);
+	r.absorb = vec4(0.0);
 	r.t0 = 0u;
 	r.t1 = 0u;
 	r.ways = 1;
@@ -1905,7 +2022,7 @@ RayMet ray_met(vec2 p, float nm) {
 			if (r.count < 4) {
 				// (2: a grating, which passes a share as a body that bends does, and holds no liquid)
 				// (3: a body that bent it and in whose sediment it ended: lit by the room through the liquid, there and back)
-				r = met_put(r, r.count, vec4(float(k), bent ? (met.solid ? 3.0 : 1.0) : (grating ? 2.0 : 0.0), bent ? met.pass : (grating ? (ended ? 0.0 : GRATING_PASS) : 1.0), bent ? (met.solid ? 2.0 * met.chord : met.chord) : 0.0), where);
+				r = met_put(r, r.count, vec4(float(k), bent ? (met.solid ? 3.0 : 1.0) : (grating ? 2.0 : 0.0), bent ? met.pass : (grating ? (ended ? 0.0 : GRATING_PASS) : 1.0), bent ? (met.solid ? 2.0 * met.chord : met.chord) : 0.0), where, bent ? met.absorbed : 0.0);
 				r.count = r.count + 1;
 			}
 			if (ended) {
@@ -2000,6 +2117,9 @@ RayMet ray_met(vec2 p, float nm) {
 OPTICS_THREAD int corrections_taken = 0;
 
 float place_nm(float g) {
+	if (band_range == 1) {
+		return 8000.0 / sqrt(1.0 - 0.6734693878 * clamp(g, 0.0, 1.0)); // (Stage 46)
+	}
 	return 380.0 / sqrt(1.0 - 0.7626561473 * clamp(g, 0.0, 1.0));
 }
 
@@ -2050,6 +2170,8 @@ struct Beam {
 	vec4 chord0;
 	vec4 pass1;
 	vec4 chord1;
+	vec4 absorb0; // (Stage 46) what their glass took in
+	vec4 absorb1;
 	uint r0;
 	uint r1;
 	uint r2;
@@ -2176,9 +2298,11 @@ Beam beam_took(Beam b, RayMet m, int w, bool head) {
 			if (records == 0) {
 				b.pass0[w] = slot.z;
 				b.chord0[w] = slot.w * slot.w;
+				b.absorb0[w] = m.absorb[k];
 			} else {
 				b.pass1[w] = slot.z;
 				b.chord1[w] = slot.w * slot.w;
+				b.absorb1[w] = m.absorb[k];
 			}
 			if (head) {
 				b.bent[k] = float(records);
@@ -2242,6 +2366,8 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 	b.chord0 = vec4(0.0);
 	b.pass1 = vec4(1.0);
 	b.chord1 = vec4(0.0);
+	b.absorb0 = vec4(0.0);
+	b.absorb1 = vec4(0.0);
 	b.r0 = 0u;
 	b.r1 = 0u;
 	b.r2 = 0u;
@@ -2364,6 +2490,8 @@ Beam beam_trace(int kind, int side, vec2 p0, vec2 p1, vec2 p2, vec2 p3, vec2 pc,
 		b.chord0 = vec4(b.chord0[only]);
 		b.pass1 = vec4(b.pass1[only]);
 		b.chord1 = vec4(b.chord1[only]);
+		b.absorb0 = vec4(b.absorb0[only]);
+		b.absorb1 = vec4(b.absorb1[only]);
 		b.x0 = b.cx;
 		b.y0 = b.cy;
 		b.x1 = b.cx;
@@ -2443,7 +2571,7 @@ bool beam_sweeps(Beam b, float ga, float gb) {
 }
 
 vec2 beam_shade(Beam b, vec4 wp, float nm) {
-	float room = scene_vec(2).y;
+	float room = room_front();
 	float a = 1.0;
 	float sum = 0.0;
 	for (int k = 0; k < 4; k++) {
@@ -2455,15 +2583,17 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 		int start = set_in(l.body);
 		float record = b.bent[k];
 		float pass = 1.0;
-		float depth_cm = l.depth_cm;
+		float absorbed = 0.0;
+		float depth_cm = l.depth_cm + l.glowing;
 		if (record > -0.5) {
 			pass = clamp(record < 0.5 ? dot(b.pass0, wp) : dot(b.pass1, wp), 0.0, 1.0);
+			absorbed = clamp(record < 0.5 ? dot(b.absorb0, wp) : dot(b.absorb1, wp), 0.0, 1.0 - pass);
 			depth_cm = sqrt(max(record < 0.5 ? dot(b.chord0, wp) : dot(b.chord1, wp), 0.0));
 			l.haze = haze_along(body, depth_cm);
 		}
 		vec4 met = k == 0 ? b.m0 : (k == 1 ? b.m1 : (k == 2 ? b.m2 : b.m3));
 		float glow = glow_of(body, start, vec2(met.z, met.w), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, room);
+		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -2473,6 +2603,9 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 // The wall's radiance over a box of it (pixels), where the wall is one there (Stage 33): one cell of its table
 // across, on rows that are alike in that cell. -1 where it is not, or the box is eight rows tall or more.
 float wall_one(float x_lo, float x_hi, float y_lo, float y_hi) {
+	if (band_range == 1) {
+		return 1.0;
+	}
 	if (!(y_hi - y_lo < 7.0)) {
 		return -1.0; // (or landing nowhere)
 	}
@@ -2668,7 +2801,7 @@ float beam_band(Beam b, float even, float g_lo, float g_hi, float nm0, float nm1
 
 // what the bodies a traced ray met do to the wall's light at nm: a times it plus b (x, y)
 vec2 ray_shade(RayMet m, float nm) {
-	float room = scene_vec(2).y;
+	float room = room_front();
 	float a = 1.0;
 	float sum = 0.0;
 	for (int k = 0; k < 4; k++) {
@@ -2687,7 +2820,7 @@ vec2 ray_shade(RayMet m, float nm) {
 		}
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float glow = glow_of(body, start, met_where(m, k), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm), bent ? slot.z : 1.0, room);
+		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -3194,7 +3327,7 @@ OPTICS_THREAD bool beam_deferred = false; // the pixel's beam was traced now, an
 OPTICS_THREAD bool beam_held = false; // the pixel's beam was kept, and its fixed estimate alone was read
 OPTICS_THREAD bool beam_one_way = false; // and every beam of it is of rays that go one way
 OPTICS_THREAD bool kept_read = true; // (false: a record is written and never read, for holding the two to each other)
-const int KEPT_BEAM = 23;
+const int KEPT_BEAM = 25;
 #ifndef KEPT_MOST
 #define KEPT_MOST 1
 #endif
@@ -3226,6 +3359,8 @@ void keep_beam(int at, Beam b, float g_lo, float g_hi, float share, float conten
 	// the rows its rays passed in bodies that something lies in (all, where its rays part: what the corrections
 	// found for it came by other ways), and what lay in them
 	kept_put(at + 22, vec4(b.one ? b.span.x : -1.0e30, b.one ? b.span.y : 1.0e30, content, 0.0));
+	kept_put(at + 23, b.absorb0);
+	kept_put(at + 24, b.absorb1);
 }
 
 Beam kept_beam(int at) {
@@ -3257,6 +3392,8 @@ Beam kept_beam(int at) {
 	b.chord0 = kept_vec(at + 17);
 	b.pass1 = kept_vec(at + 18);
 	b.chord1 = kept_vec(at + 19);
+	b.absorb0 = kept_vec(at + 23);
+	b.absorb1 = kept_vec(at + 24);
 	b.c0 = uint(route.x) + (uint(route.y) << 16);
 	// (its other nodes' routes are kept as whether they are the first's: route.z)
 	// (its other nodes' routes are kept as which neighbours go one way: route.z, a bit a piece)
@@ -3511,8 +3648,8 @@ float band_light(Path q, float u0, float u1, float t, float one_nm) {
 
 vec4 share(float u) {
 	float x = clamp(u, 0.0, 1.0) * 4096.0;
-	int j = min(int(floor(x)), 4095);
-	return mix(light_vec(j), light_vec(j + 1), x - float(j));
+	int j = min(int(floor(x)), 4095) + band_range * LIGHT_SIZE; // (the range's light: Stage 46)
+	return mix(light_vec(j), light_vec(j + 1), x - float(min(int(floor(x)), 4095)));
 }
 
 vec3 to_linear_srgb(vec3 c) {
@@ -3582,8 +3719,8 @@ Cuts cuts_of(Path q) {
 	for (int i = 0; i < MAX_CUTS; i++) {
 		c.u[i] = 1.0;
 	}
-	if (scene_vec(2).w < 0.5) {
-		return c;
+	if (scene_vec(2).w < 0.5 || band_range == 1) {
+		return c; // (narrow lines are the visible's)
 	}
 	c = line_cuts(c, q.l0, q.layers, 0);
 	c = line_cuts(c, q.l1, q.layers, 1);
@@ -3987,10 +4124,46 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 	return next;
 }
 
+// ---- the debug infrared view (GAME_SPEC §12.4, Stage 46)
+//
+// The long-wave range at the eye for every pixel: a pixel's mean band signal (on the scale on which the room's is 1)
+// is a temperature, the black body's that gives it, and the temperature a colour, one step from spectrum to RGB.
+
+// the temperature of a signal: the long-wave light's table of it, 400 places spaced evenly in the signal's logarithm
+// from 0.01 to 1000 of the room's (after its table the other way)
+float infrared_kelvin(float signal) {
+	float x = clamp(log(max(signal, 1.0e-6) / 0.01) / log(1.0e5) * 399.0, 0.0, 399.0);
+	int i = min(int(floor(x)), 398);
+	int base = LIGHT_SIZE + LIGHT_ENTRIES + LWIR_ROW;
+	float a = light_vec(base + i / 4)[i - 4 * (i / 4)];
+	float b = light_vec(base + (i + 1) / 4)[(i + 1) - 4 * ((i + 1) / 4)];
+	return mix(a, b, x - float(i));
+}
+
+// a thermal camera's palette (an iron bow: black, violet, red, orange, yellow, white), linear sRGB, t from 0 to 1
+vec3 infrared_palette(float t) {
+	float x = clamp(t, 0.0, 1.0) * 5.0;
+	int k = min(int(floor(x)), 4);
+	float f = x - float(k);
+	vec3 a = k == 0 ? vec3(0.0, 0.0, 0.0) : (k == 1 ? vec3(0.08, 0.0, 0.30) : (k == 2 ? vec3(0.55, 0.0, 0.25) : (k == 3 ? vec3(0.95, 0.20, 0.0) : vec3(1.0, 0.65, 0.0))));
+	vec3 b = k == 0 ? vec3(0.08, 0.0, 0.30) : (k == 1 ? vec3(0.55, 0.0, 0.25) : (k == 2 ? vec3(0.95, 0.20, 0.0) : (k == 3 ? vec3(1.0, 0.65, 0.0) : vec3(1.0, 1.0, 1.0))));
+	return mix(a, b, f);
+}
+
+// what the view shows of a signal: from 5 K under the room to 95 K over it
+vec4 infrared_shown(float signal) {
+	float t = (infrared_kelvin(signal) - (scene_vec(4).z - 5.0)) / 100.0;
+	vec3 c = infrared_palette(t);
+	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
+}
+
 // A pixel no body covers shows the wall drawn there, its mean over the pixel: the room and the bodies are one
 // picture at the screen's pixels (GAME_SPEC §12.3), which a host scales as one, so the wall seen through glass
 // and beside it cannot part
 vec4 wall_shown(vec2 p, float size) {
+	if (scene_vec(4).w > 0.5) {
+		return infrared_shown(1.0); // the room's own temperature (Stage 46)
+	}
 	int profile = wall_profile(p.y);
 	float v = encode1(wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size));
 	return vec4(v, v, v, 1.0);
@@ -4099,6 +4272,10 @@ PixelState anchor_state(vec2 p, vec4 now, vec4 from, float key_z) {
 vec4 shown(Path q, PixelState s) {
 	if (q.cover <= 0.0) {
 		return wall_shown(vec2(q.x, q.y), q.size);
+	}
+	if (scene_vec(4).w > 0.5) {
+		// the debug infrared view (Stage 46): the band signal's mean, its temperature, its colour
+		return infrared_shown((s.prox.x + s.hist.x + s.prox.y + s.hist.y + s.prox.z + s.hist.z) / 3.0);
 	}
 	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z));
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);

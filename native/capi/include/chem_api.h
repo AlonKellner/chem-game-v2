@@ -250,7 +250,7 @@ typedef struct cg_optics {
  * (GAME_SPEC §12.3, Stage 33): a record of this many vec4s for each pixel of a
  * rectangle of `rectangles`, written and read by the per-pixel source alone
  * (kept_vec, kept_put), zero at first. */
-#define CG_OPTICS_KEPT_VECS 24
+#define CG_OPTICS_KEPT_VECS 26
 /* And it gives the pixels read by their own rays a budget of their own: this
  * many points a frame over the whole screen (a point of theirs is a ray, or a
  * quarter of one), their asks summed apart from the others'. */

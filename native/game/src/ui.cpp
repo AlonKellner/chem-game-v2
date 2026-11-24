@@ -347,6 +347,7 @@ struct Ui::Impl {
 	bool notices_open = false;
 	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
 	bool debug_open = false;
+	bool infrared = false; // the debug infrared view (Stage 46): the whole pass in the long-wave range
 	int debug_from = 0;
 	std::string exported;
 
@@ -454,8 +455,10 @@ struct Ui::Impl {
 
 	// ---- the debug panel (§13.6): the selected item from the inside
 	static Rect debug_button() { return Rect{ 1670, 14, 110, 36 }; }
-	static Rect debug_rect(int k) { return Rect{ DEBUG.x + 20 + static_cast<float>(k) * 98, DEBUG.y + 56, 90, 30 }; } // step, export, up, down, close
-	static constexpr const char *DEBUG_BUTTONS[] = { "step", "export", "up", "down", "close" };
+	// step, export, up, down, close; and (Stage 46) the infrared view's switch, beside the panel's title
+	static Rect debug_rect(int k) { return k == 5 ? Rect{ DEBUG.x + 390, DEBUG.y + 12, 110, 30 } : Rect{ DEBUG.x + 20 + static_cast<float>(k) * 98, DEBUG.y + 56, 90, 30 }; }
+	static constexpr const char *DEBUG_BUTTONS[] = { "step", "export", "up", "down", "close", "infrared" };
+	static constexpr int DEBUG_BUTTON_COUNT = 6;
 	bool debug_press(float x, float y) {
 		if (debug_button().has(x, y)) {
 			debug_open = !debug_open;
@@ -466,7 +469,7 @@ struct Ui::Impl {
 		if (!debug_open) {
 			return false;
 		}
-		for (int k = 0; k < 5; ++k) {
+		for (int k = 0; k < DEBUG_BUTTON_COUNT; ++k) {
 			if (!debug_rect(k).has(x, y)) {
 				continue;
 			}
@@ -479,6 +482,9 @@ struct Ui::Impl {
 				debug_from = std::max(0, debug_from - 12);
 			} else if (k == 3) {
 				debug_from += 12;
+			} else if (k == 5) {
+				infrared = !infrared;
+				message = infrared ? "infrared: the room as an 8-14 um camera sees it (5 K under the room to 95 K over it)" : "infrared: off";
 			} else {
 				debug_open = false;
 			}
@@ -582,8 +588,8 @@ struct Ui::Impl {
 		rect_fill(DEBUG, PANEL_FILL);
 		outline(DEBUG, GLASS, 1);
 		text(DEBUG.x + 20, DEBUG.y + 36, "inside the selected item", INK, 20);
-		for (int k = 0; k < 5; ++k) {
-			button(debug_rect(k), DEBUG_BUTTONS[k], false, 15);
+		for (int k = 0; k < DEBUG_BUTTON_COUNT; ++k) {
+			button(debug_rect(k), DEBUG_BUTTONS[k], k == 5 && infrared, 15);
 		}
 		const std::vector<Line> lines = debug_lines();
 		float y = DEBUG.y + 116;
@@ -4227,6 +4233,7 @@ struct Ui::Impl {
 					const size_t k = thing(v.id, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
+					bodies[k].kelvin = v.celsius + 273.15; // its flame's temperature (Stage 46)
 				}
 			} else if (is_part_kind(v.kind) && (v.place == "bench" || (v.place == "trash" && i == trash_top()))) {
 				const bool circuit = v.kind == "circuit";
@@ -4442,6 +4449,8 @@ struct Ui::Impl {
 		room.pixel_x0 = sx(0.0f);
 		room.bench = WALL_RADIANCE;
 		room.elsewhere = DARK_RADIANCE;
+		room.kelvin = view.room_celsius + 273.15; // Stage 46: what the long-wave range sees the room by
+		room.range = infrared ? 1 : 0;
 		// The wall behind and the room in front are endless white planes ruled as the bench is (the user's word,
 		// Stage 33). Beyond the screen and in front they are seen only far off or turned about, so as one
 		// radiance: the wall's, less what its ruling takes (a line a pixel wide each way in every square).
@@ -5443,6 +5452,14 @@ const std::string &Ui::message() const {
 	return impl_->message;
 }
 
+void Ui::set_infrared(bool on) {
+	impl_->infrared = on;
+}
+
+bool Ui::infrared() const {
+	return impl_->infrared;
+}
+
 void Ui::set_budget(double ms) {
 	impl_->budget_ms = ms > 0.0 ? ms : 0.0;
 }
@@ -5622,7 +5639,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		return centre(Impl::debug_button());
 	}
 	if (after("debug:", rest)) {
-		for (int k = 0; k < 5; ++k) {
+		for (int k = 0; k < Impl::DEBUG_BUTTON_COUNT; ++k) {
 			if (rest == Impl::DEBUG_BUTTONS[k]) {
 				return m.debug_open && centre(Impl::debug_rect(k));
 			}

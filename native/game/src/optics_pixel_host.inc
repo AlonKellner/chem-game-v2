@@ -189,7 +189,9 @@ struct Use {
 };
 
 bool ready(const OpticsScene &s) {
-	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && s.rows.size() % static_cast<size_t>(optics_layout::ROWS_PER_SET * optics_layout::ROW) == 0 && !s.wall.empty() &&
+	// (the visible rows, set after set, then their long-wave rows: Stage 46)
+	const size_t base = s.table.size() > 3 ? static_cast<size_t>(s.table[3]) : 0, set_rows = static_cast<size_t>(optics_layout::ROWS_PER_SET * optics_layout::ROW);
+	return s.table.size() == static_cast<size_t>(optics_layout::SIZE_VECS) * 4 && base % set_rows == 0 && s.rows.size() == base + base / set_rows * optics_layout::ROWS_PER_SET * optics_layout::LWIR_ROW && !s.wall.empty() &&
 		   s.lines.size() == static_cast<size_t>(optics_layout::MAX_LINES) * 4 && s.lights.size() == static_cast<size_t>(optics_layout::LIGHTS * optics_layout::LIGHT_SIZE) * 4;
 }
 

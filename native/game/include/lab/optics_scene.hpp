@@ -28,7 +28,9 @@ inline constexpr int MAX_BODIES = 256;
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
 // bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
 // nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33); the room's middle
-// on the screen (Stage 42: where the view puts it), 0, 0
+// on the screen (Stage 42: where the view puts it), the room's temperature (K) and the range the whole pass is read
+// in (Stage 46: 0 the visible, 1 the long-wave: the debug infrared view). The first vec4's w: where the long-wave
+// rows begin among the rows (Stage 46).
 inline constexpr int HEADER_VECS = 5;
 inline constexpr int BODY_VECS = 8;
 // The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
@@ -41,8 +43,9 @@ inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
 // the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts.
-// Its vec4 6 is unused (it held where a body's refraction map lay, until Stage 35; the bodies are laid out as
-// they were).
+// Its vec4 6 (Stage 46; it held where a body's refraction map lay until Stage 35): its temperature (K: what it emits
+// by, GAME_SPEC §12.4), and the rays it is hidden from (bits: a ray of a sensor's that carries one of them passes it
+// by), 0, 0.
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
 // SET: the set of spectra it is made of (a row set of `rows`), unused, a signature of the bodies of a layer
@@ -50,22 +53,33 @@ inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // upside down.
 // FORM x is its shape: 0 a cylinder (a vessel), 1 a ball (a balloon), 2 a prism; 3 a slab, 4 a bar, 5 a cone
 // (Stage 22: FORM z its size, a slab's corners' radius or a bar's width; MORE a bar's two ends)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, SET = 7;
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, HEAT = 6, SET = 7;
 // each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
 // liquid's refractive index, its wall's, and what its solids glow with (Planck's law times their
 // emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's)
+// And each row's long-wave segment (GAME_SPEC §12.4, Stage 46): LWIR_ROW values at 20 nm from 8000 nm, the same six
+// quantities in the band (the liquid's absorption, 1/cm; the solids' reflectance, 1 - emissivity; the wall's depth:
+// glass's absorption, 1/cm, a membrane's at its reference thickness; the indices, each the real one with n + ik's
+// reflectance; no light of its own: a body's long-wave light is its temperature's), after all the sets' visible
+// rows, set after set: row r of set s at the header's base + (s ROWS_PER_SET + r) LWIR_ROW. A thing that glows
+// (a cone: a flame) holds its absorption per pixel of path in its liquid's row.
 inline constexpr int ROW = 401;
+inline constexpr int LWIR_ROW = 301;
 inline constexpr int ROWS_PER_SET = 6;
 inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5;
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
-// the lights: the room's (the only one yet), 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)
+// the lights: the room's, 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)
 inline constexpr int LIGHT_ENTRIES = 4097;
-// and after them the table the other way: the share of its energy up to each whole nm from 380 (x), ROW of them
+// and after them the table the other way: the share of its energy up to each whole nm from 380 (x), ROW of them,
+// with the light's radiance there (y: W / m2 / sr / nm), which a body's emission is a multiple of
 inline constexpr int LIGHT_SIZE = LIGHT_ENTRIES + ROW;
-inline constexpr int LIGHTS = 1;
+// Stage 46: two lights, one a range (GAME_SPEC §12.4): the visible room's; and the long-wave room's, a black body at
+// the room's temperature times the sensor's response, its entries' colour the share of its signal (X = Y = Z), its
+// table the other way at each 20 nm from 8000 nm (LWIR_ROW of them)
+inline constexpr int LIGHTS = 2;
 // The wall as a table (GAME_SPEC §12.3), in vec4s. The edges of everything drawn on it are its
 // breakpoints across; between two it is one radiance on any row of pixels (the shapes over a row's
 // height averaged). Rows alike share a profile.
@@ -90,7 +104,7 @@ inline constexpr int OUTLINE_BANDS = 32;
 // corrections over a few frames, none of them long.
 inline constexpr double RAY_POINTS = 300000.0;
 // A pixel's kept beams (Stage 33): the vec4s of one pixel's record (the per-pixel source says what they hold).
-inline constexpr int KEPT_VECS = 24;
+inline constexpr int KEPT_VECS = 26;
 // The images things emit by (GAME_SPEC §12.1: image weights; Stage 42, the spectral viewer's screen), in vec4s
 // of their own buffer, one image after another: its head (its pixels across and down, how much of its third of
 // a pixel each subpixel fills across, how much of the pixel it fills down) and (where its channels' spectra
@@ -105,9 +119,10 @@ inline constexpr double SCREEN_FILL_X = 0.8, SCREEN_FILL_Y = 0.9;
 
 struct OpticsScene {
 	std::vector<float> table; // SIZE_VECS * 4
-	std::vector<float> rows; // ROWS_PER_SET * ROW a set, as many sets as there are
+	std::vector<float> rows; // ROWS_PER_SET * ROW a set, as many sets as there are; then their long-wave rows (Stage 46)
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
+	double lights_kelvin = 0.0; // the room's temperature the long-wave light was made at
 	uint64_t revision = 0; // changes when any of them does
 	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
@@ -194,6 +209,10 @@ struct OpticsBody {
 	const uint8_t *image = nullptr;
 	int image_w = 0, image_h = 0;
 	uint64_t image_hash = 0;
+	// Its temperature (GAME_SPEC §12.4, Stage 46: what it emits by), K; 0: the room's (an item's is its cell's)
+	double kelvin = 0.0;
+	// the rays it is hidden from (bits; Stage 46: a sensor's own body from its frame)
+	uint32_t hidden = 0;
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;
@@ -231,6 +250,10 @@ struct OpticsRoom {
 	// vessel made as glassware stands with its axis on a whole one of them.
 	double pixel = 1.0, pixel_x0 = 0.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
+	// Stage 46 (GAME_SPEC §12.4): the room's temperature, which the long-wave range sees it by; and the range the
+	// whole pass is read in (0 the visible; 1 the long-wave, the debug infrared view)
+	double kelvin = 293.15;
+	int range = 0;
 };
 
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
