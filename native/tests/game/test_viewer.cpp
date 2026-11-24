@@ -7,6 +7,8 @@
 
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <algorithm>
@@ -343,4 +345,228 @@ TEST_CASE("viewer: one reading, one picture (Stage 42)") {
 	CHECK(a.hash == b.hash);
 	CHECK(a.hash != c.hash);
 	CHECK(a.rgb != c.rgb);
+}
+
+// ---- the screen: a slab that emits its picture through three primaries (Stage 42)
+
+namespace {
+
+OpticsBody screen_of(const lab::Picture &p, float x, float y, float w, float h) {
+	OpticsBody b;
+	b.shape = OpticsBody::Screen;
+	b.x = x;
+	b.y = y;
+	b.w = w;
+	b.h = h;
+	b.size = 0.5f;
+	b.surface = "lcd_black";
+	b.image = p.rgb.data();
+	b.image_w = p.w;
+	b.image_h = p.h;
+	b.image_hash = p.hash;
+	b.id = 4242;
+	return b;
+}
+
+lab::Picture filled(const std::array<uint8_t, 3> &c) {
+	lab::Picture p;
+	for (size_t i = 0; i < p.rgb.size(); i += 3) {
+		p.rgb[i] = c[0];
+		p.rgb[i + 1] = c[1];
+		p.rgb[i + 2] = c[2];
+	}
+	p.hash = (static_cast<uint64_t>(c[0]) << 16) | (static_cast<uint64_t>(c[1]) << 8) | c[2];
+	return p;
+}
+
+chem::optics::Xyz xyz_of_linear(const double c[3]) {
+	return { 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2], 0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] };
+}
+
+} // namespace
+
+TEST_CASE("viewer: the screen's white is the room's white, its black the room's light off black glass (Stage 42)") {
+	// its three primaries full, over every pixel, are the room's white: D65 at Y = 1
+	const lab::Picture white = filled({ 255, 255, 255 }), black = filled({ 0, 0, 0 });
+	const OpticsScene lit = scene_of({ screen_of(white, 500.0f, 300.0f, 208.0f, 116.0f) });
+	const OpticsScene dark = scene_of({ screen_of(black, 500.0f, 300.0f, 208.0f, 116.0f) });
+	double on[3], off[3];
+	lab::optics_truth(lit, 600, 350, on);
+	lab::optics_truth(dark, 600, 350, off);
+	for (int c = 0; c < 3; ++c) {
+		CHECK(on[c] - off[c] == doctest::Approx(1.0).epsilon(0.01));
+		CHECK(off[c] == doctest::Approx(0.03 * 1.0).epsilon(0.05)); // its face: the room's light off its black (the wall's 1 here: the room's white)
+	}
+	CHECK(lab::check_O2(lit, 600, 350) == "");
+	// every channel of light no less than nothing; full white is each of them full
+	const auto &p = lab::optics_screen_primaries();
+	for (int c = 0; c < 3; ++c) {
+		for (int k = 0; k < 401; ++k) {
+			CHECK(p[static_cast<size_t>(c)][static_cast<size_t>(k)] >= 0.0);
+		}
+	}
+	const uint8_t full[3] = { 255, 255, 255 };
+	float w[3];
+	lab::optics_screen_drive(full, w);
+	CHECK(w[0] == doctest::Approx(1.0).epsilon(1e-6));
+	CHECK(w[1] == doctest::Approx(1.0).epsilon(1e-6));
+	CHECK(w[2] == doctest::Approx(1.0).epsilon(1e-6));
+}
+
+TEST_CASE("viewer: the screen shows each wavelength as the game shows a spike of it (Stage 42)") {
+	// The rainbow's colour of each wavelength is the game's own colour of a spike there (its light alone, as the
+	// display shows it); the screen, its three smooth primaries driven to show that colour, is seen through the
+	// pass in that colour, to well under what an eye sees (EYE_VISIBLE): what the probe reads there and what its
+	// plot shows of it look alike
+	double worst = 0.0;
+	int worst_nm = 0;
+	const double wall = lab::optics_through(scene_of({}), 600, 350, 550.0); // the room's light off the black glass is the wall's here
+	for (int nm = 400; nm <= 700; nm += 5) {
+		const std::array<uint8_t, 3> code = lab::rainbow()[static_cast<size_t>(nm - lab::SPECTRUM_FIRST_NM)];
+		const OpticsScene scene = scene_of({ screen_of(filled(code), 500.0f, 300.0f, 208.0f, 116.0f) });
+		double seen[3];
+		lab::optics_truth(scene, 600, 350, seen);
+		// less the room's light off its face (the plot's black: the same under every colour)
+		for (double &c : seen) {
+			c -= 0.03 * wall;
+		}
+		double meant[3];
+		for (int c = 0; c < 3; ++c) {
+			const double v = code[static_cast<size_t>(c)] / 255.0;
+			meant[c] = v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+		}
+		const double e = lab::eye_difference(lab::shown(xyz_of_linear(seen)), lab::shown(xyz_of_linear(meant)));
+		CAPTURE(nm);
+		CHECK(e < lab::EYE_VISIBLE / 2.0);
+		if (e > worst) {
+			worst = e;
+			worst_nm = nm;
+		}
+	}
+	MESSAGE("the screen's rainbow against the game's spikes: worst " << worst << " at " << worst_nm << " nm (eye metric)");
+}
+
+TEST_CASE("viewer: O17, a screen emits what its picture says, read exactly over any sample (Stage 42)") {
+	lab::Picture plot;
+	lab::plot_spectrum(peaked(520.0, 1.0), lab::SPECTRUM_NM, plot);
+	OpticsBody jar{ nullptr, 560.0f, 280.0f, 70.0f, 87.5f };
+	const ItemView water = water_jar();
+	jar.item = &water;
+	jar.layer = 1;
+	const OpticsScene scene = scene_of({ screen_of(plot, 500.0f, 300.0f, 208.0f, 116.0f), jar });
+	CHECK(lab::check_O17(scene, 400) == "");
+	CHECK(lab::check_O2(scene, 520, 380) == "");
+	CHECK(lab::check_O2(scene, 600, 330) == "");
+	// a ray's point: one subpixel's light, or none in the gaps between them
+	const double across = 208.0 / lab::SCREEN_W, up = 116.0 / lab::SCREEN_H;
+	const double x = 500.0 + across * (lab::PLOT_X + 150 + 0.5 / 3.0 + 1.0 / 3.0), y = 300.0 + up * (lab::STRIP_TOP + 3.5); // the strip at 530 nm: its green subpixel
+	CHECK(lab::optics_point(scene, x, y, 530.0) > 0.5);
+	CHECK(lab::optics_point(scene, 500.0 + across * (lab::PLOT_X + 150 + 0.99), y, 530.0) < 0.1); // between two pixels: dark
+	// seen through the held water, the screen is the truth's own: its rays and the pass's bring the same light
+	int apart = 0, compared = 0;
+	for (double py = 330.13; py < 360.0; py += 1.731) {
+		for (double px = 565.07; px < 625.0; px += 0.977) {
+			const double pass = lab::optics_point(scene, px, py, 540.0), truth = lab::optics_point_truth(scene, px, py, 540.0);
+			++compared;
+			apart += std::fabs(pass - truth) > 1e-3 * std::max(1.0, truth) ? 1 : 0;
+		}
+	}
+	CHECK(apart < compared / 100);
+	MESSAGE(compared << " rays through the water onto the screen, " << apart << " apart from the truth's");
+}
+
+TEST_CASE("viewer: O17 and O1 fire on a screen whose sums or channels are not its picture's (Stage 42)") {
+	lab::Picture plot;
+	lab::plot_spectrum(peaked(520.0, 1.0), lab::SPECTRUM_NM, plot);
+	const OpticsScene scene = scene_of({ screen_of(plot, 500.0f, 300.0f, 208.0f, 116.0f) });
+	REQUIRE(lab::check_O17(scene, 200) == "");
+	const int start = static_cast<int>(scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::MORE) * 4]);
+	const float *head = &scene.images[static_cast<size_t>(start) * 4];
+	const size_t channels = static_cast<size_t>(head[4]) * 4, sums = static_cast<size_t>(head[5]) * 4;
+	const int w = static_cast<int>(head[0]), h = static_cast<int>(head[1]);
+	{
+		// each row's sums a pixel along: every pixel read as its neighbour
+		OpticsScene shifted = scene;
+		for (int y = 0; y < h; ++y) {
+			float *row = &shifted.images[sums + static_cast<size_t>(y * (w + 1)) * 4];
+			for (int x = w; x >= 1; --x) {
+				for (int c = 0; c < 3; ++c) {
+					row[static_cast<size_t>(x) * 4 + static_cast<size_t>(c)] = row[static_cast<size_t>(x - 1) * 4 + static_cast<size_t>(c)];
+				}
+			}
+		}
+		CHECK(lab::check_O17(shifted, 200) != "");
+		CHECK(lab::check_O1(shifted) != "");
+	}
+	{
+		// red's light and blue's swapped
+		OpticsScene swapped = scene;
+		for (int k = 0; k < 401; ++k) {
+			std::swap(swapped.images[channels + static_cast<size_t>(k)], swapped.images[channels + static_cast<size_t>(2 * 401 + k)]);
+		}
+		CHECK(lab::check_O17(swapped, 200) != "");
+	}
+	{
+		// a pixel driven past full
+		OpticsScene over = scene;
+		over.image_weights[3 * 1000] = 2.0f;
+		CHECK(lab::check_O1(over) != "");
+	}
+}
+
+TEST_CASE("viewer: a new picture is a new colour of the same screen; the same picture changes nothing (Stage 42)") {
+	lab::Picture a, b;
+	lab::plot_spectrum(peaked(520.0, 1.0), lab::SPECTRUM_NM, a);
+	lab::plot_spectrum(peaked(610.0, 1.0), lab::SPECTRUM_NM, b);
+	OpticsScene scene;
+	lab::optics_compose(scene, room(), { screen_of(a, 500.0f, 300.0f, 208.0f, 116.0f) });
+	const uint64_t images = scene.images_revision;
+	const std::vector<float> table = scene.table;
+	lab::optics_compose(scene, room(), { screen_of(a, 500.0f, 300.0f, 208.0f, 116.0f) });
+	CHECK(scene.images_revision == images);
+	CHECK(scene.table == table);
+	lab::optics_compose(scene, room(), { screen_of(b, 500.0f, 300.0f, 208.0f, 116.0f) });
+	CHECK(scene.images_revision == images + 1);
+	namespace L = lab::optics_layout;
+	const size_t ids = static_cast<size_t>(L::HEADER_VECS + L::IDS) * 4;
+	CHECK(scene.table[ids] == table[ids]); // the same thing: its history may be kept where its colour barely moved
+	CHECK(scene.table[ids + 1] != table[ids + 1]); // of another colour
+	CHECK(lab::check_O1(scene) == "");
+}
+
+TEST_CASE("viewer: a held flask in front of a screen whose picture changes keeps its beams (O12); in single precision it settles as in double (O16) (Stage 42)") {
+	lab::Picture a, b;
+	lab::plot_spectrum(peaked(520.0, 1.0), lab::SPECTRUM_NM, a);
+	lab::plot_spectrum(peaked(610.0, 0.7), lab::SPECTRUM_NM, b);
+	OpticsBody jar{ nullptr, 560.0f, 280.0f, 70.0f, 87.5f };
+	const ItemView water = water_jar();
+	jar.item = &water;
+	jar.layer = 1;
+	OpticsScene scene;
+	lab::optics_compose(scene, room(), { screen_of(a, 500.0f, 300.0f, 208.0f, 116.0f), jar });
+	REQUIRE(lab::check_O1(scene) == "");
+	const int step = 2 * sparse(), x0 = 490, y0 = 270, w = 240 / step, h = 160 / step;
+	lab::OpticsFrames kept(x0, y0, w, h, 16.0, step), single(x0, y0, w, h, 16.0, step, true);
+	for (int f = 0; f < 8; ++f) {
+		kept.frame(scene);
+	}
+	int64_t held = 0;
+	CHECK(lab::check_O12(kept, scene, x0, y0, x0 + w * step, y0 + h * step, step, &held) == "");
+	// a new plot: the screen's colour, not its shape; the flask's pixels read it through the beams they kept
+	lab::optics_compose(scene, room(), { screen_of(b, 500.0f, 300.0f, 208.0f, 116.0f), jar });
+	kept.frame(scene);
+	held = 0;
+	CHECK(lab::check_O12(kept, scene, x0, y0, x0 + w * step, y0 + h * step, step, &held) == "");
+	CHECK(held > 200 / (step * step));
+	// settled in both arithmetics, the screen behind the water is one picture
+	lab::OpticsFrames exact(x0, y0, w, h, 16.0, step);
+	int frames = 0;
+	for (; frames < 600 && (frames < 8 || exact.asked() > 0.0 || single.asked() > 0.0); ++frames) {
+		exact.frame(scene);
+		single.frame(scene);
+	}
+	double stats[4] = {};
+	CHECK(lab::check_O16(exact, single, scene, x0, y0, x0 + w * step, y0 + h * step, step, stats) == "");
+	CHECK(stats[0] > 1000.0 / (step * step));
+	MESSAGE("a screen behind held water: " << stats[0] << " pixels, " << stats[1] << " visibly apart in single precision after " << frames << " frames; " << held << " kept their beams through a new plot");
 }

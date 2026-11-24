@@ -276,6 +276,18 @@
 		},
 		"lamp_glass": {
 			"base": 0.03
+		},
+		"viewer_case": {
+			"base": 0.09
+		},
+		"lcd_black": {
+			"base": 0.03
+		},
+		"probe_head": {
+			"base": 0.35
+		},
+		"probe_cable": {
+			"base": 0.05
 		}
 	},
 	"emitters_note": "Lights of the lab's things (GAME_SPEC §12.3, Stage 22), as multiples of the room's light at each wavelength: a lamp's face where it is seen; a flame's for each pixel of path through it. Gaussian bands in nm. Calibrated, not measured (docs/DATA_SOURCES.md): a lamp's green and amber as the screen drew them; a flame's soot rising to the red, and its blue as the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm) that a premixed flame's blue is (Gaydon, The Spectroscopy of Flames). An emitter is smooth at the scale of the pass's bands (tens of nm): a narrow emission line is not sampled reliably until it has the cuts an absorption line has.",
@@ -329,6 +341,33 @@
 					"centre_nm": 515,
 					"width_nm": 30,
 					"peak": 0.01
+				}
+			]
+		},
+		"led_red": {
+			"bands": [
+				{
+					"centre_nm": 620,
+					"width_nm": 30,
+					"peak": 1.0
+				}
+			]
+		},
+		"led_green": {
+			"bands": [
+				{
+					"centre_nm": 530,
+					"width_nm": 30,
+					"peak": 1.0
+				}
+			]
+		},
+		"led_blue": {
+			"bands": [
+				{
+					"centre_nm": 450,
+					"width_nm": 30,
+					"peak": 1.0
 				}
 			]
 		}

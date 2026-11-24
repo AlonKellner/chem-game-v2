@@ -477,6 +477,49 @@ double drawn_over(double x0, double x1, double y0, double y1) {
 	return sum / ((x1 - x0) * (y1 - y0));
 }
 
+// A screen's light over a sample (Stage 42; GAME_SPEC §12.1: image weights), by the truth's own reading: each of
+// its pixels' subpixels in turn, its weight as the screen drives it (the scene's image_weights) times how much of
+// the sample it covers, times its primary's light; as a multiple of the room's light over the part of the sample
+// the screen covers (`cover`), as a layer's glow is.
+double truth_image_glow(const OpticsScene &scene, int body, double px, double py, double across, double up, double nm, double cover) {
+	using namespace optics_layout;
+	if (!(cover > 0.0)) {
+		return 0.0;
+	}
+	const float *rect = &scene.table[static_cast<size_t>(HEADER_VECS + body * BODY_VECS + RECT) * 4];
+	const int img = static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + body * BODY_VECS + MORE) * 4]);
+	const float *head = &scene.images[static_cast<size_t>(img) * 4];
+	const int w = static_cast<int>(head[0]), h = static_cast<int>(head[1]);
+	const double fill_x = head[2], fill_y = head[3];
+	const size_t weights = static_cast<size_t>(head[6]);
+	const std::array<std::array<double, 401>, 3> &light = optics_screen_primaries();
+	const int k = std::clamp(static_cast<int>(std::floor(nm - 380.0)), 0, 399);
+	const double t = std::clamp(nm - 380.0 - k, 0.0, 1.0);
+	// the sample in the image's pixels
+	const double pw = static_cast<double>(rect[2]) / w, ph = static_cast<double>(rect[3]) / h;
+	const double x0 = (px - 0.5 * across - rect[0]) / pw, x1 = (px + 0.5 * across - rect[0]) / pw;
+	const double y0 = (py - 0.5 * up - rect[1]) / ph, y1 = (py + 0.5 * up - rect[1]) / ph;
+	const auto overlap = [](double a0, double a1, double b0, double b1) { return std::max(0.0, std::min(a1, b1) - std::max(a0, b0)); };
+	double sum = 0.0;
+	for (int j = std::max(0, static_cast<int>(std::floor(y0))); j < h && j <= static_cast<int>(std::floor(y1)); ++j) {
+		const double down = overlap(y0, y1, j + 0.5 * (1.0 - fill_y), j + 0.5 * (1.0 + fill_y));
+		if (down <= 0.0) {
+			continue;
+		}
+		for (int i = std::max(0, static_cast<int>(std::floor(x0))); i < w && i <= static_cast<int>(std::floor(x1)); ++i) {
+			for (int c = 0; c < 3; ++c) {
+				// subpixel c: the c-th third of the pixel across, fill of it lit, its gaps evenly on each side
+				const double third = 1.0 / 3.0, gap = 0.5 * third * (1.0 - fill_x);
+				const double across_lit = overlap(x0, x1, i + c * third + gap, i + (c + 1) * third - gap);
+				const double weight = scene.image_weights[weights + (static_cast<size_t>(j) * static_cast<size_t>(w) + static_cast<size_t>(i)) * 3 + static_cast<size_t>(c)];
+				const double primary = light[static_cast<size_t>(c)][static_cast<size_t>(k)] * (1.0 - t) + light[static_cast<size_t>(c)][static_cast<size_t>(k + 1)] * t;
+				sum += weight * across_lit * down * primary;
+			}
+		}
+	}
+	return sum / ((x1 - x0) * (y1 - y0) * cover);
+}
+
 // what one ray of the room's light brings at nm, at the point p of the screen (`size` across, for the
 // bodies' outlines): the truth's own tracing through every body, and its own reading of the wall; each body
 // read where the ray met it, gathered from the eye inward
@@ -509,7 +552,11 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			}
 			const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
 			const double per_cm = shader::liquid_at(m.body, start, nm);
-			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::row_at(start + 5 * optics_layout::ROW, nm), shader::row_at(start + 2 * optics_layout::ROW, nm),
+			double glow = shader::row_at(start + optics_layout::GLOW_ROW * optics_layout::ROW, nm);
+			if (glow < 0.0) {
+				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
+			}
+			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
 					per_cm * (m.bent ? chord : l.depth_cm), m.pass, room);
 			b += a * does.y;
 			a *= does.x;
@@ -546,6 +593,62 @@ double optics_point_truth(const OpticsScene &scene, double x, double y, double n
 	}
 	const shader::Use use(scene);
 	return exact_through(shader::vec2(x, y), shader::POINT_SIZE, nm);
+}
+
+double optics_image_glow(const OpticsScene &scene, int body, double x, double y, double across, double up, double nm) {
+	if (!shader::ready(scene) || scene.images.empty()) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	const shader::Layer l = shader::layer_at(body, shader::vec2(x, y), across, up);
+	const int start = shader::set_of(body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
+	return shader::glow_of(body, start, shader::vec2(x, y), across, up, nm, l.solid) * l.solid;
+}
+
+double optics_image_glow_truth(const OpticsScene &scene, int body, double x, double y, double across, double up, double nm) {
+	if (!shader::ready(scene) || scene.images.empty()) {
+		return 0.0;
+	}
+	const shader::Use use(scene);
+	const shader::Layer l = shader::layer_at(body, shader::vec2(x, y), across, up);
+	return truth_image_glow(scene, body, x, y, across, up, nm, l.solid) * l.solid;
+}
+
+std::string check_O17(const OpticsScene &scene, int samples) {
+	using namespace optics_layout;
+	if (!shader::ready(scene)) {
+		return "O17: no scene";
+	}
+	uint64_t seed = 88172645463325252ull;
+	const auto next = [&] {
+		seed ^= seed << 13;
+		seed ^= seed >> 7;
+		seed ^= seed << 17;
+		return static_cast<double>(seed >> 11) / 9007199254740992.0;
+	};
+	const int count = static_cast<int>(scene.table[0]);
+	for (int b = 0; b < count; ++b) {
+		const size_t at = static_cast<size_t>(HEADER_VECS + b * BODY_VECS) * 4;
+		if (!(scene.table[at + MORE * 4 + 1] > 0.5f) || !(scene.table[at + FORM * 4] > 2.5f && scene.table[at + FORM * 4] < 3.5f)) {
+			continue;
+		}
+		const double x = scene.table[at], y = scene.table[at + 1], w = scene.table[at + 2], h = scene.table[at + 3];
+		for (int i = 0; i < samples; ++i) {
+			// a sample anywhere on it or over its edge, from a ray's point to many of its pixels across
+			const double size = std::pow(10.0, -3.0 + 5.0 * next());
+			const double across = std::min(size, 0.5 * w), up = std::min(size * (0.5 + next()), 0.5 * h);
+			const double px = x - 0.25 * across + next() * (w + 0.5 * across), py = y - 0.25 * up + next() * (h + 0.5 * up);
+			for (const double nm : { 451.0, 532.5, 618.0 }) {
+				const double pass = optics_image_glow(scene, b, px, py, across, up, nm), truth = optics_image_glow_truth(scene, b, px, py, across, up, nm);
+				if (!(std::fabs(pass - truth) <= 1e-4 * std::max(1.0, std::fabs(truth)))) { // (the buffer's sums are a float's, as the GPU's)
+					char text[220];
+					std::snprintf(text, sizeof text, "O17: a screen (body %d) over %.4g by %.4g at (%.3f, %.3f), %g nm: the pass reads %.9g, its pixels say %.9g", b, across, up, px, py, nm, pass, truth);
+					return text;
+				}
+			}
+		}
+	}
+	return "";
 }
 
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {
@@ -1492,7 +1595,10 @@ std::string check_O1(const OpticsScene &scene) {
 		for (int k = 0; k < ROW; ++k) {
 			const size_t base = static_cast<size_t>(static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4]) * ROWS_PER_SET * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
-			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(scene.rows[base + GLOW_ROW * ROW] >= 0.0)) {
+			// (a screen's glow is its image's: its row is -1, Stage 42)
+			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
+			const double glow = scene.rows[base + GLOW_ROW * ROW];
+			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(glow >= 0.0 || (imaged && glow == -1.0))) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
 				return text;
 			}
@@ -1503,6 +1609,42 @@ std::string check_O1(const OpticsScene &scene) {
 		if (!prism && (!(extinction >= 0.0) || !(thickness >= 0.0))) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
+		}
+		if (scene.table[body + static_cast<size_t>(MORE) * 4 + 1] > 0.5f && scene.table[body + static_cast<size_t>(FORM) * 4] == 3.0f) {
+			// a screen (Stage 42): its image's channels no less than nothing, its weights within [0, 1], its rows'
+			// sums its weights'
+			const int img = static_cast<int>(scene.table[body + static_cast<size_t>(MORE) * 4]);
+			if (img < 0 || static_cast<size_t>(img + IMAGE_HEAD_VECS) * 4 > scene.images.size()) {
+				std::snprintf(text, sizeof text, "O1: body %d: its image is not in the scene", i);
+				return text;
+			}
+			const float *head = &scene.images[static_cast<size_t>(img) * 4];
+			const int w = static_cast<int>(head[0]), h = static_cast<int>(head[1]), channels = static_cast<int>(head[4]), sums = static_cast<int>(head[5]);
+			const size_t weights = static_cast<size_t>(head[6]);
+			if (w < 1 || h < 1 || static_cast<size_t>(sums + h * (w + 1)) * 4 > scene.images.size() || weights + static_cast<size_t>(w * h * 3) > scene.image_weights.size()) {
+				std::snprintf(text, sizeof text, "O1: body %d: its image's %d by %d pixels are not all in the scene", i, w, h);
+				return text;
+			}
+			for (int k = 0; k < 3 * ROW; ++k) {
+				if (!(scene.images[static_cast<size_t>(channels) * 4 + static_cast<size_t>(k)] >= 0.0f)) {
+					std::snprintf(text, sizeof text, "O1: body %d: its screen's channel %d is less than nothing at %d nm", i, k / ROW, 380 + k % ROW);
+					return text;
+				}
+			}
+			for (int y = 0; y < h; ++y) {
+				double run[3] = { 0.0, 0.0, 0.0 };
+				for (int x = 0; x < w; ++x) {
+					for (int c = 0; c < 3; ++c) {
+						const double v = scene.image_weights[weights + (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3 + static_cast<size_t>(c)];
+						run[c] += v;
+						const double held = scene.images[static_cast<size_t>(sums + y * (w + 1) + x + 1) * 4 + static_cast<size_t>(c)];
+						if (!(v >= 0.0 && v <= 1.0) || !(std::fabs(held - run[c]) <= 1e-4 * std::max(1.0, run[c]))) {
+							std::snprintf(text, sizeof text, "O1: body %d: its image's pixel (%d, %d) has a weight %g outside [0, 1] or its row's sum is not its pixels' (%g, %g)", i, x, y, v, held, run[c]);
+							return text;
+						}
+					}
+				}
+			}
 		}
 		const int first = static_cast<int>(scene.table[body + static_cast<size_t>(IDS) * 4 + 2]), lines = static_cast<int>(scene.table[body + static_cast<size_t>(IDS) * 4 + 3]);
 		for (int j = first; j < first + lines; ++j) {
@@ -1532,7 +1674,16 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 		for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
 			const size_t at = static_cast<size_t>(optics_layout::HEADER_VECS + b * optics_layout::BODY_VECS);
 			const double path = scene.table[(at + optics_layout::FORM) * 4] > 4.5f ? static_cast<double>(scene.table[(at + optics_layout::RECT) * 4 + 2]) : 0.0;
-			sum += shader::row_at(shader::set_of(b) * optics_layout::ROWS_PER_SET * optics_layout::ROW + optics_layout::GLOW_ROW * optics_layout::ROW, nm) * (1.0 + path);
+			const double glow = shader::row_at(shader::set_of(b) * optics_layout::ROWS_PER_SET * optics_layout::ROW + optics_layout::GLOW_ROW * optics_layout::ROW, nm);
+			if (glow < 0.0) {
+				// a screen (Stage 42): no more than all three of its channels full
+				const int img = static_cast<int>(scene.table[(at + optics_layout::MORE) * 4]);
+				for (int c = 0; c < 3; ++c) {
+					sum += shader::image_channel(img, c, nm);
+				}
+				continue;
+			}
+			sum += glow * (1.0 + path);
 		}
 		return sum;
 	};

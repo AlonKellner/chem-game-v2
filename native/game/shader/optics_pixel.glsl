@@ -23,6 +23,7 @@
 //   vec4 shape_vec(int i)    each bending body's surfaces and how it lies (lab/optics_scene.hpp: the shapes)
 //   vec4 corner_vec(int i), void corner_put(int i, vec4 v)   the lattice of pixel corners (below: corners shared)
 //   vec4 kept_vec(int i), void kept_put(int i, vec4 v)       the record of the pixel being read (below: beams kept)
+//   vec4 image_vec(int i)    the images things emit by (lab/optics_scene.hpp: images; Stage 42, a screen's)
 
 const int HEADER_VECS = 4;
 const int BODY_VECS = 8;
@@ -684,6 +685,95 @@ struct Shade {
 	int body; // the refracting one's
 };
 
+// ---- an image a thing emits by (GAME_SPEC §12.1: image weights; Stage 42, the spectral viewer's screen)
+//
+// A screen is a slab whose set's glow is -1 (no spectrum is less than nothing, O1): its light is its image's. Each
+// pixel of the image is three subpixels side by side, red, green and blue, each a third of it across and `fill`
+// of that lit, `fill` of it lit down; each lit by its weight (linear, 0 to 1) times its channel's light. Read
+// exactly over any sample, from each row's running sums of its weights (lab/optics_scene.hpp: images).
+
+// channel c's light at nm, of the image whose head is at img: a multiple of the room's light
+float image_channel(int img, int c, float nm) {
+	float x = clamp(nm - 380.0, 0.0, 400.0);
+	int i = min(int(floor(x)), 399);
+	int at = int(image_vec(img + 1).x) * 4 + c * ROW + i;
+	float a = image_vec(at / 4)[at % 4];
+	float b = image_vec((at + 1) / 4)[(at + 1) % 4];
+	return mix(a, b, x - float(i));
+}
+
+// what one row of the image gives over [u0, u1] (its pixels' units, within the image): each channel's weights
+// times how much of each of its subpixels the span covers
+vec3 image_row_over(int img, int row, float u0, float u1) {
+	vec4 head = image_vec(img);
+	int w = int(head.x);
+	float gap = (1.0 - head.z) / 6.0; // each side of a subpixel's third that is dark
+	int sums = int(image_vec(img + 1).y) + row * (w + 1);
+	int ia = clamp(int(floor(u0)), 0, w - 1);
+	int ib = clamp(int(floor(u1)), 0, w - 1);
+	vec4 pa = image_vec(sums + ia);
+	vec4 pa1 = image_vec(sums + ia + 1);
+	vec3 wa = vec3(pa1.x - pa.x, pa1.y - pa.y, pa1.z - pa.z);
+	float fa = float(ia);
+	vec3 oa = vec3(max(min(u1, fa + 1.0 / 3.0 - gap) - max(u0, fa + gap), 0.0), max(min(u1, fa + 2.0 / 3.0 - gap) - max(u0, fa + 1.0 / 3.0 + gap), 0.0),
+			max(min(u1, fa + 1.0 - gap) - max(u0, fa + 2.0 / 3.0 + gap), 0.0));
+	if (ib == ia) {
+		return vec3(wa.x * oa.x, wa.y * oa.y, wa.z * oa.z);
+	}
+	vec4 pb = image_vec(sums + ib);
+	vec4 pb1 = image_vec(sums + ib + 1);
+	vec3 wb = vec3(pb1.x - pb.x, pb1.y - pb.y, pb1.z - pb.z);
+	float fb = float(ib);
+	vec3 ob = vec3(max(min(u1, fb + 1.0 / 3.0 - gap) - max(u0, fb + gap), 0.0), max(min(u1, fb + 2.0 / 3.0 - gap) - max(u0, fb + 1.0 / 3.0 + gap), 0.0),
+			max(min(u1, fb + 1.0 - gap) - max(u0, fb + 2.0 / 3.0 + gap), 0.0));
+	// the pixels between, whole: each subpixel a third of the pixel less its gaps
+	float whole = 1.0 / 3.0 - 2.0 * gap;
+	return vec3(wa.x * oa.x + wb.x * ob.x + (pb.x - pa1.x) * whole, wa.y * oa.y + wb.y * ob.y + (pb.y - pa1.y) * whole, wa.z * oa.z + wb.z * ob.z + (pb.z - pa1.z) * whole);
+}
+
+// A thing's image's light over the sample `across` by `up` about p, at nm: a multiple of the room's light over
+// the part of the sample the thing covers (`cover`: what its layer's solid is, which its glow is weighed by)
+float image_glow(int body, vec2 p, float across, float up, float nm, float cover) {
+	if (cover <= 0.0) {
+		return 0.0;
+	}
+	int at = HEADER_VECS + body * BODY_VECS;
+	vec4 rect = scene_vec(at);
+	int img = int(scene_vec(at + 2).x);
+	vec4 head = image_vec(img);
+	float sx = head.x / rect.z; // its pixels to a pixel of the screen
+	float sy = head.y / rect.w;
+	float u0 = clamp((p.x - 0.5 * across - rect.x) * sx, 0.0, head.x);
+	float u1 = clamp((p.x + 0.5 * across - rect.x) * sx, 0.0, head.x);
+	float v0 = clamp((p.y - 0.5 * up - rect.y) * sy, 0.0, head.y);
+	float v1 = clamp((p.y + 0.5 * up - rect.y) * sy, 0.0, head.y);
+	float gap = 0.5 * (1.0 - head.w);
+	int r0 = clamp(int(floor(v0)), 0, int(head.y) - 1);
+	int r1 = clamp(int(floor(v1)), 0, int(head.y) - 1);
+	vec3 lit = vec3(0.0);
+	for (int k = 0; k < 4096; k++) {
+		int row = r0 + k;
+		if (row > r1) {
+			break;
+		}
+		float fr = float(row);
+		float down = max(min(v1, fr + 1.0 - gap) - max(v0, fr + gap), 0.0);
+		if (down > 0.0) {
+			lit = lit + image_row_over(img, row, u0, u1) * down;
+		}
+	}
+	// the sample's area in the image's pixels: what was lit, as a share of all of it, then of its covered part
+	float share = 1.0 / (max(across * sx * up * sy, 1.0e-20) * cover);
+	return share * (lit.x * image_channel(img, 0, nm) + lit.y * image_channel(img, 1, nm) + lit.z * image_channel(img, 2, nm));
+}
+
+// what a layer's solid glows with at nm (a multiple of the room's light): its set's row, or where that is -1,
+// its image's light over the sample (`cover`, the layer's solid)
+float glow_of(int body, int start, vec2 p, float across, float up, float nm, float cover) {
+	float glow = row_at(start + 5 * ROW, nm);
+	return glow < 0.0 ? image_glow(body, p, across, up, nm, cover) : glow;
+}
+
 Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	if (k >= q.layers) {
 		return s;
@@ -692,7 +782,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float per_cm = liquid_at(body_of(l.body), start, nm);
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
-	float glow = row_at(start + 5 * ROW, nm); // what its solids glow with, a multiple of the room's light
+	float glow = glow_of(body_of(l.body), start, vec2(q.x, q.y), q.size, q.size, nm, l.solid); // what its solids glow with, a multiple of the room's light
 	if (body_of(l.body) == q.refractor && !s.own) {
 		s.own = true;
 		s.per_cm = per_cm;
@@ -2353,7 +2443,9 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 			depth_cm = sqrt(max(record < 0.5 ? dot(b.chord0, wp) : dot(b.chord1, wp), 0.0));
 			l.haze = haze_along(body, depth_cm);
 		}
-		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 5 * ROW, nm), row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, room);
+		vec4 met = k == 0 ? b.m0 : (k == 1 ? b.m1 : (k == 2 ? b.m2 : b.m3));
+		float glow = glow_of(body, start, vec2(met.z, met.w), 1.0e-3, 1.0e-3, nm, l.solid);
+		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, room);
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -2576,7 +2668,8 @@ vec2 ray_shade(RayMet m, float nm) {
 			}
 		}
 		int start = set_of(body) * ROWS_PER_SET * ROW;
-		vec2 does = body_does(l, row_at(start + ROW, nm), row_at(start + 5 * ROW, nm), row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm), bent ? slot.z : 1.0, room);
+		float glow = glow_of(body, start, met_where(m, k), 1.0e-3, 1.0e-3, nm, l.solid);
+		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm), bent ? slot.z : 1.0, room);
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}

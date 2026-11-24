@@ -490,6 +490,20 @@ by eye; measured spectra are a later stage).
 | A lamp, green; amber | 1.2 times the room's light at 530 nm (width 30); 1.5 at 600 nm (width 30) | the screen's green (#78c88c) and amber (#e0a040), brighter than the wall as a lamp is |
 | A flame, sooty | for each pixel of path: 0.08 at 650 nm (width 120) and 0.03 at 570 nm (width 60) | soot glowing, rising to the red |
 | A flame, blue | for each pixel of path: 0.05 at 431 nm (width 14), 0.008 at 470 nm (width 25), 0.01 at 515 nm (width 30), 0.001 throughout | the band systems of CH (around 431 nm) and C2 (the Swan bands, 470 to 560 nm), from which a premixed flame's blue is (A. G. Gaydon, *The Spectroscopy of Flames*, 1974); their strengths placed by eye. Smooth at the pass's band scale: 6 nm wide bands were sampled by chance, and the GPU's settled flame was visibly not the truth's (O4) |
+| The spectral viewer's case; its screen's black; its probe's head; its cable (Stage 42, design) | 0.09; 0.03; 0.35; 0.05, all flat | a dark instrument case, a display's black glass, a steel probe, a black cable |
+
+**The viewer's primaries (Stage 42)** (`data/optics/media.json`: `emitters`: `led_red`, `led_green`,
+`led_blue`). Design, calibrated: Gaussians (as the file's `width_nm`, a 1/e half-width) of 30 nm at 620,
+530 and 450 nm, each a multiple of the room's light; the screen scales them so its full white is the
+room's white (D65 at Y = 1). Smooth at the pass's bands (an emitter narrower than tens of nanometres is
+not sampled reliably, `emitters_note`). Placed so that the screen shows each wavelength's colour on its
+rainbow as the game shows a spike of that wavelength (the display's colour of the light of that
+wavelength alone, at the brightness at which it is most saturated): measured over 400 to 700 nm on
+the eye metric, the screen's colour of each against the game's, worst 1.6 and mean 0.31 (visible: 8).
+Searched: widths 12 to 35 nm (worst 0 at 20 nm or less, 3.5 at 30 nm with centres 615, 535 and 460,
+5.9 at 35 nm); centres 610 to 630, 525 to 540 and 445 to 460 at 30 nm. **Confidence: design** (a
+real panel's primaries are narrower and its colour management its maker's; these are its colours, not
+its spectra).
 
 **Glassware (Stage 24)** (`data/glassware.json`): each vessel is made to its standard. Read
 2026-11-21 from the standards' own preview pages (standards.iteh.ai: the scanned pages rendered and

@@ -214,68 +214,34 @@ bool Spectrometer::settled() const {
 
 // ---- the viewer's screen
 
-namespace {
-
-// OKLab (Ottosson 2020) from linear sRGB, and back
-void oklab_of(const double rgb[3], double lab[3]) {
-	const double l = std::cbrt(0.4122214708 * rgb[0] + 0.5363325363 * rgb[1] + 0.0514459929 * rgb[2]);
-	const double m = std::cbrt(0.2119034982 * rgb[0] + 0.6806995451 * rgb[1] + 0.1073969566 * rgb[2]);
-	const double s = std::cbrt(0.0883024619 * rgb[0] + 0.2817188376 * rgb[1] + 0.6299787005 * rgb[2]);
-	lab[0] = 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s;
-	lab[1] = 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s;
-	lab[2] = 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s;
-}
-
-void rgb_of(double lightness, double chroma, double hue, double rgb[3]) {
-	const double a = chroma * std::cos(hue), b = chroma * std::sin(hue);
-	const double l = std::pow(lightness + 0.3963377774 * a + 0.2158037573 * b, 3.0);
-	const double m = std::pow(lightness - 0.1055613458 * a - 0.0638541728 * b, 3.0);
-	const double s = std::pow(lightness - 0.0894841775 * a - 1.2914855480 * b, 3.0);
-	rgb[0] = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
-	rgb[1] = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
-	rgb[2] = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
-}
-
-bool in_gamut(const double rgb[3]) {
-	return rgb[0] >= -1e-9 && rgb[1] >= -1e-9 && rgb[2] >= -1e-9 && rgb[0] <= 1.0 + 1e-9 && rgb[1] <= 1.0 + 1e-9 && rgb[2] <= 1.0 + 1e-9;
-}
-
-} // namespace
-
 const std::array<std::array<uint8_t, 3>, SPECTRUM_NM> &rainbow() {
 	static const std::array<std::array<uint8_t, 3>, SPECTRUM_NM> colours = [] {
 		std::array<std::array<uint8_t, 3>, SPECTRUM_NM> c{};
 		const chem::optics::Spectrum &xb = chem::optics::xbar(), &yb = chem::optics::ybar(), &zb = chem::optics::zbar();
 		for (int k = 0; k < SPECTRUM_NM; ++k) {
 			const double nm = SPECTRUM_FIRST_NM + k;
-			// the light of this wavelength alone: its hue (OKLab), and of that hue the most saturated colour the
-			// display has (its cusp: the greatest chroma at any lightness)
-			double rgb[3], lab[3];
-			to_linear_srgb(chem::optics::Xyz{ xb[static_cast<size_t>(k)], yb[static_cast<size_t>(k)], zb[static_cast<size_t>(k)] }, rgb);
-			oklab_of(rgb, lab);
-			// (the cube roots of a colour no display has can be of negatives: its hue is still the line from grey)
-			const double hue = std::atan2(lab[2], lab[1]);
-			double best_c = -1.0, best_l = 0.5;
-			for (int i = 0; i <= 120; ++i) {
-				const double lightness = 0.30 + 0.65 * i / 120.0;
-				double lo = 0.0, hi = 0.5;
-				for (int j = 0; j < 40; ++j) {
-					const double mid = 0.5 * (lo + hi);
-					double probe[3];
-					rgb_of(lightness, mid, hue, probe);
-					(in_gamut(probe) ? lo : hi) = mid;
-				}
-				if (lo > best_c) {
-					best_c = lo;
-					best_l = lightness;
+			// The colour the game shows a spike of this wavelength in (what the probe sees there): its light alone,
+			// at the brightness at which the screen shows it most saturated (the display keeps a colour's
+			// lightness and hue and gives up chroma: too bright, a blue spike is shown pale)
+			const double y = std::max(yb[static_cast<size_t>(k)], 1.0e-12);
+			double best = -1.0, best_y = 0.1;
+			for (int i = 1; i <= 200; ++i) {
+				const double lum = i / 200.0;
+				const lab::CieLab seen = shown(chem::optics::Xyz{ xb[static_cast<size_t>(k)] * lum / y, lum, zb[static_cast<size_t>(k)] * lum / y });
+				const double chroma = std::hypot(seen.a, seen.b);
+				if (chroma > best) {
+					best = chroma;
+					best_y = lum;
 				}
 			}
-			rgb_of(best_l, best_c, hue, rgb);
-			// dimmer toward the ends, where the eye sees little (as a spectrometer's display draws them)
+			// dimmer toward the ends, where the eye sees little (as a spectrometer's display draws them): a dimmer
+			// spike of the same wavelength
 			const double taper = nm < 420.0 ? 0.3 + 0.7 * (nm - 380.0) / 40.0 : (nm > 700.0 ? 0.3 + 0.7 * (780.0 - nm) / 80.0 : 1.0);
+			const double lum = best_y * taper * taper;
+			int code[3] = { 0, 0, 0 };
+			shown(chem::optics::Xyz{ xb[static_cast<size_t>(k)] * lum / y, lum, zb[static_cast<size_t>(k)] * lum / y }, code);
 			for (int i = 0; i < 3; ++i) {
-				const double v = std::clamp(rgb[i], 0.0, 1.0) * taper * taper;
-				c[static_cast<size_t>(k)][static_cast<size_t>(i)] = static_cast<uint8_t>(std::lround(255.0 * srgb_encode(v)));
+				c[static_cast<size_t>(k)][static_cast<size_t>(i)] = static_cast<uint8_t>(std::clamp(code[i], 0, 255));
 			}
 		}
 		return c;

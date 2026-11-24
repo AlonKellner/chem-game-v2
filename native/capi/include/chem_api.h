@@ -227,6 +227,12 @@ typedef struct cg_optics {
 	int32_t shape_count;
 	const float *shapes; /* 4 * shape_count floats */
 	uint64_t shapes_revision;
+	/* The images things emit by (GAME_SPEC §12.1, Stage 42: the spectral
+	 * viewer's screen): image_count vec4s (none: 0 and null), with a revision of
+	 * their own; the per-pixel source reads them as image_vec. */
+	int32_t image_count;
+	const float *images; /* 4 * image_count floats */
+	uint64_t images_revision;
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames

@@ -66,12 +66,12 @@ private:
 		uint32_t capacity = 0;
 	};
 	void hold(Buffer &buffer, const float *data, int32_t floats);
-	Buffer scene_, rows_, lines_, lights_, wall_, shapes_;
+	Buffer scene_, rows_, lines_, lights_, wall_, shapes_, images_;
 	godot::RID asked_;
 	godot::RID state_[4];
 	godot::RID shown_;
 	godot::Ref<godot::Texture2DRD> shown_texture_;
-	uint64_t uploaded_ = 0, uploaded_wall_ = 0, uploaded_shapes_ = 0;
+	uint64_t uploaded_ = 0, uploaded_wall_ = 0, uploaded_shapes_ = 0, uploaded_images_ = 0;
 	bool have_scene_ = false;
 	int32_t frame_ = 0;
 	int32_t stamp_ = 0; // counts the runs of the passes (a pixel is stepped once in each)

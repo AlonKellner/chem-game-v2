@@ -87,6 +87,11 @@ inline vec4 wall_vec(int i) {
 	return vec4(v[0], v[1], v[2], v[3]);
 }
 
+// the images things emit by (Stage 42): none in a scene with no screen, and none is read there
+inline vec4 image_vec(int i) {
+	const float *v = &current->images[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
 inline vec4 shape_vec(int i) {
 	const auto *v = &OPTICS_HOST_SHAPES(*current)[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);

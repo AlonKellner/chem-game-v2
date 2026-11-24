@@ -36,6 +36,7 @@ layout(set = 0, binding = 11, std430) restrict readonly buffer WallBuffer { vec4
 layout(set = 0, binding = 13, std430) restrict readonly buffer ShapeBuffer { vec4 v[]; } shape_buffer;
 layout(set = 0, binding = 14, std430) restrict buffer CornerBuffer { vec4 v[]; } corner_buffer;
 layout(set = 0, binding = 15, std430) restrict buffer KeptBuffer { vec4 v[]; } kept_buffer;
+layout(set = 0, binding = 16, std430) restrict readonly buffer ImageBuffer { vec4 v[]; } image_buffer;
 layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; int pad2; } params;
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
@@ -47,6 +48,7 @@ vec4 corner_vec(int i) { return corner_buffer.v[i]; }
 void corner_put(int i, vec4 v) { corner_buffer.v[i] = v; }
 vec4 kept_vec(int i) { return kept_buffer.v[i]; }
 void kept_put(int i, vec4 v) { kept_buffer.v[i] = v; }
+vec4 image_vec(int i) { return image_buffer.v[i]; }
 // ---- the per-pixel source (native/game/shader/optics_pixel.glsl)
 )";
 
@@ -190,7 +192,7 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], pipeline_[0], pipeline_[1], pipeline_[2], shader_[0], shader_[1], shader_[2], corners_, kept_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, wall_.rid, shapes_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], pipeline_[0], pipeline_[1], pipeline_[2], shader_[0], shader_[1], shader_[2], corners_, kept_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -314,6 +316,11 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		hold(shapes_, optics.shapes, 4 * optics.shape_count);
 		uploaded_shapes_ = optics.shapes_revision;
 	}
+	// the images things emit by (Stage 42: a screen's), with a revision of their own
+	if (!have_scene_ || optics.images_revision != uploaded_images_) {
+		hold(images_, optics.images, optics.images != nullptr ? 4 * optics.image_count : 0);
+		uploaded_images_ = optics.images_revision;
+	}
 	if (!asked_.is_valid()) {
 		godot::PackedByteArray zero;
 		zero.resize(24);
@@ -380,6 +387,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 9, asked_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 11, wall_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 13, shapes_.rid);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 16, images_.rid);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 14, corners_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 15, kept_);
 		for (int pass = 0; pass < PASSES; ++pass) {
