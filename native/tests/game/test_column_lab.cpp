@@ -216,3 +216,40 @@ TEST_CASE("column: on the screen the pour menu's \"pour gently\" lays the green 
 		}
 	}
 }
+
+TEST_CASE("column: a held pour onto a layered vessel at any speed, a frame's first step checked, keeps every invariant (Stage 47)") {
+	// the user's test: poured by hand, the lab stopped on C5. A pour that lands as a layer moves the liquid there
+	// before the step; after unchecked steps a checked one could not then start where the last one ended.
+	for (const char *target : { "blue", "beaker" }) {
+		for (const char *speed : { "speed:10", "speed:600" }) {
+			std::string why;
+			std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/layers.json"), why);
+			REQUIRE(ui != nullptr);
+			ui->frame(1.0 / 60);
+			float x = 0, y = 0;
+			REQUIRE(ui->locate(speed, x, y));
+			ui->pointer(x, y, false);
+			ui->pointer(x, y, true);
+			ui->pointer(x, y, false);
+			float ax = 0, ay = 0, fx = 0, fy = 0;
+			REQUIRE(ui->locate("item:green", ax, ay));
+			REQUIRE(ui->locate(std::string("item:") + target, fx, fy));
+			ui->pointer(ax, ay, true);
+			ui->pointer(ax, ay, false);
+			for (int k = 1; k <= 20; ++k) {
+				ui->pointer(ax + (fx - ax) * static_cast<float>(k) / 20.0f, ay + (fy - ay) * static_cast<float>(k) / 20.0f, false);
+				ui->frame(1.0 / 60.0);
+			}
+			ui->pointer(fx, fy, true);
+			for (int k = 0; k < 360; ++k) {
+				if (k == 240) {
+					ui->pointer(fx, fy, false);
+				}
+				ui->frame(1.0 / 60.0);
+			}
+			CHECK_MESSAGE(ui->message().empty(), target << " at " << speed << ": " << ui->message());
+			CHECK_FALSE(ui->lab().failed());
+			CHECK(item(ui->lab(), target).layers.size() >= 2);
+		}
+	}
+}

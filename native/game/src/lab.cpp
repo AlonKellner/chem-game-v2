@@ -1853,6 +1853,7 @@ struct Lab::Impl {
 		}
 		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), t.cell, down, enthalpy_carried(table(), down, kelvin(t.cell)));
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		mid_step = true; // (moved before the step: a trace begun after it cannot start where the last one ended)
 	}
 	// What a pour laid on a vessel stirred back in (Stage 47): the layer under its own cell moved up into it, once
 	void stir_in_surface(Item &t) {
@@ -1869,6 +1870,7 @@ struct Lab::Impl {
 		}
 		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), layers[0], amounts, Energy{ c.energy });
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		mid_step = true;
 	}
 	// A burner under a layered vessel heats its lowest layer (Stage 47): its edge follows it, at a step boundary
 	void follow_columns() {
@@ -2213,11 +2215,12 @@ struct Lab::Impl {
 		// A checked step needs its trace to start where the last one ended. After
 		// unchecked steps, with a pour already applied in this one, it cannot:
 		// this step runs unchecked and the next is checked.
-		const bool traceable = !(untraced && mid_step);
-		mid_step = false;
+		// (Stage 47: after the pours are set, for a pour that lands as a layer moves the liquid there first)
 		set_stirring();
 		set_pours();
 		follow_columns();
+		const bool traceable = !(untraced && mid_step);
+		mid_step = false;
 		if (!check || !traceable) {
 			sim->advance();
 			untraced = true;
