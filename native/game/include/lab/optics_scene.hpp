@@ -57,10 +57,12 @@ inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
 // liquid's refractive index, its wall's, and what its solids glow with (Planck's law times their
-// emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's)
+// emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's), and what
+// its bubbles turn back (Stage 45: their single-scattering albedo, data/optics/media.json's scatterers; 0 where it
+// has none)
 inline constexpr int ROW = 401;
-inline constexpr int ROWS_PER_SET = 6;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5;
+inline constexpr int ROWS_PER_SET = 7;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6;
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
 // the lights: the room's (the only one yet), 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)

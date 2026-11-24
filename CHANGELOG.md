@@ -11,7 +11,9 @@
   - Derived each step from the burner's flow, not state: the world, its digest and the goldens are unchanged.
   - Seen as a white haze from the floor up to where they end, their extinction times 1 − g (0.85, Flatau et
     al.); a reaction's gas as bubbles to the surface.
-- §12.2: a body's vec4 6 holds a vessel's bubbles; the per-pixel source reads them wherever a haze is.
+- §12, §12.2: bubbles are a scatter medium (`data/optics/media.json`'s scatterers: albedo, efficiency, asymmetry),
+  its albedo a seventh row of a vessel's spectra (`BUBBLE_ROW`); a body's vec4 6 holds a vessel's bubbles; the
+  per-pixel source reads them wherever a haze is.
 - §13.3: `bubbles_cm`, how high a vessel's bubbles reach. §13.7: the experiment `boiling`. §18: B1. §20.
 
 ## 0.44.0 (2026-11-24, Stage 44; signed off by the user: "Stage 44 is approved, merge and proceed")

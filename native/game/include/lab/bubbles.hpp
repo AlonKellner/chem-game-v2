@@ -24,8 +24,10 @@ struct Water {
 };
 Water water_at(double celsius);
 
-// bubbles' asymmetry parameter in water, g (data/boiling.json's light): what they scatter goes mostly forward,
-// so the haze they make of the room's light is their extinction times 1 - g
+// bubbles in water as the optics has them (data/optics/media.json's scatterers: GAME_SPEC §12): their extinction
+// efficiency, and their asymmetry parameter g (what they scatter goes mostly forward, so the haze they make of the
+// room's light is their extinction times 1 - g)
+double efficiency();
 double asymmetry();
 
 // water's surface tension against its vapour, N/m (Lienhard eq. 9.2a, IAPWS)
@@ -82,7 +84,7 @@ struct Bubbles {
 	double per_second = 0.0; // steam bubbles leaving the floor
 	double end_m = 0.0; // how high they reach: where they are gone, or the surface
 	bool surface = false; // they reach the surface
-	// what is seen (§12): the bubbles' extinction a metre (2 their cross-section a cubic metre: Q_ext = 2), at the
+	// what is seen (§12): the bubbles' extinction a metre (their efficiency, 2, times their cross-section a cubic metre), at the
 	// floor, falling as (1 - z / end)^exponent to where they end; and a reaction's gas, the same at every height
 	double extinction_floor = 0.0, exponent = 0.0, gas_extinction = 0.0;
 	double holdup_floor = 0.0; // the steam's share of the liquid's volume at the floor

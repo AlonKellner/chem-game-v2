@@ -1,6 +1,7 @@
 // Boiling's bubbles (GAME_SPEC §11, Stage 45): the floor, the bubbles' rise and condensing, held to their
 // sources at the sources' conditions (docs/DATA_SOURCES.md, "Boiling's bubbles (Stage 45)").
 #include "lab/bubbles.hpp"
+#include "chem/optics.hpp"
 #include "lab/colour.hpp"
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
@@ -238,7 +239,18 @@ lab::CieLab colour_at(const lab::OpticsScene &scene, int x, int y) {
 } // namespace
 
 TEST_CASE("measured: bubbles in water scatter forward, g 0.85 (Flatau et al. 2000); their haze is what they turn away, 1 - g of their extinction (Stage 45)") {
-	CHECK(asymmetry() == doctest::Approx(0.85));
+	// a scatter medium of the optics (data/optics/media.json's scatterers): efficiency 2 (much larger than the
+	// wavelength), albedo 1 at every wavelength (they absorb nothing; Piskozub et al.: little spectral dependence)
+	const chem::optics::Scatterer *medium = chem::optics::scatterer("bubbles");
+	REQUIRE(medium != nullptr);
+	CHECK(medium->efficiency == doctest::Approx(2.0));
+	CHECK(medium->asymmetry == doctest::Approx(0.85));
+	for (const double a : *medium->albedo) {
+		CHECK(a == doctest::Approx(1.0));
+	}
+	CHECK(asymmetry() == medium->asymmetry);
+	CHECK(efficiency() == medium->efficiency);
+	CHECK(chem::optics::scatterer("foam") == nullptr);
 }
 
 TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the floor up to where they end; a reaction's gas all the way up (Stage 45)") {
@@ -291,6 +303,10 @@ TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the 
 	// what the scene gives the pass: the extinction times 1 - g, quantised in steps of 3 %
 	const float floor_haze = boiling.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4];
 	CHECK(std::fabs(floor_haze / (b.bubble_extinction * (1.0 - asymmetry())) - 1.0) < 0.02);
+	// what the bubbles turn back is their medium's albedo, in a row of the vessel's spectra; none without them
+	const size_t bubble_row = static_cast<size_t>(lab::optics_layout::BUBBLE_ROW * lab::optics_layout::ROW);
+	CHECK(boiling.rows[bubble_row + 150] == doctest::Approx((*chem::optics::scatterer("bubbles")->albedo)[150]));
+	CHECK(plain.rows[bubble_row + 150] == 0.0f);
 	// a corrupted profile is caught
 	lab::OpticsScene broken = boiling;
 	broken.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4] = -1.0f;

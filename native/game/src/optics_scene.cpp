@@ -600,6 +600,12 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			// up; each a haze, white, of their extinction times 1 - g (they scatter mostly forward). Quantised (steps of 3 % in extinction, a twentieth in the exponent, a hundredth
 			// of a millimetre in height), so a pixel keeps its history while a boil stands still (GAME_SPEC §12.2)
 			if (!body.flipped && (v.bubble_extinction > 0.0 || v.gas_extinction > 0.0)) {
+				// what they turn back at each wavelength: their albedo, as the optics has them
+				const chem::optics::Spectrum &albedo = *chem::optics::scatterer("bubbles")->albedo;
+				float *bubble_row = &rows[static_cast<size_t>((set * ROWS_PER_SET + BUBBLE_ROW) * ROW)];
+				for (int i = 0; i < ROW; ++i) {
+					bubble_row[i] = static_cast<float>(albedo[static_cast<size_t>(i)]);
+				}
 				const auto steps = [](double x) { return x > 0.0 ? std::exp(std::round(std::log(x) / 0.03) * 0.03) : 0.0; };
 				const double back = 1.0 - bubbles::asymmetry();
 				put(at + 6, 0, steps(v.bubble_extinction * back));

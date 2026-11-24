@@ -726,9 +726,12 @@ their heat to a bulk cooler than their own boiling point until they are gone, or
   is gone at a twentieth of its size: a third of a millimetre up in cold water, a centimetre or two a kelvin
   under the boil. At the boil they reach the surface, still shrinking a little low down, where the floor's
   boiling point is the higher.
-- **Seen.** The bubbles are a haze in the liquid, white (they absorb nothing and scatter at every wavelength
-  alike), from the floor up to where they end: their extinction, 2 their cross-section a cubic metre, times
-  1 − g (g 0.85: they scatter mostly forward), falling as (1 − z / end)^p, p keeping its integral up the column.
+- **Seen.** The bubbles are a haze in the liquid, from the floor up to where they end. They are a **scatter
+  medium** of the optics (`data/optics/media.json`'s scatterers, `bubbles`): a single-scattering albedo at each
+  wavelength (1: they absorb nothing), an extinction efficiency (2) and an asymmetry (0.85). Their haze's
+  extinction is the efficiency times their cross-section a cubic metre, times 1 − g (they scatter mostly
+  forward), falling as (1 − z / end)^p, p keeping its integral up the column; what it turns back is their
+  albedo, a row of the vessel's spectra (§12.2).
   A reaction's gas (§9's malachite) rises as bubbles of Fritz's size to the surface, the same at every height.
   A body's vec4 6 holds them (§12.2).
 - **Read**: the readout and the debug panel say where the bubbles end and how hot the floor is; a monitor

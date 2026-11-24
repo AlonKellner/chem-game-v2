@@ -556,7 +556,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			if (glow < 0.0) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
 			}
-			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::white_at(m.body, m.cross_y), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
+			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::haze_colour(m.body, start, m.cross_y, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
 					per_cm * (m.bent ? chord : l.depth_cm), m.pass, room);
 			b += a * does.y;
 			a *= does.x;
@@ -1646,7 +1646,11 @@ std::string check_O1(const OpticsScene &scene) {
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
 			// (a screen's glow is its image's: its row is -1, Stage 42)
 			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
-			const double glow = scene.rows[base + GLOW_ROW * ROW];
+			const double glow = scene.rows[base + GLOW_ROW * ROW], bubble = scene.rows[base + BUBBLE_ROW * ROW];
+			if (!(bubble >= 0.0 && bubble <= 1.0)) {
+				std::snprintf(text, sizeof text, "O1: body %d at %d nm: its bubbles' albedo %g outside [0, 1]", i, 380 + k, bubble);
+				return text;
+			}
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(glow >= 0.0 || (imaged && glow == -1.0))) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
 				return text;

@@ -438,8 +438,11 @@ Kalman 2003 are behind paywalls: not read.
 et al. 2000, citing Bohren and Huffman), and scatter with little spectral dependence (Piskozub et al. 2004). Their
 scattering goes mostly forward: the asymmetry parameter g is about **0.85** for bubbles in water (Flatau et al.
 2000, m = 0.75 averaged over size parameters 100 to 300; a 2 mm bubble's is about 1.5e4, so medium confidence).
-The game's bubbles are a haze, white, of what their scattering turns away from its path, the reduced extinction
-2 · (1 − g) · n · πd²/4 (the similarity relation): the light they bend a little goes on with the rest.
+The game's bubbles are a haze of what their scattering turns away from its path, the reduced extinction
+2 · (1 − g) · n · πd²/4 (the similarity relation): the light they bend a little goes on with the rest. They are a
+**scatter medium** in `data/optics/media.json`'s scatterers, `bubbles`: a single-scattering albedo of 1 at every
+wavelength (they absorb nothing), an efficiency of 2 and an asymmetry of 0.85; the pass reads the albedo as a
+row of a vessel's spectra, as it reads every other medium's.
 
 **Water's own boiling** is the table's (GAME_SPEC §8): the floor's boiling point is the table's saturation at the
 pressure there, the room's plus ρ g h, lowered by the solution's water activity.

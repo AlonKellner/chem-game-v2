@@ -55,6 +55,7 @@ GAME_SPEC 0.45.0: §11 (boiling's bubbles), §13.3 (`bubbles_cm`), §13.7 (the e
   Chen and Mayinger.
 - It is gone at 5 % of its size, or reaches the surface.
 - The column is followed in steps of a 400th of the depth or 2 % of the bubble's size: 13 µs a vessel.
+- The C API's `row_count` is seven rows a set now (`capi_c_smoke`).
 
 **What is seen.**
 - The extinction a metre is 2 n πd²/4, with n the bubbles over the floor's area at their speed.
@@ -130,7 +131,18 @@ The per-pixel source reads it in `bubbles_at(body, y)`. Every haze adds it:
 - the shade of the body that bends;
 - `body_does` for traced rays and beams.
 
-What a haze turns back is mixed toward white by the bubbles' share (`white_at`). The Layer gains no field: the
+**The bubbles are a medium of the optics.** `data/optics/media.json`'s new `scatterers` section holds `bubbles`, a
+scatter medium:
+- its single-scattering albedo at each wavelength, 1 (they absorb nothing);
+- its extinction efficiency, 2;
+- its asymmetry, 0.85.
+
+datagen embeds it (`chem::optics::scatterer`), and `lab::bubbles` takes the efficiency and the asymmetry from it.
+The albedo is a seventh row of a vessel's spectra (`BUBBLE_ROW`), filled where the vessel has bubbles. What a haze
+turns back at a wavelength is the solids' reflectance and the bubbles' albedo, mixed by their shares of the
+extinction at that height (`haze_colour`, `white_at`). It is a spectrum read as every medium's is, not a constant
+white: an albedo with bands would tint them. (First built with the white as a 1 in the source; the user asked for
+it as a medium, 2026-11-24.) O1 holds the albedo within [0, 1]. The Layer gains no field: the
 source's own note says a field cost the pass 0.1 ms. The scene quantises the four numbers (3 % steps in extinction),
 so a pixel keeps its history while a boil stands still. The reference and the truth read the same source, so they
 agree by construction; the GPU compiles it into its three passes.

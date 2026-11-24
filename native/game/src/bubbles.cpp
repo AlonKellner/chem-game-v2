@@ -4,6 +4,7 @@
 #include "lab/boiling_data.hpp"
 
 #include "chem/builtin_ids.hpp"
+#include "chem/optics.hpp"
 #include "chem/species.hpp"
 #include "chem/thermo.hpp"
 
@@ -24,7 +25,7 @@ constexpr double KELVIN = 273.15;
 
 struct Data {
 	std::vector<std::pair<double, Water>> water;
-	double b = 0.0, mu = 0.0, b2 = 0.0, tc = 0.0, g = 0.0;
+	double b = 0.0, mu = 0.0, b2 = 0.0, tc = 0.0;
 	std::map<std::string, Surface, std::less<>> surfaces;
 };
 
@@ -42,7 +43,6 @@ const Data &data() {
 		out.mu = s.at("mu").get<double>();
 		out.b2 = s.at("b2").get<double>();
 		out.tc = s.at("tc_k").get<double>();
-		out.g = j.at("light").at("asymmetry").get<double>();
 		for (const auto &[name, v] : j.at("surfaces").items()) {
 			out.surfaces[name] = Surface{ v.at("cavity_um").get<double>() * 1e-6, v.at("contact_deg").get<double>(), v.at("csf").get<double>(), v.at("s").get<double>() };
 		}
@@ -96,8 +96,18 @@ Water water_at(double celsius) {
 	return Water{ mix(a.rho, b.rho), mix(a.cp, b.cp), mix(a.k, b.k), mix(a.alpha, b.alpha), mix(a.nu, b.nu), mix(a.pr, b.pr), mix(a.beta, b.beta) };
 }
 
+// bubbles as the optics has them (data/optics/media.json: scatterers)
+const chem::optics::Scatterer &medium() {
+	static const chem::optics::Scatterer *const s = chem::optics::scatterer("bubbles");
+	return *s;
+}
+
 double asymmetry() {
-	return data().g;
+	return medium().asymmetry;
+}
+
+double efficiency() {
+	return medium().efficiency;
 }
 
 double surface_tension(double kelvin) {
@@ -206,7 +216,7 @@ Bubbles boil(const Floor &f) {
 		const double sigma = surface_tension(bulk_k), d = departure(surf.contact_deg, sigma, bulk.rho);
 		const double u = rise(d, bulk, sigma), n = f.gas_m3_s / (PI * d * d * d / 6.0) / (u * f.floor_m2);
 		b.gas_diameter_m = d;
-		b.gas_extinction = 2.0 * n * PI * d * d / 4.0;
+		b.gas_extinction = efficiency() * n * PI * d * d / 4.0;
 		b.gas_holdup = std::min(n * PI * d * d * d / 6.0, 0.99);
 	}
 	if (!(f.heat_w > 0.0)) {
@@ -238,7 +248,7 @@ Bubbles boil(const Floor &f) {
 	// height, gives it the latent heat of what condenses (Chen and Mayinger), shrinking
 	const double h = f.depth_m, sub_floor = sat_c - f.bulk_c, sub_top = b.saturation_top_c - f.bulk_c;
 	double z = 0.0, d = d0, area = 0.0; // area: the extinction's integral up the column
-	const auto extinction = [&](double dd, double u) { return 2.0 * (b.per_second / (u * f.floor_m2)) * PI * dd * dd / 4.0; };
+	const auto extinction = [&](double dd, double u) { return efficiency() * (b.per_second / (u * f.floor_m2)) * PI * dd * dd / 4.0; };
 	const double u0 = rise(d0, bulk, sigma);
 	b.extinction_floor = extinction(d0, u0);
 	b.holdup_floor = std::min(b.per_second / (u0 * f.floor_m2) * PI * d0 * d0 * d0 / 6.0, 0.99);
