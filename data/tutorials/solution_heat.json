@@ -1,0 +1,105 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 41) on data/benches/solution_heat.json: heat given out and taken in. The same 0.050 mol of copper sulfate dissolved two ways: the white anhydrous salt warms its water by about 10 K, the blue pentahydrate cools its own by about 2 K (chem_tool study solution_heat). Nothing is added by hand: the enthalpies of formation decide (GAME_SPEC §4.2).",
+	"title": "Experiment: hot and cold dissolving",
+	"bench": "../benches/solution_heat.json",
+	"steps": [
+		{
+			"part": "Two thermometers",
+			"title": "A monitor on the left beaker",
+			"text": "Drag a monitor out of the parts drawer, beside the outbox, onto a free square. Drag from its sensing port, the dot at its foot, onto the left beaker. Click \"vessel\", then \"temperature\".",
+			"why": "Each beaker holds 50 g of water at the room's 20 C. A monitor reads its temperature for you, all the time.",
+			"checks": [{"text": "a monitor reads the left beaker's temperature", "when": {"editor": {"editing": "monitor", "item": "warm", "what": "celsius"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}, {"drag": ["sense:monitor1", "item:warm"]}, {"click": "edit:kind:vessel"}, {"click": "edit:quantity:celsius"}]
+		},
+		{
+			"title": "Above 25 C",
+			"text": "Click \"above\". Then click the value, type 25, and click \"set\".",
+			"why": "Its lamp lights if the water warms past 25 C.",
+			"checks": [{"text": "it signals above 25 C", "when": {"part": {"kind": "monitor", "item": "warm", "what": "celsius", "compare": "above", "value_at_least": 24, "value_at_most": 26}}}],
+			"play": [{"click": "edit:compare:above"}, {"click": "edit:value:0"}, {"type": "25"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "A monitor on the right beaker",
+			"text": "The same for the right beaker: a monitor from the drawer onto a free square, its sensing port onto the right beaker, \"vessel\", \"temperature\".",
+			"checks": [{"text": "a monitor reads the right beaker's temperature", "when": {"editor": {"editing": "monitor", "item": "cool", "what": "celsius"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:5,1"]}, {"drag": ["sense:monitor2", "item:cool"]}, {"click": "edit:kind:vessel"}, {"click": "edit:quantity:celsius"}]
+		},
+		{
+			"title": "Below 19 C",
+			"text": "Click \"below\". Then click the value, type 19, and click \"set\".",
+			"why": "Its lamp lights if the water cools below 19 C.",
+			"checks": [{"text": "it signals below 19 C", "when": {"part": {"kind": "monitor", "item": "cool", "what": "celsius", "compare": "below", "value_at_least": 18, "value_at_most": 20}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "19"}, {"click": "edit:set"}]
+		},
+		{
+			"part": "Dissolve them",
+			"title": "The white salt into the left beaker",
+			"text": "Pick up the left jar, then right-click the left beaker. In the menu that opens, click \"tip in\".",
+			"why": "The left jar holds 8 g of anhydrous copper sulfate, CuSO4: the salt without its water, a white powder.",
+			"checks": [{"text": "all the white salt in the left beaker", "when": {"item": "anhydrous", "species": "copper_sulfate", "below_g": 0.001}}],
+			"play": [{"drag": ["item:anhydrous", "item:warm"]}, {"click": "panel:tip:copper_sulfate"}]
+		},
+		{
+			"title": "Stir it",
+			"text": "Right-click the left beaker to choose it, then \"stir\" in the column on the right.",
+			"checks": [{"text": "the left beaker is stirred", "when": {"item": "warm", "stirred": true}}],
+			"play": [{"click": "item:warm"}, {"click": "stir:warm"}]
+		},
+		{
+			"title": "The blue salt into the right beaker",
+			"text": "Pick up the right jar, then right-click the right beaker, and tip it in.",
+			"why": "The right jar holds 12.5 g of the pentahydrate, CuSO4.5H2O: the same 0.050 mol of the salt, with five waters bound in each unit of its blue crystals.",
+			"checks": [{"text": "all the blue salt in the right beaker", "when": {"item": "hydrate", "species": "copper_sulfate_pentahydrate", "below_g": 0.001}}],
+			"play": [{"drag": ["item:hydrate", "item:cool"]}, {"click": "panel:tip:copper_sulfate_pentahydrate"}]
+		},
+		{
+			"title": "Stir it too",
+			"text": "Choose the right beaker, then \"stir\".",
+			"checks": [{"text": "the right beaker is stirred", "when": {"item": "cool", "stirred": true}}],
+			"play": [{"click": "item:cool"}, {"click": "stir:cool"}]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"10x\" at the top.",
+			"checks": [{"text": "time runs at least 10 times faster", "when": {"speed_at_least": 10}}],
+			"play": [{"click": "speed:10"}]
+		},
+		{
+			"part": "Read the thermometers",
+			"title": "The white salt gives out heat",
+			"text": "Watch the left beaker's monitor, and point at the beaker to read its temperature.",
+			"why": "Dissolving pulls the salt apart and wraps its ions in water. For the bare salt, the water binding to the copper ions gives out more energy than pulling the crystal apart takes: the reaction is exothermic, and the water warms. It turns blue as it does: the blue is water bound to the copper ion.",
+			"checks": [{"text": "the left beaker above 28 C", "when": {"item": "warm", "above_c": 28}}]
+		},
+		{
+			"title": "The blue salt takes heat in",
+			"text": "Now watch the right beaker.",
+			"why": "The pentahydrate's copper ions already hold their water, so binding more gives little energy back, while pulling the crystal apart still takes energy: dissolving it is endothermic, and the heat comes out of the water.",
+			"checks": [{"text": "the right beaker below 18.6 C", "when": {"item": "cool", "below_c": 18.6}}]
+		},
+		{
+			"title": "Both dissolved",
+			"text": "Wait until no salt is left in either beaker. Both solutions are the same now: 0.050 mol of copper sulfate in about 50 g of water.",
+			"why": "The two ways to the same solution differ by the heat of five waters binding to the salt: the left gave out about 65 kJ for each mole, the right took in about 15 kJ. Then each beaker drifts back to the room's temperature.",
+			"checks": [
+				{"text": "no white salt left in the left beaker", "when": {"item": "warm", "species": "copper_sulfate", "below_g": 0.001}},
+				{"text": "no blue crystals left in the right beaker", "when": {"item": "cool", "species": "copper_sulfate_pentahydrate", "below_g": 0.001}}
+			]
+		}
+	],
+	"fails": [
+		{"text": "A salt went into the wrong beaker: the two cannot be compared now. Press reset to start again.",
+			"when": {"any": [
+				{"item": "warm", "species": "copper_sulfate_pentahydrate", "above_g": 0.01},
+				{"item": "cool", "species": "copper_sulfate", "above_g": 0.01}
+			]}}
+	],
+	"goal": [
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "the left beaker (white salt)", "quantity": {"item": "warm", "what": "celsius"}, "show": ["start", "most"]},
+		{"label": "the right beaker (blue salt)", "quantity": {"item": "cool", "what": "celsius"}, "show": ["start", "least"]}
+	]
+}

@@ -1,0 +1,41 @@
+{
+	"format": "chem-experiments/1",
+	"note": "The experiments (GAME_SPEC §13.7, Stage 41): what the top bar's \"experiments\" lists. Each a bench and its tutorial (null for none), named by their paths from this file; a host reads them and hands the screen the catalogue with each inlined (Ui::experiments, cg_ui_experiments).",
+	"experiments": [
+		{
+			"id": "demo",
+			"title": "Copper from malachite (the demo)",
+			"summary": "Decomposition, a gas caught in a balloon, an oxide dissolved in acid, distillation and crystals: the whole demo in 36 steps, with a monitor, a rig and an alarm.",
+			"bench": "benches/lab.json",
+			"tutorial": "tutorials/demo.json"
+		},
+		{
+			"id": "vacuum",
+			"title": "Boiling under a vacuum",
+			"summary": "Pressure: steam drives the air out of a flask; stoppered and cooled, it falls to a few kPa, where water boils at 50 C; heated hard, the stopper pops.",
+			"bench": "benches/vacuum.json",
+			"tutorial": "tutorials/vacuum.json"
+		},
+		{
+			"id": "solution_heat",
+			"title": "Hot and cold dissolving",
+			"summary": "Heat given out and taken in: the same copper sulfate dissolved as the white anhydrous salt warms its water by 10 K; as the blue pentahydrate, it cools its own.",
+			"bench": "benches/solution_heat.json",
+			"tutorial": "tutorials/solution_heat.json"
+		},
+		{
+			"id": "rate",
+			"title": "What speeds a reaction",
+			"summary": "Rate: copper oxide in acid, left still, stirred, or held at 60 C by a thermostat made of a monitor and a rig. Stirring hardly matters here; warmth does.",
+			"bench": "benches/rate.json",
+			"tutorial": "tutorials/rate.json"
+		},
+		{
+			"id": "free_lab",
+			"title": "The lab, free",
+			"summary": "The demo's bench with no steps: everything in the cabinet, yours to try.",
+			"bench": "benches/lab.json",
+			"tutorial": null
+		}
+	]
+}

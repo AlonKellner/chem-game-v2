@@ -1,0 +1,88 @@
+{
+	"format": "chem-bench/2",
+	"note": "The heat of solution's bench (GAME_SPEC §4.2, §13.7, Stage 41): two beakers of 50 g of water, a jar of 8 g of anhydrous copper sulfate (white) and one of 12.5 g of its pentahydrate (blue), the same 0.050 mol of the salt. Dissolved and stirred, the first warms its water by about 10 K, the second cools its own by about 2 K (chem_tool study solution_heat).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "warm",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				8,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 50
+				}
+			}
+		},
+		{
+			"id": "cool",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				18,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 50
+				}
+			}
+		},
+		{
+			"id": "anhydrous",
+			"kind": "vessel",
+			"volume_ml": 50,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 40,
+			"loss": 0.3,
+			"contents": {
+				"copper_sulfate": {
+					"g": 8,
+					"particles": 2000000
+				}
+			},
+			"at": [
+				4,
+				8
+			]
+		},
+		{
+			"id": "hydrate",
+			"kind": "vessel",
+			"volume_ml": 50,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 40,
+			"loss": 0.3,
+			"contents": {
+				"copper_sulfate_pentahydrate": {
+					"g": 12.5,
+					"particles": 2000000
+				}
+			},
+			"at": [
+				14,
+				8
+			]
+		}
+	]
+}

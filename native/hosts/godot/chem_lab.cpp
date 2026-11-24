@@ -62,6 +62,14 @@ godot::String ChemLab::get_tutorial_path() const {
 	return tutorial_path_;
 }
 
+void ChemLab::set_experiments_path(const godot::String &path) {
+	experiments_path_ = path;
+}
+
+godot::String ChemLab::get_experiments_path() const {
+	return experiments_path_;
+}
+
 godot::PackedInt32Array ChemLab::tutorial() const {
 	godot::PackedInt32Array out;
 	cg_tutorial t;
@@ -70,8 +78,23 @@ godot::PackedInt32Array ChemLab::tutorial() const {
 		out.push_back(t.state);
 		out.push_back(t.step);
 		out.push_back(t.steps);
+		out.push_back(t.strict);
 	}
 	return out;
+}
+
+void ChemLab::set_strict(bool strict) {
+	if (ui_ != nullptr) {
+		cg_ui_set_strict(ui_, strict ? 1 : 0);
+	}
+}
+
+godot::String ChemLab::experiment() const {
+	return ui_ != nullptr ? godot::String::utf8(cg_ui_experiment(ui_)) : godot::String();
+}
+
+bool ChemLab::choose(const godot::String &id) {
+	return ui_ != nullptr && cg_ui_choose(ui_, id.utf8().get_data()) == CG_OK;
 }
 
 void ChemLab::key(int code, int codepoint) {
@@ -134,6 +157,22 @@ void ChemLab::_ready() {
 		const godot::String tutorial = godot::FileAccess::get_file_as_string(tutorial_path_);
 		if (tutorial.is_empty() || cg_ui_tutor(ui_, tutorial.utf8().get_data()) != CG_OK) {
 			godot::UtilityFunctions::push_error("ChemLab: the tutorial ", tutorial_path_, ": ", tutorial.is_empty() ? godot::String("cannot be read") : godot::String::utf8(cg_last_error()));
+		}
+	}
+	// the experiments (Stage 41): the catalogue, its benches and tutorials read from its own folder
+	if (!experiments_path_.is_empty()) {
+		const godot::String catalogue = godot::FileAccess::get_file_as_string(experiments_path_);
+		const cg_read_file read = [](void *user, const char *path) -> const char * {
+			ChemLab *self = static_cast<ChemLab *>(user);
+			const godot::String text = godot::FileAccess::get_file_as_string(self->experiments_path_.get_base_dir().path_join(godot::String::utf8(path)));
+			if (text.is_empty()) {
+				return nullptr;
+			}
+			self->read_ = text.utf8();
+			return self->read_.get_data();
+		};
+		if (catalogue.is_empty() || cg_ui_experiments(ui_, catalogue.utf8().get_data(), read, this) != CG_OK) {
+			godot::UtilityFunctions::push_error("ChemLab: the experiments ", experiments_path_, ": ", catalogue.is_empty() ? godot::String("cannot be read") : godot::String::utf8(cg_last_error()));
 		}
 	}
 	// the optical pass: a compute shader over the whole screen, shown under what is painted over it
@@ -440,7 +479,13 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_tutorial_path", "path"), &ChemLab::set_tutorial_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_tutorial_path"), &ChemLab::get_tutorial_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "tutorial_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_tutorial_path", "get_tutorial_path");
+	godot::ClassDB::bind_method(godot::D_METHOD("set_experiments_path", "path"), &ChemLab::set_experiments_path);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_experiments_path"), &ChemLab::get_experiments_path);
+	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "experiments_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_experiments_path", "get_experiments_path");
 	godot::ClassDB::bind_method(godot::D_METHOD("tutorial"), &ChemLab::tutorial);
+	godot::ClassDB::bind_method(godot::D_METHOD("set_strict", "strict"), &ChemLab::set_strict);
+	godot::ClassDB::bind_method(godot::D_METHOD("experiment"), &ChemLab::experiment);
+	godot::ClassDB::bind_method(godot::D_METHOD("choose", "id"), &ChemLab::choose);
 	godot::ClassDB::bind_method(godot::D_METHOD("key", "code", "codepoint"), &ChemLab::key);
 	godot::ClassDB::bind_method(godot::D_METHOD("signals"), &ChemLab::signals);
 	godot::ClassDB::bind_method(godot::D_METHOD("paused"), &ChemLab::paused);

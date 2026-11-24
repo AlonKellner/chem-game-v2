@@ -1,0 +1,95 @@
+{
+	"format": "chem-bench/2",
+	"note": "The rate's bench (GAME_SPEC §7, §13.7, Stage 41): three beakers of 50 mL of 1 M sulfuric acid, each over 1.0 g of copper oxide powder (the demo's grains), and a burner. Left still, stirred, or warmed to 60 C, the same reaction runs at three paces: stirring does not hurry it, warmth does (Ea 69 kJ/mol, GAME_SPEC §7).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "still",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				4,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 48.1
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.05
+				},
+				"copper_oxide": {
+					"g": 1.0,
+					"particles": 700000
+				}
+			}
+		},
+		{
+			"id": "stirred",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				12,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 48.1
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.05
+				},
+				"copper_oxide": {
+					"g": 1.0,
+					"particles": 700000
+				}
+			}
+		},
+		{
+			"id": "hot",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				20,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 48.1
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.05
+				},
+				"copper_oxide": {
+					"g": 1.0,
+					"particles": 700000
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

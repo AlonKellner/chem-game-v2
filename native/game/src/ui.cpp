@@ -38,7 +38,7 @@ constexpr Rect DRAWER{ 920, 760, 460, 300 }; // the drawer of signal parts (§13
 constexpr Rect EDITOR{ 440, 76, 720, 340 }; // a part's settings, or a rig's, being written
 constexpr Rect READOUT{ 1400, 64, 520, 1016 };
 constexpr Rect PANEL{ 600, 250, 440, 340 }; // the pour menu (Stage 27: and upside down, with a cap)
-constexpr Rect TUTOR{ 1400, 64, 520, 476 }; // a tutorial's card, above the readout (§13.2)
+constexpr Rect TUTOR{ 1400, 64, 520, 502 }; // a tutorial's card, above the readout (§13.2)
 constexpr Rect ROOM{ 0, 64, 1390, 1016 }; // the lit wall behind the cabinet, the bench and the outbox
 constexpr float SPEEDS[] = { 1, 10, 60, 600 };
 
@@ -251,6 +251,15 @@ struct Ui::Impl {
 	double pour_fraction = 1.0;
 	// a tutorial (§13.2), and real time for its pointer's pulse
 	std::unique_ptr<Tutorial> tutorial;
+	std::string tutorial_json; // to open it again with another experiment's bench, and to know the experiment shown
+	bool strict = true; // the card's switch (Stage 41): strict refuses what the step does not ask for; free only points
+	// the experiments (§13.7, Stage 41): the catalogue, the one shown (-1: none of it), the list open
+	struct Experiment {
+		std::string id, title, summary, bench, tutorial; // bench and tutorial as JSON ("" for no tutorial)
+	};
+	std::vector<Experiment> catalogue;
+	int shown_k = -1; // (the experiment shown)
+	bool menu = false;
 	double clock = 0.0;
 	int selected = -1; // the last item chosen
 	// signals (§13.3): the part editor, a part being made or wired, what rang
@@ -548,9 +557,126 @@ struct Ui::Impl {
 		}
 	}
 
-	// ---- a running tutorial allows only its step's gestures (§13.2)
-	bool guided() const { return tutorial && tutorial->view().state == TutorialView::Running; }
-	// its clock stands while the step asks for a gesture
+	// a lab opened in place of the one open (reset, another experiment): the screen as it opens
+	void begin(std::unique_ptr<Lab> again) {
+		lab = std::move(again);
+		owed = 0.0;
+		message.clear();
+		refresh();
+		choose_only(-1);
+		draft = Draft{};
+		rung.clear();
+		chain.clear();
+		opened.clear();
+	}
+	// ---- the experiments (§13.7, Stage 41): a button over the cabinet, the list over the bench
+	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
+	static constexpr float MENU_ROW = 92;
+	Rect menu_rect() const { return Rect{ 480, 100, 760, 70 + MENU_ROW * static_cast<float>(catalogue.size()) }; }
+	Rect menu_row(int k) const { return Rect{ menu_rect().x + 16, menu_rect().y + 56 + MENU_ROW * static_cast<float>(k), menu_rect().w - 32, MENU_ROW - 8 }; }
+	// opens the k-th experiment: its bench, its tutorial (or none); the screen's mode stays
+	bool open_experiment(int k, std::string &why) {
+		const Experiment &e = catalogue[static_cast<size_t>(k)];
+		std::unique_ptr<Lab> again = Lab::open(e.bench, why);
+		if (!again) {
+			return false;
+		}
+		std::unique_ptr<Tutorial> t;
+		if (!e.tutorial.empty()) {
+			t = Tutorial::open(e.tutorial, again->view(), why);
+			if (!t) {
+				return false;
+			}
+		}
+		bench = e.bench;
+		begin(std::move(again));
+		panel = false;
+		pouring = false;
+		valve_drag = -1;
+		slider_drag = false;
+		hover = -1;
+		tutorial = std::move(t);
+		tutorial_json = e.tutorial;
+		shown_k = k;
+		menu = false;
+		follow();
+		return true;
+	}
+	// the entry that is the bench and the tutorial open now, -1 for none
+	int shown_now() const {
+		const auto same = [](const std::string &a, const std::string &b) {
+			if (a.empty() || b.empty()) {
+				return a.empty() && b.empty();
+			}
+			const json x = json::parse(a, nullptr, false), y = json::parse(b, nullptr, false);
+			return !x.is_discarded() && x == y;
+		};
+		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
+			if (same(catalogue[static_cast<size_t>(k)].bench, bench) && same(catalogue[static_cast<size_t>(k)].tutorial, tutorial ? tutorial_json : std::string())) {
+				return k;
+			}
+		}
+		return -1;
+	}
+	// a press on the experiments: the button, the list (which takes every press while it is open)
+	bool menu_press(float x, float y) {
+		if (catalogue.empty() || carrying || drag >= 0 || making >= 0) {
+			return false; // with something in hand, a press is where it goes
+		}
+		if (menu_button().has(x, y)) {
+			menu = !menu;
+			return true;
+		}
+		if (!menu) {
+			return false;
+		}
+		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
+			if (menu_row(k).has(x, y)) {
+				std::string why;
+				if (!open_experiment(k, why)) {
+					message = why;
+				}
+				return true;
+			}
+		}
+		menu = false; // a press elsewhere closes it, and does nothing else
+		return true;
+	}
+	void paint_menu() {
+		if (catalogue.empty()) {
+			return;
+		}
+		button(menu_button(), shown_k >= 0 ? "experiments: " + catalogue[static_cast<size_t>(shown_k)].id : std::string("experiments"), menu, 15);
+		if (!menu) {
+			return;
+		}
+		const Rect r = menu_rect();
+		rect_fill(r, PANEL_FILL);
+		outline(r, GRID, 1);
+		text(r.x + 20, r.y + 36, "Experiments: one chosen opens its bench and its steps", INK, 20);
+		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
+			const Experiment &e = catalogue[static_cast<size_t>(k)];
+			const Rect row = menu_row(k);
+			rect_fill(row, k == shown_k ? BUTTON_ON : BUTTON);
+			text(row.x + 12, row.y + 28, e.title, INK, 19);
+			float y = row.y + 52;
+			for (const std::string &l : wrapped(e.summary, 88)) {
+				text(row.x + 12, y, l, DIM, 14);
+				y += 18;
+				if (y > row.y + row.h - 4) {
+					break;
+				}
+			}
+		}
+	}
+	// ---- the tutorial's switch (Stage 41): on its card, while there is one
+	bool strict_shown() const { return tutorial != nullptr && !notices_open && !debug_open; }
+	static Rect strict_rect() { return Rect{ TUTOR.x + TUTOR.w - 168, TUTOR.y + 10, 150, 28 }; }
+
+	// ---- a running tutorial allows only its step's gestures (§13.2), while it is strict (Stage 41)
+	bool running() const { return tutorial && tutorial->view().state == TutorialView::Running; }
+	bool guided() const { return running() && strict; }
+	// its clock stands while the step asks for a gesture; free, the clock is the player's
 	bool held() const { return guided() && !tutorial->waiting(); }
 	bool asks_click(const std::string &what) const {
 		for (const TutorialGesture &g : tutorial->gestures()) {
@@ -1229,15 +1355,24 @@ struct Ui::Impl {
 		if (making >= 0 && making_carried) {
 			return; // a part in hand (Stage 34): this press is where it goes, at its release
 		}
+		if (menu_press(x, y)) {
+			return; // the experiments are the player's, like the clock (Stage 41)
+		}
 		if (draft.edit != Draft::None) {
-			// the clock stays the player's while a part is set
-			if (!pause_rect().has(x, y) && !(speed_rect(0).has(x, y) || speed_rect(1).has(x, y) || speed_rect(2).has(x, y) || speed_rect(3).has(x, y))) {
+			// the clock stays the player's while a part is set, and so does the tutorial's switch
+			if (!pause_rect().has(x, y) && !(speed_rect(0).has(x, y) || speed_rect(1).has(x, y) || speed_rect(2).has(x, y) || speed_rect(3).has(x, y)) &&
+					!(strict_shown() && strict_rect().has(x, y))) {
 				edit_press(x, y);
 				return;
 			}
 		}
 		if (notices_press(x, y) || debug_press(x, y)) {
 			return; // the notices and the debug panel are the player's, like the clock, under a tutorial too
+		}
+		if (strict_shown() && strict_rect().has(x, y)) {
+			strict = !strict; // the player's at any time (Stage 41): strict again holds the player to this step at once
+			message.clear();
+			return;
 		}
 		if (!panel && draft.edit == Draft::None && circuit_press(x, y)) {
 			return;
@@ -1328,15 +1463,7 @@ struct Ui::Impl {
 			std::string why;
 			std::unique_ptr<Lab> again = Lab::open(bench, why);
 			if (again) {
-				lab = std::move(again);
-				owed = 0.0;
-				message.clear();
-				refresh();
-				choose_only(-1);
-				draft = Draft{};
-				rung.clear();
-				chain.clear();
-				opened.clear();
+				begin(std::move(again));
 				if (tutorial) {
 					tutorial->restart();
 				}
@@ -2465,7 +2592,7 @@ struct Ui::Impl {
 			const int made = static_cast<int>(view.items.size()) - 1;
 			choose_only(made);
 			edit_part(made);
-			if (guided() && senses(view.items[static_cast<size_t>(made)].part.kind)) {
+			if (running() && senses(view.items[static_cast<size_t>(made)].part.kind)) {
 				message.clear(); // the step says how it senses
 			}
 		}
@@ -3229,7 +3356,8 @@ struct Ui::Impl {
 		if (draft.edit != Draft::None) {
 			paint_editor();
 		}
-		if (tutorial) {
+		paint_menu();
+		if (tutorial && !menu) {
 			paint_guide();
 		}
 	}
@@ -3488,7 +3616,8 @@ struct Ui::Impl {
 		rect_fill(TUTOR, PANEL_FILL);
 		outline(TUTOR, GRID, 1);
 		const float x = TUTOR.x + 18, right = TUTOR.x + TUTOR.w - 18;
-		float y = TUTOR.y + 30;
+		button(strict_rect(), strict ? "strict: on" : "strict: off (free)", strict, 15);
+		float y = TUTOR.y + 56;
 		const auto lines = [&](const std::string &s, size_t width, uint32_t color, float size, float gap) {
 			for (const std::string &l : wrapped(s, width)) {
 				text(x, y, l, color, size);
@@ -3498,6 +3627,7 @@ struct Ui::Impl {
 		text(x, y, t.part, DIM, 15);
 		const int shown_step = t.step < t.steps ? t.step + 1 : t.steps;
 		text(right - 110, y, text_of("step %.0f of %.0f", shown_step, t.steps), DIM, 15);
+		text(x, TUTOR.y + 30, strict ? "Only what the step asks is taken" : "Free: anything is taken; the outline points", DIM, 13);
 		y += 12;
 		const float bar = right - x;
 		rect_fill(Rect{ x, y, bar, 6 }, BUTTON);
@@ -3526,7 +3656,12 @@ struct Ui::Impl {
 				lines(t.why, 54, DIM, 15, 6);
 			}
 			y += 4;
-			text(x, y + 14, !tutorial->waiting() ? "The clock waits for you." : paused ? "The clock is paused: press play, or a speed." : "The clock runs: 60x or 600x hurries it.", WARN, 15);
+			text(x, y + 14,
+					!strict ? (paused ? "Free: the clock is yours, and paused." : "Free: the clock is yours.")
+					: !tutorial->waiting() ? "The clock waits for you."
+					: paused ? "The clock is paused: press play, or a speed."
+					: "The clock runs: 60x or 600x hurries it.",
+					WARN, 15);
 			y += 38;
 		}
 		for (const TutorialCheck &c : t.checks) {
@@ -4617,8 +4752,96 @@ bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
 		return false;
 	}
 	m.tutorial = std::move(t);
+	m.tutorial_json = std::string(tutorial_json);
+	m.shown_k = m.shown_now();
 	m.follow();
 	return true;
+}
+
+void Ui::set_strict(bool strict) {
+	impl_->strict = strict;
+}
+
+bool Ui::strict() const {
+	return impl_->strict;
+}
+
+bool Ui::experiments(std::string_view catalogue_json, std::string &why, const std::function<std::optional<std::string>(const std::string &path)> &read) {
+	Impl &m = *impl_;
+	const json doc = json::parse(catalogue_json, nullptr, false);
+	if (doc.is_discarded() || !doc.is_object() || doc.value("format", "") != "chem-experiments/1" || !doc.contains("experiments") || !doc["experiments"].is_array() ||
+			doc["experiments"].empty()) {
+		why = "experiments: not a chem-experiments/1 catalogue with a list of experiments";
+		return false;
+	}
+	std::vector<Impl::Experiment> out;
+	for (const json &e : doc["experiments"]) {
+		if (!e.is_object() || !e.contains("id") || !e["id"].is_string() || !e.contains("title") || !e["title"].is_string() || !e.contains("bench")) {
+			why = "experiments: each needs an id, a title and its bench";
+			return false;
+		}
+		Impl::Experiment x;
+		x.id = e["id"].get<std::string>();
+		x.title = e["title"].get<std::string>();
+		x.summary = e.value("summary", "");
+		// a bench or a tutorial inlined, or its path, read by the host's `read`
+		const auto text_of_entry = [&](const json &v, std::string &out) {
+			if (v.is_object()) {
+				out = v.dump();
+				return true;
+			}
+			if (!v.is_string() || !read) {
+				why = "experiment " + x.id + ": a bench or a tutorial is inlined, or a path a reader is given for";
+				return false;
+			}
+			const std::optional<std::string> text = read(v.get<std::string>());
+			if (!text) {
+				why = "experiment " + x.id + ": cannot read " + v.get<std::string>();
+				return false;
+			}
+			out = *text;
+			return true;
+		};
+		if (!text_of_entry(e["bench"], x.bench) || (e.contains("tutorial") && !e["tutorial"].is_null() && !text_of_entry(e["tutorial"], x.tutorial))) {
+			return false;
+		}
+		for (const Impl::Experiment &y : out) {
+			if (y.id == x.id) {
+				why = "experiments: two are named " + x.id;
+				return false;
+			}
+		}
+		// each is opened now: a catalogue with one that cannot be is refused whole
+		std::unique_ptr<Lab> bench = Lab::open(x.bench, why);
+		if (!bench) {
+			why = "experiment " + x.id + ": " + why;
+			return false;
+		}
+		if (!x.tutorial.empty() && !Tutorial::open(x.tutorial, bench->view(), why)) {
+			why = "experiment " + x.id + ": " + why;
+			return false;
+		}
+		out.push_back(std::move(x));
+	}
+	m.catalogue = std::move(out);
+	m.menu = false;
+	m.shown_k = m.shown_now();
+	return true;
+}
+
+bool Ui::choose(std::string_view id, std::string &why) {
+	Impl &m = *impl_;
+	for (int k = 0; k < static_cast<int>(m.catalogue.size()); ++k) {
+		if (m.catalogue[static_cast<size_t>(k)].id == id) {
+			return m.open_experiment(k, why);
+		}
+	}
+	why = "no experiment is named " + std::string(id);
+	return false;
+}
+
+std::string Ui::experiment() const {
+	return impl_->shown_k >= 0 ? impl_->catalogue[static_cast<size_t>(impl_->shown_k)].id : std::string();
 }
 
 const Tutorial *Ui::tutorial() const {
@@ -4727,6 +4950,20 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "reset") {
 		return centre(Impl::reset_rect());
+	}
+	if (what == "tutorial:strict") {
+		return m.strict_shown() && centre(Impl::strict_rect());
+	}
+	if (what == "menu:experiments") {
+		return !m.catalogue.empty() && centre(Impl::menu_button());
+	}
+	if (after("experiment:", rest)) {
+		for (int k = 0; m.menu && k < static_cast<int>(m.catalogue.size()); ++k) {
+			if (m.catalogue[static_cast<size_t>(k)].id == rest) {
+				return centre(m.menu_row(k));
+			}
+		}
+		return false;
 	}
 	if (after("speed:", rest)) {
 		for (int i = 0; i < 4; ++i) {

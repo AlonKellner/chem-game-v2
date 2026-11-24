@@ -32,6 +32,10 @@ struct Step {
 struct Result {
 	std::string label, item, species;
 	std::vector<std::string> show;
+	// or a quantity of an item (Stage 41): shown as it was when the run began, its least and its most while it
+	// ran (read each time the tutorial follows the lab, at least once a second of the lab's time), and now
+	std::optional<Quantity> quantity;
+	std::optional<double> start, least, most;
 };
 
 // What the screen's part editor holds, as a check names it (§13.3): every key given matches.
@@ -218,6 +222,18 @@ struct Tutorial::Impl {
 	void measure(const LabView &lv) {
 		view.results.clear();
 		for (const Result &r : results) {
+			if (r.quantity) {
+				std::string line = r.label + ":";
+				const char *sep = " ";
+				const std::optional<double> now = lab::measure(lv, *r.quantity);
+				for (const std::string &s : r.show) {
+					const std::optional<double> &value = s == "start" ? r.start : s == "least" ? r.least : s == "most" ? r.most : now;
+					line += sep + s + " " + (value ? shown(*r.quantity, *value) : std::string("-"));
+					sep = ", ";
+				}
+				view.results.push_back(line);
+				continue;
+			}
 			const ItemView *v = item_of(lv, r.item);
 			if (v == nullptr) {
 				continue;
@@ -240,6 +256,20 @@ struct Tutorial::Impl {
 			view.results.push_back(line);
 		}
 		view.results.push_back(lv.conserved ? "every element, mass and energy: unchanged" : "the world's totals moved");
+	}
+
+	// what the quantities shown as results read now: the start, the least and the most so far
+	void track(const LabView &lv) {
+		for (Result &r : results) {
+			if (!r.quantity) {
+				continue;
+			}
+			if (const std::optional<double> v = lab::measure(lv, *r.quantity)) {
+				r.start = r.start ? r.start : v;
+				r.least = r.least ? std::min(*r.least, *v) : *v;
+				r.most = r.most ? std::max(*r.most, *v) : *v;
+			}
+		}
 	}
 
 	void fill(const CondContext &x) {
@@ -326,6 +356,36 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 	}
 	for (const json &j : doc.value("results", json::array())) {
 		Result res;
+		if (j.is_object() && j.contains("quantity")) {
+			// a quantity's start, least, most or value now (Stage 41)
+			const json &qj = j["quantity"];
+			Quantity q;
+			std::string why_not;
+			if (!j.contains("label") || !j["label"].is_string() || !qj.is_object() || !qj.contains("what") || !qj["what"].is_string() || !qj.contains("item") ||
+					!r.item(qj["item"], "item", q.item)) {
+				why = r.why.empty() ? "a result is not {\"label\", \"quantity\": {\"item\", \"what\", \"measure\"}, \"show\"}" : r.why;
+				return nullptr;
+			}
+			q.what = qj["what"].get<std::string>();
+			q.measure = qj.value("measure", std::string("g"));
+			if (!valid(q, why_not)) {
+				why = why_not;
+				return nullptr;
+			}
+			res.label = j["label"].get<std::string>();
+			res.item = q.item;
+			res.quantity = q;
+			for (const json &s : j.value("show", json::array({ "now" }))) {
+				const std::string name = s.is_string() ? s.get<std::string>() : "";
+				if (name != "start" && name != "least" && name != "most" && name != "now") {
+					why = "a quantity's result shows \"start\", \"least\", \"most\" or \"now\"";
+					return nullptr;
+				}
+				res.show.push_back(name);
+			}
+			impl->results.push_back(std::move(res));
+			continue;
+		}
 		if (!j.is_object() || !j.contains("label") || !j.contains("item") || !j.contains("species") || !r.item(j["item"], "item", res.item) || !j["species"].is_string() ||
 				!r.species(j["species"].get<std::string>())) {
 			why = r.why.empty() ? "a result is not {\"label\", \"item\", \"species\", \"show\"}" : r.why;
@@ -369,6 +429,7 @@ void Tutorial::follow(const LabView &lv, const TutorialScreen &screen) {
 		m.view.failure = "The lab stopped: an invariant failed (the readout names it). Press reset to start again.";
 		return;
 	}
+	m.track(lv);
 	for (const Check &f : m.fails) {
 		if (holds(f.when, x)) {
 			m.view.state = TutorialView::Failed;
@@ -403,6 +464,11 @@ void Tutorial::follow(const LabView &lv, const TutorialScreen &screen) {
 }
 
 void Tutorial::restart() {
+	for (Result &r : impl_->results) {
+		r.start.reset();
+		r.least.reset();
+		r.most.reset();
+	}
 	impl_->view.state = TutorialView::Running;
 	impl_->view.step = 0;
 	impl_->view.failure.clear();

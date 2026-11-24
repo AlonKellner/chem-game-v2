@@ -59,13 +59,14 @@ func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
 	assert_string_contains(_lab.message(), "taken")
 
 func test_it_opens_with_the_tutorial_and_follows_it() -> void:
-	assert_eq(_lab.tutorial(), PackedInt32Array([-1, 0, 0]), "none when its path is empty")
+	assert_eq(_lab.tutorial(), PackedInt32Array([-1, 0, 0, 1]), "none when its path is empty; strict as opened")
 	_lab = ChemLab.new()
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 	assert_eq(_lab.tutorial_path, "res://data/tutorials/demo.json")
 	var t := _lab.tutorial()
-	assert_eq(t.size(), 3)
+	assert_eq(t.size(), 4)
+	assert_eq(t[3], 1, "strict")
 	assert_eq(t[0], 0, "running")
 	assert_eq(t[1], 0, "at its first step")
 	assert_gt(t[2], 20)
@@ -75,6 +76,23 @@ func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 	assert_string_contains(_lab.message(), "Not now", "anything but the step's gesture is refused")
 	_drag("item:flask", "square:11,12")
 	assert_eq(_lab.tutorial()[1], 1, "the flask on the bench passes the first step")
+
+func test_it_lists_the_experiments_and_a_free_tutorial_takes_any_gesture() -> void:
+	_lab = ChemLab.new()
+	add_child_autofree(_lab)
+	await wait_process_frames(2)
+	assert_eq(_lab.experiments_path, "res://data/experiments.json")
+	assert_eq(_lab.experiment(), "demo", "the demo, as opened, is the catalogue's first")
+	_lab.set_strict(false)
+	assert_eq(_lab.tutorial()[3], 0, "free")
+	_drag("item:burner", "square:19,12")
+	assert_eq(_lab.message(), "", "free: a gesture the step does not ask for is taken")
+	assert_eq(_item("burner")["place"], "bench")
+	assert_true(_lab.choose("vacuum"), "an experiment opened by its id")
+	assert_eq(_lab.experiment(), "vacuum")
+	assert_eq(_item("flask")["place"], "bench", "the vacuum's bench")
+	assert_eq(_lab.tutorial()[3], 0, "the mode stays")
+	assert_false(_lab.choose("kettle"))
 
 func _click(what: String) -> void:
 	var a := _lab.locate(what)
