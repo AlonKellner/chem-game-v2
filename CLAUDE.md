@@ -82,5 +82,6 @@ Commits: `Stage N: <behaviour sentence>` on a branch; merged to `main` as `Merge
 - `GAME_SPEC.md` — the design: every system in full, each with the demo's subset; the invariant catalogue (§18)
 - `docs/WORKFLOW.md` — gates and build trees
 - `docs/DATA_SOURCES.md` — physical data and its sources
+- `docs/CURRICULUM.md` — a first-year student's experiments, what each needs (tools, study aids, chemistry) and the order of work; `docs/EXPERIMENTS_ROADMAP.md` the property areas behind it
 - `docs/TDD_00_BOOTSTRAP.md` onward — one document per stage
 - Reference for conventions: the sibling repository `ricochet-game-v2`
