@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.39.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.40.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2288,7 +2288,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | R1 | Reports are pure functions of state | exact | 7 |
 | L1 | A refused command leaves the lab as it was, apart from the at most one step that takes it to a step boundary | exact | 7 |
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
-| O2 | No wavelength of a pixel comes out brighter than the brightest of the backdrop, what is drawn on it, the room in front and the room's white, and what the scene's bodies emit there (a glowing solid's or a lamp's light where it is seen, glowing gas's for each pixel of the longest path through it; Stage 22: emission is in the pass) | exact | 10, 22 |
+| O2 | No wavelength of a pixel (each nanometre from 380 to 780, the spectra's own points; Stage 40) comes out brighter than the brightest of the backdrop, what is drawn on it, the room in front and the room's white, and what the scene's bodies emit there (a glowing solid's or a lamp's light where it is seen, glowing gas's for each pixel of the longest path through it; Stage 22: emission is in the pass) | exact | 10, 22, 40 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
 | O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate. (Open: none to eight pixels a picture of 30,000 to 69,000 are visibly off once settled; `docs/TDD_37_RIGHT.md`) | tolerance | 10 |
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |

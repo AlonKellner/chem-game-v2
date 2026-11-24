@@ -11,7 +11,7 @@ as fast as possible". No behaviour of the game changes; GAME_SPEC stays at 0.39.
 | 40.2 | A ctest entry for each lab test case; parts and threads by marks; the counts checked | Done |
 | 40.3 | The sanitizers beside the rest from the start | Done |
 | 40.4 | Work that held nothing: the demo's replays checked again, the sanitizers' dense loops | Done |
-| 40.5 | `make gates`; the user's sign-off | `make gates` passed (320 s) |
+| 40.5 | `make gates`; the user's sign-off | signed off 2026-11-24 ("Approved, proceed") |
 
 ## 40.1 Measured (M3 Pro: 6 fast cores, 6 slow)
 
@@ -76,11 +76,15 @@ other's last entries.
 | the release ctest's longest entry | 165 s | 93 s (a twelfth of the O2 scan) |
 | the sanitizers' longest entry | 351 s | 207 s (`kept`: 206 s) |
 
+## 40.6 O2 at each nanometre (chosen by the user, 2026-11-24: "Approved, proceed")
+
+The O2 scan through the demo was half the release ctest's work. `check_O2` reads each nanometre from 380 to
+780, the spectra's own points (401), where it read each half (801): between the points is the tables'
+interpolation. GAME_SPEC §18's O2 row says so. `make gates`: 284 s (the release ctest 224 s beside the
+sanitizers', which are now the longer: their longest entries, `kept` and the prism's bands, 200 s each). The ways not taken: every 24th pixel; only the pixels whose
+scene can have changed.
+
 ## Open
 
-- **The O2 scan through the demo is half the release ctest's work.** Ways, each a change to what it holds,
-  for the user to choose: O2 at the spectra's own 1 nm (401 wavelengths, half the work; the tables are at 1 nm
-  and between them is their interpolation); every 24th pixel (half); or the scenes whose pixels can have
-  changed only (a pixel's key of what it sees, as the kept beams' shape key, with the contents).
 - The sanitizers' longest entries (`kept` 206 s, the prism's bands 200 s, `things` 150 to 180 s) are under its
   run's length beside the release ctest; alone they would be its tail.

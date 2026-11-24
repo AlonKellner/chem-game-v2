@@ -469,7 +469,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
 	lab::CieLab after_dissolving{}, boiled_down{};
 	int n = 0, scans = 0;
-	// every seventeenth pixel across and down (801 wavelengths a pixel; under the sanitizers the first of the parts
+	// every seventeenth pixel across and down (401 wavelengths a pixel; under the sanitizers the first of the parts
 	// below runs, a twelfth of them)
 	std::vector<std::pair<int, int>> places;
 	for (int y = 100; y < 1080; y += 17) {

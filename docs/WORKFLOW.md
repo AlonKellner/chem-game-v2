@@ -68,9 +68,10 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
   and the screen's O2 scan through the demo do not check each step again.
 - Measured (Stage 40, M3 Pro, `docs/TDD_40_GATES.md`): `make gates` 614 s before (the release ctest 165 s,
   its last 100 s the one entry `lab_tests.optics` alone; then the sanitizers' 431 s, its last minutes the
-  same entry); 320 s after, the release ctest and the sanitizers' together keeping the machine full.
-- **Next, if it is needed**: the screen's O2 scan through the demo is half the release ctest's work (801
-  wavelengths at each of 4,700 pixels of 23 scenes; a few pixels through the glass take seconds each).
+  same entry); 320 s after, the release ctest and the sanitizers' together keeping the machine full; 284 s
+  with O2 read at each nanometre (it read each half).
+- **Next, if it is needed**: the sanitizers' longest entries, `kept` (the kept beams through the play) and the
+  prism's bands, 200 s each, are their run's tail.
 
 ## The conservation sweep
 
