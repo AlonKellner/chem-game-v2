@@ -65,6 +65,7 @@ struct Part {
 	double target = 0.0;
 	int speed = 1;
 	bool tuned = false;
+	bool trying = false; // its trial runs beside the lab (Stage 39): untuned until it ends, or tuned before and held so
 	double gain = 0.0, tau = 0.0, theta = 0.0; // the process (lab/control.hpp: ProcessModel); tau 0: integrating
 	double kc = 0.0, ti = 0.0;
 	int64_t period = 0;

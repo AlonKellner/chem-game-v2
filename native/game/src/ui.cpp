@@ -1737,7 +1737,7 @@ struct Ui::Impl {
 	}
 
 	// a controller's state, in a word: unset, untuned, or its level
-	static std::string controller_state(const Part &p) { return !p.watching ? "unset" : !p.tuned ? "untuned" : text_of("%.0f%%", 100.0 * p.level); }
+	static std::string controller_state(const Part &p) { return !p.watching ? "unset" : !p.tuned ? (p.trying ? "trying" : "untuned") : text_of("%.0f%%", 100.0 * p.level); }
 
 	// ---- the part editor: geometry
 	Rect edit_cancel() const { return Rect{ EDITOR.x + EDITOR.w - 116, EDITOR.y + 12, 96, 32 }; }
@@ -4042,6 +4042,7 @@ struct Ui::Impl {
 						DIM, 15);
 				row(!p.watching ? ""
 						: p.tuned ? "now " + shown(p.quantity, now(p.quantity)) + text_of(", level %.0f%%; ", 100.0 * p.level) + text_of("gain %.3g, ", p.kc) + text_of("integral %.0f s", p.ti)
+						: p.trying ? "now " + shown(p.quantity, now(p.quantity)) + "; trying what it controls, to tune itself"
 								  : "now " + shown(p.quantity, now(p.quantity)) + "; untuned: rig it to a valve or stirring",
 						DIM, 15);
 			} else if (v.kind == "circuit") {
@@ -4546,12 +4547,15 @@ void Ui::frame(double seconds) {
 			if (!(m.budget_ms > 0.0)) {
 				return std::min(left, most);
 			}
-			if (done < 9) {
-				return std::min<int64_t>(left, done == 0 ? 1 : 8); // (the first is checked: the next few say what a step costs)
+			if (done == 0) {
+				return std::min<int64_t>(left, 1); // (the first is checked)
 			}
+			// as many as the time left holds at what the steps so far cost; eight at most until nine have run (the
+			// first, checked, says too much of a step's cost, or, where a step is dear, a controller's trial, too
+			// little: Stage 39)
 			const double each = std::max((m.clock_ms() - start) / static_cast<double>(done), 1e-6);
 			const auto fits = static_cast<int64_t>((m.budget_ms - (m.clock_ms() - start)) / each);
-			return std::clamp<int64_t>(fits, 1, std::min(left, most));
+			return std::clamp<int64_t>(fits, 1, std::min({ left, most, done < 9 ? int64_t{ 8 } : most }));
 		};
 		if (!m.tutorial) {
 			while (ok && done < steps && !stopped && !(done > 0 && spent())) {
