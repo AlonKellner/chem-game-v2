@@ -1,6 +1,6 @@
 {
 	"format": "chem-species/1",
-	"note": "Formula, phase, charge; element counts and molar masses are derived from the formula by the build. thermo (298.15 K, 1 bar): hf_kj = standard enthalpy of formation in kJ/mol, cp = molar heat capacity in J/mol/K, s0 = standard entropy in J/mol/K. A species has thermo only once its row of docs/DATA_SOURCES.md is verified; one without it cannot be in a cell that has a temperature. density (g/cm3, condensed phases): the build derives the molar volume; a condensed species without it cannot be in a rigid cell. wall: the vessel's own material: it holds heat, takes no room inside, never moves and never reacts. ions (dissolved species, GAME_SPEC §4.6): the particles it is made of in solution, each named by its formula and charge (\"SO4-2\") with its count; their elements and charges must sum to the species'. A dissolved species without ions is one neutral particle. volume_cm3 (dissolved species): its apparent molar volume in cm3/mol; without it a dissolved species takes no room.",
+	"note": "Formula, phase, charge; element counts and molar masses are derived from the formula by the build. thermo (298.15 K, 1 bar): hf_kj = standard enthalpy of formation in kJ/mol, cp = molar heat capacity in J/mol/K, s0 = standard entropy in J/mol/K. A species has thermo only once its row of docs/DATA_SOURCES.md is verified; one without it cannot be in a cell that has a temperature. density (g/cm3, condensed phases): the build derives the molar volume; a condensed species without it cannot be in a rigid cell. wall: the vessel's own material: it holds heat, takes no room inside, never moves and never reacts. ions (dissolved species, GAME_SPEC §4.6): the particles it is made of in solution, each named by its formula and charge (\"SO4-2\") with its count; their elements and charges must sum to the species'. A dissolved species without ions is one neutral particle. volume_cm3 (dissolved species): its apparent molar volume in cm3/mol; without it a dissolved species takes no room. grain_um (a solid): the diameter of its grains as it comes out of a solution by a fast equilibrium, a precipitate (GAME_SPEC §9); without it, one lump.",
 	"species": [
 		{"id": "malachite", "formula": "Cu2CO3(OH)2", "phase": "s", "density": 3.8, "thermo": {"hf_kj": -1053.95, "cp": 154.3, "s0": 166.3}},
 		{"id": "copper_oxide", "formula": "CuO", "phase": "s", "density": 6.315, "thermo": {"hf_kj": -156.06, "cp": 42.246, "s0": 42.59}},
@@ -18,6 +18,7 @@
 		{"id": "glass", "formula": "SiO2", "phase": "s", "wall": true, "thermo": {"hf_kj": -910.86, "cp": 48.066, "s0": 41.46}},
 		{"id": "latex", "formula": "C5H8", "phase": "s", "wall": true, "thermo": {"hf_kj": 0, "cp": 130.1, "s0": 0}},
 		{"id": "sodium_hydroxide_aq", "formula": "NaOH", "phase": "aq", "ions": {"Na+1": 1, "OH-1": 1}, "thermo": {"hf_kj": -470.114, "cp": -102.1, "s0": 48.1}},
-		{"id": "sodium_sulfate_aq", "formula": "Na2SO4", "phase": "aq", "ions": {"Na+1": 2, "SO4-2": 1}, "thermo": {"hf_kj": -1389.51, "cp": -201, "s0": 138.1}}
+		{"id": "sodium_sulfate_aq", "formula": "Na2SO4", "phase": "aq", "ions": {"Na+1": 2, "SO4-2": 1}, "thermo": {"hf_kj": -1389.51, "cp": -201, "s0": 138.1}},
+		{"id": "copper_hydroxide", "formula": "Cu(OH)2", "phase": "s", "density": 3.93, "grain_um": 0.3, "thermo": {"hf_kj": -443.99, "cp": 87.85, "s0": 87.0}}
 	]
 }

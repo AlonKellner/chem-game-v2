@@ -531,7 +531,12 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	CHECK(scans > 20); // every command's scene but those that are the scene before them (26 commands, 23 scenes)
 	CHECK(after_dissolving.b < -15.0); // blue
 	CHECK(boiled_down.b < -15.0);
-	CHECK(boiled_down.l < after_dissolving.l - 6.0); // (8 darker; 10 and more when the room in front was a grey of 0.3: the glass reflects a white room now, Stage 33) // and deeper for the water gone
+	MESSAGE("flask L*: empty " << empty.l << ", dissolved " << after_dissolving.l << " b " << after_dissolving.b << ", boiled down " << boiled_down.l << " b " << boiled_down.b);
+	// coloured against the empty flask, both. (Until Stage 44 the boiled-down flask read darker than the dissolved
+	// one, L* 31 to 45: that was the haze of the 0.6 mg of malachite the first stage left, 2.5 million grains in its
+	// thin layer. Acid dissolves malachite now, and the layer's middle reads 56, as its truth does at that pixel.)
+	CHECK(after_dissolving.l < empty.l - 20.0);
+	CHECK(boiled_down.l < empty.l - 20.0);
 }
 
 // ---- the renderer's frames (GAME_SPEC §12.2): history kept by content, points by need

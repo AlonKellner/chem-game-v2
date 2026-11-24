@@ -291,6 +291,97 @@ activity coefficients`):
 **Not used (not verified):** the CRC's limiting diffusion coefficients of Na⁺ and OH⁻ (1.334e-9, 5.273e-9 m²/s)
 could not be read from the CRC page. They are not needed: no surface reaction of these ions is modelled.
 
+## Precipitation and gas (Stage 44)
+
+Copper hydroxide, the precipitate a base brings out of copper sulfate; its turning into copper oxide when
+heated; malachite dissolving in an acid, its carbonate leaving as carbon dioxide (GAME_SPEC §9). All of it was
+read 2026-11-24.
+
+**Copper hydroxide's thermodynamic row**, `copper_hydroxide`, Cu(OH)₂(s). From Puigdomenech and Taxén,
+*Thermodynamic data for copper* (SKB TR-00-13, 2000), Table 2, p. 70, which takes it from Beverskog and
+Puigdomenech 1997:
+
+| Quantity | Printed | Used |
+|---|---|---|
+| ΔfG° | −359.92 kJ/mol | (with S°, gives ΔfH°) |
+| S° | 87.0 J/mol·K | **87.0** |
+| Cp | 86.99 + 23.26e-3 T − 0.54e6 T⁻² | **87.85** at 25 °C, held constant |
+| ΔfH° | — | **−443.99** kJ/mol, from ΔfG° and CODATA's entropies of Cu, O₂ and H₂ |
+
+- **Why not NBS or JANAF.** NBS 1982 (p. 2-154) gives Cu(OH)₂ only ΔfH° −449.8, with no ΔfG°, S° or Cp.
+  JANAF (1966, Cu-014) gives −450.366, S° 108.366: with it the hydroxide is 7.2 kJ *more* stable than CuO and
+  water, and its log \*Ks would be 6.41, against every measured solubility below.
+- **The same source gives the demo's CuO.** Its CuO(cr), ΔfG° −128.29 and S° 42.6, is the game's CuO row
+  (NIST: Chase, ΔfH° −156.06, S° 42.59). Robie and Hemingway 1995 (USGS Bull. 2131, p. 188): tenorite −156.1,
+  42.60.
+- **So the hydroxide is metastable.** Cu(OH)₂ → CuO + H₂O(l) is −5.51 kJ/mol (from minteq's constants −5.88,
+  from wateq4f's −5.82). Cudennec and Lecerf 2003 (*Solid State Sciences* 5, 1471; the HAL author version): the
+  hydroxide turns into the oxide, slowly in water, fast in a strong base.
+
+**The gate: the solubility constants**, `measured: the tables' solubility constants of copper hydroxide and
+copper oxide are the evaluated ones`. log \*Ks of M + 2 H⁺ → Cu²⁺ + water at 25 °C, I = 0, through the game's
+own CuSO₄(aq) and H₂SO₄(aq):
+
+| Solid | minteq.v4 (NIST SRD 46) | wateq4f (Ball and Nordstrom 1991) | llnl.dat | the model | Gate |
+|---|---|---|---|---|---|
+| Cu(OH)₂ | 8.674 (ΔrH −56.42 kJ) | 8.64 (−15.25 kcal) | — | **8.551** (ΔrH −54.39) | 0.15 |
+| CuO | 7.644 (ΔrH −64.87) | 7.62 (−15.24 kcal) | 7.656 | **7.585** (ΔrH −56.49) | 0.1 |
+
+- The solubility product follows: log Ksp = 8.551 − 2 × 13.995 = **−19.44**, Ksp 3.6e-20 (from minteq's 8.674,
+  −19.32).
+- Schindler et al. 1965 (*Helv. Chim. Acta* 48, 1204), the measurement itself, is behind a paywall: not read.
+- Measured in pure water (Cudennec and Lecerf 2003): Cu(OH)₂ 1.3e-5 mol/L, CuO 2e-7 mol/L.
+
+**Density**, 3.93 g/cm³: the Handbook of Mineralogy's spertiniite, D(meas) 3.93(2), D(calc) 3.94. The cell
+Fukuda et al. cite (Oswald et al. 1990) gives 3.949.
+
+**A precipitate's grain**, `grain_um` 0.3 (calibrated). Fukuda, Favergeon and Koga's copper hydroxide (below) had
+a BET area of 5.28 m²/g, needles 3 to 5 µm long. The sphere of that area at 3.93 g/cm³ is 6/(ρ·A) = 0.29 µm.
+A precipitate made in a beaker is not that sample, so this is the size it is given, not a measurement of it.
+
+**Copper hydroxide into copper oxide**, `hydroxide_dehydration`, Cu(OH)₂(s) → CuO(s) + H₂O(g), first order.
+Fukuda, Favergeon and Koga, *J. Phys. Chem. C* 123, 20903 (2019; the HAL version), quoting their 2018 fit in dry
+N₂, three steps in sequence:
+
+| Step | Ea kJ/mol | ln(A / s⁻¹) |
+|---|---|---|
+| induction | 196.8 ± 16.7 | 54.3 ± 5.1 |
+| **surface reaction** | **127.0 ± 6.0** | **32.9 ± 1.8** |
+| phase boundary | 124.6 ± 6.0 | 31.4 ± 1.8 |
+
+- The game takes the surface reaction as the whole: prefactor e^32.9 = 1.9448e14 /s, Ea 127.0 kJ/mol.
+- Water vapour slows it, by [P₀/p(H₂O)]^0.41 in their data. In the game, steam over it lowers its affinity,
+  through the same steam's activity.
+- What follows: a half-life of **2 years at 25 °C**, under water as dry (Cudennec: "can stay several months
+  in pure water at room temperature"); **36 min at 100 °C**; **17 s at 150 °C**; their mass loss begins at
+  about 420 K.
+- Gate: `measured: copper hydroxide turns to oxide at Fukuda's first-order rate`, at 400 K in dry nitrogen.
+- **Not modelled:** in a strong base the hydroxide dissolves as Cu(OH)₄²⁻ and comes back as CuO, "very
+  fast" (Cudennec). No rate was found, so a boiled suspension in excess base blackens as slowly as in water.
+
+**Malachite in sulfuric acid**, `malachite_dissolution`, Cu₂CO₃(OH)₂(s) + 2 H₂SO₄(aq) → 2 CuSO₄(aq) + CO₂(g) +
+3 H₂O(l), the surface law. **Nicol 2018**, *Hydrometallurgy* 177, 214 (the Murdoch accepted manuscript): pure
+gem malachite, sieved, 1 g in 600 mL, 580 rpm, 0.033 to 0.15 M acid, 25 to 45 °C.
+- A shrinking particle controlled at its surface: 1 − (1 − X)^⅓ = t/τ, τ ∝ R.
+- Order 0.65 in [H₂SO₄], first order in the proton's activity; Ea **53.6 kJ/mol** (eq. 4: exp(−6447/T)).
+- Eq. 4: dR/dt = A exp(−6447/T) C^0.65, **A 1.44e7 cm/s** with C in mol/cm³. His k = 1.05e-4 cm/s is A·exp·ρ.
+  "4.1 × 10⁻⁷ mol cm⁻² s⁻¹" in 0.2 mol/L acid at 25 °C is malachite's flux by his density; Kopylov and
+  Orlov 1964 measured 3.6e-7.
+- The game's prefactor is that shrinking rate over its own molar volume (3.8 g/cm³), with C in mol/kg:
+  1.44e5 m/s × (1e-3)^0.65 × 17186 mol/m³ = **2.7767e7 mol/m²/s**, Ea 6447 R = **53.603 kJ/mol**, order 0.65 in
+  the acid's molality.
+- At 0.2 M and 25 °C: 3.97e-3 mol/m²/s (his 4.1e-3; Kopylov and Orlov's 3.6e-3).
+- Gate: `measured: malachite dissolves in sulfuric acid at Nicol's surface rate`, at 0.1 and 0.2 M, 25 and 45 °C.
+- Bingöl and Canbazoğlu 2004 (*Hydrometallurgy* 72, 159) is behind a paywall: not read.
+- Transport in series with it (GAME_SPEC §7) takes over for coarse grains in still acid. Nicol's grains were
+  kept in suspension at 580 rpm.
+
+**Colour** (calibrated): no measured spectrum of copper hydroxide was found. The Handbook of Mineralogy says
+"blue to blue-green", strongly pleochroic. The game gives it a diffuse reflectance of 0.18 with a band at
+480 nm, 75 nm wide, peaking at 0.6 above it: a pale blue, lighter and a little greener than the pentahydrate.
+
+**Not used (not verified):** an absorption peak at 600–650 nm on an AI-generated page, rejected.
+
 ## Measured kinetics (Stage 23)
 
 Each rate from a measurement, read 2026-11-21, with an oracle test at the source's own conditions

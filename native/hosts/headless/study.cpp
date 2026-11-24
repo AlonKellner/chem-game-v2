@@ -638,6 +638,99 @@ int neutralisation() {
 	return status;
 }
 
+// Precipitation (GAME_SPEC §9, Stage 44): 25 mL of 0.2 M copper sulfate (0.005 mol in 25 g of water), 1 M sodium
+// hydroxide added; each mixture settled in one step: the hydroxide made against the closed form (half the base,
+// up to the copper), the warmth against the tables' heat, the copper left and the pH. Then the hydroxide held at a
+// temperature, its half-life against the first-order closed form.
+int precipitation() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const auto hf = [&](SpeciesId x) { return table.species(x).hf; };
+	const auto cp = [&](SpeciesId x) { return table.species(x).cp; };
+	const double heat = hf(builtin::copper_hydroxide) + hf(builtin::sodium_sulfate_aq) - hf(builtin::copper_sulfate_aq) - 2.0 * hf(builtin::sodium_hydroxide_aq) +
+			(cp(builtin::copper_hydroxide) + cp(builtin::sodium_sulfate_aq) - cp(builtin::copper_sulfate_aq) - 2.0 * cp(builtin::sodium_hydroxide_aq)) * (293.15 - T0);
+	const double grams = 97.561; // Cu(OH)2, g/mol
+	std::printf("25 mL of 0.2 M copper sulfate (0.005 mol in 25 g of water), 1 M sodium hydroxide (0.001 mol in 0.96 g of water a mL) added, mixed at 20 C\n");
+	std::printf("CuSO4(aq) + 2 NaOH(aq) -> Cu(OH)2(s) + Na2SO4(aq): %.2f kJ at 20 C\n\n", heat * 1e-3);
+	std::printf("%8s %12s %12s %14s %8s %10s %10s %10s\n", "base mL", "Cu(OH)2 g", "closed g", "Cu left mol", "pH", "C", "closed C", "invariants");
+	std::vector<Reaction> equilibria;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.kinetics().law == Kinetics::Law::Equilibrium) {
+			equilibria.push_back(r);
+		}
+	}
+	int status = 0;
+	for (int ml = 0; ml <= 14; ++ml) {
+		const double base = 0.001 * ml, water = (25.0 + 0.96 * ml) / 18.015;
+		World::Builder b(table);
+		const CellId beaker = b.add_cell("beaker");
+		b.set_amount(beaker, builtin::water, amount_from_mol(water, ok)).set_amount(beaker, builtin::copper_sulfate_aq, amount_from_mol(0.005, ok));
+		if (base > 0.0) {
+			b.set_amount(beaker, builtin::sodium_hydroxide_aq, amount_from_mol(base, ok));
+		}
+		b.set_temperature(beaker, 293.15);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		Simulation sim(std::move(*world), shipped());
+		const Totals genesis = totals(table, sim.world().snapshot());
+		const StepTrace trace = sim.step();
+		const bool clean = check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis;
+		const CellState &end = sim.world().snapshot_cell(beaker);
+		double kelvin = 0.0, p = 0.0;
+		sim.world().temperature(beaker, kelvin);
+		if (!ph(table, end, kelvin, p)) {
+			std::fprintf(stderr, "chem_tool: no pH\n");
+			return 1;
+		}
+		const auto mol = [&](SpeciesId x) { return static_cast<double>(end.amount[static_cast<size_t>(x.index)]) * MOL_PER_QUANTUM; };
+		const double made = std::min(0.005, 0.5 * base), hydroxide = mol(builtin::copper_hydroxide);
+		const double closed = 20.0 - (hydroxide > made ? hydroxide : made) * heat / thermal_state(table, end).heat_capacity;
+		std::printf("%8d %12.5f %12.5f %14.4g %8.3f %10.3f %10.3f %10s\n", ml, hydroxide * grams, made * grams, mol(builtin::copper_sulfate_aq), p, kelvin - 273.15, closed,
+				clean ? "hold" : "BROKEN");
+		status |= clean ? 0 : 1;
+		// the hydroxide is the base's half up to the copper (a microgram more where copper is left: its own hydrolysis)
+		status |= std::abs(hydroxide - made) < 2e-6 ? 0 : 1;
+		status |= std::abs(kelvin - 273.15 - closed) < 0.02 ? 0 : 1;
+		if (ml >= 11 && !(mol(builtin::copper_sulfate_aq) < 1e-11 && p > 12.0)) {
+			status |= 1; // past the equivalence, no copper is left in the solution (the last quantum, the equilibrium's own)
+		}
+	}
+	// the hydroxide held at a temperature in dry nitrogen, through a furnace's wall
+	std::printf("\nCu(OH)2(s) -> CuO(s) + H2O(g), first order (Fukuda et al. 2019): held in dry nitrogen\n%8s %14s %14s\n", "C", "half-life s", "closed s");
+	const Kinetics &k = builtin_reactions()[static_cast<size_t>(builtin::reaction::hydroxide_dehydration)].kinetics();
+	for (const double celsius : { 100.0, 125.0, 150.0 }) {
+		const double kelvin = celsius + 273.15, closed = std::log(2.0) / (k.prefactor * std::exp(-k.activation / (GAS_CONSTANT * kelvin)));
+		World::Builder b(table);
+		const CellId cell = b.add_cell("pan");
+		const CellId bath = b.add_reservoir("furnace", kelvin);
+		b.add_edge(cell, bath, PHASES_NONE, 1e6);
+		b.set_amount(cell, builtin::copper_hydroxide, amount_from_mol(1e-6, ok)).set_amount(cell, builtin::glass, amount_from_mol(100.0, ok));
+		b.set_amount(cell, builtin::nitrogen, amount_from_mol(1.0, ok)).set_temperature(cell, kelvin);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		Simulation sim(std::move(*world), shipped());
+		sim.set_step_seconds(std::min(1.0, closed / 200.0));
+		const double n0 = sim.world().amount(cell, builtin::copper_hydroxide).mol();
+		double t = 0.0;
+		while (sim.world().amount(cell, builtin::copper_hydroxide).mol() > 0.5 * n0 && t < 20.0 * closed) {
+			sim.step();
+			t += sim.step_seconds();
+		}
+		std::printf("%8.0f %14.1f %14.1f\n", celsius, t, closed);
+		status |= std::abs(t / closed - 1.0) < 0.02 ? 0 : 1;
+	}
+	std::printf("\n%s\n", status == 0 ? "every mixture settled with its invariants holding, the hydroxide and the warmth at the closed forms; the half-lives at theirs" : "A MIXTURE FAILED");
+	return status;
+}
+
 } // namespace
 
 int spectrum_study(); // spectrum.cpp
@@ -686,6 +779,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "neutralisation") == 0) {
 		return neutralisation();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, spectrum, frames, tilt, vortex)\n", name);
+	if (std::strcmp(name, "precipitation") == 0) {
+		return precipitation();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

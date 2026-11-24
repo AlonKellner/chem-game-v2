@@ -59,6 +59,17 @@
 			"base": 0.82,
 			"bands": []
 		},
+		"copper_hydroxide": {
+			"kind": "reflect",
+			"base": 0.18,
+			"bands": [
+				{
+					"centre_nm": 480,
+					"width_nm": 75,
+					"peak": 0.6
+				}
+			]
+		},
 		"latex": {
 			"kind": "transmit",
 			"base": 0.04,
