@@ -481,6 +481,22 @@ void ChemLab::optics_frame() {
 	const uint64_t composed = godot::Time::get_singleton()->get_ticks_usec();
 	scene_ms_ = static_cast<double>(composed - began) / 1000.0;
 	compute_.upload(optics);
+	// A view's change (Stage 42): while the view moves, its pixels carried from where they stood, nothing traced; at
+	// rest, their state carried once to the view now, and on
+	if (optics.view_moving) {
+		if (!anchored_) {
+			compute_.anchor();
+			std::copy(optics.view, optics.view + 4, anchor_view_);
+			anchored_ = true;
+		}
+		compute_.resample(optics.view_now, anchor_view_, false);
+		pass_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - composed) / 1000.0;
+		return;
+	}
+	if (anchored_) {
+		compute_.resample(optics.view, anchor_view_, true);
+		anchored_ = false;
+	}
 	if (optics_restarting_) {
 		compute_.restart();
 	}

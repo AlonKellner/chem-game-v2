@@ -152,6 +152,20 @@ thread_local real beam_between = OPTICS_HOST_BETWEEN;
 // the stretches of the spectrum the last pixel read was read in (for O10)
 thread_local std::vector<real> beam_stretches;
 #define OPTICS_STRETCH_HOOK(lo, hi) (beam_stretches.push_back(lo), beam_stretches.push_back(hi))
+// the anchor a sample is carried from (Stage 42: a view's change; Frames::resample), its states read through it
+thread_local const OpticsFramesCore *anchor_core = nullptr;
+inline vec4 anchor_vec(int which, int x, int y) {
+	if (anchor_core == nullptr) {
+		return vec4(0.0);
+	}
+	double hist[4], prox[4], aux[4];
+	anchor_core->state(x, y, hist, prox, aux);
+	const double *v = which == 0 ? hist : which == 1 ? prox : aux;
+	if (which == 3) {
+		return vec4(real(prox[0] + hist[0]), real(prox[1] + hist[1]), real(prox[2] + hist[2]), real(1.0));
+	}
+	return vec4(real(v[0]), real(v[1]), real(v[2]), real(v[3]));
+}
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)
@@ -391,5 +405,46 @@ struct Frames final : OpticsFramesCore {
 	double spent(int x, int y) const override {
 		const State *st = state_at(x, y);
 		return st != nullptr ? to_double(st->s.aux.w) : 0.0;
+	}
+
+	void state(int x, int y, double hist[4], double prox[4], double aux[4]) const override {
+		// (the nearest of the sample's pixels: a place past its edge reads its edge's)
+		const int col = std::clamp((x - x_) / step_, 0, std::max(w_ - 1, 0)), row = std::clamp((y - y_) / step_, 0, std::max(h_ - 1, 0));
+		const PixelState &s = states_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s;
+		const vec4 *from[3] = { &s.hist, &s.prox, &s.aux };
+		double *to[3] = { hist, prox, aux };
+		for (int k = 0; k < 3; ++k) {
+			to[k][0] = to_double(from[k]->x);
+			to[k][1] = to_double(from[k]->y);
+			to[k][2] = to_double(from[k]->z);
+			to[k][3] = to_double(from[k]->w);
+		}
+	}
+
+	void resample(const OpticsScene &scene, const OpticsFramesCore &anchor, const double now[4], const double from[4], bool full_key) override {
+		if (!ready(scene)) {
+			return;
+		}
+		const vec4 v_now(real(now[0]), real(now[1]), real(now[2]), real(0.0)), v_from(real(from[0]), real(from[1]), real(from[2]), real(0.0));
+		in_pieces(h_, [&](int row) {
+			const Use use(scene);
+			anchor_core = &anchor;
+			for (int col = 0; col < w_; ++col) {
+				State &st = states_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)];
+				const int x = x_ + col * step_, y = y_ + row * step_;
+				const Path q = at(x, y);
+				st.kept = {};
+				if (q.cover <= 0.0) {
+					st.s.hist = st.s.prox = st.s.aux = vec4(0.0);
+					st.s.key = vec4(-3.0); // (the wall: shown again from the wall's table)
+					continue;
+				}
+				st.s = anchor_state(vec2(x + 0.5, y + 0.5), v_now, v_from, q.key.z);
+				if (full_key) {
+					st.s.key = q.key;
+				}
+			}
+			anchor_core = nullptr;
+		});
 	}
 };

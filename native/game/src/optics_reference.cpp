@@ -1432,6 +1432,12 @@ void OpticsFrames::shown(const OpticsScene &scene, int x, int y, double rgba[4])
 	core_->shown(scene, x, y, rgba);
 }
 
+void OpticsFrames::resample(const OpticsFrames &anchor, const OpticsScene &scene, const double now[3], const double from[3], bool full_key) {
+	const double n[4] = { now[0], now[1], now[2], 0.0 }, f[4] = { from[0], from[1], from[2], 0.0 };
+	core_->resample(scene, *anchor.core_, n, f, full_key);
+	asked_ = ray_asked_ = 0.0;
+}
+
 bool OpticsFrames::kept_fresh(const OpticsScene &scene, int x, int y, bool &holds) const {
 	return core_->kept_fresh(scene, x, y, holds);
 }

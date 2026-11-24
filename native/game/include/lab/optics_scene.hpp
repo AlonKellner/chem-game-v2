@@ -432,6 +432,11 @@ public:
 	int64_t read() const { return read_; }
 	int64_t rays() const { return rays_; }
 	int64_t most_rays() const { return most_rays_; }
+	// A view's change (Stage 42; GAME_SPEC §12.3): every pixel's state carried from `anchor`'s, made at the view
+	// `from`, to this one's at the view `now` (each (scale, x, y): a point l of the layout at l * scale + (x, y) on the
+	// screen), as the GPU's pass carries it when the view comes to rest; `full_key`: each given the scene's whole
+	// content key, its estimate not read again (O20's self-test).
+	void resample(const OpticsFrames &anchor, const OpticsScene &scene, const double now[3], const double from[3], bool full_key = false);
 	// Whether a pixel's beams are kept from frame to frame (Stage 33; as the GPU keeps them), or traced at every
 	// read: the same picture, for holding one to the other.
 	void keep(bool on) { keeping_ = on; }

@@ -233,6 +233,14 @@ typedef struct cg_optics {
 	int32_t image_count;
 	const float *images; /* 4 * image_count floats */
 	uint64_t images_revision;
+	/* The view of the room (GAME_SPEC §12.3, Stage 42), as the passes take one: (scale, x, y, 0), a point l of the
+	 * layout at l * scale + (x, y) on the screen. The view the scene was made at; the view now; whether it is
+	 * moving: while it moves the scene is not made again, and a host carries the pixels it last made from the one
+	 * view to the other (the per-pixel source's anchor_state, compiled OPTICS_RESAMPLE_PASS), tracing nothing; at
+	 * rest, the scene made at the view now, it carries each pixel's state once and goes on. */
+	float view[4];
+	float view_now[4];
+	int32_t view_moving;
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames

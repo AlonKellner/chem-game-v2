@@ -21,6 +21,13 @@ struct View {
 	bool operator!=(const View &o) const { return !(*this == o); }
 };
 
+// the view as the passes take it (Stage 42): a point l of the layout at l * scale + (x, y) on the screen
+inline void view_affine(const View &v, const ViewRoom &room, float out[4]) {
+	out[0] = v.scale;
+	out[1] = room.x - v.x * v.scale;
+	out[2] = room.y - v.y * v.scale;
+	out[3] = 0.0f;
+}
 // the view that shows the room as it is laid out
 inline View view_whole(const ViewRoom &room) {
 	return View{ 1.0f, room.x, room.y };

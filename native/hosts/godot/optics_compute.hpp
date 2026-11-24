@@ -38,6 +38,11 @@ public:
 	void run(double budget, bool again = false);
 	// Every pixel's history starts again next frame (for timing the worst frame).
 	void restart();
+	// A view's change (Stage 42; GAME_SPEC §12.3): the pixels as they stand kept as the anchor (when the view starts
+	// to move); and what each pixel shows carried from the anchor's, made at the view `from`, to the view `now` (each
+	// (scale, x, y, 0)), tracing nothing; `rest`: its state too, as it starts again at the view now.
+	void anchor();
+	void resample(const float now[4], const float from[4], bool rest);
 	// What the screen shows: an RGBA8 texture, sRGB-encoded, alpha 0 where no body is.
 	godot::Ref<godot::Texture2DRD> shown() const { return shown_texture_; }
 
@@ -49,7 +54,19 @@ private:
 	// three passes of one source (GAME_SPEC §12.3): over the whole screen, compiled without the reading by a pixel's
 	// own rays; the beams' (Stage 29), over the rectangles of the bodies whose pixels are read by it; and, before
 	// that one, the corners' of those pixels (Stage 33)
-	enum Pass : int { SCREEN = 0, BEAMS = 1, CORNERS = 2, PASSES = 3 };
+	// (and, Stage 42, a view's change: what the pixels show and hold carried from one view to another)
+	enum Pass : int { SCREEN = 0, BEAMS = 1, CORNERS = 2, RESAMPLE = 3, PASSES = 4 };
+	struct Params {
+		int32_t frame, parity;
+		float budget, pixels;
+		int32_t left, top, right, bottom;
+		int32_t kept, stamp; // where the rectangle's kept beams begin (the beams' pass); which run of the passes this is
+		float rays; // the rays' budget: points a frame
+		int32_t pad;
+		float view_now[4], view_from[4]; // (a view's change, Stage 42)
+		int32_t mode, pad3, pad4, pad5;
+	};
+	godot::RID anchor_[4];
 	godot::RID shader_[PASSES], pipeline_[PASSES], uniforms_[PASSES];
 	godot::RID corners_; // the lattice of pixel corners: three vec4s a corner (Stage 33)
 	// each pixel's kept beams (Stage 33): a record for every pixel of the rectangles, one rectangle after another;

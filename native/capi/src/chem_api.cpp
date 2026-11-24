@@ -8,6 +8,8 @@
 #include "lab/play.hpp"
 #include "lab/ui.hpp"
 
+#include <algorithm>
+
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -380,6 +382,11 @@ cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 namespace {
 
 void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
+	// (no view of a room unless the screen gives one: the scene as it is, still)
+	const float whole[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	std::copy(whole, whole + 4, out->view);
+	std::copy(whole, whole + 4, out->view_now);
+	out->view_moving = 0;
 	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 	out->table = scene.table.data();
 	out->revision = scene.revision;
@@ -475,6 +482,10 @@ cg_status cg_ui_optics(cg_ui *ui, cg_optics *out) {
 	}
 	try {
 		fill_optics(ui->ui->optics(), out);
+		// (the views as the scene was made, just now)
+		lab::view_affine(ui->ui->scene_view(), lab::Ui::view_room(), out->view);
+		lab::view_affine(ui->ui->view(), lab::Ui::view_room(), out->view_now);
+		out->view_moving = ui->ui->view_moving() ? 1 : 0;
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());

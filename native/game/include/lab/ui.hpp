@@ -68,6 +68,14 @@ public:
 	void pan(float dx, float dy);
 	void reset_view();
 	View view() const;
+	// Whether the view is moving (Stage 42; GAME_SPEC §12.3): it changed within the last VIEW_QUIET_MS of the clock.
+	// While it moves the scene (optics()) is not made again: it stands at the view it was made at (scene_view()),
+	// and a host shows its pixels carried to the view now, tracing nothing; at rest it is made at the view once.
+	static constexpr double VIEW_QUIET_MS = 120.0;
+	bool view_moving() const;
+	View scene_view() const;
+	// the room's part of the screen, which the view is of
+	static ViewRoom view_room();
 	// A frame of real time: the lab advances by it times the speed. One step
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.

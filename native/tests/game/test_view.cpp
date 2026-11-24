@@ -1,13 +1,19 @@
 // The view of the room (GAME_SPEC §13.1, Stage 42): a camera on the lit room, from 1x to 16x, the screen's own
 // parts as they are. Zoomed, the room is laid out anew, larger (O18: the same room); the pointer's points over it
 // are the view's, so a person's gestures are the same commands at any view.
+#include "lab/colour.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 #include "lab/view.hpp"
 
+#include "chem/optics.hpp"
+
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <array>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -30,16 +36,19 @@ struct Hand {
 	std::unique_ptr<lab::Ui> ui;
 	float x = 960, y = 20;
 	bool down = false;
+	double clock_ms = 0.0; // a 60th of a second a frame (the view rests VIEW_QUIET_MS after it last moved)
 	Hand() {
 		std::string why;
 		ui = lab::Ui::open(read("data/benches/lab.json"), why);
 		REQUIRE_MESSAGE(ui != nullptr, why);
+		ui->set_clock([this] { return clock_ms; });
 	}
 	void must(const std::string &command) {
 		std::string why;
 		REQUIRE_MESSAGE(ui->lab().command(command, why), command << ": " << why);
 	}
 	void frame() {
+		clock_ms += 1000.0 / 60.0;
 		ui->pointer(x, y, down);
 		ui->frame(1.0 / 60.0);
 		ui->optics();
@@ -161,9 +170,10 @@ TEST_CASE("view: zoomed, the room is the same room larger, laid out anew (O18), 
 	float ax = 0, ay = 0;
 	h.point("item:acid", ax, ay);
 	h.ui->zoom(ax, ay, 4.0f);
-	h.frame();
+	h.pause(0.2); // at rest: the scene made at the view
 	const lab::View v = h.ui->view();
 	REQUIRE(v.scale == 4.0f);
+	REQUIRE(h.ui->scene_view() == v);
 	const lab::OpticsScene zoomed = h.ui->optics();
 	// through the acid and its glass, its rim, beside it on the wall's ruling: the same light, four times larger
 	float lx = 0, ly = 0;
@@ -171,7 +181,7 @@ TEST_CASE("view: zoomed, the room is the same room larger, laid out anew (O18), 
 	h.frame();
 	h.point("item:acid", lx, ly);
 	h.ui->zoom(ax, ay, 4.0f);
-	h.frame();
+	h.pause(0.2);
 	CHECK(lab::check_O18(whole, zoomed, v.scale, v.x, v.y, ROOM_X, ROOM_Y, lx - 70, ly - 90, lx + 70, ly + 90, 3.0) == "");
 	if (std::getenv("LAB_O18_PRINT") != nullptr) {
 		int shown = 0;
@@ -267,4 +277,144 @@ TEST_CASE("view: what the probe reads does not change with the view (Stage 42)")
 		CHECK(p->x() == x);
 		CHECK(p->y() == y);
 	}
+}
+
+namespace {
+
+// a view as the passes take it: a point l of the layout at l * scale + (x, y) on the screen
+void affine_of(const lab::View &v, double out[3]) {
+	out[0] = v.scale;
+	out[1] = ROOM_X - v.x * v.scale;
+	out[2] = ROOM_Y - v.y * v.scale;
+}
+
+double eye_rgb(const double a[3], const double b[3]) {
+	const auto seen = [](const double c[3]) {
+		return lab::shown(chem::optics::Xyz{ 0.4124564 * c[0] + 0.3575761 * c[1] + 0.1804375 * c[2], 0.2126729 * c[0] + 0.7151522 * c[1] + 0.0721750 * c[2],
+				0.0193339 * c[0] + 0.1191920 * c[1] + 0.9503041 * c[2] });
+	};
+	return lab::eye_difference(seen(a), seen(b));
+}
+
+// frames until no pixel asks for more (at most `most`): how many, and the points they spent
+int settle(lab::OpticsFrames &f, const lab::OpticsScene &scene, double &points, int most = 80) {
+	points = 0.0;
+	int n = 0;
+	for (; n < most; ++n) {
+		f.frame(scene);
+		points += f.points();
+		if (std::getenv("LAB_O20_PRINT") != nullptr) {
+			MESSAGE("frame " << n << ": " << f.points() << " points, " << f.asked() << " asked, " << f.read() << " read");
+		}
+		if (n >= 4 && f.asked() <= 0.0) {
+			return n + 1;
+		}
+	}
+	return n;
+}
+
+} // namespace
+
+TEST_CASE("view: O20, a zoom resamples, then settles once: a tenth closer, most pixels keep their history, those nothing bends read little more than their estimate, and the picture is a fresh start's (Stage 42)") {
+	Hand h;
+	double now_ms = 0.0;
+	h.ui->set_clock([&] { return now_ms; });
+	set_up(h);
+	h.must(R"({"do":"part","kind":"timer","id":"clock","at":[5,2]})");
+	h.must(R"({"do":"part","kind":"alarm","id":"bell","at":[4,3]})");
+	h.must(R"({"do":"wire","from":"clock","to":"bell"})");
+	h.frame();
+	float ax = 0, ay = 0;
+	h.point("item:clock", ax, ay);
+	h.ui->zoom(ax, ay, 1.6f);
+	CHECK(h.ui->view_moving());
+	now_ms += 200.0; // at rest
+	CHECK(!h.ui->view_moving());
+	const lab::OpticsScene a = h.ui->optics();
+	const lab::View va = h.ui->scene_view();
+	REQUIRE(va == h.ui->view());
+	// (every pixel of the signal parts at the view, their faces, lamps and ports, a wire, the monitor, and the wall's
+	// ruling about them, the anchor; of the view after it, a sample, each pixel of which has its anchor's about it)
+	h.point("item:clock", ax, ay);
+	const int ax0 = static_cast<int>(ax) - 230, ay0 = static_cast<int>(ay) - 150;
+	lab::OpticsFrames anchor(ax0, ay0, 460, 300, 16.0, 1);
+	const int step = sparse(), x0 = ax0 + 40, y0 = ay0 + 30, w = 380 / step, hh = 240 / step;
+	double spent = 0.0;
+	settle(anchor, a, spent, 40);
+	// a tenth closer: while it moves, the scene stands
+	h.ui->zoom(ax, ay, 1.1f);
+	const uint64_t standing = h.ui->optics().revision;
+	CHECK(h.ui->view_moving());
+	CHECK(h.ui->scene_view() == va);
+	now_ms += 50.0;
+	CHECK(h.ui->optics().revision == standing);
+	now_ms += 200.0;
+	const lab::OpticsScene b = h.ui->optics();
+	const lab::View vb = h.ui->scene_view();
+	REQUIRE(vb == h.ui->view());
+	double from[3], to[3];
+	affine_of(va, from);
+	affine_of(vb, to);
+	// the picture it comes to: a fresh start's, settled
+	lab::OpticsFrames fresh(x0, y0, w, hh, 16.0, step), carried(x0, y0, w, hh, 16.0, step), keyed(x0, y0, w, hh, 16.0, step), early(x0, y0, w, hh, 16.0, step);
+	settle(fresh, b, spent, 40);
+	std::vector<std::array<int, 2>> shown;
+	std::vector<std::array<double, 3>> settled;
+	std::vector<bool> bent;
+	for (int r = 0; r < hh; ++r) {
+		for (int c = 0; c < w; ++c) {
+			const int x = x0 + c * step, y = y0 + r * step;
+			if (lab::optics_cover(b, x, y) >= 0.02) {
+				std::array<double, 3> q{};
+				fresh.colour(b, x, y, q.data());
+				shown.push_back({ x, y });
+				settled.push_back(q);
+				bent.push_back(lab::optics_ray(b, x + 0.5, y + 0.5, 550.0).bent > 0 || lab::optics_ray(b, x + 0.5, y + 0.5, 550.0).x != x + 0.5);
+			}
+		}
+	}
+	const auto off = [&](const lab::OpticsFrames &f) {
+		int n = 0;
+		for (size_t i = 0; i < shown.size(); ++i) {
+			double p[3];
+			f.colour(b, shown[i][0], shown[i][1], p);
+			n += eye_rgb(p, settled[i].data()) > lab::EYE_VISIBLE ? 1 : 0;
+		}
+		return n;
+	};
+	// carried from the anchor: its first frame keeps most pixels' histories; the pixels nothing bends read little
+	// more than their estimate where a fresh start's read their first batches
+	carried.resample(anchor, b, to, from);
+	keyed.resample(anchor, b, to, from, true);
+	int kept = 0, bodies = 0, flat = 0;
+	double flat_carried = 0.0, flat_fresh = 0.0;
+	for (int k = 0; k < 3; ++k) {
+		carried.frame(b);
+		early.frame(b);
+		for (size_t i = 0; i < shown.size(); ++i) {
+			if (k == 0 && lab::optics_cover(b, shown[i][0], shown[i][1]) >= 0.999) {
+				++bodies;
+				kept += carried.restarted(shown[i][0], shown[i][1]) ? 0 : 1;
+			}
+			if (!bent[i]) {
+				flat += k == 0 ? 1 : 0;
+				flat_carried += carried.spent(shown[i][0], shown[i][1]);
+				flat_fresh += early.spent(shown[i][0], shown[i][1]);
+			}
+		}
+	}
+	const int off_carried = off(carried), off_early = off(early);
+	// and settled it is the fresh start's picture; given the whole key (its estimate not read again), it is not
+	double rest = 0.0;
+	settle(carried, b, rest, 40);
+	settle(keyed, b, rest, 40);
+	const int apart = off(carried), apart_keyed = off(keyed), compared = static_cast<int>(shown.size());
+	MESSAGE("a tenth closer: " << kept << " of " << bodies << " pixels of bodies kept their history; the " << flat << " nothing bends read " << flat_carried << " points in three frames (a fresh start: " << flat_fresh
+							   << "); visibly off the settled picture after three frames " << off_carried << " (fresh: " << off_early << ") of " << compared << "; settled, " << apart << " apart (the whole key: " << apart_keyed << ")");
+	REQUIRE(bodies > 4000 / (step * step));
+	CHECK(kept >= 0.9 * bodies);
+	CHECK(flat_carried <= 0.25 * flat_fresh);
+	CHECK(off_carried <= std::max(off_early, compared / 200));
+	CHECK(apart <= compared / 200);
+	CHECK(apart_keyed > compared / 200); // (O20's self-test)
 }

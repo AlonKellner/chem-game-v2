@@ -24,6 +24,9 @@
 //   vec4 corner_vec(int i), void corner_put(int i, vec4 v)   the lattice of pixel corners (below: corners shared)
 //   vec4 kept_vec(int i), void kept_put(int i, vec4 v)       the record of the pixel being read (below: beams kept)
 //   vec4 image_vec(int i)    the images things emit by (lab/optics_scene.hpp: images; Stage 42, a screen's)
+//   vec4 anchor_vec(int which, int x, int y)   (OPTICS_RESAMPLE_PASS, or the reference's) a pixel's state at the
+//                            view the scene was made at before the view moved: its hist (0), prox (1), aux (2), or
+//                            what it showed (3, linear); x and y clamped to the screen (below: a view's change)
 
 const int HEADER_VECS = 5;
 const int BODY_VECS = 8;
@@ -3983,6 +3986,92 @@ vec4 wall_shown(vec2 p, float size) {
 // (and matches no content: a body there starts its history)
 vec4 wall_key() {
 	return vec4(-1.0, wall_vec(0).z, -1.0, -1.0);
+}
+
+// ---- a view's change (GAME_SPEC §12.3, Stage 42)
+//
+// While the view of the room moves (a zoom, a pan), the screen shows its pixels at the view it was last made at, the
+// anchor, carried to the view now: nothing is traced. When it comes to rest, the scene is made at the new view and
+// each pixel starts from the anchor's state carried to it, its content key's shape parts no longer its: so its first
+// frame reads its fixed estimate again, and its history holds or starts again as for any change of content (its
+// estimate moved by DRIFT_MOST or less: it keeps its corrections and some of its points). A view is (scale, x, y,
+// 0): a point l of the layout is at l * scale + (x, y) on the screen.
+
+// where the middle of pixel p of the view `now` is on the anchor's screen (x, y), and how many of the anchor's
+// pixels across one of now's spans (z)
+vec3 anchor_place(vec2 p, vec4 now, vec4 from) {
+	float r = from.x / now.x;
+	return vec3((p.x - now.y) * r + from.y, (p.y - now.z) * r + from.z, r);
+}
+
+// the anchor's pixel the k-th of a place's samples reads, and its weight: closer, the four pixels about it (between
+// their middles); farther, sixteen points evenly over the pixels the place spans
+vec3 anchor_sample(vec3 a, int k) {
+	if (a.z <= 1.0) {
+		float fx = a.x - 0.5;
+		float fy = a.y - 0.5;
+		float bx = floor(fx);
+		float by = floor(fy);
+		float tx = fx - bx;
+		float ty = fy - by;
+		int i = k - 2 * (k / 2);
+		int j = k / 2;
+		return vec3(bx + float(i), by + float(j), (i == 0 ? 1.0 - tx : tx) * (j == 0 ? 1.0 - ty : ty));
+	}
+	int i = k - 4 * (k / 4);
+	int j = k / 4;
+	return vec3(floor(a.x + a.z * ((float(i) + 0.5) / 4.0 - 0.5)), floor(a.y + a.z * ((float(j) + 0.5) / 4.0 - 0.5)), 1.0 / 16.0);
+}
+
+int anchor_samples(vec3 a) {
+	return a.z <= 1.0 ? 4 : 16;
+}
+
+// what the anchor showed at a place (linear)
+vec3 anchor_shown(vec3 a) {
+	vec3 c = vec3(0.0);
+	for (int k = 0; k < 16; k++) {
+		if (k >= anchor_samples(a)) {
+			break;
+		}
+		vec3 at = anchor_sample(a, k);
+		vec4 v = anchor_vec(3, int(at.x), int(at.y));
+		c = c + vec3(v.x, v.y, v.z) * at.z;
+	}
+	return c;
+}
+
+// The state a pixel of the view `now` starts from, carried from the anchor's (made at the view `from`): its fixed
+// estimate and what its history adds, the mean of the anchor's there; its noise, their mean; its points, the fewest
+// of theirs (none, where any of them had none: a pixel that was the wall, or had only just started; the drift rule
+// then takes what its estimate moved by from them, as for any change of content); its
+// frames, as many as settle; its content key the scene's colour key (key_z) and none of its shape key.
+PixelState anchor_state(vec2 p, vec4 now, vec4 from, float key_z) {
+	vec3 a = anchor_place(p, now, from);
+	vec3 d = vec3(0.0);
+	vec3 prox = vec3(0.0);
+	float noise = 0.0;
+	float points = 1.0e30;
+	for (int k = 0; k < 16; k++) {
+		if (k >= anchor_samples(a)) {
+			break;
+		}
+		vec3 at = anchor_sample(a, k);
+		vec4 h = anchor_vec(0, int(at.x), int(at.y));
+		vec4 x = anchor_vec(1, int(at.x), int(at.y));
+		vec4 u = anchor_vec(2, int(at.x), int(at.y));
+		d = d + vec3(h.x, h.y, h.z) * at.z;
+		prox = prox + vec3(x.x, x.y, x.z) * at.z;
+		noise = noise + u.x * at.z;
+		points = at.z > 0.0 ? min(points, h.w) : points;
+	}
+	PixelState s;
+	points = points < 1.0 ? 0.0 : points;
+	s.hist = vec4(d.x, d.y, d.z, points);
+	s.prox = vec4(prox.x, prox.y, prox.z, 0.0);
+	s.aux = vec4(noise, points > 0.0 ? SETTLED_FRAMES : 0.0, 0.0, 0.0);
+	s.key = vec4(-2.0, -2.0, key_z, -2.0);
+	return s;
 }
 
 // what the pixel shows: the fixed estimate and what its history adds, sRGB-encoded; where no body is, the wall

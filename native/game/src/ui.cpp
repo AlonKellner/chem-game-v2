@@ -224,6 +224,15 @@ struct Ui::Impl {
 	// readout, the panels), 1 the room's paint (the wall, the grid: placed and sized by the view, as the room is),
 	// 2 over the room (labels and highlights: placed by the view, drawn at their own size)
 	View vw = view_whole(VIEW_ROOM);
+	View composed_at = view_whole(VIEW_ROOM); // the view the scene was last made at
+	double view_changed_ms = -1.0e30;
+	bool view_moving() const { return clock_ms() - view_changed_ms < Ui::VIEW_QUIET_MS; }
+	void set_view(const View &v) {
+		if (v != vw) {
+			vw = v;
+			view_changed_ms = clock_ms();
+		}
+	}
 	int room_paint = 0;
 	static constexpr ViewRoom VIEW_ROOM{ ROOM.x, ROOM.y, ROOM.w, ROOM.h };
 	bool zoomed() const { return vw != view_whole(VIEW_ROOM); }
@@ -1637,7 +1646,7 @@ struct Ui::Impl {
 			return;
 		}
 		if (zoomed() && view_rect().has(x, y)) {
-			vw = view_whole(VIEW_ROOM); // the player's at any time, like the clock (Stage 42)
+			set_view(view_whole(VIEW_ROOM)); // the player's at any time, like the clock (Stage 42)
 			return;
 		}
 		if (pause_rect().has(x, y)) {
@@ -4496,10 +4505,16 @@ struct Ui::Impl {
 		OpticsRoom room = room_now(); // (and the draw list, at the view)
 		if (!zoomed()) {
 			whole = room;
-			optics_compose(scene, room, bodies);
-		} else {
-			optics_compose(scene, room, at_view(bodies));
-			clip_rectangles();
+		}
+		// while the view moves, the scene stands as it was made: the host carries its pixels to the view now
+		if (!view_moving() || scene.table.empty()) {
+			if (!zoomed()) {
+				optics_compose(scene, room, bodies);
+			} else {
+				optics_compose(scene, room, at_view(bodies));
+				clip_rectangles();
+			}
+			composed_at = vw;
 		}
 		read_probes(bodies, before_probes, after_probes, whole);
 	}
@@ -5394,22 +5409,34 @@ void Ui::zoom(float x, float y, float factor) {
 	if (!(factor > 0.0f) || !std::isfinite(factor) || !m.room_at(x, y)) {
 		return; // (over a panel, the screen's own: not the room's)
 	}
-	m.vw = view_zoomed(m.vw, Impl::VIEW_ROOM, x, y, factor);
+	m.set_view(view_zoomed(m.vw, Impl::VIEW_ROOM, x, y, factor));
 }
 
 void Ui::pan(float dx, float dy) {
 	Impl &m = *impl_;
 	if (std::isfinite(dx) && std::isfinite(dy)) {
-		m.vw = view_panned(m.vw, Impl::VIEW_ROOM, dx, dy);
+		m.set_view(view_panned(m.vw, Impl::VIEW_ROOM, dx, dy));
 	}
 }
 
 void Ui::reset_view() {
-	impl_->vw = view_whole(Impl::VIEW_ROOM);
+	impl_->set_view(view_whole(Impl::VIEW_ROOM));
 }
 
 View Ui::view() const {
 	return impl_->vw;
+}
+
+bool Ui::view_moving() const {
+	return impl_->view_moving();
+}
+
+View Ui::scene_view() const {
+	return impl_->composed_at;
+}
+
+ViewRoom Ui::view_room() {
+	return Impl::VIEW_ROOM;
 }
 
 const std::string &Ui::message() const {
