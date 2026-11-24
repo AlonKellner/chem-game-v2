@@ -103,6 +103,11 @@ TEST_CASE("acidity: pure water is neutral at every temperature; an acid's pH is 
 	CHECK(base < 12.0);
 	// the salt of the two is neutral
 	CHECK(ph_of(Cell().put(builtin::sodium_sulfate_aq, 0.1)) == doctest::Approx(7.0).epsilon(0.01));
+	// past the activity model's range, a base boiled nearly dry: no pH (Stage 44)
+	CHECK(ph_of(Cell().put(builtin::sodium_hydroxide_aq, 5.9)) > 14.0);
+	double none = 0.0;
+	CHECK_FALSE(ph(t, Cell().put(builtin::sodium_hydroxide_aq, 6.1).state, 298.15, none));
+	CHECK_FALSE(ph(t, Cell().put(builtin::sulfuric_acid_aq, 3.1).state, 298.15, none));
 	// no liquid: no pH
 	Cell dry;
 	dry.state.amount[static_cast<size_t>(builtin::water.index)] = 0;

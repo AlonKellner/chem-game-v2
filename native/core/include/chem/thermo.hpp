@@ -146,7 +146,9 @@ double water_ionisation(const SpeciesTable &table, double temperature);
 // dissociated, and the neutralisation between them is a fast equilibrium, so what is left over of one sets the
 // hydrogen ions' molality; water's own ionisation adds what it adds, the free ions solving
 // (m_H + x)(m_OH + x) gamma_H gamma_OH = Kw a(H2O). Each particle's activity coefficient is Pitzer's (§10).
-// false, and `ph` left, where the cell holds no liquid or its table no ionisation of water.
+// false, and `ph` left, where the cell holds no liquid or its table no ionisation of water, or where what is left
+// over of the acid or the base is more than PH_MOST_EXCESS mol/kg, past the activity model's range (Stage 44).
+inline constexpr double PH_MOST_EXCESS = 6.0;
 bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &ph);
 
 // A dissolved species' molality: its amount per 55.51 mol of the cell's

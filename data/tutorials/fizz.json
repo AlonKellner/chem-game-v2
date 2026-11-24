@@ -1,0 +1,125 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 44) on data/benches/fizz.json: a gas from a solid. 2 g of malachite tipped into 50 mL of 1 M sulfuric acid dissolves in about two minutes at Nicol's rate (2018), its carbonate leaving as 0.009 mol of carbon dioxide, which pushes the flask's air and some of itself into a balloon.",
+	"title": "Experiment: a gas from a solid",
+	"bench": "../benches/fizz.json",
+	"steps": [
+		{
+			"part": "Fizz",
+			"title": "Malachite into the acid",
+			"text": "Pick up the jar, then right-click the flask. In the menu that opens, click \"tip in the malachite\".",
+			"why": "The flask holds 50 mL of 1 M sulfuric acid. The jar holds 2 g of malachite, a green mineral of copper carbonate and hydroxide, Cu2CO3(OH)2, as a powder.",
+			"checks": [
+				{
+					"text": "the malachite is in the flask",
+					"when": {
+						"item": "jar",
+						"species": "malachite",
+						"below_g": 0.01
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:tip:malachite"
+				}
+			]
+		},
+		{
+			"title": "Close it with the balloon",
+			"text": "Pick up the balloon in the cabinet, then click the flask.",
+			"why": "The acid takes the carbonate apart: its carbon dioxide is a gas and leaves the liquid as bubbles. With the balloon on the flask's mouth, the gas that leaves the flask goes into the balloon.",
+			"checks": [
+				{
+					"text": "the balloon is on the flask",
+					"when": {
+						"item": "balloon",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:balloon",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "It fizzes and fills",
+			"text": "Watch the green powder go and the liquid turn blue. Point at the balloon to read its gas. Click 10x on the clock to hurry it.",
+			"why": "Cu2CO3(OH)2 + 2 H2SO4 -> 2 CuSO4 + CO2 + 3 H2O. The acid eats the powder at its surface, so fine powder and strong acid go fast. 2 g gives 0.009 mol of carbon dioxide, about 220 mL: it pushes the flask's air into the balloon, and some of itself.",
+			"checks": [
+				{
+					"text": "the malachite is gone",
+					"when": {
+						"item": "flask",
+						"species": "malachite",
+						"below_g": 0.01
+					}
+				},
+				{
+					"text": "carbon dioxide in the balloon",
+					"when": {
+						"item": "balloon",
+						"species": "carbon_dioxide",
+						"above_g": 0.05
+					}
+				}
+			]
+		}
+	],
+	"fails": [],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "carbon dioxide in the balloon",
+			"item": "balloon",
+			"species": "carbon_dioxide",
+			"show": [
+				"g"
+			]
+		},
+		{
+			"label": "carbon dioxide left in the flask",
+			"item": "flask",
+			"species": "carbon_dioxide",
+			"show": [
+				"g"
+			]
+		},
+		{
+			"label": "the balloon's gas, at most",
+			"quantity": {
+				"item": "balloon",
+				"what": "gas_ml"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "the copper sulfate made",
+			"item": "flask",
+			"species": "copper_sulfate_aq",
+			"show": [
+				"g"
+			]
+		}
+	]
+}

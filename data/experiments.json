@@ -45,6 +45,20 @@
 			"tutorial": "tutorials/neutralisation.json"
 		},
 		{
+			"id": "precipitate",
+			"title": "A precipitate",
+			"summary": "Precipitation: a base poured into copper sulfate brings the copper out as a pale blue powder; boiled down it turns black, and acid makes it blue again.",
+			"bench": "benches/precipitate.json",
+			"tutorial": "tutorials/precipitate.json"
+		},
+		{
+			"id": "fizz",
+			"title": "A gas from a solid",
+			"summary": "A gas: malachite tipped into acid fizzes away, its carbon dioxide filling a balloon, the acid turning blue.",
+			"bench": "benches/fizz.json",
+			"tutorial": "tutorials/fizz.json"
+		},
+		{
 			"id": "free_lab",
 			"title": "The lab, free",
 			"summary": "The demo's bench with no steps: everything in the cabinet, yours to try.",

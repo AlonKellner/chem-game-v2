@@ -1,0 +1,267 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 44) on data/benches/precipitate.json: a precipitate. Sodium hydroxide poured into copper sulfate brings the copper out as pale blue copper hydroxide (a fast equilibrium, Ksp about 4e-20); boiled down, the hydroxide gives up its water and turns black (Fukuda's rate: slow under water, seconds once dry and above 150 C); acid dissolves the oxide, blue again (chem_tool study precipitation).",
+	"title": "Experiment: a precipitate",
+	"bench": "../benches/precipitate.json",
+	"steps": [
+		{
+			"part": "Out of the solution",
+			"title": "A little base into the copper sulfate",
+			"text": "Pick up the base bottle, then right-click the beaker. Drag the menu's slider to about 10 mL, then click \"pour\". Point at the beaker to read what it holds.",
+			"why": "The beaker holds blue copper sulfate: copper ions, Cu2+, in water. The base brings hydroxide ions, OH-. Together they make copper hydroxide, Cu(OH)2, which hardly dissolves at all: it comes out of the solution at once as a pale blue powder, a precipitate.",
+			"checks": [
+				{
+					"text": "copper hydroxide in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "copper_hydroxide",
+						"above_g": 0.3
+					}
+				},
+				{
+					"text": "and copper sulfate still dissolved",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_aq",
+						"above_g": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "panel:slider@0.04"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Base to spare",
+			"text": "Pick up the base again, right-click the beaker, slide to about 15 mL and pour.",
+			"why": "Each copper ion takes two hydroxide ions: 20 mL of the base brings out all 0.01 mol of the copper. Past that the base is left over, the pH leaps, and the liquid is clear: the blue was the copper ions, and they are in the powder now.",
+			"checks": [
+				{
+					"text": "no copper left dissolved",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_aq",
+						"below_g": 0.01
+					}
+				},
+				{
+					"text": "base left over: pH above 11",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "ph"
+						},
+						"compare": "above",
+						"value": 11
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "panel:slider@0.0625"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Black with heat",
+			"title": "A burner under it",
+			"text": "Pick up the burner in the cabinet, then click the beaker.",
+			"why": "Copper hydroxide holds its water less firmly than it seems: it is less stable than copper oxide and water, and only slow to change.",
+			"checks": [
+				{
+					"text": "the burner is under the beaker",
+					"when": {
+						"item": "burner",
+						"under": "beaker"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:beaker"
+					]
+				}
+			]
+		},
+		{
+			"title": "Full flame",
+			"text": "Right-click the burner to choose it, then drag its valve fully open. Then click 60x on the clock to hurry the wait.",
+			"why": "Under boiling water half of the hydroxide turns in about half an hour (Ea 127 kJ/mol). Once the water has boiled away and it is hotter, above 150 C, it takes seconds.",
+			"checks": [
+				{
+					"text": "the valve fully open",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.9
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@1"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "It turns black",
+			"text": "Watch the beaker: the water boils away, and the pale blue powder darkens to black.",
+			"why": "Cu(OH)2 -> CuO + H2O: the water leaves as steam, and black copper oxide stays, the same oxide the demo makes from malachite.",
+			"checks": [
+				{
+					"text": "copper oxide in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "copper_oxide",
+						"above_g": 0.7
+					}
+				}
+			]
+		},
+		{
+			"title": "Flame off",
+			"text": "Right-click the burner, then drag its valve shut. Wait for the beaker to cool below 40 C.",
+			"why": "Acid on a hot, dry beaker would spit as it boiled.",
+			"checks": [
+				{
+					"text": "the valve shut",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0.001
+					}
+				},
+				{
+					"text": "the beaker below 40 C",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"below_c": 40
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"part": "Blue again",
+			"title": "Acid on the oxide",
+			"text": "Pick up the acid bottle, right-click the beaker, slide to about 20 mL and pour. Watch the black powder.",
+			"why": "The acid first neutralises the base left over, then eats the oxide: CuO + H2SO4 -> CuSO4 + H2O. The copper is dissolved and blue again; the 0.01 mol went round a cycle and none of it was lost.",
+			"checks": [
+				{
+					"text": "about 20 mL of acid in the beaker",
+					"when": {
+						"item": "beaker",
+						"liquid_above_ml": 15
+					}
+				},
+				{
+					"text": "the oxide dissolved",
+					"when": {
+						"item": "beaker",
+						"species": "copper_oxide",
+						"below_g": 0.02
+					},
+					"wait": true
+				},
+				{
+					"text": "blue copper sulfate again",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_aq",
+						"above_g": 1.4
+					},
+					"wait": true
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "panel:slider@0.08"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		}
+	],
+	"fails": [],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the precipitate, at most",
+			"quantity": {
+				"item": "beaker",
+				"what": "copper_hydroxide",
+				"measure": "g"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "the oxide, at most",
+			"quantity": {
+				"item": "beaker",
+				"what": "copper_oxide",
+				"measure": "g"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "the copper sulfate at the end",
+			"item": "beaker",
+			"species": "copper_sulfate_aq",
+			"show": [
+				"g"
+			]
+		}
+	]
+}

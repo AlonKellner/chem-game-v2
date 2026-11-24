@@ -145,7 +145,7 @@ struct Pupil {
 		const int64_t until = ui->lab().step() + static_cast<int64_t>(seconds * 60.0);
 		while (!done()) {
 			resume();
-			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title);
+			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title << open_checks());
 			REQUIRE_MESSAGE((!ui->strict() || ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
 					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message() << open_checks());
 			ui->frame(1.0 / 60.0);

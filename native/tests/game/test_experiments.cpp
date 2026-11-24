@@ -309,3 +309,47 @@ TEST_CASE("experiment neutralisation: followed with its own gestures, free, it c
 	pupil::follow_through(p, 600);
 	completed(p);
 }
+
+// ---- precipitation and gas (Stage 44)
+
+TEST_CASE("experiment precipitate: followed with its own gestures, strict, the copper comes out, turns black and dissolves blue again (Stage 44)") {
+	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json");
+	CHECK(pupil::follow_through(p, 2400) > 10);
+	completed(p);
+	CHECK(p.grams("beaker", "copper_hydroxide") < 1e-6);
+	CHECK(p.grams("beaker", "copper_oxide") < 0.02);
+	CHECK(p.grams("beaker", "copper_sulfate_aq") > 1.55); // 0.01 mol: 1.596 g, the cycle closed
+}
+
+TEST_CASE("experiment precipitate: played as a person plays it, strict, it completes (Stage 44)") {
+	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json");
+	pupil::play_as_person(p, 2400);
+	completed(p);
+}
+
+TEST_CASE("experiment precipitate: followed with its own gestures, free, it completes (Stage 44)") {
+	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json", false);
+	pupil::follow_through(p, 2400);
+	completed(p);
+}
+
+TEST_CASE("experiment fizz: followed with its own gestures, strict, the malachite fizzes away into the balloon (Stage 44)") {
+	Pupil p("data/benches/fizz.json", "data/tutorials/fizz.json");
+	CHECK(pupil::follow_through(p, 600) == 3);
+	completed(p);
+	CHECK(p.grams("flask", "malachite") < 0.01);
+	CHECK(p.grams("balloon", "carbon_dioxide") > 0.05);
+	CHECK(p.grams("flask", "copper_sulfate_aq") > 2.8); // 0.018 mol: 2.89 g
+}
+
+TEST_CASE("experiment fizz: played as a person plays it, strict, it completes (Stage 44)") {
+	Pupil p("data/benches/fizz.json", "data/tutorials/fizz.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment fizz: followed with its own gestures, free, it completes (Stage 44)") {
+	Pupil p("data/benches/fizz.json", "data/tutorials/fizz.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}

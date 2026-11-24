@@ -490,6 +490,11 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 	const double water = exp(-mix.dissolved / mix.liquid + mix.solvent_excess);
 	const double k = kw * water / (gamma(h) * gamma(oh));
 	const double d = molal(h) - molal(oh);
+	// beyond the activity model's range (Pitzer and Mayorga's fits hold to 6 mol/kg) a solution has no pH the game
+	// can read: a base or an acid boiled nearly dry, with no solid for it to come out as (Stage 44)
+	if (d > PH_MOST_EXCESS || d < -PH_MOST_EXCESS) {
+		return false;
+	}
 	// the free hydrogen ions, without the difference of near equals: m_H = d/2 + sqrt(d^2/4 + k)
 	const double root = std::sqrt(0.25 * d * d + k);
 	const double m_h = d >= 0.0 ? 0.5 * d + root : k / (root - 0.5 * d);
