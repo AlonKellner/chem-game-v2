@@ -26,7 +26,8 @@
 //   vec4 image_vec(int i)    the images things emit by (lab/optics_scene.hpp: images; Stage 42, a screen's)
 //   vec4 anchor_vec(int which, int x, int y)   (OPTICS_RESAMPLE_PASS, or the reference's) a pixel's state at the
 //                            view the scene was made at before the view moved: its hist (0), prox (1), aux (2), or
-//                            what it showed (3, linear); x and y clamped to the screen (below: a view's change)
+//                            what it showed (3, linear); or what the room showed at 1x when last seen whole (4,
+//                            linear); x and y clamped to the screen (below: a view's change)
 
 const int HEADER_VECS = 5;
 const int BODY_VECS = 8;
@@ -735,10 +736,21 @@ vec3 image_row_over(int img, int row, float u0, float u1) {
 }
 
 // A thing's image's light over the sample `across` by `up` about p, at nm: a multiple of the room's light over
-// the part of the sample the thing covers (`cover`: what its layer's solid is, which its glow is weighed by)
+// the part of the sample the thing covers (`cover`: what its layer's solid is, which its glow is weighed by). What
+// the sample takes of each channel does not depend on the wavelength: it is found once for a sample and read again
+// for each of its bands (a pixel reads its image's sample for every band of every point; Stage 42)
+#ifndef OPTICS_THREAD
+#define OPTICS_THREAD
+#endif
+OPTICS_THREAD vec4 image_sampled = vec4(-1.0, 0.0, 0.0, 0.0); // body, p, the sample's size
+OPTICS_THREAD vec4 image_taken = vec4(0.0); // what it takes of each channel, as a share of the covered sample; its image
 float image_glow(int body, vec2 p, float across, float up, float nm, float cover) {
 	if (cover <= 0.0) {
 		return 0.0;
+	}
+	if (image_sampled.x == float(body) && image_sampled.y == p.x && image_sampled.z == p.y && image_sampled.w == across * 4096.0 + up * cover) {
+		int img = int(image_taken.w);
+		return image_taken.x * image_channel(img, 0, nm) + image_taken.y * image_channel(img, 1, nm) + image_taken.z * image_channel(img, 2, nm);
 	}
 	int at = HEADER_VECS + body * BODY_VECS;
 	vec4 rect = scene_vec(at);
@@ -767,7 +779,9 @@ float image_glow(int body, vec2 p, float across, float up, float nm, float cover
 	}
 	// the sample's area in the image's pixels: what was lit, as a share of all of it, then of its covered part
 	float share = 1.0 / (max(across * sx * up * sy, 1.0e-20) * cover);
-	return share * (lit.x * image_channel(img, 0, nm) + lit.y * image_channel(img, 1, nm) + lit.z * image_channel(img, 2, nm));
+	image_sampled = vec4(float(body), p.x, p.y, across * 4096.0 + up * cover);
+	image_taken = vec4(share * lit.x, share * lit.y, share * lit.z, float(img));
+	return image_taken.x * image_channel(img, 0, nm) + image_taken.y * image_channel(img, 1, nm) + image_taken.z * image_channel(img, 2, nm);
 }
 
 // what a layer's solid glows with at nm (a multiple of the room's light): its set's row, or where that is -1,
@@ -4027,18 +4041,25 @@ int anchor_samples(vec3 a) {
 	return a.z <= 1.0 ? 4 : 16;
 }
 
-// what the anchor showed at a place (linear)
-vec3 anchor_shown(vec3 a) {
+// what the anchor showed at a place (linear): the view's own (3), or the room's at 1x (4)
+vec3 anchor_shown(vec3 a, int which) {
 	vec3 c = vec3(0.0);
 	for (int k = 0; k < 16; k++) {
 		if (k >= anchor_samples(a)) {
 			break;
 		}
 		vec3 at = anchor_sample(a, k);
-		vec4 v = anchor_vec(3, int(at.x), int(at.y));
+		vec4 v = anchor_vec(which, int(at.x), int(at.y));
 		c = c + vec3(v.x, v.y, v.z) * at.z;
 	}
 	return c;
+}
+
+// whether a place of the anchor's screen is within the part of it the anchor holds of the room, `room` (left, top,
+// right, bottom): what a view further out shows of the room beyond it is not the anchor's
+bool anchor_covers(vec3 a, vec4 room) {
+	float half_span = 0.5 * max(a.z, 1.0);
+	return a.x - half_span >= room.x && a.x + half_span <= room.z && a.y - half_span >= room.y && a.y + half_span <= room.w;
 }
 
 // The state a pixel of the view `now` starts from, carried from the anchor's (made at the view `from`): its fixed

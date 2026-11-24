@@ -42,7 +42,10 @@ public:
 	// to move); and what each pixel shows carried from the anchor's, made at the view `from`, to the view `now` (each
 	// (scale, x, y, 0)), tracing nothing; `rest`: its state too, as it starts again at the view now.
 	void anchor();
-	void resample(const float now[4], const float from[4], bool rest);
+	// what the room shows at 1x, kept (a view further out than the anchor's shows the rest of the room from it); and
+	// the room's part of the anchor's screen (left, top, right, bottom): what the anchor holds of it
+	void keep_whole();
+	void resample(const float now[4], const float from[4], const float room[4], bool rest);
 	// What the screen shows: an RGBA8 texture, sRGB-encoded, alpha 0 where no body is.
 	godot::Ref<godot::Texture2DRD> shown() const { return shown_texture_; }
 
@@ -63,10 +66,11 @@ private:
 		int32_t kept, stamp; // where the rectangle's kept beams begin (the beams' pass); which run of the passes this is
 		float rays; // the rays' budget: points a frame
 		int32_t pad;
-		float view_now[4], view_from[4]; // (a view's change, Stage 42)
+		float view_now[4], view_from[4], room[4]; // (a view's change, Stage 42)
 		int32_t mode, pad3, pad4, pad5;
 	};
 	godot::RID anchor_[4];
+	godot::RID whole_; // what the room showed at 1x, when last seen whole (Stage 42)
 	godot::RID shader_[PASSES], pipeline_[PASSES], uniforms_[PASSES];
 	godot::RID corners_; // the lattice of pixel corners: three vec4s a corner (Stage 33)
 	// each pixel's kept beams (Stage 33): a record for every pixel of the rectangles, one rectangle after another;

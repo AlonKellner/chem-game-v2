@@ -360,6 +360,10 @@ const char *cg_ui_playing(cg_ui *ui) {
 	return ui != nullptr && ui->playing ? ui->play.mark().c_str() : nullptr;
 }
 
+const char *cg_ui_play_shot(cg_ui *ui) {
+	return ui != nullptr && ui->playing ? ui->play.shot().c_str() : nullptr;
+}
+
 cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_draw: null argument, or the list's size is not set");
@@ -387,6 +391,11 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	std::copy(whole, whole + 4, out->view);
 	std::copy(whole, whole + 4, out->view_now);
 	out->view_moving = 0;
+	const lab::ViewRoom room = lab::Ui::view_room();
+	out->room[0] = room.x;
+	out->room[1] = room.y;
+	out->room[2] = room.x + room.w;
+	out->room[3] = room.y + room.h;
 	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 	out->table = scene.table.data();
 	out->revision = scene.revision;

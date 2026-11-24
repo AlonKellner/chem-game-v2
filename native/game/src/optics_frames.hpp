@@ -71,6 +71,8 @@ struct OpticsFramesCore {
 	// (scale, x, y, 0): a point l of the layout at l * scale + (x, y) on the screen). `full_key`: the scene's whole
 	// content key given to each (O20's self-test: no estimate read again).
 	virtual void state(int x, int y, double hist[4], double prox[4], double aux[4]) const = 0;
+	// the screen's rectangle the sample spans: left, top, right, bottom
+	virtual void bounds(double out[4]) const = 0;
 	virtual void resample(const OpticsScene &scene, const OpticsFramesCore &anchor, const double now[4], const double from[4], bool full_key) = 0;
 };
 // (`step`: every step-th pixel across and down, from (x, y); w and h are then how many across and down)

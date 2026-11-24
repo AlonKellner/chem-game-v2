@@ -14,15 +14,19 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_magnify_gesture.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/input_event_pan_gesture.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -203,6 +207,10 @@ void ChemLab::_process(double delta) {
 		if (!mark_.is_empty() && last_usec_ != 0) {
 			Timed *t = timed_for(mark_);
 			t->frame_ms.push_back(static_cast<double>(now - last_usec_) / 1000.0);
+			// (LAB_PLAY_PRINT: a slow frame's parts, Stage 42)
+			if (t->frame_ms.back() > 30.0 && godot::OS::get_singleton()->has_environment("LAB_PLAY_PRINT")) {
+				godot::UtilityFunctions::print("slow frame under ", mark_, ": ", t->frame_ms.back(), " ms; the screen ", ui_ms_, ", the scene ", scene_ms_, ", the pass ", pass_ms_, ", painting ", paint_ms_);
+			}
 			t->ui_ms.push_back(ui_ms_);
 			t->scene_ms.push_back(scene_ms_);
 			t->pass_ms.push_back(pass_ms_);
@@ -215,6 +223,20 @@ void ChemLab::_process(double delta) {
 		ui_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - now) / 1000.0;
 		const char *mark = cg_ui_playing(ui_);
 		mark_ = mark != nullptr ? godot::String::utf8(mark) : godot::String();
+		// a picture the play asks for (Stage 42): taken once the frame is painted, into LAB_SHOTS (or user://)
+		if (shot_wait_ > 0 && --shot_wait_ == 0 && get_viewport() != nullptr) {
+			const godot::String dir = godot::OS::get_singleton()->has_environment("LAB_SHOTS") ? godot::OS::get_singleton()->get_environment("LAB_SHOTS") : godot::String("user://");
+			const godot::Ref<godot::Image> image = get_viewport()->get_texture()->get_image();
+			if (image.is_valid()) {
+				image->save_png(dir.path_join(shot_ + ".png"));
+				godot::UtilityFunctions::print("play: ", shot_, ".png");
+			}
+		}
+		const char *shot = cg_ui_play_shot(ui_);
+		if (shot != nullptr && shot[0] != '\0') {
+			shot_ = godot::String::utf8(shot);
+			shot_wait_ = 3;
+		}
 		keep_export();
 		if (compute_.ready()) {
 			godot::RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ChemLab::optics_frame));
@@ -483,19 +505,25 @@ void ChemLab::optics_frame() {
 	compute_.upload(optics);
 	// A view's change (Stage 42): while the view moves, its pixels carried from where they stood, nothing traced; at
 	// rest, their state carried once to the view now, and on
+	const bool whole = optics.view[0] == 1.0f && optics.view[1] == 0.0f && optics.view[2] == 0.0f;
 	if (optics.view_moving) {
 		if (!anchored_) {
+			if (whole) {
+				compute_.keep_whole();
+			}
 			compute_.anchor();
 			std::copy(optics.view, optics.view + 4, anchor_view_);
 			anchored_ = true;
 		}
-		compute_.resample(optics.view_now, anchor_view_, false);
+		compute_.resample(optics.view_now, anchor_view_, optics.room, false);
 		pass_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - composed) / 1000.0;
 		return;
 	}
 	if (anchored_) {
-		compute_.resample(optics.view, anchor_view_, true);
+		compute_.resample(optics.view, anchor_view_, optics.room, true);
 		anchored_ = false;
+	} else if (whole && ++whole_frames_ % 30 == 0) {
+		compute_.keep_whole(); // (the room seen whole, kept now and then: what a view out to it shows as it moves)
 	}
 	if (optics_restarting_) {
 		compute_.restart();

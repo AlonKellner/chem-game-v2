@@ -14,6 +14,7 @@
 #include <cmath>
 #include <map>
 #include <string>
+#include <unordered_map>
 
 namespace lab {
 
@@ -660,12 +661,24 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 						scene.images[static_cast<size_t>(channels) * 4 + static_cast<size_t>(c * ROW + i)] = static_cast<float>(light[static_cast<size_t>(c)][static_cast<size_t>(i)]);
 					}
 				}
+				// (what the panel drives its primaries to for each colour, worked out once a colour: a picture has few)
+				thread_local std::unordered_map<uint32_t, std::array<float, 3>> drives;
+				if (drives.size() > 65536) {
+					drives.clear();
+				}
 				for (int y = 0; y < h; ++y) {
 					float *row = &scene.images[static_cast<size_t>(sums + y * (w + 1)) * 4];
 					double run[3] = { 0.0, 0.0, 0.0 };
 					for (int x = 0; x < w; ++x) {
-						float drive[3];
-						optics_screen_drive(&b.image[(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3], drive);
+						const uint8_t *code = &b.image[(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3];
+						const uint32_t colour = static_cast<uint32_t>(code[0]) << 16 | static_cast<uint32_t>(code[1]) << 8 | code[2];
+						auto found = drives.find(colour);
+						if (found == drives.end()) {
+							std::array<float, 3> d{};
+							optics_screen_drive(code, d.data());
+							found = drives.emplace(colour, d).first;
+						}
+						const float *drive = found->second.data();
 						for (int c = 0; c < 3; ++c) {
 							scene.image_weights.push_back(drive[c]);
 							run[c] += drive[c];

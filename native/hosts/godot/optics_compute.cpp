@@ -41,7 +41,8 @@ layout(set = 0, binding = 17, rgba32f) uniform restrict readonly image2D anchor_
 layout(set = 0, binding = 18, rgba32f) uniform restrict readonly image2D anchor_prox;
 layout(set = 0, binding = 19, rgba32f) uniform restrict readonly image2D anchor_aux;
 layout(set = 0, binding = 20, rgba8) uniform restrict readonly image2D anchor_seen;
-layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; int pad2; vec4 view_now; vec4 view_from; int mode; int pad3; int pad4; int pad5; } params;
+layout(set = 0, binding = 21, rgba8) uniform restrict readonly image2D whole_seen;
+layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; int pad2; vec4 view_now; vec4 view_from; vec4 room; int mode; int pad3; int pad4; int pad5; } params;
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
 vec4 line_vec(int i) { return line_buffer.v[i]; }
@@ -60,7 +61,7 @@ vec4 anchor_vec(int which, int x, int y) {
 	if (which == 0) { return imageLoad(anchor_hist, at); }
 	if (which == 1) { return imageLoad(anchor_prox, at); }
 	if (which == 2) { return imageLoad(anchor_aux, at); }
-	vec4 c = imageLoad(anchor_seen, at);
+	vec4 c = which == 3 ? imageLoad(anchor_seen, at) : imageLoad(whole_seen, at);
 	return vec4(anchor_linear(c.x), anchor_linear(c.y), anchor_linear(c.z), c.w);
 }
 // ---- the per-pixel source (native/game/shader/optics_pixel.glsl)
@@ -94,7 +95,10 @@ void main() {
 		return;
 	}
 	vec2 p = vec2(float(at.x) + 0.5, float(at.y) + 0.5);
-	vec3 c = anchor_shown(anchor_place(p, params.view_now, params.view_from));
+	// (where the view's anchor holds the room, its pixels; beyond, what the room showed when last seen whole)
+	vec3 a = anchor_place(p, params.view_now, params.view_from);
+	bool covered = anchor_covers(a, params.room);
+	vec3 c = covered ? anchor_shown(a, 3) : anchor_shown(anchor_place(p, params.view_now, vec4(1.0, 0.0, 0.0, 0.0)), 4);
 	imageStore(shown_image, at, vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0));
 	if (params.mode == 0) {
 		return;
@@ -105,8 +109,8 @@ void main() {
 		q = path_of(p, 1.0);
 		bare = q.cover <= 0.0;
 	}
-	if (bare) {
-		imageStore(key_image, at, vec4(-3.0)); // the wall: shown again from its table
+	if (bare || !covered) {
+		imageStore(key_image, at, vec4(-3.0)); // the wall, shown again from its table; or no anchor: it starts afresh
 		return;
 	}
 	PixelState s = anchor_state(p, params.view_now, params.view_from, q.key.z);
@@ -237,7 +241,7 @@ void OpticsCompute::release() {
 	}
 	shown_texture_.unref();
 	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], shader_[0], shader_[1], shader_[2], shader_[3], corners_, kept_, scene_.rid, rows_.rid,
-				 lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, anchor_[0], anchor_[1], anchor_[2], anchor_[3], asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+				 lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, anchor_[0], anchor_[1], anchor_[2], anchor_[3], whole_, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -317,6 +321,8 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 	}
 	anchor_[3] = image(RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM);
 	rd_->texture_clear(anchor_[3], godot::Color(0, 0, 0, 0), 0, 1, 0, 1);
+	whole_ = image(RenderingDevice::DATA_FORMAT_R8G8B8A8_UNORM);
+	rd_->texture_clear(whole_, godot::Color(0, 0, 0, 0), 0, 1, 0, 1);
 	shown_texture_.instantiate();
 	shown_texture_->set_texture_rd_rid(shown_);
 	return true;
@@ -449,6 +455,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		for (int i = 0; i < 4; ++i) {
 			add(RenderingDevice::UNIFORM_TYPE_IMAGE, 17 + i, anchor_[i]);
 		}
+		add(RenderingDevice::UNIFORM_TYPE_IMAGE, 21, whole_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 14, corners_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 15, kept_);
 		for (int pass = 0; pass < PASSES; ++pass) {
@@ -483,7 +490,7 @@ void OpticsCompute::run(double budget, bool again) {
 	stamp_ = stamp_ % 16000000 + 1; // (a float holds it exactly; 0 is no run)
 	const int64_t list = rd_->compute_list_begin();
 	const auto pass_over = [&](int pass, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t kept = -1) {
-		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, 0, { 1, 0, 0, 0 }, { 1, 0, 0, 0 }, 0, 0, 0, 0 };
+		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, 0, { 1, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 0, 0, 0 }, 0, 0, 0, 0 };
 		godot::PackedByteArray push;
 		push.resize(sizeof params);
 		std::memcpy(push.ptrw(), &params, sizeof params);
@@ -527,13 +534,20 @@ void OpticsCompute::anchor() {
 	}
 }
 
-void OpticsCompute::resample(const float now[4], const float from[4], bool rest) {
+void OpticsCompute::keep_whole() {
+	if (rd_ != nullptr) {
+		rd_->texture_copy(shown_, whole_, godot::Vector3(0, 0, 0), godot::Vector3(0, 0, 0), godot::Vector3(WIDTH, HEIGHT, 1), 0, 0, 0, 0);
+	}
+}
+
+void OpticsCompute::resample(const float now[4], const float from[4], const float room[4], bool rest) {
 	if (rd_ == nullptr || !have_scene_ || !uniforms_[RESAMPLE].is_valid()) {
 		return;
 	}
-	Params params{ frame_, parity_, 0.0f, static_cast<float>(WIDTH * HEIGHT), 0, 0, WIDTH, HEIGHT, -1, stamp_, ray_points_, 0, {}, {}, rest ? 1 : 0, 0, 0, 0 };
+	Params params{ frame_, parity_, 0.0f, static_cast<float>(WIDTH * HEIGHT), 0, 0, WIDTH, HEIGHT, -1, stamp_, ray_points_, 0, {}, {}, {}, rest ? 1 : 0, 0, 0, 0 };
 	std::copy(now, now + 4, params.view_now);
 	std::copy(from, from + 4, params.view_from);
+	std::copy(room, room + 4, params.room);
 	godot::PackedByteArray push;
 	push.resize(sizeof params);
 	std::memcpy(push.ptrw(), &params, sizeof params);
@@ -543,6 +557,17 @@ void OpticsCompute::resample(const float now[4], const float from[4], bool rest)
 	rd_->compute_list_set_push_constant(list, push, static_cast<uint32_t>(push.size()));
 	rd_->compute_list_dispatch(list, static_cast<uint32_t>((WIDTH + GROUP_X - 1) / GROUP_X), static_cast<uint32_t>((HEIGHT + GROUP_Y - 1) / GROUP_Y), 1);
 	rd_->compute_list_end();
+	if (rest) {
+		// The first frame at the view reads its budget's scale from the last frame's asks, which were a still
+		// picture's: as though every pixel asks a fresh start's points, so that frame's batches keep to the budget
+		// too. (Each pixel whose history starts again still reads its estimate whole: where a screen fills the room's
+		// part of the screen, that first frame takes 250 ms on the machine measured; docs/TDD_42_VIEWER.md, Open.)
+		const uint32_t fresh = static_cast<uint32_t>(WIDTH * HEIGHT) * 64u;
+		godot::PackedByteArray total;
+		total.resize(4);
+		std::memcpy(total.ptrw(), &fresh, 4);
+		rd_->buffer_update(asked_, static_cast<uint32_t>(4 * parity_), 4, total);
+	}
 }
 
 } // namespace chem_godot

@@ -158,6 +158,8 @@ CG_API void cg_ui_set_budget(cg_ui *ui, double ms);
  * ("" for none), or NULL when no play runs (none was given, or it is over). */
 CG_API cg_status cg_ui_play(cg_ui *ui, const char *play_json);
 CG_API const char *cg_ui_playing(cg_ui *ui);
+/* (Stage 42) The picture the play asks for after the frame last given ("" for none, NULL when no play runs). */
+CG_API const char *cg_ui_play_shot(cg_ui *ui);
 
 enum {
 	CG_DRAW_RECT = 0, /* x, y, w, h: filled */
@@ -241,6 +243,7 @@ typedef struct cg_optics {
 	float view[4];
 	float view_now[4];
 	int32_t view_moving;
+	float room[4]; /* the room's part of the screen, which the view is of: left, top, right, bottom */
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames

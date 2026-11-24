@@ -115,7 +115,10 @@ private:
 	bool down_ = false;
 	bool panning_ = false; // the middle button held: the room's view moves with the pointer (Stage 42)
 	bool anchored_ = false; // the view moves: the pass shows its pixels carried from the view `anchor_view_`
+	godot::String shot_; // a picture a play asked for, taken when shot_wait_ frames have passed (Stage 42)
+	int shot_wait_ = 0;
 	float anchor_view_[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	int whole_frames_ = 0;
 	static constexpr float PAN_PIXELS = 24.0f; // a trackpad's two-finger step, in pixels of the screen
 	int32_t state_of(const godot::InputEventWithModifiers *event) const;
 	godot::TextureRect *optics_ = nullptr; // what the optical pass shows

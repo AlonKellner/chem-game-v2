@@ -181,6 +181,7 @@ static_assert(TRACE_MOST == trace::MEETINGS_MOST && TRACE_TURNS == trace::TURNS_
 struct Use {
 	explicit Use(const OpticsScene &s) {
 		current = &s;
+		image_sampled = vec4(-1.0); // (what a sample of a screen took is the scene's: read anew in another)
 	}
 	~Use() { current = nullptr; }
 	Use(const Use &) = delete;
@@ -421,11 +422,21 @@ struct Frames final : OpticsFramesCore {
 		}
 	}
 
+	void bounds(double out[4]) const override {
+		out[0] = x_;
+		out[1] = y_;
+		out[2] = x_ + w_ * step_;
+		out[3] = y_ + h_ * step_;
+	}
+
 	void resample(const OpticsScene &scene, const OpticsFramesCore &anchor, const double now[4], const double from[4], bool full_key) override {
 		if (!ready(scene)) {
 			return;
 		}
 		const vec4 v_now(real(now[0]), real(now[1]), real(now[2]), real(0.0)), v_from(real(from[0]), real(from[1]), real(from[2]), real(0.0));
+		double held[4];
+		anchor.bounds(held);
+		const vec4 room = vec4(static_cast<real>(held[0]), static_cast<real>(held[1]), static_cast<real>(held[2]), static_cast<real>(held[3])); // (what the anchor holds)
 		in_pieces(h_, [&](int row) {
 			const Use use(scene);
 			anchor_core = &anchor;
@@ -434,7 +445,7 @@ struct Frames final : OpticsFramesCore {
 				const int x = x_ + col * step_, y = y_ + row * step_;
 				const Path q = at(x, y);
 				st.kept = {};
-				if (q.cover <= 0.0) {
+				if (q.cover <= 0.0 || !anchor_covers(anchor_place(vec2(x + 0.5, y + 0.5), v_now, v_from), room)) {
 					st.s.hist = st.s.prox = st.s.aux = vec4(0.0);
 					st.s.key = vec4(-3.0); // (the wall: shown again from the wall's table)
 					continue;
