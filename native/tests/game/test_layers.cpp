@@ -7,6 +7,7 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "part.hpp"
 #include "sparse.hpp"
 
 #include <doctest/doctest.h>
@@ -186,12 +187,14 @@ TEST_CASE("layers: a ray followed through a held vessel and a standing one lands
 	MESSAGE(compared << " rays through a held vessel over a standing one: the renderer's within " << worst << " of a pixel of the truth's tracer");
 }
 
+// ctest: parts 2
 TEST_CASE("layers: every pixel's colour is what its rays bring, through what is held and what stands behind it (Stage 21)") {
 	// The truth: 64 rays a pixel, each traced through every body, the wall read from the shapes themselves.
 	// The held vessel's top, surface and floor, and the standing one's, cut pixels' rows; its rims cross the
 	// standing vessel's; the standing one's liquid is blue.
 	double worst = 0.0, sum = 0.0;
 	int compared = 0;
+	size_t counted = 0; // (as ctest runs it, in two entries: each every second pixel, part.hpp)
 	const lab::OpticsRoom r = drawn_room();
 	for (const float x : { 205.0f, 237.5f }) {
 		const OpticsScene scene = scene_of(r, held_blue(), x, 118.3f);
@@ -200,7 +203,7 @@ TEST_CASE("layers: every pixel's colour is what its rays bring, through what is 
 		const int surface_held = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + L::BODY_VECS + L::FORM) * 4 + 2]);
 		for (const int y : { 118, 135, 149, surface_standing, surface_held, 195, 205 }) {
 			for (int px = static_cast<int>(x) - 1; px <= static_cast<int>(x + HELD_W); px += (y == surface_held ? 1 : 3) * sparse()) {
-				if (lab::optics_cover(scene, px, y) <= 0.0) {
+				if (lab::optics_cover(scene, px, y) <= 0.0 || !part().mine(counted++)) {
 					continue;
 				}
 				double shown[3], truth[3];
@@ -217,7 +220,7 @@ TEST_CASE("layers: every pixel's colour is what its rays bring, through what is 
 			}
 		}
 	}
-	CHECK(compared > 300 / sparse());
+	CHECK(compared > 300 / sparse() / part().count);
 	CHECK(sum / compared < 1.5);
 	MESSAGE(compared << " pixels through a held vessel and a standing one, against 64 rays each: worst " << worst << " on the eye metric (visible above 8), mean " << sum / compared);
 }

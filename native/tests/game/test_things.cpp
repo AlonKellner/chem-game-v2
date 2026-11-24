@@ -6,6 +6,8 @@
 
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <algorithm>
@@ -86,10 +88,11 @@ double eye(const double a[3], const double b[3]) {
 }
 
 // every pixel of a rectangle that a body covers, against 64 of the truth's rays: the worst on the eye metric
+// (under the sanitizers every sparse()-th across: tests/support/sparse.hpp)
 double worst_of(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int &compared) {
 	double worst = 0.0;
 	for (int y = y0; y < y1; y += step) {
-		for (int x = x0; x < x1; x += step) {
+		for (int x = x0; x < x1; x += step * sparse()) {
 			if (lab::optics_cover(scene, x, y) <= 0.0) {
 				continue;
 			}
@@ -127,7 +130,7 @@ TEST_CASE("things: a slab is opaque, of its face's reflectance, its corners roun
 	CHECK(lab::optics_cover(scene, 210, 151) > 0.5);
 	int compared = 0;
 	const double worst = worst_of(scene, 198, 148, 264, 190, 2, compared);
-	CHECK(compared > 400);
+	CHECK(compared > 400 / sparse());
 	MESSAGE(compared << " pixels of a slab against 64 rays each: worst " << worst << " on the eye metric");
 }
 
@@ -138,7 +141,7 @@ TEST_CASE("things: a bar is every place within half its width of its line, at an
 	CHECK(lab::optics_cover(scene, 270, 200) == 0.0);
 	int compared = 0;
 	const double worst = worst_of(scene, 206, 156, 336, 226, 1, compared);
-	CHECK(compared > 300);
+	CHECK(compared > 300 / sparse());
 	MESSAGE(compared << " pixels of a bar against 64 rays each: worst " << worst);
 }
 
@@ -182,7 +185,7 @@ TEST_CASE("things: a flame is glowing gas: the wall is seen through it, with its
 	CHECK(lab::check_O2(scene, 411, 138) == "");
 	int compared = 0;
 	const double worst = worst_of(scene, 398, 98, 426, 142, 1, compared);
-	CHECK(compared > 300);
+	CHECK(compared > 300 / sparse());
 	MESSAGE(compared << " pixels of a flame against 64 rays each: worst " << worst);
 }
 

@@ -8,6 +8,7 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "part.hpp"
 #include "sparse.hpp"
 
 #include <doctest/doctest.h>
@@ -430,6 +431,7 @@ TEST_CASE("optics: the picture is the pixels, and the table moves only when what
 	CHECK(lab::check_O1(scene) == "");
 }
 
+// ctest: parts 12
 TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the flask turns blue (Stage 10)") {
 	std::string why;
 	const std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
@@ -467,13 +469,20 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
 	lab::CieLab after_dissolving{}, boiled_down{};
 	int n = 0, scans = 0;
-	// every seventeenth pixel across and down (under the sanitizers, sparsely across: 801 wavelengths a pixel)
+	// every seventeenth pixel across and down (801 wavelengths a pixel; under the sanitizers the first of the parts
+	// below runs, a twelfth of them)
 	std::vector<std::pair<int, int>> places;
 	for (int y = 100; y < 1080; y += 17) {
-		for (int x = 3; x < 1400; x += 17 * sparse()) {
+		for (int x = 3; x < 1400; x += 17) {
 			places.push_back({ x, y });
 		}
 	}
+	// as ctest runs it, twelve entries, each a twelfth of the scenes' pixels, a scene's pixel by a scene's pixel
+	// (Stage 40, part.hpp: a few pixels through the glass are a second or more at every scene, and so are shared
+	// out). The lab unchecked: its state is the same (D1), and the demo's session is checked by demo_session and
+	// lab_tests.lab
+	ui->lab().set_checking(false);
+	std::vector<std::pair<int, int>> mine;
 	// what a scene is known by: a command that leaves all of it as it was leaves every pixel as it was
 	std::array<uint64_t, 3> scanned{};
 	for (const nlohmann::json &command : session.at("script")) {
@@ -486,13 +495,19 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			// (Stage 35: the pixels dealt one by one among the threads, the reference's scene in use each thread's
 			// own. Dealt by rows, a row a thread, the threads whose rows cross the vessels worked alone for most
 			// of the scan, read as it now is by each pixel's own rays: 10 s a command, 3 s so.)
-			std::vector<std::string> said(12);
+			mine.clear();
+			for (size_t i = 0; i < places.size(); ++i) {
+				if (part().mine(static_cast<size_t>(scans) * places.size() + i)) {
+					mine.push_back(places[i]);
+				}
+			}
+			std::vector<std::string> said(test_threads());
 			std::vector<std::thread> threads;
 			std::atomic<size_t> next{ 0 };
 			for (size_t t = 0; t < said.size(); ++t) {
 				threads.emplace_back([&, t] {
-					for (size_t i = next.fetch_add(1); i < places.size() && said[t].empty(); i = next.fetch_add(1)) {
-						said[t] = lab::check_O2(scene, places[i].first, places[i].second);
+					for (size_t i = next.fetch_add(1); i < mine.size() && said[t].empty(); i = next.fetch_add(1)) {
+						said[t] = lab::check_O2(scene, mine[i].first, mine[i].second);
 					}
 				});
 			}

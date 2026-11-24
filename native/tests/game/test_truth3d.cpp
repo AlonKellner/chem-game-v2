@@ -207,6 +207,7 @@ TEST_CASE("frames: a shaped vessel moved up or down settles on its new picture, 
 	CHECK(worst < lab::EYE_VISIBLE);
 }
 
+// ctest: threads 4
 TEST_CASE("renderer: through a flask's curved rows, before a wall of upright lines, its pixels are the 3D truth's (Stage 25)") {
 	// lines drawn up and down the wall: bending up and down changes nothing of them, so the curved rows are held
 	// to the truth across, row by row (its rims apart: within a pixel of one, rays graze)
