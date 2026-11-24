@@ -566,7 +566,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 				}
 			}
 			const int start = shader::set_of(m.body) * optics_layout::ROWS_PER_SET * optics_layout::ROW;
-			const double per_cm = shader::liquid_at(m.body, start, nm);
+			const double per_cm = shader::liquid_at(m.body, start, nm, m.cross_y);
 			double glow = shader::row_at(start + optics_layout::GLOW_ROW * optics_layout::ROW, nm);
 			if (glow < 0.0) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
@@ -1930,6 +1930,25 @@ std::string check_O1(const OpticsScene &scene) {
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(n_liquid >= 1.0) || !(n_wall >= 1.0) || glow != 0.0) {
 				std::snprintf(text, sizeof text, "O1: body %d at %g nm: a long-wave row out of its range (depth %g, wall %g, reflectance %g, n %g, %g, light %g)", i,
 						chem::optics::lwir_nm(k), liquid, wall, solid, n_liquid, n_wall, glow);
+				return text;
+			}
+		}
+		{
+			// a layered vessel's bands (Stage 47): no more than MAX_BANDS, each a set there is, rising
+			const size_t own = static_cast<size_t>(static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4]) * ROWS_PER_SET + BANDS_ROW) * ROW;
+			const int bands = static_cast<int>(scene.rows[own]);
+			double lo = -1e30;
+			for (int k = 0; k < bands && k <= MAX_BANDS; ++k) {
+				const double band_set = scene.rows[own + 1 + 3 * static_cast<size_t>(k)], from = scene.rows[own + 2 + 3 * static_cast<size_t>(k)],
+							 to = scene.rows[own + 3 + 3 * static_cast<size_t>(k)];
+				if (!(band_set >= 0.0) || band_set >= sets || !(to >= from) || from < lo) {
+					std::snprintf(text, sizeof text, "O1: body %d: its band %d is no set there is, or does not rise (%g, %g to %g)", i, k, band_set, from, to);
+					return text;
+				}
+				lo = to;
+			}
+			if (bands < 0 || bands > MAX_BANDS) {
+				std::snprintf(text, sizeof text, "O1: body %d: %d bands", i, bands);
 				return text;
 			}
 		}

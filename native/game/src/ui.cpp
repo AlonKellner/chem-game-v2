@@ -5141,6 +5141,9 @@ struct Ui::Impl {
 				row(text_of("holds %.0f N", v.hold_n), DIM, 15);
 			} else {
 				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
+				if (v.layers.size() > 1) { // its column (Stage 47)
+					row(text_of("layered: %d layers, ", static_cast<int>(v.layers.size())) + text_of("%.1f C at the top, ", v.layers.front().celsius) + text_of("%.1f C at the bottom", v.layers.back().celsius), DIM, 15);
+				}
 				if (v.boiling) { // its bubbles (Stage 45)
 					row(v.bubbles_surface ? text_of("boiling: bubbles of %.1f mm reach the surface", v.bubble_mm) : text_of("bubbles from the floor, gone %.1f mm up", v.bubbles_end_cm * 10.0), DIM, 15);
 				} else if (v.gas_extinction > 0.0) {

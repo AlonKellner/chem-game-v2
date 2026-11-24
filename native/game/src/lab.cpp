@@ -63,7 +63,9 @@ struct Item {
 	std::string id;
 	Kind kind = Kind::Vessel;
 	CellId cell; // a vessel's or a bag's contents; a burner's flame
-	bool landed = false; // pouring: a gentle pour of it has laid its liquid on the other's as a layer of its own
+	// pouring (Stage 47): 0 nothing yet; 1 a gentle pour of it has laid its liquid on the other's as a layer of its own;
+	// 2 it poured faster than that, and stirred it in: it lays nothing more until it ends
+	int landed = 0;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -1488,7 +1490,7 @@ struct Lab::Impl {
 		}
 		world().disconnect(x.pour);
 		x.pours_into = -1;
-		x.landed = false;
+		x.landed = 0;
 		x.pour = EdgeId{};
 		x.inverted = false;
 		x.tilt = x.cap = 0.0;
@@ -1745,6 +1747,9 @@ struct Lab::Impl {
 	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
 	// an upside-down one's an orifice's under its head
 	void set_pours() {
+		// what lands as a layer, or is stirred back in, moves after every drain's rate is set (a drain's rate is set
+		// before the step's first transfer)
+		std::vector<int> lay, stir;
 		for (Item &x : items) {
 			if (x.pours_into < 0) {
 				continue;
@@ -1767,16 +1772,28 @@ struct Lab::Impl {
 				rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * head_m);
 				solids = 1.0; // upside down, what rests lies on the cap
 			}
+			const double nominal = rate; // (what it pours at, not its last step's remainder)
 			if (x.pour_left_m3 >= 0.0) {
 				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
 			}
 			// a gentle pour (Stage 47: a trickle, no more than GENTLE_POUR) lays what it pours on the liquid there as a
 			// layer of its own, as a syrup is layered under a spirit; a faster one stirs it in as it lands
-			if (rate > 0.0 && rate <= GENTLE_POUR && !x.landed && x.pour_left_m3 < 0.0) {
-				push_surface(items[static_cast<size_t>(x.pours_into)]);
-				x.landed = true;
+			if (rate > 0.0 && nominal <= GENTLE_POUR * (1.0 + 1e-9) && x.landed == 0) {
+				lay.push_back(x.pours_into);
+				x.landed = 1;
+			} else if (nominal > GENTLE_POUR * (1.0 + 1e-9) && rate > 0.0) {
+				if (x.landed == 1) {
+					stir.push_back(x.pours_into); // (a pour that sped up: what it laid it stirs in)
+				}
+				x.landed = 2;
 			}
 			world().set_drain(x.pour, rate, solids, solids_rate);
+		}
+		for (const int t : lay) {
+			push_surface(items[static_cast<size_t>(t)]);
+		}
+		for (const int t : stir) {
+			stir_in_surface(items[static_cast<size_t>(t)]);
 		}
 	}
 
@@ -1835,6 +1852,22 @@ struct Lab::Impl {
 			}
 		}
 		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), t.cell, down, enthalpy_carried(table(), down, kelvin(t.cell)));
+		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+	}
+	// What a pour laid on a vessel stirred back in (Stage 47): the layer under its own cell moved up into it, once
+	void stir_in_surface(Item &t) {
+		const std::vector<CellId> layers = layers_of(t);
+		if (layers.empty() || !layered_cell(layers[0])) {
+			return;
+		}
+		const CellState &c = world().snapshot_cell(layers[0]);
+		std::vector<SpeciesAmount> amounts;
+		for (size_t s = 0; s < c.amount.size(); ++s) {
+			if (c.amount[s] != 0) {
+				amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ c.amount[s] } });
+			}
+		}
+		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), layers[0], amounts, Energy{ c.energy });
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 	}
 	// A burner under a layered vessel heats its lowest layer (Stage 47): its edge follows it, at a step boundary
@@ -4188,10 +4221,13 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" does not hold that much liquid";
 			return false;
 		}
-		// full tilt until that much has run (at most a minute of the lab past what its rate takes), then upright
-		const double full_rate = std::max(glass::find(x.glassware, x.nominal_ml)->pour_ml_s * 1e-6, 1e-12);
+		// full tilt until that much has run (at most a minute of the lab past what its rate takes), then upright; or,
+		// "gentle" (Stage 47), a trickle, laid on what is there as a layer of its own
+		const double tilted = std::max(glass::find(x.glassware, x.nominal_ml)->pour_ml_s * 1e-6, 1e-12);
+		const bool gentle = c.value("gentle", false);
+		const double full_rate = gentle ? std::min(GENTLE_POUR, tilted) : tilted;
 		const int64_t most = static_cast<int64_t>((wanted / full_rate + 60.0) * 60.0);
-		x.tilt = 1.0;
+		x.tilt = full_rate / tilted;
 		double ran = 0.0; // what the drain was given to run: its rate's volume each step, not what evaporation took
 		for (int64_t k = 0; k < most; ++k) {
 			Item &y = items[static_cast<size_t>(from)];
@@ -4928,6 +4964,16 @@ ItemDebug Lab::debug(const std::string &id) const {
 		if (double p = 0.0; thermal.defined && chem::ph(table, state, thermal.temperature, p)) {
 			out.facts.push_back(text_of("pH %.2f", p) + text_of(" (Kw %.3g at its temperature)", chem::water_ionisation(table, thermal.temperature)));
 		}
+		// its column (Stage 47): each layer, from the top
+		if (m.layered(x)) {
+			ItemView layered;
+			m.layers_into(x, layered);
+			std::string fact = text_of("layered, %d layers from the top:", static_cast<int>(layered.layers.size()));
+			for (const LayerView &l : layered.layers) {
+				fact += text_of(" %.2f mL", l.liquid_ml) + text_of(" at %.1f C;", l.celsius);
+			}
+			out.facts.push_back(fact);
+		}
 		// its floor and its bubbles (Stage 45)
 		if (thermal.defined) {
 			ItemView b;
@@ -5468,8 +5514,8 @@ json Lab::Impl::save() const {
 		if (item.screwed) {
 			list.back()["screwed"] = true;
 		}
-		if (item.landed) { // (Stage 47)
-			list.back()["landed"] = true;
+		if (item.landed != 0) { // (Stage 47)
+			list.back()["landed"] = item.landed;
 		}
 		if (item.stirs.index >= 0) { // (Stage 32)
 			list.back()["stirs"] = item.stirs.index;
@@ -5622,7 +5668,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.kind = static_cast<Kind>(kind);
 			item.place = static_cast<Place>(place);
 			item.cell = CellId{ j.at("cell").get<int32_t>() };
-			item.landed = j.value("landed", false);
+			item.landed = j.value("landed", 0);
 
 			item.mouth = EdgeId{ j.at("mouth").get<int32_t>() };
 			item.heats = EdgeId{ j.at("heats").get<int32_t>() };

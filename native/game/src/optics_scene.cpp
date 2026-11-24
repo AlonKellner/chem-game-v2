@@ -637,6 +637,56 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
 				const double grain = 2.0 * made->widest() / body.w / 64.0;
 				const auto drawn = [&](double cm) { return std::round(cm / grain) * grain; };
+				// layered (Stage 47): each layer a band of its own liquid, from the bottom; upright only
+				if (v.layers.size() > 1 && !body.flipped && body.angle == 0.0f) {
+					const size_t bands = std::min(v.layers.size(), static_cast<size_t>(MAX_BANDS));
+					std::vector<float> table(1 + 3 * bands, 0.0f);
+					table[0] = static_cast<float>(bands);
+					double below = 0.0; // cm^3 under the band
+					for (size_t k = 0; k < bands; ++k) {
+						const LayerView &layer = v.layers[v.layers.size() - 1 - k]; // (the view lists them from the top)
+						const int band_set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
+						rows.resize(static_cast<size_t>((band_set + 1) * ROWS_PER_SET * ROW), 0.0f);
+						lwir.resize(static_cast<size_t>((band_set + 1) * ROWS_PER_SET * LWIR_ROW), 0.0f);
+						lw = &lwir[static_cast<size_t>(set * ROWS_PER_SET * LWIR_ROW)]; // (the resize moves it)
+						float *band_lw = &lwir[static_cast<size_t>(band_set * ROWS_PER_SET * LWIR_ROW)];
+						for (int i = 0; i < LWIR_ROW; ++i) {
+							band_lw[LIQUID_INDEX_ROW * LWIR_ROW + i] = band_lw[WALL_INDEX_ROW * LWIR_ROW + i] = 1.0f; // (only its liquid row is read)
+						}
+						float *band_liquid = &rows[static_cast<size_t>((band_set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
+						for (int i = 0; i < ROW; ++i) {
+							band_liquid[LIQUID_INDEX_ROW * ROW + i] = band_liquid[WALL_INDEX_ROW * ROW + i] = 1.0f;
+						}
+						if (layer.liquid_ml > 0.0) {
+							for (const SubstanceView &sv : layer.contents) {
+								if (sv.species == "water" && sv.phase != 's' && sv.phase != 'g') {
+									// its water in the long-wave (Stage 46), by its share of the layer's volume
+									for (int i = 0; i < LWIR_ROW; ++i) {
+										band_lw[LIQUID_ROW * LWIR_ROW + i] += static_cast<float>(media.water_alpha[static_cast<size_t>(i)] * (sv.ml > 0.0 ? std::min(sv.ml / layer.liquid_ml, 1.0) : 1.0));
+									}
+								}
+								const chem::SpeciesId id = chem::builtin_species().find(sv.species);
+								if (id.index < 0 || sv.phase == 's' || chem::optics::kind(id) != Kind::Absorb) {
+									continue;
+								}
+								// (a concentration to 0.2 %: a gradient spreading slowly keeps its pixels' histories between steps)
+								const double molar = sv.mol / (layer.liquid_ml / 1000.0);
+								const double kept = molar > 0.0 ? std::exp(std::round(std::log(molar) / 0.002) * 0.002) : 0.0;
+								const Spectrum &e = chem::optics::spectrum(id);
+								for (size_t i = 0; i < e.size(); ++i) {
+									band_liquid[i] += static_cast<float>(e[i] * LN10 * kept);
+								}
+							}
+						}
+						const double top = k + 1 == bands ? below + 1e9 : below + layer.liquid_ml + layer.solid_ml;
+						table[1 + 3 * k] = static_cast<float>(band_set);
+						table[2 + 3 * k] = static_cast<float>(drawn(made->level(below) - made->floor));
+						table[3 + 3 * k] = static_cast<float>(k + 1 == bands ? 1e9 : drawn(made->level(top) - made->floor));
+						below = top;
+					}
+					float *band_table = &rows[static_cast<size_t>((set * ROWS_PER_SET + BANDS_ROW) * ROW)];
+					std::copy(table.begin(), table.end(), band_table);
+				}
 				lie[2] = 1.0;
 				lie[12] = l.up_x;
 				lie[13] = l.up_y;

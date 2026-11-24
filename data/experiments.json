@@ -66,6 +66,13 @@
 			"tutorial": "tutorials/boiling.json"
 		},
 		{
+			"id": "layers",
+			"title": "Two liquids, layered",
+			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer.",
+			"bench": "benches/layers.json",
+			"tutorial": null
+		},
+		{
 			"id": "prism",
 			"title": "Light through a prism and a grating",
 			"summary": "Optics alone: a slit of white light in a dark room, seen through a prism of flint glass that spreads it into its spectrum, and a grating that shows its orders. Drag them; the wheel turns the prism.",

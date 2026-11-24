@@ -40,8 +40,9 @@ const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
-const int ROWS_PER_SET = 7;
+const int ROWS_PER_SET = 8;
 const int BUBBLE_ROW = 6; // what a vessel's bubbles turn back, their albedo (Stage 45)
+const int BANDS_ROW = 7; // a layered vessel's bands (Stage 47)
 const int LIGHT_ENTRIES = 4097;
 const int LIGHT_SIZE = LIGHT_ENTRIES + ROW; // a light's table, then the way back (Stage 46: two lights, one a range)
 const int MAX_LAYERS = 4; // bodies one pixel looks through
@@ -586,10 +587,37 @@ float haze_colour(int body, int start, float y, float nm) {
 	return mix(row_at(start + ROW, nm), row_at(start + BUBBLE_ROW * ROW, nm), white_at(body, y));
 }
 
-float liquid_at(int body, int rows, float nm) {
-	float depth = row_at(rows, nm);
-	if (nm > 7000.0) {
-		return depth; // (narrow lines are the visible's)
+// A layered vessel's band at height y of the screen (Stage 47: its column's layers, GAME_SPEC §6): the start of
+// that band's set, whose liquid row is its layer's; a vessel of one layer, its own
+int band_rows(int body, int rows, float y) {
+	float n = row_value(rows + BANDS_ROW * ROW);
+	if (n < 0.5) {
+		return rows;
+	}
+	int at = HEADER_VECS + body * BODY_VECS;
+	vec4 rect = scene_vec(at);
+	vec4 form = scene_vec(at + 1);
+	float z = (rect.y + rect.w - scene_vec(at + 5).z / form.y - y) * form.y; // cm over its floor
+	int count = int(n);
+	int found = rows;
+	for (int k = 0; k < 133; k++) {
+		if (k >= count) {
+			break;
+		}
+		int e = rows + BANDS_ROW * ROW + 1 + 3 * k;
+		found = int(row_value(e)) * ROWS_PER_SET * ROW;
+		if (z < row_value(e + 2)) {
+			break;
+		}
+	}
+	return found;
+}
+
+float liquid_at(int body, int rows, float nm, float y) {
+	int band = band_rows(body, rows, y);
+	float depth = row_at(band, nm);
+	if (nm > 7000.0 || band != rows) {
+		return depth; // (narrow lines are the visible's; a layer's band: its narrow lines are not drawn, GAME_SPEC §20)
 	}
 	vec4 ids = scene_vec(HEADER_VECS + body * BODY_VECS + 4);
 	int first = int(ids.z);
@@ -930,7 +958,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 		return s;
 	}
 	int start = set_in(l.body);
-	float per_cm = liquid_at(body_of(l.body), start, nm);
+	float per_cm = liquid_at(body_of(l.body), start, nm, q.y);
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
 	float glow = glow_of(body_of(l.body), start, vec2(q.x, q.y), q.size, q.size, nm, l.solid); // what its solids glow with, a multiple of the room's light
@@ -2672,7 +2700,7 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 			l.haze = haze_along(body, depth_cm, met.w);
 		}
 		float glow = glow_of(body, start, vec2(met.z, met.w), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met.w, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met.w, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met.w) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -2899,7 +2927,7 @@ vec2 ray_shade(RayMet m, float nm) {
 		}
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float glow = glow_of(body, start, met_where(m, k), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met_where(m, k).y, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met_where(m, k).y, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met_where(m, k).y) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -4314,7 +4342,7 @@ float relay_through(Path q, float nm) {
 		}
 		Layer l = layer_k(q, k);
 		int start = set_in(l.body);
-		float per_cm = liquid_at(body_of(l.body), start, nm);
+		float per_cm = liquid_at(body_of(l.body), start, nm, q.y);
 		float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
 		a = a * exp(-per_cm * (l.depth_cm + l.glowing)) * (1.0 - l.haze) * (1.0 - l.solid) * glass;
 	}

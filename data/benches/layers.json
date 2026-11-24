@@ -1,0 +1,51 @@
+{
+	"format": "chem-bench/2",
+	"note": "Two liquids layered (GAME_SPEC §6, §13.7, Stage 47): a 250 mL beaker of green nickel sulfate solution (0.8 mol/kg, 1.12 g/cm3) over blue copper sulfate solution (1.4 mol/kg, 1.22 g/cm3), 80 g of water in each; the lab's burner in the cabinet. The denser stays under the lighter; across their boundary each diffuses into the other, a gradient a few millimetres wide in a day.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				12,
+				7
+			],
+			"layers": [
+				{
+					"water": {
+						"g": 80.0
+					},
+					"nickel_sulfate_aq": {
+						"mol": 0.064
+					}
+				},
+				{
+					"water": {
+						"g": 80.0
+					},
+					"copper_sulfate_aq": {
+						"mol": 0.112
+					}
+				}
+			]
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}
