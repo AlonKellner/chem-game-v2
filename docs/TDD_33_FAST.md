@@ -412,6 +412,8 @@ known: that tree was never run through this check.
 
 ## Open
 
+(Stage 35 removed the measuring switches named below: `LAB_BEAM` and its modes, `LAB_BEAM_AT_ONCE`, `LAB_RAY_STATS=heel`, `heel32`, `speed`, `held`, `most`, `LAB_O9_COUNTS`; what is still open is in `docs/TDD_35_ONE.md`, `docs/TDD_36_SPEED.md` and `docs/TDD_37_RIGHT.md`.)
+
 - **(Answered in Stage 35: `docs/TDD_35_ONE.md`, *The whole source in single precision*. The two items on
   O4 below are not single precision's: the source's own frames stop with one pixel in ten thousand off
   the truth, in double too.)**

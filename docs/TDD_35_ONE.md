@@ -192,13 +192,13 @@ Where it departs from the inventory:
 Found on the way, and left as it is:
 
 - `step_pixel`: "the history weighs one point" (above) is written `points = min(points, 1.0e9)`, which does
-  nothing (a history holds 4,096 points at most). The picture is as the gates and the play have it; whether
-  the line was meant as `1.0` is to be settled with the prism's slit.
-- `through_layer` (the per-pixel source) is read by nothing, and was not before.
+  nothing (a history holds 4,096 points at most). (Since: measured and taken out, above.)
+- `through_layer` (the per-pixel source) is read by nothing, and was not before. (Since: deleted, Stage 38.)
 - `make screenshots`: its play gives up "waiting for the solution to boil down", headless and in a window,
-  before and after this work; the four pictures before that are taken and compared.
+  before and after this work; the four pictures before that are taken and compared. (Since: mended, the
+  outlet led by its line, below.)
 - Comments and names of tests still speak of maps and the chain where they say what a test was written for
-  (`test_footprint`, `test_layers`, `test_truth3d`, `test_refraction`).
+  (`test_footprint`, `test_layers`, `test_truth3d`, `test_refraction`). (Since: brought up to date, Stage 38.)
 
 ## The whole source in single precision (35.5)
 

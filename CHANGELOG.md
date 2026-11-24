@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.38.0 (2026-11-24, Stages 37 and 38; awaiting the user's sign-off)
+
+- §13 (Stage 38, `docs/TDD_38_LEFT.md`): **the trash's leftovers.** A part put in the trash keeps its wires
+  and rigs to what was outside it, and they come back with it once both ends are on the lab again (a
+  controller rigged again tunes itself); `empty_trash` and the trash box's "empty" button: everything in it
+  leaves for good, an item to the cabinet, a part scrapped.
+- §18, §19, §20 (Stages 37, 38): O4's open pixels said in its row (none to eight a picture, once settled:
+  `make screenshots` lets each picture settle 240 frames, Stage 37); O14 said to be unused; the frame's
+  budget restated for a 120 Hz display; *PLANNED* taken off what is built (crystal populations, solute
+  activity, decanting).
+- Stage 37 (`docs/TDD_37_RIGHT.md`) measured and recorded, without changing the renderer: more points before
+  a parted pixel stops (clears the CPU's off pixels, not the GPU's); the prism's slit cut where the middle
+  ray's route changes (right, and twice O13's rays at a rim with one beam a record).
+
 ## 0.37.0 (2026-11-23, Stage 36; awaiting the user's sign-off)
 
 - §13.1, §19 (Stage 36, `docs/TDD_36_SPEED.md`): **a frame's cost the same at any speed.** A host gives
