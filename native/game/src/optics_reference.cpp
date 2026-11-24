@@ -1373,9 +1373,24 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	rgb[2] = c.z;
 }
 
+// What a pixel's colour is shown as (Stage 46): itself; in the debug infrared view (the scene read in the long-wave
+// range), its band signal's temperature's colour, as the pass shows it (linear sRGB)
+static void displayed(const OpticsScene &scene, double rgb[3]) {
+	if (!(scene.table.size() > 4 * 4 + 3 && scene.table[4 * 4 + 3] > 0.5f)) {
+		return;
+	}
+	const shader::Use use(scene);
+	const shader::vec4 c = shader::infrared_shown((rgb[0] + rgb[1] + rgb[2]) / 3.0);
+	const double code[3] = { c.x, c.y, c.z };
+	for (int k = 0; k < 3; ++k) {
+		rgb[k] = code[k] <= 0.04045 ? code[k] / 12.92 : std::pow((code[k] + 0.055) / 1.055, 2.4);
+	}
+}
+
 void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]) {
 	double rgb[3];
 	optics_truth(scene, x, y, rgb);
+	displayed(scene, rgb);
 	gamut_map(rgb);
 	for (int c = 0; c < 3; ++c) {
 		rgba[c] = srgb_encode(rgb[c]);
@@ -1569,6 +1584,7 @@ OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int 
 			}
 			double rgb[3];
 			optics_truth(scene, col, row, rgb);
+			displayed(scene, rgb);
 			const CieLab truth = shown(chem::optics::Xyz{ 0.4124564 * rgb[0] + 0.3575761 * rgb[1] + 0.1804375 * rgb[2], 0.2126729 * rgb[0] + 0.7151522 * rgb[1] + 0.0721750 * rgb[2],
 					0.0193339 * rgb[0] + 0.1191920 * rgb[1] + 0.9503041 * rgb[2] });
 			double lin[3];

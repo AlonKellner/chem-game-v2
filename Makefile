@@ -154,4 +154,4 @@ pass-cost: native
 screenshots gpu-parity: native
 	mkdir -p build/screenshots
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
-	perl -e 'alarm 90; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 120; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots

@@ -1648,6 +1648,19 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		float kept = exp(-alpha * best);
 		r.absorbed = r.absorbed + r.pass * (1.0 - kept);
 		r.pass = r.pass * kept;
+		if (alpha > 0.0 && r.pass < 1.0e-9) {
+			// taken in, all but nothing (glass in the long-wave): it goes no further, one way at every wavelength, and
+			// brings nothing from beyond (its pass is nothing)
+			r.absorbed = r.absorbed + r.pass;
+			r.pass = 0.0;
+			// (where it would land is no wavelength's: it goes on from where it met the shape, as it came, so the rays of a
+			// stretch go one way however the glass's index swings across its band)
+			r.route = r.route * uint(31) + uint(11);
+			r.at = from;
+			r.toward = heading;
+			r.left = false;
+			return r;
+		}
 		o = ray_point(o, u, best);
 		r.meetings = r.meetings + 1;
 		r.span = vec2(min(r.span.x, trace_level.x * o.x + trace_level.y * o.y), max(r.span.y, trace_level.x * o.x + trace_level.y * o.y));
@@ -4324,8 +4337,8 @@ float relay_step(Path q, vec2 p, int frame) {
 	float m2 = rec.z;
 	float want = points < RELAY_SETTLED ? RELAY_SETTLED - points : 0.0;
 	if (points >= 2.0) {
-		float precision = RELAY_PRECISION * max(mean, 1.0e-3);
-		want = max(want, m2 / (points - 1.0) / (precision * precision) - points);
+		float aim = RELAY_PRECISION * max(mean, 1.0e-3);
+		want = max(want, m2 / (points - 1.0) / (aim * aim) - points);
 	}
 	int n = want > 0.0 ? int(clamp(want, 16.0, 64.0)) : 0;
 	if (points >= RELAY_MOST) {
@@ -4357,8 +4370,8 @@ float relay_step(Path q, vec2 p, int frame) {
 	}
 	float more = points < RELAY_SETTLED ? RELAY_SETTLED - points : 0.0;
 	if (points >= 2.0) {
-		float precision = RELAY_PRECISION * max(mean, 1.0e-3);
-		more = max(more, m2 / (points - 1.0) / (precision * precision) - points);
+		float aim = RELAY_PRECISION * max(mean, 1.0e-3);
+		more = max(more, m2 / (points - 1.0) / (aim * aim) - points);
 	}
 	return max(more, 0.0);
 }
@@ -4426,7 +4439,7 @@ vec4 wall_shown(vec2 p, float size) {
 // the state of a pixel that shows the wall: the wall table's own tag, so it is shown again when the wall changes
 // (and matches no content: a body there starts its history)
 vec4 wall_key() {
-	return vec4(-1.0, wall_vec(0).z, -1.0, -1.0);
+	return vec4(-1.0, wall_vec(0).z, -1.0 - scene_vec(4).w, -1.0); // (and the range it is shown in: Stage 46)
 }
 
 // ---- a view's change (GAME_SPEC §12.3, Stage 42)

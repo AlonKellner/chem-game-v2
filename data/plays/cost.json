@@ -23,6 +23,9 @@
 		{"to": "stir:flask", "button": "click"},
 		{"frames": 360, "mark": "stir"},
 		{"to": "speed:600", "button": "click"},
-		{"frames": 360, "mark": "fast"}
+		{"frames": 360, "mark": "fast"},
+		{"to": "debug", "button": "click"},
+		{"to": "debug:infrared", "button": "click"},
+		{"frames": 360, "mark": "infrared"}
 	]
 }
