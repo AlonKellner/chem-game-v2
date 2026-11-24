@@ -692,7 +692,6 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					wall = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_ROW) * ROW)];
 					liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
 					wall_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_INDEX_ROW) * ROW)];
-					glows = &rows[static_cast<size_t>((set * ROWS_PER_SET + GLOW_ROW) * ROW)];
 				}
 				lie[2] = 1.0;
 				lie[12] = l.up_x;
