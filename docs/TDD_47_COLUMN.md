@@ -34,6 +34,7 @@ GAME_SPEC 0.47.0 covers:
 | 47.6 | On the screen: a band of each layer's liquid; the experiment `layers` | Done |
 | 47.7 | The goldens: a new species moves every digest; every measured value unchanged | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
 | 47.8 | GAME_SPEC 0.47.0, `make gates`, the user's sign-off | `make gates` passed (522 s: ASan+UBSan 522, ctest 364, Godot 12 of 12; the sanitizers found the band sets growing the scene's rows under the body's own row pointers, which were then read freed); awaiting sign-off |
+| 47.9 | Rebased onto Stage 46 (the long-wave range): a band set carries long-wave rows too (its layer's water by its share), so a layered vessel reads right at any wavelength and through a sensor's relay | `make gates` passed again (521 s: ASan+UBSan 521, ctest 349, Godot 12 of 12); the goldens unchanged by the rebase; `make screenshots` O4 the same as main's, shot for shot; awaiting sign-off |
 
 ## 47.1 The prism in the list
 
