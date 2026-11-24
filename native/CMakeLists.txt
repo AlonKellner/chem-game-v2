@@ -120,6 +120,9 @@ file(GLOB CHEM_TOOL_SOURCES CONFIGURE_DEPENDS hosts/headless/*.cpp)
 add_executable(chem_tool ${CHEM_TOOL_SOURCES})
 target_link_libraries(chem_tool PRIVATE chem_capi chem_lab) # the studies drive the core directly
 chem_apply_flags(chem_tool)
+# (the studies that open the repository's benches and tutorials: chem_tool study speed)
+get_filename_component(CHEM_TOOL_REPO_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
+target_compile_definitions(chem_tool PRIVATE "CHEM_REPO_ROOT=\"${CHEM_TOOL_REPO_ROOT}\"")
 
 # ---------------------------------------------------------------------- chem_gd
 if(CHEM_BUILD_EXTENSION)

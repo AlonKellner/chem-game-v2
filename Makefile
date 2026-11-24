@@ -62,11 +62,10 @@ native:
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
 
 # The Godot project reads only res://: the data is copied in (gitignored), and the
-# per-pixel source. (maps/ is left as it is: the refraction maps a build before
-# Stage 35 made there; nothing makes or reads them now.)
+# per-pixel source.
 godot-data:
 	mkdir -p $(GODOT_PROJECT)/data
-	rsync -a --delete --exclude maps/ data/ $(GODOT_PROJECT)/data/
+	rsync -a --delete data/ $(GODOT_PROJECT)/data/
 	mkdir -p $(GODOT_PROJECT)/shaders
 	cp native/game/shader/optics_pixel.glsl $(GODOT_PROJECT)/shaders/optics_pixel.glslinc
 
@@ -147,7 +146,7 @@ pass-cost: native
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
 	perl -e 'alarm 150; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/play.gd -- $(CURDIR)/$(PLAY)
 
-# Five screenshots of the host through the demo -> build/screenshots; at each,
+# Fourteen screenshots of the host through the demo -> build/screenshots; at each,
 # the GPU's optical pass against the reference renderer (O4), and the GPU's
 # time for a frame. It opens a window for a few seconds (a headless Godot
 # paints nothing), played headless first and under a time limit: a script on

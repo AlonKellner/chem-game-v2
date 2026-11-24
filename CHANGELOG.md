@@ -1,5 +1,35 @@
 # GAME_SPEC version history
 
+## 0.38.0 (2026-11-24, Stages 37 and 38; signed off by the user: "Approved, merge and proceed")
+
+- §13 (Stage 38, `docs/TDD_38_LEFT.md`): **the trash's leftovers.** A part put in the trash keeps its wires
+  and rigs to what was outside it, and they come back with it once both ends are on the lab again (a
+  controller rigged again tunes itself); `empty_trash` and the trash box's "empty" button: everything in it
+  leaves for good, an item to the cabinet, a part scrapped. The trash box's count ("trash (2)") and the
+  emptying's notice say the number in it (both said 0: a count given as an integer to a format that takes
+  doubles; found by the user).
+- §18, §19, §20 (Stages 37, 38): O4's open pixels said in its row (none to eight a picture, once settled:
+  `make screenshots` lets each picture settle 240 frames, Stage 37); O14 said to be unused; the frame's
+  budget restated for a 120 Hz display; *PLANNED* taken off what is built (crystal populations, solute
+  activity, decanting).
+- Stage 37 (`docs/TDD_37_RIGHT.md`) measured and recorded, without changing the renderer: more points before
+  a parted pixel stops (clears the CPU's off pixels, not the GPU's); the prism's slit cut where the middle
+  ray's route changes (right, and twice O13's rays at a rim with one beam a record).
+
+## 0.37.0 (2026-11-23, Stage 36; signed off by the user: "Approved, merge and proceed")
+
+- §13.1, §19 (Stage 36, `docs/TDD_36_SPEED.md`): **a frame's cost the same at any speed.** A host gives
+  the lab's steps a budget of the CPU's time in a frame (`cg_ui_set_budget`; the Godot host 3 ms): a frame
+  runs whole steps of 1/60 s until it has spent it and carries the rest, a frame's worth at most; a heavy
+  moment keeps a lower speed, shown beside the clock. The steps are the steps however they fall (D1); the
+  session records are unchanged. Cheaper steps, the same values: a part's reading without the shape
+  searches; a sediment's lie kept apart and found from a table per turn. Cheaper, not the same to the bit
+  (the picture and a hand pour; not in a record): a hand pour's lie anchored on its volumes, the vortex's
+  share by the secant. At 600×: a stirred vessel poured by hand 140 ms a frame to 4.7; three monitors and a
+  controller 11 to 3.4; a controller's trial 1.2 s to 54 ms. Two things for the GPU's frames at the
+  lab's steps were built, did nothing there, and were taken out: the spread of a step's pixels over two
+  frames, and sending only the changed pages of the scene. `chem_tool study speed`; the cost play runs on at 600×.
+
 ## 0.36.0 (2026-11-23, Stage 35; signed off by the user: "Stage 35 is approved")
 
 - §12.3, §11, §18, §19, §20 (Stage 35, `docs/TDD_35_ONE.md`): **one renderer.** A pixel's own rays,

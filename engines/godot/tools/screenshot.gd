@@ -47,8 +47,9 @@ func _watch(done: Callable, what: String) -> bool:
 	return false
 
 func _shoot(dir: String, name: String) -> void:
-	# the game is paused: the optical pass settles (each pixel's history), in a bounded number of frames
-	for i in 40:
+	# the game is paused: the optical pass settles (each pixel's history), in a bounded number of frames (Stage 37:
+	# 40 counted pixels not yet settled under the rays' budget)
+	for i in 240:
 		await process_frame
 	if DisplayServer.get_name() == "headless": # it paints nothing
 		return

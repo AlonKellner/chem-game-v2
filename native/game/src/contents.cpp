@@ -2,6 +2,7 @@
 #include "lab/contents.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <map>
@@ -114,11 +115,18 @@ double below(const glass::Vessel &vessel, double turn, double level) {
 		const glass::Vessel *vessel = nullptr;
 		double turn = 0.0, level = 0.0, answer = 0.0;
 	};
-	thread_local Asked last;
-	if (last.vessel != &vessel || last.turn != turn || last.level != level) {
-		last = Asked{ &vessel, turn, level, below_made(vessel, turn, level) };
+	// (the last few: a pour asks for the lip's and the surface's in turn, Stage 36)
+	thread_local std::array<Asked, 4> kept;
+	thread_local size_t next = 0;
+	for (const Asked &a : kept) {
+		if (a.vessel == &vessel && a.turn == turn && a.level == level) {
+			return a.answer;
+		}
 	}
-	return last.answer;
+	kept[next] = Asked{ &vessel, turn, level, below_made(vessel, turn, level) };
+	const double answer = kept[next].answer;
+	next = (next + 1) % kept.size();
+	return answer;
 }
 
 namespace {
@@ -537,20 +545,36 @@ Swirl swirl(const glass::Vessel &vessel, double turn, double liquid_cm3, double 
 	if (!(energy > 0.0) || !(out.most > 0.0)) {
 		return out;
 	}
-	// its share: with the depth the liquid has under that vortex (a smaller vortex lifts the surface less)
+	// its share: with the depth the liquid has under that vortex (a smaller vortex lifts the surface less): the
+	// share s with s = cbrt(3 E / (W depth(s))), found by the secant on their difference from the share the full
+	// depth gives (Stage 36: three or four searches of how the contents lie, where the fixed point took a dozen)
+	const auto asks = [&](double share, bool &ok) {
+		const Lying l = lying(vessel, turn, liquid_cm3, solid_cm3, share, 1);
+		ok = l.depth > 0.0;
+		return ok ? std::min(1.0, std::cbrt(3.0 * energy / (weight * l.depth * 1e-2))) : share;
+	};
 	out.share = std::min(1.0, std::cbrt(energy / out.most));
-	for (int pass = 0; pass < 12 && out.share < 1.0; ++pass) {
-		const Lying l = lying(vessel, turn, liquid_cm3, solid_cm3, out.share, 1);
-		if (!(l.depth > 0.0)) {
-			break;
-		}
-		const double next = std::min(1.0, std::cbrt(3.0 * energy / (weight * l.depth * 1e-2)));
-		const bool there = std::fabs(next - out.share) < 1e-7;
-		out.share = next;
-		if (there) {
-			break;
-		}
+	bool ok = true;
+	double a = out.share, fa = asks(a, ok) - a;
+	if (!ok || !(out.share < 1.0)) {
+		return out;
 	}
+	double b = std::min(1.0, a + fa), fb = 0.0;
+	for (int pass = 0; pass < 12; ++pass) {
+		fb = asks(b, ok) - b;
+		if (!ok) {
+			break;
+		}
+		out.share = b;
+		if (std::fabs(fb) < 1e-7 || fb == fa) {
+			break;
+		}
+		const double next = std::clamp(b - fb * (b - a) / (fb - fa), 0.0, 1.0);
+		a = b;
+		fa = fb;
+		b = next;
+	}
+	out.share = std::min(1.0, out.share + (ok ? fb : 0.0));
 	return out;
 }
 
@@ -584,26 +608,21 @@ Lying lying(const glass::Vessel &vessel, double turn, double liquid_cm3, double 
 
 namespace {
 
-Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, double solid_cm3, double vortex, int side) {
-	Lying l;
-	const Frame f = frame(turn);
-	l.turn = turn;
-	l.up_x = f.up_x();
-	l.up_y = f.up_y();
-	reach(vessel, f, l.lowest, l.highest);
-	const double span = l.highest - l.lowest;
-	const glass::Point inner = brim_inner(vessel), outer = brim_outer(vessel);
-	const double sense = side < 0 ? -1.0 : 1.0;
-	l.lip_x = sense * inner.r;
-	l.lip_y = inner.y;
-	l.tip_x = sense * outer.r;
-	l.tip_y = outer.y;
-	l.lip_level = f.level(l.lip_x, l.lip_y);
-
-	// ---- the sediment: as peaked as the angle of repose allows; its peak's height is what holds its bulk
+// The sediment's lie at a turn (GAME_SPEC §11): its flat section and its pile, from the vessel, its turn and the
+// solids' volume alone, whatever liquid or vortex is over it. (Kept apart and the last few kept, Stage 36: a
+// vortex's size is found by trying a dozen, each a search of the liquid over the same sediment, and the sediment's
+// own search is a thousand sections. The answer is the same to the bit.)
+struct Settled {
+	bool solid = false;
+	double level = 0.0;
+	Cone pile;
+};
+Settled settled_made(const glass::Vessel &vessel, double turn, double solid_cm3, double lowest, double highest) {
+	Settled out;
+	const double span = highest - lowest;
 	const double bulk = solid_cm3 > 0.0 ? solid_cm3 / PACKING : 0.0;
 	if (bulk > 0.0) {
-		l.solid = true;
+		out.solid = true;
 		// for a peak at a level: the flat section under it (the lowest whose pile, at repose, reaches the peak),
 		// the pile, and what the two hold
 		const auto heap = [&](double peak, double &flat, Cone &pile) {
@@ -611,7 +630,7 @@ Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, do
 				const Cut c = cut(vessel, turn, h);
 				return (peak - h) - REPOSE * (c.any ? std::min(c.half, c.deep()) : 0.0);
 			};
-			const double first = l.lowest + 1e-6 * span;
+			const double first = lowest + 1e-6 * span;
 			flat = first;
 			if (short_of(first) > 0.0) {
 				double lo = first, hi = peak;
@@ -641,21 +660,118 @@ Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, do
 			}
 			return below(vessel, turn, flat) + pile.volume();
 		};
-		double lo = l.lowest, hi = l.highest, flat = l.lowest;
-		Cone pile;
-		if (heap(hi, flat, pile) <= bulk) {
-			lo = hi; // more than the vessel holds: it is full of it
+		// (the bulk a peak holds, at 32 peaks from the lowest to the highest, kept for the turn: a sediment's peak
+		// is then between two of them, and found there by false position with Illinois's guard, to the closeness
+		// halving from the whole height came to in forty. Stage 36: while a stirred vessel pours, what lies as
+		// sediment changes at every step.)
+		constexpr int PEAKS = 32;
+		struct Table {
+			const glass::Vessel *vessel = nullptr;
+			double turn = 0.0;
+			std::array<double, PEAKS + 1> bulk{};
+		};
+		thread_local std::array<Table, 4> tables;
+		thread_local size_t next = 0;
+		const Table *t = nullptr;
+		for (const Table &k : tables) {
+			if (k.vessel == &vessel && k.turn == turn) {
+				t = &k;
+			}
 		}
-		for (int i = 0; i < 40 && hi - lo > 1e-9 * span; ++i) {
-			const double mid = 0.5 * (lo + hi);
-			(heap(mid, flat, pile) < bulk ? lo : hi) = mid;
+		double flat = lowest;
+		Cone pile;
+		if (t == nullptr) {
+			Table &k = tables[next];
+			next = (next + 1) % tables.size();
+			k.vessel = &vessel;
+			k.turn = turn;
+			for (int i = 0; i <= PEAKS; ++i) {
+				k.bulk[static_cast<size_t>(i)] = i == 0 ? 0.0 : heap(lowest + span * i / PEAKS, flat, pile);
+			}
+			t = &k;
+		}
+		double lo = lowest, hi = highest;
+		if (t->bulk[PEAKS] <= bulk) {
+			lo = hi; // more than the vessel holds: it is full of it
+		} else {
+			int i = 0;
+			while (i < PEAKS - 1 && t->bulk[static_cast<size_t>(i + 1)] < bulk) {
+				++i;
+			}
+			lo = lowest + span * i / PEAKS;
+			hi = lowest + span * (i + 1) / PEAKS;
+			double f_lo = t->bulk[static_cast<size_t>(i)] - bulk, f_hi = t->bulk[static_cast<size_t>(i + 1)] - bulk;
+			int last = 0;
+			for (int k = 0; k < 60 && hi - lo > 1e-9 * span; ++k) {
+				double mid = f_hi != f_lo ? hi - f_hi * (hi - lo) / (f_hi - f_lo) : 0.5 * (lo + hi);
+				if (!(mid > lo && mid < hi) || k % 8 == 7) {
+					mid = 0.5 * (lo + hi);
+				}
+				const double f_mid = heap(mid, flat, pile) - bulk;
+				if (f_mid < 0.0) {
+					lo = mid;
+					f_lo = f_mid;
+					f_hi = last == -1 ? 0.5 * f_hi : f_hi;
+					last = -1;
+				} else {
+					hi = mid;
+					f_hi = f_mid;
+					f_lo = last == 1 ? 0.5 * f_lo : f_lo;
+					last = 1;
+				}
+			}
 		}
 		heap(0.5 * (lo + hi), flat, pile);
-		l.solid_level = flat;
-		l.pile = pile;
+		out.level = flat;
+		out.pile = pile;
 	} else {
-		l.solid_level = l.lowest;
+		out.level = lowest;
 	}
+	return out;
+}
+Settled settled(const glass::Vessel &vessel, double turn, double solid_cm3, double lowest, double highest) {
+	struct Asked {
+		const glass::Vessel *vessel = nullptr;
+		double turn = 0.0, solid = 0.0;
+		Settled answer;
+	};
+	thread_local std::array<Asked, 4> kept;
+	thread_local size_t next = 0;
+	for (const Asked &a : kept) {
+		if (a.vessel == &vessel && a.turn == turn && a.solid == solid_cm3) {
+			return a.answer;
+		}
+	}
+	Asked &a = kept[next];
+	next = (next + 1) % kept.size();
+	a.vessel = &vessel;
+	a.turn = turn;
+	a.solid = solid_cm3;
+	a.answer = settled_made(vessel, turn, solid_cm3, lowest, highest);
+	return a.answer;
+}
+
+Lying lying_made(const glass::Vessel &vessel, double turn, double liquid_cm3, double solid_cm3, double vortex, int side) {
+	Lying l;
+	const Frame f = frame(turn);
+	l.turn = turn;
+	l.up_x = f.up_x();
+	l.up_y = f.up_y();
+	reach(vessel, f, l.lowest, l.highest);
+	const double span = l.highest - l.lowest;
+	const glass::Point inner = brim_inner(vessel), outer = brim_outer(vessel);
+	const double sense = side < 0 ? -1.0 : 1.0;
+	l.lip_x = sense * inner.r;
+	l.lip_y = inner.y;
+	l.tip_x = sense * outer.r;
+	l.tip_y = outer.y;
+	l.lip_level = f.level(l.lip_x, l.lip_y);
+
+	// ---- the sediment: as peaked as the angle of repose allows; its peak's height is what holds its bulk
+	const Settled sediment = settled(vessel, turn, solid_cm3, l.lowest, l.highest);
+	l.solid = sediment.solid;
+	l.solid_level = sediment.level;
+	l.pile = sediment.pile;
 	l.solid_head = l.solid ? l.solid_level - l.lip_level : -span;
 
 	// ---- the liquid: its level is where the inside under it, less the powder under it and less the vortex,

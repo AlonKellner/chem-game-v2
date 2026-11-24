@@ -644,6 +644,30 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	well_formed(p.ui->draw());
 }
 
+TEST_CASE("ui: the trash's box has a button that empties it, while something is in it (Stage 38)") {
+	Player p;
+	p.click("pause");
+	float x = 0, y = 0;
+	CHECK_FALSE(p.ui->locate("trash:empty", x, y));
+	p.drag("item:beaker", "trash");
+	p.drag("item:flask", "trash");
+	REQUIRE(p.ui->lab().view().trash.size() == 2);
+	REQUIRE(p.ui->locate("trash:empty", x, y));
+	well_formed(p.ui->draw());
+	// the box says how many things are in it (it once said 0: an integer read as a double)
+	const lab::DrawList &list = p.ui->draw();
+	bool counted = false;
+	for (const lab::DrawCommand &c : list.commands) {
+		counted = counted || (c.type == lab::DrawCommand::Text && std::string(&list.text[static_cast<size_t>(c.first)]) == "trash (2)");
+	}
+	CHECK(counted);
+	p.click("trash:empty");
+	CHECK(p.ui->lab().view().trash.empty());
+	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.item("flask").place == "cabinet");
+	CHECK_FALSE(p.ui->locate("trash:empty", x, y));
+}
+
 TEST_CASE("ui: what is not wanted goes in the trash, carried there or by Backspace; the last put there stands in it and is taken up again, and the undo key brings it back where it stood (Stage 34)") {
 	Player p;
 	p.click("pause");

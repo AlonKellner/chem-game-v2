@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -207,6 +208,10 @@ struct Ui::Impl {
 	bool paused = false;
 	bool check_every_step = false;
 	double owed = 0.0; // steps not yet taken
+	// the frame's budget for the lab's steps (Stage 36): 0, none
+	double budget_ms = 0.0;
+	std::function<double()> clock_ms = [] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
+	double achieved = 0.0; // the clock's speed kept to, over the last frames
 	// the pointer
 	float px = 0, py = 0;
 	bool down = false;
@@ -830,6 +835,7 @@ struct Ui::Impl {
 	static Rect pause_rect() { return Rect{ 270, 14, 96, 36 }; }
 	static Rect check_rect() { return Rect{ 760, 14, 220, 36 }; }
 	static Rect reset_rect() { return Rect{ 1000, 14, 96, 36 }; }
+	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
@@ -1292,6 +1298,11 @@ struct Ui::Impl {
 			if (cancel_button().has(x, y) || !PANEL.has(x, y)) {
 				panel = false; // still in hand
 			}
+			return;
+		}
+		if (!view.trash.empty() && empty_rect().has(x, y) && !guided()) {
+			act({ { "do", "empty_trash" } });
+			choose_only(-1);
 			return;
 		}
 		if (pause_rect().has(x, y)) {
@@ -3153,7 +3164,10 @@ struct Ui::Impl {
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
 		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
 		outline(TRASH, WALL_GRID, 1);
-		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%d)", static_cast<int>(view.trash.size())), WALL_INK);
+		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%.0f)", static_cast<double>(view.trash.size())), WALL_INK);
+		if (!view.trash.empty()) {
+			button(empty_rect(), "empty", false, 13);
+		}
 		if (view.trash.empty()) {
 			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
 			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
@@ -3169,6 +3183,10 @@ struct Ui::Impl {
 		button(reset_rect(), "reset");
 		const double seconds = static_cast<double>(view.step) / 60.0;
 		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
+		// where the frame's budget holds the clock back (Stage 36): the speed it keeps
+		if (budget_ms > 0.0 && !paused && achieved < 0.9 * speed) {
+			text(1220, 40, text_of("keeping %.0fx", achieved), WALL_INK, 14);
+		}
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit" || hidden(i)) {
@@ -4496,15 +4514,17 @@ void Ui::frame(double seconds) {
 		}
 	}
 	if (!m.paused && !m.lab->failed() && seconds > 0.0) {
-		m.owed += seconds * m.speed * 60.0;
+		const double asked = seconds * m.speed * 60.0;
+		m.owed += asked;
 		// no more than twenty simulated seconds a frame: beyond it the clock runs slow, never the picture
-		auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
-		m.owed = m.owed < 1200.0 ? m.owed - static_cast<double>(steps) : 0.0;
+		const auto steps = static_cast<int64_t>(m.owed < 1200.0 ? m.owed : 1200.0);
 		std::string why;
-		bool ok = true, first = true;
+		bool ok = true, first = true, stopped = false;
+		int64_t done = 0;
 		// one step of every frame against every invariant; all of them when asked; and
 		// the lab stops at the end of a step in which an alarm rang (§13.3)
 		const auto run = [&](int64_t n) {
+			const int64_t before = m.lab->step();
 			m.lab->set_checking(first || m.check_every_step);
 			ok = m.lab->advance(first && !m.check_every_step ? 1 : n, why, true);
 			m.lab->set_checking(false);
@@ -4512,31 +4532,54 @@ void Ui::frame(double seconds) {
 				ok = m.lab->advance(n - 1, why, true);
 			}
 			first = false;
+			done += m.lab->step() - before;
 			if (ok && m.lab->rang()) {
+				stopped = true;
 				m.ring();
 			}
 		};
+		// Under a budget (Stage 36) the steps are run in pieces, each as many as the time left is likely to hold
+		// at what the steps so far have cost, until it is spent: at least one step a frame.
+		const double start = m.budget_ms > 0.0 ? m.clock_ms() : 0.0;
+		const auto spent = [&] { return m.budget_ms > 0.0 && m.clock_ms() - start >= m.budget_ms; };
+		const auto piece = [&](int64_t left, int64_t most) {
+			if (!(m.budget_ms > 0.0)) {
+				return std::min(left, most);
+			}
+			if (done < 9) {
+				return std::min<int64_t>(left, done == 0 ? 1 : 8); // (the first is checked: the next few say what a step costs)
+			}
+			const double each = std::max((m.clock_ms() - start) / static_cast<double>(done), 1e-6);
+			const auto fits = static_cast<int64_t>((m.budget_ms - (m.clock_ms() - start)) / each);
+			return std::clamp<int64_t>(fits, 1, std::min(left, most));
+		};
 		if (!m.tutorial) {
-			if (steps > 0) {
-				run(steps);
+			while (ok && done < steps && !stopped && !(done > 0 && spent())) {
+				run(piece(steps - done, steps));
 			}
 		} else {
 			// a tutorial's clock stands while its step asks for a gesture (§13.2): the lab
 			// advances a second at a time, and stops in the second where a wait ends
-			while (ok && steps > 0 && !m.held() && !m.paused) {
-				const int64_t n = steps < 60 ? steps : 60;
-				run(n);
-				steps -= n;
+			while (ok && done < steps && !m.held() && !m.paused && !stopped && !(done > 0 && spent())) {
+				run(piece(steps - done, 60));
 				m.refresh();
 				m.follow();
 			}
 		}
+		// what was not run is carried, no more than one frame's worth: beyond it the clock runs slow
+		m.owed = m.owed < 1200.0 ? std::min(m.owed - static_cast<double>(done), std::max(asked, 1.0)) : 0.0;
+		if (stopped) {
+			m.owed = std::min(m.owed, std::max(m.owed - std::floor(m.owed), 0.0)); // (stopped by an alarm: the frame's other steps are not owed)
+		}
+		m.achieved = 0.9 * m.achieved + 0.1 * (static_cast<double>(done) / 60.0 / seconds);
 		if (m.held() || m.paused) {
 			m.owed = 0.0;
 		}
 		if (!ok) {
 			m.message = why;
 		}
+	} else if (m.paused) {
+		m.achieved = 0.0;
 	}
 	m.clock += seconds > 0.0 ? seconds : 0.0;
 	m.refresh();
@@ -4599,6 +4642,20 @@ const std::string &Ui::message() const {
 	return impl_->message;
 }
 
+void Ui::set_budget(double ms) {
+	impl_->budget_ms = ms > 0.0 ? ms : 0.0;
+}
+
+void Ui::set_clock(std::function<double()> ms_now) {
+	if (ms_now) {
+		impl_->clock_ms = std::move(ms_now);
+	}
+}
+
+double Ui::achieved() const {
+	return impl_->achieved;
+}
+
 double Ui::speed() const {
 	return impl_->speed;
 }
@@ -4642,6 +4699,14 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	if (what == "trash") {
 		x = TRASH.cx();
 		y = TRASH.y + 30;
+		return true;
+	}
+	if (what == "trash:empty") { // its button, while something is in it (Stage 38)
+		if (view.trash.empty()) {
+			return false;
+		}
+		x = empty_rect().cx();
+		y = empty_rect().cy();
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first

@@ -319,7 +319,7 @@ struct Lab::Impl {
 			return std::nullopt;
 		}
 		LabView one;
-		one.items.push_back(item_view(items[static_cast<size_t>(i)]));
+		one.items.push_back(item_view(items[static_cast<size_t>(i)], false));
 		return measure(one, q);
 	}
 
@@ -1171,20 +1171,21 @@ struct Lab::Impl {
 		}
 		return false;
 	}
-	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. The wires and the
-	// resets among what it holds go with it; those to anything outside come off, as `scrap` takes them off. It
-	// signals nothing there: its signal off, an alarm quiet, a monitor's last reading forgotten, a controller
-	// untuned (its rigs are off, as after `unrig`); a timer keeps what is left of it.
+	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. Its wires and rigs come
+	// off the lab and are kept beside it, those to anything outside it too (Stage 38: until then those were taken
+	// off for good, as `scrap` takes them). It signals nothing there: its signal off, an alarm quiet, a monitor's
+	// last reading forgotten, a controller untuned (its rigs are off, as after `unrig`); a timer keeps what is
+	// left of it.
 	void bin_part(const std::string &id) {
 		const std::vector<std::string> held = held_by(parts, id);
 		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
 		for (const Wire &w : wires) {
-			if (inside(w.from) && inside(w.to)) {
+			if (inside(w.from) || inside(w.to)) {
 				binned_wires.push_back(w);
 			}
 		}
 		for (Rig r : rigs) {
-			if (inside(r.from) && r.control == "reset" && inside(r.item)) {
+			if (inside(r.from) || (r.control == "reset" && inside(r.item))) {
 				r.seen = false; // its source's signal is off: it acts from its next change
 				binned_rigs.push_back(r);
 			}
@@ -1207,29 +1208,43 @@ struct Lab::Impl {
 			std::erase_if(parts, [&](const Part &q) { return q.id == name; });
 		}
 	}
-	// A part out of the trash, with all it holds: among the lab's parts again (the last of them), and the wires
-	// and resets kept beside it. With `scrapped`, gone for good instead.
+	// A part out of the trash, with all it holds: among the lab's parts again (the last of them). With
+	// `scrapped`, gone for good instead. Then every wire and rig kept in the trash whose two ends are on the lab
+	// again comes back (Stage 38): the part's own, and those to what was outside it, now or once that is
+	// restored too; those to what is gone go with it. A controller rigged again tunes itself, as when it is rigged.
 	void unbin_part(const std::string &id, bool scrapped) {
 		const std::vector<std::string> held = held_by(binned, id);
-		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
 		for (const std::string &name : held) {
 			if (!scrapped) {
 				parts.push_back(binned[static_cast<size_t>(find_binned(name))]);
 			}
 			std::erase_if(binned, [&](const Part &q) { return q.id == name; });
 		}
+		// (an end that is nowhere, on the lab or in the trash, is gone)
+		const auto live = [&](const std::string &name) { return find_part(name) >= 0 || (find(name) >= 0 && !in_trash(name)); };
+		const auto gone = [&](const std::string &name) { return find_part(name) < 0 && find_binned(name) < 0 && find(name) < 0; };
+		std::vector<int> tunes;
 		for (const Wire &w : binned_wires) {
-			if (!scrapped && inside(w.from)) {
+			if (live(w.from) && live(w.to)) {
 				wires.push_back(w);
 			}
 		}
 		for (const Rig &r : binned_rigs) {
-			if (!scrapped && inside(r.from)) {
+			if (live(r.from) && live(r.item)) {
 				rigs.push_back(r);
+				const int from = find_part(r.from);
+				if (r.follow && std::find(tunes.begin(), tunes.end(), from) == tunes.end()) {
+					tunes.push_back(from);
+				}
 			}
 		}
-		std::erase_if(binned_wires, [&](const Wire &w) { return inside(w.from); });
-		std::erase_if(binned_rigs, [&](const Rig &r) { return inside(r.from); });
+		std::erase_if(binned_wires, [&](const Wire &w) { return (live(w.from) && live(w.to)) || gone(w.from) || gone(w.to); });
+		std::erase_if(binned_rigs, [&](const Rig &r) { return (live(r.from) && live(r.item)) || gone(r.from) || gone(r.item); });
+		for (const int at : tunes) {
+			if (parts[static_cast<size_t>(at)].watching) {
+				tune(at);
+			}
+		}
 	}
 	// an element leaves the trash's history
 	void forget_trash(const std::string &id) {
@@ -1423,19 +1438,21 @@ struct Lab::Impl {
 		lying_in(x, mixture, sediment);
 		return contents::swirl(*g, turn_of(x), mixture, sediment, liquid_g(x.cell), x.swirl);
 	}
-	// (the same until its energy, what it holds or what it holds up has changed by a part in ten thousand)
+	// (worked out again when what it holds has changed (its signature, set_stirring's), or what it holds up by a
+	// thousandth, or its energy by a hundredth; between, its share goes as the cube root of its energy, as it
+	// does where the depth under it is the same. Stage 36: a turning liquid's energy changes at every step, and a
+	// share is a dozen searches of how the contents lie)
 	double vortex(const Item &x) const {
 		if (!(x.swirl > 0.0)) {
 			return 0.0;
 		}
-		const auto near = [](double a, double b) { return std::fabs(a - b) <= 1e-4 * std::fabs(b); };
-		if (!(x.share_energy > 0.0) || !near(x.swirl, x.share_energy) || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-4)) {
+		if (!(x.share_energy > 0.0) || std::fabs(x.swirl - x.share_energy) > 1e-2 * x.share_energy || x.swirl_for != x.share_for || !(std::fabs(x.suspended - x.share_held_up) <= 1e-3)) {
 			x.share = swirl_of(x).share;
 			x.share_energy = x.swirl;
 			x.share_for = x.swirl_for;
 			x.share_held_up = x.suspended;
 		}
-		return x.share;
+		return x.share < 1.0 ? std::min(1.0, x.share * std::cbrt(x.swirl / x.share_energy)) : 1.0;
 	}
 	// A stirred liquid's turning, each step (GAME_SPEC §11, Stage 32). The stirrer does work on the liquid, which
 	// the mains give (the ledger's entry: it is heat in the liquid once the turning has died down, and the liquid
@@ -1559,17 +1576,30 @@ struct Lab::Impl {
 			}
 			return p;
 		}
-		const contents::Lying l = contents::lying(g, p.turn, mixture, sediment, x.swirl > 0.0 ? vortex(x) : 0.0, 1);
-		p.head_cm = l.liquid ? l.head : 0.0;
+		// How the contents lie is worked out for the liquid to the nearest 256th of the vessel's capacity, the
+		// sediment to the nearest 1024th and the vortex to the nearest 256th of its share (Stage 36): between, the
+		// liquid's surface stands over it by what is more over the surface's area, and what is more of either runs.
+		// A step's cost is then most often a lookup while a pour runs, and the answer is what the contents are,
+		// whatever came before.
+		// (the last sixteenth of the vessel's capacity of liquid, and of a sixteenth of that of sediment, exactly:
+		// where little is left the anchor would be as much again as what lies there)
+		const double unit = g.capacity() / 256.0;
+		const double near_mixture = mixture < 16.0 * unit ? mixture : std::round(mixture / unit) * unit;
+		const double near_sediment = sediment < 4.0 * unit ? sediment : std::round(sediment / (unit / 4.0)) * (unit / 4.0);
+		const double near_vortex = x.swirl > 0.0 ? std::round(256.0 * vortex(x)) / 256.0 : 0.0;
+		const contents::Lying l = contents::lying(g, p.turn, near_mixture, near_sediment, near_vortex, 1);
+		const double more = l.liquid && l.surface_area > 0.0 ? (mixture - near_mixture) / l.surface_area : 0.0; // cm, up
+		const double head = l.head + more;
+		p.head_cm = l.liquid ? head : 0.0;
 		const double lip_holds = contents::below(g, p.turn, l.lip_level), brim = std::fabs(l.lip_x);
-		if (l.liquid && l.head > 0.0 && mixture > 0.0) {
-			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds, 0.0);
-			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, l.head), over / chem::STEP_SECONDS);
+		if (l.liquid && head > 0.0 && mixture > 0.0) {
+			const double over = std::max(contents::below(g, p.turn, l.liquid_level) - lip_holds + (mixture - near_mixture), 0.0);
+			p.runs_ml_s = std::min(contents::over_brim(brim, p.turn, head), over / chem::STEP_SECONDS);
 			p.liquid = p.runs_ml_s * (liquid_m3(x.cell) * 1e6 / mixture) * 1e-6; // (the drain's rate is of the liquid itself)
 			p.carried = share;
 		}
 		if (l.solid && l.solid_head > 0.0) {
-			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds, 0.0);
+			const double over = std::max(contents::below(g, p.turn, l.solid_level) - lip_holds + (sediment - near_sediment) / contents::PACKING, 0.0);
 			p.solids = contents::PACKING * std::min(contents::over_brim(brim, p.turn, l.solid_head), over / chem::STEP_SECONDS) * 1e-6;
 		}
 		return p;
@@ -2180,7 +2210,10 @@ struct Lab::Impl {
 
 	json save() const;
 
-	ItemView item_view(const Item &item) const {
+	// (`shaped`: with how what is in it lies, a pour by hand's and a vortex's searches; a reading of a quantity,
+	// which reads none of them, leaves them out: at every step, for every monitor, at 600 times the clock's speed,
+	// they were most of the frame. Stage 36)
+	ItemView item_view(const Item &item, bool shaped = true) const {
 		const Impl &m = *this;
 		const SpeciesTable &table = m.table();
 		static const char PHASE[] = { 's', 'l', 'g', 'a' };
@@ -2207,7 +2240,7 @@ struct Lab::Impl {
 		if (item.pours_into >= 0 && item.inverted && item.pour.index >= 0) {
 			v.pours_ml_s = std::max(world().edges()[static_cast<size_t>(item.pour.index)].rate, 0.0) * 1e6;
 		}
-		if (item.pours_into >= 0 && !item.inverted) {
+		if (item.pours_into >= 0 && !item.inverted && shaped) {
 			if (const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml); g != nullptr) {
 				const ByHand p = by_hand(item, *g);
 				v.turn = p.turn;
@@ -2220,7 +2253,7 @@ struct Lab::Impl {
 		if (item.swirl > 0.0 || item.suspended > 0.0) {
 			v.swirl_j = item.swirl;
 			v.swirl_most_j = item.swirl_most;
-			v.vortex = vortex(item);
+			v.vortex = shaped ? vortex(item) : 0.0;
 			v.suspended = item.suspended;
 		}
 		v.submitted = item.submitted;
@@ -2641,7 +2674,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	const std::string what = c.at("do").get<std::string>();
 
 	// what is in the trash (Stage 34) takes no command but those that take it out, a wait, and a rig taken off it
-	if (!trash.empty() && what != "trash" && what != "restore" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
+	if (!trash.empty() && what != "trash" && what != "restore" && what != "empty_trash" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
 		std::string id;
 		if (names_trashed(c, id)) {
 			why = "\"" + id + "\" is in the trash: restore it first";
@@ -3439,6 +3472,26 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.place = Place::Trash;
 		x.col = x.row = -1;
 		trim_trash();
+		return true;
+	}
+	if (what == "empty_trash") {
+		// the trash emptied (Stage 38): everything in it leaves for good, as the oldest does past its capacity: an
+		// item to the cabinet (it holds matter, which nothing destroys), a part scrapped with all it holds
+		if (trash.empty()) {
+			why = "the trash is empty";
+			return false;
+		}
+		const size_t count = trash.size();
+		while (!trash.empty()) {
+			const Binned oldest = trash.front();
+			trash.erase(trash.begin());
+			if (oldest.part) {
+				unbin_part(oldest.id, true);
+			} else {
+				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
+			}
+		}
+		note(Notice::Detail, "", text_of("the trash was emptied: %.0f things, its items to the cabinet", static_cast<double>(count)));
 		return true;
 	}
 	if (what == "restore") {

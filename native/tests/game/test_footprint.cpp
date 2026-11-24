@@ -67,11 +67,11 @@ OpticsScene scene_with(std::vector<lab::OpticsShape> shapes) {
 
 } // namespace
 
-TEST_CASE("footprint: the truth's own tracer lands where the renderer's map does, away from the rims (Stage 20)") {
-	// The renderer reads a map traced through surface patches (lab/optics_trace.hpp); the truth's tracer asks
-	// only which medium a point is in. Away from the rims the two are the same geometry by different code,
-	// and the map puts the image within a hundredth of a pixel of the screen of it (the error on the wall,
-	// over how fast the landing moves across the vessel there).
+TEST_CASE("footprint: the truth's own tracer lands where the renderer's does, away from the rims (Stage 20)") {
+	// The renderer traces its rays through surface patches (the pass's tracer, Stage 29; a refraction map until
+	// Stage 35); the truth's tracer asks only which medium a point is in. Away from the rims the two are the same
+	// geometry by different code, and the renderer puts the image within a hundredth of a pixel of the screen of
+	// it (the error on the wall, over how fast the landing moves across the vessel there).
 	const OpticsScene scene = scene_with({});
 	int compared = 0;
 	for (int x = static_cast<int>(X); x < static_cast<int>(X + W); ++x) {
@@ -100,7 +100,7 @@ TEST_CASE("footprint: before an even wall the truth with one ray is the renderer
 	}
 }
 
-TEST_CASE("footprint: a vessel's map lands its rays where the closed form does: the ray keeps d / n from the axis (Stage 20)") {
+TEST_CASE("footprint: the renderer lands a vessel's rays where the closed form does: the ray keeps d / n from the axis (Stage 20)") {
 	// Through concentric circles a ray's distance from the axis, times the index, is kept: it meets
 	// each surface of radius r at asin(d / (n1 r)) and leaves at asin(d / (n2 r)). Summed over the four
 	// crossings that turns it by delta, and it lands (d - D sin delta) / cos delta from the axis.
@@ -126,7 +126,7 @@ TEST_CASE("footprint: a vessel's map lands its rays where the closed form does: 
 			const double turn = 2.0 * (std::asin(a / radius) - std::asin(a / (n_glass * radius)) + std::asin(a / (n_glass * inner)) - std::asin(a / (n_water * inner)));
 			const double landed = (a - wall * std::sin(turn)) / std::cos(turn);
 			CAPTURE(x);
-			// the map is true to a hundredth of a pixel of the screen: on the wall, that times how fast the
+			// the renderer is true to a hundredth of a pixel of the screen: on the wall, that times how fast the
 			// landing moves across the vessel (the tracer itself: to 1e-10, test_trace.cpp)
 			const double slope = std::max(1.0, std::fabs(lab::optics_bend(scene, x + 1, LOW, nm).x - lab::optics_bend(scene, x - 1, LOW, nm).x) / 2.0);
 			CHECK(std::fabs(lab::optics_bend(scene, x, LOW, nm).x - (rect[0] + rect[2] * 0.5 + (d < 0.0 ? -landed : landed) / cm)) / slope < 0.01);
@@ -200,7 +200,7 @@ const ItemView &blue_vessel() {
 TEST_CASE("footprint: every pixel's colour is what its rays bring, before a wall of any drawing: many shapes, a huge one, overlaps, edges anywhere (Stage 20)") {
 	// The wall: a grid of forty lines at odd places and widths, a rectangle larger than any the scene's table
 	// once took, two that overlap it and each other, a line across. The truth traces 64 rays a pixel and reads
-	// the wall from the shapes themselves, in painting order; the renderer reads its map and its table.
+	// the wall from the shapes themselves, in painting order; the renderer reads its rays and the wall's table.
 	lab::OpticsRoom r = room();
 	r.shapes.push_back(lab::OpticsShape{ 20.0f, 150.0f, 700.0f, 400.0f, 0.5 }); // 280,000 square pixels
 	for (int k = 0; k < 40; ++k) {

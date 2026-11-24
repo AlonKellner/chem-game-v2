@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.36.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.38.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -161,7 +161,7 @@ One step of simulated time, in this order:
 5. Settling: each cell, deepest in the gas tree first, is taken to its fast equilibria (§8) and,
    if rigid, made exactly full (§6). This comes last, so a step ends with every cell at
    equilibrium and full.
-6. Update crystal populations (§9). *(PLANNED, Stage 6.)*
+6. Update crystal populations (§9). (Stage 6: within step 1, as the crystals' nucleation and growth.)
 7. Check invariants (every step in tests and in Debug builds; sampled in release builds).
 
 **Sequential application.** Each process is evaluated from the state the previous one left and
@@ -484,8 +484,8 @@ brings.
 
 **Demo subset:** water liquid/vapour projection in the flask, the balloon and the condenser;
 condensate drips to the beaker.
-**Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium. Kinetic
-phase changes, melting and solute activity are *PLANNED* (solutes: Stage 6).
+**Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium; solute
+activity is in it from Stage 19 (Pitzer's excess, §10). Kinetic phase changes and melting are *PLANNED*.
 
 ## 9. Solutions and crystallization
 
@@ -541,7 +541,8 @@ temperature.
 - The four forms of the salt, above.
 - A dissolved species takes its apparent molar volume.
 - Particles as equal spheres, one count per solid per cell.
-- Decanting comes with the equipment (*PLANNED, Stage 8*).
+- Decanting: a pour by hand runs the liquid off its sediment, which runs once its flat section stands over
+  the lip (Stage 31, §11).
 
 **Status:**
 - Stage 6 implements the pentahydrate, ideal-dilute solutions of neutral solutes, and dissolved
@@ -1438,8 +1439,9 @@ input to them, and a session script is a list of them.
 | `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it (a signal part too); refused where something stands, off the grid, or while the item is joined to another |
 | `move` | `items`, `by` [columns, rows] | several items and parts along the bench together, by one offset: all of them or none, with the reason (one would be off the grid, or land on something left behind) |
 | `stow` | `item` | back into the cabinet; a signal part back to the drawer |
-| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item as into the cabinet (its matter stays in the world and goes on as there; refused as `stow` is), a part with its settings kept and its wires and rigs to anything outside it taken off (a circuit with all it holds), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item to the cabinet, a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to the cabinet) and `restore` |
-| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, to where it stood: its square, or the cabinet. Where its square is taken an item goes to the cabinet, and a part stays in the trash and says so |
+| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item as into the cabinet (its matter stays in the world and goes on as there; refused as `stow` is), a part with its settings kept and its wires and rigs, those to anything outside it too, off the lab and kept with it (a circuit with all it holds; Stage 38: until then those to outside were taken off for good), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item to the cabinet, a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to the cabinet), `restore` and `empty_trash` |
+| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, to where it stood: its square, or the cabinet. Where its square is taken an item goes to the cabinet, and a part stays in the trash and says so. A wire or a rig kept in the trash comes back once both its ends are on the lab again (Stage 38), and a controller rigged again tunes itself |
+| `empty_trash` | — | (Stage 38) everything in the trash leaves it for good, as the oldest does past its capacity: an item to the cabinet with all it holds, a part scrapped with what joined it. Refused when it is empty |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
@@ -1590,6 +1592,7 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | carry an item to the cabinet | `stow` |
 | carry an item or a part to the trash (the box at the cabinet's foot), or Backspace with it in hand or chosen and nothing being typed (Stage 34) | `trash`; the last put there stands in the box and is taken up again as an item of the cabinet is (`place`, `stow`) |
 | the undo key (Ctrl+Z, Cmd+Z; Stage 34) | `restore`: the last put in the trash is back where it stood, and chosen |
+| the trash box's "empty", while something is in it (Stage 38) | `empty_trash` |
 | carry a burner onto a vessel | `heat` |
 | carry a balloon, a condenser or a stopper onto a vessel | `attach` (a stopper: into its neck, sealing it; Stage 28) |
 | drag a line from the end of a condenser's outlet to a vessel (Stage 34: as a wire from a part's port; to another vessel, it is moved; let go on nothing, it comes off) | `under`, after `undrain` where it ran into another; `undrain` |
@@ -1620,7 +1623,12 @@ panel closes it.
 
 **The clock:** pause; 1×, 10×, 60×, 600×; reset. A frame advances the lab by its real time times
 the speed, at most twenty simulated seconds a frame: beyond that the clock runs slow, never the
-picture.
+picture. **A frame's cost is the same at any speed** (Stage 36): a host gives the lab's steps a budget of
+the CPU's time in a frame (`cg_ui_set_budget`; the Godot host 3 ms of a 120 Hz display's 8.3), and a
+frame runs whole steps until it has spent it; what it could not run is run in the next frames, no more
+than one frame's worth carried. Where a moment is heavy the clock keeps a lower speed for it, shown
+beside the clock ("keeping 212x"), and the picture keeps its frames. The steps are the same 1/60 s steps
+however they fall into frames (§3; `D1`), so a lab is the same at any speed and any budget.
 
 **Invariants on the screen.** One step of every frame is checked against every invariant; "check
 every step" checks them all. The readout's first line is the conservation laws: every element,
@@ -2273,7 +2281,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
 | O2 | No wavelength of a pixel comes out brighter than the brightest of the backdrop, what is drawn on it, the room in front and the room's white, and what the scene's bodies emit there (a glowing solid's or a lamp's light where it is seen, glowing gas's for each pixel of the longest path through it; Stage 22: emission is in the pass) | exact | 10, 22 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
-| O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate | tolerance | 10 |
+| O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate. (Open: none to eight pixels a picture of 30,000 to 69,000 are visibly off once settled; `docs/TDD_37_RIGHT.md`) | tolerance | 10 |
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | O7 | A uniform wall seen through any clear geometry is the wall's radiance: with absorption and reflection turned off, every pixel a body covers shows the wall's radiance (the radiance theorem). It fires on a renderer that weights the wall by the area its rays land on | tolerance (float32) | 20 |
@@ -2283,6 +2291,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O11 | A pixel's parts make it whole (Stage 29). However a pixel is cut to be read (in four where its rays part or do not land straight, at where they part, along the spectrum where its middle ray's way changes), what it is read from adds up to all of it, once, over the whole spectrum. With it, O7 is held over bands of the light as the pass reads them, not at single wavelengths alone: found so, the two sides of a cut were read at different wavelengths, and a sliver between them not at all. It fires on a reading that loses a millionth of a pixel | exact (1e-9) | 29 |
 | O12 | A kept beam is the beam (Stage 33). A pixel's beams are traced when its shape key moves (the shape tags of the bodies over it and of those its rays can reach behind them) and read from its record while it is the same. Every pixel whose record is for what it looks through now holds, value for value, the beams traced afresh, at every frame of scripted play (a vessel carried, turned and poured by hand, stirred); and the picture is, value for value, the picture with nothing kept and with each pixel's own corners. A record stands through a change of what lies in a vessel where the change is on rows of the screen its rays do not pass (each body's content tag, now and at the scene before, and the rows between which they differ; each ray the rows between which it met such a body): held frame after frame while a bottle pours into a flask and a flask is stirred. It fires where a liquid's level is moved under the same tags | exact | 33 |
 | O13 | A frame's rays are bounded (Stage 33). No pixel follows more than 96 rays in a frame (its beam's middle, and a correction a band of the most a frame reads, each cut at its lines); a bench left alone comes to follow none; through the play a frame's rays stay under what each mark's did. What a frame costs on the GPU is the rays it follows: with this the cost is held where no GPU runs. It fires on a bound a beam alone passes | exact (a count) | 33 |
+| O14 | (Not used: the number was set aside in Stage 33's plan for the corrections' mean, which was never built as a check) | — | — |
 | O15 | The pass's rays in single precision are its rays in double (Stage 33). The tracer of a shape's surfaces, the same text the GPU runs, compiled with a float's arithmetic and the GPU's tolerances: over every body that bends, rays across it straight in and aslant, fewer than one in two hundred go another way, and of the rest all but one in a hundred leave within a thousandth of a centimetre and of a heading of where they leave in double. It fires on another glass | tolerance | 33 |
 | O16 | The pass in single precision is the pass (Stage 35). The whole per-pixel source, the same text the GPU runs, compiled with a float's arithmetic, the GPU's tolerances and the scene's numbers as the GPU is sent them, and stepped frame by frame beside itself in double until neither asks for more: over the pixels bodies cover, the colours the two come to are a mean of under 1 apart on the eye metric, and fewer than one pixel in two hundred visibly apart (a pixel whose rays are chaotic is another draw in each). It fires on another picture. What it found: `docs/TDD_35_ONE.md` | tolerance | 35 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
@@ -2297,7 +2306,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 
 ## 19. Performance budget
 
-- 60 frames per second at 1920×1080.
+- 120 frames a second at 1920×1080 on the machine it is measured on (the user's decision, Stage 33): a frame
+  of 8.3 ms, of it the lab's steps no more than their budget (3 ms; Stage 36, §13.1). Until Stage 33: 60.
 - Simulation: one step under 5 µs for the demo's world, so 600× acceleration costs under 3 ms per
   frame. Measured by `chem_tool study` (Stage 2: 0.27 µs for one cell and a reservoir; Stage 3:
   0.43 µs for one cell, two reservoirs and the reaction table; Stage 4: 0.67 µs for a flask, a
@@ -2352,7 +2362,17 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   - A pour by hand at 600 times real time: 1.4 to 2.6 ms of a frame on the CPU (100 to 135 before:
     the liquid's level searched at every step).
   - The measurements, and what each mechanism gave: `docs/TDD_33_FAST.md`.
-- Timing is evidence, recorded per stage; it is not a gate.
+- **Stage 36** (`chem_tool study speed`: the screen's frame on the CPU, scene by scene, at 1×, 60× and 600×,
+  and at 600× under the host's budget of 3 ms; `docs/TDD_36_SPEED.md`). At 600× with no budget, before
+  the stage and after: the bench still 0.7 ms a frame; decomposing 0.9; dissolving stirred 2.1 (its
+  worst 8.6) and 2.0 (3.6); with three monitors and a controller 11 (its worst 1.2 s, a controller's
+  trial) and 3.4 (4.3); boiling into the condenser 2.0; a vessel of water and sediment poured by hand
+  2.8 and 0.55; the same stirred 140 (its worst 9.7 s) and 4.7. Under the budget every scene's frame
+  is 3 ms of steps and the scene composed (under 1 ms), and every one keeps 600× but the monitored
+  dissolving (553×) and the stirred pour, which keeps 600× over its frames but has single steps of up
+  to 18 ms while it pours. `make pass-cost`'s play runs on at 600× (its mark `fast`): 8.3 ms a frame,
+  the worst 13.4. At 1× the frames of the lab's steps while a vessel is stirred or poured into run to 18
+  and 23 ms (open: `docs/TDD_36_SPEED.md`).
 
 ## 20. Declared simplifications of the demo
 
@@ -2404,6 +2424,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A solution's index is water's; the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room is a cube with black cells along its edges (twice the screen's width, sixteen cells across a face), what glass reflects is its faces' mean as one radiance, the ruling of its faces is not drawn off the screen, and the wall is 20 cm behind the vessels: all design, not measured | Rims are darker than the wall, as on a lit bench; how much is the room's own |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
-| A vessel inside another is not built; where a ray at one end of the spectrum is turned back inside a prism and at the other is not, the piece of the spectrum between is read by chance rays alone (open: `docs/TDD_35_ONE.md`); a pixel stops asking for rays when its own estimate of its error is 2 on the eye metric (8 is visible), from its last sixteen batches: about one pixel in ten thousand, where rays are chaotic (a vessel's floor near its axis), stops visibly off the truth, in double as on the GPU (open: `docs/TDD_35_ONE.md`) | A few pixels of a prism's spectrum beside the slit's image stay dark or dim; two to eight pixels of a bench's picture are tinted where the truth is grey |
+| A vessel inside another is not built; where a ray at one end of the spectrum is turned back inside a prism and at the other is not, the piece of the spectrum between is read by chance rays alone (open: `docs/TDD_35_ONE.md`); a pixel stops asking for rays when its own estimate of its error is 2 on the eye metric (8 is visible), from its last sixteen batches: about one pixel in ten thousand, where rays are chaotic (a vessel's floor near its axis), stops visibly off the truth, on the CPU in double as in single precision, and on the GPU by a cause not found (open: `docs/TDD_35_ONE.md`, `docs/TDD_37_RIGHT.md`) | A few pixels of a prism's spectrum beside the slit's image stay dark or dim; none to eight pixels of a bench's picture, of 30,000 to 69,000, are tinted where the truth is grey |
 | A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
 | The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |

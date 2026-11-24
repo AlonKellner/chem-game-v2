@@ -1,6 +1,6 @@
 // Layers of refraction (GAME_SPEC §12.3, Stage 21): what is held is seen in front of what stands. A ray
-// is followed layer by layer by the bodies' maps (the chain); the truth traces every body of the one world
-// by its own tracer.
+// is followed layer by layer, each body traced through its own surfaces (the pass's tracer, Stage 29); the
+// truth traces every body of the one world by its own tracer.
 #include "lab/colour.hpp"
 #include "lab/optics_scene.hpp"
 
@@ -152,10 +152,10 @@ TEST_CASE("layers: a vessel picked up sees the wall from a gap further (Stage 21
 }
 
 TEST_CASE("layers: a ray followed through a held vessel and a standing one lands where both traced together land it (Stage 21)") {
-	// The renderer chains the two bodies' maps (each its body alone, straight in); the truth traces a ray
-	// through whatever medium a point of the one world is in. The chain itself is exact (to 1e-8 of a pixel,
-	// docs/TDD_21_LAYERS.md); each map is true to a fiftieth of a pixel of the screen, and the second vessel
-	// magnifies the first's share: the two put the image within 0.06 of a pixel, away from where rays part ways.
+	// The renderer follows a ray body by body, each traced through its own surfaces where the ray meets its layer;
+	// the truth traces a ray through whatever medium a point of the one world is in. The two are the same
+	// geometry by different code: they put the image within 0.06 of a pixel, away from where rays part ways.
+	// (Until Stage 35 the renderer chained the bodies' refraction maps: docs/TDD_21_LAYERS.md.)
 	int compared = 0, through_both = 0;
 	double worst = 0.0;
 	for (const float x : { 190.0f, 210.0f, 231.5f, 255.25f }) {
@@ -183,7 +183,7 @@ TEST_CASE("layers: a ray followed through a held vessel and a standing one lands
 	}
 	CHECK(compared > 1500);
 	CHECK(through_both > 500);
-	MESSAGE(compared << " rays through a held vessel over a standing one: the chain within " << worst << " of a pixel of the truth's tracer");
+	MESSAGE(compared << " rays through a held vessel over a standing one: the renderer's within " << worst << " of a pixel of the truth's tracer");
 }
 
 TEST_CASE("layers: every pixel's colour is what its rays bring, through what is held and what stands behind it (Stage 21)") {
@@ -324,7 +324,7 @@ TEST_CASE("O7: brightness is neither made nor lost by bending twice, or six time
 	REQUIRE(lab::check_O1(six) == "");
 	CHECK(six.table[3 * 4 + 1] == 5.0f);
 	CHECK(lab::check_O7(six, 199, 100, 320, 220, 0.6) == "");
-	// and through six the chain still lands where the truth's tracer does
+	// and through six the renderer's ray still lands where the truth's tracer does
 	int compared = 0;
 	for (int px = 252; px < 285; px += 2) {
 		const double exact = lab::optics_exact_bend(six, px, 190, 550.0);

@@ -149,6 +149,10 @@ CG_API void cg_ui_pointer(cg_ui *ui, float x, float y, int32_t state);
 /* A frame of real time, in seconds: the lab advances by it times the speed
  * chosen on the screen. */
 CG_API void cg_ui_frame(cg_ui *ui, double seconds);
+/* A frame's budget for the lab's steps, in milliseconds of the CPU (Stage 36; lab::Ui::set_budget): each
+ * cg_ui_frame runs whole steps until it has spent it and carries the rest, so a frame costs the same at any
+ * speed of the clock and a heavy moment runs the clock slower. 0 (as opened): every step asked is run. */
+CG_API void cg_ui_set_budget(cg_ui *ui, double ms);
 /* A play (Stage 33; lab/play.hpp, "chem-play/1"): what a hand does on the screen, as data. Once given, each
  * cg_ui_frame first gives the screen that frame's gestures. cg_ui_playing: the mark of the frame last given
  * ("" for none), or NULL when no play runs (none was given, or it is over). */

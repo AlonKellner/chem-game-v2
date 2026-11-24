@@ -145,9 +145,9 @@ TEST_CASE("truth: a level line on the wall, seen through a conical flask's cone,
 }
 
 TEST_CASE("renderer: through a beaker's upright band its pixels are the 3D truth's; a flask keeps a uniform wall as it is (Stage 24)") {
-	// a level ray through an upright band never meets the curves: the band's map is exact there, and the
-	// renderer's pixel (its footprint, read from the map) is the truth's (a grid of rays traced in three
-	// dimensions). A line drawn upright on the wall, seen through the glass, is the test of it.
+	// a level ray through an upright band never meets the curves, and the renderer's pixel (its beam's footprint,
+	// from its own rays: Stage 35) is the truth's (a grid of rays traced in three dimensions). A line drawn
+	// upright on the wall, seen through the glass, is the test of it.
 	const ItemView beaker = glassware("beaker", 250);
 	const OpticsScene scene = scene_of(beaker, { lab::OpticsShape{ X + 37.0f, 0.0f, 0.6f, 1000.0f, 0.05 }, lab::OpticsShape{ X + 61.3f, 0.0f, 1.4f, 1000.0f, 0.15 } });
 	const lab::glass::Vessel &g = *lab::glass::find("beaker", 250);
@@ -208,8 +208,8 @@ TEST_CASE("frames: a shaped vessel moved up or down settles on its new picture, 
 }
 
 TEST_CASE("renderer: through a flask's curved rows, before a wall of upright lines, its pixels are the 3D truth's (Stage 25)") {
-	// lines drawn up and down the wall: bending up and down changes nothing of them, so the rows read between
-	// two knots are held to the truth across, row by row (its rims apart: within a pixel of one, rays graze)
+	// lines drawn up and down the wall: bending up and down changes nothing of them, so the curved rows are held
+	// to the truth across, row by row (its rims apart: within a pixel of one, rays graze)
 	std::vector<lab::OpticsShape> lines;
 	for (int k = 0; k < 12; ++k) {
 		lines.push_back(lab::OpticsShape{ X - 20.0f + 11.3f * static_cast<float>(k), 0.0f, 0.7f + 0.2f * static_cast<float>(k % 3), 1000.0f, 0.1 + 0.05 * (k % 4) });
@@ -238,8 +238,8 @@ TEST_CASE("renderer: through a flask's curved rows, before a wall of upright lin
 		}
 	}
 	MESSAGE("through a flask's curved rows, " << compared << " pixels: worst " << worst << ", mean " << sum / compared << " on the eye metric, " << visible << " visible");
-	// a thin line's image is coloured by a cubic through the whole spectrum (each knot's map is of one piece, for
-	// the plain reading): at one pixel in a thousand its fringe shows
+	// a thin line's image is coloured by a cubic through a pixel's four nodes of the spectrum: at one pixel in a
+	// thousand its fringe shows
 	CHECK(compared > 300 / sparse());
 	CHECK(visible <= compared / 500);
 	CHECK(sum / compared < 1.0);
