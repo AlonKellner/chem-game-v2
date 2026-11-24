@@ -10,8 +10,8 @@ cleanup). The open items: `docs/TDD_35_ONE.md` (Open), `docs/TDD_33_FAST.md` (Op
 |---|---|---|
 | 37.1 | The pixels that stop off the truth (O4 on the GPU) | Measured; the screenshot tool's wait lengthened; open |
 | 37.2 | The prism's slit, where a node's ray is turned back | Tried: right, and too dear as it stands; open |
-| 37.3 | An upside-down vessel by the general model | |
-| 37.4 | Speed: the ideas of TDD 33, each measured | |
+| 37.3 | An upside-down vessel by the general model | Looked at; left as it is (below) |
+| 37.4 | Speed: the ideas of TDD 33, each measured | No target left to measure them on (below) |
 | 37.5 | `make gates`; the user's sign-off | |
 
 ## 37.1 The pixels that stop off the truth
@@ -73,3 +73,25 @@ not at every read; then O13 looked at again (the frame a thing moves still trace
 stretch, or the extra stretches put off to the next frames); then the GPU's cost measured (`make pass-cost`,
 the prism's own `make prism-shots`); and O10's own case restated for stretches cut at a route's change.
 The two prism cases stay marked `may_fail`.
+
+## 37.3 An upside-down vessel
+
+A vessel made as glassware and set upside down is already drawn by the general model: the scene gives it
+half a turn about its middle (`optics_compose`'s lie), and what lies in it is `contents::lying` at that turn,
+traced as any turned vessel. What is still its own: `Vessel::head_inverted` (the head over the cap of a
+placed pour, `lab.cpp`'s `set_pours` and the item's view), the level in the body's form for a vessel drawn as
+a plain cylinder (no glassware: tests' benches), and the shader's `flipped` for that cylinder. The head could
+be `lying(vessel, π, …)`'s (the same depth to a part in a billion, by a search where it is one bisection now);
+the plain cylinder has no shape to lie in. Left as it is: nothing seen changes, and the special case that is
+left is the plain cylinder's, which has no general model to go to.
+
+## 37.4 Speed
+
+Every mark of the cost play runs at the display's rate (8.3 ms a frame), 600× included (Stage 36). What is
+over it: the frames of the lab's steps at 1× while a vessel is stirred or poured into (18 to 23 ms, the frames
+between 4 to 6), and a frame in which every history starts again (23 ms). Stage 36 showed the step frames'
+cost is not the pixels' work (putting all of it off a frame changed nothing). None of TDD 33's ideas (the
+wall through the hardware's filter, a sparse lattice of rays, a ray's derivatives, an outline pixel in closed
+form, a carried vessel's beams moved with it, `path_of` once a pixel) is aimed at that, and without a GPU
+time a pass (the device's timestamps are empty on this backend) a gain could not be told from the frames'
+noise. Not tried; the step frames are the first thing to find (TDD 36, Open).
