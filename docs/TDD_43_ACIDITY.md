@@ -16,7 +16,7 @@ experiments) and §20.
 | 43.3 | The gates: Kw against IAPWS, γ± against Hamer and Wu and Goldberg, the titration study | Done |
 | 43.4 | The lab: `ph` in the view, the readout, the debug panel, monitors and goals; a part that signals | Done |
 | 43.5 | Two experiments: diluting an acid, an acid meets a base | Done |
-| 43.6 | The goldens: every digest moves (the tables grew); every measured value the same | Waiting on the user's approval |
+| 43.6 | The goldens: every digest moves (the tables grew); every measured value the same | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
 | 43.7 | GAME_SPEC 0.43.0, `make gates`, the user's sign-off | |
 
 ## 43.1 The data
@@ -116,7 +116,7 @@ gestures, strict at a person's pace, and free.
 
 ## 43.6 The goldens
 
-All six of `make sessions-check`'s digests move from command 0, along with the two golden tests of
+Both session records' digests (`make sessions-check`: demo, pressure) move from command 0, along with the two golden tests of
 `lab_tests` and `demo_session`:
 - `digest()` hashes each cell's whole amount and particle vectors, one entry per species.
 - Two more species make every vector longer.
@@ -128,7 +128,7 @@ one, and the printed output differs only by the new element's line in the conser
 - every warning and danger;
 - every total.
 
-Re-recording (`make sessions APPROVED=1`, and the lab tests' records) waits on the user's approval.
+Re-recorded with `make sessions APPROVED=1` once the user approved it (2026-11-24); the lab tests read the same records.
 
 ## Open
 
