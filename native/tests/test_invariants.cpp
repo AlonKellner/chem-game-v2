@@ -405,7 +405,7 @@ StepTrace clean_phase(std::vector<Reaction> &equilibria) {
 TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (Stage 5)") {
 	std::vector<Reaction> equilibria;
 	const StepTrace honest = clean_phase(equilibria);
-	REQUIRE(equilibria.size() == 1);
+	REQUIRE(equilibria.size() == 2); // water's evaporation, and the neutralisation (Stage 43), whose species the cell lacks
 	CHECK(check_all(builtin_species(), honest, equilibria).empty());
 	const auto water = static_cast<size_t>(builtin::water.index);
 	const auto steam = static_cast<size_t>(builtin::steam.index);

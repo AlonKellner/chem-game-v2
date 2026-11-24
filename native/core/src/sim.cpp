@@ -603,10 +603,12 @@ bool Simulation::project(CellId cell) {
 	// moves (one alone settles in the first round)
 	for (int round = 0; round < 8; ++round) {
 		bool moved = false;
+		int live = 0; // the equilibria that could move here (Stage 43: those of species the cell lacks are no round's)
 		for (const Reaction &reaction : equilibria_) {
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
+			++live;
 			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
@@ -621,7 +623,7 @@ bool Simulation::project(CellId cell) {
 			}
 		}
 		changed = changed || moved;
-		if (!moved || equilibria_.size() < 2) {
+		if (!moved || live < 2) {
 			break;
 		}
 	}

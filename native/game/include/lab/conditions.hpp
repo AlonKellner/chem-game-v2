@@ -80,6 +80,7 @@ struct PartPattern {
 	std::optional<Comparison::Op> op;
 	std::optional<double> value_at_least, value_at_most;
 	std::optional<bool> watching, ringing, rang;
+	std::optional<bool> signals; // its signal is on now (Stage 43)
 };
 struct WirePattern {
 	std::string from, to;

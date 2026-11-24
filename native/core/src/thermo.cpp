@@ -457,6 +457,46 @@ double activity(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 	return presence == Presence::Present ? exp(ln) : 0.0;
 }
 
+double water_ionisation(const SpeciesTable &table, double temperature) {
+	const SolutionDef &s = table.solution();
+	if (!(s.ionisation_g > 0.0) || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	const double t0 = T0;
+	const double entropy = (s.ionisation_h - s.ionisation_g) / t0;
+	const double g = s.ionisation_h + s.ionisation_cp * (temperature - t0) - temperature * (entropy + s.ionisation_cp * log(temperature / t0));
+	return exp(-g / (GAS_CONSTANT * temperature));
+}
+
+bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &out) {
+	const double kw = water_ionisation(table, temperature);
+	const Mix mix = mix_of(table, cell);
+	if (!(kw > 0.0) || !(mix.liquid > 0.0)) {
+		return false;
+	}
+	const std::vector<IonDef> &ions = table.solution().ions;
+	const auto index_of = [&](std::string_view name) {
+		for (size_t j = 0; j < ions.size(); ++j) {
+			if (ions[j].name == name) {
+				return static_cast<int>(j);
+			}
+		}
+		return -1;
+	};
+	const int h = index_of("H+1"), oh = index_of("OH-1");
+	const auto molal = [&](int j) { return j >= 0 ? mix.particles[static_cast<size_t>(j)] / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0; };
+	const auto gamma = [&](int j) { return j >= 0 ? exp(mix.ln_gamma[static_cast<size_t>(j)]) : 1.0; };
+	// the solvent's activity: the liquid is water, ln a = -dissolved / liquid + its excess (as log_activity has it)
+	const double water = exp(-mix.dissolved / mix.liquid + mix.solvent_excess);
+	const double k = kw * water / (gamma(h) * gamma(oh));
+	const double d = molal(h) - molal(oh);
+	// the free hydrogen ions, without the difference of near equals: m_H = d/2 + sqrt(d^2/4 + k)
+	const double root = std::sqrt(0.25 * d * d + k);
+	const double m_h = d >= 0.0 ? 0.5 * d + root : k / (root - 0.5 * d);
+	out = -log(gamma(h) * m_h) / log(10.0);
+	return true;
+}
+
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
 	const Mix mix = mix_of(table, cell);
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;

@@ -258,3 +258,54 @@ TEST_CASE("experiment rate: followed with its own gestures, free, it completes (
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+// ---- acids and bases (Stage 43)
+
+TEST_CASE("experiment dilution: followed with its own gestures, strict, each tenfold dilution raises the pH by nearly one (Stage 43)") {
+	Pupil p("data/benches/dilution.json", "data/tutorials/dilution.json");
+	CHECK(pupil::follow_through(p, 600) > 10);
+	completed(p);
+	const auto ph = [&](const std::string &id) {
+		REQUIRE(p.item(id).ph);
+		return *p.item(id).ph;
+	};
+	CHECK(ph("hundredth") - ph("tenth") > 0.7);
+	CHECK(ph("hundredth") - ph("tenth") < 1.0);
+	CHECK(ph("thousandth") - ph("hundredth") > 0.8);
+	CHECK(ph("thousandth") - ph("hundredth") < 1.0);
+	CHECK(p.drawn(", pH ")); // the readout
+}
+
+TEST_CASE("experiment dilution: played as a person plays it, strict, it completes (Stage 43)") {
+	Pupil p("data/benches/dilution.json", "data/tutorials/dilution.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment dilution: followed with its own gestures, free, it completes (Stage 43)") {
+	Pupil p("data/benches/dilution.json", "data/tutorials/dilution.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment neutralisation: followed with its own gestures, strict, the acid warms and its pH leaps past 7 (Stage 43)") {
+	Pupil p("data/benches/neutralisation.json", "data/tutorials/neutralisation.json");
+	CHECK(pupil::follow_through(p, 600) > 10);
+	completed(p);
+	REQUIRE(p.item("beaker").ph);
+	CHECK(*p.item("beaker").ph > 11.0);
+	CHECK(p.grams("beaker", "sodium_sulfate_aq") > 3.5); // 0.025 mol of it: 3.55 g
+	CHECK(p.grams("beaker", "sulfuric_acid_aq") < 1e-6);
+}
+
+TEST_CASE("experiment neutralisation: played as a person plays it, strict, it completes (Stage 43)") {
+	Pupil p("data/benches/neutralisation.json", "data/tutorials/neutralisation.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment neutralisation: followed with its own gestures, free, it completes (Stage 43)") {
+	Pupil p("data/benches/neutralisation.json", "data/tutorials/neutralisation.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}

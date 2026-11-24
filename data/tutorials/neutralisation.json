@@ -1,0 +1,69 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 43) on data/benches/neutralisation.json: an acid and a base. 1 M sodium hydroxide poured into 25 mL of 1 M sulfuric acid: the solution warms as they neutralise (55.8 kJ a mole of water), the pH hardly moves while acid is left, then leaps from 2 to 12 across the last few mL (40, 8 and 5 mL poured) (chem_tool study neutralisation).",
+	"title": "Experiment: an acid meets a base",
+	"bench": "../benches/neutralisation.json",
+	"steps": [
+		{
+			"part": "A pH monitor",
+			"title": "A monitor on the acid",
+			"text": "Drag a monitor out of the parts drawer onto a free square. Drag from its sensing port onto the beaker. Click \"vessel\", then \"pH\".",
+			"why": "The beaker holds 25 mL of 1 M sulfuric acid: 0.05 mol of hydrogen ions. The bottle holds 1 M sodium hydroxide, a base: each NaOH gives a hydroxide ion, OH-.",
+			"checks": [{"text": "a monitor reads the beaker's pH", "when": {"editor": {"editing": "monitor", "item": "beaker", "what": "ph"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}, {"drag": ["sense:monitor1", "item:beaker"]}, {"click": "edit:kind:vessel"}, {"click": "edit:quantity:ph"}]
+		},
+		{
+			"title": "Above pH 7",
+			"text": "Click \"above\". Then click the value, type 7, and click \"set\".",
+			"why": "Its lamp lights once the beaker is no longer acid.",
+			"checks": [{"text": "the monitor signals above pH 7", "when": {"part": {"kind": "monitor", "item": "beaker", "what": "ph", "compare": "above", "value_at_least": 6.5, "value_at_most": 7.5}}}],
+			"play": [{"click": "edit:compare:above"}, {"click": "edit:value:0"}, {"type": "7"}, {"click": "edit:set"}]
+		},
+		{
+			"part": "Neutralise",
+			"title": "40 mL of the base",
+			"text": "Pick up the base, then right-click the beaker. Drag the menu's slider to about 40 mL, then click \"pour\".",
+			"why": "Each hydroxide ion meets a hydrogen ion and they become water: H+ + OH- -> H2O. 40 mL of the base takes 0.04 mol of the 0.05.",
+			"checks": [
+				{"text": "about 65 mL in the beaker", "when": {"all": [{"item": "beaker", "liquid_above_ml": 60}, {"item": "beaker", "liquid_below_ml": 70}]}},
+				{"text": "still acid: pH below 2", "when": {"quantity": {"item": "beaker", "what": "ph"}, "compare": "below", "value": 2}}
+			],
+			"play": [{"drag": ["item:base", "item:beaker"]}, {"click": "panel:slider@0.16"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "It warms",
+			"text": "Point at the beaker: the readout shows its temperature.",
+			"why": "Making water out of its ions gives out heat, 55.8 kJ for each mole: the neutralisation is exothermic.",
+			"checks": [{"text": "the beaker above 25 C", "when": {"item": "beaker", "above_c": 25}}]
+		},
+		{
+			"title": "8 mL more",
+			"text": "Pick up the base again, right-click the beaker, slide to about 8 mL and pour.",
+			"why": "Now 0.048 mol of the 0.05 are gone: only 4 % of the acid is left, yet the pH is still about 2. pH counts in powers of ten.",
+			"checks": [
+				{"text": "about 73 mL in the beaker", "when": {"all": [{"item": "beaker", "liquid_above_ml": 70}, {"item": "beaker", "liquid_below_ml": 76}]}},
+				{"text": "still acid: pH below 4", "when": {"quantity": {"item": "beaker", "what": "ph"}, "compare": "below", "value": 4}}
+			],
+			"play": [{"drag": ["item:base", "item:beaker"]}, {"click": "panel:slider@0.038"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "5 mL more",
+			"text": "Once more: slide to about 5 mL and pour. Watch the monitor's lamp.",
+			"why": "2 mL of these neutralise the last of the acid; the other 3 mL are base left over, and the pH leaps past 7 to about 12. Exactly neutral lies within a drop: that is why a titration ends a drop at a time.",
+			"checks": [
+				{"text": "now basic: pH above 11", "when": {"quantity": {"item": "beaker", "what": "ph"}, "compare": "above", "value": 11}},
+				{"text": "the monitor signals", "when": {"part": {"kind": "monitor", "item": "beaker", "signals": true}}}
+			],
+			"play": [{"drag": ["item:base", "item:beaker"]}, {"click": "panel:slider@0.0247"}, {"click": "panel:pour"}]
+		}
+	],
+	"fails": [],
+	"goal": [
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "the beaker's pH", "quantity": {"item": "beaker", "what": "ph"}, "show": ["start", "most"]},
+		{"label": "the beaker's temperature", "quantity": {"item": "beaker", "what": "celsius"}, "show": ["start", "most"]},
+		{"label": "the salt made", "item": "beaker", "species": "sodium_sulfate_aq", "show": ["g"]}
+	]
+}

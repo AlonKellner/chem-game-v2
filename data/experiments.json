@@ -31,6 +31,20 @@
 			"tutorial": "tutorials/rate.json"
 		},
 		{
+			"id": "dilution",
+			"title": "Diluting an acid",
+			"summary": "pH: sulfuric acid diluted tenfold, three times; the pH climbs about a unit each time, and a monitor reads it.",
+			"bench": "benches/dilution.json",
+			"tutorial": "tutorials/dilution.json"
+		},
+		{
+			"id": "neutralisation",
+			"title": "An acid meets a base",
+			"summary": "Neutralisation: sodium hydroxide poured into sulfuric acid warms it; the pH hardly moves, then leaps from 2 to 12 within a few mL.",
+			"bench": "benches/neutralisation.json",
+			"tutorial": "tutorials/neutralisation.json"
+		},
+		{
 			"id": "free_lab",
 			"title": "The lab, free",
 			"summary": "The demo's bench with no steps: everything in the cabinet, yours to try.",

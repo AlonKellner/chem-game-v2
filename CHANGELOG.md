@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.43.0 (2026-11-24, Stage 43; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 43, `docs/TDD_43_ACIDITY.md`): **acids, bases and pH**. Sodium hydroxide and sodium sulfate in
+  solution (NBS 1982), the neutralisation a fast equilibrium (−55.84 kJ a water, so the solution warms), and
+  the pH derived from what is left over of the acid or the base and water's own ionisation. Kw is held to
+  IAPWS R11-24 from 0 to 100 °C; the new Pitzer pairs to Hamer and Wu and to Goldberg.
+  `chem_tool study neutralisation`.
+- §13.1, §13.3: the pH on the readout and the debug panel; `ph` for monitors, conditions and goals; a part's
+  condition `signals`.
+- §13.7: two experiments, diluting an acid and an acid meets a base.
+- §20: the acid's pH and its neutralisation's heat without bisulfate; the sodium salts only in solution.
+
 ## 0.41.0 (2026-11-24, Stage 41; signed off by the user: "Works perfectly, approved, merge and proceed")
 
 - §13.2 (Stage 41, `docs/TDD_41_EXPERIMENTS.md`): **a tutorial is strict or free**, by a switch on its card

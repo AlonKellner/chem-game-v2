@@ -77,6 +77,10 @@ struct SolutionDef {
 	std::vector<IonDef> ions;
 	std::vector<PairDef> pairs;
 	std::vector<ViscosityPoint> viscosity; // the solvent's, by rising temperature; empty: diffusion is not scaled
+	// water's own ionisation, H2O(l) -> H+(aq) + OH-(aq), at 25 C (GAME_SPEC §9, Stage 43): its enthalpy and
+	// Gibbs energy (J/mol) and its change of heat capacity (J/mol/K, held at every temperature); Kw follows.
+	// ionisation_g 0: none, and no pH
+	double ionisation_h = 0.0, ionisation_g = 0.0, ionisation_cp = 0.0;
 };
 
 struct SpeciesDef {

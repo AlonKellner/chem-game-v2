@@ -329,6 +329,16 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				solution.viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("mpa_s").get<double>() / 1000.0 });
 			}
 		}
+		// water's own ionisation (GAME_SPEC §9, Stage 43)
+		if (solutions_json.contains("water_ionisation")) {
+			const json &w = solutions_json.at("water_ionisation");
+			solution.ionisation_h = w.at("h_kj").get<double>() * 1000.0;
+			solution.ionisation_g = w.at("g_kj").get<double>() * 1000.0;
+			solution.ionisation_cp = w.at("cp").get<double>();
+			if (!(solution.ionisation_g > 0.0)) {
+				fail(solutions_file, "water_ionisation: its Gibbs energy is positive: water is mostly not ionised");
+			}
+		}
 		for (const json &p : solutions_json.at("pairs")) {
 			const auto ion_of = [&](const char *key) {
 				const std::string name = p.at(key).get<std::string>();
@@ -490,8 +500,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	if (solution.pairs.empty()) {
 		cpp << "\t{},\n";
 	}
-	char model[120];
-	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g;\n", solution.a_phi, solution.b);
+	char model[240];
+	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g, IONISATION_H = %.17g, IONISATION_G = %.17g, IONISATION_CP = %.17g;\n", solution.a_phi,
+			solution.b, solution.ionisation_h, solution.ionisation_g, solution.ionisation_cp);
 	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size()
 		<< ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
@@ -521,7 +532,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\tstatic const SpeciesTable table = [] {\n"
 		<< "\t\tstd::string why;\n"
 		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT),\n"
-		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT) };\n"
+		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"

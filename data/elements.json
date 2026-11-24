@@ -8,6 +8,7 @@
 		{"symbol": "O", "mass": "15.999"},
 		{"symbol": "Si", "mass": "28.085"},
 		{"symbol": "S", "mass": "32.06"},
-		{"symbol": "Cu", "mass": "63.546"}
+		{"symbol": "Cu", "mass": "63.546"},
+		{"symbol": "Na", "mass": "22.990"}
 	]
 }

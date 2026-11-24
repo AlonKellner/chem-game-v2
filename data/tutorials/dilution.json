@@ -1,0 +1,71 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 43) on data/benches/dilution.json: what pH measures. 1 M sulfuric acid diluted tenfold three times, the pH climbing about a unit each time (a little less: the ions' activity coefficients rise as the solution thins).",
+	"title": "Experiment: diluting an acid",
+	"bench": "../benches/dilution.json",
+	"steps": [
+		{
+			"part": "A tenth, a hundredth, a thousandth",
+			"title": "5 mL of acid into 45 mL of water",
+			"text": "Pick up the acid bottle, then right-click the first beaker. Drag the menu's slider to about 5 mL, then click \"pour\". Point at the beaker: the readout shows its pH.",
+			"why": "The bottle holds 1 M sulfuric acid. pH counts the hydrogen ions in powers of ten: pH 1 is a tenth of a mole of them in a litre, pH 2 a hundredth. Each H2SO4 gives two of them.",
+			"checks": [
+				{"text": "about 50 mL in the first beaker", "when": {"all": [{"item": "tenth", "liquid_above_ml": 49}, {"item": "tenth", "liquid_below_ml": 52}]}},
+				{"text": "its pH below 1.5", "when": {"quantity": {"item": "tenth", "what": "ph"}, "compare": "below", "value": 1.5}}
+			],
+			"play": [{"drag": ["item:acid", "item:tenth"]}, {"click": "panel:slider@0.0208"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "A tenth of that",
+			"text": "Pick up the first beaker, then right-click the second. Slide to 5 mL (a tenth of it) and pour.",
+			"why": "Ten times less acid in the same volume: ten times fewer hydrogen ions, so the pH goes up by about one.",
+			"checks": [
+				{"text": "about 50 mL in the second beaker", "when": {"all": [{"item": "hundredth", "liquid_above_ml": 49}, {"item": "hundredth", "liquid_below_ml": 52}]}},
+				{"text": "its pH between 1.5 and 2.5", "when": {"quantity": {"item": "hundredth", "what": "ph"}, "compare": "between", "values": [1.5, 2.5]}}
+			],
+			"play": [{"drag": ["item:tenth", "item:hundredth"]}, {"click": "panel:slider@0.1"}, {"click": "panel:pour"}]
+		},
+		{
+			"part": "A pH monitor",
+			"title": "A monitor on the last beaker",
+			"text": "Drag a monitor out of the parts drawer onto a free square. Drag from its sensing port onto the third beaker. Click \"vessel\", then \"pH\".",
+			"why": "The third beaker holds only water now: pH 7, neutral, as many hydroxide ions as hydrogen ions.",
+			"checks": [{"text": "a monitor reads the third beaker's pH", "when": {"editor": {"editing": "monitor", "item": "thousandth", "what": "ph"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}, {"drag": ["sense:monitor1", "item:thousandth"]}, {"click": "edit:kind:vessel"}, {"click": "edit:quantity:ph"}]
+		},
+		{
+			"title": "Below pH 4",
+			"text": "Click \"below\". Then click the value, type 4, and click \"set\".",
+			"why": "Its lamp lights once the beaker is clearly acid.",
+			"checks": [{"text": "the monitor signals below pH 4", "when": {"part": {"kind": "monitor", "item": "thousandth", "what": "ph", "compare": "below", "value_at_least": 3.5, "value_at_most": 4.5}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "4"}, {"click": "edit:set"}]
+		},
+		{
+			"part": "A thousandth",
+			"title": "And a tenth again",
+			"text": "Pick up the second beaker, then right-click the third. Slide to 5 mL and pour. Watch the monitor's lamp.",
+			"why": "A thousandth of the bottle's acid: about pH 3. Still a thousand times more hydrogen ions than pure water has.",
+			"checks": [
+				{"text": "the third beaker's pH between 2.4 and 3.5", "when": {"quantity": {"item": "thousandth", "what": "ph"}, "compare": "between", "values": [2.4, 3.5]}},
+				{"text": "the monitor signals", "when": {"part": {"kind": "monitor", "item": "thousandth", "signals": true}}}
+			],
+			"play": [{"drag": ["item:hundredth", "item:thousandth"]}, {"click": "panel:slider@0.1"}, {"click": "panel:pour"}]
+		}
+	],
+	"fails": [
+		{"text": "Acid went into the wrong beaker: the steps are a tenth each. Press reset to start again.",
+			"when": {"any": [
+				{"item": "hundredth", "species": "sulfuric_acid_aq", "above_g": 0.2},
+				{"item": "thousandth", "species": "sulfuric_acid_aq", "above_g": 0.02}
+			]}}
+	],
+	"goal": [
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "the bottle, 1 M", "quantity": {"item": "acid", "what": "ph"}, "show": ["now"]},
+		{"label": "a tenth", "quantity": {"item": "tenth", "what": "ph"}, "show": ["now"]},
+		{"label": "a hundredth", "quantity": {"item": "hundredth", "what": "ph"}, "show": ["now"]},
+		{"label": "a thousandth", "quantity": {"item": "thousandth", "what": "ph"}, "show": ["now"]}
+	]
+}

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.41.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.43.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -534,6 +534,23 @@ temperature.
     transition dissolves again as the solution cools, and the pentahydrate grows.
   - Boiled dry and heated on, the hydrates turn white as their water leaves.
 - Water on the white salt dissolves it and grows the blue pentahydrate.
+
+**Acids and bases** (Stage 43; `docs/TDD_43_ACIDITY.md`). There is a strong acid (H₂SO₄) and a
+strong base (NaOH, in solution: Na⁺ and OH⁻), both fully dissociated, and their salt (Na₂SO₄).
+- **The neutralisation** is a fast equilibrium (§8): H₂SO₄(aq) + 2 NaOH(aq) → Na₂SO₄(aq) + 2 H₂O(l).
+  With K = 1/Kw², an acid and a base never stand together in a solution: the one there is less of
+  is used up, to the little water's own ionisation leaves of it. Its heat follows from the tables,
+  −55.84 kJ a water, so the solution warms.
+- **The pH** is derived, not stored: −log₁₀ a(H⁺).
+  - The hydrogen ions' molality is what is left over of the acid's over the base's.
+  - Water's own ions solve (m_H + x)(m_OH + x)·γ_H·γ_OH = Kw·a(H₂O), so pure water and a neutral
+    salt are at pKw/2, and a base's pH follows from Kw.
+  - Kw comes from water's ionisation at 25 °C (NBS), its heat capacity held constant, and is
+    within 0.06 of IAPWS from 0 to 100 °C. Each γ is Pitzer's single-ion coefficient (§10).
+  - A vessel with a liquid shows it (the readout, the debug panel), and a monitor or a goal can
+    read it (`ph`, §13.3).
+- *(PLANNED)* Water's self-ionisation as a species, weak acids and bases, bisulfate, indicators,
+  a salt that comes out of solution (`docs/EXPERIMENTS_ROADMAP.md`, area 1).
 
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
@@ -1635,7 +1652,7 @@ every step" checks them all. The readout's first line is the conservation laws: 
 mass and energy unchanged since the bench was opened, or not.
 
 **The readout** shows what the pointer is on: its temperature, its pressure (Stage 28; sealed: what
-it gives way at, amber near it; broken: so), the volume of its gas and of its solids and liquids,
+it gives way at, amber near it; broken: so), its liquid's pH (Stage 43), the volume of its gas and of its solids and liquids,
 and each species' mass, particle count and size; then the lab's events and the last refusal.
 **The cabinet's shelves** share its height among what the bench can put in it (Stage 28: 118 px
 each, or less).
@@ -1776,7 +1793,8 @@ so the sessions' records are unchanged.
       volume (`ml`, Stage 28: a solid's or a liquid's own, a solute's apparent, a gas's share of the
       gas), purity (`purity`), and for a solid its particle count (`count`) and size (`size`);
     - **the vessel**: its temperature (`celsius`), its pressure (`kpa`, Stage 28: an open one's is
-      the room's), the mass of all it holds (`mass_g`), its liquid (`liquid_ml`), its solids
+      the room's), its liquid's pH (`ph`, Stage 43: while it holds one; a goal's term can read
+      it too), the mass of all it holds (`mass_g`), its liquid (`liquid_ml`), its solids
       (`solid_ml`), its solids and liquids (`condensed_ml`), its gas (`gas_ml`);
     - **other**: a balloon's fill (`fill`), a burner's valve (`valve`).
 - **A monitor** (`set {part, item, what, measure, compare, value | values}`):
@@ -2164,9 +2182,16 @@ stand on.
     held near 60 °C by a thermostat the player makes (a monitor below 60 °C rigged to open the
     burner's valve to 30 % and close it above); the warm oxide is gone while the others have lost
     under a tenth, the stirred no more than the still (the surface sets the pace).
+  - `dilution`, *diluting an acid* (§9, Stage 43): 1 M sulfuric acid diluted tenfold three times;
+    the pH climbs from 1.07 to 1.85 to 2.73, a little less than a unit each time (the ions' activity
+    coefficients rise as it thins); a monitor on the pH.
+  - `neutralisation`, *an acid meets a base* (§9, Stage 43): 1 M sodium hydroxide poured into 25 mL
+    of 1 M sulfuric acid, 40, 8 and 5 mL; the solution warms by about 7 K, and the pH stays below 3
+    with 4 % of the acid left, then leaps to 12 (`chem_tool study neutralisation`: the titration
+    curve, every mixture within 0.02 K of the closed form).
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
-  acids, bases and pH; precipitation and gas; boiling, bubbling and agitation; freezing and
+  the rest of acids, bases and pH (weak acids, indicators, a burette); precipitation and gas; boiling, bubbling and agitation; freezing and
   melting; pressure and temperature; humidity and saturation; and the lessons' own mechanics (a
   measurement log, a prediction, a plot).
 
@@ -2461,7 +2486,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
-| Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no pH, no vapour of its own; its heat capacity is the pure liquid's |
+| Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no vapour of its own; its heat capacity is the pure liquid's. Its pH (Stage 43) is that of all its hydrogen ions: 0.01 mol/kg reads 1.86 (about 1.87 measured), and a neutralisation gives the infinite-dilution heat, −55.8 kJ a water, where the bisulfate's dissociation adds about 11 kJ at 0.5 mol/kg |
+| Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |

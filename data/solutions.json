@@ -1,6 +1,6 @@
 {
 	"format": "chem-solutions/1",
-	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. Sources: docs/DATA_SOURCES.md.",
+	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. water_ionisation: water's own ionisation, whose constant Kw sets the pH where neither an acid nor a base is left over. Sources: docs/DATA_SOURCES.md.",
 	"a_phi": 0.392,
 	"b": 1.2,
 	"diffusion": {"note": "each ion's diffusion coefficient in water at infinite dilution, 25 C, m2/s (GAME_SPEC §7)", "source": "Li and Gregory 1974, Table 1", "H+1": 9.31e-9, "Cu+2": 7.33e-10, "SO4-2": 1.07e-9},
@@ -25,6 +25,9 @@
 	],
 	"pairs": [
 		{"cation": "Cu+2", "anion": "SO4-2", "beta0": 0.2358, "beta1": 2.485, "beta2": -47.35, "c_phi": 0, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974; their c_phi, -0.0012, left out: beyond 65 mol/kg it turns the water's activity back up"},
-		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"}
-	]
+		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"},
+		{"cation": "Na+1", "anion": "OH-1", "beta0": 0.0864, "beta1": 0.253, "c_phi": 0.0044, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table I (to 6 mol/kg)"},
+		{"cation": "Na+1", "anion": "SO4-2", "beta0": 0.01958, "beta1": 1.113, "c_phi": 0.004974, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table VI (to 4 mol/kg): their (4/3) beta0 0.0261, (4/3) beta1 1.484, (2^(5/2)/3) c_phi 0.00938"}
+	],
+	"water_ionisation": {"note": "H2O(l) -> H+(aq) + OH-(aq) at 25 C (GAME_SPEC §9, Stage 43): its enthalpy and Gibbs energy, kJ/mol, and its change of heat capacity, J/mol K, held at every temperature; Kw from them", "source": "NBS tables (Wagman et al. 1982): OH- -229.994, -157.244, -148.5; H2O(l) -285.830, -237.129, 75.291", "h_kj": 55.836, "g_kj": 79.885, "cp": -223.8}
 }

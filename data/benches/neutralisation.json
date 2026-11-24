@@ -1,0 +1,56 @@
+{
+	"format": "chem-bench/2",
+	"note": "The neutralisation's bench (GAME_SPEC §9, §13.7, Stage 43): a beaker of 25 mL of 1 M sulfuric acid (0.025 mol in 24.05 g of water) and a bottle of 1 M sodium hydroxide (0.25 mol in 250 g of water: 1 mol/kg). 50 mL of the base neutralises the acid (chem_tool study neutralisation).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "base",
+			"kind": "vessel",
+			"volume_ml": 500,
+			"wall": "glass",
+			"glassware": "bottle",
+			"wall_g": 250,
+			"loss": 0.8,
+			"contents": {
+				"water": {
+					"g": 250.0
+				},
+				"sodium_hydroxide_aq": {
+					"mol": 0.25
+				}
+			},
+			"at": [
+				2,
+				7
+			]
+		},
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				10,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 24.05
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.025
+				}
+			}
+		}
+	]
+}
