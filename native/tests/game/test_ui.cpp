@@ -1108,11 +1108,12 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 	CHECK_FALSE(p.item("controller1").part.tuned); // nothing rigged yet
 	p.drag("port:controller1", "item:burner"); // no settings: the valve follows its level
 	CHECK(p.ui->message().empty());
-	CHECK(p.item("controller1").part.tuned);
+	CHECK(p.item("controller1").part.trying); // its trial runs beside the lab, untuned meanwhile (Stage 39)
 	p.click("speed:600");
 	for (int frame = 0; frame < 60 * 10; ++frame) { // ten seconds of a person's watching: 100 minutes of the lab
 		p.ui->frame(1.0 / 60.0);
 	}
+	CHECK(p.item("controller1").part.tuned);
 	const double t = p.item("flask").celsius;
 	MESSAGE("the flask held at " << t << " C; the controller's level " << p.item("controller1").part.level);
 	CHECK(t == doctest::Approx(60.0).epsilon(1.0 / 60.0));

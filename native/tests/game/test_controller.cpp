@@ -39,6 +39,22 @@ const lab::ItemView &item(const lab::LabView &v, const std::string &id) {
 	return *at;
 }
 
+// a controller's trial runs beside the lab, two of its seconds a step (Stage 39): the lab stepped until no
+// trial runs (an hour's trial at most: 1800 steps); the steps it took
+int tried(lab::Lab &l) {
+	std::string why;
+	const auto trying = [&] {
+		const lab::LabView v = l.view();
+		return std::any_of(v.items.begin(), v.items.end(), [](const lab::ItemView &x) { return x.part.trying; });
+	};
+	int steps = 0;
+	for (; trying() && steps < 2000; ++steps) {
+		REQUIRE_MESSAGE(l.advance(1, why), why);
+	}
+	CHECK_FALSE(trying());
+	return steps;
+}
+
 struct Run {
 	double overshoot = 0.0; // above the target, at most
 	double settled = 1e9; // the first time from which it stays within a degree
@@ -52,6 +68,9 @@ Run hold(const char *speed) {
 	ok(*l, R"({"do": "sense", "part": "controller1", "item": "flask"})");
 	ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
 	ok(*l, std::string(R"({"do": "set", "part": "controller1", "what": "celsius", "target": 60, "speed": ")") + speed + "\"}");
+	CHECK(item(l->view(), "controller1").part.trying); // untuned while its trial runs (Stage 39)
+	CHECK_FALSE(item(l->view(), "controller1").part.tuned);
+	tried(*l);
 	const lab::Part c = item(l->view(), "controller1").part;
 	REQUIRE(c.tuned);
 	CHECK(c.kc > 0.0); // the burner heats: more level, more heat
@@ -108,6 +127,7 @@ TEST_CASE("controller: set, rigged and tuned; its rigs follow; untuned with the 
 	CHECK_FALSE(l->command(R"({"do": "rig", "from": "controller1", "item": "timer1", "control": "reset"})", why));
 	CHECK_FALSE(l->command(R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve", "on": 1})", why));
 	ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
+	tried(*l);
 	CHECK(item(l->view(), "controller1").part.tuned);
 	CHECK(l->view().rigs.back().follow);
 	// stirring, by PWM: the flask's stirring changes nothing of the beaker beside it, which it senses: untuned, with
@@ -122,6 +142,8 @@ TEST_CASE("controller: set, rigged and tuned; its rigs follow; untuned with the 
 	ok(*s, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
 	ok(*s, R"({"do": "set", "part": "controller1", "item": "beaker", "what": "celsius", "target": 50})");
 	ok(*s, R"({"do": "rig", "from": "controller1", "item": "flask", "control": "stir"})");
+	tried(*s);
+	REQUIRE_FALSE(s->view().notices.empty());
 	CHECK_FALSE(item(s->view(), "controller1").part.tuned);
 	CHECK(s->view().notices.back().says.find("is not tuned") != std::string::npos);
 	// (of the flask itself it changes the temperature, a little: a stirrer's work is heat in the liquid, Stage 32)
@@ -129,6 +151,7 @@ TEST_CASE("controller: set, rigged and tuned; its rigs follow; untuned with the 
 	ok(*w, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
 	ok(*w, R"({"do": "set", "part": "controller1", "item": "flask", "what": "celsius", "target": 50})");
 	ok(*w, R"({"do": "rig", "from": "controller1", "item": "flask", "control": "stir"})");
+	tried(*w);
 	CHECK(item(w->view(), "controller1").part.tuned);
 	// the valve follows its level, a step behind; the controller writes no notice each step
 	const size_t notices = l->view().notices.size();
@@ -197,6 +220,7 @@ TEST_CASE("controller: what it controls changed by a pour (its contents' mass do
 	ok(*l, R"({"do": "sense", "part": "controller1", "item": "flask"})");
 	ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
 	ok(*l, R"({"do": "set", "part": "controller1", "what": "celsius", "target": 60, "speed": "normal"})");
+	tried(*l);
 	const lab::Part first = item(l->view(), "controller1").part;
 	REQUIRE(first.tuned);
 	REQUIRE(l->advance(60 * 900, why));
@@ -204,7 +228,19 @@ TEST_CASE("controller: what it controls changed by a pour (its contents' mass do
 	const lab::LabView before = l->view();
 	const int tuned_before = static_cast<int>(std::count_if(before.notices.begin(), before.notices.end(), [](const lab::Notice &n) { return n.says.find("controller1 tuned") != std::string::npos; }));
 	ok(*l, R"({"do": "pour", "from": "jug", "to": "flask", "all": true})");
-	REQUIRE(l->advance(60, why));
+	// once the pour has run, its trial starts; meanwhile it holds on with the gains it had (Stage 39)
+	int waited = 0;
+	for (; !item(l->view(), "controller1").part.trying && waited < 600; ++waited) {
+		REQUIRE(l->advance(1, why));
+	}
+	const lab::Part trying = item(l->view(), "controller1").part;
+	REQUIRE(trying.trying);
+	CHECK(trying.tuned);
+	CHECK(trying.kc == first.kc);
+	const double level = trying.level;
+	const int steps = tried(*l);
+	MESSAGE("its trial again ran over " << steps << " steps");
+	CHECK(item(l->view(), "controller1").part.level == doctest::Approx(level).epsilon(0.2)); // no bump
 	const lab::LabView v = l->view();
 	const int tuned_after = static_cast<int>(std::count_if(v.notices.begin(), v.notices.end(), [](const lab::Notice &n) { return n.says.find("controller1 tuned") != std::string::npos; }));
 	CHECK(tuned_after == tuned_before + 1);
@@ -229,4 +265,39 @@ TEST_CASE("controller: what it controls changed by a pour (its contents' mass do
 	}
 	CHECK(said);
 	CHECK_FALSE(l->failed());
+}
+
+TEST_CASE("controller: its trial runs beside the lab, two of its seconds a step: untuned meanwhile, the same however the steps are grouped, saved and loaded mid-trial it goes on digest for digest (Stage 39)") {
+	auto a = heated(), b = heated();
+	for (lab::Lab *l : { a.get(), b.get() }) {
+		ok(*l, R"({"do": "part", "kind": "controller", "at": [1, 1]})");
+		ok(*l, R"({"do": "sense", "part": "controller1", "item": "flask"})");
+		ok(*l, R"({"do": "rig", "from": "controller1", "item": "burner", "control": "valve"})");
+		ok(*l, R"({"do": "set", "part": "controller1", "what": "celsius", "target": 60})");
+	}
+	std::string why;
+	REQUIRE(a->advance(5, why));
+	for (int k = 0; k < 5; ++k) {
+		REQUIRE(b->advance(1, why));
+	}
+	CHECK(a->digest() == b->digest());
+	const lab::Part c = item(a->view(), "controller1").part;
+	CHECK(c.trying);
+	CHECK_FALSE(c.tuned);
+	CHECK(c.level == 0.0);
+	CHECK(item(a->view(), "burner").valve == 0.0); // untuned: it does nothing yet
+	// saved mid-trial: the copies go with it
+	auto loaded = lab::Lab::load(a->save(), why);
+	REQUIRE_MESSAGE(loaded != nullptr, why);
+	CHECK(loaded->digest() == a->digest());
+	CHECK(item(loaded->view(), "controller1").part.trying);
+	const int steps = tried(*a);
+	REQUIRE(loaded->advance(steps, why));
+	CHECK(loaded->digest() == a->digest());
+	CHECK(item(loaded->view(), "controller1").part.tuned);
+	// a trial dropped: unsensed mid-trial, it is not tuned when it would have ended
+	ok(*b, R"({"do": "unsense", "part": "controller1"})");
+	CHECK_FALSE(item(b->view(), "controller1").part.trying);
+	REQUIRE(b->advance(steps + 10, why));
+	CHECK_FALSE(item(b->view(), "controller1").part.tuned);
 }

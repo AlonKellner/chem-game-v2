@@ -1,5 +1,15 @@
 # GAME_SPEC version history
 
+## 0.39.0 (2026-11-24, Stage 39; signed off by the user: "Approved, merge and proceed")
+
+- §13.3 (Stage 39, `docs/TDD_39_TRIAL.md`): **a controller's trial runs beside the lab**, two of its seconds
+  at each of the lab's steps (it ran whole inside one step: 50 ms for the monitored scene's, seconds for an
+  hour's). A controller set or rigged is untuned ("trying") until it ends; one tuned again keeps its gains
+  until the new. A running trial is saved with its copies and is in the digest.
+- §13.1: the budget's second piece is sized from what the first step cost (eight dear steps at once were a
+  frame of 18 ms).
+- §19: the measurements.
+
 ## 0.38.0 (2026-11-24, Stages 37 and 38; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 38, `docs/TDD_38_LEFT.md`): **the trash's leftovers.** A part put in the trash keeps its wires

@@ -42,6 +42,7 @@ constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
 constexpr double WORK_KELVIN = 1.0e300;
 constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
+constexpr int TRIAL_PER_STEP = 2; // a trial's seconds run at each of the lab's steps (Stage 39): what a step costs is bounded
 constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
 constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (GAME_SPEC §13.3, Stage 26)
@@ -564,8 +565,11 @@ struct Lab::Impl {
 				const std::string u = unit(p.quantity);
 				out.push_back("holds " + label(none, p.quantity) + " at " + shown(p.quantity, p.target) + ", " + SPEEDS[std::clamp(p.speed, 0, 2)]);
 				if (!p.tuned) {
-					out.push_back("not tuned: rig what it controls, and set it");
+					out.push_back(p.trying ? "trying what it controls, to tune itself" : "not tuned: rig what it controls, and set it");
 					break;
+				}
+				if (p.trying) {
+					out.push_back("trying what it controls again: its gains held until the trial's");
 				}
 				out.push_back(p.tau > 0.0 ? "its trial found: " + text_of("%.4g ", p.gain) + u + " full on, " + text_of("over %.0f s", p.tau) + text_of(", after %.1f s", p.theta)
 										  : "its trial found: " + text_of("%.4g ", p.gain) + u + " a second full on" + text_of(", after %.1f s", p.theta));
@@ -615,7 +619,7 @@ struct Lab::Impl {
 		}
 		for (size_t k = 0; k < parts.size(); ++k) {
 			Part &p = parts[k];
-			if (p.kind != PartKind::Controller || !p.tuned || !p.watching) {
+			if (p.kind != PartKind::Controller || !p.tuned || !p.watching || p.trying) {
 				continue;
 			}
 			const int sensed = find(p.quantity.item);
@@ -631,15 +635,8 @@ struct Lab::Impl {
 			basis_of(p.quantity.item, g, cp, has);
 			const auto off = [](double now, double was) { return std::fabs(now - was) > 0.1 * std::fabs(was) && std::fabs(now - was) > 1e-9; };
 			if (off(g, p.basis_g) || off(cp, p.basis_cp) || has != p.basis_has) {
-				const double level = p.level;
 				note(Notice::Detail, p.id, p.id + " tunes again: what it controls changed");
-				tune(static_cast<int>(k));
-				Part &q = parts[k];
-				const std::optional<double> value = reading(q.quantity);
-				if (q.tuned && value && q.kc != 0.0 && q.ti > 0.0) {
-					q.integral = q.ti * (level / q.kc - (q.target - *value));
-					q.level = level;
-				}
+				tune(static_cast<int>(k), true); // its gains held until the trial's
 			}
 		}
 	}
@@ -648,10 +645,46 @@ struct Lab::Impl {
 	// stands, every control rigged from it held full on in one and off in the other, read each second until the
 	// difference reaches half again the distance to the target, or levels off, or an hour passes; fitted, and
 	// SIMC's gains for its speed. Untuned, with the reason, when there is nothing to try or nothing moves.
-	void tune(int at) {
+	// The trial runs beside the lab, TRIAL_PER_STEP of its seconds at each of the lab's steps (Stage 39): a
+	// controller set or rigged is untuned until it ends; one tuned before (`again`, what it controls changed)
+	// keeps its gains until the new, then takes them with its level carried over.
+	struct Trial {
+		std::string part;
+		std::unique_ptr<Lab> copies[2];
+		std::vector<double> t, r; // each second's difference, on less off
+		double distance = 0.0; // from the target, as it started
+		double basis_g = 0.0, basis_cp = 0.0; // what it was tried on
+		uint64_t basis_has = 0;
+		bool again = false;
+	};
+	std::vector<Trial> trials;
+
+	int trial_of(const std::string &part) const {
+		for (size_t k = 0; k < trials.size(); ++k) {
+			if (trials[k].part == part) {
+				return static_cast<int>(k);
+			}
+		}
+		return -1;
+	}
+	void drop_trial(const std::string &part) {
+		std::erase_if(trials, [&](const Trial &t) { return t.part == part; });
+		const int at = find_part(part);
+		if (at >= 0) {
+			parts[static_cast<size_t>(at)].trying = false;
+		}
+	}
+
+	void tune(int at, bool again = false) {
 		Part &p = parts[static_cast<size_t>(at)];
-		retune(p, false);
-		p.gain = p.tau = p.theta = 0.0;
+		drop_trial(p.id);
+		const auto untune = [&] {
+			retune(p, false);
+			p.gain = p.tau = p.theta = 0.0;
+		};
+		if (!again) {
+			untune();
+		}
 		std::vector<Rig> mine;
 		for (const Rig &r : rigs) {
 			if (r.from == p.id && r.follow) {
@@ -659,19 +692,28 @@ struct Lab::Impl {
 			}
 		}
 		if (!p.watching || mine.empty()) {
+			untune();
 			return; // tuned once it is set and rigged
 		}
 		const std::optional<double> start = reading(p.quantity);
 		std::string why;
 		const std::string saved = start ? save().dump() : std::string();
-		std::unique_ptr<Lab> copies[2] = { saved.empty() ? nullptr : Lab::load(saved, why), saved.empty() ? nullptr : Lab::load(saved, why) };
-		const auto untuned = [&](const std::string &reason) { note(Notice::Warning, p.id, p.id + " is not tuned: " + reason); };
-		if (!copies[0] || !copies[1]) {
+		Trial tried;
+		tried.part = p.id;
+		tried.again = again;
+		for (std::unique_ptr<Lab> &copy : tried.copies) {
+			copy = saved.empty() ? nullptr : Lab::load(saved, why);
+		}
+		const auto untuned = [&](const std::string &reason) {
+			untune();
+			note(Notice::Warning, p.id, p.id + " is not tuned: " + reason);
+		};
+		if (!tried.copies[0] || !tried.copies[1]) {
 			untuned(start ? "the lab could not be copied to try it" : "it reads nothing of " + p.quantity.item);
 			return;
 		}
 		for (int k = 0; k < 2; ++k) {
-			Lab &l = *copies[k];
+			Lab &l = *tried.copies[k];
 			l.set_checking(false);
 			bool ok = l.command(json{ { "do", "scrap" }, { "part", p.id } }.dump(), why); // its rigs go with it
 			l.impl_->trial = true; // a copy tries; it does not tune its own controllers again (Stage 28)
@@ -686,32 +728,68 @@ struct Lab::Impl {
 				return;
 			}
 		}
-		const double distance = std::fabs(p.target - *start);
-		std::vector<double> t, r;
-		for (int second = 1; second <= TRIAL_SECONDS; ++second) {
-			if (!copies[0]->advance(60, why) || !copies[1]->advance(60, why)) {
-				break;
-			}
-			const std::optional<double> on = measure(copies[0]->view(), p.quantity), off = measure(copies[1]->view(), p.quantity);
-			if (!on || !off) {
-				break;
-			}
-			t.push_back(second);
-			r.push_back(*on - *off);
-			const double moved = std::fabs(r.back());
-			// far enough to hold the target, or levelled off: a third of the trial moved it by a hundredth
-			const size_t third = r.size() * 2 / 3;
-			if ((second >= 10 && distance > 0.0 && moved >= 1.5 * distance) ||
-					(second >= 60 && moved > 0.0 && std::fabs(r.back() - r[third]) < 0.01 * moved)) {
-				break;
-			}
+		tried.distance = std::fabs(p.target - *start);
+		basis_of(p.quantity.item, tried.basis_g, tried.basis_cp, tried.basis_has);
+		p.trying = true;
+		trials.push_back(std::move(tried));
+	}
+
+	// a trial's next second; true when it has ended
+	static bool trial_second(Trial &trial, const Quantity &q) {
+		const auto second = static_cast<int>(trial.t.size()) + 1;
+		std::string why;
+		if (second > TRIAL_SECONDS || !trial.copies[0]->advance(60, why) || !trial.copies[1]->advance(60, why)) {
+			return true;
 		}
+		const std::optional<double> on = trial.copies[0]->impl_->reading(q), off = trial.copies[1]->impl_->reading(q);
+		if (!on || !off) {
+			return true;
+		}
+		trial.t.push_back(second);
+		trial.r.push_back(*on - *off);
+		const double moved = std::fabs(trial.r.back());
+		// far enough to hold the target, or levelled off: a third of the trial moved it by a hundredth
+		const size_t third = trial.r.size() * 2 / 3;
+		return (second >= 10 && trial.distance > 0.0 && moved >= 1.5 * trial.distance) ||
+				(second >= 60 && moved > 0.0 && std::fabs(trial.r.back() - trial.r[third]) < 0.01 * moved);
+	}
+
+	// every trial on by its seconds for this step, and those ended fitted (Stage 39)
+	void run_trials() {
+		for (size_t k = 0; k < trials.size();) {
+			const int at = find_part(trials[k].part);
+			if (at < 0 || !parts[static_cast<size_t>(at)].watching) {
+				trials.erase(trials.begin() + static_cast<std::ptrdiff_t>(k));
+				continue;
+			}
+			bool ended = false;
+			for (int s = 0; s < TRIAL_PER_STEP && !ended; ++s) {
+				ended = trial_second(trials[k], parts[static_cast<size_t>(at)].quantity);
+			}
+			if (!ended) {
+				++k;
+				continue;
+			}
+			const Trial ended_one = std::move(trials[k]);
+			trials.erase(trials.begin() + static_cast<std::ptrdiff_t>(k));
+			parts[static_cast<size_t>(at)].trying = false;
+			trial_ended(at, ended_one);
+		}
+	}
+
+	// a trial ended: fitted, and SIMC's gains for its speed
+	void trial_ended(int at, const Trial &tried) {
+		Part &p = parts[static_cast<size_t>(at)];
+		const double level = p.level;
+		const bool tuned_before = p.tuned;
 		ProcessModel m;
-		if (!fit_process(t, r, m)) {
-			untuned("nothing it controls moves " + label(LabView{}, p.quantity));
+		if (!fit_process(tried.t, tried.r, m)) {
+			retune(p, false);
+			p.gain = p.tau = p.theta = 0.0;
+			note(Notice::Warning, p.id, p.id + " is not tuned: nothing it controls moves " + label(LabView{}, p.quantity));
 			return;
 		}
-		const double span = m.integrating ? t.back() : m.tau;
+		const double span = m.integrating ? tried.t.back() : m.tau;
 		const PiGains g = simc(m, closed_loop_time(m, static_cast<Speed>(p.speed), span), 2.0 * STEP_SECONDS);
 		p.gain = m.gain;
 		p.tau = m.integrating ? 0.0 : m.tau;
@@ -720,11 +798,20 @@ struct Lab::Impl {
 		p.kc = g.kc;
 		p.ti = g.ti;
 		p.period = std::clamp<int64_t>(std::llround(span / 10.0 / STEP_SECONDS), 600, 36000); // a tenth of its time: 10 s to 10 min
-		basis_of(p.quantity.item, p.basis_g, p.basis_cp, p.basis_has);
+		p.basis_g = tried.basis_g;
+		p.basis_cp = tried.basis_cp;
+		p.basis_has = tried.basis_has;
 		const std::string u = unit(p.quantity);
 		note(Notice::Event, p.id,
 				p.id + " tuned: " + (m.integrating ? text_of("%.3g ", m.gain) + u + " a second, full on" : text_of("%.3g ", m.gain) + u + " full on, " + text_of("over %.0f s", m.tau)) +
 						text_of(", after %.0f s; ", m.theta) + text_of("gain %.3g, ", g.kc) + text_of("integral time %.0f s", g.ti));
+		if (tried.again && tuned_before) { // no bump: its integral set to give the level it had
+			const std::optional<double> value = reading(p.quantity);
+			if (value && p.kc != 0.0 && p.ti > 0.0) {
+				p.integral = p.ti * (level / p.kc - (p.target - *value));
+				p.level = level;
+			}
+		}
 	}
 
 	// a control set, at a step boundary, by a rig or by the player's command;
@@ -1199,7 +1286,9 @@ struct Lab::Impl {
 			p.held = 0;
 			p.last.reset();
 			if (p.kind == PartKind::Controller) {
+				drop_trial(name); // (Stage 39)
 				retune(p, false);
+				p.trying = false;
 				p.gain = p.tau = p.theta = 0.0;
 				p.pinned = 0;
 				p.pinned_said = false;
@@ -1998,6 +2087,9 @@ struct Lab::Impl {
 			}
 		}
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
+		if (!trials.empty()) {
+			run_trials();
+		}
 		if (world().step() % READ_EVERY == 0) {
 			detect(false);
 			watch_controllers();
@@ -3002,6 +3094,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.watching = false;
 			p.last.reset();
 			retune(p, false);
+			drop_trial(p.id); // (Stage 39)
 			return true;
 		}
 		const std::string item = c.value("item", std::string());
@@ -3015,6 +3108,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.watching = false;
 			p.last.reset();
 			retune(p, false);
+			drop_trial(p.id); // (Stage 39)
 		}
 		return true;
 	}
@@ -4658,6 +4752,25 @@ std::string Lab::digest() const {
 	if (!m.parts.empty()) {
 		links(m.parts, m.wires, m.rigs);
 	}
+	// a controller's trial as it runs (Stage 39): what it has read and its copies' own digests; a lab with
+	// none digests as before
+	for (const Lab::Impl::Trial &t : m.trials) {
+		text("trial");
+		text(t.part);
+		for (const std::vector<double> *v : { &t.t, &t.r }) {
+			hash.update_u64(v->size());
+			for (const double x : *v) {
+				hash.update_double(x);
+			}
+		}
+		for (const double x : { t.distance, t.basis_g, t.basis_cp }) {
+			hash.update_double(x);
+		}
+		hash.update_u64(t.basis_has);
+		hash.update_u64(t.again ? 1 : 0);
+		text(t.copies[0]->digest());
+		text(t.copies[1]->digest());
+	}
 	// the trash, once it holds something (Stage 34): its order, where each element goes back to, and its
 	// parts as they will be restored; a lab with an empty trash digests as before
 	if (!m.trash.empty()) {
@@ -4798,6 +4911,14 @@ json Lab::Impl::save() const {
 	bench["signals"] = signals_json(true);
 	if (!trash.empty()) { // a lab with an empty trash saves as before (Stage 34)
 		bench["trash"] = trash_json(true);
+	}
+	if (!trials.empty()) { // a controller's trial as it runs (Stage 39): its two copies whole
+		json list_of = json::array();
+		for (const Trial &t : trials) {
+			list_of.push_back({ { "part", t.part }, { "copies", { json::parse(t.copies[0]->save()), json::parse(t.copies[1]->save()) } }, { "t", doubles(t.t) }, { "r", doubles(t.r) },
+					{ "distance", bits(t.distance) }, { "basis", { bits(t.basis_g), bits(t.basis_cp), t.basis_has } }, { "again", t.again } });
+		}
+		bench["trials"] = list_of;
 	}
 	bench["notices"] = notices_json(true);
 	bench["goals"] = { { "list", goals_json(true) }, { "made", goals_made } };
@@ -4952,6 +5073,28 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		}
 		if (bench.contains("trash") && !impl->trash_from(bench.at("trash"), why)) {
 			return nullptr;
+		}
+		for (const json &j : bench.value("trials", json::array())) { // (Stage 39)
+			Lab::Impl::Trial t;
+			t.part = j.at("part").get<std::string>();
+			const int at = impl->find_part(t.part);
+			for (size_t k = 0; k < 2; ++k) {
+				t.copies[k] = Lab::load(j.at("copies").at(k).dump(), why);
+				if (!t.copies[k]) {
+					return nullptr;
+				}
+				t.copies[k]->set_checking(false);
+				t.copies[k]->impl_->trial = true;
+			}
+			if (at < 0 || impl->parts[static_cast<size_t>(at)].kind != PartKind::Controller || !to_doubles(j.at("t"), t.t) || !to_doubles(j.at("r"), t.r) ||
+					!from_bits(j.at("distance"), t.distance) || !from_bits(j.at("basis").at(0), t.basis_g) || !from_bits(j.at("basis").at(1), t.basis_cp)) {
+				why = "the save holds a controller's trial that cannot be read";
+				return nullptr;
+			}
+			t.basis_has = j.at("basis").at(2).get<uint64_t>();
+			t.again = j.at("again").get<bool>();
+			impl->parts[static_cast<size_t>(at)].trying = true;
+			impl->trials.push_back(std::move(t));
 		}
 		for (const Item &x : impl->items) {
 			if (x.place == Place::Trash && impl->trash_at(x.id) < 0) {
