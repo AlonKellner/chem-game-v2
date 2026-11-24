@@ -382,6 +382,71 @@ gem malachite, sieved, 1 g in 600 mL, 580 rpm, 0.033 to 0.15 M acid, 25 to 45 °
 
 **Not used (not verified):** an absorption peak at 600–650 nm on an AI-generated page, rejected.
 
+## Boiling's bubbles (Stage 45)
+
+What a vessel's heated floor does (GAME_SPEC §11): its natural convection, the onset of its bubbles, how
+large they leave, how fast they rise, how fast they condense in a cooler bulk, and what they do to light.
+`data/boiling.json`, all of it read 2026-11-24.
+
+**Water's properties**, `water`: Lienhard, *A Heat Transfer Textbook* 6.00 (2024, ahtt.mit.edu), **Table A.3**,
+saturated liquid water, the rows from 7 to 147 °C as printed (ρ, cp, k, α, ν, Pr, β). His water data are from
+IAPWS's formulations ("in agreement with IAPWS recommendations through 2007"). Read between rows.
+
+**Surface tension**, `surface_tension`: Lienhard's **eq. 9.2a** (IAPWS), σ = 235.8 (1 − T/Tc)^1.256 [1 − 0.625
+(1 − T/Tc)] mN/m, Tc 647.096 K: 58.9 mN/m at 100 °C (his Example 9.2's 0.0589), 72.0 at 25 °C.
+
+**Natural convection off the floor** (code, `lab::bubbles::convection`): a plate heated from below, facing up,
+the length A/P (Lloyd and Moran 1974).
+- Below Ra = 1e7: Lienhard **eqs. 8.37a–b** (Raithby and Hollands): Nu = 0.560 Ra^¼ / [1 + (0.492/Pr)^9/16]^4/9,
+  and where Nu < 10, Nu = 1.4 / ln(1 + 1.4/Nu). The text extracted from the PDF loses the fraction bars; read
+  as these, each tends to the other's limit (1.4/ln(1 + 1.4/Nu) → Nu at large Nu), and the Prandtl factor
+  divides, as in every Churchill–Usagi form.
+- Above: **eq. 8.35**, Nu = 0.14 Ra^⅓ (1 + 0.0107 Pr)/(1 + 0.01 Pr).
+- Against Lloyd and Moran's 0.54 Ra^¼ (measured by mass transfer, Sc 2200): within 10 % at water's Prandtl
+  numbers. A 66 mm beaker floor at 4 K: Ra 1.3e6, h 650 W/m²K.
+
+**The onset** (the floor's surface, calibrated): a bubble starts where the floor's largest cavity holds a
+nucleus, 2σ/r = a_w p_sat(T) − p (Lienhard **eq. 9.1**). No measured onset superheat on glass was found. Lienhard's
+**Example 9.1** pairs 8 K of superheat with a cavity of 0.0035 mm, and the game gives glass that cavity:
+`cavity_um` 3.5. Chang's boiling-point experiments (Cambridge HPS, "The Myth of the Boiling Point") show water
+in Pyrex beakers boiling above 100 °C, up to about 101 °C in the bulk; boiling stones bring it back. A bulk that
+superheats is not modelled yet (GAME_SPEC §20).
+
+**Nucleate boiling**: Rohsenow, Lienhard **eq. 9.4**: c_p ΔT/(h_fg Pr^s) = C_sf [q/(μ h_fg) √(σ/g Δρ)]^0.33.
+- Table 9.2 gives C_sf for water on copper and platinum 0.013, nickel and brass 0.006, s = 1.0; none for glass
+  (Pioro 1999's fuller table was not read). Glass takes **0.013** (calibrated), s 1.0.
+- Gate: Lienhard's **Example 9.2**: C_sf 0.016 at 22 K gives 800 kW/m² (his Fig. 9.2's heater).
+- Its typical error is 100 % in q and 25 % in ΔT (Lienhard).
+
+**A bubble's size as it leaves**: **Fritz** (1935), d = 0.0208 θ √(σ/(g Δρ)), θ in degrees (as quoted in
+"Life beyond Fritz", arXiv:2406.01989, eq. 9). No contact angle of water on lab glass was found; **45°**, Fritz's
+own for water (calibrated): 2.34 mm at 100 °C.
+
+**Its rise**: **Baz-Rodríguez et al. 2012** (*Rev. Mex. Ing. Quím.* 11, 269), eq. 1, V = (V₁⁻² + V₂⁻²)^−½: V₁
+the potential flow's with its viscous correction (eqs. 2, 6), V₂ Lehrer's wave analogy, √(3σ/ρd + g d/2)
+(eq. 8). Against measured pure water: their speed's extrema lie at about 0.15 and 0.65 cm across (Mendelson
+1967, Loth 2010), theirs at 0.17 and 0.67; the game's at 0.161 and 0.665 cm, a peak of 34 cm/s
+(`measured: a bubble's rise peaks near 0.15 cm`).
+
+**Its condensing**: **Chen and Mayinger 1992** (*Int. J. Multiphase Flow* 18, 877), Nu = 0.185 Re^0.7 Pr^0.5,
+400 < Re < 1e4, read in Herry et al. (MHMT 2024), not in the paper itself. A bubble shrinks as
+dd/dt = −2 h ΔT_sub/(ρ_v h_fg), and is gone at 5 % of its first diameter. Below Re 400 (its last moments) the
+correlation is used past its range. Isenberg and Sideman 1970, Warrier et al. 2002, Kim and Park 2011 and
+Kalman 2003 are behind paywalls: not read.
+
+**What they do to light**: bubbles far larger than the wavelength have an extinction efficiency of **2** (Flatau
+et al. 2000, citing Bohren and Huffman), and scatter with little spectral dependence (Piskozub et al. 2004). Their
+scattering goes mostly forward: the asymmetry parameter g is about **0.85** for bubbles in water (Flatau et al.
+2000, m = 0.75 averaged over size parameters 100 to 300; a 2 mm bubble's is about 1.5e4, so medium confidence).
+The game's bubbles are a haze of what their scattering turns away from its path, the reduced extinction
+2 · (1 − g) · n · πd²/4 (the similarity relation): the light they bend a little goes on with the rest. They are a
+**scatter medium** in `data/optics/media.json`'s scatterers, `bubbles`: a single-scattering albedo of 1 at every
+wavelength (they absorb nothing), an efficiency of 2 and an asymmetry of 0.85; the pass reads the albedo as a
+row of a vessel's spectra, as it reads every other medium's.
+
+**Water's own boiling** is the table's (GAME_SPEC §8): the floor's boiling point is the table's saturation at the
+pressure there, the room's plus ρ g h, lowered by the solution's water activity.
+
 ## Measured kinetics (Stage 23)
 
 Each rate from a measurement, read 2026-11-21, with an oracle test at the source's own conditions

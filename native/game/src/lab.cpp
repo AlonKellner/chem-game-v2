@@ -1,4 +1,5 @@
 #include "lab/lab.hpp"
+#include "lab/bubbles.hpp"
 #include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
@@ -334,7 +335,7 @@ struct Lab::Impl {
 			return std::nullopt;
 		}
 		LabView one;
-		one.items.push_back(item_view(items[static_cast<size_t>(i)], false));
+		one.items.push_back(item_view(items[static_cast<size_t>(i)], false, q.what == "bubbles_cm"));
 		return measure(one, q);
 	}
 
@@ -2335,8 +2336,8 @@ struct Lab::Impl {
 
 	// (`shaped`: with how what is in it lies, a pour by hand's and a vortex's searches; a reading of a quantity,
 	// which reads none of them, leaves them out: at every step, for every monitor, at 600 times the clock's speed,
-	// they were most of the frame. Stage 36)
-	ItemView item_view(const Item &item, bool shaped = true) const {
+	// they were most of the frame. Stage 36; and its bubbles, `bubbling`, which only a reading of them needs, Stage 45)
+	ItemView item_view(const Item &item, bool shaped = true, bool bubbling = true) const {
 		const Impl &m = *this;
 		const SpeciesTable &table = m.table();
 		static const char PHASE[] = { 's', 'l', 'g', 'a' };
@@ -2409,6 +2410,9 @@ struct Lab::Impl {
 			if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 				v.ph = p;
 			}
+			if (item.kind == Kind::Vessel && (shaped || bubbling)) {
+				m.bubbles_into(item, kelvin, v);
+			}
 			v.gas_ml = fill.gas * 1e6;
 			v.condensed_ml = fill.condensed * 1e6;
 			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
@@ -2461,6 +2465,67 @@ struct Lab::Impl {
 			v.celsius = m.world().meta(item.cell).reservoir_temperature - 273.15;
 		}
 		return v;
+	}
+
+	// Boiling's bubbles (GAME_SPEC §11, Stage 45): from the heat its floor took from a burner in the last step,
+	// its bulk, its liquid's depth, and the gas its reactions gave off in the liquid; an upright vessel of a
+	// standard shape on the bench, holding water as a liquid
+	void bubbles_into(const Item &item, double kelvin, ItemView &v) const {
+		const CellState &cell = world().snapshot_cell(item.cell);
+		if (item.place != Place::Bench || item.inverted || item.pours_into >= 0 || cell.amount[static_cast<size_t>(builtin::water.index)] <= 0) {
+			return;
+		}
+		const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml);
+		const Fill fill = fill_of(table(), cell, kelvin, &world().meta(item.cell));
+		if (g == nullptr || !fill.defined) {
+			return;
+		}
+		bubbles::Floor f;
+		const double r = g->radius_inside(g->floor + 1e-3) * 1e-2; // m
+		f.floor_m2 = 3.14159265358979323846 * r * r;
+		f.perimeter_m = 2.0 * 3.14159265358979323846 * r;
+		f.depth_m = std::max(g->level(fill.condensed * 1e6) - g->floor, 0.0) * 1e-2;
+		f.bulk_c = kelvin - 273.15;
+		f.pressure_pa = pressure_pa(item);
+		f.water_activity = activity(table(), cell, builtin::water, &world().meta(item.cell));
+		const StepFlows &flows = sim->flows();
+		const std::span<const Edge> edges = world().edges();
+		for (const Item &b : items) {
+			if (b.kind != Kind::Burner || b.heats.index < 0 || static_cast<size_t>(b.heats.index) >= edges.size()) {
+				continue;
+			}
+			const Edge &e = edges[static_cast<size_t>(b.heats.index)];
+			const size_t slot = static_cast<size_t>(b.heats.index) * PROCESSES + static_cast<size_t>(Process::Heat);
+			if ((e.a == item.cell || e.b == item.cell) && slot < flows.energy.size()) {
+				f.heat_w += (e.b == item.cell ? 1.0 : -1.0) * static_cast<double>(flows.energy[slot]) * JOULE_PER_QUANTUM / sim->step_seconds();
+			}
+		}
+		// the gas its rated reactions made this step in the liquid, at its temperature and pressure
+		double gas_mol = 0.0;
+		for (size_t k = 0; k < sim->rated().size(); ++k) {
+			const size_t slot = static_cast<size_t>(item.cell.index) * flows.reactions + k;
+			if (slot >= flows.extent.size() || flows.extent[slot] == 0) {
+				continue;
+			}
+			for (const Term &t : sim->rated()[k].terms()) {
+				if (table().species(t.species).phase == Phase::Gas) {
+					gas_mol += std::max(static_cast<double>(flows.extent[slot]) * t.nu, 0.0) * MOL_PER_QUANTUM;
+				}
+			}
+		}
+		f.gas_m3_s = gas_mol * GAS_CONSTANT * kelvin / f.pressure_pa / sim->step_seconds();
+		const bubbles::Bubbles b = bubbles::boil(f);
+		v.depth_cm = f.depth_m * 100.0;
+		v.floor_c = b.floor_c;
+		v.floor_boils_c = b.saturation_floor_c;
+		v.boiling = b.boiling;
+		v.bubbles_surface = (b.boiling && b.surface) || b.gas_extinction > 0.0;
+		v.bubbles_cm = v.bubbles_surface ? v.depth_cm : b.boiling ? b.end_m * 100.0 : 0.0;
+		v.bubble_mm = b.diameter_m * 1000.0;
+		v.bubble_extinction = b.extinction_floor * 0.01; // a cm
+		v.bubble_exponent = b.exponent;
+		v.gas_extinction = b.gas_extinction * 0.01;
+		v.bubbles_end_cm = b.end_m * 100.0;
 	}
 
 	// connections change at a step boundary: take the step in progress to its end
@@ -4511,6 +4576,21 @@ ItemDebug Lab::debug(const std::string &id) const {
 		// its liquid's pH, and what sets it (Stage 43)
 		if (double p = 0.0; thermal.defined && chem::ph(table, state, thermal.temperature, p)) {
 			out.facts.push_back(text_of("pH %.2f", p) + text_of(" (Kw %.3g at its temperature)", chem::water_ionisation(table, thermal.temperature)));
+		}
+		// its floor and its bubbles (Stage 45)
+		if (thermal.defined) {
+			ItemView b;
+			m.bubbles_into(x, thermal.temperature, b);
+			if (b.depth_cm > 0.0 && (b.floor_c > thermal.temperature - 273.15 + 0.05 || b.boiling || b.gas_extinction > 0.0)) {
+				std::string fact = text_of("its floor %.1f C (it boils at %.2f C there, ", b.floor_c, b.floor_boils_c) + text_of("under %.1f cm of liquid)", b.depth_cm);
+				if (b.boiling) {
+					fact += text_of(": bubbles of %.1f mm leave it", b.bubble_mm) + (b.bubbles_surface ? std::string(" and reach the surface") : text_of(" and are gone %.1f mm up, condensing in the cooler liquid", b.bubbles_end_cm * 10.0));
+				}
+				if (b.gas_extinction > 0.0) {
+					fact += "; a gas rises through it in bubbles";
+				}
+				out.facts.push_back(fact);
+			}
 		}
 		if (x.pours_into >= 0 && x.pour.index >= 0) {
 			const double rate = world.edges()[static_cast<size_t>(x.pour.index)].rate * 1e6;

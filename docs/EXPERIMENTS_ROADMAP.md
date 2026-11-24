@@ -115,7 +115,11 @@ reach the surface at all, but end at some midpoint." Agreed plan: this area is t
 the heated floor"; the full vertical dimension (area 8) and two liquids (area 9) are stages of their own after
 it.
 
-**Today.** Boiling is a fast equilibrium on a vessel as one well-mixed cell: the steam leaves the liquid for
+**Built in Stage 45** (`docs/TDD_45_BUBBLES.md`): the model below, all but the superheated bulk, bumping and
+boiling chips; the `boiling` experiment. Still to come here: a bulk that superheats and bumps, chips, a
+column that narrows with its vessel, bubbles as bodies the pass traces, sloshing.
+
+**Before Stage 45.** Boiling is a fast equilibrium on a vessel as one well-mixed cell: the steam leaves the liquid for
 the vessel's gas at once, and nothing is seen. A gas a reaction makes in a liquid (the malachite's carbon
 dioxide, Stage 44) leaves at once too. Only stirred powder scatters inside a liquid.
 

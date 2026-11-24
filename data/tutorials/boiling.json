@@ -1,0 +1,199 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §11, §13.7, Stage 45) on data/benches/boiling.json: boiling's bubbles. Heated from below, the beaker's floor stands far hotter than its water; bubbles of steam start there, rise, and condense in the cooler water a fraction of a millimetre up; as the water nears its boiling point they climb higher, and at the boil they reach the surface (lab/bubbles.hpp).",
+	"title": "Experiment: bubbles of a boil",
+	"bench": "../benches/boiling.json",
+	"steps": [
+		{
+			"part": "Heat from below",
+			"title": "A burner under the beaker",
+			"text": "Pick up the burner in the cabinet, then click the beaker.",
+			"why": "The beaker holds 200 g of water, 5.9 cm deep. A flame heats its floor; the water takes the heat from the floor.",
+			"checks": [
+				{
+					"text": "the burner is under the beaker",
+					"when": {
+						"item": "burner",
+						"under": "beaker"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:beaker"
+					]
+				}
+			]
+		},
+		{
+			"title": "Full flame",
+			"text": "Right-click the burner to choose it, then drag its valve fully open.",
+			"why": "About 450 W through a floor of 34 square centimetres. Warm water rises off the floor and the cooler sinks onto it, so the water stays near one temperature; the floor itself stands far hotter.",
+			"checks": [
+				{
+					"text": "the valve fully open",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.9
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@1"
+				}
+			]
+		},
+		{
+			"part": "Bubbles",
+			"title": "A monitor on the bubbles",
+			"text": "Drag a monitor out of the parts drawer onto a free square. Drag from its sensing port onto the beaker. Click \"vessel\", then \"bubbles' height\".",
+			"why": "Where the floor is hot enough, a scratch in the glass holds a speck of steam, and it grows into a bubble: about 2.3 mm across as it leaves the floor. The monitor reads how high the bubbles get before they are gone.",
+			"checks": [
+				{
+					"text": "a monitor reads how high the beaker's bubbles reach",
+					"when": {
+						"editor": {
+							"editing": "monitor",
+							"item": "beaker",
+							"what": "bubbles_cm"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"drawer:monitor",
+						"square:1,1"
+					]
+				},
+				{
+					"drag": [
+						"sense:monitor1",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "edit:kind:vessel"
+				},
+				{
+					"click": "edit:quantity:bubbles_cm"
+				}
+			]
+		},
+		{
+			"title": "Above 5 cm",
+			"text": "Click \"above\". Then click the value, type 5, and click \"set\".",
+			"why": "Its lamp lights once the bubbles reach nearly to the surface.",
+			"checks": [
+				{
+					"text": "the monitor signals above 5 cm",
+					"when": {
+						"part": {
+							"kind": "monitor",
+							"item": "beaker",
+							"what": "bubbles_cm",
+							"compare": "above",
+							"value_at_least": 4.5,
+							"value_at_most": 5.5
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "edit:compare:above"
+				},
+				{
+					"click": "edit:value:0"
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "edit:set"
+				}
+			]
+		},
+		{
+			"title": "They climb",
+			"text": "Click 10x on the clock. Point at the beaker: the readout says how far the bubbles get. Watch the cloud of them low in the water.",
+			"why": "A bubble of steam in water cooler than its own boiling point gives its heat to the water and shrinks: in cold water it is gone a fraction of a millimetre up, in water a kelvin under the boil after a centimetre or two. The heat it carried warms the water all the same.",
+			"checks": [
+				{
+					"text": "the bubbles reach above 5 cm",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "bubbles_cm"
+						},
+						"compare": "above",
+						"value": 5
+					}
+				}
+			]
+		},
+		{
+			"title": "The boil",
+			"text": "Watch the monitor's lamp.",
+			"why": "At the boil the water is as hot as a bubble's own steam, nothing condenses it, and the bubbles reach the surface: the steam leaves the water. Its floor boils a little hotter than its surface (the water's weight on it), so the bubbles still shrink a little low down.",
+			"checks": [
+				{
+					"text": "the monitor signals",
+					"when": {
+						"part": {
+							"kind": "monitor",
+							"item": "beaker",
+							"signals": true
+						}
+					}
+				},
+				{
+					"text": "the water at 99.5 C or more",
+					"when": {
+						"item": "beaker",
+						"above_c": 99.5
+					}
+				}
+			]
+		}
+	],
+	"fails": [],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "how high the bubbles reached",
+			"quantity": {
+				"item": "beaker",
+				"what": "bubbles_cm"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "the water",
+			"quantity": {
+				"item": "beaker",
+				"what": "celsius"
+			},
+			"show": [
+				"start",
+				"most"
+			]
+		}
+	]
+}

@@ -1,0 +1,92 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{
+			"do": {
+				"do": "place",
+				"item": "beaker",
+				"at": [
+					12,
+					7
+				]
+			}
+		},
+		{
+			"do": {
+				"do": "place",
+				"item": "acid",
+				"at": [
+					4,
+					7
+				]
+			}
+		},
+		{
+			"do": {
+				"do": "pour",
+				"from": "acid",
+				"to": "beaker",
+				"ml": 150
+			}
+		},
+		{
+			"do": {
+				"do": "place",
+				"item": "burner",
+				"at": [
+					12,
+					11
+				]
+			}
+		},
+		{
+			"do": {
+				"do": "heat",
+				"burner": "burner",
+				"vessel": "beaker"
+			}
+		},
+		{
+			"do": {
+				"do": "valve",
+				"burner": "burner",
+				"to": 1.0
+			}
+		},
+		{
+			"frames": 120,
+			"mark": "cold",
+			"shot": "boil-cold"
+		},
+		{
+			"do": {
+				"do": "wait_until",
+				"item": "beaker",
+				"above_c": 99.0,
+				"timeout": 3600
+			}
+		},
+		{
+			"frames": 120,
+			"mark": "near",
+			"shot": "boil-near"
+		},
+		{
+			"do": {
+				"do": "wait_until",
+				"item": "beaker",
+				"above_c": 100.4,
+				"timeout": 3600
+			}
+		},
+		{
+			"frames": 120,
+			"mark": "boiling",
+			"shot": "boil-boiling"
+		},
+		{
+			"frames": 10,
+			"mark": "boiling"
+		}
+	]
+}

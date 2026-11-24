@@ -117,7 +117,7 @@ int main(void) {
 		fprintf(stderr, "the draw list is not in two parts around the optical pass\n");
 		return 1;
 	}
-	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 5 + 256 * 8 + 48 * 27 * 4 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 1 * 6 * 401 ||
+	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 5 + 256 * 8 + 48 * 27 * 4 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 1 * 7 * 401 ||
 			optics.line_count != 256 || optics.light_count != 4097 + 401 || optics.rows == NULL || optics.lights == NULL || optics.lights[4 * 4096 + 2] < 0.99f) {
 		fprintf(stderr, "the optical pass's scene is not one vessel in 115 vectors, with its spectra, its lines and the room light's table\n");
 		return 1;

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.44.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.45.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -647,7 +647,8 @@ inside a cell.
   the wall and preferential nucleation happen.
 - **Deposits:** crusts, soot and residue are solids held by the wall cell; they add thermal
   resistance and change what is seen.
-- **Wetting and meniscus**; **bubbles** as a transient gas population in a liquid.
+- **Wetting and meniscus**; **bubbles** as a transient gas population in a liquid (built for a heated floor
+  and a reaction's gas, Stage 45: below).
 - **Cleaning:** removing deposits by solvent, heat or abrasion.
 - **A liquid's surface as a shape** *(PLANNED; asked for by the user, 2026-11-20)*. Today a
   liquid's surface is flat and level, and is seen only by what the liquid under it does to the
@@ -705,6 +706,37 @@ any angle about the eye's axis:
 - **H1, H2** (§18) hold what lies in a vessel to its amounts and to its bounds.
 
 Not built: the meniscus, sloshing, a paraboloid's vortex (a cone has its volume and its place).
+
+**Boiling's bubbles** (Stage 45; `lab/bubbles.hpp`, `docs/TDD_45_BUBBLES.md`; asked for by the user, 2026-11-24).
+A liquid heated from below is unstable: its warm bottom rises, and natural convection keeps the bulk within a
+little of one temperature (one cell, §5). What is not uniform is a thin boundary layer against the hot floor,
+which can stand above the boiling point while the bulk is well below it. Bubbles start there, rise, and give
+their heat to a bulk cooler than their own boiling point until they are gone, or reach the surface.
+- **Derived, not state.** A bubble lives a tenth of a second and temperatures change over minutes, so each
+  step's bubbles follow from the heat the floor took from a burner (the edge's flow, §13.6), the bulk's
+  temperature, the liquid's depth and its water's activity. Where the heat goes is the same either way: the
+  burner's heat is the bulk's, whether a bubble carried it or convection did. Nothing is conserved by them,
+  and nothing changes in the world or its digest.
+- **The floor.** Its heat is shared between natural convection (Raithby and Hollands, the length A/P) and
+  nucleate boiling (Rohsenow) where it is hot enough to boil: where the floor's largest cavity (glass: 3.5 µm)
+  holds a nucleus, 2σ/r = a_w p_sat(T) − p, at the floor's pressure, the room's plus the liquid's weight (its
+  boiling point 0.3 K higher under 10 cm of water).
+- **A bubble** leaves the floor at Fritz's size (2.3 mm), rises at its terminal speed (Baz-Rodríguez), and where
+  the bulk is under the boiling point at its height gives it its latent heat (Chen and Mayinger), shrinking. It
+  is gone at a twentieth of its size: a third of a millimetre up in cold water, a centimetre or two a kelvin
+  under the boil. At the boil they reach the surface, still shrinking a little low down, where the floor's
+  boiling point is the higher.
+- **Seen.** The bubbles are a haze in the liquid, from the floor up to where they end. They are a **scatter
+  medium** of the optics (`data/optics/media.json`'s scatterers, `bubbles`): a single-scattering albedo at each
+  wavelength (1: they absorb nothing), an extinction efficiency (2) and an asymmetry (0.85). Their haze's
+  extinction is the efficiency times their cross-section a cubic metre, times 1 − g (they scatter mostly
+  forward), falling as (1 − z / end)^p, p keeping its integral up the column; what it turns back is their
+  albedo, a row of the vessel's spectra (§12.2).
+  A reaction's gas (§9's malachite) rises as bubbles of Fritz's size to the surface, the same at every height.
+  A body's vec4 6 holds them (§12.2).
+- **Read**: the readout and the debug panel say where the bubbles end and how hot the floor is; a monitor
+  reads `bubbles_cm` (§13.3).
+- **B1** (§18) holds the bubbles to the liquid and to the heat the floor took.
 
 **Demo subset:** what lies in a vessel, as above. Crystals nucleate in the bulk cell.
 **Status:** Stages 30 to 32 implement it (`docs/TDD_30_CONTENTS.md`, `docs/TDD_32_VORTEX.md`); the rest is specified, after the demo.
@@ -1864,7 +1896,9 @@ so the sessions' records are unchanged.
     - **the vessel**: its temperature (`celsius`), its pressure (`kpa`, Stage 28: an open one's is
       the room's), its liquid's pH (`ph`, Stage 43: while it holds one; a goal's term can read
       it too), the mass of all it holds (`mass_g`), its liquid (`liquid_ml`), its solids
-      (`solid_ml`), its solids and liquids (`condensed_ml`), its gas (`gas_ml`);
+      (`solid_ml`), its solids and liquids (`condensed_ml`), its gas (`gas_ml`); how high its
+      bubbles reach over its floor (`bubbles_cm`, Stage 45: its liquid's depth where they reach the
+      surface, 0 with none; while it holds a liquid);
     - **other**: a balloon's fill (`fill`), a burner's valve (`valve`).
 - **A monitor** (`set {part, item, what, measure, compare, value | values}`):
   - Its own condition is a comparison (§13.2's quantities and comparisons, purity included) of the
@@ -2262,6 +2296,10 @@ stand on.
     sulfate, 10 then 15 mL; the pale blue hydroxide comes out, 0.976 g, and the liquid is left clear
     with base to spare; a burner boils it down and the powder turns black, 0.795 g of copper oxide;
     cooled, 20 mL of 1 M acid dissolves it blue again (`chem_tool study precipitation`).
+  - `boiling`, *bubbles of a boil* (§11, Stage 45): a burner at full flame under a beaker of 200 g of
+    water; bubbles start at its floor at once and vanish a fraction of a millimetre up in the cold
+    water; a monitor on how high they reach signals above 5 cm as the water nears the boil, and at
+    the boil they reach the surface.
   - `fizz`, *a gas from a solid* (§9, Stage 44): 2 g of malachite tipped into 50 mL of 1 M acid
     under a balloon dissolves in about two minutes; 0.009 mol of carbon dioxide leaves it, 0.12 g
     of it into the balloon with 220 mL of gas, the rest in the flask's own air; the acid turns blue.
@@ -2472,6 +2510,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O19 | The probe settles to its disc (Stage 42). A spectral viewer's probe that has read every nanometre N times holds, at each of five, a mean within four standard errors (and 1e-4) of the disc's truth: the uniform integral over the disc by the truth's own tracer, on a polar grid of rings of equal area; across a part's edge, in a flame, through water and at a vessel's rim. It fires on sampling the centre alone, the disc's square, points crowded to its middle (by radius, not its square root), and on a disc moved without starting again | tolerance (statistical) | 42 |
 | O20 | A view's change resamples, then settles once (Stage 42). A tenth closer, carried from the settled anchor: at least 90% of the pixels of bodies keep their history at the first frame; those nothing bends read at most a quarter of a fresh start's points over three frames; at no frame are more of them visibly off the settled picture than a fresh start's; settled it is a fresh start's picture (1 in 200 visibly apart at most); and while the view moves the scene is not made again. It fires on a prior given the scene's whole key, which reads no estimate again (it keeps a tinted picture) | tolerance | 42 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
+| B1 | A vessel's bubbles lie in its liquid: they end from its floor to its surface, their extinction and holdup are no less than nothing and the holdup under one, and the heat its steam bubbles take is no more than its floor took (Stage 45) | exact | 45 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
@@ -2578,6 +2617,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Grains settle at Stokes' speed, through water's viscosity at 20 °C whatever the liquid and its temperature | Right for fine powder (a grain's Reynolds number under 1: under about 0.1 mm for the oxide); coarse grains really fall slower than this |
 | A pour by hand is an ideal jet's: no air coming in against the liquid (a full mouth does not glug), no surface tension at the lip (the last of it dribbles as the head falls, where a real lip holds a drop), the stream falls straight | A bottle turned right over empties in about 2 s where a real one takes 5 to 10 |
 | Sediment runs over a lip by the liquid's law | A powder really slides at once past its angle of repose, and not at all before it |
+| Boiling's bubbles are derived each step from a vessel's floor and its bulk, over the floor's whole area, as a haze (Stage 45) | A bulk that superheats, bumping, boiling chips and the onset's hysteresis are not modelled; bubbles rise in a column the floor's width, not narrowing with the vessel; at a strong flame the floor boils from the start (450 W through 34 cm² is more than convection carries at any bulk temperature); a bubble does not grow as the pressure falls up the column, nor merge |
 | One temperature per vessel | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |

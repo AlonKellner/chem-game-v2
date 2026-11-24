@@ -382,5 +382,15 @@
 				}
 			]
 		}
+	},
+	"scatterers_note": "What scatters in a liquid and is no species (GAME_SPEC §12, Stage 45): a scatter medium, its single-scattering albedo at each wavelength (base and Gaussian bands in nm, as a reflecting medium's), its extinction efficiency (Q_ext: extinction over geometric cross-section) and its asymmetry parameter g (the mean cosine of its scattering: what it turns away from its path, as a haze, is its extinction times 1 - g). bubbles: gas bubbles in water, boiling's and a reaction's (docs/DATA_SOURCES.md).",
+	"scatterers": {
+		"bubbles": {
+			"kind": "scatter",
+			"base": 1.0,
+			"bands": [],
+			"efficiency": 2.0,
+			"asymmetry": 0.85
+		}
 	}
 }
