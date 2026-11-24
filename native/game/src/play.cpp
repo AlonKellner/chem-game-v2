@@ -36,6 +36,12 @@ bool Play::read(std::string_view text, Play &out, std::string &why) {
 				}
 			} else if (key == "mark" && value.is_string()) {
 				step.mark = value.get<std::string>();
+			} else if (key == "do" && value.is_object()) {
+				step.command = value.dump();
+			} else if (key == "zoom" && value.is_number() && value.get<double>() > 0.0) {
+				step.zoom = value.get<float>();
+			} else if (key == "shot" && value.is_string()) {
+				step.shot = value.get<std::string>();
 			} else {
 				why = "a step's \"" + key + "\" is not read";
 				return false;
@@ -53,6 +59,13 @@ bool Play::next(Ui &ui) {
 		return false;
 	}
 	const Step &step = steps_[at_];
+	shot_.clear();
+	if (frame_ == 0 && !step.command.empty()) {
+		std::string why;
+		if (!ui.lab().command(step.command, why) && refused_.empty()) {
+			refused_ = step.command + ": " + why;
+		}
+	}
 	if (frame_ == 0) {
 		// where the step goes is looked up as it starts: the thing may have just come onto the screen
 		from_x_ = to_x_ = x_;
@@ -73,10 +86,14 @@ bool Play::next(Ui &ui) {
 	x_ = from_x_ + (to_x_ - from_x_) * f;
 	y_ = from_y_ + (to_y_ - from_y_) * f;
 	mark_ = step.mark;
+	if (step.zoom > 0.0f) {
+		ui.zoom(x_, y_, step.zoom);
+	}
 	if (frame_ < step.frames) {
 		ui.pointer(x_, y_, down_);
 		return true;
 	}
+	shot_ = step.shot;
 	switch (step.button) {
 	case Click:
 	case Right:

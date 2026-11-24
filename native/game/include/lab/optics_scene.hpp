@@ -3,6 +3,7 @@
 #include "lab/glassware.hpp"
 #include "lab/lab.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -26,8 +27,9 @@ inline constexpr int MAX_BODIES = 256;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
 // bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
-// nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33)
-inline constexpr int HEADER_VECS = 4;
+// nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33); the room's middle
+// on the screen (Stage 42: where the view puts it), 0, 0
+inline constexpr int HEADER_VECS = 5;
 inline constexpr int BODY_VECS = 8;
 // The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
 // round them) reach into it, in painting order, the nearest the eye last: its count and up to GRID_SLOTS
@@ -89,6 +91,16 @@ inline constexpr int OUTLINE_BANDS = 32;
 inline constexpr double RAY_POINTS = 300000.0;
 // A pixel's kept beams (Stage 33): the vec4s of one pixel's record (the per-pixel source says what they hold).
 inline constexpr int KEPT_VECS = 24;
+// The images things emit by (GAME_SPEC §12.1: image weights; Stage 42, the spectral viewer's screen), in vec4s
+// of their own buffer, one image after another: its head (its pixels across and down, how much of its third of
+// a pixel each subpixel fills across, how much of the pixel it fills down) and (where its channels' spectra
+// begin, where its rows' sums begin, where its weights begin in `image_weights`, 0); its three channels' light,
+// red, green and blue, ROW values each, four to a vec4 (a multiple of the room's light: the screen's primaries,
+// scaled so its full white is the room's white); then for each of its rows, w + 1 running sums of its pixels'
+// weights (linear, 0 to 1: red, green, blue, 0), the first 0. A thing that emits one is a slab whose set's glow
+// is -1 and whose MORE is (where its image begins, 1, 0, 0).
+inline constexpr int IMAGE_HEAD_VECS = 2;
+inline constexpr double SCREEN_FILL_X = 0.8, SCREEN_FILL_Y = 0.9;
 } // namespace optics_layout
 
 struct OpticsScene {
@@ -128,6 +140,13 @@ struct OpticsScene {
 	// How each body lies (Stage 30), 40 numbers a body, as the shapes' head lays them out: where it stands
 	// upright, how it is turned and about where, and what lies in it (lab/contents.hpp), in its own frame.
 	std::vector<double> lies;
+	// The images things emit by (Stage 42; optics_layout's images), made again only when one changes; and each
+	// image's weights as they are (w * h * 3 floats, linear, red, green and blue, row by row), for the truth's
+	// own reading of them.
+	std::vector<float> images;
+	uint64_t images_revision = 0;
+	uint64_t images_key = 0;
+	std::vector<float> image_weights;
 };
 
 // One vessel or balloon as the screen places it.
@@ -157,7 +176,11 @@ struct OpticsBody {
 	//   Cone: a cone of glowing gas, its apex at its rectangle's top centre, its base its rectangle's bottom;
 	//         it emits along the path through it (its light is a multiple of the room's for each pixel of
 	//         path) and absorbs nothing.
-	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5, Grating = 6 };
+	//   Screen: a slab that emits an image (Stage 42: the spectral viewer's): its `image`, `image_w` by `image_h`
+	//           pixels as the screen is to show them (8-bit sRGB, row by row), shown over its rectangle; its face
+	//           the screen's black glass. The screen drives its three primaries to show each pixel's colour
+	//           (optics_screen_drive). It is made again only when `image_hash` changes.
+	enum Shape : int { Item = 0, Slab = 3, Bar = 4, Cone = 5, Grating = 6, Screen = 7 };
 	Shape shape = Item;
 	float size = 0.0f;
 	float dash = 0.0f; // a bar's dash and gap together (pixels); 0: unbroken
@@ -168,6 +191,9 @@ struct OpticsBody {
 	const char *light_to = nullptr;
 	double toward = 0.0, strength = 1.0;
 	uint64_t id = 0; // which thing it is: a pixel's history follows it
+	const uint8_t *image = nullptr;
+	int image_w = 0, image_h = 0;
+	uint64_t image_hash = 0;
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;
@@ -200,11 +226,23 @@ struct OpticsRoom {
 	// a vessel's rim, comes to them. On the screen the wall is as it is drawn; elsewhere on a face it is
 	// `beyond`. 0: no room (the wall's plane without end, and `front` for a ray that never reaches it).
 	double cube = 0.0, cube_cell = 0.0, edge = 0.0;
+	double cube_x = 960.0, cube_y = 540.0; // its middle, on the screen (Stage 42: the view moves it)
+	// the layout's pixels on the screen (Stage 42: a view of the room): how wide one is, and where its x = 0 is. A
+	// vessel made as glassware stands with its axis on a whole one of them.
+	double pixel = 1.0, pixel_x0 = 0.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
 
 // The room's white, for what glows: a white page in a lit room (GAME_SPEC §12).
 inline constexpr double ROOM_WHITE_CD_M2 = 100.0;
+
+// The spectral viewer's screen (Stage 42; GAME_SPEC §12.1): its three primaries' light at each nanometre (a
+// multiple of the room's light: data/optics/media.json's led_red, led_green and led_blue, scaled so that every
+// subpixel full, over a whole pixel with its gaps, is the room's white); and what it drives them to (linear
+// weights, 0 to 1) to show a colour (8-bit sRGB): the colour's light, or where its primaries cannot make it, the
+// nearest toward the grey of its luminance that they can (its lightness and hue kept, its chroma given up).
+const std::array<std::array<double, 401>, 3> &optics_screen_primaries();
+void optics_screen_drive(const uint8_t code[3], float weights[3]);
 
 // Fills the scene from the state (bodies in painting order, a nearer layer's over a further one's; those
 // past MAX_BODIES are left out). The revision moves only if the scene did.
@@ -257,6 +295,29 @@ std::string check_O7(const OpticsScene &scene, int x0, int y0, int x1, int y1, d
 // bring (traced exactly; the ends of the line's image found by halving, the light between them summed by
 // Simpson's rule), wherever the line lands. "" when it holds.
 std::string check_O8(const OpticsScene &with_line, const OpticsScene &without, int row, int x0, int x1, double nm, OpticsThrough through = nullptr);
+// One ray's light at one wavelength through the point (x, y) of the screen, a factor of the room's light as
+// optics_through (Stage 42: the spectrum probe's sample, GAME_SPEC §12): by the pass's own source, and by the
+// truth's own tracer. And the content key of what a sample `size` across about the point looks through, as a
+// pixel's history keys it (its bodies, their shapes and contents, the backdrop and the wall's tag).
+double optics_point(const OpticsScene &scene, double x, double y, double nm);
+double optics_point_truth(const OpticsScene &scene, double x, double y, double nm);
+void optics_point_key(const OpticsScene &scene, double x, double y, double size, double key[4]);
+// A screen's light (Stage 42; GAME_SPEC §12.1: image weights) over a sample `across` by `up` about (x, y), at a
+// wavelength, as a multiple of the room's light over the whole sample (body: which body of the scene): as the pass
+// reads it, from its rows' sums, and as the truth does, pixel by pixel, subpixel by subpixel.
+double optics_image_glow(const OpticsScene &scene, int body, double x, double y, double across, double up, double nm);
+double optics_image_glow_truth(const OpticsScene &scene, int body, double x, double y, double across, double up, double nm);
+// O17 (GAME_SPEC §18, Stage 42): a screen emits what its picture says. Over `samples` samples of every screen of
+// the scene, from a ray's point to many of its pixels, on it and over its edges, at three wavelengths, what the
+// pass reads of it is what its pixels' subpixels give, to a float's precision (1e-4). "" when it holds.
+std::string check_O17(const OpticsScene &scene, int samples);
+// O18 (GAME_SPEC §18, Stage 42): the view is a similarity. The scene of a room seen at a view (`scale`, the
+// layout's point (ox, oy) at the room's corner (rx, ry) of the screen) is the scene of it laid out, larger: at
+// a point of every `step`th pixel of the layout's [x0, x1) x [y0, y1) (each 0.47 of the way into it), at three
+// wavelengths, a ray through the view's place of a point brings what a ray through the point brings in the
+// layout, but for the few that graze a surface; of the rays the view lands on its own screen (past it, its wall is
+// the far wall's mean). "" when it holds.
+std::string check_O18(const OpticsScene &whole, const OpticsScene &zoomed, double scale, double ox, double oy, double rx, double ry, double x0, double y0, double x1, double y1, double step);
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 
@@ -371,6 +432,11 @@ public:
 	int64_t read() const { return read_; }
 	int64_t rays() const { return rays_; }
 	int64_t most_rays() const { return most_rays_; }
+	// A view's change (Stage 42; GAME_SPEC §12.3): every pixel's state carried from `anchor`'s, made at the view
+	// `from`, to this one's at the view `now` (each (scale, x, y): a point l of the layout at l * scale + (x, y) on the
+	// screen), as the GPU's pass carries it when the view comes to rest; `full_key`: each given the scene's whole
+	// content key, its estimate not read again (O20's self-test).
+	void resample(const OpticsFrames &anchor, const OpticsScene &scene, const double now[3], const double from[3], bool full_key = false);
 	// Whether a pixel's beams are kept from frame to frame (Stage 33; as the GPU keeps them), or traced at every
 	// read: the same picture, for holding one to the other.
 	void keep(bool on) { keeping_ = on; }

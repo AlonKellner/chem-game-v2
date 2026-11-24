@@ -158,6 +158,8 @@ CG_API void cg_ui_set_budget(cg_ui *ui, double ms);
  * ("" for none), or NULL when no play runs (none was given, or it is over). */
 CG_API cg_status cg_ui_play(cg_ui *ui, const char *play_json);
 CG_API const char *cg_ui_playing(cg_ui *ui);
+/* (Stage 42) The picture the play asks for after the frame last given ("" for none, NULL when no play runs). */
+CG_API const char *cg_ui_play_shot(cg_ui *ui);
 
 enum {
 	CG_DRAW_RECT = 0, /* x, y, w, h: filled */
@@ -227,6 +229,21 @@ typedef struct cg_optics {
 	int32_t shape_count;
 	const float *shapes; /* 4 * shape_count floats */
 	uint64_t shapes_revision;
+	/* The images things emit by (GAME_SPEC §12.1, Stage 42: the spectral
+	 * viewer's screen): image_count vec4s (none: 0 and null), with a revision of
+	 * their own; the per-pixel source reads them as image_vec. */
+	int32_t image_count;
+	const float *images; /* 4 * image_count floats */
+	uint64_t images_revision;
+	/* The view of the room (GAME_SPEC §12.3, Stage 42), as the passes take one: (scale, x, y, 0), a point l of the
+	 * layout at l * scale + (x, y) on the screen. The view the scene was made at; the view now; whether it is
+	 * moving: while it moves the scene is not made again, and a host carries the pixels it last made from the one
+	 * view to the other (the per-pixel source's anchor_state, compiled OPTICS_RESAMPLE_PASS), tracing nothing; at
+	 * rest, the scene made at the view now, it carries each pixel's state once and goes on. */
+	float view[4];
+	float view_now[4];
+	int32_t view_moving;
+	float room[4]; /* the room's part of the screen, which the view is of: left, top, right, bottom */
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames
@@ -314,8 +331,16 @@ CG_API const char *cg_ui_experiment(cg_ui *ui);
  * the character's code point, or backspace, enter, escape. */
 /* CG_KEY_UNDO (Stage 34): the host's undo chord (Ctrl+Z, Cmd+Z); it brings back what was last put in the
  * trash. Backspace, with nothing being typed, puts what is chosen in the trash; a host sends Delete as it. */
-enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4 };
+/* CG_KEY_VIEW (Stage 42): the host's key for the whole room again, at 1x. */
+enum { CG_KEY_TEXT = 0, CG_KEY_BACKSPACE = 1, CG_KEY_ENTER = 2, CG_KEY_ESCAPE = 3, CG_KEY_UNDO = 4, CG_KEY_VIEW = 5 };
 CG_API void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint);
+
+/* The view of the room (GAME_SPEC §13.1, Stage 42): zoomed by `factor` about a point of the screen (a wheel's
+ * notch, a pinch; over a panel nothing), moved by a hand's drag of (dx, dy) screen pixels, and what it is: its
+ * scale and the layout's point at the room's top-left corner (view[3]). */
+CG_API void cg_ui_zoom(cg_ui *ui, float x, float y, float factor);
+CG_API void cg_ui_pan(cg_ui *ui, float dx, float dy);
+CG_API void cg_ui_view(cg_ui *ui, float view[3]);
 
 /* The signals on the bench (GAME_SPEC §13.3): timers, monitors, alarms, notice parts, writers, circuits.
  * Borrowed until the next call on this ui. */

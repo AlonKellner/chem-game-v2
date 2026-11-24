@@ -132,7 +132,7 @@ TEST_CASE("wall pixels: signal parts side by side are each seen whole, a sensing
 	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
 		bars += scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS + lab::optics_layout::FORM) * 4] == 4.0f ? 1 : 0;
 	}
-	CHECK(bars == 2); // the sensing line; the condenser's outlet, in the cabinet
+	CHECK(bars == 2 + 13); // the sensing line; the condenser's outlet, in the cabinet; the spectral viewer's probe in its holder, in the cabinet: its ring, its handle, its cable (Stage 42)
 }
 
 TEST_CASE("wall pixels: through a held vessel every part behind it is seen: two rows of three, each its face, not the wall (Stage 26)") {

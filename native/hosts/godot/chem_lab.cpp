@@ -4,6 +4,7 @@
 #include "draw_list.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -13,13 +14,19 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
+#include <godot_cpp/classes/input_event_magnify_gesture.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
+#include <godot_cpp/classes/input_event_pan_gesture.hpp>
+#include <godot_cpp/classes/os.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
 #include <godot_cpp/classes/time.hpp>
+#include <godot_cpp/classes/viewport.hpp>
+#include <godot_cpp/classes/viewport_texture.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/callable_method_pointer.hpp>
 #include <godot_cpp/variant/color.hpp>
@@ -200,6 +207,10 @@ void ChemLab::_process(double delta) {
 		if (!mark_.is_empty() && last_usec_ != 0) {
 			Timed *t = timed_for(mark_);
 			t->frame_ms.push_back(static_cast<double>(now - last_usec_) / 1000.0);
+			// (LAB_PLAY_PRINT: a slow frame's parts, Stage 42)
+			if (t->frame_ms.back() > 30.0 && godot::OS::get_singleton()->has_environment("LAB_PLAY_PRINT")) {
+				godot::UtilityFunctions::print("slow frame under ", mark_, ": ", t->frame_ms.back(), " ms; the screen ", ui_ms_, ", the scene ", scene_ms_, ", the pass ", pass_ms_, ", painting ", paint_ms_);
+			}
 			t->ui_ms.push_back(ui_ms_);
 			t->scene_ms.push_back(scene_ms_);
 			t->pass_ms.push_back(pass_ms_);
@@ -212,6 +223,20 @@ void ChemLab::_process(double delta) {
 		ui_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - now) / 1000.0;
 		const char *mark = cg_ui_playing(ui_);
 		mark_ = mark != nullptr ? godot::String::utf8(mark) : godot::String();
+		// a picture the play asks for (Stage 42): taken once the frame is painted, into LAB_SHOTS (or user://)
+		if (shot_wait_ > 0 && --shot_wait_ == 0 && get_viewport() != nullptr) {
+			const godot::String dir = godot::OS::get_singleton()->has_environment("LAB_SHOTS") ? godot::OS::get_singleton()->get_environment("LAB_SHOTS") : godot::String("user://");
+			const godot::Ref<godot::Image> image = get_viewport()->get_texture()->get_image();
+			if (image.is_valid()) {
+				image->save_png(dir.path_join(shot_ + ".png"));
+				godot::UtilityFunctions::print("play: ", shot_, ".png");
+			}
+		}
+		const char *shot = cg_ui_play_shot(ui_);
+		if (shot != nullptr && shot[0] != '\0') {
+			shot_ = godot::String::utf8(shot);
+			shot_wait_ = 3;
+		}
 		keep_export();
 		if (compute_.ready()) {
 			godot::RenderingServer::get_singleton()->call_on_render_thread(callable_mp(this, &ChemLab::optics_frame));
@@ -226,6 +251,32 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 		return;
 	}
 	const godot::Ref<godot::InputEventMouseButton> button = event;
+	// the view of the room (Stage 42): the wheel zooms about the pointer, a pinch zooms, two fingers or the middle
+	// button held move it
+	if (button.is_valid() && (button->get_button_index() == godot::MOUSE_BUTTON_WHEEL_UP || button->get_button_index() == godot::MOUSE_BUTTON_WHEEL_DOWN)) {
+		if (button->is_pressed()) {
+			const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(button->get_position());
+			const float notches = std::max(button->get_factor(), 1.0f);
+			cg_ui_zoom(ui_, at.x, at.y, std::pow(button->get_button_index() == godot::MOUSE_BUTTON_WHEEL_UP ? 1.25f : 0.8f, notches));
+		}
+		return;
+	}
+	if (button.is_valid() && button->get_button_index() == godot::MOUSE_BUTTON_MIDDLE) {
+		panning_ = button->is_pressed();
+		return;
+	}
+	const godot::Ref<godot::InputEventMagnifyGesture> pinch = event;
+	if (pinch.is_valid()) {
+		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(pinch->get_position());
+		cg_ui_zoom(ui_, at.x, at.y, static_cast<float>(pinch->get_factor()));
+		return;
+	}
+	const godot::Ref<godot::InputEventPanGesture> pan = event;
+	if (pan.is_valid()) {
+		const godot::Vector2 by = pan->get_delta() * -PAN_PIXELS;
+		cg_ui_pan(ui_, by.x, by.y);
+		return;
+	}
 	if (button.is_valid() && (button->get_button_index() == godot::MOUSE_BUTTON_LEFT || button->get_button_index() == godot::MOUSE_BUTTON_RIGHT)) {
 		down_ = button->is_pressed();
 		const bool right = button->get_button_index() == godot::MOUSE_BUTTON_RIGHT; // the full menu (Stage 27)
@@ -237,7 +288,9 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 	const godot::Ref<godot::InputEventKey> key = event;
 	if (key.is_valid() && key->is_pressed()) {
 		const godot::Key code = key->get_keycode();
-		if ((key->is_ctrl_pressed() || key->is_meta_pressed()) && code == godot::KEY_Z) {
+		if (((key->is_ctrl_pressed() || key->is_meta_pressed()) && (code == godot::KEY_0 || code == godot::KEY_KP_0)) || code == godot::KEY_HOME) {
+			cg_ui_key(ui_, CG_KEY_VIEW, 0); // the whole room again (Stage 42)
+		} else if ((key->is_ctrl_pressed() || key->is_meta_pressed()) && code == godot::KEY_Z) {
 			cg_ui_key(ui_, CG_KEY_UNDO, 0); // (Stage 34: what was last put in the trash comes back)
 		} else if (code == godot::KEY_BACKSPACE || code == godot::KEY_DELETE) {
 			cg_ui_key(ui_, CG_KEY_BACKSPACE, 0);
@@ -251,6 +304,10 @@ void ChemLab::_input(const godot::Ref<godot::InputEvent> &event) {
 		return;
 	}
 	const godot::Ref<godot::InputEventMouseMotion> motion = event;
+	if (motion.is_valid() && panning_) {
+		const godot::Vector2 by = motion->get_relative() * get_global_transform_with_canvas().affine_inverse().get_scale();
+		cg_ui_pan(ui_, by.x, by.y);
+	}
 	if (motion.is_valid()) {
 		const godot::Vector2 at = get_global_transform_with_canvas().affine_inverse().xform(motion->get_position());
 		cg_ui_pointer(ui_, at.x, at.y, state_of(motion.ptr()));
@@ -300,6 +357,14 @@ void ChemLab::frame(double seconds) {
 		queue_redraw();
 		overlay_->queue_redraw();
 	}
+}
+
+double ChemLab::get_view_scale() const {
+	float view[3] = { 1.0f, 0.0f, 0.0f };
+	if (ui_ != nullptr) {
+		cg_ui_view(ui_, view);
+	}
+	return view[0];
 }
 
 godot::Vector2 ChemLab::locate(const godot::String &what) const {
@@ -438,6 +503,28 @@ void ChemLab::optics_frame() {
 	const uint64_t composed = godot::Time::get_singleton()->get_ticks_usec();
 	scene_ms_ = static_cast<double>(composed - began) / 1000.0;
 	compute_.upload(optics);
+	// A view's change (Stage 42): while the view moves, its pixels carried from where they stood, nothing traced; at
+	// rest, their state carried once to the view now, and on
+	const bool whole = optics.view[0] == 1.0f && optics.view[1] == 0.0f && optics.view[2] == 0.0f;
+	if (optics.view_moving) {
+		if (!anchored_) {
+			if (whole) {
+				compute_.keep_whole();
+			}
+			compute_.anchor();
+			std::copy(optics.view, optics.view + 4, anchor_view_);
+			anchored_ = true;
+		}
+		compute_.resample(optics.view_now, anchor_view_, optics.room, false);
+		pass_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - composed) / 1000.0;
+		return;
+	}
+	if (anchored_) {
+		compute_.resample(optics.view, anchor_view_, optics.room, true);
+		anchored_ = false;
+	} else if (whole && ++whole_frames_ % 30 == 0) {
+		compute_.keep_whole(); // (the room seen whole, kept now and then: what a view out to it shows as it moves)
+	}
 	if (optics_restarting_) {
 		compute_.restart();
 	}
@@ -494,6 +581,7 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("pointer", "x", "y", "down", "mods"), &ChemLab::pointer, DEFVAL(0));
 	godot::ClassDB::bind_method(godot::D_METHOD("frame", "seconds"), &ChemLab::frame);
 	godot::ClassDB::bind_method(godot::D_METHOD("locate", "what"), &ChemLab::locate);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_view_scale"), &ChemLab::get_view_scale);
 	godot::ClassDB::bind_method(godot::D_METHOD("report"), &ChemLab::report);
 	godot::ClassDB::bind_method(godot::D_METHOD("message"), &ChemLab::message);
 	godot::ClassDB::bind_method(godot::D_METHOD("exported"), &ChemLab::exported);

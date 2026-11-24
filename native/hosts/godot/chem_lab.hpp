@@ -60,6 +60,8 @@ public:
 	void frame(double seconds);
 	// the centre of a named thing on the screen ("item:flask", "cell:3,1", ...), or (-1, -1)
 	godot::Vector2 locate(const godot::String &what) const;
+	// the view of the room's scale (Stage 42; 1: all of it)
+	double get_view_scale() const;
 	godot::String report() const;
 	godot::String message() const;
 	// Where the debug panel's last export was written (user://saves/...), "" for none (§13.6).
@@ -111,6 +113,13 @@ private:
 
 	cg_ui *ui_ = nullptr;
 	bool down_ = false;
+	bool panning_ = false; // the middle button held: the room's view moves with the pointer (Stage 42)
+	bool anchored_ = false; // the view moves: the pass shows its pixels carried from the view `anchor_view_`
+	godot::String shot_; // a picture a play asked for, taken when shot_wait_ frames have passed (Stage 42)
+	int shot_wait_ = 0;
+	float anchor_view_[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	int whole_frames_ = 0;
+	static constexpr float PAN_PIXELS = 24.0f; // a trackpad's two-finger step, in pixels of the screen
 	int32_t state_of(const godot::InputEventWithModifiers *event) const;
 	godot::TextureRect *optics_ = nullptr; // what the optical pass shows
 	godot::Node2D *overlay_ = nullptr; // what is painted over it

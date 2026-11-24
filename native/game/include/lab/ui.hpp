@@ -2,7 +2,9 @@
 
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/spectrometer.hpp"
 #include "lab/tutorial.hpp"
+#include "lab/view.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -54,8 +56,26 @@ public:
 	// A key for the part editor's focused field (GAME_SPEC §13.3): text (a
 	// character, by its code point), backspace, enter (set), escape (cancel; with
 	// no editor open, let go of the selection).
-	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3, KeyUndo = 4 };
+	// (KeyView, Stage 42: the room seen whole again, at 1x)
+	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3, KeyUndo = 4, KeyView = 5 };
 	void key(Key key, uint32_t codepoint = 0);
+	// The view of the room (GAME_SPEC §13.1, Stage 42): a camera on the lit room (the cabinet, the bench, the outbox),
+	// from 1x (all of it) to 16x; the top bar, the readout's column and the panels stay as they are. Zoomed by
+	// `factor` about a point of the screen (what is under it stays under it), moved by a hand's drag (pixels of the
+	// screen), and back to 1x. The room is laid out anew at each view: its bodies, the wall and the depths, so a
+	// closer view shows what is finer (a screen's subpixels). The pointer's points over the room are the view's.
+	void zoom(float x, float y, float factor);
+	void pan(float dx, float dy);
+	void reset_view();
+	View view() const;
+	// Whether the view is moving (Stage 42; GAME_SPEC §12.3): it changed within the last VIEW_QUIET_MS of the clock.
+	// While it moves the scene (optics()) is not made again: it stands at the view it was made at (scene_view()),
+	// and a host shows its pixels carried to the view now, tracing nothing; at rest it is made at the view once.
+	static constexpr double VIEW_QUIET_MS = 120.0;
+	bool view_moving() const;
+	View scene_view() const;
+	// the room's part of the screen, which the view is of
+	static ViewRoom view_room();
 	// A frame of real time: the lab advances by it times the speed. One step
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.
@@ -77,6 +97,10 @@ public:
 	const DrawList &draw();
 	// What the optical pass shows now (GAME_SPEC §12).
 	const OpticsScene &optics();
+	// A spectral viewer's probe, as it has read so far, and the picture on its screen (GAME_SPEC §13.1, Stage 42);
+	// null for none such, or one not yet on the screen. Read when the scene is made (optics()).
+	const Spectrometer *probe(std::string_view viewer) const;
+	const Picture *screen(std::string_view viewer) const;
 
 	Lab &lab();
 	// A tutorial over the lab (GAME_SPEC §13.2): its card above the readout,
@@ -116,6 +140,9 @@ public:
 	bool paused() const;
 
 	// The centre of a named thing on the screen, for tests and scripted hosts:
+	//   probe:<viewer> (its probe's disc: in its holder, in hand, or where it is fixed)   holder:<viewer>
+	//   screen:<viewer>[@u,v] (a place of its screen, 0 to 1)   item:<id>@u,v (a place of an item in its own frame)
+	//   readout:probe:holder (the button that sends the chosen viewer's probe home)   (Stage 42)
 	//   item:<id>   square:<col>,<row> (a drop there puts the square the item is
 	//   held by on it)   cabinet   outbox
 	//   valve:<burner>@<0..1>   stir:<vessel>

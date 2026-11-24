@@ -34,7 +34,7 @@ struct SubstanceView {
 
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray, stopper; a signal part: timer, monitor, alarm
+	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42); a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
 	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
@@ -85,6 +85,12 @@ struct ItemView {
 	double solid_ml = 0.0; // its solids, not its wall: what rests on its floor (Stage 26: not what is condensed less what is liquid, which counts a solute's volume as solid)
 	std::vector<SubstanceView> contents;
 	Part part; // a signal part (§13.3): its settings and state
+	// a spectral viewer (§13, Stage 42): where its probe is fixed: on an item or a part (probe_on, its id), at
+	// (probe_u, probe_v) of it in its own frame (0 to 1 across and down its rectangle, upright); on the room
+	// (probe_room), at (probe_u, probe_v) in the bench's squares from its top-left corner; else in its holder
+	std::string probe_on;
+	bool probe_room = false;
+	double probe_u = 0.0, probe_v = 0.0;
 };
 
 // What the lab says happened (GAME_SPEC §13.4), at a level the player may

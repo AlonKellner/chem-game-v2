@@ -3,6 +3,8 @@
 #include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
+#include "lab/spectrometer.hpp"
+#include "lab/view.hpp"
 
 #include "chem/optics.hpp"
 
@@ -14,6 +16,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <utility>
 
 namespace lab {
@@ -212,6 +215,70 @@ struct Ui::Impl {
 	double budget_ms = 0.0;
 	std::function<double()> clock_ms = [] { return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count(); };
 	double achieved = 0.0; // the clock's speed kept to, over the last frames
+	// The spectral viewers (GAME_SPEC §13.1, Stage 42): whose probe is in hand (-1: none), and whether a click took
+	// it (the next press lets it go) or a press holds it (its release does); each viewer's probe and the picture on
+	// its screen; the scene the probes read (the pass's own, without their heads and cables), and when it was made
+	int probing = -1;
+	bool probe_in_hand = false;
+	// the view of the room (Stage 42), and how what is painted now is placed: 0 the screen's own (the top bar, the
+	// readout, the panels), 1 the room's paint (the wall, the grid: placed and sized by the view, as the room is),
+	// 2 over the room (labels and highlights: placed by the view, drawn at their own size)
+	View vw = view_whole(VIEW_ROOM);
+	View composed_at = view_whole(VIEW_ROOM); // the view the scene was last made at
+	double view_changed_ms = -1.0e30;
+	bool view_moving() const { return clock_ms() - view_changed_ms < Ui::VIEW_QUIET_MS; }
+	void set_view(const View &v) {
+		if (v != vw) {
+			vw = v;
+			view_changed_ms = clock_ms();
+		}
+	}
+	int room_paint = 0;
+	static constexpr ViewRoom VIEW_ROOM{ ROOM.x, ROOM.y, ROOM.w, ROOM.h };
+	bool zoomed() const { return vw != view_whole(VIEW_ROOM); }
+	float sx(float x) const { return screen_x(vw, VIEW_ROOM, x); }
+	float sy(float y) const { return screen_y(vw, VIEW_ROOM, y); }
+	Rect on_screen(const Rect &r) const { return Rect{ sx(r.x), sy(r.y), r.w * vw.scale, r.h * vw.scale }; }
+	// whether a point of the screen is the room's (laid out by the view) or a panel's over it
+	bool room_at(float x, float y) const {
+		if (!ROOM.has(x, y) || draft.edit != Draft::None || panel || DRAWER.has(x, y) || (!opened.empty() && circuit_panel().has(x, y))) {
+			return false;
+		}
+		return !(notices_open && NOTICES.has(x, y)) && !(debug_open && DEBUG.has(x, y)) && !menu;
+	}
+	// whether a name of the screen (Ui::locate) is of the room: what stands in it and its places, not a panel's
+	bool room_name(std::string_view what) const {
+		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:" };
+		for (const char *prefix : ROOMS) {
+			const std::string_view p(prefix);
+			if (what.substr(0, p.size()) != p) {
+				continue;
+			}
+			// (a part in an open circuit is the circuit's panel's)
+			const size_t colon = what.find(':');
+			if (colon != std::string_view::npos && p.back() == ':') {
+				std::string_view name = what.substr(colon + 1);
+				name = name.substr(0, name.find('@'));
+				const int i = item_index(std::string(name));
+				if (i >= 0 && view.items[static_cast<size_t>(i)].place == "circuit") {
+					return false;
+				}
+			}
+			return true;
+		}
+		return false;
+	}
+	struct ViewerState {
+		Spectrometer probe;
+		Picture picture;
+		bool plotted = false;
+	};
+	std::map<std::string, ViewerState> viewers;
+	OpticsScene reading;
+	double reading_ms = -1.0e30;
+	static constexpr double PROBE_BUDGET_MS = 2.0; // a frame's time for the probes' rays, all of them
+	static constexpr int64_t PROBE_RAYS_MOST = 16384; // and at most these (a frame's on a clock that does not move)
+	static constexpr double READING_EVERY_MS = 100.0; // the scene they read, made again at most this often while they rest
 	// the pointer
 	float px = 0, py = 0;
 	bool down = false;
@@ -775,7 +842,10 @@ struct Ui::Impl {
 
 	// how large an item is drawn
 	void size_of(const ItemView &v, float &w, float &h) const {
-		if (v.kind == "burner") {
+		if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
+			w = VIEWER_W;
+			h = VIEWER_H;
+		} else if (v.kind == "burner") {
 			w = 56;
 			h = 26;
 		} else if (v.kind == "stopper") { // a rubber bung (Stage 28)
@@ -795,6 +865,136 @@ struct Ui::Impl {
 			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.volume_ml));
 			h = w * 1.25f;
 		}
+	}
+
+	// ---- the spectral viewer (GAME_SPEC §13.1, Stage 42)
+	// its parts within its drawn rectangle (smaller in the cabinet, as all of it is): its case, the screen in it, the
+	// probe's holder beside it; where the cable leaves the case, and where the probe's disc rests in the holder
+	static constexpr float VIEWER_W = 272, VIEWER_H = 150;
+	static Rect viewer_case(const Rect &r) {
+		const float s = r.w / VIEWER_W;
+		return Rect{ r.x, r.y, 232 * s, r.h };
+	}
+	static Rect viewer_screen(const Rect &r) {
+		const float s = r.w / VIEWER_W;
+		return Rect{ r.x + 12 * s, r.y + 12 * s, 208 * s, 116 * s };
+	}
+	static Rect viewer_holder(const Rect &r) {
+		const float s = r.w / VIEWER_W;
+		return Rect{ r.x + 240 * s, r.y + 26 * s, 26 * s, 96 * s };
+	}
+	static void viewer_port(const Rect &r, float &x, float &y) {
+		const float s = r.w / VIEWER_W;
+		x = r.x + 232 * s;
+		y = r.y + 136 * s;
+	}
+	static void viewer_rest(const Rect &r, float &x, float &y) {
+		const float s = r.w / VIEWER_W;
+		x = r.x + 253 * s;
+		y = r.y + 44 * s;
+	}
+	// A place of an item in its own frame (0 to 1 across and down its rectangle, upright) on the screen, as it is
+	// drawn now: upside down with it, turned with it; and the way back
+	void place_on(int index, double u, double v, float &x, float &y) const {
+		const Rect r = drawn(index);
+		const ItemView &it = view.items[static_cast<size_t>(index)];
+		double ax = r.x + u * r.w, ay = r.y + v * r.h;
+		if (it.inverted && it.pours_into >= 0) {
+			ax = 2.0 * r.cx() - ax;
+			ay = 2.0 * r.cy() - ay;
+		}
+		float angle = 0, pvx = 0, pvy = 0;
+		if (turned(index, r, angle, pvx, pvy)) {
+			const double c = std::cos(angle), sn = std::sin(angle), dx = ax - pvx, dy = ay - pvy;
+			ax = pvx + dx * c - dy * sn;
+			ay = pvy + dx * sn + dy * c;
+		}
+		x = static_cast<float>(ax);
+		y = static_cast<float>(ay);
+	}
+	void frame_of(int index, float x, float y, double &u, double &v) const {
+		const Rect r = drawn(index);
+		const ItemView &it = view.items[static_cast<size_t>(index)];
+		double ax = x, ay = y;
+		float angle = 0, pvx = 0, pvy = 0;
+		if (turned(index, r, angle, pvx, pvy)) {
+			const double c = std::cos(angle), sn = std::sin(angle), dx = ax - pvx, dy = ay - pvy;
+			ax = pvx + dx * c + dy * sn;
+			ay = pvy - dx * sn + dy * c;
+		}
+		if (it.inverted && it.pours_into >= 0) {
+			ax = 2.0 * r.cx() - ax;
+			ay = 2.0 * r.cy() - ay;
+		}
+		u = r.w > 0 ? (ax - r.x) / r.w : 0.5;
+		v = r.h > 0 ? (ay - r.y) / r.h : 0.5;
+	}
+	// Where a viewer's probe reads (the middle of its disc): in hand, where the pointer is; fixed on an item or a
+	// part that is on the screen, at its place of it; on the room, there; else resting in its holder (false)
+	bool probe_point(int index, float &x, float &y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (probing == index) {
+			x = px;
+			y = py;
+			return true;
+		}
+		if (!v.probe_on.empty()) {
+			const int t = item_index(v.probe_on);
+			if (t >= 0 && visible(t) && !hidden(t)) {
+				place_on(t, v.probe_u, v.probe_v, x, y);
+				return true;
+			}
+		} else if (v.probe_room) {
+			x = BENCH.x + static_cast<float>(v.probe_u) * square();
+			y = BENCH.y + static_cast<float>(v.probe_v) * square();
+			return true;
+		}
+		viewer_rest(drawn(index), x, y);
+		return false;
+	}
+	// what takes the probe up: its disc and its handle
+	bool probe_grab(int index, float x, float y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (v.kind != "viewer" || v.place != "bench" || hidden(index)) {
+			return false;
+		}
+		float hx = 0, hy = 0;
+		probe_point(index, hx, hy);
+		return std::hypot(x - hx, y - hy) < 10.0f || std::hypot(x - (hx + 13.0f), y - (hy - 13.0f)) < 8.0f;
+	}
+	// the readout's button that puts the probe back in its holder, while its viewer is selected on the bench
+	bool probe_home_rect(int index, Rect &r) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (index != selected || v.kind != "viewer" || v.place != "bench" || draft.edit != Draft::None || (v.probe_on.empty() && !v.probe_room)) {
+			return false;
+		}
+		r = Rect{ READOUT.x + 16, readout_top() + 90, 150, 30 };
+		return true;
+	}
+	// letting go of a probe: on its own screen it reads that (a frame late); on the rest of its viewer it goes home;
+	// on an item or a part it is fixed there, at that place of it; on the room, there; anywhere else, home
+	void drop_probing(int index, float x, float y) {
+		probing = -1;
+		probe_in_hand = false;
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const Rect r = drawn(index);
+		json c = { { "do", "probe" }, { "viewer", v.id } };
+		if (viewer_screen(r).has(x, y)) {
+			double u = 0, w = 0;
+			frame_of(index, x, y, u, w);
+			c["on"] = v.id;
+			c["at"] = { u, w };
+		} else if (Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }.has(x, y)) {
+			// home
+		} else if (const int t = item_at(x, y, index); t >= 0) {
+			double u = 0, w = 0;
+			frame_of(t, x, y, u, w);
+			c["on"] = id(t);
+			c["at"] = { u, w };
+		} else if (ROOM.has(x, y)) {
+			c["at"] = { (x - BENCH.x) / square(), (y - BENCH.y) / square() };
+		}
+		act(c);
 	}
 
 	// how much smaller an item is drawn to fit the cabinet's shelf, and an outbox slot (its name under it)
@@ -961,6 +1161,7 @@ struct Ui::Impl {
 	static Rect pause_rect() { return Rect{ 270, 14, 96, 36 }; }
 	static Rect check_rect() { return Rect{ 760, 14, 220, 36 }; }
 	static Rect reset_rect() { return Rect{ 1000, 14, 96, 36 }; }
+	static Rect view_rect() { return Rect{ 1440, 14, 150, 36 }; } // while zoomed: back to all of the room (Stage 42)
 	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
@@ -1352,6 +1553,10 @@ struct Ui::Impl {
 	}
 
 	void press(float x, float y) {
+		if (probing >= 0 && probe_in_hand) {
+			drop_probing(probing, x, y); // a probe in hand (Stage 42): this press is where it goes
+			return;
+		}
 		if (making >= 0 && making_carried) {
 			return; // a part in hand (Stage 34): this press is where it goes, at its release
 		}
@@ -1440,6 +1645,10 @@ struct Ui::Impl {
 			choose_only(-1);
 			return;
 		}
+		if (zoomed() && view_rect().has(x, y)) {
+			set_view(view_whole(VIEW_ROOM)); // the player's at any time, like the clock (Stage 42)
+			return;
+		}
 		if (pause_rect().has(x, y)) {
 			if (paused) {
 				play();
@@ -1486,6 +1695,13 @@ struct Ui::Impl {
 					turn(x);
 					return;
 				}
+			}
+			if (probe_home_rect(i, r) && r.has(x, y)) {
+				if (!allowed_click("readout:probe:holder")) {
+					return;
+				}
+				act({ { "do", "probe" }, { "viewer", id(i) } });
+				return;
 			}
 			if (stir_rect(i, r) && r.has(x, y)) {
 				if (!allowed_click("stir:" + id(i))) {
@@ -2502,6 +2718,17 @@ struct Ui::Impl {
 	}
 	// a drag from the drawer, or from a part's port, begins
 	bool begin_signal_drag(float x, float y) {
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			if (probe_grab(i, x, y)) { // a spectral viewer's probe (Stage 42)
+				if (guided() && !asks_drag_from("probe:" + id(i))) {
+					not_now();
+					return true;
+				}
+				probing = i;
+				probe_in_hand = false;
+				return true;
+			}
+		}
 		for (int k = 0; k < DRAWN_KINDS; ++k) {
 			if (drawer_rect(k).has(x, y)) {
 				if (guided() && !asks_drag_from(std::string("drawer:") + DRAWN[k])) {
@@ -2724,6 +2951,11 @@ struct Ui::Impl {
 			return;
 		}
 		if (draft.edit == Draft::None) {
+			if (key == Ui::KeyEscape && probing >= 0) {
+				probing = -1; // a probe in hand goes back where it was (Stage 42)
+				probe_in_hand = false;
+				return;
+			}
 			if (key == Ui::KeyEscape && making >= 0) {
 				making = -1; // a part in hand goes back in the drawer
 				making_carried = false;
@@ -2892,27 +3124,52 @@ struct Ui::Impl {
 
 	// ------------------------------------------------------------- painting
 
+	// (each placed by the view where it is the room's: room_paint; Stage 42)
+	float pw(float width) const { return room_paint == 1 ? width * vw.scale : width; }
 	void rect_fill(const Rect &r, uint32_t color) {
-		list.commands.push_back(DrawCommand{ DrawCommand::Rect, color, 1, 0, 0, r.x, r.y, r.w, r.h });
+		const Rect s = room_paint != 0 ? on_screen(r) : r;
+		list.commands.push_back(DrawCommand{ DrawCommand::Rect, color, 1, 0, 0, s.x, s.y, s.w, s.h });
 	}
 	void outline(const Rect &r, uint32_t color, float width = 2) {
-		list.commands.push_back(DrawCommand{ DrawCommand::Outline, color, width, 0, 0, r.x, r.y, r.w, r.h });
+		const Rect s = room_paint != 0 ? on_screen(r) : r;
+		list.commands.push_back(DrawCommand{ DrawCommand::Outline, color, pw(width), 0, 0, s.x, s.y, s.w, s.h });
 	}
 	void line(float x1, float y1, float x2, float y2, uint32_t color, float width = 2) {
-		list.commands.push_back(DrawCommand{ DrawCommand::Line, color, width, 0, 0, x1, y1, x2, y2 });
+		if (room_paint != 0) {
+			x1 = sx(x1);
+			y1 = sy(y1);
+			x2 = sx(x2);
+			y2 = sy(y2);
+		}
+		list.commands.push_back(DrawCommand{ DrawCommand::Line, color, pw(width), 0, 0, x1, y1, x2, y2 });
 	}
 	void circle(float x, float y, float r, uint32_t color) {
+		if (room_paint != 0) {
+			x = sx(x);
+			y = sy(y);
+			r = room_paint == 1 ? r * vw.scale : r;
+		}
 		list.commands.push_back(DrawCommand{ DrawCommand::Circle, color, 1, 0, 0, x, y, r, 0 });
 	}
 	void polygon(std::initializer_list<float> xy, uint32_t color) {
 		const auto first = static_cast<int32_t>(list.points.size() / 2);
 		list.points.insert(list.points.end(), xy.begin(), xy.end());
+		if (room_paint != 0) {
+			for (size_t k = static_cast<size_t>(first) * 2; k < list.points.size(); k += 2) {
+				list.points[k] = sx(list.points[k]);
+				list.points[k + 1] = sy(list.points[k + 1]);
+			}
+		}
 		list.commands.push_back(DrawCommand{ DrawCommand::Polygon, color, 1, first, static_cast<int32_t>(xy.size() / 2), 0, 0, 0, 0 });
 	}
 	void text(float x, float y, const std::string &s, uint32_t color = INK, float size = 18) {
 		const auto offset = static_cast<int32_t>(list.text.size());
 		list.text += s;
 		list.text += '\0';
+		if (room_paint != 0) {
+			x = sx(x);
+			y = sy(y);
+		}
 		list.commands.push_back(DrawCommand{ DrawCommand::Text, color, 1, offset, static_cast<int32_t>(s.size()), x, y, 0, size });
 	}
 	void button(const Rect &r, const std::string &label, bool on = false, float size = 18) {
@@ -3245,7 +3502,7 @@ struct Ui::Impl {
 			// outlet. No outline is drawn over the pass (Stage 21): a line the screen draws is not bent by what is
 			// held before it.
 		}
-		const std::string label = v.kind == "burner" ? v.id : v.id + text_of("  %.0f C", v.celsius);
+		const std::string label = v.kind == "burner" || v.kind == "viewer" ? v.id : v.id + text_of("  %.0f C", v.celsius);
 		if (index == drag) {
 			return;
 		}
@@ -3274,20 +3531,30 @@ struct Ui::Impl {
 		list.points.clear();
 		list.text.clear();
 		list.above = 0;
+		room_paint = 0;
 		rect_fill(Rect{ 0, 0, 1920, 1080 }, BACKGROUND);
+		room_paint = 1; // the room's paint, as the view lays it out (Stage 42)
 		rect_fill(ROOM, WALL);
 		// the bench and its grid
+		// (each line a pixel's strip, on the pixel that a line a pixel wide on its whole coordinate is painted on: so
+		// the room seen closer is the same ruling larger, not one moved by half a pixel; Stage 42)
 		const float sq = square();
+		const auto ruled = [&](float x0, float y0, float x1, float y1) { rect_fill(Rect{ x0 - 1, y0 - 1, std::max(x1 - x0, 0.0f) + 1, std::max(y1 - y0, 0.0f) + 1 }, WALL_GRID); };
 		for (int c = 0; c <= view.cols; ++c) {
-			line(BENCH.x + static_cast<float>(c) * sq, BENCH.y, BENCH.x + static_cast<float>(c) * sq, BENCH.y + static_cast<float>(view.rows) * sq, WALL_GRID, 1);
+			ruled(BENCH.x + static_cast<float>(c) * sq, BENCH.y, BENCH.x + static_cast<float>(c) * sq, BENCH.y + static_cast<float>(view.rows) * sq);
 		}
 		for (int r = 0; r <= view.rows; ++r) {
-			line(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq, WALL_GRID, 1);
+			ruled(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq);
 		}
-		outline(CABINET, WALL_GRID, 1);
-		outline(OUTBOX, WALL_GRID, 1);
+		for (const Rect &box : { CABINET, OUTBOX }) {
+			ruled(box.x, box.y, box.x + box.w, box.y);
+			ruled(box.x, box.y + box.h, box.x + box.w, box.y + box.h);
+			ruled(box.x, box.y, box.x, box.y + box.h);
+			ruled(box.x + box.w, box.y, box.x + box.w, box.y + box.h);
+		}
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
+		room_paint = 2; // over the room: its names and highlights, placed by the view
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
 		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
 		outline(TRASH, WALL_GRID, 1);
@@ -3301,19 +3568,19 @@ struct Ui::Impl {
 		}
 		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
 		paint_slots();
-		// the clock
-		button(pause_rect(), paused ? "play" : "pause", paused);
-		for (int i = 0; i < 4; ++i) {
-			button(speed_rect(i), text_of("%.0fx", SPEEDS[i]), !paused && speed == SPEEDS[i]);
+		paint_room_overlays();
+		room_paint = 0;
+		if (zoomed()) {
+			// the room seen closer: what of it lies past its own part of the screen is not shown (Stage 42)
+			rect_fill(Rect{ 0, 0, 1920, ROOM.y }, BACKGROUND);
+			rect_fill(Rect{ ROOM.x + ROOM.w, ROOM.y, 1920 - ROOM.x - ROOM.w, 1080 - ROOM.y }, BACKGROUND);
+			rect_fill(DRAWER, BACKGROUND);
 		}
-		button(check_rect(), check_every_step ? "check every step: on" : "check every step: off", check_every_step);
-		button(reset_rect(), "reset");
-		const double seconds = static_cast<double>(view.step) / 60.0;
-		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
-		// where the frame's budget holds the clock back (Stage 36): the speed it keeps
-		if (budget_ms > 0.0 && !paused && achieved < 0.9 * speed) {
-			text(1220, 40, text_of("keeping %.0fx", achieved), WALL_INK, 14);
-		}
+		paint_screen_own();
+	}
+
+	// what is painted over the room (its names, highlights, the signals' lines), placed by the view
+	void paint_room_overlays() {
 		// the items, those in hand last
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (view.items[static_cast<size_t>(i)].kind == "tray" || i == drag || view.items[static_cast<size_t>(i)].place == "circuit" || hidden(i)) {
@@ -3327,9 +3594,6 @@ struct Ui::Impl {
 				line(a.x + a.w + 26, a.y + a.h + 14, b.cx(), b.y, rgba(70, 120, 190, 200), 1);
 			}
 		}
-		if (!opened.empty()) {
-			paint_circuit();
-		}
 		if (drag >= 0) {
 			paint_item(drag, drawn(drag));
 		}
@@ -3342,10 +3606,32 @@ struct Ui::Impl {
 		if (marquee && down) {
 			outline(marquee_rect(), WALL_INK, 1);
 		}
+		paint_signals();
+	}
+
+	// the screen's own: the clock, an open circuit, the tutorial, the readout, the drawer, the panels
+	void paint_screen_own() {
+		button(pause_rect(), paused ? "play" : "pause", paused);
+		for (int i = 0; i < 4; ++i) {
+			button(speed_rect(i), text_of("%.0fx", SPEEDS[i]), !paused && speed == SPEEDS[i]);
+		}
+		button(check_rect(), check_every_step ? "check every step: on" : "check every step: off", check_every_step);
+		button(reset_rect(), "reset");
+		if (zoomed()) {
+			button(view_rect(), text_of("%.1fx: whole", vw.scale), false, 15); // back to all of the room (Stage 42)
+		}
+		const double seconds = static_cast<double>(view.step) / 60.0;
+		text(1120, 40, text_of("%02.0f:%04.1f", std::floor(seconds / 60.0), seconds - 60.0 * std::floor(seconds / 60.0)), INK, 22);
+		// where the frame's budget holds the clock back (Stage 36): the speed it keeps
+		if (budget_ms > 0.0 && !paused && achieved < 0.9 * speed) {
+			text(1220, 40, text_of("keeping %.0fx", achieved), WALL_INK, 14);
+		}
+		if (!opened.empty()) {
+			paint_circuit();
+		}
 		if (tutorial) {
 			paint_tutorial();
 		}
-		paint_signals();
 		paint_readout();
 		paint_drawer();
 		paint_notices();
@@ -3840,6 +4126,9 @@ struct Ui::Impl {
 			if (!box(g->what, a) || (g->drag && !box(g->to, b))) {
 				continue;
 			}
+			// where the view shows them (Stage 42)
+			a = room_name(g->what) ? on_screen(a) : a;
+			b = g->drag && room_name(g->to) ? on_screen(b) : b;
 			if (drag >= 0 && g->drag) {
 				outline(b, colour, 3); // the item is in hand: only where it goes
 				return;
@@ -3912,6 +4201,24 @@ struct Ui::Impl {
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
+			} else if (v.kind == "viewer") {
+				// the spectral viewer (Stage 42): its case, its screen showing its picture, its probe's holder
+				const float s = r.w / VIEWER_W;
+				thing(v.id, "case", OpticsBody::Slab, viewer_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				ViewerState &st = viewers[v.id];
+				if (!st.plotted) {
+					plot_spectrum({}, 0, st.picture);
+					st.plotted = true;
+				}
+				// (off the bench it is switched off: its screen dark, its probe reading nothing)
+				static const Picture OFF{};
+				const Picture &shows = v.place == "bench" ? st.picture : OFF;
+				const size_t k = thing(v.id, "screen", OpticsBody::Screen, viewer_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				bodies[k].image = shows.rgb.data();
+				bodies[k].image_w = shows.w;
+				bodies[k].image_h = shows.h;
+				bodies[k].image_hash = shows.hash;
+				thing(v.id, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
 			} else if (v.kind == "burner") {
 				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
@@ -3990,6 +4297,36 @@ struct Ui::Impl {
 			bar(v.id, "stand rod", rod, ground - 6, rod, grip - 10, 3.0f, "burner_metal", false);
 			bar(v.id, "clamp", rod, grip, held.cx() - held.w * 0.3f, grip, 2.5f, "burner_metal", false);
 		}
+		// The viewers' probes (Stage 42): each a ring about the disc it reads, a handle, and a cable sagging from the
+		// handle to where it leaves its viewer; all of the pass, and none of them in the probes' own reading
+		const size_t before_probes = bodies.size();
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.kind != "viewer" || hidden(i) || !visible(i)) {
+				continue;
+			}
+			float hx = 0, hy = 0, ox = 0, oy = 0;
+			probe_point(i, hx, hy);
+			viewer_port(drawn(i), ox, oy);
+			int on = v.probe_on.empty() ? -1 : item_index(v.probe_on);
+			const bool held = probing == i || (on >= 0 && (on == drag ? (moved || carrying) : carrying_group() && chosen(on))) || (i == drag && (moved || carrying));
+			const float ring = static_cast<float>(PROBE_RADIUS_PX) + 1.5f;
+			for (int k = 0; k < 6; ++k) {
+				const float a0 = 6.2831853f * static_cast<float>(k) / 6.0f, a1 = 6.2831853f * static_cast<float>(k + 1) / 6.0f;
+				bar(v.id, k == 0 ? "probe ring 0" : k == 1 ? "probe ring 1" : k == 2 ? "probe ring 2" : k == 3 ? "probe ring 3" : k == 4 ? "probe ring 4" : "probe ring 5", hx + ring * std::cos(a0), hy + ring * std::sin(a0),
+						hx + ring * std::cos(a1), hy + ring * std::sin(a1), 1.5f, "probe_head", held);
+			}
+			const float ex = hx + ring + 12.0f, ey = hy - ring - 12.0f;
+			bar(v.id, "probe handle", hx + ring * 0.7f, hy - ring * 0.7f, ex, ey, 4.0f, "probe_head", held);
+			const float sag = 10.0f + 0.25f * std::hypot(ox - ex, oy - ey);
+			static const char *const CABLE[] = { "probe cable 0", "probe cable 1", "probe cable 2", "probe cable 3", "probe cable 4", "probe cable 5" };
+			for (int k = 0; k < 6; ++k) {
+				const float t0 = static_cast<float>(k) / 6.0f, t1 = static_cast<float>(k + 1) / 6.0f;
+				bar(v.id, CABLE[k], ex + (ox - ex) * t0, ey + (oy - ey) * t0 + sag * 4.0f * t0 * (1.0f - t0), ex + (ox - ex) * t1, ey + (oy - ey) * t1 + sag * 4.0f * t1 * (1.0f - t1), 3.0f,
+						"probe_cable", held);
+			}
+		}
+		const size_t after_probes = bodies.size();
 		// A pour's stream (Stage 27; Stage 31): a column of what pours, from the lip or the mouth it leaves straight
 		// down to where it lands, thinning as it falls faster: what passes a second is the same at every height,
 		// so its radius there is sqrt(Q / (pi sqrt(v0^2 + 2 g y))). In short lengths, each as wide as it is there.
@@ -4089,11 +4426,20 @@ struct Ui::Impl {
 			bodies.back().dash = SENSE_DASH; // one body, dashed by the pass, not a body a dash
 		}
 		// what is drawn on the wall behind them (GAME_SPEC §12.3): the draw list's first part, as flat greys
+		// (at the view: the room laid out anew, its depths with it, so the view is the same room larger: Stage 42)
+		const auto room_now = [&]() {
 		OpticsRoom room;
-		room.x = ROOM.x;
-		room.y = ROOM.y;
-		room.w = ROOM.w;
-		room.h = ROOM.h;
+		const float scale = vw.scale;
+		room.x = sx(ROOM.x);
+		room.y = sy(ROOM.y);
+		room.w = ROOM.w * scale;
+		room.h = ROOM.h * scale;
+		room.wall_px *= scale;
+		room.gap_px *= scale;
+		room.cube_x = sx(960.0f);
+		room.cube_y = sy(540.0f);
+		room.pixel = scale;
+		room.pixel_x0 = sx(0.0f);
 		room.bench = WALL_RADIANCE;
 		room.elsewhere = DARK_RADIANCE;
 		// The wall behind and the room in front are endless white planes ruled as the bench is (the user's word,
@@ -4101,14 +4447,14 @@ struct Ui::Impl {
 		// radiance: the wall's, less what its ruling takes (a line a pixel wide each way in every square).
 		{
 			const auto lin = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
-			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0);
+			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0); // (the layout's: its ruling is as much larger as its squares)
 			const double share = 2.0 / sq - 1.0 / (sq * sq);
 			room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
 			// The room is a cube twice the screen's width on a side, each face ruled in sixteen cells across, the
 			// cells along its twelve edges black (the user's word: endless white planes left a vessel all but
 			// unseen; rays bent far, as at a rim, come to the black cells). What glass reflects is the room as a
 			// whole: its faces' mean.
-			room.cube = 3840.0;
+			room.cube = 3840.0 * scale;
 			room.cube_cell = room.cube / 16.0;
 			room.edge = 0.0;
 			const double black = 1.0 - (14.0 / 16.0) * (14.0 / 16.0);
@@ -4146,7 +4492,142 @@ struct Ui::Impl {
 				shape(x - half, std::min(y, static_cast<double>(c.h)), x + half, std::max(y, static_cast<double>(c.h)), r);
 			}
 		}
-		optics_compose(scene, room, bodies);
+		return room;
+		};
+		// The probes read the room as it is laid out, whatever the view (Stage 42); the screen shows it at the view
+		OpticsRoom whole;
+		if (zoomed()) {
+			const View seen = vw;
+			vw = view_whole(VIEW_ROOM);
+			whole = room_now();
+			vw = seen;
+		}
+		OpticsRoom room = room_now(); // (and the draw list, at the view)
+		if (!zoomed()) {
+			whole = room;
+		}
+		// while the view moves, the scene stands as it was made: the host carries its pixels to the view now
+		if (!view_moving() || scene.table.empty()) {
+			if (!zoomed()) {
+				optics_compose(scene, room, bodies);
+			} else {
+				optics_compose(scene, room, at_view(bodies));
+				clip_rectangles();
+			}
+			composed_at = vw;
+		}
+		read_probes(bodies, before_probes, after_probes, whole);
+	}
+
+	// The bodies at the view (Stage 42): placed and sized by it, their depths with them; those past the room's part of
+	// the screen left out
+	std::vector<OpticsBody> at_view(const std::vector<OpticsBody> &bodies) const {
+		std::vector<OpticsBody> out;
+		out.reserve(bodies.size());
+		const float scale = vw.scale;
+		for (OpticsBody b : bodies) {
+			b.x = sx(b.x);
+			b.y = sy(b.y);
+			b.w *= scale;
+			b.h *= scale;
+			b.x0 = sx(b.x0);
+			b.y0 = sy(b.y0);
+			b.x1 = sx(b.x1);
+			b.y1 = sy(b.y1);
+			b.pivot_x = sx(b.pivot_x);
+			b.pivot_y = sy(b.pivot_y);
+			if (b.shape != OpticsBody::Grating) {
+				b.size *= scale; // (a grating's is its ruling's pitch, in nanometres)
+			}
+			b.dash *= scale;
+			float left = b.x, top = b.y, right = b.x + b.w, bottom = b.y + b.h;
+			if (b.shape == OpticsBody::Bar) {
+				left = std::min(b.x0, b.x1) - b.size;
+				right = std::max(b.x0, b.x1) + b.size;
+				top = std::min(b.y0, b.y1) - b.size;
+				bottom = std::max(b.y0, b.y1) + b.size;
+			} else if (b.angle != 0.0f || b.flipped) {
+				// turned about its pivot: what it may sweep
+				const float reach = std::hypot(b.w, b.h) + std::hypot(b.pivot_x - b.x, b.pivot_y - b.y);
+				left = b.pivot_x - reach;
+				right = b.pivot_x + reach;
+				top = b.pivot_y - reach;
+				bottom = b.pivot_y + reach;
+			}
+			if (right < ROOM.x || left > ROOM.x + ROOM.w || bottom < ROOM.y || top > ROOM.y + ROOM.h) {
+				continue;
+			}
+			out.push_back(b);
+		}
+		return out;
+	}
+	// the passes that trace rays run over the room's part of the screen alone
+	void clip_rectangles() {
+		std::vector<float> kept;
+		std::vector<int> bodies_kept;
+		for (size_t k = 0; k + 3 < scene.rectangles.size(); k += 4) {
+			const float l = std::max(scene.rectangles[k], std::floor(ROOM.x)), t = std::max(scene.rectangles[k + 1], std::floor(ROOM.y));
+			const float r = std::min(scene.rectangles[k + 2], std::ceil(ROOM.x + ROOM.w)), b = std::min(scene.rectangles[k + 3], std::ceil(ROOM.y + ROOM.h));
+			if (r > l && b > t) {
+				kept.insert(kept.end(), { l, t, r, b });
+				bodies_kept.push_back(scene.rectangle_bodies[k / 4]);
+			}
+		}
+		scene.rectangles = kept;
+		scene.rectangle_bodies = bodies_kept;
+	}
+
+
+	// The viewers' probes read (GAME_SPEC §12: the spectrum probe; Stage 42): the scene as the pass has it, but for
+	// the probes' own heads and cables, made again whenever a probe has moved and at most every READING_EVERY_MS
+	// while they rest; each probe's disc where it is now, read for a frame's share of PROBE_BUDGET_MS; and each
+	// screen's picture plotted from what its probe has read (shown at the next frame: on its own screen, a probe
+	// reads the frame before)
+	void read_probes(const std::vector<OpticsBody> &bodies, size_t probes_from, size_t probes_to, const OpticsRoom &room) {
+		std::vector<int> showing;
+		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
+			if (view.items[static_cast<size_t>(i)].kind == "viewer" && view.items[static_cast<size_t>(i)].place == "bench") {
+				showing.push_back(i); // (switched on: on the bench)
+			}
+		}
+		if (showing.empty()) {
+			return;
+		}
+		const double now = clock_ms();
+		bool moved_any = false;
+		std::vector<std::pair<float, float>> at;
+		for (const int i : showing) {
+			float x = 0, y = 0;
+			probe_point(i, x, y);
+			at.emplace_back(x, y);
+			const Spectrometer &p = viewers[id(i)].probe;
+			moved_any = moved_any || x != p.x() || y != p.y();
+		}
+		if (moved_any || now - reading_ms >= READING_EVERY_MS || reading.table.empty()) {
+			std::vector<OpticsBody> seen;
+			seen.reserve(bodies.size());
+			for (size_t k = 0; k < bodies.size(); ++k) {
+				if (k < probes_from || k >= probes_to) {
+					seen.push_back(bodies[k]);
+				}
+			}
+			optics_compose(reading, room, seen);
+			reading_ms = now;
+		}
+		// (the time is the rays' own, from when the scene they read is made: a sweep of every nanometre first, whatever
+		// the time, so a probe carried shows the whole spectrum at every frame)
+		const double start = clock_ms();
+		for (size_t n = 0; n < showing.size(); ++n) {
+			ViewerState &st = viewers[id(showing[n])];
+			st.probe.aim(reading, at[n].first, at[n].second, PROBE_RADIUS_PX);
+			const double share = start + PROBE_BUDGET_MS * static_cast<double>(n + 1) / static_cast<double>(showing.size());
+			int read = st.probe.read(reading, SPECTRUM_NM);
+			read += st.probe.read(reading, PROBE_RAYS_MOST / static_cast<int64_t>(showing.size()) - SPECTRUM_NM, [&] { return clock_ms() < share; });
+			if (read > 0 || !st.plotted) {
+				plot_spectrum(st.probe.curve(), st.probe.read_count(), st.picture);
+				st.plotted = true;
+			}
+		}
 	}
 
 	void paint_readout() {
@@ -4278,7 +4759,38 @@ struct Ui::Impl {
 							DIM, 14);
 				}
 			}
-			if (v.kind == "burner") {
+			if (v.kind == "viewer") {
+				// the spectral viewer (Stage 42): where its probe is, how much it has read, and the peak
+				Rect home;
+				if (probe_home_rect(showing, home)) {
+					button(home, "probe home", false, 15);
+					y += 42;
+				}
+				row(probing == showing ? "its probe in hand: reading where it is"
+						: !v.probe_on.empty() ? "its probe on " + v.probe_on + text_of(", at %.2f across, ", v.probe_u) + text_of("%.2f down", v.probe_v)
+						: v.probe_room		  ? "its probe on the room" + text_of(", %.2f squares across, ", v.probe_u) + text_of("%.2f down", v.probe_v)
+											  : "its probe in its holder: take it up to read anything",
+						DIM, 15);
+				const auto found = viewers.find(v.id);
+				if (found != viewers.end()) {
+					const Spectrometer &p = found->second.probe;
+					int least = PROBE_SAMPLES_MOST;
+					for (const int c : p.counts()) {
+						least = std::min(least, c);
+					}
+					const std::array<double, SPECTRUM_NM> c = p.curve();
+					int peak = 0;
+					for (int k = 1; k < SPECTRUM_NM; ++k) {
+						peak = c[static_cast<size_t>(k)] > c[static_cast<size_t>(peak)] ? k : peak;
+					}
+					row(p.settled() ? "settled: every nanometre the mean of its rays over the disc"
+									: text_of("read %.0f of 401 nm", p.read_count()) + text_of(", at least %.0f rays each", least),
+							DIM, 15);
+					if (p.read_count() > 0) {
+						row(text_of("peak %.0f nm: ", SPECTRUM_FIRST_NM + peak) + text_of("%.3g mW/(sr m2 nm)", 1000.0 * radiance_of(c[static_cast<size_t>(peak)], peak)), DIM, 15);
+					}
+				}
+			} else if (v.kind == "burner") {
 				row(text_of("flame %.0f C, valve %.0f%%", v.celsius, 100.0 * v.valve));
 			} else if (v.kind == "stopper") {
 				row(v.on >= 0 ? "in the neck of " + view.items[static_cast<size_t>(v.on)].id + ": pull it out by picking it up" : "put it on a narrow neck to seal it", DIM, 15);
@@ -4531,6 +5043,11 @@ std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 
 void Ui::pointer(float x, float y, bool down, int mods) {
 	Impl &m = *impl_;
+	// over the room, a point of the view: where it is in the room's layout (Stage 42; at 1x, itself)
+	if (m.zoomed() && m.room_at(x, y)) {
+		x = layout_x(m.vw, Impl::VIEW_ROOM, x);
+		y = layout_y(m.vw, Impl::VIEW_ROOM, y);
+	}
 	const bool pressed = down && !m.down, released = !down && m.down;
 	m.mods = mods;
 	if (pressed) {
@@ -4552,7 +5069,15 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.turn(x);
 		}
 	} else if (released) {
-		if (m.making >= 0 && !m.making_carried && DRAWER.has(x, y)) {
+		if (m.probing >= 0 && !m.probe_in_hand) {
+			// a probe (Stage 42): pressed and let go where it was, it is in hand, and the next press puts it down;
+			// pressed and moved, it goes where the button is let go
+			if (std::fabs(x - m.press_x) > 4 || std::fabs(y - m.press_y) > 4) {
+				m.drop_probing(m.probing, x, y);
+			} else {
+				m.probe_in_hand = true;
+			}
+		} else if (m.making >= 0 && !m.making_carried && DRAWER.has(x, y)) {
 			// pressed and let go on the drawer (Stage 34): the part is in hand, as an item taken from the cabinet
 			// is, and the next press puts it down. (Pressed and dragged out, it goes where the button is let go.)
 			m.making_carried = true;
@@ -4745,6 +5270,16 @@ Lab &Ui::lab() {
 	return *impl_->lab;
 }
 
+const Spectrometer *Ui::probe(std::string_view viewer) const {
+	const auto found = impl_->viewers.find(std::string(viewer));
+	return found == impl_->viewers.end() ? nullptr : &found->second.probe;
+}
+
+const Picture *Ui::screen(std::string_view viewer) const {
+	const auto found = impl_->viewers.find(std::string(viewer));
+	return found == impl_->viewers.end() || !found->second.plotted ? nullptr : &found->second.picture;
+}
+
 bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
 	Impl &m = *impl_;
 	std::unique_ptr<Tutorial> t = Tutorial::open(tutorial_json, m.view, why);
@@ -4861,8 +5396,47 @@ std::vector<std::string> Ui::selection() const {
 }
 
 void Ui::key(Key key, uint32_t codepoint) {
+	if (key == KeyView) {
+		reset_view();
+		return;
+	}
 	impl_->type(key, codepoint);
 	impl_->follow();
+}
+
+void Ui::zoom(float x, float y, float factor) {
+	Impl &m = *impl_;
+	if (!(factor > 0.0f) || !std::isfinite(factor) || !m.room_at(x, y)) {
+		return; // (over a panel, the screen's own: not the room's)
+	}
+	m.set_view(view_zoomed(m.vw, Impl::VIEW_ROOM, x, y, factor));
+}
+
+void Ui::pan(float dx, float dy) {
+	Impl &m = *impl_;
+	if (std::isfinite(dx) && std::isfinite(dy)) {
+		m.set_view(view_panned(m.vw, Impl::VIEW_ROOM, dx, dy));
+	}
+}
+
+void Ui::reset_view() {
+	impl_->set_view(view_whole(Impl::VIEW_ROOM));
+}
+
+View Ui::view() const {
+	return impl_->vw;
+}
+
+bool Ui::view_moving() const {
+	return impl_->view_moving();
+}
+
+View Ui::scene_view() const {
+	return impl_->composed_at;
+}
+
+ViewRoom Ui::view_room() {
+	return Impl::VIEW_ROOM;
 }
 
 const std::string &Ui::message() const {
@@ -4892,7 +5466,14 @@ bool Ui::paused() const {
 }
 
 bool Ui::locate(std::string_view what, float &x, float &y) const {
-	return impl_->locate(what, x, y);
+	if (!impl_->locate(what, x, y)) {
+		return false;
+	}
+	if (impl_->room_name(what)) {
+		x = impl_->sx(x); // where the view shows it (Stage 42)
+		y = impl_->sy(y);
+	}
+	return true;
 }
 
 bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
@@ -4972,6 +5553,63 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 			}
 		}
 		return false;
+	}
+	// the spectral viewer (Stage 42): its probe's disc, its holder, a place of its screen; a place of an item in its
+	// own frame (item:<id>@u,v); the readout's button that sends the probe home
+	const auto at_uv = [&](std::string_view s, std::string &name, double &u, double &v) {
+		const size_t a = s.find('@');
+		if (a == std::string_view::npos) {
+			name = std::string(s);
+			return false;
+		}
+		name = std::string(s.substr(0, a));
+		const std::string rest_uv(s.substr(a + 1));
+		return std::sscanf(rest_uv.c_str(), "%lf,%lf", &u, &v) == 2;
+	};
+	if (after("probe:", rest)) {
+		const int i = index_of(rest);
+		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
+			return false;
+		}
+		m.probe_point(i, x, y);
+		return true;
+	}
+	if (after("holder:", rest)) {
+		const int i = index_of(rest);
+		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
+			return false;
+		}
+		Impl::viewer_rest(m.drawn(i), x, y);
+		return true;
+	}
+	if (after("screen:", rest)) {
+		std::string name;
+		double u = 0.5, v = 0.5;
+		at_uv(rest, name, u, v);
+		const int i = index_of(name);
+		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
+			return false;
+		}
+		const Rect sc = Impl::viewer_screen(m.drawn(i)), r = m.drawn(i);
+		m.place_on(i, (sc.x + u * sc.w - r.x) / r.w, (sc.y + v * sc.h - r.y) / r.h, x, y);
+		return true;
+	}
+	if (what == "readout:probe:holder") {
+		Rect r;
+		return m.selected >= 0 && m.probe_home_rect(m.selected, r) && centre(r);
+	}
+	if (after("item:", rest) && rest.find('@') != std::string_view::npos) {
+		std::string name;
+		double u = 0.5, v = 0.5;
+		if (!at_uv(rest, name, u, v)) {
+			return false;
+		}
+		const int i = index_of(name);
+		if (i < 0 || !m.visible(i)) {
+			return false;
+		}
+		m.place_on(i, u, v, x, y);
+		return true;
 	}
 	if (after("item:", rest)) {
 		const int i = index_of(rest);

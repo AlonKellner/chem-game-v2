@@ -9,10 +9,12 @@
 #include "lab/optics_trace.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <cmath>
 #include <map>
 #include <string>
+#include <unordered_map>
 
 namespace lab {
 
@@ -95,7 +97,142 @@ double pool_depth(double ml, double r) {
 	return (lo + hi) / 2.0;
 }
 
+// ---- the spectral viewer's screen (Stage 42)
+
+// the screen's light at full weight, over a whole pixel: each subpixel's share of it
+constexpr double SUBPIXEL_SHARE = SCREEN_FILL_X * SCREEN_FILL_Y / 3.0;
+
+// the room's white (D65 at Y = 1): its X, Y and Z, and the sum it is normalised by
+struct White {
+	double x = 0.0, z = 0.0, norm = 1.0;
+};
+const White &white_of() {
+	static const White w = [] {
+		White o;
+		double x = 0.0, y = 0.0, z = 0.0;
+		for (size_t i = 0; i < chem::optics::d65().size(); ++i) {
+			x += chem::optics::d65()[i] * chem::optics::xbar()[i];
+			y += chem::optics::d65()[i] * chem::optics::ybar()[i];
+			z += chem::optics::d65()[i] * chem::optics::zbar()[i];
+		}
+		o.x = x / y;
+		o.z = z / y;
+		o.norm = y;
+		return o;
+	}();
+	return w;
+}
+
+// a 3 x 3 matrix's inverse
+bool invert3(const double m[3][3], double o[3][3]) {
+	const double d = m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+	if (!(std::fabs(d) > 1e-300)) {
+		return false;
+	}
+	o[0][0] = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) / d;
+	o[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) / d;
+	o[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) / d;
+	o[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) / d;
+	o[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) / d;
+	o[1][2] = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) / d;
+	o[2][0] = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) / d;
+	o[2][1] = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) / d;
+	o[2][2] = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) / d;
+	return true;
+}
+
+// The screen's primaries and what a weight of each makes, over a pixel (X, Y, Z against the room's white), and
+// the way back
+struct Panel {
+	std::array<std::array<double, 401>, 3> primaries{};
+	double make[3][3] = {}, back[3][3] = {};
+};
+const Panel &panel() {
+	static const Panel p = [] {
+		Panel o;
+		const char *const names[3] = { "led_red", "led_green", "led_blue" };
+		const White &w = white_of();
+		double m[3][3] = {};
+		for (int c = 0; c < 3; ++c) {
+			const Spectrum *e = chem::optics::emitter(names[c]);
+			for (size_t i = 0; i < 401; ++i) {
+				const double g = e != nullptr ? (*e)[i] : 0.0;
+				o.primaries[static_cast<size_t>(c)][i] = g;
+				const double light = SUBPIXEL_SHARE * g * chem::optics::d65()[i] / w.norm;
+				m[0][c] += light * chem::optics::xbar()[i];
+				m[1][c] += light * chem::optics::ybar()[i];
+				m[2][c] += light * chem::optics::zbar()[i];
+			}
+		}
+		// each scaled so that all three full are the room's white
+		double inv[3][3];
+		if (!invert3(m, inv)) {
+			return o;
+		}
+		const double target[3] = { w.x, 1.0, w.z };
+		for (int c = 0; c < 3; ++c) {
+			const double a = inv[c][0] * target[0] + inv[c][1] * target[1] + inv[c][2] * target[2];
+			for (size_t i = 0; i < 401; ++i) {
+				o.primaries[static_cast<size_t>(c)][i] *= a;
+			}
+			for (int r = 0; r < 3; ++r) {
+				o.make[r][c] = m[r][c] * a;
+			}
+		}
+		invert3(o.make, o.back);
+		return o;
+	}();
+	return p;
+}
+
+double srgb_decoded(uint8_t code) {
+	static const std::array<double, 256> table = [] {
+		std::array<double, 256> t{};
+		for (int i = 0; i < 256; ++i) {
+			const double v = i / 255.0;
+			t[static_cast<size_t>(i)] = v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4);
+		}
+		return t;
+	}();
+	return table[code];
+}
+
 } // namespace
+
+const std::array<std::array<double, 401>, 3> &optics_screen_primaries() {
+	return panel().primaries;
+}
+
+void optics_screen_drive(const uint8_t code[3], float weights[3]) {
+	const Panel &p = panel();
+	const double r = srgb_decoded(code[0]), g = srgb_decoded(code[1]), b = srgb_decoded(code[2]);
+	// the colour's light (sRGB's primaries, D65 white at Y = 1)
+	const double t[3] = { 0.4124564 * r + 0.3575761 * g + 0.1804375 * b, 0.2126729 * r + 0.7151522 * g + 0.0721750 * b, 0.0193339 * r + 0.1191920 * g + 0.9503041 * b };
+	const White &w = white_of();
+	const double grey[3] = { w.x * t[1], t[1], w.z * t[1] };
+	const auto drive = [&](double share, double out[3]) {
+		const double m[3] = { grey[0] + (t[0] - grey[0]) * share, t[1], grey[2] + (t[2] - grey[2]) * share };
+		bool fits = true;
+		for (int c = 0; c < 3; ++c) {
+			out[c] = p.back[c][0] * m[0] + p.back[c][1] * m[1] + p.back[c][2] * m[2];
+			fits = fits && out[c] >= -1e-9 && out[c] <= 1.0 + 1e-9;
+		}
+		return fits;
+	};
+	double out[3];
+	if (!drive(1.0, out)) {
+		// toward the grey of its luminance, as far as the primaries reach
+		double lo = 0.0, hi = 1.0;
+		for (int i = 0; i < 30; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			(drive(mid, out) ? lo : hi) = mid;
+		}
+		drive(lo, out);
+	}
+	for (int c = 0; c < 3; ++c) {
+		weights[c] = static_cast<float>(std::clamp(out[c], 0.0, 1.0));
+	}
+}
 
 void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vector<OpticsBody> &bodies) {
 	std::vector<float> t(static_cast<size_t>(SIZE_VECS) * 4, 0.0f), rows, lines(static_cast<size_t>(MAX_LINES) * 4, 0.0f);
@@ -113,6 +250,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(3, 0, room.gap_px);
 	put(3, 2, room.cube);
 	put(3, 3, room.cube_cell);
+	put(4, 0, room.cube_x);
+	put(4, 1, room.cube_y);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -135,6 +274,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	std::stable_sort(ordered.begin(), ordered.end(), [&](const OpticsBody *a, const OpticsBody *b) { return layer_of(*a) < layer_of(*b); });
 	int count = 0, line_count = 0, nearest = 0;
 	std::map<std::string, int> shared; // the sets of spectra things share, by what they are made of
+	// the screens (Stage 42), and where each one's image begins in the images' buffer
+	struct ScreenAt {
+		const OpticsBody *body;
+		int start;
+	};
+	std::vector<ScreenAt> screens;
+	int image_next = 0;
 	for (const OpticsBody *each : ordered) {
 		const OpticsBody &body = *each;
 		const bool thing = body.shape != OpticsBody::Item;
@@ -146,8 +292,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			// a thing of the lab that is no vessel (Stage 22): a shape, of a set of spectra things share
 			const int at = HEADER_VECS + count * BODY_VECS;
 			++count;
-			const std::string made = std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") +
-									 "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
+			const bool screen = body.shape == OpticsBody::Screen && body.image != nullptr && body.image_w > 0 && body.image_h > 0;
+			const std::string made = screen ? "screen|" + std::to_string(screens.size()) + "|" + (body.surface ? body.surface : "")
+											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
 			auto found = shared.find(made);
 			if (found == shared.end()) {
 				const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
@@ -162,7 +309,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					}
 				}
 				const Spectrum *a = body.light ? chem::optics::emitter(body.light) : nullptr, *b = body.light_to ? chem::optics::emitter(body.light_to) : nullptr;
-				for (int i = 0; i < ROW && (a != nullptr || b != nullptr); ++i) {
+				for (int i = 0; i < ROW && screen; ++i) {
+					base[GLOW_ROW * ROW + i] = -1.0f; // its light is its image's
+				}
+				for (int i = 0; i < ROW && (a != nullptr || b != nullptr) && !screen; ++i) {
 					const double from = a ? (*a)[static_cast<size_t>(i)] : 0.0, to = b ? (*b)[static_cast<size_t>(i)] : from;
 					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward));
 				}
@@ -187,7 +337,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			put(at + RECT, 1, y);
 			put(at + RECT, 2, w);
 			put(at + RECT, 3, h);
-			put(at + FORM, 0, static_cast<int>(body.shape));
+			if (screen) {
+				// a slab whose light is its image (Stage 42): where its image will begin in the images' buffer
+				put(at + MORE, 0, image_next);
+				put(at + MORE, 1, 1.0);
+				screens.push_back(ScreenAt{ &body, image_next });
+				image_next += IMAGE_HEAD_VECS + (3 * ROW + 3) / 4 + body.image_h * (body.image_w + 1);
+			}
+			put(at + FORM, 0, body.shape == OpticsBody::Screen ? static_cast<int>(OpticsBody::Slab) : static_cast<int>(body.shape));
 			put(at + FORM, 1, 1.0);
 			put(at + FORM, 2, body.size);
 			put(at + REFRACT, 1, layer_of(body));
@@ -196,6 +353,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			uint64_t h_sig = fnv(&rows[static_cast<size_t>(found->second * ROWS_PER_SET * ROW)], ROWS_PER_SET * ROW * sizeof(float));
 			h_sig = fnv(&t[static_cast<size_t>(at) * 4], 3 * 4 * sizeof(float), h_sig);
 			h_sig = fnv(&wall_key, sizeof wall_key, h_sig);
+			if (screen) {
+				h_sig = fnv(&body.image_hash, sizeof body.image_hash, h_sig); // a new picture is a new colour
+			}
 			put(at + IDS, 1, tag(h_sig));
 			continue;
 		}
@@ -219,7 +379,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		const bool ball = v.kind == "balloon";
 		const double bottom = static_cast<double>(body.y) + body.h;
 		// a vessel made as glassware stands with its axis on a whole pixel (GAME_SPEC §12.3, Stage 24)
-		put(at + RECT, 0, v.glassware.empty() ? body.x : std::round(body.x + body.w / 2.0f) - body.w / 2.0f);
+		put(at + RECT, 0, v.glassware.empty() ? body.x : room.pixel_x0 + std::round((body.x + body.w / 2.0 - room.pixel_x0) / room.pixel) * room.pixel - body.w / 2.0);
 		put(at + RECT, 1, body.y);
 		put(at + RECT, 2, body.w);
 		put(at + RECT, 3, body.h);
@@ -471,6 +631,66 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		put(at + IDS, 3, line_count - first_line);
 	}
 	put(0, 0, count);
+	// The images (Stage 42): made again only when one has changed, or where they lie
+	{
+		uint64_t key = 1469598103934665603ull;
+		for (const ScreenAt &sc : screens) {
+			key = fnv(&sc.body->image_hash, sizeof sc.body->image_hash, key);
+			key = fnv(&sc.body->image_w, sizeof sc.body->image_w, key);
+			key = fnv(&sc.body->image_h, sizeof sc.body->image_h, key);
+			key = fnv(&sc.start, sizeof sc.start, key);
+		}
+		if (key != scene.images_key || (screens.empty() != scene.images.empty())) {
+			scene.images.assign(static_cast<size_t>(std::max(image_next, 1)) * 4, 0.0f);
+			scene.image_weights.clear();
+			const std::array<std::array<double, 401>, 3> &light = panel().primaries;
+			for (const ScreenAt &sc : screens) {
+				const OpticsBody &b = *sc.body;
+				const int w = b.image_w, h = b.image_h;
+				float *head = &scene.images[static_cast<size_t>(sc.start) * 4];
+				const int channels = sc.start + IMAGE_HEAD_VECS, sums = channels + (3 * ROW + 3) / 4;
+				head[0] = static_cast<float>(w);
+				head[1] = static_cast<float>(h);
+				head[2] = static_cast<float>(SCREEN_FILL_X);
+				head[3] = static_cast<float>(SCREEN_FILL_Y);
+				head[4] = static_cast<float>(channels);
+				head[5] = static_cast<float>(sums);
+				head[6] = static_cast<float>(scene.image_weights.size());
+				for (int c = 0; c < 3; ++c) {
+					for (int i = 0; i < ROW; ++i) {
+						scene.images[static_cast<size_t>(channels) * 4 + static_cast<size_t>(c * ROW + i)] = static_cast<float>(light[static_cast<size_t>(c)][static_cast<size_t>(i)]);
+					}
+				}
+				// (what the panel drives its primaries to for each colour, worked out once a colour: a picture has few)
+				thread_local std::unordered_map<uint32_t, std::array<float, 3>> drives;
+				if (drives.size() > 65536) {
+					drives.clear();
+				}
+				for (int y = 0; y < h; ++y) {
+					float *row = &scene.images[static_cast<size_t>(sums + y * (w + 1)) * 4];
+					double run[3] = { 0.0, 0.0, 0.0 };
+					for (int x = 0; x < w; ++x) {
+						const uint8_t *code = &b.image[(static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3];
+						const uint32_t colour = static_cast<uint32_t>(code[0]) << 16 | static_cast<uint32_t>(code[1]) << 8 | code[2];
+						auto found = drives.find(colour);
+						if (found == drives.end()) {
+							std::array<float, 3> d{};
+							optics_screen_drive(code, d.data());
+							found = drives.emplace(colour, d).first;
+						}
+						const float *drive = found->second.data();
+						for (int c = 0; c < 3; ++c) {
+							scene.image_weights.push_back(drive[c]);
+							run[c] += drive[c];
+							row[static_cast<size_t>(x + 1) * 4 + static_cast<size_t>(c)] = static_cast<float>(run[c]);
+						}
+					}
+				}
+			}
+			scene.images_key = key;
+			++scene.images_revision;
+		}
+	}
 
 	if (scene.lights.empty()) {
 		const chem::optics::EnergyTable &room_light = chem::optics::room_light();

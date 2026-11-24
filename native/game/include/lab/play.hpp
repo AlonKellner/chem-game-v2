@@ -17,6 +17,10 @@
 //   "button": what the button does on the step's last frame: "click", "right" (a click of the right button),
 //             "down" (pressed, and held through the steps after), "up" (let go); without it, as it was
 //   "mark":   a name for the step's frames (what a host times, what a test counts)
+//   "do":     (Stage 42) a lab command, given on the step's first frame (a bench set out as a test sets it)
+//   "zoom":   (Stage 42) the room's view zoomed by this factor about the pointer on each of the step's frames (a
+//             wheel turned: a notch a frame)
+//   "shot":   (Stage 42) a name for a picture of the screen a host takes after the step's last frame
 namespace lab {
 
 class Play {
@@ -29,6 +33,9 @@ public:
 	const std::string &mark() const { return mark_; }
 	// a thing a step named that was not on the screen ("" when every one was)
 	const std::string &missed() const { return missed_; }
+	// the picture to take after the frame last given ("" for none), and a command that was refused ("" for none)
+	const std::string &shot() const { return shot_; }
+	const std::string &refused() const { return refused_; }
 
 private:
 	enum Button : int { Keep = 0, Click = 1, Right = 2, Down = 3, Up = 4 };
@@ -39,6 +46,8 @@ private:
 		int frames = 1;
 		int button = Keep;
 		std::string mark;
+		std::string command, shot;
+		float zoom = 0.0f;
 	};
 	std::vector<Step> steps_;
 	size_t at_ = 0;
@@ -46,7 +55,7 @@ private:
 	float x_ = 960.0f, y_ = 20.0f; // the pointer
 	float from_x_ = 960.0f, from_y_ = 20.0f, to_x_ = 960.0f, to_y_ = 20.0f; // the step's glide
 	bool down_ = false;
-	std::string mark_, missed_;
+	std::string mark_, missed_, shot_, refused_;
 };
 
 } // namespace lab

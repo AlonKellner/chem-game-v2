@@ -1,0 +1,27 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{"do": {"do": "place", "item": "viewer", "at": [18, 1]}},
+		{"do": {"do": "place", "item": "burner", "at": [9, 9]}},
+		{"do": {"do": "valve", "burner": "burner", "to": 1.0}},
+		{"do": {"do": "place", "item": "acid", "at": [12, 6]}},
+		{"frames": 120, "mark": "settled", "shot": "viewer-bench"},
+		{"frames": 10, "mark": "settled"},
+		{"to": "probe:viewer", "frames": 30, "button": "click"},
+		{"to": "item:acid@0.5,0.8", "frames": 60, "mark": "carry"},
+		{"to": "item:burner@0.5,-0.8", "frames": 40, "button": "click", "mark": "carry"},
+		{"frames": 180, "mark": "reading", "shot": "viewer-flame"},
+		{"frames": 10, "mark": "reading"},
+		{"to": "screen:viewer@0.45,0.5", "frames": 20},
+		{"frames": 12, "zoom": 1.25, "mark": "zoom"},
+		{"frames": 60, "mark": "rest", "shot": "viewer-screen-14x"},
+		{"frames": 10, "mark": "rest"},
+		{"zoom": 0.909, "mark": "tenth"},
+		{"frames": 30, "mark": "tenth", "shot": "viewer-screen-tenth"},
+		{"frames": 10, "mark": "tenth"},
+		{"frames": 6, "zoom": 0.8, "mark": "zoom", "shot": "viewer-moving-out"},
+		{"frames": 6, "zoom": 0.8, "mark": "zoom"},
+		{"frames": 60, "mark": "whole", "shot": "viewer-whole"},
+		{"frames": 10, "mark": "whole"}
+	]
+}

@@ -87,6 +87,11 @@ inline vec4 wall_vec(int i) {
 	return vec4(v[0], v[1], v[2], v[3]);
 }
 
+// the images things emit by (Stage 42): none in a scene with no screen, and none is read there
+inline vec4 image_vec(int i) {
+	const float *v = &current->images[static_cast<size_t>(i) * 4];
+	return vec4(v[0], v[1], v[2], v[3]);
+}
 inline vec4 shape_vec(int i) {
 	const auto *v = &OPTICS_HOST_SHAPES(*current)[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
@@ -147,6 +152,20 @@ thread_local real beam_between = OPTICS_HOST_BETWEEN;
 // the stretches of the spectrum the last pixel read was read in (for O10)
 thread_local std::vector<real> beam_stretches;
 #define OPTICS_STRETCH_HOOK(lo, hi) (beam_stretches.push_back(lo), beam_stretches.push_back(hi))
+// the anchor a sample is carried from (Stage 42: a view's change; Frames::resample), its states read through it
+thread_local const OpticsFramesCore *anchor_core = nullptr;
+inline vec4 anchor_vec(int which, int x, int y) {
+	if (anchor_core == nullptr) {
+		return vec4(0.0);
+	}
+	double hist[4], prox[4], aux[4];
+	anchor_core->state(x, y, hist, prox, aux);
+	const double *v = which == 0 ? hist : which == 1 ? prox : aux;
+	if (which == 3) {
+		return vec4(real(prox[0] + hist[0]), real(prox[1] + hist[1]), real(prox[2] + hist[2]), real(1.0));
+	}
+	return vec4(real(v[0]), real(v[1]), real(v[2]), real(v[3]));
+}
 #include "../shader/optics_pixel.glsl"
 #undef float
 #if defined(__clang__)
@@ -162,6 +181,7 @@ static_assert(TRACE_MOST == trace::MEETINGS_MOST && TRACE_TURNS == trace::TURNS_
 struct Use {
 	explicit Use(const OpticsScene &s) {
 		current = &s;
+		image_sampled = vec4(-1.0); // (what a sample of a screen took is the scene's: read anew in another)
 	}
 	~Use() { current = nullptr; }
 	Use(const Use &) = delete;
@@ -175,6 +195,31 @@ bool ready(const OpticsScene &s) {
 
 Path at(int x, int y) {
 	return path_of(vec2(x + 0.5, y + 0.5), 1.0);
+}
+
+// How wide a point is, in pixels, as the pass's rays read the bodies they meet (ray_shade's layer_at).
+constexpr double POINT_SIZE = 1.0e-3;
+
+// One ray's light at one wavelength through the point p of the screen (Stage 42: the spectrum probe's sample;
+// GAME_SPEC §12), by the pass's own source: where nothing bends it, the bodies as they lie at the point and the
+// wall there; else the ray traced through every body to where it lands, through a grating each of its ways by
+// its share. A factor of the room's light, as optics_through.
+real point_light(vec2 p, real nm) {
+	const Path q = path_of(p, POINT_SIZE);
+	if (!beamed(q)) {
+		return flat_band(q, 0.0, 0.0, 0.0, nm);
+	}
+	real light = 0.0;
+	int ways = 1;
+	for (int way = 0; way < ways; ++way) {
+		ray_way = way;
+		const RayMet m = ray_met(p, nm);
+		ways = way == 0 ? m.ways : ways;
+		const vec2 t = ray_shade(m, nm);
+		light = light + (ways > 1 ? way_share(way) : 1.0) * (t.x * wall_point(vec2(m.x, m.y)) + t.y);
+	}
+	ray_way = 0;
+	return light;
 }
 
 // ---- the frames of a sample of pixels (optics_frames.hpp; lab/optics_scene.hpp: OpticsFrames)
@@ -361,5 +406,56 @@ struct Frames final : OpticsFramesCore {
 	double spent(int x, int y) const override {
 		const State *st = state_at(x, y);
 		return st != nullptr ? to_double(st->s.aux.w) : 0.0;
+	}
+
+	void state(int x, int y, double hist[4], double prox[4], double aux[4]) const override {
+		// (the nearest of the sample's pixels: a place past its edge reads its edge's)
+		const int col = std::clamp((x - x_) / step_, 0, std::max(w_ - 1, 0)), row = std::clamp((y - y_) / step_, 0, std::max(h_ - 1, 0));
+		const PixelState &s = states_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)].s;
+		const vec4 *from[3] = { &s.hist, &s.prox, &s.aux };
+		double *to[3] = { hist, prox, aux };
+		for (int k = 0; k < 3; ++k) {
+			to[k][0] = to_double(from[k]->x);
+			to[k][1] = to_double(from[k]->y);
+			to[k][2] = to_double(from[k]->z);
+			to[k][3] = to_double(from[k]->w);
+		}
+	}
+
+	void bounds(double out[4]) const override {
+		out[0] = x_;
+		out[1] = y_;
+		out[2] = x_ + w_ * step_;
+		out[3] = y_ + h_ * step_;
+	}
+
+	void resample(const OpticsScene &scene, const OpticsFramesCore &anchor, const double now[4], const double from[4], bool full_key) override {
+		if (!ready(scene)) {
+			return;
+		}
+		const vec4 v_now(real(now[0]), real(now[1]), real(now[2]), real(0.0)), v_from(real(from[0]), real(from[1]), real(from[2]), real(0.0));
+		double held[4];
+		anchor.bounds(held);
+		const vec4 room = vec4(static_cast<real>(held[0]), static_cast<real>(held[1]), static_cast<real>(held[2]), static_cast<real>(held[3])); // (what the anchor holds)
+		in_pieces(h_, [&](int row) {
+			const Use use(scene);
+			anchor_core = &anchor;
+			for (int col = 0; col < w_; ++col) {
+				State &st = states_[static_cast<size_t>(row) * static_cast<size_t>(w_) + static_cast<size_t>(col)];
+				const int x = x_ + col * step_, y = y_ + row * step_;
+				const Path q = at(x, y);
+				st.kept = {};
+				if (q.cover <= 0.0 || !anchor_covers(anchor_place(vec2(x + 0.5, y + 0.5), v_now, v_from), room)) {
+					st.s.hist = st.s.prox = st.s.aux = vec4(0.0);
+					st.s.key = vec4(-3.0); // (the wall: shown again from the wall's table)
+					continue;
+				}
+				st.s = anchor_state(vec2(x + 0.5, y + 0.5), v_now, v_from, q.key.z);
+				if (full_key) {
+					st.s.key = q.key;
+				}
+			}
+			anchor_core = nullptr;
+		});
 	}
 };

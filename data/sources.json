@@ -167,6 +167,20 @@
 			"doc": ["Calibrated things of the lab"]
 		},
 		{
+			"data": [
+				"optics/media.json/surfaces/{viewer_case,lcd_black,probe_head,probe_cable}/**"
+			],
+			"design": "the spectral viewer's case, its screen's black, its probe's head and cable (Stage 42)"
+		},
+		{
+			"data": [
+				"optics/media.json/emitters/{led_red,led_green,led_blue}/**"
+			],
+			"calibrated": "the viewer's screen's three primaries: smooth at the pass's bands, placed so the screen shows each wavelength's rainbow colour as the game shows a spike of it (Stage 42)",
+			"doc": ["The viewer's primaries"],
+			"tests": ["viewer: the screen shows each wavelength as the game shows a spike of it"]
+		},
+		{
 			"data": ["benches/{demo.json,lab.json}/items/condenser/{wall_mm,floor_mm}"],
 			"calibrated": "the condenser, made to no standard yet: a 50 mL beaker's least wall (ISO 3819) and the calibrated floor",
 			"doc": ["The condenser keeps", "Calibrated floors"],
@@ -250,8 +264,8 @@
 			"design": "the experiments (Stage 41, GAME_SPEC §13.7): their steps' thresholds, read off each experiment played through (native/tests/game/test_experiments.cpp)"
 		},
 		{
-			"data": ["plays/cost.json/**"],
-			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display"
+			"data": ["plays/cost.json/**", "plays/viewer.json/**"],
+			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display; the spectral viewer's and the view's (Stage 42), with the bench it sets out"
 		}
 	]
 }

@@ -289,8 +289,8 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28)
-	CHECK(bars == 3 + 2); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27)
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42)
+	CHECK(bars == 3 + 2 + 6 + 1 + 6); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27); the viewer's probe in its holder: its ring, its handle, its cable (Stage 42)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
 	// and none of it is drawn over the pass: no polygon (a flame) anywhere, no circle (a lamp, a port, a knob) on
@@ -380,7 +380,7 @@ TEST_CASE("ui: nothing of the lab is drawn over the optical pass: on the bench o
 	std::vector<float> faces; // the sets of the faces of a monitor and an alarm
 	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
 		const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::RECT) * 4];
-		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 3.0f && rect[2] > 30.0f && rect[3] > 30.0f && rect[3] < 40.0f) {
+		if (scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 3.0f && rect[2] > 30.0f && rect[2] < 40.0f && rect[3] > 30.0f && rect[3] < 40.0f) { // (a part's square)
 			faces.push_back(scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::SET) * 4]);
 		}
 	}

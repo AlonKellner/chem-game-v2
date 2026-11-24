@@ -8,6 +8,8 @@
 #include "lab/play.hpp"
 #include "lab/ui.hpp"
 
+#include <algorithm>
+
 #include <cmath>
 #include <cstddef>
 #include <functional>
@@ -358,6 +360,10 @@ const char *cg_ui_playing(cg_ui *ui) {
 	return ui != nullptr && ui->playing ? ui->play.mark().c_str() : nullptr;
 }
 
+const char *cg_ui_play_shot(cg_ui *ui) {
+	return ui != nullptr && ui->playing ? ui->play.shot().c_str() : nullptr;
+}
+
 cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_draw: null argument, or the list's size is not set");
@@ -380,6 +386,16 @@ cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 namespace {
 
 void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
+	// (no view of a room unless the screen gives one: the scene as it is, still)
+	const float whole[4] = { 1.0f, 0.0f, 0.0f, 0.0f };
+	std::copy(whole, whole + 4, out->view);
+	std::copy(whole, whole + 4, out->view_now);
+	out->view_moving = 0;
+	const lab::ViewRoom room = lab::Ui::view_room();
+	out->room[0] = room.x;
+	out->room[1] = room.y;
+	out->room[2] = room.x + room.w;
+	out->room[3] = room.y + room.h;
 	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 	out->table = scene.table.data();
 	out->revision = scene.revision;
@@ -397,6 +413,9 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->shape_count = static_cast<int32_t>(scene.shapes.size() / 4);
 	out->shapes = scene.shapes.data();
 	out->shapes_revision = scene.shapes_revision;
+	out->image_count = static_cast<int32_t>(scene.images.size() / 4);
+	out->images = scene.images.empty() ? nullptr : scene.images.data();
+	out->images_revision = scene.images_revision;
 }
 
 void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
@@ -472,6 +491,10 @@ cg_status cg_ui_optics(cg_ui *ui, cg_optics *out) {
 	}
 	try {
 		fill_optics(ui->ui->optics(), out);
+		// (the views as the scene was made, just now)
+		lab::view_affine(ui->ui->scene_view(), lab::Ui::view_room(), out->view);
+		lab::view_affine(ui->ui->view(), lab::Ui::view_room(), out->view_now);
+		out->view_moving = ui->ui->view_moving() ? 1 : 0;
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
@@ -495,8 +518,30 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 	}
 }
 
+void cg_ui_zoom(cg_ui *ui, float x, float y, float factor) {
+	if (ui != nullptr) {
+		ui->ui->zoom(x, y, factor);
+	}
+}
+
+void cg_ui_pan(cg_ui *ui, float dx, float dy) {
+	if (ui != nullptr) {
+		ui->ui->pan(dx, dy);
+	}
+}
+
+void cg_ui_view(cg_ui *ui, float view[3]) {
+	if (ui == nullptr || view == nullptr) {
+		return;
+	}
+	const lab::View v = ui->ui->view();
+	view[0] = v.scale;
+	view[1] = v.x;
+	view[2] = v.y;
+}
+
 void cg_ui_key(cg_ui *ui, int32_t key, uint32_t codepoint) {
-	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_UNDO) {
+	if (ui == nullptr || key < CG_KEY_TEXT || key > CG_KEY_VIEW) {
 		return;
 	}
 	try {

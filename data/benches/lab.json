@@ -104,6 +104,10 @@
 			"kind": "burner",
 			"celsius": 1927,
 			"conductance": 0.25
+		},
+		{
+			"id": "viewer",
+			"kind": "viewer"
 		}
 	],
 	"goals": [

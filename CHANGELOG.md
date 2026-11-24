@@ -12,6 +12,26 @@
 - §13.7: two experiments, diluting an acid and an acid meets a base.
 - §20: the acid's pH and its neutralisation's heat without bisulfate; the sodium salts only in solution.
 
+## 0.42.0 (2026-11-24, Stage 42, merged after Stage 43; signed off by the user: "It works perfectly! [...] Approved, proceed")
+
+- §13, §12 (Stage 42, `docs/TDD_42_VIEWER.md`): **the spectral viewer**, an instrument of the cabinet that
+  holds no matter (the world and its digest are the same with it or without). Its probe always reads: it is
+  taken up from its holder and reads wherever it is carried, at every frame; let go, `probe` fixes it on an
+  item or a part at that place of it in its own frame (it goes with it, turned or upside down), on the room,
+  on its own screen (a frame late), or home. It reads the light that reaches the eye from a disc of 4 px, ray
+  by ray through points uniform over it, coarse first, and settles to the disc's own integral (O19).
+- §12.1: **an image's weights for an emitting texture.** The viewer's screen is an LED panel, each pixel
+  three subpixels of smooth primaries (620, 530 and 450 nm), read exactly over any sample (O17). Its plot
+  has a column a nanometre and a rainbow of each wavelength as the game shows a spike of it (through the
+  pass within 3 on the eye metric).
+- §13.1, §12.3: **a view of the room**, 1x to 16x about the pointer (the wheel, a pinch; two fingers or the
+  middle button move it; Home, Ctrl/Cmd+0 or the top bar's "whole"), the top bar, the readout and the panels
+  as they were. The room is laid out anew at it (O18: the same room larger). While the view moves nothing is
+  traced, and its pixels are carried from the settled ones; at rest each pixel starts from them once (O20:
+  a tenth closer, 96% keep their history).
+- §14: `cg_ui_zoom`, `cg_ui_pan`, `cg_ui_view`, `CG_KEY_VIEW`, `cg_ui_play_shot`; `cg_optics` gains its
+  images, its views and the room. Plays may set a bench out, turn the wheel and take pictures.
+
 ## 0.41.0 (2026-11-24, Stage 41; signed off by the user: "Works perfectly, approved, merge and proceed")
 
 - §13.2 (Stage 41, `docs/TDD_41_EXPERIMENTS.md`): **a tutorial is strict or free**, by a switch on its card

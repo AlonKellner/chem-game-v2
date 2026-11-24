@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.43.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.43.0, with Stage 42's 0.42.0 merged after it (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -729,8 +729,12 @@ revolution seen from the side.
   quantum yield, with its own energy bands.
 - **Illumination modes:** daylight (D65), ultraviolet lamp, darkness (emission only). A mode is a
   set of light textures.
-- **Spectrum probe:** the full-resolution spectrum under the cursor, computed at 1 nm on the CPU
-  from the same textures, and plotted.
+- **Spectrum probe** (built in Stage 42 as the spectral viewer's, §13): the full-resolution spectrum
+  of a small disc of the screen, computed at 1 nm on the CPU from the same textures, and plotted on
+  the viewer's own screen. It reads rays through points uniform over the disc (a nanometre's own
+  sequence each, coarse first: every 16th nanometre, then the 8ths between, down to each one) and
+  averages them over time, so it settles to the disc's own uniform integral (`O19`); it starts again
+  where the disc moves or what it looks through changes, as a pixel's history does.
 - **Exposure:** fixed, or adapted from a reduced-resolution luminance computed on the GPU.
 - **Colours no display has** (a spectral line, a deep copper blue, anything brighter than white)
   are brought into the display's gamut keeping their lightness and hue and giving up saturation:
@@ -764,7 +768,10 @@ by frame (the points' sequence is deterministic).
   different widths.
 - **A weight** says how much of a channel there is at each point of the object: a constant, a
   gradient (up the height of a vessel, across a layer, along a wall's thickness), an image (a
-  picture's colour separations), or a live quantity of the simulation (a concentration).
+  picture's colour separations), or a live quantity of the simulation (a concentration). *Built
+  (Stage 42)* for an image's weights of an emitting texture: the spectral viewer's screen, three
+  channels (its primaries) weighted pixel by pixel by its picture, each pixel's three subpixels side
+  by side, read exactly over any sample from each row's running sums (`O17`).
 - **At a point**, the texture's distribution is the weighted sum `D(λ) = Σ_c w_c D_c(λ)`. However
   many channels made it, each pixel has exactly one spectral distribution per texture, and that
   distribution is what takes effect.
@@ -1402,11 +1409,30 @@ a second on the machine it was measured on); Stage 35 makes it the only renderer
 store and the tables of a held vessel's rays are removed. Open in it (`docs/TDD_35_ONE.md`,
 `docs/TDD_33_FAST.md`): a prism's slit where a ray is turned back inside the prism, and a pixel in
 ten thousand that stops asking for rays while visibly off the truth (the GPU's settled picture has a
-handful; they are not single precision's: the same source in double has them, `O16`). The
-rest of the full design (lights besides the room's, image and gradient weights,
-Voigt lines, band gaps, fluorescence, ultraviolet and dark modes, the spectrum probe, Rayleigh and
-Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
+handful; they are not single precision's: the same source in double has them, `O16`). Stage 42
+builds an image's weights for an emitting texture (a screen), the spectrum probe (§12) and a view of
+the room (below). The rest of the full design (lights besides the room's, gradient weights and
+an image's for the other effects, Voigt lines, band gaps, fluorescence, ultraviolet and dark modes,
+Rayleigh and Mie auras, light cast through glass onto a surface (caustics, a rainbow on a wall),
 adapted exposure, Display P3 output) is specified and not built.
+
+**A view of the room** (Stage 42; §13.1). The screen's room (the cabinet, the bench, the outbox) is
+seen from 1× to 16×: the room is laid out anew at the view, every body, the wall's drawing and the
+depths (the wall's distance, a layer's gap, the room's cube and its middle) scaled with it, so a view
+is the same room larger (`O18`: for what lands on the view's own screen) and shows what is finer (a
+screen's subpixels). The wall's ruling is drawn as the pixel strips 1× paints, and a glassware
+vessel's axis stands on a whole pixel of the layout, so 1× is unchanged and every view is its
+geometry scaled. **A view's change resamples the settled pixels** (the user's word: pixels start
+from the settled ones, a small change settles almost at once, nothing is traced while the view
+moves, and each pixel is computed once after it stops). While the view moves (it changed within the
+last 120 ms) the scene stands at the view it was made at, its pixels kept as the anchor, and a pass
+(`OPTICS_RESAMPLE_PASS`, the same source) shows them carried to the view now (between pixels' middles
+closer, the mean over a pixel's span further out; beyond what the anchor holds, the room as last seen
+whole at 1×), tracing nothing. At rest the scene is made once at the view and each pixel starts from
+its anchor's state carried to it (its estimate and corrections, the fewest of its points, its noise),
+its content key's colour part the scene's and its shape parts none: its first frame reads its fixed
+estimate, and the drift rule keeps its history or starts it again, as for any change of content
+(`O20`). The probes read the room as laid out, whatever the view.
 
 ## 13. Lab layer and interaction
 
@@ -1425,6 +1451,12 @@ drawer). Items:
   `coolant` is a condenser.
 - **balloon:** an elastic cell with a wall, and a capacity.
 - **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
+- **viewer** (Stage 42): the spectral viewer, an instrument with no cell and no edge: it holds no
+  matter and changes nothing in the world (the world and its digest are the same with it and
+  without it). Its screen shows the spectrum its probe reads (§12: the spectrum probe), always:
+  where its probe is fixed (on an item or a part, at a place of it in its own frame; on the room;
+  in its holder), or where it is carried. Off the bench (in the cabinet, the trash, the outbox) it
+  is off, its screen dark.
 - **the tray:** the bench's own, under everything: where what overflows goes (§6).
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
@@ -1435,6 +1467,7 @@ drawer). Items:
   - a condenser, 2 × 5;
   - a balloon, 4 × 5;
   - a burner, 3 × 3;
+  - a viewer, 7 × 4 (its case and screen, and its probe's holder beside them);
   - a signal part, 1 × 1.
 
   Footprints never overlap; `at` is the footprint's top-left square.
@@ -1465,6 +1498,7 @@ input to them, and a session script is a list of them.
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
 | `pour` | `from`, `to`, `ml` or `all` | moves liquid, with what is dissolved in it in proportion, and its enthalpy |
 | `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
+| `probe` | `viewer`, `on`, `at` | (Stage 42) fixes a viewer's probe: `on` an item or a part (its id; the viewer itself too: it reads its own screen, a frame late), at `at` [u, v] of it in its own frame (0 to 1 across and down its rectangle upright; 0.5, 0.5 without); with `at` alone, on the room at that point (in squares from the bench's top-left corner); with neither, back in its holder. Refused for a viewer off the bench, or on what is in the trash or is not there. It goes back to its holder when what it is on leaves the lab (a part scrapped, the trash emptied) or the viewer leaves the bench. Saved; not digested: it acts on nothing in the world |
 | `attach` | `item`, `to` | puts a balloon or a condenser on a vessel's mouth (from the bench or straight from the cabinet): a gas connection, and the mouth closed to the room |
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
@@ -1615,6 +1649,9 @@ sliders and the selection's rectangle: a drag over an item moves nothing.
 | drag a line from the end of a condenser's outlet to a vessel (Stage 34: as a wire from a part's port; to another vessel, it is moved; let go on nothing, it comes off) | `under`, after `undrain` where it ran into another; `undrain` |
 | carry a vessel over another vessel: the left button | a held pour: `hold`, then `pour` with the tilt's `rate` while held; let go, `unpour` |
 | carry a vessel over another vessel: the right button | the full menu: a slider for how much liquid, `pour`; a button for each solid, `tip`; upside down with a cap, `invert` |
+| take a viewer's probe up from where it is (a click: in hand until the next press; or pressed and dragged: where the button is let go), Stage 42 | while it is carried it reads where it is, at every frame (a sweep of every nanometre first); let go on an item or a part, `probe` `on` it at that place of it; on the viewer's own screen, `on` the viewer; on the rest of the viewer, home; on the room, `probe` `at`; Escape puts it back where it was |
+| the readout's "probe home", the viewer chosen (Stage 42) | `probe` (back in its holder) |
+| the wheel or a pinch over the room; two fingers or the middle button held; Home, Ctrl/Cmd+0 or the top bar's "whole" (Stage 42) | the room's view (below): zoomed about the pointer, a quarter a notch, 1× to 16×; moved; all of it again |
 | carry an item onto a slot of the outbox | `submit` to that slot (§13.5) |
 | carry something off what it is on, or a burner from under a vessel | `detach` or `unheat`, then whatever the putting down means |
 | drag the slider beside a burner | `valve` |
@@ -1657,6 +1694,15 @@ and each species' mass, particle count and size; then the lab's events and the l
 **The cabinet's shelves** share its height among what the bench can put in it (Stage 28: 118 px
 each, or less).
 
+**The view of the room** (Stage 42; the user's word: to inspect small details closely, such as the
+viewer's screen and its plot). A camera on the lit room (the cabinet, the bench, the outbox), from 1×
+(all of it) to 16×, zoomed about the pointer by the wheel or a pinch, moved by two fingers or the
+middle button, and all of it again by Home, Ctrl/Cmd+0 or the top bar's "whole" (shown while
+zoomed). The top bar, the readout's column, the drawer and the panels stay as they are, over the
+room. The room is laid out anew at the view (§12.3), names and highlights over it are placed by the
+view at their own size, and the pointer's points over the room are the view's: a gesture is the same
+command at any view. Nothing of it is the lab's: it is not saved.
+
 **Drawing.** What is in a vessel, and a balloon, is the optical pass of §12.3. The draw list is
 flat and in two parts, one under that pass and one over it: the room and its grid under; glass as
 lines, a liquid's surface as a line (a clear liquid is otherwise invisible until Stage 11's
@@ -1671,7 +1717,8 @@ for play: everything in the cabinet), the commands and the screen above.
 **Status:** Stage 7 implements the bench, the commands, reports, the digest and sessions; Stage 8
 places, the tray, bursting and save/load; Stage 9 the screen and the Godot host; Stage 13 the grid
 of squares and footprints, the selection and `move`; Stage 27 pouring as a control, supports and
-adjacency; Stage 28 sealing: the stopper, the screw cap, glass bursting.
+adjacency; Stage 28 sealing: the stopper, the screw cap, glass bursting; Stage 42 the spectral
+viewer and its probe, and the view of the room.
 
 ### 13.2 The tutorial
 
@@ -2225,7 +2272,10 @@ stand on.
   whether the screen is strict), `cg_ui_set_strict`, `cg_ui_experiments`, `cg_ui_choose` and
   `cg_ui_experiment` (the experiments, §13.7).
 - **The optical pass through the C API:** `cg_ui_optics` (the scene of §12.3: the table, each
-  body's spectra, the lines, the room light's energy table, with one revision),
+  body's spectra, the lines, the room light's energy table, with one revision; Stage 42: the images
+  things emit by, with a revision of their own, and the view the scene was made at, the view now and
+  whether it is moving, with the room's part of the screen), `cg_ui_zoom`, `cg_ui_pan`, `cg_ui_view`
+  and `CG_KEY_VIEW` (the room's view, §13.1),
   `cg_ui_optics_compare` (a host's settled picture of the pass against the truth: `O4`).
 - **The Godot host** (`native/hosts/godot`: `ChemLab`, a `Node2D`): it reads the bench file,
   forwards the mouse, calls a frame in `_process`, paints the draw list's first part in `_draw`,
@@ -2257,6 +2307,8 @@ thermometer, manometer, balance, conductivity meter, pH meter, refractometer, sp
 spectrum probe of §12).
 
 **Demo subset:** none; the debug panel shows true composition. **Status:** specified; after the demo.
+The spectrometer is built as the spectral viewer (Stage 42, §13): it measures the light, exactly,
+with no uncertainty stated yet, and identifies nothing.
 
 ## 17. The demo
 
@@ -2372,7 +2424,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O1 | Transmittance is within [0, 1]: in the renderer's scene every optical depth is at least 0, every reflectance within [0, 1], every line has a width | exact | 10 |
 | O2 | No wavelength of a pixel (each nanometre from 380 to 780, the spectra's own points; Stage 40) comes out brighter than the brightest of the backdrop, what is drawn on it, the room in front and the room's white, and what the scene's bodies emit there (a glowing solid's or a lamp's light where it is seen, glowing gas's for each pixel of the longest path through it; Stage 22: emission is in the pass) | exact | 10, 22, 40 |
 | O3 | Random spectra of every shape (§12.2's test set, 1,500, deterministic) are shown within the eye's threshold: settled, none visible and a mean of at most 0.25; the first frame after a change, at most 1 in 200 visible. It fires on batches of 2 points | tolerance | 10 |
-| O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate. (Open: none to eight pixels a picture of 30,000 to 69,000 are visibly off once settled; `docs/TDD_37_RIGHT.md`) | tolerance | 10 |
+| O4 | The GPU's settled picture of the optical pass is the truth: wherever a body covers at least a fiftieth of a pixel, no pixel is visibly different (eye metric above 8). It needs a GPU, so it is checked by `make screenshots`, not by the commit gate. (Open: none to twelve pixels a picture of 28,000 to 73,000 are visibly off once settled; `docs/TDD_37_RIGHT.md`, `docs/TDD_42_VIEWER.md`) | tolerance | 10 |
 | O5 | Where every index is 1, refraction changes nothing: each pixel's light is the average of its straight rays, with nothing reflected, at a rim too, where some miss the vessel (Stage 20: until then, its centre's ray, exactly); it fires on water's own index | tolerance (0.002 of the room's white against the truth's rays; 0.0002 against the straight path in the vessel's middle half) | 11, 20 |
 | O6 | Fresnel conserves light: at each surface what is reflected and what gets through sum to what arrives, so in a room as bright in front as behind, clear glass and water change nothing; and no wavelength comes out brighter than the brightest of the wall, its drawn shapes and the room in front (`check_O2`) | tolerance (the scene's float32 radiances) | 11 |
 | O7 | A uniform wall seen through any clear geometry is the wall's radiance: with absorption and reflection turned off, every pixel a body covers shows the wall's radiance (the radiance theorem). It fires on a renderer that weights the wall by the area its rays land on | tolerance (float32) | 20 |
@@ -2385,6 +2437,10 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O14 | (Not used: the number was set aside in Stage 33's plan for the corrections' mean, which was never built as a check) | — | — |
 | O15 | The pass's rays in single precision are its rays in double (Stage 33). The tracer of a shape's surfaces, the same text the GPU runs, compiled with a float's arithmetic and the GPU's tolerances: over every body that bends, rays across it straight in and aslant, fewer than one in two hundred go another way, and of the rest all but one in a hundred leave within a thousandth of a centimetre and of a heading of where they leave in double. It fires on another glass | tolerance | 33 |
 | O16 | The pass in single precision is the pass (Stage 35). The whole per-pixel source, the same text the GPU runs, compiled with a float's arithmetic, the GPU's tolerances and the scene's numbers as the GPU is sent them, and stepped frame by frame beside itself in double until neither asks for more: over the pixels bodies cover, the colours the two come to are a mean of under 1 apart on the eye metric, and fewer than one pixel in two hundred visibly apart (a pixel whose rays are chaotic is another draw in each). It fires on another picture. What it found: `docs/TDD_35_ONE.md` | tolerance | 35 |
+| O17 | A screen emits what its picture says (Stage 42). Over samples of every screen of a scene, from a ray's point to many of its pixels, on it and over its edges, at three wavelengths, what the pass reads of it (from each row's running sums) is what its pixels' subpixels give, read one by one from its weights by the truth, to a float's precision (1e-4); O1 holds its channels no less than nothing, its weights within [0, 1] and its sums its pixels', and O2 bounds it by its channels full. It fires on sums a pixel along, and on two channels swapped | tolerance (float32) | 42 |
+| O18 | The view is a similarity (Stage 42). At points 0.47 into the layout's pixels about a vessel of liquid, at three wavelengths, a ray through the view's place of a point (at 4×) brings what a ray through the point brings laid out, but for one in a hundred that graze a surface; of the rays the view lands on its own screen (past it, its wall is the far wall's mean: §20). It fires on a view whose wall stands as far behind as at 1× | tolerance (0.002 of a ray's light) | 42 |
+| O19 | The probe settles to its disc (Stage 42). A spectral viewer's probe that has read every nanometre N times holds, at each of five, a mean within four standard errors (and 1e-4) of the disc's truth: the uniform integral over the disc by the truth's own tracer, on a polar grid of rings of equal area; across a part's edge, in a flame, through water and at a vessel's rim. It fires on sampling the centre alone, the disc's square, points crowded to its middle (by radius, not its square root), and on a disc moved without starting again | tolerance (statistical) | 42 |
+| O20 | A view's change resamples, then settles once (Stage 42). A tenth closer, carried from the settled anchor: at least 90% of the pixels of bodies keep their history at the first frame; those nothing bends read at most a quarter of a fresh start's points over three frames; at no frame are more of them visibly off the settled picture than a fresh start's; settled it is a fresh start's picture (1 in 200 visibly apart at most); and while the view moves the scene is not made again. It fires on a prior given the scene's whole key, which reads no estimate again (it keeps a tinted picture) | tolerance | 42 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
@@ -2470,6 +2526,17 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   (it ran eight at once: the stirred pour's 18 ms frames were eight of its 2.2 ms steps); that scene's
   worst frame under the budget is 6.0 ms.
 
+- **Stage 42** (`make pass-cost PLAY=data/plays/viewer.json`, Apple M3 Pro, 1920×1080, a machine busy with
+  another stage's builds; `docs/TDD_42_VIEWER.md`):
+  - A probe's ray costs 0.16 to 0.46 µs on the CPU (on a part, in a flame, through water): its 2 ms a
+    frame read about ten sweeps of every nanometre, and a probe settles in about three seconds.
+  - A frame with the viewer on the bench and its probe carried: 8.3 ms, as with it still (26 ms until the
+    panel's drive was worked out once a colour). The scene the probes read is made again whenever a probe
+    moves: about 4 ms of the CPU.
+  - While the view moves a frame costs what a settled one does (nothing is traced). The first frame of a
+    view at rest where a screen fills the room's part starts every pixel's history again (its subpixels'
+    stripes have moved under them): 250 ms on the GPU, the frames after 8 ms; elsewhere 40 to 60 ms
+    (Open: `docs/TDD_42_VIEWER.md`).
 ## 20. Declared simplifications of the demo
 
 | Simplification | Size of the error |
@@ -2524,3 +2591,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A vessel inside another is not built; where a ray at one end of the spectrum is turned back inside a prism and at the other is not, the piece of the spectrum between is read by chance rays alone (open: `docs/TDD_35_ONE.md`); a pixel stops asking for rays when its own estimate of its error is 2 on the eye metric (8 is visible), from its last sixteen batches: about one pixel in ten thousand, where rays are chaotic (a vessel's floor near its axis), stops visibly off the truth, on the CPU in double as in single precision, and on the GPU by a cause not found (open: `docs/TDD_35_ONE.md`, `docs/TDD_37_RIGHT.md`) | A few pixels of a prism's spectrum beside the slit's image stay dark or dim; none to eight pixels of a bench's picture, of 30,000 to 69,000, are tinted where the truth is grey |
 | A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
 | The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |
+| The spectral viewer's screen is an LED panel of three smooth primaries (Gaussians of 30 nm at 620, 530 and 450 nm, design), its pixels' subpixels side by side, each 0.8 of its third lit across and the pixel 0.9 lit down; its colour management is the panel's own, toward grey of a colour's luminance where its primaries cannot reach (Stage 42) | Its rainbow is each wavelength as the game shows a spike of it, seen through the pass within 3 on the eye metric (8 is visible); a real panel's primaries are narrower and its maker's colour management its own |
+| A probe's disc is 4 px of the layout across its radius, and reads the light that reaches the eye from it (the probe's own head and cable are not in its reading), at 1 nm with no noise of its own (Stage 42) | A real fibre probe sees a cone and adds its own noise and stray light |
+| A view of the room is the room laid out anew at it; past the view's own screen its wall is the far wall's mean, not the wall drawn (Stage 42) | A ray that a vessel bends past the view's screen (at its rims, zoomed in) reads about 1% other light than it would laid out |
