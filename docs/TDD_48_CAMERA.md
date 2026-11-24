@@ -31,7 +31,7 @@ cabinet, the frame's gestures, the readout), §18 (O26) and §20.
 | 48.6 | The `Ui`: the camera's bodies, its relay, its frame's gestures, its search a step a frame | Done |
 | 48.7 | The readout's controls and readings | Done |
 | 48.8 | A play with pictures, the host's case | Done |
-| 48.9 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (359 s: ASan+UBSan 359, ctest 292, Godot 13 of 13, goldens unchanged); the sign-off awaited |
+| 48.9 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (359 s: ASan+UBSan 359, ctest 292, Godot 13 of 13, goldens unchanged); signed off by the user, 2026-11-24 ("Works perfectly! Approved, merge and proceed") |
 
 ## What was built
 

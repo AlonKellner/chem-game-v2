@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.48.0 (2026-11-24, Stage 48; awaiting the user's sign-off)
+## 0.48.0 (2026-11-24, Stage 48; signed off by the user: "Works perfectly! Approved, merge and proceed")
 
 - §13 (Stage 48, `docs/TDD_48_CAMERA.md`): **a thermal camera**, an 8–14 µm instrument in the cabinet.
   - Its frame is the size of its screen: over the screen (see-through), or fixed on the room.
