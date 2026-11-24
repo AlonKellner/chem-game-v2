@@ -124,6 +124,7 @@ struct EnergyEntry {
 struct EnergyTable {
 	std::array<EnergyEntry, ENERGY_STEPS + 1> entry{};
 	Xyz total; // the whole light's colour
+	double signal = 0.0; // a long-wave light's whole, W / m2 / sr (Stage 46: its integral, at a nanometre)
 	EnergyEntry at(double share) const; // interpolated between entries
 };
 // `continuum` is radiance at 1 nm on the room's scale (d65() is the room's

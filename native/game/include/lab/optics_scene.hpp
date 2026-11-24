@@ -1,5 +1,6 @@
 #pragma once
 
+#include "chem/optics.hpp"
 #include "lab/glassware.hpp"
 #include "lab/lab.hpp"
 
@@ -341,6 +342,27 @@ std::string check_O17(const OpticsScene &scene, int samples);
 // layout, but for the few that graze a surface; of the rays the view lands on its own screen (past it, its wall is
 // the far wall's mean). "" when it holds.
 std::string check_O18(const OpticsScene &whole, const OpticsScene &zoomed, double scale, double ox, double oy, double rx, double ry, double x0, double y0, double x1, double y1, double step);
+// ---- the long-wave range (GAME_SPEC §12.4, Stage 46)
+
+// O21 (GAME_SPEC §18): the thermal radiance theorem. A scene read in the long-wave range (its room's `range` 1), every
+// body at the room's temperature: every `step`th pixel of [x0, x1) x [y0, y1) a body covers reads the room's light, 1,
+// at `points` wavelengths over the band, by the pass's own reading (optics_through), to `tolerance`. "" when it holds.
+std::string check_O21(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int points, double tolerance);
+// O22: a traced ray's shares are whole: what its surfaces passed, what its glass took in and what its surfaces
+// turned away sum to 1 (each no less than nothing), to `tolerance`. "" when they do.
+std::string check_O22(double pass, double absorbed, double turned, double tolerance);
+// What one body does to a ray straight in at (x, y) of the screen at nm, by the pass's own tracer or the truth's: what
+// its surfaces passed, its glass took in and its surfaces turned away (false: the ray does not meet it, or it bends
+// nothing).
+bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, double nm, bool truth, double out[3]);
+// O23: the long-wave light's table is its integral: its whole is the closed form of the band's Planck integral at the
+// room's temperature (1e-7), and a temperature comes back from its signal to a millikelvin, 230 to 2500 K, at any
+// emissivity from 0.1 to 1. "" when it holds.
+std::string check_O23(const chem::optics::EnergyTable &light, double room_kelvin);
+// O24: the visible picture is the same with the long-wave range there: every `step`th pixel of the region's colour
+// (optics_truth) in the two scenes, bit for bit. "" when it is.
+std::string check_O24(const OpticsScene &with, const OpticsScene &without, int x0, int y0, int x1, int y1, int step);
+
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 

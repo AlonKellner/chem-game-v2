@@ -1639,6 +1639,121 @@ OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w
 
 // ---- invariants
 
+// ---- the long-wave range (GAME_SPEC §12.4, Stage 46)
+
+std::string check_O21(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int points, double tolerance) {
+	using namespace optics_layout;
+	if (!shader::ready(scene)) {
+		return "O21: the scene is not the size the renderer reads";
+	}
+	if (!(scene.table[4 * 4 + 3] > 0.5f)) {
+		return "O21: the scene is not read in the long-wave range";
+	}
+	char text[240];
+	int read = 0;
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			if (optics_cover(scene, x, y) <= 0.0) {
+				continue;
+			}
+			for (int k = 0; k < points; ++k) {
+				const double nm = chem::optics::LWIR_FIRST_NM + (chem::optics::LWIR_COUNT - 1.0) * chem::optics::LWIR_STEP_NM * (k + 0.5) / points;
+				const double v = optics_through(scene, x, y, nm);
+				++read;
+				if (!(std::fabs(v - 1.0) <= tolerance)) {
+					std::snprintf(text, sizeof text, "O21: pixel (%d, %d) at %g nm reads %.15g of the room's long-wave light, not 1", x, y, nm, v);
+					return text;
+				}
+			}
+		}
+	}
+	if (read == 0) {
+		return "O21: no pixel of the region is a body's";
+	}
+	return "";
+}
+
+std::string check_O22(double pass, double absorbed, double turned, double tolerance) {
+	char text[200];
+	if (!(pass >= -tolerance && absorbed >= -tolerance && turned >= -tolerance) || !(std::fabs(pass + absorbed + turned - 1.0) <= tolerance)) {
+		std::snprintf(text, sizeof text, "O22: a ray's shares are passed %.15g, taken in %.15g, turned away %.15g: not all of it", pass, absorbed, turned);
+		return text;
+	}
+	return "";
+}
+
+std::string check_O23(const chem::optics::EnergyTable &light, double room_kelvin) {
+	char text[200];
+	const double closed = chem::optics::band_signal(room_kelvin);
+	if (!(std::fabs(light.signal - closed) <= 1e-7 * closed)) {
+		std::snprintf(text, sizeof text, "O23: the long-wave light's whole is %.12g W/m2/sr; the band's integral at %g K is %.12g", light.signal, room_kelvin, closed);
+		return text;
+	}
+	for (double kelvin = 230.0; kelvin <= 2500.0; kelvin *= 1.21) {
+		for (const double e : { 0.1, 0.3, 0.95, 1.0 }) {
+			const double signal = e * chem::optics::band_signal(kelvin) + (1.0 - e) * chem::optics::band_signal(room_kelvin);
+			const double back = chem::optics::brightness_kelvin(signal, e, room_kelvin);
+			if (!(std::fabs(back - kelvin) <= 1e-3)) {
+				std::snprintf(text, sizeof text, "O23: %g K at an emissivity of %g comes back as %.6f K", kelvin, e, back);
+				return text;
+			}
+		}
+	}
+	return "";
+}
+
+std::string check_O24(const OpticsScene &with, const OpticsScene &without, int x0, int y0, int x1, int y1, int step) {
+	char text[240];
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			double a[3], b[3];
+			optics_truth(with, x, y, a);
+			optics_truth(without, x, y, b);
+			for (int c = 0; c < 3; ++c) {
+				if (a[c] != b[c]) {
+					std::snprintf(text, sizeof text, "O24: pixel (%d, %d): %.17g with the long-wave range, %.17g without (channel %d)", x, y, a[c], b[c], c);
+					return text;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, double nm, bool truth, double out[3]) {
+	using namespace optics_layout;
+	if (!shader::ready(scene) || body < 0 || body >= static_cast<int>(scene.table[0])) {
+		return false;
+	}
+	const shader::Use use(scene);
+	shader::band_range = nm > 7000.0 ? 1 : 0;
+	if (!shader::trace_bends(body)) {
+		return false;
+	}
+	const double gap = shader::scene_vec(3).x, z = -shader::scene_vec(HEADER_VECS + body * BODY_VECS + 5).y * gap;
+	const double from_z = -(shader::scene_vec(3).y + 1.0) * gap - 400.0;
+	const int core = shader::trace_core(body, y);
+	if (truth) {
+		Line line{ x, y, from_z, 0.0, 0.0, 1.0 };
+		const Exact e = exact_body(body, core, nm, z, line);
+		if (!e.met || e.meetings == 0) {
+			return false;
+		}
+		out[0] = e.pass;
+		out[1] = e.absorbed;
+		out[2] = e.turned;
+		return true;
+	}
+	const shader::BodyMet e = shader::trace_body(body, core, nm, z, shader::vec3(x, y, from_z), shader::vec3(0.0, 0.0, 1.0));
+	if (!e.met) {
+		return false;
+	}
+	out[0] = e.pass;
+	out[1] = e.absorbed;
+	out[2] = e.turned;
+	return true;
+}
+
 std::string check_O1(const OpticsScene &scene) {
 	using namespace optics_layout;
 	if (!shader::ready(scene)) {

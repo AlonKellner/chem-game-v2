@@ -355,6 +355,7 @@ EnergyTable lwir_energy_table(double room_kelvin) {
 		t.entry[static_cast<size_t>(j)] = EnergyEntry{ LWIR_FIRST_NM + static_cast<double>(i - 1) + f, Xyz{ share, share, share } };
 	}
 	t.total = Xyz{ 1.0, 1.0, 1.0 };
+	t.signal = total; // (each nanometre's radiance at its middle, times a nanometre)
 	return t;
 }
 
