@@ -6,7 +6,7 @@
 |---|---|---|---|
 | `native/build-core` | `make core` | the tests, `chem_tool`, the C API; no godot-cpp | the inner loop and every ctest gate |
 | `native/build` | `make native` | the GDExtension Godot loads; no tests | running the game, the Godot suite |
-| `native/build-asan` | `make native-asan` | the tests under ASan+UBSan, Debug at -O1; no godot-cpp | the merge gate |
+| `native/build-asan` | `make native-asan` | the tests under ASan+UBSan, Debug at -O2; no godot-cpp | the merge gate |
 
 The first `make native` compiles godot-cpp (about 1100 files) with 4 jobs; later builds use every core.
 
@@ -16,7 +16,7 @@ The first `make native` compiles godot-cpp (about 1100 files) with 4 jobs; later
 |---|---|---|
 | `make check` | while working | `make core`, then ctest (`AREA=core\|lab`, or `TC=<doctest filter>`) |
 | `make gate` | before every commit | core, ctest, the extension, the Godot host's suite, goldens unchanged; through the result cache |
-| `make gates` | before a merge or a stage close | the same uncached, then ctest under ASan+UBSan |
+| `make gates` | before a merge or a stage close | the same uncached, and ctest under ASan+UBSan side by side with it from the start |
 
 `SKIP_GODOT=1 make gate` runs every engine-free gate. Every gate runs even after a failure; the
 summary table gives each gate's seconds and result, and the log directory.
@@ -29,20 +29,30 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
 
 ## What keeps the gates quick
 
-- **A ctest entry for each test source file** (`chem_tests.<file>`, `lab_tests.<file>`, by doctest's
-  source-file filter): ctest runs them side by side, and the result cache keeps each apart.
-  `chem_tests.every_file_runs` and `lab_tests.every_file_runs` fail if a test case is in a file no
-  entry runs.
+- **A ctest entry for each test case of the lab's tests** (`lab_tests.<file>.<n>`, the n-th case of the
+  file, by doctest's `--source-file` with `--first` and `--last`; Stage 40), and for each source file of
+  the core's (`chem_tests.<file>`): ctest runs them side by side, the longest first once it has their
+  times (`Testing/Temporary/CTestCostData.txt`), and the result cache keeps each apart. The cases are
+  counted from the source's lines that start with `TEST_CASE(`; `lab_tests.<file>.count` fails if
+  doctest counts another number (configure again: an edit to a test file does it), each entry fails if
+  it ran no case, and `*.every_file_runs` fails if a test case is in a file no entry runs.
+- **Marks before a test case** (`native/CMakeLists.txt`, `chem_add_cases`): `// ctest: parts N` makes it N
+  entries (`lab_tests.<file>.<n>.<i>`), each run with `LAB_PART=i/N`, and the case does the i-th share of
+  its heaviest loop (`native/tests/support/part.hpp`: `part().mine(k)`, by a hash of k, so the dear items
+  that lie together are shared out). Only a loop whose every item is checked alone is parted: a statistic
+  over the loop (a mean, a count of visible pixels) is not the same over a part. `// ctest: threads N` runs
+  it on N threads (`LAB_THREADS`), and ctest counts it as N processors. Every other case keeps to one
+  thread: side by side the cases fill the machine, and a thread more a case mostly waits.
 - **The reference's heavy loops are dealt among threads** (`in_pieces`,
   `native/game/src/optics_reference.cpp`): the truth of a pixel's area (thousands of exact rays),
   the O8 check's scan, the renderer's frames. A piece is the same piece on every machine and
   results are joined in the pieces' order, so a result does not depend on the number of threads.
-  `LAB_THREADS=n` sets it (default: half the machine's, six at most); the five heavy `lab_tests`
-  entries run with four, and ctest counts each as four processors.
+  `LAB_THREADS=n` sets it (default: half the machine's, six at most); ctest gives each case one, or
+  what its mark says.
 - **The sanitizer build samples the heaviest comparisons sparsely**: `LAB_SPARSE=n` takes every
   n-th sample across in the tests that hold every pixel to 64 traced rays
-  (`native/tests/support/sparse.hpp`; `ASAN_SPARSE`, default 3), as it runs fewer sweep worlds.
-  The release ctest runs every sample.
+  (`native/tests/support/sparse.hpp`; `ASAN_SPARSE`, default 3), as it runs fewer sweep worlds; and
+  of a parted case only its first part, on four threads. The release ctest runs every sample.
 - **The sanitizer build is optimized (-O2)**, still a Debug build whose assertions abort: the
   sanitizers instrument the same code. Its tests ran 237 s at -O1 and 102 s at -O2 (their summed
   work 1,649 s and 470 s; the machine was busier for the first).
@@ -52,8 +62,17 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
 - **The GPU's cost is compared back to back**: the same machine reads a restarting pass from 1.6 to
   2.3 ms as its state drifts over an hour. A change's cost is the difference between it and the
   code before it, measured one after the other, three times each (`make pass-cost`).
-- **Next, if it is needed**: the sanitizer run's longest entry is `lab_tests.optics` (98 s), whose
-  tests could be split into two files.
+- **The replays of the demo that hold digests run unchecked**: the lab's state is the same checked or not
+  (D1), and `demo_session` checks every invariant at every step of the same session. So the cases that
+  hold the record's digests (`lab: the demo session reproduces…`, `lab: a saved lab, loaded, continues…`)
+  and the screen's O2 scan through the demo do not check each step again.
+- Measured (Stage 40, M3 Pro, `docs/TDD_40_GATES.md`): `make gates` 614 s before (the release ctest 165 s,
+  its last 100 s the one entry `lab_tests.optics` alone; then the sanitizers' 431 s, its last minutes the
+  same entry); 320 s after, the release ctest and the sanitizers' together keeping the machine full; 284 s
+  with O2 read at each nanometre (it read each half); 276 s with `kept` and the prism's slit sparse under
+  the sanitizers.
+- **Next, if it is needed**: the two runs end together (224 s and 274 s); what is left is their work. The
+  sanitizers' longest entries are the prism's bands (140 to 180 s: a reference of 4,000 wavelengths a band).
 
 ## The conservation sweep
 
@@ -80,7 +99,7 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 
 | Entry | Checks |
 |---|---|
-| `chem_tests.<file>`, `lab_tests.<file>` | the core's and the lab layer's doctest cases, an entry a source file; `.every_file_runs`: no test case is left out |
+| `chem_tests.<file>`, `lab_tests.<file>.<n>` | the core's doctest cases, an entry a source file; the lab layer's, an entry a test case (`.<n>.<i>`: a part of one); `lab_tests.<file>.count`: the file's cases are those counted; `.every_file_runs`: no test case is left out |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
 | `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest |

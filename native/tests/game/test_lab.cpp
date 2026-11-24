@@ -266,6 +266,9 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::istringstream golden(read("bench/sessions/demo.jsonl"));
 	auto lab = demo_bench();
+	// unchecked (Stage 40): its state is the same (D1), and every invariant is checked at every step of the same
+	// session by demo_session (chem_tool run)
+	lab->set_checking(false);
 	int index = 0;
 	for (const json &command : session.at("script")) {
 		json plain = command;
@@ -512,6 +515,7 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 			if (first == nullptr) {
 				return fail(why);
 			}
+			first->set_checking(false); // (the state is the same, D1: what is held here is the record's digests; Stage 40)
 			for (size_t i = 0; i <= cut; ++i) {
 				if (!first->command(command(i), why)) {
 					return fail(why);
@@ -522,6 +526,7 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 			if (second == nullptr) {
 				return fail(why);
 			}
+			second->set_checking(false);
 			if (second->digest() != first->digest() || second->step() != first->step() || json::parse(second->report()) != json::parse(first->report())) {
 				return fail("the loaded lab is not the saved one");
 			}

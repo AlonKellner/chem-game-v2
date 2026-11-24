@@ -186,6 +186,66 @@ if(CHEM_BUILD_TESTS)
         add_test(NAME ${target}.every_file_runs COMMAND ${target} --count --source-file-exclude=${excluded})
         set_tests_properties(${target}.every_file_runs PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: 0")
     endfunction()
+    # The same, a ctest entry for each test case (doctest's --first and --last within its file, counted from
+    # the source's lines that start with TEST_CASE): the cases of a file run side by side, so no file is the
+    # run's last minutes alone (the gates, Stage 40). Each case keeps to one thread (LAB_THREADS=1: side by
+    # side the cases fill the machine, and a thread more a case mostly waits; docs/TDD_40_GATES.md). Marks on
+    # the lines before a test case: `// ctest: parts N`, N entries, each with LAB_PART=i/N (the case does the
+    # i-th share of its heaviest loop, tests/support/part.hpp; under the sanitizers only the first part runs, on
+    # four threads);
+    # `// ctest: threads N`, N threads, and ctest
+    # counts it as N processors. Each file's count is checked against doctest's own (.count), each entry runs a
+    # case (FAIL on none), and an edit to a file configures again (CMAKE_CONFIGURE_DEPENDS).
+    function(chem_add_cases target)
+        set(all "")
+        foreach(source ${ARGN})
+            get_filename_component(stem ${source} NAME_WE)
+            if(stem STREQUAL "test_main")
+                continue()
+            endif()
+            string(REGEX REPLACE "^test_" "" short ${stem})
+            list(APPEND all "*${stem}.cpp")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${source})
+            file(STRINGS ${source} lines REGEX "^(TEST_CASE\\(|// ctest: (parts|threads) [0-9]+)")
+            set(case 0)
+            set(parts 1)
+            set(threads 1)
+            foreach(line IN LISTS lines)
+                if(line MATCHES "^// ctest: parts ([0-9]+)")
+                    set(parts ${CMAKE_MATCH_1})
+                elseif(line MATCHES "^// ctest: threads ([0-9]+)")
+                    set(threads ${CMAKE_MATCH_1})
+                elseif(line MATCHES "^TEST_CASE\\(")
+                    math(EXPR case "${case} + 1")
+                    math(EXPR last "${parts} - 1")
+                    if(CHEM_SANITIZE AND parts GREATER 1)
+                        # the sanitizers want the code's paths: a parted case's first part (a random share of its
+                        # loop), on four threads
+                        set(last 0)
+                        set(threads 4)
+                    endif()
+                    foreach(part RANGE ${last})
+                        if(parts GREATER 1)
+                            set(name ${target}.${short}.${case}.${part})
+                            set(environment "LAB_THREADS=${threads};LAB_PART=${part}/${parts}")
+                        else()
+                            set(name ${target}.${short}.${case})
+                            set(environment "LAB_THREADS=${threads}")
+                        endif()
+                        add_test(NAME ${name} COMMAND ${target} --source-file=*${stem}.cpp --first=${case} --last=${case})
+                        set_tests_properties(${name} PROPERTIES ENVIRONMENT "${environment}" PROCESSORS ${threads} FAIL_REGULAR_EXPRESSION "test cases: +0 [|]")
+                    endforeach()
+                    set(parts 1)
+                    set(threads 1)
+                endif()
+            endforeach()
+            add_test(NAME ${target}.${short}.count COMMAND ${target} --count --source-file=*${stem}.cpp)
+            set_tests_properties(${target}.${short}.count PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: ${case}\n")
+        endforeach()
+        list(JOIN all "," excluded)
+        add_test(NAME ${target}.every_file_runs COMMAND ${target} --count --source-file-exclude=${excluded})
+        set_tests_properties(${target}.every_file_runs PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: 0")
+    endfunction()
     chem_add_tests(chem_tests ${CHEM_TEST_SOURCES})
 
     # the lab layer's tests
@@ -196,13 +256,7 @@ if(CHEM_BUILD_TESTS)
     target_include_directories(lab_tests PRIVATE tests/support)
     target_compile_definitions(lab_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
     chem_apply_flags(lab_tests NO_CONVERSION)
-    chem_add_tests(lab_tests ${LAB_TEST_SOURCES})
-    # The optics tests deal their heavy loops among threads (lab/optics_scene.hpp: the reference): ctest
-    # counts each as four processors, and each keeps to four threads, so that a run of all of them side by
-    # side does not ask for more than the machine has.
-    foreach(heavy optics layers footprint refraction lab)
-        set_tests_properties(lab_tests.${heavy} PROPERTIES PROCESSORS 4 ENVIRONMENT "LAB_THREADS=4")
-    endforeach()
+    chem_add_cases(lab_tests ${LAB_TEST_SOURCES})
 
     # Data that breaks a conservation law does not build: chem_datagen refuses
     # each of these (tests/data/bad_*), so the custom command above would fail.

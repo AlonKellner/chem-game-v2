@@ -1507,8 +1507,9 @@ std::string check_O2(const OpticsScene &scene, int x, int y) {
 		}
 		return sum;
 	};
-	for (int k = 0; k <= 800; ++k) {
-		const double nm = 380.0 + 0.5 * k, t = optics_through(scene, x, y, nm);
+	// at each nanometre, the spectra's own points (Stage 40: it was each half, the halves the tables' interpolation)
+	for (int k = 0; k <= 400; ++k) {
+		const double nm = 380.0 + k, t = optics_through(scene, x, y, nm);
 		if (!(t >= 0.0 && t <= (most + emitted(nm)) * (1.0 + 1e-12))) {
 			char text[160];
 			std::snprintf(text, sizeof text, "O2: at (%d, %d), %g nm carries %g: more than came in or was emitted", x, y, nm, t);

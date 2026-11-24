@@ -1,5 +1,12 @@
 # GAME_SPEC version history
 
+## 0.40.0 (2026-11-24, Stage 40; signed off by the user: "Approved, proceed")
+
+- §18 (Stage 40, `docs/TDD_40_GATES.md`): O2 is checked at each nanometre from 380 to 780, the spectra's own
+  points (it was each half nanometre, the halves the tables' interpolation).
+- The gates (no behaviour of the game): a ctest entry for each lab test case, the heaviest split into parts
+  or given threads by marks, the sanitizers beside the rest from the start; `make gates` 614 s to 320 and less.
+
 ## 0.39.0 (2026-11-24, Stage 39; signed off by the user: "Approved, merge and proceed")
 
 - §13.3 (Stage 39, `docs/TDD_39_TRIAL.md`): **a controller's trial runs beside the lab**, two of its seconds

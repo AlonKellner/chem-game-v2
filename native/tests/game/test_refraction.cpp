@@ -7,6 +7,7 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "sparse.hpp"
 #include <doctest/doctest.h>
 
 #include <cmath>
@@ -177,7 +178,7 @@ TEST_CASE("O6: Fresnel loses no light: in a room as bright in front as behind, c
 	}
 	double worst = 0.0;
 	for (int y = LOW - 80; y <= LOW + 10; y += 5) {
-		for (int x = static_cast<int>(X); x < static_cast<int>(X + W); x += 2) {
+		for (int x = static_cast<int>(X); x < static_cast<int>(X + W); x += 2 * sparse()) { // (sparse.hpp: the sanitizers)
 			for (const double nm : { 400.0, 550.0, 760.0 }) {
 				worst = std::max(worst, std::fabs(lab::optics_through(scene, x, y, nm) - WALL));
 			}

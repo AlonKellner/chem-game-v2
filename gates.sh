@@ -5,8 +5,9 @@
 #     result cache (tools/gate_cache.py): a ctest entry or the Godot suite whose
 #     inputs are the same as when it last passed is not run again (GATE_CACHE=0:
 #     run everything).
-#   LEVEL=merge (make gates): the same with no cache, then ctest under
-#     ASan+UBSan (build-asan).
+#   LEVEL=merge (make gates): the same with no cache, and ctest under
+#     ASan+UBSan (build-asan), side by side with the rest from the start (Stage
+#     40: every ctest entry a test case, the machine kept full; docs/TDD_40_GATES.md).
 #   SKIP_GODOT=1: every engine-free gate (no extension build, no Godot suite).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
 # Logs: $LOGDIR (printed).
@@ -93,6 +94,10 @@ godot_gate() {
 }
 
 wall0=$(date +%s)
+# the sanitizers' build and run, from the start, beside everything else
+if [ "$LEVEL" = merge ]; then
+	gate_bg asan make native-asan
+fi
 gate core make core
 # side by side: ctest, the Godot extension and suite
 if [ "$LEVEL" = commit ]; then
@@ -104,9 +109,6 @@ if [ -z "${SKIP_GODOT:-}" ]; then
 	gate_bg godot godot_gate
 fi
 gate_join
-if [ "$LEVEL" = merge ]; then
-	gate asan make native-asan
-fi
 gate goldens goldens_unchanged
 
 echo
