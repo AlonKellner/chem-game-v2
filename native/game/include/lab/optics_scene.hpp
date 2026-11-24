@@ -78,8 +78,12 @@ inline constexpr int KELVIN_VEC = SET, KELVIN_PART = 1, HIDDEN_VEC = GLOW, HIDDE
 // liquid's row.
 inline constexpr int ROW = 401;
 inline constexpr int LWIR_ROW = 301;
-inline constexpr int ROWS_PER_SET = 7;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6;
+// And a layered vessel's bands (Stage 47: its column's layers, GAME_SPEC §6): their count, then for each from the
+// bottom its set (whose liquid row is that layer's) and the heights over the floor it lies between, cm; 0 for a
+// vessel that is one layer (its own liquid row is all of it). At most MAX_BANDS.
+inline constexpr int ROWS_PER_SET = 8;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6, BANDS_ROW = 7;
+inline constexpr int MAX_BANDS = 133; // (1 + 3 a band in a row of 401)
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
 // the lights: the room's, 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)
@@ -149,7 +153,7 @@ struct OpticsScene {
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	double lights_kelvin = 0.0; // the room's temperature the long-wave light was made at
-	uint64_t revision = 0; // changes when any of them does
+	uint64_t revision = 0; // changes when any of them does: to a number no scene has had (Stage 47), as every revision here
 	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
 	uint64_t wall_revision = 0;

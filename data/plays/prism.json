@@ -1,0 +1,39 @@
+{
+	"format": "chem-play/1",
+	"steps": [
+		{
+			"frames": 120,
+			"mark": "lab"
+		},
+		{
+			"to": "menu:experiments",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"to": "experiment:prism",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"frames": 240,
+			"mark": "prism",
+			"shot": "prism-chosen"
+		},
+		{
+			"to": "menu:experiments",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"to": "experiment:layers",
+			"frames": 10,
+			"button": "click"
+		},
+		{
+			"frames": 120,
+			"mark": "layers",
+			"shot": "prism-then-layers"
+		}
+	]
+}

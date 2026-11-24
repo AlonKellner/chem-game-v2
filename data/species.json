@@ -19,6 +19,7 @@
 		{"id": "latex", "formula": "C5H8", "phase": "s", "wall": true, "thermo": {"hf_kj": 0, "cp": 130.1, "s0": 0}},
 		{"id": "sodium_hydroxide_aq", "formula": "NaOH", "phase": "aq", "ions": {"Na+1": 1, "OH-1": 1}, "thermo": {"hf_kj": -470.114, "cp": -102.1, "s0": 48.1}},
 		{"id": "sodium_sulfate_aq", "formula": "Na2SO4", "phase": "aq", "ions": {"Na+1": 2, "SO4-2": 1}, "thermo": {"hf_kj": -1389.51, "cp": -201, "s0": 138.1}},
-		{"id": "copper_hydroxide", "formula": "Cu(OH)2", "phase": "s", "density": 3.93, "grain_um": 0.3, "thermo": {"hf_kj": -443.99, "cp": 87.85, "s0": 87.0}}
+		{"id": "copper_hydroxide", "formula": "Cu(OH)2", "phase": "s", "density": 3.93, "grain_um": 0.3, "thermo": {"hf_kj": -443.99, "cp": 87.85, "s0": 87.0}},
+		{"id": "nickel_sulfate_aq", "formula": "NiSO4", "phase": "aq", "ions": {"Ni+2": 1, "SO4-2": 1}, "volume_cm3": 0.81, "thermo": {"hf_kj": -963.2, "cp": 211.81, "s0": -108.8}}
 	]
 }

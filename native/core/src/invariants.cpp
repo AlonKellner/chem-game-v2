@@ -79,7 +79,11 @@ void entropy_sums(const SpeciesTable &table, const StepTrace &trace, double &cha
 			continue;
 		}
 		double before = 0.0, after = 0.0;
-		if (!entropy_of(table, trace, trace.before, c, before) || !entropy_of(table, trace, trace.after, c, after)) {
+		// an empty cell's entropy is none (Stage 47: a column's layer that fills, or empties, in the step)
+		const auto none = [](const CellState &x) { return std::all_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a == 0; }) && x.energy == 0; };
+		const bool was = none(trace.before.cells[c]) || entropy_of(table, trace, trace.before, c, before);
+		const bool is = none(trace.after.cells[c]) || entropy_of(table, trace, trace.after, c, after);
+		if (!was || !is) {
 			continue; // T3 reports a cell without a temperature
 		}
 		change += after - before;
@@ -362,7 +366,9 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 							static_cast<long long>(i), a.pressure, b.pressure);
 					out.push_back(buffer);
 				}
-			} else if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid)) {
+			} else if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid) &&
+					!(entry.edge.index >= 0 && static_cast<size_t>(entry.edge.index) < trace.edges.size() && trace.edges[static_cast<size_t>(entry.edge.index)].column)) {
+				// (a bubble rising up a column, Stage 47, is buoyancy, not pressure)
 				bool from_defined = false, to_defined = false;
 				const double from_excess = trace.meta[from].rigid ? gas_excess(table, trace.meta[from], replay.cells[from], from_defined) : 0.0;
 				const double to_excess = trace.meta[to].rigid ? gas_excess(table, trace.meta[to], replay.cells[to], to_defined) : 0.0;
@@ -455,7 +461,16 @@ Violations check_T3(const SpeciesTable &table, const StepTrace &trace) {
 		if (trace.meta[c].reservoir) {
 			continue;
 		}
-		const Thermal t = thermal_state(table, trace.after.cells[c], meta_of(trace, c));
+		const CellState &cell = trace.after.cells[c];
+		if (std::all_of(cell.amount.begin(), cell.amount.end(), [](int64_t a) { return a == 0; })) {
+			// an empty cell (Stage 47: a column's layer while it is mixed) has no temperature, and holds no energy
+			if (cell.energy != 0) {
+				out.push_back(text("T3: step %lld: empty cell %lld holds %lld quanta of energy", static_cast<long long>(trace.step), static_cast<long long>(c),
+						static_cast<long long>(cell.energy)));
+			}
+			continue;
+		}
+		const Thermal t = thermal_state(table, cell, meta_of(trace, c));
 		if (!t.defined) {
 			out.push_back(text("T3: step %lld: cell %lld has no temperature (a species without thermodynamic data, or no heat capacity, or sealed with no room for its gas)",
 					static_cast<long long>(trace.step), static_cast<long long>(c)));
@@ -672,6 +687,48 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 	return out;
 }
 
+Violations check_L1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	const size_t cells = trace.after.cells.size();
+	std::vector<int32_t> below(cells, -1);
+	std::vector<uint8_t> lower(cells, 0);
+	for (const Edge &e : trace.edges) {
+		if (e.open && e.column && static_cast<size_t>(e.a.index) < cells && static_cast<size_t>(e.b.index) < cells) {
+			below[static_cast<size_t>(e.b.index)] = e.a.index;
+			lower[static_cast<size_t>(e.a.index)] = 1;
+		}
+	}
+	for (size_t top = 0; top < cells && out.size() < MAX_MESSAGES; ++top) {
+		if (below[top] < 0 || lower[top]) {
+			continue;
+		}
+		const CellMeta &m = trace.meta[top];
+		double held = 0.0; // m^3 of solids and liquids, the whole column's
+		const Fill own = fill_of(table, trace.after.cells[top], T0);
+		held += own.defined ? own.condensed : 0.0;
+		bool gap = false;
+		for (int32_t at = below[top]; at >= 0 && static_cast<size_t>(at) < cells; at = below[static_cast<size_t>(at)]) {
+			const CellState &c = trace.after.cells[static_cast<size_t>(at)];
+			const bool none = std::all_of(c.amount.begin(), c.amount.end(), [](int64_t a) { return a == 0; });
+			if (!none && gap) {
+				out.push_back(text("L1: step %lld: layer %lld of column %lld holds something under an empty layer", static_cast<long long>(trace.step), static_cast<long long>(at),
+						static_cast<long long>(top)));
+				break;
+			}
+			gap = gap || none;
+			const Fill f = fill_of(table, c, T0);
+			held += f.defined ? f.condensed : 0.0;
+		}
+		if (m.column_volume > 0.0 && (m.volume > m.column_volume * (1.0 + 1e-12) || held > m.column_volume * (1.0 + 1e-9))) {
+			char buffer[240];
+			std::snprintf(buffer, sizeof buffer, "L1: step %lld: column %lld of %.6g m^3 has a top of %.6g m^3 and holds %.6g m^3 of solids and liquids", static_cast<long long>(trace.step),
+					static_cast<long long>(top), m.column_volume, m.volume, held);
+			out.push_back(buffer);
+		}
+	}
+	return out;
+}
+
 Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
@@ -681,7 +738,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 		Violations v = check_V2(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

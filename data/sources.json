@@ -3,7 +3,7 @@
 	"note": "Where each number in data/ comes from (CLAUDE.md, 'Fetched data is documented and held to its source'; tools/check_sources.py, the ctest entry data_sources). Every numeric value under data/ (a JSON number or decimal string; a CSV table as a whole) must match an entry's pattern. A pattern is a path: the file, then keys; an array of objects is keyed by each one's id, symbol or name, any other array by '#'. '{a,b}' is any of its names; '*' and '**' only as the last segment (one key; anything below), so a new file, species, reaction, item or medium matches nothing until it is entered here. An entry is measured (tests: the TEST_CASEs that hold it to its source; doc: phrases docs/DATA_SOURCES.md must contain), calibrated (why; doc; tests optional) or design (why: a choice of the game, not a claim about the world).",
 	"entries": [
 		{
-			"data": ["elements.json/elements/{H,C,N,O,Si,S,Cu,Na}/mass"],
+			"data": ["elements.json/elements/{H,C,N,O,Si,S,Cu,Na,Ni}/mass"],
 			"measured": "CIAAW's abridged standard atomic weights",
 			"doc": ["CIAAW"],
 			"tests": ["sources: molar masses are IUPAC's atomic weights"]
@@ -66,7 +66,7 @@
 			"tests": ["sources: the solutes' apparent molar volumes"]
 		},
 		{
-			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq,sodium_hydroxide_aq,sodium_sulfate_aq}/ions/*"],
+			"data": ["species.json/species/{copper_sulfate_aq,sulfuric_acid_aq,sodium_hydroxide_aq,sodium_sulfate_aq,nickel_sulfate_aq}/ions/*"],
 			"design": "a dissolved salt's ions, counted from its formula"
 		},
 		{
@@ -291,15 +291,15 @@
 			"design": "scripts of the demo: waits, settings and checks"
 		},
 		{
-			"data": ["benches/{vacuum.json,solution_heat.json,rate.json,dilution.json,neutralisation.json,precipitate.json,fizz.json,boiling.json}/**"],
-			"design": "the experiments' benches (Stage 41, GAME_SPEC §13.7): the lab's glassware, stopper and burner with the values data/benches/lab.json gives them (sourced there); where each stands; what each holds, chosen by the studies: vacuum, the pressure session's flask of water (chem_tool run data/sessions/pressure.json); solution_heat, the same 0.050 mol of copper sulfate as the anhydrous salt (8 g) and as the pentahydrate (12.5 g), under the solubility in 50 g of water (chem_tool study solution_heat); rate, 1.0 g of copper oxide in the demo's grains (2.5 million to 3.6 g) under 50 mL of 1 M sulfuric acid, the acid bottle's (chem_tool study dissolution); precipitate, 0.01 mol of copper sulfate in 50 g of water, all of it brought out by 20 mL of the 1 M base (chem_tool study precipitation); fizz, 2 g of malachite in the demo's grains (a million) under 50 mL of the 1 M acid, which dissolves all of it; boiling, 200 g of water in the lab's 250 mL beaker, 5.9 cm deep (Stage 45)"
+			"data": ["benches/{vacuum.json,solution_heat.json,rate.json,dilution.json,neutralisation.json,precipitate.json,fizz.json,boiling.json,layers.json}/**"],
+			"design": "the experiments' benches (Stage 41, GAME_SPEC §13.7): the lab's glassware, stopper and burner with the values data/benches/lab.json gives them (sourced there); where each stands; what each holds, chosen by the studies: vacuum, the pressure session's flask of water (chem_tool run data/sessions/pressure.json); solution_heat, the same 0.050 mol of copper sulfate as the anhydrous salt (8 g) and as the pentahydrate (12.5 g), under the solubility in 50 g of water (chem_tool study solution_heat); rate, 1.0 g of copper oxide in the demo's grains (2.5 million to 3.6 g) under 50 mL of 1 M sulfuric acid, the acid bottle's (chem_tool study dissolution); precipitate, 0.01 mol of copper sulfate in 50 g of water, all of it brought out by 20 mL of the 1 M base (chem_tool study precipitation); fizz, 2 g of malachite in the demo's grains (a million) under 50 mL of the 1 M acid, which dissolves all of it; boiling, 200 g of water in the lab's 250 mL beaker, 5.9 cm deep (Stage 45); layers, 0.064 mol of nickel sulfate in 80 g of water over 0.112 mol of copper sulfate in 80 g, coloured enough to see and dense enough apart to stay; beside it the same blue in a beaker and the green at the same molality in the bottle (0.16 mol in 200 g), to layer by hand (Stage 47)"
 		},
 		{
 			"data": ["tutorials/{vacuum.json,solution_heat.json,rate.json,dilution.json,neutralisation.json,precipitate.json,fizz.json,boiling.json}/**"],
 			"design": "the experiments (Stage 41, GAME_SPEC §13.7): their steps' thresholds, read off each experiment played through (native/tests/game/test_experiments.cpp)"
 		},
 		{
-			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**"],
+			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**", "plays/layers.json/**", "plays/prism.json/**"],
 			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display; the spectral viewer's and the view's (Stage 42), with the bench it sets out"
 		},
 		{"data": ["species.json/species/copper_hydroxide/thermo/*"], "measured": "Puigdomenech and Taxen 2000 (SKB TR-00-13), Table 2: its Gibbs energy, entropy and heat capacity; the enthalpy with CODATA's elements", "doc": ["Precipitation and gas (Stage 44)", "SKB TR-00-13"], "tests": ["sources: every species' thermodynamic row is the one cited", "measured: the tables' solubility constants of copper hydroxide and copper oxide are the evaluated ones"]},
@@ -308,9 +308,13 @@
 		{"data": ["reactions.json/reactions/hydroxide_dehydration/kinetics/*"], "measured": "Fukuda, Favergeon and Koga 2019: the surface-reaction step of the dry decomposition, Ea 127.0 kJ/mol, ln A 32.9", "doc": ["Precipitation and gas (Stage 44)", "Fukuda"], "tests": ["measured: copper hydroxide turns to oxide at Fukuda's first-order rate"]},
 		{"data": ["reactions.json/reactions/malachite_dissolution/kinetics/*"], "measured": "Nicol 2018, eq. 4: the shrinking rate A exp(-6447/T) C^0.65, A 1.44e7 cm/s, over the model's own molar volume", "doc": ["Precipitation and gas (Stage 44)", "Nicol 2018"], "tests": ["measured: malachite dissolves in sulfuric acid at Nicol's surface rate"]},
 		{"data": ["optics/media.json/media/copper_hydroxide/**"], "calibrated": "searched and not found measured (the Handbook of Mineralogy: blue to blue-green): a shape placed so the precipitate is its pale blue", "doc": ["Precipitation and gas (Stage 44)", "not found measured"]},
-		{"data": ["boiling.json/water/#/*"], "measured": "Lienhard, A Heat Transfer Textbook 6.00 (2024), Table A.3: saturated liquid water, 7 to 147 C", "doc": ["Boiling's bubbles (Stage 45)", "Table A.3"], "tests": ["measured: water's properties are Lienhard's rows and its surface tension IAPWS's"]},
+		{"data": ["solutions.json/solvent/#/*"], "measured": "Lienhard, A Heat Transfer Textbook 6.00 (2024), Table A.3: saturated liquid water, 0.01 to 147 C (Stage 45; the core's solvent from Stage 47)", "doc": ["Boiling's bubbles (Stage 45)", "Table A.3"], "tests": ["measured: water's properties are Lienhard's rows and its surface tension IAPWS's"]},
 		{"data": ["optics/media.json/scatterers/bubbles/{base,efficiency,asymmetry}"], "measured": "bubbles in water (GAME_SPEC §12, Stage 45): an extinction efficiency of 2 for bubbles far larger than the wavelength and g about 0.85 (Flatau et al. 2000, citing Bohren and Huffman; m = 0.75, size parameters 100 to 300), absorbing nothing and scattering with little spectral dependence (Piskozub et al. 2004): an albedo of 1", "doc": ["Boiling's bubbles (Stage 45)", "asymmetry", "scatterers"], "tests": ["measured: bubbles in water scatter forward, g 0.85"]},
 		{"data": ["boiling.json/surface_tension/*"], "measured": "Lienhard eq. 9.2a (IAPWS): water's surface tension against its vapour", "doc": ["Boiling's bubbles (Stage 45)", "9.2a"], "tests": ["measured: water's properties are Lienhard's rows and its surface tension IAPWS's"]},
-		{"data": ["boiling.json/surfaces/glass/{cavity_um,contact_deg,csf,s}"], "calibrated": "no measurement on glass read: the cavity Lienhard's Example 9.1 pairs with 8 K of superheat (3.5 um), Fritz's own 45 degrees for water, Rohsenow's C_sf of copper and platinum under water (0.013) with water's s of 1", "doc": ["Boiling's bubbles (Stage 45)", "calibrated"], "tests": ["measured: a glass floor's cavities hold a nucleus at Lienhard's Example 9.1's superheat", "measured: Rohsenow's flux is Lienhard's Example 9.2"]}
+		{"data": ["boiling.json/surfaces/glass/{cavity_um,contact_deg,csf,s}"], "calibrated": "no measurement on glass read: the cavity Lienhard's Example 9.1 pairs with 8 K of superheat (3.5 um), Fritz's own 45 degrees for water, Rohsenow's C_sf of copper and platinum under water (0.013) with water's s of 1", "doc": ["Boiling's bubbles (Stage 45)", "calibrated"], "tests": ["measured: a glass floor's cavities hold a nucleus at Lienhard's Example 9.1's superheat", "measured: Rohsenow's flux is Lienhard's Example 9.2"]},
+		{"data": ["species.json/species/nickel_sulfate_aq/thermo/{hf_kj,s0}"], "measured": "NBS 1982 (Wagman et al.), p. 2-167: NiSO4 'ai', the sum of its ions", "doc": ["Nickel sulfate (Stage 47)", "Wagman et al."], "tests": ["sources: every species' thermodynamic row is the one cited"]},
+		{"data": ["species.json/species/nickel_sulfate_aq/thermo/cp"], "calibrated": "NBS gives NiSO4(aq) no heat capacity: copper sulfate's, the same table's 2:2 sulfate, a stand-in (no solid nickel salt is made, so no solubility hangs on it)", "doc": ["Nickel sulfate (Stage 47)", "stand-in"], "tests": ["sources: every species' thermodynamic row is the one cited"]},
+		{"data": ["species.json/species/nickel_sulfate_aq/volume_cm3"], "measured": "Krumgalz, Pogorelsky and Pitzer 1996 (JPCRD 25, 663), Table 5: the apparent molar volume at 1 mol/kg from its Pitzer volume terms, 0.81 cm3/mol", "doc": ["Nickel sulfate (Stage 47)", "Krumgalz"], "tests": ["measured: a mol/kg of nickel sulfate is as dense as Krumgalz, Pogorelsky and Pitzer give it"]},
+		{"data": ["optics/media.json/media/nickel_sulfate_aq/**"], "measured": "Shigematsu et al. 1960 (Bull. Inst. Chem. Res. Kyoto Univ. 38, 307), Table 1: Ni2+ in water 394 nm 4.72, 650 nm 1.80, 718 nm 2.06 L/mol/cm; three Gaussians in wavenumber whose sum gives them, the widths read from his Fig. 1 (calibrated); Burke et al. 1972: 5.15 at 394 nm in sulfate", "doc": ["Nickel sulfate (Stage 47)", "Shigematsu"], "tests": ["measured: nickel sulfate's absorption peaks are Shigematsu's"]}
 	]
 }

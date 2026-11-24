@@ -15,6 +15,39 @@
   item in a box of one size, instruments off in it.
 - §18: O26. §20: the camera's simplifications.
 
+## 0.47.0 (2026-11-24, Stage 47; merged after 0.48.0; signed off by the user: "Approved, merge and proceed")
+
+- §6 (Stage 47, `docs/TDD_47_COLUMN.md`): **the vertical dimension**. A vessel of a standard shape is a column:
+  - its own cell, with layer cells under it, grown four at a time as a gradient needs them; a vessel starts as one
+    cell;
+  - gas rises, solids sink, a lighter layer under a heavier overturns, alike ones merge;
+  - stable ones exchange what is dissolved (Fick) and heat (k A / dz);
+  - a steep step is resolved into thinner homogeneous layers, to half a millimetre.
+- §6, §13: in the lab:
+  - a layered vessel reads as a whole and layer by layer;
+  - a gentle pour lays its liquid as a layer, a fast one stirs it in;
+  - a burner heats a column's lowest layer;
+  - a bench may start layered; save and load keep it.
+- §12.1, §12.2: a layered vessel is a band of each layer's own liquid, read at the pixel's height
+  (`BANDS_ROW`).
+- §4.2, §18: an empty cell has no temperature and holds no energy (T3); L1 holds a column together.
+- §9, §10: nickel sulfate in solution, green (NBS, Pitzer and Mayorga, Krumgalz, Shigematsu). Pitzer's third-virial
+  term counted C twice: fixed (the demo's pairs have none).
+- §13.7:
+  - the experiment `layers`, two liquids layered (green over blue);
+  - the prism and the grating in the list (a catalogue entry may name a scene);
+  - the list in two columns past eight.
+- From the user's first test:
+  - the layers bench has a beaker of the blue, a bottle of the green and an empty beaker;
+  - the pour menu's "pour gently" pours as a trickle;
+  - a scene's revisions are unique across scenes, so the prism shows its dark room, not the lab's wall that was
+    left on the GPU.
+- From the user's second test:
+  - a tipped vessel's layers lie level in the room, and it pours its top layer first;
+  - a pour reads the whole layered vessel;
+  - a held pour at speed no longer breaks C5.
+- Water's properties by temperature are the core's (`solutions.json`'s `solvent`), boiling's bubbles' too.
+
 ## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")
 
 - §12.4 (Stage 46, `docs/TDD_46_LWIR.md`): **the long-wave range**, 8–14 µm, what a thermal camera sees, in the same

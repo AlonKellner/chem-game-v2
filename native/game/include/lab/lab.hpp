@@ -50,6 +50,13 @@ struct ThermalSettings {
 	std::string gain = "auto";
 };
 
+// One layer of a vessel's column (GAME_SPEC §6, Stage 47), as the picture and the readout show it: its liquid's
+// volume and its solids', its temperature, and what it holds
+struct LayerView {
+	double liquid_ml = 0.0, solid_ml = 0.0, celsius = 0.0;
+	std::vector<SubstanceView> contents;
+};
+
 struct ItemView {
 	std::string id;
 	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48); a signal part: timer, monitor, alarm
@@ -112,6 +119,9 @@ struct ItemView {
 	double liquid_ml = 0.0;
 	double solid_ml = 0.0; // its solids, not its wall: what rests on its floor (Stage 26: not what is condensed less what is liquid, which counts a solute's volume as solid)
 	std::vector<SubstanceView> contents;
+	// a vessel's column while it is layered (Stage 47), from the top down (its own cell's liquid first); empty while
+	// it is mixed. `contents` and the rest are the whole column's.
+	std::vector<LayerView> layers;
 	Part part; // a signal part (§13.3): its settings and state
 	// a spectral viewer (§13, Stage 42): where its probe is fixed: on an item or a part (probe_on, its id), at
 	// (probe_u, probe_v) of it in its own frame (0 to 1 across and down its rectangle, upright); on the room

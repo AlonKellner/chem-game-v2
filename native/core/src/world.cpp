@@ -1,5 +1,7 @@
 #include "chem/world.hpp"
 
+#include <algorithm>
+
 #include "chem/invariants.hpp"
 #include "chem/thermo.hpp"
 
@@ -63,7 +65,7 @@ std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const
 	std::vector<uint8_t> reached(meta.size(), 0);
 	std::vector<size_t> frontier;
 	for (size_t c = 0; c < meta.size(); ++c) {
-		if (!meta[c].reservoir && !meta[c].rigid) {
+		if (!meta[c].reservoir && !meta[c].rigid && !meta[c].layer) { // (a layer is no root of the air: Stage 47)
 			reached[c] = 1;
 			frontier.push_back(c);
 		}
@@ -72,7 +74,7 @@ std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const
 		const size_t at = frontier.back();
 		frontier.pop_back();
 		for (const Edge &e : edges) {
-			if (!e.open || (e.phases & PHASES_GAS) == 0) {
+			if (!e.open || (e.phases & PHASES_GAS) == 0 || e.column) { // (a column's edge is no gas path: Stage 47)
 				continue;
 			}
 			const auto a = static_cast<size_t>(e.a.index);
@@ -117,6 +119,30 @@ CellId World::Builder::add_reservoir(std::string name, double temperature) {
 EdgeId World::Builder::add_edge(CellId a, CellId b, PhaseMask phases, double conductance) {
 	edges_.push_back(Edge{ a, b, phases, true, conductance });
 	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+}
+
+CellId World::Builder::add_layer_cell(std::string name) {
+	names_.push_back(std::move(name));
+	CellMeta m;
+	m.layer = true;
+	meta_.push_back(m);
+	return CellId{ static_cast<int32_t>(names_.size() - 1) };
+}
+
+EdgeId World::Builder::add_column_edge(CellId lower, CellId upper) {
+	Edge e{ lower, upper, PHASES_ALL, true, 0.0 };
+	e.column = true;
+	edges_.push_back(e);
+	return EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
+}
+
+World::Builder &World::Builder::set_column(CellId top, double area, double whole) {
+	if (top.index >= 0 && static_cast<size_t>(top.index) < meta_.size()) {
+		CellMeta &m = meta_[static_cast<size_t>(top.index)];
+		m.column_volume = whole > 0.0 ? whole : m.volume;
+		m.column_area = area;
+	}
+	return *this;
 }
 
 EdgeId World::Builder::add_drain(CellId from, CellId to) {
@@ -276,7 +302,12 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	}
 	if (world.thermal_) {
 		for (size_t c = 0; c < world.cells_.size(); ++c) {
-			if (!meta_[c].reservoir && !thermal_state(*table_, world.cells_[c], &world.meta_[c]).defined) {
+			const CellState &cell = world.cells_[c];
+			const bool none = std::all_of(cell.amount.begin(), cell.amount.end(), [](int64_t a) { return a == 0; });
+			if (none && cell.energy == 0) {
+				continue; // an empty cell (Stage 47: a column's layer while it is mixed) has no temperature, and holds no energy
+			}
+			if (!meta_[c].reservoir && !thermal_state(*table_, cell, &world.meta_[c]).defined) {
 				return refuse("in a world with temperatures every cell has one (a species without thermodynamic data, or no heat capacity)");
 			}
 		}
@@ -353,6 +384,18 @@ Refusal World::set_particles(CellId cell, SpeciesId species, int64_t count) {
 		return Refusal::BadValue;
 	}
 	cells_[static_cast<size_t>(cell.index)].particles[static_cast<size_t>(species.index)] = count;
+	return Refusal::None;
+}
+
+Refusal World::resize_column_top(CellId top, double volume) {
+	if (!known(top)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(top.index)];
+	if (!m.rigid || !(m.column_volume > 0.0) || !(volume > 0.0) || volume > m.column_volume) {
+		return Refusal::BadValue;
+	}
+	m.volume = volume;
 	return Refusal::None;
 }
 
@@ -555,6 +598,41 @@ Refusal World::connect(CellId a, CellId b, PhaseMask phases, EdgeId *made, doubl
 		*made = EdgeId{ static_cast<int32_t>(edges_.size() - 1) };
 	}
 	return Refusal::None;
+}
+
+CellId World::add_layer_under(CellId lower, Refusal *why) {
+	const auto refuse = [&](Refusal r) {
+		if (why != nullptr) {
+			*why = r;
+		}
+		return CellId{};
+	};
+	// (between steps, a command's transfers already in the step's ledger: an empty cell changes no total, and the
+	// step's trace starts with it empty; never inside a step's processes)
+	if (!known(lower)) {
+		return refuse(Refusal::UnknownCell);
+	}
+	const CellMeta &over = meta_[static_cast<size_t>(lower.index)];
+	if (!over.layer && !(over.column_volume > 0.0)) {
+		return refuse(Refusal::BadValue); // a column grows under its top or its last layer
+	}
+	const auto species = static_cast<size_t>(table_->species_count());
+	names_.push_back(names_[static_cast<size_t>(lower.index)] + "+");
+	CellMeta m;
+	m.layer = true;
+	meta_.push_back(m);
+	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
+	cells_.push_back(none);
+	before_.cells.push_back(none); // (the step's trace starts with it, empty)
+	const CellId made{ static_cast<int32_t>(cells_.size() - 1) };
+	Edge e{ made, lower, PHASES_ALL, true, 0.0 };
+	e.column = true;
+	edges_.push_back(e);
+	++topology_version_;
+	if (why != nullptr) {
+		*why = Refusal::None;
+	}
+	return made;
 }
 
 Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {

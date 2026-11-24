@@ -24,7 +24,6 @@ constexpr double PI = 3.14159265358979323846;
 constexpr double KELVIN = 273.15;
 
 struct Data {
-	std::vector<std::pair<double, Water>> water;
 	double b = 0.0, mu = 0.0, b2 = 0.0, tc = 0.0;
 	std::map<std::string, Surface, std::less<>> surfaces;
 };
@@ -33,11 +32,6 @@ const Data &data() {
 	static const Data d = [] {
 		Data out;
 		const nlohmann::json j = nlohmann::json::parse(BOILING_JSON);
-		for (const nlohmann::json &r : j.at("water")) {
-			out.water.push_back({ r.at("celsius").get<double>(),
-					Water{ r.at("rho").get<double>(), r.at("cp").get<double>(), r.at("k").get<double>(), r.at("alpha").get<double>(), r.at("nu").get<double>(),
-							r.at("pr").get<double>(), r.at("beta").get<double>() } });
-		}
 		const nlohmann::json &s = j.at("surface_tension");
 		out.b = s.at("b_mn_m").get<double>() * 1e-3;
 		out.mu = s.at("mu").get<double>();
@@ -79,21 +73,9 @@ double root(F f, double lo, double hi) {
 } // namespace
 
 Water water_at(double celsius) {
-	const auto &rows = data().water;
-	if (celsius <= rows.front().first) {
-		return rows.front().second;
-	}
-	if (celsius >= rows.back().first) {
-		return rows.back().second;
-	}
-	size_t i = 1;
-	while (rows[i].first < celsius) {
-		++i;
-	}
-	const double f = (celsius - rows[i - 1].first) / (rows[i].first - rows[i - 1].first);
-	const Water &a = rows[i - 1].second, &b = rows[i].second;
-	const auto mix = [f](double x, double y) { return x + (y - x) * f; };
-	return Water{ mix(a.rho, b.rho), mix(a.cp, b.cp), mix(a.k, b.k), mix(a.alpha, b.alpha), mix(a.nu, b.nu), mix(a.pr, b.pr), mix(a.beta, b.beta) };
+	// the core's own (data/solutions.json's solvent: Lienhard's Table A.3; Stage 47)
+	const chem::SolventPoint p = chem::solvent_at(chem::builtin_species(), celsius + KELVIN);
+	return Water{ p.rho, p.cp, p.k, p.alpha, p.nu, p.pr, p.beta };
 }
 
 // bubbles as the optics has them (data/optics/media.json: scatterers)

@@ -3,6 +3,7 @@
 #include "lab/glassware.hpp"
 
 #include "lab/conditions.hpp"
+#include "lab/prism_demo.hpp"
 #include "lab/spectrometer.hpp"
 #include "lab/thermal.hpp"
 #include "lab/view.hpp"
@@ -346,7 +347,9 @@ struct Ui::Impl {
 	// the experiments (§13.7, Stage 41): the catalogue, the one shown (-1: none of it), the list open
 	struct Experiment {
 		std::string id, title, summary, bench, tutorial; // bench and tutorial as JSON ("" for no tutorial)
+		std::string scene; // or a scene of the optics alone (Stage 47: "prism", the prism and the grating), no bench
 	};
+	std::unique_ptr<PrismDemo> shown_scene; // the scene shown in place of the lab, if one is
 	std::vector<Experiment> catalogue;
 	int shown_k = -1; // (the experiment shown)
 	bool menu = false;
@@ -668,11 +671,29 @@ struct Ui::Impl {
 	// ---- the experiments (§13.7, Stage 41): a button over the cabinet, the list over the bench
 	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
 	static constexpr float MENU_ROW = 92;
-	Rect menu_rect() const { return Rect{ 480, 100, 760, 70 + MENU_ROW * static_cast<float>(catalogue.size()) }; }
-	Rect menu_row(int k) const { return Rect{ menu_rect().x + 16, menu_rect().y + 56 + MENU_ROW * static_cast<float>(k), menu_rect().w - 32, MENU_ROW - 8 }; }
+	// in one column, or two past eight (Stage 47: eleven in one ran off the screen)
+	int menu_columns() const { return catalogue.size() > 8 ? 2 : 1; }
+	int menu_rows() const { return (static_cast<int>(catalogue.size()) + menu_columns() - 1) / menu_columns(); }
+	Rect menu_rect() const {
+		const float w = menu_columns() == 1 ? 760.0f : 1440.0f;
+		return Rect{ menu_columns() == 1 ? 480.0f : 240.0f, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
+	}
+	Rect menu_row(int k) const {
+		const float column_w = (menu_rect().w - 32) / static_cast<float>(menu_columns());
+		const int column = k / menu_rows(), row = k % menu_rows();
+		return Rect{ menu_rect().x + 16 + column_w * static_cast<float>(column), menu_rect().y + 56 + MENU_ROW * static_cast<float>(row), column_w - (menu_columns() > 1 ? 8 : 0),
+			MENU_ROW - 8 };
+	}
 	// opens the k-th experiment: its bench, its tutorial (or none); the screen's mode stays
 	bool open_experiment(int k, std::string &why) {
 		const Experiment &e = catalogue[static_cast<size_t>(k)];
+		if (!e.scene.empty()) {
+			// a scene of the optics alone (Stage 47): shown in place of the lab, which waits where it was
+			shown_scene = std::make_unique<PrismDemo>();
+			shown_k = k;
+			menu = false;
+			return true;
+		}
 		std::unique_ptr<Lab> again = Lab::open(e.bench, why);
 		if (!again) {
 			return false;
@@ -695,11 +716,15 @@ struct Ui::Impl {
 		tutorial_json = e.tutorial;
 		shown_k = k;
 		menu = false;
+		shown_scene.reset();
 		follow();
 		return true;
 	}
 	// the entry that is the bench and the tutorial open now, -1 for none
 	int shown_now() const {
+		if (shown_scene) {
+			return shown_k;
+		}
 		const auto same = [](const std::string &a, const std::string &b) {
 			if (a.empty() || b.empty()) {
 				return a.empty() && b.empty();
@@ -749,14 +774,14 @@ struct Ui::Impl {
 		const Rect r = menu_rect();
 		rect_fill(r, PANEL_FILL);
 		outline(r, GRID, 1);
-		text(r.x + 20, r.y + 36, "Experiments: one chosen opens its bench and its steps", INK, 20);
+		text(r.x + 20, r.y + 36, "Experiments: one chosen opens its bench and its steps (or its scene)", INK, 20);
 		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
 			const Experiment &e = catalogue[static_cast<size_t>(k)];
 			const Rect row = menu_row(k);
 			rect_fill(row, k == shown_k ? BUTTON_ON : BUTTON);
 			text(row.x + 12, row.y + 28, e.title, INK, 19);
 			float y = row.y + 52;
-			for (const std::string &l : wrapped(e.summary, 88)) {
+			for (const std::string &l : wrapped(e.summary, menu_columns() > 1 ? 84 : 88)) {
 				text(row.x + 12, y, l, DIM, 14);
 				y += 18;
 				if (y > row.y + row.h - 4) {
@@ -1380,6 +1405,8 @@ struct Ui::Impl {
 	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
+	// the same amount as a trickle (Stage 47): laid on the liquid there as a layer of its own, not stirred in
+	static Rect gentle_button() { return Rect{ PANEL.x + 230, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
 	// upside down over it, with a cap: a placed pour (Stage 27)
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
@@ -1825,8 +1852,9 @@ struct Ui::Impl {
 				slide(x);
 				return;
 			}
-			if (pour_button().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
-				if (!allowed_click("panel:pour")) {
+			const bool gently = gentle_button().has(x, y);
+			if ((pour_button().has(x, y) || gently) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (!allowed_click(gently ? "panel:gentle" : "panel:pour")) {
 					return;
 				}
 				const double ml = view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
@@ -1835,6 +1863,9 @@ struct Ui::Impl {
 					command["all"] = true;
 				} else {
 					command["ml"] = ml;
+				}
+				if (gently) {
+					command["gentle"] = true;
 				}
 				if (act(command)) {
 					panel = false;
@@ -4277,6 +4308,7 @@ struct Ui::Impl {
 			}
 			if (panel) {
 				buttons.push_back(pour_button());
+				buttons.push_back(gentle_button());
 				buttons.push_back(cancel_button());
 				for (const auto &[species, b] : tip_buttons()) {
 					buttons.push_back(b);
@@ -5116,6 +5148,9 @@ struct Ui::Impl {
 				row(text_of("holds %.0f N", v.hold_n), DIM, 15);
 			} else {
 				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
+				if (v.layers.size() > 1) { // its column (Stage 47)
+					row(text_of("layered: %d layers, ", static_cast<int>(v.layers.size())) + text_of("%.1f C at the top, ", v.layers.front().celsius) + text_of("%.1f C at the bottom", v.layers.back().celsius), DIM, 15);
+				}
 				if (v.boiling) { // its bubbles (Stage 45)
 					row(v.bubbles_surface ? text_of("boiling: bubbles of %.1f mm reach the surface", v.bubble_mm) : text_of("bubbles from the floor, gone %.1f mm up", v.bubbles_end_cm * 10.0), DIM, 15);
 				} else if (v.gas_extinction > 0.0) {
@@ -5337,6 +5372,7 @@ struct Ui::Impl {
 			rect_fill(Rect{ s.x, s.y, s.w * static_cast<float>(pour_fraction), s.h }, rgba(90, 140, 220));
 			text(s.x, s.y - 8, text_of("%.1f mL of %.1f mL", source.liquid_ml * pour_fraction, source.liquid_ml), DIM, 15);
 			button(pour_button(), pour_fraction >= 1.0 ? "pour it all" : "pour");
+			button(gentle_button(), "pour gently");
 		} else {
 			text(PANEL.x + 30, PANEL.y + 100, "no liquid in it", DIM, 15);
 		}
@@ -5367,6 +5403,20 @@ std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 
 void Ui::pointer(float x, float y, bool down, int mods) {
 	Impl &m = *impl_;
+	if (m.shown_scene) {
+		// a scene of the optics alone: a press on the experiments is theirs, every other its own
+		const bool pressed = down && !m.down;
+		m.down = down;
+		m.px = x;
+		m.py = y;
+		if (pressed && m.menu_press(x, y)) {
+			return;
+		}
+		if (m.shown_scene) {
+			m.shown_scene->pointer(x, y, down);
+		}
+		return;
+	}
 	// over the room, a point of the view: where it is in the room's layout (Stage 42; at 1x, itself)
 	if (m.zoomed() && m.room_at(x, y)) {
 		x = layout_x(m.vw, Impl::VIEW_ROOM, x);
@@ -5489,6 +5539,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
+	if (m.shown_scene) { // a scene of the optics alone: no clock, no lab
+		m.clock += seconds > 0.0 ? seconds : 0.0;
+		return;
+	}
 	if (m.pouring && m.drag >= 0 && seconds > 0.0) {
 		// A pour by hand (Stage 27; Stage 31): to the pouring place, then tilting further while the button is held;
 		// let go, upright again, then back to the hand, where it ends
@@ -5593,11 +5647,21 @@ std::string Ui::take_export() {
 }
 
 const DrawList &Ui::draw() {
-	impl_->paint();
-	return impl_->list;
+	Impl &m = *impl_;
+	if (m.shown_scene) {
+		// the scene's own picture, and over it the experiments' button and list
+		m.list = m.shown_scene->draw();
+		m.paint_menu();
+		return m.list;
+	}
+	m.paint();
+	return m.list;
 }
 
 const OpticsScene &Ui::optics() {
+	if (impl_->shown_scene) {
+		return impl_->shown_scene->optics();
+	}
 	impl_->compose();
 	return impl_->scene;
 }
@@ -5647,8 +5711,8 @@ bool Ui::experiments(std::string_view catalogue_json, std::string &why, const st
 	}
 	std::vector<Impl::Experiment> out;
 	for (const json &e : doc["experiments"]) {
-		if (!e.is_object() || !e.contains("id") || !e["id"].is_string() || !e.contains("title") || !e["title"].is_string() || !e.contains("bench")) {
-			why = "experiments: each needs an id, a title and its bench";
+		if (!e.is_object() || !e.contains("id") || !e["id"].is_string() || !e.contains("title") || !e["title"].is_string() || (!e.contains("bench") && !e.contains("scene"))) {
+			why = "experiments: each needs an id, a title and its bench (or its scene)";
 			return false;
 		}
 		Impl::Experiment x;
@@ -5673,7 +5737,14 @@ bool Ui::experiments(std::string_view catalogue_json, std::string &why, const st
 			out = *text;
 			return true;
 		};
-		if (!text_of_entry(e["bench"], x.bench) || (e.contains("tutorial") && !e["tutorial"].is_null() && !text_of_entry(e["tutorial"], x.tutorial))) {
+		if (e.contains("scene")) {
+			// a scene of the optics alone (Stage 47): the prism and the grating
+			if (!e["scene"].is_string() || e["scene"].get<std::string>() != "prism" || e.contains("bench") || e.contains("tutorial")) {
+				why = "experiment " + x.id + ": a scene is \"prism\", with no bench and no tutorial";
+				return false;
+			}
+			x.scene = e["scene"].get<std::string>();
+		} else if (!text_of_entry(e["bench"], x.bench) || (e.contains("tutorial") && !e["tutorial"].is_null() && !text_of_entry(e["tutorial"], x.tutorial))) {
 			return false;
 		}
 		for (const Impl::Experiment &y : out) {
@@ -5683,6 +5754,10 @@ bool Ui::experiments(std::string_view catalogue_json, std::string &why, const st
 			}
 		}
 		// each is opened now: a catalogue with one that cannot be is refused whole
+		if (!x.scene.empty()) {
+			out.push_back(std::move(x));
+			continue;
+		}
 		std::unique_ptr<Lab> bench = Lab::open(x.bench, why);
 		if (!bench) {
 			why = "experiment " + x.id + ": " + why;
@@ -5741,6 +5816,10 @@ void Ui::key(Key key, uint32_t codepoint) {
 }
 
 void Ui::zoom(float x, float y, float factor) {
+	if (impl_->shown_scene) { // in a scene of the optics alone the wheel turns what it shows
+		impl_->shown_scene->turn(factor > 1.0f ? 0.05 : factor < 1.0f ? -0.05 : 0.0);
+		return;
+	}
 	Impl &m = *impl_;
 	if (CABINET.has(x, y) && factor > 0.0f && factor != 1.0f && std::isfinite(factor)) {
 		m.cabinet_scroll(factor > 1.0f ? -1 : 1); // the wheel over the cabinet scrolls it, a row a notch (Stage 48)
@@ -6086,6 +6165,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:pour") {
 		return centre(Impl::pour_button());
+	}
+	if (what == "panel:gentle") {
+		return centre(Impl::gentle_button());
 	}
 	if (what == "panel:invert") {
 		x = Impl::invert_button().cx();

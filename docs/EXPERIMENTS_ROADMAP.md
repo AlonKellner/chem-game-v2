@@ -268,6 +268,26 @@ These are not chemistry, but every principle lesson will need them.
 
 ## 8. The vertical dimension
 
+**Built in Stage 47** (`docs/TDD_47_COLUMN.md`):
+- **What it is:** a vessel's column of layers, grown as it needs from one cell.
+- **What it does:**
+  - overturns where the lower layer is the lighter;
+  - passes what is dissolved and heat between stable layers;
+  - resolves a steep step into thinner layers.
+- **In the lab:** gentle pours that layer, the burner on the lowest layer, a layered bench.
+- **On the screen:** bands.
+- **The experiment** `layers`.
+
+**Still to come here** (the user's "other considerations" for a gradient, 2026-11-24):
+- entrainment where a pour lands;
+- shear at an interface;
+- salt fingers (double diffusion: heat diffuses about 100 times faster than salt);
+- the Soret effect (a solute drifting in a temperature gradient);
+- an unstable interface overturning in plumes, not whole;
+- volumes that expand with temperature;
+- a column that narrows with its vessel;
+- bubbles layer by layer.
+
 The user, 2026-11-24: "What would it take to correctly model vertical temperature distribution in a vessel?
 [...] I do want to accurately simulate the vertical dimension of vessels at some point, allowing for things
 like water and oil to not mix permanently, but for them to have some heat transfer." A stage of its own,

@@ -198,11 +198,13 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 		const double b_ionic = (p.beta1 * h1 + p.beta2 * h2) / ionic; // dB/dI
 		const double zc = static_cast<double>(model.ions[c].charge), za = static_cast<double>(-model.ions[a].charge);
 		const double c_ca = p.c_phi / (2.0 * std::sqrt(zc * za));
-		f += 2.0 * mm * (b_ca + z_sum * c_ca);
-		d[c] += 2.0 * m[a] * (b_ca + z_sum * c_ca);
-		d[a] += 2.0 * m[c] * (b_ca + z_sum * c_ca);
+		// m_c m_a (2 B + Z C), Z the sum over every ion of m |z| (Pitzer 1991; until Stage 47 this read 2 m_c m_a (B + Z C),
+		// which counts C twice: no pair with a C^phi was gated where it shows, 2:2 salts above 0.5 mol/kg)
+		f += mm * (2.0 * b_ca + z_sum * c_ca);
+		d[c] += m[a] * (2.0 * b_ca + z_sum * c_ca);
+		d[a] += m[c] * (2.0 * b_ca + z_sum * c_ca);
 		d_ionic += 2.0 * mm * b_ionic;
-		d_z += 2.0 * mm * c_ca;
+		d_z += mm * c_ca;
 	}
 	double weighted = 0.0;
 	for (size_t j = 0; j < n; ++j) {
@@ -388,6 +390,49 @@ double solvent_viscosity(const SpeciesTable &table, double temperature) {
 		}
 	}
 	return points.back().pascal_seconds;
+}
+
+SolventPoint solvent_at(const SpeciesTable &table, double temperature) {
+	const std::vector<SolventPoint> &rows = table.solution().solvent;
+	if (rows.empty()) {
+		return SolventPoint{};
+	}
+	if (!(temperature > rows.front().kelvin)) {
+		return rows.front();
+	}
+	if (!(temperature < rows.back().kelvin)) {
+		return rows.back();
+	}
+	size_t i = 1;
+	while (rows[i].kelvin < temperature) {
+		++i;
+	}
+	const SolventPoint &a = rows[i - 1], &b = rows[i];
+	const double f = (temperature - a.kelvin) / (b.kelvin - a.kelvin);
+	const auto mix = [f](double x, double y) { return x + (y - x) * f; };
+	return SolventPoint{ temperature, mix(a.rho, b.rho), mix(a.cp, b.cp), mix(a.k, b.k), mix(a.alpha, b.alpha), mix(a.nu, b.nu), mix(a.pr, b.pr), mix(a.beta, b.beta) };
+}
+
+bool liquid_density(const SpeciesTable &table, const CellState &cell, double temperature, double &density) {
+	double grams = 0.0, volume = 0.0, liquid = 0.0; // g, m^3 at 25 C, quanta of liquid
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		const SpeciesId id{ static_cast<int32_t>(s) };
+		const SpeciesDef &def = table.species(id);
+		if (cell.amount[s] <= 0 || def.wall || (def.phase != Phase::Liquid && def.phase != Phase::Aqueous)) {
+			continue;
+		}
+		const double mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
+		grams += mol * static_cast<double>(table.molar_mass_ug(id)) * 1e-6;
+		volume += mol * def.molar_volume;
+		liquid += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) : 0.0;
+	}
+	if (!(liquid > 0.0) || !(volume > 0.0)) {
+		return false;
+	}
+	const double at25 = solvent_at(table, 298.15).rho, now = solvent_at(table, temperature).rho;
+	const double expansion = at25 > 0.0 && now > 0.0 ? at25 / now : 1.0;
+	density = grams * 1e-3 / (volume * expansion);
+	return true;
 }
 
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {

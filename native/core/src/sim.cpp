@@ -783,6 +783,14 @@ void Simulation::settle() {
 		build_tree();
 	}
 	settle_cells();
+	// a column's layers (Stage 47), on no gas path: each at its fast equilibria too (a layer that boils makes steam
+	// in it, which the column takes up at the next step)
+	for (size_t c = 0; c < cells; ++c) {
+		const CellId cell{ static_cast<int32_t>(c) };
+		if (world_.meta(cell).layer && thermal(cell).defined) {
+			project(cell);
+		}
+	}
 }
 
 // The gas tree: the cells breadth first from the elastic ones along the open
@@ -798,7 +806,7 @@ void Simulation::build_tree() {
 	order_.clear();
 	for (size_t c = 0; c < cells; ++c) {
 		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
-		if (!m.reservoir && !m.rigid) {
+		if (!m.reservoir && !m.rigid && !m.layer) { // (a layer is no root of the air: Stage 47)
 			depth_[c] = 0;
 			order_.push_back(c);
 		}
@@ -807,7 +815,7 @@ void Simulation::build_tree() {
 		const size_t at = order_[head];
 		for (size_t i = 0; i < edges.size(); ++i) {
 			const Edge &e = edges[i];
-			if (!e.open || (e.phases & PHASES_GAS) == 0) {
+			if (!e.open || (e.phases & PHASES_GAS) == 0 || e.column) { // (a column's edge is no gas path)
 				continue;
 			}
 			const auto a = static_cast<size_t>(e.a.index);
@@ -1027,6 +1035,7 @@ int64_t Simulation::tally(size_t reaction, CellId cell) const {
 
 // what was derived before the step may be stale: a host may have changed the world between steps
 void Simulation::begin_step() {
+	grow_columns(); // (Stage 47: before anything is sized by the cells)
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	thermal_.resize(cells);
 	thermal_valid_.assign(cells, 0);
@@ -1035,6 +1044,7 @@ void Simulation::begin_step() {
 	flows_.grams.assign(world_.edges().size() * PROCESSES, 0.0);
 	flows_.extent.assign(cells * flows_.reactions, 0);
 	process_ = Process::Reaction;
+	configure_columns();
 }
 
 void Simulation::restore_remainders(std::vector<double> heat, std::vector<double> reaction, std::vector<double> nucleation, std::vector<double> work) {
@@ -1055,6 +1065,8 @@ void Simulation::advance() {
 		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Column;
+		stratify();
 		process_ = Process::Settle;
 		settle();
 		process_ = Process::Overflow;
@@ -1079,6 +1091,8 @@ StepTrace Simulation::step() {
 		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Column;
+		stratify();
 		process_ = Process::Settle;
 		settle();
 		process_ = Process::Overflow;

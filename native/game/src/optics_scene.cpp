@@ -10,6 +10,7 @@
 #include "lab/optics_trace.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstdlib>
 #include <cmath>
@@ -20,6 +21,14 @@
 namespace lab {
 
 namespace {
+
+// A revision names what it is of across every scene (Stage 47): a host that shows one scene and then another (the
+// lab, then the prism) uploads what changed by its revision, and two scenes' counts from 0 would name different
+// tables alike.
+uint64_t next_revision() {
+	static std::atomic<uint64_t> last{ 0 };
+	return ++last;
+}
 
 using namespace optics_layout;
 constexpr double FIRST_NM_D = chem::optics::FIRST_NM;
@@ -637,6 +646,71 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
 				const double grain = 2.0 * made->widest() / body.w / 64.0;
 				const auto drawn = [&](double cm) { return std::round(cm / grain) * grain; };
+				// layered (Stage 47): each layer a band of its own liquid, from the bottom. The layers lie level in the
+				// room at any turn, as its surface does: a band's top is the level that holds the liquid of the layers
+				// under it, as the surface is the one that holds all of it (in its frame, as lie[15]); tipped to pour,
+				// its top layer is the one at the lip, and each under it reaches the lip as the level falls to it.
+				if (v.layers.size() > 1 && l.liquid) {
+					const size_t bands = std::min(v.layers.size(), static_cast<size_t>(MAX_BANDS));
+					std::vector<float> table(1 + 3 * bands, 0.0f);
+					table[0] = static_cast<float>(bands);
+					double layered_ml = 0.0;
+					for (const LayerView &layer : v.layers) {
+						layered_ml += layer.liquid_ml;
+					}
+					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0), scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
+					double below = 0.0, under = -1e9; // the layers' liquid under the band, and its bottom level
+					for (size_t k = 0; k < bands; ++k) {
+						const LayerView &layer = v.layers[v.layers.size() - 1 - k]; // (the view lists them from the top)
+						const int band_set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
+						rows.resize(static_cast<size_t>((band_set + 1) * ROWS_PER_SET * ROW), 0.0f);
+						lwir.resize(static_cast<size_t>((band_set + 1) * ROWS_PER_SET * LWIR_ROW), 0.0f);
+						lw = &lwir[static_cast<size_t>(set * ROWS_PER_SET * LWIR_ROW)]; // (the resize moves it)
+						float *band_lw = &lwir[static_cast<size_t>(band_set * ROWS_PER_SET * LWIR_ROW)];
+						for (int i = 0; i < LWIR_ROW; ++i) {
+							band_lw[LIQUID_INDEX_ROW * LWIR_ROW + i] = band_lw[WALL_INDEX_ROW * LWIR_ROW + i] = 1.0f; // (only its liquid row is read)
+						}
+						float *band_liquid = &rows[static_cast<size_t>((band_set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
+						for (int i = 0; i < ROW; ++i) {
+							band_liquid[LIQUID_INDEX_ROW * ROW + i] = band_liquid[WALL_INDEX_ROW * ROW + i] = 1.0f;
+						}
+						if (layer.liquid_ml > 0.0) {
+							for (const SubstanceView &sv : layer.contents) {
+								if (sv.species == "water" && sv.phase != 's' && sv.phase != 'g') {
+									// its water in the long-wave (Stage 46), by its share of the layer's volume
+									for (int i = 0; i < LWIR_ROW; ++i) {
+										band_lw[LIQUID_ROW * LWIR_ROW + i] += static_cast<float>(media.water_alpha[static_cast<size_t>(i)] * (sv.ml > 0.0 ? std::min(sv.ml / layer.liquid_ml, 1.0) : 1.0));
+									}
+								}
+								const chem::SpeciesId id = chem::builtin_species().find(sv.species);
+								if (id.index < 0 || sv.phase == 's' || chem::optics::kind(id) != Kind::Absorb) {
+									continue;
+								}
+								// (a concentration to 0.2 %: a gradient spreading slowly keeps its pixels' histories between steps)
+								const double molar = sv.mol / (layer.liquid_ml / 1000.0);
+								const double kept = molar > 0.0 ? std::exp(std::round(std::log(molar) / 0.002) * 0.002) : 0.0;
+								const Spectrum &e = chem::optics::spectrum(id);
+								for (size_t i = 0; i < e.size(); ++i) {
+									band_liquid[i] += static_cast<float>(e[i] * LN10 * kept);
+								}
+							}
+						}
+						below += layer.liquid_ml;
+						const double over = k + 1 == bands ? 1e9 : drawn(contents::lying(*made, lie[3], below * scale, sediment, 0.0, body.side).liquid_level);
+						table[1 + 3 * k] = static_cast<float>(band_set);
+						table[2 + 3 * k] = static_cast<float>(under);
+						table[3 + 3 * k] = static_cast<float>(std::max(over, under));
+						under = std::max(over, under);
+					}
+					float *band_table = &rows[static_cast<size_t>((set * ROWS_PER_SET + BANDS_ROW) * ROW)];
+					std::copy(table.begin(), table.end(), band_table);
+					// (the rows grew: the body's own rows are where they are now, not where they were)
+					liquid = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
+					solid = &rows[static_cast<size_t>((set * ROWS_PER_SET + SOLID_ROW) * ROW)];
+					wall = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_ROW) * ROW)];
+					liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
+					wall_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_INDEX_ROW) * ROW)];
+				}
 				lie[2] = 1.0;
 				lie[12] = l.up_x;
 				lie[13] = l.up_y;
@@ -796,7 +870,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			scene.images_key = key;
-			++scene.images_revision;
+			scene.images_revision = next_revision();
 		}
 		// The sensor displays' blocks (Stage 46), written whenever anything in them changes: where their frames are,
 		// their settings, and a tag of what lies under each frame (a pixel of the display follows it)
@@ -903,7 +977,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		scene.relay_pool = pool;
 		if (changed) {
-			++scene.images_revision;
+			scene.images_revision = next_revision();
 		}
 	}
 
@@ -951,7 +1025,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		scene.lights_kelvin = room.kelvin;
-		++scene.revision;
+		scene.revision = next_revision();
 	}
 	// the wall's table (GAME_SPEC §12.3): made again only when what is drawn on it changes
 	if (scene.wall_key != wall_key || scene.wall.empty()) {
@@ -1156,7 +1230,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
 		scene.lines = std::move(lines);
-		++scene.revision;
+		scene.revision = next_revision();
 	}
 	optics_shapes(scene);
 }
@@ -1315,7 +1389,7 @@ void optics_shapes(OpticsScene &scene) {
 			scene.shapes[i] = static_cast<float>(out[i]);
 		}
 		scene.shapes_exact = std::move(out);
-		++scene.shapes_revision;
+		scene.shapes_revision = next_revision();
 	}
 }
 
@@ -1466,7 +1540,7 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 			cell[2] = static_cast<float>(integral - coarse);
 		}
 	}
-	++scene.wall_revision;
+	scene.wall_revision = next_revision();
 }
 
 } // namespace lab
