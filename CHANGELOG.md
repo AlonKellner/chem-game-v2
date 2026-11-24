@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.39.0 (2026-11-24, Stage 39; awaiting the user's sign-off)
+## 0.39.0 (2026-11-24, Stage 39; signed off by the user: "Approved, merge and proceed")
 
 - §13.3 (Stage 39, `docs/TDD_39_TRIAL.md`): **a controller's trial runs beside the lab**, two of its seconds
   at each of the lab's steps (it ran whole inside one step: 50 ms for the monitored scene's, seconds for an
