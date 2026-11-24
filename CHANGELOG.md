@@ -5,7 +5,9 @@
 - §13 (Stage 38, `docs/TDD_38_LEFT.md`): **the trash's leftovers.** A part put in the trash keeps its wires
   and rigs to what was outside it, and they come back with it once both ends are on the lab again (a
   controller rigged again tunes itself); `empty_trash` and the trash box's "empty" button: everything in it
-  leaves for good, an item to the cabinet, a part scrapped.
+  leaves for good, an item to the cabinet, a part scrapped. The trash box's count ("trash (2)") and the
+  emptying's notice say the number in it (both said 0: a count given as an integer to a format that takes
+  doubles; found by the user).
 - §18, §19, §20 (Stages 37, 38): O4's open pixels said in its row (none to eight a picture, once settled:
   `make screenshots` lets each picture settle 240 frames, Stage 37); O14 said to be unused; the frame's
   budget restated for a 120 Hz display; *PLANNED* taken off what is built (crystal populations, solute

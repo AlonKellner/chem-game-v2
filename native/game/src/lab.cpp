@@ -3491,7 +3491,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
 			}
 		}
-		note(Notice::Detail, "", text_of("the trash was emptied: %d things, its items to the cabinet", static_cast<int>(count)));
+		note(Notice::Detail, "", text_of("the trash was emptied: %.0f things, its items to the cabinet", static_cast<double>(count)));
 		return true;
 	}
 	if (what == "restore") {

@@ -532,7 +532,7 @@ TEST_CASE("trash: emptied, everything in it leaves for good: an item to the cabi
 	CHECK(grams(v, "jar", "malachite") == malachite);
 	CHECK_FALSE(there(v, "timer1")); // gone: its name free again, its wire to the alarm with it
 	CHECK(v.wires.empty());
-	CHECK(noticed(v, "the trash was emptied"));
+	CHECK(noticed(v, "the trash was emptied: 2 things")); // (the count once read 0)
 	must(*l, R"({"do": "part", "kind": "timer", "at": [0, 0], "id": "timer1"})");
 	CHECK(there(l->view(), "timer1"));
 	CHECK(v.conserved);

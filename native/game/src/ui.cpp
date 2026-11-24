@@ -3164,7 +3164,7 @@ struct Ui::Impl {
 		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
 		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
 		outline(TRASH, WALL_GRID, 1);
-		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%d)", static_cast<int>(view.trash.size())), WALL_INK);
+		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%.0f)", static_cast<double>(view.trash.size())), WALL_INK);
 		if (!view.trash.empty()) {
 			button(empty_rect(), "empty", false, 13);
 		}
