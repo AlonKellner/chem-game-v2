@@ -109,6 +109,9 @@ struct SpeciesDef {
 	// count of 0 ends the list. One with none is a neutral particle of its own
 	// (the table gives it one).
 	std::array<IonCount, MAX_IONS> ions{};
+	// A solid: the diameter of its grains as they come out of a solution by a
+	// fast equilibrium (a precipitate, GAME_SPEC §9, Stage 44), m; 0: one lump
+	double grain = 0.0;
 };
 
 struct SpeciesId {
