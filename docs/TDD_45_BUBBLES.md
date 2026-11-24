@@ -22,7 +22,7 @@ GAME_SPEC 0.45.0: §11 (boiling's bubbles), §13.3 (`bubbles_cm`), §13.7 (the e
 | 45.3 | The lab: a vessel's bubbles from its burner's flow; the readout, the debug panel, `bubbles_cm` | Done |
 | 45.4 | The pass: a body's vec4 6, read wherever a haze is, white | Done |
 | 45.5 | The experiment `boiling`; a play that photographs a boil on the GPU | Done |
-| 45.6 | GAME_SPEC 0.45.0, `make gates`, the user's sign-off | `make gates` passed (374 s: ASan+UBSan 374, ctest 232, Godot 12 of 12); awaiting sign-off |
+| 45.6 | GAME_SPEC 0.45.0, `make gates`, the user's sign-off | `make gates` passed (361 s, after the bubbles became a medium: ASan+UBSan 361, ctest 219, Godot 12 of 12); signed off by the user, 2026-11-24 ("Please do, I trust you to do it. When you're done, everything is approved, merge and proceed") |
 
 ## 45.1 The model, and why it is derived
 

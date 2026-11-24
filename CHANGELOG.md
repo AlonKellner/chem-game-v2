@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.45.0 (2026-11-24, Stage 45)
+## 0.45.0 (2026-11-24, Stage 45; signed off by the user: "everything is approved, merge and proceed")
 
 - §11 (Stage 45, `docs/TDD_45_BUBBLES.md`): **boiling's bubbles** (`lab/bubbles.hpp`, `data/boiling.json`).
   - A vessel heated from below is one bulk and a film at its floor: the floor's heat shared between natural
