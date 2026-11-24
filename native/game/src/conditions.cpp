@@ -499,7 +499,7 @@ bool part_holds(const PartPattern &p, const LabView &view) {
 		}
 		const Part &x = v.part;
 		if ((!p.item.empty() && x.quantity.item != p.item) || (!p.what.empty() && x.quantity.what != p.what) || (!p.measure.empty() && x.quantity.measure != p.measure) ||
-				(p.op && x.comparison.op != *p.op) || (p.watching && x.watching != *p.watching) || (p.ringing && x.ringing != *p.ringing) || (p.rang && (x.rang_at >= 0) != *p.rang)) {
+				(p.op && x.comparison.op != *p.op) || (p.watching && x.watching != *p.watching) || (p.signals && x.out != *p.signals) || (p.ringing && x.ringing != *p.ringing) || (p.rang && (x.rang_at >= 0) != *p.rang)) {
 			continue;
 		}
 		if (!range(x.comparison.a, p.value_at_least, p.value_at_most)) {

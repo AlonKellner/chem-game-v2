@@ -62,6 +62,8 @@ bool CondReader::part_pattern(const json &j, PartPattern &p) {
 			ok = number(v, "value_at_most", p.value_at_most);
 		} else if (key == "watching") {
 			ok = flag(v, "watching", p.watching);
+		} else if (key == "signals") {
+			ok = flag(v, "signals", p.signals);
 		} else if (key == "ringing") {
 			ok = flag(v, "ringing", p.ringing);
 		} else if (key == "rang") {

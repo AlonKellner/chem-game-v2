@@ -1,0 +1,89 @@
+{
+	"format": "chem-bench/2",
+	"note": "The dilution's bench (GAME_SPEC §9, §13.7, Stage 43): the lab's bottle of 1 M sulfuric acid and three beakers of 45 g of water. A twentieth of a mole per kg at each step, then a tenth of it, and a tenth again: the pH climbs about a unit each time.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "acid",
+			"kind": "vessel",
+			"volume_ml": 500,
+			"wall": "glass",
+			"glassware": "bottle",
+			"wall_g": 250,
+			"loss": 0.8,
+			"contents": {
+				"water": {
+					"g": 240.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.25
+				}
+			},
+			"at": [
+				2,
+				7
+			]
+		},
+		{
+			"id": "tenth",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				8,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 45
+				}
+			}
+		},
+		{
+			"id": "hundredth",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				14,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 45
+				}
+			}
+		},
+		{
+			"id": "thousandth",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				20,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 45
+				}
+			}
+		}
+	]
+}

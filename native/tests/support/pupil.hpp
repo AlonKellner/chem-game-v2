@@ -129,6 +129,16 @@ struct Pupil {
 		}
 		return 0.0;
 	}
+	// the step's checks not yet holding, with what they wait on
+	std::string open_checks() const {
+		std::string out;
+		for (const lab::TutorialCheck &c : tutorial().checks) {
+			if (!c.done) {
+				out += " [open: " + c.text + (c.now.empty() ? "" : ", now " + c.now) + "]";
+			}
+		}
+		return out;
+	}
 	// frames of 1/60 s until `done`, at most `seconds` of the lab's time
 	template <typename Done>
 	void watch(Done done, double seconds) {
@@ -137,7 +147,7 @@ struct Pupil {
 			resume();
 			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title);
 			REQUIRE_MESSAGE((!ui->strict() || ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
-					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message());
+					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message() << open_checks());
 			ui->frame(1.0 / 60.0);
 			REQUIRE_MESSAGE(!ui->lab().failed(), ui->message());
 		}
