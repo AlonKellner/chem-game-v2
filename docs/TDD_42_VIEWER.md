@@ -43,7 +43,7 @@ The spec, by section:
 - §18: O17 to O20.
 - §19 and §20.
 
-Version 0.42.0. Branched from Stage 41's tip (`f8ad333`), since 41 changes the same files and merges first.
+Version 0.42.0. Branched from Stage 41's tip (`f8ad333`), since 41 changes the same files and merges first; rebased onto Stage 43, which merged before it (GAME_SPEC's line: 0.43.0, with 0.42.0 merged after it).
 
 | Phase | Topic | Status |
 |---|---|---|
@@ -55,7 +55,7 @@ Version 0.42.0. Branched from Stage 41's tip (`f8ad333`), since 41 changes the s
 | 42.6 | The view: 1x to 16x, the room laid out anew (O18); a view's change resampled (O20) | Done |
 | 42.7 | The C API and the Godot host: the wheel, a pinch, two fingers, middle-drag, Home and Ctrl/Cmd+0 | Done |
 | 42.8 | Costs and pictures on the GPU (`data/plays/viewer.json`) | Measured (below); Open items |
-| 42.9 | GAME_SPEC 0.42.0; the documents; `make gates`; the user's sign-off | `make gates` passed (309 s: ASan+UBSan 309, ctest 253, Godot 12 of 12); awaiting sign-off |
+| 42.9 | GAME_SPEC (0.42.0, merged after 0.43.0); the documents; `make gates`; the user's sign-off | Rebased onto Stage 43: `make gates` passed (483 s: ASan+UBSan 483, ctest 272, Godot 12 of 12); signed off 2026-11-24 ("It works perfectly! [...] Approved, proceed") |
 
 ## 42.1 The probe's reading
 
