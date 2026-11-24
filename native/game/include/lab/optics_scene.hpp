@@ -153,7 +153,7 @@ struct OpticsScene {
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	double lights_kelvin = 0.0; // the room's temperature the long-wave light was made at
-	uint64_t revision = 0; // changes when any of them does
+	uint64_t revision = 0; // changes when any of them does: to a number no scene has had (Stage 47), as every revision here
 	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
 	uint64_t wall_revision = 0;

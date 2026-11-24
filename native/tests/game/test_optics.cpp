@@ -412,7 +412,7 @@ TEST_CASE("optics: the picture is the pixels, and the table moves only when what
 	lab::optics_compose(scene, ROOM, { lab::OpticsBody{ &v, X, Y, W, H } });
 	CHECK(scene.revision == revision);
 	lab::optics_compose(scene, ROOM, { lab::OpticsBody{ &v, X + 1, Y, W, H } });
-	CHECK(scene.revision == revision + 1);
+	CHECK(scene.revision > revision);
 	const std::vector<uint8_t> picture = lab::optics_picture(scene, 90, 90, 40, 30);
 	REQUIRE(picture.size() == 40 * 30 * 4);
 	for (const auto &[col, row] : { std::pair{ 0, 0 }, std::pair{ 20, 15 }, std::pair{ 39, 29 } }) {

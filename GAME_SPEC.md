@@ -407,8 +407,8 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   molar volumes scaled by the solvent's own expansion from 25 °C (Lienhard's water, `data/solutions.json`'s
   `solvent`).
 - **In the lab.** A layered vessel reads as a whole (its contents, its temperature as they would come to mixed); the
-  readout and the debug panel say how it is layered. A gentle pour (`"gentle": true`, or a trickle by hand, no more
-  than 2 mL/s) pushes the liquid there down a place and lands as a layer of its own; a faster pour stirs it in. A
+  readout and the debug panel say how it is layered. A gentle pour (`"gentle": true`, the pour menu's "pour gently", or a
+  trickle by hand, no more than 2 mL/s) pushes the liquid there down a place and lands as a layer of its own; a faster pour stirs it in. A
   burner under a layered vessel heats its lowest layer. A bench may start a vessel layered (`"layers"`, from the top
   down). Saved and loaded, a column goes on exactly.
 - **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height.
@@ -1139,7 +1139,8 @@ bodies reach into each; each set of six spectra at 1 nm (a liquid's optical dept
 its solids' reflectance, its wall's depth, its liquid's and its wall's refractive index, its
 solids' glow); up to 256 narrow lines; the room light's energy table (4,097 entries); each body's
 shape as the surfaces a ray meets, with how it lies and what lies in it; the wall's table; and the
-rectangles of the bodies, where the passes that trace run. Each has a revision of its own.
+rectangles of the bodies, where the passes that trace run. Each has a revision of its own, a number no scene
+has had before (Stage 47: a host showing the lab and then the prism uploads a table by its revision alone).
 **The renderer** (`native/game/shader/optics_pixel.glsl`, copied into the Godot project) is the
 method of §12.2 for one pixel: its path, the rays of its beam, what gets through at a wavelength,
 a batch of points, the fixed estimate, the frame's step and what it shows. The Godot host runs it

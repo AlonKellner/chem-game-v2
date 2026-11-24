@@ -1405,6 +1405,8 @@ struct Ui::Impl {
 	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
+	// the same amount as a trickle (Stage 47): laid on the liquid there as a layer of its own, not stirred in
+	static Rect gentle_button() { return Rect{ PANEL.x + 230, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
 	// upside down over it, with a cap: a placed pour (Stage 27)
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
@@ -1850,8 +1852,9 @@ struct Ui::Impl {
 				slide(x);
 				return;
 			}
-			if (pour_button().has(x, y) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
-				if (!allowed_click("panel:pour")) {
+			const bool gently = gentle_button().has(x, y);
+			if ((pour_button().has(x, y) || gently) && view.items[static_cast<size_t>(from)].liquid_ml > 0.0) {
+				if (!allowed_click(gently ? "panel:gentle" : "panel:pour")) {
 					return;
 				}
 				const double ml = view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
@@ -1860,6 +1863,9 @@ struct Ui::Impl {
 					command["all"] = true;
 				} else {
 					command["ml"] = ml;
+				}
+				if (gently) {
+					command["gentle"] = true;
 				}
 				if (act(command)) {
 					panel = false;
@@ -4302,6 +4308,7 @@ struct Ui::Impl {
 			}
 			if (panel) {
 				buttons.push_back(pour_button());
+				buttons.push_back(gentle_button());
 				buttons.push_back(cancel_button());
 				for (const auto &[species, b] : tip_buttons()) {
 					buttons.push_back(b);
@@ -5365,6 +5372,7 @@ struct Ui::Impl {
 			rect_fill(Rect{ s.x, s.y, s.w * static_cast<float>(pour_fraction), s.h }, rgba(90, 140, 220));
 			text(s.x, s.y - 8, text_of("%.1f mL of %.1f mL", source.liquid_ml * pour_fraction, source.liquid_ml), DIM, 15);
 			button(pour_button(), pour_fraction >= 1.0 ? "pour it all" : "pour");
+			button(gentle_button(), "pour gently");
 		} else {
 			text(PANEL.x + 30, PANEL.y + 100, "no liquid in it", DIM, 15);
 		}
@@ -6157,6 +6165,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:pour") {
 		return centre(Impl::pour_button());
+	}
+	if (what == "panel:gentle") {
+		return centre(Impl::gentle_button());
 	}
 	if (what == "panel:invert") {
 		x = Impl::invert_button().cx();

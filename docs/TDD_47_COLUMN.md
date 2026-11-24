@@ -35,6 +35,7 @@ GAME_SPEC 0.47.0 covers:
 | 47.7 | The goldens: a new species moves every digest; every measured value unchanged | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
 | 47.8 | GAME_SPEC 0.47.0, `make gates`, the user's sign-off | `make gates` passed (522 s: ASan+UBSan 522, ctest 364, Godot 12 of 12; the sanitizers found the band sets growing the scene's rows under the body's own row pointers, which were then read freed); awaiting sign-off |
 | 47.9 | Rebased onto Stage 46 (the long-wave range): a band set carries long-wave rows too (its layer's water by its share), so a layered vessel reads right at any wavelength and through a sensor's relay | `make gates` passed again (521 s: ASan+UBSan 521, ctest 349, Godot 12 of 12); the goldens unchanged by the rebase; `make screenshots` O4 the same as main's, shot for shot; awaiting sign-off |
+| 47.10 | The user's first test: the layers bench's vessels and the pour menu's "pour gently"; the prism's dark room (revisions unique across scenes) | Done; the separation the user saw after stirring is not reproduced (asked) |
 
 ## 47.1 The prism in the list
 
@@ -199,7 +200,38 @@ Each cell's amount vector gained a species, so every digest moves. In the measur
 0 quanta of atoms". A mixed column never makes a layer, so a vessel's cells are as they were. Re-recorded once
 the user approved it (2026-11-24).
 
+## 47.10 The user's first test
+
+The user played the stage and reported three things:
+
+- **"Two liquids, layered" had no second vessel to pour into.** The bench now holds a beaker of the blue alone, a
+  bottle of the green (the same molality, 0.16 mol in 200 g) and an empty beaker. The pour menu has a **"pour
+  gently"** button beside "pour" that pours the slider's amount as a trickle (`"gentle": true`). Before, a gentle
+  pour on the screen meant holding a pour by hand and letting go before the tilt passed 2 mL/s, which was too hard
+  to find. Tests: the bench's vessels and a gentle pour from the green onto the blue; on the screen, the menu's
+  "pour gently" lays the green on the blue and its "pour" stirs it in.
+- **Stirred, the layers merged at once and never separated.** The user then saw them separate slowly. Neither
+  the lab nor the screen reproduces a separation:
+  - `stir` on for 5 s, then off, then 4 h by command: one liquid, no layers, its solids about 2 umol of the
+    hydroxide;
+  - the same through the screen's own gestures at 600x for 16 h: no layers, no bands.
+
+  Two miscible solutions once mixed do not come apart: that would lower the entropy (§18 T2). What the user saw is
+  asked about. That a stirrer merges the column in its first step is a simplification. A stirrer at 10 mW
+  dissipated, with a mixing efficiency of about 0.2, works the 0.7 mJ the two layers' stratification holds in
+  about half a second, so the first step is close. It is in Open.
+- **The prism and grating showed the lab's white wall and grid.** The cause is the scene's revisions. Each scene
+  counted them from 0, and the Godot host uploads a table only when its revision changes. The prism's wall came
+  with revision 1, the lab's had been 1, so the host kept the lab's wall. Every revision is now a number no scene
+  has had (`next_revision`, process-wide). Test: lab, prism, lab, every table's revision new each time, the prism's
+  wall dark and the lab's light; it fails without the fix (1 = 1). On the GPU, `data/plays/prism.json` shows the
+  dark room with the slit's spectrum through the prism.
+
 ## Open
+
+- **Stirring mixes a column whole in one step.** It should be an entrainment limited by the stirrer's power and
+  the stratification's potential energy (mixing efficiency about 0.2, Osborn 1980). For the layers bench this is
+  about half a second, so the step is close, but a short stir should leave a partly mixed column.
 
 - **A gradient's other causes** (the user's "other considerations"):
   - entrainment where a pour lands (a gentle pour lays nothing at its boundary but what it pours);

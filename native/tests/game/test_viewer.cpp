@@ -526,7 +526,7 @@ TEST_CASE("viewer: a new picture is a new colour of the same screen; the same pi
 	CHECK(scene.images_revision == images);
 	CHECK(scene.table == table);
 	lab::optics_compose(scene, room(), { screen_of(b, 500.0f, 300.0f, 208.0f, 116.0f) });
-	CHECK(scene.images_revision == images + 1);
+	CHECK(scene.images_revision > images);
 	namespace L = lab::optics_layout;
 	const size_t ids = static_cast<size_t>(L::HEADER_VECS + L::IDS) * 4;
 	CHECK(scene.table[ids] == table[ids]); // the same thing: its history may be kept where its colour barely moved

@@ -37,6 +37,11 @@
   - the experiment `layers`, two liquids layered (green over blue);
   - the prism and the grating in the list (a catalogue entry may name a scene);
   - the list in two columns past eight.
+- From the user's first test:
+  - the layers bench has a beaker of the blue, a bottle of the green and an empty beaker;
+  - the pour menu's "pour gently" pours as a trickle;
+  - a scene's revisions are unique across scenes, so the prism shows its dark room, not the lab's wall that was
+    left on the GPU.
 - Water's properties by temperature are the core's (`solutions.json`'s `solvent`), boiling's bubbles' too.
 
 ## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")

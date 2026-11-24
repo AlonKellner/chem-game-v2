@@ -170,3 +170,49 @@ TEST_CASE("column: on the screen a layered vessel is a band of each layer's colo
 	CHECK(lab::check_O2(scene, x, low) == "");
 	CHECK(lab::check_O2(scene, x, high) == "");
 }
+
+TEST_CASE("column: the layered bench has vessels to layer by hand: the green poured gently onto the blue lies on it (Stage 47)") {
+	// the user's test: the experiment had no second vessel to pour into
+	auto l = open(read("data/benches/layers.json"));
+	CHECK(item(*l, "blue").layers.empty());
+	CHECK(mol_in(item(*l, "blue"), "copper_sulfate_aq") > 0.11);
+	CHECK(mol_in(item(*l, "green"), "nickel_sulfate_aq") > 0.15);
+	CHECK(item(*l, "empty").contents.size() > 0); // (its air)
+	ok(*l, R"({"do": "pour", "from": "green", "to": "blue", "ml": 40, "gentle": true})");
+	const lab::ItemView v = item(*l, "blue");
+	REQUIRE(v.layers.size() >= 2);
+	CHECK(mol_in(v.layers.front(), "nickel_sulfate_aq") > 0.02);
+	CHECK(mol_in(v.layers.front(), "copper_sulfate_aq") < 1e-4);
+	ok(*l, R"({"do": "pour", "from": "green", "to": "empty", "ml": 40})");
+	CHECK(item(*l, "empty").liquid_ml > 30.0);
+}
+
+TEST_CASE("column: on the screen the pour menu's \"pour gently\" lays the green on the blue, its \"pour\" stirs it in (Stage 47)") {
+	for (const bool gently : { true, false }) {
+		std::string why;
+		std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/layers.json"), why);
+		REQUIRE_MESSAGE(ui != nullptr, why);
+		ui->frame(1.0 / 60);
+		const auto press = [&](const std::string &what, int mods) {
+			float x = 0, y = 0;
+			REQUIRE_MESSAGE(ui->locate(what, x, y), "not on the screen: " << what);
+			ui->pointer(x, y, false, mods);
+			ui->pointer(x, y, true, mods);
+			ui->pointer(x, y, false, mods);
+			ui->frame(1.0 / 60);
+		};
+		press("item:green", 0); // picked up
+		press("item:blue", lab::Ui::ModRight); // onto the blue: the pour menu
+		press("panel:slider@0.2", 0);
+		press(gently ? "panel:gentle" : "panel:pour", 0);
+		const lab::ItemView v = item(ui->lab(), "blue");
+		if (gently) {
+			REQUIRE(v.layers.size() >= 2);
+			CHECK(mol_in(v.layers.front(), "nickel_sulfate_aq") > 0.02);
+			CHECK(mol_in(v.layers.front(), "copper_sulfate_aq") < 1e-4);
+		} else {
+			CHECK(v.layers.empty());
+			CHECK(mol_in(v, "nickel_sulfate_aq") > 0.02);
+		}
+	}
+}

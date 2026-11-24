@@ -10,6 +10,7 @@
 #include "lab/optics_trace.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <array>
 #include <cstdlib>
 #include <cmath>
@@ -20,6 +21,14 @@
 namespace lab {
 
 namespace {
+
+// A revision names what it is of across every scene (Stage 47): a host that shows one scene and then another (the
+// lab, then the prism) uploads what changed by its revision, and two scenes' counts from 0 would name different
+// tables alike.
+uint64_t next_revision() {
+	static std::atomic<uint64_t> last{ 0 };
+	return ++last;
+}
 
 using namespace optics_layout;
 constexpr double FIRST_NM_D = chem::optics::FIRST_NM;
@@ -852,7 +861,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			scene.images_key = key;
-			++scene.images_revision;
+			scene.images_revision = next_revision();
 		}
 		// The sensor displays' blocks (Stage 46), written whenever anything in them changes: where their frames are,
 		// their settings, and a tag of what lies under each frame (a pixel of the display follows it)
@@ -959,7 +968,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		scene.relay_pool = pool;
 		if (changed) {
-			++scene.images_revision;
+			scene.images_revision = next_revision();
 		}
 	}
 
@@ -1007,7 +1016,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		scene.lights_kelvin = room.kelvin;
-		++scene.revision;
+		scene.revision = next_revision();
 	}
 	// the wall's table (GAME_SPEC §12.3): made again only when what is drawn on it changes
 	if (scene.wall_key != wall_key || scene.wall.empty()) {
@@ -1212,7 +1221,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		scene.table = std::move(t);
 		scene.rows = std::move(rows);
 		scene.lines = std::move(lines);
-		++scene.revision;
+		scene.revision = next_revision();
 	}
 	optics_shapes(scene);
 }
@@ -1371,7 +1380,7 @@ void optics_shapes(OpticsScene &scene) {
 			scene.shapes[i] = static_cast<float>(out[i]);
 		}
 		scene.shapes_exact = std::move(out);
-		++scene.shapes_revision;
+		scene.shapes_revision = next_revision();
 	}
 }
 
@@ -1522,7 +1531,7 @@ void optics_wall(OpticsScene &scene, const OpticsRoom &room) {
 			cell[2] = static_cast<float>(integral - coarse);
 		}
 	}
-	++scene.wall_revision;
+	scene.wall_revision = next_revision();
 }
 
 } // namespace lab

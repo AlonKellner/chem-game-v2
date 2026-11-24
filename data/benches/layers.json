@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "Two liquids layered (GAME_SPEC §6, §13.7, Stage 47): a 250 mL beaker of green nickel sulfate solution (0.8 mol/kg, 1.12 g/cm3) over blue copper sulfate solution (1.4 mol/kg, 1.22 g/cm3), 80 g of water in each; the lab's burner in the cabinet. The denser stays under the lighter; across their boundary each diffuses into the other, a gradient a few millimetres wide in a day.",
+	"note": "Two liquids layered (GAME_SPEC §6, §13.7, Stage 47): a 250 mL beaker of green nickel sulfate solution (0.8 mol/kg, 1.12 g/cm3) over blue copper sulfate solution (1.4 mol/kg, 1.22 g/cm3), 80 g of water in each. Beside it, to layer by hand: a beaker of the blue alone, a bottle of the green (a gentle pour from it lays the green on the blue; a fast one stirs it in) and an empty beaker; the lab's burner in the cabinet. The denser stays under the lighter; across their boundary each diffuses into the other, a gradient a few millimetres wide in a day.",
 	"grid": [
 		28,
 		15
@@ -39,6 +39,61 @@
 						"mol": 0.112
 					}
 				}
+			]
+		},
+		{
+			"id": "blue",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				17,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 80.0
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.112
+				}
+			}
+		},
+		{
+			"id": "green",
+			"kind": "vessel",
+			"volume_ml": 500,
+			"wall": "glass",
+			"glassware": "bottle",
+			"wall_g": 250,
+			"loss": 0.8,
+			"at": [
+				6,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 200.0
+				},
+				"nickel_sulfate_aq": {
+					"mol": 0.16
+				}
+			}
+		},
+		{
+			"id": "empty",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				21,
+				7
 			]
 		},
 		{
