@@ -34,8 +34,16 @@ public:
 	// the tutorial over it (a "chem-tutorial/1" file); empty for none
 	void set_tutorial_path(const godot::String &path);
 	godot::String get_tutorial_path() const;
-	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps]
+	// the experiments it lists (a "chem-experiments/1" file, its paths from its own folder; GAME_SPEC §13.7); empty for none
+	void set_experiments_path(const godot::String &path);
+	godot::String get_experiments_path() const;
+	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps, strict (1) or free (0)]
 	godot::PackedInt32Array tutorial() const;
+	// strict or free (§13.2, Stage 41), as the card's switch sets it
+	void set_strict(bool strict);
+	// the experiment shown ("" for none of the catalogue's), and one opened by its id, as a click on it does
+	godot::String experiment() const;
+	bool choose(const godot::String &id);
 	// A key, as the engine's would be (GAME_SPEC §13.3): code 0 text (by its code point), 1 backspace, 2 enter, 3 escape.
 	void key(int code, int codepoint);
 	// The signal parts (§13.3): each {id, kind, out, ringing, left_s}; and whether the clock is paused.
@@ -93,6 +101,8 @@ protected:
 private:
 	godot::String bench_path_ = "res://data/benches/lab.json";
 	godot::String tutorial_path_ = "res://data/tutorials/demo.json";
+	godot::String experiments_path_ = "res://data/experiments.json";
+	godot::CharString read_; // the last file the catalogue's reader gave (cg_read_file's text is borrowed)
 	void paint(godot::CanvasItem *on, bool above);
 	void paint_over(); // the overlay's draw signal
 	void optics_frame(); // on the render thread

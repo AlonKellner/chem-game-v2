@@ -288,9 +288,27 @@ typedef struct cg_tutorial {
 	int32_t state; /* CG_TUTORIAL_* */
 	int32_t step; /* the current step, from 0; equal to steps once all are passed */
 	int32_t steps;
+	int32_t strict; /* Stage 41: 1 strict, 0 free (the screen's mode, with or without a tutorial); written when size covers it */
 } cg_tutorial;
 
 CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
+
+/* Strict (1, as opened) or free (0) (GAME_SPEC §13.2, Stage 41), as the tutorial card's switch sets it:
+ * strict, a running tutorial takes only its step's gestures and its clock waits for them; free, it only
+ * points at them. The screen's own: it stays through a reset and another experiment. */
+CG_API void cg_ui_set_strict(cg_ui *ui, int32_t strict);
+
+/* The experiments (GAME_SPEC §13.7, Stage 41): a chem-experiments/1 catalogue (data/experiments.json), each
+ * entry's bench and tutorial (null for none) inlined or a path, read by `read`: the file's text, borrowed
+ * until the next call of it, or NULL for one it cannot read (`read` may be NULL when all are inlined). Each
+ * is opened at once; CG_ERR_INVALID_ARGUMENT, with the reason in cg_last_error, for one that cannot be, and
+ * nothing is taken. The top bar's "experiments" lists them. */
+typedef const char *(*cg_read_file)(void *user, const char *path);
+CG_API cg_status cg_ui_experiments(cg_ui *ui, const char *catalogue_json, cg_read_file read, void *user);
+/* Opens the experiment of this id, as a click on it in the list does. */
+CG_API cg_status cg_ui_choose(cg_ui *ui, const char *id);
+/* The id of the experiment shown, "" for none of the catalogue's; borrowed until the next call on this ui. */
+CG_API const char *cg_ui_experiment(cg_ui *ui);
 
 /* A key for the screen's focused field (GAME_SPEC §13.3): CG_KEY_TEXT with
  * the character's code point, or backspace, enter, escape. */

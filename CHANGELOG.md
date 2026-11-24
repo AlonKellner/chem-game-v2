@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.41.0 (2026-11-24, Stage 41; signed off by the user: "Works perfectly, approved, merge and proceed")
+
+- §13.2 (Stage 41, `docs/TDD_41_EXPERIMENTS.md`): **a tutorial is strict or free**, by a switch on its card
+  (strict as the screen opens, the player's at any time). Free, it only points: every gesture and the clock
+  are the player's, while steps pass and runs fail as when strict. A tutorial's results may show any
+  quantity's start, least, most and value now.
+- §13.7 (new): **the experiments**, a catalogue (`data/experiments.json`) listed by the top bar's
+  "experiments": boiling under a vacuum (pressure), hot and cold dissolving (heat given out and taken in),
+  what speeds a reaction (stirring against warmth, with a thermostat the player makes); the demo; the lab
+  with no steps. `chem_tool study solution_heat`. The roadmap of what comes next:
+  `docs/EXPERIMENTS_ROADMAP.md`.
+- §14: `cg_ui_set_strict`, `cg_tutorial.strict`, `cg_ui_experiments`, `cg_ui_choose`, `cg_ui_experiment`.
+
 ## 0.40.0 (2026-11-24, Stage 40; signed off by the user: "Approved, proceed")
 
 - §18 (Stage 40, `docs/TDD_40_GATES.md`): O2 is checked at each nanometre from 380 to 780, the spectra's own

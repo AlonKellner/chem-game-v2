@@ -10,6 +10,8 @@
 
 #include <cmath>
 #include <cstddef>
+#include <functional>
+#include <optional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -550,14 +552,63 @@ cg_status cg_ui_tutor(cg_ui *ui, const char *tutorial_json) {
 }
 
 cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out) {
-	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_tutorial)) {
+	// a caller built before Stage 41 has no `strict`: its size ends at `steps`
+	if (ui == nullptr || out == nullptr || out->size < offsetof(cg_tutorial, strict)) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_tutorial: null argument, or the size is not set");
 	}
 	const lab::Tutorial *t = ui->ui->tutorial();
 	out->state = t != nullptr ? static_cast<int32_t>(t->view().state) : CG_TUTORIAL_NONE;
 	out->step = t != nullptr ? t->view().step : 0;
 	out->steps = t != nullptr ? t->view().steps : 0;
+	if (out->size >= offsetof(cg_tutorial, strict) + sizeof out->strict) {
+		out->strict = ui->ui->strict() ? 1 : 0;
+	}
 	return CG_OK;
+}
+
+void cg_ui_set_strict(cg_ui *ui, int32_t strict) {
+	if (ui != nullptr) {
+		ui->ui->set_strict(strict != 0);
+	}
+}
+
+cg_status cg_ui_experiments(cg_ui *ui, const char *catalogue_json, cg_read_file read, void *user) {
+	if (ui == nullptr || catalogue_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_experiments: null argument");
+	}
+	try {
+		std::string why;
+		std::function<std::optional<std::string>(const std::string &)> reader;
+		if (read != nullptr) {
+			reader = [&](const std::string &path) -> std::optional<std::string> {
+				const char *text = read(user, path.c_str());
+				return text != nullptr ? std::optional<std::string>(text) : std::nullopt;
+			};
+		}
+		return ui->ui->experiments(catalogue_json, why, reader) ? CG_OK : fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+cg_status cg_ui_choose(cg_ui *ui, const char *id) {
+	if (ui == nullptr || id == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_choose: null argument");
+	}
+	try {
+		std::string why;
+		return ui->ui->choose(id, why) ? CG_OK : fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
+const char *cg_ui_experiment(cg_ui *ui) {
+	if (ui == nullptr) {
+		return "";
+	}
+	ui->text = ui->ui->experiment();
+	return ui->text.c_str();
 }
 
 const char *cg_ui_message(cg_ui *ui) {

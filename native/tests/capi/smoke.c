@@ -1,6 +1,7 @@
 /* A C11 host compiles against chem_api.h and links the shared library (Stage 0). */
 #include "chem_api.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -197,6 +198,37 @@ int main(void) {
 	}
 	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.state != CG_TUTORIAL_COMPLETE || tutorial.step != 1 || tutorial.steps != 1) {
 		fprintf(stderr, "the one-step tutorial, already done, is not complete\n");
+		return 1;
+	}
+	/* Stage 41: strict as opened, free when set; a caller built before `strict` is still answered */
+	if (tutorial.strict != 1) {
+		fprintf(stderr, "the screen did not open strict\n");
+		return 1;
+	}
+	cg_ui_set_strict(ui, 0);
+	tutorial.strict = 7;
+	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.strict != 0) {
+		fprintf(stderr, "the screen was not made free\n");
+		return 1;
+	}
+	tutorial.size = (uint32_t)offsetof(cg_tutorial, strict);
+	tutorial.strict = 7;
+	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.strict != 7 || tutorial.steps != 1) {
+		fprintf(stderr, "a cg_tutorial without `strict` was refused, or written past its size\n");
+		return 1;
+	}
+	/* Stage 41: the experiments: a catalogue of one, the bench as opened and no tutorial */
+	if (cg_ui_experiments(ui, "{\"format\": \"chem-experiments/1\", \"experiments\": [{\"id\": \"cup\", \"title\": \"a cup\", \"tutorial\": null, \"bench\": "
+							  "{\"format\": \"chem-bench/1\", \"room\": {\"celsius\": 20}, \"grid\": [4, 1], \"items\": [{\"id\": \"cup\", \"at\": [1, 0], \"kind\": \"vessel\", "
+							  "\"volume_ml\": 100, \"wall\": \"glass\", \"wall_g\": 50, \"contents\": {\"water\": {\"g\": 20}}}]}}]}", NULL, NULL) != CG_OK ||
+			cg_ui_experiments(ui, "{}", NULL, NULL) != CG_ERR_INVALID_ARGUMENT || cg_ui_choose(ui, "kettle") != CG_ERR_INVALID_ARGUMENT || cg_ui_choose(ui, "cup") != CG_OK ||
+			strcmp(cg_ui_experiment(ui), "cup") != 0) {
+		fprintf(stderr, "the experiments: %s\n", cg_last_error());
+		return 1;
+	}
+	tutorial.size = sizeof tutorial;
+	if (cg_ui_tutorial(ui, &tutorial) != CG_OK || tutorial.state != CG_TUTORIAL_NONE || tutorial.strict != 0) {
+		fprintf(stderr, "the experiment chosen has a tutorial, or the mode did not stay\n");
 		return 1;
 	}
 	cg_ui_close(ui);

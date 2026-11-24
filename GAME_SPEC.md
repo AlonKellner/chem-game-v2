@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.40.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.41.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1682,13 +1682,23 @@ gestures, and a run with a tutorial is the same lab as one without.
   `wait` when the lab is waited on for it rather than a gesture; every check of a step that asks
   for no gesture is waited on. One that names an item the bench
   does not have, or a species the tables do not, is refused when the tutorial is opened.
-- **One step at a time.** While a tutorial runs, the screen takes only the current step's
+- **Strict or free** (Stage 41; asked for by the user, 2026-11-24). A switch on the card,
+  "strict", on as the screen opens, is the player's at any time, like the clock: strict, the
+  tutorial holds the player to its steps, as the next two points say; free, it only guides. Free,
+  the card, its checks and the pulsing outline stay, and steps pass and runs fail exactly as when
+  strict (the state decides), but every gesture is taken and the clock is the player's: it runs
+  whether a step asks for a gesture or waits on the lab, still a second at a time so a step passes
+  in the second it holds. Switched back to strict mid-run, the next gesture is held to the step
+  again at once; a lab that went off the steps meanwhile may leave a step its own gestures cannot
+  pass, and reset starts it again. The mode is the screen's: it stays through a reset and another
+  experiment (§13.7), and is not in the lab's save or digest (the tutorial is not).
+- **One step at a time** (strict). While a tutorial runs, the screen takes only the current step's
   gestures: a drag of the item it names, let go where it goes (onto the item it names, into a
   free square for a square, into the outbox or the cabinet); a click on the button, valve or
   slider it names. Anything else is refused, with what the step asks for, and changes nothing.
   While the step waits on the lab, no gesture is taken. The clock's buttons and reset are always
   the player's. Once the run is complete or has failed, the screen is the player's again.
-- **The clock waits for the player.** While the step asks for a gesture, the lab's time does not
+- **The clock waits for the player** (strict). While the step asks for a gesture, the lab's time does not
   pass; it runs only while every open check is waited on. The screen then advances the lab a
   second at a time and stops in the second the wait ends, at any speed: a player is never too
   slow for the lab, and a 600x clock cannot boil a flask dry while the player reaches for the
@@ -1700,7 +1710,10 @@ gestures, and a run with a tutorial is the same lab as one without.
   holds ends the run, as does an invariant stopping the lab. A failed run stays failed until the
   screen's reset, which starts the lab and the tutorial again.
 - **Completing.** Once every step is passed, its goal is checked: if every goal check holds the
-  tutorial is complete, and it reports what was made, measured from the state; if one does not,
+  tutorial is complete, and it reports what was made, measured from the state (a species' grams,
+  purity, share of the gas, crystals; or, Stage 41, any quantity of §13.3 as it was when the run
+  began, its least and its most while it ran, read each time the tutorial follows the lab, and
+  now); if one does not,
   the run has failed, and the card says which.
 - **On the screen** the card stands above the readout: the part, the step's number and a progress
   bar, the title, what to do and why, and each check with a box, ticked when it holds, with the
@@ -1899,7 +1912,7 @@ so the sessions' records are unchanged.
 
     It selects the watched item, and names the chain in the message: "alarm1 rang: monitor1,
     flask: H2O(l) (g) below 10.000 g (now 9.996 g)". Playing on answers it.
-- **A tutorial** restricts every gesture of the signals to its step's own:
+- **A strict tutorial** (§13.2) restricts every gesture of the signals to its step's own:
   - the drags out of the drawer and from ports;
   - every button of the editor, its cancel and Escape included, so a part is never left half set;
   - the keys: text is taken only while it is still the start of what the step asks to type.
@@ -2118,6 +2131,48 @@ and each reaction's account of itself (`Lab::debug`).
 **Demo subset:** all of the above. Signed off by the user on 2026-11-18 (Stage 18); vessels' pressure
 and pours, and signal parts, Stage 28.
 
+### 13.7 Experiments
+
+*(Stage 41; asked for by the user, 2026-11-24: "more experiments, similar to the current tutorial
+... explore all of the features which would be required for step by step chemical principles
+lessons".)* An experiment is a bench and a tutorial over it (or none), in steps like the demo's,
+each about one property of matter; not yet a lesson in a principle, but the ground lessons will
+stand on.
+
+- **The catalogue** (`data/experiments.json`, `chem-experiments/1`): each experiment's id, title,
+  a summary, its bench and its tutorial (`null` for none), as paths from the catalogue's folder. A
+  host reads it and hands the screen its text with a reader of the paths (`Ui::experiments`,
+  `cg_ui_experiments`); every experiment is opened then, and a catalogue with one that cannot be
+  is refused whole.
+- **On the screen.** The top bar's "experiments", over the cabinet, opens the list over the bench:
+  each experiment's title and summary, the one shown marked. One clicked opens its bench and its
+  tutorial in place of what is open; reset then starts that one again. The list is the player's
+  under a tutorial too, strict or free, like the clock; with something in hand, a press is where it
+  goes, not the list's. The one shown is the entry whose bench and tutorial are what is open.
+- **The experiments** (each played through the screen to its end, strict, strict at a person's
+  pace, and free: `native/tests/game/test_experiments.cpp`):
+  - `vacuum`, *boiling under a vacuum* (§6): steam drives a flask's air out; stoppered at once and
+    cooled, the steam condenses and the flask falls below 10 kPa (a monitor on its pressure); a
+    gentle flame boils it at 50 °C; the full flame pops the stopper at 138 kPa. Fails: the stopper
+    in with air still in the flask.
+  - `solution_heat`, *hot and cold dissolving* (§4.2): the same 0.050 mol of copper sulfate in two
+    beakers of 50 g of water, two monitors on their temperatures; the white anhydrous salt warms
+    its water by 10.6 K, the blue pentahydrate cools its own by 1.7 K (adiabatic, 11.4 and 2.2 K:
+    `chem_tool study solution_heat`, within 0.1 K of the closed form). The heats come from the
+    tables alone: −64.6 and +14.6 kJ/mol at 25 °C.
+  - `rate`, *what speeds a reaction* (§7): CuO in 1 M acid in three beakers, still, stirred, and
+    held near 60 °C by a thermostat the player makes (a monitor below 60 °C rigged to open the
+    burner's valve to 30 % and close it above); the warm oxide is gone while the others have lost
+    under a tenth, the stirred no more than the still (the surface sets the pace).
+  - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
+- **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
+  acids, bases and pH; precipitation and gas; boiling, bubbling and agitation; freezing and
+  melting; pressure and temperature; humidity and saturation; and the lessons' own mechanics (a
+  measurement log, a prediction, a plot).
+
+**Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).
+**Status:** Stage 41.
+
 ## 14. C API and hosts
 
 - `native/capi/include/chem_api.h` is the game for any host. Rules: every struct starts with its
@@ -2141,7 +2196,9 @@ and pours, and signal parts, Stage 28.
 - **The screen through the C API:** `cg_ui_open`, `cg_ui_pointer`, `cg_ui_frame`, `cg_ui_draw`
   (a draw list of rectangles, lines, polygons, circles and text, as flat arrays), `cg_ui_message`,
   `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts),
-  `cg_ui_tutor` and `cg_ui_tutorial` (a tutorial over the screen, §13.2, and how far it is).
+  `cg_ui_tutor` and `cg_ui_tutorial` (a tutorial over the screen, §13.2, and how far it is, and
+  whether the screen is strict), `cg_ui_set_strict`, `cg_ui_experiments`, `cg_ui_choose` and
+  `cg_ui_experiment` (the experiments, §13.7).
 - **The optical pass through the C API:** `cg_ui_optics` (the scene of §12.3: the table, each
   body's spectra, the lines, the room light's energy table, with one revision),
   `cg_ui_optics_compare` (a host's settled picture of the pass against the truth: `O4`).

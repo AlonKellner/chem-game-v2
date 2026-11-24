@@ -1,0 +1,46 @@
+{
+	"format": "chem-bench/2",
+	"note": "The vacuum experiment's bench (GAME_SPEC §6, §13.7, Stage 41): a flask of 100 g of water on the bench, a stopper and a burner in the cabinet, as data/benches/pressure.json has them.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "flask",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "conical_flask",
+			"wall_g": 100,
+			"loss": 0.9,
+			"at": [
+				11,
+				6
+			],
+			"contents": {
+				"water": {
+					"g": 100
+				}
+			}
+		},
+		{
+			"id": "stopper",
+			"kind": "stopper",
+			"wall": "latex",
+			"wall_g": 8,
+			"hold_n": 30,
+			"loss": 0.1
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

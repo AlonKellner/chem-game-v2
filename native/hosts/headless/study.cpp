@@ -474,6 +474,103 @@ int crystals() {
 	return genesis == end ? 0 : 1;
 }
 
+// Stage 41: the heat of solution (GAME_SPEC §4.2, §13.7). A salt tipped into a
+// beaker of water and stirred: the anhydrous salt warms it, the pentahydrate
+// cools it. Nothing is added by hand: the enthalpies of formation decide, and
+// the closed form is the beaker's heat capacity taking the heat of solution.
+int solution_heat() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const auto hf = [&](SpeciesId s) { return table.species(s).hf; };
+	const struct {
+		const char *name;
+		SpeciesId salt;
+		int waters;
+		double grams;
+	} runs[] = { { "anhydrous CuSO4", builtin::copper_sulfate, 0, 8.0 }, { "CuSO4.5H2O", builtin::copper_sulfate_pentahydrate, 5, 12.5 } };
+	std::printf("a salt tipped into 50 g of water in an 80 g glass beaker at 20 C, stirred (x3); adiabatic, then losing 0.5 W/K to a 20 C room\n\n");
+	int status = 0;
+	for (const auto &run : runs) {
+		const double n = run.grams / (static_cast<double>(table.molar_mass_ug(run.salt)) * 1e-6);
+		const auto cp = [&](SpeciesId s) { return table.species(s).cp; };
+		const double dissolve = hf(builtin::copper_sulfate_aq) + run.waters * hf(builtin::water) - hf(run.salt); // J/mol, at 25 C
+		// at 20 C: the heat capacities are constant (§10), so the heat of solution moves by their change
+		const double at_20 = dissolve + (cp(builtin::copper_sulfate_aq) + run.waters * cp(builtin::water) - cp(run.salt)) * (293.15 - 298.15);
+		for (const double loss : { 0.0, 0.5 }) {
+			World::Builder b(table);
+			const CellId beaker = b.add_rigid_cell("beaker", 250e-6);
+			const CellId air = b.add_cell("air");
+			const CellId room = b.add_reservoir("room", 293.15);
+			b.add_edge(beaker, air, PHASES_GAS);
+			if (loss > 0.0) {
+				b.add_edge(beaker, room, PHASES_NONE, loss);
+			}
+			const double water = 50.0 / 18.015;
+			b.set_amount(beaker, builtin::water, amount_from_mol(water, ok)).set_amount(beaker, builtin::glass, amount_from_mol(80.0 / 60.083, ok));
+			b.set_amount(beaker, run.salt, amount_from_mol(n, ok)).set_particles(beaker, run.salt, 2000000);
+			const double gas = P_ATMOSPHERE * (250e-6 - water * table.species(builtin::water).molar_volume - n * table.species(run.salt).molar_volume) / (GAS_CONSTANT * 293.15);
+			b.set_amount(beaker, builtin::nitrogen, amount_from_mol(0.79 * gas, ok)).set_amount(beaker, builtin::oxygen, amount_from_mol(0.21 * gas, ok));
+			b.set_temperature(beaker, 293.15);
+			b.set_amount(air, builtin::nitrogen, amount_from_mol(790.0, ok)).set_amount(air, builtin::oxygen, amount_from_mol(210.0, ok));
+			b.set_temperature(air, 293.15);
+			b.set_mixing(beaker, 3.0);
+			std::string why;
+			auto world = b.build(&why);
+			if (!world) {
+				std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+				return 1;
+			}
+			Simulation sim(std::move(*world), shipped());
+			sim.set_checking(true);
+			const Totals genesis = totals(table, sim.world().snapshot());
+			std::printf("%s, %.4f mol (%.1f g); heat of solution from the tables %+.2f kJ/mol at 25 C, %+.2f at 20 C; %s\n", run.name, n, run.grams, dissolve * 1e-3, at_20 * 1e-3,
+					loss > 0.0 ? "losing heat to the room" : "adiabatic");
+			std::printf("%8s %9s %10s %14s %14s %14s\n", "time s", "beaker C", "salt g", "CuSO4 mol/kg", "closed form C", "other solids g");
+			double extreme = 20.0, half = 0.0, done = 0.0;
+			for (int step = 0; step <= 60 * 1800; ++step) {
+				const double c = celsius_of(sim.world(), beaker);
+				extreme = run.waters == 0 ? std::fmax(extreme, c) : std::fmin(extreme, c);
+				const double left = sim.world().amount(beaker, run.salt).mol() / n;
+				if (half == 0.0 && left <= 0.5) {
+					half = step * STEP_SECONDS;
+				}
+				if (done == 0.0 && left <= 0.01) {
+					done = step * STEP_SECONDS;
+				}
+				if (step % (60 * 60) == 0 && (step <= 60 * 600 || step % (60 * 300) == 0)) {
+					// the closed form: the heat the dissolved part took, over what the beaker holds now
+					const double dissolved = n - sim.world().amount(beaker, run.salt).mol();
+					const double capacity = thermal_state(table, sim.world().snapshot_cell(beaker)).heat_capacity;
+					double others = 0.0;
+					for (const SpeciesId s : { builtin::copper_sulfate, builtin::copper_sulfate_monohydrate, builtin::copper_sulfate_trihydrate,
+								 builtin::copper_sulfate_pentahydrate }) {
+						if (s != run.salt) {
+							others += sim.world().amount(beaker, s).mol() * static_cast<double>(table.molar_mass_ug(s)) * 1e-6;
+						}
+					}
+					std::printf("%8.0f %9.3f %10.4f %14.5f %14.3f %14.5f\n", step * STEP_SECONDS, c, left * run.grams, molality(sim.world(), beaker, builtin::copper_sulfate_aq),
+							20.0 - dissolved * at_20 / capacity, others);
+				}
+				sim.step();
+			}
+			const bool same = totals(table, sim.world().snapshot()) == genesis;
+			std::printf("%s %.3f C (%+.3f K); half dissolved at %.0f s, 99%% at %.0f s; totals %s\n", run.waters == 0 ? "warmest" : "coldest", extreme, extreme - 20.0, half,
+					done, same ? "unchanged" : "MOVED");
+			status |= same ? 0 : 1;
+			if (loss == 0.0) {
+				// adiabatic: all of it dissolved, the beaker is where the closed form puts it (within the little the
+				// steam and the air over the water take: 0.1 K)
+				const double capacity = thermal_state(table, sim.world().snapshot_cell(beaker)).heat_capacity;
+				const double closed = 20.0 - n * at_20 / capacity, off = celsius_of(sim.world(), beaker) - closed;
+				std::printf("closed form %.3f C: off by %+.3f K (%s)\n", closed, off, std::fabs(off) < 0.1 && done > 0.0 ? "within 0.1 K" : "MORE THAN 0.1 K, OR NOT ALL DISSOLVED");
+				status |= std::fabs(off) < 0.1 && done > 0.0 ? 0 : 1;
+			}
+			std::printf("\n");
+		}
+	}
+	return status;
+}
+
 } // namespace
 
 int spectrum_study(); // spectrum.cpp
@@ -516,6 +613,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "crystals") == 0) {
 		return crystals();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, spectrum, frames, tilt, vortex)\n", name);
+	if (std::strcmp(name, "solution_heat") == 0) {
+		return solution_heat();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

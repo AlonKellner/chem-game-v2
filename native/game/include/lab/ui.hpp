@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -84,6 +85,24 @@ public:
 	bool tutor(std::string_view tutorial_json, std::string &why);
 	// null without one
 	const Tutorial *tutorial() const;
+	// Strict (as opened, and the card's switch, tutorial:strict; GAME_SPEC §13.2, Stage 41): a running
+	// tutorial refuses every gesture its step does not ask for, and its clock waits while the step asks for
+	// one. Free: it only points at what the step asks for; every gesture is the player's, and so is the
+	// clock. Steps pass by the state either way, and a failure fails the run either way. The mode is the
+	// screen's: it stays through a reset and another experiment.
+	void set_strict(bool strict);
+	bool strict() const;
+	// The experiments (GAME_SPEC §13.7, Stage 41; `chem-experiments/1`): each an id, a title, a summary, its
+	// bench and its tutorial (null for none) inlined, all of them opened here and refused if one cannot be
+	// (with the reason). The top bar's "experiments" opens a list of them; one chosen opens its bench and its
+	// tutorial in place of what is open, and reset starts it again. The entry that is what is open now is
+	// marked as shown. A bench or a tutorial given as a path (the catalogue file's own, data/experiments.json)
+	// is read by `read` (none: refused); it gives the file's text, or nothing for one it cannot read.
+	bool experiments(std::string_view catalogue_json, std::string &why, const std::function<std::optional<std::string>(const std::string &path)> &read = {});
+	// opens the experiment of this id, as a click on it does; false, with the reason, for none such
+	bool choose(std::string_view id, std::string &why);
+	// the id of the experiment shown, "" for none of the catalogue's
+	std::string experiment() const;
 	// The item selected ("" for none): the last one chosen.
 	std::string selected() const;
 	// Everything selected, in the order it was chosen (§13.1).
@@ -102,6 +121,7 @@ public:
 	//   valve:<burner>@<0..1>   stir:<vessel>
 	//   panel:pour  panel:slider@<0..1>  panel:tip:<species>  panel:cancel
 	//   pause   speed:<1|10|60|600>   check   reset
+	//   tutorial:strict (the card's switch)   menu:experiments   experiment:<id> (while the list is open)
 	//   drawer:<timer|monitor|alarm>   port:<part>   choose:<wire|reset>
 	//   part:edit   part:reset   part:unwire:<to>   part:unrig:<item>:<control>
 	//   circuit:create (the drawer's, for the parts chosen)   part:open   part:give_back

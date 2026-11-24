@@ -230,6 +230,14 @@
 			"design": "scripts of the demo: waits, settings and checks"
 		},
 		{
+			"data": ["benches/{vacuum.json,solution_heat.json,rate.json}/**"],
+			"design": "the experiments' benches (Stage 41, GAME_SPEC §13.7): the lab's glassware, stopper and burner with the values data/benches/lab.json gives them (sourced there); where each stands; what each holds, chosen by the studies: vacuum, the pressure session's flask of water (chem_tool run data/sessions/pressure.json); solution_heat, the same 0.050 mol of copper sulfate as the anhydrous salt (8 g) and as the pentahydrate (12.5 g), under the solubility in 50 g of water (chem_tool study solution_heat); rate, 1.0 g of copper oxide in the demo's grains (2.5 million to 3.6 g) under 50 mL of 1 M sulfuric acid, the acid bottle's (chem_tool study dissolution)"
+		},
+		{
+			"data": ["tutorials/{vacuum.json,solution_heat.json,rate.json}/**"],
+			"design": "the experiments (Stage 41, GAME_SPEC §13.7): their steps' thresholds, read off each experiment played through (native/tests/game/test_experiments.cpp)"
+		},
+		{
 			"data": ["plays/cost.json/**"],
 			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display"
 		}

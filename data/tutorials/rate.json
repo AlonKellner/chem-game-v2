@@ -1,0 +1,91 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 41) on data/benches/rate.json: what speeds a reaction. Three beakers of the demo's reaction, CuO + H2SO4 -> CuSO4 + H2O: left still, stirred, and held near 60 C by a monitor rigged to the burner, a thermostat. Stirring does not hurry it (the oxide's surface sets the pace, not the acid's way to it: GAME_SPEC §7); warmth does, about thirty times at 60 C (Ea 69 kJ/mol).",
+	"title": "Experiment: what speeds a reaction",
+	"bench": "../benches/rate.json",
+	"steps": [
+		{
+			"part": "Three beakers",
+			"title": "Stir the middle one",
+			"text": "Each beaker holds 1 g of black copper oxide under 50 mL of sulfuric acid. Right-click the middle beaker to choose it, then click \"stir\" in the column on the right.",
+			"why": "CuO + H2SO4 -> CuSO4 + H2O: the same reaction as the demo's second stage, already running in all three. The left beaker is left as it is, to compare with.",
+			"checks": [{"text": "the middle beaker is stirred", "when": {"item": "stirred", "stirred": true}}],
+			"play": [{"click": "item:stirred"}, {"click": "stir:stirred"}]
+		},
+		{
+			"title": "A burner under the right one",
+			"text": "Pick up the burner in the cabinet, then click the right beaker.",
+			"checks": [{"text": "the burner is under the right beaker", "when": {"item": "burner", "under": "hot"}}],
+			"play": [{"drag": ["item:burner", "item:hot"]}]
+		},
+		{
+			"part": "A thermostat",
+			"title": "A monitor on the right beaker",
+			"text": "Drag a monitor out of the parts drawer onto a free square. Drag from its sensing port onto the right beaker. Click \"vessel\", then \"temperature\".",
+			"checks": [{"text": "a monitor reads the right beaker's temperature", "when": {"editor": {"editing": "monitor", "item": "hot", "what": "celsius"}}}],
+			"play": [{"drag": ["drawer:monitor", "square:1,1"]}, {"drag": ["sense:monitor1", "item:hot"]}, {"click": "edit:kind:vessel"}, {"click": "edit:quantity:celsius"}]
+		},
+		{
+			"title": "Below 60 C",
+			"text": "Click \"below\". Then click the value, type 60, and click \"set\".",
+			"why": "It signals while the beaker is colder than 60 C.",
+			"checks": [{"text": "it signals below 60 C", "when": {"part": {"kind": "monitor", "item": "hot", "what": "celsius", "compare": "below", "value_at_least": 59, "value_at_most": 61}}}],
+			"play": [{"click": "edit:compare:below"}, {"click": "edit:value:0"}, {"type": "60"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "Rig it to the burner",
+			"text": "Drag from the monitor's port, the dot on its right, onto the burner. The rig's settings open.",
+			"checks": [{"text": "a rig from the monitor to the burner's valve", "when": {"editor": {"editing": "rig", "item": "burner", "control": "valve"}}}],
+			"play": [{"drag": ["port:monitor1", "item:burner"]}]
+		},
+		{
+			"title": "On when cold, off when warm",
+			"text": "On the \"when on\" row, click the value and type 30. On the \"when off\" row, click its value and type 0. Click \"rig\".",
+			"why": "Below 60 C the valve opens to 30%; past it, it closes. A thermostat holds the beaker near 60 C, at any speed.",
+			"checks": [{"text": "the valve opens to 30% below 60 C and closes above", "when": {"rig": {"from": "monitor", "item": "burner", "control": "valve", "on_at_least": 0.29, "on_at_most": 0.31, "off_at_most": 0.001}}}],
+			"play": [{"click": "edit:on:value"}, {"type": "30"}, {"click": "edit:off:value"}, {"type": "0"}, {"click": "edit:set"}]
+		},
+		{
+			"title": "Light it",
+			"text": "Right-click the burner to choose it, then drag its valve to about 30% open.",
+			"why": "A rig sets the valve when its signal changes; until the beaker first reaches 60 C, the valve is yours.",
+			"checks": [
+				{"text": "the valve at least 20% open", "when": {"item": "burner", "valve_at_least": 0.2}},
+				{"text": "and at most 40%", "when": {"item": "burner", "valve_at_most": 0.4}}
+			],
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@0.3"}]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"60x\" at the top.",
+			"checks": [{"text": "time runs at least 60 times faster", "when": {"speed_at_least": 60}}],
+			"play": [{"click": "speed:60"}]
+		},
+		{
+			"part": "Compare",
+			"title": "Warm to 60 C",
+			"text": "Watch the right beaker warm, and the monitor's lamp go out at 60 C.",
+			"checks": [{"text": "the right beaker above 58 C", "when": {"item": "hot", "above_c": 58}}]
+		},
+		{
+			"title": "Until the warm oxide is gone",
+			"text": "Wait, and point at each beaker to read how much copper oxide is left in it.",
+			"why": "A reaction goes only as fast as its particles meet with energy enough. At 60 C far more of them have it: about thirty times as many as at 20 C, for this reaction. Stirring brings fresh acid to the grains, but here the acid already reaches them faster than they can use it: the grains' surface sets the pace, so stirring changes nearly nothing.",
+			"checks": [{"text": "less than 10 mg of copper oxide left in the right beaker", "when": {"item": "hot", "species": "copper_oxide", "below_g": 0.01}}]
+		}
+	],
+	"fails": [
+		{"text": "The right beaker got too hot: the acid would boil away. Press reset to start again.", "when": {"item": "hot", "above_c": 90}},
+		{"text": "The burner went under the wrong beaker: only the right one is to be warmed. Press reset to start again.",
+			"when": {"any": [{"item": "burner", "under": "still"}, {"item": "burner", "under": "stirred"}]}}
+	],
+	"goal": [
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "copper oxide left, still at 20 C", "item": "still", "species": "copper_oxide", "show": ["g"]},
+		{"label": "copper oxide left, stirred at 20 C", "item": "stirred", "species": "copper_oxide", "show": ["g"]},
+		{"label": "copper oxide left, near 60 C", "item": "hot", "species": "copper_oxide", "show": ["g"]},
+		{"label": "the right beaker's temperature", "quantity": {"item": "hot", "what": "celsius"}, "show": ["least", "most"]}
+	]
+}
