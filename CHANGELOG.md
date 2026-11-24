@@ -1,5 +1,20 @@
 # GAME_SPEC version history
 
+## 0.48.0 (2026-11-24, Stage 48; awaiting the user's sign-off)
+
+- §13 (Stage 48, `docs/TDD_48_CAMERA.md`): **a thermal camera**, an 8–14 µm instrument in the cabinet.
+  - Its frame is the size of its screen: over the screen (see-through), or fixed on the room.
+  - Its screen is the renderer's sensor display of the frame, with its scale, centre spot, emissivity, range and
+    the hottest and coldest marked, all the screen's own light.
+  - Its settings: palette, emissivity, reflected temperature, marks, range auto or locked, gain. The commands
+    `frame` and `thermal`, saved and not digested.
+  - `lab/thermal.hpp`: the palettes (`data/thermal.json`), the span and auto gain with hysteresis, the search for
+    the hottest and coldest a step at a time (O26).
+- §13.1: the frame taken up by its handle, live while carried, let go on the room or home over its screen, Escape
+  putting it back; the readout's controls and readings. **The cabinet scrolls** (the wheel over it, its bar), every
+  item in a box of one size, instruments off in it.
+- §18: O26. §20: the camera's simplifications.
+
 ## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")
 
 - §12.4 (Stage 46, `docs/TDD_46_LWIR.md`): **the long-wave range**, 8–14 µm, what a thermal camera sees, in the same
