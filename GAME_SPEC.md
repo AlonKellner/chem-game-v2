@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.38.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.39.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1800,6 +1800,15 @@ so the sessions' records are unchanged.
     `Kc (e + I / Ti)`, kept within 0 and 1; the integral `I` grows by the error times the step only
     while the level is not held at a limit it would pass (no wind-up). It starts at 0 when the
     controller is set or tuned.
+  - **The trial runs beside the lab** (Stage 39): its copies are made from the lab as it stands when
+    the trial starts, and run two seconds of their time (`TRIAL_PER_STEP`) at each of the lab's
+    steps, so no step costs more than two of its seconds on two copies (2.3 ms on the measuring
+    machine, where the whole trial in one step was 50 ms, and an hour's could be seconds). Until it
+    ends, a controller set or rigged is not tuned (its level 0, its state shown as "trying"); one
+    tuned before and tuned again keeps its gains until the trial's, then takes them with its level
+    carried over. A trial running is part of the lab's state: saved and loaded with its copies, in
+    the digest, the same however the steps are grouped (D1). A controller unset, sensing another
+    item, scrapped or put in the trash drops its trial.
   - A trial that finds nothing moves (no rig, or a control that changes nothing it senses) leaves it
     untuned, with the reason in a notice; it writes a notice when it is tuned, with its gains. Its
     rigs to a cap are tried as its valves are (Stage 28).
@@ -1807,7 +1816,7 @@ so the sessions' records are unchanged.
     it keeps what its item held at the trial: its contents' mass, its heat capacity, and which
     materials are there (a milligram or more). At each reading of the detectors (§13.4), where
     either has changed by a tenth, or a material has come or gone, and no pour into or out of the
-    item is running, it is tuned again on a copy of the lab as it stands now. Its level is carried
+    item is running, it is tuned again on copies of the lab as it stands now. Its level is carried
     over: its integral is set to give it, with the new gains, so the loop goes on with no bump. The
     trial's copies do not tune their own controllers again.
   - **Held at a limit** short of its target for a minute (full on and still below, or off and still
@@ -2373,6 +2382,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
   to 18 ms while it pours. `make pass-cost`'s play runs on at 600× (its mark `fast`): 8.3 ms a frame,
   the worst 13.4. At 1× the frames of the lab's steps while a vessel is stirred or poured into run to 18
   and 23 ms (open: `docs/TDD_36_SPEED.md`).
+- **Stage 39** (`docs/TDD_39_TRIAL.md`): a controller's trial runs beside the lab, two of its seconds a
+  step (2.3 ms); with the three monitors and a controller under the budget the worst frame is 4.9 ms
+  (54 ms with the trial in one step). The budget sizes its second piece from what the first step cost
+  (it ran eight at once: the stirred pour's 18 ms frames were eight of its 2.2 ms steps); that scene's
+  worst frame under the budget is 6.0 ms.
 
 ## 20. Declared simplifications of the demo
 

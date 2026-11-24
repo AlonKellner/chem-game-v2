@@ -115,12 +115,12 @@ sum of two frames is two periods of the display: the throughput is the display's
 - **The GPU's alternating frames at 1× while a stirred vessel turns** (above): unexplained. To find it: a
   GPU time for each pass (a way the Metal backend gives, or the slope method of TDD 20 with extra passes),
   the stir's frames with the lab paused, and with the vortex held still.
-- **A controller's trial** is 54 ms inside one step (two copies of the lab run up to an hour each). A
+- **A controller's trial** (done in Stage 39, `docs/TDD_39_TRIAL.md`: it runs beside the lab, two of its seconds a step) was 54 ms inside one step (two copies of the lab run up to an hour each). A
   frame in which a controller tunes again is that long at any speed. Ways: the trial's copies run beside
   the clock and their gains used from a fixed later step (deterministic: the copies start from the state of
   that step; the copies' own caches must be safe on another thread: `contents::full_tilt`'s map is static);
   or a shorter trial (it stops when the response is fitted).
-- **The stirred hand pour's single steps** reach 18 ms while it pours (the budget cannot split a step):
+- **The stirred hand pour's frames** (Stage 39: they were eight of its 2.2 ms steps run at once; with the budget's pieces sized from the first step, 6 ms at worst; its steps' cost left, `docs/TDD_39_TRIAL.md`) reach 18 ms while it pours (the budget cannot split a step):
   the vortex's share worked out again when the contents' signature moves (`set_stirring`'s `holds`), each
   a few searches of the liquid over a sediment that changes at every step. A table of the share by volume,
   as `plain_pour`'s, would make it a lookup.
