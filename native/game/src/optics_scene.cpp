@@ -1,5 +1,6 @@
 // The renderer's table, from the state (GAME_SPEC §12).
 #include "lab/optics_scene.hpp"
+#include "lab/bubbles.hpp"
 #include "lab/glassware.hpp"
 
 #include "chem/optics.hpp"
@@ -596,14 +597,15 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				put(at + MORE, 0, EXTINCTION_EFFICIENCY * held_up * cross_section_cm2 / v.liquid_ml);
 			}
 			// boiling's bubbles (Stage 45): steam's from the floor up to where they end, a reaction's gas's all the way
-			// up; each a haze, white. Quantised (steps of 3 % in extinction, a twentieth in the exponent, a hundredth
+			// up; each a haze, white, of their extinction times 1 - g (they scatter mostly forward). Quantised (steps of 3 % in extinction, a twentieth in the exponent, a hundredth
 			// of a millimetre in height), so a pixel keeps its history while a boil stands still (GAME_SPEC §12.2)
 			if (!body.flipped && (v.bubble_extinction > 0.0 || v.gas_extinction > 0.0)) {
 				const auto steps = [](double x) { return x > 0.0 ? std::exp(std::round(std::log(x) / 0.03) * 0.03) : 0.0; };
-				put(at + 6, 0, steps(v.bubble_extinction));
+				const double back = 1.0 - bubbles::asymmetry();
+				put(at + 6, 0, steps(v.bubble_extinction * back));
 				put(at + 6, 1, std::round(v.bubbles_end_cm * 1000.0) / 1000.0);
 				put(at + 6, 2, std::round(v.bubble_exponent * 20.0) / 20.0);
-				put(at + 6, 3, steps(v.gas_extinction));
+				put(at + 6, 3, steps(v.gas_extinction * back));
 			}
 			if (at_rest > 0.0) {
 				// at rest: a heap at its angle of repose, a cone until it reaches the wall

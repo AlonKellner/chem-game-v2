@@ -24,6 +24,10 @@ struct Water {
 };
 Water water_at(double celsius);
 
+// bubbles' asymmetry parameter in water, g (data/boiling.json's light): what they scatter goes mostly forward,
+// so the haze they make of the room's light is their extinction times 1 - g
+double asymmetry();
+
 // water's surface tension against its vapour, N/m (Lienhard eq. 9.2a, IAPWS)
 double surface_tension(double kelvin);
 

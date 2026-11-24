@@ -353,3 +353,35 @@ TEST_CASE("experiment fizz: followed with its own gestures, free, it completes (
 	pupil::follow_through(p, 600);
 	completed(p);
 }
+
+// ---- boiling's bubbles (Stage 45)
+
+TEST_CASE("experiment boiling: followed with its own gestures, strict, the bubbles climb from the floor and reach the surface at the boil (Stage 45)") {
+	Pupil p("data/benches/boiling.json", "data/tutorials/boiling.json");
+	CHECK(pupil::follow_through(p, 1800) > 8);
+	completed(p);
+	// a little longer, to its boiling point: the bubbles reach the surface
+	std::string why;
+	for (int s = 0; s < 600 && !p.item("beaker").bubbles_surface; ++s) {
+		REQUIRE_MESSAGE(p.ui->lab().command(R"({"do": "wait", "seconds": 1})", why), why);
+	}
+	p.click("item:beaker"); // chosen: its readout
+	p.frames(2);
+	const lab::ItemView beaker = p.item("beaker");
+	CHECK(beaker.boiling);
+	CHECK(beaker.bubbles_surface);
+	CHECK(beaker.bubbles_cm == doctest::Approx(beaker.depth_cm));
+	CHECK(p.drawn("boiling: bubbles")); // the readout
+}
+
+TEST_CASE("experiment boiling: played as a person plays it, strict, it completes (Stage 45)") {
+	Pupil p("data/benches/boiling.json", "data/tutorials/boiling.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment boiling: followed with its own gestures, free, it completes (Stage 45)") {
+	Pupil p("data/benches/boiling.json", "data/tutorials/boiling.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}

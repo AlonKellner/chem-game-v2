@@ -59,6 +59,13 @@
 			"tutorial": "tutorials/fizz.json"
 		},
 		{
+			"id": "boiling",
+			"title": "Bubbles of a boil",
+			"summary": "Boiling: a beaker heated from below makes bubbles at its floor long before it boils; they vanish in the cooler water, climb as it warms, and reach the surface at the boil.",
+			"bench": "benches/boiling.json",
+			"tutorial": "tutorials/boiling.json"
+		},
+		{
 			"id": "free_lab",
 			"title": "The lab, free",
 			"summary": "The demo's bench with no steps: everything in the cabinet, yours to try.",

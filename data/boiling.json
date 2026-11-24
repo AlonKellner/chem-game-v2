@@ -1,6 +1,6 @@
 {
 	"format": "chem-boiling/1",
-	"note": "Boiling's bubbles (GAME_SPEC §11, Stage 45): what a vessel's heated floor does, derived each step from the heat its floor takes, its bulk's temperature and its liquid's depth; not state. water: saturated liquid water's properties by temperature (Lienhard, A Heat Transfer Textbook 6.00, Table A.3: rho kg/m3, cp J/kg K, k W/m K, alpha and nu m2/s, Pr, beta 1/K), read between rows, held beyond the ends. surface_tension: water's against its vapour, Lienhard's eq. 9.2a (IAPWS): b (mN/m) (1 - T/Tc)^mu (1 + b2 (1 - T/Tc)). surfaces: a floor's cavities (its largest, um: where a nucleus holds once the superheat's critical radius 2 sigma / (p_sat - p) is under it), the contact angle that sizes a departing bubble (Fritz, degrees) and Rohsenow's C_sf with its Prandtl exponent s. Sources: docs/DATA_SOURCES.md.",
+	"note": "Boiling's bubbles (GAME_SPEC §11, Stage 45): what a vessel's heated floor does, derived each step from the heat its floor takes, its bulk's temperature and its liquid's depth; not state. water: saturated liquid water's properties by temperature (Lienhard, A Heat Transfer Textbook 6.00, Table A.3: rho kg/m3, cp J/kg K, k W/m K, alpha and nu m2/s, Pr, beta 1/K), read between rows, held beyond the ends. surface_tension: water's against its vapour, Lienhard's eq. 9.2a (IAPWS): b (mN/m) (1 - T/Tc)^mu (1 + b2 (1 - T/Tc)). surfaces: a floor's cavities (its largest, um: where a nucleus holds once the superheat's critical radius 2 sigma / (p_sat - p) is under it), the contact angle that sizes a departing bubble (Fritz, degrees) and Rohsenow's C_sf with its Prandtl exponent s. light: bubbles in water scatter mostly forward (their asymmetry parameter g), so what turns the room's light back as a haze is their extinction times 1 - g. Sources: docs/DATA_SOURCES.md.",
 	"water": [
 		{
 			"celsius": 7,
@@ -146,5 +146,8 @@
 			"csf": 0.013,
 			"s": 1.0
 		}
+	},
+	"light": {
+		"asymmetry": 0.85
 	}
 }

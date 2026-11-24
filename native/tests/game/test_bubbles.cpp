@@ -237,6 +237,10 @@ lab::CieLab colour_at(const lab::OpticsScene &scene, int x, int y) {
 
 } // namespace
 
+TEST_CASE("measured: bubbles in water scatter forward, g 0.85 (Flatau et al. 2000); their haze is what they turn away, 1 - g of their extinction (Stage 45)") {
+	CHECK(asymmetry() == doctest::Approx(0.85));
+}
+
 TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the floor up to where they end; a reaction's gas all the way up (Stage 45)") {
 	lab::OpticsRoom room;
 	room.w = room.h = 1000;
@@ -264,12 +268,12 @@ TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the 
 	scene_of(v, plain);
 	lab::ItemView b = v;
 	b.boiling = true;
-	b.bubble_extinction = 2.0; // a centimetre, at the floor
+	b.bubble_extinction = 2.0 / (1.0 - asymmetry()); // a centimetre, at the floor: 2 seen, after the forward share
 	b.bubbles_end_cm = 1.0;
 	b.bubble_exponent = 1.0;
 	scene_of(b, boiling);
 	lab::ItemView g = v;
-	g.gas_extinction = 1.0;
+	g.gas_extinction = 1.0 / (1.0 - asymmetry());
 	scene_of(g, fizzing);
 	const int x = 145, low = 209, high = 180; // 0.25 cm and 2.3 cm over the floor; the liquid is 3.2 cm deep
 	const lab::CieLab plain_low = colour_at(plain, x, low), plain_high = colour_at(plain, x, high);
@@ -284,6 +288,9 @@ TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the 
 	CHECK(lab::check_O2(boiling, x, low) == "");
 	CHECK(lab::check_O2(boiling, x, high) == "");
 	CHECK(lab::check_O2(fizzing, x, high) == "");
+	// what the scene gives the pass: the extinction times 1 - g, quantised in steps of 3 %
+	const float floor_haze = boiling.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4];
+	CHECK(std::fabs(floor_haze / (b.bubble_extinction * (1.0 - asymmetry())) - 1.0) < 0.02);
 	// a corrupted profile is caught
 	lab::OpticsScene broken = boiling;
 	broken.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4] = -1.0f;

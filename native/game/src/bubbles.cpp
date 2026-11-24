@@ -24,7 +24,7 @@ constexpr double KELVIN = 273.15;
 
 struct Data {
 	std::vector<std::pair<double, Water>> water;
-	double b = 0.0, mu = 0.0, b2 = 0.0, tc = 0.0;
+	double b = 0.0, mu = 0.0, b2 = 0.0, tc = 0.0, g = 0.0;
 	std::map<std::string, Surface, std::less<>> surfaces;
 };
 
@@ -42,6 +42,7 @@ const Data &data() {
 		out.mu = s.at("mu").get<double>();
 		out.b2 = s.at("b2").get<double>();
 		out.tc = s.at("tc_k").get<double>();
+		out.g = j.at("light").at("asymmetry").get<double>();
 		for (const auto &[name, v] : j.at("surfaces").items()) {
 			out.surfaces[name] = Surface{ v.at("cavity_um").get<double>() * 1e-6, v.at("contact_deg").get<double>(), v.at("csf").get<double>(), v.at("s").get<double>() };
 		}
@@ -93,6 +94,10 @@ Water water_at(double celsius) {
 	const Water &a = rows[i - 1].second, &b = rows[i].second;
 	const auto mix = [f](double x, double y) { return x + (y - x) * f; };
 	return Water{ mix(a.rho, b.rho), mix(a.cp, b.cp), mix(a.k, b.k), mix(a.alpha, b.alpha), mix(a.nu, b.nu), mix(a.pr, b.pr), mix(a.beta, b.beta) };
+}
+
+double asymmetry() {
+	return data().g;
 }
 
 double surface_tension(double kelvin) {

@@ -435,8 +435,11 @@ correlation is used past its range. Isenberg and Sideman 1970, Warrier et al. 20
 Kalman 2003 are behind paywalls: not read.
 
 **What they do to light**: bubbles far larger than the wavelength have an extinction efficiency of **2** (Flatau
-et al. 2000, citing Bohren and Huffman), and scatter with little spectral dependence (Piskozub et al. 2004). The
-game's bubbles are a haze of extinction 2 · n · πd²/4, white.
+et al. 2000, citing Bohren and Huffman), and scatter with little spectral dependence (Piskozub et al. 2004). Their
+scattering goes mostly forward: the asymmetry parameter g is about **0.85** for bubbles in water (Flatau et al.
+2000, m = 0.75 averaged over size parameters 100 to 300; a 2 mm bubble's is about 1.5e4, so medium confidence).
+The game's bubbles are a haze, white, of what their scattering turns away from its path, the reduced extinction
+2 · (1 − g) · n · πd²/4 (the similarity relation): the light they bend a little goes on with the rest.
 
 **Water's own boiling** is the table's (GAME_SPEC §8): the floor's boiling point is the table's saturation at the
 pressure there, the room's plus ρ g h, lowered by the solution's water activity.
