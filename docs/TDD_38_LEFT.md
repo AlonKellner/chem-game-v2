@@ -10,7 +10,7 @@ Open), the cleanup and the documents (TDD 35 and its explorers' lists).
 | 38.1 | The trash: a part's wires and rigs to outside; emptying it; a vessel bursting in it; its list in the C API | Done (below) |
 | 38.2 | Cleanup: the old maps' directory, `through_layer`, the tests' words of maps and the chain | Done |
 | 38.3 | The documents: GAME_SPEC's stale tags and numbers, TDD 33 and 35's notes | Done |
-| 38.4 | `make gates`; the user's sign-off | |
+| 38.4 | `make gates`; the user's sign-off | `make gates` passed; awaiting the user |
 
 ## 38.1 The trash
 
