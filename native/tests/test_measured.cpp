@@ -277,3 +277,122 @@ TEST_CASE("measured: malachite reflects as the USGS library's GDS801, through th
 	CHECK(peak + 380 >= 510);
 	CHECK(peak + 380 <= 530);
 }
+
+// ---- the long-wave infrared, 8-14 um (GAME_SPEC §12.1, Stage 46): each value at its source's own conditions
+
+namespace {
+// a grey body's band emissivity at normal incidence from its n + ik (opaque: what is not reflected is emitted),
+// weighed by a black body at `kelvin` over the sensor's band
+double band_emissivity(const optics::LwirSpectrum &n, const optics::LwirSpectrum &k, double kelvin) {
+	double emitted = 0.0, all = 0.0;
+	for (int i = 0; i < optics::LWIR_COUNT; ++i) {
+		const double b = optics::planck(optics::lwir_nm(i), kelvin);
+		emitted += b * (1.0 - optics::normal_reflectance(n[static_cast<size_t>(i)], k[static_cast<size_t>(i)]));
+		all += b;
+	}
+	return emitted / all;
+}
+} // namespace
+
+TEST_CASE("measured: water's long-wave index is Hale and Querry's at 10 um, and it is opaque in a hundredth of a millimetre (Stage 46)") {
+	const SpeciesId water = builtin_species().find("water");
+	const optics::LwirSpectrum *n = optics::lwir_n(water), *k = optics::lwir_k(water);
+	REQUIRE(n != nullptr);
+	REQUIRE(k != nullptr);
+	const size_t at = (10000 - optics::LWIR_FIRST_NM) / optics::LWIR_STEP_NM;
+	CHECK((*n)[at] == doctest::Approx(1.218).epsilon(1e-12)); // Hale and Querry, Appl. Opt. 12, 555 (1973), at 10.0 um
+	CHECK((*k)[at] == doctest::Approx(0.0508).epsilon(1e-12));
+	CHECK((*k)[(12000 - optics::LWIR_FIRST_NM) / optics::LWIR_STEP_NM] == doctest::Approx(0.199).epsilon(1e-12));
+	// 4 pi k / wavelength: 638 per cm at 10 um, so 0.1 mm of water passes e^-6.4
+	CHECK(optics::absorption_per_cm((*k)[at], 10000.0) == doctest::Approx(638.37).epsilon(1e-4));
+	// its emissivity over the band: at least Fluke's table's 0.93 for water (a guide: theirs is not at normal incidence)
+	const double e = band_emissivity(*n, *k, 295.0);
+	CHECK(e >= 0.93);
+	CHECK(e < 1.0);
+}
+
+TEST_CASE("measured: glass's long-wave reflectance peaks as Kitamura's fused silica does, in its Reststrahlen band (Stage 46)") {
+	const SpeciesId glass = builtin_species().find("glass");
+	const optics::LwirSpectrum *n = optics::lwir_n(glass), *k = optics::lwir_k(glass);
+	REQUIRE(n != nullptr);
+	REQUIRE(k != nullptr);
+	double most = 0.0, at_nm = 0.0;
+	for (int i = 0; i < optics::LWIR_COUNT; ++i) {
+		const double r = optics::normal_reflectance((*n)[static_cast<size_t>(i)], (*k)[static_cast<size_t>(i)]);
+		if (r > most) {
+			most = r;
+			at_nm = optics::lwir_nm(i);
+		}
+	}
+	// Kitamura, Pilon and Jonasz, Appl. Opt. 46, 8118 (2007), fitted to Popova et al. (1972): n 0.45931, k 1.9693 at
+	// 8929.5 nm, a normal reflectance of 0.6942, the band's most
+	CHECK(most == doctest::Approx(0.6942).epsilon(0.01));
+	CHECK(std::fabs(at_nm - 8929.5) <= optics::LWIR_STEP_NM);
+	// opaque: a micrometre at the peak absorbs nearly everything, and a vessel's millimetre of wall all of it
+	const size_t at = (9000 - optics::LWIR_FIRST_NM) / optics::LWIR_STEP_NM;
+	CHECK(optics::absorption_per_cm((*k)[at], 9000.0) > 1e4);
+	CHECK(optics::absorption_per_cm((*k)[(11000 - optics::LWIR_FIRST_NM) / optics::LWIR_STEP_NM], 11000.0) > 1e3);
+	// its emissivity over the band, within 0.1 of Fluke's table's 0.85 for plate glass (a soda-lime glass, not silica)
+	CHECK(std::fabs(band_emissivity(*n, *k, 295.0) - 0.85) < 0.1);
+	// the index the pass bends by gives the same reflectance at normal incidence
+	for (int i = 0; i < optics::LWIR_COUNT; ++i) {
+		const double nn = (*n)[static_cast<size_t>(i)], kk = (*k)[static_cast<size_t>(i)], m = optics::effective_index(nn, kk);
+		CHECK(m >= 1.0);
+		CHECK(optics::normal_reflectance(m, 0.0) == doctest::Approx(optics::normal_reflectance(nn, kk)).epsilon(1e-12));
+	}
+}
+
+TEST_CASE("measured: each long-wave emissivity is its table's: Fluke's for plastics, rubber, glass and oxidised steel (Stage 46)") {
+	// Fluke Process Instruments, emissivity of non-metals and of metals, 8-14 um (a guide)
+	for (const char *plastic : { "timer_face", "monitor_face", "part_face", "wire", "cap_plastic", "viewer_case", "probe_cable" }) {
+		CAPTURE(plastic);
+		CHECK(optics::lwir_emissivity(plastic).value_or(-1.0) == 0.95); // plastic, opaque
+	}
+	CHECK(optics::lwir_emissivity("rubber").value_or(-1.0) == 0.95);
+	CHECK(optics::lwir_emissivity("lamp_glass").value_or(-1.0) == 0.85); // glass, plate
+	const double steel = optics::lwir_emissivity("burner_metal").value_or(-1.0);
+	CHECK(steel >= 0.7); // steel, oxidised: 0.7 to 0.9
+	CHECK(steel <= 0.9);
+	CHECK(!optics::lwir_emissivity("no such thing").has_value());
+}
+
+TEST_CASE("measured: Planck's law at 10 um and 300 K, and the band's signal as its integral (Stage 46)") {
+	// a black body at 300 K, 10 um: 9.924 W / m2 / sr / um
+	CHECK(optics::planck(10000.0, 300.0) == doctest::Approx(9.924e-3).epsilon(1e-3));
+	// the closed form against the integral itself (Simpson's rule at a nanometre)
+	for (const double kelvin : { 230.0, 295.0, 373.15, 900.0, 2200.0 }) {
+		CAPTURE(kelvin);
+		double sum = 0.0;
+		for (int i = 0; i <= 6000; ++i) {
+			sum += optics::planck(8000.0 + i, kelvin) * (i == 0 || i == 6000 ? 1.0 : i % 2 == 1 ? 4.0 : 2.0) / 3.0;
+		}
+		CHECK(optics::band_signal(kelvin) == doctest::Approx(sum).epsilon(1e-9));
+	}
+}
+
+TEST_CASE("measured: a camera's temperature from its signal round-trips to a millikelvin, any emissivity, any reflection (Stage 46)") {
+	for (double kelvin = 230.0; kelvin <= 2500.0; kelvin *= 1.37) {
+		for (const double e : { 0.1, 0.5, 0.95, 1.0 }) {
+			for (const double reflected : { 250.0, 295.0, 330.0 }) {
+				CAPTURE(kelvin);
+				CAPTURE(e);
+				CAPTURE(reflected);
+				const double signal = e * optics::band_signal(kelvin) + (1.0 - e) * optics::band_signal(reflected);
+				CHECK(std::fabs(optics::brightness_kelvin(signal, e, reflected) - kelvin) < 1e-3);
+			}
+		}
+	}
+	// the room's light as the sensor weighs it: shares of its signal, the whole of it 1
+	const optics::EnergyTable t = optics::lwir_energy_table(295.0);
+	CHECK(t.entry.front().nm == doctest::Approx(8000.0));
+	CHECK(t.entry.back().nm == doctest::Approx(14000.0));
+	CHECK(t.total.y == 1.0);
+	CHECK(t.at(0.5).up_to.y == doctest::Approx(0.5));
+	// half the signal of a room at 295 K lies below its median wavelength
+	double below = 0.0;
+	const double median = t.at(0.5).nm;
+	for (double nm = 8000.25; nm < 14000.0; nm += 0.5) {
+		below += nm < median ? optics::planck(nm, 295.0) * 0.5 : 0.0;
+	}
+	CHECK(below / optics::band_signal(295.0) == doctest::Approx(0.5).epsilon(1e-3));
+}

@@ -850,6 +850,123 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		optics << "const Spectrum *" << (emits ? "emitter" : "surface") << "(std::string_view name) {\n" << cases << "\treturn nullptr;\n}\n\n";
 	}
+	// ---- the long-wave infrared, 8-14 um (GAME_SPEC §12.1, Stage 46)
+	const json lwir = media.value("lwir", json::object());
+	const auto species_index = [&](const std::string &name) {
+		for (size_t i = 0; i < species.size(); ++i) {
+			if (species[i].id == name) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	};
+	const auto emit_lwir = [](std::ostringstream &o, const std::string &name, const std::vector<double> &values) {
+		o << "constexpr LwirSpectrum " << name << " = { {";
+		for (size_t i = 0; i < values.size(); ++i) {
+			char number[40];
+			std::snprintf(number, sizeof number, "%.17g", values[i]);
+			o << (i % 8 == 0 ? "\n\t" : " ") << number << ",";
+		}
+		o << "\n} };\n\n";
+	};
+	{
+		const json response = lwir.at("response");
+		if (response.at("first_nm").get<int>() != 8000 || response.at("last_nm").get<int>() != 14000) {
+			fail(media_file, "the long-wave response is the band the tables cover, 8000 to 14000 nm");
+		}
+	}
+	std::string lwir_n_cases, lwir_k_cases;
+	const json lwir_indices = lwir.value("indices", json::object());
+	for (const auto &[name, m] : lwir_indices.items()) {
+		const int index = species_index(name);
+		if (index < 0) {
+			fail(media_file, "a long-wave index for \"" + name + "\", which is not a species");
+		}
+		const std::string file = m.at("table").get<std::string>();
+		std::ifstream in(data / "optics" / file);
+		if (!in) {
+			fail(file, "is not in data/optics");
+		}
+		std::vector<std::array<double, 3>> rows;
+		std::string line;
+		while (std::getline(in, line)) {
+			if (line.empty() || line[0] == '#' || line[0] == 'n') {
+				continue;
+			}
+			std::array<double, 3> r{};
+			std::stringstream row(line);
+			std::string cell;
+			for (double &v : r) {
+				if (!std::getline(row, cell, ',')) {
+					fail(file, "a row is nm, n, k");
+				}
+				v = std::stod(cell);
+			}
+			if ((!rows.empty() && r[0] <= rows.back()[0]) || !(r[1] > 0.0) || r[2] < 0.0) {
+				fail(file, "is not a table of ascending wavelengths with n > 0 and k >= 0");
+			}
+			rows.push_back(r);
+		}
+		if (rows.empty() || rows.front()[0] > 8000.0 || rows.back()[0] < 14000.0) {
+			fail(file, "does not run from 8000 to 14000 nm");
+		}
+		std::vector<double> n(301), k(301);
+		for (size_t i = 0; i < n.size(); ++i) {
+			const double nm = 8000.0 + 20.0 * static_cast<double>(i);
+			for (size_t j = 0; j + 1 < rows.size(); ++j) {
+				if (nm >= rows[j][0] && nm <= rows[j + 1][0]) {
+					const double f = (nm - rows[j][0]) / (rows[j + 1][0] - rows[j][0]);
+					n[i] = rows[j][1] + (rows[j + 1][1] - rows[j][1]) * f;
+					k[i] = rows[j][2] + (rows[j + 1][2] - rows[j][2]) * f;
+					break;
+				}
+			}
+		}
+		emit_lwir(optics, "LWIR_N_" + std::to_string(index), n);
+		emit_lwir(optics, "LWIR_K_" + std::to_string(index), k);
+		lwir_n_cases += "\t\tcase " + std::to_string(index) + ":\n\t\t\treturn &LWIR_N_" + std::to_string(index) + ";\n";
+		lwir_k_cases += "\t\tcase " + std::to_string(index) + ":\n\t\t\treturn &LWIR_K_" + std::to_string(index) + ";\n";
+	}
+	optics << "const LwirSpectrum *lwir_n(SpeciesId species) {\n\tswitch (species.index) {\n" << lwir_n_cases << "\t\tdefault:\n\t\t\treturn nullptr;\n\t}\n}\n\n"
+		   << "const LwirSpectrum *lwir_k(SpeciesId species) {\n\tswitch (species.index) {\n" << lwir_k_cases << "\t\tdefault:\n\t\t\treturn nullptr;\n\t}\n}\n\n";
+	// grey values by name: a surface's or a solid species' emissivity, a wall's transmittance
+	const auto by_name = [&](const char *section, const char *function, bool positive) {
+		std::string cases;
+		const json entries = lwir.value(section, json::object());
+		for (const auto &[name, v] : entries.items()) {
+			const double x = v.get<double>();
+			const bool known = media.value("surfaces", json::object()).contains(name) || species_index(name) >= 0;
+			if (!known || !(x >= 0.0 && x <= 1.0) || (positive && !(x > 0.0))) {
+				fail(media_file, "\"" + name + "\": a long-wave " + section + " is a surface's or a species', between 0 and 1");
+			}
+			char text[200];
+			std::snprintf(text, sizeof text, "\tif (name == \"%s\") {\n\t\treturn %.17g;\n\t}\n", name.c_str(), x);
+			cases += text;
+		}
+		optics << "std::optional<double> " << function << "(std::string_view name) {\n" << cases << "\treturn std::nullopt;\n}\n\n";
+	};
+	by_name("emissivity", "lwir_emissivity", true);
+	by_name("transmittance", "lwir_transmittance", false);
+	{
+		std::string cases;
+		int count = 0;
+		const json flames = lwir.value("flames", json::object());
+		for (const auto &[name, f] : flames.items()) {
+			if (!media.value("emitters", json::object()).contains(name)) {
+				fail(media_file, "\"" + name + "\": a long-wave flame is an emitter's");
+			}
+			const double gas = f.at("gas_per_cm").get<double>(), soot = f.at("soot_per_cm").get<double>();
+			if (!(gas >= 0.0) || !(soot >= 0.0)) {
+				fail(media_file, "\"" + name + "\": a flame's absorption is at least 0");
+			}
+			char text[300];
+			std::snprintf(text, sizeof text, "constexpr LwirFlame FLAME_%d{ %.17g, %.17g };\n", count, gas, soot);
+			optics << text;
+			cases += "\tif (name == \"" + name + "\") {\n\t\treturn &FLAME_" + std::to_string(count) + ";\n\t}\n";
+			++count;
+		}
+		optics << "\nconst LwirFlame *lwir_flame(std::string_view name) {\n" << cases << "\treturn nullptr;\n}\n\n";
+	}
 	optics << "const Spectrum *material_index(std::string_view name) {\n" << material_cases << "\treturn nullptr;\n}\n\n"
 		   << "const Spectrum &xbar() {\n\treturn XBAR;\n}\nconst Spectrum &ybar() {\n\treturn YBAR;\n}\nconst Spectrum &zbar() {\n\treturn ZBAR;\n}\n"
 		   << "const Spectrum &d65() {\n\treturn D65;\n}\n\nKind kind(SpeciesId species) {\n\tswitch (species.index) {\n";

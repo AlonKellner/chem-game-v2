@@ -655,6 +655,51 @@ world in pixels, since each item is drawn at its own scale. A solution's index i
 of dry powders); a suspended particle's extinction efficiency 2 (the large-particle limit).
 **The room:** its white is 100 cd/m² (a white page in ordinary indoor light).
 
+## The long-wave infrared (Stage 46)
+
+What a thermal camera's microbolometer sees, 8–14 µm (GAME_SPEC §12.1): the renderer's second range of the
+spectrum, at 20 nm (301 points). Fetched 2026-11-24. Glass and water are opaque in it: what the camera sees of
+a vessel is its outer glass.
+
+**Measured** (`data/optics/water_lwir.csv`, `silica_lwir.csv`; `data/optics/media.json` `lwir.indices`):
+
+| Value | Source | Read | Gate |
+|---|---|---|---|
+| Liquid water's n + ik, 7.9–14.5 µm | G. M. Hale and M. R. Querry, *Optical constants of water in the 200-nm to 200-µm wavelength region*, Appl. Opt. 12, 555–563 (1973), doi 10.1364/AO.12.000555, at 25 °C; read from the refractiveindex.info database (main/H2O/nk/Hale.yml) | every row over the band and one each side, as printed (0.2 µm steps to 10 µm, 0.5 µm after): at 10.0 µm n 1.218, k 0.0508; at 12.0 µm n 1.111, k 0.199 | `measured: water's long-wave index is Hale and Querry's at 10 um` (n and k at 10 µm, k at 12 µm, 638 /cm) |
+| Glass's n + ik, 7.96–14.04 µm, as fused silica's | R. Kitamura, L. Pilon and M. Jonasz (Kitamura, Pilon and Jonasz), *Optical constants of silica glass from extreme ultraviolet to far infrared at near room temperature*, Appl. Opt. 46, 8118–8133 (2007), doi 10.1364/AO.46.008118: their model fitted to S. Popova, T. Tolstykh and V. Vorobev, Opt. Spectrosc. 33, 444–445 (1972) (amorphous quartz, 1400–200 cm⁻¹); read from the refractiveindex.info database (main/SiO2/nk/Popova.yml) | every row over the band and one each side (89 rows): the Reststrahlen peak, n 0.45931, k 1.9693 at 8929.5 nm (normal reflectance 0.694) | `measured: glass's long-wave reflectance peaks as Kitamura's fused silica does` (the peak within 1 % and a 20 nm step; opaque; the band emissivity within 0.1 of plate glass's 0.85) |
+
+Fused silica stands in for the lab's borosilicate (BOROFLOAT 33's own constants are not tabulated over
+8–14 µm): **medium confidence** for the glass. A soda-lime or borosilicate glass has a weaker Reststrahlen
+band; the model's band emissivity at normal incidence is 0.79, Fluke's table gives 0.85 for plate glass.
+Between rows the tables are read linearly, at 20 nm.
+
+**Grey emissivities over 8–14 µm** (`media.json` `lwir.emissivity`): Fluke Process Instruments, *Emissivity
+values for common materials* (non-metals) and *Emissivity of metals*, the 8–14 µm column (pages dated
+23 March 2017, "to be used as a guide only"). **Medium confidence**: a supplier's table of typical values.
+
+| Thing | Value | Row read |
+|---|---|---|
+| The parts' faces, the wire, the sensing and rig marks, the cap, the viewer's case, its probe's head and cable | 0.95 | Plastic, opaque: 0.95 |
+| Rubber (a stopper, a tube) | 0.95 | Rubber: 0.95 |
+| The outlet's glass, a lamp's glass, the viewer's screen | 0.85 | Glass, plate: 0.85 |
+| The burner's metal | 0.8 | Steel, oxidised: 0.7–0.9 (the middle) |
+| Water (the gate's bound) | 0.93 | Water: 0.93 (the model's own, from Hale and Querry: 0.985 at normal incidence) |
+
+Also read (unused): stainless steel 0.1–0.8, iron oxidised 0.5–0.9, aluminium oxidised 0.2–0.4, copper
+oxidised 0.4–0.8; the table's 8–14 µm cell for non-aluminium paint is ambiguous.
+
+**Calibrated** (**low confidence**):
+
+| Value | Chosen | Basis |
+|---|---|---|
+| A solid powder's emissivity (malachite, the copper oxide, the copper sulfates, the hydroxide) | 0.9 | not found measured over the band for these powders; Fluke's non-metals are 0.9–0.95 almost throughout, and a powder's rough face emits as a near black body |
+| The balloon's latex: its transmittance at its reference thickness | 0.3, grey | not found measured for a balloon's membrane; natural rubber absorbs strongly in its bands (11.9 µm) and a membrane a tenth of a millimetre thick passes part of the band between them |
+| A flame's gas: its absorption over the band | 0.01 per cm, grey | not found as band parameters to hand (Edwards' wide-band model's parameters are in textbooks, not read): set so that the burner's premixed flame, a centimetre or two of combustion products at 2200 K, reads tens of degrees above the room on an 8–14 µm camera at an emissivity of 0.95, as thermal images of a Bunsen flame show: faint, not hot |
+| A sooty flame's soot | 0.005 per cm at 10 µm, as 1/wavelength | Rayleigh soot (Dalzell and Sarofim's n, k: κ = 4.9 f_v / λ) at a soot volume fraction of 10⁻⁶, a luminous laboratory flame's order |
+
+**Design**: the sensor's response is flat over 8000–14000 nm (a microbolometer's band behind its window; a real
+one falls off at the band's edges).
+
 ## Controller tuning: SIMC (Stage 26)
 
 A controller's PI gains (`native/game/src/control.cpp`, GAME_SPEC §13.3) are Skogestad's SIMC rules:

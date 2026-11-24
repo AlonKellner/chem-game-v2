@@ -3,6 +3,7 @@
 #include "chem/species.hpp"
 
 #include <array>
+#include <optional>
 #include <span>
 #include <string_view>
 
@@ -130,6 +131,50 @@ struct EnergyTable {
 EnergyTable energy_table(const Spectrum &continuum, std::span<const Line> lines = {});
 // The room's light: the illuminant itself.
 const EnergyTable &room_light();
+
+// ---- the long-wave infrared, 8-14 um (GAME_SPEC §12.1, Stage 46): what a thermal camera's microbolometer sees
+
+inline constexpr int LWIR_FIRST_NM = 8000;
+inline constexpr int LWIR_STEP_NM = 20;
+inline constexpr int LWIR_COUNT = 301; // 8000 .. 14000 nm
+using LwirSpectrum = std::array<double, LWIR_COUNT>;
+constexpr double lwir_nm(int i) {
+	return LWIR_FIRST_NM + LWIR_STEP_NM * static_cast<double>(i);
+}
+// A species' complex refractive index n + ik over the band, measured (data/optics: water's, glass's), or null.
+const LwirSpectrum *lwir_n(SpeciesId species);
+const LwirSpectrum *lwir_k(SpeciesId species);
+// What n + ik makes of light: the reflectance at normal incidence from air; the real index with that reflectance
+// (what the pass bends and turns by: at least 1); the absorption coefficient, 1/cm (4 pi k / wavelength).
+double normal_reflectance(double n, double k);
+double effective_index(double n, double k);
+double absorption_per_cm(double k, double nm);
+// Grey values over the band, by name (a surface's, or a solid species'): its emissivity (what it does not emit it
+// reflects), a wall's transmittance at its reference thickness; none where there is no entry.
+std::optional<double> lwir_emissivity(std::string_view name);
+std::optional<double> lwir_transmittance(std::string_view name);
+// A flame's absorption coefficient per cm of path: its gas's, grey, and its soot's, as 1 / wavelength from 10 um.
+struct LwirFlame {
+	double gas_per_cm = 0.0, soot_per_cm = 0.0;
+	double per_cm(double nm) const {
+		return gas_per_cm + soot_per_cm * 10000.0 / nm;
+	}
+};
+const LwirFlame *lwir_flame(std::string_view name);
+// The sensor's spectral response: flat over the band, 0 outside it.
+double lwir_response(double nm);
+// Planck's law: a black body's spectral radiance, W / m2 / sr / nm.
+double planck(double nm, double kelvin);
+// What the sensor collects from a black body: its radiance times the response, W / m2 / sr; in closed form
+// (the series of the integral of x^3 / (e^x - 1)).
+double band_signal(double kelvin);
+// The camera's temperature from a signal (W / m2 / sr): of a grey body of `emissivity` that reflects the rest of a
+// room at `reflected_kelvin` (signal = e B(T) + (1 - e) B(T_r), inverted); 0 where the signal is under the
+// reflection's. To a millikelvin over 1 to 10000 K.
+double brightness_kelvin(double signal, double emissivity, double reflected_kelvin);
+// The room's long-wave light as the sensor weighs it: a black body at the room's temperature times the response,
+// cut by equal shares of the signal; on the scale on which the room's whole signal is 1 (in x, y and z alike).
+EnergyTable lwir_energy_table(double room_kelvin);
 
 // One frame's estimate of the colour of `light` through `through(nm)` (a
 // factor, 0 .. 1), by n bands of equal energy, each its exact colour times what

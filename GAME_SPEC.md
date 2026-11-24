@@ -1456,6 +1456,43 @@ its content key's colour part the scene's and its shape parts none: its first fr
 estimate, and the drift rule keeps its history or starts it again, as for any change of content
 (`O20`). The probes read the room as laid out, whatever the view.
 
+### 12.4 The long-wave range (Stage 46)
+
+What a thermal camera sees (Stage 47): the long-wave infrared, **8–14 µm**, an LWIR microbolometer's band.
+Visible light never reaches it (a camera's germanium optics are opaque to it), and it sees by what things
+emit at their temperatures. It is rendered by **the same pipeline** as the visible, in another range of
+the spectrum, with another mapping into colour.
+
+- **A second range.** Every spectral row has a long-wave segment beside its visible one: 8000 to 14000 nm
+  at 20 nm (301 values). Water's and glass's complex indices are measured (Hale and Querry; fused silica
+  by Kitamura et al., a stand-in for borosilicate); the lab's things are grey bodies of a tabled
+  emissivity; a wall of latex is grey; a flame is a grey gas and its soot (`docs/DATA_SOURCES.md`). An
+  index n + ik enters the pass as the real index with its reflectance at normal incidence, and k as an
+  absorption coefficient, 4πk/λ: glass and water are opaque in the band (a vessel shows its outer glass).
+- **Its light.** The room is isothermal: its wall, its cube and the room in front are a black body at the
+  room's temperature, and a pixel's points in the range are drawn from that body's light times the
+  sensor's response (flat over the band), cut by equal shares of its signal (the visible light's energy
+  table, the same construction). On that scale the room's whole signal is 1.
+- **Every body emits by its temperature (Kirchhoff).** A layer that passes `a` and turns away `r` of what
+  comes to it emits `θ_T(λ)(1 − a − r)`, where `θ_T` is its temperature's Planck radiance over the
+  room's light at the same wavelength: in the long-wave range the black body's ratio, in the visible
+  zero below 500 K (a hot solid's glow, which this replaces). A body's temperature is its cell's; a
+  stream is its source's; a lit flame is at its flame's temperature; the rest of the lab at the
+  room's. *The thermal radiance theorem*: in a room at one temperature every point reads exactly the
+  room's light, through any geometry (`O21`).
+- **The sensor's mapping** (the camera, Stage 47): a pixel whose path meets a camera's screen reads in
+  front of it in the visible, and at the screen its point moves to the matching point of the camera's
+  frame and goes on there in the long-wave range (the same functions: refraction, reflection,
+  absorption, emission), at a point of the long-wave light's shares. The pixel's colour is one step from
+  spectrum to RGB: the band signal's mean → the camera's temperature (Planck inverted over the band,
+  with its emissivity and reflected temperature) → its palette, filtered by what is in front of the
+  screen and with that's own light added (`O25`). *A debug infrared view* (off by default) is the same
+  mapping at the eye for every pixel.
+- **One scene, complete at any view.** The frame can be anywhere in the room, on the screen or off it
+  at a view: the scene keeps every body at every view, and its grid lies on the room's own squares
+  scaled by the view, so any point of the room finds its bodies. A body can be hidden from a ray (a
+  camera from its own frame).
+
 ## 13. Lab layer and interaction
 
 The engine-free game layer (`native/game`, namespace `lab`): a bench of equipment over one closed
@@ -2471,6 +2508,11 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O18 | The view is a similarity (Stage 42). At points 0.47 into the layout's pixels about a vessel of liquid, at three wavelengths, a ray through the view's place of a point (at 4×) brings what a ray through the point brings laid out, but for one in a hundred that graze a surface; of the rays the view lands on its own screen (past it, its wall is the far wall's mean: §20). It fires on a view whose wall stands as far behind as at 1× | tolerance (0.002 of a ray's light) | 42 |
 | O19 | The probe settles to its disc (Stage 42). A spectral viewer's probe that has read every nanometre N times holds, at each of five, a mean within four standard errors (and 1e-4) of the disc's truth: the uniform integral over the disc by the truth's own tracer, on a polar grid of rings of equal area; across a part's edge, in a flame, through water and at a vessel's rim. It fires on sampling the centre alone, the disc's square, points crowded to its middle (by radius, not its square root), and on a disc moved without starting again | tolerance (statistical) | 42 |
 | O20 | A view's change resamples, then settles once (Stage 42). A tenth closer, carried from the settled anchor: at least 90% of the pixels of bodies keep their history at the first frame; those nothing bends read at most a quarter of a fresh start's points over three frames; at no frame are more of them visibly off the settled picture than a fresh start's; settled it is a fresh start's picture (1 in 200 visibly apart at most); and while the view moves the scene is not made again. It fires on a prior given the scene's whole key, which reads no estimate again (it keeps a tinted picture) | tolerance | 42 |
+| O21 | The thermal radiance theorem (Stage 46): in a room at one temperature, every body and the room at it, every pixel's long-wave reading is the room's signal, 1, at every point, through any geometry (refraction, reflection, absorption, a flame) and through a sensor's mapping: to 1e-12 in double and 1e-5 in single precision. It fires on glass that emits nothing, and on emission `1 − a` that forgets what is reflected | tolerance | 46 |
+| O22 | Kirchhoff per layer and per traced ray (Stage 46): at θ = 1 what a layer passes, turns away and emits sum to 1; a traced ray's turned, passed and absorbed shares sum to 1. It fires on emission times 0.9, and on `1 − pass` taken as reflection through absorbing glass | 1e-12 | 46 |
+| O23 | The long-wave light's table is its integral (Stage 46): its whole is the closed-form series of the band's Planck integral at the room's temperature, and a camera's temperature from a signal round-trips to a millikelvin from 230 to 2500 K at any emissivity from 0.1 to 1. It fires on a table built a kelvin off | 1 mK; 1e-9 | 46 |
+| O24 | The long-wave range changes nothing in the visible (Stage 46): with every body below 500 K, the visible picture with the range present is the picture without it, bit for bit. It fires on a visible θ that is not exactly zero below 500 K | exact | 46 |
+| O25 | A sensor's pixel is its truth (Stage 46): a settled pixel over a sensor's screen is within 8 on the eye metric of the front's filter times the palette of the temperature from its sensor pixel's band signal (the truth's own tracer, integrated over the band) plus the front's own light. It fires on a frame a pixel off, a continuation read in the visible, the palette applied per point rather than to the mean, and a key without what lies beyond | 8 (eye metric) | 46 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |

@@ -1,0 +1,25 @@
+# Liquid water at 25 C, its complex refractive index n + ik over the long-wave infrared (GAME_SPEC §12.1, Stage 46).
+# G. M. Hale and M. R. Querry, Optical constants of water in the 200-nm to 200-um wavelength region, Appl. Opt. 12, 555-563 (1973), doi 10.1364/AO.12.000555;
+# read from the refractiveindex.info database (main/H2O/nk/Hale.yml), the rows over 8-14 um and one each side. docs/DATA_SOURCES.md.
+nm,n,k
+7900,1.294,0.0339
+8000,1.291,0.0343
+8200,1.286,0.0351
+8400,1.281,0.0361
+8600,1.275,0.0372
+8800,1.269,0.0385
+9000,1.262,0.0399
+9200,1.255,0.0415
+9400,1.247,0.0433
+9600,1.239,0.0454
+9800,1.229,0.0479
+10000,1.218,0.0508
+10500,1.185,0.0662
+11000,1.153,0.0968
+11500,1.126,0.142
+12000,1.111,0.199
+12500,1.123,0.259
+13000,1.146,0.305
+13500,1.177,0.343
+14000,1.21,0.37
+14500,1.241,0.388

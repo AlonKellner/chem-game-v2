@@ -3,6 +3,7 @@
 #include "chem/math.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace chem::optics {
@@ -252,6 +253,109 @@ EnergyTable energy_table(const Spectrum &continuum, std::span<const Line> lines)
 const EnergyTable &room_light() {
 	static const EnergyTable table = energy_table(d65());
 	return table;
+}
+
+// ---- the long-wave infrared (Stage 46)
+
+namespace {
+constexpr double C1 = 1.191042972e-16; // 2 h c^2, W m2 / sr
+constexpr double C2 = 0.014387769; // h c / k, m K
+constexpr double LWIR_LAST_NM = LWIR_FIRST_NM + LWIR_STEP_NM * (LWIR_COUNT - 1.0);
+// the integral of t^3 / (e^t - 1) from x to infinity
+double tail(double x) {
+	double sum = 0.0;
+	for (int n = 1; n < 100000; ++n) {
+		const double e = chem::exp(-n * x), dn = n;
+		const double term = e * (x * x * x / dn + 3.0 * x * x / (dn * dn) + 6.0 * x / (dn * dn * dn) + 6.0 / (dn * dn * dn * dn));
+		sum += term;
+		if (term < sum * 1e-17) {
+			break;
+		}
+	}
+	return sum;
+}
+} // namespace
+
+double normal_reflectance(double n, double k) {
+	return ((n - 1.0) * (n - 1.0) + k * k) / ((n + 1.0) * (n + 1.0) + k * k);
+}
+
+double effective_index(double n, double k) {
+	const double r = std::sqrt(normal_reflectance(n, k));
+	return (1.0 + r) / (1.0 - r);
+}
+
+double absorption_per_cm(double k, double nm) {
+	return 4.0 * 3.14159265358979323846 * k / (nm * 1e-7);
+}
+
+double lwir_response(double nm) {
+	return nm >= LWIR_FIRST_NM && nm <= LWIR_LAST_NM ? 1.0 : 0.0;
+}
+
+double planck(double nm, double kelvin) {
+	if (!(kelvin > 0.0)) {
+		return 0.0;
+	}
+	const double m = nm * 1e-9, x = C2 / (m * kelvin);
+	if (x > 700.0) {
+		return 0.0;
+	}
+	return C1 / (m * m * m * m * m) / (chem::exp(x) - 1.0) * 1e-9;
+}
+
+double band_signal(double kelvin) {
+	if (!(kelvin > 0.0)) {
+		return 0.0;
+	}
+	// with x = c2 / (wavelength T): B d(wavelength) = c1 T^4 / c2^4 x^3 / (e^x - 1) dx
+	const double t4 = kelvin * kelvin * kelvin * kelvin, c24 = C2 * C2 * C2 * C2;
+	const double x_long = C2 / (LWIR_LAST_NM * 1e-9 * kelvin), x_short = C2 / (LWIR_FIRST_NM * 1e-9 * kelvin);
+	return C1 * t4 / c24 * (tail(x_long) - tail(x_short));
+}
+
+double brightness_kelvin(double signal, double emissivity, double reflected_kelvin) {
+	const double e = emissivity < 1e-6 ? 1e-6 : emissivity > 1.0 ? 1.0 : emissivity;
+	const double own = (signal - (1.0 - e) * band_signal(reflected_kelvin)) / e;
+	if (!(own > 0.0)) {
+		return 0.0;
+	}
+	// band_signal rises with the temperature: bisect on the logarithm, then Newton's steps
+	double lo = 1.0, hi = 10000.0;
+	if (own >= band_signal(hi)) {
+		return hi;
+	}
+	for (int i = 0; i < 200 && hi - lo > 1e-9 * hi; ++i) {
+		const double mid = std::sqrt(lo * hi);
+		(band_signal(mid) < own ? lo : hi) = mid;
+	}
+	return (lo + hi) / 2.0;
+}
+
+EnergyTable lwir_energy_table(double room_kelvin) {
+	// a nanometre at a time; the energy and the signal are the same (the response weighs it, nothing else)
+	const int steps = static_cast<int>(LWIR_LAST_NM - LWIR_FIRST_NM);
+	std::vector<double> energy{ 0.0 };
+	for (int i = 0; i < steps; ++i) {
+		const double nm = LWIR_FIRST_NM + i + 0.5;
+		energy.push_back(energy.back() + planck(nm, room_kelvin) * lwir_response(nm));
+	}
+	EnergyTable t;
+	const double total = energy.back();
+	size_t i = 1;
+	for (int j = 0; j <= ENERGY_STEPS; ++j) {
+		const double target = total * j / ENERGY_STEPS;
+		while (i < energy.size() - 1 && energy[i] < target) {
+			++i;
+		}
+		const double span = energy[i] - energy[i - 1];
+		double f = span > 0.0 ? (target - energy[i - 1]) / span : 0.0;
+		f = f < 0.0 ? 0.0 : f > 1.0 ? 1.0 : f;
+		const double share = static_cast<double>(j) / ENERGY_STEPS;
+		t.entry[static_cast<size_t>(j)] = EnergyEntry{ LWIR_FIRST_NM + static_cast<double>(i - 1) + f, Xyz{ share, share, share } };
+	}
+	t.total = Xyz{ 1.0, 1.0, 1.0 };
+	return t;
 }
 
 const Bands &game_bands() {
