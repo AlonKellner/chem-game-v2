@@ -68,7 +68,7 @@ double latent(double kelvin) {
 // a temperature where f rises through zero, between lo and hi
 template <typename F>
 double root(F f, double lo, double hi) {
-	for (int i = 0; i < 80; ++i) {
+	for (int i = 0; i < 60; ++i) { // a 400 K range to 4e-16 of it
 		const double middle = 0.5 * (lo + hi);
 		(f(middle) < 0.0 ? lo : hi) = middle;
 	}
@@ -182,8 +182,8 @@ double Bubbles::extinction_at(double z_m) const {
 Bubbles boil(const Floor &f) {
 	Bubbles b;
 	b.floor_c = f.bulk_c;
-	if (!(f.depth_m > 0.0) || !(f.floor_m2 > 0.0)) {
-		return b;
+	if (!(f.depth_m > 0.0) || !(f.floor_m2 > 0.0) || (!(f.heat_w > 0.0) && !(f.gas_m3_s > 0.0))) {
+		return b; // (no heat through its floor and no gas: nothing to work out, every frame, for every vessel)
 	}
 	const double bulk_k = f.bulk_c + KELVIN;
 	const Water bulk = water_at(f.bulk_c);

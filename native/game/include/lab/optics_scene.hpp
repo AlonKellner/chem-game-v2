@@ -41,8 +41,10 @@ inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
 // the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts.
-// Its vec4 6 is unused (it held where a body's refraction map lay, until Stage 35; the bodies are laid out as
-// they were).
+// Its vec4 6 (Stage 45; until Stage 35 where a body's refraction map lay): a vessel's boiling's bubbles, its steam
+// bubbles' extinction a centimetre at its floor, the height over its floor where they end (cm), the exponent their
+// extinction falls by to there, (1 - z / end)^exponent, and a reaction's gas's extinction a centimetre, the same at
+// every height (GAME_SPEC §11); 0 for any other body.
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
 // SET: the set of spectra it is made of (a row set of `rows`), unused, a signature of the bodies of a layer

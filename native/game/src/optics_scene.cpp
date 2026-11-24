@@ -595,6 +595,16 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// stirred up: every particle shades its own cross-section, twice over
 				put(at + MORE, 0, EXTINCTION_EFFICIENCY * held_up * cross_section_cm2 / v.liquid_ml);
 			}
+			// boiling's bubbles (Stage 45): steam's from the floor up to where they end, a reaction's gas's all the way
+			// up; each a haze, white. Quantised (steps of 3 % in extinction, a twentieth in the exponent, a hundredth
+			// of a millimetre in height), so a pixel keeps its history while a boil stands still (GAME_SPEC §12.2)
+			if (!body.flipped && (v.bubble_extinction > 0.0 || v.gas_extinction > 0.0)) {
+				const auto steps = [](double x) { return x > 0.0 ? std::exp(std::round(std::log(x) / 0.03) * 0.03) : 0.0; };
+				put(at + 6, 0, steps(v.bubble_extinction));
+				put(at + 6, 1, std::round(v.bubbles_end_cm * 1000.0) / 1000.0);
+				put(at + 6, 2, std::round(v.bubble_exponent * 20.0) / 20.0);
+				put(at + 6, 3, steps(v.gas_extinction));
+			}
 			if (at_rest > 0.0) {
 				// at rest: a heap at its angle of repose, a cone until it reaches the wall
 				const double heap_ml = at_rest / PACKING, r_wall = made ? made->radius_inside(made->floor + 0.25 * made->height) : d_cm / 2.0;

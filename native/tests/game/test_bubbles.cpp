@@ -1,10 +1,14 @@
 // Boiling's bubbles (GAME_SPEC §11, Stage 45): the floor, the bubbles' rise and condensing, held to their
 // sources at the sources' conditions (docs/DATA_SOURCES.md, "Boiling's bubbles (Stage 45)").
 #include "lab/bubbles.hpp"
+#include "lab/colour.hpp"
+#include "lab/lab.hpp"
+#include "lab/optics_scene.hpp"
 
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <string>
 
 using namespace lab::bubbles;
 
@@ -58,7 +62,7 @@ TEST_CASE("measured: Rohsenow's flux is Lienhard's Example 9.2: 800 kW/m2 at 22 
 
 TEST_CASE("measured: a glass floor's cavities hold a nucleus at Lienhard's Example 9.1's superheat, about 8 K (Stage 45)") {
 	// Example 9.1: at 8 K of superheat a nucleus is held in a cavity of 0.0035 mm (2 sigma / (p_sat - p))
-	const Bubbles b = boil(beaker(0.0, 20.0, 1e-6));
+	const Bubbles b = boil(beaker(0.001, 20.0, 1e-6)); // (a milliwatt: convection carries it)
 	CHECK(b.onset_c - b.saturation_floor_c == doctest::Approx(8.0).epsilon(0.1));
 	MESSAGE("onset " << b.onset_c << " C over a boiling point of " << b.saturation_floor_c << " C at the floor");
 }
@@ -179,4 +183,109 @@ TEST_CASE("invariants: B1 fires on bubbles past the surface, a negative extincti
 			}
 		}
 	}
+}
+
+TEST_CASE("bubbles: a beaker of water on a burner first makes bubbles that die near its floor, then boils with bubbles to the surface (Stage 45)") {
+	std::string why;
+	const char *bench = R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "at": [10, 7],
+			"contents": {"water": {"g": 150}}},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+	auto lab = lab::Lab::open(bench, why);
+	REQUIRE_MESSAGE(lab != nullptr, why);
+	REQUIRE_MESSAGE(lab->command(R"({"do": "heat", "burner": "burner", "vessel": "beaker"})", why), why);
+	REQUIRE_MESSAGE(lab->command(R"({"do": "valve", "burner": "burner", "to": 1})", why), why);
+	const auto beaker = [&] {
+		for (const lab::ItemView &v : lab->view().items) {
+			if (v.id == "beaker") {
+				return v;
+			}
+		}
+		FAIL("no beaker");
+		return lab::ItemView{};
+	};
+	double first_c = 0.0, below_mm = 0.0;
+	for (int s = 0; s < 1200 && !beaker().bubbles_surface; ++s) {
+		REQUIRE_MESSAGE(lab->command(R"({"do": "wait", "seconds": 1})", why), why);
+		const lab::ItemView v = beaker();
+		if (v.boiling && first_c == 0.0) {
+			first_c = v.celsius;
+			below_mm = v.bubbles_end_cm * 10.0;
+		}
+	}
+	const lab::ItemView boiling = beaker();
+	MESSAGE("bubbles first at " << first_c << " C, gone " << below_mm << " mm up; at the surface at " << boiling.celsius << " C, the floor at " << boiling.floor_c
+								<< " C, " << boiling.bubble_mm << " mm bubbles, " << boiling.depth_cm << " cm deep");
+	CHECK(first_c > 20.0);
+	CHECK(first_c < 95.0);
+	CHECK(below_mm < 5.0);
+	REQUIRE(boiling.bubbles_surface);
+	CHECK(boiling.celsius > 99.5);
+	CHECK(boiling.bubbles_cm == doctest::Approx(boiling.depth_cm));
+	CHECK(boiling.bubble_extinction > 0.0);
+	CHECK(lab->debug("beaker").facts.size() > 1);
+}
+
+namespace {
+
+lab::CieLab colour_at(const lab::OpticsScene &scene, int x, int y) {
+	double rgb[3];
+	lab::optics_truth(scene, x, y, rgb);
+	return lab::to_lab(chem::optics::Xyz{ 0.4124564 * rgb[0] + 0.3575761 * rgb[1] + 0.1804375 * rgb[2], 0.2126729 * rgb[0] + 0.7151522 * rgb[1] + 0.0721750 * rgb[2],
+			0.0193339 * rgb[0] + 0.1191920 * rgb[1] + 0.9503041 * rgb[2] });
+}
+
+} // namespace
+
+TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the floor up to where they end; a reaction's gas all the way up (Stage 45)") {
+	lab::OpticsRoom room;
+	room.w = room.h = 1000;
+	room.bench = 0.7305;
+	room.elsewhere = 0.02;
+	room.refraction = false;
+	// 100 mL of water in a 250 mL vessel drawn 90 wide (6.34 cm: 0.0704 cm a pixel), its floor at y 212.5
+	lab::ItemView v;
+	v.id = "beaker";
+	v.kind = "vessel";
+	v.volume_ml = 250.0;
+	v.celsius = 95.0;
+	v.liquid_ml = v.condensed_ml = 100.0;
+	lab::SubstanceView water;
+	water.species = "water";
+	water.phase = 'l';
+	water.mol = 5.5;
+	water.g = 100.0;
+	v.contents = { water };
+	const auto scene_of = [&](const lab::ItemView &item, lab::OpticsScene &scene) {
+		lab::optics_compose(scene, room, { lab::OpticsBody{ &item, 100, 100, 90, 112.5f } });
+		REQUIRE(lab::check_O1(scene) == "");
+	};
+	lab::OpticsScene plain, boiling, fizzing;
+	scene_of(v, plain);
+	lab::ItemView b = v;
+	b.boiling = true;
+	b.bubble_extinction = 2.0; // a centimetre, at the floor
+	b.bubbles_end_cm = 1.0;
+	b.bubble_exponent = 1.0;
+	scene_of(b, boiling);
+	lab::ItemView g = v;
+	g.gas_extinction = 1.0;
+	scene_of(g, fizzing);
+	const int x = 145, low = 209, high = 180; // 0.25 cm and 2.3 cm over the floor; the liquid is 3.2 cm deep
+	const lab::CieLab plain_low = colour_at(plain, x, low), plain_high = colour_at(plain, x, high);
+	const lab::CieLab boil_low = colour_at(boiling, x, low), boil_high = colour_at(boiling, x, high);
+	MESSAGE("L* low " << plain_low.l << " -> " << boil_low.l << "; high " << plain_high.l << " -> " << boil_high.l);
+	CHECK(boil_low.l > plain_low.l + 3.0); // the bubbles turn the room's light back
+	CHECK(std::fabs(boil_high.l - plain_high.l) < 0.05); // above where they end, nothing
+	CHECK(std::fabs(boil_low.a) < 1.5); // white, not tinted
+	CHECK(std::fabs(boil_low.b) < 1.5);
+	CHECK(colour_at(fizzing, x, high).l > plain_high.l + 3.0); // a reaction's gas, all the way up
+	// the pass's own colour there is the truth's
+	CHECK(lab::check_O2(boiling, x, low) == "");
+	CHECK(lab::check_O2(boiling, x, high) == "");
+	CHECK(lab::check_O2(fizzing, x, high) == "");
+	// a corrupted profile is caught
+	lab::OpticsScene broken = boiling;
+	broken.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4] = -1.0f;
+	CHECK(lab::check_O1(broken).rfind("O1", 0) == 0);
 }

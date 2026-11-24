@@ -542,7 +542,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), size, size);
 			double chord = m.chord;
 			if (m.bent) {
-				l.haze = shader::haze_along(m.body, m.chord); // along its own path through the liquid (Stage 26)
+				l.haze = shader::haze_along(m.body, m.chord, m.cross_y); // along its own path through the liquid (Stage 26)
 				if (shader::lies_in(m.body)) {
 					// what lies in it is traced (Stage 30): its sediment is where the ray ended, lit by the room
 					// through the liquid there and back
@@ -556,7 +556,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			if (glow < 0.0) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
 			}
-			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
+			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::white_at(m.body, m.cross_y), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
 					per_cm * (m.bent ? chord : l.depth_cm), m.pass, room);
 			b += a * does.y;
 			a *= does.x;
@@ -1655,6 +1655,12 @@ std::string check_O1(const OpticsScene &scene) {
 		const size_t body = static_cast<size_t>(HEADER_VECS + i * BODY_VECS) * 4;
 		const bool prism = scene.table[body + static_cast<size_t>(FORM) * 4] > 1.5f; // its MORE holds its corners (a thing of the lab's, its ends)
 		const double extinction = scene.table[body + static_cast<size_t>(MORE) * 4], thickness = scene.table[body + static_cast<size_t>(MORE) * 4 + 1];
+		const float *bubbles = &scene.table[body + 6 * 4]; // a vessel's bubbles (Stage 45): none less than nothing
+		if (!prism && (!(bubbles[0] >= 0.0f) || !(bubbles[1] >= 0.0f) || !(bubbles[2] >= 0.0f) || !(bubbles[3] >= 0.0f))) {
+			std::snprintf(text, sizeof text, "O1: body %d: bubbles less than nothing (%g, %g, %g, %g)", i, static_cast<double>(bubbles[0]), static_cast<double>(bubbles[1]),
+					static_cast<double>(bubbles[2]), static_cast<double>(bubbles[3]));
+			return text;
+		}
 		if (!prism && (!(extinction >= 0.0) || !(thickness >= 0.0))) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
