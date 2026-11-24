@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.46.0 (2026-11-24, Stage 46; awaiting the user's sign-off)
+## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")
 
 - §12.4 (Stage 46, `docs/TDD_46_LWIR.md`): **the long-wave range**, 8–14 µm, what a thermal camera sees, in the same
   renderer as the visible.

@@ -33,7 +33,7 @@ GAME_SPEC 0.46.0 covers it in §12.4 and §18 (O21 to O25).
 | 46.6 | One scene at any view: the grid on the room's squares, no culling; bodies hidden from a sensor's rays | Done |
 | 46.7 | The sensor mapping: the reference, the GPU host's pool of records (O25) | Done |
 | 46.8 | The debug infrared view; O4 on its picture; `make screenshots` and `make pass-cost` | Done |
-| 46.9 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (688 s: ASan+UBSan 688, ctest 416, Godot 12 of 12, goldens unchanged); the sign-off awaited |
+| 46.9 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (688 s: ASan+UBSan 688, ctest 416, Godot 12 of 12, goldens unchanged); signed off by the user, 2026-11-24 ("Perfect, approved, merge and proceed") |
 
 Stage 45 (another agent's, boiling's bubbles) merged into main during this stage. It took the bodies' vec4 6 and
 added a seventh row to each set. Main was merged into this branch (`a3ba205`), and a body's temperature moved to
