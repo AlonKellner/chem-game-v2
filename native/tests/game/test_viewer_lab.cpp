@@ -40,14 +40,15 @@ std::string refused(lab::Lab &l, const std::string &command) {
 	return why;
 }
 
-const lab::ItemView &item(const lab::LabView &v, const std::string &id) {
+// (a copy: the view it is read from is often a temporary)
+lab::ItemView item(const lab::LabView &v, const std::string &id) {
 	for (const lab::ItemView &i : v.items) {
 		if (i.id == id) {
 			return i;
 		}
 	}
 	FAIL("no item " << id);
-	return v.items.front();
+	return lab::ItemView{};
 }
 
 // the interactive bench, its viewer taken out
@@ -64,7 +65,7 @@ std::string without_viewer() {
 TEST_CASE("lab: a viewer is equipment of the cabinet that changes nothing in the world (Stage 42)") {
 	auto with = open_text(read("data/benches/lab.json"));
 	auto without = open_text(without_viewer());
-	const lab::ItemView &v = item(with->view(), "viewer");
+	const lab::ItemView v = item(with->view(), "viewer");
 	CHECK(v.kind == "viewer");
 	CHECK(v.place == "cabinet");
 	CHECK(v.w == 7);
@@ -104,7 +105,7 @@ TEST_CASE("lab: the probe is fixed on an item, a part or the room, or back in it
 	must(*l, R"({"do":"place","item":"flask","at":[8,4]})");
 	must(*l, R"({"do":"probe","viewer":"viewer","on":"flask","at":[0.25,0.8]})");
 	{
-		const lab::ItemView &v = item(l->view(), "viewer");
+		const lab::ItemView v = item(l->view(), "viewer");
 		CHECK(v.probe_on == "flask");
 		CHECK(!v.probe_room);
 		CHECK(v.probe_u == 0.25);
@@ -119,7 +120,7 @@ TEST_CASE("lab: the probe is fixed on an item, a part or the room, or back in it
 	// on the room
 	must(*l, R"({"do":"probe","viewer":"viewer","at":[2.5,13.75]})");
 	{
-		const lab::ItemView &v = item(l->view(), "viewer");
+		const lab::ItemView v = item(l->view(), "viewer");
 		CHECK(v.probe_on.empty());
 		CHECK(v.probe_room);
 		CHECK(v.probe_v == 13.75);
@@ -166,7 +167,7 @@ TEST_CASE("lab: the probe is saved and loaded; a lab without a probe out saves a
 	std::string why;
 	auto again = lab::Lab::load(l->save(), why);
 	REQUIRE_MESSAGE(again != nullptr, why);
-	const lab::ItemView &v = item(again->view(), "viewer");
+	const lab::ItemView v = item(again->view(), "viewer");
 	CHECK(v.kind == "viewer");
 	CHECK(v.probe_on == "flask");
 	CHECK(v.probe_u == 0.1234567890123);

@@ -55,7 +55,7 @@ Version 0.42.0. Branched from Stage 41's tip (`f8ad333`), since 41 changes the s
 | 42.6 | The view: 1x to 16x, the room laid out anew (O18); a view's change resampled (O20) | Done |
 | 42.7 | The C API and the Godot host: the wheel, a pinch, two fingers, middle-drag, Home and Ctrl/Cmd+0 | Done |
 | 42.8 | Costs and pictures on the GPU (`data/plays/viewer.json`) | Measured (below); Open items |
-| 42.9 | GAME_SPEC 0.42.0; the documents; `make gates`; the user's sign-off | Awaiting sign-off |
+| 42.9 | GAME_SPEC 0.42.0; the documents; `make gates`; the user's sign-off | `make gates` passed (309 s: ASan+UBSan 309, ctest 253, Godot 12 of 12); awaiting sign-off |
 
 ## 42.1 The probe's reading
 
@@ -341,7 +341,17 @@ The pictures (`build/screenshots/viewer-*.png`):
   The fix: the wall's table in the layout's pixels at every view, with the view's map applied at every read
   (the wall's integrals, which callers take in the screen's lengths, scaled with it). This would also drop
   the wall's rebuild at each view.
-- **O4 on the GPU:** a few pixels a picture visibly off, as before the stage (below).
+- **O4 on the GPU** (`make screenshots`, the demo's pictures): as before the stage, a few pixels a picture are
+  visibly off. Measured against Stage 41's tip built beside it:
+
+  | | Visibly off a picture | The largest difference |
+  |---|---|---|
+  | Stage 41's tip | 0 to 9 | 14 |
+  | Stage 42 | 0 to 12 | 14 |
+
+  The pixels Stage 42 adds are at the cabinet (x about 125): the viewer is a tenth item there, so its glassware
+  is drawn smaller (shelves of 82 px, not 91), and small glass is where the known O4 pixels lie
+  (`docs/TDD_37_RIGHT.md`). Nothing of the pass's own changed there; open as O4 is.
 - **The pool of kept beams** grows to its cap (384 MB) when a vessel fills a 16x view; past it, rectangles
   trace every frame. This was not reached in the play.
 - **The probe reads at 1x.** Zoomed in, the disc is still 4 px of the layout. A probe whose disc shrinks
