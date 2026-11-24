@@ -212,7 +212,15 @@ Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
 
 } // namespace
 
-Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside) {
+Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside, const std::array<double, MAX_MEDIA> *absorb) {
+	// what a medium takes in over a stretch of the way (Stage 46)
+	const auto take = [&](Landing &out, int medium, double cm) {
+		if (absorb != nullptr && medium >= 0 && medium < MAX_MEDIA) {
+			const double kept = std::exp(-(*absorb)[static_cast<size_t>(medium)] * cm);
+			out.absorbed += out.pass * (1.0 - kept);
+			out.pass *= kept;
+		}
+	};
 	Landing out;
 	int here = 0;
 	const int MOST = MEETINGS_MOST;
@@ -275,6 +283,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 			}
 			if (which >= 0) {
 				out.chord[static_cast<size_t>(here)] += nearest;
+				take(out, here, nearest);
 				o = along(o, u, nearest);
 				++out.meetings;
 				const int there = medium_at(*inside, along(o, u, NUDGE));
@@ -304,6 +313,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 				}
 				const double cos_t = std::sqrt(1.0 - sin2);
 				const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+				out.turned += out.pass * 0.5 * (rs * rs + rp * rp);
 				out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
 				const double k = eta * cos_i - cos_t;
 				u = Vec3{ eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z };
@@ -317,6 +327,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		}
 		const Patch &p = shape.patches[static_cast<size_t>(hit)];
 		out.chord[static_cast<size_t>(here)] += best;
+		take(out, here, best);
 		o = along(o, u, best);
 		++out.meetings;
 		// the surface's normal, and which medium is beyond it
@@ -362,6 +373,7 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		}
 		const double cos_t = std::sqrt(1.0 - sin2);
 		const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
+		out.turned += out.pass * 0.5 * (rs * rs + rp * rp);
 		out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
 		const double k = eta * cos_i - cos_t;
 		u = Vec3{ eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z };

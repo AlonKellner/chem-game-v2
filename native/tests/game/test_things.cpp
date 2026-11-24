@@ -197,7 +197,7 @@ TEST_CASE("things: things of one make share a set of spectra (Stage 22)") {
 	parts.push_back(slab(600.0f, 600.0f, 12.0f, 12.0f, 6.0f, "lamp_glass", "lamp_green"));
 	const OpticsScene scene = scene_of(parts);
 	namespace L = lab::optics_layout;
-	CHECK(scene.rows.size() == static_cast<size_t>(2 * L::ROWS_PER_SET * L::ROW));
+	CHECK(scene.rows.size() == static_cast<size_t>(2 * L::ROWS_PER_SET * (L::ROW + L::LWIR_ROW))); // (with their long-wave rows: Stage 46)
 	CHECK(scene.table[0] == 51.0f);
 }
 

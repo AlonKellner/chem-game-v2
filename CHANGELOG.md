@@ -1,5 +1,24 @@
 # GAME_SPEC version history
 
+## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")
+
+- §12.4 (Stage 46, `docs/TDD_46_LWIR.md`): **the long-wave range**, 8–14 µm, what a thermal camera sees, in the same
+  renderer as the visible.
+  - Every row a segment at 20 nm. Water's n + ik measured (Hale and Querry), glass's as fused silica's (Kitamura
+    et al.), Fluke's grey emissivities; the latex and the flames calibrated.
+  - The room's long-wave light a black body at its temperature. Every body emits by its own (Kirchhoff, in the
+    flat shading and the traced rays alike). Glass takes in what it neither passes nor turns away: opaque in the
+    band, a vessel shows its outer glass.
+  - A hot solid's glow is its temperature's; the glow row is retired.
+  - One scene is the whole room at any view: the grid on the room's own squares, no body left out off the
+    screen. A body can be hidden from a sensor's rays.
+  - The sensor mapping: a sensor's display shows the long-wave light at the matching point of its frame, as its
+    camera reads it, one step from the band's signal to a temperature, a palette's colour, its primaries
+    driven to it, through what is in front.
+  - The debug panel's "infrared": the whole picture as an 8–14 µm camera sees it.
+- §18: O21 (the thermal radiance theorem), O22 (a ray's shares whole), O23 (the light's table its integral), O24 (the
+  visible picture as it was), O25 (a sensor's pixel its truth). §20: the long-wave range's simplifications.
+
 ## 0.45.0 (2026-11-24, Stage 45; signed off by the user: "everything is approved, merge and proceed")
 
 - §11 (Stage 45, `docs/TDD_45_BUBBLES.md`): **boiling's bubbles** (`lab/bubbles.hpp`, `data/boiling.json`).

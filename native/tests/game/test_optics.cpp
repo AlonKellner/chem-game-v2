@@ -268,12 +268,10 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 	const auto glow_of = [](const OpticsScene &scene, int x, int y, double rgb[3]) {
 		double all[3];
 		lab::optics_truth(scene, x, y, all);
-		// (a solid's glow is a light in the pass: each body's glow at 1 nm, a multiple of the room's light)
+		// (a solid's glow is a light in the pass, by its temperature: Kirchhoff, Stage 46; cold, it is at the room's)
 		OpticsScene cold = scene;
 		for (int i = 0; i < static_cast<int>(cold.table[0]); ++i) {
-			for (int k = 0; k < lab::optics_layout::ROW; ++k) {
-				cold.rows[static_cast<size_t>((i * lab::optics_layout::ROWS_PER_SET + lab::optics_layout::GLOW_ROW) * lab::optics_layout::ROW + k)] = 0.0f;
-			}
+			cold.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + i * lab::optics_layout::BODY_VECS + lab::optics_layout::KELVIN_VEC) * 4 + lab::optics_layout::KELVIN_PART] = cold.table[4 * 4 + 2];
 		}
 		double lit[3];
 		lab::optics_truth(cold, x, y, lit);
@@ -730,7 +728,7 @@ TEST_CASE("optics: a bench of two hundred bodies: each pixel finds its own throu
 	lab::optics_compose(all, ROOM, bodies);
 	REQUIRE(lab::check_O1(all) == "");
 	CHECK(all.table[0] == 200.0f);
-	CHECK(all.rows.size() == static_cast<size_t>(200 * L::ROWS_PER_SET * L::ROW)); // a set of spectra each
+	CHECK(all.rows.size() == static_cast<size_t>(200 * L::ROWS_PER_SET * (L::ROW + L::LWIR_ROW))); // a set of spectra each (and its long-wave rows: Stage 46)
 	int compared = 0;
 	for (int k = 0; k < 200; k += 7) {
 		OpticsScene alone;

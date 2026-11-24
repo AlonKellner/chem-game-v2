@@ -153,6 +153,37 @@
 			"tests": ["refraction: a 60-degree prism"]
 		},
 		{
+			"data": ["optics/water_lwir.csv"],
+			"measured": "Hale and Querry 1973, liquid water at 25 C (refractiveindex.info)",
+			"doc": ["Hale and Querry", "The long-wave infrared (Stage 46)"],
+			"tests": ["measured: water's long-wave index is Hale and Querry's at 10 um"]
+		},
+		{
+			"data": ["optics/silica_lwir.csv"],
+			"measured": "Kitamura, Pilon and Jonasz 2007's model of Popova et al. 1972, fused silica (refractiveindex.info)",
+			"doc": ["Kitamura, Pilon and Jonasz", "Popova"],
+			"tests": ["measured: glass's long-wave reflectance peaks as Kitamura's fused silica does"]
+		},
+		{
+			"data": ["optics/media.json/lwir/emissivity/{timer_face,monitor_face,alarm_face,notice_face,writer_face,controller_face,part_face,circuit_face,wire,sense,rig,cap_plastic,viewer_case,probe_head,probe_cable,rubber,burner_metal,outlet_glass,lamp_glass,lcd_black}"],
+			"measured": "Fluke Process Instruments' emissivity tables, 8-14 um: plastic, opaque; rubber; glass, plate; steel, oxidised",
+			"doc": ["Grey emissivities over 8–14 µm", "Fluke Process Instruments"],
+			"tests": ["measured: each long-wave emissivity is its table's"]
+		},
+		{
+			"data": [
+				"optics/media.json/lwir/emissivity/{malachite,copper_oxide,copper_sulfate,copper_sulfate_pentahydrate,copper_sulfate_trihydrate,copper_sulfate_monohydrate,copper_hydroxide}",
+				"optics/media.json/lwir/transmittance/latex",
+				"optics/media.json/lwir/flames/**"
+			],
+			"calibrated": "searched and not found measured over the band: a powder as Fluke's non-metals; the latex's membrane; a flame's gas set so the burner reads as thermal images of a Bunsen flame show, and its soot as Rayleigh soot",
+			"doc": ["A solid powder's emissivity", "A flame's gas", "A sooty flame's soot"]
+		},
+		{
+			"data": ["optics/media.json/lwir/response/**"],
+			"design": "the sensor's band, 8-14 um, flat: a microbolometer's (Stage 46)"
+		},
+		{
 			"data": ["optics/media.json/media/{copper_oxide,copper_sulfate,copper_sulfate_pentahydrate,copper_sulfate_trihydrate,copper_sulfate_monohydrate,latex}/**"],
 			"calibrated": "searched and not found measured: shapes placed so the substance has its known colour",
 			"doc": ["Calibrated media", "not found measured"],

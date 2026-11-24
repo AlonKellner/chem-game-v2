@@ -392,5 +392,62 @@
 			"efficiency": 2.0,
 			"asymmetry": 0.85
 		}
+	},
+	"lwir_note": "The long-wave infrared, 8-14 um (GAME_SPEC §12.1, Stage 46), what a thermal camera's microbolometer sees. indices: a species' complex refractive index n + ik from a measured table (nm, n, k), interpolated at 20 nm: water's by Hale and Querry, glass's as fused silica's by Kitamura et al. (a stand-in for borosilicate). emissivity: a grey body's over the band, for the lab's things (by surface name) and the solids (by species): what is not emitted is reflected. transmittance: a wall's at its reference thickness, grey. flames: a flame's absorption coefficient per cm of path, grey, its gas's and its soot's (soot's at 10 um, as 1/wavelength). response: the sensor's band, flat. docs/DATA_SOURCES.md.",
+	"lwir": {
+		"indices": {
+			"water": {
+				"table": "water_lwir.csv"
+			},
+			"glass": {
+				"table": "silica_lwir.csv"
+			}
+		},
+		"emissivity": {
+			"timer_face": 0.95,
+			"monitor_face": 0.95,
+			"alarm_face": 0.95,
+			"notice_face": 0.95,
+			"writer_face": 0.95,
+			"controller_face": 0.95,
+			"part_face": 0.95,
+			"circuit_face": 0.95,
+			"wire": 0.95,
+			"sense": 0.95,
+			"rig": 0.95,
+			"cap_plastic": 0.95,
+			"viewer_case": 0.95,
+			"probe_head": 0.95,
+			"probe_cable": 0.95,
+			"rubber": 0.95,
+			"burner_metal": 0.8,
+			"outlet_glass": 0.85,
+			"lamp_glass": 0.85,
+			"lcd_black": 0.85,
+			"malachite": 0.9,
+			"copper_oxide": 0.9,
+			"copper_sulfate": 0.9,
+			"copper_sulfate_pentahydrate": 0.9,
+			"copper_sulfate_trihydrate": 0.9,
+			"copper_sulfate_monohydrate": 0.9,
+			"copper_hydroxide": 0.9
+		},
+		"transmittance": {
+			"latex": 0.3
+		},
+		"flames": {
+			"flame_blue": {
+				"gas_per_cm": 0.01,
+				"soot_per_cm": 0.0
+			},
+			"flame_sooty": {
+				"gas_per_cm": 0.01,
+				"soot_per_cm": 0.005
+			}
+		},
+		"response": {
+			"first_nm": 8000,
+			"last_nm": 14000
+		}
 	}
 }

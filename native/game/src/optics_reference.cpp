@@ -1,6 +1,7 @@
 // The reference renderer: the per-pixel source compiled as C++, in float64 (GAME_SPEC §12, §12.2).
 #include "lab/optics_scene.hpp"
 #include "lab/optics_trace.hpp"
+#include "chem/optics.hpp"
 
 #include "lab/colour.hpp"
 #include "optics_frames.hpp"
@@ -205,6 +206,7 @@ struct Exact {
 	bool met = false; // the ray met the body
 	double entry = 0.0; // how far along the line, from where it was given (pixels)
 	double pass = 1.0, chord = 0.0; // what its surfaces passed; its path in the liquid (cm)
+	double absorbed = 0.0, turned = 0.0; // what its glass took in, and its surfaces turned away (Stage 46)
 	int meetings = 0;
 	bool out = true; // it left the body (not still inside after every meeting allowed)
 	uint32_t route = 0; // the surfaces it crossed
@@ -280,7 +282,11 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	const double lux = line.ux * c + line.uy * s, luy = -line.ux * s + line.uy * c;
 	const trace::Vec3 u{ lux, -sense * luy, line.uz };
 	const trace::Vec3 o{ (lx - axis) * cm - back * u.x, sense * (base - ly) * cm - back * u.y, (line.z - z_axis) * cm - back * u.z };
-	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr);
+	// what its glass takes in per cm (Stage 46: nothing in the visible); a prism's core is its glass, and so is a
+	// cylinder's floor
+	const double alpha = row_at(start + 2 * optics_layout::ROW, nm);
+	const std::array<double, trace::MAX_MEDIA> absorb{ 0.0, alpha, prism || core == 2 ? alpha : 0.0, 0.0 };
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
 		return out;
@@ -288,6 +294,8 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	out.met = true;
 	out.entry = (l.chord[0] - back) / cm;
 	out.pass = l.pass;
+	out.absorbed = l.absorbed;
+	out.turned = l.turned;
 	out.chord = liquid && !prism ? l.chord[trace::CORE] : 0.0;
 	out.out = l.left;
 	out.route = l.route;
@@ -309,6 +317,7 @@ struct Met {
 	uint32_t route = 0;
 	int core = 0;
 	bool solid = false; // it ended in this body's sediment (Stage 30)
+	double absorbed = 0.0; // what its glass took in (Stage 46)
 };
 struct ExactRay {
 	double x = 0.0, y = 0.0;
@@ -358,7 +367,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		for (int k = last; k >= first; --k) {
 			if (k == hit) {
 				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, line);
-				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid });
+				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid, e.absorbed });
 				if (!e.out || line.uz <= 0.05) {
 					lands = false;
 					out.x = 100000.0;
@@ -412,6 +421,9 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 // the wall at a point, from what is drawn on it (not from the renderer's table): the bench or the room,
 // then each shape in painting order
 double drawn_at(double x, double y) {
+	if (shader::band_range == 1) {
+		return 1.0; // the long-wave room is one black body (Stage 46)
+	}
 	// (as the wall's table has it: far off to either side, where a ray that never reaches the wall is put; and
 	// beyond the screen's edges, the wall's plane as the room says. Stage 33: the truth read the darkness beside
 	// the bench at both, where the pass read the room.)
@@ -437,6 +449,9 @@ double drawn_at(double x, double y) {
 // their edges into cells, each one radiance, read by drawn_at at its middle (Stage 22: a line thinner than
 // the truth's own samples was counted by how many of them it caught)
 double drawn_over(double x0, double x1, double y0, double y1) {
+	if (shader::band_range == 1) {
+		return 1.0; // the long-wave room is one black body (Stage 46)
+	}
 	const shader::vec4 bench = shader::scene_vec(1);
 	std::vector<double> xs{ x0, x1 }, ys{ y0, y1 };
 	const auto cut = [](std::vector<double> &at, double lo, double hi, double v) {
@@ -530,7 +545,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	if (q.layers == 0 || (q.refractor < 0 && !q.ways)) {
 		return shader::along(q, nm, 1.0, 0.0, 0.0, false, size > 1.0e-3 ? drawn_over(p.x - half, p.x + half, p.y - half, p.y + half) : drawn_at(p.x, p.y));
 	}
-	const double room = shader::scene_vec(2).y;
+	const double room = shader::room_front();
 	// (through a grating: every way the ray goes on in, each by its share)
 	double total = 0.0;
 	int ways = 1;
@@ -557,7 +572,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
 			}
 			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::haze_colour(m.body, start, m.cross_y, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
-					per_cm * (m.bent ? chord : l.depth_cm), m.pass, room);
+					per_cm * (m.bent ? chord : l.depth_cm + l.glowing), m.pass, m.absorbed, room, shader::theta_of(nm, shader::body_kelvin(m.body)));
 			b += a * does.y;
 			a *= does.x;
 		}
@@ -1195,7 +1210,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 	if (s < 0) {
 		return out;
 	}
-	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1);
+	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0);
 	out.at[0] = t.at.x;
 	out.at[1] = t.at.y;
 	out.at[2] = t.at.z;
@@ -1358,9 +1373,24 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	rgb[2] = c.z;
 }
 
+// What a pixel's colour is shown as (Stage 46): itself; in the debug infrared view (the scene read in the long-wave
+// range), its band signal's temperature's colour, as the pass shows it (linear sRGB)
+static void displayed(const OpticsScene &scene, double rgb[3]) {
+	if (!(scene.table.size() > 4 * 4 + 3 && scene.table[4 * 4 + 3] > 0.5f)) {
+		return;
+	}
+	const shader::Use use(scene);
+	const shader::vec4 c = shader::infrared_shown((rgb[0] + rgb[1] + rgb[2]) / 3.0);
+	const double code[3] = { c.x, c.y, c.z };
+	for (int k = 0; k < 3; ++k) {
+		rgb[k] = code[k] <= 0.04045 ? code[k] / 12.92 : std::pow((code[k] + 0.055) / 1.055, 2.4);
+	}
+}
+
 void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]) {
 	double rgb[3];
 	optics_truth(scene, x, y, rgb);
+	displayed(scene, rgb);
 	gamut_map(rgb);
 	for (int c = 0; c < 3; ++c) {
 		rgba[c] = srgb_encode(rgb[c]);
@@ -1554,6 +1584,7 @@ OpticsParity compare_rows(const OpticsScene &scene, const uint8_t *picture, int 
 			}
 			double rgb[3];
 			optics_truth(scene, col, row, rgb);
+			displayed(scene, rgb);
 			const CieLab truth = shown(chem::optics::Xyz{ 0.4124564 * rgb[0] + 0.3575761 * rgb[1] + 0.1804375 * rgb[2], 0.2126729 * rgb[0] + 0.7151522 * rgb[1] + 0.0721750 * rgb[2],
 					0.0193339 * rgb[0] + 0.1191920 * rgb[1] + 0.9503041 * rgb[2] });
 			double lin[3];
@@ -1624,6 +1655,212 @@ OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w
 
 // ---- invariants
 
+// ---- the long-wave range (GAME_SPEC §12.4, Stage 46)
+
+std::string check_O21(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int points, double tolerance) {
+	using namespace optics_layout;
+	if (!shader::ready(scene)) {
+		return "O21: the scene is not the size the renderer reads";
+	}
+	if (!(scene.table[4 * 4 + 3] > 0.5f)) {
+		return "O21: the scene is not read in the long-wave range";
+	}
+	char text[240];
+	int read = 0;
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			if (optics_cover(scene, x, y) <= 0.0) {
+				continue;
+			}
+			for (int k = 0; k < points; ++k) {
+				const double nm = chem::optics::LWIR_FIRST_NM + (chem::optics::LWIR_COUNT - 1.0) * chem::optics::LWIR_STEP_NM * (k + 0.5) / points;
+				const double v = optics_through(scene, x, y, nm);
+				++read;
+				if (!(std::fabs(v - 1.0) <= tolerance)) {
+					std::snprintf(text, sizeof text, "O21: pixel (%d, %d) at %g nm reads %.15g of the room's long-wave light, not 1", x, y, nm, v);
+					return text;
+				}
+			}
+		}
+	}
+	if (read == 0) {
+		return "O21: no pixel of the region is a body's";
+	}
+	return "";
+}
+
+std::string check_O22(double pass, double absorbed, double turned, double tolerance) {
+	char text[200];
+	if (!(pass >= -tolerance && absorbed >= -tolerance && turned >= -tolerance) || !(std::fabs(pass + absorbed + turned - 1.0) <= tolerance)) {
+		std::snprintf(text, sizeof text, "O22: a ray's shares are passed %.15g, taken in %.15g, turned away %.15g: not all of it", pass, absorbed, turned);
+		return text;
+	}
+	return "";
+}
+
+std::string check_O23(const chem::optics::EnergyTable &light, double room_kelvin) {
+	char text[200];
+	const double closed = chem::optics::band_signal(room_kelvin);
+	if (!(std::fabs(light.signal - closed) <= 1e-7 * closed)) {
+		std::snprintf(text, sizeof text, "O23: the long-wave light's whole is %.12g W/m2/sr; the band's integral at %g K is %.12g", light.signal, room_kelvin, closed);
+		return text;
+	}
+	for (double kelvin = 230.0; kelvin <= 2500.0; kelvin *= 1.21) {
+		for (const double e : { 0.1, 0.3, 0.95, 1.0 }) {
+			const double signal = e * chem::optics::band_signal(kelvin) + (1.0 - e) * chem::optics::band_signal(room_kelvin);
+			const double back = chem::optics::brightness_kelvin(signal, e, room_kelvin);
+			if (!(std::fabs(back - kelvin) <= 1e-3)) {
+				std::snprintf(text, sizeof text, "O23: %g K at an emissivity of %g comes back as %.6f K", kelvin, e, back);
+				return text;
+			}
+		}
+	}
+	return "";
+}
+
+std::string check_O24(const OpticsScene &with, const OpticsScene &without, int x0, int y0, int x1, int y1, int step) {
+	char text[240];
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			double a[3], b[3];
+			optics_truth(with, x, y, a);
+			optics_truth(without, x, y, b);
+			for (int c = 0; c < 3; ++c) {
+				if (a[c] != b[c]) {
+					std::snprintf(text, sizeof text, "O24: pixel (%d, %d): %.17g with the long-wave range, %.17g without (channel %d)", x, y, a[c], b[c], c);
+					return text;
+				}
+			}
+		}
+	}
+	return "";
+}
+
+bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, double nm, bool truth, double out[3]) {
+	using namespace optics_layout;
+	if (!shader::ready(scene) || body < 0 || body >= static_cast<int>(scene.table[0])) {
+		return false;
+	}
+	const shader::Use use(scene);
+	shader::band_range = nm > 7000.0 ? 1 : 0;
+	if (!shader::trace_bends(body)) {
+		return false;
+	}
+	const double gap = shader::scene_vec(3).x, z = -shader::scene_vec(HEADER_VECS + body * BODY_VECS + 5).y * gap;
+	const double from_z = -(shader::scene_vec(3).y + 1.0) * gap - 400.0;
+	const int core = shader::trace_core(body, y);
+	if (truth) {
+		Line line{ x, y, from_z, 0.0, 0.0, 1.0 };
+		const Exact e = exact_body(body, core, nm, z, line);
+		if (!e.met || e.meetings == 0) {
+			return false;
+		}
+		out[0] = e.pass;
+		out[1] = e.absorbed;
+		out[2] = e.turned;
+		return true;
+	}
+	const shader::BodyMet e = shader::trace_body(body, core, nm, z, shader::vec3(x, y, from_z), shader::vec3(0.0, 0.0, 1.0));
+	if (!e.met) {
+		return false;
+	}
+	out[0] = e.pass;
+	out[1] = e.absorbed;
+	out[2] = e.turned;
+	return true;
+}
+
+bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
+	using namespace optics_layout;
+	optics_truth(scene, x, y, rgb); // what is in front of the display, and its face, in the visible
+	if (!shader::ready(scene)) {
+		return false;
+	}
+	const shader::Use use(scene);
+	const shader::vec2 p(x + 0.5, y + 0.5);
+	const shader::Path q = shader::path_of(p, 1.0);
+	if (q.relay < 0) {
+		return false;
+	}
+	const int b = shader::relay_block(q.relay);
+	const shader::vec4 h0 = shader::image_vec(b), h1 = shader::image_vec(b + 1);
+	// its primaries through its front, every share of the visible light its own band
+	double a[3][3] = {};
+	shader::band_range = 0;
+	const int bands = 1024;
+	for (int j = 0; j < bands; ++j) {
+		const shader::vec4 lo = shader::share(static_cast<double>(j) / bands), hi = shader::share(static_cast<double>(j + 1) / bands);
+		const double nm = shader::share((j + 0.5) / bands).x + 380.0, through = shader::relay_through(q, nm);
+		for (int c = 0; c < 3; ++c) {
+			const double light = through * shader::relay_primary(b, c, nm);
+			const shader::vec3 lin = shader::to_linear_srgb(shader::vec3((hi.y - lo.y) * light, (hi.z - lo.z) * light, (hi.w - lo.w) * light));
+			a[c][0] += lin.x;
+			a[c][1] += lin.y;
+			a[c][2] += lin.z;
+		}
+	}
+	// its sensor pixel's mean long-wave light, by the truth's own tracer: a grid over the pixel, every share its band
+	const shader::vec3 sensor = shader::relay_sensor(q.relay, p);
+	shader::range_fixed = true;
+	shader::band_range = 1;
+	shader::ray_hide = static_cast<int>(h1.z);
+	const int grid = 6, shares = 96;
+	double sum = 0.0;
+	for (int i = 0; i < grid; ++i) {
+		for (int k = 0; k < grid; ++k) {
+			const shader::vec2 at(sensor.x + ((i + 0.5) / grid - 0.5) * sensor.z, sensor.y + ((k + 0.5) / grid - 0.5) * sensor.z);
+			for (int j = 0; j < shares; ++j) {
+				sum += exact_through(at, 1.0e-3, shader::share((j + 0.5) / shares).x + 380.0);
+			}
+		}
+	}
+	shader::range_fixed = false;
+	shader::ray_hide = 0;
+	shader::band_range = 0;
+	const double signal = sum / (grid * grid * shares);
+	// as the camera reads it, and shows it
+	const double own = (signal - (1.0 - h0.z) * h0.w) / std::max(static_cast<double>(h0.z), 1e-6);
+	const double t = std::clamp((shader::infrared_kelvin(own) - h1.x) / std::max(static_cast<double>(h1.y - h1.x), 1e-6), 0.0, 1.0) * (RELAY_PALETTE - 1);
+	const int k = std::min(static_cast<int>(std::floor(t)), RELAY_PALETTE - 2);
+	const shader::vec4 w = shader::mix(shader::image_vec(b + RELAY_HEAD_VECS + k), shader::image_vec(b + RELAY_HEAD_VECS + k + 1), t - k);
+	const shader::vec3 st = shader::relay_stripes(q.relay, p, 1.0);
+	const double drive[3] = { w.x * st.x, w.y * st.y, w.z * st.z };
+	for (int c = 0; c < 3; ++c) {
+		for (int ch = 0; ch < 3; ++ch) {
+			rgb[ch] += a[c][ch] * drive[c];
+		}
+	}
+	return true;
+}
+
+std::string check_O25(const OpticsScene &scene, const OpticsFrames &frames, int x0, int y0, int x1, int y1, int step) {
+	char text[240];
+	int read = 0;
+	for (int y = y0; y < y1; y += step) {
+		for (int x = x0; x < x1; x += step) {
+			double truth[3], rgba[4];
+			if (!optics_relay_truth(scene, x, y, truth)) {
+				continue;
+			}
+			frames.shown(scene, x, y, rgba);
+			const shader::Use use(scene);
+			const auto decode = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+			const shader::vec3 seen(decode(rgba[0]), decode(rgba[1]), decode(rgba[2]));
+			const double off = shader::eye(shader::lab_of(seen), shader::lab_of(shader::gamut(shader::vec3(truth[0], truth[1], truth[2]))));
+			++read;
+			if (!(off <= 8.0)) {
+				std::snprintf(text, sizeof text, "O25: the display's pixel (%d, %d) is %.2f from its truth on the eye metric (shows %.4f %.4f %.4f, truth %.4f %.4f %.4f)", x, y, off, seen.x,
+						seen.y, seen.z, truth[0], truth[1], truth[2]);
+				return text;
+			}
+		}
+	}
+	if (read == 0) {
+		return "O25: no pixel of the region is a sensor display's";
+	}
+	return "";
+}
+
 std::string check_O1(const OpticsScene &scene) {
 	using namespace optics_layout;
 	if (!shader::ready(scene)) {
@@ -1634,7 +1871,7 @@ std::string check_O1(const OpticsScene &scene) {
 		return "O1: more bodies than the scene holds";
 	}
 	char text[200];
-	const int sets = static_cast<int>(scene.rows.size()) / (ROWS_PER_SET * ROW);
+	const int sets = static_cast<int>(scene.table[3]) / (ROWS_PER_SET * ROW); // (then their long-wave rows: Stage 46)
 	for (int i = 0; i < count; ++i) {
 		const float set = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4];
 		if (!(set >= 0.0f) || set >= static_cast<float>(sets) || set != std::floor(set)) {
@@ -1645,7 +1882,7 @@ std::string check_O1(const OpticsScene &scene) {
 			const size_t base = static_cast<size_t>(static_cast<int>(scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + SET) * 4]) * ROWS_PER_SET * ROW + k);
 			const double liquid = scene.rows[base + LIQUID_ROW * ROW], solid = scene.rows[base + SOLID_ROW * ROW], wall = scene.rows[base + WALL_ROW * ROW];
 			// (a screen's glow is its image's: its row is -1, Stage 42)
-			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
+			const bool imaged = scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + MORE) * 4 + 1] < 1.5f && scene.table[static_cast<size_t>(HEADER_VECS + i * BODY_VECS + FORM) * 4] == 3.0f;
 			const double glow = scene.rows[base + GLOW_ROW * ROW], bubble = scene.rows[base + BUBBLE_ROW * ROW];
 			if (!(bubble >= 0.0 && bubble <= 1.0)) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: its bubbles' albedo %g outside [0, 1]", i, 380 + k, bubble);
@@ -1653,6 +1890,18 @@ std::string check_O1(const OpticsScene &scene) {
 			}
 			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(glow >= 0.0 || (imaged && glow == -1.0))) {
 				std::snprintf(text, sizeof text, "O1: body %d at %d nm: a transmittance outside [0, 1] (depth %g, wall %g, reflectance %g)", i, 380 + k, liquid, wall, solid);
+				return text;
+			}
+		}
+		for (int k = 0; k < LWIR_ROW; ++k) {
+			// its long-wave rows (Stage 46): absorptions no less than nothing, a reflectance within [0, 1], indices at
+			// least 1, no light of its own
+			const size_t base = static_cast<size_t>(scene.table[3]) + static_cast<size_t>(static_cast<int>(set) * ROWS_PER_SET * LWIR_ROW + k);
+			const double liquid = scene.rows[base + LIQUID_ROW * LWIR_ROW], solid = scene.rows[base + SOLID_ROW * LWIR_ROW], wall = scene.rows[base + WALL_ROW * LWIR_ROW];
+			const double n_liquid = scene.rows[base + LIQUID_INDEX_ROW * LWIR_ROW], n_wall = scene.rows[base + WALL_INDEX_ROW * LWIR_ROW], glow = scene.rows[base + GLOW_ROW * LWIR_ROW];
+			if (!(liquid >= 0.0) || !(wall >= 0.0) || !(solid >= 0.0 && solid <= 1.0) || !(n_liquid >= 1.0) || !(n_wall >= 1.0) || glow != 0.0) {
+				std::snprintf(text, sizeof text, "O1: body %d at %g nm: a long-wave row out of its range (depth %g, wall %g, reflectance %g, n %g, %g, light %g)", i,
+						chem::optics::lwir_nm(k), liquid, wall, solid, n_liquid, n_wall, glow);
 				return text;
 			}
 		}
@@ -1669,7 +1918,7 @@ std::string check_O1(const OpticsScene &scene) {
 			std::snprintf(text, sizeof text, "O1: body %d: a negative extinction or wall (%g, %g)", i, extinction, thickness);
 			return text;
 		}
-		if (scene.table[body + static_cast<size_t>(MORE) * 4 + 1] > 0.5f && scene.table[body + static_cast<size_t>(FORM) * 4] == 3.0f) {
+		if (scene.table[body + static_cast<size_t>(MORE) * 4 + 1] > 0.5f && scene.table[body + static_cast<size_t>(MORE) * 4 + 1] < 1.5f && scene.table[body + static_cast<size_t>(FORM) * 4] == 3.0f) {
 			// a screen (Stage 42): its image's channels no less than nothing, its weights within [0, 1], its rows'
 			// sums its weights'
 			const int img = static_cast<int>(scene.table[body + static_cast<size_t>(MORE) * 4]);

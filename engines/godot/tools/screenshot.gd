@@ -24,18 +24,12 @@ func _click(what: String) -> void:
 	_lab.pointer(a.x, a.y, true, 16 if what.begins_with("item:") else 0) # an item is chosen by the right button (Stage 27)
 	_lab.pointer(a.x, a.y, false, 16 if what.begins_with("item:") else 0)
 
-func _grams(id: String, species: String) -> float:
+func _of(id: String, species := "") -> float: # an item's grams of a species; with none, its temperature
 	for item in JSON.parse_string(_lab.report())["items"]:
 		if item["id"] == id:
+			if species == "": return item["celsius"]
 			for row in item.get("contents", []):
-				if row["species"] == species:
-					return row["g"]
-	return 0.0
-
-func _celsius(id: String) -> float:
-	for item in JSON.parse_string(_lab.report())["items"]:
-		if item["id"] == id:
-			return item["celsius"]
+				if row["species"] == species: return row["g"]
 	return 0.0
 
 func _watch(done: Callable, what: String) -> bool:
@@ -70,6 +64,11 @@ func _shoot(dir: String, name: String) -> void:
 		if parity[2] > 0:
 			alone.save_png(dir.path_join(name + "_optics_alone.png"))
 
+func _infrared(dir: String, name: String) -> void: # the moment as an 8-14 um camera sees it (Stage 46), held to O4
+	for what in ["debug", "debug:infrared"]: _click(what)
+	await _shoot(dir, name)
+	for what in ["debug:infrared", "debug"]: _click(what)
+
 func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	var dir: String = args[0] if args.size() > 0 else "user://"
@@ -101,16 +100,16 @@ func _play(dir: String) -> void:
 	_click("valve:burner@1")
 	await _shoot(dir, "1_set_up")
 	_click("speed:600")
-	if not _watch(func(): return _grams("flask", "malachite") < 2.0, "the malachite to decompose"):
+	if not _watch(func(): return _of("flask", "malachite") < 2.0, "the malachite to decompose"):
 		return
 	_click("pause")
 	await _shoot(dir, "2_decomposing")
 	_click("speed:600")
-	if not _watch(func(): return _grams("flask", "malachite") < 0.005, "the malachite to be gone"):
+	if not _watch(func(): return _of("flask", "malachite") < 0.005, "the malachite to be gone"):
 		return
 	_drag("item:balloon", "slot:1") # its goal (GAME_SPEC §13.5)
 	_click("valve:burner@0")
-	if not _watch(func(): return _celsius("flask") < 30.0, "the flask to cool"):
+	if not _watch(func(): return _of("flask") < 30.0, "the flask to cool"):
 		return
 	_click("pause")
 	_drag("item:acid", "square:7,12")
@@ -120,7 +119,7 @@ func _play(dir: String) -> void:
 	_click("stir:flask")
 	_click("valve:burner@0.2")
 	_click("speed:600")
-	if not _watch(func(): return _grams("flask", "copper_oxide") < 0.001, "the oxide to dissolve"):
+	if not _watch(func(): return _of("flask", "copper_oxide") < 0.001, "the oxide to dissolve"):
 		return
 	_click("stir:flask")
 	_drag("item:condenser", "item:flask")
@@ -141,16 +140,17 @@ func _play(dir: String) -> void:
 	_drag("drawer:alarm", "square:3,1")
 	_drag("port:monitor1", "item:alarm1")
 	_click("valve:burner@1")
-	if not _watch(func(): return _grams("flask", "water") < 30.0, "the solution to boil down"):
+	if not _watch(func(): return _of("flask", "water") < 30.0, "the solution to boil down"):
 		return
 	_click("pause")
 	await _shoot(dir, "4_boiling")
+	await _infrared(dir, "4_infrared") # (the solution boiling, the condenser cool)
 	_click("speed:600")
-	if not _watch(func(): return _grams("flask", "water") < 12.0, "the solution to boil down"):
+	if not _watch(func(): return _of("flask", "water") < 12.0, "the solution to boil down"):
 		return
 	if _lab.paused(): # the alarm stopped the clock at 12 g, and the rig closed the valve
 		_click("pause")
-	if not _watch(func(): return _celsius("flask") < 21.0, "the flask to cool"):
+	if not _watch(func(): return _of("flask") < 21.0, "the flask to cool"):
 		return
 	for i in 90:
 		_lab.frame(1.0 / 60.0)

@@ -86,6 +86,10 @@ public:
 	// runs the clock slower, never the picture. 0 (as opened): no budget, every step a frame asks is run (up to
 	// twenty seconds' worth). The steps are the same steps however they fall into frames (D1).
 	void set_budget(double ms);
+	// The debug infrared view (GAME_SPEC §12.4, Stage 46): the whole picture as an 8-14 um thermal camera sees it, a
+	// temperature a colour (the debug panel's "infrared"); off as opened.
+	void set_infrared(bool on);
+	bool infrared() const;
 	// what the budget is measured by: milliseconds, from any start (a test gives its own; by default the
 	// steady clock)
 	void set_clock(std::function<double()> ms_now);

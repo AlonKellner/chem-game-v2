@@ -189,7 +189,7 @@ OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const do
 	if (s < 0) {
 		return out;
 	}
-	const shader32::Traced t = shader32::trace_shape(s, shader32::vec3(from[0], from[1], from[2]), shader32::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z.v > 0.5f ? block : -1);
+	const shader32::Traced t = shader32::trace_shape(s, shader32::vec3(from[0], from[1], from[2]), shader32::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z.v > 0.5f ? block : -1, 0.0f, 0.0f);
 	out.at[0] = t.at.x.v;
 	out.at[1] = t.at.y.v;
 	out.at[2] = t.at.z.v;

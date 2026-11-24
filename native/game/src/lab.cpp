@@ -4431,6 +4431,7 @@ LabView Lab::view() const {
 	}
 	const Totals now = totals(table, m.world().snapshot());
 	out.conserved = now == m.genesis;
+	out.room_celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // GAME_SPEC §12.4 (Stage 46)
 	out.mass_g = now.mass.grams();
 	out.energy_j = static_cast<double>(now.energy) * JOULE_PER_QUANTUM;
 	for (const Event &e : m.events) {
