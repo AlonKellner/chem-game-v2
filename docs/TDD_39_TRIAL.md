@@ -13,7 +13,7 @@ budget. GAME_SPEC §13.3, §19.
 | 39.2 | The trial beside the lab: two of its seconds a step; saved, digested; untuned meanwhile, or its gains held | Done |
 | 39.3 | The budget's second piece sized from what the first step cost | Done |
 | 39.4 | The stirred pour's steps | Measured; left (below) |
-| 39.5 | GAME_SPEC §13.3, §19; `make gates`; the user's sign-off | |
+| 39.5 | GAME_SPEC §13.3, §19; `make gates`; the user's sign-off | `make gates` passed; awaiting the user |
 
 ## 39.1 Measured
 
