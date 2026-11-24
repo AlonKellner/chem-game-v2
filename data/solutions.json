@@ -1,6 +1,6 @@
 {
 	"format": "chem-solutions/1",
-	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. water_ionisation: water's own ionisation, whose constant Kw sets the pH where neither an acid nor a base is left over. Sources: docs/DATA_SOURCES.md.",
+	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. solvent: saturated liquid water's properties by temperature (Lienhard, A Heat Transfer Textbook 6.00, Table A.3: rho kg/m3, cp J/kg K, k W/m K, alpha and nu m2/s, Pr, beta 1/K), read between rows, held beyond the ends: its density, for what floats on what (a column's layers, GAME_SPEC §6), its conduction, and boiling's bubbles (§11). water_ionisation: water's own ionisation, whose constant Kw sets the pH where neither an acid nor a base is left over. Sources: docs/DATA_SOURCES.md.",
 	"a_phi": 0.392,
 	"b": 1.2,
 	"diffusion": {"note": "each ion's diffusion coefficient in water at infinite dilution, 25 C, m2/s (GAME_SPEC §7)", "source": "Li and Gregory 1974, Table 1", "H+1": 9.31e-9, "Cu+2": 7.33e-10, "SO4-2": 1.07e-9},
@@ -28,6 +28,23 @@
 		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"},
 		{"cation": "Na+1", "anion": "OH-1", "beta0": 0.0864, "beta1": 0.253, "c_phi": 0.0044, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table I (to 6 mol/kg)"},
 		{"cation": "Na+1", "anion": "SO4-2", "beta0": 0.01958, "beta1": 1.113, "c_phi": 0.004974, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table VI (to 4 mol/kg): their (4/3) beta0 0.0261, (4/3) beta1 1.484, (2^(5/2)/3) c_phi 0.00938"}
+	],
+	"solvent": [
+		{"celsius": 0.01, "rho": 999.8, "cp": 4220, "k": 0.561, "alpha": 1.33e-07, "nu": 1.791e-06, "pr": 13.47, "beta": -6.8e-05},
+		{"celsius": 2, "rho": 999.9, "cp": 4214, "k": 0.5645, "alpha": 1.34e-07, "nu": 1.682e-06, "pr": 12.55, "beta": -3.55e-05},
+		{"celsius": 7, "rho": 999.9, "cp": 4201, "k": 0.574, "alpha": 1.366e-07, "nu": 1.434e-06, "pr": 10.63, "beta": 4.36e-05},
+		{"celsius": 12, "rho": 999.5, "cp": 4193, "k": 0.5835, "alpha": 1.392e-07, "nu": 1.24e-06, "pr": 8.91, "beta": 0.000112},
+		{"celsius": 17, "rho": 998.8, "cp": 4187, "k": 0.5927, "alpha": 1.417e-07, "nu": 1.085e-06, "pr": 7.66, "beta": 0.000172},
+		{"celsius": 22, "rho": 997.8, "cp": 4183, "k": 0.6017, "alpha": 1.442e-07, "nu": 9.6e-07, "pr": 6.66, "beta": 0.000226},
+		{"celsius": 27, "rho": 996.5, "cp": 4181, "k": 0.6103, "alpha": 1.465e-07, "nu": 8.568e-07, "pr": 5.85, "beta": 0.000275},
+		{"celsius": 32, "rho": 995.0, "cp": 4180, "k": 0.6184, "alpha": 1.487e-07, "nu": 7.708e-07, "pr": 5.18, "beta": 0.000319},
+		{"celsius": 37, "rho": 993.3, "cp": 4179, "k": 0.626, "alpha": 1.508e-07, "nu": 6.982e-07, "pr": 4.63, "beta": 0.000361},
+		{"celsius": 47, "rho": 989.3, "cp": 4181, "k": 0.6396, "alpha": 1.546e-07, "nu": 5.832e-07, "pr": 3.77, "beta": 0.000436},
+		{"celsius": 67, "rho": 979.5, "cp": 4189, "k": 0.6605, "alpha": 1.61e-07, "nu": 4.308e-07, "pr": 2.68, "beta": 0.000565},
+		{"celsius": 87, "rho": 967.4, "cp": 4202, "k": 0.6737, "alpha": 1.657e-07, "nu": 3.371e-07, "pr": 2.03, "beta": 0.000679},
+		{"celsius": 100.0, "rho": 958.3, "cp": 4216, "k": 0.6791, "alpha": 1.681e-07, "nu": 2.94e-07, "pr": 1.75, "beta": 0.000751},
+		{"celsius": 127, "rho": 937.5, "cp": 4256, "k": 0.6836, "alpha": 1.713e-07, "nu": 2.332e-07, "pr": 1.36, "beta": 0.000895},
+		{"celsius": 147, "rho": 919.9, "cp": 4299, "k": 0.6825, "alpha": 1.726e-07, "nu": 2.03e-07, "pr": 1.18, "beta": 0.001008}
 	],
 	"water_ionisation": {"note": "H2O(l) -> H+(aq) + OH-(aq) at 25 C (GAME_SPEC §9, Stage 43): its enthalpy and Gibbs energy, kJ/mol, and its change of heat capacity, J/mol K, held at every temperature; Kw from them", "source": "NBS tables (Wagman et al. 1982): OH- -229.994, -157.244, -148.5; H2O(l) -285.830, -237.129, 75.291", "h_kj": 55.836, "g_kj": 79.885, "cp": -223.8}
 }

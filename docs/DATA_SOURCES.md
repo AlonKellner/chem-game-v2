@@ -388,8 +388,10 @@ What a vessel's heated floor does (GAME_SPEC §11): its natural convection, the 
 large they leave, how fast they rise, how fast they condense in a cooler bulk, and what they do to light.
 `data/boiling.json`, all of it read 2026-11-24.
 
-**Water's properties**, `water`: Lienhard, *A Heat Transfer Textbook* 6.00 (2024, ahtt.mit.edu), **Table A.3**,
-saturated liquid water, the rows from 7 to 147 °C as printed (ρ, cp, k, α, ν, Pr, β). His water data are from
+**Water's properties**: Lienhard, *A Heat Transfer Textbook* 6.00 (2024, ahtt.mit.edu), **Table A.3**,
+saturated liquid water, the rows from 0.01 to 147 °C as printed (ρ, cp, k, α, ν, Pr, β). Stage 45 kept them in
+`data/boiling.json`; from Stage 47 they are the core's, `data/solutions.json`'s `solvent` (`chem::solvent_at`),
+for a column's buoyancy and conduction as well as the bubbles. His water data are from
 IAPWS's formulations ("in agreement with IAPWS recommendations through 2007"). Read between rows.
 
 **Surface tension**, `surface_tension`: Lienhard's **eq. 9.2a** (IAPWS), σ = 235.8 (1 − T/Tc)^1.256 [1 − 0.625

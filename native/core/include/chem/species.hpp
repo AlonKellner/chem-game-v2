@@ -62,6 +62,14 @@ struct ViscosityPoint {
 	double pascal_seconds = 0.0;
 };
 
+// The solvent's properties at one temperature (Stage 47: saturated liquid water, Lienhard's Table A.3): its
+// density (kg/m^3), heat capacity (J/kg K), conductivity (W/m K), thermal diffusivity and kinematic viscosity
+// (m^2/s), Prandtl number and thermal expansion (1/K).
+struct SolventPoint {
+	double kelvin = 0.0;
+	double rho = 0.0, cp = 0.0, k = 0.0, alpha = 0.0, nu = 0.0, pr = 0.0, beta = 0.0;
+};
+
 // Pitzer's parameters of one cation and one anion (GAME_SPEC §10).
 struct PairDef {
 	int32_t cation = -1, anion = -1; // ions
@@ -81,6 +89,7 @@ struct SolutionDef {
 	// Gibbs energy (J/mol) and its change of heat capacity (J/mol/K, held at every temperature); Kw follows.
 	// ionisation_g 0: none, and no pH
 	double ionisation_h = 0.0, ionisation_g = 0.0, ionisation_cp = 0.0;
+	std::vector<SolventPoint> solvent; // by rising temperature; empty: none known (no column's buoyancy, Stage 47)
 };
 
 struct SpeciesDef {

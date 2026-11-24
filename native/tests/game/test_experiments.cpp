@@ -1,6 +1,8 @@
 // The tutorial's strict and free modes (GAME_SPEC §13.2) and the experiments
 // (§13.7; Stage 41): the catalogue, its list on the screen, and each
 // experiment played through the screen with nothing but its own gestures.
+#include "lab/optics_scene.hpp"
+#include "lab/prism_demo.hpp"
 #include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
@@ -17,10 +19,19 @@ using pupil::read;
 
 namespace {
 
+// the first body's rectangle, a scene's signature for the prism's moving
+std::string scene_signature(const lab::OpticsScene &scene) {
+	const float *r = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS) * 4];
+	return std::to_string(r[0]) + "," + std::to_string(r[1]) + "," + std::to_string(r[2]) + "," + std::to_string(r[3]);
+}
+
 // data/experiments.json with each bench and tutorial inlined, as a host hands it to the screen
 std::string catalogue() {
 	nlohmann::json doc = nlohmann::json::parse(read("data/experiments.json"));
 	for (nlohmann::json &e : doc["experiments"]) {
+		if (e.contains("scene")) {
+			continue; // a scene of the optics alone (Stage 47): no bench to inline
+		}
 		e["bench"] = nlohmann::json::parse(read("data/" + e["bench"].get<std::string>()));
 		if (!e["tutorial"].is_null()) {
 			e["tutorial"] = nlohmann::json::parse(read("data/" + e["tutorial"].get<std::string>()));
@@ -384,4 +395,39 @@ TEST_CASE("experiment boiling: followed with its own gestures, free, it complete
 	Pupil p("data/benches/boiling.json", "data/tutorials/boiling.json", false);
 	pupil::follow_through(p, 1800);
 	completed(p);
+}
+
+// ---- a scene of the optics alone in the list (Stage 47)
+
+TEST_CASE("experiments: the prism and the grating are in the list; chosen, the screen shows that scene, its prism dragged, and back to a bench (Stage 47)") {
+	Pupil p; // the demo, as a host opens it
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->experiments(read("data/experiments.json"), why, [](const std::string &path) -> std::optional<std::string> { return read("data/" + path); }), why);
+	p.click("menu:experiments");
+	CHECK(p.drawn("Light through a prism and a grating"));
+	p.click("experiment:prism");
+	CHECK(p.ui->message().empty());
+	CHECK(p.ui->experiment() == "prism");
+	p.ui->frame(1.0 / 60.0);
+	CHECK(p.drawn("experiments: prism")); // the button stays over the scene
+	const lab::OpticsScene &scene = p.ui->optics();
+	CHECK(scene.table[0] >= 2.0f); // the prism and the grating are bodies of the pass
+	CHECK(lab::check_O1(scene) == "");
+	// the prism dragged: the scene's own gesture
+	const lab::PrismDemo probe;
+	const float x0 = probe.centre_x() + 1, y0 = probe.centre_y();
+	const std::string before = scene_signature(p.ui->optics());
+	p.ui->pointer(x0, y0, false);
+	p.ui->pointer(x0, y0, true);
+	p.ui->pointer(x0 + 120, y0, true);
+	p.ui->pointer(x0 + 120, y0, false);
+	CHECK(scene_signature(p.ui->optics()) != before);
+	// back to a bench, from the list over the scene
+	p.click("menu:experiments");
+	p.click("experiment:free_lab");
+	CHECK(p.ui->experiment() == "free_lab");
+	CHECK(p.drawn("cabinet"));
+	// a catalogue naming a scene there is not is refused
+	CHECK_FALSE(p.ui->experiments(R"({"format": "chem-experiments/1", "experiments": [{"id": "x", "title": "X", "scene": "kaleidoscope"}]})", why, nullptr));
+	CHECK(why.find("scene") != std::string::npos);
 }

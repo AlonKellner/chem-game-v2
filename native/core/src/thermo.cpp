@@ -390,6 +390,49 @@ double solvent_viscosity(const SpeciesTable &table, double temperature) {
 	return points.back().pascal_seconds;
 }
 
+SolventPoint solvent_at(const SpeciesTable &table, double temperature) {
+	const std::vector<SolventPoint> &rows = table.solution().solvent;
+	if (rows.empty()) {
+		return SolventPoint{};
+	}
+	if (!(temperature > rows.front().kelvin)) {
+		return rows.front();
+	}
+	if (!(temperature < rows.back().kelvin)) {
+		return rows.back();
+	}
+	size_t i = 1;
+	while (rows[i].kelvin < temperature) {
+		++i;
+	}
+	const SolventPoint &a = rows[i - 1], &b = rows[i];
+	const double f = (temperature - a.kelvin) / (b.kelvin - a.kelvin);
+	const auto mix = [f](double x, double y) { return x + (y - x) * f; };
+	return SolventPoint{ temperature, mix(a.rho, b.rho), mix(a.cp, b.cp), mix(a.k, b.k), mix(a.alpha, b.alpha), mix(a.nu, b.nu), mix(a.pr, b.pr), mix(a.beta, b.beta) };
+}
+
+bool liquid_density(const SpeciesTable &table, const CellState &cell, double temperature, double &density) {
+	double grams = 0.0, volume = 0.0, liquid = 0.0; // g, m^3 at 25 C, quanta of liquid
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		const SpeciesId id{ static_cast<int32_t>(s) };
+		const SpeciesDef &def = table.species(id);
+		if (cell.amount[s] <= 0 || def.wall || (def.phase != Phase::Liquid && def.phase != Phase::Aqueous)) {
+			continue;
+		}
+		const double mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
+		grams += mol * static_cast<double>(table.molar_mass_ug(id)) * 1e-6;
+		volume += mol * def.molar_volume;
+		liquid += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) : 0.0;
+	}
+	if (!(liquid > 0.0) || !(volume > 0.0)) {
+		return false;
+	}
+	const double at25 = solvent_at(table, 298.15).rho, now = solvent_at(table, temperature).rho;
+	const double expansion = at25 > 0.0 && now > 0.0 ? at25 / now : 1.0;
+	density = grams * 1e-3 / (volume * expansion);
+	return true;
+}
+
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {
 	const SpeciesDef &def = table.species(species);
 	if (def.phase != Phase::Aqueous || !(temperature > 0.0)) {

@@ -12,7 +12,8 @@
 
 namespace lab::bubbles {
 
-// saturated liquid water at a temperature (Lienhard, Table A.3), read between rows, held beyond the ends
+// saturated liquid water at a temperature (Lienhard, Table A.3: the core's solvent, chem::solvent_at), read between
+// rows, held beyond the ends
 struct Water {
 	double rho = 0.0; // kg/m^3
 	double cp = 0.0; // J/kg K

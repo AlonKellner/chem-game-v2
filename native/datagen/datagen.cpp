@@ -333,6 +333,16 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				}
 			}
 		}
+		if (solutions_json.contains("solvent")) {
+			for (const json &v : solutions_json.at("solvent")) {
+				const chem::SolventPoint point{ v.at("celsius").get<double>() + 273.15, v.at("rho").get<double>(), v.at("cp").get<double>(), v.at("k").get<double>(),
+					v.at("alpha").get<double>(), v.at("nu").get<double>(), v.at("pr").get<double>(), v.at("beta").get<double>() };
+				if (!(point.rho > 0.0 && point.k > 0.0 && point.nu > 0.0) || (!solution.solvent.empty() && !(point.kelvin > solution.solvent.back().kelvin))) {
+					fail(solutions_file, "the solvent's rows are by rising temperature, each density, conductivity and viscosity positive");
+				}
+				solution.solvent.push_back(point);
+			}
+		}
 		if (solutions_json.contains("viscosity")) {
 			for (const json &v : solutions_json.at("viscosity")) {
 				solution.viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("mpa_s").get<double>() / 1000.0 });
@@ -501,6 +511,15 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	if (solution.viscosity.empty()) {
 		cpp << "\t{},\n";
 	}
+	cpp << "};\n\nconstexpr SolventPoint SOLVENT[] = {\n";
+	for (const chem::SolventPoint &v : solution.solvent) {
+		char point[300];
+		std::snprintf(point, sizeof point, "\t{ %.17g, %.17g, %.17g, %.17g, %.17g, %.17g, %.17g, %.17g },\n", v.kelvin, v.rho, v.cp, v.k, v.alpha, v.nu, v.pr, v.beta);
+		cpp << point;
+	}
+	if (solution.solvent.empty()) {
+		cpp << "\t{},\n";
+	}
 	cpp << "};\n\nconstexpr PairDef PAIRS[] = {\n";
 	for (const chem::PairDef &p : solution.pairs) {
 		char pair[300];
@@ -514,7 +533,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	char model[240];
 	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g, IONISATION_H = %.17g, IONISATION_G = %.17g, IONISATION_CP = %.17g;\n", solution.a_phi,
 			solution.b, solution.ionisation_h, solution.ionisation_g, solution.ionisation_cp);
-	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size()
+	cpp << "};\n" << model << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
 		<< ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
@@ -543,7 +562,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\tstatic const SpeciesTable table = [] {\n"
 		<< "\t\tstd::string why;\n"
 		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT),\n"
-		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP };\n"
+		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP,\n"
+		<< "\t\t\t\tstd::vector<SolventPoint>(SOLVENT, SOLVENT + SOLVENT_COUNT) };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"

@@ -71,6 +71,15 @@ double particle_diameter(const SpeciesTable &table, const CellState &cell, Speci
 // its points in the logarithm and held beyond its ends. 0 with no table.
 double solvent_viscosity(const SpeciesTable &table, double temperature);
 
+// The solvent's properties at a temperature (Stage 47: saturated liquid water, data/solutions.json's solvent), read
+// between rows, held beyond the ends; all 0 where the table has none.
+SolventPoint solvent_at(const SpeciesTable &table, double temperature);
+
+// A cell's liquid's density at a temperature, kg/m^3 (Stage 47: what floats on what in a column, GAME_SPEC §6): the
+// mass of its liquid and of what is dissolved in it over their volume, the table's molar volumes (at 25 C) scaled by
+// the solvent's own expansion from 25 C. false, and `density` left, where it holds no liquid.
+bool liquid_density(const SpeciesTable &table, const CellState &cell, double temperature, double &density);
+
 // A dissolved species' diffusion coefficient in the solvent at T, m^2/s
 // (GAME_SPEC §7): its particles moving together, sum(nu) / sum(nu / D_i) over
 // them (Nernst-Hartley, for a cation and an anion), each D_i measured at 25 C

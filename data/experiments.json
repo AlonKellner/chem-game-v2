@@ -1,6 +1,6 @@
 {
 	"format": "chem-experiments/1",
-	"note": "The experiments (GAME_SPEC §13.7, Stage 41): what the top bar's \"experiments\" lists. Each a bench and its tutorial (null for none), named by their paths from this file; a host reads them and hands the screen the catalogue with each inlined (Ui::experiments, cg_ui_experiments).",
+	"note": "The experiments (GAME_SPEC §13.7, Stage 41): what the top bar's \"experiments\" lists. Each a bench and its tutorial (null for none), named by their paths from this file, or a scene of the optics alone (\"scene\": \"prism\", Stage 47); a host reads them and hands the screen the catalogue with each inlined (Ui::experiments, cg_ui_experiments).",
 	"experiments": [
 		{
 			"id": "demo",
@@ -64,6 +64,12 @@
 			"summary": "Boiling: a beaker heated from below makes bubbles at its floor long before it boils; they vanish in the cooler water, climb as it warms, and reach the surface at the boil.",
 			"bench": "benches/boiling.json",
 			"tutorial": "tutorials/boiling.json"
+		},
+		{
+			"id": "prism",
+			"title": "Light through a prism and a grating",
+			"summary": "Optics alone: a slit of white light in a dark room, seen through a prism of flint glass that spreads it into its spectrum, and a grating that shows its orders. Drag them; the wheel turns the prism.",
+			"scene": "prism"
 		},
 		{
 			"id": "free_lab",
