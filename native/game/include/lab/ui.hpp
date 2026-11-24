@@ -4,6 +4,7 @@
 #include "lab/optics_scene.hpp"
 #include "lab/spectrometer.hpp"
 #include "lab/tutorial.hpp"
+#include "lab/view.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -55,8 +56,18 @@ public:
 	// A key for the part editor's focused field (GAME_SPEC §13.3): text (a
 	// character, by its code point), backspace, enter (set), escape (cancel; with
 	// no editor open, let go of the selection).
-	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3, KeyUndo = 4 };
+	// (KeyView, Stage 42: the room seen whole again, at 1x)
+	enum Key : int32_t { KeyText = 0, KeyBackspace = 1, KeyEnter = 2, KeyEscape = 3, KeyUndo = 4, KeyView = 5 };
 	void key(Key key, uint32_t codepoint = 0);
+	// The view of the room (GAME_SPEC §13.1, Stage 42): a camera on the lit room (the cabinet, the bench, the outbox),
+	// from 1x (all of it) to 16x; the top bar, the readout's column and the panels stay as they are. Zoomed by
+	// `factor` about a point of the screen (what is under it stays under it), moved by a hand's drag (pixels of the
+	// screen), and back to 1x. The room is laid out anew at each view: its bodies, the wall and the depths, so a
+	// closer view shows what is finer (a screen's subpixels). The pointer's points over the room are the view's.
+	void zoom(float x, float y, float factor);
+	void pan(float dx, float dy);
+	void reset_view();
+	View view() const;
 	// A frame of real time: the lab advances by it times the speed. One step
 	// of each frame is checked against every invariant; all of them when the
 	// screen's "check every step" is on.

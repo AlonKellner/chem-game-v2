@@ -651,6 +651,49 @@ std::string check_O17(const OpticsScene &scene, int samples) {
 	return "";
 }
 
+std::string check_O18(const OpticsScene &whole, const OpticsScene &zoomed, double scale, double ox, double oy, double rx, double ry, double x0, double y0, double x1, double y1, double step) {
+	if (!shader::ready(whole) || !shader::ready(zoomed)) {
+		return "O18: no scene";
+	}
+	int compared = 0, apart = 0;
+	double worst = 0.0, worst_x = 0.0, worst_y = 0.0;
+	// (each point 0.47 of a pixel into its pixel of the layout: what is drawn on the wall is painted on whole pixels,
+	// of the layout at 1x and of the screen at the view, which may stand a quarter of a layout's pixel apart)
+	for (double y = std::floor(y0) + 0.47; y < y1; y += std::max(1.0, std::round(step))) {
+		for (double x = std::floor(x0) + 0.47; x < x1; x += std::max(1.0, std::round(step))) {
+			const double zx = rx + (x - ox) * scale, zy = ry + (y - oy) * scale;
+			if (zx < 0.0 || zy < 0.0 || zx >= 1920.0 || zy >= 1080.0) {
+				continue;
+			}
+			for (const double nm : { 447.0, 553.0, 641.0 }) {
+				// (a ray the view lands past its own screen reads the far wall's mean there, not the wall drawn:
+				// the view's wall is what is on its screen; GAME_SPEC §20)
+				const OpticsRay ray = optics_ray(zoomed, zx, zy, nm);
+				if (ray.bent > 0 && (!ray.lands || ray.x < 0.0 || ray.y < 0.0 || ray.x >= 1920.0 || ray.y >= 1080.0)) {
+					continue;
+				}
+				const double a = optics_point(whole, x, y, nm), b = optics_point(zoomed, zx, zy, nm);
+				const double off = std::fabs(a - b) / std::max(1.0, std::fabs(a));
+				++compared;
+				if (off > 2e-3) {
+					++apart;
+					if (off > worst) {
+						worst = off;
+						worst_x = x;
+						worst_y = y;
+					}
+				}
+			}
+		}
+	}
+	if (compared == 0 || apart > compared / 100) {
+		char text[220];
+		std::snprintf(text, sizeof text, "O18: %d of %d rays bring another light seen at %gx than laid out (the worst %.3g apart, at (%.2f, %.2f) of the layout)", apart, compared, scale, worst, worst_x, worst_y);
+		return text;
+	}
+	return "";
+}
+
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm) {
 	if (!shader::ready(scene)) {
 		return 0.0;

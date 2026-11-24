@@ -25,7 +25,7 @@
 //   vec4 kept_vec(int i), void kept_put(int i, vec4 v)       the record of the pixel being read (below: beams kept)
 //   vec4 image_vec(int i)    the images things emit by (lab/optics_scene.hpp: images; Stage 42, a screen's)
 
-const int HEADER_VECS = 4;
+const int HEADER_VECS = 5;
 const int BODY_VECS = 8;
 const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
@@ -1757,8 +1757,9 @@ uint route_mix(uint h, uint v) {
 // own pixels); 1, another cell of another face; 2, a cell along one of the cube's twelve edges, which is black.
 vec3 room_exit(vec3 p, vec3 u, float wall, float side, float cell) {
 	float half_side = 0.5 * side;
-	vec3 lo = vec3(960.0 - half_side, 540.0 - half_side, wall - side);
-	vec3 hi = vec3(960.0 + half_side, 540.0 + half_side, wall);
+	vec4 middle = scene_vec(4); // where it stands on the screen (Stage 42: the view moves it)
+	vec3 lo = vec3(middle.x - half_side, middle.y - half_side, wall - side);
+	vec3 hi = vec3(middle.x + half_side, middle.y + half_side, wall);
 	float tx = abs(u.x) > 1.0e-9 ? ((u.x > 0.0 ? hi.x : lo.x) - p.x) / u.x : 1.0e30;
 	float ty = abs(u.y) > 1.0e-9 ? ((u.y > 0.0 ? hi.y : lo.y) - p.y) / u.y : 1.0e30;
 	float tz = abs(u.z) > 1.0e-9 ? ((u.z > 0.0 ? hi.z : lo.z) - p.z) / u.z : 1.0e30;

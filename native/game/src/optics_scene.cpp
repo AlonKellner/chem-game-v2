@@ -249,6 +249,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(3, 0, room.gap_px);
 	put(3, 2, room.cube);
 	put(3, 3, room.cube_cell);
+	put(4, 0, room.cube_x);
+	put(4, 1, room.cube_y);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -376,7 +378,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		const bool ball = v.kind == "balloon";
 		const double bottom = static_cast<double>(body.y) + body.h;
 		// a vessel made as glassware stands with its axis on a whole pixel (GAME_SPEC §12.3, Stage 24)
-		put(at + RECT, 0, v.glassware.empty() ? body.x : std::round(body.x + body.w / 2.0f) - body.w / 2.0f);
+		put(at + RECT, 0, v.glassware.empty() ? body.x : room.pixel_x0 + std::round((body.x + body.w / 2.0 - room.pixel_x0) / room.pixel) * room.pixel - body.w / 2.0);
 		put(at + RECT, 1, body.y);
 		put(at + RECT, 2, body.w);
 		put(at + RECT, 3, body.h);

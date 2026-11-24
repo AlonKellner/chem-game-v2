@@ -27,8 +27,9 @@ inline constexpr int MAX_BODIES = 256;
 // bodies, the backdrop on the bench and off it, lights; the bench's rectangle; the wall's distance behind
 // the bench's plane (pixels), the radiance of the room in front, whether anything refracts (1 or 0), whether
 // bands are cut at the edges a bent view crosses (1 or 0); the gap between two layers' planes (pixels), the
-// nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33)
-inline constexpr int HEADER_VECS = 4;
+// nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33); the room's middle
+// on the screen (Stage 42: where the view puts it), 0, 0
+inline constexpr int HEADER_VECS = 5;
 inline constexpr int BODY_VECS = 8;
 // The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
 // round them) reach into it, in painting order, the nearest the eye last: its count and up to GRID_SLOTS
@@ -225,6 +226,10 @@ struct OpticsRoom {
 	// a vessel's rim, comes to them. On the screen the wall is as it is drawn; elsewhere on a face it is
 	// `beyond`. 0: no room (the wall's plane without end, and `front` for a ray that never reaches it).
 	double cube = 0.0, cube_cell = 0.0, edge = 0.0;
+	double cube_x = 960.0, cube_y = 540.0; // its middle, on the screen (Stage 42: the view moves it)
+	// the layout's pixels on the screen (Stage 42: a view of the room): how wide one is, and where its x = 0 is. A
+	// vessel made as glassware stands with its axis on a whole one of them.
+	double pixel = 1.0, pixel_x0 = 0.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 };
 
@@ -306,6 +311,13 @@ double optics_image_glow_truth(const OpticsScene &scene, int body, double x, dou
 // the scene, from a ray's point to many of its pixels, on it and over its edges, at three wavelengths, what the
 // pass reads of it is what its pixels' subpixels give, to a float's precision (1e-4). "" when it holds.
 std::string check_O17(const OpticsScene &scene, int samples);
+// O18 (GAME_SPEC §18, Stage 42): the view is a similarity. The scene of a room seen at a view (`scale`, the
+// layout's point (ox, oy) at the room's corner (rx, ry) of the screen) is the scene of it laid out, larger: at
+// a point of every `step`th pixel of the layout's [x0, x1) x [y0, y1) (each 0.47 of the way into it), at three
+// wavelengths, a ray through the view's place of a point brings what a ray through the point brings in the
+// layout, but for the few that graze a surface; of the rays the view lands on its own screen (past it, its wall is
+// the far wall's mean). "" when it holds.
+std::string check_O18(const OpticsScene &whole, const OpticsScene &zoomed, double scale, double ox, double oy, double rx, double ry, double x0, double y0, double x1, double y1, double step);
 // where the exact tracer lands the pixel's central ray, on the screen
 double optics_exact_bend(const OpticsScene &scene, int x, int y, double nm);
 
