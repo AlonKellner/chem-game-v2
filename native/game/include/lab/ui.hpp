@@ -2,6 +2,7 @@
 
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/spectrometer.hpp"
 #include "lab/tutorial.hpp"
 
 #include <cstdint>
@@ -77,6 +78,10 @@ public:
 	const DrawList &draw();
 	// What the optical pass shows now (GAME_SPEC §12).
 	const OpticsScene &optics();
+	// A spectral viewer's probe, as it has read so far, and the picture on its screen (GAME_SPEC §13.1, Stage 42);
+	// null for none such, or one not yet on the screen. Read when the scene is made (optics()).
+	const Spectrometer *probe(std::string_view viewer) const;
+	const Picture *screen(std::string_view viewer) const;
 
 	Lab &lab();
 	// A tutorial over the lab (GAME_SPEC §13.2): its card above the readout,
@@ -116,6 +121,9 @@ public:
 	bool paused() const;
 
 	// The centre of a named thing on the screen, for tests and scripted hosts:
+	//   probe:<viewer> (its probe's disc: in its holder, in hand, or where it is fixed)   holder:<viewer>
+	//   screen:<viewer>[@u,v] (a place of its screen, 0 to 1)   item:<id>@u,v (a place of an item in its own frame)
+	//   readout:probe:holder (the button that sends the chosen viewer's probe home)   (Stage 42)
 	//   item:<id>   square:<col>,<row> (a drop there puts the square the item is
 	//   held by on it)   cabinet   outbox
 	//   valve:<burner>@<0..1>   stir:<vessel>

@@ -181,7 +181,7 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 // stand over a burner. A bench may give its own ("size").
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
 	if (kind == "viewer") {
-		w = 6; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
+		w = 7; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
 		h = 4;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it

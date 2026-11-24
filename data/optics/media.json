@@ -281,7 +281,7 @@
 			"base": 0.09
 		},
 		"lcd_black": {
-			"base": 0.03
+			"base": 0.012
 		},
 		"probe_head": {
 			"base": 0.35

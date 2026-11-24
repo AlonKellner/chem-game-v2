@@ -67,7 +67,7 @@ TEST_CASE("lab: a viewer is equipment of the cabinet that changes nothing in the
 	const lab::ItemView &v = item(with->view(), "viewer");
 	CHECK(v.kind == "viewer");
 	CHECK(v.place == "cabinet");
-	CHECK(v.w == 6);
+	CHECK(v.w == 7);
 	CHECK(v.h == 4);
 	CHECK(v.contents.empty());
 	CHECK(v.probe_on.empty());

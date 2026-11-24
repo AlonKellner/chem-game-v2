@@ -395,7 +395,7 @@ TEST_CASE("viewer: the screen's white is the room's white, its black the room's 
 	lab::optics_truth(dark, 600, 350, off);
 	for (int c = 0; c < 3; ++c) {
 		CHECK(on[c] - off[c] == doctest::Approx(1.0).epsilon(0.01));
-		CHECK(off[c] == doctest::Approx(0.03 * 1.0).epsilon(0.05)); // its face: the room's light off its black (the wall's 1 here: the room's white)
+		CHECK(off[c] == doctest::Approx(0.012).epsilon(0.05)); // its face: the room's light off its black
 	}
 	CHECK(lab::check_O2(lit, 600, 350) == "");
 	// every channel of light no less than nothing; full white is each of them full
@@ -428,7 +428,7 @@ TEST_CASE("viewer: the screen shows each wavelength as the game shows a spike of
 		lab::optics_truth(scene, 600, 350, seen);
 		// less the room's light off its face (the plot's black: the same under every colour)
 		for (double &c : seen) {
-			c -= 0.03 * wall;
+			c -= 0.012 * wall;
 		}
 		double meant[3];
 		for (int c = 0; c < 3; ++c) {
