@@ -271,7 +271,7 @@ TEST_CASE("optics: a hot solid glows, as hot as it is (Stage 10)") {
 		// (a solid's glow is a light in the pass, by its temperature: Kirchhoff, Stage 46; cold, it is at the room's)
 		OpticsScene cold = scene;
 		for (int i = 0; i < static_cast<int>(cold.table[0]); ++i) {
-			cold.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + i * lab::optics_layout::BODY_VECS + lab::optics_layout::HEAT) * 4] = cold.table[4 * 4 + 2];
+			cold.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + i * lab::optics_layout::BODY_VECS + lab::optics_layout::KELVIN_VEC) * 4 + lab::optics_layout::KELVIN_PART] = cold.table[4 * 4 + 2];
 		}
 		double lit[3];
 		lab::optics_truth(cold, x, y, lit);

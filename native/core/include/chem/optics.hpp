@@ -51,6 +51,14 @@ const Spectrum *material_index(std::string_view name);
 // one there is not (data/optics/media.json: surfaces, emitters; GAME_SPEC §12.3, Stage 22).
 const Spectrum *surface(std::string_view name);
 const Spectrum *emitter(std::string_view name);
+// What scatters in a liquid and is no species (data/optics/media.json: scatterers; GAME_SPEC §12, Stage 45): its
+// single-scattering albedo at each wavelength, its extinction efficiency (extinction over geometric cross-section)
+// and its asymmetry parameter g; by name, null for one there is not. "bubbles": gas bubbles in water.
+struct Scatterer {
+	const Spectrum *albedo = nullptr;
+	double efficiency = 0.0, asymmetry = 0.0;
+};
+const Scatterer *scatterer(std::string_view name);
 // An absorber's narrow lines, beside its 1 nm spectrum (GAME_SPEC §12.1): each a
 // Gaussian of the given full width at half maximum, read at the exact wavelength
 // a point falls on, never averaged over a nanometre.

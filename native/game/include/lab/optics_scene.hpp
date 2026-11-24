@@ -46,9 +46,12 @@ inline constexpr int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // within a body; REFRACT: its glass's thickness (cm), its layer (0: the bench's; each one more a gap nearer
 // the eye), its floor's thickness (cm: glass all through, which what it holds rests on), whether it refracts.
-// Its vec4 6 (Stage 46; it held where a body's refraction map lay until Stage 35): its temperature (K: what it emits
-// by, GAME_SPEC §12.4), and the rays it is hidden from (bits: a ray of a sensor's that carries one of them passes it
-// by), 0, 0.
+// Its vec4 6 (Stage 45; until Stage 35 where a body's refraction map lay): a vessel's boiling's bubbles, its steam
+// bubbles' extinction a centimetre at its floor (times 1 - g: the share their scattering turns back), the height over its floor where they end (cm), the exponent their
+// extinction falls by to there, (1 - z / end)^exponent, and a reaction's gas's extinction a centimetre, the same at
+// every height (GAME_SPEC §11); 0 for any other body.
+// Stage 46 (GAME_SPEC §12.4): its temperature (K: what it emits by) is its SET's y, and the rays it is hidden from
+// (bits: a ray of a sensor's that carries one of them passes it by) its GLOW's w.
 // A prism (FORM x = 2): MORE and GLOW x, y hold its three corners (cm from its centre, x across and z away from
 // the eye), GLOW z its centre's offset from its rectangle's (pixels)
 // SET: the set of spectra it is made of (a row set of `rows`), unused, a signature of the bodies of a layer
@@ -56,22 +59,27 @@ inline constexpr int SIZE_VECS = GRID_BASE + GRID_COLS * GRID_ROWS * GRID_VECS;
 // upside down.
 // FORM x is its shape: 0 a cylinder (a vessel), 1 a ball (a balloon), 2 a prism; 3 a slab, 4 a bar, 5 a cone
 // (Stage 22: FORM z its size, a slab's corners' radius or a bar's width; MORE a bar's two ends)
-inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, HEAT = 6, SET = 7;
+inline constexpr int RECT = 0, FORM = 1, MORE = 2, GLOW = 3, IDS = 4, REFRACT = 5, SET = 7;
+// (Stage 46) where in the table a body's temperature is (SET y), and its hidden bits (GLOW w), as vec4 and part
+inline constexpr int KELVIN_VEC = SET, KELVIN_PART = 1, HIDDEN_VEC = GLOW, HIDDEN_PART = 3;
 // each set of spectra (Stage 22: what a body is made of, named by its SET; a vessel's is its own), ROW values
 // at 1 nm from 380 nm: its liquid's optical depth per centimetre
 // (natural), its solids' reflectance, its wall's optical depth at the reference thickness, its
 // liquid's refractive index, its wall's, and what its solids glow with (Planck's law times their
-// emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's)
-// And each row's long-wave segment (GAME_SPEC §12.4, Stage 46): LWIR_ROW values at 20 nm from 8000 nm, the same six
+// emissivity, as a multiple of the room's light at that wavelength: a light in the pass like the wall's), and what
+// its bubbles turn back (Stage 45: their single-scattering albedo, data/optics/media.json's scatterers; 0 where it
+// has none)
+// And each row's long-wave segment (GAME_SPEC §12.4, Stage 46): LWIR_ROW values at 20 nm from 8000 nm, the same
 // quantities in the band (the liquid's absorption, 1/cm; the solids' reflectance, 1 - emissivity; the wall's depth:
 // glass's absorption, 1/cm, a membrane's at its reference thickness; the indices, each the real one with n + ik's
-// reflectance; no light of its own: a body's long-wave light is its temperature's), after all the sets' visible
-// rows, set after set: row r of set s at the header's base + (s ROWS_PER_SET + r) LWIR_ROW. A thing that glows
-// (a cone: a flame) holds its absorption per pixel of path in its liquid's row.
+// reflectance; no light of its own: a body's long-wave light is its temperature's; no bubbles: they are in water,
+// opaque there), after all the sets' visible rows, set after set: row r of set s at the header's base +
+// (s ROWS_PER_SET + r) LWIR_ROW. A thing that glows (a cone: a flame) holds its absorption per pixel of path in its
+// liquid's row.
 inline constexpr int ROW = 401;
 inline constexpr int LWIR_ROW = 301;
-inline constexpr int ROWS_PER_SET = 6;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5;
+inline constexpr int ROWS_PER_SET = 7;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6;
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;
 // the lights: the room's, 4,097 entries of (nm - 380, the colour up to it: X, Y, Z)

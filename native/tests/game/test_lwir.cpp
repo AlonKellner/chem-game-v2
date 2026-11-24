@@ -161,11 +161,11 @@ TEST_CASE("long-wave: in a room at one temperature every pixel reads the room's 
 	CHECK(lab::check_O21(scene, 190, 90, 700, 240, step, 5, 1e-12) == "");
 	// it fires: a body a millikelvin off the room (glass, a heap, a flame that emits as if it were not there)
 	OpticsScene off = scene;
-	off.table[static_cast<size_t>(L::HEADER_VECS + 0 * L::BODY_VECS + L::HEAT) * 4] += 0.001f;
+	off.table[static_cast<size_t>(L::HEADER_VECS + 0 * L::BODY_VECS + L::KELVIN_VEC) * 4 + L::KELVIN_PART] += 0.001f;
 	CHECK(lab::check_O21(off, 200, 100, 290, 212, 2, 3, 1e-12) != "");
 	OpticsScene cold = scene;
 	for (int b = 0; b < static_cast<int>(cold.table[0]); ++b) {
-		cold.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::HEAT) * 4] = 1.0f; // nothing emits
+		cold.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::KELVIN_VEC) * 4 + L::KELVIN_PART] = 1.0f; // nothing emits
 	}
 	CHECK(lab::check_O21(cold, 190, 90, 700, 240, 9, 3, 1e-12) != "");
 	// and it holds only in the long-wave range
@@ -227,14 +227,14 @@ TEST_CASE("long-wave: the visible picture is as it was with the long-wave range 
 		without.lights[i] = static_cast<float>(i % 97);
 	}
 	for (int b = 0; b < static_cast<int>(without.table[0]); ++b) {
-		without.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::HEAT) * 4] = static_cast<float>(1.0 + 37.0 * b);
+		without.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::KELVIN_VEC) * 4 + L::KELVIN_PART] = static_cast<float>(1.0 + 37.0 * b);
 	}
 	without.table[4 * 4 + 2] = 451.0f;
 	const int step = sparse() ? 9 : 3;
 	CHECK(lab::check_O24(with, without, 190, 90, 700, 240, step) == "");
 	// it fires: the heap at 900 K glows
 	OpticsScene hot = without;
-	hot.table[static_cast<size_t>(L::HEADER_VECS + 1 * L::BODY_VECS + L::HEAT) * 4] = 900.0f;
+	hot.table[static_cast<size_t>(L::HEADER_VECS + 1 * L::BODY_VECS + L::KELVIN_VEC) * 4 + L::KELVIN_PART] = 900.0f;
 	CHECK(lab::check_O24(with, hot, 320, 180, 410, 212, 2) != "");
 }
 

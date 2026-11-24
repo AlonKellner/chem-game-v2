@@ -1,0 +1,38 @@
+{
+	"format": "chem-bench/2",
+	"note": "Boiling's bench (GAME_SPEC §11, §13.7, Stage 45): a 250 mL beaker of 200 g of water, 5.9 cm deep, and the lab's burner in the cabinet (data/benches/lab.json's values). At full flame its floor takes about 450 W.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				12,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 200.0
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

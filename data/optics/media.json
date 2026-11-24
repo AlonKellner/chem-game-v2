@@ -383,6 +383,16 @@
 			]
 		}
 	},
+	"scatterers_note": "What scatters in a liquid and is no species (GAME_SPEC §12, Stage 45): a scatter medium, its single-scattering albedo at each wavelength (base and Gaussian bands in nm, as a reflecting medium's), its extinction efficiency (Q_ext: extinction over geometric cross-section) and its asymmetry parameter g (the mean cosine of its scattering: what it turns away from its path, as a haze, is its extinction times 1 - g). bubbles: gas bubbles in water, boiling's and a reaction's (docs/DATA_SOURCES.md).",
+	"scatterers": {
+		"bubbles": {
+			"kind": "scatter",
+			"base": 1.0,
+			"bands": [],
+			"efficiency": 2.0,
+			"asymmetry": 0.85
+		}
+	},
 	"lwir_note": "The long-wave infrared, 8-14 um (GAME_SPEC §12.1, Stage 46), what a thermal camera's microbolometer sees. indices: a species' complex refractive index n + ik from a measured table (nm, n, k), interpolated at 20 nm: water's by Hale and Querry, glass's as fused silica's by Kitamura et al. (a stand-in for borosilicate). emissivity: a grey body's over the band, for the lab's things (by surface name) and the solids (by species): what is not emitted is reflected. transmittance: a wall's at its reference thickness, grey. flames: a flame's absorption coefficient per cm of path, grey, its gas's and its soot's (soot's at 10 um, as 1/wavelength). response: the sensor's band, flat. docs/DATA_SOURCES.md.",
 	"lwir": {
 		"indices": {

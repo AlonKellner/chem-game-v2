@@ -1,5 +1,6 @@
 // The renderer's table, from the state (GAME_SPEC §12).
 #include "lab/optics_scene.hpp"
+#include "lab/bubbles.hpp"
 #include "lab/glassware.hpp"
 
 #include "chem/optics.hpp"
@@ -389,8 +390,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				relay_bodies.push_back((at - HEADER_VECS) / BODY_VECS);
 				image_next += RELAY_VECS;
 			}
-			put(at + HEAT, 0, body.kelvin > 0.0 ? body.kelvin : room.kelvin); // Stage 46
-			put(at + HEAT, 1, body.hidden);
+			put(at + KELVIN_VEC, KELVIN_PART, body.kelvin > 0.0 ? body.kelvin : room.kelvin); // Stage 46
+			put(at + HIDDEN_VEC, HIDDEN_PART, body.hidden);
 			put(at + FORM, 0, body.shape == OpticsBody::Screen || body.shape == OpticsBody::Sensor ? static_cast<int>(OpticsBody::Slab) : static_cast<int>(body.shape));
 			put(at + FORM, 1, 1.0);
 			put(at + FORM, 2, body.size);
@@ -417,8 +418,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		for (int i = 0; i < LWIR_ROW; ++i) {
 			lw[LIQUID_INDEX_ROW * LWIR_ROW + i] = lw[WALL_INDEX_ROW * LWIR_ROW + i] = 1.0f; // air
 		}
-		put(at + HEAT, 0, body.kelvin > 0.0 ? body.kelvin : v.celsius + 273.15); // Stage 46: its cell's
-		put(at + HEAT, 1, body.hidden);
+		put(at + KELVIN_VEC, KELVIN_PART, body.kelvin > 0.0 ? body.kelvin : v.celsius + 273.15); // Stage 46: its cell's
+		put(at + HIDDEN_VEC, HIDDEN_PART, body.hidden);
 		put(at + SET, 0, set);
 		put(at + SET, 3, body.flipped ? 1.0 : 0.0); // upside down (Stage 27)
 		float *liquid = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
@@ -678,6 +679,23 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// stirred up: every particle shades its own cross-section, twice over
 				put(at + MORE, 0, EXTINCTION_EFFICIENCY * held_up * cross_section_cm2 / v.liquid_ml);
 			}
+			// boiling's bubbles (Stage 45): steam's from the floor up to where they end, a reaction's gas's all the way
+			// up; each a haze, white, of their extinction times 1 - g (they scatter mostly forward). Quantised (steps of 3 % in extinction, a twentieth in the exponent, a hundredth
+			// of a millimetre in height), so a pixel keeps its history while a boil stands still (GAME_SPEC §12.2)
+			if (!body.flipped && (v.bubble_extinction > 0.0 || v.gas_extinction > 0.0)) {
+				// what they turn back at each wavelength: their albedo, as the optics has them
+				const chem::optics::Spectrum &albedo = *chem::optics::scatterer("bubbles")->albedo;
+				float *bubble_row = &rows[static_cast<size_t>((set * ROWS_PER_SET + BUBBLE_ROW) * ROW)];
+				for (int i = 0; i < ROW; ++i) {
+					bubble_row[i] = static_cast<float>(albedo[static_cast<size_t>(i)]);
+				}
+				const auto steps = [](double x) { return x > 0.0 ? std::exp(std::round(std::log(x) / 0.03) * 0.03) : 0.0; };
+				const double back = 1.0 - bubbles::asymmetry();
+				put(at + 6, 0, steps(v.bubble_extinction * back));
+				put(at + 6, 1, std::round(v.bubbles_end_cm * 1000.0) / 1000.0);
+				put(at + 6, 2, std::round(v.bubble_exponent * 20.0) / 20.0);
+				put(at + 6, 3, steps(v.gas_extinction * back));
+			}
 			if (at_rest > 0.0) {
 				// at rest: a heap at its angle of repose, a cone until it reaches the wall
 				const double heap_ml = at_rest / PACKING, r_wall = made ? made->radius_inside(made->floor + 0.25 * made->height) : d_cm / 2.0;
@@ -814,11 +832,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			for (int o = 0; o < count; ++o) {
 				const size_t at = static_cast<size_t>(HEADER_VECS + o * BODY_VECS) * 4;
 				const float *other = &t[at + RECT * 4];
-				const bool hidden = (static_cast<uint32_t>(t[at + HEAT * 4 + 1]) & relay.bit) != 0;
+				const bool hidden = (static_cast<uint32_t>(t[at + HIDDEN_VEC * 4 + HIDDEN_PART]) & relay.bit) != 0;
 				if (!hidden && other[0] < relay.frame_x + rect[2] + 2.0f && other[0] + other[2] + 2.0f > relay.frame_x && other[1] < relay.frame_y + rect[3] + 2.0f && other[1] + other[3] + 2.0f > relay.frame_y) {
 					under = fnv(&t[at], 4 * 4 * sizeof(float), under); // its rectangle, form, more and glow
 					under = fnv(&t[at + IDS * 4], 2 * sizeof(float), under);
-					under = fnv(&t[at + HEAT * 4], sizeof(float), under);
+					under = fnv(&t[at + KELVIN_VEC * 4 + KELVIN_PART], sizeof(float), under);
 				}
 			}
 			block[12] = tag(under);

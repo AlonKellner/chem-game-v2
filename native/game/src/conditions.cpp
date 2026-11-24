@@ -12,7 +12,7 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met" || what == "ph";
+			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm";
 }
 
 bool is_gas(const std::string &species) {
@@ -147,6 +147,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "kpa") { // its pressure (Stage 28): an open vessel's is the room's
 		return v->pressure_kpa;
 	}
+	if (q.what == "bubbles_cm") { // how high bubbles reach over its floor (Stage 45): none without a liquid
+		return v->liquid_ml > 0.0 ? std::optional<double>(v->bubbles_cm) : std::nullopt;
+	}
 	if (q.what == "ph") { // its liquid's (Stage 43): none without one
 		return v->ph;
 	}
@@ -190,6 +193,9 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		out.push_back(Quantity{ item.id, "kpa", "g" }); // Stage 28
 		if (item.ph) {
 			out.push_back(Quantity{ item.id, "ph", "g" }); // Stage 43: while it holds a liquid
+		}
+		if (item.liquid_ml > 0.0) {
+			out.push_back(Quantity{ item.id, "bubbles_cm", "g" }); // Stage 45
 		}
 	}
 	if (item.kind == "balloon") {
@@ -242,7 +248,7 @@ std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind k
 		}
 	}
 	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
-		static const char *const ORDER[] = { "celsius", "kpa", "ph", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		static const char *const ORDER[] = { "celsius", "kpa", "ph", "bubbles_cm", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
 		std::vector<std::string> ordered;
 		for (const char *w : ORDER) {
 			if (std::find(out.begin(), out.end(), w) != out.end()) {
@@ -284,6 +290,9 @@ std::string unit(const Quantity &q) {
 	if (q.what == "kpa") {
 		return "kPa";
 	}
+	if (q.what == "bubbles_cm") {
+		return "cm";
+	}
 	if (fixed(q.what)) {
 		return "mL";
 	}
@@ -308,6 +317,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "pressure";
 	} else if (q.what == "ph") {
 		what = "pH";
+	} else if (q.what == "bubbles_cm") {
+		what = "bubbles' height";
 	} else if (q.what == "valve") {
 		what = "valve";
 	} else if (q.what == "fill") {
@@ -339,6 +350,9 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "ph") {
 		return fmt("pH %.2f", value);
+	}
+	if (q.what == "bubbles_cm") {
+		return fmt("%.2f cm", value);
 	}
 	if (q.measure == "ml" && !fixed(q.what)) {
 		return fmt("%.2f mL", value);

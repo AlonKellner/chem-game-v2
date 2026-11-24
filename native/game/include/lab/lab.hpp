@@ -73,6 +73,16 @@ struct ItemView {
 	double celsius = 0.0;
 	// its liquid's pH (GAME_SPEC §9, Stage 43): -log10 a(H+); none without a liquid
 	std::optional<double> ph;
+	// boiling's bubbles (GAME_SPEC §11, Stage 45), derived from the last step, not state: its floor's boundary
+	// layer's temperature, and the boiling point there; bubbles of steam leaving it, and whether they reach the
+	// surface; how high bubbles reach over the floor, cm (the liquid's depth where they reach the surface; a
+	// reaction's gas reaches it); a steam bubble's size as it leaves, mm; the liquid's depth, cm; what the optical
+	// pass reads: the steam bubbles' extinction a cm at the floor, falling as (1 - z / end)^exponent to where they
+	// end (bubbles_end_cm over the floor), and a reaction's gas's, the same at every height
+	double floor_c = 0.0, floor_boils_c = 0.0;
+	bool boiling = false, bubbles_surface = false;
+	double bubbles_cm = 0.0, bubble_mm = 0.0, depth_cm = 0.0;
+	double bubble_extinction = 0.0, bubble_exponent = 0.0, bubbles_end_cm = 0.0, gas_extinction = 0.0;
 	double volume_ml = 0.0; // a vessel's own
 	double capacity_ml = 0.0; // a balloon's
 	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)

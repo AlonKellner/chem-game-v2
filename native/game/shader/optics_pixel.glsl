@@ -40,7 +40,8 @@ const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
-const int ROWS_PER_SET = 6;
+const int ROWS_PER_SET = 7;
+const int BUBBLE_ROW = 6; // what a vessel's bubbles turn back, their albedo (Stage 45)
 const int LIGHT_ENTRIES = 4097;
 const int LIGHT_SIZE = LIGHT_ENTRIES + ROW; // a light's table, then the way back (Stage 46: two lights, one a range)
 const int MAX_LAYERS = 4; // bodies one pixel looks through
@@ -121,16 +122,16 @@ struct PixelState {
 #define OPTICS_THREAD
 #endif
 OPTICS_THREAD int band_range = 0;
-// the bodies a ray passes by (Stage 46: bits of a body's HEAT y; a sensor's rays do not see its own body)
+// the bodies a ray passes by (Stage 46: bits of a body's GLOW w; a sensor's rays do not see its own body)
 OPTICS_THREAD int ray_hide = 0;
 OPTICS_THREAD bool range_fixed = false; // (a sensor's continuation reads in the range it set, whatever the pass's)
 bool hidden(int body) {
-	return ray_hide != 0 && (int(scene_vec(HEADER_VECS + body * BODY_VECS + 6).y) & ray_hide) != 0;
+	return ray_hide != 0 && (int(scene_vec(HEADER_VECS + body * BODY_VECS + 3).w) & ray_hide) != 0;
 }
 
 // a body's temperature (K; Stage 46)
 float body_kelvin(int body) {
-	return scene_vec(HEADER_VECS + body * BODY_VECS + 6).x;
+	return scene_vec(HEADER_VECS + body * BODY_VECS + 7).y; // (its SET's y)
 }
 
 // the shares of the light's energy at which a pixel's bands are cut (GAME_SPEC §12.2: cuts_of), ascending
@@ -221,6 +222,37 @@ vec2 thing_at(vec4 form, vec4 rect, vec4 more, vec2 p) {
 	return vec2(inside, 2.0 * sqrt(max(reach * reach - from_axis * from_axis, 0.0)));
 }
 
+// Boiling's bubbles (GAME_SPEC §11, Stage 45). A vessel's vec4 6 holds its steam bubbles' extinction a centimetre
+// at its floor, the height over its floor where they end (cm), the exponent their extinction falls by up to there,
+// (1 - z / end)^exponent, and a reaction's gas's extinction a centimetre, the same at every height. Their extinction
+// a centimetre at height y of the screen: 0 for any other body, under its floor, and upside down.
+float bubbles_at(int body, float y) {
+	int at = HEADER_VECS + body * BODY_VECS;
+	vec4 b = scene_vec(at + 6);
+	if (b.x <= 0.0 && b.w <= 0.0) {
+		return 0.0;
+	}
+	vec4 rect = scene_vec(at);
+	vec4 form = scene_vec(at + 1);
+	if (form.x > 0.5 || flipped(body)) {
+		return 0.0;
+	}
+	float z = (rect.y + rect.w - scene_vec(at + 5).z / form.y - y) * form.y;
+	if (z < 0.0) {
+		return 0.0;
+	}
+	float steam = b.y > 0.0 && z < b.y ? b.x * pow(1.0 - z / b.y, b.z) : 0.0;
+	return steam + b.w;
+}
+
+// the share of a body's haze at height y that is bubbles, which turn the room's light back white, rather than its
+// stirred-up solids, which turn it back in their colour
+float white_at(int body, float y) {
+	float solids = scene_vec(HEADER_VECS + body * BODY_VECS + 2).x;
+	float bubbles = bubbles_at(body, y);
+	return solids + bubbles > 0.0 ? bubbles / (solids + bubbles) : 0.0;
+}
+
 Layer layer_at(int i, vec2 p, float across, float up) {
 	Layer l;
 	l.body = i + 256 * set_of(i);
@@ -301,7 +333,7 @@ Layer layer_at(int i, vec2 p, float across, float up) {
 	float wet = form.x < 0.5 ? max(clamp((p.y - form.z) / up + 0.5, 0.0, 1.0) - under, 0.0) * side : clamp((p.y - form.z) / up + 0.5, 0.0, 1.0) * cover;
 	float heap = form.x > 1.5 ? 0.0 : form.w * max(1.0 - abs(from_axis) / max(more.z, 0.001), 0.0);
 	l.depth_cm = cm * wet;
-	l.haze = form.x > 1.5 ? 0.0 : 1.0 - exp(-more.x * cm * wet);
+	l.haze = form.x > 1.5 ? 0.0 : 1.0 - exp(-(more.x + bubbles_at(i, p.y)) * cm * wet);
 	l.solid = form.w <= 0.0 ? 0.0 : (form.x < 0.5 ? max(clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) - under, 0.0) * side : clamp((p.y - (ground - heap)) / up + 0.5, 0.0, 1.0) * cover);
 	l.wall = wall * cover;
 	l.cover = cover;
@@ -549,6 +581,11 @@ float row_at(int start, float nm) {
 	return row_value(start + i) * (1.0 - f) + row_value(start + i + 1) * f;
 }
 
+// what a body's haze at height y turns back at nm: its solids' reflectance and its bubbles' albedo, by their shares
+float haze_colour(int body, int start, float y, float nm) {
+	return mix(row_at(start + ROW, nm), row_at(start + BUBBLE_ROW * ROW, nm), white_at(body, y));
+}
+
 float liquid_at(int body, int rows, float nm) {
 	float depth = row_at(rows, nm);
 	if (nm > 7000.0) {
@@ -718,9 +755,9 @@ vec4 thirds_weights(float g) {
 // liquid as long as `chord_cm`: its extinction (MORE.x, a centimetre) over that path (Stage 26: along the path its
 // ray takes, the vessel's own shape, not its rectangle as a cylinder: a conical flask's stirred suspension was a
 // grey rectangle past the cone's sides)
-float haze_along(int body, float chord_cm) {
+float haze_along(int body, float chord_cm, float y) {
 	int at = HEADER_VECS + body * BODY_VECS;
-	return scene_vec(at + 1).x < 0.5 ? 1.0 - exp(-scene_vec(at + 2).x * max(chord_cm, 0.0)) : 0.0;
+	return scene_vec(at + 1).x < 0.5 ? 1.0 - exp(-(scene_vec(at + 2).x + bubbles_at(body, y)) * max(chord_cm, 0.0)) : 0.0;
 }
 
 float chord_of_part(float c0, float c1, float per_cm) {
@@ -745,7 +782,8 @@ struct Shade {
 	float b_front;
 	bool own; // the refracting body is among the layers
 	float per_cm; // its liquid's optical depth a centimetre
-	float colour; // what its solids and its haze turn back
+	float colour; // what its solids turn back
+	float scatter; // what its haze turns back: its solids' colour and its bubbles' albedo, by their shares (Stage 45)
 	float glow; // what its solids glow with
 	float glass; // what its wall lets through
 	float haze;
@@ -902,6 +940,7 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 		s.theta = theta;
 		s.per_cm = per_cm;
 		s.colour = colour;
+		s.scatter = mix(colour, row_at(start + BUBBLE_ROW * ROW, nm), white_at(body_of(l.body), q.y));
 		s.glow = glow;
 		s.glass = glass;
 		s.haze = l.haze;
@@ -915,8 +954,9 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float depth = per_cm * (l.depth_cm + l.glowing); // (a glowing thing's absorption is per pixel of its path: Stage 46)
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
-	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * glass;
-	b = b + theta * (1.0 - a - colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * glass);
+	float scatter = mix(colour, row_at(start + BUBBLE_ROW * ROW, nm), white_at(body_of(l.body), q.y)); // what its haze turns back
+	float b = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * glass;
+	b = b + theta * (1.0 - a - (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid) * glass);
 	if (s.own) {
 		s.b_front = a * s.b_front + b;
 		s.a_front = a * s.a_front;
@@ -936,6 +976,7 @@ Shade shade_of(Path q, float nm) {
 	s.own = false;
 	s.per_cm = 0.0;
 	s.colour = 0.0;
+	s.scatter = 0.0;
 	s.glow = 0.0;
 	s.glass = 1.0;
 	s.haze = 0.0;
@@ -960,14 +1001,14 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		float through = exp(-depth);
 		seen = seen * through;
 		// its haze along these rays' own path through its liquid; none through its core as air
-		float k = scene_vec(HEADER_VECS + s.body * BODY_VECS + 2).x;
-		float haze = liquid ? haze_along(s.body, chord_of_part(c0, c1, max(k, 1.0e-6))) : 0.0;
-		seen = mix(seen, s.colour * exp(-depth * 0.5), haze);
+		float k = scene_vec(HEADER_VECS + s.body * BODY_VECS + 2).x + bubbles_at(s.body, q.y);
+		float haze = liquid ? haze_along(s.body, chord_of_part(c0, c1, max(k, 1.0e-6)), q.y) : 0.0;
+		seen = mix(seen, s.scatter * exp(-depth * 0.5), haze);
 		seen = mix(seen, s.colour * through + s.glow * exp(-depth * 0.5), s.solid);
 		seen = seen * s.glass;
 		// (Stage 46) what it passes and what it turns back, and the rest it emits
 		float own_a = through * (1.0 - haze) * (1.0 - s.solid) * s.glass;
-		float own_r = ((s.colour * exp(-depth * 0.5) * haze) * (1.0 - s.solid) + s.colour * through * s.solid) * s.glass;
+		float own_r = ((s.scatter * exp(-depth * 0.5) * haze) * (1.0 - s.solid) + s.colour * through * s.solid) * s.glass;
 		seen = seen + s.theta * (1.0 - own_a - own_r);
 	}
 	if (q.refractor >= 0) {
@@ -1045,12 +1086,12 @@ float swept_wall(int profile, float a0, float a, float b0, float b) {
 // it; its wall; and its surfaces pass `pass` of all that, the rest showing the room in front.
 // (Stage 46) What it neither passes nor turns away it emits, `theta` times (Kirchhoff, GAME_SPEC §12.4); and of what
 // its surfaces do not pass, `absorbed` was taken in by its glass, which emits as much, the rest turned away.
-vec2 body_does(Layer l, float colour, float glow, float skin_depth, float depth, float pass, float absorbed, float room, float theta) {
+vec2 body_does(Layer l, float colour, float scatter, float glow, float skin_depth, float depth, float pass, float absorbed, float room, float theta) {
 	float skin = exp(-skin_depth * l.wall);
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * skin;
-	float b = (colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * skin;
-	float r = colour * (exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + through * l.solid) * skin;
+	float b = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * skin;
+	float r = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid) * skin;
 	b = b + theta * (1.0 - a - r);
 	return vec2(pass * a, pass * b + (1.0 - pass - absorbed) * room + absorbed * theta);
 }
@@ -2625,11 +2666,13 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 			pass = clamp(record < 0.5 ? dot(b.pass0, wp) : dot(b.pass1, wp), 0.0, 1.0);
 			absorbed = clamp(record < 0.5 ? dot(b.absorb0, wp) : dot(b.absorb1, wp), 0.0, 1.0 - pass);
 			depth_cm = sqrt(max(record < 0.5 ? dot(b.chord0, wp) : dot(b.chord1, wp), 0.0));
-			l.haze = haze_along(body, depth_cm);
 		}
 		vec4 met = k == 0 ? b.m0 : (k == 1 ? b.m1 : (k == 2 ? b.m2 : b.m3));
+		if (record > -0.5) {
+			l.haze = haze_along(body, depth_cm, met.w);
+		}
 		float glow = glow_of(body, start, vec2(met.z, met.w), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met.w, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -2849,14 +2892,14 @@ vec2 ray_shade(RayMet m, float nm) {
 		bool bent = slot.y > 0.5;
 		Layer l = layer_at(body, met_where(m, k), 1.0e-3, 1.0e-3);
 		if (bent) {
-			l.haze = haze_along(body, slot.w);
+			l.haze = haze_along(body, slot.w, met_where(m, k).y);
 			if (lies_in(body)) {
 				l.solid = slot.y > 2.5 ? 1.0 : 0.0;
 			}
 		}
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float glow = glow_of(body, start, met_where(m, k), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met_where(m, k).y, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
