@@ -40,7 +40,7 @@
 		{
 			"id": "neutralisation",
 			"title": "An acid meets a base",
-			"summary": "Neutralisation: sodium hydroxide poured into sulfuric acid warms it; the pH hardly moves, then leaps from 3 to 12 within a few mL.",
+			"summary": "Neutralisation: sodium hydroxide poured into sulfuric acid warms it; the pH hardly moves, then leaps from 2 to 12 within a few mL.",
 			"bench": "benches/neutralisation.json",
 			"tutorial": "tutorials/neutralisation.json"
 		},

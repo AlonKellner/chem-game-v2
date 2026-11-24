@@ -39,6 +39,14 @@ Every area follows the same rules as any stage:
 
 ## 1. Acids, bases and pH
 
+**Built in Stage 43** (`docs/TDD_43_ACIDITY.md`):
+- NaOH(aq) and Na₂SO₄(aq), the neutralisation and its heat, and the pH (derived, Kw held to IAPWS).
+- `ph` for monitors and goals.
+- The `dilution` and `neutralisation` experiments.
+
+What is still to come of this area: bisulfate, weak acids, an indicator, a burette, and the sodium salts as
+solids.
+
 **Experiments**
 - The pH of an acid as it is diluted, tenfold at a time.
 - Neutralisation's heat: about −55.8 kJ/mol for a strong acid and base, seen as temperature.

@@ -1,6 +1,6 @@
 {
 	"format": "chem-tutorial/1",
-	"note": "An experiment (GAME_SPEC §13.7, Stage 43) on data/benches/neutralisation.json: an acid and a base. 1 M sodium hydroxide poured into 25 mL of 1 M sulfuric acid: the solution warms as they neutralise (55.8 kJ a mole of water), the pH hardly moves while acid is left, then leaps from 3 to 12 across the last few mL (40, 8 and 5 mL poured) (chem_tool study neutralisation).",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 43) on data/benches/neutralisation.json: an acid and a base. 1 M sodium hydroxide poured into 25 mL of 1 M sulfuric acid: the solution warms as they neutralise (55.8 kJ a mole of water), the pH hardly moves while acid is left, then leaps from 2 to 12 across the last few mL (40, 8 and 5 mL poured) (chem_tool study neutralisation).",
 	"title": "Experiment: an acid meets a base",
 	"bench": "../benches/neutralisation.json",
 	"steps": [
@@ -39,7 +39,7 @@
 		{
 			"title": "8 mL more",
 			"text": "Pick up the base again, right-click the beaker, slide to about 8 mL and pour.",
-			"why": "Now 0.048 mol of the 0.05 are gone: only 4 % of the acid is left, yet the pH is still about 3. pH counts in powers of ten.",
+			"why": "Now 0.048 mol of the 0.05 are gone: only 4 % of the acid is left, yet the pH is still about 2. pH counts in powers of ten.",
 			"checks": [
 				{"text": "about 73 mL in the beaker", "when": {"all": [{"item": "beaker", "liquid_above_ml": 70}, {"item": "beaker", "liquid_below_ml": 76}]}},
 				{"text": "still acid: pH below 4", "when": {"quantity": {"item": "beaker", "what": "ph"}, "compare": "below", "value": 4}}
