@@ -686,6 +686,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					}
 					float *band_table = &rows[static_cast<size_t>((set * ROWS_PER_SET + BANDS_ROW) * ROW)];
 					std::copy(table.begin(), table.end(), band_table);
+					// (the rows grew: the body's own rows are where they are now, not where they were)
+					liquid = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_ROW) * ROW)];
+					solid = &rows[static_cast<size_t>((set * ROWS_PER_SET + SOLID_ROW) * ROW)];
+					wall = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_ROW) * ROW)];
+					liquid_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_INDEX_ROW) * ROW)];
+					wall_index = &rows[static_cast<size_t>((set * ROWS_PER_SET + WALL_INDEX_ROW) * ROW)];
+					glows = &rows[static_cast<size_t>((set * ROWS_PER_SET + GLOW_ROW) * ROW)];
 				}
 				lie[2] = 1.0;
 				lie[12] = l.up_x;
