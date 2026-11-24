@@ -1171,20 +1171,21 @@ struct Lab::Impl {
 		}
 		return false;
 	}
-	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. The wires and the
-	// resets among what it holds go with it; those to anything outside come off, as `scrap` takes them off. It
-	// signals nothing there: its signal off, an alarm quiet, a monitor's last reading forgotten, a controller
-	// untuned (its rigs are off, as after `unrig`); a timer keeps what is left of it.
+	// A part into the trash, with all it holds: out of the lab's parts, its settings kept. Its wires and rigs come
+	// off the lab and are kept beside it, those to anything outside it too (Stage 38: until then those were taken
+	// off for good, as `scrap` takes them). It signals nothing there: its signal off, an alarm quiet, a monitor's
+	// last reading forgotten, a controller untuned (its rigs are off, as after `unrig`); a timer keeps what is
+	// left of it.
 	void bin_part(const std::string &id) {
 		const std::vector<std::string> held = held_by(parts, id);
 		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
 		for (const Wire &w : wires) {
-			if (inside(w.from) && inside(w.to)) {
+			if (inside(w.from) || inside(w.to)) {
 				binned_wires.push_back(w);
 			}
 		}
 		for (Rig r : rigs) {
-			if (inside(r.from) && r.control == "reset" && inside(r.item)) {
+			if (inside(r.from) || (r.control == "reset" && inside(r.item))) {
 				r.seen = false; // its source's signal is off: it acts from its next change
 				binned_rigs.push_back(r);
 			}
@@ -1207,29 +1208,43 @@ struct Lab::Impl {
 			std::erase_if(parts, [&](const Part &q) { return q.id == name; });
 		}
 	}
-	// A part out of the trash, with all it holds: among the lab's parts again (the last of them), and the wires
-	// and resets kept beside it. With `scrapped`, gone for good instead.
+	// A part out of the trash, with all it holds: among the lab's parts again (the last of them). With
+	// `scrapped`, gone for good instead. Then every wire and rig kept in the trash whose two ends are on the lab
+	// again comes back (Stage 38): the part's own, and those to what was outside it, now or once that is
+	// restored too; those to what is gone go with it. A controller rigged again tunes itself, as when it is rigged.
 	void unbin_part(const std::string &id, bool scrapped) {
 		const std::vector<std::string> held = held_by(binned, id);
-		const auto inside = [&](const std::string &name) { return std::find(held.begin(), held.end(), name) != held.end(); };
 		for (const std::string &name : held) {
 			if (!scrapped) {
 				parts.push_back(binned[static_cast<size_t>(find_binned(name))]);
 			}
 			std::erase_if(binned, [&](const Part &q) { return q.id == name; });
 		}
+		// (an end that is nowhere, on the lab or in the trash, is gone)
+		const auto live = [&](const std::string &name) { return find_part(name) >= 0 || (find(name) >= 0 && !in_trash(name)); };
+		const auto gone = [&](const std::string &name) { return find_part(name) < 0 && find_binned(name) < 0 && find(name) < 0; };
+		std::vector<int> tunes;
 		for (const Wire &w : binned_wires) {
-			if (!scrapped && inside(w.from)) {
+			if (live(w.from) && live(w.to)) {
 				wires.push_back(w);
 			}
 		}
 		for (const Rig &r : binned_rigs) {
-			if (!scrapped && inside(r.from)) {
+			if (live(r.from) && live(r.item)) {
 				rigs.push_back(r);
+				const int from = find_part(r.from);
+				if (r.follow && std::find(tunes.begin(), tunes.end(), from) == tunes.end()) {
+					tunes.push_back(from);
+				}
 			}
 		}
-		std::erase_if(binned_wires, [&](const Wire &w) { return inside(w.from); });
-		std::erase_if(binned_rigs, [&](const Rig &r) { return inside(r.from); });
+		std::erase_if(binned_wires, [&](const Wire &w) { return (live(w.from) && live(w.to)) || gone(w.from) || gone(w.to); });
+		std::erase_if(binned_rigs, [&](const Rig &r) { return (live(r.from) && live(r.item)) || gone(r.from) || gone(r.item); });
+		for (const int at : tunes) {
+			if (parts[static_cast<size_t>(at)].watching) {
+				tune(at);
+			}
+		}
 	}
 	// an element leaves the trash's history
 	void forget_trash(const std::string &id) {
@@ -2659,7 +2674,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	const std::string what = c.at("do").get<std::string>();
 
 	// what is in the trash (Stage 34) takes no command but those that take it out, a wait, and a rig taken off it
-	if (!trash.empty() && what != "trash" && what != "restore" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
+	if (!trash.empty() && what != "trash" && what != "restore" && what != "empty_trash" && what != "place" && what != "stow" && what != "wait" && what != "wait_until" && what != "unrig") {
 		std::string id;
 		if (names_trashed(c, id)) {
 			why = "\"" + id + "\" is in the trash: restore it first";
@@ -3457,6 +3472,26 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.place = Place::Trash;
 		x.col = x.row = -1;
 		trim_trash();
+		return true;
+	}
+	if (what == "empty_trash") {
+		// the trash emptied (Stage 38): everything in it leaves for good, as the oldest does past its capacity: an
+		// item to the cabinet (it holds matter, which nothing destroys), a part scrapped with all it holds
+		if (trash.empty()) {
+			why = "the trash is empty";
+			return false;
+		}
+		const size_t count = trash.size();
+		while (!trash.empty()) {
+			const Binned oldest = trash.front();
+			trash.erase(trash.begin());
+			if (oldest.part) {
+				unbin_part(oldest.id, true);
+			} else {
+				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
+			}
+		}
+		note(Notice::Detail, "", text_of("the trash was emptied: %d things, its items to the cabinet", static_cast<int>(count)));
 		return true;
 	}
 	if (what == "restore") {

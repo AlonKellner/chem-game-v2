@@ -260,12 +260,12 @@ TEST_CASE("refraction: the light takes the bent chord through the liquid, at its
 		// exp(-tau L) along the chord the ray really crosses
 		const double front = 0.3, reflected = (1.0 - b.pass) * front;
 		const double t_salt = (lab::optics_through(salt, AXIS + k, LOW, 680.0) - reflected) / (lab::optics_through(plain, AXIS + k, LOW, 680.0) - reflected);
-		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-3)); // the map's chord, between its samples
+		CHECK(-std::log(t_salt) / tau_per_cm == doctest::Approx(b.chord).epsilon(1e-3)); // the chord, from the pixel's rays
 		// the chord of a ray d from the axis inside water is 2 sqrt(r^2 - (d / n)^2): longer than the straight one
 		const double cm_per_px = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::FORM) * 4 + 1];
 		const double glass_cm = salt.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + lab::optics_layout::REFRACT) * 4];
 		const double r_in = 45.0 * cm_per_px - glass_cm, d = (k + 0.5) * cm_per_px, n = index_at(chem::builtin::water, 680.0);
-		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-4)); // the map's one cubic over the spectrum
+		CHECK(b.chord == doctest::Approx(2.0 * std::sqrt(r_in * r_in - (d / n) * (d / n))).epsilon(1e-4)); // the cubic through the pixel's four nodes
 		if (k > 0) {
 			CHECK(b.chord > 2.0 * std::sqrt(r_in * r_in - d * d));
 		}

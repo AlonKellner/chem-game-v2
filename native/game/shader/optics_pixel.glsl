@@ -506,23 +506,6 @@ float liquid_at(int body, int rows, float nm) {
 	return depth;
 }
 
-// what one body does to the light that reaches it, at nm, through depth_cm of its liquid
-float through_layer(Layer l, float seen_before, float nm, float depth_cm) {
-	int start = set_in(l.body);
-	float depth = liquid_at(body_of(l.body), start, nm) * depth_cm;
-	float colour = row_at(start + ROW, nm);
-	// through the liquid (Beer-Lambert)
-	float seen = seen_before * exp(-depth);
-	// what is suspended in it turns the room's light back, from half way in on average
-	seen = mix(seen, colour * exp(-depth * 0.5), l.haze);
-	// what lies in it is lit and seen through it: there and back is one chord; and glows, through half of one;
-	// and glowing gas adds its light along its path
-	float glow = row_at(start + 5 * ROW, nm);
-	seen = mix(seen, colour * exp(-depth) + glow * exp(-depth * 0.5), l.solid) + glow * l.glowing;
-	// and the wall
-	return seen * exp(-row_at(start + 2 * ROW, nm) * l.wall);
-}
-
 // ---- the wall behind the bodies (GAME_SPEC §12.3): a table, read exactly
 
 
@@ -721,7 +704,9 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 		s.body = body_of(l.body);
 		return s;
 	}
-	// through_layer, as a times what reaches it plus b
+	// what one body does to the light that reaches it (Beer-Lambert through its liquid; what is suspended in it
+	// turns the room's light back from half way in; what lies in it is lit and seen there and back; it glows; and
+	// its wall), as a times what reaches it plus b
 	float depth = per_cm * l.depth_cm;
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;

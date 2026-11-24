@@ -44,7 +44,6 @@ GAME_SPEC §13 (the commands `undrain`, `trash`, `restore`), §13.1 (the gesture
 
 ## Open
 
-- A trashed part's wires and rigs to what was outside it do not come back with it.
-- A part leaves the trash for good only when 64 newer things are in it; there is no emptying it.
-- A vessel that bursts in the trash goes to the cabinet broken: one line, with no test.
-- The C API does not give the trash's list (the screen has it from the lab's view).
+- (Stage 38, `docs/TDD_38_LEFT.md`: a trashed part's wires and rigs to what was outside it come back with it;
+  the trash is emptied by `empty_trash` and its box's button; a vessel cannot burst in the trash with the
+  data as it is, so its line stays a guard; the C API gives the trash's list in `cg_ui_report`'s `trash`.)

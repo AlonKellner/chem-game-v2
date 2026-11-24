@@ -835,6 +835,7 @@ struct Ui::Impl {
 	static Rect pause_rect() { return Rect{ 270, 14, 96, 36 }; }
 	static Rect check_rect() { return Rect{ 760, 14, 220, 36 }; }
 	static Rect reset_rect() { return Rect{ 1000, 14, 96, 36 }; }
+	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
 	static Rect pour_button() { return Rect{ PANEL.x + 30, PANEL.y + 118, 180, 36 }; }
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
@@ -1297,6 +1298,11 @@ struct Ui::Impl {
 			if (cancel_button().has(x, y) || !PANEL.has(x, y)) {
 				panel = false; // still in hand
 			}
+			return;
+		}
+		if (!view.trash.empty() && empty_rect().has(x, y) && !guided()) {
+			act({ { "do", "empty_trash" } });
+			choose_only(-1);
 			return;
 		}
 		if (pause_rect().has(x, y)) {
@@ -3159,6 +3165,9 @@ struct Ui::Impl {
 		// the trash (Stage 34): what was put away last stands in it, and may be taken up again
 		outline(TRASH, WALL_GRID, 1);
 		text(TRASH.x + 8, TRASH.y + 20, view.trash.empty() ? std::string("trash") : text_of("trash (%d)", static_cast<int>(view.trash.size())), WALL_INK);
+		if (!view.trash.empty()) {
+			button(empty_rect(), "empty", false, 13);
+		}
 		if (view.trash.empty()) {
 			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
 			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
@@ -4690,6 +4699,14 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	if (what == "trash") {
 		x = TRASH.cx();
 		y = TRASH.y + 30;
+		return true;
+	}
+	if (what == "trash:empty") { // its button, while something is in it (Stage 38)
+		if (view.trash.empty()) {
+			return false;
+		}
+		x = empty_rect().cx();
+		y = empty_rect().cy();
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first

@@ -274,7 +274,7 @@ TEST_CASE("trash: an item is carried out of the trash onto a free square, or sto
 	CHECK(l->digest() == bench()->digest()); // where things stand is not the world
 }
 
-TEST_CASE("trash: a part keeps its settings, signals nothing while it is there, and comes back without its wires and rigs (Stage 34)") {
+TEST_CASE("trash: a part keeps its settings, signals nothing while it is there, and comes back with its wires and rigs (Stage 34, 38)") {
 	const auto made = [] {
 		auto l = bench();
 		for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "set", "part": "timer1", "seconds": 2})", R"({"do": "part", "kind": "alarm", "at": [1, 0]})",
@@ -301,7 +301,7 @@ TEST_CASE("trash: a part keeps its settings, signals nothing while it is there, 
 	}
 	v = l->view();
 	CHECK(trashed(v) == Names{ "timer1", "monitor1", "writer1", "controller1" });
-	CHECK(v.wires.empty()); // to the alarm and the writer, outside them: off, as scrapping takes them off
+	CHECK(v.wires.empty()); // to the alarm and the writer, outside them: off the lab, kept in the trash with them
 	CHECK(v.rigs.empty());
 	CHECK(item(v, "timer1").place == "trash");
 	CHECK(item(v, "timer1").col == 0); // its square
@@ -343,14 +343,22 @@ TEST_CASE("trash: a part keeps its settings, signals nothing while it is there, 
 	CHECK(says(refused(*l, R"({"do": "part", "kind": "timer", "at": [9, 0], "id": "timer1"})"), "\"timer1\" is taken"));
 	CHECK(says(refused(*l, R"({"do": "trash", "item": "timer1"})"), "already in the trash"));
 
-	// back on their squares, set as they were, joined to nothing
+	// back on their squares, set as they were, joined as they were (Stage 38: until then, to nothing)
 	for (int k = 0; k < 4; ++k) {
 		must(*l, R"({"do": "restore"})");
 	}
 	v = l->view();
 	CHECK(v.trash.empty());
-	CHECK(v.wires.empty());
-	CHECK(v.rigs.empty());
+	const auto joined = [](const std::vector<lab::Wire> &ws) {
+		std::vector<std::string> out;
+		for (const lab::Wire &w : ws) {
+			out.push_back(w.from + " -> " + w.to);
+		}
+		std::sort(out.begin(), out.end());
+		return out;
+	};
+	CHECK(joined(v.wires) == joined(twin->view().wires)); // (in the order they came back)
+	CHECK(v.rigs.size() == 2);
 	CHECK(item(v, "timer1").place == "bench");
 	CHECK(item(v, "timer1").col == 0);
 	CHECK(item(v, "timer1").row == 0);
@@ -363,8 +371,8 @@ TEST_CASE("trash: a part keeps its settings, signals nothing while it is there, 
 	CHECK(item(v, "controller1").part.target == 50.0);
 	CHECK(item(v, "controller1").part.watching);
 	CHECK_FALSE(item(v, "controller1").part.tuned); // rigged to nothing
-	// and they work again: the timer goes on from where it was, and wired, the alarm rings
-	must(*l, R"({"do": "wire", "from": "timer1", "to": "alarm1"})");
+	// and they work again: the timer goes on from where it was, and wired as it was, the alarm rings
+	CHECK(says(refused(*l, R"({"do": "wire", "from": "timer1", "to": "alarm1"})"), "already"));
 	must(*l, R"({"do": "wait", "seconds": 0.5})");
 	CHECK(item(l->view(), "timer1").part.left == 30);
 	CHECK(item(l->view(), "monitor1").part.out);
@@ -397,7 +405,7 @@ TEST_CASE("trash: a part whose square is taken stays in the trash, with the reas
 	CHECK_FALSE(l->failed());
 }
 
-TEST_CASE("trash: a circuit goes in and comes back with the parts in it and the wires among them (Stage 34)") {
+TEST_CASE("trash: a circuit goes in and comes back with the parts in it, the wires among them and those to what was outside (Stage 34, 38)") {
 	auto l = bench();
 	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [3, 1]})", R"({"do": "set", "part": "timer1", "seconds": 2})", R"({"do": "part", "kind": "monitor", "at": [5, 2]})",
 				 R"({"do": "set", "part": "monitor1", "item": "flask", "what": "celsius", "compare": "above", "value": 30})", R"({"do": "part", "kind": "alarm", "at": [6, 3]})",
@@ -414,7 +422,7 @@ TEST_CASE("trash: a circuit goes in and comes back with the parts in it and the 
 	CHECK(item(v, "timer1").part.in == "circuit1");
 	CHECK(item(v, "monitor1").place == "trash");
 	CHECK(item(v, "alarm1").place == "bench");
-	CHECK(v.wires.empty()); // the one to the alarm is off; the one inside is kept with it
+	CHECK(v.wires.empty()); // the one inside and the one to the alarm: off the lab, kept with it
 	CHECK(v.rigs.empty());
 	CHECK(says(refused(*l, R"({"do": "restore", "item": "timer1"})"), "\"timer1\" is in \"circuit1\", in the trash: restore that"));
 	CHECK(says(refused(*l, R"({"do": "place", "item": "monitor1", "at": [0, 0]})"), "\"monitor1\" is in \"circuit1\", in the trash: restore that"));
@@ -438,10 +446,11 @@ TEST_CASE("trash: a circuit goes in and comes back with the parts in it and the 
 	CHECK(item(v, "monitor1").col == 2); // as they lay in it
 	CHECK(item(v, "monitor1").row == 1);
 	CHECK(item(v, "monitor1").part.comparison.a == 30.0);
-	CHECK(v.wires == std::vector<lab::Wire>{ lab::Wire{ "timer1", "monitor1" } });
-	REQUIRE(v.rigs.size() == 1); // the reset inside it; the one to the burner is off
-	CHECK(v.rigs[0].item == "timer1");
-	CHECK(v.rigs[0].control == "reset");
+	CHECK(v.wires == std::vector<lab::Wire>{ lab::Wire{ "timer1", "monitor1" }, lab::Wire{ "monitor1", "alarm1" } });
+	REQUIRE(v.rigs.size() == 2); // the reset inside it, and the one to the burner's valve
+	CHECK(v.rigs[0].item == "burner");
+	CHECK(v.rigs[1].item == "timer1");
+	CHECK(v.rigs[1].control == "reset");
 	must(*l, R"({"do": "wait", "seconds": 2})");
 	CHECK_FALSE(l->failed());
 	CHECK(item(l->view(), "timer1").part.left == 0);
@@ -504,6 +513,29 @@ TEST_CASE("trash: it holds 64 elements; one more and the oldest leaves for good,
 	CHECK(item(l->view(), "timer2").part.preset == 2 * 60);
 	must(*l, R"({"do": "wait", "seconds": 0.5})");
 	CHECK(l->view().conserved);
+	CHECK_FALSE(l->failed());
+}
+
+TEST_CASE("trash: emptied, everything in it leaves for good: an item to the cabinet with all it holds, a part scrapped with what joined it (Stage 38)") {
+	auto l = bench();
+	CHECK(says(refused(*l, R"({"do": "empty_trash"})"), "the trash is empty"));
+	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "part", "kind": "alarm", "at": [1, 0]})", R"({"do": "wire", "from": "timer1", "to": "alarm1"})",
+				 R"({"do": "trash", "item": "jar"})", R"({"do": "trash", "item": "timer1"})" }) {
+		must(*l, c);
+	}
+	const double malachite = grams(l->view(), "jar", "malachite");
+	REQUIRE(malachite > 0.0);
+	must(*l, R"({"do": "empty_trash"})");
+	const lab::LabView v = l->view();
+	CHECK(v.trash.empty());
+	CHECK(item(v, "jar").place == "cabinet");
+	CHECK(grams(v, "jar", "malachite") == malachite);
+	CHECK_FALSE(there(v, "timer1")); // gone: its name free again, its wire to the alarm with it
+	CHECK(v.wires.empty());
+	CHECK(noticed(v, "the trash was emptied"));
+	must(*l, R"({"do": "part", "kind": "timer", "at": [0, 0], "id": "timer1"})");
+	CHECK(there(l->view(), "timer1"));
+	CHECK(v.conserved);
 	CHECK_FALSE(l->failed());
 }
 
