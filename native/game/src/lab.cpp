@@ -49,7 +49,9 @@ constexpr double PI = 3.14159265358979323846; // a controller's trial, at most (
 // what a hand moves between two vessels: liquid with what is dissolved in it, and solids; never gas
 constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(Phase::Solid));
 
-enum class Kind { Vessel, Bag, Burner, Tray, Stopper }; // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber
+// a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber; a viewer (Stage 42): the spectral
+// viewer, an instrument that holds no matter (no cell, no edge: it changes nothing in the world)
+enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer };
 // On: on a vessel's mouth. Under: a burner under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
 enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
@@ -101,7 +103,16 @@ struct Item {
 	// upright bottle's screw cap on, sealing it
 	double hold_n = 0.0;
 	bool screwed = false;
+	// a viewer (Stage 42): where its probe is fixed (ItemView: probe_on, probe_room, probe_u, probe_v)
+	std::string probe_on;
+	bool probe_room = false;
+	double probe_u = 0.0, probe_v = 0.0;
 };
+
+// whether an item holds matter of its own (a burner's cell is its flame, a viewer has none)
+bool holds_matter(const Item &x) {
+	return x.kind != Kind::Burner && x.kind != Kind::Viewer;
+}
 
 struct Event {
 	int64_t step = 0;
@@ -151,7 +162,7 @@ bool from_bits(const json &j, double &v) {
 	return true;
 }
 
-const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper" };
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer" };
 const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 double number(const json &j, const char *key, double fallback) {
@@ -169,7 +180,10 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 // room for its body, what stands on its mouth starts above it, and a vessel's
 // stand over a burner. A bench may give its own ("size").
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
-	if (kind == "burner") {
+	if (kind == "viewer") {
+		w = 6; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
+		h = 4;
+	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
 	} else if (kind == "stopper") {
 		w = h = 1;
@@ -496,7 +510,7 @@ struct Lab::Impl {
 		if (control == "cap" && screw_cap(i)) {
 			return items[static_cast<size_t>(i)].screwed ? 0.0 : 1.0; // upright: on (0, sealed) or off (1)
 		}
-		if (control == "stir" && i >= 0 && items[static_cast<size_t>(i)].kind != Kind::Burner && items[static_cast<size_t>(i)].kind != Kind::Tray) {
+		if (control == "stir" && i >= 0 && holds_matter(items[static_cast<size_t>(i)]) && items[static_cast<size_t>(i)].kind != Kind::Tray) {
 			return items[static_cast<size_t>(i)].stirred ? 1.0 : 0.0;
 		}
 		if (control == "valve" && i >= 0 && items[static_cast<size_t>(i)].kind == Kind::Burner) {
@@ -593,7 +607,7 @@ struct Lab::Impl {
 		g = cp = 0.0;
 		has = 0;
 		const int i = find(id);
-		if (i < 0 || items[static_cast<size_t>(i)].kind == Kind::Burner) {
+		if (i < 0 || !holds_matter(items[static_cast<size_t>(i)])) {
 			return;
 		}
 		const CellId cell = items[static_cast<size_t>(i)].cell;
@@ -832,7 +846,7 @@ struct Lab::Impl {
 		}
 		Item &x = items[static_cast<size_t>(i)];
 		if (control == "stir") {
-			if (x.kind == Kind::Burner || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
+			if (!holds_matter(x) || x.kind == Kind::Tray || x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
 				return false;
 			}
 			const bool on = value > 0.5;
@@ -1856,7 +1870,7 @@ struct Lab::Impl {
 		const std::span<const ReactionNote> notes = builtin_reaction_notes();
 		for (size_t i = 0; i < items.size(); ++i) {
 			const Item &x = items[i];
-			if (x.kind == Kind::Burner) {
+			if (!holds_matter(x)) {
 				continue;
 			}
 			if (x.kind == Kind::Tray) {
@@ -2292,6 +2306,23 @@ struct Lab::Impl {
 	}
 
 	// true when the item is on the bench, in use
+	// A viewer's probe goes back to its holder when what it is fixed on has left the lab (a part scrapped, the trash
+	// emptied), or when the viewer itself leaves the bench (Stage 42). What is in the trash or a closed circuit
+	// keeps it: it comes back with them.
+	void release_probes() {
+		for (Item &v : items) {
+			if (v.kind != Kind::Viewer || (v.probe_on.empty() && !v.probe_room)) {
+				continue;
+			}
+			const bool gone = !v.probe_on.empty() && find(v.probe_on) < 0 && find_part(v.probe_on) < 0 && find_binned(v.probe_on) < 0;
+			if (gone || v.place == Place::Cabinet || v.place == Place::Trash || v.place == Place::Outbox) {
+				v.probe_on.clear();
+				v.probe_room = false;
+				v.probe_u = v.probe_v = 0.0;
+			}
+		}
+	}
+
 	bool on_bench(const Item &x, std::string &why) const {
 		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
 			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in the outbox") + ", not on the bench";
@@ -2364,7 +2395,13 @@ struct Lab::Impl {
 		v.floor_mm = item.floor_mm;
 		v.glassware = item.glassware;
 		v.nominal_ml = item.nominal_ml;
-		if (item.kind != Kind::Burner) {
+		v.probe_on = item.probe_on;
+		v.probe_room = item.probe_room;
+		v.probe_u = item.probe_u;
+		v.probe_v = item.probe_v;
+		if (item.kind == Kind::Viewer) {
+			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // it stands in the room's air
+		} else if (item.kind != Kind::Burner) {
 			const double kelvin = m.kelvin(item.cell);
 			v.celsius = kelvin - 273.15;
 			const CellState &cell = m.world().snapshot_cell(item.cell);
@@ -2477,7 +2514,7 @@ struct Lab::Impl {
 		const Kind is = items[static_cast<size_t>(index)].kind;
 		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
-			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : "a vessel");
+			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : "a vessel");
 			return false;
 		}
 		if (is == Kind::Vessel && items[static_cast<size_t>(index)].burst) {
@@ -2620,8 +2657,14 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				impl->items.push_back(item);
 				continue;
 			}
+			if (kind == "viewer") {
+				// the spectral viewer (Stage 42): no matter, no cell, no edge; its probe in its holder
+				item.kind = Kind::Viewer;
+				impl->items.push_back(item);
+				continue;
+			}
 			if (kind != "vessel" && kind != "balloon" && kind != "stopper") {
-				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper or burner";
+				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner or viewer";
 				return nullptr;
 			}
 			item.kind = kind == "vessel" ? Kind::Vessel : kind == "stopper" ? Kind::Stopper : Kind::Bag;
@@ -3923,6 +3966,53 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		return move(items[static_cast<size_t>(from)], items[static_cast<size_t>(to)], amounts, why);
 	}
+	if (what == "probe") {
+		// the spectral viewer's probe (GAME_SPEC §13, Stage 42): fixed on an item or a part at a place of it in its own
+		// frame ("on", "at": 0 to 1 across and down it), on the room ("at" alone: in the bench's squares from its
+		// top-left corner), or back in its holder (neither). It reads always; this only says where.
+		int at = -1;
+		if (!item(c, "viewer", Kind::Viewer, at, why)) {
+			return false;
+		}
+		Item &v = items[static_cast<size_t>(at)];
+		if (!on_bench(v, why)) {
+			return false;
+		}
+		double u = 0.5, w = 0.5;
+		const bool placed = c.contains("at");
+		if (placed) {
+			const json &a = c.at("at");
+			if (!a.is_array() || a.size() != 2 || !a.at(0).is_number() || !a.at(1).is_number() || !std::isfinite(a.at(0).get<double>()) || !std::isfinite(a.at(1).get<double>())) {
+				why = "a probe's \"at\" is two numbers";
+				return false;
+			}
+			u = a.at(0).get<double>();
+			w = a.at(1).get<double>();
+		}
+		if (c.contains("on")) {
+			if (!c.at("on").is_string()) {
+				why = "a probe is put \"on\" an item or a part, by its id";
+				return false;
+			}
+			const std::string on = c.at("on").get<std::string>();
+			if (find_binned(on) >= 0) {
+				why = "\"" + on + "\" is in the trash";
+				return false;
+			}
+			if (find(on) < 0 && find_part(on) < 0) {
+				why = "there is no \"" + on + "\" to put a probe on";
+				return false;
+			}
+			v.probe_on = on;
+			v.probe_room = false;
+		} else {
+			v.probe_on.clear();
+			v.probe_room = placed;
+		}
+		v.probe_u = v.probe_on.empty() && !v.probe_room ? 0.0 : u;
+		v.probe_v = v.probe_on.empty() && !v.probe_room ? 0.0 : w;
+		return true;
+	}
 	if (what == "attach") {
 		int thing = -1, to = -1;
 		const bool stopper = c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) >= 0
@@ -4188,7 +4278,9 @@ bool Lab::command(std::string_view command_json, std::string &why) {
 		return false;
 	}
 	try {
-		return impl_->run(c, why);
+		const bool ran = impl_->run(c, why);
+		impl_->release_probes();
+		return ran;
 	} catch (const std::exception &e) {
 		why = std::string("the command is malformed: ") + e.what();
 		return false;
@@ -4403,7 +4495,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 		out.facts.insert(out.facts.begin(), "in the trash: it signals nothing");
 		return out;
 	}
-	if (i < 0 || m.items[static_cast<size_t>(i)].kind == Kind::Burner) {
+	if (i < 0 || !holds_matter(m.items[static_cast<size_t>(i)])) {
 		return out;
 	}
 	out.found = true;
@@ -4568,6 +4660,19 @@ std::string Lab::report() const {
 			j["valve"] = item.valve;
 			j["under"] = item.under >= 0 ? json(m.items[static_cast<size_t>(item.under)].id) : json(nullptr);
 			j["given_j"] = 0.0 - m.world().energy(item.cell).joule();
+			items.push_back(j);
+			continue;
+		}
+		if (item.kind == Kind::Viewer) {
+			// the spectral viewer (Stage 42): where it stands, and where its probe is fixed
+			j["kind"] = "viewer";
+			j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+			if (item.place == Place::Bench) {
+				j["at"] = { item.col, item.row };
+			}
+			j["probe"] = !item.probe_on.empty() ? json{ { "on", item.probe_on }, { "at", { item.probe_u, item.probe_v } } }
+						 : item.probe_room		? json{ { "at", { item.probe_u, item.probe_v } } }
+												: json("holder");
 			items.push_back(j);
 			continue;
 		}
@@ -4908,6 +5013,9 @@ json Lab::Impl::save() const {
 			list.back()["suspended"] = bits(item.suspended);
 			list.back()["swirl_holds"] = { bits(item.swirl_for), bits(item.swirl_most), bits(item.swirl_lifts), bits(item.settles) };
 		}
+		if (item.kind == Kind::Viewer && (!item.probe_on.empty() || item.probe_room)) { // a lab without a viewer saves as before (Stage 42)
+			list.back()["probe"] = { { "on", item.probe_on }, { "room", item.probe_room }, { "at", { bits(item.probe_u), bits(item.probe_v) } } };
+		}
 		if (item.pours_into >= 0) { // a lab without a pour saves as before (Stage 27)
 			list.back()["pours"] = { { "into", item.pours_into }, { "edge", item.pour.index }, { "inverted", item.inverted }, { "tilt", bits(item.tilt) }, { "cap", bits(item.cap) } };
 		}
@@ -5023,7 +5131,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Stopper) || place < 0 || place > static_cast<int>(Place::Trash)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Viewer) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -5064,6 +5172,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.slot = j.value("slot", 0);
 			item.glassware = j.value("glassware", "");
 			item.screwed = j.value("screwed", false);
+			if (j.contains("probe")) {
+				const json &pj = j.at("probe");
+				item.probe_on = pj.at("on").get<std::string>();
+				item.probe_room = pj.at("room").get<bool>();
+				if (!from_bits(pj.at("at").at(0), item.probe_u) || !from_bits(pj.at("at").at(1), item.probe_v)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+			}
 			if (j.contains("hold_n") && !from_bits(j.at("hold_n"), item.hold_n)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
@@ -5145,7 +5262,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = item.cell.index >= 0 && item.cell.index < cells && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
+		const bool refs = (item.kind == Kind::Viewer ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";
