@@ -32,9 +32,27 @@ struct SubstanceView {
 	double ml = 0.0; // its volume (Stage 28): a solid's or a liquid's own, a solute's apparent, a gas's share of the gas
 };
 
+// A thermal camera's settings (§13, Stage 48): where its sensor's frame is, and how it reads and shows what it sees.
+// The frame is over its own screen (see-through), or fixed on the room (frame_room) with its top-left at (frame_x,
+// frame_y) in the bench's squares from the bench's top-left corner. It reads by `emissivity`, the room it reflects at
+// `reflected_c` (none: the room's own); shows by `palette` (data/thermal.json), the hottest and coldest marked
+// (`markers`); over its gain's range, or `locked` to level_c +- span_c / 2; its gain high (-20 to 150 C), low (0 to
+// 650 C) or auto (high, and low above it).
+struct ThermalSettings {
+	bool frame_room = false;
+	double frame_x = 0.0, frame_y = 0.0;
+	std::string palette = "ironbow";
+	double emissivity = 0.95;
+	std::optional<double> reflected_c;
+	bool markers = true;
+	bool locked = false;
+	double level_c = 60.0, span_c = 80.0;
+	std::string gain = "auto";
+};
+
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42); a signal part: timer, monitor, alarm
+	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48); a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
 	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
@@ -101,6 +119,7 @@ struct ItemView {
 	std::string probe_on;
 	bool probe_room = false;
 	double probe_u = 0.0, probe_v = 0.0;
+	ThermalSettings thermal; // a thermal camera's (Stage 48)
 };
 
 // What the lab says happened (GAME_SPEC §13.4), at a level the player may

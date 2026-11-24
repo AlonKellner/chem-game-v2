@@ -1770,6 +1770,35 @@ bool optics_ray_shares(const OpticsScene &scene, int body, double x, double y, d
 	return true;
 }
 
+double optics_lwir_signal(const OpticsScene &scene, double x, double y, double size, int bands, uint32_t hide) {
+	if (!shader::ready(scene) || bands < 1) {
+		return 1.0;
+	}
+	const shader::Use use(scene);
+	shader::range_fixed = true;
+	shader::band_range = 1;
+	shader::ray_hide = static_cast<int>(hide);
+	const shader::vec2 p(x, y);
+	const shader::Path q = shader::path_of(p, size);
+	double sum = 0.0;
+	for (int j = 0; j < bands; ++j) {
+		const double nm = shader::share((j + 0.5) / bands).x + 380.0;
+		if (q.layers == 0) {
+			sum += 1.0;
+		} else if (q.refractor >= 0 || q.ways) {
+			const shader::RayMet m = shader::ray_met(p, nm);
+			const shader::vec2 t = shader::ray_shade(m, nm);
+			sum += t.x + t.y;
+		} else {
+			sum += shader::along(q, nm, 1.0, 0.0, 0.0, false, 1.0);
+		}
+	}
+	shader::range_fixed = false;
+	shader::ray_hide = 0;
+	shader::band_range = 0;
+	return sum / bands;
+}
+
 bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 	using namespace optics_layout;
 	optics_truth(scene, x, y, rgb); // what is in front of the display, and its face, in the visible

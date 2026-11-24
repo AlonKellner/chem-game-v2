@@ -153,6 +153,10 @@
 			"tests": ["refraction: a 60-degree prism"]
 		},
 		{
+			"data": ["thermal.json/{palettes,gains,auto_span}/**"],
+			"design": "a thermal camera's palettes, gains and the hysteresis of its span (Stage 48): after what 8-14 um cameras offer, chosen for the game"
+		},
+		{
 			"data": ["optics/water_lwir.csv"],
 			"measured": "Hale and Querry 1973, liquid water at 25 C (refractiveindex.info)",
 			"doc": ["Hale and Querry", "The long-wave infrared (Stage 46)"],

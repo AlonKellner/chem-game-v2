@@ -408,6 +408,10 @@ std::string check_O24(const OpticsScene &with, const OpticsScene &without, int x
 // integrated by the truth's own tracer over a grid of it at every share of the band (linear sRGB; false: the pixel
 // is no display's, and rgb is its optics_truth).
 bool optics_relay_truth(const OpticsScene &scene, int x, int y, double rgb[3]);
+// What a thermal camera's sensor collects (Stage 48): the mean long-wave signal (the room's scale) over a square of
+// the room `size` across about (x, y), at `bands` equal shares of the band each read at its middle, the bodies `hide`
+// hidden, by the pass's own source (flat over the square, or one ray at its middle where something bends).
+double optics_lwir_signal(const OpticsScene &scene, double x, double y, double size, int bands, uint32_t hide);
 class OpticsFrames;
 // O25 (GAME_SPEC §18): a sensor's pixel is its truth: every `step`th display pixel of the region, as `frames` show it
 // settled, within 8 of its truth on the eye metric. "" when it holds.
