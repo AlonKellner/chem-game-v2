@@ -600,15 +600,23 @@ bool Simulation::project(CellId cell) {
 	const CellState &state = world_.snapshot_cell(cell);
 	bool changed = false;
 	// several equilibria that share a species are taken in turn until none
-	// moves (one alone settles in the first round)
-	for (int round = 0; round < 8; ++round) {
+	// moves; each is probed again only if the cell changed since it was last
+	// probed (Stage 44: one that cannot move, or that moved last, is at rest
+	// until another moves, so a cell with one moving equilibrium settles in
+	// the first round)
+	seen_.assign(equilibria_.size(), -1); // the cell's version at each one's last probe
+	int version = 0;
+	for (int round = 0; round < 16; ++round) {
 		bool moved = false;
-		int live = 0; // the equilibria that could move here (Stage 43: those of species the cell lacks are no round's)
-		for (const Reaction &reaction : equilibria_) {
+		for (size_t e = 0; e < equilibria_.size(); ++e) {
+			const Reaction &reaction = equilibria_[e];
+			if (seen_[e] == version) {
+				continue; // nothing changed since it was probed, or since it moved
+			}
+			seen_[e] = version;
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
-			++live;
 			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
@@ -617,13 +625,33 @@ bool Simulation::project(CellId cell) {
 			const bool forward = a > 0.0;
 			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward));
 			if (size != 0) {
+				// a solid that appears out of the solution comes as its grains (a precipitate, Stage 44), not one lump
+				std::array<SpeciesId, MAX_TERMS> appears{};
+				for (size_t t = 0; t < reaction.terms().size(); ++t) {
+					const Term &term = reaction.terms()[t];
+					const SpeciesDef &def = table.species(term.species);
+					if ((forward ? term.nu > 0 : term.nu < 0) && def.phase == Phase::Solid && def.grain > 0.0 && def.molar_volume > 0.0 &&
+							state.amount[static_cast<size_t>(term.species.index)] == 0) {
+						appears[t] = term.species;
+					}
+				}
 				const Refusal refused = transform(cell, reaction, forward ? size : -size);
 				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+				for (const SpeciesId s : appears) {
+					if (table.has(s)) {
+						const SpeciesDef &def = table.species(s);
+						// N spheres of the grain's diameter in the volume made
+						const double volume = static_cast<double>(state.amount[static_cast<size_t>(s.index)]) * MOL_PER_QUANTUM * def.molar_volume;
+						const double grains = volume / (0.5235987755982988 * def.grain * def.grain * def.grain);
+						world_.set_particles(cell, s, grains < 1.0 ? 1 : grains < 1e15 ? static_cast<int64_t>(grains) : 1000000000000000);
+					}
+				}
 				moved = true;
+				seen_[e] = ++version; // at its balance, in the cell as it is now
 			}
 		}
 		changed = changed || moved;
-		if (!moved || live < 2) {
+		if (!moved) {
 			break;
 		}
 	}

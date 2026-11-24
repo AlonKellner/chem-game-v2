@@ -58,6 +58,10 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		{ builtin::latex, 0.0, 0.0, 130.1 }, // NETZSCH's 1.91 J/g/K
 		{ builtin::sodium_hydroxide_aq, -470.114, 48.1, -102.1 }, // NBS 1982, p. 2-299, NaOH "ai" (Stage 43)
 		{ builtin::sodium_sulfate_aq, -1389.51, 138.1, -201.0 }, // NBS 1982, p. 2-307, Na2SO4 "ai"
+		// Puigdomenech and Taxen 2000, SKB TR-00-13, Table 2: dG -359.92, S 87.0 and its Cp equation at 25 C;
+		// dH with CODATA's elements (Stage 44: JANAF 1966's row makes it more stable than CuO and water, as no
+		// solubility measured does)
+		{ builtin::copper_hydroxide, -443.99, 87.0, 87.85 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -90,6 +94,7 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::nitrogen, 2 * N, 0.0 },
 		{ builtin::sodium_hydroxide_aq, NA + O + H, 0.0 }, // Stage 43
 		{ builtin::sodium_sulfate_aq, 2 * NA + S + 4 * O, 0.0 },
+		{ builtin::copper_hydroxide, CU + 2 * O + 2 * H, 3.93 }, // spertiniite, measured: Handbook of Mineralogy (Stage 44)
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);

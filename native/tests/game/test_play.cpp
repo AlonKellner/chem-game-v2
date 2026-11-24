@@ -54,7 +54,7 @@ TEST_CASE("play: the play a host times sets the bench up, carries the bottle, po
 	lab::Play play;
 	REQUIRE_MESSAGE(lab::Play::read(read("data/plays/cost.json"), play, why), why);
 	std::map<std::string, int> frames;
-	double most_turn = 0.0, most_pour = 0.0;
+	double most_turn = 0.0, most_pour = 0.0, held_up = 0.0;
 	for (int i = 0; i < 6000 && play.next(*ui); ++i) {
 		ui->frame(1.0 / 120.0);
 		++frames[play.mark()];
@@ -62,6 +62,9 @@ TEST_CASE("play: the play a host times sets the bench up, carries the bottle, po
 		const lab::ItemView &acid = item(now, "acid");
 		most_turn = std::max(most_turn, acid.turn);
 		most_pour = std::max(most_pour, acid.pours_ml_s);
+		if (play.mark() == "stir") {
+			held_up = std::max(held_up, item(now, "flask").suspended);
+		}
 	}
 	CHECK(play.over());
 	CHECK_MESSAGE(play.missed().empty(), "not on the screen when its step came: " << play.missed());
@@ -80,8 +83,9 @@ TEST_CASE("play: the play a host times sets the bench up, carries the bottle, po
 	CHECK(acid.liquid_ml < 100.0);
 	CHECK(flask.place == "bench");
 	CHECK(acid.place == "bench");
-	// stirred: a vortex stands in it, and it holds powder up
+	// stirred: a vortex stands in it, and it holds powder up while it stirs (Stage 44: the acid dissolves the
+	// malachite, so after the half hour at 600x none is left to hold up)
 	CHECK(flask.swirl_j > 0.0);
 	CHECK(flask.vortex > 0.0);
-	CHECK(flask.suspended > 0.0);
+	CHECK(held_up > 0.0);
 }

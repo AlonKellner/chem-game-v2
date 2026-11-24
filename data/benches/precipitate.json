@@ -1,0 +1,83 @@
+{
+	"format": "chem-bench/2",
+	"note": "The precipitate's bench (GAME_SPEC §9, §13.7, Stage 44): a beaker of copper sulfate solution (0.01 mol in 50 g of water, 0.2 mol/kg), a bottle of 1 M sodium hydroxide (0.25 mol in 250 g of water) and one of 1 M sulfuric acid (0.25 mol in 240.5 g), the demo's; a burner in the cabinet. 20 mL of the base brings all the copper out as 0.98 g of copper hydroxide (chem_tool study precipitation).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "base",
+			"kind": "vessel",
+			"volume_ml": 500,
+			"wall": "glass",
+			"glassware": "bottle",
+			"wall_g": 250,
+			"loss": 0.8,
+			"contents": {
+				"water": {
+					"g": 250.0
+				},
+				"sodium_hydroxide_aq": {
+					"mol": 0.25
+				}
+			},
+			"at": [
+				2,
+				7
+			]
+		},
+		{
+			"id": "acid",
+			"kind": "vessel",
+			"volume_ml": 500,
+			"wall": "glass",
+			"glassware": "bottle",
+			"wall_g": 250,
+			"loss": 0.8,
+			"contents": {
+				"water": {
+					"g": 240.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.25
+				}
+			},
+			"at": [
+				6,
+				7
+			]
+		},
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "beaker",
+			"wall_g": 80,
+			"loss": 0.5,
+			"at": [
+				12,
+				7
+			],
+			"contents": {
+				"water": {
+					"g": 50.0
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.01
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

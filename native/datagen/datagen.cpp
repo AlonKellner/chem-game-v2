@@ -117,6 +117,7 @@ struct SpeciesRow {
 	bool wall = false;
 	double density = 0.0; // g/cm^3; 0: none given
 	double molar_volume = 0.0; // m^3/mol, derived (a dissolved species: from volume_cm3)
+	double grain = 0.0; // m: a precipitate's grains (grain_um)
 	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
 };
 
@@ -260,6 +261,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				fail(species_file, "species " + row.id + ": its ions do not sum to its formula and charge (at most " + std::to_string(chem::MAX_IONS) + " ions)");
 			}
 		}
+		if (s.contains("grain_um")) {
+			const double g = s.at("grain_um").get<double>();
+			if (row.phase->phase != chem::Phase::Solid || row.wall || !(g > 0.0)) {
+				fail(species_file, "species " + row.id + ": grain_um is a solid's positive grain diameter as it comes out of a solution");
+			}
+			row.grain = g * 1e-6;
+		}
 		if (s.contains("volume_cm3")) {
 			const double v = s.at("volume_cm3").get<double>();
 			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0)) {
@@ -293,6 +301,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < row.ions.size(); ++i) {
 			def.ions[i] = chem::IonCount{ row.ions[i].first, row.ions[i].second };
 		}
+		def.grain = row.grain;
 		species_defs.push_back(def);
 	}
 
@@ -470,7 +479,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < static_cast<size_t>(chem::MAX_IONS); ++i) {
 			cpp << (i ? ", " : " ") << "IonCount{ " << (i < row.ions.size() ? row.ions[i].first : -1) << ", " << (i < row.ions.size() ? row.ions[i].second : 0) << " }";
 		}
-		cpp << " } } },\n";
+		char grain[40];
+		std::snprintf(grain, sizeof grain, "%.17g", row.grain);
+		cpp << " } }, " << grain << " },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";
 	for (const chem::IonDef &ion : solution.ions) {
