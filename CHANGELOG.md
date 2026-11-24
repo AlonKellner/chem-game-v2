@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.41.0 (2026-11-24, Stage 41)
+## 0.41.0 (2026-11-24, Stage 41; signed off by the user: "Works perfectly, approved, merge and proceed")
 
 - §13.2 (Stage 41, `docs/TDD_41_EXPERIMENTS.md`): **a tutorial is strict or free**, by a switch on its card
   (strict as the screen opens, the player's at any time). Free, it only points: every gesture and the clock

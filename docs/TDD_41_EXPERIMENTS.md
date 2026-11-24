@@ -28,7 +28,7 @@ The spec: GAME_SPEC §13.2 (strict or free; results of a quantity), §13.3 (a st
 | 41.3 | The experiment picker: the catalogue, the list on the screen, the C API, the Godot host | Done |
 | 41.4 | Three experiments: benches and tutorials; results of a quantity | Done |
 | 41.5 | The roadmap of experiments | Done (`docs/EXPERIMENTS_ROADMAP.md`) |
-| 41.6 | GAME_SPEC 0.41.0; `make gates`; the user's sign-off | `make gates` passed (330 s: ASan+UBSan 330, ctest 204, Godot 11 of 11); awaiting sign-off |
+| 41.6 | GAME_SPEC 0.41.0; `make gates`; the user's sign-off | `make gates` passed (330 s: ASan+UBSan 330, ctest 204, Godot 11 of 11); signed off 2026-11-24 ("Works perfectly, approved, merge and proceed") |
 
 ## 41.1 Measured
 
