@@ -42,6 +42,10 @@
   - the pour menu's "pour gently" pours as a trickle;
   - a scene's revisions are unique across scenes, so the prism shows its dark room, not the lab's wall that was
     left on the GPU.
+- From the user's second test:
+  - a tipped vessel's layers lie level in the room, and it pours its top layer first;
+  - a pour reads the whole layered vessel;
+  - a held pour at speed no longer breaks C5.
 - Water's properties by temperature are the core's (`solutions.json`'s `solvent`), boiling's bubbles' too.
 
 ## 0.46.0 (2026-11-24, Stage 46; signed off by the user: "Perfect, approved, merge and proceed")

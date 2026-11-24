@@ -587,17 +587,26 @@ float haze_colour(int body, int start, float y, float nm) {
 	return mix(row_at(start + ROW, nm), row_at(start + BUBBLE_ROW * ROW, nm), white_at(body, y));
 }
 
+// The shapes' head (Stage 30; lab/optics_scene.hpp lays it out): SHAPE_BLOCK vec4s a body: its shape's start,
+// whether it is made as glassware, whether what lies in it is given, its turn; the turn's pivot, cosine and
+// sine; its rectangle upright; the room's up in its frame, whether it holds liquid, the liquid's level; its
+// vortex's depth, half width and half depth, whether it holds sediment; the vortex's middle, the sediment's
+// level, its pile's height; the pile's half width and half depth, its middle.
+const int SHAPE_BLOCK = 10;
+
 // A layered vessel's band at height y of the screen (Stage 47: its column's layers, GAME_SPEC §6): the start of
-// that band's set, whose liquid row is its layer's; a vessel of one layer, its own
+// that band's set, whose liquid row is its layer's; a vessel of one layer, its own. The bands lie level in the room
+// at any turn, as the liquid's surface does: a place's level is read in the vessel's frame as the surface's is, so
+// many cm up the room from the frame's origin (the middle of its upright bottom, turned about its pivot).
 int band_rows(int body, int rows, float y) {
 	float n = row_value(rows + BANDS_ROW * ROW);
 	if (n < 0.5) {
 		return rows;
 	}
-	int at = HEADER_VECS + body * BODY_VECS;
-	vec4 rect = scene_vec(at);
-	vec4 form = scene_vec(at + 1);
-	float z = (rect.y + rect.w - scene_vec(at + 5).z / form.y - y) * form.y; // cm over its floor
+	vec4 turned = shape_vec(body * SHAPE_BLOCK + 1); // its pivot, the turn's cosine and sine
+	vec4 upright = shape_vec(body * SHAPE_BLOCK + 2); // its rectangle upright
+	float origin = turned.y + (upright.x + 0.5 * upright.z - turned.x) * turned.w + (upright.y + upright.w - turned.y) * turned.z;
+	float z = (origin - y) * scene_vec(HEADER_VECS + body * BODY_VECS + 1).y; // its level, cm
 	int count = int(n);
 	int found = rows;
 	for (int k = 0; k < 133; k++) {
@@ -1151,12 +1160,6 @@ float dot3(vec3 a, vec3 b) {
 	return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-// The shapes' head (Stage 30; lab/optics_scene.hpp lays it out): SHAPE_BLOCK vec4s a body: its shape's start,
-// whether it is made as glassware, whether what lies in it is given, its turn; the turn's pivot, cosine and
-// sine; its rectangle upright; the room's up in its frame, whether it holds liquid, the liquid's level; its
-// vortex's depth, half width and half depth, whether it holds sediment; the vortex's middle, the sediment's
-// level, its pile's height; the pile's half width and half depth, its middle.
-const int SHAPE_BLOCK = 10;
 
 // whether what lies in a body is given (its liquid's surface, its sediment): then its core is traced by it
 bool lies_in(int body) {

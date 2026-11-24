@@ -35,7 +35,8 @@ GAME_SPEC 0.47.0 covers:
 | 47.7 | The goldens: a new species moves every digest; every measured value unchanged | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
 | 47.8 | GAME_SPEC 0.47.0, `make gates`, the user's sign-off | `make gates` passed (522 s: ASan+UBSan 522, ctest 364, Godot 12 of 12; the sanitizers found the band sets growing the scene's rows under the body's own row pointers, which were then read freed); awaiting sign-off |
 | 47.9 | Rebased onto Stage 46 (the long-wave range): a band set carries long-wave rows too (its layer's water by its share), so a layered vessel reads right at any wavelength and through a sensor's relay | `make gates` passed again (521 s: ASan+UBSan 521, ctest 349, Godot 12 of 12); the goldens unchanged by the rebase; `make screenshots` O4 the same as main's, shot for shot; awaiting sign-off |
-| 47.10 | The user's first test: the layers bench's vessels and the pour menu's "pour gently"; the prism's dark room (revisions unique across scenes) | Done; the separation the user saw after stirring is not reproduced (asked) |
+| 47.10 | The user's first test: the layers bench's vessels and the pour menu's "pour gently"; the prism's dark room (revisions unique across scenes) | Done; the separation the user saw after stirring was a reset (47.11) |
+| 47.11 | The user's second test: a tipped vessel's layers level in the room, poured top first; pours read the whole vessel; C5 at speed | Done |
 
 ## 47.1 The prism in the list
 
@@ -227,7 +228,33 @@ The user played the stage and reported three things:
   wall dark and the lab's light; it fails without the fix (1 = 1). On the GPU, `data/plays/prism.json` shows the
   dark room with the slit's spectrum through the prism.
 
+## 47.11 The user's second test
+
+- **Separating after stirring:** not seen. What the user saw came after a reset (the bench layered again, its
+  boundary already blurred).
+- **The poured-from vessel looked mixed while it poured.** Bands were drawn upright only, so a tipped vessel was
+  one liquid on the screen and layered again once set down. The layers now lie level in the room at any turn, as
+  the surface does: a band's top is `contents::lying`'s level for the liquid of the layers under it, read in the
+  vessel's frame as the surface's (`lie[15]`) is. The shader reads a pixel's level through the vessel's turn and
+  pivot (`band_rows`). Tipped, the top layer is at the lip and pours first; each under it reaches the lip as the
+  level falls to it. Tests: a scripted pour from the layered beaker gives the green first, then the blue; held
+  tipped over the empty beaker, its picture by the truth has both colours. On the GPU the stream turns from green
+  to blue as the level reaches the blue.
+- **A pour read only the top layer's liquid.** A scripted pour of 60 mL from the layered beaker was refused (its
+  top layer held less), and whether liquid stood over the lip was read from the top layer alone. Both now read
+  the whole vessel.
+- **An invariant broke** (C5, a cell's ledger against its state). A held pour at 10x or more, with only each
+  frame's first step checked: the pour's surface push moves the liquid before the step, and a checked step after
+  unchecked ones restarts its trace after that move, counting it twice. The push and the stirring back in now
+  mark the step as begun, as every other move between steps does, and whether a step can be traced is decided
+  after the pours are set. Test: held pours onto both beakers at 10x and 600x; it fails without the fix.
+- **What a pour mixes in where it lands** stays as it is (a trickle lays a layer, a faster pour stirs in what it
+  laid). The user is fine with poured liquids mixing as they land.
+
 ## Open
+
+- **An outlet at a layered vessel's bottom, or one upside down through its cap,** draws from its top layer. It
+  should draw from its lowest: the drain's edge following the lowest layer, as a burner's does.
 
 - **Stirring mixes a column whole in one step.** It should be an entrainment limited by the stirrer's power and
   the stratification's potential energy (mixing efficiency about 0.2, Osborn 1980). For the layers bench this is

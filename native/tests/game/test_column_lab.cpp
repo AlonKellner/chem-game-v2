@@ -253,3 +253,71 @@ TEST_CASE("column: a held pour onto a layered vessel at any speed, a frame's fir
 		}
 	}
 }
+
+TEST_CASE("column: a layered vessel pours its top layer first, the one under it as the level reaches it (Stage 47)") {
+	// the user's test: the layers looked mixed in the vessel poured from
+	auto l = open(read("data/benches/layers.json"));
+	l->set_checking(true);
+	ok(*l, R"({"do": "pour", "from": "beaker", "to": "empty", "ml": 60})");
+	lab::ItemView got = item(*l, "empty");
+	CHECK(mol_in(got, "nickel_sulfate_aq") > 0.04); // the green, the top
+	CHECK(mol_in(got, "copper_sulfate_aq") < 0.002);
+	const lab::ItemView left = item(*l, "beaker");
+	CHECK(mol_in(left, "copper_sulfate_aq") > 0.11); // the blue still in it, all of it
+	ok(*l, R"({"do": "pour", "from": "beaker", "to": "empty", "ml": 60})");
+	got = item(*l, "empty");
+	CHECK(mol_in(got, "nickel_sulfate_aq") > 0.06); // the rest of the green
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.02); // and then the blue
+}
+
+TEST_CASE("column: a layered vessel tipped to pour shows its layers level in the room: the top one at the lip, the lower at its far bottom (Stage 47)") {
+	std::string why;
+	std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/layers.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(1.0 / 60);
+	float ax = 0, ay = 0, fx = 0, fy = 0;
+	REQUIRE(ui->locate("item:beaker", ax, ay));
+	REQUIRE(ui->locate("item:empty", fx, fy));
+	ui->pointer(ax, ay, true);
+	ui->pointer(ax, ay, false);
+	for (int k = 1; k <= 20; ++k) {
+		ui->pointer(ax + (fx - ax) * static_cast<float>(k) / 20.0f, ay + (fy - ay) * static_cast<float>(k) / 20.0f, false);
+		ui->frame(1.0 / 60.0);
+	}
+	ui->pointer(fx, fy, true);
+	for (int k = 0; k < 120; ++k) { // held: tipped, and pouring
+		ui->frame(1.0 / 60.0);
+	}
+	const lab::ItemView v = item(ui->lab(), "beaker");
+	REQUIRE(v.turn > 0.3);
+	REQUIRE(v.layers.size() >= 2);
+	const lab::OpticsScene &scene = ui->optics();
+	REQUIRE(lab::check_O1(scene) == "");
+	const int body = lab::optics_body(scene, "beaker");
+	REQUIRE(body >= 0);
+	namespace L = lab::optics_layout;
+	const int set = static_cast<int>(scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS + L::SET) * 4]);
+	CHECK(scene.rows[static_cast<size_t>((set * L::ROWS_PER_SET + L::BANDS_ROW) * L::ROW)] >= 2.0f); // its bands, tipped
+	// the liquid's lowest and highest points on the screen, along the column through the rectangle's middle third
+	const float *rect = &scene.table[static_cast<size_t>(L::HEADER_VECS + body * L::BODY_VECS) * 4];
+	const auto colour = [&](int x, int y) {
+		double rgb[3];
+		lab::optics_truth(scene, x, y, rgb);
+		return lab::to_lab(chem::optics::Xyz{ 0.4124564 * rgb[0] + 0.3575761 * rgb[1] + 0.1804375 * rgb[2], 0.2126729 * rgb[0] + 0.7151522 * rgb[1] + 0.0721750 * rgb[2],
+				0.0193339 * rgb[0] + 0.1191920 * rgb[1] + 0.9503041 * rgb[2] });
+	};
+	int blues = 0, greens = 0;
+	for (int x = static_cast<int>(rect[0]); x < static_cast<int>(rect[0] + rect[2]); x += 4) {
+		for (int y = static_cast<int>(rect[1]); y < static_cast<int>(rect[1] + rect[3]); y += 4) {
+			const lab::CieLab c = colour(x, y);
+			if (c.b < -25.0 && c.a > -20.0) {
+				++blues; // the copper's blue
+			} else if (c.a < -15.0 && c.b > -15.0) {
+				++greens; // the nickel's green
+			}
+		}
+	}
+	MESSAGE("tipped: " << blues << " blue samples, " << greens << " green");
+	CHECK(blues > 20);
+	CHECK(greens > 20);
+}

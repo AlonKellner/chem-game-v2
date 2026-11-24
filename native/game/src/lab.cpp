@@ -1729,8 +1729,8 @@ struct Lab::Impl {
 		if (x.swirl > 0.0) {
 			return true;
 		}
-		const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
-		if (!fill.defined) {
+		const Fill held = fill(x); // (the whole vessel: a layered one's column, Stage 47)
+		if (!held.defined) {
 			return false; // (as by_hand: nothing runs)
 		}
 		struct Held {
@@ -1742,7 +1742,7 @@ struct Lab::Impl {
 		if (last.vessel != &g || last.turn != turn) {
 			last = Held{ &g, turn, contents::held_at(g, turn, 1) };
 		}
-		return fill.condensed * 1e6 >= last.holds * (1.0 - 1.0e-9);
+		return held.condensed * 1e6 >= last.holds * (1.0 - 1.0e-9);
 	}
 	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
 	// an upside-down one's an orifice's under its head
@@ -1766,8 +1766,8 @@ struct Lab::Impl {
 				solids = p.carried;
 				solids_rate = p.solids;
 			} else if (g != nullptr) {
-				const Fill fill = fill_of(table(), world().snapshot_cell(x.cell), kelvin(x.cell));
-				const double head_m = fill.defined ? g->head_inverted(fill.condensed * 1e6) / 100.0 : 0.0;
+				const Fill held = fill(x);
+				const double head_m = held.defined ? g->head_inverted(held.condensed * 1e6) / 100.0 : 0.0;
 				const double bore_m = g->cap_bore / 100.0;
 				rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * head_m);
 				solids = 1.0; // upside down, what rests lies on the cap
@@ -4208,7 +4208,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			x.tilt = rate;
 			return true;
 		}
-		const double volume = liquid_m3(x.cell);
+		const double volume = liquid_m3(x); // (all of a layered vessel's, Stage 47)
 		const double wanted = c.value("all", false) ? volume : number(c, "ml", -1.0) * 1e-6;
 		if (!(wanted > 0.0)) {
 			if (started) {
@@ -4234,7 +4234,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		double ran = 0.0; // what the drain was given to run: its rate's volume each step, not what evaporation took
 		for (int64_t k = 0; k < most; ++k) {
 			Item &y = items[static_cast<size_t>(from)];
-			const double left = wanted - ran, there = liquid_m3(y.cell);
+			const double left = wanted - ran, there = liquid_m3(y);
 			if (!(left > wanted * 1e-9) || there <= 0.0) {
 				break;
 			}

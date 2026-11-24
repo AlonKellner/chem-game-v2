@@ -411,7 +411,13 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   trickle by hand, no more than 2 mL/s) pushes the liquid there down a place and lands as a layer of its own; a faster pour stirs it in. A
   burner under a layered vessel heats its lowest layer. A bench may start a vessel layered (`"layers"`, from the top
   down). Saved and loaded, a column goes on exactly.
-- **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height.
+- **Poured from.** A layered vessel tipped to pour gives its top layer first; the one under it rises to the lip as
+  the level falls to it. A pour reads the whole vessel's liquid (how much it holds, whether any stands over its
+  lip). An outlet at a layered vessel's bottom, or one upside down through its cap, still draws from its top
+  layer (*(PLANNED)*: from its lowest).
+- **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height. The layers lie level in the
+  room at any turn, as the surface does: a band's top is the level that holds the liquid of the layers under it,
+  read in the vessel's frame as the surface's is.
 - **L1** (§18) holds a column together.
 
 ## 7. Chemical kinetics

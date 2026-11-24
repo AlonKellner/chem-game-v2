@@ -646,12 +646,20 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
 				const double grain = 2.0 * made->widest() / body.w / 64.0;
 				const auto drawn = [&](double cm) { return std::round(cm / grain) * grain; };
-				// layered (Stage 47): each layer a band of its own liquid, from the bottom; upright only
-				if (v.layers.size() > 1 && !body.flipped && body.angle == 0.0f) {
+				// layered (Stage 47): each layer a band of its own liquid, from the bottom. The layers lie level in the
+				// room at any turn, as its surface does: a band's top is the level that holds the liquid of the layers
+				// under it, as the surface is the one that holds all of it (in its frame, as lie[15]); tipped to pour,
+				// its top layer is the one at the lip, and each under it reaches the lip as the level falls to it.
+				if (v.layers.size() > 1 && l.liquid) {
 					const size_t bands = std::min(v.layers.size(), static_cast<size_t>(MAX_BANDS));
 					std::vector<float> table(1 + 3 * bands, 0.0f);
 					table[0] = static_cast<float>(bands);
-					double below = 0.0; // cm^3 under the band
+					double layered_ml = 0.0;
+					for (const LayerView &layer : v.layers) {
+						layered_ml += layer.liquid_ml;
+					}
+					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0), scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
+					double below = 0.0, under = -1e9; // the layers' liquid under the band, and its bottom level
 					for (size_t k = 0; k < bands; ++k) {
 						const LayerView &layer = v.layers[v.layers.size() - 1 - k]; // (the view lists them from the top)
 						const int band_set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
@@ -687,11 +695,12 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 								}
 							}
 						}
-						const double top = k + 1 == bands ? below + 1e9 : below + layer.liquid_ml + layer.solid_ml;
+						below += layer.liquid_ml;
+						const double over = k + 1 == bands ? 1e9 : drawn(contents::lying(*made, lie[3], below * scale, sediment, 0.0, body.side).liquid_level);
 						table[1 + 3 * k] = static_cast<float>(band_set);
-						table[2 + 3 * k] = static_cast<float>(drawn(made->level(below) - made->floor));
-						table[3 + 3 * k] = static_cast<float>(k + 1 == bands ? 1e9 : drawn(made->level(top) - made->floor));
-						below = top;
+						table[2 + 3 * k] = static_cast<float>(under);
+						table[3 + 3 * k] = static_cast<float>(std::max(over, under));
+						under = std::max(over, under);
 					}
 					float *band_table = &rows[static_cast<size_t>((set * ROWS_PER_SET + BANDS_ROW) * ROW)];
 					std::copy(table.begin(), table.end(), band_table);
