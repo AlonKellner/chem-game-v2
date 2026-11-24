@@ -304,3 +304,57 @@ TEST_CASE("long-wave: a flame is faint and a hot metal reads low (Stage 46)") {
 	CHECK(steel < plastic - 10.0);
 	CHECK(plastic < 473.15);
 }
+
+TEST_CASE("long-wave: one scene is the whole room at any view: a point off the screen finds what it does at 1x (Stage 46)") {
+	// the bench laid out, and the same seen at 4x with the layout's (0, 0) far to the left and above: its bodies off
+	// the screen are still in the scene, and a point of the room reads there what it reads laid out
+	Bench bench;
+	std::vector<OpticsBody> laid = bench.bodies(20.0);
+	laid[3].kelvin = 373.15; // a hot face, a warm wire, the flame at its own
+	laid[4].kelvin = 330.0;
+	laid[6].kelvin = 2200.0;
+	for (int k = 0; k < 26; ++k) {
+		// and a row of small slabs, each at its own temperature: more than a square of the screen holds, should those
+		// off the screen be heaped on its edge
+		laid.push_back(thing(OpticsBody::Slab, 442.0f + 10.0f * static_cast<float>(k), 218, 7, 18, "part_face", 300.0 + 9.0 * k));
+	}
+	lab::OpticsRoom whole = room(1), zoomed = room(1);
+	const double scale = 4.0, ox = -2600.0, oy = -150.0;
+	zoomed.pixel = scale;
+	zoomed.pixel_x0 = ox;
+	zoomed.pixel_y0 = oy;
+	zoomed.wall_px *= scale;
+	zoomed.gap_px *= scale;
+	zoomed.shapes.clear();
+	whole.shapes.clear();
+	std::vector<OpticsBody> seen = laid;
+	for (OpticsBody &b : seen) {
+		b.x = static_cast<float>(ox + scale * b.x);
+		b.y = static_cast<float>(oy + scale * b.y);
+		b.w = static_cast<float>(scale * b.w);
+		b.h = static_cast<float>(scale * b.h);
+		b.x0 = static_cast<float>(ox + scale * b.x0);
+		b.y0 = static_cast<float>(oy + scale * b.y0);
+		b.x1 = static_cast<float>(ox + scale * b.x1);
+		b.y1 = static_cast<float>(oy + scale * b.y1);
+		b.size = static_cast<float>(scale * b.size);
+	}
+	const OpticsScene a = compose(whole, laid), b = compose(zoomed, seen);
+	int off_screen = 0, read = 0;
+	for (int y = 102; y < 238; y += 4) {
+		for (int x = 442; x < 700; x += 3) {
+			const double px = x + 0.47, py = y + 0.47, zx = ox + scale * px, zy = oy + scale * py;
+			off_screen += zx < 0.0 || zx > 1920.0 || zy < 0.0 || zy > 1080.0 ? 1 : 0;
+			for (const double nm : { 8300.0, 10400.0, 13100.0 }) {
+				const double at_1x = lab::optics_point(a, px, py, nm), at_view = lab::optics_point(b, zx, zy, nm);
+				CAPTURE(x);
+				CAPTURE(y);
+				CAPTURE(nm);
+				CHECK(at_view == doctest::Approx(at_1x).epsilon(1e-5));
+				++read;
+			}
+		}
+	}
+	CHECK(off_screen > 100);
+	CHECK(read > 1000);
+}

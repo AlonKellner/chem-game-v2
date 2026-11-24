@@ -31,10 +31,12 @@ inline constexpr int MAX_BODIES = 256;
 // nearest layer any body is on, the room's side (0: none) and its cells' width (pixels; Stage 33); the room's middle
 // on the screen (Stage 42: where the view puts it), the room's temperature (K) and the range the whole pass is read
 // in (Stage 46: 0 the visible, 1 the long-wave: the debug infrared view). The first vec4's w: where the long-wave
-// rows begin among the rows (Stage 46).
-inline constexpr int HEADER_VECS = 5;
+// rows begin among the rows (Stage 46). The sixth (Stage 46): where the layout's (0, 0) is on the screen, how wide a
+// square of the screen's grid is there (GRID_SQUARE at the view), 0.
+inline constexpr int HEADER_VECS = 6;
 inline constexpr int BODY_VECS = 8;
-// The screen in squares (GAME_SPEC §12.3, Stage 22): each lists the bodies whose rectangles (and a pixel
+// The room in squares (GAME_SPEC §12.3, Stage 22; Stage 46: the layout's, at the view, so the whole room is in them
+// at any view, on the screen or off it): each lists the bodies whose rectangles (and a pixel
 // round them) reach into it, in painting order, the nearest the eye last: its count and up to GRID_SLOTS
 // bodies, in GRID_VECS vec4s. A pixel looks at its square's bodies alone. Where more reach in, the nearest are
 // kept (Stage 26: fifteen, not seven: two signal parts side by side, each a face, a lamp and ports, straddle
@@ -249,7 +251,7 @@ struct OpticsRoom {
 	double cube_x = 960.0, cube_y = 540.0; // its middle, on the screen (Stage 42: the view moves it)
 	// the layout's pixels on the screen (Stage 42: a view of the room): how wide one is, and where its x = 0 is. A
 	// vessel made as glassware stands with its axis on a whole one of them.
-	double pixel = 1.0, pixel_x0 = 0.0;
+	double pixel = 1.0, pixel_x0 = 0.0, pixel_y0 = 0.0;
 	bool cuts = true; // GAME_SPEC §12.2: a pixel's bands cut where its bent view crosses a drawn edge
 	// Stage 46 (GAME_SPEC §12.4): the room's temperature, which the long-wave range sees it by; and the range the
 	// whole pass is read in (0 the visible; 1 the long-wave, the debug infrared view)

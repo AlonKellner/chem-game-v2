@@ -29,7 +29,7 @@
 //                            what it showed (3, linear); or what the room showed at 1x when last seen whole (4,
 //                            linear); x and y clamped to the screen (below: a view's change)
 
-const int HEADER_VECS = 5;
+const int HEADER_VECS = 6;
 const int BODY_VECS = 8;
 const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
@@ -118,6 +118,11 @@ struct PixelState {
 #define OPTICS_THREAD
 #endif
 OPTICS_THREAD int band_range = 0;
+// the bodies a ray passes by (Stage 46: bits of a body's HEAT y; a sensor's rays do not see its own body)
+OPTICS_THREAD int ray_hide = 0;
+bool hidden(int body) {
+	return ray_hide != 0 && (int(scene_vec(HEADER_VECS + body * BODY_VECS + 6).y) & ray_hide) != 0;
+}
 
 // a body's temperature (K; Stage 46)
 float body_kelvin(int body) {
@@ -134,9 +139,12 @@ struct Cuts {
 // ---- where the pixel looks
 
 // the square of the screen p is in: its two vec4s, (count, b0, b1, b2) and (b3, b4, b5, b6)
+// (Stage 46: the squares are the room's own, at the view: where the layout's (0, 0) is on the screen and how wide a
+// square is there, the header's vec4 5; so any place of the room finds its bodies, on the screen or off it)
 int square_at(vec2 p) {
-	int c = clamp(int(floor(p.x / GRID_SQUARE)), 0, GRID_COLS - 1);
-	int r = clamp(int(floor(p.y / GRID_SQUARE)), 0, GRID_ROWS - 1);
+	vec4 grid = scene_vec(5);
+	int c = clamp(int(floor((p.x - grid.x) / grid.z)), 0, GRID_COLS - 1);
+	int r = clamp(int(floor((p.y - grid.y) / grid.z)), 0, GRID_ROWS - 1);
 	return GRID_BASE + GRID_VECS * (r * GRID_COLS + c);
 }
 
@@ -422,6 +430,9 @@ Path path_of(vec2 p, float size) {
 		int i = square_body(square, k);
 		int at = HEADER_VECS + i * BODY_VECS;
 		vec4 rect = scene_vec(at);
+		if (hidden(i)) {
+			continue;
+		}
 		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0 || p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {
 			continue;
 		}
@@ -1963,7 +1974,7 @@ RayMet ray_met(vec2 p, float nm) {
 		int met_core = 0;
 		for (int k = first; k <= last; k++) {
 			vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-			if (trace_bends(k) && where.y >= rect.y && where.y <= rect.y + rect.w) {
+			if (trace_bends(k) && !hidden(k) && where.y >= rect.y && where.y <= rect.y + rect.w) {
 				// (a ray whose line passes the body's axis further off than it reaches does not meet it)
 				float off = abs((lp.x - (rect.x + rect.z * 0.5)) * lu.z - (lp.z - z) * lu.x) / sqrt(lu.x * lu.x + lu.z * lu.z);
 				if (off > rect.z * 1.6 + 2.0) {
@@ -1988,7 +1999,7 @@ RayMet ray_met(vec2 p, float nm) {
 			bool bent = k == hit;
 			if (!bent) {
 				vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-				if (trace_bends(k) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
+				if (trace_bends(k) || hidden(k) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
 					continue;
 				}
 			}

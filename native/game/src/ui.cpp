@@ -4447,6 +4447,7 @@ struct Ui::Impl {
 		room.cube_y = sy(540.0f);
 		room.pixel = scale;
 		room.pixel_x0 = sx(0.0f);
+		room.pixel_y0 = sy(0.0f);
 		room.bench = WALL_RADIANCE;
 		room.elsewhere = DARK_RADIANCE;
 		room.kelvin = view.room_celsius + 273.15; // Stage 46: what the long-wave range sees the room by
@@ -4528,8 +4529,8 @@ struct Ui::Impl {
 		read_probes(bodies, before_probes, after_probes, whole);
 	}
 
-	// The bodies at the view (Stage 42): placed and sized by it, their depths with them; those past the room's part of
-	// the screen left out
+	// The bodies at the view (Stage 42): placed and sized by it, their depths with them; every one of them, those past
+	// the room's part of the screen too (Stage 46: the scene is the whole room at any view)
 	std::vector<OpticsBody> at_view(const std::vector<OpticsBody> &bodies) const {
 		std::vector<OpticsBody> out;
 		out.reserve(bodies.size());
@@ -4549,24 +4550,7 @@ struct Ui::Impl {
 				b.size *= scale; // (a grating's is its ruling's pitch, in nanometres)
 			}
 			b.dash *= scale;
-			float left = b.x, top = b.y, right = b.x + b.w, bottom = b.y + b.h;
-			if (b.shape == OpticsBody::Bar) {
-				left = std::min(b.x0, b.x1) - b.size;
-				right = std::max(b.x0, b.x1) + b.size;
-				top = std::min(b.y0, b.y1) - b.size;
-				bottom = std::max(b.y0, b.y1) + b.size;
-			} else if (b.angle != 0.0f || b.flipped) {
-				// turned about its pivot: what it may sweep
-				const float reach = std::hypot(b.w, b.h) + std::hypot(b.pivot_x - b.x, b.pivot_y - b.y);
-				left = b.pivot_x - reach;
-				right = b.pivot_x + reach;
-				top = b.pivot_y - reach;
-				bottom = b.pivot_y + reach;
-			}
-			if (right < ROOM.x || left > ROOM.x + ROOM.w || bottom < ROOM.y || top > ROOM.y + ROOM.h) {
-				continue;
-			}
-			out.push_back(b);
+			out.push_back(b); // (Stage 46: every body, on the screen or off it: a sensor's frame may be anywhere in the room)
 		}
 		return out;
 	}

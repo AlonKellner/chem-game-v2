@@ -265,6 +265,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(4, 0, room.cube_x);
 	put(4, 1, room.cube_y);
 	put(4, 2, room.kelvin); // Stage 46
+	put(5, 0, room.pixel_x0); // the grid, on the room's squares at the view
+	put(5, 1, room.pixel_y0);
+	put(5, 2, GRID_SQUARE * room.pixel);
 	put(4, 3, room.range);
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
@@ -983,9 +986,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	// the screen's squares: each the bodies that reach into it, in painting order, the nearest kept
 	for (int b = 0; b < count; ++b) {
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
-		const auto square = [](double v, int most) { return std::min(std::max(static_cast<int>(std::floor(v / GRID_SQUARE)), 0), most - 1); };
-		const int c0 = square(rect[0] - 1.5, GRID_COLS), c1 = square(static_cast<double>(rect[0]) + rect[2] + 1.5, GRID_COLS);
-		const int r0 = square(rect[1] - 1.5, GRID_ROWS), r1 = square(static_cast<double>(rect[1]) + rect[3] + 1.5, GRID_ROWS);
+		const double side = t[5 * 4 + 2], ox = t[5 * 4], oy = t[5 * 4 + 1];
+		const auto square = [&](double v, double origin, int most) { return std::min(std::max(static_cast<int>(std::floor((v - origin) / side)), 0), most - 1); };
+		const int c0 = square(rect[0] - 1.5, ox, GRID_COLS), c1 = square(static_cast<double>(rect[0]) + rect[2] + 1.5, ox, GRID_COLS);
+		const int r0 = square(rect[1] - 1.5, oy, GRID_ROWS), r1 = square(static_cast<double>(rect[1]) + rect[3] + 1.5, oy, GRID_ROWS);
 		for (int r = r0; r <= r1; ++r) {
 			for (int c = c0; c <= c1; ++c) {
 				float *cell = &t[static_cast<size_t>(GRID_BASE + GRID_VECS * (r * GRID_COLS + c)) * 4];
