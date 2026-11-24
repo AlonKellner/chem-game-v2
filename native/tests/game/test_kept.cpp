@@ -6,6 +6,7 @@
 #include "lab/play.hpp"
 #include "lab/ui.hpp"
 
+#include "sparse.hpp"
 #include <doctest/doctest.h>
 
 #include <fstream>
@@ -45,7 +46,7 @@ TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12),
 	int frames = 0;
 	for (int i = 0; i < 6000 && play.next(*ui); ++i) {
 		ui->frame(1.0 / 120.0);
-		if (i % 6 != 0) {
+		if (i % (6 * sparse()) != 0) { // (every sixth frame; under the sanitizers fewer: sparse.hpp, Stage 40)
 			continue;
 		}
 		const lab::OpticsScene &scene = ui->optics();
@@ -90,7 +91,7 @@ TEST_CASE("kept: through the play, kept beams are the beams traced afresh (O12),
 			break;
 		}
 	}
-	CHECK(frames > 100);
+	CHECK(frames > 100 / sparse());
 	CHECK(held_most > 500); // (a check that held nothing checked nothing)
 	CHECK(differing == 0);
 	// (while things move, a pixel's beams are traced again at every frame, kept or not: what keeping saves there

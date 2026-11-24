@@ -81,7 +81,11 @@ other's last entries.
 The O2 scan through the demo was half the release ctest's work. `check_O2` reads each nanometre from 380 to
 780, the spectra's own points (401), where it read each half (801): between the points is the tables'
 interpolation. GAME_SPEC §18's O2 row says so. `make gates`: 284 s (the release ctest 224 s beside the
-sanitizers', which are now the longer: their longest entries, `kept` and the prism's bands, 200 s each). The ways not taken: every 24th pixel; only the pixels whose
+sanitizers', which are now the longer: their longest entries, `kept` and the prism's bands, 200 s each).
+Then under the sanitizers `kept` takes every 18th frame of the play (every 6th: O12 holds over any frames) and
+the prism's slit case (`may_fail`) a third of its points a band: `make gates` 276 s, the release ctest 224 s
+beside the sanitizers' 274. What is left is the machine's: the two runs' work over its twelve cores, the prism's
+bands' reference (4,000 wavelengths a band) the sanitizers' longest entries. The ways not taken: every 24th pixel; only the pixels whose
 scene can have changed.
 
 ## Open

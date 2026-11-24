@@ -69,9 +69,10 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
 - Measured (Stage 40, M3 Pro, `docs/TDD_40_GATES.md`): `make gates` 614 s before (the release ctest 165 s,
   its last 100 s the one entry `lab_tests.optics` alone; then the sanitizers' 431 s, its last minutes the
   same entry); 320 s after, the release ctest and the sanitizers' together keeping the machine full; 284 s
-  with O2 read at each nanometre (it read each half).
-- **Next, if it is needed**: the sanitizers' longest entries, `kept` (the kept beams through the play) and the
-  prism's bands, 200 s each, are their run's tail.
+  with O2 read at each nanometre (it read each half); 276 s with `kept` and the prism's slit sparse under
+  the sanitizers.
+- **Next, if it is needed**: the two runs end together (224 s and 274 s); what is left is their work. The
+  sanitizers' longest entries are the prism's bands (140 to 180 s: a reference of 4,000 wavelengths a band).
 
 ## The conservation sweep
 

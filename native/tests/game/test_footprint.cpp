@@ -313,7 +313,7 @@ TEST_CASE("footprint: a band's light is its wavelengths' together: the wall read
 // there (test_refraction.cpp, the case marked as this one is; docs/TDD_35_ONE.md, Open).
 // It may fail so that the suite passes; it is not to be loosened.
 TEST_CASE("footprint: where a prism's rays part along the spectrum, a band's light is its wavelengths' together too, by the mean of its rays over the frames (Stage 35)" * doctest::may_fail()) {
-	const Bands bands = prism_bands(false, 512);
+	const Bands bands = prism_bands(false, 512 / sparse()); // (fewer points under the sanitizers: Stage 40)
 	CHECK(bands.compared > 500);
 	CHECK(bands.off * 200 <= bands.compared);
 	MESSAGE(bands.compared << " bands of a sixteenth where the rays part, each the mean of 512 points: " << bands.off << " more than 3% off, the worst " << bands.worst);
