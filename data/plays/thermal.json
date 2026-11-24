@@ -12,7 +12,7 @@
 		{"frames": 90, "mark": "see-through", "shot": "thermal-see-through"},
 		{"frames": 10, "mark": "see-through"},
 		{"to": "frame:camera", "frames": 20, "button": "down"},
-		{"to": "item:burner@0.5,-0.6", "frames": 90, "mark": "carry"},
+		{"to": "item:burner@1.7,-3.4", "frames": 90, "mark": "carry"},
 		{"button": "up"},
 		{"do": {"do": "move", "items": ["camera"], "by": [5, 6]}},
 		{"frames": 120, "mark": "frame-moved", "shot": "thermal-frame-moved"},
