@@ -75,6 +75,15 @@ solids.
 
 ## 2. Precipitation and gas
 
+**Built in Stage 44** (`docs/TDD_44_PRECIPITATION.md`):
+- Cu(OH)₂(s) out of copper sulfate with the base, a fast equilibrium at the tables' Ksp; back into an acid;
+  black copper oxide from it at Fukuda's measured rate.
+- Malachite in sulfuric acid at Nicol's measured rate, its carbon dioxide into a balloon.
+- The `precipitate` and `fizz` experiments.
+
+What is still to come of this area: a sodium carbonate (and the fizz of a soluble one), the suspension's
+cloud as it falls (its turbidity), and other precipitates (Ksp of each: barium sulfate, calcium carbonate).
+
 **Experiments**
 - CuSO₄(aq) + 2 NaOH(aq) → Cu(OH)₂(s), a pale blue precipitate. Heated, Cu(OH)₂ → CuO + H₂O, and it turns black.
 - A carbonate in acid fizzes CO₂ into a balloon. With malachite, every species is already in the tables:

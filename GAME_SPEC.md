@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.43.0, with Stage 42's 0.42.0 merged after it (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.44.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -474,7 +474,9 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
   cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
   end of what the cell holds. The search is a secant step from the two ends with a bisection
   every third, on the affinity along the reaction's own extent at fixed enthalpy.
-- Several fast equilibria that share a species in one cell are taken in turn, up to eight rounds.
+- Several fast equilibria that share a species in one cell are taken in turn, up to sixteen rounds. Each is
+  probed again only once the cell has changed since it was last probed (Stage 44): one that cannot move, or
+  that moved last, rests until another moves, so a cell where one equilibrium moves settles in one round.
 
 **What follows without being written:** water under dry air evaporates until its partial
 pressure is the saturation pressure, and cools doing it. A flask of boiling water sits at the
@@ -507,7 +509,9 @@ activity is in it from Stage 19 (Pitzer's excess, §10). Kinetic phase changes a
 **Particles.** Each solid in a cell is in a number of particles: a powder's grains, a crop of
 crystals. The count is state, saved with the rest, but not a conserved quantity:
 
-- a solid that appears is one lump; one that is used up has none (invariant X1);
+- a solid that appears is one lump; one that is used up has none (invariant X1). A solid that comes out of a
+  solution by a fast equilibrium, a precipitate, comes as grains of its own size (`grain_um`, Stage 44):
+  its volume shared among spheres of that diameter;
 - a solid made from a solid keeps its grains (the oxide from the malachite);
 - **nucleation** adds particles where the surface law makes a solid from a supersaturated
   solution: `k_n · (kg of solvent) · (S − 1)^p` per second, `S = e^(A/RT)` the supersaturation.
@@ -549,6 +553,22 @@ strong base (NaOH, in solution: Na⁺ and OH⁻), both fully dissociated, and th
     within 0.06 of IAPWS from 0 to 100 °C. Each γ is Pitzer's single-ion coefficient (§10).
   - A vessel with a liquid shows it (the readout, the debug panel), and a monitor or a goal can
     read it (`ph`, §13.3).
+**Precipitation and gas** (Stage 44; `docs/TDD_44_PRECIPITATION.md`).
+- **A precipitate.** Copper hydroxide, Cu(OH)₂(s), comes out of a copper sulfate solution with a base by a
+  fast equilibrium: CuSO₄(aq) + 2 NaOH(aq) → Cu(OH)₂(s) + Na₂SO₄(aq). Its solubility follows from the tables:
+  log \*Ks 8.55 (evaluated 8.64 to 8.67), Ksp 4e-20; with base to spare, no copper stays dissolved. It comes
+  as grains of 0.3 µm, pale blue.
+- **Back into an acid.** Cu(OH)₂(s) + H₂SO₄(aq) → CuSO₄(aq) + 2 H₂O(l), a fast equilibrium too: an acid takes
+  a base first, then dissolves the hydroxide. Without acid a copper sulfate solution gives up a trace of the
+  hydroxide and is acid itself (pH about 5 at 0.5 mol/kg, measured about 4: §20).
+- **Black with heat.** The hydroxide is less stable than copper oxide and water (−5.5 kJ/mol), and turns into
+  it slowly, first order: Cu(OH)₂(s) → CuO(s) + H₂O(g), Fukuda's measured rate (Ea 127 kJ/mol). Two years at
+  25 °C, half an hour under boiling water, seconds dry above 150 °C. The oxide keeps its grains.
+- **A gas from a solid.** Malachite dissolves in sulfuric acid at its surface (Nicol's rate: order 0.65 in the
+  acid, Ea 53.6 kJ/mol), its carbonate leaving as carbon dioxide:
+  Cu₂CO₃(OH)₂(s) + 2 H₂SO₄(aq) → 2 CuSO₄(aq) + CO₂(g) + 3 H₂O(l).
+- The pH is read only within the activity model's range: past 6 mol/kg left over of an acid or a base (one
+  boiled nearly dry), a solution has none.
 - *(PLANNED)* Water's self-ionisation as a species, weak acids and bases, bisulfate, indicators,
   a salt that comes out of solution (`docs/EXPERIMENTS_ROADMAP.md`, area 1).
 
@@ -566,6 +586,8 @@ strong base (NaOH, in solution: Na⁺ and OH⁻), both fully dissociated, and th
   species that take no volume.
 - Stage 19 makes the solutes electrolytes and gives them their volumes, and adds the lower
   hydrates and the stepwise dehydration. Signed off by the user on 2026-11-19 (Stage 19).
+- Stage 43 adds the strong base, its salt, the neutralisation and the pH; Stage 44 the precipitate, its
+  dissolving in acid and its turning to oxide, and malachite dissolving in acid.
 
 ## 10. Property models
 
@@ -2236,14 +2258,21 @@ stand on.
     of 1 M sulfuric acid, 40, 8 and 5 mL; the solution warms by about 7 K, and the pH stays below 3
     with 4 % of the acid left, then leaps to 12 (`chem_tool study neutralisation`: the titration
     curve, every mixture within 0.02 K of the closed form).
+  - `precipitate`, *a precipitate* (§9, Stage 44): 1 M sodium hydroxide into 0.01 mol of copper
+    sulfate, 10 then 15 mL; the pale blue hydroxide comes out, 0.976 g, and the liquid is left clear
+    with base to spare; a burner boils it down and the powder turns black, 0.795 g of copper oxide;
+    cooled, 20 mL of 1 M acid dissolves it blue again (`chem_tool study precipitation`).
+  - `fizz`, *a gas from a solid* (§9, Stage 44): 2 g of malachite tipped into 50 mL of 1 M acid
+    under a balloon dissolves in about two minutes; 0.009 mol of carbon dioxide leaves it, 0.12 g
+    of it into the balloon with 220 mL of gas, the rest in the flask's own air; the acid turns blue.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
-  the rest of acids, bases and pH (weak acids, indicators, a burette); precipitation and gas; boiling, bubbling and agitation; freezing and
+  the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation; freezing and
   melting; pressure and temperature; humidity and saturation; and the lessons' own mechanics (a
   measurement log, a prediction, a plot).
 
 **Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).
-**Status:** Stage 41.
+**Status:** Stage 41; the acids' two in Stage 43, precipitation's and the gas's in Stage 44.
 
 ## 14. C API and hosts
 
@@ -2554,6 +2583,9 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
 | Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no vapour of its own; its heat capacity is the pure liquid's. Its pH (Stage 43) is that of all its hydrogen ions: 0.01 mol/kg reads 1.86 (about 1.87 measured), and a neutralisation gives the infinite-dilution heat, −55.8 kJ a water, where the bisulfate's dissociation adds about 11 kJ at 0.5 mol/kg |
+| A copper sulfate solution hydrolyses to a trace of solid copper hydroxide, not to the ion CuOH⁺ (Stage 44) | 1.4e-6 mol of it from 0.05 mol of the salt in 100 g of water: pH about 5, where a real 0.5 mol/kg solution reads about 4 |
+| Copper hydroxide turns to oxide at the dry solid's rate, in water too (Stage 44) | In a strong base the real one dissolves as Cu(OH)₄²⁻ and comes back as the oxide in minutes; here a boiled suspension takes half an hour, as in water |
+| A solution's pH only to 6 mol/kg of acid or base left over (Stage 44) | Beyond the activity model's fits a boiled-down base reads no pH, where a real one reads about 15 |
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |

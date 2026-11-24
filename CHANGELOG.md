@@ -1,5 +1,24 @@
 # GAME_SPEC version history
 
+## 0.44.0 (2026-11-24, Stage 44)
+
+- §9 (Stage 44, `docs/TDD_44_PRECIPITATION.md`): **precipitation and gas**.
+  - Copper hydroxide, Cu(OH)₂(s) (SKB TR-00-13's row: log \*Ks 8.55 against the evaluated 8.64 to 8.67), comes
+    out of copper sulfate with sodium hydroxide by a fast equilibrium, as grains of 0.3 µm, pale blue. An acid
+    dissolves it again, another fast equilibrium; a copper sulfate solution alone holds a trace of it and reads
+    about pH 5.
+  - It turns to black copper oxide at Fukuda's measured first-order rate (127 kJ/mol): two years at 25 °C,
+    half an hour under boiling water, seconds dry above 150 °C.
+  - Malachite dissolves in sulfuric acid at Nicol's measured surface rate (order 0.65, 53.6 kJ/mol), its
+    carbonate leaving as carbon dioxide. The demo's 0.57 mg of malachite left after its first stage now
+    dissolves in its acid: the goldens re-recorded with the user's approval.
+  - The pH is read only within the activity model's range (6 mol/kg left over of an acid or a base).
+  - `chem_tool study precipitation`: the titration, every mixture at the closed form; the half-lives at theirs.
+- §8: each fast equilibrium is probed again only once its cell has changed since (up to sixteen rounds); §9's
+  particles: a precipitate comes as grains of its own size (`grain_um`).
+- §13.7: the experiments `precipitate` (a precipitate, black with heat, blue again in acid) and `fizz` (a gas
+  from a solid into a balloon). §20: the hydrolysis's trace solid, the oxide's rate in a base, the pH's range.
+
 ## 0.43.0 (2026-11-24, Stage 43; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 43, `docs/TDD_43_ACIDITY.md`): **acids, bases and pH**. Sodium hydroxide and sodium sulfate in
