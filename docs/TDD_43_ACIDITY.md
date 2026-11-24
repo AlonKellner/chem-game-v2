@@ -17,7 +17,7 @@ experiments) and §20.
 | 43.4 | The lab: `ph` in the view, the readout, the debug panel, monitors and goals; a part that signals | Done |
 | 43.5 | Two experiments: diluting an acid, an acid meets a base | Done |
 | 43.6 | The goldens: every digest moves (the tables grew); every measured value the same | Re-recorded with the user's approval, 2026-11-24 ("Re-record them") |
-| 43.7 | GAME_SPEC 0.43.0, `make gates`, the user's sign-off | `make gates` passed (324 s: ASan+UBSan 324, ctest 210, Godot 11 of 11; the sanitizers found the enthalpy shift's test, M1, holding a value for 7 elements, not 8); awaiting sign-off |
+| 43.7 | GAME_SPEC 0.43.0, `make gates`, the user's sign-off | `make gates` passed (324 s: ASan+UBSan 324, ctest 210, Godot 11 of 11; the sanitizers found the enthalpy shift's test, M1, holding a value for 7 elements, not 8); signed off by the user, 2026-11-24 ("Approved, merge and proceed") |
 
 ## 43.1 The data
 

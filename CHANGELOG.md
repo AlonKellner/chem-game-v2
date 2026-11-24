@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.43.0 (2026-11-24, Stage 43)
+## 0.43.0 (2026-11-24, Stage 43; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 43, `docs/TDD_43_ACIDITY.md`): **acids, bases and pH**. Sodium hydroxide and sodium sulfate in
   solution (NBS 1982), the neutralisation a fast equilibrium (−55.84 kJ a water, so the solution warms), and
