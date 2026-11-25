@@ -1,0 +1,213 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 54; docs/CURRICULUM.md, experiment 30) on data/benches/vapour.json: water's vapour pressure against temperature, and its heat of vaporisation from Clausius and Clapeyron's line.",
+	"title": "Experiment: water's vapour pressure",
+	"bench": "../benches/vapour.json",
+	"steps": [
+		{
+			"part": "Boiling the air out",
+			"title": "A burner under the flask",
+			"text": "Pick up the burner in the cabinet, then click the flask.",
+			"checks": [
+				{
+					"text": "the burner under the flask",
+					"when": {
+						"item": "burner",
+						"under": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Full flame, and hurry",
+			"text": "Right-click the burner, drag its valve fully open, then click 60x.",
+			"checks": [
+				{
+					"text": "the valve fully open",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.95
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@1"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Boil the air out",
+			"text": "Let it boil: its steam drives the air out of the flask.",
+			"why": "Once only water and its vapour are left in the flask, its pressure is water's vapour pressure alone.",
+			"checks": [
+				{
+					"text": "boiling",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"above_c": 100
+					}
+				},
+				{
+					"text": "its air gone",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"species": "nitrogen",
+						"below_g": 0.002
+					}
+				}
+			]
+		},
+		{
+			"title": "Off",
+			"text": "Right-click the burner and drag its valve shut.",
+			"why": "Stoppered while the flame still heats it, the sealed flask's pressure would climb past what its stopper holds.",
+			"checks": [
+				{
+					"text": "the burner off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"title": "Stoppered",
+			"text": "Pick up the stopper and click the flask, before the room's air finds its way back in.",
+			"checks": [
+				{
+					"text": "the stopper in the flask",
+					"when": {
+						"item": "stopper",
+						"on": "flask"
+					}
+				},
+				{
+					"text": "the burner still off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:stopper",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"part": "Logging",
+			"title": "Log its temperature",
+			"text": "Right-click the flask, click \"+ T\", open the notebook and click \"5 s\".",
+			"checks": [
+				{
+					"text": "its temperature logged",
+					"when": {
+						"item": "flask",
+						"logging": "celsius"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "record:flask:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"title": "Log its pressure",
+			"text": "Close the notebook, right-click the flask, click \"+ kPa\", open the notebook again and click \"5 s\".",
+			"why": "The gauge reads the pressure inside the sealed flask: water's vapour pressure at the flask's temperature.",
+			"checks": [
+				{
+					"text": "its pressure logged",
+					"when": {
+						"item": "flask",
+						"logging": "kpa"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "record:flask:kpa"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"part": "Cooling",
+			"title": "Let it cool",
+			"text": "Watch it cool to 45 C, its pressure falling with it.",
+			"checks": [
+				{
+					"text": "the flask below 45 C",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"below_c": 45
+					}
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "water's heat of vaporisation",
+			"unit": "kJ/mol",
+			"truth": "41.93",
+			"ideal": 40.65,
+			"tolerance": 0.06,
+			"relative": true,
+			"why": "In the notebook: x the temperature as 1/K, y the pressure as ln. Clausius and Clapeyron: ln p = -dH / (R T) + c, so dH = -slope x 8.314 J/(mol K). The truth is the tables' own at 75 C (44.0 kJ/mol at 25 C, less 41.7 J/mol for each kelvin); the textbook's 40.65 is at 100 C."
+		}
+	]
+}

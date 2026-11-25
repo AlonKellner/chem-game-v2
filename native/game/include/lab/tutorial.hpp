@@ -3,6 +3,8 @@
 #include "lab/lab.hpp"
 #include "lab/quantity.hpp"
 
+#include <optional>
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -62,6 +64,17 @@ struct TutorialView {
 	std::vector<std::string> results; // what was made, measured, once complete
 };
 
+// A result the student reports at the end (GAME_SPEC §13.2, Stage 54): what it is and its unit; its truth, an expression
+// over the lab's quantities worked out when it is checked (lab/notebook.hpp's `evaluate`); the textbook's ideal, if
+// any; how close counts (absolute, or a share of the truth when `relative`); and why the three may differ.
+struct TutorialReport {
+	std::string label, unit, truth;
+	std::optional<double> ideal;
+	double tolerance = 0.0;
+	bool relative = false;
+	std::string why;
+};
+
 class Tutorial {
 public:
 	// null, with the reason in `why`, when the text is not a tutorial, or names
@@ -78,6 +91,8 @@ public:
 	void restart();
 
 	const TutorialView &view() const;
+	// what the student reports at the end (Stage 54)
+	const std::vector<TutorialReport> &report() const;
 	// The current step's gestures, in order, while a check that is not waited
 	// on is still open: the screen points at the last one it can find, a test
 	// plays them all.

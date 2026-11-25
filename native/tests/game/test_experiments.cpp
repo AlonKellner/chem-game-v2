@@ -1,6 +1,7 @@
 // The tutorial's strict and free modes (GAME_SPEC §13.2) and the experiments
 // (§13.7; Stage 41): the catalogue, its list on the screen, and each
 // experiment played through the screen with nothing but its own gestures.
+#include "lab/notebook.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/ui.hpp"
@@ -598,5 +599,130 @@ TEST_CASE("experiment calorimeter: played as a person plays it, strict, it compl
 TEST_CASE("experiment calorimeter: followed with its own gestures, free, it completes (Stage 52)") {
 	Pupil p("data/benches/calorimeter.json", "data/tutorials/calorimeter.json", false);
 	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+namespace {
+
+// the report filled in: each item's truth worked out, typed (a little off), and checked on the card
+void report(Pupil &p, const std::vector<double> &typed) {
+	for (size_t k = 0; k < typed.size(); ++k) {
+		p.click("report:" + std::to_string(k));
+		for (int b = 0; b < 20; ++b) {
+			p.ui->key(lab::Ui::KeyBackspace); // what was typed before, cleared
+		}
+		char number[32];
+		std::snprintf(number, sizeof number, "%.6g", typed[k]);
+		p.type(number);
+	}
+	p.click("report:check");
+	p.ui->frame(1.0 / 60.0);
+}
+
+double truth_of(Pupil &p, const std::string &expression) {
+	double v = 0.0;
+	std::string why;
+	REQUIRE_MESSAGE(lab::evaluate(expression, p.ui->lab().view(), v, why), why);
+	return v;
+}
+
+} // namespace
+
+TEST_CASE("experiment titration_curve: followed with its own gestures, strict, the notebook logs the curve and the report checks its end point (Stage 54)") {
+	Pupil p("data/benches/titration_curve.json", "data/tutorials/titration_curve.json");
+	CHECK(pupil::follow_through(p, 7200) > 9);
+	completed(p);
+	// the notebook: pH and the burette's reading at the same moments, a dozen and more across the leap
+	const lab::LabView v = p.ui->lab().view();
+	int ph = 0, ml = 0, paired = 0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		ph += e.quantity.what == "ph" ? 1 : 0;
+		ml += e.quantity.what == "scale_ml" ? 1 : 0;
+		for (const lab::NoteEntry &f : v.notebook) {
+			paired += e.quantity.what == "ph" && f.quantity.what == "scale_ml" && f.step == e.step ? 1 : 0;
+		}
+	}
+	MESSAGE(ph << " pH readings, " << ml << " burette readings, " << paired << " paired");
+	CHECK(paired > 20);
+	CHECK(paired >= std::min(ph, ml) - 1); // (the first of each written by hand, at its own moment)
+	// the report: the truth typed, within; a wrong end point, off
+	const double end = truth_of(p, p.ui->tutorial()->report()[0].truth), c = truth_of(p, p.ui->tutorial()->report()[1].truth);
+	CHECK(end == doctest::Approx(2 * 25.0 * c / 0.0997).epsilon(0.01)); // 25 mL of the acid, the 0.0997 M base
+	report(p, { end + 0.1, c * 1.01 });
+	CHECK(p.drawn("yours is within it"));
+	report(p, { end + 3.0, c * 1.2 });
+	CHECK(p.drawn("yours is off by"));
+}
+
+TEST_CASE("experiment titration_curve: played as a person plays it, strict, it completes (Stage 54)") {
+	Pupil p("data/benches/titration_curve.json", "data/tutorials/titration_curve.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment titration_curve: followed with its own gestures, free, it completes (Stage 54)") {
+	Pupil p("data/benches/titration_curve.json", "data/tutorials/titration_curve.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment vapour: followed with its own gestures, strict, ln p against 1/T gives water's heat of vaporisation (Stage 54)") {
+	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json");
+	CHECK(pupil::follow_through(p, 7200) > 6);
+	completed(p);
+	// Clausius and Clapeyron from what the notebook holds, by the instruments' readings
+	const lab::LabView v = p.ui->lab().view();
+	std::vector<double> x, y;
+	for (const lab::NoteEntry &t : v.notebook) {
+		for (const lab::NoteEntry &k : v.notebook) {
+			if (t.quantity.what == "celsius" && k.quantity.what == "kpa" && t.step == k.step) {
+				x.push_back(*lab::transformed(t.value, lab::AxisTransform::Inverse, true));
+				y.push_back(*lab::transformed(k.value, lab::AxisTransform::Log, false));
+			}
+		}
+	}
+	const lab::LineFit f = lab::fit_line(x, y);
+	REQUIRE(f.ok);
+	const double dh = -f.slope * 8.314462618 / 1000.0;
+	MESSAGE(x.size() << " points, dH " << dh << " kJ/mol, R2 " << f.r2);
+	CHECK(f.r2 > 0.99);
+	CHECK(dh == doctest::Approx(41.93).epsilon(0.06));
+	report(p, { dh });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment vapour: strict, the valve is shut before the stopper goes in, and stays shut while it cools (Stage 54)") {
+	// the user's report: the stopper put in first passed the step, and the valve could not be shut after it
+	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json");
+	const int steps = p.tutorial().steps;
+	while (p.tutorial().state == lab::TutorialView::Running && p.tutorial().title != "Off" && p.tutorial().step < steps) {
+		const int step = p.tutorial().step;
+		for (const lab::TutorialGesture &g : p.ui->tutorial()->gestures()) {
+			p.play(g);
+		}
+		p.watch([&] { return p.tutorial().step != step; }, 7200);
+	}
+	REQUIRE(p.tutorial().title == "Off");
+	p.drag("item:stopper", "item:flask"); // the stopper first: not yet
+	CHECK(p.item("stopper").place != "on");
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("item:burner");
+	p.click("valve:burner@0");
+	CHECK(p.item("burner").valve == 0.0);
+	CHECK(p.tutorial().title == "Stoppered");
+	pupil::follow_through(p, 7200);
+	completed(p);
+	CHECK(p.item("burner").valve == 0.0);
+}
+
+TEST_CASE("experiment vapour: played as a person plays it, strict, it completes (Stage 54)") {
+	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment vapour: followed with its own gestures, free, it completes (Stage 54)") {
+	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json", false);
+	pupil::follow_through(p, 7200);
 	completed(p);
 }

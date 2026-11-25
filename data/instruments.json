@@ -8,6 +8,7 @@
 	],
 	"thermometer": {"resolution_c": 0.1, "accuracy_c": 0.2, "time_constant_s": 4.3},
 	"ph_meter": {"resolution": 0.01, "accuracy": 0.02},
+	"gauge": {"resolution_kpa": 0.1, "accuracy_kpa": 0.5},
 	"hand": 0.10,
 	"walls_g_cm3": {"glass": 2.23, "latex": 0.92, "polystyrene_foam": 0.05}
 }

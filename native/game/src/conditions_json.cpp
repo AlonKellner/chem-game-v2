@@ -141,6 +141,12 @@ bool CondReader::cond(const json &j, Cond &c) {
 			std::string id;
 			ok = item(v, key.c_str(), id);
 			(key == "on" ? c.on : key == "under" ? c.under : c.drains_to) = id;
+		} else if (key == "logging" || key == "recorded") { // (Stage 54) a quantity's name
+			if (!v.is_string()) {
+				ok = fail(std::string("\"") + key + "\" names a quantity, \"celsius\", \"kpa\"...");
+			} else {
+				(key == "logging" ? c.logging : c.recorded) = v.get<std::string>();
+			}
 		} else if (key == "submitted") {
 			ok = flag(v, "submitted", c.submitted);
 		} else if (key == "stirred") {
