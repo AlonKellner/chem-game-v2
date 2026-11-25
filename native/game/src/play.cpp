@@ -42,6 +42,8 @@ bool Play::read(std::string_view text, Play &out, std::string &why) {
 				step.zoom = value.get<float>();
 			} else if (key == "shot" && value.is_string()) {
 				step.shot = value.get<std::string>();
+			} else if (key == "type" && value.is_string()) {
+				step.typed = value.get<std::string>(); // (Stage 58)
 			} else {
 				why = "a step's \"" + key + "\" is not read";
 				return false;
@@ -113,6 +115,9 @@ bool Play::next(Ui &ui) {
 		break;
 	default:
 		ui.pointer(x_, y_, down_);
+	}
+	for (const char c : step.typed) {
+		ui.key(Ui::KeyText, static_cast<uint32_t>(static_cast<unsigned char>(c)));
 	}
 	frame_ = 0;
 	++at_;

@@ -5,6 +5,8 @@
 #include "lab/notebook.hpp"
 #include "lab/spectro.hpp"
 
+#include "chem/builtin_ids.hpp"
+#include "lab/calculator.hpp"
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/spectrometer.hpp"
@@ -403,6 +405,15 @@ struct Ui::Impl {
 	std::string note_label, note_value;
 	int note_focus = 0; // 0 none, 1 the label, 2 the value
 	bool note_fresh = false; // a field just clicked: what is typed next replaces it (Stage 56)
+	// (Stage 58) the panel's tabs: the notebook, the calculator, the reference
+	int notebook_tab = 0;
+	// the calculator: what it works out, the reaction chosen, what is typed in each field, which field is typed in
+	int calc_kind = 0, calc_reaction = 0, calc_focus = -1;
+	bool calc_fresh = false;
+	std::array<std::string, 8> calc_fields{};
+	// the reference: its page; the model's solubility, worked out once it is shown
+	int reference_page = 0;
+	std::vector<std::pair<double, double>> solubility_rows; // C, mol/kg
 	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
 	bool debug_open = false;
 	bool infrared = false; // the debug infrared view (Stage 46): the whole pass in the long-wave range
@@ -513,9 +524,38 @@ struct Ui::Impl {
 
 	// ---- the notebook (GAME_SPEC §13.1, Stage 54): its button, its panel's table, plot and logger
 	static Rect notebook_button() { return Rect{ 1006, 14, 104, 36 }; } // after reset, before the clock (Stage 55: not over it)
+	static constexpr const char *TABS[] = { "tab:notebook", "tab:calculator", "tab:reference" };
+	static constexpr const char *PAGES[] = { "elements", "species", "reactions", "solubility" };
+	static constexpr const char *KINDS[] = { "mass", "moles", "solution", "dilution", "reaction" };
 	static Rect notebook_rect(const std::string &what) {
 		// close, erase; x, its transform, y, its transform, fit; log every 1, 5, 30 s, stop
 		static const char *const NAMES[] = { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog" };
+		// (Stage 58) the panel's tabs; the reference's pages; the calculator's kinds, its reaction's arrows, its note
+		for (int k = 0; k < 3; ++k) {
+			if (what == TABS[k]) {
+				return Rect{ NOTEBOOK.x + 20 + static_cast<float>(k) * 100, NOTEBOOK.y + 12, 96, 30 };
+			}
+		}
+		for (int k = 0; k < 4; ++k) {
+			if (what == std::string("ref:") + PAGES[k]) {
+				return Rect{ NOTEBOOK.x + 20 + static_cast<float>(k) * 122, NOTEBOOK.y + 60, 116, 30 };
+			}
+		}
+		for (int k = 0; k < 5; ++k) {
+			if (what == std::string("calc:") + KINDS[k]) {
+				return Rect{ NOTEBOOK.x + 20 + static_cast<float>(k) * 98, NOTEBOOK.y + 60, 94, 30 };
+			}
+		}
+		if (what == "calc:prev" || what == "calc:next") {
+			return Rect{ NOTEBOOK.x + (what == "calc:prev" ? 20.0f : 70.0f), NOTEBOOK.y + 104, 44, 30 };
+		}
+		if (what == "calc:note") {
+			return Rect{ NOTEBOOK.x + 20, NOTEBOOK.y + 960, 220, 30 };
+		}
+		if (what.rfind("calc:field:", 0) == 0) {
+			const int k = std::atoi(what.c_str() + 11);
+			return Rect{ NOTEBOOK.x + 280, NOTEBOOK.y + 150 + static_cast<float>(k) * 40, 220, 30 };
+		}
 		// (Stage 55) the write row under the plot: its label's field, its value's, and "write"
 		if (what == "write:label" || what == "write:value" || what == "write") {
 			static const float AT[] = { 80, 236, 400 }, W[] = { 130, 130, 90 };
@@ -599,6 +639,30 @@ struct Ui::Impl {
 		}
 		if (!notebook_open) {
 			return false;
+		}
+		for (int k = 0; k < 3; ++k) {
+			if (notebook_rect(TABS[k]).has(x, y)) {
+				notebook_tab = k; // (Stage 58)
+				note_focus = 0;
+				calc_focus = -1;
+				return true;
+			}
+		}
+		if (notebook_rect("close").has(x, y)) {
+			notebook_open = false;
+			return true;
+		}
+		if (notebook_tab == 1) {
+			calc_press(x, y);
+			return NOTEBOOK.has(x, y);
+		}
+		if (notebook_tab == 2) {
+			for (int k = 0; k < 4; ++k) {
+				if (notebook_rect(std::string("ref:") + PAGES[k]).has(x, y)) {
+					reference_page = k;
+				}
+			}
+			return NOTEBOOK.has(x, y);
 		}
 		const std::vector<std::string> labels = note_labels();
 		const auto next = [&](const std::string &now, bool time) {
@@ -693,6 +757,324 @@ struct Ui::Impl {
 		}
 		return true;
 	}
+	// ---- the calculator (GAME_SPEC §13.1, Stage 58): what it works out, its fields, what follows
+	struct CalcField {
+		std::string label;
+		bool formula = false;
+	};
+	std::vector<CalcField> calc_fields_of() const {
+		switch (calc_kind) {
+		case 0:
+			return { { "formula", true } };
+		case 1:
+			return { { "formula", true }, { "mass (g)", false } };
+		case 2:
+			return { { "the solid's formula", true }, { "concentration (mol/L)", false }, { "volume (mL)", false } };
+		case 3:
+			return { { "the stock (mol/L)", false }, { "wanted (mol/L)", false }, { "made up to (mL)", false } };
+		default: {
+			std::vector<CalcField> out;
+			const chem::Reaction &r = calc_reaction_def();
+			const chem::SpeciesTable &table = chem::builtin_species();
+			std::string product;
+			for (const chem::Term &t : r.terms()) {
+				out.push_back({ std::string(table.species(t.species).formula) + (t.nu < 0 ? " in (g)" : " made (g)"), false });
+				product = product.empty() && t.nu > 0 ? std::string(table.species(t.species).formula) : product;
+			}
+			out.push_back({ "got of " + product + " (g)", false });
+			return out;
+		}
+		}
+	}
+	const chem::Reaction &calc_reaction_def() const {
+		const auto all = chem::builtin_reactions();
+		return all[static_cast<size_t>(std::clamp(calc_reaction, 0, static_cast<int>(all.size()) - 1))];
+	}
+	std::optional<double> calc_number(int k) const {
+		const std::string &f = calc_fields[static_cast<size_t>(k)];
+		char *end = nullptr;
+		const double v = std::strtod(f.c_str(), &end);
+		return !f.empty() && end != nullptr && *end == '\0' && std::isfinite(v) ? std::optional<double>(v) : std::nullopt;
+	}
+	struct CalcResult {
+		bool ok = false;
+		std::vector<std::string> lines;
+		double main = 0.0;
+		std::string label, unit;
+	};
+	CalcResult calc_result() const {
+		CalcResult out;
+		const chem::SpeciesTable &table = chem::builtin_species();
+		const auto formula = [&](int k, calc::MolarMass &mm) {
+			mm = calc::molar_mass(table, calc_fields[static_cast<size_t>(k)]);
+			if (!mm.ok) {
+				out.lines.push_back(calc_fields[static_cast<size_t>(k)].empty() ? "type a formula, such as CuSO4.5H2O" : mm.why);
+				return false;
+			}
+			out.lines.push_back(text_of("M = %.3f g/mol", mm.g_per_mol));
+			return true;
+		};
+		calc::MolarMass mm;
+		switch (calc_kind) {
+		case 0:
+			if (formula(0, mm)) {
+				for (size_t i = 0; i < mm.shares.size(); ++i) {
+					out.lines.push_back(mm.shares[i].first + text_of(": %.2f %% by mass", mm.shares[i].second) + text_of(" (%.0f atoms)", static_cast<double>(mm.atoms[i].second)));
+				}
+				out = CalcResult{ true, out.lines, mm.g_per_mol, "M", "g/mol" };
+			}
+			break;
+		case 1:
+			if (formula(0, mm)) {
+				if (const std::optional<double> m = calc_number(1)) {
+					const double n = calc::moles(*m, mm.g_per_mol);
+					out.lines.push_back(text_of("n = m / M = %.6g", *m) + text_of(" / %.3f", mm.g_per_mol) + text_of(" = %.5g mol", n));
+					out = CalcResult{ true, out.lines, n, "n", "mol" };
+				} else {
+					out.lines.push_back("type its mass in grams");
+				}
+			}
+			break;
+		case 2:
+			if (formula(0, mm)) {
+				const std::optional<double> c = calc_number(1), v = calc_number(2);
+				if (c && v) {
+					const double m = calc::solution_grams(*c, *v, mm.g_per_mol);
+					out.lines.push_back(text_of("m = c V M = %.5g mol/L", *c) + text_of(" x %.5g L", *v / 1000.0) + text_of(" x %.3f g/mol", mm.g_per_mol));
+					out.lines.push_back(text_of("  = %.4f g, made up to the volume", m));
+					out = CalcResult{ true, out.lines, m, "m", "g" };
+				} else {
+					out.lines.push_back("type the concentration and the volume");
+				}
+			}
+			break;
+		case 3: {
+			const std::optional<double> c1 = calc_number(0), c2 = calc_number(1), v2 = calc_number(2);
+			if (c1 && c2 && v2 && *c1 > 0.0) {
+				const double v1 = calc::dilution_ml(*c1, *c2, *v2);
+				out.lines.push_back(text_of("V1 = c2 V2 / c1 = %.5g", *c2) + text_of(" x %.5g", *v2) + text_of(" / %.5g", *c1) + text_of(" = %.3f mL of the stock", v1));
+				out.lines.push_back(text_of("made up to %.5g mL", *v2));
+				out = CalcResult{ true, out.lines, v1, "V1", "mL" };
+			} else {
+				out.lines.push_back("type the three: c1 V1 = c2 V2");
+			}
+			break;
+		}
+		default: {
+			const chem::Reaction &r = calc_reaction_def();
+			const auto terms = r.terms();
+			std::vector<std::optional<double>> given;
+			for (size_t k = 0; k < terms.size(); ++k) {
+				given.push_back(calc_number(static_cast<int>(k)));
+			}
+			const calc::Stoichiometry st = calc::stoichiometry(table, r, given);
+			if (!st.ok) {
+				out.lines.push_back(st.why);
+				break;
+			}
+			for (const calc::Stoichiometry::Term &t : st.terms) {
+				if (t.allows) {
+					out.lines.push_back(t.formula + text_of(": %.5g g", *t.given_g) + text_of(" = %.5g mol, enough for %.5g mol of the reaction", *t.given_g / t.g_per_mol, *t.allows));
+				}
+			}
+			out.lines.push_back("limiting: " + st.terms[static_cast<size_t>(st.limiting)].formula + text_of(", %.5g mol of the reaction", st.extent));
+			int first = -1;
+			for (size_t k = 0; k < st.terms.size(); ++k) {
+				const calc::Stoichiometry::Term &t = st.terms[k];
+				out.lines.push_back(text_of("  %.4g g of ", t.g) + t.formula + (t.nu < 0 ? " used" : " made"));
+				first = first < 0 && t.nu > 0 ? static_cast<int>(k) : first;
+			}
+			out = CalcResult{ true, out.lines, first >= 0 ? st.terms[static_cast<size_t>(first)].g : st.extent, "theoretical", "g" };
+			if (const std::optional<double> got = calc_number(static_cast<int>(terms.size())); got && first >= 0) {
+				const double y = calc::percent_yield(*got, st.terms[static_cast<size_t>(first)].g);
+				out.lines.push_back(text_of("yield = %.5g g", *got) + text_of(" / %.4g g", st.terms[static_cast<size_t>(first)].g) + text_of(" = %.1f %%", y));
+				out.main = y;
+				out.label = "yield";
+				out.unit = "%";
+			}
+			break;
+		}
+		}
+		return out;
+	}
+	void calc_press(float x, float y) {
+		for (int k = 0; k < 5; ++k) {
+			if (notebook_rect(std::string("calc:") + KINDS[k]).has(x, y)) {
+				if (calc_kind != k) {
+					calc_kind = k;
+					calc_fields = {};
+				}
+				calc_focus = -1;
+				return;
+			}
+		}
+		const int reactions = static_cast<int>(chem::builtin_reactions().size());
+		if (calc_kind == 4 && (notebook_rect("calc:prev").has(x, y) || notebook_rect("calc:next").has(x, y))) {
+			calc_reaction = (calc_reaction + (notebook_rect("calc:next").has(x, y) ? 1 : reactions - 1)) % reactions;
+			calc_fields = {};
+			calc_focus = -1;
+			return;
+		}
+		if (notebook_rect("calc:note").has(x, y)) {
+			const CalcResult r = calc_result();
+			if (r.ok) {
+				act({ { "do", "note" }, { "label", r.label }, { "value", r.main }, { "unit", r.unit } });
+			}
+			return;
+		}
+		calc_focus = -1;
+		for (int k = 0; k < static_cast<int>(calc_fields_of().size()) && k < 8; ++k) {
+			if (notebook_rect("calc:field:" + std::to_string(k)).has(x, y)) {
+				calc_focus = k;
+				calc_fresh = true;
+			}
+		}
+	}
+	bool type_calc(Ui::Key key, uint32_t codepoint) {
+		if (!notebook_open || notebook_tab != 1 || calc_focus < 0) {
+			return false;
+		}
+		const std::vector<CalcField> fields = calc_fields_of();
+		if (calc_focus >= static_cast<int>(fields.size())) {
+			return false;
+		}
+		std::string &f = calc_fields[static_cast<size_t>(calc_focus)];
+		const bool formula = fields[static_cast<size_t>(calc_focus)].formula;
+		const bool ok = formula ? (std::isalnum(static_cast<int>(codepoint)) != 0 || codepoint == '(' || codepoint == ')' || codepoint == '.')
+								: ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e');
+		const bool replacing = calc_fresh;
+		calc_fresh = false;
+		if (key == Ui::KeyText && ok && codepoint < 128) {
+			if (replacing) {
+				f.clear();
+			}
+			if (f.size() < 24) {
+				f += static_cast<char>(codepoint);
+			}
+		} else if (key == Ui::KeyBackspace && !f.empty()) {
+			f.pop_back();
+		} else if (key == Ui::KeyEnter || key == Ui::KeyEscape) {
+			calc_focus = -1;
+		}
+		return true;
+	}
+	void paint_calculator() {
+		static const char *const NAMES[] = { "molar mass", "moles", "solution", "dilution", "reaction" };
+		for (int k = 0; k < 5; ++k) {
+			button(notebook_rect(std::string("calc:") + KINDS[k]), NAMES[k], calc_kind == k, 13);
+		}
+		const chem::SpeciesTable &table = chem::builtin_species();
+		if (calc_kind == 4) {
+			button(notebook_rect("calc:prev"), "<", false, 15);
+			button(notebook_rect("calc:next"), ">", false, 15);
+			text(NOTEBOOK.x + 126, NOTEBOOK.y + 125, calc::equation(table, calc_reaction_def()), INK, 13);
+		}
+		const std::vector<CalcField> fields = calc_fields_of();
+		for (size_t k = 0; k < fields.size() && k < 8; ++k) {
+			const Rect f = notebook_rect("calc:field:" + std::to_string(k));
+			text(NOTEBOOK.x + 20, f.y + 21, fields[k].label, INK, 14);
+			rect_fill(f, rgba(24, 24, 24));
+			const bool typing = calc_focus == static_cast<int>(k);
+			outline(f, typing ? GUIDE : GRID, typing ? 2.0f : 1.0f);
+			text(f.x + 8, f.y + 21, calc_fields[k] + (typing ? "_" : ""), INK, 15);
+		}
+		const CalcResult r = calc_result();
+		float y = NOTEBOOK.y + 150 + static_cast<float>(std::min<size_t>(fields.size(), 8)) * 40 + 30;
+		for (const std::string &line : r.lines) {
+			for (const std::string &l : wrapped(line, 58)) {
+				text(NOTEBOOK.x + 20, y, l, r.ok ? INK : DIM, 15);
+				y += 21;
+			}
+		}
+		button(notebook_rect("calc:note"), r.ok ? "write " + r.label + " in the notebook" : std::string("nothing to write yet"), false, 13);
+	}
+	// ---- the reference (GAME_SPEC §13.1, Stage 58): the simulation's own tables
+	void paint_reference() {
+		static const char *const NAMES[] = { "elements", "species", "reactions", "solubility" };
+		for (int k = 0; k < 4; ++k) {
+			button(notebook_rect(std::string("ref:") + PAGES[k]), NAMES[k], reference_page == k, 13);
+		}
+		const chem::SpeciesTable &table = chem::builtin_species();
+		const float x0 = NOTEBOOK.x + 20, y0 = NOTEBOOK.y + 110;
+		if (reference_page == 0) {
+			// the periodic table's first four periods; the elements the tables hold, with their weights
+			static const char *const SYMBOLS[] = { "H", "He", "Li", "Be", "B", "C", "N", "O", "F", "Ne", "Na", "Mg", "Al", "Si", "P", "S", "Cl", "Ar", "K", "Ca", "Sc", "Ti", "V", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", "Ga",
+				"Ge", "As", "Se", "Br", "Kr" };
+			for (int z = 1; z <= 36; ++z) {
+				const int period = z <= 2 ? 1 : z <= 10 ? 2 : z <= 18 ? 3 : 4;
+				const int first = period == 1 ? 1 : period == 2 ? 3 : period == 3 ? 11 : 19, i = z - first;
+				const int column = period == 1 ? (z == 1 ? 1 : 18) : period == 4 ? i + 1 : (i < 2 ? i + 1 : i + 11);
+				const Rect cell{ x0 + static_cast<float>(column - 1) * 27, y0 + 10 + static_cast<float>(period - 1) * 36, 25, 33 };
+				bool held = false;
+				for (int e = 0; e < table.element_count(); ++e) {
+					held = held || table.element(e).symbol == SYMBOLS[z - 1];
+				}
+				rect_fill(cell, held ? BUTTON_ON : BUTTON);
+				text(cell.x + 3, cell.y + 14, SYMBOLS[z - 1], held ? INK : DIM, 13);
+				text(cell.x + 3, cell.y + 29, std::to_string(z), DIM, 10);
+			}
+			float y = y0 + 170;
+			text(x0, y, "in the simulation's tables (standard atomic weights):", DIM, 14);
+			for (int e = 0; e < table.element_count(); ++e) {
+				y += 21;
+				text(x0, y, std::string(table.element(e).symbol) + text_of("  %.3f g/mol", static_cast<double>(table.element(e).mass_ug_per_mol) * 1e-6), INK, 14);
+			}
+		} else if (reference_page == 1) {
+			float y = y0 + 20;
+			text(x0, y, "formula", DIM, 13);
+			text(x0 + 170, y, "phase", DIM, 13);
+			text(x0 + 220, y, "M g/mol", DIM, 13);
+			text(x0 + 300, y, "Hf kJ/mol", DIM, 13);
+			text(x0 + 385, y, "S J/mol K", DIM, 13);
+			text(x0 + 455, y, "Cp", DIM, 13);
+			static const char *const PHASES[] = { "s", "l", "g", "aq" };
+			for (int s = 0; s < table.species_count(); ++s) {
+				const chem::SpeciesDef &d = table.species(chem::SpeciesId{ s });
+				y += 21;
+				text(x0, y, std::string(d.formula) + (d.wall ? " (wall)" : ""), INK, 13);
+				text(x0 + 170, y, PHASES[static_cast<int>(d.phase) & 3], DIM, 13);
+				text(x0 + 220, y, text_of("%.2f", static_cast<double>(table.molar_mass_ug(chem::SpeciesId{ s })) * 1e-6), INK, 13);
+				if (d.has_thermo) {
+					text(x0 + 300, y, text_of("%.2f", d.hf / 1000.0), INK, 13);
+					text(x0 + 385, y, text_of("%.2f", d.s0), INK, 13);
+					text(x0 + 455, y, text_of("%.1f", d.cp), INK, 13);
+				}
+			}
+		} else if (reference_page == 2) {
+			float y = y0;
+			for (const chem::Reaction &r : chem::builtin_reactions()) {
+				y += 22;
+				text(x0, y, calc::equation(table, r), INK, 13);
+				y += 18;
+				const chem::Kinetics &k = r.kinetics();
+				const std::string law = k.law == chem::Kinetics::Law::FirstOrder ? text_of("first order, Ea %.1f kJ/mol", k.activation / 1000.0)
+						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in its acid", k.driver_order) : std::string())
+						: k.law == chem::Kinetics::Law::Equilibrium										   ? std::string("fast: always at its equilibrium")
+																										   : std::string("runs when it is brought about");
+				text(x0 + 16, y, law, DIM, 12);
+			}
+		} else {
+			// the model's own solubility: copper sulfate under its pentahydrate, at each ten degrees
+			if (solubility_rows.empty()) {
+				const chem::Reaction &r = chem::builtin_reactions()[static_cast<size_t>(chem::builtin::reaction::pentahydrate_crystallization)];
+				for (int c = 0; c <= 90; c += 10) {
+					solubility_rows.emplace_back(c, calc::solubility(table, r, chem::builtin::copper_sulfate_aq, c + 273.15));
+				}
+			}
+			float y = y0 + 20;
+			text(x0, y, "copper sulfate in water, under its blue crystals: the simulation's own", DIM, 13);
+			y += 30;
+			text(x0, y, "C", DIM, 13);
+			text(x0 + 80, y, "mol/kg", DIM, 13);
+			text(x0 + 200, y, "g CuSO4 per 100 g of water", DIM, 13);
+			for (const auto &[c, m] : solubility_rows) {
+				y += 22;
+				text(x0, y, text_of("%.0f", c), INK, 14);
+				text(x0 + 80, y, text_of("%.3f", m), INK, 14);
+				text(x0 + 200, y, text_of("%.1f", m * 159.61 / 10.0), INK, 14);
+			}
+		}
+	}
 	void paint_notebook() {
 		button(notebook_button(), text_of("notebook %.0f", static_cast<double>(view.notebook.size())), notebook_open, 15);
 		if (!notebook_open) {
@@ -700,9 +1082,23 @@ struct Ui::Impl {
 		}
 		rect_fill(NOTEBOOK, PANEL_FILL);
 		outline(NOTEBOOK, GLASS, 1);
-		text(NOTEBOOK.x + 20, NOTEBOOK.y + 36, view.instruments ? "notebook, by instruments" : "notebook", INK, 20);
+		static const char *const TAB_NAMES[] = { "notebook", "calculator", "reference" };
+		for (int k = 0; k < 3; ++k) {
+			button(notebook_rect(TABS[k]), TAB_NAMES[k], notebook_tab == k, 14); // (Stage 58)
+		}
 		button(notebook_rect("close"), "close");
+		if (notebook_tab == 1) {
+			paint_calculator();
+			return;
+		}
+		if (notebook_tab == 2) {
+			paint_reference();
+			return;
+		}
 		button(notebook_rect("erase"), "erase");
+		if (view.instruments) {
+			text(NOTEBOOK.x + 20, NOTEBOOK.y + 64, "by instruments: what they read", DIM, 13);
+		}
 		// the table: the newest at the foot, as written
 		float y = NOTEBOOK.y + 80;
 		const size_t shown_rows = 10, first = view.notebook.size() > shown_rows ? view.notebook.size() - shown_rows : 0;
@@ -1184,6 +1580,9 @@ struct Ui::Impl {
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
 		screen.predicted = predictions_made(); // (Stage 55)
+		if (notebook_open && notebook_tab == 1 && calc_result().ok) {
+			screen.calculated = KINDS[calc_kind]; // (Stage 58)
+		}
 		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal", "controller" };
 		screen.edit.editing = EDITING[draft.edit];
 		screen.edit.part = draft.part;
@@ -3948,6 +4347,9 @@ struct Ui::Impl {
 		if (type_predict(key, codepoint) || type_report(key, codepoint)) {
 			return; // a prediction's field (Stage 55), the report's (Stage 54)
 		}
+		if (type_calc(key, codepoint)) {
+			return; // the calculator's fields (Stage 58)
+		}
 		if (type_note(key, codepoint)) {
 			return; // the notebook's write row (Stage 55)
 		}
@@ -5081,6 +5483,22 @@ struct Ui::Impl {
 			if (notebook_open) {
 				for (const char *n : { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog", "write:label", "write:value", "write" }) {
 					buttons.push_back(notebook_rect(n));
+				}
+				// (Stage 58) its tabs, the calculator's kinds, arrows, note and fields, the reference's pages
+				for (const char *n : TABS) {
+					buttons.push_back(notebook_rect(n));
+				}
+				for (const char *n : KINDS) {
+					buttons.push_back(notebook_rect(std::string("calc:") + n));
+				}
+				for (const char *n : PAGES) {
+					buttons.push_back(notebook_rect(std::string("ref:") + n));
+				}
+				for (const char *n : { "calc:prev", "calc:next", "calc:note" }) {
+					buttons.push_back(notebook_rect(n));
+				}
+				for (int k = 0; k < 8; ++k) {
+					buttons.push_back(notebook_rect("calc:field:" + std::to_string(k)));
 				}
 			}
 			for (const auto &[w, b] : record_buttons()) {
@@ -7209,7 +7627,13 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		return centre(Impl::notebook_button());
 	}
 	if (after("notebook:", rest)) {
-		return m.notebook_open && centre(Impl::notebook_rect(std::string(rest)));
+		// (Stage 58) on the tab that shows it: the calculator's, the reference's, the notebook's own
+		const std::string name(rest);
+		const int tab = name.rfind("calc:", 0) == 0 ? 1 : name.rfind("ref:", 0) == 0 ? 2 : name.rfind("tab:", 0) == 0 || name == "close" ? m.notebook_tab : 0;
+		if (name.rfind("calc:field:", 0) == 0 && std::atoi(name.c_str() + 11) >= static_cast<int>(m.calc_fields_of().size())) {
+			return false;
+		}
+		return m.notebook_open && m.notebook_tab == tab && centre(Impl::notebook_rect(name));
 	}
 	if (after("record:", rest)) {
 		const size_t colon = rest.find(':');

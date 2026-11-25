@@ -1,0 +1,124 @@
+{
+	"format": "chem-play/1",
+	"note": "The calculator and the reference (Stage 58): the prepare bench chosen from the experiments' list, the notebook's calculator working out a solution's mass, then a reaction's yield, then the reference's species and solubility; pictures of each (LAB_SHOTS).",
+	"steps": [
+		{
+			"to": "menu:experiments",
+			"button": "click"
+		},
+		{
+			"to": "experiment:prepare",
+			"button": "click"
+		},
+		{
+			"frames": 20,
+			"mark": "prepare"
+		},
+		{
+			"to": "notebook",
+			"button": "click"
+		},
+		{
+			"to": "notebook:tab:calculator",
+			"button": "click"
+		},
+		{
+			"to": "notebook:calc:solution",
+			"button": "click"
+		},
+		{
+			"to": "notebook:calc:field:0",
+			"button": "click"
+		},
+		{
+			"type": "CuSO4.5H2O"
+		},
+		{
+			"to": "notebook:calc:field:1",
+			"button": "click"
+		},
+		{
+			"type": "0.0500"
+		},
+		{
+			"to": "notebook:calc:field:2",
+			"button": "click"
+		},
+		{
+			"type": "100"
+		},
+		{
+			"frames": 30,
+			"mark": "solution",
+			"shot": "calculator-solution"
+		},
+		{
+			"frames": 30
+		},
+		{
+			"to": "notebook:calc:reaction",
+			"button": "click"
+		},
+		{
+			"to": "notebook:calc:next",
+			"button": "click"
+		},
+		{
+			"to": "notebook:calc:field:0",
+			"button": "click"
+		},
+		{
+			"type": "2.00"
+		},
+		{
+			"to": "notebook:calc:field:1",
+			"button": "click"
+		},
+		{
+			"type": "0.981"
+		},
+		{
+			"to": "notebook:calc:field:4",
+			"button": "click"
+		},
+		{
+			"type": "1.44"
+		},
+		{
+			"frames": 30,
+			"mark": "reaction",
+			"shot": "calculator-reaction"
+		},
+		{
+			"frames": 30
+		},
+		{
+			"to": "notebook:tab:reference",
+			"button": "click"
+		},
+		{
+			"to": "notebook:ref:species",
+			"button": "click"
+		},
+		{
+			"frames": 30,
+			"mark": "species",
+			"shot": "reference-species"
+		},
+		{
+			"frames": 30
+		},
+		{
+			"to": "notebook:ref:elements",
+			"button": "click"
+		},
+		{
+			"frames": 30,
+			"mark": "elements",
+			"shot": "reference-elements"
+		},
+		{
+			"frames": 30
+		}
+	]
+}

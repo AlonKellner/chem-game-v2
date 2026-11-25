@@ -51,6 +51,7 @@ struct TutorialScreen {
 	std::string selected; // the item selected, "" for none
 	TutorialEdit edit;
 	int predicted = 0; // how many of the report's predictions are made (Stage 55)
+	std::string calculated; // what the calculator has worked out, shown: "mass", "moles", "solution", "dilution", "reaction" (Stage 58)
 };
 
 struct TutorialView {

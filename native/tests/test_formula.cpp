@@ -1,5 +1,5 @@
 // The data files' formulas and equations (native/datagen/formula.hpp).
-#include "formula.hpp"
+#include "chem/formula.hpp"
 
 #include <doctest/doctest.h>
 

@@ -1,5 +1,15 @@
 # GAME_SPEC version history
 
+## 0.58.0 (2026-11-25, Stage 58; signed off by the user: "Approved, merge and proceed")
+
+- §13.1 (Stage 58, `docs/TDD_58_CALCULATOR.md`; `docs/CURRICULUM.md`, step C's first half): the notebook's panel in
+  three tabs; **the calculator** (molar mass and composition, moles, a solution's mass, a dilution, a reaction's
+  stoichiometry, limiting reagent and yield; its working shown, its result written in the notebook); **the reference**
+  (the elements, the species, the reactions, the model's own solubility). The formula grammar moved into the core.
+- §13.2: the check `calculated`. A play may type.
+- §13.7: the experiment `prepare` (a solution planned with the calculator, weighed, made up, worked out from the
+  balance). The goldens unchanged.
+
 ## 0.57.0 (2026-11-25, Stage 57; signed off by the user: "Approved, merge and proceed")
 
 - §7 (Stage 57, `docs/TDD_57_DISSOLVING.md`; `docs/CURRICULUM.md`, step B2): **transport to a grain** by Sano,

@@ -898,3 +898,33 @@ TEST_CASE("experiment solubility: followed with its own gestures, free, it compl
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment prepare: followed with its own gestures, strict, the calculator plans it and the balance's reading gives what was made (Stage 58)") {
+	Pupil p("data/benches/prepare.json", "data/tutorials/prepare.json");
+	CHECK(pupil::follow_through(p, 1800) > 20);
+	completed(p);
+	CHECK(p.drawn("n = m / M")); // the calculator shows its sum
+	double reading = 0.0, planned = 0.0;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		reading = e.quantity.what == "reads_g" ? e.value : reading;
+		planned = e.label == "m" ? e.value : planned;
+	}
+	CHECK(planned == doctest::Approx(1.2484).epsilon(1e-3));
+	const double made = reading / 249.68 / 0.100, truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE("planned " << planned << " g, weighed " << reading << " g: " << made << " mol/L against " << truth);
+	CHECK(made == doctest::Approx(truth).epsilon(0.005));
+	report(p, { made });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment prepare: played as a person plays it, strict, it completes (Stage 58)") {
+	Pupil p("data/benches/prepare.json", "data/tutorials/prepare.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment prepare: followed with its own gestures, free, it completes (Stage 58)") {
+	Pupil p("data/benches/prepare.json", "data/tutorials/prepare.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}

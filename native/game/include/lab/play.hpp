@@ -21,6 +21,7 @@
 //   "zoom":   (Stage 42) the room's view zoomed by this factor about the pointer on each of the step's frames (a
 //             wheel turned: a notch a frame)
 //   "shot":   (Stage 42) a name for a picture of the screen a host takes after the step's last frame
+//   "type":   (Stage 58) text typed on the step's last frame, after its button, a key a character
 namespace lab {
 
 class Play {
@@ -46,7 +47,7 @@ private:
 		int frames = 1;
 		int button = Keep;
 		std::string mark;
-		std::string command, shot;
+		std::string command, shot, typed;
 		float zoom = 0.0f;
 	};
 	std::vector<Step> steps_;
