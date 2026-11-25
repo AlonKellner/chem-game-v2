@@ -5292,6 +5292,20 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		set_beside(thing, v);
 		return true;
 	}
+	if (what == "note") {
+		// (Stage 55) a number the student writes in the notebook, under a label: no instrument's, no quantity's
+		const std::string label = c.value("label", "");
+		const double value = number(c, "value", std::numeric_limits<double>::quiet_NaN());
+		if (label.empty() || label.size() > 24 || !std::isfinite(value)) {
+			why = "a note is {\"label\" (at most 24 characters), \"value\" (a number), \"unit\"?}";
+			return false;
+		}
+		notebook.push_back(NoteEntry{ static_cast<int64_t>(world().step()), label, Quantity{}, value, c.value("unit", ""), false });
+		if (notebook.size() > NOTEBOOK_MOST) {
+			notebook.erase(notebook.begin());
+		}
+		return true;
+	}
 	if (what == "record" || what == "log" || what == "unlog" || what == "erase") {
 		// the notebook (GAME_SPEC §13, Stage 54): it acts on nothing in the world
 		if (what == "erase") {

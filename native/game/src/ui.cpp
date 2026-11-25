@@ -539,28 +539,36 @@ struct Ui::Impl {
 	}
 	// the plot's points: y's entries against the time, or against x's entry of the same moment, each transformed
 	std::vector<std::pair<double, double>> plot_points() const {
+		// (Stage 55) a y pairs with the x written at the same moment, or else the last x written before it: a logged pair,
+		// or a number written and then a reading recorded (a standard's concentration, then its absorbance). Entries are
+		// written in the order of their moments: one pass, a moment at a time.
 		std::vector<std::pair<double, double>> out;
-		for (const NoteEntry &e : view.notebook) {
-			if (e.label != plot_y) {
-				continue;
+		std::optional<double> last; // the last x of the moments before
+		for (size_t g = 0; g < view.notebook.size();) {
+			size_t end = g;
+			std::optional<double> here; // the x written at this moment
+			while (end < view.notebook.size() && view.notebook[end].step == view.notebook[g].step) {
+				if (!plot_x.empty() && view.notebook[end].label == plot_x) {
+					here = view.notebook[end].value;
+				}
+				++end;
 			}
-			std::optional<double> x;
-			if (plot_x.empty()) {
-				x = static_cast<double>(e.step) * STEP_SECONDS;
-			} else {
-				for (const NoteEntry &f : view.notebook) {
-					if (f.label == plot_x && f.step == e.step) {
-						x = f.value;
-					}
+			for (size_t i = g; i < end; ++i) {
+				const NoteEntry &e = view.notebook[i];
+				if (e.label != plot_y) {
+					continue;
+				}
+				const std::optional<double> x = plot_x.empty() ? std::optional<double>(static_cast<double>(e.step) * STEP_SECONDS) : here ? here : last;
+				if (!x) {
+					continue;
+				}
+				const std::optional<double> tx = transformed(*x, plot_tx, !plot_x.empty() && note_celsius(plot_x)), ty = transformed(e.value, plot_ty, note_celsius(plot_y));
+				if (tx && ty) {
+					out.emplace_back(*tx, *ty);
 				}
 			}
-			if (!x) {
-				continue;
-			}
-			const std::optional<double> tx = transformed(*x, plot_tx, !plot_x.empty() && note_celsius(plot_x)), ty = transformed(e.value, plot_ty, note_celsius(plot_y));
-			if (tx && ty) {
-				out.emplace_back(*tx, *ty);
-			}
+			last = here ? here : last;
+			g = end;
 		}
 		return out;
 	}

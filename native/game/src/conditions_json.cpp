@@ -147,6 +147,18 @@ bool CondReader::cond(const json &j, Cond &c) {
 			} else {
 				(key == "logging" ? c.logging : c.recorded) = v.get<std::string>();
 			}
+		} else if (key == "noted") { // (Stage 55) a label written in the notebook
+			if (!v.is_string()) {
+				ok = fail("\"noted\" names a label written in the notebook");
+			} else {
+				c.noted = v.get<std::string>();
+			}
+		} else if (key == "noted_value") {
+			if (!v.is_number()) {
+				ok = fail("\"noted_value\" is a number");
+			} else {
+				c.noted_value = v.get<double>();
+			}
 		} else if (key == "submitted") {
 			ok = flag(v, "submitted", c.submitted);
 		} else if (key == "stirred") {
