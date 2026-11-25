@@ -1,6 +1,6 @@
 {
 	"format": "chem-walls/1",
-	"note": "A vessel's wall as rings (GAME_SPEC §6, Stage 53; docs/DATA_SOURCES.md): how tall a ring is and how many a vessel has; air's properties at 1 atm for the convection of a dry wall into the gas over a liquid (Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. v6.00 (2024), Table A.6, p. 755).",
+	"note": "A vessel's wall as rings (GAME_SPEC §6, Stage 53; docs/DATA_SOURCES.md): how tall a ring is and how many a vessel has; air's properties at 1 atm for the convection of a dry wall into the gas over a liquid and of its outside into the room (Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. v6.00 (2024), Table A.6, p. 755).",
 	"rings": {
 		"height_mm": 10,
 		"least": 4,
@@ -16,5 +16,13 @@
 		{"kelvin": 600, "rho": 0.5881, "cp": 1051, "nu": 5.232e-5, "k": 0.0460, "alpha": 7.44e-5, "pr": 0.703},
 		{"kelvin": 800, "rho": 0.4411, "cp": 1099, "nu": 8.472e-5, "k": 0.0572, "alpha": 11.8e-5, "pr": 0.717},
 		{"kelvin": 1000, "rho": 0.3529, "cp": 1141, "nu": 12.27e-5, "k": 0.0677, "alpha": 16.8e-5, "pr": 0.730}
-	]
+	],
+	"emittance_note": "A wall's total hemispherical emittance, by its species, at its temperature (Stage 53: each ring radiates to the room at its own). Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. v6.00 (2024), Table 10.1, p. 546: glass, smooth, 0.94 at 40 C; Pyrex 0.94 to 0.74 over 260 to 540 C (read as linear between its ends).",
+	"emittance": {
+		"glass": [
+			{"kelvin": 313.15, "e": 0.94},
+			{"kelvin": 533.15, "e": 0.94},
+			{"kelvin": 813.15, "e": 0.74}
+		]
+	}
 }

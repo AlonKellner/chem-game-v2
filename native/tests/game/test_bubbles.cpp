@@ -189,7 +189,7 @@ TEST_CASE("invariants: B1 fires on bubbles past the surface, a negative extincti
 TEST_CASE("bubbles: a beaker of water on a burner first makes bubbles that die near its floor, then boils with bubbles to the surface (Stage 45)") {
 	std::string why;
 	const char *bench = R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
-		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "at": [10, 7],
+		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "at": [10, 7],
 			"contents": {"water": {"g": 150}}},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
 	auto lab = lab::Lab::open(bench, why);

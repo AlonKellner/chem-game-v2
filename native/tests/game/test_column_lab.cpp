@@ -85,9 +85,9 @@ double mol_in(const lab::ItemView &v, const std::string &species) {
 
 // a beaker of 1.4 mol/kg copper sulfate, and a bottle of 0.8 mol/kg nickel sulfate
 const char *const DENSE_AND_LIGHT = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
-	{"id": "beaker", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+	{"id": "beaker", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 		"contents": {"water": {"g": 80}, "copper_sulfate_aq": {"mol": 0.112}}},
-	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "loss": 0.8,
+	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250,
 		"contents": {"water": {"g": 200}, "nickel_sulfate_aq": {"mol": 0.16}}}]})";
 
 } // namespace
@@ -372,9 +372,9 @@ namespace {
 
 // a bottle of green nickel sulfate over blue copper sulfate, and an empty beaker to drain it into
 const char *const LAYERED_BOTTLE = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
-	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "loss": 0.8,
+	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250,
 		"layers": [{"water": {"g": 80}, "nickel_sulfate_aq": {"mol": 0.064}}, {"water": {"g": 80}, "copper_sulfate_aq": {"mol": 0.112}}]},
-	{"id": "cup", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5}]})";
+	{"id": "cup", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80}]})";
 
 } // namespace
 

@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "conical_flask",
 			"wall_g": 100,
-			"loss": 0.9,
 			"at": [
 				11,
 				6

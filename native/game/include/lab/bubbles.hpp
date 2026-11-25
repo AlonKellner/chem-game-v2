@@ -83,6 +83,13 @@ struct Floor {
 // lowest liquid): convection, and past the onset where its cavities hold a nucleus Rohsenow's boiling too, as boil()
 // splits it. A floor no warmer than the bulk passes none this way.
 double floor_flux(const Floor &f, double floor_c);
+// The same through half the floor's glass (Stage 53): its middle at a temperature, the glass's resistance between
+// its middle and its inside surface (K/W over the whole floor); the surface where what crosses the glass is what the
+// surface passes on, and that heat, W
+struct Through {
+	double heat_w = 0.0, surface_c = 0.0;
+};
+Through floor_through(const Floor &f, double middle_c, double resistance);
 // whether a floor at a temperature nucleates (Stage 53): past the onset it starts; under its boiling point it stops;
 // between, it goes on as it was (f.nucleating)
 bool floor_nucleates(const Floor &f, double floor_c);

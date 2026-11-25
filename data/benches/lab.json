@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room. wall_g: the wall's mass, which holds heat; glassware: what it is made as (data/glassware.json: its standard's shape, its capacity to the brim, its wall and floor; GAME_SPEC §12.3); without one (the condenser), wall_mm and floor_mm give its wall and floor and it is a cylinder of its volume. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size. goals: the game's, one to an outbox slot (GAME_SPEC §13.5): each term a quantity of what is handed in there, compared.",
+	"note": "The interactive bench (GAME_SPEC §17): the demo's equipment, all of it in the cabinet. loss: W/K to the room, for what is not glassware (glassware loses by its own glass's outside: GAME_SPEC §6, Stage 53). wall_g: the wall's mass, which holds heat; glassware: what it is made as (data/glassware.json: its standard's shape, its capacity to the brim, its wall and floor; GAME_SPEC §12.3); without one (the condenser), wall_mm and floor_mm give its wall and floor and it is a cylinder of its volume. A burner's conductance is with its valve fully open. The bench adds its own tray, where what overflows goes. The grid is in squares; each item stands on a footprint of them, by its kind and volume unless it gives a size. goals: the game's, one to an outbox slot (GAME_SPEC §13.5): each term a quantity of what is handed in there, compared.",
 	"grid": [
 		28,
 		15
@@ -16,8 +16,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"glassware": "conical_flask",
-			"wall_g": 100,
-			"loss": 0.9
+			"wall_g": 100
 		},
 		{
 			"id": "stopper",
@@ -55,8 +54,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"glassware": "beaker",
-			"wall_g": 80,
-			"loss": 0.5
+			"wall_g": 80
 		},
 		{
 			"id": "waste",
@@ -64,8 +62,7 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"glassware": "beaker",
-			"wall_g": 80,
-			"loss": 0.5
+			"wall_g": 80
 		},
 		{
 			"id": "jar",
@@ -74,7 +71,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 40,
-			"loss": 0.3,
 			"contents": {
 				"malachite": {
 					"g": 5,
@@ -89,7 +85,6 @@
 			"wall": "glass",
 			"glassware": "bottle",
 			"wall_g": 250,
-			"loss": 0.8,
 			"contents": {
 				"water": {
 					"g": 240.5

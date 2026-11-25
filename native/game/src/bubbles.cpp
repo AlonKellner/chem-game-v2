@@ -177,25 +177,49 @@ double Bubbles::extinction_at(double z_m) const {
 }
 
 double floor_flux(const Floor &f, double floor_c) {
-	if (!(f.depth_m > 0.0) || !(f.floor_m2 > 0.0) || !(floor_c > f.bulk_c)) {
-		return 0.0;
+	return floor_through(f, floor_c, 0.0).heat_w;
+}
+
+Through floor_through(const Floor &f, double middle_c, double resistance) {
+	Through out;
+	out.surface_c = middle_c;
+	if (!(f.depth_m > 0.0) || !(f.floor_m2 > 0.0) || !(middle_c > f.bulk_c)) {
+		return out;
 	}
 	const Water bulk = water_at(f.bulk_c);
 	const double floor_pa = f.pressure_pa + bulk.rho * G * f.depth_m;
 	const double a_w = f.water_activity > 0.0 ? f.water_activity : 1.0;
-	double q = convection(f.floor_m2, f.perimeter_m, floor_c, f.bulk_c) * f.floor_m2 * (floor_c - f.bulk_c);
-	if (a_w * saturation_pressure(floor_c + KELVIN) <= floor_pa) {
-		return q; // (under its boiling point there: no bubble can grow, and no root to find)
-	}
-	const double floor_k = boiling_point(floor_pa, f.water_activity);
+	// what the floor's surface at a temperature passes: convection, and past the onset Rohsenow's boiling (the onset
+	// found once: no surface warmer than the glass's middle, and under its boiling point there none boils)
+	double onset_k = 1e300, floor_k = 0.0;
 	const Surface &surf = surface(f.surface);
-	const double onset_k = f.nucleating ? floor_k : root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
-	if (floor_c + KELVIN > onset_k) {
-		const double sat_c = floor_k - KELVIN, sigma = surface_tension(floor_k);
-		const double h_fg = latent(floor_k), rho_v = floor_pa * molar_mass() / (chem::GAS_CONSTANT * floor_k);
-		q += f.floor_m2 * rohsenow(floor_c - sat_c, water_at(sat_c), sigma, h_fg, rho_v, surf);
+	if (a_w * saturation_pressure(middle_c + KELVIN) > floor_pa) {
+		floor_k = boiling_point(floor_pa, f.water_activity);
+		onset_k = f.nucleating ? floor_k : root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
 	}
-	return q;
+	const auto flux = [&](double t_c) {
+		double q = convection(f.floor_m2, f.perimeter_m, t_c, f.bulk_c) * f.floor_m2 * (t_c - f.bulk_c);
+		if (t_c + KELVIN > onset_k) {
+			const double sat_c = floor_k - KELVIN, sigma = surface_tension(floor_k);
+			const double h_fg = latent(floor_k), rho_v = floor_pa * molar_mass() / (chem::GAS_CONSTANT * floor_k);
+			q += f.floor_m2 * rohsenow(t_c - sat_c, water_at(sat_c), sigma, h_fg, rho_v, surf);
+		}
+		return q;
+	};
+	if (!(resistance > 0.0)) {
+		out.heat_w = flux(middle_c);
+		return out;
+	}
+	// through half the glass in series: the surface where what crosses the glass is what the surface passes on (the
+	// one between the bulk and the middle: the flux grows with the surface's temperature, what crosses falls)
+	double lo = f.bulk_c, hi = middle_c;
+	for (int k = 0; k < 60 && hi - lo > 1e-9; ++k) {
+		const double mid = 0.5 * (lo + hi);
+		(flux(mid) > (middle_c - mid) / resistance ? hi : lo) = mid;
+	}
+	out.surface_c = 0.5 * (lo + hi);
+	out.heat_w = (middle_c - out.surface_c) / resistance;
+	return out;
 }
 
 bool floor_nucleates(const Floor &f, double floor_c) {

@@ -18,10 +18,13 @@ constexpr double PI = 3.14159265358979323846;
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
 constexpr int SAMPLES = 16; // a ring's integrals, at the middles of as many slices
 
+constexpr double SIGMA = 5.670374419e-8; // W/m^2 K^4, Stefan and Boltzmann's (CODATA 2018, exact from h, c, k)
+
 struct Data {
 	double height_cm = 0.5;
 	int least = 4, most = 24;
 	std::vector<std::pair<double, Air>> air; // by kelvin
+	std::vector<std::pair<std::string, std::vector<std::pair<double, double>>>> emittance; // by wall, by kelvin
 };
 
 const Data &data() {
@@ -34,6 +37,13 @@ const Data &data() {
 		d.most = r.at("most").get<int>();
 		for (const nlohmann::json &row : j.at("air")) {
 			d.air.emplace_back(row.at("kelvin").get<double>(), Air{ row.at("k").get<double>(), row.at("nu").get<double>(), row.at("alpha").get<double>(), row.at("pr").get<double>() });
+		}
+		for (const auto &[wall, rows] : j.at("emittance").items()) {
+			std::vector<std::pair<double, double>> table;
+			for (const nlohmann::json &row : rows) {
+				table.emplace_back(row.at("kelvin").get<double>(), row.at("e").get<double>());
+			}
+			d.emittance.emplace_back(wall, std::move(table));
 		}
 		return d;
 	}();
@@ -76,6 +86,8 @@ std::vector<Ring> rings_of(const glass::Vessel &v) {
 		f.outside_cm2 = PI * base * base + i.outside;
 		f.across_cm2 = PI * std::max(ro * ro - ri * ri, 0.0);
 		f.radius = ri;
+		f.thickness_cm = v.floor;
+		f.base_cm2 = PI * base * base;
 		out.push_back(f);
 	}
 	const double span = v.height - v.floor;
@@ -91,6 +103,8 @@ std::vector<Ring> rings_of(const glass::Vessel &v) {
 		const double ro = v.radius_outside(r.to - nudge), ri = v.radius_inside(r.to - nudge);
 		r.across_cm2 = PI * std::max(ro * ro - ri * ri, 0.0);
 		r.radius = v.radius_inside(0.5 * (r.from + r.to));
+		const double middle = 0.5 * (r.from + r.to);
+		r.thickness_cm = std::max(v.radius_outside(middle) - v.radius_inside(middle), 0.0);
 		out.push_back(r);
 	}
 	return out;
@@ -147,6 +161,51 @@ double into_air(double height_m, double wall_k, double fluid_k) {
 	const Air a = air_at(film);
 	const double ra = GRAVITY / film * std::fabs(wall_k - fluid_k) * height_m * height_m * height_m / (a.nu * a.alpha); // (an ideal gas: beta = 1 / T)
 	return nusselt(ra, a.pr) * a.k / height_m;
+}
+
+double under_disc(double diameter_m, double wall_k, double air_k) {
+	if (!(diameter_m > 0.0) || !(wall_k > 0.0) || !(air_k > 0.0)) {
+		return 0.0;
+	}
+	const double film = 0.5 * (wall_k + air_k);
+	const Air a = air_at(film);
+	const double g = GRAVITY / film * std::fabs(wall_k - air_k) / (a.nu * a.alpha); // (an ideal gas: beta = 1 / T)
+	if (wall_k >= air_k) { // warmer, facing down: stable (8.39)
+		const double ra = g * diameter_m * diameter_m * diameter_m;
+		return 0.82 * std::pow(ra, 0.2) * std::pow(a.pr, 0.034) * a.k / diameter_m;
+	}
+	const double l = 0.25 * diameter_m, ra = g * l * l * l; // colder, facing down: unstable, over L* = A/P
+	if (ra >= 1e7) {
+		return 0.14 * std::cbrt(ra) * (1.0 + 0.0107 * a.pr) / (1.0 + 0.01 * a.pr) * a.k / l; // (8.35)
+	}
+	const double nu = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / a.pr, 9.0 / 16.0), 4.0 / 9.0); // (8.37a)
+	const double corrected = nu > 10.0 ? nu : 1.4 / std::log(1.0 + 1.4 / std::max(nu, 1e-9)); // (8.37b: thick layers)
+	return corrected * a.k / l;
+}
+
+double emittance(std::string_view wall, double kelvin) {
+	for (const auto &[name, rows] : data().emittance) {
+		if (name != wall || rows.empty()) {
+			continue;
+		}
+		if (kelvin <= rows.front().first) {
+			return rows.front().second;
+		}
+		if (kelvin >= rows.back().first) {
+			return rows.back().second;
+		}
+		size_t k = 0;
+		while (k + 2 < rows.size() && rows[k + 1].first < kelvin) {
+			++k;
+		}
+		const double f = (kelvin - rows[k].first) / (rows[k + 1].first - rows[k].first);
+		return rows[k].second + (rows[k + 1].second - rows[k].second) * f;
+	}
+	return 0.0;
+}
+
+double radiation(double e, double wall_k, double room_k) {
+	return e * SIGMA * (wall_k * wall_k + room_k * room_k) * (wall_k + room_k);
 }
 
 double bed_conductivity(double fluid, double solid, double porosity, double shape) {

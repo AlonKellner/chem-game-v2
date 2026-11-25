@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 80,
-			"loss": 0.5,
 			"at": [
 				12,
 				7

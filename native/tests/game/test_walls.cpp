@@ -45,7 +45,7 @@ lab::ItemView item(lab::Lab &l, const std::string &id) {
 
 // a 250 mL beaker of 150 g of water on the bench, a burner beside it
 const char *const BEAKER = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
-	{"id": "beaker", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+	{"id": "beaker", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 		"contents": {"water": {"g": 150}}},
 	{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
 
@@ -128,7 +128,7 @@ TEST_CASE("walls: a beaker of water on a flame: its floor heats first and hottes
 	const double wet = v.wall_c[3];
 	CHECK(std::fabs(wet - v.celsius) < std::fabs(top - v.celsius));
 	ok(*l, R"({"do": "unheat", "burner": "burner"})");
-	REQUIRE_MESSAGE(l->advance(60 * 3600 * 3, why), why); // three hours (a time constant of some twenty minutes)
+	REQUIRE_MESSAGE(l->advance(60 * 3600 * 6, why), why); // six hours (a time constant of about an hour: its own outside, Stage 53)
 	v = item(*l, "beaker");
 	for (const double c : v.wall_c) {
 		CHECK(std::fabs(c - 20.0) < 1.0);
@@ -177,7 +177,7 @@ TEST_CASE("measured: a powder bed conducts as Zehner and Schlünder's stagnant b
 TEST_CASE("walls: a powder on a flask's floor over a flame takes its heat through its bed: malachite decomposes in a minute or two (Stage 53)") {
 	// a dry flask of 2 g of malachite on a full flame: the floor's glass heats, and the bed under it
 	const char *const FLASK = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
-		{"id": "flask", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 120, "loss": 0.5,
+		{"id": "flask", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 120,
 			"contents": {"malachite": {"g": 2, "particles": 2000000}}},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
 	auto l = open(FLASK);
@@ -232,4 +232,104 @@ TEST_CASE("walls: a floor held near its boiling onset boils steadily, its bubble
 	REQUIRE(ui->lab().advance(60, why));
 	REQUIRE(copy->advance(60, why));
 	CHECK(copy->digest() == ui->lab().digest());
+}
+
+TEST_CASE("measured: a ring's loss to the room is its outside's convection and its radiation (Stage 53)") {
+	// Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. (v6.00, 2024): a disc facing down, warmer than the air
+	// (stable), Nu_D = 0.82 Ra_D^(1/5) Pr^0.034 (Kadambi and Drake, eq. 8.39); colder (unstable) over L* = A/P,
+	// Nu = 0.560 Ra^(1/4) / [1 + (0.492/Pr)^(9/16)]^(4/9) (8.37a), 1.4 / ln(1 + 1.4 / Nu) under 10 (8.37b), 0.14 Ra^(1/3)
+	// (1 + 0.0107 Pr) / (1 + 0.01 Pr) from Ra = 1e7 (8.35). Table 10.1: glass, smooth, 0.94 at 40 C; Pyrex 0.94 to
+	// 0.74 over 260 to 540 C. Radiation of a small body in a large room, e sigma (Tw^2 + Tr^2)(Tw + Tr) (eqs. 1.34, 2.28)
+	const auto rayleigh = [](double length, double wall_k, double air_k) {
+		const double film = 0.5 * (wall_k + air_k);
+		const lab::walls::Air a = lab::walls::air_at(film);
+		return 9.80665 / film * std::fabs(wall_k - air_k) * length * length * length / (a.nu * a.alpha);
+	};
+	{ // a 7 cm base at 80 C over air at 20 C: stable
+		const double d = 0.07, film = 0.5 * (353.15 + 293.15);
+		const lab::walls::Air a = lab::walls::air_at(film);
+		const double nu = 0.82 * std::pow(rayleigh(d, 353.15, 293.15), 0.2) * std::pow(a.pr, 0.034);
+		CHECK(lab::walls::under_disc(d, 353.15, 293.15) / (nu * a.k / d) == doctest::Approx(1.0).epsilon(1e-12));
+	}
+	{ // the same base 10 K under the air: unstable, a thick layer (8.37b)
+		const double d = 0.07, l = d / 4.0;
+		const lab::walls::Air a = lab::walls::air_at(0.5 * (283.15 + 293.15));
+		const double ra = rayleigh(l, 283.15, 293.15);
+		REQUIRE(ra < 1e7);
+		const double nu = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / a.pr, 9.0 / 16.0), 4.0 / 9.0);
+		REQUIRE(nu < 10.0);
+		CHECK(lab::walls::under_disc(d, 283.15, 293.15) / (1.4 / std::log(1.0 + 1.4 / nu) * a.k / l) == doctest::Approx(1.0).epsilon(1e-12));
+	}
+	{ // a 2 m plate 60 K under the air: unstable, turbulent (8.35)
+		const double d = 2.0, l = d / 4.0;
+		const lab::walls::Air a = lab::walls::air_at(0.5 * (233.15 + 293.15));
+		const double ra = rayleigh(l, 233.15, 293.15);
+		REQUIRE(ra >= 1e7);
+		CHECK(lab::walls::under_disc(d, 233.15, 293.15) / (0.14 * std::cbrt(ra) * (1.0 + 0.0107 * a.pr) / (1.0 + 0.01 * a.pr) * a.k / l) == doctest::Approx(1.0).epsilon(1e-12));
+	}
+	CHECK(lab::walls::emittance("glass", 313.15) == 0.94);
+	CHECK(lab::walls::emittance("glass", 293.15) == 0.94);
+	CHECK(lab::walls::emittance("glass", 673.15) == doctest::Approx(0.84)); // 400 C: half way along Pyrex's line
+	CHECK(lab::walls::emittance("glass", 1200.0) == 0.74);
+	CHECK(lab::walls::emittance("latex", 300.0) == 0.0); // (none sourced: its bench's loss)
+	const double sigma = 5.670374419e-8;
+	CHECK(lab::walls::radiation(0.94, 300.0, 300.0) / (0.94 * 4.0 * sigma * 300.0 * 300.0 * 300.0) == doctest::Approx(1.0).epsilon(1e-12)); // (2.31)
+	CHECK(lab::walls::radiation(0.94, 400.0, 300.0) * 100.0 / (0.94 * sigma * (std::pow(400.0, 4) - std::pow(300.0, 4))) == doctest::Approx(1.0).epsilon(1e-12)); // (1.34)
+}
+
+TEST_CASE("walls: a ring's glass is as thick as the vessel's wall, its floor as its floor (Stage 53)") {
+	std::string why;
+	const auto beaker = lab::glass::make("beaker", 250.0, why);
+	REQUIRE_MESSAGE(beaker.has_value(), why);
+	const std::vector<lab::walls::Ring> rings = lab::walls::rings_of(*beaker);
+	CHECK(rings.front().thickness_cm == doctest::Approx(beaker->floor));
+	CHECK(rings.front().base_cm2 > 0.0);
+	CHECK(rings.front().base_cm2 < rings.front().outside_cm2);
+	for (size_t k = 1; k < rings.size(); ++k) {
+		CHECK(rings[k].base_cm2 == 0.0);
+		CHECK(rings[k].thickness_cm > 0.05);
+		CHECK(rings[k].thickness_cm < 0.5);
+	}
+}
+
+// two conical flasks heated alike, empty, on two burners; a beaker of water at the room's 20 C
+const char *const HOT_FLASKS = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+	{"id": "flask", "at": [6, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100},
+	{"id": "control", "at": [14, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100},
+	{"id": "beaker", "at": [20, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 60}}},
+	{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25},
+	{"id": "burner2", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+
+TEST_CASE("walls: water poured into a hot flask cools the ring it wets first, and the ring over it through the glass, faster than a flask left alone (Stage 53)") {
+	auto l = open(HOT_FLASKS);
+	ok(*l, R"({"do": "heat", "burner": "burner", "vessel": "flask"})");
+	ok(*l, R"({"do": "heat", "burner": "burner2", "vessel": "control"})");
+	ok(*l, R"({"do": "valve", "burner": "burner", "to": 0.3})");
+	ok(*l, R"({"do": "valve", "burner": "burner2", "to": 0.3})");
+	std::string why;
+	REQUIRE(l->advance(60 * 300, why));
+	ok(*l, R"({"do": "unheat", "burner": "burner"})");
+	ok(*l, R"({"do": "unheat", "burner": "burner2"})");
+	const std::vector<double> hot = item(*l, "flask").wall_c;
+	REQUIRE(hot == item(*l, "control").wall_c);
+	REQUIRE(hot.size() > 4);
+	CHECK(hot[1] > 60.0); // (the glass well over the water's 20 C)
+	ok(*l, R"({"do": "pour", "from": "beaker", "to": "flask", "all": true})");
+	REQUIRE(l->advance(60 * 5, why));
+	// the water stands about 1.7 cm deep: the first ring wet, the second at its surface, the third dry
+	const lab::ItemView poured = item(*l, "flask"), alone = item(*l, "control");
+	std::ostringstream o;
+	for (size_t k = 0; k < poured.wall_c.size(); ++k) {
+		o << k << ": " << poured.wall_c[k] << " C (alone " << alone.wall_c[k] << ")\n";
+	}
+	MESSAGE(o.str());
+	// what the water took from each ring, against the flask left alone: most from the one it wets; from the dry one
+	// over it, its heat drawn down the glass, far more than from a ring high on the wall
+	const auto cooled = [&](size_t k) { return alone.wall_c[k] - poured.wall_c[k]; };
+	const size_t far = poured.wall_c.size() - 4;
+	CHECK(cooled(1) > 100.0);
+	CHECK(cooled(2) > 10.0 * cooled(far));
+	CHECK(cooled(3) > cooled(far));
+	CHECK(cooled(1) > cooled(2));
+	CHECK(cooled(2) > cooled(3));
 }

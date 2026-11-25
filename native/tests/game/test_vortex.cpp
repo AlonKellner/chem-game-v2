@@ -24,9 +24,9 @@ constexpr double G = 9.80665;
 std::unique_ptr<lab::Lab> bench(double water_g, double oxide_g, double particles = 1000000) {
 	char text[900];
 	std::snprintf(text, sizeof text, R"({"format": "chem-bench/2", "room": {"celsius": 20}, "items": [
-		{"id": "beaker", "at": [4, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+		{"id": "beaker", "at": [4, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 			"contents": {"water": {"g": %.6f}%s}},
-		{"id": "other", "at": [10, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+		{"id": "other", "at": [10, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 			"contents": {"water": {"g": %.6f}}}]})",
 			water_g, oxide_g > 0.0 ? (std::string(R"(, "copper_oxide": {"g": )") + std::to_string(oxide_g) + R"(, "particles": )" + std::to_string(static_cast<long long>(particles)) + "}").c_str() : "", water_g);
 	std::string why;
@@ -265,7 +265,7 @@ TEST_CASE("vortex: saved in the middle of its turning and loaded, a lab goes on 
 TEST_CASE("vortex: on the screen a stirred vessel's liquid has its vortex, a cone the pass traces, and its powder is a haze in the liquid while it turns (Stage 32)") {
 	std::string why;
 	std::unique_ptr<lab::Ui> ui = lab::Ui::open(R"({"format": "chem-bench/2", "room": {"celsius": 20}, "items": [
-		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 			"contents": {"water": {"g": 150}, "copper_oxide": {"g": 3, "particles": 1000000000}}}]})",
 			why);
 	REQUIRE_MESSAGE(ui != nullptr, why);

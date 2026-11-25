@@ -14,7 +14,7 @@ namespace {
 
 // 100 g of water in the conical flask, over the burner
 const char *BENCH = R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000},
-	"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9,
+	"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100,
 			"contents": {"water": {"g": 100}}},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
 
@@ -137,8 +137,8 @@ TEST_CASE("controller: set, rigged and tuned; its rigs follow; untuned with the 
 	// stirring, by PWM: the flask's stirring changes nothing of the beaker beside it, which it senses: untuned, with
 	// the reason
 	std::unique_ptr<lab::Lab> s = lab::Lab::open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000},
-		"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9, "contents": {"water": {"g": 100}}},
-			{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "contents": {"water": {"g": 50}}}]})",
+		"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "contents": {"water": {"g": 100}}},
+			{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 50}}}]})",
 			why);
 	REQUIRE_MESSAGE(s != nullptr, why);
 	ok(*s, R"({"do": "place", "item": "flask", "at": [10, 6]})");
@@ -213,9 +213,9 @@ TEST_CASE("controller: G3 and G4 fire on a corrupted controller (Stage 26)") {
 TEST_CASE("controller: what it controls changed by a pour (its contents' mass doubled), it tunes again, carrying its level over, and holds on; one held full on short of its target says so (Stage 28)") {
 	std::string why;
 	auto l = lab::Lab::open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000},
-	"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9, "at": [10, 6],
+	"items": [{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "at": [10, 6],
 			"contents": {"water": {"g": 80}}},
-		{"id": "jug", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "at": [18, 6],
+		{"id": "jug", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "at": [18, 6],
 			"contents": {"water": {"g": 80}}},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})", why);
 	REQUIRE_MESSAGE(l != nullptr, why);
@@ -251,7 +251,7 @@ TEST_CASE("controller: what it controls changed by a pour (its contents' mass do
 	const lab::Part again = item(v, "controller1").part;
 	REQUIRE(again.tuned);
 	MESSAGE("tuned on 80 g: gain " << first.kc << ", tau " << first.tau << " s; again on 160 g: gain " << again.kc << ", tau " << again.tau << " s");
-	CHECK(again.kc != doctest::Approx(first.kc).epsilon(0.05)); // what it found is another process
+	CHECK(again.kc / first.kc != doctest::Approx(1.0).epsilon(0.05)); // what it found is another process (a ratio: Approx's margin is absolute under 1)
 	double worst = 0.0;
 	for (int second = 0; second < 1800; ++second) {
 		REQUIRE(l->advance(60, why));
