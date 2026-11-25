@@ -104,6 +104,55 @@ double contrast(const SpeciesTable &table, const CellState &a, double ta, const 
 	return out;
 }
 
+// A column's heights (Stage 51): the height over its floor under which its inside holds a volume, and its
+// cross-section at a height. By its shape (the inside's volume at heights a rise apart) where it has one; past its
+// last point, as its last segment; a cylinder of its area where it has none.
+double height_of(const CellMeta &m, double volume) {
+	const std::vector<double> &v = m.column_shape;
+	if (v.size() < 2 || !(m.column_rise > 0.0)) {
+		return m.column_area > 0.0 ? volume / m.column_area : 0.0;
+	}
+	if (!(volume > v.front())) {
+		return 0.0;
+	}
+	const size_t k = std::min<size_t>(static_cast<size_t>(std::upper_bound(v.begin(), v.end(), volume) - v.begin()), v.size() - 1) - 1;
+	const double span = v[k + 1] - v[k];
+	return (static_cast<double>(k) + (span > 0.0 ? (volume - v[k]) / span : 0.0)) * m.column_rise;
+}
+
+double area_at(const CellMeta &m, double height) {
+	const std::vector<double> &v = m.column_shape;
+	if (v.size() < 2 || !(m.column_rise > 0.0)) {
+		return m.column_area;
+	}
+	const auto k = static_cast<size_t>(std::clamp(height / m.column_rise, 0.0, static_cast<double>(v.size() - 2)));
+	const double a = (v[k + 1] - v[k]) / m.column_rise;
+	return a > 0.0 ? a : m.column_area;
+}
+
+// Each cell of a column, from the top (0) down: the heights over the floor of its liquid's bottom, middle (by
+// volume) and top, stacked from the bottom up; and the cross-section across the interface under it
+struct Levels {
+	std::vector<double> bottom, middle, top, across;
+	double thick(size_t i) const { return top[i] - bottom[i]; }
+};
+
+Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell, const std::vector<CellId> &cells) {
+	const CellMeta &m = world.meta(top_cell);
+	const size_t n = cells.size();
+	Levels out{ std::vector<double>(n), std::vector<double>(n), std::vector<double>(n), std::vector<double>(n) };
+	double below = 0.0;
+	for (size_t k = n; k-- > 0;) {
+		const double v = solution_m3(table, world.snapshot_cell(cells[k]));
+		out.bottom[k] = height_of(m, below);
+		out.middle[k] = height_of(m, below + 0.5 * v);
+		out.top[k] = height_of(m, below + v);
+		out.across[k] = area_at(m, out.bottom[k]);
+		below += v;
+	}
+	return out;
+}
+
 } // namespace
 
 double jet_entrains(double flux, double speed) {
@@ -161,12 +210,13 @@ void Simulation::grow_columns() {
 			continue; // a spare one there
 		}
 		const double area = world_.meta(col.top).column_area;
+		const Levels at = levels_of(table, world_, col.top, col.cells);
 		for (size_t i = 0; i + 1 < n && area > 0.0; ++i) {
 			const CellState &u = world_.snapshot_cell(col.cells[i]), &l = world_.snapshot_cell(col.cells[i + 1]);
 			const Thermal tu = thermal_state(table, u, &world_.meta(col.cells[i])), tl = thermal_state(table, l);
 			if (tu.defined && tl.defined && holds(table, u, Phase::Liquid) && holds(table, l, Phase::Liquid) &&
 					contrast(table, u, tu.temperature, l, tl.temperature) > SPLIT_ABOVE &&
-					std::max(solution_m3(table, u), solution_m3(table, l)) / area > 2.0 * THINNEST) {
+					std::max(at.thick(i), at.thick(i + 1)) > 2.0 * THINNEST) {
 				grow.push_back(col.cells[n - 1]);
 				break;
 			}
@@ -186,14 +236,15 @@ void Simulation::configure_columns() {
 	const SpeciesTable &table = world_.species();
 	for (const Column &col : columns_) {
 		const double area = world_.meta(col.top).column_area;
+		const Levels at = levels_of(table, world_, col.top, col.cells);
 		for (size_t i = 0; i + 1 < col.cells.size(); ++i) {
 			const CellState &upper = world_.snapshot_cell(col.cells[i]), &lower = world_.snapshot_cell(col.cells[i + 1]);
 			double g = 0.0;
 			const Thermal &tu = thermal(col.cells[i]), &tl = thermal(col.cells[i + 1]);
 			if (area > 0.0 && tu.defined && tl.defined && holds(table, upper, Phase::Liquid) && holds(table, lower, Phase::Liquid)) {
-				const double dz = 0.5 * (solution_m3(table, upper) + solution_m3(table, lower)) / area;
+				const double dz = at.middle[i] - at.middle[i + 1]; // (Stage 51: by the column's shape)
 				const double k = solvent_at(table, 0.5 * (tu.temperature + tl.temperature)).k;
-				g = dz > 0.0 ? k * area / dz : 0.0;
+				g = dz > 0.0 ? k * at.across[i] / dz : 0.0;
 			}
 			if (world_.edges()[static_cast<size_t>(col.up[i].index)].conductance != g) {
 				world_.set_conductance(col.up[i], g);
@@ -330,7 +381,8 @@ void Simulation::stratify(const Column &col) {
 				break;
 			}
 			const double whole = vu * vl / (vu + vl); // the volume exchanged that makes them one
-			const double per_m3 = GRAVITY * (down > up ? down - up : 0.0) * 0.5 * (vu + vl) / area_m2; // J a m^3 exchanged
+			const Levels at = levels_of(table, world_, col.top, col.cells);
+			const double per_m3 = GRAVITY * (down > up ? down - up : 0.0) * (at.middle[i] - at.middle[i + 1]); // J a m^3 exchanged
 			const double pays = per_m3 > 0.0 ? budget / per_m3 : whole;
 			if (pays >= whole) {
 				// one: the lower up into the upper, the layers under it up a place
@@ -388,15 +440,15 @@ void Simulation::stratify(const Column &col) {
 			const double momentum = q * speed, per_metre = jet_entrains(q, speed); // m^2/s
 			const double jet_density = landed_kg_[top_at] / landed_m3_[top_at];
 			double top_density = 0.0;
-			const double top_m3 = solution_m3(table, state(0));
 			const bool top_known = liquid_density(table, state(0), kelvin(0), top_density);
-			double flux = q + per_metre * (top_known ? top_m3 / area_m2 : 0.0);
+			const Levels at = levels_of(table, world_, col.top, col.cells);
+			double flux = q + per_metre * (top_known ? at.thick(0) : 0.0);
 			const double mixture = (q * jet_density + (flux - q) * top_density) / flux;
 			double reach = -1.0; // how far it plunges, once it meets a denser layer (m)
 			// the layers between the top and the one it entrains: their height and their density times it (a cubic
 			// metre lifted from layer k into the top raises the column by g [sum over them of (rho_k - rho_j) h_j +
 			// (rho_k - rho_top) h_top / 2]: the layers between sink as layer k thins)
-			const double top_h = top_m3 / area_m2;
+			const double top_h = 2.0 * (at.middle[0] - at.bottom[0]); // (twice its middle's height over its bottom)
 			double between_h = 0.0, between_mass = 0.0;
 			for (size_t k = 1; k < n && liquid(k) && top_known && budget > 0.0; ++k) {
 				double d = 0.0;
@@ -404,7 +456,7 @@ void Simulation::stratify(const Column &col) {
 				if (!liquid_density(table, state(k), kelvin(k), d) || !(v > 0.0)) {
 					break;
 				}
-				const double h = v / area_m2;
+				const double h = at.thick(k);
 				if (d > mixture && reach < 0.0) {
 					const double buoyancy = GRAVITY * (d - mixture) / d * flux;
 					reach = fountain_reach(momentum, buoyancy);
@@ -459,7 +511,8 @@ void Simulation::stratify(const Column &col) {
 		if (!(vu > 0.0) || !(vl > 0.0)) {
 			continue;
 		}
-		const double dz = 0.5 * (vu + vl) / area, t = 0.5 * (kelvin(i) + kelvin(i + 1));
+		const Levels at = levels_of(table, world_, col.top, col.cells);
+		const double dz = at.middle[i] - at.middle[i + 1], across = at.across[i], t = 0.5 * (kelvin(i) + kelvin(i + 1));
 		std::vector<SpeciesAmount> down_moves, up_moves;
 		for (size_t s = 0; s < state(i).amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
@@ -472,7 +525,7 @@ void Simulation::stratify(const Column &col) {
 				continue;
 			}
 			const double most = std::fabs(cu - cl) / (1.0 / vu + 1.0 / vl) * 0.5; // half the way to equal, at most
-			const double mol = std::min(d * area * std::fabs(cu - cl) / dz * dt, most);
+			const double mol = dz > 0.0 ? std::min(d * across * std::fabs(cu - cl) / dz * dt, most) : 0.0;
 			const auto q = static_cast<int64_t>(mol / MOL_PER_QUANTUM);
 			if (q > 0) {
 				(cu > cl ? down_moves : up_moves).push_back(SpeciesAmount{ id, Amount{ q } });
@@ -502,7 +555,7 @@ void Simulation::stratify(const Column &col) {
 		}
 		if (at < n) {
 			const size_t thick = solution_m3(table, state(at)) >= solution_m3(table, state(at + 1)) ? at : at + 1;
-			if (solution_m3(table, state(thick)) / area > 2.0 * THINNEST) {
+			if (levels_of(table, world_, col.top, col.cells).thick(thick) > 2.0 * THINNEST) {
 				// every layer under it down a place, then half of it into the place it leaves
 				for (size_t k = n - 1; k > thick + 1; --k) {
 					if (!empty(state(k - 1))) {

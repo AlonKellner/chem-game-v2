@@ -472,3 +472,55 @@ TEST_CASE("column: a stream landing slowly, or on a liquid much denser, plunges 
 	CHECK(lifted > 0.0);
 	CHECK(lifted < 0.8 * whole);
 }
+
+// ---- a column's shape (Stage 51)
+
+TEST_CASE("column: a column that narrows takes its layers' heights and its interfaces' areas from its shape: diffusion across a narrow neck is slower (Stage 51)") {
+	// A column of the floor's area A0 for 2 cm, then of half of it. Copper sulfate fills it to 3 cm (2 cm of the wide,
+	// 1 cm of the narrow), water over it 2 cm more. By its shape the interface is in the neck (A0 / 2) and the middles
+	// 2.75 cm apart (1.25 cm and 4 cm); as a cylinder of A0 the same volumes stand 1.75 cm apart across A0. Fick's
+	// first step moves D A dc / dz: the narrowing's (1/2 / 2.75) / (1 / 1.75) of the cylinder's.
+	const double a0 = PI * RADIUS * RADIUS, rise = 0.001;
+	const double lower = a0 * 0.02 + 0.5 * a0 * 0.01, upper = 0.5 * a0 * 0.02; // m^3
+	const auto bench = [&](bool shaped) {
+		return beaker([&](World::Builder &w, Bench &x) {
+			const double water_l = lower / builtin_species().species(builtin::water).molar_volume, water_u = upper / builtin_species().species(builtin::water).molar_volume;
+			w.set_amount(x.top, builtin::water, amount_of(water_u)).set_temperature(x.top, 293.15);
+			w.set_amount(x.layers[0], builtin::water, amount_of(water_l)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.05)).set_temperature(x.layers[0], 293.15);
+			if (shaped) {
+				std::vector<double> volumes;
+				for (int k = 0; k <= 80; ++k) {
+					const double z = k * rise;
+					volumes.push_back(z <= 0.02 ? a0 * z : a0 * 0.02 + 0.5 * a0 * (z - 0.02));
+				}
+				w.set_column_shape(x.top, rise, volumes);
+			}
+		});
+	};
+	Bench narrow = bench(true), straight = bench(false);
+	// the layers' own volumes (the solute's adds to the water's), stacked by each shape
+	const auto volume_of = [&](CellId c) {
+		double v = 0.0;
+		const CellState &state = narrow.sim->world().snapshot_cell(c);
+		for (size_t k = 0; k < state.amount.size(); ++k) {
+			const SpeciesDef &d = builtin_species().species(SpeciesId{ static_cast<int32_t>(k) });
+			if (state.amount[k] > 0 && (d.phase == Phase::Liquid || d.phase == Phase::Aqueous)) {
+				v += static_cast<double>(state.amount[k]) * MOL_PER_QUANTUM * d.molar_volume;
+			}
+		}
+		return v;
+	};
+	const double vl = volume_of(narrow.layers[0]), vu = volume_of(narrow.top);
+	const auto height = [&](double v) { return v <= a0 * 0.02 ? v / a0 : 0.02 + (v - a0 * 0.02) / (0.5 * a0); };
+	const double dz_narrow = height(vl + 0.5 * vu) - height(0.5 * vl), across = height(vl) <= 0.02 ? a0 : 0.5 * a0;
+	const double dz_straight = (vl + 0.5 * vu) / a0 - 0.5 * vl / a0;
+	const double expected = (across / dz_narrow) / (a0 / dz_straight);
+	run(narrow, 1);
+	run(straight, 1);
+	// (the copper that crosses, in both its forms: some hydrolyses in the water it reaches, Stage 47)
+	const auto copper = [&](const Bench &b) { return mol(b, b.top, builtin::copper_sulfate_aq) + mol(b, b.top, builtin::copper_hydroxide); };
+	const double ratio = copper(narrow) / copper(straight);
+	MESSAGE("through the neck " << ratio << " of the cylinder's; by the shapes " << expected << " (" << dz_narrow * 100.0 << " cm against " << dz_straight * 100.0 << " cm)");
+	CHECK(expected < 0.4); // (the neck's)
+	CHECK(ratio / expected == doctest::Approx(1.0).epsilon(0.01));
+}

@@ -114,9 +114,14 @@ struct CellMeta {
 	// gas path, and empty while the column is mixed. A column's top (the
 	// vessel's own rigid cell): the volume of the whole vessel, of which its
 	// own `volume` is what its layers leave; and the column's cross-section,
-	// m^2, which its layers' thicknesses are their volumes over.
+	// m^2, which its layers' thicknesses are their volumes over. Its shape
+	// (Stage 51): the inside's volume, m^3, at heights 0, column_rise, 2
+	// column_rise, ... over its floor (a conical flask narrows); none, a
+	// cylinder of column_area.
 	bool layer = false;
 	double column_volume = 0.0, column_area = 0.0;
+	double column_rise = 0.0;
+	std::vector<double> column_shape;
 };
 
 struct SpeciesAmount {
@@ -212,6 +217,8 @@ public:
 		CellId add_layer_cell(std::string name);
 		EdgeId add_column_edge(CellId lower, CellId upper);
 		Builder &set_column(CellId top, double area, double whole = 0.0); // whole: the vessel's volume (0: its own now)
+		// a column's shape (Stage 51): the inside's volume (m^3) at heights 0, rise, 2 rise, ... (m) over its floor
+		Builder &set_column_shape(CellId top, double rise, std::vector<double> volumes);
 		// an edge exactly as given: closed, a drain, any conductance (for a saved world)
 		EdgeId add_edge_as(const Edge &edge);
 		// Where what overflows goes (GAME_SPEC §6): an elastic cell. With one,

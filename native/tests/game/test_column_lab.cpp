@@ -129,9 +129,10 @@ TEST_CASE("column: a stirrer mixes a layered vessel into one as its turning buil
 	const lab::ItemView part = item(*brief, "beaker");
 	REQUIRE(part.layers.size() >= 2);
 	CHECK(mol_in(part.layers.back(), "nickel_sulfate_aq") > 1e-3); // the green stirred down into the blue
-	// the top still the greener: less of the blue than an even mixture, more of the green than the bottom
+	// the top still the greener: less of the blue than an even mixture and than the bottom, more of the green
 	const lab::LayerView &top = part.layers.front(), &bottom = part.layers.back();
-	CHECK(mol_in(top, "copper_sulfate_aq") / top.liquid_ml < 0.5 * 0.112 / part.liquid_ml);
+	CHECK(mol_in(top, "copper_sulfate_aq") / top.liquid_ml < 0.112 / part.liquid_ml); // (an even mixture's)
+	CHECK(mol_in(top, "copper_sulfate_aq") / top.liquid_ml < mol_in(bottom, "copper_sulfate_aq") / bottom.liquid_ml);
 	CHECK(mol_in(top, "nickel_sulfate_aq") / top.liquid_ml > mol_in(bottom, "nickel_sulfate_aq") / bottom.liquid_ml);
 	MESSAGE("a short stir: " << part.layers.size() << " layers; the top " << top.liquid_ml << " mL, Cu " << mol_in(top, "copper_sulfate_aq") << " mol; the bottom "
 							 << bottom.liquid_ml << " mL, Ni " << mol_in(bottom, "nickel_sulfate_aq") << " mol");

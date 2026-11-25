@@ -3257,6 +3257,15 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				// its column: no layer until it is layered (they are made as it needs them); its cross-section its floor's
 				const double r = made->radius_inside(made->floor + 1e-3) * 1e-2;
 				b.set_column(item.cell, 3.14159265358979323846 * r * r);
+				// its shape (Stage 51): the inside's volume at heights over its floor, to its brim (a conical flask
+				// narrows as it rises)
+				constexpr int POINTS = 64;
+				const double rise_cm = (made->height - made->floor) / (POINTS - 1);
+				std::vector<double> shape(POINTS);
+				for (int k = 0; k < POINTS; ++k) {
+					shape[static_cast<size_t>(k)] = made->volume_below(made->floor + k * rise_cm) * 1e-6;
+				}
+				b.set_column_shape(item.cell, rise_cm * 1e-2, std::move(shape));
 				if (j.contains("layers") && j.at("layers").is_array()) {
 					CellId over = item.cell;
 					for (size_t k = 1; k < j.at("layers").size(); ++k) {
@@ -5879,6 +5888,13 @@ json Lab::Impl::save() const {
 		}
 		if (meta.column_volume > 0.0) {
 			cell["column"] = { bits(meta.column_volume), bits(meta.column_area) };
+			if (!meta.column_shape.empty()) { // its shape (Stage 51): its rise, then its volumes
+				json shape = json::array({ bits(meta.column_rise) });
+				for (const double v : meta.column_shape) {
+					shape.push_back(bits(v));
+				}
+				cell["column_shape"] = std::move(shape);
+			}
 		}
 		cell["amount"] = state.amount;
 		cell["energy"] = state.energy;
@@ -6037,6 +6053,21 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					return nullptr;
 				}
 				b.set_column(id, area, whole);
+				if (cell.contains("column_shape") && cell.at("column_shape").is_array() && cell.at("column_shape").size() >= 3) {
+					std::vector<double> shape;
+					double rise = 0.0;
+					bool read = from_bits(cell.at("column_shape").at(0), rise);
+					for (size_t k = 1; k < cell.at("column_shape").size() && read; ++k) {
+						double v = 0.0;
+						read = from_bits(cell.at("column_shape").at(k), v);
+						shape.push_back(v);
+					}
+					if (!read) {
+						why = "the save holds a number that is not one";
+						return nullptr;
+					}
+					b.set_column_shape(id, rise, std::move(shape));
+				}
 			}
 			const auto amount = cell.at("amount").get<std::vector<int64_t>>();
 			const auto particles = cell.at("particles").get<std::vector<int64_t>>();
