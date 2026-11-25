@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.56.0 (2026-11-25, Stage 56)
+## 0.56.0 (2026-11-25, Stage 56; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 56, `docs/TDD_56_RATES.md`; `docs/CURRICULUM.md`, step B's last part): the spectrophotometer's **heated
   cell holder** (20 to 80 C; a heater from the mains into the cuvette's lowest layer; saved, digested while set); the
