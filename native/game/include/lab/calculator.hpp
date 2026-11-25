@@ -53,6 +53,10 @@ Stoichiometry stoichiometry(const chem::SpeciesTable &table, const chem::Reactio
 // A yield: what was got of a product against its theoretical amount, %
 double percent_yield(double actual_g, double theoretical_g);
 
+// The model's own solubility (the reference's table): the molality of `dissolved` in water at which `crystallization`
+// (dissolved + water -> a solid) is at equilibrium, mol/kg; 0 if none is found up to 16 mol/kg
+double solubility(const chem::SpeciesTable &table, const chem::Reaction &crystallization, chem::SpeciesId dissolved, double kelvin);
+
 // A reaction's equation as the tables' formulas spell it: "CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)"
 std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reaction);
 

@@ -2,6 +2,9 @@
 #include "lab/calculator.hpp"
 
 #include "chem/formula.hpp"
+#include "chem/quantity.hpp"
+#include "chem/thermo.hpp"
+#include "chem/world.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -129,6 +132,37 @@ Stoichiometry stoichiometry(const chem::SpeciesTable &table, const chem::Reactio
 	}
 	out.ok = true;
 	return out;
+}
+
+double solubility(const chem::SpeciesTable &table, const chem::Reaction &crystallization, chem::SpeciesId dissolved, double kelvin) {
+	// a kilogram of water and m mol/kg dissolved: where crystallizing turns from running back to running on
+	const auto affinity_at = [&](double m, bool &defined) {
+		chem::CellState state;
+		state.amount.assign(static_cast<size_t>(table.species_count()), 0);
+		bool ok = false;
+		state.amount[static_cast<size_t>(table.find("water").index)] = chem::amount_from_mol(1000.0 / 18.015, ok).quanta;
+		state.amount[static_cast<size_t>(dissolved.index)] = chem::amount_from_mol(m, ok).quanta;
+		return chem::affinity(table, state, crystallization.terms(), kelvin, defined);
+	};
+	// up from a dilute solution, doubling until crystals would grow (far past the activity model's range, at tens of
+	// mol/kg, its affinity turns back: it is not searched there)
+	double lo = 1e-4, hi = 0.25;
+	bool defined = false;
+	if (!(affinity_at(lo, defined) < 0.0) || !defined) {
+		return 0.0;
+	}
+	while (!(affinity_at(hi, defined) > 0.0)) {
+		if (!defined || hi > 16.0) {
+			return 0.0;
+		}
+		lo = hi;
+		hi *= 2.0;
+	}
+	for (int i = 0; i < 60; ++i) {
+		const double mid = std::sqrt(lo * hi);
+		(affinity_at(mid, defined) > 0.0 ? hi : lo) = mid;
+	}
+	return std::sqrt(lo * hi);
 }
 
 double percent_yield(double actual_g, double theoretical_g) {

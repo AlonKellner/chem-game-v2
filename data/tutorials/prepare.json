@@ -1,0 +1,323 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 58; docs/CURRICULUM.md, experiment 2 with the calculator, S2) on data/benches/prepare.json: a standard solution planned with the calculator, weighed and made up, and its concentration worked out from what the balance read.",
+	"title": "Experiment: a solution by calculation",
+	"bench": "../benches/prepare.json",
+	"steps": [
+		{
+			"part": "Planning",
+			"title": "The crystals' molar mass",
+			"text": "Open the notebook and its calculator. Choose \"molar mass\", click the formula's field and type CuSO4.5H2O: the blue crystals, five waters to each copper sulfate.",
+			"why": "A molar mass is the sum of its atoms' atomic weights: one copper, one sulfur, nine oxygens and ten hydrogens make 249.68 g/mol. The water in the crystals counts.",
+			"checks": [
+				{
+					"text": "the molar mass worked out",
+					"when": {
+						"calculated": "mass"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:tab:calculator"
+				},
+				{
+					"click": "notebook:calc:mass"
+				},
+				{
+					"click": "notebook:calc:field:0"
+				},
+				{
+					"type": "CuSO4.5H2O"
+				}
+			]
+		},
+		{
+			"title": "How much to weigh",
+			"text": "Choose \"solution\": type CuSO4.5H2O, then 0.0500 (mol/L), then 100 (mL). Click \"write m in the notebook\", and close the notebook.",
+			"why": "m = c V M: 0.0500 mol/L in 0.100 L is 0.00500 mol, and 0.00500 mol of the crystals weigh 1.248 g.",
+			"checks": [
+				{
+					"text": "the mass worked out",
+					"when": {
+						"calculated": "solution"
+					}
+				},
+				{
+					"text": "written in the notebook",
+					"when": {
+						"noted": "m"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook:calc:solution"
+				},
+				{
+					"click": "notebook:calc:field:0"
+				},
+				{
+					"type": "CuSO4.5H2O"
+				},
+				{
+					"click": "notebook:calc:field:1"
+				},
+				{
+					"type": "0.0500"
+				},
+				{
+					"click": "notebook:calc:field:2"
+				},
+				{
+					"type": "100"
+				},
+				{
+					"click": "notebook:calc:note"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"part": "Weighing",
+			"title": "The flask on the balance",
+			"text": "Click the first volumetric flask to pick it up, then click the balance. Then right-click the balance and click \"tare\".",
+			"why": "A volumetric flask holds its nominal volume at its mark, to within its class: 100 mL within 0.10 mL. Tared, the balance reads only what goes into it.",
+			"checks": [
+				{
+					"text": "the flask tared on the balance",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "flask"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:flask",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "About 1.25 g of the crystals",
+			"text": "Pick up the jar, then right-click the flask for the menu. Type 1.25, then click \"tip 1.25 g of the solid\". Write down what the balance reads.",
+			"why": "Copper sulfate pentahydrate, CuSO4.5H2O, is 249.69 g a mole: 2.5 g of it is about 0.0100 mol. The balance's reading, not the 2.5, is what you took.",
+			"checks": [
+				{
+					"text": "about 1.25 g in the flask",
+					"when": {
+						"item": "flask",
+						"species": "copper_sulfate_pentahydrate",
+						"above_g": 1.0
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:flask"
+					]
+				},
+				{
+					"type": "1.25"
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "What the balance says",
+			"text": "Right-click the balance and click \"+ mass\": what you actually took, never quite what you aimed at.",
+			"why": "A hand tips about what it aims at; the balance says what it was, to 0.1 mg. Planning gives the aim; the balance gives the number to work with.",
+			"checks": [
+				{
+					"text": "its reading recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		},
+		{
+			"part": "Making up",
+			"title": "Water to dissolve them",
+			"text": "Pick up the water bottle, right-click the flask, type 50 and click \"pour\". Then right-click the flask, click \"stir\", and click 60x on the clock.",
+			"why": "A solid dissolves in some of the water first; the flask is made up to its mark only once it has, or the volume would change as it dissolved.",
+			"checks": [
+				{
+					"text": "water in the flask, stirred",
+					"when": {
+						"all": [
+							{
+								"item": "flask",
+								"above_g": 0,
+								"species": "water"
+							},
+							{
+								"item": "flask",
+								"stirred": true
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:flask"
+					]
+				},
+				{
+					"type": "50"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "stir:flask"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until it is dissolved",
+			"text": "Watch the blue crystals go into the water.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "To the mark",
+			"text": "Pick up the water bottle, right-click the flask and click \"to the mark\".",
+			"why": "The bottom of the meniscus on the mark: the flask now holds its own 100 mL (within 0.10 mL) of a solution of all the copper sulfate you weighed. Its concentration is the moles you weighed over 0.1000 L.",
+			"checks": [
+				{
+					"text": "made up to its mark",
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:mark"
+				}
+			]
+		},
+		{
+			"part": "What you made",
+			"title": "The moles you weighed",
+			"text": "Open the notebook's calculator, choose \"moles\": type CuSO4.5H2O and the balance's reading (from the notebook's table). The concentration is those moles in the flask's 0.100 L.",
+			"why": "n = m / M, and c = n / V: what you weighed, not what you planned.",
+			"checks": [
+				{
+					"text": "the moles worked out",
+					"when": {
+						"calculated": "moles"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:tab:calculator"
+				},
+				{
+					"click": "notebook:calc:moles"
+				},
+				{
+					"click": "notebook:calc:field:0"
+				},
+				{
+					"type": "CuSO4.5H2O"
+				},
+				{
+					"click": "notebook:calc:field:1"
+				},
+				{
+					"type": "1.25"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the concentration you made",
+			"unit": "mol/L",
+			"truth": "1000 * flask.copper_sulfate_aq.mol / flask.liquid_ml",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "c = m / (M V): the balance's reading over 249.68 g/mol, in the flask's 0.100 L. Your hand tipped about what it aimed at, so the concentration is near 0.0500 mol/L, not on it; the balance reads within 0.2 mg and the flask holds its own volume within 0.1 mL."
+		}
+	]
+}

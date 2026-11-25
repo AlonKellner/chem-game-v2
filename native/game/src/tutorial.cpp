@@ -114,6 +114,17 @@ struct Reader : CondReader {
 				c.extra.push_back([n](const CondContext &x) { return x.host != nullptr && static_cast<const TutorialScreen *>(x.host)->predicted >= n; });
 				return true;
 			}
+			if (key == "calculated") {
+				// (Stage 58) the calculator shows a result of this kind
+				ok = value.is_string();
+				if (!ok) {
+					r.why = "\"calculated\" names what the calculator works out: mass, moles, solution, dilution or reaction";
+					return true;
+				}
+				const std::string kind = value.get<std::string>();
+				c.extra.push_back([kind](const CondContext &x) { return x.host != nullptr && static_cast<const TutorialScreen *>(x.host)->calculated == kind; });
+				return true;
+			}
 			if (key != "editor") {
 				return false;
 			}

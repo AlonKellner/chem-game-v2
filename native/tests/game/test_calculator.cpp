@@ -71,3 +71,44 @@ TEST_CASE("calculator: a reaction's stoichiometry, its limiting reagent and its 
 	REQUIRE(heat.ok);
 	CHECK(heat.terms[1].g == doctest::Approx(2.0 * 0.01 * 79.545).epsilon(1e-3)); // 1.591 g of the oxide from 2.211 g
 }
+
+TEST_CASE("calculator: the reference's solubility is the model's own equilibrium (Stage 58)") {
+	const chem::SpeciesTable &t = chem::builtin_species();
+	const chem::Reaction &r = reaction(chem::builtin::reaction::pentahydrate_crystallization);
+	const double m20 = solubility(t, r, chem::builtin::copper_sulfate_aq, 293.15);
+	// Stage 57's measured run settled to 1.2375 mol/kg at 20 C (19.75 g per 100 g)
+	CHECK(m20 == doctest::Approx(1.2375).epsilon(0.002));
+	CHECK(solubility(t, r, chem::builtin::copper_sulfate_aq, 333.15) == doctest::Approx(2.5824).epsilon(0.003));
+}
+
+#include "lab/ui.hpp"
+#include "pupil.hpp"
+
+TEST_CASE("calculator screen: the notebook's tabs, the reference's pages from the tables, a formula refused saying why (Stage 58)") {
+	pupil::Pupil p("data/benches/prepare.json", "data/tutorials/prepare.json", false);
+	p.click("notebook");
+	float x = 0, y = 0;
+	CHECK_FALSE(p.ui->locate("notebook:calc:mass", x, y)); // the notebook's own tab first
+	p.click("notebook:tab:reference");
+	p.click("notebook:ref:elements");
+	CHECK(p.drawn("Cu  63.546 g/mol"));
+	p.click("notebook:ref:species");
+	CHECK(p.drawn("CuSO4.5H2O"));
+	CHECK(p.drawn("249.68"));
+	p.click("notebook:ref:reactions");
+	CHECK(p.drawn("CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)"));
+	CHECK(p.drawn("first order, Ea 147.6 kJ/mol"));
+	p.click("notebook:ref:solubility");
+	CHECK(p.drawn("19.8")); // g per 100 g of water at 20 C: the model's own 19.75
+	p.click("notebook:tab:calculator");
+	p.click("notebook:calc:mass");
+	p.click("notebook:calc:field:0");
+	p.type("AuCl3");
+	CHECK(p.drawn("the tables know no Au"));
+	p.click("notebook:calc:field:0"); // clicked again: what is typed replaces it
+	p.type("Cu2CO3(OH)2");
+	CHECK(p.drawn("M = 221.114 g/mol"));
+	p.click("notebook:calc:reaction");
+	CHECK(p.ui->locate("notebook:calc:field:4", x, y)); // its terms and the yield's field
+	CHECK_FALSE(p.ui->locate("notebook:calc:field:6", x, y));
+}
