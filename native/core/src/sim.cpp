@@ -105,7 +105,11 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 // reaction never passes its own equilibrium, so each
 // application raises the entropy (T2), and at equilibrium nothing moves and
 // nothing is carried (D3).
-SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing, const CellMeta *meta) {
+// (Stage 57) how much faster a crystal's surface gives up its ions dissolving than it builds them in growing: large enough
+// that transport sets the pace at any stirring (calibrated; docs/DATA_SOURCES.md, A crystal dissolving)
+constexpr double DETACHMENT = 1000.0;
+
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta) {
 	SurfaceSteps steps;
 	const Kinetics &kinetics = reaction.kinetics();
 	if (kinetics.law != Kinetics::Law::Surface || !(temperature > 0.0) || a == 0.0 || a != a) {
@@ -117,6 +121,13 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// at the surface: k(T) m_driver^q |f|
 	const double driver = table.has(kinetics.driver) ? molality(table, cell, kinetics.driver) : 1.0; // its concentration (GAME_SPEC §7)
 	steps.surface = kinetics.prefactor * exp(-kinetics.activation / rt) * (kinetics.driver_order == 1.0 ? driver : pow(driver, kinetics.driver_order)) * (1.0 - exp(-drive));
+	// (Stage 57) a crystal dissolving into its solution: its surface gives its ions up a thousand times as fast as it
+	// builds them in (a detachment, no lattice to make), so transport sets the pace; the surface's factor still takes
+	// the rate to nothing at equilibrium (D3)
+	if (kinetics.dissolves_by_transport && forward == (reaction.nu(kinetics.in) < 0)) {
+		steps.surface *= DETACHMENT;
+		steps.both = steps.surface;
+	}
 	steps.transport = HUGE_VAL;
 	steps.both = steps.surface;
 	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it
@@ -193,7 +204,14 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	const double c = static_cast<double>(cell.amount[x]) * MOL_PER_QUANTUM / solvent;
 	const double c_eq = static_cast<double>(n) * MOL_PER_QUANTUM / solvent * (ratio < -700.0 ? 0.0 : exp(ratio));
 	const double gap = c > c_eq ? c - c_eq : c_eq - c;
-	steps.transport = 2.0 * mixing * coefficient / d * gap / nu;
+	// the film's: Sano, Yamaguchi and Adachi (1974), Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3); 2 at rest (Stage 57)
+	double sherwood = 2.0;
+	const double mu = solvent_viscosity(table, temperature), rho = liquid_density(table, cell);
+	if (dissipation > 0.0 && mu > 0.0 && rho > 0.0) {
+		const double kinematic = mu / rho;
+		sherwood += 0.4 * pow(dissipation * d * d * d * d / (kinematic * kinematic * kinematic), 0.25) * pow(kinematic / coefficient, 1.0 / 3.0);
+	}
+	steps.transport = sherwood * coefficient / d * gap / nu;
 	steps.transported = true;
 	steps.both = steps.surface > 0.0 && steps.transport > 0.0 ? steps.surface * steps.transport / (steps.surface + steps.transport) : 0.0;
 	return steps;
@@ -264,7 +282,7 @@ void Simulation::react() {
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
 				// mol/m^2/s of the solid: at its surface and by transport, in series (GAME_SPEC §7), as they are at the step's start
-				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, world_.meta(cell).mixing, &world_.meta(cell)).both * per;
+				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, dissipation_per_kg(table, state, world_.meta(cell).stirring), &world_.meta(cell)).both * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
 				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
 				const double g = 4.835975862049409 * cbrt(static_cast<double>(state.particles[in])) * cbrt(solid.molar_volume * solid.molar_volume) * flux;

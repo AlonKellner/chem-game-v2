@@ -101,6 +101,41 @@
 			"tutorial": "tutorials/calorimeter.json"
 		},
 		{
+			"id": "titration_curve",
+			"title": "A titration's curve",
+			"summary": "Measured and written down: an unknown acid titrated slowly while the notebook logs the pH and the burette's reading each second; the curve's leap is the end point, and its volume the acid's concentration, reported and checked.",
+			"bench": "benches/titration_curve.json",
+			"tutorial": "tutorials/titration_curve.json"
+		},
+		{
+			"id": "vapour",
+			"title": "Water's vapour pressure",
+			"summary": "Measured and written down: a flask boiled free of air, stoppered, its temperature and pressure logged as it cools; ln p against 1/T is a straight line whose slope gives water's heat of vaporisation, reported and checked.",
+			"bench": "benches/vapour.json",
+			"tutorial": "tutorials/vapour.json"
+		},
+		{
+			"id": "beer",
+			"title": "Beer and Lambert's line",
+			"summary": "Measured and written down: a spectrophotometer blanked with water reads four standards of copper sulfate at 750 nm; their absorbance against their concentration is a line through zero, and an unknown is read on it. A guess first, by eye.",
+			"bench": "benches/beer.json",
+			"tutorial": "tutorials/beer.json"
+		},
+		{
+			"id": "rates",
+			"title": "Rates: the order and the activation energy",
+			"summary": "Measured and written down: copper oxide dissolving in acid in a stirred cuvette held at 25, 35 and 45 C, timed by its copper's absorbance; ln t against 1/T gives the activation energy, and half the acid the order in it. A guess first.",
+			"bench": "benches/rates.json",
+			"tutorial": "tutorials/rates.json"
+		},
+		{
+			"id": "solubility",
+			"title": "A solubility curve",
+			"summary": "Measured and written down: four beakers of copper sulfate crystals in water, each heated gently and stirred until its last crystal dissolves; its solubility against that temperature is the curve, and ln s against 1/T the heat of solution. A guess first.",
+			"bench": "benches/solubility.json",
+			"tutorial": "tutorials/solubility.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

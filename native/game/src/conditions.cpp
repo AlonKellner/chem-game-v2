@@ -13,7 +13,8 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap";
+			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
+			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended";
 }
 
 bool is_gas(const std::string &species) {
@@ -123,6 +124,12 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "valve") {
 		return v->kind == "burner" ? std::optional<double>(100.0 * v->valve) : std::nullopt;
 	}
+	if (q.what == "absorbance" || q.what == "nm" || q.what == "holder" || v->kind == "spectrophotometer") { // (Stage 55) what it reads, what it is set to
+		if (v->kind != "spectrophotometer") {
+			return std::nullopt;
+		}
+		return q.what == "nm" ? std::optional<double>(v->nm) : q.what == "absorbance" ? v->absorbance : q.what == "holder" ? v->holder_c : std::nullopt; // (holder: Stage 56)
+	}
 	if (q.what == "reads_g" || v->kind == "balance") { // a balance's display (Stage 50): none while it is off
 		return v->kind == "balance" && q.what == "reads_g" && !v->overload ? v->display_g : std::nullopt;
 	}
@@ -132,6 +139,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	}
 	if (q.what == "fill") {
 		return v->kind == "balloon" && v->capacity_ml > 0.0 ? std::optional<double>(100.0 * v->gas_ml / v->capacity_ml) : std::nullopt;
+	}
+	if (q.what == "suspended") { // the share of its solids its stirring holds up (Stage 56; Stage 32's)
+		return v->kind == "vessel" ? std::optional<double>(100.0 * v->suspended) : std::nullopt;
 	}
 	if (q.what == "celsius") {
 		return v->celsius;
@@ -204,6 +214,12 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		out.push_back(Quantity{ item.id, "reads_g", "g" });
 		return out;
 	}
+	if (item.kind == "spectrophotometer") { // (Stage 55)
+		out.push_back(Quantity{ item.id, "absorbance", "g" });
+		out.push_back(Quantity{ item.id, "nm", "g" });
+		out.push_back(Quantity{ item.id, "holder", "g" }); // (Stage 56)
+		return out;
+	}
 	for (const char *what : { "celsius", "gas_ml", "condensed_ml", "liquid_ml", "solid_ml", "mass_g" }) {
 		out.push_back(Quantity{ item.id, what, "g" });
 	}
@@ -234,7 +250,7 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 }
 
 QuantityKind kind_of(const Quantity &q) {
-	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap") {
+	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap" || q.what == "absorbance" || q.what == "nm" || q.what == "holder") {
 		return QuantityKind::Other;
 	}
 	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
@@ -302,11 +318,17 @@ std::string unit(const Quantity &q) {
 	if (q.what == "celsius") {
 		return "C";
 	}
-	if (q.what == "valve" || q.what == "fill" || q.what == "tap") {
+	if (q.what == "valve" || q.what == "fill" || q.what == "tap" || q.what == "suspended") {
 		return "%";
 	}
-	if (q.what == "met" || q.what == "ph") {
+	if (q.what == "met" || q.what == "ph" || q.what == "absorbance") {
 		return "";
+	}
+	if (q.what == "nm") {
+		return "nm";
+	}
+	if (q.what == "holder") {
+		return "C";
 	}
 	if (q.what == "mass_g" || q.what == "reads_g") {
 		return "g";
@@ -339,6 +361,14 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "total mass";
 	} else if (q.what == "reads_g") {
 		what = "reading";
+	} else if (q.what == "absorbance") {
+		what = "absorbance";
+	} else if (q.what == "nm") {
+		what = "wavelength";
+	} else if (q.what == "holder") {
+		what = "cell holder";
+	} else if (q.what == "suspended") {
+		what = "solids held up";
 	} else if (q.what == "scale_ml") {
 		what = "burette reading";
 	} else if (q.what == "tap") {
@@ -376,6 +406,15 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "mass_g") {
 		return fmt("%.3f g", value);
+	}
+	if (q.what == "absorbance") { // (Stage 55)
+		return fmt("A %.3f", value);
+	}
+	if (q.what == "nm") {
+		return fmt("%.0f nm", value);
+	}
+	if (q.what == "holder") {
+		return fmt("holder %.0f C", value);
 	}
 	if (q.what == "reads_g") { // to an analytical balance's 0.1 mg (Stage 50)
 		return fmt("%.4f g", value);
@@ -655,6 +694,15 @@ bool holds(const Cond &c, const CondContext &x) {
 			return false;
 		}
 	}
+	if (c.noted) { // (Stage 55) written by the student, a number under a label
+		int count = 0;
+		for (const NoteEntry &e : x.view.notebook) {
+			count += e.quantity.item.empty() && e.label == *c.noted && (!c.noted_value || std::fabs(e.value - *c.noted_value) <= 1e-9 + 1e-6 * std::fabs(*c.noted_value)) ? 1 : 0;
+		}
+		if (count < c.noted_count.value_or(1)) {
+			return false;
+		}
+	}
 	if (c.item.empty()) {
 		return true;
 	}
@@ -663,6 +711,20 @@ bool holds(const Cond &c, const CondContext &x) {
 		return false;
 	}
 	const ItemView &v = *found;
+	if (c.logging || c.recorded) { // (Stage 54)
+		bool logged = !c.logging, written = !c.recorded;
+		for (const NoteLogger &l : x.view.loggers) {
+			logged = logged || (l.quantity.item == c.item && l.quantity.what == *c.logging);
+		}
+		int count = 0;
+		for (const NoteEntry &e : x.view.notebook) {
+			count += c.recorded && e.quantity.item == c.item && e.quantity.what == *c.recorded ? 1 : 0;
+		}
+		written = written || count >= c.recorded_count.value_or(1);
+		if (!logged || !written) {
+			return false;
+		}
+	}
 	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
 		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to)) {
 		return false;

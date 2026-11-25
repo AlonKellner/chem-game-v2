@@ -137,7 +137,7 @@ struct ItemView {
 	// a liquid), its marks' (on glassware with marks, which are `marks_ml` apart), each the truth with its instrument's
 	// offset, to its resolution
 	std::string label;
-	std::optional<double> read_c, read_ph, read_ml;
+	std::optional<double> read_c, read_ph, read_ml, read_kpa; // (read_kpa: its gauge, Stage 54)
 	double marks_ml = 0.0;
 	// volumetric glass (Stage 52): its class A tolerance and its scale's divisions, mL; a mark's true volume (a pipette's,
 	// a volumetric flask's); a burette's reading down from its zero line, the truth (`read_ml` the instrument's)
@@ -149,6 +149,12 @@ struct ItemView {
 	double readability_g = 0.0, capacity_g = 0.0, linearity_g = 0.0;
 	double gross_g = 0.0, tare_g = 0.0;
 	std::optional<double> display_g;
+	// a spectrophotometer (Stage 55): the wavelength set, nm; whether it has a blank and the wavelength it was taken at;
+	// what it reads (none without a blank, or past its range: `overload`)
+	double nm = 0.0, blank_nm = 0.0;
+	bool blanked = false;
+	std::optional<double> absorbance;
+	std::optional<double> holder_c; // its cell holder's set temperature, C (Stage 56); none: off
 	bool overload = false;
 };
 
@@ -188,6 +194,26 @@ struct Goal {
 	bool operator==(const Goal &) const = default;
 };
 
+// The notebook (GAME_SPEC §13, Stage 54): what was read and when. An entry is a moment's reading of a quantity, by its
+// label; `instrument` when an instrument read it (by instruments), not the truth.
+struct NoteEntry {
+	int64_t step = 0;
+	std::string label;
+	Quantity quantity;
+	double value = 0.0;
+	std::string unit;
+	bool instrument = false;
+	bool operator==(const NoteEntry &) const = default;
+};
+// A logger: a quantity recorded every `every_s` seconds, next at step `next`
+struct NoteLogger {
+	std::string label;
+	Quantity quantity;
+	double every_s = 1.0;
+	int64_t next = 0;
+	bool operator==(const NoteLogger &) const = default;
+};
+
 struct LabView {
 	int64_t step = 0;
 	int cols = 0, rows = 0; // the bench's grid, in squares
@@ -214,6 +240,8 @@ struct LabView {
 	std::vector<std::string> ringing; // the alarms ringing
 	std::vector<Notice> notices; // oldest first (the last 2000)
 	std::vector<Goal> goals; // §13.5: in the order they were made, the bench's first
+	std::vector<NoteEntry> notebook; // (Stage 54) oldest first
+	std::vector<NoteLogger> loggers;
 };
 
 // The debug panel (GAME_SPEC §13.6): what an item holds, its flows in the

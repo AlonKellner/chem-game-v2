@@ -1,0 +1,47 @@
+{
+	"format": "chem-bench/2",
+	"note": "Water's vapour pressure (GAME_SPEC §13, Stage 54; docs/CURRICULUM.md, experiment 30): the vacuum's flask of 100 g of water, its burner and stopper. Read by instruments: boiled until its air is gone, stoppered, its temperature and pressure logged every 5 s as it cools; ln p against 1/T is Clausius and Clapeyron's line, its slope -dH/R.",
+	"readings": "instruments",
+	"seed": 71,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "flask",
+			"kind": "vessel",
+			"volume_ml": 250,
+			"wall": "glass",
+			"glassware": "conical_flask",
+			"wall_g": 100,
+			"at": [
+				11,
+				6
+			],
+			"contents": {
+				"water": {
+					"g": 100
+				}
+			}
+		},
+		{
+			"id": "stopper",
+			"kind": "stopper",
+			"wall": "latex",
+			"wall_g": 8,
+			"hold_n": 30,
+			"loss": 0.1
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

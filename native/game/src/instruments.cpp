@@ -16,7 +16,7 @@ using json = nlohmann::json;
 
 struct Data {
 	std::vector<Balance> balances;
-	Meter thermometer, ph;
+	Meter thermometer, ph, gauge;
 	double hand = 0.1, reference = 8000.0;
 	std::vector<std::pair<std::string, double>> walls;
 };
@@ -31,6 +31,7 @@ const Data &data() {
 		}
 		o.thermometer = Meter{ j.at("thermometer").at("resolution_c").get<double>(), j.at("thermometer").at("accuracy_c").get<double>(), j.at("thermometer").value("time_constant_s", 0.0) };
 		o.ph = Meter{ j.at("ph_meter").at("resolution").get<double>(), j.at("ph_meter").at("accuracy").get<double>() };
+		o.gauge = Meter{ j.at("gauge").at("resolution_kpa").get<double>(), j.at("gauge").at("accuracy_kpa").get<double>() };
 		o.hand = j.at("hand").get<double>();
 		for (const auto &[name, density] : j.at("walls_g_cm3").items()) {
 			o.walls.emplace_back(name, density.get<double>());
@@ -61,6 +62,10 @@ Meter thermometer() {
 
 Meter ph_meter() {
 	return data().ph;
+}
+
+Meter gauge() {
+	return data().gauge;
 }
 
 double hand() {

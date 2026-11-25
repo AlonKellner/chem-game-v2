@@ -1,0 +1,542 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 57; docs/CURRICULUM.md, experiments 4 and 45) on data/benches/solubility.json: copper sulfate's solubility curve, each point the temperature at which a known mass's last crystal dissolves, slowly heated; ln s against 1/T, the heat of solution.",
+	"title": "Experiment: a solubility curve",
+	"bench": "../benches/solubility.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Copper sulfate dissolves better hot than cold. How many grams of it (the anhydrous salt) will 100 g of water hold at 50 C? At 20 C it is about 20 g. Type your guess, then click \"predict\".",
+			"why": "A solubility curve: how much of a salt a solvent holds when it is saturated, at each temperature. Predicted first, it is kept as you made it.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "30"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: 5 g",
+			"title": "5 g, gently",
+			"text": "Pick up the burner and click the beaker of 5 g. Right-click the beaker and click \"stir\". Right-click the burner and drag its valve to 0.46%: a gentle flame, so the solution warms slowly.",
+			"why": "The crystals dissolve as the solution warms and can hold more. Heated slowly and stirred, the solution stays close to saturated, and the last crystal goes at the temperature where these grams just saturate it. Heated fast, it goes later: the solution lags behind.",
+			"checks": [
+				{
+					"text": "the burner under it",
+					"when": {
+						"item": "burner",
+						"under": "b5"
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "b5",
+						"stirred": true
+					}
+				},
+				{
+					"text": "a gentle flame",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.004
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:b5"
+					]
+				},
+				{
+					"click": "item:b5"
+				},
+				{
+					"click": "stir:b5"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.0046"
+				}
+			]
+		},
+		{
+			"title": "Until the last crystal goes",
+			"text": "Watch the crystals shrink and the blue deepen. Speed the clock up if you like; slow it near the end to catch the moment.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "b5",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "Its temperature, and its solubility",
+			"text": "Right-click the beaker and click \"+ T\": the temperature it saturates at. 5 g of the pentahydrate hold 3.20 g of CuSO4 and 1.80 g of water, so 11.80 g of water in all hold 3.20 g: 27.1 g per 100 g. Open the notebook and write the label \"s\" and the number 27.1, then \"write\". Close the notebook, right-click the burner and close its valve.",
+			"why": "The pentahydrate brings its own water: CuSO4.5H2O is 159.6 g of CuSO4 and 90.1 g of water in every 249.7 g.",
+			"checks": [
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "b5",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "s = 27.1 written",
+					"when": {
+						"noted": "s",
+						"noted_count": 1
+					}
+				},
+				{
+					"text": "the flame off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:b5"
+				},
+				{
+					"click": "record:b5:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "s"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "27.1"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"part": "2: 6 g",
+			"title": "6 g, gently",
+			"text": "Pick up the burner and click the beaker of 6 g (it leaves the last one). Right-click the beaker and click \"stir\". Right-click the burner and drag its valve to 0.72%: a gentle flame, so the solution warms slowly.",
+			"why": "More salt in the same water: it saturates at a higher temperature.",
+			"checks": [
+				{
+					"text": "the burner under it",
+					"when": {
+						"item": "burner",
+						"under": "b6"
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "b6",
+						"stirred": true
+					}
+				},
+				{
+					"text": "a gentle flame",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.0068
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:b6"
+					]
+				},
+				{
+					"click": "item:b6"
+				},
+				{
+					"click": "stir:b6"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.0072"
+				}
+			]
+		},
+		{
+			"title": "Until the last crystal goes",
+			"text": "Watch the crystals shrink and the blue deepen. Speed the clock up if you like; slow it near the end to catch the moment.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "b6",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "Its temperature, and its solubility",
+			"text": "Right-click the beaker and click \"+ T\": the temperature it saturates at. 6 g of the pentahydrate hold 3.84 g of CuSO4 and 2.16 g of water, so 12.16 g of water in all hold 3.84 g: 31.5 g per 100 g. Open the notebook and write the number 31.5, then \"write\". Close the notebook, right-click the burner and close its valve.",
+			"why": "Each beaker one point of the curve.",
+			"checks": [
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "b6",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "s = 31.5 written",
+					"when": {
+						"noted": "s",
+						"noted_count": 2
+					}
+				},
+				{
+					"text": "the flame off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:b6"
+				},
+				{
+					"click": "record:b6:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "31.5"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"part": "3: 7 g",
+			"title": "7 g, gently",
+			"text": "Pick up the burner and click the beaker of 7 g (it leaves the last one). Right-click the beaker and click \"stir\". Right-click the burner and drag its valve to 0.97%: a gentle flame, so the solution warms slowly.",
+			"why": "More salt in the same water: it saturates at a higher temperature.",
+			"checks": [
+				{
+					"text": "the burner under it",
+					"when": {
+						"item": "burner",
+						"under": "b7"
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "b7",
+						"stirred": true
+					}
+				},
+				{
+					"text": "a gentle flame",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.0092
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:b7"
+					]
+				},
+				{
+					"click": "item:b7"
+				},
+				{
+					"click": "stir:b7"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.0097"
+				}
+			]
+		},
+		{
+			"title": "Until the last crystal goes",
+			"text": "Watch the crystals shrink and the blue deepen. Speed the clock up if you like; slow it near the end to catch the moment.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "b7",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "Its temperature, and its solubility",
+			"text": "Right-click the beaker and click \"+ T\": the temperature it saturates at. 7 g of the pentahydrate hold 4.47 g of CuSO4 and 2.53 g of water, so 12.53 g of water in all hold 4.47 g: 35.7 g per 100 g. Open the notebook and write the number 35.7, then \"write\". Close the notebook, right-click the burner and close its valve.",
+			"why": "Each beaker one point of the curve.",
+			"checks": [
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "b7",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "s = 35.7 written",
+					"when": {
+						"noted": "s",
+						"noted_count": 3
+					}
+				},
+				{
+					"text": "the flame off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:b7"
+				},
+				{
+					"click": "record:b7:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "35.7"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"part": "4: 8 g",
+			"title": "8 g, gently",
+			"text": "Pick up the burner and click the beaker of 8 g (it leaves the last one). Right-click the beaker and click \"stir\". Right-click the burner and drag its valve to 0.95%: a gentle flame, so the solution warms slowly.",
+			"why": "More salt in the same water: it saturates at a higher temperature.",
+			"checks": [
+				{
+					"text": "the burner under it",
+					"when": {
+						"item": "burner",
+						"under": "b8"
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "b8",
+						"stirred": true
+					}
+				},
+				{
+					"text": "a gentle flame",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.009
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:b8"
+					]
+				},
+				{
+					"click": "item:b8"
+				},
+				{
+					"click": "stir:b8"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.0095"
+				}
+			]
+		},
+		{
+			"title": "Until the last crystal goes",
+			"text": "Watch the crystals shrink and the blue deepen. Speed the clock up if you like; slow it near the end to catch the moment.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "b8",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "Its temperature, and its solubility",
+			"text": "Right-click the beaker and click \"+ T\": the temperature it saturates at. 8 g of the pentahydrate hold 5.11 g of CuSO4 and 2.89 g of water, so 12.89 g of water in all hold 5.11 g: 39.7 g per 100 g. Open the notebook and write the number 39.7, then \"write\". Close the notebook, right-click the burner and close its valve.",
+			"why": "Each beaker one point of the curve.",
+			"checks": [
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "b8",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "s = 39.7 written",
+					"when": {
+						"noted": "s",
+						"noted_count": 4
+					}
+				},
+				{
+					"text": "the flame off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:b8"
+				},
+				{
+					"click": "record:b8:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "39.7"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the solubility at 50 C, read from your curve",
+			"unit": "g per 100 g of water",
+			"truth": "34.6",
+			"tolerance": 0.08,
+			"relative": true,
+			"predict": true,
+			"why": "In the notebook: x the beakers' temperatures, y the column s; read the curve at 50 C. The handbook gives 33.3 g; a crystal's last bit dissolves a little after the solution saturates, so a curve heated too fast lies to the right of the true one."
+		},
+		{
+			"label": "the heat of solution, from the curve",
+			"unit": "kJ/mol",
+			"truth": "15.0",
+			"tolerance": 0.25,
+			"relative": true,
+			"why": "x the temperatures as 1/K, y the column s as ln, fit: the slope is -dH / R, so dH = -slope x 8.314 J/(mol K). It is the heat taken in as the salt dissolves into a nearly saturated solution (the model's 15.0 kJ/mol over 25 to 60 C); the calorimeter's, into much water, is smaller."
+		}
+	]
+}

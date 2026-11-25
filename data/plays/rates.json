@@ -1,0 +1,18 @@
+{
+	"format": "chem-play/1",
+	"note": "The cell holder (Stage 56): the rates' bench chosen from the experiments' list, a cuvette of acid held at 35 C, oxide tipped in and stirred; a picture of the readout while it reacts (LAB_SHOTS). The commands go to the lab directly.",
+	"steps": [
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:rates", "button": "click"},
+		{"frames": 30, "mark": "rates"},
+		{"do": {"do": "insert", "spectrophotometer": "spec", "cuvette": "a35", "onto": true}},
+		{"do": {"do": "holder", "spectrophotometer": "spec", "celsius": 35}},
+		{"do": {"do": "wait", "seconds": 120}},
+		{"do": {"do": "blank", "spectrophotometer": "spec"}},
+		{"do": {"do": "tip", "from": "o2", "to": "a35", "species": "copper_oxide", "all": true}},
+		{"do": {"do": "stir", "vessel": "a35", "on": true}},
+		{"do": {"do": "wait", "seconds": 60}},
+		{"to": "item:spec", "button": "right"},
+		{"frames": 90, "mark": "held", "shot": "rates-held"}
+	]
+}

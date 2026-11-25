@@ -69,12 +69,14 @@ Saturated saturated(double kelvin, double dissolved) {
 	const CellId bath = b.add_reservoir("bath", kelvin);
 	b.add_edge(cell, bath, PHASES_NONE, 500.0);
 	b.set_amount(cell, builtin::water, mol(100.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_pentahydrate, mol(1.0));
-	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 1000000).set_mixing(cell, 1000.0);
+	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 1000000);
 	if (dissolved > 0.0) {
 		b.set_amount(cell, builtin::copper_sulfate_aq, mol(dissolved));
 	}
 	b.set_amount(cell, builtin::glass, mol(1.0)).set_temperature(cell, kelvin);
-	Simulation sim(build(b), { fast_crystallisation() });
+	World world = build(b);
+	REQUIRE(world.set_stirring(cell, 1.0) == Refusal::None); // stirred hard (Stage 57: 10 W/kg; until then a mixing of 1000)
+	Simulation sim(std::move(world), { fast_crystallisation() });
 	sim.set_checking(true);
 	return Saturated{ cell, std::move(sim) };
 }
@@ -128,8 +130,10 @@ TEST_CASE("solution: dissolving the pentahydrate cools the solution (Stage 6)") 
 	World::Builder b(builtin_species());
 	const CellId cell = b.add_cell("beaker");
 	b.set_amount(cell, builtin::water, mol(100.0 / 18.015)).set_amount(cell, builtin::copper_sulfate_pentahydrate, mol(0.05));
-	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 100000).set_mixing(cell, 1000.0).set_temperature(cell, 298.15);
-	Simulation sim(build(b), { fast_crystallisation() });
+	b.set_particles(cell, builtin::copper_sulfate_pentahydrate, 100000).set_temperature(cell, 298.15);
+	World world = build(b);
+	REQUIRE(world.set_stirring(cell, 1.0) == Refusal::None); // stirred hard (Stage 57: 10 W/kg; until then a mixing of 1000)
+	Simulation sim(std::move(world), { fast_crystallisation() });
 	sim.set_checking(true);
 	const Totals genesis = totals(builtin_species(), sim.world().snapshot());
 	for (int step = 0; step < 6000; ++step) {
@@ -178,7 +182,7 @@ TEST_CASE("solution: a neutral solute lowers water's vapour pressure, so the sol
 }
 
 TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and hardly faster stirred (Stage 6; Stage 23: controlled at its surface)") {
-	const auto time_to_dissolve = [](double kelvin, double mixing, double fraction) {
+	const auto time_to_dissolve = [](double kelvin, double stirring, double fraction) {
 		World::Builder b(builtin_species());
 		const CellId cell = b.add_cell("flask");
 		const CellId bath = b.add_reservoir("bath", kelvin);
@@ -188,7 +192,7 @@ TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and h
 		b.set_amount(cell, builtin::water, mol(96.2 / 18.015)).set_amount(cell, builtin::sulfuric_acid_aq, mol(0.1));
 		b.set_amount(cell, builtin::glass, mol(1.0)).set_temperature(cell, kelvin);
 		World world = build(b);
-		REQUIRE(world.set_mixing(cell, mixing) == Refusal::None);
+		REQUIRE(world.set_stirring(cell, stirring) == Refusal::None); // (Stage 57: the stirring's watts, Sano's transport)
 		Simulation sim(std::move(world), shipped());
 		sim.set_checking(true);
 		const Totals genesis = totals(builtin_species(), sim.world().snapshot());
@@ -205,9 +209,9 @@ TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and h
 		CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 		return step * STEP_SECONDS;
 	};
-	const double cold = time_to_dissolve(333.15, 1.0, 0.5);
-	const double still = time_to_dissolve(353.15, 1.0, 0.5);
-	const double stirred = time_to_dissolve(353.15, 3.0, 0.5);
+	const double cold = time_to_dissolve(333.15, 0.0, 0.5);
+	const double still = time_to_dissolve(353.15, 0.0, 0.5);
+	const double stirred = time_to_dissolve(353.15, 0.1, 0.5); // 1 W/kg
 	CHECK(still > 60.0); // a minute or more, even hot
 	// Majima et al. 1980: the rate does not depend on agitation; the acid reaches the 8 um grains far faster than they use it
 	CHECK(still / stirred == doctest::Approx(1.0).epsilon(0.03));

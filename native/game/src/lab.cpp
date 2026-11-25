@@ -4,6 +4,8 @@
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
+#include "lab/notebook.hpp"
+#include "lab/spectro.hpp"
 
 #include "chem/builtin_ids.hpp"
 #include "chem/error.hpp"
@@ -37,7 +39,8 @@ std::string build_name() {
 
 namespace {
 
-constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
+constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7); since Stage 57 it changes no rate (kept in saves)
+constexpr double STIRRED_W_KG = 0.1; // a stirred beaker's dissipation, W/kg, for "stirring would make it faster" (Stage 57)
 // A stirrer (GAME_SPEC §11, Stage 32): the work it does on the liquid a second, W, and how long a liquid left
 // alone keeps turning, s (dE/dt = P - E / tau). The game's choices: a small stir bar at a few hundred turns a
 // minute; a beaker of water stops turning in a few seconds.
@@ -51,6 +54,7 @@ constexpr double GENTLE_POUR = 2e-6; // m^3/s: a gentle pour's trickle down the 
 constexpr double LIP_GAP = 0.01;
 constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
+constexpr size_t NOTEBOOK_MOST = 2000; // the notebook keeps its last this many entries (Stage 54)
 constexpr int TRIAL_PER_STEP = 2; // a trial's seconds run at each of the lab's steps (Stage 39): what a step costs is bounded
 constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
@@ -61,7 +65,7 @@ constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(P
 // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber; a viewer (Stage 42): the spectral
 // viewer, an instrument that holds no matter (no cell, no edge: it changes nothing in the world)
 // a balance (Stage 50): an instrument under a vessel, as a burner is, with no cell and no edge
-enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal, Balance };
+enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal, Balance, Spectro };
 // On: on a vessel's mouth. Under: a burner or a balance (Stage 50) under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
 enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
@@ -148,7 +152,19 @@ struct Item {
 	// a vessel's thermometer by instruments (Stage 52): what it reads, K, following its vessel with its own lag; NaN until
 	// it has read anything
 	double read_kelvin = std::numeric_limits<double>::quiet_NaN();
+	// a spectrophotometer (Stage 55): the wavelength set, nm; its blank's signal (0: none yet) and the wavelength it was
+	// set to then
+	double nm = 600.0, blank = 0.0, blank_nm = 0.0;
+	// its cell holder's temperature (Stage 56), C; NaN: off. It heats the cuvette in its well along `heats`, from the
+	// mains
+	double holder_c = std::numeric_limits<double>::quiet_NaN();
 };
+
+// an instrument a vessel stands on, joined to nothing in the world (Stage 50: a balance; Stage 55: a spectrophotometer,
+// its cuvette in its well)
+bool stands_under(Kind k) {
+	return k == Kind::Balance || k == Kind::Spectro;
+}
 
 // a vessel with an outlet at its foot (Stage 52: a burette, a pipette): its glassware, or null
 const glass::Vessel *outlet_of(const Item &x) {
@@ -158,7 +174,7 @@ const glass::Vessel *outlet_of(const Item &x) {
 
 // whether an item holds matter of its own (a burner's cell is its flame, a viewer has none)
 bool holds_matter(const Item &x) {
-	return x.kind != Kind::Burner && x.kind != Kind::Viewer && x.kind != Kind::Thermal && x.kind != Kind::Balance;
+	return x.kind != Kind::Burner && x.kind != Kind::Viewer && x.kind != Kind::Thermal && !stands_under(x.kind);
 }
 
 struct Event {
@@ -209,7 +225,7 @@ bool from_bits(const json &j, double &v) {
 	return true;
 }
 
-const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal", "balance" };
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal", "balance", "spectrophotometer" };
 const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 // A wall's glass (Stage 53): whether it loses to the room by its own outside (its species' conductivity and emittance
@@ -236,11 +252,20 @@ double number(const json &j, const char *key, double fallback) {
 	return j.contains(key) && j.at(key).is_number() ? j.at(key).get<double>() : fallback;
 }
 
-double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
-	if (amount.contains("mol")) {
-		return amount.at("mol").get<double>();
+// an amount as the bench gives it: a number, or (Stage 54: an unknown) a range [low, high] drawn once from the seed
+double amount_of(const json &v, uint64_t seed, const std::string &key) {
+	if (v.is_array() && v.size() == 2) {
+		const double lo = v.at(0).get<double>(), hi = v.at(1).get<double>();
+		return lo + (hi - lo) * 0.5 * (1.0 + instruments::share(seed, key));
 	}
-	return amount.at("g").get<double>() / (static_cast<double>(table.molar_mass_ug(id)) * 1e-6);
+	return v.get<double>();
+}
+
+double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount, uint64_t seed = 0, const std::string &key = "") {
+	if (amount.contains("mol")) {
+		return amount_of(amount.at("mol"), seed, key);
+	}
+	return amount_of(amount.at("g"), seed, key) / (static_cast<double>(table.molar_mass_ug(id)) * 1e-6);
 }
 
 // An item's footprint on the bench, in squares of the grid (GAME_SPEC §13):
@@ -262,6 +287,9 @@ void default_size(const std::string &kind, double volume_ml, bool condenser, int
 	} else if (kind == "balance") {
 		w = 4; // a balance (Stage 50): its pan and its display
 		h = 2;
+	} else if (kind == "spectrophotometer") {
+		w = 5; // a spectrophotometer (Stage 55): its well and its displays
+		h = 3;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
 	} else if (kind == "stopper") {
@@ -329,6 +357,9 @@ struct Lab::Impl {
 	// misses are drawn from
 	bool instruments = false;
 	uint64_t seed = 0;
+	// the notebook (Stage 54): what was recorded, and the loggers
+	std::vector<NoteEntry> notebook;
+	std::vector<NoteLogger> loggers;
 	CellId air;
 	CellId room;
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
@@ -438,6 +469,56 @@ struct Lab::Impl {
 		LabView view;
 	};
 	mutable ReadView read_view;
+
+	// ---- the notebook (GAME_SPEC §13, Stage 54)
+	// what is read of a quantity now, as the notebook writes it: by instruments an instrument's reading, or none
+	std::optional<double> note_reading(const Quantity &q, bool &instrument) const {
+		const int i = find(q.item);
+		instrument = false;
+		if (i < 0) {
+			return std::nullopt;
+		}
+		LabView one;
+		one.instruments = instruments;
+		one.seed = seed;
+		one.items.push_back(item_view(items[static_cast<size_t>(i)], false, q.what == "bubbles_cm"));
+		return lab::reading(one, q, instrument);
+	}
+	bool record_note(const Quantity &q, const std::string &label, std::string &why) {
+		bool instrument = false;
+		const std::optional<double> v = note_reading(q, instrument);
+		if (!v) {
+			why = instruments ? "no instrument reads " + label_of(q) + ": a student sees only what instruments read" : "there is no " + label_of(q) + " to read";
+			return false;
+		}
+		notebook.push_back(NoteEntry{ static_cast<int64_t>(world().step()), label.empty() ? label_of(q) : label, q, *v, unit(q), instrument });
+		if (notebook.size() > NOTEBOOK_MOST) {
+			notebook.erase(notebook.begin());
+		}
+		return true;
+	}
+	static std::string label_of(const Quantity &q) { return label(LabView{}, q); }
+	static bool quantity_of_command(const json &c, Quantity &q, std::string &why) {
+		if (!c.contains("item") || !c.at("item").is_string() || !c.contains("what") || !c.at("what").is_string()) {
+			why = "a reading names its \"item\" and \"what\"";
+			return false;
+		}
+		q.item = c.at("item").get<std::string>();
+		q.what = c.at("what").get<std::string>();
+		q.measure = c.value("measure", "g");
+		return true;
+	}
+	// the loggers whose time has come record (at the end of a step)
+	void follow_loggers() {
+		for (NoteLogger &l : loggers) {
+			if (static_cast<int64_t>(world().step()) >= l.next) {
+				std::string no;
+				record_note(l.quantity, l.label, no);
+				const int64_t n = std::max<int64_t>(1, std::llround(l.every_s / STEP_SECONDS));
+				l.next = (static_cast<int64_t>(world().step()) / n + 1) * n; // (the next whole multiple)
+			}
+		}
+	}
 
 	// ---- goals (§13.5)
 	int find_goal(const std::string &id) const {
@@ -1538,7 +1619,7 @@ struct Lab::Impl {
 			return false;
 		}
 		for (const Item &b : items) {
-			if (inverted && (b.kind == Kind::Burner || b.kind == Kind::Balance) && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
+			if (inverted && (b.kind == Kind::Burner || stands_under(b.kind)) && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
 				why = "\"" + x.id + "\" stands over \"" + b.id + "\": take it away first";
 				return false;
 			}
@@ -2690,6 +2771,7 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		// (Stage 47: after the pours are set, for a pour that lands as a layer moves the liquid there first)
 		set_stirring();
+		set_holders(); // (Stage 56)
 		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
 		set_pours();
 		set_outlets();
@@ -2712,6 +2794,7 @@ struct Lab::Impl {
 			}
 		}
 		follow_thermometers();
+		follow_loggers();
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (!trials.empty()) {
 			run_trials();
@@ -2955,7 +3038,7 @@ struct Lab::Impl {
 	// (`was`, as it was before it moved), or beside it. A balance holds nothing in the world: no boundary.
 	void leave_balances(int thing, const Item &was) {
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].kind == Kind::Balance && items[i].under == thing) {
+			if (stands_under(items[i].kind) && items[i].under == thing) {
 				items[i].under = -1;
 				items[i].place = Place::Cabinet;
 				items[i].col = items[i].row = -1;
@@ -3001,6 +3084,61 @@ struct Lab::Impl {
 		return instruments::conventional_g(g, cm3, air_density());
 	}
 
+	// What a spectrophotometer's beam passes through (GAME_SPEC §13, Stage 55): its cuvette's liquid at the beam's
+	// height over its floor, the layer there if it is layered; air if the liquid stands lower or nothing is in its well
+	spectro::Sample spectro_sample(const Item &x) const {
+		spectro::Sample out;
+		if (x.under < 0) {
+			return out;
+		}
+		const Item &cuvette = items[static_cast<size_t>(x.under)];
+		const glass::Vessel *g = glass::find(cuvette.glassware, cuvette.nominal_ml);
+		if (g == nullptr || cuvette.pours_into >= 0) {
+			return out;
+		}
+		const double y = g->floor + spectro::model().beam_mm / 10.0;
+		out.path_cm = 2.0 * g->radius_inside(y);
+		const double below = g->volume_below(y) * 1e-6; // m^3 under the beam
+		std::vector<CellId> cells{ cuvette.cell }; // from the top down
+		for (const CellId c : layers_of(cuvette)) {
+			if (layered_cell(c)) {
+				cells.push_back(c);
+			}
+		}
+		double filled = 0.0;
+		const double held = std::clamp(cuvette.suspended, 0.0, 1.0); // the share of its solids its stirring holds up (Stage 56)
+		for (auto c = cells.rbegin(); c != cells.rend(); ++c) {
+			const CellState &state = world().snapshot_cell(*c);
+			const double liquid = liquid_m3(state), solid = solid_m3(state);
+			if (filled + solid * (1.0 - held) > below) {
+				out.opaque = true; // its settled solids stand at the beam
+				return out;
+			}
+			filled += liquid + solid;
+			if (filled > below && liquid > 0.0) {
+				for (size_t s = 0; s < state.amount.size(); ++s) {
+					const SpeciesId id{ static_cast<int32_t>(s) };
+					const SpeciesDef &def = table().species(id);
+					if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+						out.molar.emplace_back(id, static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM / (liquid * 1000.0));
+					}
+					if (state.amount[s] > 0 && !def.wall && def.phase == Phase::Solid && held > 0.0 && s < state.particles.size() && state.particles[s] > 0) {
+						// (Stage 56) its grains held up in the liquid, in the beam
+						const double grains = static_cast<double>(state.particles[s]) * held / (liquid * 1e6);
+						out.turbidity += spectro::turbidity(grains, chem::particle_diameter(table(), state, id) * 100.0);
+					}
+				}
+				return out;
+			}
+		}
+		return out;
+	}
+	// its detector's signal now: at its true wavelength, the one set plus its error drawn from the seed
+	double spectro_signal(const Item &x) const {
+		const spectro::Model &model = spectro::model();
+		return spectro::signal(model, x.nm + model.wavelength_error_nm * instruments::share(seed, x.id + ":nm"), spectro_sample(x));
+	}
+
 	// The hand (GAME_SPEC §13, Readings; Stage 50): what it moves of an amount aimed at, `1 + hand u`, u drawn from
 	// the seed, the step and the two vessels
 	double by_hand(const json &c, const std::string &what, const Item &from, const Item &to) const {
@@ -3011,10 +3149,54 @@ struct Lab::Impl {
 		return 1.0 + instruments::hand() * instruments::share(seed, key);
 	}
 
+	// A spectrophotometer's cell holder (GAME_SPEC §13, Stage 56): while it is set and a cuvette stands in its well, a
+	// heater along an edge from the mains to the cuvette, its power proportional to how far the cuvette is under the
+	// set temperature, up to its most; it only heats (a cuvette cools by its own loss to the room). The edge is made
+	// when it is wanted and taken off when it is not: a lab that never sets one is as before.
+	void set_holders() {
+		for (Item &x : items) {
+			if (x.kind != Kind::Spectro) {
+				continue;
+			}
+			const bool wanted = std::isfinite(x.holder_c) && x.under >= 0 && (x.place == Place::Under) && items[static_cast<size_t>(x.under)].pours_into < 0 &&
+					mains.index >= 0;
+			if (!wanted) {
+				if (x.heats.index >= 0) {
+					world().disconnect(x.heats);
+					x.heats = EdgeId{};
+				}
+				continue;
+			}
+			const Item &cuvette = items[static_cast<size_t>(x.under)];
+			// into its lowest layer (a column's, Stage 47): a holder warms the cell from its foot up, and warmth below
+			// overturns through the column
+			CellId lowest = cuvette.cell;
+			for (const CellId c : layers_of(cuvette)) {
+				if (layered_cell(c)) {
+					lowest = c;
+				}
+			}
+			if (x.heats.index >= 0 && world().edges()[static_cast<size_t>(x.heats.index)].b.index != lowest.index) {
+				world().disconnect(x.heats); // another cuvette in its well, or another layer at its foot
+				x.heats = EdgeId{};
+			}
+			if (x.heats.index < 0) {
+				EdgeId edge;
+				if (world().connect(mains, lowest, PHASES_NONE, &edge) != Refusal::None) {
+					continue;
+				}
+				x.heats = edge;
+			}
+			const spectro::Model &model = spectro::model();
+			const double under = x.holder_c + 273.15 - kelvin(cuvette);
+			world().set_power(x.heats, std::clamp(model.holder_gain_w_k * under, 0.0, model.holder_most_w));
+		}
+	}
+
 	// what stands under a vessel that keeps it where it is: a burner (a balance is left behind)
 	int fixed_under(int thing) const {
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].under == thing && items[i].kind != Kind::Balance) {
+			if (items[i].under == thing && !stands_under(items[i].kind)) {
 				return static_cast<int>(i);
 			}
 		}
@@ -3111,6 +3293,19 @@ struct Lab::Impl {
 			v.overload = v.gross_g > model.capacity_g;
 			if (item.place == Place::Bench || item.place == Place::Under) {
 				v.display_g = instruments::display_g(model, v.gross_g, item.tare, instruments::share(m.seed, item.id + ":linearity"));
+			}
+		} else if (item.kind == Kind::Spectro) {
+			// a spectrophotometer (Stage 55): its wavelength, its blank's, what it reads while it is on the bench
+			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15;
+			v.nm = item.nm;
+			v.blank_nm = item.blank_nm;
+			v.blanked = item.blank > 0.0;
+			if (std::isfinite(item.holder_c)) {
+				v.holder_c = item.holder_c; // (Stage 56)
+			}
+			if (v.blanked && (item.place == Place::Bench || item.place == Place::Under)) {
+				v.absorbance = spectro::reading(spectro::model(), m.spectro_signal(item), item.blank);
+				v.overload = !v.absorbance;
 			}
 		} else if (item.kind == Kind::Viewer || item.kind == Kind::Thermal) {
 			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // it stands in the room's air
@@ -3217,6 +3412,8 @@ struct Lab::Impl {
 				if (v.ph) {
 					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
 				}
+				const instruments::Meter gauge = instruments::gauge(); // (Stage 54)
+				v.read_kpa = instruments::rounded(v.pressure_kpa + gauge.accuracy * instruments::share(m.seed, item.id + ":gauge"), gauge.resolution);
 				const glass::Vessel *g = item.glassware.empty() ? nullptr : glass::find(item.glassware, item.nominal_ml);
 				if (g != nullptr && g->marks_ml > 0.0) {
 					v.marks_ml = g->marks_ml;
@@ -3489,7 +3686,7 @@ struct Lab::Impl {
 		const Kind is = items[static_cast<size_t>(index)].kind;
 		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
-			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : kind == Kind::Thermal ? "a thermal camera" : kind == Kind::Balance ? "a balance" : "a vessel");
+			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : kind == Kind::Thermal ? "a thermal camera" : kind == Kind::Balance ? "a balance" : kind == Kind::Spectro ? "a spectrophotometer" : "a vessel");
 			return false;
 		}
 		if (is == Kind::Vessel && items[static_cast<size_t>(index)].burst) {
@@ -3664,8 +3861,19 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				impl->items.push_back(item);
 				continue;
 			}
+			if (kind == "spectrophotometer") {
+				// a spectrophotometer (Stage 55): no matter, no cell, no edge; set at a wavelength, not yet blanked
+				item.kind = Kind::Spectro;
+				item.nm = j.value("nm", 600.0);
+				if (!(item.nm >= spectro::model().first_nm && item.nm <= spectro::model().last_nm)) {
+					why = "item \"" + item.id + "\": its wavelength is within its range";
+					return nullptr;
+				}
+				impl->items.push_back(item);
+				continue;
+			}
 			if (kind != "vessel" && kind != "balloon" && kind != "stopper") {
-				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner, viewer, thermal or balance";
+				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner, viewer, thermal, balance or spectrophotometer";
 				return nullptr;
 			}
 			if (j.contains("label") && !j.at("label").is_string()) {
@@ -3795,7 +4003,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						why = "item \"" + item.id + "\": a layer under its top holds no gas";
 						return nullptr;
 					}
-					const double mol = mol_of(table, id, spec);
+					const double mol = mol_of(table, id, spec, impl->seed, item.id + ":" + name); // (an unknown's range, Stage 54)
 					b.set_amount(into, id, amount(mol));
 					if (spec.contains("particles")) {
 						b.set_particles(into, id, spec.at("particles").get<int64_t>());
@@ -4820,17 +5028,27 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		flame.heats = EdgeId{};
 		return true;
 	}
-	if (what == "weigh") {
+	if (what == "weigh" || what == "insert") {
 		// a balance under a vessel (GAME_SPEC §13, Stage 50), as a burner goes under one: from the bench or straight
-		// from the cabinet. It joins nothing in the world.
+		// from the cabinet; a spectrophotometer under a cuvette, the cuvette in its well (Stage 55). Neither joins
+		// anything in the world.
+		const bool weighs = what == "weigh";
 		int balance = -1, vessel = -1;
-		if (!item(c, "balance", Kind::Balance, balance, why) || !item(c, "vessel", Kind::Vessel, vessel, why)) {
+		if (!item(c, weighs ? "balance" : "spectrophotometer", weighs ? Kind::Balance : Kind::Spectro, balance, why) || !item(c, weighs ? "vessel" : "cuvette", Kind::Vessel, vessel, why)) {
 			return false;
 		}
 		Item &scale = items[static_cast<size_t>(balance)];
 		const Item &v = items[static_cast<size_t>(vessel)];
 		if (v.kind != Kind::Vessel) {
-			why = "a balance weighs a vessel, with what is on it";
+			why = weighs ? "a balance weighs a vessel, with what is on it" : "a spectrophotometer's well takes a cuvette";
+			return false;
+		}
+		if (!weighs && v.glassware != "cuvette") {
+			why = "only a cuvette fits \"" + scale.id + "\"'s well";
+			return false;
+		}
+		if (!weighs && v.holds >= 0) {
+			why = "\"" + v.id + "\" has \"" + items[static_cast<size_t>(v.holds)].id + "\" on it: the well's lid closes over a cuvette alone";
 			return false;
 		}
 		if (v.place == Place::Outbox || v.place == Place::Trash || (v.place == Place::Cabinet && !c.value("onto", false))) {
@@ -4893,9 +5111,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		scale.place = Place::Under;
 		return true;
 	}
-	if (what == "unweigh") {
+	if (what == "unweigh" || what == "remove") {
 		int balance = -1;
-		if (!item(c, "balance", Kind::Balance, balance, why)) {
+		if (!(what == "unweigh" ? item(c, "balance", Kind::Balance, balance, why) : item(c, "spectrophotometer", Kind::Spectro, balance, why))) {
 			return false;
 		}
 		Item &scale = items[static_cast<size_t>(balance)];
@@ -4909,6 +5127,59 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		scale.col = scale.row = -1;
 		set_beside(balance, v);
 		scale.under = -1;
+		return true;
+	}
+	if (what == "tune") {
+		// (Stage 55) a spectrophotometer's wavelength, to the nanometre; its blank stays as it was taken
+		int spectro = -1;
+		if (!item(c, "spectrophotometer", Kind::Spectro, spectro, why)) {
+			return false;
+		}
+		const double nm = std::round(number(c, "nm", -1.0));
+		if (!(nm >= spectro::model().first_nm && nm <= spectro::model().last_nm)) {
+			why = "a spectrophotometer is tuned to \"nm\" within " + std::to_string(static_cast<int>(spectro::model().first_nm)) + " to " + std::to_string(static_cast<int>(spectro::model().last_nm));
+			return false;
+		}
+		items[static_cast<size_t>(spectro)].nm = nm;
+		return true;
+	}
+	if (what == "holder") {
+		// (Stage 56) its cell holder set to a temperature, or off ("celsius": null or absent)
+		int spectro = -1;
+		if (!item(c, "spectrophotometer", Kind::Spectro, spectro, why)) {
+			return false;
+		}
+		const spectro::Model &model = spectro::model();
+		double celsius = std::numeric_limits<double>::quiet_NaN();
+		if (c.contains("celsius") && !c.at("celsius").is_null()) {
+			celsius = number(c, "celsius", -1000.0);
+			if (!(celsius >= model.holder_least_c && celsius <= model.holder_most_c)) {
+				why = "a cell holder is set between " + std::to_string(static_cast<int>(model.holder_least_c)) + " and " + std::to_string(static_cast<int>(model.holder_most_c)) + " C, or off";
+				return false;
+			}
+		}
+		if (!boundary(why)) {
+			return false;
+		}
+		items[static_cast<size_t>(spectro)].holder_c = celsius;
+		return true;
+	}
+	if (what == "blank") {
+		// (Stage 55) 100 % T through what stands in its well now, at the wavelength it is set to
+		int spectro = -1;
+		if (!item(c, "spectrophotometer", Kind::Spectro, spectro, why)) {
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(spectro)];
+		if (!on_bench(x, why)) {
+			return false;
+		}
+		if (x.under < 0) {
+			why = "\"" + x.id + "\" has nothing in its well to blank with: a cuvette of the solvent first";
+			return false;
+		}
+		x.blank = spectro_signal(x);
+		x.blank_nm = x.nm;
 		return true;
 	}
 	if (what == "tare") {
@@ -5507,6 +5778,69 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		set_beside(thing, v);
 		return true;
 	}
+	if (what == "note") {
+		// (Stage 55) a number the student writes in the notebook, under a label: no instrument's, no quantity's
+		const std::string label = c.value("label", "");
+		const double value = number(c, "value", std::numeric_limits<double>::quiet_NaN());
+		if (label.empty() || label.size() > 24 || !std::isfinite(value)) {
+			why = "a note is {\"label\" (at most 24 characters), \"value\" (a number), \"unit\"?}";
+			return false;
+		}
+		notebook.push_back(NoteEntry{ static_cast<int64_t>(world().step()), label, Quantity{}, value, c.value("unit", ""), false });
+		if (notebook.size() > NOTEBOOK_MOST) {
+			notebook.erase(notebook.begin());
+		}
+		return true;
+	}
+	if (what == "record" || what == "log" || what == "unlog" || what == "erase") {
+		// the notebook (GAME_SPEC §13, Stage 54): it acts on nothing in the world
+		if (what == "erase") {
+			if (c.contains("entry")) {
+				const int64_t at = c.at("entry").is_number_integer() ? c.at("entry").get<int64_t>() : -1;
+				if (at < 0 || at >= static_cast<int64_t>(notebook.size())) {
+					why = "the notebook has no such entry";
+					return false;
+				}
+				notebook.erase(notebook.begin() + at);
+			} else {
+				notebook.clear();
+			}
+			return true;
+		}
+		Quantity q;
+		if (!quantity_of_command(c, q, why)) {
+			return false;
+		}
+		const std::string named = c.value("label", "");
+		if (what == "record") {
+			return record_note(q, named, why);
+		}
+		const auto same = [&](const NoteLogger &l) { return l.quantity.item == q.item && l.quantity.what == q.what && l.quantity.measure == q.measure; };
+		if (what == "unlog") {
+			const auto at = std::find_if(loggers.begin(), loggers.end(), same);
+			if (at == loggers.end()) {
+				why = "nothing logs " + label_of(q);
+				return false;
+			}
+			loggers.erase(at);
+			return true;
+		}
+		const double every = number(c, "every", -1.0);
+		if (!(every >= 1.0 && every <= 3600.0)) {
+			why = "a logger records \"every\" 1 to 3600 seconds";
+			return false;
+		}
+		bool instrument = false;
+		if (!note_reading(q, instrument)) {
+			why = instruments ? "no instrument reads " + label_of(q) : "there is no " + label_of(q) + " to read";
+			return false;
+		}
+		loggers.erase(std::remove_if(loggers.begin(), loggers.end(), same), loggers.end());
+		// (on the whole multiples of its interval: two loggers of one interval write at the same moments, a row a moment)
+		const int64_t n = std::max<int64_t>(1, std::llround(every / STEP_SECONDS)), now = static_cast<int64_t>(world().step());
+		loggers.push_back(NoteLogger{ named.empty() ? label_of(q) : named, q, every, (now + n - 1) / n * n });
+		return true;
+	}
 	if (what == "fill") {
 		// to the mark (Stage 52): a pipette draws, a volumetric flask is made up, from a vessel's liquid with what is
 		// dissolved in it, until its own stands at its mark (its true volume there, within its class's tolerance)
@@ -5682,7 +6016,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		// lifted off its burner, which stays where the vessel stood (a balance too, Stage 50, which has no edge)
 		for (Item &other : items) {
-			if (other.under == thing && other.kind == Kind::Balance) {
+			if (other.under == thing && stands_under(other.kind)) {
 				other.under = -1;
 			} else if (other.under == thing) {
 				if (!boundary(why)) {
@@ -5699,7 +6033,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.slot = slot;
 		x.col = x.row = -1;
 		for (size_t i = 0; i < items.size(); ++i) {
-			if ((items[i].kind == Kind::Burner || items[i].kind == Kind::Balance) && items[i].place == Place::Under && items[i].under < 0) {
+			if ((items[i].kind == Kind::Burner || stands_under(items[i].kind)) && items[i].place == Place::Under && items[i].under < 0) {
 				items[i].place = Place::Cabinet;
 				set_beside(static_cast<int>(i), was); // where the vessel stood, or beside it
 			}
@@ -5814,6 +6148,8 @@ LabView Lab::view() const {
 	out.conserved = now == m.genesis;
 	out.room_celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // GAME_SPEC §12.4 (Stage 46)
 	out.instruments = m.instruments; // (Stage 50)
+	out.notebook = m.notebook; // (Stage 54)
+	out.loggers = m.loggers;
 	out.seed = m.seed;
 	out.air_kg_m3 = m.air_density();
 	out.mass_g = now.mass.grams();
@@ -5895,8 +6231,9 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	const double mol = static_cast<double>(state.amount[in]) * MOL_PER_QUANTUM;
 	const double area = 4.835975862049409 * std::cbrt(static_cast<double>(state.particles[in])) * std::pow(mol * solid.molar_volume, 2.0 / 3.0); // m^2
 	// which of its two steps holds it back (GAME_SPEC §7): the reaction at the surface, or transport to it
-	const double mixing = world.meta(cell).mixing;
-	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, mixing, &world.meta(cell));
+	// (Stage 57: transport by the stirring's own dissipation, Sano's)
+	const double dissipation = chem::dissipation_per_kg(table, state, world.meta(cell).stirring);
+	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, dissipation, &world.meta(cell));
 	const bool by_transport = steps.transported && steps.transport < steps.surface;
 	const bool alike = steps.transported && steps.transport < 3.0 * steps.surface && steps.surface < 3.0 * steps.transport;
 	std::string says = alike ? "limited by its surface and by transport to it alike: " : by_transport ? "limited by transport to its surface: " : "limited at its surface: ";
@@ -5904,8 +6241,8 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	if (table.has(k.driver)) {
 		says += text_of(", %.3g mol/kg of ", molality(table, state, k.driver)) + named(table, k.driver);
 	}
-	if (mixing < STIRRED) {
-		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED, &world.meta(cell)).both / steps.both : 1.0;
+	if (!(dissipation > 0.0) && !(world.meta(cell).mixing > 1.0)) { // (a stirrer just switched on has dissipated nothing yet)
+		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED_W_KG, &world.meta(cell)).both / steps.both : 1.0;
 		says += faster < 1.05 ? std::string("; stirring would hardly speed it") : text_of("; stirring would make it %.1f times faster", faster);
 	} else {
 		says += "; stirred";
@@ -6154,6 +6491,21 @@ std::string Lab::report() const {
 			items.push_back(j);
 			continue;
 		}
+		if (item.kind == Kind::Spectro) {
+			// a spectrophotometer (Stage 55): where it stands, what is in its well, its wavelength, its blank's, what it reads
+			const ItemView v = m.item_view(item, false, false);
+			j["kind"] = "spectrophotometer";
+			j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+			if (item.place == Place::Bench) {
+				j["at"] = { item.col, item.row };
+			}
+			j["under"] = item.under >= 0 ? json(m.items[static_cast<size_t>(item.under)].id) : json(nullptr);
+			j["nm"] = item.nm;
+			j["blank_nm"] = v.blanked ? json(item.blank_nm) : json(nullptr);
+			j["absorbance"] = v.absorbance ? json(*v.absorbance) : json(nullptr);
+			items.push_back(j);
+			continue;
+		}
 		if (item.kind == Kind::Thermal) {
 			// a thermal camera (Stage 48): where it stands, where its frame is, its settings
 			const ThermalSettings &t = item.thermal;
@@ -6310,6 +6662,9 @@ std::string Lab::digest() const {
 		}
 		if (x.floor_nucleating) { // (Stage 53) its floor nucleating
 			hash.update_u64(0x6e75636c00000000u | static_cast<uint64_t>(&x - m.items.data()));
+		}
+		if (std::isfinite(x.holder_c)) { // a cell holder's temperature (Stage 56): what it will heat to
+			hash.update_double(x.holder_c);
 		}
 	}
 	if (!m.sim->work_remainders().empty()) {
@@ -6534,6 +6889,17 @@ json Lab::Impl::save() const {
 	bench["air"] = air.index;
 	bench["room"] = room.index;
 	bench["mains"] = mains.index;
+	if (!notebook.empty() || !loggers.empty()) { // (Stage 54) a lab with nothing written down saves as before
+		json pages = json::array(), logging = json::array();
+		for (const NoteEntry &e : notebook) {
+			pages.push_back({ { "step", e.step }, { "label", e.label }, { "item", e.quantity.item }, { "what", e.quantity.what }, { "measure", e.quantity.measure }, { "value", bits(e.value) },
+				{ "unit", e.unit }, { "instrument", e.instrument } });
+		}
+		for (const NoteLogger &l : loggers) {
+			logging.push_back({ { "label", l.label }, { "item", l.quantity.item }, { "what", l.quantity.what }, { "measure", l.quantity.measure }, { "every", bits(l.every_s) }, { "next", l.next } });
+		}
+		bench["notebook"] = { { "pages", pages }, { "loggers", logging } };
+	}
 	if (instruments || seed != 0) { // a bench of the truth and no seed saves as before (Stage 50)
 		bench["readings"] = instruments ? "instruments" : "truth";
 		bench["seed"] = seed;
@@ -6575,6 +6941,12 @@ json Lab::Impl::save() const {
 		}
 		if (item.kind == Kind::Balance) { // (Stage 50)
 			list.back()["balance"] = { { "model", item.model }, { "tare", bits(item.tare) } };
+		}
+		if (item.kind == Kind::Spectro) { // (Stage 55)
+			list.back()["spectro"] = { bits(item.nm), bits(item.blank), bits(item.blank_nm) };
+			if (std::isfinite(item.holder_c)) { // (Stage 56)
+				list.back()["holder_c"] = bits(item.holder_c);
+			}
 		}
 		if (!item.label.empty()) {
 			list.back()["label"] = item.label;
@@ -6734,11 +7106,31 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		impl->mains = CellId{ bench.value("mains", -1) };
 		impl->instruments = bench.value("readings", "truth") == "instruments"; // (Stage 50)
 		impl->seed = bench.value("seed", uint64_t{ 0 });
+		if (bench.contains("notebook")) { // (Stage 54)
+			for (const json &e : bench.at("notebook").at("pages")) {
+				NoteEntry n{ e.at("step").get<int64_t>(), e.at("label").get<std::string>(), Quantity{ e.at("item").get<std::string>(), e.at("what").get<std::string>(), e.at("measure").get<std::string>() },
+					0.0, e.at("unit").get<std::string>(), e.at("instrument").get<bool>() };
+				if (!from_bits(e.at("value"), n.value)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				impl->notebook.push_back(n);
+			}
+			for (const json &e : bench.at("notebook").at("loggers")) {
+				NoteLogger l{ e.at("label").get<std::string>(), Quantity{ e.at("item").get<std::string>(), e.at("what").get<std::string>(), e.at("measure").get<std::string>() }, 1.0,
+					e.at("next").get<int64_t>() };
+				if (!from_bits(e.at("every"), l.every_s)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				impl->loggers.push_back(l);
+			}
+		}
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Balance) || place < 0 || place > static_cast<int>(Place::Trash)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Spectro) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -6802,6 +7194,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					why = "the save names a balance that there is not, or holds a number that is not one";
 					return nullptr;
 				}
+			}
+			if (j.contains("spectro") && (!j.at("spectro").is_array() || j.at("spectro").size() != 3 || !from_bits(j.at("spectro").at(0), item.nm) ||
+						!from_bits(j.at("spectro").at(1), item.blank) || !from_bits(j.at("spectro").at(2), item.blank_nm))) { // (Stage 55)
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			if (j.contains("holder_c") && !from_bits(j.at("holder_c"), item.holder_c)) { // (Stage 56)
+				why = "the save holds a number that is not one";
+				return nullptr;
 			}
 			if (item.kind == Kind::Balance && item.model.empty()) {
 				why = "the save's balance has no model";
@@ -6915,7 +7316,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = (item.kind == Kind::Viewer || item.kind == Kind::Thermal || item.kind == Kind::Balance ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
+		const bool refs = (item.kind == Kind::Viewer || item.kind == Kind::Thermal || stands_under(item.kind) ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";

@@ -2,6 +2,8 @@
 #include "lab/contents.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
+#include "lab/notebook.hpp"
+#include "lab/spectro.hpp"
 
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
@@ -21,6 +23,7 @@
 #include <cstdlib>
 #include <deque>
 #include <map>
+#include <set>
 #include <utility>
 
 namespace lab {
@@ -193,6 +196,7 @@ constexpr int DRAWN_KINDS = 6; // what the drawer holds
 constexpr const char *SPEEDS_NAMED[] = { "gentle", "normal", "fast" }; // a controller's (§13.3, Stage 26)
 constexpr Rect NOTICES{ 1400, 64, 520, 700 }; // the notices, over the readout (§13.4)
 constexpr Rect DEBUG{ 1400, 64, 520, 1016 }; // the debug panel, over the readout (§13.6)
+constexpr Rect NOTEBOOK{ 860, 64, 530, 1010 }; // the notebook (Stage 54), over the bench's right: beside the readout and a report
 constexpr Comparison::Op OPS[] = { Comparison::Above, Comparison::Below, Comparison::AtLeast, Comparison::AtMost, Comparison::Reaches, Comparison::Between, Comparison::Outside };
 constexpr const char *OP_KEYS[] = { "above", "below", "at_least", "at_most", "reaches", "between", "outside" };
 constexpr const char *SIDES[] = { "on", "off", "change" };
@@ -248,7 +252,7 @@ struct Ui::Impl {
 		if (!ROOM.has(x, y) || draft.edit != Draft::None || panel || DRAWER.has(x, y) || (!opened.empty() && circuit_panel().has(x, y))) {
 			return false;
 		}
-		return !(notices_open && NOTICES.has(x, y)) && !(debug_open && DEBUG.has(x, y)) && !menu;
+		return !(notices_open && NOTICES.has(x, y)) && !(debug_open && DEBUG.has(x, y)) && !(notebook_open && NOTEBOOK.has(x, y)) && !menu;
 	}
 	// whether a name of the screen (Ui::locate) is of the room: what stands in it and its places, not a panel's
 	bool room_name(std::string_view what) const {
@@ -279,6 +283,7 @@ struct Ui::Impl {
 	};
 	std::map<std::string, ViewerState> viewers;
 	std::map<std::string, Picture> balances; // each balance's display as it last showed (Stage 50)
+	std::map<std::string, Picture> spectro_shows; // each spectrophotometer's two displays, "<id>:a" and "<id>:nm" (Stage 55)
 	// a thermal camera's (Stage 48): its search, what it last read, the span it shows, what its screen is given
 	struct CameraState {
 		ThermalSearch search;
@@ -374,6 +379,30 @@ struct Ui::Impl {
 	// notices (§13.4): the levels shown (the others silenced, still kept), and the panel
 	std::array<bool, 4> hear{ false, true, true, true };
 	bool notices_open = false;
+	// the notebook's panel (Stage 54): open; what its plot shows (x: a label, or "" for the time; y: a label), each axis's
+	// transform, the fitted line
+	bool notebook_open = false;
+	// the report (Stage 54): what the student typed for each item, the field typed into, and each item as checked
+	struct ReportCheck {
+		bool done = false, within = false;
+		double truth = 0.0, yours = 0.0;
+		std::string why;
+	};
+	std::vector<std::string> answers;
+	// (Stage 55) the report's predictions: what is typed for each before the run, and what was made (kept as typed)
+	std::vector<std::string> guesses;
+	std::set<std::string> done; // (Stage 55) the experiments completed: progress, the host's to keep
+	std::vector<std::optional<double>> predictions;
+	int guess_focus = -1;
+	int report_focus = -1;
+	std::vector<ReportCheck> report_checks;
+	std::string plot_x, plot_y;
+	AxisTransform plot_tx = AxisTransform::Plain, plot_ty = AxisTransform::Plain;
+	bool plot_fit = true;
+	// (Stage 55) the notebook's write row: a label and a number the student writes, and which field is typed in
+	std::string note_label, note_value;
+	int note_focus = 0; // 0 none, 1 the label, 2 the value
+	bool note_fresh = false; // a field just clicked: what is typed next replaces it (Stage 56)
 	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
 	bool debug_open = false;
 	bool infrared = false; // the debug infrared view (Stage 46): the whole pass in the long-wave range
@@ -480,6 +509,525 @@ struct Ui::Impl {
 			}
 			y += 6;
 		}
+	}
+
+	// ---- the notebook (GAME_SPEC §13.1, Stage 54): its button, its panel's table, plot and logger
+	static Rect notebook_button() { return Rect{ 1006, 14, 104, 36 }; } // after reset, before the clock (Stage 55: not over it)
+	static Rect notebook_rect(const std::string &what) {
+		// close, erase; x, its transform, y, its transform, fit; log every 1, 5, 30 s, stop
+		static const char *const NAMES[] = { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog" };
+		// (Stage 55) the write row under the plot: its label's field, its value's, and "write"
+		if (what == "write:label" || what == "write:value" || what == "write") {
+			static const float AT[] = { 80, 236, 400 }, W[] = { 130, 130, 90 };
+			const int k = what == "write:label" ? 0 : what == "write:value" ? 1 : 2;
+			return Rect{ NOTEBOOK.x + AT[k], NOTEBOOK.y + 790, W[k], 30 };
+		}
+		for (int k = 0; k < 11; ++k) {
+			if (what == NAMES[k]) {
+				if (k < 2) {
+					return Rect{ NOTEBOOK.x + NOTEBOOK.w - 210 + static_cast<float>(k) * 100, NOTEBOOK.y + 12, 90, 30 };
+				}
+				if (k < 7) {
+					static const float AT[] = { 20, 170, 240, 390, 460 }, W[] = { 145, 64, 145, 64, 64 }; // (Stage 55: within the panel)
+					return Rect{ NOTEBOOK.x + AT[k - 2], NOTEBOOK.y + 316, W[k - 2], 30 };
+				}
+				return Rect{ NOTEBOOK.x + 150 + static_cast<float>(k - 7) * 84, NOTEBOOK.y + 980, 78, 28 };
+			}
+		}
+		return Rect{};
+	}
+	static Rect plot_area() { return Rect{ NOTEBOOK.x + 60, NOTEBOOK.y + 370, NOTEBOOK.w - 90, 330 }; }
+	// the notebook's columns: its labels, in the order first written
+	std::vector<std::string> note_labels() const {
+		std::vector<std::string> out;
+		for (const NoteEntry &e : view.notebook) {
+			if (std::find(out.begin(), out.end(), e.label) == out.end()) {
+				out.push_back(e.label);
+			}
+		}
+		return out;
+	}
+	bool note_celsius(const std::string &label) const {
+		for (const NoteEntry &e : view.notebook) {
+			if (e.label == label) {
+				return e.quantity.what == "celsius";
+			}
+		}
+		return false;
+	}
+	// the plot's points: y's entries against the time, or against x's entry of the same moment, each transformed
+	std::vector<std::pair<double, double>> plot_points() const {
+		// (Stage 55) a y pairs with the x written at the same moment, or else the last x written before it: a logged pair,
+		// or a number written and then a reading recorded (a standard's concentration, then its absorbance). Entries are
+		// written in the order of their moments: one pass, a moment at a time.
+		std::vector<std::pair<double, double>> out;
+		std::optional<double> last; // the last x of the moments before
+		for (size_t g = 0; g < view.notebook.size();) {
+			size_t end = g;
+			std::optional<double> here; // the x written at this moment
+			while (end < view.notebook.size() && view.notebook[end].step == view.notebook[g].step) {
+				if (!plot_x.empty() && view.notebook[end].label == plot_x) {
+					here = view.notebook[end].value;
+				}
+				++end;
+			}
+			for (size_t i = g; i < end; ++i) {
+				const NoteEntry &e = view.notebook[i];
+				if (e.label != plot_y) {
+					continue;
+				}
+				const std::optional<double> x = plot_x.empty() ? std::optional<double>(static_cast<double>(e.step) * STEP_SECONDS) : here ? here : last;
+				if (!x) {
+					continue;
+				}
+				const std::optional<double> tx = transformed(*x, plot_tx, !plot_x.empty() && note_celsius(plot_x)), ty = transformed(e.value, plot_ty, note_celsius(plot_y));
+				if (tx && ty) {
+					out.emplace_back(*tx, *ty);
+				}
+			}
+			last = here ? here : last;
+			g = end;
+		}
+		return out;
+	}
+	bool notebook_press(float x, float y) {
+		if (notebook_button().has(x, y)) {
+			notebook_open = !notebook_open;
+			notices_open = notices_open && !notebook_open;
+			debug_open = debug_open && !notebook_open;
+			return true;
+		}
+		if (!notebook_open) {
+			return false;
+		}
+		const std::vector<std::string> labels = note_labels();
+		const auto next = [&](const std::string &now, bool time) {
+			// the next column after `now`: the time first when it may be one
+			std::vector<std::string> all;
+			if (time) {
+				all.emplace_back();
+			}
+			all.insert(all.end(), labels.begin(), labels.end());
+			if (all.empty()) {
+				return now;
+			}
+			const auto at = std::find(all.begin(), all.end(), now);
+			return at == all.end() || at + 1 == all.end() ? all.front() : *(at + 1);
+		};
+		const auto cycle = [](AxisTransform t) { return static_cast<AxisTransform>((static_cast<int>(t) + 1) % 3); };
+		note_focus = notebook_rect("write:label").has(x, y) ? 1 : notebook_rect("write:value").has(x, y) ? 2 : 0;
+		note_fresh = note_focus != 0;
+		if (notebook_rect("close").has(x, y)) {
+			notebook_open = false;
+		} else if (notebook_rect("write").has(x, y)) {
+			write_note();
+		} else if (notebook_rect("erase").has(x, y)) {
+			act({ { "do", "erase" } });
+		} else if (notebook_rect("x").has(x, y)) {
+			plot_x = next(plot_x, true);
+		} else if (notebook_rect("tx").has(x, y)) {
+			plot_tx = cycle(plot_tx);
+		} else if (notebook_rect("y").has(x, y)) {
+			plot_y = next(plot_y, false);
+		} else if (notebook_rect("ty").has(x, y)) {
+			plot_ty = cycle(plot_ty);
+		} else if (notebook_rect("fit").has(x, y)) {
+			plot_fit = !plot_fit;
+		} else if (const auto read = std::find_if(view.notebook.rbegin(), view.notebook.rend(), [](const NoteEntry &e) { return !e.quantity.item.empty(); });
+				read != view.notebook.rend()) {
+			// a logger for the last quantity recorded (not a number written)
+			const NoteEntry &last = *read;
+			const json q = { { "item", last.quantity.item }, { "what", last.quantity.what }, { "measure", last.quantity.measure } };
+			for (const double every : { 1.0, 5.0, 30.0 }) {
+				if (notebook_rect("log:" + text_of("%.0f", every)).has(x, y)) {
+					json c = q;
+					c["do"] = "log";
+					c["every"] = every;
+					c["label"] = last.label;
+					act(c);
+				}
+			}
+			if (notebook_rect("unlog").has(x, y)) {
+				json c = q;
+				c["do"] = "unlog";
+				act(c);
+			}
+		}
+		return NOTEBOOK.has(x, y); // the panel takes what falls on it
+	}
+	// (Stage 55) the write row's number into the notebook under its label; the label stays for the next
+	void write_note() {
+		char *end = nullptr;
+		const double v = std::strtod(note_value.c_str(), &end);
+		if (note_label.empty() || note_value.empty() || end == nullptr || *end != '\0') {
+			message = "write a label and a number, then \"write\"";
+			return;
+		}
+		if (act({ { "do", "note" }, { "label", note_label }, { "value", v } })) {
+			note_value.clear();
+			note_focus = 2;
+		}
+	}
+	bool type_note(Ui::Key key, uint32_t codepoint) {
+		if (!notebook_open || note_focus == 0) {
+			return false;
+		}
+		std::string &f = note_focus == 1 ? note_label : note_value;
+		const bool letter = (codepoint >= 'a' && codepoint <= 'z') || (codepoint >= 'A' && codepoint <= 'Z') || codepoint == ' ' || codepoint == '_';
+		const bool digit = (codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e';
+		const bool replacing = note_fresh;
+		note_fresh = false;
+		if (key == Ui::KeyText && (digit || (note_focus == 1 && letter))) {
+			if (replacing) {
+				f.clear(); // a field just clicked: what is typed replaces it (Stage 56)
+			}
+			if (f.size() < 16) {
+				f += static_cast<char>(codepoint);
+			}
+		} else if (key == Ui::KeyBackspace && !f.empty()) {
+			f.pop_back();
+		} else if (key == Ui::KeyEnter) {
+			write_note();
+		} else if (key == Ui::KeyEscape) {
+			note_focus = 0;
+		}
+		return true;
+	}
+	void paint_notebook() {
+		button(notebook_button(), text_of("notebook %.0f", static_cast<double>(view.notebook.size())), notebook_open, 15);
+		if (!notebook_open) {
+			return;
+		}
+		rect_fill(NOTEBOOK, PANEL_FILL);
+		outline(NOTEBOOK, GLASS, 1);
+		text(NOTEBOOK.x + 20, NOTEBOOK.y + 36, view.instruments ? "notebook, by instruments" : "notebook", INK, 20);
+		button(notebook_rect("close"), "close");
+		button(notebook_rect("erase"), "erase");
+		// the table: the newest at the foot, as written
+		float y = NOTEBOOK.y + 80;
+		const size_t shown_rows = 10, first = view.notebook.size() > shown_rows ? view.notebook.size() - shown_rows : 0;
+		for (size_t i = first; i < view.notebook.size(); ++i) {
+			const NoteEntry &e = view.notebook[i];
+			text(NOTEBOOK.x + 20, y, when(e.step), DIM, 14);
+			text(NOTEBOOK.x + 110, y, e.label, INK, 14);
+			text(NOTEBOOK.x + 360, y, e.quantity.item.empty() ? text_of("%.6g", e.value) + (e.unit.empty() ? "" : " " + e.unit) + " (written)" : shown(e.quantity, e.value), INK, 14);
+			y += 21;
+		}
+		if (view.notebook.empty()) {
+			text(NOTEBOOK.x + 20, y, "nothing yet: choose an item, then a \"+\" under its readings", DIM, 15);
+		}
+		// the plot
+		const std::string xs = plot_x.empty() ? "time (s)" : plot_x, ys = plot_y.empty() ? "(choose y)" : plot_y;
+		button(notebook_rect("x"), "x: " + xs, false, 13);
+		button(notebook_rect("tx"), std::string(transform_name(plot_tx, note_celsius(plot_x))).empty() ? "as is" : transform_name(plot_tx, note_celsius(plot_x)), plot_tx != AxisTransform::Plain, 13);
+		button(notebook_rect("y"), "y: " + ys, false, 13);
+		button(notebook_rect("ty"), std::string(transform_name(plot_ty, note_celsius(plot_y))).empty() ? "as is" : transform_name(plot_ty, note_celsius(plot_y)), plot_ty != AxisTransform::Plain, 13);
+		button(notebook_rect("fit"), "fit", plot_fit, 13);
+		// the write row (Stage 55): a number the student writes, under a label
+		{
+			text(NOTEBOOK.x + 20, NOTEBOOK.y + 811, "write", DIM, 15);
+			const Rect fl = notebook_rect("write:label"), fv = notebook_rect("write:value");
+			for (int k = 1; k <= 2; ++k) {
+				const Rect &f = k == 1 ? fl : fv;
+				rect_fill(f, rgba(24, 24, 24));
+				outline(f, note_focus == k ? GUIDE : GRID, note_focus == k ? 2.0f : 1.0f);
+				const std::string &t = k == 1 ? note_label : note_value;
+				text(f.x + 8, f.y + 21, t.empty() && note_focus != k ? (k == 1 ? "label" : "number") : t + (note_focus == k ? "_" : ""), t.empty() ? DIM : INK, 15);
+			}
+			text(fl.x + fl.w + 10, fl.y + 21, "=", DIM, 16);
+			button(notebook_rect("write"), "write", false, 14);
+		}
+		const Rect area = plot_area();
+		rect_fill(area, rgba(24, 24, 24));
+		outline(area, GRID, 1);
+		const std::vector<std::pair<double, double>> pts = plot_points();
+		if (!pts.empty()) {
+			double x0 = pts[0].first, x1 = x0, y0 = pts[0].second, y1 = y0;
+			for (const auto &[qx, qy] : pts) {
+				x0 = std::min(x0, qx);
+				x1 = std::max(x1, qx);
+				y0 = std::min(y0, qy);
+				y1 = std::max(y1, qy);
+			}
+			if (x1 - x0 < 1e-12) {
+				x1 = x0 + 1.0;
+			}
+			if (y1 - y0 < 1e-12) {
+				y1 = y0 + 1.0;
+			}
+			const auto sx = [&](double v) { return area.x + 10 + static_cast<float>((v - x0) / (x1 - x0)) * (area.w - 20); };
+			const auto sy = [&](double v) { return area.y + area.h - 10 - static_cast<float>((v - y0) / (y1 - y0)) * (area.h - 20); };
+			for (const auto &[qx, qy] : pts) {
+				rect_fill(Rect{ sx(qx) - 3, sy(qy) - 3, 6, 6 }, GUIDE);
+			}
+			text(area.x, area.y + area.h + 22, text_of("%.4g", x0), DIM, 13);
+			text(area.x + area.w - 80, area.y + area.h + 22, text_of("%.4g", x1), DIM, 13);
+			text(area.x - 56, area.y + area.h - 6, text_of("%.4g", y0), DIM, 13);
+			text(area.x - 56, area.y + 14, text_of("%.4g", y1), DIM, 13);
+			if (plot_fit) {
+				std::vector<double> xv, yv;
+				for (const auto &[qx, qy] : pts) {
+					xv.push_back(qx);
+					yv.push_back(qy);
+				}
+				const LineFit f = fit_line(xv, yv);
+				if (f.ok) {
+					line(sx(x0), sy(f.slope * x0 + f.intercept), sx(x1), sy(f.slope * x1 + f.intercept), WARN, 2);
+					text(NOTEBOOK.x + 20, area.y + area.h + 54, text_of("slope %.6g", f.slope) + text_of(", intercept %.6g", f.intercept) + text_of(", R2 %.5f", f.r2) + text_of(" (%.0f points)", f.n), INK, 15);
+				}
+			}
+		}
+		if (const auto read = std::find_if(view.notebook.rbegin(), view.notebook.rend(), [](const NoteEntry &e) { return !e.quantity.item.empty(); });
+				read != view.notebook.rend()) {
+			// the last quantity recorded (Stage 55: not a number written), short of the buttons
+			const std::string named = read->label.size() > 14 ? read->label.substr(0, 13) + "." : read->label;
+			text(NOTEBOOK.x + 20, NOTEBOOK.y + 1000, "log " + named + ":", DIM, 14);
+			button(notebook_rect("log:1"), "1 s", false, 13);
+			button(notebook_rect("log:5"), "5 s", false, 13);
+			button(notebook_rect("log:30"), "30 s", false, 13);
+			button(notebook_rect("unlog"), "stop", false, 13);
+		}
+		float ly = NOTEBOOK.y + 940;
+		for (const NoteLogger &l : view.loggers) {
+			text(NOTEBOOK.x + 20, ly, "logging " + l.label + text_of(" every %.0f s", l.every_s), WARN, 14);
+			ly -= 20;
+		}
+	}
+	// ---- the report (GAME_SPEC §13.2, Stage 54): once a tutorial is complete, under its card in place of the readout
+	bool report_active() const { return tutorial && tutorial->view().state == TutorialView::Complete && !tutorial->report().empty(); }
+	void clear_report() {
+		answers.clear();
+		report_checks.clear();
+		report_focus = -1;
+		guesses.clear();
+		predictions.clear();
+		guess_focus = -1;
+	}
+	// ---- predictions (GAME_SPEC §13.2, Stage 55): the report's items marked `predict`, typed and made before the run's
+	// end, in place of the readout while any is still to make; kept as made, shown beside the result
+	std::vector<int> predicted_items() const {
+		std::vector<int> out;
+		if (tutorial) {
+			for (size_t k = 0; k < tutorial->report().size(); ++k) {
+				if (tutorial->report()[k].predict) {
+					out.push_back(static_cast<int>(k));
+				}
+			}
+		}
+		return out;
+	}
+	int predictions_made() const {
+		int n = 0;
+		for (const std::optional<double> &p : predictions) {
+			n += p ? 1 : 0;
+		}
+		return n;
+	}
+	bool predicting() const { return running() && predictions_made() < static_cast<int>(predicted_items().size()); }
+	// shown in place of the readout while nothing is selected: an item chosen shows its own readout and controls
+	bool predict_shown() const { return predicting() && selected < 0; }
+	static Rect guess_field(int n) { return Rect{ READOUT.x + 300, TUTOR.y + TUTOR.h + 100 + static_cast<float>(n) * 70, 150, 30 }; }
+	Rect guess_make() const { return Rect{ READOUT.x + 16, TUTOR.y + TUTOR.h + 100 + static_cast<float>(predicted_items().size()) * 70, 120, 34 }; }
+	void make_predictions() {
+		const size_t n = tutorial->report().size();
+		guesses.resize(n);
+		predictions.resize(n);
+		for (const int k : predicted_items()) {
+			char *end = nullptr;
+			const std::string &g = guesses[static_cast<size_t>(k)];
+			const double v = std::strtod(g.c_str(), &end);
+			if (!predictions[static_cast<size_t>(k)] && !g.empty() && end != nullptr && *end == '\0') {
+				predictions[static_cast<size_t>(k)] = v;
+			}
+		}
+		message = predicting() ? "a prediction is a number: type one in each field" : std::string();
+	}
+	bool predict_press(float x, float y) {
+		if (!predict_shown()) {
+			return false;
+		}
+		const std::vector<int> items = predicted_items();
+		for (size_t n = 0; n < items.size(); ++n) {
+			if (guess_field(static_cast<int>(n)).has(x, y)) {
+				guess_focus = items[n];
+				return true;
+			}
+		}
+		if (guess_make().has(x, y)) {
+			make_predictions();
+			return true;
+		}
+		return false;
+	}
+	bool type_predict(Ui::Key key, uint32_t codepoint) {
+		if (!predict_shown() || guess_focus < 0) {
+			return false;
+		}
+		guesses.resize(tutorial->report().size());
+		predictions.resize(tutorial->report().size());
+		if (predictions[static_cast<size_t>(guess_focus)]) {
+			return true; // made: kept as it was
+		}
+		std::string &g = guesses[static_cast<size_t>(guess_focus)];
+		if (key == Ui::KeyText && ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e') && g.size() < 16) {
+			g += static_cast<char>(codepoint);
+		} else if (key == Ui::KeyBackspace && !g.empty()) {
+			g.pop_back();
+		} else if (key == Ui::KeyEnter) {
+			make_predictions();
+		} else if (key == Ui::KeyEscape) {
+			guess_focus = -1;
+		}
+		return true;
+	}
+	void paint_predict() {
+		const std::vector<TutorialReport> &items = tutorial->report();
+		float y = TUTOR.y + TUTOR.h + 46;
+		text(READOUT.x + 16, y, "Before you start: predict", INK, 18);
+		text(READOUT.x + 16, y + 26, "what you expect, kept as you make it, beside what you find", DIM, 14);
+		const std::vector<int> ks = predicted_items();
+		for (size_t n = 0; n < ks.size(); ++n) {
+			const size_t k = static_cast<size_t>(ks[n]);
+			const Rect f = guess_field(static_cast<int>(n));
+			text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
+			rect_fill(f, rgba(24, 24, 24));
+			const bool made = k < predictions.size() && predictions[k];
+			outline(f, guess_focus == static_cast<int>(k) && !made ? GUIDE : GRID, guess_focus == static_cast<int>(k) ? 2.0f : 1.0f);
+			const std::string typed = made ? text_of("%.6g", *predictions[k]) : k < guesses.size() ? guesses[k] : std::string();
+			text(f.x + 8, f.y + 21, typed + (guess_focus == static_cast<int>(k) && !made ? "_" : ""), made ? GOOD : INK, 16);
+			text(f.x + f.w + 10, f.y + 21, items[k].unit, DIM, 15);
+		}
+		button(guess_make(), "predict", false, 15);
+	}
+	static Rect report_field(int k) { return Rect{ READOUT.x + 300, TUTOR.y + TUTOR.h + 70 + static_cast<float>(k) * 96, 150, 30 }; }
+	Rect report_check() const { return Rect{ READOUT.x + 16, TUTOR.y + TUTOR.h + 70 + static_cast<float>(tutorial->report().size()) * 96, 120, 34 }; }
+	void check_report() {
+		const std::vector<TutorialReport> &items = tutorial->report();
+		answers.resize(items.size());
+		report_checks.assign(items.size(), ReportCheck{});
+		for (size_t k = 0; k < items.size(); ++k) {
+			ReportCheck &c = report_checks[k];
+			c.done = true;
+			if (!evaluate(items[k].truth, view, c.truth, c.why)) {
+				c.why = "its truth cannot be worked out: " + c.why;
+				continue;
+			}
+			char *end = nullptr;
+			c.yours = std::strtod(answers[k].c_str(), &end);
+			const bool number = !answers[k].empty() && end != nullptr && *end == '\0';
+			const double allowed = items[k].relative ? items[k].tolerance * std::fabs(c.truth) : items[k].tolerance;
+			c.within = number && std::fabs(c.yours - c.truth) <= allowed;
+			if (!number) {
+				c.why = "nothing to check: type a number";
+			}
+		}
+	}
+	bool report_press(float x, float y) {
+		if (!report_active()) {
+			return false;
+		}
+		answers.resize(tutorial->report().size());
+		for (int k = 0; k < static_cast<int>(answers.size()); ++k) {
+			if (report_field(k).has(x, y)) {
+				report_focus = k;
+				return true;
+			}
+		}
+		if (report_check().has(x, y)) {
+			check_report();
+			return true;
+		}
+		return false;
+	}
+	bool type_report(Ui::Key key, uint32_t codepoint) {
+		if (!report_active() || report_focus < 0) {
+			return false;
+		}
+		answers.resize(tutorial->report().size());
+		std::string &a = answers[static_cast<size_t>(report_focus)];
+		if (key == Ui::KeyText && ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e') && a.size() < 16) {
+			a += static_cast<char>(codepoint);
+		} else if (key == Ui::KeyBackspace && !a.empty()) {
+			a.pop_back();
+		} else if (key == Ui::KeyEnter) {
+			check_report();
+		} else if (key == Ui::KeyEscape) {
+			report_focus = -1;
+		}
+		return true;
+	}
+	void paint_report() {
+		const std::vector<TutorialReport> &items = tutorial->report();
+		float y = TUTOR.y + TUTOR.h + 46;
+		text(READOUT.x + 16, y, "Your report: type each result, then check it", INK, 18);
+		for (size_t k = 0; k < items.size(); ++k) {
+			const Rect f = report_field(static_cast<int>(k));
+			text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
+			rect_fill(f, rgba(24, 24, 24));
+			outline(f, report_focus == static_cast<int>(k) ? GUIDE : GRID, report_focus == static_cast<int>(k) ? 2.0f : 1.0f);
+			const std::string typed = k < answers.size() ? answers[k] : std::string();
+			text(f.x + 8, f.y + 21, typed + (report_focus == static_cast<int>(k) ? "_" : ""), INK, 16);
+			text(f.x + f.w + 10, f.y + 21, items[k].unit, DIM, 15);
+			if (k < report_checks.size() && report_checks[k].done) {
+				const ReportCheck &c = report_checks[k];
+				std::string says = c.why.empty() ? text_of("the truth %.4g", c.truth) + (c.within ? ": yours is within it" : text_of(": yours is off by %.3g", c.yours - c.truth)) : c.why;
+				if (items[k].ideal) {
+					says += text_of("; the textbook's %.4g", *items[k].ideal);
+				}
+				if (k < predictions.size() && predictions[k]) {
+					says += text_of("; you predicted %.4g", *predictions[k]); // (Stage 55)
+				}
+				text(READOUT.x + 16, f.y + 50, says, c.within ? GOOD : WARN, 14);
+				if (!items[k].why.empty()) {
+					const std::vector<std::string> w = wrapped(items[k].why, 64);
+					text(READOUT.x + 16, f.y + 70, w.empty() ? std::string() : w.front() + (w.size() > 1 ? " .." : ""), DIM, 13);
+				}
+			}
+		}
+		button(report_check(), "check", false, 15);
+		y = report_check().y + 60;
+		for (size_t k = 0; k < items.size() && k < report_checks.size() && report_checks[k].done; ++k) {
+			for (const std::string &l : wrapped(items[k].why, 60)) {
+				if (y > READOUT.y + READOUT.h - 30) {
+					break;
+				}
+				text(READOUT.x + 16, y, l, DIM, 13);
+				y += 18;
+			}
+		}
+	}
+
+	// the readout's "+": a reading of the chosen item into the notebook (Stage 54)
+	std::vector<std::pair<std::string, Rect>> record_buttons() const {
+		std::vector<std::pair<std::string, Rect>> out;
+		if (selected < 0 || selected >= static_cast<int>(view.items.size()) || draft.edit != Draft::None) {
+			return out;
+		}
+		const ItemView &v = view.items[static_cast<size_t>(selected)];
+		std::vector<std::string> whats;
+		if (v.kind == "balance") {
+			whats = { "reads_g" };
+		} else if (v.kind == "spectrophotometer") {
+			whats = { "absorbance" }; // (Stage 55)
+		} else if (v.kind == "vessel") {
+			whats.emplace_back("celsius");
+			if (v.ph) {
+				whats.emplace_back("ph");
+			}
+			if (v.scale_ml) {
+				whats.emplace_back("scale_ml");
+			} else if (!view.instruments || v.read_ml) {
+				whats.emplace_back("liquid_ml");
+			}
+			whats.emplace_back("kpa");
+		}
+		for (size_t k = 0; k < whats.size(); ++k) {
+			out.emplace_back(whats[k], Rect{ READOUT.x + 16 + static_cast<float>(k) * 96, READOUT.y + READOUT.h - 168, 90, 28 });
+		}
+		return out;
+	}
+	static std::string record_name(const std::string &what) {
+		return what == "celsius" ? "+ T" : what == "ph" ? "+ pH" : what == "reads_g" ? "+ mass" : what == "kpa" ? "+ kPa" : what == "absorbance" ? "+ A" : "+ mL";
 	}
 
 	// ---- the debug panel (§13.6): the selected item from the inside
@@ -635,6 +1183,7 @@ struct Ui::Impl {
 		screen.broken = lab->failed();
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
+		screen.predicted = predictions_made(); // (Stage 55)
 		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal", "controller" };
 		screen.edit.editing = EDITING[draft.edit];
 		screen.edit.part = draft.part;
@@ -648,7 +1197,19 @@ struct Ui::Impl {
 	void follow() {
 		if (tutorial) {
 			tutorial->follow(view, screen_now());
+			if (tutorial->view().state == TutorialView::Complete && shown_k >= 0) {
+				done.insert(catalogue[static_cast<size_t>(shown_k)].id); // (Stage 55) progress
+			}
 		}
+	}
+	// (Stage 55) the next lesson: the first in the catalogue's order with a tutorial, not yet done
+	int next_lesson() const {
+		for (size_t k = 0; k < catalogue.size(); ++k) {
+			if (!catalogue[k].tutorial.empty() && done.count(catalogue[k].id) == 0) {
+				return static_cast<int>(k);
+			}
+		}
+		return -1;
 	}
 	void play() {
 		paused = false;
@@ -674,12 +1235,13 @@ struct Ui::Impl {
 	// ---- the experiments (§13.7, Stage 41): a button over the cabinet, the list over the bench
 	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
 	static constexpr float MENU_ROW = 92;
-	// in one column, or two past eight (Stage 47: eleven in one ran off the screen)
-	int menu_columns() const { return catalogue.size() > 8 ? 2 : 1; }
+	// in one column, a column more past each eight (Stage 47: eleven in one ran off the screen; Stage 54: nineteen in
+	// two), at most three
+	int menu_columns() const { return std::min(3, static_cast<int>((catalogue.size() + 7) / 8)); }
 	int menu_rows() const { return (static_cast<int>(catalogue.size()) + menu_columns() - 1) / menu_columns(); }
 	Rect menu_rect() const {
-		const float w = menu_columns() == 1 ? 760.0f : 1440.0f;
-		return Rect{ menu_columns() == 1 ? 480.0f : 240.0f, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
+		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : 1800.0f;
+		return Rect{ menu_columns() == 1 ? 480.0f : (1920 - w) / 2, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
 	}
 	Rect menu_row(int k) const {
 		const float column_w = (menu_rect().w - 32) / static_cast<float>(menu_columns());
@@ -716,6 +1278,7 @@ struct Ui::Impl {
 		slider_drag = false;
 		hover = -1;
 		tutorial = std::move(t);
+		clear_report(); // (Stage 54: a new tutorial's report)
 		tutorial_json = e.tutorial;
 		shown_k = k;
 		menu = false;
@@ -783,8 +1346,15 @@ struct Ui::Impl {
 			const Rect row = menu_row(k);
 			rect_fill(row, k == shown_k ? BUTTON_ON : BUTTON);
 			text(row.x + 12, row.y + 28, e.title, INK, 19);
+			// (Stage 55) progress: each done, and the next
+			if (done.count(e.id) != 0) {
+				text(row.x + row.w - 64, row.y + 28, "done", GOOD, 16);
+			} else if (k == next_lesson()) {
+				outline(row, GUIDE, 2);
+				text(row.x + row.w - 64, row.y + 28, "next", GUIDE, 16);
+			}
 			float y = row.y + 52;
-			for (const std::string &l : wrapped(e.summary, menu_columns() > 1 ? 84 : 88)) {
+			for (const std::string &l : wrapped(e.summary, menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
 				text(row.x + 12, y, l, DIM, 14);
 				y += 18;
 				if (y > row.y + row.h - 4) {
@@ -889,6 +1459,13 @@ struct Ui::Impl {
 	static Rect balance_case(const Rect &r) { return Rect{ r.x, r.y + BALANCE_PAN, r.w, r.h - BALANCE_PAN }; }
 	static Rect balance_pan(const Rect &r) { return Rect{ r.x + r.w * 0.12f, r.y, r.w * 0.76f, BALANCE_PAN }; }
 	static Rect balance_display(const Rect &r) { return Rect{ r.x + r.w * 0.42f, r.y + BALANCE_PAN + 8, r.w * 0.52f, (r.h - BALANCE_PAN) * 0.5f }; }
+	// a spectrophotometer (Stage 55): its case, the well its cuvette stands in, its absorbance's display and its
+	// wavelength's on either side of the well
+	static constexpr float SPECTRO_W = 190, SPECTRO_H = 64, SPECTRO_WELL = 10;
+	static Rect spectro_case(const Rect &r) { return Rect{ r.x, r.y + SPECTRO_WELL, r.w, r.h - SPECTRO_WELL }; }
+	static Rect spectro_well(const Rect &r) { return Rect{ r.cx() - 0.09f * r.w, r.y, 0.18f * r.w, SPECTRO_WELL * r.w / SPECTRO_W }; }
+	static Rect spectro_display(const Rect &r) { return Rect{ r.x + 0.06f * r.w, r.y + 0.36f * r.h, 0.34f * r.w, 0.34f * r.h }; }
+	static Rect spectro_nm_display(const Rect &r) { return Rect{ r.x + 0.64f * r.w, r.y + 0.36f * r.h, 0.28f * r.w, 0.34f * r.h }; }
 	static constexpr float INVERTED_GAP = 24; // an upside-down vessel's mouth above the mouth it pours into
 	// the square of an item's footprint its body's centre is on, as it would stand on the bench
 	void body_square(int index, int &c, int &r) const {
@@ -911,6 +1488,9 @@ struct Ui::Impl {
 		} else if (v.kind == "balance") { // its case, its pan and its display (Stage 50)
 			w = BALANCE_W;
 			h = BALANCE_H;
+		} else if (v.kind == "spectrophotometer") { // its case, its well and its displays (Stage 55)
+			w = SPECTRO_W;
+			h = SPECTRO_H;
 		} else if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
 			w = VIEWER_W;
 			h = VIEWER_H;
@@ -928,7 +1508,8 @@ struct Ui::Impl {
 			h = 120;
 		} else if (const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml)) {
 			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
-			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
+			// (a cuvette, Stage 55: narrow, as it stands in a spectrophotometer's well)
+			w = v.glassware == "cuvette" ? 30.0f : static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
 			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
 			if (h > TALL_MOST) { // tall glassware (Stage 52): no taller than fits over a flask, in its own proportions
 				w *= TALL_MOST / h;
@@ -1320,7 +1901,7 @@ struct Ui::Impl {
 		}
 		if (v.place == "under" && v.under >= 0) {
 			const Rect vessel = rect(v.under);
-			if (v.kind == "balance") { // the vessel stands on its pan (Stage 50)
+			if (v.kind == "balance" || v.kind == "spectrophotometer") { // the vessel stands on its pan (Stage 50), in its well (Stage 55)
 				return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h, w, h };
 			}
 			return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h + 64, w, h };
@@ -1345,6 +1926,9 @@ struct Ui::Impl {
 			}
 			if (other.kind == "balance" && other.under == index) {
 				lift = STAND + BALANCE_H; // on a balance's pan (Stage 50)
+			}
+			if (other.kind == "spectrophotometer" && other.under == index) {
+				lift = STAND + SPECTRO_H; // in a spectrophotometer's well (Stage 55)
 			}
 		}
 		return Rect{ c.cx() - w / 2, c.y + c.h - lift - h, w, h };
@@ -1396,11 +1980,31 @@ struct Ui::Impl {
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		const bool cap = v.kind == "vessel" && ((v.inverted && v.pours_into >= 0) || (has_outlet(v) && v.glassware == "burette"));
-		if (index != selected || (v.kind != "burner" && !cap) || (v.place != "bench" && v.place != "under" && !cap) || draft.edit != Draft::None) {
+		if (index != selected || (v.kind != "burner" && v.kind != "spectrophotometer" && !cap) || (v.place != "bench" && v.place != "under" && !cap) || draft.edit != Draft::None) {
 			return false;
 		}
 		r = Rect{ READOUT.x + 90, readout_top() + 96, 300, 18 };
 		return true;
+	}
+	// a spectrophotometer's wavelength on its slider (Stage 55): 0 its range's first nanometre, 1 its last
+	static double nm_share(double nm) { return (nm - spectro::model().first_nm) / (spectro::model().last_nm - spectro::model().first_nm); }
+	static double nm_at(double share) { return std::round(spectro::model().first_nm + share * (spectro::model().last_nm - spectro::model().first_nm)); }
+	// its buttons under the slider: blank, and a nanometre down or up
+	std::vector<std::pair<std::string, Rect>> spectro_buttons(int index) const {
+		std::vector<std::pair<std::string, Rect>> out;
+		Rect slider;
+		if (view.items[static_cast<size_t>(index)].kind != "spectrophotometer" || !valve_rect(index, slider)) {
+			return out;
+		}
+		const float y0 = slider.y + 32;
+		out.emplace_back("blank", Rect{ READOUT.x + 16, y0, 90, 30 });
+		out.emplace_back("-", Rect{ READOUT.x + 116, y0, 44, 30 });
+		out.emplace_back("+", Rect{ READOUT.x + 166, y0, 44, 30 });
+		// (Stage 56) its cell holder: on or off, 5 C down or up
+		out.emplace_back("holder", Rect{ READOUT.x + 230, y0, 110, 30 });
+		out.emplace_back("h-", Rect{ READOUT.x + 350, y0, 44, 30 });
+		out.emplace_back("h+", Rect{ READOUT.x + 400, y0, 44, 30 });
+		return out;
 	}
 
 	// a vessel's stirring button, while it stands on the bench with liquid in it
@@ -1434,10 +2038,10 @@ struct Ui::Impl {
 		return true;
 	}
 
-	Rect speed_rect(int i) const { return Rect{ 380 + static_cast<float>(i) * 84, 14, 76, 36 }; }
+	Rect speed_rect(int i) const { return Rect{ 380 + static_cast<float>(i) * 80, 14, 72, 36 }; }
 	static Rect pause_rect() { return Rect{ 270, 14, 96, 36 }; }
-	static Rect check_rect() { return Rect{ 760, 14, 220, 36 }; }
-	static Rect reset_rect() { return Rect{ 1000, 14, 96, 36 }; }
+	static Rect check_rect() { return Rect{ 704, 14, 200, 36 }; }
+	static Rect reset_rect() { return Rect{ 916, 14, 80, 36 }; } // (Stage 55: narrower, for the notebook's button)
 	static Rect view_rect() { return Rect{ 1440, 14, 150, 36 }; } // while zoomed: back to all of the room (Stage 42)
 	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
@@ -1814,7 +2418,9 @@ struct Ui::Impl {
 		if (was_on && !act({ { "do", "detach" }, { "item", v.id } })) {
 			return;
 		}
-		if (was_under && !act(v.kind == "balance" ? json{ { "do", "unweigh" }, { "balance", v.id } } : json{ { "do", "unheat" }, { "burner", v.id } })) {
+		if (was_under && !act(v.kind == "balance"		   ? json{ { "do", "unweigh" }, { "balance", v.id } }
+							  : v.kind == "spectrophotometer" ? json{ { "do", "remove" }, { "spectrophotometer", v.id } }
+															  : json{ { "do", "unheat" }, { "burner", v.id } })) {
 			return;
 		}
 		if (target >= 0) {
@@ -1827,6 +2433,10 @@ struct Ui::Impl {
 				if (t.kind == "vessel") { // under the vessel, where it stands (Stage 50)
 					act({ { "do", "weigh" }, { "balance", v.id }, { "vessel", t.id } });
 				}
+			} else if (v.kind == "spectrophotometer") {
+				if (t.kind == "vessel") { // under a cuvette, where it stands (Stage 55)
+					act({ { "do", "insert" }, { "spectrophotometer", v.id }, { "cuvette", t.id } });
+				}
 			} else if (has_outlet(v) && t.kind == "vessel") {
 				// (Stage 52) a pipette, empty, draws to its mark from what it is dipped into; full, or a burette, stands on
 				// the vessel, its tip in the mouth, and drains into it
@@ -1837,6 +2447,8 @@ struct Ui::Impl {
 				}
 			} else if (t.kind == "balance" && v.kind == "vessel" && t.place == "bench") {
 				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
+			} else if (t.kind == "spectrophotometer" && v.kind == "vessel" && t.place == "bench") {
+				act({ { "do", "insert" }, { "spectrophotometer", t.id }, { "cuvette", v.id }, { "onto", true } }); // into its well (Stage 55)
 			} else if (t.kind != "vessel") {
 				message = "\"" + t.id + "\" takes nothing";
 			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {
@@ -1912,7 +2524,7 @@ struct Ui::Impl {
 				return;
 			}
 		}
-		if (notices_press(x, y) || debug_press(x, y)) {
+		if (notices_press(x, y) || debug_press(x, y) || notebook_press(x, y) || predict_press(x, y) || report_press(x, y)) {
 			return; // the notices and the debug panel are the player's, like the clock, under a tutorial too
 		}
 		if (strict_shown() && strict_rect().has(x, y)) {
@@ -2045,6 +2657,7 @@ struct Ui::Impl {
 				begin(std::move(again));
 				if (tutorial) {
 					tutorial->restart();
+					clear_report(); // (Stage 54: a report anew)
 				}
 			}
 			return;
@@ -2058,7 +2671,8 @@ struct Ui::Impl {
 				wide.y -= 6;
 				wide.h += 12;
 				if (wide.has(x, y)) {
-					if (!allowed_click((view.items[static_cast<size_t>(i)].kind == "burner" ? "valve:" : "cap:") + id(i) + "@")) {
+					const std::string &kind = view.items[static_cast<size_t>(i)].kind;
+					if (!allowed_click((kind == "burner" ? "valve:" : kind == "spectrophotometer" ? "nm:" : "cap:") + id(i) + "@")) {
 						return;
 					}
 					valve_drag = i;
@@ -2088,6 +2702,25 @@ struct Ui::Impl {
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
+			for (const auto &[name, b] : spectro_buttons(i)) {
+				if (b.has(x, y)) {
+					// (Stage 55) its blank, or a nanometre down or up; (Stage 56) its holder on or off, 5 C down or up
+					const ItemView &sv = view.items[static_cast<size_t>(i)];
+					const bool holding = name == "holder" || name == "h-" || name == "h+";
+					const std::string named = name == "blank" ? "blank:" + id(i) : holding ? "cell:" + id(i) + (name == "holder" ? "" : name == "h-" ? ":-" : ":+") : "nm:" + id(i) + ":" + name;
+					if (allowed_click(named)) {
+						if (holding) {
+							const double now = sv.holder_c ? *sv.holder_c : 25.0;
+							const json c = name == "holder" ? (sv.holder_c ? json(nullptr) : json(25.0)) : json(std::clamp(now + (name == "h+" ? 5.0 : -5.0), spectro::model().holder_least_c, spectro::model().holder_most_c));
+							act({ { "do", "holder" }, { "spectrophotometer", id(i) }, { "celsius", c } });
+						} else {
+							const double nm = sv.nm + (name == "+" ? 1.0 : -1.0);
+							act(name == "blank" ? json{ { "do", "blank" }, { "spectrophotometer", id(i) } } : json{ { "do", "tune" }, { "spectrophotometer", id(i) }, { "nm", nm } });
+						}
+					}
+					return;
+				}
+			}
 			if (tare_rect(i, r) && r.has(x, y)) {
 				if (allowed_click("tare:" + id(i))) {
 					act({ { "do", "tare" }, { "balance", id(i) } }); // (Stage 50)
@@ -2099,6 +2732,14 @@ struct Ui::Impl {
 					return;
 				}
 				act({ { "do", "cap" }, { "item", id(i) }, { "to", view.items[static_cast<size_t>(i)].screwed ? 1.0 : 0.0 } });
+				return;
+			}
+		}
+		for (const auto &[what, r] : record_buttons()) {
+			if (r.has(x, y) && !carrying) {
+				if (allowed_click("record:" + id(selected) + ":" + what)) {
+					act({ { "do", "record" }, { "item", id(selected) }, { "what", what } }); // into the notebook (Stage 54)
+				}
 				return;
 			}
 		}
@@ -3304,6 +3945,12 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (type_predict(key, codepoint) || type_report(key, codepoint)) {
+			return; // a prediction's field (Stage 55), the report's (Stage 54)
+		}
+		if (type_note(key, codepoint)) {
+			return; // the notebook's write row (Stage 55)
+		}
 		if (panel && draft.edit == Draft::None) {
 			type_amount(key, codepoint); // the pour menu's amount (Stage 50)
 			return;
@@ -3524,6 +4171,8 @@ struct Ui::Impl {
 		open = open < 0 ? 0 : open > 1 ? 1 : open;
 		if (view.items[static_cast<size_t>(valve_drag)].kind == "burner") {
 			act({ { "do", "valve" }, { "burner", id(valve_drag) }, { "to", open } });
+		} else if (view.items[static_cast<size_t>(valve_drag)].kind == "spectrophotometer") {
+			act({ { "do", "tune" }, { "spectrophotometer", id(valve_drag) }, { "nm", nm_at(open) } }); // (Stage 55)
 		} else {
 			act({ { "do", "cap" }, { "item", id(valve_drag) }, { "to", open } });
 		}
@@ -4052,6 +4701,7 @@ struct Ui::Impl {
 		paint_readout();
 		paint_drawer();
 		paint_notices();
+		paint_notebook();
 		paint_debug();
 		if (panel) {
 			paint_panel();
@@ -4425,8 +5075,29 @@ struct Ui::Impl {
 			r = square_rect(static_cast<int>((x - BENCH.x) / square()), static_cast<int>((y - BENCH.y) / square()));
 			return true;
 		}
-		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@") {
-			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect() };
+		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@" && what.find('@') == std::string::npos) {
+			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect(), notebook_button() };
+			// (Stage 54, 55) the notebook's, the readout's "+", a spectrophotometer's, a prediction's and the report's
+			if (notebook_open) {
+				for (const char *n : { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog", "write:label", "write:value", "write" }) {
+					buttons.push_back(notebook_rect(n));
+				}
+			}
+			for (const auto &[w, b] : record_buttons()) {
+				buttons.push_back(b);
+			}
+			if (predict_shown()) {
+				for (size_t n = 0; n < predicted_items().size(); ++n) {
+					buttons.push_back(guess_field(static_cast<int>(n)));
+				}
+				buttons.push_back(guess_make());
+			}
+			if (report_active()) {
+				for (size_t k = 0; k < tutorial->report().size(); ++k) {
+					buttons.push_back(report_field(static_cast<int>(k)));
+				}
+				buttons.push_back(report_check());
+			}
 			for (int i = 0; i < 4; ++i) {
 				buttons.push_back(speed_rect(i));
 			}
@@ -4445,6 +5116,9 @@ struct Ui::Impl {
 				}
 				if (screw_rect(i, b)) {
 					buttons.push_back(b);
+				}
+				for (const auto &[n, sb] : spectro_buttons(i)) {
+					buttons.push_back(sb);
 				}
 			}
 			for (const Rect &b : buttons) {
@@ -4686,6 +5360,21 @@ struct Ui::Impl {
 				bodies[k].image_w = shows.w;
 				bodies[k].image_h = shows.h;
 				bodies[k].image_hash = shows.hash;
+			} else if (v.kind == "spectrophotometer") {
+				// a spectrophotometer (Stage 55): its case, its well, its two displays (dark off the bench)
+				const float s = r.w / SPECTRO_W;
+				thing(v.id, "case", OpticsBody::Slab, spectro_case(r), 8.0f * s, "viewer_case", nullptr, in_hand);
+				thing(v.id, "well", OpticsBody::Slab, spectro_well(r), 3.0f * s, "lcd_black", nullptr, in_hand);
+				const bool on = v.place == "bench" || v.place == "under";
+				for (int d = 0; d < 2; ++d) {
+					Picture &shows = spectro_shows[v.id + (d == 0 ? ":a" : ":nm")];
+					instruments::plot_display(!on ? std::string() : d == 0 ? spectro::display_text(v.absorbance, v.blanked, v.overload) : spectro::wavelength_text(v.nm), shows);
+					const size_t k = thing(v.id, d == 0 ? "display" : "nm", OpticsBody::Screen, d == 0 ? spectro_display(r) : spectro_nm_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+					bodies[k].image = shows.rgb.data();
+					bodies[k].image_w = shows.w;
+					bodies[k].image_h = shows.h;
+					bodies[k].image_hash = shows.hash;
+				}
 			} else if (v.kind == "burner") {
 				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
@@ -5099,6 +5788,14 @@ struct Ui::Impl {
 	}
 
 	void paint_readout() {
+		if (report_active()) {
+			paint_report(); // (Stage 54) in place of the readout, once a tutorial with a report is complete
+			return;
+		}
+		if (predict_shown()) {
+			paint_predict(); // (Stage 55) in place of the readout, until the predictions are made
+			return;
+		}
 		float y = tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30;
 		const auto row = [&](const std::string &s, uint32_t color = INK, float size = 17) {
 			text(READOUT.x + 16, y, s, color, size);
@@ -5200,14 +5897,21 @@ struct Ui::Impl {
 			// its controls, while it is selected (GAME_SPEC §13.1: not on the bench)
 			Rect control;
 			if (valve_rect(showing, control)) {
-				const double open = v.kind == "burner" ? v.valve : v.cap;
-				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : has_outlet(v) ? "tap" : "cap", INK, 16);
+				const bool tuned = v.kind == "spectrophotometer";
+				const double open = v.kind == "burner" ? v.valve : tuned ? nm_share(v.nm) : v.cap;
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : tuned ? "nm" : has_outlet(v) ? "tap" : "cap", INK, 16);
 				rect_fill(control, BUTTON);
 				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
 				rect_fill(Rect{ knob - 4, control.y - 4, 8, control.h + 8 }, INK);
-				text(control.x + control.w + 12, control.y + 15, text_of("%.0f%%", 100.0 * open), DIM, 15);
+				text(control.x + control.w + 12, control.y + 15, tuned ? text_of("%.0f nm", v.nm) : text_of("%.0f%%", 100.0 * open), DIM, 15);
 				y += 42;
+				for (const auto &[name, b] : spectro_buttons(showing)) {
+					const bool on = v.holder_c.has_value();
+					button(b, name == "blank" ? "blank" : name == "-" ? "-1" : name == "+" ? "+1" : name == "holder" ? (on ? text_of("holder %.0f C", *v.holder_c) : std::string("holder off")) : name == "h-" ? "-5" : "+5",
+						name == "holder" && on, 15);
+				}
+				y += spectro_buttons(showing).empty() ? 0 : 52;
 			} else if (stir_rect(showing, control)) {
 				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
 				Rect screw;
@@ -5305,6 +6009,24 @@ struct Ui::Impl {
 				std::string name = v.model;
 				std::replace(name.begin(), name.end(), '_', '-');
 				row(name + text_of(", to %g g", v.readability_g) + text_of(" up to %.0f g,", v.capacity_g) + text_of(" within %g g", v.linearity_g), DIM, 14);
+			} else if (v.kind == "spectrophotometer") {
+				// (Stage 55) what it reads, against what blank, what is in its well
+				const bool on = v.place == "bench" || v.place == "under";
+				row(!on ? "off: put it on the bench to read" : !v.blanked ? "no blank yet: a cuvette of the solvent in its well, then blank" : v.overload ? "OL: past its range of absorbance" : text_of("absorbance %.3f", *v.absorbance),
+					on && v.blanked && !v.overload ? INK : DIM, 18);
+				if (v.blanked && v.blank_nm != v.nm) {
+					row(text_of("blanked at %.0f nm, set to ", v.blank_nm) + text_of("%.0f nm: blank again", v.nm), WARN, 15);
+				}
+				if (v.under >= 0) {
+					// (Stage 56) and how warm it is, by its thermometer (by instruments) or as it is
+					const ItemView &in = view.items[static_cast<size_t>(v.under)];
+					const std::optional<double> warm = view.instruments ? in.read_c : std::optional<double>(in.celsius);
+					row("in its well: " + in.id + (warm ? text_of(", %.1f C", *warm) : std::string()), DIM, 15);
+				} else {
+					row("carry a cuvette onto it to read", DIM, 15);
+				}
+				const spectro::Model &model = spectro::model();
+				row(text_of("%.0f to ", model.first_nm) + text_of("%.0f nm,", model.last_nm) + text_of(" band %.0f nm,", model.band_nm) + text_of(" stray light %g%%", 100.0 * model.stray), DIM, 14);
 			} else if (v.kind == "burner") {
 				row(text_of("flame %.0f C, valve %.0f%%", v.celsius, 100.0 * v.valve));
 			} else if (v.kind == "stopper") {
@@ -5389,6 +6111,9 @@ struct Ui::Impl {
 		y += 10;
 		for (const std::string &e : view.events) {
 			row(e, WARN, 15);
+		}
+		for (const auto &[what, r] : record_buttons()) {
+			button(r, record_name(what), false, 14); // (Stage 54) a reading into the notebook
 		}
 		if (!message.empty()) {
 			// wrapped at about 52 characters
@@ -5913,6 +6638,7 @@ bool Ui::tutor(std::string_view tutorial_json, std::string &why) {
 		return false;
 	}
 	m.tutorial = std::move(t);
+	m.clear_report(); // (Stage 54)
 	m.tutorial_json = std::string(tutorial_json);
 	m.shown_k = m.shown_now();
 	m.follow();
@@ -6014,6 +6740,32 @@ bool Ui::choose(std::string_view id, std::string &why) {
 
 std::string Ui::experiment() const {
 	return impl_->shown_k >= 0 ? impl_->catalogue[static_cast<size_t>(impl_->shown_k)].id : std::string();
+}
+
+std::string Ui::progress() const {
+	nlohmann::json done = nlohmann::json::array();
+	for (const std::string &id : impl_->done) {
+		done.push_back(id);
+	}
+	return nlohmann::json{ { "format", "chem-progress/1" }, { "done", done } }.dump();
+}
+
+bool Ui::set_progress(std::string_view progress_json, std::string &why) {
+	const nlohmann::json j = nlohmann::json::parse(progress_json, nullptr, false);
+	if (j.is_discarded() || !j.is_object() || j.value("format", "") != "chem-progress/1" || !j.contains("done") || !j.at("done").is_array()) {
+		why = "progress is {\"format\": \"chem-progress/1\", \"done\": [ids]}";
+		return false;
+	}
+	std::set<std::string> done;
+	for (const nlohmann::json &id : j.at("done")) {
+		if (!id.is_string()) {
+			why = "progress's \"done\" holds experiments' ids";
+			return false;
+		}
+		done.insert(id.get<std::string>()); // (an id the catalogue has not is kept: another catalogue may)
+	}
+	impl_->done = std::move(done);
+	return true;
 }
 
 const Tutorial *Ui::tutorial() const {
@@ -6372,6 +7124,52 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = r.cy();
 		return true;
 	}
+	if (after("nm:", rest)) {
+		// (Stage 55) a spectrophotometer's wavelength: "nm:<id>@<nm>" on its slider, "nm:<id>:+" or ":-" its buttons
+		const size_t at = rest.find('@'), by = rest.find(':');
+		const int i = index_of(rest.substr(0, std::min(at, by)));
+		Rect r;
+		if (i < 0 || !m.valve_rect(i, r)) {
+			return false;
+		}
+		if (at != std::string_view::npos) {
+			x = r.x + r.w * static_cast<float>(m.nm_share(std::atof(std::string(rest.substr(at + 1)).c_str())));
+			y = r.cy();
+			return true;
+		}
+		for (const auto &[name, b] : m.spectro_buttons(i)) {
+			if (by != std::string_view::npos && rest.substr(by + 1) == name) {
+				return centre(b);
+			}
+		}
+		return false;
+	}
+	if (after("cell:", rest)) {
+		// (Stage 56) a spectrophotometer's cell holder: "cell:<id>" its switch, ":-" or ":+" 5 C down or up
+		const size_t by = rest.find(':');
+		const int i = index_of(rest.substr(0, by));
+		if (i < 0) {
+			return false;
+		}
+		const std::string want = by == std::string_view::npos ? "holder" : rest.substr(by + 1) == "-" ? "h-" : "h+";
+		for (const auto &[name, b] : m.spectro_buttons(i)) {
+			if (name == want) {
+				return centre(b);
+			}
+		}
+		return false;
+	}
+	if (after("blank:", rest)) {
+		const int i = index_of(rest);
+		if (i >= 0) {
+			for (const auto &[name, b] : m.spectro_buttons(i)) {
+				if (name == "blank") {
+					return centre(b);
+				}
+			}
+		}
+		return false;
+	}
 	if (after("stir:", rest)) {
 		const int i = index_of(rest);
 		Rect r;
@@ -6386,6 +7184,44 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const int i = index_of(rest);
 		Rect r;
 		return i >= 0 && m.tare_rect(i, r) && centre(r);
+	}
+	if (after("report:", rest)) { // (Stage 54)
+		if (!m.report_active()) {
+			return false;
+		}
+		if (rest == "check") {
+			return centre(m.report_check());
+		}
+		const int k = std::atoi(std::string(rest).c_str());
+		return k >= 0 && k < static_cast<int>(m.tutorial->report().size()) && centre(Impl::report_field(k));
+	}
+	if (after("predict:", rest)) { // (Stage 55) a prediction's field, by its order among them; "make"
+		if (!m.predict_shown()) {
+			return false;
+		}
+		if (rest == "make") {
+			return centre(m.guess_make());
+		}
+		const int n = std::atoi(std::string(rest).c_str());
+		return n >= 0 && n < static_cast<int>(m.predicted_items().size()) && centre(Impl::guess_field(n));
+	}
+	if (what == "notebook") { // (Stage 54)
+		return centre(Impl::notebook_button());
+	}
+	if (after("notebook:", rest)) {
+		return m.notebook_open && centre(Impl::notebook_rect(std::string(rest)));
+	}
+	if (after("record:", rest)) {
+		const size_t colon = rest.find(':');
+		if (colon == std::string_view::npos || m.selected < 0 || m.id(m.selected) != rest.substr(0, colon)) {
+			return false;
+		}
+		for (const auto &[w, r] : m.record_buttons()) {
+			if (w == rest.substr(colon + 1)) {
+				return centre(r);
+			}
+		}
+		return false;
 	}
 	Rect signal;
 	if (m.signal_rect(what, signal)) {

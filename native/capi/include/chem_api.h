@@ -330,6 +330,10 @@ CG_API cg_status cg_ui_experiments(cg_ui *ui, const char *catalogue_json, cg_rea
 CG_API cg_status cg_ui_choose(cg_ui *ui, const char *id);
 /* The id of the experiment shown, "" for none of the catalogue's; borrowed until the next call on this ui. */
 CG_API const char *cg_ui_experiment(cg_ui *ui);
+/* Progress through the experiments (Stage 55): a chem-progress/1 document, {"format", "done": [ids]}, of those
+ * completed; borrowed until the next call on this ui. The host keeps it between runs and gives it back. */
+CG_API const char *cg_ui_progress(cg_ui *ui);
+CG_API cg_status cg_ui_set_progress(cg_ui *ui, const char *progress_json);
 
 /* A key for the screen's focused field (GAME_SPEC §13.3): CG_KEY_TEXT with
  * the character's code point, or backspace, enter, escape. */

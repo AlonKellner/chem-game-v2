@@ -1,0 +1,23 @@
+{
+	"format": "chem-play/1",
+	"note": "The spectrophotometer (Stage 55): Beer and Lambert's bench chosen from the experiments' list, the instrument set out at 750 nm and blanked with water, a standard in its well and read, its concentration written; pictures of the bench, the readout and the notebook (LAB_SHOTS). The commands go to the lab directly: the tutorial's card waits on its first step.",
+	"steps": [
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:beer", "button": "click"},
+		{"frames": 60, "mark": "beer", "shot": "beer-bench"},
+		{"do": {"do": "place", "item": "spec", "at": [3, 12]}},
+		{"do": {"do": "tune", "spectrophotometer": "spec", "nm": 750}},
+		{"do": {"do": "insert", "spectrophotometer": "spec", "cuvette": "c0", "onto": true}},
+		{"do": {"do": "blank", "spectrophotometer": "spec"}},
+		{"do": {"do": "remove", "spectrophotometer": "spec"}},
+		{"do": {"do": "place", "item": "c0", "at": [9, 7]}},
+		{"do": {"do": "place", "item": "spec", "at": [3, 12]}},
+		{"do": {"do": "insert", "spectrophotometer": "spec", "cuvette": "s3", "onto": true}},
+		{"do": {"do": "note", "label": "c", "value": 0.06}},
+		{"do": {"do": "record", "item": "spec", "what": "absorbance"}},
+		{"to": "item:spec", "button": "right"},
+		{"frames": 90, "mark": "reading", "shot": "beer-reading"},
+		{"to": "notebook", "button": "click"},
+		{"frames": 30, "mark": "notebook", "shot": "beer-notebook"}
+	]
+}

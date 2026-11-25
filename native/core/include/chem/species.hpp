@@ -175,6 +175,9 @@ struct Kinetics {
 	double nucleation = 0.0; // Surface: 1/kg/s
 	double nucleation_order = 0.0;
 	double driver_order = 1.0; // Surface: the surface rate goes with m_driver to this power
+	// Surface (Stage 57): its solid dissolves into its solution at transport's pace, its surface's step a thousand
+	// times its growth's (a crystal gives up its ions; only its growth builds a lattice)
+	bool dissolves_by_transport = false;
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {

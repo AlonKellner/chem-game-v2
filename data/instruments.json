@@ -8,6 +8,8 @@
 	],
 	"thermometer": {"resolution_c": 0.1, "accuracy_c": 0.2, "time_constant_s": 4.3},
 	"ph_meter": {"resolution": 0.01, "accuracy": 0.02},
+	"gauge": {"resolution_kpa": 0.1, "accuracy_kpa": 0.5},
+	"spectrophotometer": {"range_nm": [380, 780], "band_nm": 4, "stray_light": 0.001, "wavelength_accuracy_nm": 2, "resolution": 0.001, "most": 3.0, "lamp_k": 2900, "beam_mm": 15, "holder": {"range_c": [20, 80], "gain_w_k": 5, "most_w": 10}},
 	"hand": 0.10,
 	"walls_g_cm3": {"glass": 2.23, "latex": 0.92, "polystyrene_foam": 0.05}
 }

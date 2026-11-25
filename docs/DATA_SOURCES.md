@@ -489,7 +489,8 @@ solubility, activities and affinity (GAME_SPEC §7).
 |---|---|---|---|
 | Ions' diffusion coefficients in water at infinite dilution, 25 °C (`data/solutions.json`, `diffusion`) | H⁺ 9.31e-9, Cu²⁺ 7.33e-10, SO₄²⁻ 1.07e-9 m²/s | Li and Gregory, *Geochim. Cosmochim. Acta* 38, 703 (1974), Table 1 | Nernst–Hartley gives CuSO₄ 8.70e-10 and H₂SO₄ 2.61e-9 m²/s: `measured: water's viscosity, and the ions' diffusion` |
 | Water's viscosity, 0.01–150 °C (`data/solutions.json`, `viscosity`) | 17 points, 1.7902 mPa·s at 0.01 °C to 0.18262 at 150 °C; 0.88997 at 25 °C | NIST Chemistry WebBook, fluid properties at 0.5 MPa (Huber et al., IAPWS 2008, *J. Phys. Chem. Ref. Data* 38, 101, 2009), read 2026-11-21 | 45 °C read between points, 0.5973, against the WebBook's 0.59584 (0.25%) |
-| The Sherwood number | 2, times the stirring (3 stirred) | a sphere in still liquid, the diffusion limit | **calibrated**: no convection; stirring's factor is the game's |
+| The Sherwood number (Stage 57; until then 2, times 3 stirred, calibrated) | Sh = 2 + 0.4 (ε d⁴ / ν³)^(1/4) Sc^(1/3), ε the stirring's dissipation per kg of the liquid (the lab's, Stage 49), ν and Sc from the viscosity above and each species' diffusion; 2 at rest | Sano, Yamaguchi and Adachi, *J. Chem. Eng. Japan* 7(4), 255–261 (1974): suspended particles of 60–1100 µm (ion-exchange beads; dissolving granules of benzoic acid, KMnO₄, β-naphthol) in stirred vessels 9.5 to 40 cm across, within 30.8 % in Sh. Harriott, *AIChE J.* 8, 93 (1962): in agitated tanks 1.5 to 8 times a fixed sphere's at its terminal velocity | `measured: a stirred crystal dissolves by transport at Sano's Sherwood number, many times a still one's`: 25, 43 and 76 for a 0.53 mm crystal at 0.01, 0.1 and 1 W/kg |
+| A crystal dissolving (Stage 57) | at transport's pace: its surface step 1000 times its growth's, in series (the copper sulfates' `dissolution: "transport"`; **calibrated**: large enough that transport sets the pace at any stirring, and the surface's factor still stops it at equilibrium) | Mullin, *Crystallization*, 4th ed. (2001): dissolution is generally diffusion controlled, growth by integration at the surface besides; for the pentahydrate even growth is 58 to 99 % transport's (Leeds, *Crystallisation of copper sulphate pentahydrate from aqueous solution in absence and presence of sodium chloride*, 2019) | `measured: a crystal in water dissolves by transport` |
 
 The kinetics calibrated for play before Stage 23, for the record: the oxide 1.15e6 mol/m²/s with
 Ea 50 kJ/mol, times the stirring; every hydrate's growth 3e-2 mol/m²/s with no activation energy,
@@ -918,7 +919,7 @@ CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. 
 
 Chosen for the game (`data/instruments.json`, design): a top-loading balance reads 0.01 g to 620 g within
 0.02 g, an analytical one 0.1 mg to 220 g within 0.2 mg; a thermometer 0.1 °C within 0.2 °C; a pH meter 0.01
-within 0.02; a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
+within 0.02; a pressure gauge 0.1 kPa within 0.5 kPa (Stage 54); a spectrophotometer (Stage 55) of a student's kind: 380 to 780 nm (the simulation's light), a 4 nm band, 0.1 % stray light, its wavelength within 2 nm, its absorbance to 0.001 up to 3, a tungsten lamp at 2900 K, its beam 15 mm over a cell's floor (the common centre height); a round cuvette 12 mm across, its wall 1 mm, so its path 10 mm; its heated cell holder (Stage 56) 20 to 80 C, 5 W/K up to 10 W; a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
 or 50 mL) within 5 %, a bottle's within 10 % (`data/glassware.json`). Confidence: these are of the order
 makers state; they are not claims about any one instrument.
 

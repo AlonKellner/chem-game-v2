@@ -5,6 +5,8 @@
 // second part over that (another child).
 #pragma once
 
+#include <string>
+
 #include "chem_api.h"
 #include "optics_compute.hpp"
 
@@ -37,6 +39,9 @@ public:
 	// the experiments it lists (a "chem-experiments/1" file, its paths from its own folder; GAME_SPEC §13.7); empty for none
 	void set_experiments_path(const godot::String &path);
 	godot::String get_experiments_path() const;
+	// where progress through the experiments is kept between runs (Stage 55); "" keeps none
+	void set_progress_path(const godot::String &path);
+	godot::String get_progress_path() const;
 	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps, strict (1) or free (0)]
 	godot::PackedInt32Array tutorial() const;
 	// strict or free (§13.2, Stage 41), as the card's switch sets it
@@ -104,6 +109,9 @@ private:
 	godot::String bench_path_ = "res://data/benches/lab.json";
 	godot::String tutorial_path_ = "res://data/tutorials/demo.json";
 	godot::String experiments_path_ = "res://data/experiments.json";
+	godot::String progress_path_ = "user://progress.json";
+	std::string progress_; // as last kept (Stage 55)
+	void keep_progress();
 	godot::CharString read_; // the last file the catalogue's reader gave (cg_read_file's text is borrowed)
 	void paint(godot::CanvasItem *on, bool above);
 	void paint_over(); // the overlay's draw signal

@@ -392,7 +392,7 @@ wall; the existing `loss` calibration, split by area. Each value gets a gate tes
 
 **Invariants:** the rings' glass sums to the vessel's `wall_g`; T1 to T3 as for any cell.
 
-### 8d. Supplies, Storage and Trash (PLANNED: Stage 55)
+### 8d. Supplies, Storage and Trash (PLANNED: Stage 59)
 
 The user, 2026-11-25 (after Stage 53's step cost): "We should have the following: 1. Supplies - things which are not
 simulated at all, just like parts, once you take them out, they join the room simulation 2. Storage - things which
@@ -404,8 +404,17 @@ the Cabinet becomes, the user chose **Supplies**, and a stage of its own after S
   no steps, as a signal part in the drawer is not. Its picture is captured ahead of time, not rendered live (the
   memory "precompute before runtime"). Taking one out makes it in the world, its contents at the room's temperature,
   from its bench's description. Nothing goes back to Supplies.
-- **Storage:** a new shelf for items set aside off the grid. They are still simulated with the room: they cool, react
-  and evaporate.
+- **Storage:** the outbox (the user, 2026-11-25, during Stage 53's merge: "Storage should basically be the output
+  tray, it should have goal exactly like it does today, just be purposed for any type of storage, including just
+  putting something aside while space is tight in the lab grid"). Its goals on its slots stay as they are; anything
+  may be set there to free the grid. What is in it is still simulated with the room: it cools, reacts and evaporates.
+- **Scrolling and search, in Supplies and in Storage** (the same message): "both the Supplies (cabinet) and Storage
+  (out tray) should have scrolling capabilities, to allow an arbitrary amount of things to be contained in them.
+  Also, I want textual search functionality in both, and search results to match by keywords, some of which depend
+  on the contents, some on the vessel, and any other you think appropriate for the search functionality." Keywords
+  to consider: its id and label; its kind and glassware (beaker, flask, burette...) and its capacity; what it holds
+  (each species' name, formula and phase, a solution's solute, "empty"); what it is made of; what it is for (a goal
+  on its slot, an instrument's measure); its state (hot, cold, sealed, stoppered, boiling).
 - **Trash:** stops simulating, as now (Stage 34: restored from the trash, it is as it was).
 - **What it settles:** a bench full of glassware steps only what is out of Supplies. The free lab's idle cabinet
   stepped at 16 µs against 6.5 before Stage 53's rings, and steps at almost nothing.

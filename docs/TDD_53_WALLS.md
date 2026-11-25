@@ -187,6 +187,14 @@ pixel's history follows is the parts' weighted mean, on the scale of one tempera
 waits for 30 °C, not 21 (the crystals are out by then; 21 °C takes some 5700 s of the lab's clock, more frames
 than its alarm allows).
 
+## Merged after Stage 57
+
+Main had moved on by Stages 55 to 57 (the other agent's), merged into this branch. Their benches' glassware lost
+its `loss` as every other bench's had (27 values). Stage 57's solubility curve had its flames chosen against the
+old chosen `loss` (0.3 W/K a 50 mL beaker): with the beakers' own outsides each last crystal went some 5.5 K later
+(46.0, 54.3, 61.1, 66.1 °C; 29.2 g at 50 °C against the model's 34.6). The valves were found again so each last
+crystal goes where it did (40.4, 48.9, 55.8, 60.8 °C): 0.46, 0.72, 0.97 and 0.95 % (were 1.5, 2.2, 2.7 and 3 %).
+
 ## Open
 
 - **A controller's setpoint weighting:** with an integrating process SIMC's PI overshoots any speed by about a tenth
@@ -205,5 +213,5 @@ than its alarm allows).
   a vessel tipped far enough that its two walls differ in height there is read by the place, not each wall.
 - **A burette** is 24 rings of about 3 cm.
 - **The free lab** steps at 16 µs against main's 6.5: its idle cabinet's rings still conduct to the room each step.
-  Settled by the user's Supplies (Stage 55, the roadmap's area 8d): the cabinet's items are then no part of the
+  Settled by the user's Supplies (Stage 59, the roadmap's area 8d): the cabinet's items are then no part of the
   world until taken out.

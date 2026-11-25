@@ -1,6 +1,61 @@
 # GAME_SPEC version history
 
-## 0.53.0 (2026-11-25, Stage 53)
+## 0.57.0 (2026-11-25, Stage 57; signed off by the user: "Approved, merge and proceed")
+
+- §7 (Stage 57, `docs/TDD_57_DISSOLVING.md`; `docs/CURRICULUM.md`, step B2): **transport to a grain** by Sano,
+  Yamaguchi and Adachi's measured Sherwood number from the stirring's own dissipation (2 at rest), the old factor of
+  three for stirring retired; **a crystal dissolves at transport's pace** (its surface step a thousand times its
+  growth's), as real crystals do: stirred, minutes, not an hour.
+- §13.7: the experiment `solubility` (copper sulfate's curve by the temperature its last crystal dissolves at; ln s
+  against 1/T, the heat of solution).
+- §20: the grain's transport. The goldens re-recorded with the user's approval: the demo's results by a hair (the
+  oxide gone at 1010.1 s, not 1007.1; the crystals 9.197167 g; the distillate 37.764 g).
+
+## 0.56.0 (2026-11-25, Stage 56; signed off by the user: "Approved, merge and proceed")
+
+- §13 (Stage 56, `docs/TDD_56_RATES.md`; `docs/CURRICULUM.md`, step B's last part): the spectrophotometer's **heated
+  cell holder** (20 to 80 C; a heater from the mains into the cuvette's lowest layer; saved, digested while set); the
+  quantity `holder`. **A suspension dims the beam**: grains held up by stirring, twice their cross-section;
+  the quantity `suspended`.
+- §13.1: the holder's switch and steps, the cuvette's warmth in the readout; a notebook field clicked into is replaced
+  by what is typed.
+- §13.2: the condition `noted_count`.
+- §13.7: the experiment `rates` (the order in the acid and the activation energy, timed by absorbance).
+- `docs/CURRICULUM.md`: experiment 37 moved to step F (no instrument reads the solids' decompositions as they run);
+  4 and 45 to a new step B2, after crystals dissolve by mass transfer (C15: the pentahydrate dissolves as slowly as it
+  grows, an hour to saturate). §20: the holder's simplifications. The goldens unchanged.
+
+## 0.55.0 (2026-11-25, Stage 55; signed off by the user: "Approved, merge and proceed")
+
+- §13 (Stage 55, `docs/TDD_55_SPECTRO.md`; `docs/CURRICULUM.md`, step B's second half): **a spectrophotometer**, a
+  single-beam instrument: a cuvette in its well, its wavelength tuned (380 to 780 nm), a blank, the absorbance read from
+  the pass's own spectra through its slit's band and with its stray light, at the beam's height in the cuvette. **A
+  cuvette**, 10 mm across inside. **A number written** in the notebook (`note`); the plot pairs a y with the x of its
+  moment, or else the last before it.
+- §13.1: the instrument and its controls on the screen; the notebook's write row (and Stage 54's faults seen in this
+  stage's pictures: its button over the clock, its plot's "fit" past the panel's edge); **predictions** in place of the
+  readout before a run; **progress** through the experiments, "done" and "next" in the list.
+- §13.2: a report's item marked `predict`; conditions `predicted`, `noted` (`noted_value`) and `recorded_count`.
+- §13.7: the experiment `beer` (Beer and Lambert's line and an unknown).
+- §14: `cg_ui_progress`, `cg_ui_set_progress`; the Godot host keeps progress in `user://progress.json`.
+- §20: the spectrophotometer's simplifications. The goldens unchanged.
+
+## 0.54.0 (2026-11-25, Stage 54; signed off by the user: "Approved, merge and proceed")
+
+- §13 (Stage 54, `docs/TDD_54_NOTEBOOK.md`; `docs/CURRICULUM.md`, step B's first half): **the notebook**, kept by the
+  lab: `record` a reading, `log` one every so many seconds, `unlog`, `erase`; by instruments an instrument's reading,
+  never the truth; saved, not digested. A table, a plot with each axis as it is, ln or 1/x, and a least-squares line.
+  - **A pressure gauge** by instruments (0.1 kPa, ±0.5 kPa).
+  - **Unknowns**: a bench's amount as a range, drawn once from its seed.
+- §13.1: the notebook's panel; "+" beside each reading; the report on the card; the experiments list in up to three
+  columns.
+- §13.2: the tutorial's `report` (expressions over the lab's quantities, checked within a tolerance, beside the
+  textbook's ideal); conditions `logging` and `recorded`.
+- §13.7: the experiments `titration_curve` (an unknown acid's curve and end point) and `vapour` (water's vapour
+  pressure, Clausius and Clapeyron's line).
+- §20: a logger's and the fit's simplifications. The goldens unchanged.
+
+## 0.53.0 (2026-11-25, Stage 53, merged after 0.57.0; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 53, `docs/TDD_53_WALLS.md`; the roadmap's area 8b): **the glass in rings**. A glassware vessel's wall
   is its floor and rings of about 1 cm up to its brim, each a cell of its glass:

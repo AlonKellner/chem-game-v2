@@ -101,6 +101,7 @@ This file is what a stage reads to choose its experiments. The property areas of
 | C12 | Conductivity, derived (the ions' mobilities are in `data/solutions.json` already) | new |
 | C13 | Two liquids and a solute shared between them | 9 |
 | C14 | Emission lines: flame tests, atomic spectra (the optics have lines; no species has data) | new |
+| C15 | Crystals that dissolve by mass transfer: through the liquid's film, much faster than they grow (Stage 56 found the pentahydrate dissolving as slowly as it grows: an hour to saturate, its last crystal gone 50 K above its saturation temperature) | the crystals' kinetics (GAME_SPEC §9) |
 
 ## The experiments
 
@@ -113,7 +114,7 @@ are missing.
 | 1 | Density; how accurate glassware is | a density; a pipette's true volume | Now | T1 T2 T3 S1 |
 | 2 | A standard solution and a dilution series | a molarity | Now | T1 T2 T3 S2 |
 | 3 | Separating a mixture | each part's mass, the recovery | Now (CuO from CuSO₄) | T2 T6 |
-| 4 | Recrystallisation; a solubility curve | solubility against temperature; the yield | Now | T2 T6 S1 |
+| 4 | Recrystallisation; a solubility curve | solubility against temperature; the yield | C15 | T2 T6 S1 |
 | 5 | Simple distillation | the boiling point, the recovery | Now (the demo) | T4 |
 | | **2. Stoichiometry** | | | |
 | 6 | The formula of a hydrate | x in CuSO₄·xH₂O | Now | T2 T6 S2 |
@@ -152,7 +153,7 @@ are missing.
 | 35 | Supersaturation and a seed | — | Now | T2 |
 | | **7. Kinetics** | | | |
 | 36 | What sets a rate; the order in the acid; the activation energy | the order (0.5), Ea | Now (`rate`) | S1 |
-| 37 | First-order decay and a half-life (a solid decomposing) | k, the half-life | Now | T2 S1 |
+| 37 | First-order decay and a half-life (crystal violet by absorbance; the solids' decompositions are read by no instrument while they run) | k, the half-life | C4 | T5 S1 |
 | 38 | The iodine clock: initial rates, orders, Ea | the rate law | C1 C4 C5 | T3 S1 |
 | 39 | Crystal violet with hydroxide, by absorbance | a pseudo-first-order k | C4 | T5 S1 |
 | 40 | Peroxide with a catalyst: gas against time | the rate; the catalyst's effect | C4 | T8 S1 |
@@ -161,7 +162,7 @@ are missing.
 | 42 | Le Chatelier (thiocyanate, cobalt chloride, chromate, copper and ammonia) | the shift's direction | C1 C2 C3 | T6 |
 | 43 | Kc of FeSCN²⁺ by absorbance | Kc | C3 | T5 S2 |
 | 44 | The Ksp of calcium hydroxide; a common ion | Ksp | C1 C3 | T3 T6 |
-| 45 | ΔH and ΔS from how a solubility changes with temperature | ΔH, ΔS | Now (CuSO₄); borax C1 | T4 S1 |
+| 45 | ΔH and ΔS from how a solubility changes with temperature | ΔH, ΔS | C15 (CuSO₄); borax C1 | T4 S1 |
 | | **9. Redox and electrochemistry** | | | |
 | 46 | The activity series of metals | the order | C1 C5 | T6 |
 | 47 | A redox titration (permanganate; iodometric) | a concentration | C1 C5 | T3 |
@@ -182,11 +183,12 @@ Each step is a stage of its own, numbered when it is taken, by `docs/WORKFLOW.md
 | Step | Stage | Scope | Experiments it completes |
 |---|---|---|---|
 | A | **The measured lab** | T1 T2 T3 T4; the calorimeter (T7) and the crucible (T6); composition hidden per experiment | 1, 2, 5, 6, 7, 13 (readings by hand), 22, 23, 24, 32 |
-| B | **The notebook and the report** | S1 S5 S6 S7; T5 | 4, 13 (the curve), 30, 34, 36, 37, 45 |
+| B | **The notebook and the report** (Stages 54 to 56) | S1 S5 S6 S7; T5 | 13 (the curve), 30, 34, 36 (4, 37 and 45 moved: Stage 56) |
+| B2 | **Crystals that dissolve** (Stage 57) | C15 | 4, 45 |
 | C | **The calculator, the planner, the reference** | S2 S3 S4; filtering (T6) | 3, 8, 35, 50 |
 | D | **Acids, bases and buffers** (area 1) | C2; the cap of C1 and a first pack (Cl, K, acetate, ammonia, carbonate, phosphate); C12; heat of dilution (C11) | 14 to 20 |
 | E | **Salts, precipitates and complexes** (area 2) | C1 C3 C14; the rest of T6 | 10, 12, 42, 43, 44, 51, 52, 54 |
-| F | **Solution kinetics and redox** | C4 C5 | 11, 38 to 41, 46, 47 |
+| F | **Solution kinetics and redox** | C4 C5 | 11, 37, 38 to 41, 46, 47 |
 | G | **Gases** (areas 5, 6) | C7; T8 | 27, 28, 31 |
 | H | **Electrochemistry** | C6; T9 | 48, 49 |
 | I | **Ice, other liquids, burning** (area 4) | C8 C9 C10; the rest of T7 | 9, 21 (a metal), 25, 26, 29, 33 |
