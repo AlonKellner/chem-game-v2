@@ -812,6 +812,8 @@ struct Ui::Impl {
 		return n;
 	}
 	bool predicting() const { return running() && predictions_made() < static_cast<int>(predicted_items().size()); }
+	// shown in place of the readout while nothing is selected: an item chosen shows its own readout and controls
+	bool predict_shown() const { return predicting() && selected < 0; }
 	static Rect guess_field(int n) { return Rect{ READOUT.x + 300, TUTOR.y + TUTOR.h + 100 + static_cast<float>(n) * 70, 150, 30 }; }
 	Rect guess_make() const { return Rect{ READOUT.x + 16, TUTOR.y + TUTOR.h + 100 + static_cast<float>(predicted_items().size()) * 70, 120, 34 }; }
 	void make_predictions() {
@@ -829,7 +831,7 @@ struct Ui::Impl {
 		message = predicting() ? "a prediction is a number: type one in each field" : std::string();
 	}
 	bool predict_press(float x, float y) {
-		if (!predicting()) {
+		if (!predict_shown()) {
 			return false;
 		}
 		const std::vector<int> items = predicted_items();
@@ -846,7 +848,7 @@ struct Ui::Impl {
 		return false;
 	}
 	bool type_predict(Ui::Key key, uint32_t codepoint) {
-		if (!predicting() || guess_focus < 0) {
+		if (!predict_shown() || guess_focus < 0) {
 			return false;
 		}
 		guesses.resize(tutorial->report().size());
@@ -5741,7 +5743,7 @@ struct Ui::Impl {
 			paint_report(); // (Stage 54) in place of the readout, once a tutorial with a report is complete
 			return;
 		}
-		if (predicting()) {
+		if (predict_shown()) {
 			paint_predict(); // (Stage 55) in place of the readout, until the predictions are made
 			return;
 		}
@@ -7121,7 +7123,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		return k >= 0 && k < static_cast<int>(m.tutorial->report().size()) && centre(Impl::report_field(k));
 	}
 	if (after("predict:", rest)) { // (Stage 55) a prediction's field, by its order among them; "make"
-		if (!m.predicting()) {
+		if (!m.predict_shown()) {
 			return false;
 		}
 		if (rest == "make") {

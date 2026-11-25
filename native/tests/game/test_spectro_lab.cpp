@@ -2,10 +2,13 @@
 // cuvette's liquid at the beam's height; tuned; saved, not digested.
 #include "lab/lab.hpp"
 #include "lab/spectro.hpp"
+#include "lab/ui.hpp"
 
 #include "chem/builtin_ids.hpp"
 
 #include <doctest/doctest.h>
+
+#include "pupil.hpp"
 
 #include <cmath>
 #include <string>
@@ -110,4 +113,29 @@ TEST_CASE("spectro lab: a liquid under the beam reads the air (Stage 55)") {
 	MESSAGE("the air against the water's blank: " << air);
 	CHECK(air <= 0.0); // no water in the beam: a little more light than through the blank
 	CHECK(air > -0.05);
+}
+
+TEST_CASE("spectro screen: its slider and a nanometre's buttons tune it; a blank with an empty well is refused, saying why (Stage 55)") {
+	pupil::Pupil p("data/benches/beer.json", "data/tutorials/beer.json", false);
+	p.drag("item:spec", "square:3,13");
+	REQUIRE(p.item("spec").place == "bench");
+	p.click("item:spec");
+	p.click("nm:spec@700");
+	CHECK(p.item("spec").nm == 700.0);
+	p.click("nm:spec:+");
+	CHECK(p.item("spec").nm == 701.0);
+	p.click("nm:spec:-");
+	p.click("nm:spec:-");
+	CHECK(p.item("spec").nm == 699.0);
+	p.click("blank:spec");
+	CHECK_FALSE(p.item("spec").blanked);
+	CHECK(p.ui->message().find("nothing in its well") != std::string::npos);
+	CHECK(p.drawn("no blank yet"));
+	// a cuvette carried onto it stands in its well; the instrument's two displays are bodies of the pass
+	p.drag("item:c0", "item:spec");
+	CHECK(p.item("spec").under >= 0);
+	p.click("item:spec");
+	p.click("blank:spec");
+	CHECK(p.item("spec").blanked);
+	CHECK(p.drawn("absorbance 0.000"));
 }
