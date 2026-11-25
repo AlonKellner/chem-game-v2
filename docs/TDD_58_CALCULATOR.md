@@ -35,7 +35,7 @@ calculation up and the game works it out. Filtering (T6), the planner (S3) and t
 | 58.1 | The formula grammar in the core; `lab/calculator.hpp` and its tests | Done |
 | 58.2 | The screen: the panel's tabs, the calculator, the reference | Done |
 | 58.3 | The experiment: a solution by calculation | Done |
-| 58.4 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1272 s: ASan+UBSan 1272, ctest 905, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
+| 58.4 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1272 s: ASan+UBSan 1272, ctest 905, Godot 13 of 13, goldens unchanged); signed off by the user, 2026-11-25 ("Approved, merge and proceed") |
 
 ## The goldens
 

@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.58.0 (2026-11-25, Stage 58)
+## 0.58.0 (2026-11-25, Stage 58; signed off by the user: "Approved, merge and proceed")
 
 - §13.1 (Stage 58, `docs/TDD_58_CALCULATOR.md`; `docs/CURRICULUM.md`, step C's first half): the notebook's panel in
   three tabs; **the calculator** (molar mass and composition, moles, a solution's mass, a dilution, a reaction's
