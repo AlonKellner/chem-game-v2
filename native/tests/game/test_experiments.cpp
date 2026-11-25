@@ -958,3 +958,35 @@ TEST_CASE("experiment separate: followed with its own gestures, free, it complet
 	pupil::follow_through(p, 1800);
 	completed(p);
 }
+
+TEST_CASE("experiment yield: followed with its own gestures, strict, planned, precipitated, filtered and weighed: the percent yield (Stage 60)") {
+	Pupil p("data/benches/yield.json", "data/tutorials/yield.json");
+	CHECK(pupil::follow_through(p, 1800) > 30);
+	completed(p);
+	std::vector<double> readings;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.quantity.what == "reads_g") {
+			readings.push_back(e.value);
+		}
+	}
+	REQUIRE(readings.size() == 2);
+	const double theoretical = readings[0] / 249.68 * 97.56, found = 100.0 * readings[1] / theoretical;
+	const double truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE("crystals " << readings[0] << " g, hydroxide " << readings[1] << " g of a theoretical " << theoretical << ": " << found << " % against " << truth << " %");
+	CHECK(found == doctest::Approx(truth).epsilon(0.005));
+	report(p, { found });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 90"));
+}
+
+TEST_CASE("experiment yield: played as a person plays it, strict, it completes (Stage 60)") {
+	Pupil p("data/benches/yield.json", "data/tutorials/yield.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment yield: followed with its own gestures, free, it completes (Stage 60)") {
+	Pupil p("data/benches/yield.json", "data/tutorials/yield.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}

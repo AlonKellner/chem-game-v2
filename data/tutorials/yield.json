@@ -1,0 +1,447 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 60; docs/CURRICULUM.md, experiment 8) on data/benches/yield.json: copper hydroxide precipitated from weighed copper sulfate by an excess of sodium hydroxide, filtered and weighed; its percent yield.",
+	"title": "Experiment: limiting reagent and percent yield",
+	"bench": "../benches/yield.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "You will make copper hydroxide from copper sulfate and sodium hydroxide, and weigh what you get. What percent of the amount the equation says do you expect to recover? Type it, then click \"predict\".",
+			"why": "The percent yield: what you got over what the equation says you could get, from the reagent that runs out first, the limiting one.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "90"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "Planning",
+			"title": "The plan",
+			"text": "Open the notebook's planner. Type the target Cu(OH)2 and 0.600 g: step 1 is the precipitation, CuSO4 + 2 NaOH. It needs 0.00615 mol of CuSO4 (as many moles of the blue crystals: 1.536 g of CuSO4.5H2O) and 0.0123 mol of NaOH (12.3 mL of the 1.00 M base). Close the notebook.",
+			"why": "Worked back from what you want: the equation's ratios turn the product's moles into each reagent's.",
+			"checks": [
+				{
+					"text": "the plan worked out",
+					"when": {
+						"calculated": "plan"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:tab:planner"
+				},
+				{
+					"click": "notebook:plan:target"
+				},
+				{
+					"type": "Cu(OH)2"
+				},
+				{
+					"click": "notebook:plan:grams"
+				},
+				{
+					"type": "0.600"
+				}
+			]
+		},
+		{
+			"title": "The beaker on the balance",
+			"text": "Close the notebook. Pick up the reaction beaker and click the balance; right-click the balance and click \"tare\".",
+			"checks": [
+				{
+					"text": "the beaker on the balance, tared",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "beaker"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"drag": [
+						"item:beaker",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"part": "Weighing",
+			"title": "About 1.54 g of the crystals",
+			"text": "Pick up the jar of crystals and right-click the beaker; type 1.54 and click \"tip in the solid\".",
+			"checks": [
+				{
+					"text": "about 1.54 g in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_pentahydrate",
+						"above_g": 1.2
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "1.54"
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "What the balance says",
+			"text": "Right-click the balance and click \"+ mass\": what you took.",
+			"checks": [
+				{
+					"text": "its reading recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		},
+		{
+			"part": "Reacting",
+			"title": "Dissolved",
+			"text": "Pick up the beaker and set it on the bench. Pick up the water and right-click the beaker; type 50 and click \"pour\". Right-click the beaker and click \"stir\".",
+			"checks": [
+				{
+					"text": "water in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"above_g": 40
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "beaker",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"square:9,12"
+					]
+				},
+				{
+					"drag": [
+						"item:water",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "50"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:beaker"
+				},
+				{
+					"click": "stir:beaker"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until the crystals are gone",
+			"text": "Wait while they dissolve.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The base, in excess",
+			"text": "Pick up the sodium hydroxide and right-click the beaker; type 15 and click \"pour\": more than the 12.3 mL the plan needs, so the copper runs out first.",
+			"why": "Copper hydroxide hardly dissolves: it comes out as a pale blue powder at once. With the base in excess, the copper sulfate is the limiting reagent: the yield is reckoned from it.",
+			"checks": [
+				{
+					"text": "the copper all out of the solution",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_aq",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "15"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Filtering",
+			"title": "The funnel on the flask",
+			"text": "Pick up the filter funnel and click the flask.",
+			"checks": [
+				{
+					"text": "the funnel on the flask",
+					"when": {
+						"item": "funnel",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Pour it through",
+			"text": "Pick up the stirred beaker and right-click the funnel; type 100 and click \"pour\": all of it.",
+			"checks": [
+				{
+					"text": "the liquid poured in",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"type": "100"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "The rest of the powder",
+			"text": "Pick up the beaker again and right-click the funnel; click \"tip in the solid\".",
+			"checks": [
+				{
+					"text": "none left in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "copper_hydroxide",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Until it has drained",
+			"text": "Wait while the filtrate drips through.",
+			"checks": [
+				{
+					"text": "the funnel drained",
+					"wait": true,
+					"when": {
+						"item": "funnel",
+						"species": "water",
+						"below_g": 0.05
+					}
+				}
+			]
+		},
+		{
+			"part": "Weighing what you made",
+			"title": "The dish on the balance",
+			"text": "Pick up the weighing dish and click the balance; right-click the balance and click \"tare\".",
+			"checks": [
+				{
+					"text": "the dish on the balance, tared",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "dish"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:dish",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "The powder into the dish",
+			"text": "Pick up the funnel and right-click the dish; click \"tip in the solid\".",
+			"checks": [
+				{
+					"text": "the powder in the dish",
+					"when": {
+						"item": "funnel",
+						"species": "copper_hydroxide",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:dish"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Its mass, and the yield",
+			"text": "Right-click the balance and click \"+ mass\". In the calculator's \"reaction\", choose CuSO4 + 2 NaOH: type the CuSO4 you used (the crystals' mass x 159.60 / 249.68) and what you got: it gives the yield.",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g",
+						"recorded_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the percent yield of copper hydroxide",
+			"unit": "%",
+			"truth": "100 * dish.copper_hydroxide.g / (97.56 * (dish.copper_hydroxide.mol + funnel.copper_hydroxide.mol + beaker.copper_hydroxide.mol + beaker.copper_sulfate_aq.mol + flask.copper_sulfate_aq.mol + flask.copper_hydroxide.mol))",
+			"tolerance": 1.0,
+			"predict": true,
+			"why": "What you weighed over what the copper you put in could make: 97.56 g of Cu(OH)2 for each mole of the crystals. Here nearly all of it: the precipitate hardly dissolves, every grain was carried across, and the paper kept them all. A real yield is lower: powder clings to glass and paper, a little passes the paper, and a wet cake is weighed only once dried."
+		}
+	]
+}
