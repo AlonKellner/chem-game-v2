@@ -121,6 +121,10 @@ struct SpeciesDef {
 	// A solid: the diameter of its grains as they come out of a solution by a
 	// fast equilibrium (a precipitate, GAME_SPEC §9, Stage 44), m; 0: one lump
 	double grain = 0.0;
+	// A gas: how fast it diffuses through the room's air, m^2/s at 298.15 K and 1 atm, and the exponent of its
+	// temperature (D = D298 (T / 298.15)^n; GAME_SPEC §6, Stage 50: an open vessel's gas exchanged at its mouth);
+	// 0: it does not diffuse
+	double air_diffusion = 0.0, air_exponent = 0.0;
 };
 
 struct SpeciesId {

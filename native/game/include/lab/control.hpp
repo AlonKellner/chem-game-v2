@@ -19,6 +19,10 @@ struct ProcessModel {
 	bool operator==(const ProcessModel &) const = default;
 };
 
+// The least response a trial counts (Stage 50), in the sensed quantity's own unit (a microkelvin, a microgram): under
+// it nothing moved. An open vessel's gas exchanges with the room's air, so a control there reaches every open vessel by
+// a trace (7e-10 K, measured), where a real one reaches its own by thousandths.
+inline constexpr double LEAST_RESPONSE = 1e-6;
 // The process that best fits a step's response `r` (the reading with every
 // control full on, less the reading with them off) at times `t` (s, from the
 // step, increasing): least squares over a grid of delays and time constants,

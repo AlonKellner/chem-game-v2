@@ -118,6 +118,7 @@ struct SpeciesRow {
 	double density = 0.0; // g/cm^3; 0: none given
 	double molar_volume = 0.0; // m^3/mol, derived (a dissolved species: from volume_cm3)
 	double grain = 0.0; // m: a precipitate's grains (grain_um)
+	double air_diffusion = 0.0, air_exponent = 0.0; // a gas's in the room's air: m^2/s at 298.15 K, and its exponent (Stage 50)
 	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
 };
 
@@ -268,6 +269,16 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			}
 			row.grain = g * 1e-6;
 		}
+		if (s.contains("air_diffusion")) {
+			// (Stage 50) {"cm2_s": D at 298.15 K and 1 atm, "exponent": n}
+			const nlohmann::json &d = s.at("air_diffusion");
+			const double cm2 = d.value("cm2_s", 0.0), n = d.value("exponent", 0.0);
+			if (row.phase->phase != chem::Phase::Gas || !(cm2 > 0.0) || !(n >= 0.0 && n <= 3.0)) {
+				fail(species_file, "species " + row.id + ": air_diffusion is a gas's positive cm2_s at 298.15 K and an exponent from 0 to 3");
+			}
+			row.air_diffusion = cm2 * 1e-4;
+			row.air_exponent = n;
+		}
 		if (s.contains("volume_cm3")) {
 			const double v = s.at("volume_cm3").get<double>();
 			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0)) {
@@ -302,6 +313,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			def.ions[i] = chem::IonCount{ row.ions[i].first, row.ions[i].second };
 		}
 		def.grain = row.grain;
+		def.air_diffusion = row.air_diffusion;
+		def.air_exponent = row.air_exponent;
 		species_defs.push_back(def);
 	}
 
@@ -489,8 +502,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < static_cast<size_t>(chem::MAX_IONS); ++i) {
 			cpp << (i ? ", " : " ") << "IonCount{ " << (i < row.ions.size() ? row.ions[i].first : -1) << ", " << (i < row.ions.size() ? row.ions[i].second : 0) << " }";
 		}
-		char grain[40];
-		std::snprintf(grain, sizeof grain, "%.17g", row.grain);
+		char grain[120];
+		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g", row.grain, row.air_diffusion, row.air_exponent);
 		cpp << " } }, " << grain << " },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";

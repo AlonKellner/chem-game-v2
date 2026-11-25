@@ -468,13 +468,13 @@ TEST_CASE("experiments: the prism chosen after the lab is its dark room on the s
 	CHECK(luminance(wall_x, wall_y) > 0.3);
 }
 
-TEST_CASE("experiment hydrate: followed with its own gestures, strict, the crystals lose their water and take a little back as they cool, so x comes out a little under 5 (Stage 50)") {
+TEST_CASE("experiment hydrate: followed with its own gestures, strict, the crystals lose their water and the balance gives x of 5 (Stage 50)") {
 	Pupil p("data/benches/hydrate.json", "data/tutorials/hydrate.json");
 	CHECK(pupil::follow_through(p, 3600) > 9);
 	completed(p);
 	REQUIRE(p.tutorial().results.size() == 4);
-	// every copper is in the dish or the jar, as the salt or a hydrate (the dish's formed again from its own steam as it
-	// cooled; the jar's crystals lose a little water to the room's dry air: GAME_SPEC §20)
+	// every copper is in the dish or the jar, as the salt or a hydrate (the jar's crystals lose a little water to the
+	// room's dry air: GAME_SPEC §20)
 	const auto copper = [&](const std::string &id) {
 		return p.grams(id, "copper_sulfate") / 159.609 + p.grams(id, "copper_sulfate_monohydrate") / 177.624 + p.grams(id, "copper_sulfate_trihydrate") / 213.655 +
 				p.grams(id, "copper_sulfate_pentahydrate") / 249.685;
@@ -491,11 +491,11 @@ TEST_CASE("experiment hydrate: followed with its own gestures, strict, the cryst
 	}
 	const double reads = *p.item("scale").display_g;
 	CHECK(std::fabs(reads - solids) < 0.002);
-	// what the student works out from the balance: a little under 5, as in a lab that cools its dish in the air
+	// what the student works out from the balance: 5, to the balance's readability and the crystals' few mg lost in the jar
 	const double x = (taken - reads) / 18.015 / (reads / 159.609);
 	MESSAGE("x from the balance: " << x);
-	CHECK(x > 4.5);
-	CHECK(x < 5.0);
+	CHECK(x > 4.95);
+	CHECK(x < 5.05);
 }
 
 TEST_CASE("experiment hydrate: played as a person plays it, strict, it completes (Stage 50)") {

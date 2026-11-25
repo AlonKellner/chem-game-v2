@@ -125,6 +125,10 @@ double entropy_change(const SpeciesTable &table, const StepTrace &trace);
 // empty layer), and the top is no larger than the vessel, nor does the column hold more than fits in it.
 Violations check_L1(const SpeciesTable &table, const StepTrace &trace);
 
+// E1 (Stage 50): a gas exchanged along an edge (an open vessel's mouth) moves only down its mole fraction's difference,
+// along an open edge that exchanges gas and joins the two cells, and no further than to equal fractions.
+Violations check_E1(const SpeciesTable &table, const StepTrace &trace);
+
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
 // `equilibria`: the reactions of the equilibrium law the simulation runs (P1).

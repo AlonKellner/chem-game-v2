@@ -219,6 +219,9 @@ namespace {
 // formation enthalpies and entropies make them spontaneous in either direction.
 // With `volumes`, about half the cells are rigid, the edges let gas through,
 // and gas flows to keep the rigid cells full.
+// every gas exchanged by diffusion in the sweeps' steps (Stage 50)
+long long exchanges_seen = 0;
+
 void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = false, long long *transforms = nullptr, bool volumes = false,
 		long long *gas_moves = nullptr) {
 	Rng rng(seed);
@@ -240,6 +243,10 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		def.s0 = static_cast<double>(rng.range(1, 400));
 		if (volumes && (def.phase == Phase::Solid || def.phase == Phase::Liquid)) {
 			def.molar_volume = static_cast<double>(rng.range(5, 100)) * 1e-6;
+		}
+		if (volumes && def.phase == Phase::Gas && rng.chance(80)) { // (Stage 50) a gas that diffuses at an exchanging edge
+			def.air_diffusion = static_cast<double>(rng.range(1, 100)) * 1e-6;
+			def.air_exponent = static_cast<double>(rng.range(0, 200)) / 100.0;
 		}
 	}
 	if (volumes) {
@@ -341,6 +348,11 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 	}
 	auto built = builder.build(&why);
 	REQUIRE_MESSAGE(built.has_value(), why);
+	for (size_t e = 0; volumes && e < built->edges().size(); ++e) { // (Stage 50) gas exchanged by diffusion, weak to strong
+		if ((built->edges()[e].phases & PHASES_GAS) != 0 && rng.chance(50)) {
+			REQUIRE(built->set_exchange(EdgeId{ static_cast<int32_t>(e) }, static_cast<double>(rng.range(1, 100000)) * 1e-5) == Refusal::None);
+		}
+	}
 	std::vector<Reaction> reactions;
 	if (reactive) {
 		for (const Reaction &r : chem.reactions) {
@@ -391,6 +403,7 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 		double lo_before = 0.0, hi_before = 0.0, lo_after = 0.0, hi_after = 0.0;
 		extremes(lo_before, hi_before);
 		const StepTrace trace = sim.step();
+		exchanges_seen += static_cast<long long>(trace.exchanged.size());
 		extremes(lo_after, hi_after);
 		for (const LedgerEntry &entry : trace.ledger) {
 			if (entry.kind == LedgerEntry::Kind::Transfer) {
@@ -464,6 +477,7 @@ TEST_CASE("sweeps: rigid cells stay exactly full on every step of every random w
 		run_thermal_world(0x9a5000000ull + static_cast<uint64_t>(w), transfers, true, &transforms, true, &gas_moves);
 	}
 	MESSAGE(worlds << " worlds with volumes, " << worlds * 60 << " steps, " << gas_moves << " gas flows, " << transforms << " reaction steps, "
-				   << transfers - gas_moves << " heat transfers");
+				   << transfers - gas_moves << " heat transfers, " << exchanges_seen << " gases exchanged by diffusion");
 	CHECK(gas_moves > worlds);
+	CHECK(exchanges_seen > worlds); // (Stage 50) the sweep exchanges gas at its edges
 }

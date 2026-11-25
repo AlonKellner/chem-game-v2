@@ -13,6 +13,14 @@
   - **The hand**: `pour` and `tip` with `about` move the amount aimed at within 10 %; a `tip` with no species
     moves the solids in proportion.
   - `lab/instruments.hpp`; `data/instruments.json`; the marks in `data/glassware.json`; `reads_g`.
+- §6 (the user's choice, 2026-11-25, when the weighing experiments showed a dish keeping its own gas): **gas
+  exchanged at an open mouth**. An edge's `exchange` (area over length, `World::set_exchange`); a process after the
+  drains moves each gas down its mole fraction at its diffusion in air (`air_diffusion` in `data/species.json`: NIST TN
+  2279 and Incropera), the exact two-cell relaxation, with its enthalpy; the lab gives each open vessel's mouth
+  Stefan's tube from what it holds to its brim. Open vessels evaporate at Stefan's rate; a dish's own carbon dioxide
+  and steam leave it. E1 (§18), T1 setting exchanges aside; the sweeps exchange gas. A controller's trial counts a
+  response under a millionth of its unit as none. Every session's record re-recorded (the demo's open beaker
+  evaporates 0.375 g in its two hours).
 - §13.1: the balance's body and seven-segment display, its gestures and "tare"; the readout by instruments; a
   typed amount in the pour menu (mL, or g of a solid), one "tip the solid" by instruments.
 - §13.7: the experiments `hydrate` (the water in blue crystals) and `carbonate` (what heat takes from a

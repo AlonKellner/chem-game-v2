@@ -570,7 +570,9 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	CHECK(p.grams("balloon", "carbon_dioxide") > 0.8);
 	CHECK(p.grams("beaker", "water") > 35.0);
 	for (const lab::SubstanceView &s : p.item("beaker").contents) {
-		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass"));
+		// (Stage 50: with a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
+		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass" ||
+				(s.species == "carbon_dioxide" && s.g < 1e-3)));
 	}
 	const double crystals = p.grams("flask", "copper_sulfate_pentahydrate");
 	CHECK(crystals > 8.0);

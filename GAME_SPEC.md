@@ -427,6 +427,24 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   read in the vessel's frame as the surface's is.
 - **L1** (§18) holds a column together.
 
+**Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
+a dish keeping its own carbon dioxide and steam). Gas moved only by bulk flow until Stage 50; now an open vessel's
+gas also exchanges with the room's air by **diffusion** through its mouth.
+- An edge may exchange gas (`Edge::exchange`, `World::set_exchange`): its area over the length it diffuses along,
+  m. Each step, after the drains and before the settling (`Process::Exchange`), each gas crosses it from the cell
+  where its **mole fraction** is the higher, at `D c G (x_a − x_b)` mol/s: `D` its diffusion in air at the two
+  cells' mean temperature (`gas_diffusion`: `D298 (T / 298.15)^n`, `data/species.json`'s `air_diffusion`,
+  `docs/DATA_SOURCES.md`), `c` the gas's molar density at 1 atm there, `G` the edge's. Over the step, the exact
+  relaxation of the two cells' fractions toward each other, never past equal, each gas with its own enthalpy.
+  Driven by the mole fraction, the same air at two temperatures exchanges nothing.
+- **A vessel's mouth** (the lab, at each step's boundary): Stefan's tube from what the vessel holds up to its
+  brim, `G` the integral of `dz / A(z)` over the inside's cross-section inverted (at least 3 mm under the brim's
+  mouth). A vessel of no standard shape, and one closed by what is on its mouth, exchange nothing.
+- **What follows**: an open beaker of water evaporates into the room's air at Stefan's rate (in the model's 20 °C,
+  2.338 kPa of vapour; a 250 mL beaker of water loses a few tenths of a gram an hour, its water a little under the
+  room's temperature); a dish's own carbon dioxide and steam leave it as it stands.
+- **E1** (§18) holds each exchange to its difference; T1 holds every other gas transfer to bulk flow.
+
 ## 7. Chemical kinetics
 
 **Full design**
@@ -2724,6 +2742,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
 | G4 | A control following a controller by PWM is on, over each whole period, for the steps the level at the period's start gives (its share of the period, rounded to a whole step) | exact | 26 |
+| E1 | A gas exchanged at an open mouth moves only down its mole fraction's difference (Stage 50; `chem/invariants.hpp`): along an open edge that exchanges gas and joins the two cells, no further than to equal fractions; every other gas transfer still bulk flow (T1). It fires on a gas moved against its fraction, a move a thousand times what equalises, and an exchange along an edge that does not exchange | exact | 50 |
 | I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer and pH meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
@@ -2853,7 +2872,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
 | No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |
-| Gas moves only by bulk flow; gases do not diffuse between cells | A flask and its balloon keep different compositions until gas flows between them |
+| Gas moves by bulk flow, and by diffusion only at an open vessel's mouth (Stage 50: Stefan's tube, from what it holds to its brim); none between cells joined otherwise; no convection | A flask and its balloon keep different compositions until gas flows between them; a warm vessel's gas really leaves it by convection far faster than by diffusion, so a hot dish keeps its own gas longer here than in a lab |
 | Air is 79% N₂ and 21% O₂ | Argon (0.9%) and the rest are left out |
 | Steam is an ideal gas with a constant heat capacity | Water boils at 100.44 °C at 1 atm (373.124 K is 99.97 °C); its saturation pressure is within 2% from 25 to 100 °C |
 | Fast phase change has no barrier | No superheating, no supercooling, no fog: vapour condenses the moment it is saturated |

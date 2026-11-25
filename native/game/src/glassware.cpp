@@ -255,6 +255,34 @@ double Vessel::level(double cm3) const {
 	return 0.5 * (lo + hi);
 }
 
+void Vessel::make_paths() {
+	constexpr double PI_ = 3.14159265358979323846;
+	constexpr double least_cm = 0.3; // a vessel full to its brim keeps its gas a few mm under it
+	const double all = capacity(), r_mouth = mouth();
+	capacity_cached = all;
+	paths.assign(65, 0.0);
+	for (int k = 0; k <= 64; ++k) {
+		const double from = std::min(level(all * k / 64.0), height);
+		constexpr int SLICES = 32;
+		const double dz = (height - from) / SLICES;
+		double path = 0.0;
+		for (int i = 0; i < SLICES; ++i) {
+			const double r = std::max(radius_inside(from + (i + 0.5) * dz), 0.1 * r_mouth);
+			path += dz / (PI_ * r * r);
+		}
+		paths[static_cast<size_t>(k)] = std::max(path, least_cm / (PI_ * r_mouth * r_mouth));
+	}
+}
+
+double Vessel::mouth_path(double held_cm3) const {
+	if (paths.size() != 65) {
+		return 0.0;
+	}
+	const double f = std::clamp(held_cm3 / capacity_cached * 64.0, 0.0, 64.0);
+	const auto k = std::min(static_cast<size_t>(f), size_t{ 63 });
+	return paths[k] + (paths[k + 1] - paths[k]) * (f - static_cast<double>(k));
+}
+
 double Vessel::mouth() const {
 	return radius_inside(height - 1e-6);
 }
@@ -419,6 +447,7 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	std::vector<Corner> in = inward(c);
 	reach(in, H);
 	v.inside = below(rounded(in), H);
+	v.make_paths(); // (Stage 50)
 	return v;
 }
 

@@ -83,7 +83,8 @@ the tables' water reads the closed form of its glass, water and air, to its read
 | 50.5 | The screen: the balance's bodies and display, its gestures and readout; the readout by instruments | Done |
 | 50.6 | The screen: a typed amount in the pour menu, a scoop in the tip menu | Done |
 | 50.7 | The experiments: the hydrate, the carbonate; played strict, at a person's pace and free | Done |
-| 50.8 | This document, CHANGELOG, `make gates`, the user's sign-off | |
+| 50.8 | Gas exchanged at an open mouth (the user's choice, 2026-11-25): the gases' diffusion in air, the core's process, E1, the lab's mouths, the sweeps | Done |
+| 50.9 | The goldens re-recorded with the user's approval; this document, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## What was built
 
@@ -137,14 +138,22 @@ the tables' water reads the closed form of its glass, water and air, to its read
   water reads 179.85 g on the top-loading balance: less by the air its glass and water displace. The room's air,
   nitrogen and oxygen with no argon, is 1.199 kg/m³ at 20 °C (real dry air 1.204). The same beaker of 0.004 mol of
   carbon dioxide reads 0.06 g more than of air; heated to 650 °C, less by the air its heat thinned.
-- **`hydrate`**, at its seed: 2.178 g of crystals taken (aimed at 2 g). Heated white, then cooled in the air, the
-  dish holds 1.231 g of the anhydrous salt, 0.160 g of the monohydrate and 0.024 g of the trihydrate: the dry
-  salt took back some of its own water, still in the dish's air and the room's, as it cooled. The balance reads
-  1.4139 g; x from the readings is 4.79 to 4.81 (strict, at a person's pace, free). A lab that cools its dish in
-  the air gets about that; a desiccator is how a real one gets 5.
+- **`hydrate`**, at its seed: 2.178 g of crystals taken (aimed at 2 g). Heated white and cooled, the dish holds
+  1.393 g of the anhydrous salt; the balance reads 1.3920 g; x from the readings is 5.005 (strict, at a person's
+  pace, free). Before the gas exchange (below) the dish kept its own steam and took 0.18 g of it back as hydrates
+  as it cooled (x 4.8).
 - **`carbonate`**: 1.548 g of malachite (aimed at 1.5 g) leaves 1.114 g of copper oxide, 71.95 % (the equation
-  72.0 %); the balance reads the dish at 41.53 g with it and 41.12 g after: 0.02 g heavy, its own carbon dioxide and
-  condensed steam (Open).
+  72.0 %); the balance reads the dish 41.53 g with it and 41.10 g after, the oxide's own (the student's share 72.3 %
+  at the balance's 0.01 g). Before the exchange the dish kept 0.028 g of its carbon dioxide and 0.010 g of condensed
+  steam, and read 41.12 g.
+- **The gas exchange.** Water's vapour pressure at 20 °C in the model is 2.338 kPa (2.339 measured); an open flask
+  of water loses it at Stefan's rate within 2 %; a flask's carbon dioxide relaxes toward the room's air at the
+  closed form within 2 %. The sweeps exchange gas 44,513 times over 2000 random worlds with every invariant
+  holding. A controller's trial now counts a response under a millionth of its quantity's unit as none: the room's
+  air carries a trace of anything (stirring one beaker moved its neighbour's temperature by 7e-10 K).
+- **The goldens** (`bench/sessions/`): the demo's distillate beaker, open for its two hours' wait, evaporates
+  0.375 g (38.162 to 37.787 g) and stands 0.09 K under the room; its crystals 9.1966 to 9.1969 g; its timings by up to
+  4 s. The pressure session's by tenths of a second.
 
 **Tests**:
 
@@ -152,26 +161,17 @@ the tables' water reads the closed form of its glass, water and air, to its read
 |---|---|
 | `test_instruments.cpp` (5) | OIML's case (the sources' gate); the draws' spread; I1 holds of 6000 readings and fires on three corrupted ones; a display's net, linearity and marks; the seven segments |
 | `test_balance_lab.cpp` (6) | the closed form of a beaker's load, tare, a pour off it, the analytical balance; hot air light and CO2 heavy; nothing in the world (digests equal with and without), refusals, save and load, left where its vessel stood, carried by a move, left by a stow and a hand-in; I1 over a lab by instruments at three seeds, saved and digested; the hand's misses, the same on every run, otherwise at another seed, exact without `about`, the solids in proportion, all past what there is; `onto` from the bench and the cabinet, and its refusals |
-| `test_experiments.cpp` (6) | each experiment strict with its own gestures, at a person's pace, and free; the hydrate's copper all in the dish or the jar, the balance its solids, x 4.5 to 5; the carbonate's 72 % |
+| `test_exchange.cpp` (4) | the gases' coefficients their sources' (water within 1 % of NIST's fit from 280 to 450 K); a flask's CO2 relaxing at the closed form; an open flask's water at Stefan's rate; E1's self-test |
+| `test_sweeps.cpp` | random gases with random diffusion, half the gas edges exchanging: conservation, T1, T2, E1 on every step |
+| `test_experiments.cpp` (6) | each experiment strict with its own gestures, at a person's pace, and free; the hydrate's copper all in the dish or the jar, the balance its solids, x 4.95 to 5.05; the carbonate's 72 % |
 
 ## Open
 
-- **An open vessel's gas never leaves it but by bulk flow** (§20: gases do not diffuse between cells), and both
-  experiments show it on the balance. The carbonate's dish ends holding 0.028 g of its own carbon dioxide and
-  0.010 g of water condensed from its own steam: it reads 41.12 g where its oxide alone would read 41.10, so the
-  student's share left comes out 73.5 % where the equation says 72.0 %. The hydrate's dish keeps its steam to take
-  back as it cools. A real dish loses both to the room by diffusion and convection within minutes. The fix is
-  gas exchange at an open mouth (roadmap area 6; GAME_SPEC §8's slow evaporation from a still surface): it moves
-  every open vessel, so every golden.
-- **The hydrate's water taken back as it cools grows from what is left of the monohydrate.** A reverse rate is in
-  proportion to the forward reaction's reactant (§20), so the dish's rehydration starts from the trace the
-  heating left (under a milligram) and its size depends on how long the dish was heated. A real dry salt takes
-  water back at its surface whatever is left. The outcome (x near 4.8) is what a lab that cools in the air gets;
-  its cause in the model is not yet the right one. It wants a rate law for a solid taking up a gas at its surface.
+- **A solid taking up a gas** (a dry salt from humid air) runs by the dehydration's reverse, in proportion to the hydrate left (§20); with the room's humidity (roadmap area 6) it wants a rate law at the solid's surface.
 - **The jar's crystals lose a little water to the room's dry air** (Stage 41's Open): 0.1 % of the copper of a
   jar of the pentahydrate is the trihydrate by the end of `hydrate`. Room humidity is roadmap area 6.
 - **By instruments, monitors, controllers, goals and checks still read the truth**, and a sensing part's editor
   lists what a vessel holds (§20).
+- **No convection**: a warm vessel's gas leaves it by diffusion alone, slower than by the convection a real one has (§20).
 - **No thermometer's lag and no instrument's noise**: the calorimeter's stage (the curriculum's step A, its second
   half) brings the lag, and the volumetric glassware.
-- **The free lab has no balance** in its cabinet yet.

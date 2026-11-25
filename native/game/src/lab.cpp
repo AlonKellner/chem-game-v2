@@ -1887,6 +1887,33 @@ struct Lab::Impl {
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		mid_step = true;
 	}
+	// An open vessel's gas exchanges with the room's air by diffusion through its mouth (GAME_SPEC §6, Stage 50): its
+	// mouth's edge passes each gas as a tube from what the vessel holds up to its brim would (Stefan's), the area over
+	// the length inverted from the integral of dz / A(z). Set at a step boundary, again only when it has changed.
+	void set_exchanges() {
+		for (Item &x : items) {
+			if (x.kind != Kind::Vessel || x.burst || x.mouth.index < 0 || x.glassware.empty() || !world().edges()[static_cast<size_t>(x.mouth.index)].open) {
+				continue;
+			}
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+			if (g == nullptr) {
+				continue;
+			}
+			double held = 0.0; // cm^3 of solids and liquids, the column's whole
+			std::vector<CellId> cells = layers_of(x);
+			cells.push_back(x.cell);
+			for (const CellId c : cells) {
+				held += fill_of(table(), world().snapshot_cell(c), kelvin(c)).condensed * 1e6;
+			}
+			const double path = g->mouth_path(held); // 1/cm, from its table
+			const double exchange = 0.01 / path; // cm to m
+			const double now = world().edges()[static_cast<size_t>(x.mouth.index)].exchange;
+			if (std::fabs(exchange - now) > 1e-3 * exchange) {
+				world().set_exchange(x.mouth, exchange);
+			}
+		}
+	}
+
 	// the lowest layer of a vessel's column that holds anything; its own cell where none does (Stage 47)
 	CellId lowest_cell(const Item &v) const {
 		CellId out = v.cell;
@@ -2280,6 +2307,7 @@ struct Lab::Impl {
 		set_stirring();
 		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
 		set_pours();
+		set_exchanges();
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
 		if (!check || !traceable) {
@@ -5388,7 +5416,7 @@ ItemDebug Lab::debug(const std::string &id) const {
 	// its flows in the last step, into it
 	const StepFlows &f = m.sim->flows();
 	const std::span<const Edge> edges = world.edges();
-	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow", "work" };
+	static const char *const PROCESS[] = { "reaction", "heat", "drain", "settle", "overflow", "work", "column", "exchange" };
 	for (size_t e = 0; e < edges.size() && (e + 1) * PROCESSES <= f.energy.size(); ++e) {
 		if (edges[e].a != cell && edges[e].b != cell) {
 			continue;
@@ -5650,6 +5678,9 @@ std::string Lab::digest() const {
 		if (e.power != 0.0) { // a stirrer's work (Stage 32)
 			hash.update_double(e.power);
 		}
+		if (e.exchange > 0.0) { // gas exchanged at a mouth (Stage 50)
+			hash.update_double(e.exchange);
+		}
 	}
 	for (const Item &x : m.items) { // a liquid's turning, and what it holds up (Stage 32)
 		if (x.swirl > 0.0 || x.suspended > 0.0) {
@@ -5857,6 +5888,9 @@ json Lab::Impl::save() const {
 		if (e.power != 0.0) {
 			edges.back()["power"] = bits(e.power);
 		}
+		if (e.exchange > 0.0) { // (Stage 50)
+			edges.back()["exchange"] = bits(e.exchange);
+		}
 	}
 	out["edges"] = edges;
 	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
@@ -6017,7 +6051,8 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.drain = e.at("drain").get<bool>();
 			edge.column = e.value("column", false);
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
-					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power))) {
+					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power)) ||
+					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}

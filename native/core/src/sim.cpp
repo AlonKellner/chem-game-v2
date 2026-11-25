@@ -590,6 +590,58 @@ void Simulation::overflow() {
 	}
 }
 
+// Gas exchanged by diffusion along an edge that exchanges it (GAME_SPEC §6, Stage 50: an open vessel's mouth): each
+// gas crosses from where its mole fraction is the higher, at 1 atm, D c G (x_a - x_b) mol/s, D its diffusion in air
+// at the two cells' mean temperature, c the gas's molar density there, G the edge's area over length; over the step,
+// the exact relaxation of the two cells' fractions toward each other (never past equal), with its own enthalpy.
+void Simulation::exchange_gases() {
+	exchanged_.clear();
+	const SpeciesTable &table = world_.species();
+	const std::span<const Edge> edges = world_.edges();
+	for (size_t i = 0; i < edges.size(); ++i) {
+		const Edge e = edges[i];
+		if (!e.open || e.column || !(e.exchange > 0.0) || (e.phases & PHASES_GAS) == 0 || world_.meta(e.a).reservoir || world_.meta(e.b).reservoir) {
+			continue;
+		}
+		const CellState a = world_.snapshot_cell(e.a), b = world_.snapshot_cell(e.b);
+		double na = 0.0, nb = 0.0;
+		for (size_t s = 0; s < a.amount.size(); ++s) {
+			if (table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+				na += static_cast<double>(a.amount[s]) * MOL_PER_QUANTUM;
+				nb += static_cast<double>(b.amount[s]) * MOL_PER_QUANTUM;
+			}
+		}
+		if (!(na > 0.0) || !(nb > 0.0)) {
+			continue;
+		}
+		const double ta = thermal(e.a).temperature, tb = thermal(e.b).temperature, t = 0.5 * (ta + tb);
+		if (!(t > 0.0)) {
+			continue;
+		}
+		const double c = P_ATMOSPHERE / (GAS_CONSTANT * t), inverse = 1.0 / na + 1.0 / nb;
+		for (size_t s = 0; s < a.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const double d = gas_diffusion(table, id, t);
+			if (!(d > 0.0) || (a.amount[s] == 0 && b.amount[s] == 0)) {
+				continue;
+			}
+			const double xa = static_cast<double>(a.amount[s]) * MOL_PER_QUANTUM / na, xb = static_cast<double>(b.amount[s]) * MOL_PER_QUANTUM / nb;
+			const double mol = std::fabs(xa - xb) / inverse * (1.0 - chem::exp(-d * c * e.exchange * inverse * step_seconds_));
+			const bool down = xa > xb; // from a to b
+			const int64_t have = down ? a.amount[s] : b.amount[s];
+			const int64_t q = std::min(static_cast<int64_t>(mol / MOL_PER_QUANTUM), have);
+			if (q <= 0) {
+				continue;
+			}
+			const CellId from = down ? e.a : e.b;
+			const SpeciesAmount moved[] = { SpeciesAmount{ id, Amount{ q } } };
+			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, from, moved, enthalpy_carried(table, moved, down ? ta : tb));
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			exchanged_.push_back(Exchanged{ EdgeId{ static_cast<int32_t>(i) }, from, down ? e.b : e.a, id, down ? xa : xb, down ? xb : xa, down ? na : nb, down ? nb : na, q });
+		}
+	}
+}
+
 // The fast equilibria of one cell (GAME_SPEC §8): each reaction of the
 // equilibrium law, in order, taken to the last quantum before its affinity
 // would change sign, or to the end of what the cell holds (dry-out, total
@@ -1065,6 +1117,8 @@ void Simulation::advance() {
 		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Exchange;
+		exchange_gases();
 		process_ = Process::Column;
 		stratify();
 		process_ = Process::Settle;
@@ -1091,6 +1145,8 @@ StepTrace Simulation::step() {
 		do_work();
 		process_ = Process::Drain;
 		drain_liquids();
+		process_ = Process::Exchange;
+		exchange_gases();
 		process_ = Process::Column;
 		stratify();
 		process_ = Process::Settle;
@@ -1101,6 +1157,7 @@ StepTrace Simulation::step() {
 	StepTrace trace = world_.close_step();
 	if (world_.thermal()) {
 		trace.starved = starved_;
+		trace.exchanged = exchanged_;
 	}
 	if (checking_) {
 		const Violations violations = check_all(world_.species(), trace, equilibria_);

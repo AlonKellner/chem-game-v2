@@ -71,6 +71,10 @@ struct Edge {
 	// passing heat and what is dissolved between them); never a gas path
 	// (no gas tree, no sealing runs along it).
 	bool column = false;
+	// Gas exchanged by diffusion (GAME_SPEC §6, Stage 50: an open vessel's mouth): the area it passes through over
+	// the length it diffuses along, m (the integral of dz / A(z) inverted); 0: none. Each gas crosses down its
+	// mole fraction's difference at its own diffusion in air.
+	double exchange = 0.0;
 };
 
 // What a cell is, beside its state. A reservoir is an energy account at a
@@ -129,6 +133,16 @@ struct LedgerEntry {
 	int64_t extent = 0; // Transform: the extent applied (delta = nu * extent)
 };
 
+// One gas's exchange along an edge in a step (Stage 50), as the simulation reckoned it: from the cell where its mole
+// fraction was the higher, the two fractions and the two cells' gas (mol) before it moved, and what moved (quanta).
+struct Exchanged {
+	EdgeId edge;
+	CellId from, to;
+	SpeciesId species;
+	double x_from = 0.0, x_to = 0.0, gas_from = 0.0, gas_to = 0.0;
+	int64_t moved = 0;
+};
+
 // One step as the invariants see it (chem/invariants.hpp).
 struct StepTrace {
 	uint64_t step = 0;
@@ -143,6 +157,8 @@ struct StepTrace {
 	// or because a fast reaction in it consumed gas faster than eight fillings
 	// a step (a partial vacuum, which the demo's subset does not model).
 	std::vector<uint8_t> starved;
+	// set by the simulation: every gas exchanged along an edge this step (Stage 50), for E1
+	std::vector<Exchanged> exchanged;
 };
 
 // Why a call changed nothing.
@@ -304,6 +320,8 @@ public:
 	Refusal set_conductance(EdgeId edge, double conductance);
 	// the work done along an edge, W, from its a to its b (Stage 32); between steps
 	Refusal set_power(EdgeId edge, double power);
+	// an edge's gas exchange by diffusion, m (Stage 50: area over length; 0: none); between steps
+	Refusal set_exchange(EdgeId edge, double exchange);
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
 	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)

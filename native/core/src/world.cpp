@@ -732,6 +732,20 @@ Refusal World::set_power(EdgeId edge, double power) {
 	return Refusal::None;
 }
 
+Refusal World::set_exchange(EdgeId edge, double exchange) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	if (!(exchange >= 0.0) || exchange > 1.0e6) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].exchange = exchange;
+	return Refusal::None;
+}
+
 void World::refresh_sealed() {
 	for (CellMeta &m : meta_) {
 		m.sealed = false;

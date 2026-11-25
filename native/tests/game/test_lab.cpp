@@ -301,7 +301,8 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	CHECK(grams(beaker, "water") > 35.0);
 	for (const json &row : beaker.at("contents")) {
 		const std::string s = row.at("species");
-		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass"));
+		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
+		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass" || (s == "carbon_dioxide" && row.at("g").get<double>() < 1e-3)));
 	}
 	// a flask whose only solid or liquid, beside a trace of undecomposed malachite, is the pentahydrate
 	const double crystals = grams(flask, "copper_sulfate_pentahydrate");

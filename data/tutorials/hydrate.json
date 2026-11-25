@@ -72,7 +72,7 @@
 			"part": "Weighing again",
 			"title": "Back on the balance",
 			"text": "Pick up the dish and click the balance. It still has the empty dish's tare: it reads the white salt alone. Write it down.",
-			"why": "The crystals' mass less the salt's is the water. In moles: water / 18.02 g/mol and salt / 159.6 g/mol; their ratio is x in CuSO4.xH2O, which is 5. Yours will come out a little under 5: as the dish cooled, the dry salt took back some of the water it had given off, still in the air around it. A real lab cools the dish in a desiccator, a closed jar kept dry, for that reason.",
+			"why": "The crystals' mass less the salt's is the water. In moles: water / 18.02 g/mol and salt / 159.6 g/mol; their ratio is x in CuSO4.xH2O, which is 5. In a real lab the air is humid, and dry copper sulfate takes water back from it as it cools, so the result comes out a little under 5 unless the dish cools in a desiccator, a closed jar kept dry. This lab's air is dry.",
 			"checks": [{"text": "the dish on the balance", "when": {"item": "scale", "under": "dish"}}],
 			"play": [{"drag": ["item:dish", "item:scale"]}]
 		}

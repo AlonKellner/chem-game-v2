@@ -67,6 +67,13 @@ struct Vessel {
 	double marks_ml = 0.0, marks_error = 0.0;
 	double mouth() const;
 	double head_inverted(double cm3) const;
+	// Its open mouth's path for a gas (GAME_SPEC §6, Stage 50: Stefan's tube): the integral of dz / A(z) over the inside
+	// from what it holds (cm^3 of solids and liquids) up to its brim, 1/cm, at least `least` cm over the mouth's area.
+	// From a table made with the vessel (65 fills from empty to full), interpolated.
+	double mouth_path(double held_cm3) const;
+	std::vector<double> paths; // the table: at k/64 of its capacity
+	double capacity_cached = 0.0; // capacity(), kept with the table
+	void make_paths();
 };
 // the widest mouth a balloon's or a condenser's fitting seals, cm (data/glassware.json: seals_mm)
 double seals();
