@@ -76,6 +76,7 @@ struct Vessel {
 	// (Torricelli's, the orifice's Cd, from its zero line or its mark to empty); a burette's zero line, cm over its tip
 	double tolerance_ml = 0.0, graduation_ml = 0.0, delivery_s = 0.0, tip_bore = 0.0, zero = 0.0;
 	bool outlet = false;
+	bool mark = false; // one mark it is filled to (a pipette's, a volumetric flask's)
 	static constexpr size_t PATHS = 256; // (Stage 52: a slender pipette's bore changes too fast for 64)
 	std::vector<double> paths; // the table: at k / PATHS of its capacity
 	double capacity_cached = 0.0; // capacity(), kept with the table

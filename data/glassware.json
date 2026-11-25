@@ -72,7 +72,8 @@
 			"pour_ml_s": 2,
 			"cap_bore_mm": 4,
 			"burst_kpa": 200,
-			"outlet": true
+			"outlet": true,
+			"mark": true
 		},
 		{
 			"name": "volumetric_flask",
@@ -84,7 +85,8 @@
 			"floor_per_wall": 2.0,
 			"pour_ml_s": 10,
 			"cap_bore_mm": 4,
-			"burst_kpa": 200
+			"burst_kpa": 200,
+			"mark": true
 		},
 		{
 			"name": "measuring_cylinder",

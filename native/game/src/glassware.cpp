@@ -398,6 +398,7 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	v.graduation_ml = row->value("graduation_ml", 0.0);
 	v.delivery_s = row->value("delivery_s", 0.0);
 	v.outlet = k->value("outlet", false);
+	v.mark = k->value("mark", false);
 	v.floor = v.wall * k->at("floor_per_wall").get<double>();
 	v.pour_ml_s = k->at("pour_ml_s").get<double>();
 	v.cap_bore = k->at("cap_bore_mm").get<double>() / 10.0;

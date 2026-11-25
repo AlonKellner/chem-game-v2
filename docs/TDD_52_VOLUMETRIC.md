@@ -55,7 +55,7 @@ What it builds:
 |---|---|---|
 | 52.1 | GAME_SPEC; the glassware's rows, the foam, the probe; their sources | |
 | 52.2 | The profiles: cylinder, volumetric flask, pipette, burette, cup; marks; the tip's bore from the delivery time | Done |
-| 52.3 | The lab: an outlet vessel on a mouth, its drain through its stopcock; `fill` to the mark; each piece's tolerance from the seed; the burette's reading | |
+| 52.3 | The lab: an outlet vessel on a mouth, its drain through its stopcock; `fill` to the mark; each piece's tolerance from the seed; the burette's reading | Done |
 | 52.4 | The thermometer's lag; the volumetric readings | |
 | 52.5 | The screen: tall glassware drawn to fit, the stopcock, the gestures, the readout | |
 | 52.6 | The experiments: a standard solution, a titration, a calorimeter | |
