@@ -965,5 +965,6 @@ new wall species, `polystyrene_foam` (C8H8, the styrene unit).
 | Its mass | about 2.6 g | a cup's wall of about 52 cm³ at about 0.05 g/cm³ (calibrated) |
 | Its heat lost (a bench's `loss`) | 0.12 W/K | calibrated: the foam's 0.035 W/(m·K) through its 2.5 mm over about 0.021 m² (0.29 W/K) in series with an outside film of about 7 W/(m²·K) over 0.025 m² (0.18 W/K) and a lid; a double cup with a lid lost 23.8 °C in 40 min (J. Chem. Educ. 2025, 102, 1281; its start unknown) |
 
-Its light: searched and not found measured. A flat third of the visible through its wall, scattered white, and a
-fifth of the long-wave (`data/optics/media.json`), calibrated.
+Its light: searched and not found measured. Real foam scatters white; the pass has no wall that scatters light back,
+so the cup's wall lets a flat 0.8 of the visible through (pale, where a third made it a smoked grey) and a fifth of
+the long-wave (`data/optics/media.json`), calibrated.
