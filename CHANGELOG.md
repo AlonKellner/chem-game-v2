@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.54.0 (2026-11-25, Stage 54)
+## 0.54.0 (2026-11-25, Stage 54; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 54, `docs/TDD_54_NOTEBOOK.md`; `docs/CURRICULUM.md`, step B's first half): **the notebook**, kept by the
   lab: `record` a reading, `log` one every so many seconds, `unlog`, `erase`; by instruments an instrument's reading,
