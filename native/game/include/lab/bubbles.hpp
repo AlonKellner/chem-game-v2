@@ -75,6 +75,11 @@ struct Floor {
 	double gas_m3_s = 0.0;
 };
 
+// The heat a floor at a temperature passes into the liquid over it, W (Stage 53: a vessel's floor ring against its
+// lowest liquid): convection, and past the onset where its cavities hold a nucleus Rohsenow's boiling too, as boil()
+// splits it. A floor no warmer than the bulk passes none this way.
+double floor_flux(const Floor &f, double floor_c);
+
 struct Bubbles {
 	double floor_c = 0.0; // the boundary layer's, against the floor
 	double saturation_floor_c = 0.0, saturation_top_c = 0.0; // the boiling point at the floor and at the surface

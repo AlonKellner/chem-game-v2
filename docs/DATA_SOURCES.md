@@ -869,6 +869,20 @@ Chosen for the game: a pouring lip, an outlet or a cap stands 1 cm over the mout
 `native/game/src/lab.cpp`; the screen's 10 pixels at its scale); a stream lands at the speed of its fall from there to
 the liquid's surface, `sqrt(2 g h)`; a gentle pour runs down the wall and lands at none.
 
+## The glass in rings (Stage 53)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| Borosilicate glass's thermal conductivity | 1.2 W/(m K) (`species.json`, `glass`) | SCHOTT, DURAN borosilicate glass 3.3, technical data: λ at 90 °C, 1.2 W/(m K); density at 25 °C 2.23 g/cm³ (read 2026-11-25). Confidence: a datasheet value, ± 5 % | `measured: a vessel's glass conducts at SCHOTT DURAN's 1.2 W/m K` |
+| Natural convection on a vertical wall | Nu = 0.68 + 0.670 Ra^¼ [1 + (0.492/Pr)^{9/16}]^{−4/9} to Ra = 10⁹ (8.13a); {0.825 + 0.387 Ra^{1/6} / [1 + (0.492/Pr)^{9/16}]^{8/27}}² above (8.13b), properties at the film temperature (`lab/walls.hpp`) | Churchill and Chu (1975, Int. J. Heat Mass Transfer 18, 1323–1329), as Lienhard and Lienhard, *A Heat Transfer Textbook*, 6th ed. (v6.00, 2024), §8.3, eqs. 8.13a–b, pp. 419–420 give them: within a few per cent of the data up to Ra ≈ 10⁸ | `measured: a vertical wall's natural convection is Churchill and Chu's (Lienhard eqs. 8.13a-b) and air is Lienhard's Table A.6`: the forms at their own Ra and Pr |
+| Air at 1 atm | ρ, cₚ, k, α, ν, Pr from 250 to 1000 K (`data/walls.json`) | Lienhard and Lienhard, Table A.6, p. 755 (the rows as printed) | the same test: 300 and 350 K as printed, 325 K between |
+| A powder bed's effective conductivity | Zehner and Schlünder's stagnant bed: k_e / k_f = 1 − √(1−ε) + 2√(1−ε)/(1−λB) [(1−λ)B/(1−λB)² ln(1/(λB)) − (B+1)/2 − (B−1)/(1−λB)], λ = k_f/k_s, B = C ((1−ε)/ε)^{10/9}, C = 1.40 for broken grains (`walls::bed_conductivity`) | Zehner and Schlünder (1970), as M. Kandula (NASA, "On the effective thermal conductivity of porous packed beds with uniform spherical particles") gives it, eqs. 9a–c and 10, pp. 6–7: C = 1.25 spheres, 1.40 broken particles, 2.5 cylinders; validated for conductivity ratios 8 to 1200 and solid fractions to about 0.8, below about 2000. The bed's porosity is the sediment's (1 − PACKING, 0.5, calibrated: above) | `measured: a powder bed conducts as Zehner and Schlünder's stagnant bed`: the form for twelve beds |
+| The grains' conductivities | malachite 3.59, the copper sulfate hydrates 1.32, anhydrous copper sulfate 5.91 W/(m K); copper oxide and hydroxide none | **Calibrated: searched and not found measured** (2026-11-25: malachite, tenorite, chalcanthite). Each is the nearest measured mineral as Robertson (USGS Open-File Report 88-441, 1988) tabulates it: calcite, a carbonate (8.58 CU, Horai 1971, p. 40); gypsum, a hydrated sulfate (3.15 CU, p. 30); anhydrite (14.12 CU, p. 30); 1 CU = 0.4184 W/(m K). A bed's grains are those of its solids that have one, weighted by volume; a bed with none conducts as its fluid. The bed's conductivity grows only as the logarithm of its grains' (about 1.6 times from a ratio of 100 to 1000) | the same test; and `walls: a powder on a flask's floor over a flame takes its heat through its bed` |
+
+Chosen for the game: a ring about 5 mm tall, at least 4 and at most 24 a vessel (`data/walls.json`); each ring's
+share of the vessel's calibrated `loss` to the room by its outside area (an outside by natural convection and
+radiation is later: the roadmap's area 8b).
+
 ## Glass and stoppers under pressure (Stage 28)
 
 Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass

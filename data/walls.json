@@ -1,0 +1,20 @@
+{
+	"format": "chem-walls/1",
+	"note": "A vessel's wall as rings (GAME_SPEC §6, Stage 53; docs/DATA_SOURCES.md): how tall a ring is and how many a vessel has; air's properties at 1 atm for the convection of a dry wall into the gas over a liquid (Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. v6.00 (2024), Table A.6, p. 755).",
+	"rings": {
+		"height_mm": 5,
+		"least": 4,
+		"most": 24
+	},
+	"air": [
+		{"kelvin": 250, "rho": 1.413, "cp": 1006, "nu": 1.135e-5, "k": 0.0226, "alpha": 1.59e-5, "pr": 0.715},
+		{"kelvin": 300, "rho": 1.177, "cp": 1006, "nu": 1.575e-5, "k": 0.0264, "alpha": 2.23e-5, "pr": 0.707},
+		{"kelvin": 350, "rho": 1.009, "cp": 1009, "nu": 2.069e-5, "k": 0.0300, "alpha": 2.95e-5, "pr": 0.702},
+		{"kelvin": 400, "rho": 0.8823, "cp": 1014, "nu": 2.613e-5, "k": 0.0335, "alpha": 3.74e-5, "pr": 0.699},
+		{"kelvin": 450, "rho": 0.7842, "cp": 1021, "nu": 3.204e-5, "k": 0.0368, "alpha": 4.59e-5, "pr": 0.698},
+		{"kelvin": 500, "rho": 0.7058, "cp": 1030, "nu": 3.839e-5, "k": 0.0399, "alpha": 5.50e-5, "pr": 0.698},
+		{"kelvin": 600, "rho": 0.5881, "cp": 1051, "nu": 5.232e-5, "k": 0.0460, "alpha": 7.44e-5, "pr": 0.703},
+		{"kelvin": 800, "rho": 0.4411, "cp": 1099, "nu": 8.472e-5, "k": 0.0572, "alpha": 11.8e-5, "pr": 0.717},
+		{"kelvin": 1000, "rho": 0.3529, "cp": 1141, "nu": 12.27e-5, "k": 0.0677, "alpha": 16.8e-5, "pr": 0.730}
+	]
+}

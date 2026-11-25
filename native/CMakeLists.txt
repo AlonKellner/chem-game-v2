@@ -96,6 +96,10 @@ configure_file(game/glassware_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/glass
 file(READ "${CHEM_DATA_DIR}/boiling.json" CHEM_BOILING_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/boiling.json")
 configure_file(game/boiling_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/boiling_data.hpp" @ONLY)
+# A vessel's wall as rings (data/walls.json, GAME_SPEC §6, Stage 53), embedded the same way.
+file(READ "${CHEM_DATA_DIR}/walls.json" CHEM_WALLS_JSON)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/walls.json")
+configure_file(game/walls_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/walls_data.hpp" @ONLY)
 # A thermal camera's palettes and gains (data/thermal.json, GAME_SPEC §13, Stage 48), embedded the same way.
 file(READ "${CHEM_DATA_DIR}/thermal.json" CHEM_THERMAL_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/thermal.json")

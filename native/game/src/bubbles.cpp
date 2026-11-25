@@ -176,6 +176,25 @@ double Bubbles::extinction_at(double z_m) const {
 	return out;
 }
 
+double floor_flux(const Floor &f, double floor_c) {
+	if (!(f.depth_m > 0.0) || !(f.floor_m2 > 0.0) || !(floor_c > f.bulk_c)) {
+		return 0.0;
+	}
+	const Water bulk = water_at(f.bulk_c);
+	const double floor_pa = f.pressure_pa + bulk.rho * G * f.depth_m;
+	const double floor_k = boiling_point(floor_pa, f.water_activity);
+	const Surface &surf = surface(f.surface);
+	const double a_w = f.water_activity > 0.0 ? f.water_activity : 1.0;
+	const double onset_k = root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
+	double q = convection(f.floor_m2, f.perimeter_m, floor_c, f.bulk_c) * f.floor_m2 * (floor_c - f.bulk_c);
+	if (floor_c + KELVIN > onset_k) {
+		const double sat_c = floor_k - KELVIN, sigma = surface_tension(floor_k);
+		const double h_fg = latent(floor_k), rho_v = floor_pa * molar_mass() / (chem::GAS_CONSTANT * floor_k);
+		q += f.floor_m2 * rohsenow(floor_c - sat_c, water_at(sat_c), sigma, h_fg, rho_v, surf);
+	}
+	return q;
+}
+
 Bubbles boil(const Floor &f) {
 	Bubbles b;
 	b.floor_c = f.bulk_c;

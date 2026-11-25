@@ -55,6 +55,25 @@ double mol_in(const lab::LayerView &layer, const std::string &species) {
 	return 0.0;
 }
 
+// what the layers over the copper hold of a species (the green may lie as more than one layer as its boundary is
+// resolved: Stage 47)
+double over_the_copper(const lab::ItemView &v, const std::string &species) {
+	double out = 0.0;
+	for (const lab::LayerView &layer : v.layers) {
+		double copper = 0.0;
+		for (const lab::SubstanceView &s : layer.contents) {
+			copper += s.species == "copper_sulfate_aq" ? s.mol : 0.0;
+		}
+		if (copper >= 1e-4) {
+			break;
+		}
+		for (const lab::SubstanceView &s : layer.contents) {
+			out += s.species == species ? s.mol : 0.0;
+		}
+	}
+	return out;
+}
+
 double mol_in(const lab::ItemView &v, const std::string &species) {
 	for (const lab::SubstanceView &s : v.contents) {
 		if (s.species == species) {
@@ -97,7 +116,7 @@ TEST_CASE("column: a gentle pour lays a lighter liquid on a denser one; a fast o
 	ok(*gentle, R"({"do": "pour", "from": "bottle", "to": "beaker", "ml": 40, "gentle": true})");
 	lab::ItemView v = item(*gentle, "beaker");
 	REQUIRE(v.layers.size() >= 2);
-	CHECK(mol_in(v.layers.front(), "nickel_sulfate_aq") > 0.02); // on top, the green it poured
+	CHECK(over_the_copper(v, "nickel_sulfate_aq") > 0.02); // on top, the green it poured
 	CHECK(mol_in(v.layers.front(), "copper_sulfate_aq") < 1e-4);
 	double under = 0.0; // the copper sulfate, in every layer under the one it poured (it splits as its boundary is resolved)
 	for (size_t k = 1; k < v.layers.size(); ++k) {
@@ -203,7 +222,7 @@ TEST_CASE("column: the layered bench has vessels to layer by hand: the green pou
 	ok(*l, R"({"do": "pour", "from": "green", "to": "blue", "ml": 40, "gentle": true})");
 	const lab::ItemView v = item(*l, "blue");
 	REQUIRE(v.layers.size() >= 2);
-	CHECK(mol_in(v.layers.front(), "nickel_sulfate_aq") > 0.02);
+	CHECK(over_the_copper(v, "nickel_sulfate_aq") > 0.02);
 	CHECK(mol_in(v.layers.front(), "copper_sulfate_aq") < 1e-4);
 	ok(*l, R"({"do": "pour", "from": "green", "to": "empty", "ml": 40})");
 	CHECK(item(*l, "empty").liquid_ml > 30.0);
@@ -230,7 +249,7 @@ TEST_CASE("column: on the screen the pour menu's \"pour gently\" lays the green 
 		const lab::ItemView v = item(ui->lab(), "blue");
 		if (gently) {
 			REQUIRE(v.layers.size() >= 2);
-			CHECK(mol_in(v.layers.front(), "nickel_sulfate_aq") > 0.02);
+			CHECK(over_the_copper(v, "nickel_sulfate_aq") > 0.02);
 			CHECK(mol_in(v.layers.front(), "copper_sulfate_aq") < 1e-4);
 		} else {
 			// (Stage 51) its stream's energy mixes them

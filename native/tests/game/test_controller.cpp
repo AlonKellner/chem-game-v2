@@ -108,8 +108,12 @@ TEST_CASE("controller: water in the flask held at 60 C by the burner, at each sp
 		CHECK(r->settled < 3000.0);
 		CHECK(r->last_error < 1.0);
 	}
-	CHECK(gentle.overshoot < 2.0);
-	CHECK(normal.overshoot < 5.0);
+	// (Stage 53: the flask's water loses its heat through its glass, and at the trial's small changes the process is
+	// fitted as an integrator; SIMC's PI then overshoots a setpoint's step by a share of it at any speed, about a tenth.
+	// Before, a first-order process, the gentle overshot under 2 C. A setpoint weighting is open: docs/TDD_53_WALLS.md)
+	for (const Run *r : { &gentle, &normal, &fast }) {
+		CHECK(r->overshoot < 5.0);
+	}
 	CHECK(fast.settled <= normal.settled);
 	CHECK(normal.settled <= gentle.settled);
 }

@@ -1,5 +1,21 @@
 # GAME_SPEC version history
 
+## 0.53.0 (2026-11-25, Stage 53)
+
+- §6 (Stage 53, `docs/TDD_53_WALLS.md`; the roadmap's area 8b): **the glass in rings**. A glassware vessel's wall
+  is its floor and rings up to its brim, each a cell of its glass:
+  - each conducts to the next through the glass (`conductivity` on wall species: DURAN's 1.2 W/(m K));
+  - each loses to the room by its share of the vessel's `loss`;
+  - each touches the column's liquid layers and the gas over them by natural convection on a vertical wall
+    (Churchill and Chu, as Lienhard gives them; air from Lienhard's Table A.6), set each step;
+  - the floor touches the lowest liquid by Stage 45's heated floor; a burner heats the floor.
+- §6: **a powder bed** on a floor takes its heat through the bed (Zehner and Schlünder, Kandula's form; the grains'
+  conductivities by mineral analogues, calibrated).
+- The lab: a vessel's view lists its rings' temperatures (`wall_c`); its glass is summed from the rings. The debug
+  panel shows its floor's heat. Every glassware vessel's heating and cooling shift; both goldens re-recorded with the
+  user's approval.
+- §20: the rings' simplifications.
+
 ## 0.52.0 (2026-11-25, Stage 52; signed off by the user: "Approved, proceed")
 
 - §13 (Stage 52, `docs/TDD_52_VOLUMETRIC.md`; `docs/CURRICULUM.md`, step A's second half): **volumetric glassware**,

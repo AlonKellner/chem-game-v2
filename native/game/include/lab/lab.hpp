@@ -122,6 +122,9 @@ struct ItemView {
 	// a vessel's column while it is layered (Stage 47), from the top down (its own cell's liquid first); empty while
 	// it is mixed. `contents` and the rest are the whole column's.
 	std::vector<LayerView> layers;
+	// its wall's temperatures (Stage 53), °C: its floor first, then its rings up to its brim; empty for a vessel whose
+	// wall is in its own cell (one made as no glassware)
+	std::vector<double> wall_c;
 	Part part; // a signal part (§13.3): its settings and state
 	// a spectral viewer (§13, Stage 42): where its probe is fixed: on an item or a part (probe_on, its id), at
 	// (probe_u, probe_v) of it in its own frame (0 to 1 across and down its rectangle, upright); on the room

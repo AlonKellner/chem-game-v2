@@ -14,6 +14,7 @@
 #include "lab/conditions.hpp"
 #include "lab/sha256.hpp"
 #include "lab/thermal.hpp"
+#include "lab/walls.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -73,6 +74,17 @@ struct Item {
 	// at no speed), for a scripted pour's while
 	int landed = 0;
 	bool gentle = false;
+	// its wall as rings (GAME_SPEC §6, Stage 53): its floor first, then the rings up to its brim, each a cell of its
+	// glass; and the edges each has to the cells of its column, by which it passes heat to what it touches there
+	std::vector<CellId> rings;
+	struct Contact {
+		size_t ring = 0;
+		CellId cell;
+		EdgeId edge;
+	};
+	std::vector<Contact> contacts;
+	// what its rings hold of each wall species, summed once (their glass never changes)
+	mutable std::vector<std::pair<int32_t, int64_t>> wall_amounts;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -1957,6 +1969,171 @@ struct Lab::Impl {
 		}
 	}
 
+	// A vessel's wall as rings (GAME_SPEC §6, Stage 53): each step, the conductance between each ring and each cell of
+	// its column is what the ring touches of that cell (the height of the cell's liquid, or of the gas over the
+	// liquid, along the ring) times how fast heat crosses there: natural convection on a vertical wall into the
+	// liquid (Churchill and Chu, the liquid's depth its length) or into the gas (the dry wall's height); the floor and
+	// the lowest liquid by Stage 45's heated floor (convection, and boiling past its onset), or, a floor no warmer, as
+	// a wall into it. A cell with no temperature (an empty layer) touches nothing.
+	void set_walls() {
+		for (Item &x : items) {
+			if (x.rings.empty()) {
+				continue;
+			}
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
+			if (g == nullptr) {
+				continue;
+			}
+			// its rings, and the height under which it holds a volume (a table of 256 heights, read between them),
+			// worked out once for each kind of vessel
+			struct Shape {
+				std::vector<walls::Ring> rings;
+				std::vector<double> volume; // cm^3 under heights 0, rise, 2 rise, ... to the brim
+				double rise = 0.0;
+				double level(double cm3) const {
+					if (!(cm3 > 0.0)) {
+						return 0.0;
+					}
+					const auto at = std::upper_bound(volume.begin(), volume.end(), cm3);
+					if (at == volume.end()) {
+						return rise * static_cast<double>(volume.size() - 1);
+					}
+					const size_t k = static_cast<size_t>(at - volume.begin()) - 1;
+					const double span = volume[k + 1] - volume[k];
+					return rise * (static_cast<double>(k) + (span > 0.0 ? (cm3 - volume[k]) / span : 0.0));
+				}
+			};
+			static thread_local std::map<const glass::Vessel *, Shape> cut;
+			auto found = cut.find(g);
+			if (found == cut.end()) {
+				Shape shape;
+				shape.rings = walls::rings_of(*g);
+				shape.rise = g->height / 255.0;
+				for (int k = 0; k < 256; ++k) {
+					shape.volume.push_back(g->volume_below(k * shape.rise));
+				}
+				found = cut.emplace(g, std::move(shape)).first;
+			}
+			const Shape &shape = found->second;
+			const std::vector<walls::Ring> &rings = shape.rings;
+			if (rings.size() != x.rings.size()) {
+				continue;
+			}
+			// its column, from the top down; a cell it has no contact with yet (a layer it grew) gets them
+			std::vector<CellId> column{ x.cell };
+			for (const CellId c : layers_of(x)) {
+				column.push_back(c);
+			}
+			if (x.contacts.empty()) {
+				find_contacts(x, column);
+			}
+			for (const CellId c : column) {
+				bool known = false;
+				for (const Item::Contact &k : x.contacts) {
+					known = known || k.cell == c;
+				}
+				for (size_t r = 0; r < x.rings.size() && !known; ++r) {
+					EdgeId edge;
+					if (world().connect(x.rings[r], c, PHASES_NONE, &edge, 0.0) == Refusal::None) {
+						x.contacts.push_back(Item::Contact{ r, c, edge });
+					}
+				}
+			}
+			// each cell's condensed height over the base, stacked from the bottom (cm); the surface; the lowest that holds
+			std::map<int32_t, std::pair<double, double>> span;
+			double below = 0.0;
+			CellId lowest = x.cell;
+			for (size_t k = column.size(); k-- > 0;) {
+				const Fill f = fill_of(table(), world().snapshot_cell(column[k]), kelvin(column[k]));
+				const double cm3 = f.defined ? f.condensed * 1e6 : 0.0;
+				span[column[k].index] = { shape.level(below), shape.level(below + cm3) };
+				if (cm3 > 0.0 && below == 0.0) {
+					lowest = column[k];
+				}
+				below += cm3;
+			}
+			const double surface = shape.level(below), depth_m = std::max(surface - g->floor, 0.0) * 1e-2, dry_m = std::max(g->height - surface, 0.0) * 1e-2;
+			const bool wet = below > 0.0 && liquid_m3(x) > 0.0;
+			for (const Item::Contact &c : x.contacts) {
+				const walls::Ring &r = rings[c.ring];
+				double wall_k = 0.0, cell_k = 0.0;
+				double conductance = 0.0;
+				if (world().temperature(x.rings[c.ring], wall_k) && world().temperature(c.cell, cell_k) && span.count(c.cell.index) != 0) {
+					const auto [from, to] = span[c.cell.index];
+					if (r.floor) {
+						const double area = r.inside_cm2 * 1e-4;
+						// what lies on the floor (Stage 53): a bed of its solids, their grains' conductivity weighted by
+						// their volumes (those with one), in the liquid over them or the gas, over half its thickness
+						double bed_cm = 0.0, grain_k = 0.0;
+						if (c.cell == lowest) {
+							const CellState &st = world().snapshot_cell(c.cell);
+							double solid_m3 = 0.0, known_m3 = 0.0, k_sum = 0.0;
+							for (size_t s = 0; s < st.amount.size(); ++s) {
+								const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+								if (st.amount[s] > 0 && !def.wall && def.phase == Phase::Solid && def.molar_volume > 0.0) {
+									const double v = static_cast<double>(st.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+									solid_m3 += v;
+									if (def.conductivity > 0.0) {
+										known_m3 += v;
+										k_sum += v * def.conductivity;
+									}
+								}
+							}
+							const double lying_m3 = solid_m3 * (1.0 - std::clamp(x.suspended, 0.0, 1.0));
+							bed_cm = lying_m3 > 0.0 ? std::max(shape.level(lying_m3 * 1e6 / contents::PACKING) - g->floor, 0.0) : 0.0;
+							grain_k = known_m3 > 0.0 ? k_sum / known_m3 : 0.0;
+						}
+						if (c.cell == lowest && bed_cm > 0.0) {
+							const double film = 0.5 * (wall_k + cell_k);
+							const double fluid = wet ? chem::solvent_at(table(), film).k : walls::air_at(film).k;
+							const double bed = walls::bed_conductivity(fluid, grain_k, 1.0 - contents::PACKING);
+							conductance = bed * area / std::max(0.5 * bed_cm * 1e-2, 1e-4);
+						} else if (c.cell == lowest && wet) {
+							bubbles::Floor f;
+							f.floor_m2 = area;
+							f.perimeter_m = 2.0 * 3.14159265358979323846 * r.radius * 1e-2;
+							f.depth_m = depth_m;
+							f.bulk_c = cell_k - 273.15;
+							f.pressure_pa = pressure_pa(x);
+							f.water_activity = activity(table(), world().snapshot_cell(c.cell), builtin::water, &world().meta(c.cell));
+							const double q = wall_k > cell_k ? bubbles::floor_flux(f, wall_k - 273.15) : 0.0;
+							conductance = std::max(q / std::max(wall_k - cell_k, 1e-9), walls::into_water(f.floor_m2 / std::max(f.perimeter_m, 1e-9), wall_k, cell_k) * area);
+						} else if (c.cell == lowest) {
+							conductance = walls::into_air(std::max(dry_m, 1e-3), wall_k, cell_k) * area; // (dry and bare: the floor under the gas)
+						}
+					} else {
+						const double a = std::max(r.from, from), b = std::min(r.to, to);
+						// (what it touches: its inside's area by the share of its height, its wall hardly sloping in 5 mm)
+						const double per_cm = r.inside_cm2 * 1e-4 / (r.to - r.from);
+						if (b > a && wet) {
+							conductance += (b - a) * per_cm * walls::into_water(depth_m, wall_k, cell_k);
+						}
+						if (c.cell == x.cell && r.to > surface) {
+							conductance += (r.to - std::max(r.from, surface)) * per_cm * walls::into_air(std::max(dry_m, 1e-3), wall_k, cell_k);
+						}
+					}
+				}
+				if (world().edges()[static_cast<size_t>(c.edge.index)].conductance != conductance) {
+					world().set_conductance(c.edge, conductance);
+				}
+			}
+		}
+	}
+	// a vessel's contacts found from the world's edges (a lab loaded: Stage 53)
+	void find_contacts(Item &x, const std::vector<CellId> &column) {
+		const std::span<const Edge> edges = world().edges();
+		for (size_t e = 0; e < edges.size(); ++e) {
+			const Edge &edge = edges[e];
+			if (!edge.open || edge.drain || edge.column || edge.phases != PHASES_NONE) {
+				continue;
+			}
+			for (size_t r = 0; r < x.rings.size(); ++r) {
+				if (edge.a == x.rings[r] && std::find(column.begin(), column.end(), edge.b) != column.end()) {
+					x.contacts.push_back(Item::Contact{ r, edge.b, EdgeId{ static_cast<int32_t>(e) } });
+				}
+			}
+		}
+	}
 	// An open vessel's gas exchanges with the room's air by diffusion through its mouth (GAME_SPEC §6, Stage 50): its
 	// mouth's edge passes each gas as a tube from what the vessel holds up to its brim would (Stefan's), the area over
 	// the length inverted from the integral of dz / A(z). Set at a step boundary, again only when it has changed.
@@ -2041,6 +2218,9 @@ struct Lab::Impl {
 				continue;
 			}
 			const Item &v = items[static_cast<size_t>(b.under)];
+			if (!v.rings.empty()) {
+				continue; // it heats its floor (Stage 53)
+			}
 			CellId target = v.cell;
 			for (const CellId c : layers_of(v)) {
 				if (layered_cell(c)) {
@@ -2379,6 +2559,7 @@ struct Lab::Impl {
 		set_pours();
 		set_outlets();
 		set_exchanges();
+		set_walls();
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
 		if (!check || !traceable) {
@@ -2496,13 +2677,22 @@ struct Lab::Impl {
 			}
 		}
 		const double t = kelvin(v.cell); // opened: read as an expansion against the room
-		if (!gas.empty()) {
-			world().transfer(v.mouth, v.cell, gas, enthalpy_carried(table(), gas, t));
+		// (Stage 53) a vessel whose glass is in its rings is left empty: what goes last takes all the energy left, so
+		// that an empty cell holds none (T3)
+		bool walled = false;
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			walled = walled || (cell.amount[s] > 0 && table().species(SpeciesId{ static_cast<int32_t>(s) }).wall);
 		}
 		const int tray_at = find("tray");
 		EdgeId spill;
-		if (!rest.empty() && tray_at >= 0 && world().connect(v.cell, items[static_cast<size_t>(tray_at)].cell, HANDLED, &spill) == Refusal::None) {
-			world().transfer(spill, v.cell, rest, enthalpy_carried(table(), rest, t));
+		const bool spills = !rest.empty() && tray_at >= 0 && world().connect(v.cell, items[static_cast<size_t>(tray_at)].cell, HANDLED, &spill) == Refusal::None;
+		if (!gas.empty()) {
+			const Energy e = !walled && !spills ? Energy{ world().snapshot_cell(v.cell).energy } : enthalpy_carried(table(), gas, t);
+			world().transfer(v.mouth, v.cell, gas, e);
+		}
+		if (spills) {
+			const Energy e = !walled ? Energy{ world().snapshot_cell(v.cell).energy } : enthalpy_carried(table(), rest, t);
+			world().transfer(spill, v.cell, rest, e);
 		}
 		mid_step = true;
 		touched.resize(items.size(), 0);
@@ -2800,6 +2990,9 @@ struct Lab::Impl {
 			if (layered) {
 				m.layers_into(item, v);
 			}
+			for (size_t r = 0; shaped && r < item.rings.size(); ++r) { // (Stage 53; a full view's: a monitor's reading needs none)
+				v.wall_c.push_back(m.kelvin(item.rings[r]) - 273.15);
+			}
 			if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 				v.ph = p;
 			}
@@ -2842,6 +3035,32 @@ struct Lab::Impl {
 					v.solid_ml += row.mol * def.molar_volume * 1e6;
 				}
 				v.contents.push_back(row);
+			}
+			// its wall, in its rings (Stage 53): a row of each wall species, as when its glass was in its own cell
+			if (!item.rings.empty()) {
+				if (item.wall_amounts.empty()) {
+					std::map<int32_t, int64_t> wall;
+					for (const CellId r : item.rings) {
+						const CellState &rc = m.world().snapshot_cell(r);
+						for (size_t s = 0; s < rc.amount.size(); ++s) {
+							if (rc.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).wall) {
+								wall[static_cast<int32_t>(s)] += rc.amount[s];
+							}
+						}
+					}
+					item.wall_amounts.assign(wall.begin(), wall.end());
+				}
+				for (const auto &[s, q] : item.wall_amounts) {
+					const SpeciesDef &def = table.species(SpeciesId{ s });
+					SubstanceView row;
+					row.species = std::string(def.id);
+					row.formula = std::string(def.formula);
+					row.phase = PHASE[static_cast<int>(def.phase)];
+					row.wall = true;
+					row.mol = static_cast<double>(q) * MOL_PER_QUANTUM;
+					row.g = row.mol * static_cast<double>(table.molar_mass_ug(SpeciesId{ s })) * 1e-6;
+					v.contents.push_back(row);
+				}
 			}
 			// a vessel with a coolant is a condenser: one of its edges goes to a reservoir that is neither the room nor a burner
 			for (const Edge &e : m.world().edges()) {
@@ -2917,8 +3136,15 @@ struct Lab::Impl {
 		f.water_activity = activity(table(), cell, builtin::water, &world().meta(item.cell));
 		const StepFlows &flows = sim->flows();
 		const std::span<const Edge> edges = world().edges();
+		for (const Item::Contact &c : item.contacts) { // (Stage 53) what its floor passed into its column
+			const size_t slot = static_cast<size_t>(c.edge.index) * PROCESSES + static_cast<size_t>(Process::Heat);
+			if (c.ring == 0 && c.edge.index >= 0 && slot < flows.energy.size()) {
+				const Edge &e = edges[static_cast<size_t>(c.edge.index)];
+				f.heat_w += (e.b == c.cell ? 1.0 : -1.0) * static_cast<double>(flows.energy[slot]) * JOULE_PER_QUANTUM / sim->step_seconds();
+			}
+		}
 		for (const Item &b : items) {
-			if (b.kind != Kind::Burner || b.heats.index < 0 || static_cast<size_t>(b.heats.index) >= edges.size()) {
+			if (b.kind != Kind::Burner || b.heats.index < 0 || static_cast<size_t>(b.heats.index) >= edges.size() || !item.rings.empty()) {
 				continue;
 			}
 			const Edge &e = edges[static_cast<size_t>(b.heats.index)];
@@ -3362,7 +3588,38 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				why = "item \"" + item.id + "\": its wall is not a wall species";
 				return nullptr;
 			}
-			b.set_amount(item.cell, wall, amount(j.at("wall_g").get<double>() / (static_cast<double>(table.molar_mass_ug(wall)) * 1e-6)));
+			const double wall_mol = j.at("wall_g").get<double>() / (static_cast<double>(table.molar_mass_ug(wall)) * 1e-6);
+			if (made && item.kind == Kind::Vessel) {
+				// its wall as rings (Stage 53): each its share of the glass by the glass it holds, its share of the loss to
+				// the room by the outside it has; along the wall, conduction through the glass between their middles;
+				// and each to every cell of its column, by what it touches there (its conductances set every step)
+				const std::vector<walls::Ring> rings = walls::rings_of(*made);
+				double glass = 0.0, outside = 0.0;
+				for (const walls::Ring &r : rings) {
+					glass += r.glass_cm3;
+					outside += r.outside_cm2;
+				}
+				const double loss = number(j, "loss", 0.5), conductivity = table.species(wall).conductivity;
+				for (size_t k = 0; k < rings.size(); ++k) {
+					const CellId ring = b.add_cell(item.id + (k == 0 ? std::string(".floor") : ".ring" + std::to_string(k)));
+					b.set_amount(ring, wall, amount(wall_mol * rings[k].glass_cm3 / glass)).set_temperature(ring, room_kelvin);
+					b.add_edge(ring, impl->room, PHASES_NONE, loss * rings[k].outside_cm2 / outside);
+					if (k > 0 && conductivity > 0.0) {
+						const double dz = 0.5 * ((rings[k].to - rings[k].from) + (rings[k - 1].to - rings[k - 1].from)) * 1e-2;
+						b.add_edge(item.rings.back(), ring, PHASES_NONE, conductivity * rings[k - 1].across_cm2 * 1e-4 / dz);
+					}
+					item.rings.push_back(ring);
+				}
+				std::vector<CellId> column{ item.cell };
+				column.insert(column.end(), built.begin(), built.end());
+				for (size_t k = 0; k < item.rings.size(); ++k) {
+					for (const CellId c : column) {
+						item.contacts.push_back(Item::Contact{ k, c, b.add_edge(item.rings[k], c, PHASES_NONE, 0.0) });
+					}
+				}
+			} else {
+				b.set_amount(item.cell, wall, amount(wall_mol));
+			}
 			item.wall_mm = made ? made->wall * 10.0 : number(j, "wall_mm", 0.0);
 			item.floor_mm = made ? made->floor * 10.0 : number(j, "floor_mm", 0.0);
 			if (!(item.wall_mm >= 0.0) || !(item.floor_mm >= 0.0)) {
@@ -3417,7 +3674,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				item.mouth = b.add_edge(item.cell, impl->air, PHASES_GAS);
 			}
 			b.set_temperature(item.cell, room_kelvin);
-			b.add_edge(item.cell, impl->room, PHASES_NONE, number(j, "loss", 0.5));
+			if (item.rings.empty()) { // (a vessel with rings loses heat through them: Stage 53)
+				b.add_edge(item.cell, impl->room, PHASES_NONE, number(j, "loss", 0.5));
+			}
 			if (j.contains("coolant")) {
 				const json &coolant = j.at("coolant");
 				const CellId cold = b.add_reservoir(item.id + ".coolant", coolant.at("celsius").get<double>() + 273.15);
@@ -4383,7 +4642,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 		}
-		if (world().connect(items[static_cast<size_t>(vessel)].cell, flame.cell, PHASES_NONE, &flame.heats, flame.full * flame.valve) != Refusal::None) {
+		const Item &heated = items[static_cast<size_t>(vessel)];
+		const CellId over = heated.rings.empty() ? heated.cell : heated.rings.front(); // (its floor, Stage 53)
+		if (world().connect(over, flame.cell, PHASES_NONE, &flame.heats, flame.full * flame.valve) != Refusal::None) {
 			why = "the burner cannot go there";
 			return false;
 		}
@@ -6145,6 +6406,13 @@ json Lab::Impl::save() const {
 		if (item.landed != 0) { // (Stage 47)
 			list.back()["landed"] = item.landed;
 		}
+		if (!item.rings.empty()) { // its wall's rings (Stage 53)
+			json rings = json::array();
+			for (const CellId r : item.rings) {
+				rings.push_back(r.index);
+			}
+			list.back()["rings"] = std::move(rings);
+		}
 		if (item.stirs.index >= 0) { // (Stage 32)
 			list.back()["stirs"] = item.stirs.index;
 		}
@@ -6327,6 +6595,11 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.place = static_cast<Place>(place);
 			item.cell = CellId{ j.at("cell").get<int32_t>() };
 			item.landed = j.value("landed", 0);
+			if (j.contains("rings")) { // (Stage 53: its contacts found again from the edges at its first step)
+				for (const json &r : j.at("rings")) {
+					item.rings.push_back(CellId{ r.get<int32_t>() });
+				}
+			}
 
 			item.mouth = EdgeId{ j.at("mouth").get<int32_t>() };
 			item.heats = EdgeId{ j.at("heats").get<int32_t>() };

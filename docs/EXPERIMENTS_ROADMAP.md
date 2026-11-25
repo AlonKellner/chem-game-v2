@@ -331,7 +331,7 @@ derived again; more cells to a vessel only where a gradient stands.
 
 **Depends on:** area 3's floor film (the heated floor's boundary layer is the column's lowest layer).
 
-### 8b. The glass in layers (PLANNED: a stage of its own)
+### 8b. The glass in layers (built in Stage 53: `docs/TDD_53_WALLS.md`)
 
 The user, 2026-11-25 (during Stage 51): "separating the vessel glass into the same layers as the liquids, each
 vessel layer should have an independent heat transfer dynamic with the layer it touches, and vessel layers should

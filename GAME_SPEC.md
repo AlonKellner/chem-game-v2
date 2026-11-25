@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.52.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.53.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -438,6 +438,17 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
 - **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height. The layers lie level in the
   room at any turn, as the surface does: a band's top is the level that holds the liquid of the layers under it,
   read in the vessel's frame as the surface's is.
+- **The wall in rings** (Stage 53; `lab/walls.hpp`, `docs/TDD_53_WALLS.md`). A glassware vessel's glass is its
+  floor and rings of about 5 mm up to its brim (4 to 24), each a cell of the glass by its share. Each loses heat to
+  the room by its share of the vessel's `loss` (by outside area). It conducts to the ring over it through the glass
+  (the wall species' `conductivity`; borosilicate 1.2 W/(m K)). Each step its contact with each cell of the column
+  is what it touches there times how fast heat crosses: natural convection on a vertical wall (Churchill and Chu),
+  into the liquid (the liquid's depth its length) or into the gas over it (air: Lienhard's Table A.6). The floor and
+  the lowest liquid use Stage 45's heated floor (convection, boiling past its onset). A burner heats the floor.
+- **A powder bed** (Stage 53): solids lying on a floor take its heat through their bed over half its thickness, at
+  Zehner and Schlünder's stagnant conductivity (broken grains, C = 1.40; the porosity the sediment's), with the
+  liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
+  solids that have one, and a bed with none conducts as its fluid.
 - **L1** (§18) holds a column together.
 
 **Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
@@ -2902,6 +2913,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The long-wave range (Stage 46): the room one temperature, its wall, cube and room in front a black body; fused silica for the lab's glass; grey emissivities; a flame a grey gas and its soot, calibrated; the sensor's response flat over 8–14 µm | A camera sees no hot thing in a glass's reflection; borosilicate's weaker Reststrahlen band reads a few per cent more emissive than silica's 0.79; a real flame's CO₂ and H₂O bands are lines, not grey |
 | A thermal camera (Stage 48): one sensor pixel a layout pixel, every frame; no noise of its own, no lens's blur, no frame rate; its search a few times a second; its overlay a 3 × 5 font | A real camera's 160 × 120 or 320 × 240 pixels, its NETD of about 0.05 K and its 9 Hz are a better experience left out (the user's word: "same resolution and frame rate as the rest of the rendered lab") |
 | A vessel's column (Stage 47): layers homogeneous, its volumes the table's at 25 °C; a layer's middle by volume (Stage 51) | A layer's buoyancy reads the solvent's measured expansion, but its volume does not change with it (roadmap area 8c); an overturn mixes the two layers whole (no plume); water does not diffuse back against a solute; a band ignores the narrow lines of its liquid; in a narrowing column a layer's centre of mass is a little under its middle by volume |
+| A vessel's wall in rings (Stage 53): rings of fixed heights; each one's contact by overlap, the wall's slope within a ring aside; its outside the calibrated `loss` by area; a vertical wall's correlation for a flask's sloping sides; a bed's grains by mineral analogues; a bed with no grain of known conductivity conducts as its fluid | A conical flask's sloping wall convects as a vertical one; a hot vessel's outside loses as calibrated, not by convection and radiation; the controller's trial fits a flask as an integrator, and its gentle speed overshoots a step by about a tenth |
 | A pour's stream (Stage 51): a free round jet's entrainment (Ricou and Spalding's, from gas jets far from their nozzle) and a forced fountain's reach, from where it lands; all of its kinetic energy work on the column at Linden's 0.2 | A stream a few centimetres long in a beaker is near its nozzle and confined, ± 30%; the energy that stays in the layer it lands in is counted as if it reached the interfaces below, so a pour mixes at most as much as it could |
 | Stirring a column (Stage 49): the mixing efficiency a constant, Linden's maximum (0.2); the stirring's work spent from the bottom up, at the interfaces alone; the potential energy it raises not in the ledger | A weakly stratified column mixes faster than it would (its efficiency would be lower); the layer the stirrer stirs deepens up the column, the top's mixed last; the joules raised (under a millijoule) are not taken from the liquid's heat |
 | One temperature per vessel (a vessel of no standard shape; any vessel while it is mixed) | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
