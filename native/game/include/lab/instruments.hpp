@@ -31,6 +31,7 @@ const std::vector<Balance> &balances(); // in data/instruments.json's order; the
 const Balance *balance(std::string_view name); // null if there is none of that name
 Meter thermometer(); // °C
 Meter ph_meter();
+Meter gauge(); // a pressure gauge, kPa (Stage 54)
 double hand(); // how far a hand misses an amount aimed at, a share (0.10)
 double reference_density(); // the reference weights', kg/m^3 (OIML D 28: 8000)
 // a wall species' density, g/cm^3: the air its glass or its rubber displaces on a balance (0: none known)

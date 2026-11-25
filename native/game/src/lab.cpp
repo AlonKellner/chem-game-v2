@@ -4,6 +4,7 @@
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
+#include "lab/notebook.hpp"
 
 #include "chem/builtin_ids.hpp"
 #include "chem/error.hpp"
@@ -50,6 +51,7 @@ constexpr double GENTLE_POUR = 2e-6; // m^3/s: a gentle pour's trickle down the 
 constexpr double LIP_GAP = 0.01;
 constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
+constexpr size_t NOTEBOOK_MOST = 2000; // the notebook keeps its last this many entries (Stage 54)
 constexpr int TRIAL_PER_STEP = 2; // a trial's seconds run at each of the lab's steps (Stage 39): what a step costs is bounded
 constexpr double ORIFICE_CD = 0.61; // a sharp-edged orifice's discharge coefficient (GAME_SPEC §13, Stage 27; docs/DATA_SOURCES.md)
 constexpr double GRAVITY = 9.80665; // m/s^2, standard
@@ -196,11 +198,20 @@ double number(const json &j, const char *key, double fallback) {
 	return j.contains(key) && j.at(key).is_number() ? j.at(key).get<double>() : fallback;
 }
 
-double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
-	if (amount.contains("mol")) {
-		return amount.at("mol").get<double>();
+// an amount as the bench gives it: a number, or (Stage 54: an unknown) a range [low, high] drawn once from the seed
+double amount_of(const json &v, uint64_t seed, const std::string &key) {
+	if (v.is_array() && v.size() == 2) {
+		const double lo = v.at(0).get<double>(), hi = v.at(1).get<double>();
+		return lo + (hi - lo) * 0.5 * (1.0 + instruments::share(seed, key));
 	}
-	return amount.at("g").get<double>() / (static_cast<double>(table.molar_mass_ug(id)) * 1e-6);
+	return v.get<double>();
+}
+
+double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount, uint64_t seed = 0, const std::string &key = "") {
+	if (amount.contains("mol")) {
+		return amount_of(amount.at("mol"), seed, key);
+	}
+	return amount_of(amount.at("g"), seed, key) / (static_cast<double>(table.molar_mass_ug(id)) * 1e-6);
 }
 
 // An item's footprint on the bench, in squares of the grid (GAME_SPEC §13):
@@ -289,6 +300,9 @@ struct Lab::Impl {
 	// misses are drawn from
 	bool instruments = false;
 	uint64_t seed = 0;
+	// the notebook (Stage 54): what was recorded, and the loggers
+	std::vector<NoteEntry> notebook;
+	std::vector<NoteLogger> loggers;
 	CellId air;
 	CellId room;
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
@@ -379,6 +393,55 @@ struct Lab::Impl {
 		LabView one;
 		one.items.push_back(item_view(items[static_cast<size_t>(i)], false, q.what == "bubbles_cm"));
 		return measure(one, q);
+	}
+
+	// ---- the notebook (GAME_SPEC §13, Stage 54)
+	// what is read of a quantity now, as the notebook writes it: by instruments an instrument's reading, or none
+	std::optional<double> note_reading(const Quantity &q, bool &instrument) const {
+		const int i = find(q.item);
+		instrument = false;
+		if (i < 0) {
+			return std::nullopt;
+		}
+		LabView one;
+		one.instruments = instruments;
+		one.seed = seed;
+		one.items.push_back(item_view(items[static_cast<size_t>(i)], false, q.what == "bubbles_cm"));
+		return lab::reading(one, q, instrument);
+	}
+	bool record_note(const Quantity &q, const std::string &label, std::string &why) {
+		bool instrument = false;
+		const std::optional<double> v = note_reading(q, instrument);
+		if (!v) {
+			why = instruments ? "no instrument reads " + label_of(q) + ": a student sees only what instruments read" : "there is no " + label_of(q) + " to read";
+			return false;
+		}
+		notebook.push_back(NoteEntry{ static_cast<int64_t>(world().step()), label.empty() ? label_of(q) : label, q, *v, unit(q), instrument });
+		if (notebook.size() > NOTEBOOK_MOST) {
+			notebook.erase(notebook.begin());
+		}
+		return true;
+	}
+	static std::string label_of(const Quantity &q) { return label(LabView{}, q); }
+	static bool quantity_of_command(const json &c, Quantity &q, std::string &why) {
+		if (!c.contains("item") || !c.at("item").is_string() || !c.contains("what") || !c.at("what").is_string()) {
+			why = "a reading names its \"item\" and \"what\"";
+			return false;
+		}
+		q.item = c.at("item").get<std::string>();
+		q.what = c.at("what").get<std::string>();
+		q.measure = c.value("measure", "g");
+		return true;
+	}
+	// the loggers whose time has come record (at the end of a step)
+	void follow_loggers() {
+		for (NoteLogger &l : loggers) {
+			if (static_cast<int64_t>(world().step()) >= l.next) {
+				std::string no;
+				record_note(l.quantity, l.label, no);
+				l.next = static_cast<int64_t>(world().step()) + std::max<int64_t>(1, std::llround(l.every_s / STEP_SECONDS));
+			}
+		}
 	}
 
 	// ---- goals (§13.5)
@@ -2396,6 +2459,7 @@ struct Lab::Impl {
 			}
 		}
 		follow_thermometers();
+		follow_loggers();
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (!trials.empty()) {
 			run_trials();
@@ -2863,6 +2927,8 @@ struct Lab::Impl {
 				if (v.ph) {
 					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
 				}
+				const instruments::Meter gauge = instruments::gauge(); // (Stage 54)
+				v.read_kpa = instruments::rounded(v.pressure_kpa + gauge.accuracy * instruments::share(m.seed, item.id + ":gauge"), gauge.resolution);
 				const glass::Vessel *g = item.glassware.empty() ? nullptr : glass::find(item.glassware, item.nominal_ml);
 				if (g != nullptr && g->marks_ml > 0.0) {
 					v.marks_ml = g->marks_ml;
@@ -3394,7 +3460,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						why = "item \"" + item.id + "\": a layer under its top holds no gas";
 						return nullptr;
 					}
-					const double mol = mol_of(table, id, spec);
+					const double mol = mol_of(table, id, spec, impl->seed, item.id + ":" + name); // (an unknown's range, Stage 54)
 					b.set_amount(into, id, amount(mol));
 					if (spec.contains("particles")) {
 						b.set_particles(into, id, spec.at("particles").get<int64_t>());
@@ -5101,6 +5167,53 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		set_beside(thing, v);
 		return true;
 	}
+	if (what == "record" || what == "log" || what == "unlog" || what == "erase") {
+		// the notebook (GAME_SPEC §13, Stage 54): it acts on nothing in the world
+		if (what == "erase") {
+			if (c.contains("entry")) {
+				const int64_t at = c.at("entry").is_number_integer() ? c.at("entry").get<int64_t>() : -1;
+				if (at < 0 || at >= static_cast<int64_t>(notebook.size())) {
+					why = "the notebook has no such entry";
+					return false;
+				}
+				notebook.erase(notebook.begin() + at);
+			} else {
+				notebook.clear();
+			}
+			return true;
+		}
+		Quantity q;
+		if (!quantity_of_command(c, q, why)) {
+			return false;
+		}
+		const std::string named = c.value("label", "");
+		if (what == "record") {
+			return record_note(q, named, why);
+		}
+		const auto same = [&](const NoteLogger &l) { return l.quantity.item == q.item && l.quantity.what == q.what && l.quantity.measure == q.measure; };
+		if (what == "unlog") {
+			const auto at = std::find_if(loggers.begin(), loggers.end(), same);
+			if (at == loggers.end()) {
+				why = "nothing logs " + label_of(q);
+				return false;
+			}
+			loggers.erase(at);
+			return true;
+		}
+		const double every = number(c, "every", -1.0);
+		if (!(every >= 1.0 && every <= 3600.0)) {
+			why = "a logger records \"every\" 1 to 3600 seconds";
+			return false;
+		}
+		bool instrument = false;
+		if (!note_reading(q, instrument)) {
+			why = instruments ? "no instrument reads " + label_of(q) : "there is no " + label_of(q) + " to read";
+			return false;
+		}
+		loggers.erase(std::remove_if(loggers.begin(), loggers.end(), same), loggers.end());
+		loggers.push_back(NoteLogger{ named.empty() ? label_of(q) : named, q, every, static_cast<int64_t>(world().step()) });
+		return true;
+	}
 	if (what == "fill") {
 		// to the mark (Stage 52): a pipette draws, a volumetric flask is made up, from a vessel's liquid with what is
 		// dissolved in it, until its own stands at its mark (its true volume there, within its class's tolerance)
@@ -5408,6 +5521,8 @@ LabView Lab::view() const {
 	out.conserved = now == m.genesis;
 	out.room_celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // GAME_SPEC §12.4 (Stage 46)
 	out.instruments = m.instruments; // (Stage 50)
+	out.notebook = m.notebook; // (Stage 54)
+	out.loggers = m.loggers;
 	out.seed = m.seed;
 	out.air_kg_m3 = m.air_density();
 	out.mass_g = now.mass.grams();
@@ -6125,6 +6240,17 @@ json Lab::Impl::save() const {
 	bench["air"] = air.index;
 	bench["room"] = room.index;
 	bench["mains"] = mains.index;
+	if (!notebook.empty() || !loggers.empty()) { // (Stage 54) a lab with nothing written down saves as before
+		json pages = json::array(), logging = json::array();
+		for (const NoteEntry &e : notebook) {
+			pages.push_back({ { "step", e.step }, { "label", e.label }, { "item", e.quantity.item }, { "what", e.quantity.what }, { "measure", e.quantity.measure }, { "value", bits(e.value) },
+				{ "unit", e.unit }, { "instrument", e.instrument } });
+		}
+		for (const NoteLogger &l : loggers) {
+			logging.push_back({ { "label", l.label }, { "item", l.quantity.item }, { "what", l.quantity.what }, { "measure", l.quantity.measure }, { "every", bits(l.every_s) }, { "next", l.next } });
+		}
+		bench["notebook"] = { { "pages", pages }, { "loggers", logging } };
+	}
 	if (instruments || seed != 0) { // a bench of the truth and no seed saves as before (Stage 50)
 		bench["readings"] = instruments ? "instruments" : "truth";
 		bench["seed"] = seed;
@@ -6315,6 +6441,26 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		impl->mains = CellId{ bench.value("mains", -1) };
 		impl->instruments = bench.value("readings", "truth") == "instruments"; // (Stage 50)
 		impl->seed = bench.value("seed", uint64_t{ 0 });
+		if (bench.contains("notebook")) { // (Stage 54)
+			for (const json &e : bench.at("notebook").at("pages")) {
+				NoteEntry n{ e.at("step").get<int64_t>(), e.at("label").get<std::string>(), Quantity{ e.at("item").get<std::string>(), e.at("what").get<std::string>(), e.at("measure").get<std::string>() },
+					0.0, e.at("unit").get<std::string>(), e.at("instrument").get<bool>() };
+				if (!from_bits(e.at("value"), n.value)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				impl->notebook.push_back(n);
+			}
+			for (const json &e : bench.at("notebook").at("loggers")) {
+				NoteLogger l{ e.at("label").get<std::string>(), Quantity{ e.at("item").get<std::string>(), e.at("what").get<std::string>(), e.at("measure").get<std::string>() }, 1.0,
+					e.at("next").get<int64_t>() };
+				if (!from_bits(e.at("every"), l.every_s)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				impl->loggers.push_back(l);
+			}
+		}
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
