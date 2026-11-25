@@ -85,7 +85,7 @@ loggers and their buttons. "+" buttons under a vessel's or a balance's readings.
 once the run is complete: a field a result, typed, checked. The experiments list grows a third column past sixteen
 (nineteen in two ran off the screen's foot).
 
-**The experiments**: `titration_curve` (10 steps), `vapour` (7 steps).
+**The experiments**: `titration_curve` (10 steps), `vapour` (8 steps).
 
 ## Measured
 
@@ -100,6 +100,14 @@ once the run is complete: a field a result, typed, checked. The experiments list
 |---|---|
 | `test_notebook.cpp` (3) | the fit, the transforms, the expression; record and log by the truth and by instruments, a species refused by instruments, saved and loaded, not digested, unlog and erase; an unknown drawn within its range, the same for a seed |
 | `test_experiments.cpp` (6) | the two experiments strict with their own gestures (the notebook's pairs; the report within and off), at a person's pace, and free |
+
+## The user's tests
+
+- 2026-11-25: "The vapour experiment asks me to let the flask cool, but does not allow me to close the burner
+  valve." Its step "Off, and stoppered" checked only the stopper, so the stopper put in first passed it, and strict
+  the valve was refused from then on, the flame still under the flask while it was to cool. Split in two: "Off" (the
+  valve shut), then "Stoppered" (the stopper in, the valve still shut). `experiment vapour: strict, the valve is shut
+  before the stopper goes in, and stays shut while it cools` plays the stopper first and finds it refused.
 
 ## Open
 

@@ -691,6 +691,30 @@ TEST_CASE("experiment vapour: followed with its own gestures, strict, ln p again
 	CHECK(p.drawn("yours is within it"));
 }
 
+TEST_CASE("experiment vapour: strict, the valve is shut before the stopper goes in, and stays shut while it cools (Stage 54)") {
+	// the user's report: the stopper put in first passed the step, and the valve could not be shut after it
+	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json");
+	const int steps = p.tutorial().steps;
+	while (p.tutorial().state == lab::TutorialView::Running && p.tutorial().title != "Off" && p.tutorial().step < steps) {
+		const int step = p.tutorial().step;
+		for (const lab::TutorialGesture &g : p.ui->tutorial()->gestures()) {
+			p.play(g);
+		}
+		p.watch([&] { return p.tutorial().step != step; }, 7200);
+	}
+	REQUIRE(p.tutorial().title == "Off");
+	p.drag("item:stopper", "item:flask"); // the stopper first: not yet
+	CHECK(p.item("stopper").place != "on");
+	CHECK(p.ui->message().find("Not now") != std::string::npos);
+	p.click("item:burner");
+	p.click("valve:burner@0");
+	CHECK(p.item("burner").valve == 0.0);
+	CHECK(p.tutorial().title == "Stoppered");
+	pupil::follow_through(p, 7200);
+	completed(p);
+	CHECK(p.item("burner").valve == 0.0);
+}
+
 TEST_CASE("experiment vapour: played as a person plays it, strict, it completes (Stage 54)") {
 	Pupil p("data/benches/vapour.json", "data/tutorials/vapour.json");
 	pupil::play_as_person(p, 7200);

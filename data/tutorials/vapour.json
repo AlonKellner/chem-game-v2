@@ -75,14 +75,15 @@
 			]
 		},
 		{
-			"title": "Off, and stoppered",
-			"text": "Drag the valve shut, then pick up the stopper and click the flask.",
+			"title": "Off",
+			"text": "Right-click the burner and drag its valve shut.",
+			"why": "Stoppered while the flame still heats it, the sealed flask's pressure would climb past what its stopper holds.",
 			"checks": [
 				{
-					"text": "the stopper in the flask",
+					"text": "the burner off",
 					"when": {
-						"item": "stopper",
-						"on": "flask"
+						"item": "burner",
+						"valve_at_most": 0
 					}
 				}
 			],
@@ -92,7 +93,29 @@
 				},
 				{
 					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"title": "Stoppered",
+			"text": "Pick up the stopper and click the flask, before the room's air finds its way back in.",
+			"checks": [
+				{
+					"text": "the stopper in the flask",
+					"when": {
+						"item": "stopper",
+						"on": "flask"
+					}
 				},
+				{
+					"text": "the burner still off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
 				{
 					"drag": [
 						"item:stopper",
