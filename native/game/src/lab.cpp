@@ -3,6 +3,7 @@
 #include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/glassware.hpp"
+#include "lab/instruments.hpp"
 
 #include "chem/builtin_ids.hpp"
 #include "chem/error.hpp"
@@ -55,8 +56,9 @@ constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(P
 
 // a stopper (Stage 28): rubber that seals a neck, an elastic cell of its rubber; a viewer (Stage 42): the spectral
 // viewer, an instrument that holds no matter (no cell, no edge: it changes nothing in the world)
-enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal };
-// On: on a vessel's mouth. Under: a burner under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
+// a balance (Stage 50): an instrument under a vessel, as a burner is, with no cell and no edge
+enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal, Balance };
+// On: on a vessel's mouth. Under: a burner or a balance (Stage 50) under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
 enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
 
 struct Item {
@@ -115,11 +117,14 @@ struct Item {
 	bool probe_room = false;
 	double probe_u = 0.0, probe_v = 0.0;
 	ThermalSettings thermal; // a thermal camera (Stage 48): its frame and settings
+	// a balance (Stage 50): its model (data/instruments.json) and its tare, a conventional mass, g; a vessel's label
+	std::string model, label;
+	double tare = 0.0;
 };
 
 // whether an item holds matter of its own (a burner's cell is its flame, a viewer has none)
 bool holds_matter(const Item &x) {
-	return x.kind != Kind::Burner && x.kind != Kind::Viewer && x.kind != Kind::Thermal;
+	return x.kind != Kind::Burner && x.kind != Kind::Viewer && x.kind != Kind::Thermal && x.kind != Kind::Balance;
 }
 
 struct Event {
@@ -170,7 +175,7 @@ bool from_bits(const json &j, double &v) {
 	return true;
 }
 
-const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal" };
+const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal", "balance" };
 const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
 
 double number(const json &j, const char *key, double fallback) {
@@ -194,6 +199,9 @@ void default_size(const std::string &kind, double volume_ml, bool condenser, int
 	} else if (kind == "thermal") {
 		w = 5; // a thermal camera (Stage 48): its case and screen
 		h = 4;
+	} else if (kind == "balance") {
+		w = 4; // a balance (Stage 50): its pan and its display
+		h = 2;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
 	} else if (kind == "stopper") {
@@ -257,6 +265,10 @@ struct Lab::Impl {
 	std::vector<Item> items;
 	std::vector<Event> events;
 	int cols = 28, rows = 15; // the bench's grid, in squares
+	// readings (GAME_SPEC §13, Stage 50): by instruments, or the truth; the seed the instruments' offsets and a hand's
+	// misses are drawn from
+	bool instruments = false;
+	uint64_t seed = 0;
 	CellId air;
 	CellId room;
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
@@ -1445,8 +1457,8 @@ struct Lab::Impl {
 			return false;
 		}
 		for (const Item &b : items) {
-			if (inverted && b.kind == Kind::Burner && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
-				why = "\"" + x.id + "\" stands over \"" + b.id + "\": take the burner away first";
+			if (inverted && (b.kind == Kind::Burner || b.kind == Kind::Balance) && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
+				why = "\"" + x.id + "\" stands over \"" + b.id + "\": take it away first";
 				return false;
 			}
 		}
@@ -2347,6 +2359,7 @@ struct Lab::Impl {
 			set_beside(v.holds, v);
 			v.holds = -1;
 		}
+		leave_balances(static_cast<int>(i), v); // a balance under it is left where it stood (Stage 50)
 		for (Item &b : items) { // a burner under it is set beside it
 			if (b.kind == Kind::Burner && b.under == static_cast<int>(i)) {
 				world().disconnect(b.heats);
@@ -2513,6 +2526,76 @@ struct Lab::Impl {
 		}
 	}
 
+	// A vessel lifted off a balance (Stage 50) leaves the balance where it stood: set down where the vessel was
+	// (`was`, as it was before it moved), or beside it. A balance holds nothing in the world: no boundary.
+	void leave_balances(int thing, const Item &was) {
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].kind == Kind::Balance && items[i].under == thing) {
+				items[i].under = -1;
+				items[i].place = Place::Cabinet;
+				items[i].col = items[i].row = -1;
+				set_beside(static_cast<int>(i), was);
+			}
+		}
+	}
+	// The room's air's density, kg/m^3 (Stage 50): its own gas at 1 atm and its temperature
+	double air_density() const {
+		const CellState &a = world().snapshot_cell(air);
+		double mol = 0.0, kg = 0.0;
+		for (size_t s = 0; s < a.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			if (a.amount[s] > 0 && table().species(id).phase == Phase::Gas) {
+				const double n = static_cast<double>(a.amount[s]) * MOL_PER_QUANTUM;
+				mol += n;
+				kg += n * static_cast<double>(table().molar_mass_ug(id)) * 1e-9;
+			}
+		}
+		return mol > 0.0 ? P_ATMOSPHERE * (kg / mol) / (GAS_CONSTANT * kelvin(air)) : 0.0;
+	}
+	// A balance's load (Stage 50): a vessel, what it holds and what is on its mouth; its mass, g, and its own
+	// volume, cm^3 (its walls' by their densities, what it holds by what it takes up)
+	void load_of(int thing, double &g, double &cm3) const {
+		const Item &x = items[static_cast<size_t>(thing)];
+		for (const SubstanceView &row : item_view(x, false, false).contents) {
+			g += row.g;
+			const double density = row.wall ? instruments::wall_density(row.species) : 0.0;
+			cm3 += row.wall ? (density > 0.0 ? row.g / density : 0.0) : row.ml;
+		}
+		if (x.holds >= 0) {
+			load_of(x.holds, g, cm3);
+		}
+	}
+	// what a balance's load reads on it before its linearity: its conventional mass (OIML D 28), g; nothing while
+	// the vessel is lifted off it to pour
+	double gross_g(const Item &scale) const {
+		if (scale.under < 0 || items[static_cast<size_t>(scale.under)].pours_into >= 0) {
+			return 0.0;
+		}
+		double g = 0.0, cm3 = 0.0;
+		load_of(scale.under, g, cm3);
+		return instruments::conventional_g(g, cm3, air_density());
+	}
+
+	// The hand (GAME_SPEC §13, Readings; Stage 50): what it moves of an amount aimed at, `1 + hand u`, u drawn from
+	// the seed, the step and the two vessels
+	double by_hand(const json &c, const std::string &what, const Item &from, const Item &to) const {
+		if (!c.value("about", false)) {
+			return 1.0;
+		}
+		const std::string key = "hand:" + what + ":" + std::to_string(world().step()) + ":" + from.id + ":" + to.id;
+		return 1.0 + instruments::hand() * instruments::share(seed, key);
+	}
+
+	// what stands under a vessel that keeps it where it is: a burner (a balance is left behind)
+	int fixed_under(int thing) const {
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].under == thing && items[i].kind != Kind::Balance) {
+				return static_cast<int>(i);
+			}
+		}
+		return -1;
+	}
+
 	bool on_bench(const Item &x, std::string &why) const {
 		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
 			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in the outbox") + ", not on the bench";
@@ -2590,7 +2673,21 @@ struct Lab::Impl {
 		v.probe_u = item.probe_u;
 		v.probe_v = item.probe_v;
 		v.thermal = item.thermal;
-		if (item.kind == Kind::Viewer || item.kind == Kind::Thermal) {
+		if (item.kind == Kind::Balance) {
+			// a balance (Stage 50): its model, its load's conventional mass, its display while it is on the bench
+			const instruments::Balance &model = *instruments::balance(item.model);
+			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15;
+			v.model = item.model;
+			v.readability_g = model.readability_g;
+			v.capacity_g = model.capacity_g;
+			v.linearity_g = model.linearity_g;
+			v.gross_g = m.gross_g(item);
+			v.tare_g = item.tare;
+			v.overload = v.gross_g > model.capacity_g;
+			if (item.place == Place::Bench || item.place == Place::Under) {
+				v.display_g = instruments::display_g(model, v.gross_g, item.tare, instruments::share(m.seed, item.id + ":linearity"));
+			}
+		} else if (item.kind == Kind::Viewer || item.kind == Kind::Thermal) {
 			v.celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // it stands in the room's air
 		} else if (item.kind != Kind::Burner) {
 			// a layered vessel (Stage 47) reads as a whole: its column's contents, at the temperature they come to
@@ -2655,6 +2752,19 @@ struct Lab::Impl {
 						burner = burner || (b.kind == Kind::Burner && b.cell == other);
 					}
 					v.condenser = v.condenser || !burner;
+				}
+			}
+			if (item.kind == Kind::Vessel) {
+				// its instruments' readings (GAME_SPEC §13, Readings; Stage 50): the truth and an offset drawn from the seed
+				v.label = item.label;
+				const instruments::Meter t = instruments::thermometer(), ph = instruments::ph_meter();
+				v.read_c = instruments::rounded(v.celsius + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
+				if (v.ph) {
+					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
+				}
+				if (const glass::Vessel *g = item.glassware.empty() ? nullptr : glass::find(item.glassware, item.nominal_ml); g != nullptr && g->marks_ml > 0.0) {
+					v.marks_ml = g->marks_ml;
+					v.read_ml = instruments::marks_ml(v.liquid_ml, g->marks_ml, g->marks_error, instruments::share(m.seed, item.id + ":marks"));
 				}
 			}
 		} else {
@@ -2896,7 +3006,7 @@ struct Lab::Impl {
 		const Kind is = items[static_cast<size_t>(index)].kind;
 		const bool ok = kind == Kind::Vessel ? is == Kind::Vessel || is == Kind::Bag : is == kind; // "vessel": anything a hand moves that holds matter
 		if (!ok) {
-			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : kind == Kind::Thermal ? "a thermal camera" : "a vessel");
+			why = "\"" + id + "\" is not " + (kind == Kind::Burner ? "a burner" : kind == Kind::Bag ? "a balloon" : kind == Kind::Viewer ? "a spectral viewer" : kind == Kind::Thermal ? "a thermal camera" : kind == Kind::Balance ? "a balance" : "a vessel");
 			return false;
 		}
 		if (is == Kind::Vessel && items[static_cast<size_t>(index)].burst) {
@@ -2996,6 +3106,21 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		b.set_temperature(impl->air, room_kelvin);
 		b.add_edge(impl->air, impl->room, PHASES_NONE, 1000.0);
 
+		if (bench.contains("readings")) { // (Stage 50)
+			const json &r = bench.at("readings");
+			if (!r.is_string() || (r.get<std::string>() != "truth" && r.get<std::string>() != "instruments")) {
+				why = "a bench's readings are \"truth\" or \"instruments\"";
+				return nullptr;
+			}
+			impl->instruments = r.get<std::string>() == "instruments";
+		}
+		if (bench.contains("seed")) {
+			if (!bench.at("seed").is_number_unsigned()) {
+				why = "a bench's seed is a whole number, 0 or more";
+				return nullptr;
+			}
+			impl->seed = bench.at("seed").get<uint64_t>();
+		}
 		if (bench.contains("grid")) {
 			impl->cols = bench.at("grid").at(0).get<int>();
 			impl->rows = bench.at("grid").at(1).get<int>();
@@ -3045,10 +3170,26 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				impl->items.push_back(item);
 				continue;
 			}
+			if (kind == "balance") {
+				// a balance (Stage 50): no matter, no cell, no edge; of a model of data/instruments.json
+				item.kind = Kind::Balance;
+				item.model = j.value("model", instruments::balances().front().name);
+				if (instruments::balance(item.model) == nullptr) {
+					why = "item \"" + item.id + "\": there is no balance of the model \"" + item.model + "\"";
+					return nullptr;
+				}
+				impl->items.push_back(item);
+				continue;
+			}
 			if (kind != "vessel" && kind != "balloon" && kind != "stopper") {
-				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner, viewer or thermal";
+				why = "item \"" + item.id + "\": a kind is vessel, balloon, stopper, burner, viewer, thermal or balance";
 				return nullptr;
 			}
+			if (j.contains("label") && !j.at("label").is_string()) {
+				why = "item \"" + item.id + "\": a label is text";
+				return nullptr;
+			}
+			item.label = j.value("label", ""); // what it is called on its glass (Stage 50)
 			item.kind = kind == "vessel" ? Kind::Vessel : kind == "stopper" ? Kind::Stopper : Kind::Bag;
 			item.hold_n = item.kind == Kind::Stopper ? number(j, "hold_n", 30.0) : 0.0;
 			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
@@ -3366,11 +3507,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
-		for (const Item &other : items) {
-			if (other.under == thing) {
-				why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
-				return false;
-			}
+		if (const int fixed = fixed_under(thing); fixed >= 0) {
+			why = "\"" + x.id + "\" cannot be moved as it is: \"" + items[static_cast<size_t>(fixed)].id + "\" depends on where it stands";
+			return false;
 		}
 		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
 			why = "a place is \"at\" [column, row]";
@@ -3390,9 +3529,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		forget_trash(x.id); // carried out of the trash (Stage 34)
+		const Item was = x;
 		x.place = Place::Bench;
 		x.col = col;
 		x.row = row;
+		leave_balances(thing, was); // lifted off a balance, which stays where it stood (Stage 50)
 		return true;
 	}
 	if (what == "move") {
@@ -3445,11 +3586,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 					why = "\"" + x.id + "\" cannot be moved as it is: it is not on the bench, or it is joined to something";
 					return false;
 				}
-				for (const Item &other : items) {
-					if (other.under == thing) {
-						why = "\"" + x.id + "\" cannot be moved as it is: \"" + other.id + "\" depends on where it stands";
-						return false;
-					}
+				if (const int fixed = fixed_under(thing); fixed >= 0) { // (a balance under it goes with it: Stage 50)
+					why = "\"" + x.id + "\" cannot be moved as it is: \"" + items[static_cast<size_t>(fixed)].id + "\" depends on where it stands";
+					return false;
 				}
 			}
 			int col = 0, row = 0, w = 0, h = 0;
@@ -3962,10 +4101,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &x = items[static_cast<size_t>(thing)];
-		bool free = x.kind != Kind::Tray && (x.place == Place::Bench || x.place == Place::Trash) && x.holds < 0; // from the trash too (Stage 34)
-		for (const Item &other : items) {
-			free = free && other.under != thing;
-		}
+		const bool free = x.kind != Kind::Tray && (x.place == Place::Bench || x.place == Place::Trash) && x.holds < 0 && fixed_under(thing) < 0; // from the trash too (Stage 34)
 		if (!free) {
 			why = "\"" + x.id + "\" cannot go back in the cabinet as it is";
 			return false;
@@ -3974,8 +4110,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		forget_trash(x.id);
+		const Item was = x;
 		x.place = Place::Cabinet;
 		x.col = x.row = -1;
+		leave_balances(thing, was); // (Stage 50)
 		return true;
 	}
 	if (what == "trash") {
@@ -4013,10 +4151,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		} else if (x.holds >= 0) {
 			no = "\"" + x.id + "\" has \"" + items[static_cast<size_t>(x.holds)].id + "\" on it: take it off first";
 		}
-		for (const Item &other : items) {
-			if (no.empty() && other.under == thing) {
-				no = "\"" + x.id + "\" stands over \"" + other.id + "\": take the burner away first";
-			}
+		if (const int fixed = fixed_under(thing); no.empty() && fixed >= 0) { // (a balance is left behind: Stage 50)
+			no = "\"" + x.id + "\" stands over \"" + items[static_cast<size_t>(fixed)].id + "\": take the burner away first";
 		}
 		if (!no.empty()) {
 			why = no;
@@ -4026,8 +4162,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		trash.push_back(Binned{ x.id, false, x.place == Place::Bench ? x.col : -1, x.place == Place::Bench ? x.row : -1 });
+		const Item was = x;
 		x.place = Place::Trash;
 		x.col = x.row = -1;
+		leave_balances(thing, was); // (Stage 50)
 		trim_trash();
 		return true;
 	}
@@ -4109,6 +4247,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + flame.id + "\" is already under \"" + items[static_cast<size_t>(flame.under)].id + "\"";
 			return false;
 		}
+		for (const Item &other : items) { // one thing under a vessel: a burner or a balance (Stage 50)
+			if (other.under == vessel) {
+				why = "\"" + items[static_cast<size_t>(vessel)].id + "\" stands over \"" + other.id + "\": take it away first";
+				return false;
+			}
+		}
 		if (world().connect(items[static_cast<size_t>(vessel)].cell, flame.cell, PHASES_NONE, &flame.heats, flame.full * flame.valve) != Refusal::None) {
 			why = "the burner cannot go there";
 			return false;
@@ -4138,6 +4282,110 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		set_beside(burner, v);
 		flame.under = -1;
 		flame.heats = EdgeId{};
+		return true;
+	}
+	if (what == "weigh") {
+		// a balance under a vessel (GAME_SPEC §13, Stage 50), as a burner goes under one: from the bench or straight
+		// from the cabinet. It joins nothing in the world.
+		int balance = -1, vessel = -1;
+		if (!item(c, "balance", Kind::Balance, balance, why) || !item(c, "vessel", Kind::Vessel, vessel, why)) {
+			return false;
+		}
+		Item &scale = items[static_cast<size_t>(balance)];
+		const Item &v = items[static_cast<size_t>(vessel)];
+		if (v.kind != Kind::Vessel) {
+			why = "a balance weighs a vessel, with what is on it";
+			return false;
+		}
+		if (v.place == Place::Outbox || v.place == Place::Trash || (v.place == Place::Cabinet && !c.value("onto", false))) {
+			on_bench(v, why);
+			return false;
+		}
+		if (scale.place == Place::Trash || scale.place == Place::Outbox) {
+			why = "\"" + scale.id + "\" is " + (scale.place == Place::Trash ? "in the trash" : "handed in");
+			return false;
+		}
+		if (scale.under >= 0) {
+			why = "\"" + scale.id + "\" is already under \"" + items[static_cast<size_t>(scale.under)].id + "\"";
+			return false;
+		}
+		for (const Item &other : items) {
+			if (other.under == vessel) {
+				why = "\"" + v.id + "\" stands over \"" + other.id + "\": take it away first";
+				return false;
+			}
+		}
+		if (v.pours_into >= 0) {
+			why = "\"" + v.id + "\" is pouring: set it upright first";
+			return false;
+		}
+		if (c.value("onto", false)) {
+			// the vessel set on the balance where the balance stands (its foot on the balance's, centred on it), from the
+			// bench or the cabinet; as `place` moves it
+			if (scale.place != Place::Bench) {
+				why = "\"" + scale.id + "\" is not standing on the bench to set anything on";
+				return false;
+			}
+			Item &x = items[static_cast<size_t>(vessel)];
+			if (x.holds >= 0 || x.drains_to >= 0 || (x.place != Place::Bench && x.place != Place::Cabinet)) {
+				why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
+				return false;
+			}
+			const int col = scale.col + (scale.w - x.w) / 2, row = scale.row + scale.h - x.h;
+			if (!on_grid(col, row, x.w, x.h)) {
+				why = "\"" + x.id + "\" does not fit on the bench over \"" + scale.id + "\"";
+				return false;
+			}
+			scale.place = Place::Under; // (its squares are the vessel's now)
+			const int there = standing_in(col, row, x.w, x.h, vessel);
+			scale.place = Place::Bench;
+			if (there >= 0) {
+				why = "\"" + name_of(there) + "\" stands where \"" + x.id + "\" would stand on \"" + scale.id + "\"";
+				return false;
+			}
+			if (!take_off_drains(vessel, why)) {
+				return false;
+			}
+			forget_trash(x.id);
+			x.place = Place::Bench;
+			x.col = col;
+			x.row = row;
+		} else if (!on_bench(v, why)) {
+			return false;
+		}
+		scale.under = vessel;
+		scale.place = Place::Under;
+		return true;
+	}
+	if (what == "unweigh") {
+		int balance = -1;
+		if (!item(c, "balance", Kind::Balance, balance, why)) {
+			return false;
+		}
+		Item &scale = items[static_cast<size_t>(balance)];
+		if (scale.under < 0) {
+			why = "\"" + scale.id + "\" is not under anything";
+			return false;
+		}
+		// it goes back beside the vessel if there is room, else to the cabinet
+		const Item v = items[static_cast<size_t>(scale.under)];
+		scale.place = Place::Cabinet;
+		scale.col = scale.row = -1;
+		set_beside(balance, v);
+		scale.under = -1;
+		return true;
+	}
+	if (what == "tare") {
+		// (Stage 50) its display to 0: the tare is its load's conventional mass now
+		int balance = -1;
+		if (!item(c, "balance", Kind::Balance, balance, why)) {
+			return false;
+		}
+		Item &scale = items[static_cast<size_t>(balance)];
+		if (!on_bench(scale, why)) {
+			return false;
+		}
+		scale.tare = gross_g(scale);
 		return true;
 	}
 	if (what == "valve") {
@@ -4260,7 +4508,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return true;
 		}
 		const double volume = liquid_m3(x); // (all of a layered vessel's, Stage 47)
-		const double wanted = c.value("all", false) ? volume : number(c, "ml", -1.0) * 1e-6;
+		// (Stage 50: "about" an amount, what a hand pours of it, and at most what there is)
+		double wanted = c.value("all", false) ? volume : number(c, "ml", -1.0) * 1e-6 * by_hand(c, "pour", x, items[static_cast<size_t>(x.pours_into)]);
+		if (c.value("about", false) && wanted > volume) {
+			wanted = volume;
+		}
 		if (!(wanted > 0.0)) {
 			if (started) {
 				end_pour(static_cast<size_t>(from), why);
@@ -4354,9 +4606,44 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 					}
 				}
 			}
+		} else if (!c.contains("species")) {
+			// (Stage 50) the solids, each in proportion to its mass: a mass of them, or all
+			double solids_g = 0.0;
+			for (size_t s = 0; s < source.amount.size(); ++s) {
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				if (source.amount[s] > 0 && table().species(id).phase == Phase::Solid && !table().species(id).wall) {
+					solids_g += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * static_cast<double>(table().molar_mass_ug(id)) * 1e-6;
+				}
+			}
+			if (!(solids_g > 0.0)) {
+				why = "\"" + items[static_cast<size_t>(from)].id + "\" holds no solid";
+				return false;
+			}
+			double fraction = 1.0;
+			if (!c.value("all", false)) {
+				const double g = number(c, "g", -1.0) * by_hand(c, "tip", items[static_cast<size_t>(from)], items[static_cast<size_t>(to)]);
+				if (!(g > 0.0)) {
+					why = "a tip is of \"g\" or \"all\"";
+					return false;
+				}
+				if (g > solids_g * (1.0 + 1e-9) && !c.value("about", false)) {
+					why = "\"" + items[static_cast<size_t>(from)].id + "\" does not hold that much solid";
+					return false;
+				}
+				fraction = std::min(1.0, g / solids_g);
+			}
+			for (size_t s = 0; s < source.amount.size(); ++s) {
+				const SpeciesId id{ static_cast<int32_t>(s) };
+				if (source.amount[s] > 0 && table().species(id).phase == Phase::Solid && !table().species(id).wall) {
+					const int64_t moves = fraction >= 1.0 ? source.amount[s] : static_cast<int64_t>(static_cast<double>(source.amount[s]) * fraction);
+					if (moves > 0) {
+						amounts.push_back(SpeciesAmount{ id, Amount{ moves } });
+					}
+				}
+			}
 		} else {
 			// one solid: a mass of it, or all
-			if (!c.contains("species") || !c.at("species").is_string()) {
+			if (!c.at("species").is_string()) {
 				why = "a tip names the \"species\"";
 				return false;
 			}
@@ -4368,13 +4655,16 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			const int64_t have = source.amount[static_cast<size_t>(id.index)];
 			int64_t moves = have;
 			if (!c.value("all", false)) {
-				const double g = number(c, "g", -1.0);
+				const double g = number(c, "g", -1.0) * by_hand(c, "tip", items[static_cast<size_t>(from)], items[static_cast<size_t>(to)]);
 				if (!(g > 0.0)) {
 					why = "a tip is of \"g\" or \"all\"";
 					return false;
 				}
 				bool fits = false;
 				moves = amount_from_mol(g / (static_cast<double>(table().molar_mass_ug(id)) * 1e-6), fits).quanta;
+				if (fits && moves > have && c.value("about", false)) {
+					moves = have; // (Stage 50) a hand takes what there is
+				}
 				if (!fits || moves > have) {
 					why = "\"" + items[static_cast<size_t>(from)].id + "\" does not hold that much of it";
 					return false;
@@ -4741,9 +5031,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) { // away from the outlet it stood under
 			return false;
 		}
-		// lifted off its burner, which stays where the vessel stood
+		// lifted off its burner, which stays where the vessel stood (a balance too, Stage 50, which has no edge)
 		for (Item &other : items) {
-			if (other.under == thing) {
+			if (other.under == thing && other.kind == Kind::Balance) {
+				other.under = -1;
+			} else if (other.under == thing) {
 				if (!boundary(why)) {
 					return false;
 				}
@@ -4758,7 +5050,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.slot = slot;
 		x.col = x.row = -1;
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].kind == Kind::Burner && items[i].place == Place::Under && items[i].under < 0) {
+			if ((items[i].kind == Kind::Burner || items[i].kind == Kind::Balance) && items[i].place == Place::Under && items[i].under < 0) {
 				items[i].place = Place::Cabinet;
 				set_beside(static_cast<int>(i), was); // where the vessel stood, or beside it
 			}
@@ -4872,6 +5164,9 @@ LabView Lab::view() const {
 	const Totals now = totals(table, m.world().snapshot());
 	out.conserved = now == m.genesis;
 	out.room_celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // GAME_SPEC §12.4 (Stage 46)
+	out.instruments = m.instruments; // (Stage 50)
+	out.seed = m.seed;
+	out.air_kg_m3 = m.air_density();
 	out.mass_g = now.mass.grams();
 	out.energy_j = static_cast<double>(now.energy) * JOULE_PER_QUANTUM;
 	for (const Event &e : m.events) {
@@ -5194,6 +5489,22 @@ std::string Lab::report() const {
 			items.push_back(j);
 			continue;
 		}
+		if (item.kind == Kind::Balance) {
+			// a balance (Stage 50): where it stands, what it is under, its load's conventional mass, its tare, its display
+			const ItemView v = m.item_view(item, false, false);
+			j["kind"] = "balance";
+			j["place"] = PLACE_NAME[static_cast<int>(item.place)];
+			if (item.place == Place::Bench) {
+				j["at"] = { item.col, item.row };
+			}
+			j["model"] = item.model;
+			j["under"] = item.under >= 0 ? json(m.items[static_cast<size_t>(item.under)].id) : json(nullptr);
+			j["gross_g"] = v.gross_g;
+			j["tare_g"] = item.tare;
+			j["display_g"] = v.display_g ? json(*v.display_g) : json(nullptr);
+			items.push_back(j);
+			continue;
+		}
 		if (item.kind == Kind::Thermal) {
 			// a thermal camera (Stage 48): where it stands, where its frame is, its settings
 			const ThermalSettings &t = item.thermal;
@@ -5310,6 +5621,9 @@ std::string Lab::digest() const {
 	const World &world = m.world();
 	Sha256 hash;
 	hash.update_u64(world.step());
+	if (m.seed != 0) { // what a hand misses by is drawn from it (Stage 50): a bench without one digests as before
+		hash.update_u64(m.seed);
+	}
 	for (int32_t c = 0; c < world.cell_count(); ++c) {
 		const CellState &cell = world.snapshot_cell(CellId{ c });
 		for (const int64_t v : cell.amount) {
@@ -5555,6 +5869,10 @@ json Lab::Impl::save() const {
 	bench["air"] = air.index;
 	bench["room"] = room.index;
 	bench["mains"] = mains.index;
+	if (instruments || seed != 0) { // a bench of the truth and no seed saves as before (Stage 50)
+		bench["readings"] = instruments ? "instruments" : "truth";
+		bench["seed"] = seed;
+	}
 	json list = json::array();
 	for (const Item &item : items) {
 		list.push_back({ { "id", item.id }, { "kind", static_cast<int>(item.kind) }, { "cell", item.cell.index }, { "mouth", item.mouth.index }, { "full", bits(item.full) },
@@ -5579,6 +5897,12 @@ json Lab::Impl::save() const {
 			list.back()["swirl"] = bits(item.swirl);
 			list.back()["suspended"] = bits(item.suspended);
 			list.back()["swirl_holds"] = { bits(item.swirl_for), bits(item.swirl_most), bits(item.swirl_lifts), bits(item.settles) };
+		}
+		if (item.kind == Kind::Balance) { // (Stage 50)
+			list.back()["balance"] = { { "model", item.model }, { "tare", bits(item.tare) } };
+		}
+		if (!item.label.empty()) {
+			list.back()["label"] = item.label;
 		}
 		if (item.kind == Kind::Thermal) { // a camera's frame and settings (Stage 48)
 			const ThermalSettings &t = item.thermal;
@@ -5711,11 +6035,13 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		impl->air = CellId{ bench.at("air").get<int32_t>() };
 		impl->room = CellId{ bench.at("room").get<int32_t>() };
 		impl->mains = CellId{ bench.value("mains", -1) };
+		impl->instruments = bench.value("readings", "truth") == "instruments"; // (Stage 50)
+		impl->seed = bench.value("seed", uint64_t{ 0 });
 		for (const json &j : bench.at("items")) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Thermal) || place < 0 || place > static_cast<int>(Place::Trash)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Balance) || place < 0 || place > static_cast<int>(Place::Trash)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -5758,6 +6084,18 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.slot = j.value("slot", 0);
 			item.glassware = j.value("glassware", "");
 			item.screwed = j.value("screwed", false);
+			item.label = j.value("label", "");
+			if (j.contains("balance")) { // (Stage 50)
+				item.model = j.at("balance").at("model").get<std::string>();
+				if (instruments::balance(item.model) == nullptr || !from_bits(j.at("balance").at("tare"), item.tare)) {
+					why = "the save names a balance that there is not, or holds a number that is not one";
+					return nullptr;
+				}
+			}
+			if (item.kind == Kind::Balance && item.model.empty()) {
+				why = "the save's balance has no model";
+				return nullptr;
+			}
 			if (j.contains("thermal")) {
 				const json &tj = j.at("thermal");
 				ThermalSettings &t = item.thermal;
@@ -5866,7 +6204,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	const auto edge_count = static_cast<int32_t>(world->edges().size());
 	const auto item_count = static_cast<int>(impl->items.size());
 	for (const Item &item : impl->items) {
-		const bool refs = (item.kind == Kind::Viewer || item.kind == Kind::Thermal ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
+		const bool refs = (item.kind == Kind::Viewer || item.kind == Kind::Thermal || item.kind == Kind::Balance ? item.cell.index < 0 : item.cell.index >= 0 && item.cell.index < cells) && item.mouth.index < edge_count && item.heats.index < edge_count && item.joint.index < edge_count && item.stirs.index < edge_count &&
 				item.under < item_count && item.on < item_count && item.holds < item_count && item.drains_to < item_count;
 		if (!refs) {
 			why = "the save's items point outside the world";

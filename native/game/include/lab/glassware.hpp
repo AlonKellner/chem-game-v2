@@ -63,6 +63,8 @@ struct Vessel {
 	// bursts); whether a screw cap fits it, upright, to seal it (a bottle's thread)
 	double burst = 0.0;
 	bool screw_cap = false;
+	// its marks (GAME_SPEC §13, Readings; Stage 50): their spacing, mL (0: none), and how far one may be off its volume, a share
+	double marks_ml = 0.0, marks_error = 0.0;
 	double mouth() const;
 	double head_inverted(double cm3) const;
 };

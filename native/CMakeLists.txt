@@ -100,6 +100,10 @@ configure_file(game/boiling_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/boiling
 file(READ "${CHEM_DATA_DIR}/thermal.json" CHEM_THERMAL_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/thermal.json")
 configure_file(game/thermal_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/thermal_data.hpp" @ONLY)
+# The instruments' resolutions and errors (data/instruments.json, GAME_SPEC §13, Readings; Stage 50), embedded the same way.
+file(READ "${CHEM_DATA_DIR}/instruments.json" CHEM_INSTRUMENTS_JSON)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/instruments.json")
+configure_file(game/instruments_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/instruments_data.hpp" @ONLY)
 file(GLOB CHEM_LAB_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
 add_library(chem_lab STATIC ${CHEM_LAB_SOURCES})
 target_include_directories(chem_lab PUBLIC game/include "${CHEM_GEN_DIR}/lab_include")

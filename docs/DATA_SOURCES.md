@@ -875,3 +875,16 @@ burst; a capped bottle heated with water in it bursts near 144 °C (its water's 
 ## Constants
 
 CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).
+
+## The balance (Stage 50)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A load's conventional mass | `m_c = (m − ρ_air V) / (1 − ρ_air / ρ_ref)`, `ρ_ref` = 8000 kg/m³ | OIML D 28 (2004), *Conventional value of the result of weighing in air*: the mass of reference weights of 8000 kg/m³ that balance the load in air of 1.2 kg/m³ at 20 °C. A balance is adjusted with such weights, so what it shows is a conventional mass. Its own case: a kilogram of water at 20 °C (998.21 kg/m³, 1001.8 cm³) in air of 1.2 kg/m³ reads 998.95 g | `measured: a balance reads OIML's conventional mass` |
+| The room's air | `ρ_air = P M / (R T)` of the room's own gas | the ideal gas: the room's composition (79 % N₂, 21 % O₂, dry: 28.85 g/mol, where real air's argon makes 28.96), 1 atm and its temperature; 1.199 kg/m³ at 20 °C, 0.4 % under real dry air's 1.204 (a buoyancy 5 µg lighter a mL) | `lab: a balance reads its load's conventional mass` |
+
+Chosen for the game (`data/instruments.json`, design): a top-loading balance reads 0.01 g to 620 g within
+0.02 g, an analytical one 0.1 mg to 220 g within 0.2 mg; a thermometer 0.1 °C within 0.2 °C; a pH meter 0.01
+within 0.02; a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
+or 50 mL) within 5 %, a bottle's within 10 % (`data/glassware.json`). Confidence: these are of the order
+makers state; they are not claims about any one instrument.

@@ -1,6 +1,7 @@
 #include "lab/ui.hpp"
 #include "lab/contents.hpp"
 #include "lab/glassware.hpp"
+#include "lab/instruments.hpp"
 
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
@@ -277,6 +278,7 @@ struct Ui::Impl {
 		bool plotted = false;
 	};
 	std::map<std::string, ViewerState> viewers;
+	std::map<std::string, Picture> balances; // each balance's display as it last showed (Stage 50)
 	// a thermal camera's (Stage 48): its search, what it last read, the span it shows, what its screen is given
 	struct CameraState {
 		ThermalSearch search;
@@ -340,6 +342,7 @@ struct Ui::Impl {
 	bool panel = false;
 	int from = -1, to = -1;
 	double pour_fraction = 1.0;
+	std::string amount; // the pour menu's amount as typed (Stage 50): mL of its liquid, or g of its solid when it has none
 	// a tutorial (§13.2), and real time for its pointer's pulse
 	std::unique_ptr<Tutorial> tutorial;
 	std::string tutorial_json; // to open it again with another experiment's bench, and to know the experiment shown
@@ -880,6 +883,11 @@ struct Ui::Impl {
 	// an item's footprint on the bench
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
+	// a balance (Stage 50): its case, the pan on it, and its display in the case's front; a vessel on it stands on the pan
+	static constexpr float BALANCE_W = 150, BALANCE_H = 44, BALANCE_PAN = 8;
+	static Rect balance_case(const Rect &r) { return Rect{ r.x, r.y + BALANCE_PAN, r.w, r.h - BALANCE_PAN }; }
+	static Rect balance_pan(const Rect &r) { return Rect{ r.x + r.w * 0.12f, r.y, r.w * 0.76f, BALANCE_PAN }; }
+	static Rect balance_display(const Rect &r) { return Rect{ r.x + r.w * 0.42f, r.y + BALANCE_PAN + 8, r.w * 0.52f, (r.h - BALANCE_PAN) * 0.5f }; }
 	static constexpr float INVERTED_GAP = 24; // an upside-down vessel's mouth above the mouth it pours into
 	// the square of an item's footprint its body's centre is on, as it would stand on the bench
 	void body_square(int index, int &c, int &r) const {
@@ -899,6 +907,9 @@ struct Ui::Impl {
 		if (v.kind == "thermal") { // its case and its screen (Stage 48)
 			w = CAMERA_W;
 			h = CAMERA_H;
+		} else if (v.kind == "balance") { // its case, its pan and its display (Stage 50)
+			w = BALANCE_W;
+			h = BALANCE_H;
 		} else if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
 			w = VIEWER_W;
 			h = VIEWER_H;
@@ -1304,6 +1315,9 @@ struct Ui::Impl {
 		}
 		if (v.place == "under" && v.under >= 0) {
 			const Rect vessel = rect(v.under);
+			if (v.kind == "balance") { // the vessel stands on its pan (Stage 50)
+				return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h, w, h };
+			}
 			return Rect{ vessel.cx() - w / 2, vessel.y + vessel.h + 64, w, h };
 		}
 		if (v.place == "circuit") { // in the open circuit's panel, or not on the screen
@@ -1323,6 +1337,9 @@ struct Ui::Impl {
 		for (const ItemView &other : view.items) {
 			if (other.kind == "burner" && other.under == index) {
 				lift = 34 + 94; // the burner, and its flame, under it
+			}
+			if (other.kind == "balance" && other.under == index) {
+				lift = STAND + BALANCE_H; // on a balance's pan (Stage 50)
 			}
 		}
 		return Rect{ c.cx() - w / 2, c.y + c.h - lift - h, w, h };
@@ -1386,6 +1403,16 @@ struct Ui::Impl {
 		return true;
 	}
 
+	// a balance's tare (Stage 50), while it is selected on the bench or under a vessel
+	bool tare_rect(int index, Rect &r) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (index != selected || v.kind != "balance" || (v.place != "bench" && v.place != "under") || draft.edit != Draft::None) {
+			return false;
+		}
+		r = Rect{ READOUT.x + 16, readout_top() + 90, 90, 30 };
+		return true;
+	}
+
 	// an upright bottle's screw cap, on or off, while it is selected on the bench (Stage 28)
 	bool screw_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
@@ -1410,7 +1437,8 @@ struct Ui::Impl {
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
 	// upside down over it, with a cap: a placed pour (Stage 27)
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
-	// the solids of the vessel being emptied, each with its button
+	// the solids of the vessel being emptied, each with its button; by instruments (Stage 50) one button for them all,
+	// "solid", which names none of them
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
 		std::vector<std::pair<std::string, Rect>> out;
 		if (!panel || from < 0) {
@@ -1418,10 +1446,42 @@ struct Ui::Impl {
 		}
 		for (const SubstanceView &s : view.items[static_cast<size_t>(from)].contents) {
 			if (s.phase == 's' && !s.wall && out.size() < 3) {
-				out.emplace_back(s.species, Rect{ PANEL.x + 30, PANEL.y + 168 + static_cast<float>(out.size()) * 40, 260, 34 });
+				out.emplace_back(view.instruments ? "solid" : s.species, Rect{ PANEL.x + 30, PANEL.y + 168 + static_cast<float>(out.size()) * 40, 260, 34 });
+				if (view.instruments) {
+					break;
+				}
 			}
 		}
 		return out;
+	}
+	// the amount typed (Stage 50): its field, top right of the menu; what it is of (mL of the liquid, else g of the solid)
+	static Rect amount_field() { return Rect{ PANEL.x + PANEL.w - 160, PANEL.y + 14, 130, 34 }; }
+	bool amount_in_ml() const { return from >= 0 && view.items[static_cast<size_t>(from)].liquid_ml > 0.0; }
+	std::optional<double> typed() const {
+		char *end = nullptr;
+		const double v = std::strtod(amount.c_str(), &end);
+		return !amount.empty() && end != nullptr && *end == '\0' && v > 0.0 && std::isfinite(v) ? std::optional<double>(v) : std::nullopt;
+	}
+	// a key while the pour menu is open: digits and a point type its amount, Backspace takes one back, Enter pours what
+	// is typed (or tips it, from a vessel with no liquid), Escape closes it
+	void type_amount(Ui::Key key, uint32_t codepoint) {
+		if (key == Ui::KeyText && ((codepoint >= '0' && codepoint <= '9') || (codepoint == '.' && amount.find('.') == std::string::npos)) && amount.size() < 9 &&
+				allowed_text(amount + static_cast<char>(codepoint))) {
+			amount += static_cast<char>(codepoint);
+			if (const std::optional<double> v = typed(); v && amount_in_ml()) {
+				pour_fraction = std::clamp(*v / view.items[static_cast<size_t>(from)].liquid_ml, 0.02, 1.0);
+			}
+		} else if (key == Ui::KeyBackspace && !amount.empty()) {
+			amount.pop_back();
+		} else if (key == Ui::KeyEscape) {
+			panel = false; // still in hand
+		} else if (key == Ui::KeyEnter && typed()) {
+			if (amount_in_ml()) {
+				press(pour_button().cx(), pour_button().cy());
+			} else if (const auto tips = tip_buttons(); !tips.empty()) {
+				press(tips.front().second.cx(), tips.front().second.cy());
+			}
+		}
 	}
 
 	bool act(const json &command) {
@@ -1742,7 +1802,7 @@ struct Ui::Impl {
 		if (was_on && !act({ { "do", "detach" }, { "item", v.id } })) {
 			return;
 		}
-		if (was_under && !act({ { "do", "unheat" }, { "burner", v.id } })) {
+		if (was_under && !act(v.kind == "balance" ? json{ { "do", "unweigh" }, { "balance", v.id } } : json{ { "do", "unheat" }, { "burner", v.id } })) {
 			return;
 		}
 		if (target >= 0) {
@@ -1751,6 +1811,12 @@ struct Ui::Impl {
 				if (t.kind == "vessel") {
 					act({ { "do", "heat" }, { "burner", v.id }, { "vessel", t.id } });
 				}
+			} else if (v.kind == "balance") {
+				if (t.kind == "vessel") { // under the vessel, where it stands (Stage 50)
+					act({ { "do", "weigh" }, { "balance", v.id }, { "vessel", t.id } });
+				}
+			} else if (t.kind == "balance" && v.kind == "vessel" && t.place == "bench") {
+				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
 			} else if (t.kind != "vessel") {
 				message = "\"" + t.id + "\" takes nothing";
 			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {
@@ -1764,6 +1830,7 @@ struct Ui::Impl {
 				from = index;
 				to = target;
 				pour_fraction = v.liquid_ml > 50.0 ? 50.0 / v.liquid_ml : 1.0;
+				amount.clear();
 			}
 			return;
 		}
@@ -1857,12 +1924,16 @@ struct Ui::Impl {
 				if (!allowed_click(gently ? "panel:gentle" : "panel:pour")) {
 					return;
 				}
-				const double ml = view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
+				const std::optional<double> asked = typed();
+				const double ml = asked ? *asked : view.items[static_cast<size_t>(from)].liquid_ml * pour_fraction;
 				json command = { { "do", "pour" }, { "from", id(from) }, { "to", id(to) } };
-				if (pour_fraction >= 1.0) {
+				if (pour_fraction >= 1.0 && !asked) {
 					command["all"] = true;
 				} else {
 					command["ml"] = ml;
+				}
+				if (view.instruments) {
+					command["about"] = true; // a hand's pour (Stage 50)
 				}
 				if (gently) {
 					command["gentle"] = true;
@@ -1878,7 +1949,20 @@ struct Ui::Impl {
 					if (!allowed_click("panel:tip:" + species)) {
 						return;
 					}
-					if (act({ { "do", "tip" }, { "from", id(from) }, { "to", id(to) }, { "species", species }, { "all", true } })) {
+					// all of it, or the grams typed (Stage 50; from a vessel with no liquid); by instruments the solids, by hand
+					json command = { { "do", "tip" }, { "from", id(from) }, { "to", id(to) } };
+					if (species != "solid" || !view.instruments) {
+						command["species"] = species;
+					}
+					if (const std::optional<double> g = typed(); g && !amount_in_ml()) {
+						command["g"] = *g;
+					} else {
+						command["all"] = true;
+					}
+					if (view.instruments) {
+						command["about"] = true;
+					}
+					if (act(command)) {
 						panel = false;
 						put_back();
 					}
@@ -1976,6 +2060,12 @@ struct Ui::Impl {
 				act({ { "do", "stir" }, { "vessel", id(i) }, { "on", !view.items[static_cast<size_t>(i)].stirred } });
 				return;
 			}
+			if (tare_rect(i, r) && r.has(x, y)) {
+				if (allowed_click("tare:" + id(i))) {
+					act({ { "do", "tare" }, { "balance", id(i) } }); // (Stage 50)
+				}
+				return;
+			}
 			if (screw_rect(i, r) && r.has(x, y)) {
 				if (!allowed_click("screw:" + id(i))) {
 					return;
@@ -2000,6 +2090,7 @@ struct Ui::Impl {
 					from = drag;
 					to = target;
 					pour_fraction = view.items[static_cast<size_t>(drag)].liquid_ml > 50.0 ? 50.0 / view.items[static_cast<size_t>(drag)].liquid_ml : 1.0;
+					amount.clear();
 					return;
 				}
 				if (guided()) {
@@ -3185,6 +3276,10 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (panel && draft.edit == Draft::None) {
+			type_amount(key, codepoint); // the pour menu's amount (Stage 50)
+			return;
+		}
 		if (draft.edit == Draft::None && (key == Ui::KeyBackspace || key == Ui::KeyUndo)) {
 			// Nothing being typed (Stage 34): Backspace puts what is in hand, or what is chosen, in the trash; the
 			// undo key brings back what was last put there. A tutorial's step asks for neither.
@@ -3389,6 +3484,7 @@ struct Ui::Impl {
 		const Rect r = pour_slider();
 		const double f = (x - r.x) / r.w;
 		pour_fraction = f < 0.02 ? 0.02 : f > 1 ? 1 : f;
+		amount.clear(); // (the slider's amount, not what was typed: Stage 50)
 	}
 
 	void turn(float x) {
@@ -4536,6 +4632,20 @@ struct Ui::Impl {
 				bodies[k].image_h = shows.h;
 				bodies[k].image_hash = shows.hash;
 				thing(v.id, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
+			} else if (v.kind == "balance") {
+				// a balance (Stage 50): its case, its pan of steel, its display showing its reading (dark off the bench)
+				const float s = r.w / BALANCE_W;
+				thing(v.id, "case", OpticsBody::Slab, balance_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				thing(v.id, "pan", OpticsBody::Slab, balance_pan(r), 2.0f * s, "burner_metal", nullptr, in_hand);
+				const instruments::Balance *model = instruments::balance(v.model);
+				Picture &shows = balances[v.id];
+				const std::string says = model != nullptr ? instruments::display_text(*model, v.display_g, v.overload) : std::string();
+				instruments::plot_display(says, shows);
+				const size_t k = thing(v.id, "display", OpticsBody::Screen, balance_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				bodies[k].image = shows.rgb.data();
+				bodies[k].image_w = shows.w;
+				bodies[k].image_h = shows.h;
+				bodies[k].image_hash = shows.hash;
 			} else if (v.kind == "burner") {
 				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
@@ -5141,14 +5251,39 @@ struct Ui::Impl {
 						row(text_of("peak %.0f nm: ", SPECTRUM_FIRST_NM + peak) + text_of("%.3g mW/(sr m2 nm)", 1000.0 * radiance_of(c[static_cast<size_t>(peak)], peak)), DIM, 15);
 					}
 				}
+			} else if (v.kind == "balance") {
+				// a balance (Stage 50): its tare, what it reads, what is on it, what it states of itself
+				Rect tare;
+				if (tare_rect(showing, tare)) {
+					button(tare, "tare", false, 15);
+					y += 42;
+				}
+				const instruments::Balance *model = instruments::balance(v.model);
+				const std::string says = model != nullptr ? instruments::display_text(*model, v.display_g, v.overload) : std::string();
+				row(says.empty() ? "off: put it on the bench to weigh" : v.overload ? text_of("OL: past its %.0f g", v.capacity_g) : "reads " + says, v.overload ? WARN : INK, 18);
+				row(v.under >= 0 ? "on its pan: " + view.items[static_cast<size_t>(v.under)].id : "set a vessel on its pan to weigh it", DIM, 15);
+				std::string name = v.model;
+				std::replace(name.begin(), name.end(), '_', '-');
+				row(name + text_of(", to %g g", v.readability_g) + text_of(" up to %.0f g,", v.capacity_g) + text_of(" within %g g", v.linearity_g), DIM, 14);
 			} else if (v.kind == "burner") {
 				row(text_of("flame %.0f C, valve %.0f%%", v.celsius, 100.0 * v.valve));
 			} else if (v.kind == "stopper") {
 				row(v.on >= 0 ? "in the neck of " + view.items[static_cast<size_t>(v.on)].id + ": pull it out by picking it up" : "put it on a narrow neck to seal it", DIM, 15);
 				row(text_of("holds %.0f N", v.hold_n), DIM, 15);
 			} else {
-				row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
-				if (v.layers.size() > 1) { // its column (Stage 47)
+				// by instruments (Stage 50): its label and its instruments' readings, not what it holds
+				const bool measured = view.instruments && v.kind == "vessel";
+				if (!v.label.empty()) {
+					row("\"" + v.label + "\"", INK, 16);
+				}
+				if (measured) {
+					row((v.read_c ? text_of("thermometer %.1f C", *v.read_c) : std::string()) + (v.read_ph ? text_of(", pH meter %.2f", *v.read_ph) : std::string()));
+				} else {
+					row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
+				}
+				if (v.layers.size() > 1 && measured) {
+					row(text_of("layered: %d layers", static_cast<int>(v.layers.size())), DIM, 15);
+				} else if (v.layers.size() > 1) { // its column (Stage 47)
 					row(text_of("layered: %d layers, ", static_cast<int>(v.layers.size())) + text_of("%.1f C at the top, ", v.layers.front().celsius) + text_of("%.1f C at the bottom", v.layers.back().celsius), DIM, 15);
 				}
 				if (v.boiling) { // its bubbles (Stage 45)
@@ -5161,6 +5296,18 @@ struct Ui::Impl {
 				} else if (v.sealed) {
 					row(text_of("sealed: it gives way past %.0f kPa", v.gives_way_kpa), v.pressure_kpa > 0.8 * v.gives_way_kpa ? WARN : DIM, 15);
 				}
+				if (measured) {
+					// what its marks read of its liquid; what it holds is for the student to find out
+					if (v.read_ml) {
+						row(!(v.liquid_ml > 0.0) ? "no liquid"
+								: *v.read_ml > 0.0 ? text_of("liquid to about %.0f mL by its marks", *v.read_ml) + text_of(" (every %.0f mL)", v.marks_ml)
+												   : text_of("liquid under its first mark (%.0f mL)", v.marks_ml),
+								DIM, 15);
+					}
+					if (v.solid_ml > 0.0) {
+						row("a solid in it", DIM, 15);
+					}
+				} else {
 				row(v.kind == "vessel" ? text_of("%.1f mL gas, %.2f mL solids and liquids", v.gas_ml, v.condensed_ml)
 									   : text_of("%.1f mL of %.0f mL", v.gas_ml + v.condensed_ml, v.capacity_ml));
 				for (const SubstanceView &s : v.contents) {
@@ -5173,6 +5320,7 @@ struct Ui::Impl {
 						line += text_of("  %.0f particles, %.0f um", static_cast<double>(s.particles), s.size_um);
 					}
 					row(line, DIM, 15);
+				}
 				}
 			}
 		} else {
@@ -5366,18 +5514,33 @@ struct Ui::Impl {
 		rect_fill(PANEL, PANEL_FILL);
 		outline(PANEL, GLASS, 1);
 		text(PANEL.x + 30, PANEL.y + 40, source.id + " into " + id(to), INK, 22);
+		// the amount typed (Stage 50): what a pour or a tip aims at; by instruments, a hand's
+		const Rect field = amount_field();
+		const std::optional<double> asked = typed();
+		rect_fill(field, rgba(24, 24, 24));
+		outline(field, amount.empty() ? GRID : GUIDE, amount.empty() ? 1.0f : 2.0f);
+		text(field.x + 8, field.y + 23, amount.empty() ? (amount_in_ml() ? "type mL" : "type g") : amount + (amount_in_ml() ? " mL" : " g") + "_", amount.empty() ? DIM : INK, 16);
 		if (source.liquid_ml > 0.0) {
 			const Rect s = pour_slider();
+			const double shown = asked ? std::min(*asked, source.liquid_ml) / source.liquid_ml : pour_fraction;
 			rect_fill(s, BUTTON);
-			rect_fill(Rect{ s.x, s.y, s.w * static_cast<float>(pour_fraction), s.h }, rgba(90, 140, 220));
-			text(s.x, s.y - 8, text_of("%.1f mL of %.1f mL", source.liquid_ml * pour_fraction, source.liquid_ml), DIM, 15);
-			button(pour_button(), pour_fraction >= 1.0 ? "pour it all" : "pour");
+			rect_fill(Rect{ s.x, s.y, s.w * static_cast<float>(shown), s.h }, rgba(90, 140, 220));
+			if (view.instruments) {
+				// (by instruments the vessel's liquid is what its marks say)
+				const double whole = source.read_ml.value_or(0.0);
+				text(s.x, s.y - 8, asked ? text_of("about %.1f mL, by hand", *asked) : whole > 0.0 ? text_of("about %.0f mL", whole * pour_fraction) + text_of(" of about %.0f mL", whole) : text_of("%.0f%% of its liquid", 100.0 * pour_fraction), DIM, 15);
+			} else {
+				text(s.x, s.y - 8, asked ? text_of("%.1f mL", *asked) + text_of(" of %.1f mL", source.liquid_ml) : text_of("%.1f mL of %.1f mL", source.liquid_ml * pour_fraction, source.liquid_ml), DIM, 15);
+			}
+			button(pour_button(), pour_fraction >= 1.0 && !asked ? "pour it all" : "pour");
 			button(gentle_button(), "pour gently");
 		} else {
 			text(PANEL.x + 30, PANEL.y + 100, "no liquid in it", DIM, 15);
 		}
 		for (const auto &[species, r] : tip_buttons()) {
-			button(r, "tip in the " + species);
+			const std::optional<double> g = amount_in_ml() ? std::nullopt : typed();
+			const std::string what = species == "solid" && view.instruments ? "the solid" : "the " + species;
+			button(r, g ? text_of("tip %g g of ", *g) + what : "tip in " + what);
 		}
 		if (!guided() || asks_click("panel:invert")) {
 			button(invert_button(), "upside down, with a cap");
@@ -6156,6 +6319,11 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		Rect r;
 		return i >= 0 && m.screw_rect(i, r) && centre(r);
 	}
+	if (after("tare:", rest)) { // (Stage 50)
+		const int i = index_of(rest);
+		Rect r;
+		return i >= 0 && m.tare_rect(i, r) && centre(r);
+	}
 	Rect signal;
 	if (m.signal_rect(what, signal)) {
 		return centre(signal);
@@ -6176,6 +6344,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:cancel") {
 		return centre(Impl::cancel_button());
+	}
+	if (what == "panel:amount") { // (Stage 50)
+		return m.panel && centre(Impl::amount_field());
 	}
 	if (after("panel:slider@", rest)) {
 		const Rect r = Impl::pour_slider();

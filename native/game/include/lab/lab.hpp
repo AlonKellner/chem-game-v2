@@ -59,12 +59,12 @@ struct LayerView {
 
 struct ItemView {
 	std::string id;
-	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48); a signal part: timer, monitor, alarm
+	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48), balance (Stage 50); a signal part: timer, monitor, alarm
 	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
 	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
-	int under = -1; // a burner: index of the vessel over it
+	int under = -1; // a burner, a balance (Stage 50): index of the vessel over it
 	int holds = -1; // a vessel: index of what is on its mouth
 	int drains_to = -1; // a vessel: index of what stands under its outlet
 	// pouring (GAME_SPEC §13, Stage 27): the vessel it pours into (index; -1: none), held or upside down with a
@@ -130,6 +130,19 @@ struct ItemView {
 	bool probe_room = false;
 	double probe_u = 0.0, probe_v = 0.0;
 	ThermalSettings thermal; // a thermal camera's (Stage 48)
+	// readings (GAME_SPEC §13, Readings; Stage 50): a vessel's label; its thermometer's reading, its pH meter's (with
+	// a liquid), its marks' (on glassware with marks, which are `marks_ml` apart), each the truth with its instrument's
+	// offset, to its resolution
+	std::string label;
+	std::optional<double> read_c, read_ph, read_ml;
+	double marks_ml = 0.0;
+	// a balance (Stage 50): its model and what it states; its load's conventional mass (what I1 holds its display
+	// to), its tare; its display (none: off the bench), and whether its load is past its capacity
+	std::string model;
+	double readability_g = 0.0, capacity_g = 0.0, linearity_g = 0.0;
+	double gross_g = 0.0, tare_g = 0.0;
+	std::optional<double> display_g;
+	bool overload = false;
 };
 
 // What the lab says happened (GAME_SPEC §13.4), at a level the player may
@@ -175,6 +188,11 @@ struct LabView {
 	double mass_g = 0.0;
 	double energy_j = 0.0;
 	double room_celsius = 20.0; // the room's air (Stage 46: what the long-wave range sees as its light)
+	// readings (GAME_SPEC §13, Readings; Stage 50): by instruments (the readout shows them, not what a vessel holds);
+	// the seed they are drawn from; the room's air's density, kg/m^3 (what a balance's load displaces)
+	bool instruments = false;
+	uint64_t seed = 0;
+	double air_kg_m3 = 0.0;
 	// the equipment, then the signal parts, in the order they were made (one restored from the trash comes last),
 	// then the parts in the trash (Stage 34: place "trash"; with a circuit, what it holds, their `part.in` its id)
 	std::vector<ItemView> items;
