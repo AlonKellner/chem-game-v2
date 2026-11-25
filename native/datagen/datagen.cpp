@@ -10,7 +10,7 @@
 //   <out dir>/builtin_tables.cpp             the tables, with a static_assert
 //   <out dir>/include/chem/builtin_ids.hpp   the species' and reactions' indices by name
 #include "chem/species.hpp"
-#include "formula.hpp"
+#include "chem/formula.hpp"
 
 #include <nlohmann/json.hpp>
 
