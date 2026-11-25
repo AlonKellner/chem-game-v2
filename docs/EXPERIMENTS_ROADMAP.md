@@ -392,6 +392,33 @@ wall; the existing `loss` calibration, split by area. Each value gets a gate tes
 
 **Invariants:** the rings' glass sums to the vessel's `wall_g`; T1 to T3 as for any cell.
 
+### 8c. Liquids that expand with temperature (PLANNED: a stage of its own)
+
+Found in Stage 51; the user chose to give it its own stage (2026-11-25). Every liquid volume in the core is the
+table's at 25 °C (§20). Water grows about 4% from 20 to 100 °C (Lienhard's rows, already in `data/solutions.json`'s
+`solvent` and read by `liquid_density`, Stage 47). Solutes would follow the solvent, as their density already does;
+solids stay fixed.
+
+**What has to change together.**
+- `fill_of`: a liquid's and a solute's volume at the cell's temperature, at every caller; today several pass 25 °C on
+  purpose.
+- A sealed cell's free volume (`free_volume`, `thermo.cpp`), so its pressure (P = nRT / V_free); expansion compresses
+  the gas over a nearly full flask.
+- The sealed cell's energy, E = H − n_gas R T + P_atm V_free (`world.cpp`): V_free(T) makes the temperature's solve
+  from the energy implicit in it, a small term against the heat capacity (P_atm dV/dT is about 5 mJ/K against
+  hundreds of J/K).
+- Settling a rigid cell exactly full (`sim.cpp`); the overflow's room check; the column's layer heights and its
+  top's size (`strata.cpp`); the drains' rates by volume.
+- The volume invariants V1 to V3 and L1, each at the cell's own temperature.
+- The lab's readings (`liquid_ml`, `condensed_ml`), the pour by hand's levels, the picture's levels (a hot liquid
+  stands higher).
+
+**Data:** water's density by temperature (have, verified); a solute's own apparent molar volume by temperature is a
+later refinement (Krumgalz's tables, as nickel sulfate's 25 °C value).
+
+**Goldens:** every session's measured values shift (the pressure session's vacuum most); evidence and the user's
+approval first.
+
 ## 9. Two liquids
 
 After area 8. Water and an oil do not mix, yet pass heat between them.

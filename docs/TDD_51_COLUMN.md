@@ -12,8 +12,8 @@ which you think is best, document it and let's implement it as a future stage". 
 `docs/EXPERIMENTS_ROADMAP.md`, area 8b: a fixed grid of glass rings coupled to the liquid's layers by overlap.
 
 GAME_SPEC 0.51.0 covers:
-- §6: a pour's stream;
-- §20: its simplifications.
+- §6: a pour's stream; a column's shape;
+- §20: their simplifications.
 
 ## Phases
 
@@ -21,8 +21,8 @@ GAME_SPEC 0.51.0 covers:
 |---|---|---|
 | 51.1 | A pour's stream mixes where it lands: its kinetic energy as work (Linden's 0.2), its entrainment (Ricou and Spalding) as far as it plunges (Turner) | Done; the demo's golden re-recorded with the user's approval (its measured output unchanged) |
 | 51.2 | The mixing efficiency falling with the Richardson number | Not done: no sourced coefficient (below) |
-| 51.3 | A conical flask's narrowing in its layers | |
-| 51.4 | Liquid volumes that grow with temperature | |
+| 51.3 | A conical flask's narrowing in its layers: the column's shape from its glassware | Done |
+| 51.4 | Liquid volumes that grow with temperature | Its own stage (the user, 2026-11-25): roadmap area 8c |
 | 51.5 | The glass in layers: the design (roadmap area 8b) | Documented; a stage of its own |
 | 51.6 | GAME_SPEC 0.51.0, `make gates`, the user's sign-off | |
 
@@ -80,6 +80,32 @@ identical line for line. The pressure session is unchanged. Re-recorded with the
 1. Stage 49's energy test (micro-joules) therefore passed on more than it claimed. Its checks, and the Fick, jet and
 oxide checks of `test_column.cpp`, now compare ratios to 1. Elsewhere `test_measured.cpp`'s Planck check
 (9.924e-3 at epsilon 1e-3, really ± 10%) is as weak; it is another stage's and is noted in Open.
+
+## 51.3 A column's shape
+
+A column was a cylinder of its floor's area: a layer's thickness its volume over that area. The lab now gives each
+glassware column its shape (`World::Builder::set_column_shape`): the inside's volume at 64 heights from the floor's
+top to the brim (`glass::Vessel::volume_below`), saved with the column. `levels_of` (`strata.cpp`) stacks the
+layers from the bottom by their volumes and reads each one's bottom, middle (by volume) and top heights, and the
+area across the interface under it, from the shape. Every place that divided a volume by the floor's area now
+reads them:
+- the thickness checks (a split, a block grown);
+- the distances between middles (diffusion, conduction, the mixing's cost);
+- the area across an interface (diffusion, conduction);
+- the stream's path.
+
+A column given no shape (the core's tests) is the cylinder it was.
+
+Test: `column: a column that narrows takes its layers' heights and its interfaces' areas from its shape`. A column of
+A0 for 2 cm, then of A0 / 2, with copper sulfate to 3 cm and water over it: in a step the copper crosses at 0.3172 of
+the cylinder's rate, against 0.3179 by the shapes. The copper is counted in both its forms, since some hydrolyses in
+the water it reaches; copper sulfate alone gave 0.29. The goldens are unchanged.
+
+## 51.4 Liquids that expand: its own stage
+
+A liquid's volume at its temperature reaches past the column: a sealed cell's free volume, pressure and energy
+definition, settling, overflow, the volume invariants and every session's measured values. The user chose a stage
+of its own; the analysis is in the roadmap, area 8c.
 
 ## 51.2 The mixing efficiency and the Richardson number
 
