@@ -66,6 +66,20 @@
 			"tutorial": "tutorials/boiling.json"
 		},
 		{
+			"id": "hydrate",
+			"title": "The water in blue crystals",
+			"summary": "Measured: a sample of blue copper sulfate crystals weighed into a tared dish on an analytical balance, heated until white and weighed cold: the mass lost is their water, and the moles of each give x in CuSO4.xH2O. A hand takes about what it aims at; the balance says what it was.",
+			"bench": "benches/hydrate.json",
+			"tutorial": "tutorials/hydrate.json"
+		},
+		{
+			"id": "carbonate",
+			"title": "What heat takes from a carbonate",
+			"summary": "Measured: green malachite weighed by difference, heated until it is black copper oxide, weighed again: what is left over what was taken is what the equation says, 72 %.",
+			"bench": "benches/carbonate.json",
+			"tutorial": "tutorials/carbonate.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

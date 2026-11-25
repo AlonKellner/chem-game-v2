@@ -12,7 +12,7 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm";
+			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g";
 }
 
 bool is_gas(const std::string &species) {
@@ -122,6 +122,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "valve") {
 		return v->kind == "burner" ? std::optional<double>(100.0 * v->valve) : std::nullopt;
 	}
+	if (q.what == "reads_g" || v->kind == "balance") { // a balance's display (Stage 50): none while it is off
+		return v->kind == "balance" && q.what == "reads_g" && !v->overload ? v->display_g : std::nullopt;
+	}
 	PartKind part = PartKind::Timer;
 	if (v->kind == "burner" || v->kind == "tray" || part_kind_of(v->kind, part)) {
 		return std::nullopt; // a signal part holds no matter
@@ -186,6 +189,10 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		out.push_back(Quantity{ item.id, "valve", "g" });
 		return out;
 	}
+	if (item.kind == "balance") { // what it reads (Stage 50)
+		out.push_back(Quantity{ item.id, "reads_g", "g" });
+		return out;
+	}
 	for (const char *what : { "celsius", "gas_ml", "condensed_ml", "liquid_ml", "solid_ml", "mass_g" }) {
 		out.push_back(Quantity{ item.id, what, "g" });
 	}
@@ -210,7 +217,7 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 }
 
 QuantityKind kind_of(const Quantity &q) {
-	if (q.what == "fill" || q.what == "valve" || q.what == "met") {
+	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g") {
 		return QuantityKind::Other;
 	}
 	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
@@ -284,7 +291,7 @@ std::string unit(const Quantity &q) {
 	if (q.what == "met" || q.what == "ph") {
 		return "";
 	}
-	if (q.what == "mass_g") {
+	if (q.what == "mass_g" || q.what == "reads_g") {
 		return "g";
 	}
 	if (q.what == "kpa") {
@@ -313,6 +320,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "solids";
 	} else if (q.what == "mass_g") {
 		what = "total mass";
+	} else if (q.what == "reads_g") {
+		what = "reading";
 	} else if (q.what == "kpa") {
 		what = "pressure";
 	} else if (q.what == "ph") {
@@ -344,6 +353,9 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "mass_g") {
 		return fmt("%.3f g", value);
+	}
+	if (q.what == "reads_g") { // to an analytical balance's 0.1 mg (Stage 50)
+		return fmt("%.4f g", value);
 	}
 	if (q.what == "kpa") {
 		return fmt("%.1f kPa", value);

@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## 0.50.0 (2026-11-25, Stage 50; the user's sign-off pending)
+
+- §13 (Stage 50, `docs/TDD_50_MEASURED.md`; `docs/CURRICULUM.md`, step A): **the measured lab**.
+  - **A balance** (`balance`, top-loading 0.01 g or analytical 0.1 mg): no cell, no edge; under a vessel as a
+    burner is (`weigh`, `weigh` with `onto`, `unweigh`), left where its vessel stood when the vessel is lifted
+    off; it reads its load's conventional mass (OIML D 28: less the air it displaces, so hot air reads light and
+    carbon dioxide heavy), its tare (`tare`) and its linearity, to its readability; `OL` past its capacity.
+  - **Readings by instruments**: a bench's `readings` and `seed`. Each vessel's thermometer, pH meter and marks
+    read the truth with an offset drawn once from the seed, to their resolution; the readout shows them and a
+    vessel's `label`, not what it holds.
+  - **The hand**: `pour` and `tip` with `about` move the amount aimed at within 10 %; a `tip` with no species
+    moves the solids in proportion.
+  - `lab/instruments.hpp`; `data/instruments.json`; the marks in `data/glassware.json`; `reads_g`.
+- §13.1: the balance's body and seven-segment display, its gestures and "tare"; the readout by instruments; a
+  typed amount in the pour menu (mL, or g of a solid), one "tip the solid" by instruments.
+- §13.7: the experiments `hydrate` (the water in blue crystals) and `carbonate` (what heat takes from a
+  carbonate).
+- §16: the balance and the readings built. §18: I1. §20: the instruments' and the hand's simplifications.
 ## 0.49.0 (2026-11-25, Stage 49; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 49, `docs/TDD_49_STIRRED.md`), Stage 47's open items:

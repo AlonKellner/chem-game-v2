@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.49.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.50.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1842,6 +1842,20 @@ home", the emissivity and the reflected temperature − and +, AUTO or LOCK (loc
 level and span − and +. The readout says where its frame is, its hottest and coldest and where they are, its
 centre, and the span it shows at what gain.
 
+**A balance** (Stage 50) is a case with a steel pan and a display in its front, whose seven segments show its
+reading (dark off the bench). A vessel carried onto it is set on its pan (`weigh` with `onto`); the balance
+carried onto a vessel goes under it (`weigh`); carried away from under a vessel, it comes out (`unweigh`); a vessel
+carried off it leaves it where it stood. Selected, its readout has "tare", and says what it reads, what is on its
+pan, and its model's readability, capacity and linearity.
+
+**Amounts** (Stage 50). While the pour menu is open, digits and a point type its amount, shown top right: mL of
+the vessel's liquid, or, from a vessel with none, g of its solid. Backspace takes one back, Enter pours (or tips)
+it, Escape closes the menu; the slider clears it. A tip button tips the amount typed, or all without one.
+
+**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
+what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
+buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
+
 **An item's controls are not on the bench** (Stage 22, signed off by the user on 2026-11-21; asked for on 2026-11-20).
 Until Stage 22 a vessel's "stir" button and a burner's valve stood on the grid beside the item,
 always. They are interaction, not lab things, and they covered what the optical pass shows: they
@@ -2478,12 +2492,21 @@ stand on.
     sulfate in a beaker, no tutorial: the clock at 600x blurs their boundary as each diffuses into the
     other (about a centimetre in ten hours), a stirrer mixes them, a burner under it heats the lower.
   - `prism`, *light through a prism and a grating* (§12.3, Stage 47): the optics demo, now in the list.
+  - `hydrate`, *the water in blue crystals* (§13 the balance and Readings, Stage 50; `docs/CURRICULUM.md`
+    experiment 6): read by instruments. A dish tared on an analytical balance, about 2 g of the
+    pentahydrate scooped into it (2.178 g at the bench's seed), heated until white, cooled and weighed
+    again: the balance reads 1.414 g, and x from the two readings comes out 4.8, a little under 5, as in
+    a lab that cools its dish in the air: the dry salt takes back some of its own water as it cools.
+  - `carbonate`, *what heat takes from a carbonate* (Stage 50; experiment 7): read by instruments, weighed
+    by difference on a top-loading balance: about 1.5 g of malachite (1.548 g) heated until black leaves
+    1.114 g of copper oxide, the equation's 72.0 %.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
   melting; pressure and temperature; humidity and saturation; the vertical dimension (a vessel as a column of
   layers); two liquids (oil and water); and the lessons' own mechanics (a
-  measurement log, a prediction, a plot).
+  measurement log, a prediction, a plot). The first-year curriculum's experiments, each with what it needs, are listed in
+  `docs/CURRICULUM.md`.
 
 **Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).
 **Status:** Stage 41; the acids' two in Stage 43, precipitation's and the gas's in Stage 44.
