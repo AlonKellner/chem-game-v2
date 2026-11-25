@@ -92,6 +92,10 @@ struct CellMeta {
 	// How well the cell is stirred (GAME_SPEC §7): 1 at rest. It multiplies
 	// the rates that transport limits (the surface law), never an equilibrium.
 	double mixing = 1.0;
+	// What a stirrer's turning dissipates in its liquid, W (GAME_SPEC §6, Stage
+	// 49): a column's layers mix as far as it pays. Set by whoever turns it,
+	// before each step; a rate the column reads, not state.
+	double stirring = 0.0;
 	// A rigid cell with no gas path to an elastic cell (Stage 28): kept by the
 	// world from its edges, not set (V3).
 	bool sealed = false;
@@ -302,6 +306,8 @@ public:
 	Refusal set_power(EdgeId edge, double power);
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
+	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)
+	Refusal set_stirring(CellId cell, double watts);
 	// A column's top made the size its layers leave it (Stage 47): the
 	// simulation's own act within a step, as the column moves liquid between
 	// them (no more than the vessel's whole volume, more than nothing).

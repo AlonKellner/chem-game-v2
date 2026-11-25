@@ -399,6 +399,17 @@ Refusal World::resize_column_top(CellId top, double volume) {
 	return Refusal::None;
 }
 
+Refusal World::set_stirring(CellId cell, double watts) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!good_conductance(watts)) { // (at least 0 and finite)
+		return Refusal::BadValue;
+	}
+	meta_[static_cast<size_t>(cell.index)].stirring = watts;
+	return Refusal::None;
+}
+
 Refusal World::set_mixing(CellId cell, double mixing) {
 	if (!ledger_.empty()) {
 		return Refusal::MidStep;

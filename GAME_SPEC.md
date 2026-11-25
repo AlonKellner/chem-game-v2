@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.48.0 (history: `CHANGELOG.md`; with 0.47.0, merged after it). This file is the single source of truth for the design.
+Version 0.49.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -395,7 +395,14 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   - the layers in use stay together under the top: one with no liquid over it rises into that place;
   - solids sink to the lowest liquid;
   - two layers merge where the lower is the lighter (it overturns: convective adjustment), or where they are alike
-    and no steep step is beside them (one is enough); a stirred column is one cell;
+    and no steep step is beside them (one is enough);
+  - stirred, the layers mix as far as the turning pays (Stage 49): of the work the turning dissipates this step
+    (`CellMeta::stirring`, W, set by whoever turns it: the lab's turning energy over its 1.5 s), Γ = 0.2 raises
+    the column's potential energy (Linden 1979's maximum mixing efficiency). It is spent from the bottom up (the
+    stirrer stands on the floor; the layer it stirs deepens up the column). Two layers that exchange a volume v
+    (each mixed as it lands) raise it by g (ρ_lower − ρ_upper) v d, d the distance between their middles; at
+    V_u V_l / (V_u + V_l) they are one and merge, and what is left goes to the interface over them; where it pays
+    for less, they exchange what it pays for. A stir stopped short leaves the column part mixed;
   - two layers that stay exchange what is dissolved down its gradient (Fick's law across the distance between
     their middles, each species' own diffusion coefficient, §7) and heat (by conduction, k A / dz, the solvent's
     conductivity; the edge's conductance set at the step's start);
@@ -413,8 +420,8 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   down). Saved and loaded, a column goes on exactly.
 - **Poured from.** A layered vessel tipped to pour gives its top layer first; the one under it rises to the lip as
   the level falls to it. A pour reads the whole vessel's liquid (how much it holds, whether any stands over its
-  lip). An outlet at a layered vessel's bottom, or one upside down through its cap, still draws from its top
-  layer (*(PLANNED)*: from its lowest).
+  lip). An outlet at its bottom, and the cap of one upside down, draw from its lowest layer that holds anything
+  (Stage 49): their drains follow it at each step's boundary, as a burner's edge does, their rates kept.
 - **Seen** (§12.2): a band of each layer's own liquid, read at the pixel's height. The layers lie level in the
   room at any turn, as the surface does: a band's top is the level that holds the liquid of the layers under it,
   read in the vessel's frame as the surface's is.
@@ -2759,6 +2766,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The long-wave range (Stage 46): the room one temperature, its wall, cube and room in front a black body; fused silica for the lab's glass; grey emissivities; a flame a grey gas and its soot, calibrated; the sensor's response flat over 8–14 µm | A camera sees no hot thing in a glass's reflection; borosilicate's weaker Reststrahlen band reads a few per cent more emissive than silica's 0.79; a real flame's CO₂ and H₂O bands are lines, not grey |
 | A thermal camera (Stage 48): one sensor pixel a layout pixel, every frame; no noise of its own, no lens's blur, no frame rate; its search a few times a second; its overlay a 3 × 5 font | A real camera's 160 × 120 or 320 × 240 pixels, its NETD of about 0.05 K and its 9 Hz are a better experience left out (the user's word: "same resolution and frame rate as the rest of the rendered lab") |
 | A vessel's column (Stage 47): layers homogeneous, the column's cross-section its floor's, its volumes the table's at 25 °C | A layer's buoyancy reads the solvent's measured expansion, but its volume does not change with it; an overturn mixes the two layers whole (no plume); a pour lays nothing at its boundary but what it pours (a gentle one) or stirs all in (a fast one), no entrainment between; water does not diffuse back against a solute; a conical flask's narrowing is not in its layers' thicknesses; a band ignores the narrow lines of its liquid |
+| Stirring a column (Stage 49): the mixing efficiency a constant, Linden's maximum (0.2); the stirring's work spent from the bottom up, at the interfaces alone; the potential energy it raises not in the ledger | A weakly stratified column mixes faster than it would (its efficiency would be lower); the layer the stirrer stirs deepens up the column, the top's mixed last; the joules raised (under a millijoule) are not taken from the liquid's heat |
 | One temperature per vessel (a vessel of no standard shape; any vessel while it is mixed) | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |

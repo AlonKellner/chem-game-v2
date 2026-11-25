@@ -237,7 +237,7 @@ TEST_CASE("column: a denser liquid over a lighter overturns at once; warm over c
 	CHECK(used(cold_on_warm) == 0);
 }
 
-TEST_CASE("column: gas in a layer rises, solids in the top sink into the liquid under them, and stirring makes the column one (Stage 47)") {
+TEST_CASE("column: gas in a layer rises, solids in the top sink into the liquid under them, and stirring makes the column one (Stage 47, Stage 49)") {
 	Bench b = beaker([](World::Builder &w, Bench &x) {
 		water(w, x.top, 100.0, 293.15);
 		w.set_amount(x.top, builtin::copper_oxide, amount_of(0.01));
@@ -249,8 +249,97 @@ TEST_CASE("column: gas in a layer rises, solids in the top sink into the liquid 
 	CHECK(mol(b, b.top, builtin::copper_oxide) == 0.0);
 	CHECK(mol(b, lowest(b), builtin::copper_oxide) == doctest::Approx(0.01).epsilon(1e-3));
 	REQUIRE(b.sim->world().set_mixing(b.top, 3.0) == Refusal::None);
-	run(b, 1);
+	REQUIRE(b.sim->world().set_stirring(b.top, 0.01) == Refusal::None); // (Stage 49: as far as the turning pays)
+	run(b, 600);
 	CHECK(used(b) == 0);
+}
+
+// ---- stirred (Stage 49)
+
+namespace {
+
+// the column's potential energy, J: each layer's liquid mass (as dense as it is, over its volume) at the height of
+// its middle, from the bottom up
+double potential(const Bench &b) {
+	const SpeciesTable &table = builtin_species();
+	const double area = b.sim->world().meta(b.top).column_area;
+	std::vector<CellId> cells{ b.top };
+	for (const CellId c : column(b)) {
+		cells.push_back(c);
+	}
+	double z = 0.0, out = 0.0;
+	for (size_t k = cells.size(); k-- > 0;) {
+		const CellState &c = b.sim->world().snapshot_cell(cells[k]);
+		double v = 0.0;
+		for (size_t s = 0; s < c.amount.size(); ++s) {
+			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (c.amount[s] > 0 && !d.wall && (d.phase == Phase::Liquid || d.phase == Phase::Aqueous)) {
+				v += static_cast<double>(c.amount[s]) * MOL_PER_QUANTUM * d.molar_volume;
+			}
+		}
+		if (!(v > 0.0)) {
+			continue;
+		}
+		const double h = v / area;
+		out += density(b, cells[k]) * v * 9.80665 * (z + 0.5 * h);
+		z += h;
+	}
+	return out;
+}
+
+Bench two_liquids() {
+	return beaker([](World::Builder &w, Bench &x) {
+		water(w, x.top, 80.0, 293.15);
+		w.set_amount(x.top, builtin::nickel_sulfate_aq, amount_of(0.064));
+		w.set_amount(x.layers[0], builtin::water, amount_of(80.0 / 18.015)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.112)).set_temperature(x.layers[0], 293.15);
+	});
+}
+
+} // namespace
+
+TEST_CASE("measured: stirred, a layered column's potential energy rises at Linden's 0.2 of what the turning dissipates (Stage 49)") {
+	// Linden 1979 (Geophys. Astrophys. Fluid Dyn. 13, 3-23): of the work that stirs a stable stratification, at most
+	// 0.2 +- 0.05 goes to its potential energy; the column takes the most (docs/DATA_SOURCES.md). Two layers, the
+	// green nickel sulfate over the blue copper sulfate, 80 g of water each: still and stirred side by side, the
+	// difference is the stirring's.
+	Bench still = two_liquids(), stirred = two_liquids();
+	run(still, 2);
+	run(stirred, 2);
+	const double watts = 1e-3;
+	REQUIRE(stirred.sim->world().set_stirring(stirred.top, watts) == Refusal::None);
+	const double before_still = potential(still), before_stirred = potential(stirred);
+	const int steps = 6;
+	run(still, steps);
+	run(stirred, steps);
+	const double gained = (potential(stirred) - before_stirred) - (potential(still) - before_still);
+	const double paid = 0.2 * watts * steps * STEP_SECONDS;
+	MESSAGE("gained " << gained * 1e6 << " uJ of " << paid * 1e6 << " uJ paid");
+	CHECK(used(stirred) >= 1); // (not yet one: it is paying for the exchange)
+	CHECK(gained == doctest::Approx(paid).epsilon(0.05));
+}
+
+TEST_CASE("column: stirred, two layers become one in the time the turning pays for; a stir stopped short leaves them part mixed (Stage 49)") {
+	// the user's test: stirred, the layers merged at once. The stirrer stands on the floor: the layer it stirs deepens
+	// up the column, through the gradient and into the green.
+	Bench b = two_liquids();
+	run(b, 2);
+	const double start = potential(b);
+	REQUIRE(b.sim->world().set_stirring(b.top, 0.002) == Refusal::None); // a fifth of a stirrer's full turning
+	run(b, 30); // half a second: 0.2 mJ of the 0.7 that make them one
+	const double partly = potential(b);
+	CHECK(partly - start == doctest::Approx(0.2 * 0.002 * 0.5).epsilon(0.05));
+	CHECK(used(b) >= 1);
+	CHECK(mol(b, lowest(b), builtin::nickel_sulfate_aq) > 1e-3); // the green down in the blue
+	REQUIRE(b.sim->world().set_stirring(b.top, 0.0) == Refusal::None);
+	run(b, 60); // stopped: it stays as it was mixed (diffusion's micro-joules aside)
+	CHECK(std::fabs(potential(b) - partly) < 0.01 * (partly - start));
+	CHECK(used(b) >= 1);
+	REQUIRE(b.sim->world().set_stirring(b.top, 0.01) == Refusal::None);
+	run(b, 600); // ten seconds at a stirrer's full turning: one
+	CHECK(used(b) == 0);
+	CHECK(mol(b, b.top, builtin::nickel_sulfate_aq) == doctest::Approx(0.064).epsilon(1e-6));
+	CHECK(mol(b, b.top, builtin::copper_sulfate_aq) > 0.11);
+	MESSAGE("mixed: " << (potential(b) - start) * 1e3 << " mJ over the layered column's");
 }
 
 TEST_CASE("column: a steep step is resolved into thinner layers, each homogeneous, in order of density (Stage 47)") {

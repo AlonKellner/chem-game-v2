@@ -109,11 +109,30 @@ TEST_CASE("column: a gentle pour lays a lighter liquid on a denser one; a fast p
 	CHECK(item(*fast, "beaker").layers.empty()); // one liquid
 }
 
-TEST_CASE("column: a stirrer mixes a layered vessel into one; a burner heats its lowest layer (Stage 47)") {
+TEST_CASE("column: a stirrer mixes a layered vessel into one as its turning builds; a short stir leaves it part mixed; a burner heats its lowest layer (Stage 47, Stage 49)") {
+	// (Stage 49, the user's test: stirred, the layers merged at once) the turning builds over a second and a half,
+	// and mixes the layers as far as what it dissipates pays
 	auto stirred = open(read("data/benches/layers.json"));
+	stirred->set_checking(true);
 	ok(*stirred, R"({"do": "stir", "vessel": "beaker", "on": true})");
-	ok(*stirred, R"({"do": "wait", "seconds": 1})");
+	ok(*stirred, R"({"do": "wait", "seconds": 0.25})");
+	CHECK(item(*stirred, "beaker").layers.size() >= 2); // a quarter of a second: still layered
+	ok(*stirred, R"({"do": "wait", "seconds": 5})");
 	CHECK(item(*stirred, "beaker").layers.empty());
+	auto brief = open(read("data/benches/layers.json"));
+	ok(*brief, R"({"do": "stir", "vessel": "beaker", "on": true})");
+	ok(*brief, R"({"do": "wait", "seconds": 0.3})");
+	ok(*brief, R"({"do": "stir", "vessel": "beaker", "on": false})");
+	ok(*brief, R"({"do": "wait", "seconds": 10})"); // its turning gone
+	const lab::ItemView part = item(*brief, "beaker");
+	REQUIRE(part.layers.size() >= 2);
+	CHECK(mol_in(part.layers.back(), "nickel_sulfate_aq") > 1e-3); // the green stirred down into the blue
+	// the top still the greener: less of the blue than an even mixture, more of the green than the bottom
+	const lab::LayerView &top = part.layers.front(), &bottom = part.layers.back();
+	CHECK(mol_in(top, "copper_sulfate_aq") / top.liquid_ml < 0.5 * 0.112 / part.liquid_ml);
+	CHECK(mol_in(top, "nickel_sulfate_aq") / top.liquid_ml > mol_in(bottom, "nickel_sulfate_aq") / bottom.liquid_ml);
+	MESSAGE("a short stir: " << part.layers.size() << " layers; the top " << top.liquid_ml << " mL, Cu " << mol_in(top, "copper_sulfate_aq") << " mol; the bottom "
+							 << bottom.liquid_ml << " mL, Ni " << mol_in(bottom, "nickel_sulfate_aq") << " mol");
 	auto heated = open(read("data/benches/layers.json"));
 	ok(*heated, R"({"do": "heat", "burner": "burner", "vessel": "beaker"})");
 	ok(*heated, R"({"do": "valve", "burner": "burner", "to": 0.2})");
@@ -320,4 +339,54 @@ TEST_CASE("column: a layered vessel tipped to pour shows its layers level in the
 	MESSAGE("tipped: " << blues << " blue samples, " << greens << " green");
 	CHECK(blues > 20);
 	CHECK(greens > 20);
+}
+
+namespace {
+
+// a bottle of green nickel sulfate over blue copper sulfate, and an empty beaker to drain it into
+const char *const LAYERED_BOTTLE = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "loss": 0.8,
+		"layers": [{"water": {"g": 80}, "nickel_sulfate_aq": {"mol": 0.064}}, {"water": {"g": 80}, "copper_sulfate_aq": {"mol": 0.112}}]},
+	{"id": "cup", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5}]})";
+
+} // namespace
+
+TEST_CASE("column: an outlet at a layered vessel's bottom draws its lowest layer first (Stage 49)") {
+	// Stage 47's Open: the outlet drew from the top layer
+	auto l = open(read("data/benches/layers.json"));
+	l->set_checking(true);
+	ok(*l, R"({"do": "under", "item": "empty", "of": "beaker"})");
+	std::string why;
+	REQUIRE_MESSAGE(l->advance(1, why), why); // (an outlet runs all of what is over it each step: the lowest layer, then the next)
+	const lab::ItemView got = item(*l, "empty");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.11); // the blue, from the bottom
+	CHECK(mol_in(got, "nickel_sulfate_aq") < 1e-6);
+	CHECK(mol_in(item(*l, "beaker"), "nickel_sulfate_aq") > 0.0639); // the green all still in it
+	ok(*l, R"({"do": "undrain", "of": "beaker"})"); // its line comes off, from whichever layer it left
+	const double there = item(*l, "empty").liquid_ml;
+	REQUIRE_MESSAGE(l->advance(60, why), why);
+	CHECK(item(*l, "empty").liquid_ml == doctest::Approx(there).epsilon(1e-3));
+}
+
+TEST_CASE("column: a layered bottle upside down runs its lowest layer out through its cap first, the one over it after (Stage 49)") {
+	auto l = open(LAYERED_BOTTLE);
+	l->set_checking(true);
+	ok(*l, R"({"do": "invert", "item": "bottle", "over": "cup"})");
+	ok(*l, R"({"do": "cap", "item": "bottle", "to": 1})");
+	std::string why;
+	REQUIRE_MESSAGE(l->advance(60, why), why); // a second: some of the blue
+	lab::ItemView got = item(*l, "cup");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.005);
+	CHECK(mol_in(got, "nickel_sulfate_aq") < 1e-4);
+	// saved and loaded while its cap's drain leaves from a layer, it goes on exactly
+	auto copy = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(copy != nullptr, why);
+	REQUIRE_MESSAGE(copy->advance(60 * 10, why), why);
+	REQUIRE_MESSAGE(l->advance(60 * 10, why), why);
+	CHECK(copy->digest() == l->digest());
+	REQUIRE_MESSAGE(l->advance(60 * 110, why), why); // two minutes: all of it, the green last
+	got = item(*l, "cup");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.11);
+	CHECK(mol_in(got, "nickel_sulfate_aq") > 0.06);
+	MESSAGE("through the cap: " << got.liquid_ml << " mL");
 }

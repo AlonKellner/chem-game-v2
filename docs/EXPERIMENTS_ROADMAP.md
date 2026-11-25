@@ -313,7 +313,8 @@ alone takes hours to even out 5 cm of water (L² over water's diffusivity, about
 - **The liquid's weight**: each layer's pressure, and so its boiling point, from the liquid above it.
 - **What touches what**: the burner heats the bottom layer, the walls lose heat from each layer they bound,
   the gas meets the top layer, solids settle into the bottom one, stirring mixes the column (the turning's
-  energy, Stage 32), a pour by hand takes the top layer first.
+  energy, Stage 32; as far as its dissipation pays, Stage 49), a pour by hand takes the top layer first, an
+  outlet or a cap the bottom one (Stage 49).
 - **Kept**: layers are cells, so conservation comes with `transfer` and `transform`. New invariants: the
   layers' volumes sum to the liquid's; no unstable layering outlasts the adjustment (as P1 holds the fast
   equilibria).
