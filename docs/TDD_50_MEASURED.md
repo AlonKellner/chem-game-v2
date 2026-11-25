@@ -165,6 +165,14 @@ the tables' water reads the closed form of its glass, water and air, to its read
 | `test_sweeps.cpp` | random gases with random diffusion, half the gas edges exchanging: conservation, T1, T2, E1 on every step |
 | `test_experiments.cpp` (6) | each experiment strict with its own gestures, at a person's pace, and free; the hydrate's copper all in the dish or the jar, the balance its solids, x 4.95 to 5.05; the carbonate's 72 % |
 
+## The user's test
+
+- 2026-11-25: "Activating tare on the scale does not zero it, but sets it to 0.009. Other than that, looks good!" The
+  balance read 0 (its readout said "0.00 g"); its display drew the unit in seven segments, and a seven-segment g is
+  a 9: "0.00 g" read "0.009". The unit is now a small lowercase g, lower and dimmer than the digits, a legend beside
+  them as a balance prints it, and a digit's unlit segments are fainter. Test: `instruments: a balance's display
+  draws its reading in seven segments` ("0.00 g" lights no digit after the zeros, and is not "0.009").
+
 ## Open
 
 - **A solid taking up a gas** (a dry salt from humid air) runs by the dehydration's reverse, in proportion to the hydrate left (§20); with the room's humidity (roadmap area 6) it wants a rate law at the solid's surface.

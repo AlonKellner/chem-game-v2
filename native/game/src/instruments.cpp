@@ -152,7 +152,7 @@ void plot_display(const std::string &text, Picture &p) {
 	p.w = 96;
 	p.h = 15;
 	p.rgb.assign(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 3, 0);
-	static constexpr uint8_t LIT[3] = { 70, 235, 190 }, DIM[3] = { 12, 26, 22 };
+	static constexpr uint8_t LIT[3] = { 70, 235, 190 }, DIM[3] = { 5, 11, 9 };
 	const auto bar = [&](int x0, int y0, int x1, int y1, const uint8_t *c) {
 		for (int y = y0; y <= y1; ++y) {
 			for (int x = x0; x <= x1; ++x) {
@@ -170,7 +170,7 @@ void plot_display(const std::string &text, Picture &p) {
 		static constexpr int DIGITS[10] = { 63, 6, 91, 79, 102, 109, 125, 7, 127, 111 };
 		return c >= '0' && c <= '9' ? DIGITS[c - '0'] : c == '-' ? 64 : c == 'O' ? 63 : c == 'L' ? 56 : c == 'g' ? 111 : 0;
 	};
-	const auto advance = [](char c) { return c == '.' ? 2 : c == ' ' ? 3 : 7; };
+	const auto advance = [](char c) { return c == '.' ? 2 : c == ' ' ? 4 : c == 'g' ? 4 : 7; };
 	int width = 0;
 	for (const char c : text) {
 		width += advance(c);
@@ -180,9 +180,21 @@ void plot_display(const std::string &text, Picture &p) {
 	for (const char c : text) {
 		if (c == '.') {
 			bar(x - 1, y0 + 8, x - 1, y0 + 8, LIT);
+		} else if (c == 'g') {
+			// the unit: a small lowercase g, lower than the digits and dimmer, a legend beside them as a balance prints
+			// it (in seven segments a g is a 9: "0.00 g" read as "0.009")
+			// (a round bowl over a hooked tail, from the digits' middle to below their foot)
+			static constexpr uint8_t ROWS[6] = { 3, 5, 5, 3, 1, 6 }, UNIT[3] = { 40, 150, 120 };
+			for (int r = 0; r < 6; ++r) {
+				for (int b = 0; b < 3; ++b) {
+					if ((ROWS[r] >> (2 - b) & 1) != 0) {
+						bar(x + b, y0 + 4 + r, x + b, y0 + 4 + r, UNIT);
+					}
+				}
+			}
 		} else if (c != ' ') {
 			const int m = mask(c);
-			const bool digit = c != 'g'; // a digit's place shows its unlit segments faintly; the unit is printed
+			const bool digit = true; // a digit's place shows its unlit segments faintly
 			const auto seg = [&](int bit, int x0, int ya, int x1, int yb) {
 				if ((m & bit) != 0) {
 					bar(x0, ya, x1, yb, LIT);

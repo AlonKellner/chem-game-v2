@@ -326,4 +326,19 @@ TEST_CASE("instruments: a balance's display draws its reading in seven segments 
 	}
 	CHECK(lit > 40);
 	CHECK(dark == static_cast<int>(off.rgb.size()));
+	// the unit is no digit (the user, 2026-11-25: a tared balance read "0.009"): "0.00 g" lights none of a 9's segments
+	// where a digit would stand after the zeros, and differs from "0.009"
+	lab::Picture zero, nine;
+	plot_display("0.00 g", zero);
+	plot_display("0.009", nine);
+	CHECK(zero.hash != nine.hash);
+	int unit_lit = 0, nine_lit = 0;
+	for (int y = 0; y < zero.h; ++y) {
+		for (int x = zero.w - 8; x < zero.w; ++x) {
+			unit_lit += zero.at(x, y)[1] > 200 ? 1 : 0; // the digits' own bright green
+			nine_lit += nine.at(x, y)[1] > 200 ? 1 : 0;
+		}
+	}
+	CHECK(unit_lit == 0); // the unit is a dimmer legend, not lit as a digit
+	CHECK(nine_lit > 10);
 }
