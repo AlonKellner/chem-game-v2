@@ -35,7 +35,7 @@ The curriculum's step C, its second half (`docs/CURRICULUM.md`: T6, S3), after S
 | 59.2 | The lab: its drain through the paper | Done |
 | 59.3 | The screen: a residue scraped out | Done |
 | 59.4 | The experiment: separating a mixture | Done |
-| 59.5 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 59.5 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (957 s: ASan+UBSan 957, ctest 728, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
 
 ## The goldens
 
