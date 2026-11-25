@@ -5,7 +5,9 @@
 - §6 (Stage 53, `docs/TDD_53_WALLS.md`; the roadmap's area 8b): **the glass in rings**. A glassware vessel's wall
   is its floor and rings of about 1 cm up to its brim, each a cell of its glass:
   - each conducts to the next through the glass (`conductivity` on wall species: DURAN's 1.2 W/(m K));
-  - each loses to the room by its share of the vessel's `loss`;
+  - each loses to the room by its own outside at its own temperature: natural convection on its side, a floor's base
+    as a disc facing down (Lienhard eqs. 8.35, 8.37, 8.39), radiation by glass's emittance (Lienhard Table 10.1);
+    heat crosses half its glass to either side; the glassware's chosen `loss` is gone;
   - each touches the column's liquid layers and the gas over them by natural convection on a vertical wall
     (Churchill and Chu, as Lienhard gives them; air from Lienhard's Table A.6), set each step;
   - the floor touches the lowest liquid by Stage 45's heated floor; a burner heats the floor;
@@ -16,6 +18,8 @@
 - The lab: a vessel's view lists its rings' temperatures (`wall_c`); its glass is summed from the rings. The debug
   panel shows its floor's heat. Every glassware vessel's heating and cooling shift; both goldens re-recorded with the
   user's approval.
+- §12.4: the pass and the thermal camera see each ring at its own temperature and each layer at its own, running
+  continuously between their middles (a set's ninth row, `TEMPS_ROW`; `heat_of` in the per-pixel source).
 - §20: the rings' simplifications.
 
 ## 0.52.0 (2026-11-25, Stage 52; signed off by the user: "Approved, proceed")

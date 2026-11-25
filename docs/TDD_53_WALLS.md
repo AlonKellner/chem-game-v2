@@ -13,6 +13,14 @@ stage. Stage 52 (the measured lab's second half) is another agent's.
 - **A powder on the floor:** "Packed-bed physics". The demo's malachite, heated only through the gas over it,
   no longer decomposed; it now takes the floor's heat through its bed (Zehner and Schlünder).
 - **The goldens:** re-recorded with the user's approval (2026-11-25) after the evidence below.
+- **Rings as vessels in their own right** (the user, 2026-11-25, after seeing the thermal camera show a hot flask
+  poured with cold water at one temperature): "I prefer the rings to be implemented fully, as if each has its own
+  properties and full simulation. The ring is like the vessel of the cell, it should have everything that a vessel
+  has, just like each layer has everything that a cell has. However, [...] just like layers which are cells with
+  strong relationships and potentially gradients they share - rings should be the same, they have gradients they
+  share, temperature for example." Asked whether each ring's loss to the room should be its own (physical, about
+  a quarter of the chosen `loss`, cooling some three to four times slower) or the chosen loss kept: "Physical, per
+  ring".
 
 GAME_SPEC 0.53.0 covers:
 - §6: the wall in rings; a powder bed on a floor;
@@ -27,6 +35,8 @@ GAME_SPEC 0.53.0 covers:
 | 53.3 | The lab: rings and their edges, `set_walls` each step, the burner on the floor, the bubbles' floor heat, save and load, the view | Done |
 | 53.4 | A powder bed on the floor | Done |
 | 53.5 | The demo's shifts: tests restated, the goldens re-recorded with the user's approval | Done |
+| 53.7 | Each ring's own outside (convection, a base facing down, radiation by its emittance), half its glass in series to either side; the chosen `loss` gone from glassware | Done |
+| 53.8 | The pass and the camera see each ring and each layer at its own temperature, continuous between their middles | Done |
 | 53.6 | GAME_SPEC 0.53.0, `make gates`, the user's sign-off | `make gates` passed (1984 s: ASan+UBSan, ctest 517, Godot 13 of 13); `make screenshots` O4 as Stage 48 recorded (the largest 13 to 17 at x = 26), its headless and windowed alarms 120 s and 240 s (the demo's slower cooling takes more frames); awaiting sign-off |
 
 ## 53.1 Data
@@ -132,14 +142,53 @@ Heat now goes through the glass:
   boiling's hysteresis, approved: the demo's oxide dissolves 0.5 s sooner and its crystals are 9.134 g (9.123); the
   pressure session's burst 0.1 s sooner.
 
+## 53.7 Each ring's own outside
+
+A ring's loss to the room is its own, at its own temperature, set each step with its contacts (`outside_of`):
+- **its side** convects into the room's air as a part of the whole wall (Churchill and Chu over the vessel's height:
+  the boundary layer grows up the whole wall), at its own temperature;
+- **a floor's base** is a disc facing down: warmer than the air, stable (Kadambi and Drake, Lienhard eq. 8.39);
+  colder, unstable (Raithby and Hollands over L* = D/4: eqs. 8.37a–b, 8.35 from Ra = 10⁷);
+- **radiation** to a black room, e σ (T_w² + T_r²)(T_w + T_r), glass's emittance 0.94 to 260 °C falling to 0.74 at
+  540 °C (Lienhard Table 10.1, `data/walls.json`);
+- **through its glass:** half its thickness (a ring's wall, a floor's floor) in series with its outside and with
+  each contact inside; a boiling floor's inside surface is solved where what crosses the glass is what the surface
+  passes on (`bubbles::floor_through`), and its nuclei are decided there.
+
+The physical loss is about a quarter of the chosen one (the flask: about 0.25 W/K at 60 K over the room, against
+0.9), which was chosen before evaporation from an open mouth existed (Stage 50). What moved:
+- the demo: malachite in 46.5 s (40.6); the flask to 30 °C in 912 s (418); after the distillation to 21 °C in 5666 s
+  (1632: its wait's timeout 7200 s); the crystals 9.54 g (9.13); the distillate 33.79 g;
+- the pressure session: the same events at the same pressures, later (the stopper at 1508 s, the bottle at 1795 s);
+- tests restated: the beaker's cooling (six hours, a time constant of about an hour); the trash's half hour; the
+  vacuum experiment's 7200 s; the pointer-played demo's cooling; the controller's two tunings compared as a ratio
+  (doctest's `Approx` margin is absolute under 1).
+
+Water poured into a hot flask (`walls: water poured into a hot flask...`): against the same flask left alone, the
+wet ring cools by some 217 K in five minutes, the one at the surface by 48, the dry one over it by 2.6, a ring high
+on the wall by 2.0.
+
+## 53.8 The parts' temperatures in the pass
+
+A set of spectra has a ninth row (`TEMPS_ROW`): a vessel's rings, each its middle's height over its upright base and
+its temperature; its layers (two or more), each its middle's level and its temperature; the hottest, and a
+signature. The per-pixel source's `heat_of` reads them at a place: the wall along the vessel's axis (the place turned
+back to where it stands upright), the contents by the level in the room (as the bands); linear between middles,
+held beyond. What the contents neither pass nor turn back they emit at theirs, what the wall takes in at the
+wall's; with every part at one temperature that is exactly the picture it was (a test holds it to 1e-6 K). In the
+visible a vessel no part of which reaches 500 K reads nothing more, and a pixel's history follows the signature
+only in the long-wave or from 500 K, so the visible pass costs what it did. A beaker graded from 90 °C at its floor
+to 30 °C at its brim reads 72.6 °C near its floor and 27.8 °C near its brim (emissivity 1, the glass reflecting
+the room a little), at most 0.7 K from one row of pixels to the next (a ring is some 11 rows).
+
 ## Open
 
 - **A controller's setpoint weighting:** with an integrating process SIMC's PI overshoots any speed by about a tenth
   of the step; a weighted setpoint (or a ramp) would give the gentle speed its gentleness back.
-- **The outside:** each ring's loss is the calibrated `loss` shared by area; natural convection and radiation on the
-  outside (the long-wave range has the glass's emissivity) would replace it.
-- **The thermal camera** sees a vessel at one temperature; a wall's rings could be its picture's gradient (a row of
-  the set by height, as the bands are).
+- **The foam cup** keeps its bench's `loss` until polystyrene foam's conductivity and emittance are sourced (the
+  other agent's, after this stage merges); then it loses by its own outside through its foam, as glass does.
+- **The front and back walls** are read at one ring's temperature where a ray crosses the silhouette at a height;
+  a vessel tipped far enough that its two walls differ in height there is read by the place, not each wall.
 - **A burette** is 24 rings of about 3 cm.
 - **The free lab** steps at 16 µs against main's 6.5: its idle cabinet's rings still conduct to the room each step.
   Settled by the user's Supplies (Stage 55, the roadmap's area 8d): the cabinet's items are then no part of the
