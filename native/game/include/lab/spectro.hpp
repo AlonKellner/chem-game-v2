@@ -27,6 +27,9 @@ struct Model {
 	double most = 3.0; // what it displays at most ("OL" past it)
 	double lamp_k = 2900.0; // its lamp's filament
 	double beam_mm = 15.0; // the beam's height over a cell's floor
+	// its cell holder (Stage 56): what it may be set to, C; how hard it heats, W per kelvin under the set
+	// temperature, and at most, W
+	double holder_least_c = 20.0, holder_most_c = 80.0, holder_gain_w_k = 5.0, holder_most_w = 10.0;
 };
 const Model &model();
 

@@ -134,6 +134,9 @@ struct Item {
 	// a spectrophotometer (Stage 55): the wavelength set, nm; its blank's signal (0: none yet) and the wavelength it was
 	// set to then
 	double nm = 600.0, blank = 0.0, blank_nm = 0.0;
+	// its cell holder's temperature (Stage 56), C; NaN: off. It heats the cuvette in its well along `heats`, from the
+	// mains
+	double holder_c = std::numeric_limits<double>::quiet_NaN();
 };
 
 // an instrument a vessel stands on, joined to nothing in the world (Stage 50: a balance; Stage 55: a spectrophotometer,
@@ -2452,6 +2455,7 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		// (Stage 47: after the pours are set, for a pour that lands as a layer moves the liquid there first)
 		set_stirring();
+		set_holders(); // (Stage 56)
 		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
 		set_pours();
 		set_outlets();
@@ -2812,6 +2816,50 @@ struct Lab::Impl {
 		return 1.0 + instruments::hand() * instruments::share(seed, key);
 	}
 
+	// A spectrophotometer's cell holder (GAME_SPEC §13, Stage 56): while it is set and a cuvette stands in its well, a
+	// heater along an edge from the mains to the cuvette, its power proportional to how far the cuvette is under the
+	// set temperature, up to its most; it only heats (a cuvette cools by its own loss to the room). The edge is made
+	// when it is wanted and taken off when it is not: a lab that never sets one is as before.
+	void set_holders() {
+		for (Item &x : items) {
+			if (x.kind != Kind::Spectro) {
+				continue;
+			}
+			const bool wanted = std::isfinite(x.holder_c) && x.under >= 0 && (x.place == Place::Under) && items[static_cast<size_t>(x.under)].pours_into < 0 &&
+					mains.index >= 0;
+			if (!wanted) {
+				if (x.heats.index >= 0) {
+					world().disconnect(x.heats);
+					x.heats = EdgeId{};
+				}
+				continue;
+			}
+			const Item &cuvette = items[static_cast<size_t>(x.under)];
+			// into its lowest layer (a column's, Stage 47): a holder warms the cell from its foot up, and warmth below
+			// overturns through the column
+			CellId lowest = cuvette.cell;
+			for (const CellId c : layers_of(cuvette)) {
+				if (layered_cell(c)) {
+					lowest = c;
+				}
+			}
+			if (x.heats.index >= 0 && world().edges()[static_cast<size_t>(x.heats.index)].b.index != lowest.index) {
+				world().disconnect(x.heats); // another cuvette in its well, or another layer at its foot
+				x.heats = EdgeId{};
+			}
+			if (x.heats.index < 0) {
+				EdgeId edge;
+				if (world().connect(mains, lowest, PHASES_NONE, &edge) != Refusal::None) {
+					continue;
+				}
+				x.heats = edge;
+			}
+			const spectro::Model &model = spectro::model();
+			const double under = x.holder_c + 273.15 - kelvin(cuvette);
+			world().set_power(x.heats, std::clamp(model.holder_gain_w_k * under, 0.0, model.holder_most_w));
+		}
+	}
+
 	// what stands under a vessel that keeps it where it is: a burner (a balance is left behind)
 	int fixed_under(int thing) const {
 		for (size_t i = 0; i < items.size(); ++i) {
@@ -2919,6 +2967,9 @@ struct Lab::Impl {
 			v.nm = item.nm;
 			v.blank_nm = item.blank_nm;
 			v.blanked = item.blank > 0.0;
+			if (std::isfinite(item.holder_c)) {
+				v.holder_c = item.holder_c; // (Stage 56)
+			}
 			if (v.blanked && (item.place == Place::Bench || item.place == Place::Under)) {
 				v.absorbance = spectro::reading(spectro::model(), m.spectro_signal(item), item.blank);
 				v.overload = !v.absorbance;
@@ -4678,6 +4729,27 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		items[static_cast<size_t>(spectro)].nm = nm;
 		return true;
 	}
+	if (what == "holder") {
+		// (Stage 56) its cell holder set to a temperature, or off ("celsius": null or absent)
+		int spectro = -1;
+		if (!item(c, "spectrophotometer", Kind::Spectro, spectro, why)) {
+			return false;
+		}
+		const spectro::Model &model = spectro::model();
+		double celsius = std::numeric_limits<double>::quiet_NaN();
+		if (c.contains("celsius") && !c.at("celsius").is_null()) {
+			celsius = number(c, "celsius", -1000.0);
+			if (!(celsius >= model.holder_least_c && celsius <= model.holder_most_c)) {
+				why = "a cell holder is set between " + std::to_string(static_cast<int>(model.holder_least_c)) + " and " + std::to_string(static_cast<int>(model.holder_most_c)) + " C, or off";
+				return false;
+			}
+		}
+		if (!boundary(why)) {
+			return false;
+		}
+		items[static_cast<size_t>(spectro)].holder_c = celsius;
+		return true;
+	}
 	if (what == "blank") {
 		// (Stage 55) 100 % T through what stands in its well now, at the wavelength it is set to
 		int spectro = -1;
@@ -6173,6 +6245,9 @@ std::string Lab::digest() const {
 			hash.update_double(x.swirl);
 			hash.update_double(x.suspended);
 		}
+		if (std::isfinite(x.holder_c)) { // a cell holder's temperature (Stage 56): what it will heat to
+			hash.update_double(x.holder_c);
+		}
 	}
 	if (!m.sim->work_remainders().empty()) {
 		hash.update_u64(m.sim->work_remainders().size());
@@ -6441,6 +6516,9 @@ json Lab::Impl::save() const {
 		}
 		if (item.kind == Kind::Spectro) { // (Stage 55)
 			list.back()["spectro"] = { bits(item.nm), bits(item.blank), bits(item.blank_nm) };
+			if (std::isfinite(item.holder_c)) { // (Stage 56)
+				list.back()["holder_c"] = bits(item.holder_c);
+			}
 		}
 		if (!item.label.empty()) {
 			list.back()["label"] = item.label;
@@ -6685,6 +6763,10 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			}
 			if (j.contains("spectro") && (!j.at("spectro").is_array() || j.at("spectro").size() != 3 || !from_bits(j.at("spectro").at(0), item.nm) ||
 						!from_bits(j.at("spectro").at(1), item.blank) || !from_bits(j.at("spectro").at(2), item.blank_nm))) { // (Stage 55)
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			if (j.contains("holder_c") && !from_bits(j.at("holder_c"), item.holder_c)) { // (Stage 56)
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}

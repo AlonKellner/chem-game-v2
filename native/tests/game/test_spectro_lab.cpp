@@ -23,8 +23,8 @@ std::string bench() {
 				"contents": {"water": {"g": 100}}},
 			{"id": "blue", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [14, 7],
 				"contents": {"water": {"g": 100}, "copper_sulfate_aq": {"mol": 0.005}}},
-			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [20, 8]},
-			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [23, 8]}
+			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [20, 8]},
+			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [23, 8]}
 		]})";
 }
 
@@ -138,4 +138,38 @@ TEST_CASE("spectro screen: its slider and a nanometre's buttons tune it; a blank
 	p.click("blank:spec");
 	CHECK(p.item("spec").blanked);
 	CHECK(p.drawn("absorbance 0.000"));
+}
+
+TEST_CASE("spectro lab: its cell holder warms the cuvette in its well to a set temperature and holds it, every invariant kept (Stage 56)") {
+	auto l = open(bench());
+	l->set_checking(true);
+	std::string why;
+	must(*l, R"({"do": "pour", "from": "blue", "to": "c1", "ml": 3.5})");
+	CHECK_FALSE(l->command(R"({"do": "holder", "spectrophotometer": "spec", "celsius": 95})", why));
+	must(*l, R"({"do": "holder", "spectrophotometer": "spec", "celsius": 50})");
+	CHECK(*item(*l, "spec").holder_c == 50.0);
+	must(*l, R"({"do": "wait", "seconds": 30})"); // nothing in its well: nothing warms
+	CHECK(item(*l, "c1").celsius == doctest::Approx(20.0).epsilon(0.01));
+	must(*l, R"({"do": "insert", "spectrophotometer": "spec", "cuvette": "c1", "onto": true})");
+	must(*l, R"({"do": "wait", "seconds": 60})");
+	const double warming = item(*l, "c1").celsius;
+	MESSAGE("the cuvette after a minute in the holder: " << warming << " C");
+	CHECK(warming > 40.0);
+	// saved and loaded while it warms: the same lab, step by step
+	auto loaded = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(loaded != nullptr, why);
+	CHECK(loaded->digest() == l->digest());
+	must(*l, R"({"do": "wait", "seconds": 240})");
+	must(*loaded, R"({"do": "wait", "seconds": 240})");
+	CHECK(loaded->digest() == l->digest());
+	const double held = item(*l, "c1").celsius;
+	MESSAGE("held at " << held << " C");
+	CHECK(held == doctest::Approx(50.0).epsilon(0.02)); // within a kelvin of it: its loss to the room against its gain
+	CHECK(held < 50.0);
+	// lifted out, it cools; off, the holder takes its edge away
+	must(*l, R"({"do": "remove", "spectrophotometer": "spec"})");
+	must(*l, R"({"do": "wait", "seconds": 120})");
+	CHECK(item(*l, "c1").celsius < held - 5.0);
+	must(*l, R"({"do": "holder", "spectrophotometer": "spec"})");
+	CHECK_FALSE(item(*l, "spec").holder_c);
 }

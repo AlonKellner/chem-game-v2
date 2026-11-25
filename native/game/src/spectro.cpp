@@ -25,6 +25,11 @@ const Model &model() {
 		o.most = j.at("most").get<double>();
 		o.lamp_k = j.at("lamp_k").get<double>();
 		o.beam_mm = j.at("beam_mm").get<double>();
+		const nlohmann::json &h = j.at("holder");
+		o.holder_least_c = h.at("range_c").at(0).get<double>();
+		o.holder_most_c = h.at("range_c").at(1).get<double>();
+		o.holder_gain_w_k = h.at("gain_w_k").get<double>();
+		o.holder_most_w = h.at("most_w").get<double>();
 		return o;
 	}();
 	return m;
