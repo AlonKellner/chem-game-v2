@@ -43,7 +43,7 @@ Each candidate experiment of the step was run before it was written (an explorat
 | 56.2 | The lab: the holder, saved and digested | Done |
 | 56.3 | The screen: the holder's controls | Done |
 | 56.4 | The experiment: the order and the activation energy | Done |
-| 56.5 | This document, CHANGELOG, the curriculum's moves, `make gates`, the user's sign-off | |
+| 56.5 | This document, CHANGELOG, the curriculum's moves, `make gates`, the user's sign-off | `make gates` passed (872 s: ASan+UBSan 872, ctest 664, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
 
 ## The goldens
 
