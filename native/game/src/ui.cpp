@@ -1991,6 +1991,10 @@ struct Ui::Impl {
 		out.emplace_back("blank", Rect{ READOUT.x + 16, y0, 90, 30 });
 		out.emplace_back("-", Rect{ READOUT.x + 116, y0, 44, 30 });
 		out.emplace_back("+", Rect{ READOUT.x + 166, y0, 44, 30 });
+		// (Stage 56) its cell holder: on or off, 5 C down or up
+		out.emplace_back("holder", Rect{ READOUT.x + 230, y0, 110, 30 });
+		out.emplace_back("h-", Rect{ READOUT.x + 350, y0, 44, 30 });
+		out.emplace_back("h+", Rect{ READOUT.x + 400, y0, 44, 30 });
 		return out;
 	}
 
@@ -2691,10 +2695,19 @@ struct Ui::Impl {
 			}
 			for (const auto &[name, b] : spectro_buttons(i)) {
 				if (b.has(x, y)) {
-					// (Stage 55) its blank, or a nanometre down or up
-					if (allowed_click(name == "blank" ? "blank:" + id(i) : "nm:" + id(i) + ":" + name)) {
-						const double nm = view.items[static_cast<size_t>(i)].nm + (name == "+" ? 1.0 : -1.0);
-						act(name == "blank" ? json{ { "do", "blank" }, { "spectrophotometer", id(i) } } : json{ { "do", "tune" }, { "spectrophotometer", id(i) }, { "nm", nm } });
+					// (Stage 55) its blank, or a nanometre down or up; (Stage 56) its holder on or off, 5 C down or up
+					const ItemView &sv = view.items[static_cast<size_t>(i)];
+					const bool holding = name == "holder" || name == "h-" || name == "h+";
+					const std::string named = name == "blank" ? "blank:" + id(i) : holding ? "cell:" + id(i) + (name == "holder" ? "" : name == "h-" ? ":-" : ":+") : "nm:" + id(i) + ":" + name;
+					if (allowed_click(named)) {
+						if (holding) {
+							const double now = sv.holder_c ? *sv.holder_c : 25.0;
+							const json c = name == "holder" ? (sv.holder_c ? json(nullptr) : json(25.0)) : json(std::clamp(now + (name == "h+" ? 5.0 : -5.0), spectro::model().holder_least_c, spectro::model().holder_most_c));
+							act({ { "do", "holder" }, { "spectrophotometer", id(i) }, { "celsius", c } });
+						} else {
+							const double nm = sv.nm + (name == "+" ? 1.0 : -1.0);
+							act(name == "blank" ? json{ { "do", "blank" }, { "spectrophotometer", id(i) } } : json{ { "do", "tune" }, { "spectrophotometer", id(i) }, { "nm", nm } });
+						}
 					}
 					return;
 				}
@@ -5885,7 +5898,9 @@ struct Ui::Impl {
 				text(control.x + control.w + 12, control.y + 15, tuned ? text_of("%.0f nm", v.nm) : text_of("%.0f%%", 100.0 * open), DIM, 15);
 				y += 42;
 				for (const auto &[name, b] : spectro_buttons(showing)) {
-					button(b, name == "blank" ? "blank" : name == "-" ? "-1" : "+1", false, 15);
+					const bool on = v.holder_c.has_value();
+					button(b, name == "blank" ? "blank" : name == "-" ? "-1" : name == "+" ? "+1" : name == "holder" ? (on ? text_of("holder %.0f C", *v.holder_c) : std::string("holder off")) : name == "h-" ? "-5" : "+5",
+						name == "holder" && on, 15);
 				}
 				y += spectro_buttons(showing).empty() ? 0 : 52;
 			} else if (stir_rect(showing, control)) {
@@ -5993,7 +6008,14 @@ struct Ui::Impl {
 				if (v.blanked && v.blank_nm != v.nm) {
 					row(text_of("blanked at %.0f nm, set to ", v.blank_nm) + text_of("%.0f nm: blank again", v.nm), WARN, 15);
 				}
-				row(v.under >= 0 ? "in its well: " + view.items[static_cast<size_t>(v.under)].id : "carry a cuvette onto it to read", DIM, 15);
+				if (v.under >= 0) {
+					// (Stage 56) and how warm it is, by its thermometer (by instruments) or as it is
+					const ItemView &in = view.items[static_cast<size_t>(v.under)];
+					const std::optional<double> warm = view.instruments ? in.read_c : std::optional<double>(in.celsius);
+					row("in its well: " + in.id + (warm ? text_of(", %.1f C", *warm) : std::string()), DIM, 15);
+				} else {
+					row("carry a cuvette onto it to read", DIM, 15);
+				}
 				const spectro::Model &model = spectro::model();
 				row(text_of("%.0f to ", model.first_nm) + text_of("%.0f nm,", model.last_nm) + text_of(" band %.0f nm,", model.band_nm) + text_of(" stray light %g%%", 100.0 * model.stray), DIM, 14);
 			} else if (v.kind == "burner") {
@@ -7108,6 +7130,21 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		}
 		for (const auto &[name, b] : m.spectro_buttons(i)) {
 			if (by != std::string_view::npos && rest.substr(by + 1) == name) {
+				return centre(b);
+			}
+		}
+		return false;
+	}
+	if (after("cell:", rest)) {
+		// (Stage 56) a spectrophotometer's cell holder: "cell:<id>" its switch, ":-" or ":+" 5 C down or up
+		const size_t by = rest.find(':');
+		const int i = index_of(rest.substr(0, by));
+		if (i < 0) {
+			return false;
+		}
+		const std::string want = by == std::string_view::npos ? "holder" : rest.substr(by + 1) == "-" ? "h-" : "h+";
+		for (const auto &[name, b] : m.spectro_buttons(i)) {
+			if (name == want) {
 				return centre(b);
 			}
 		}

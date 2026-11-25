@@ -173,3 +173,20 @@ TEST_CASE("spectro lab: its cell holder warms the cuvette in its well to a set t
 	must(*l, R"({"do": "holder", "spectrophotometer": "spec"})");
 	CHECK_FALSE(item(*l, "spec").holder_c);
 }
+
+TEST_CASE("spectro screen: its cell holder's switch and 5 C steps (Stage 56)") {
+	pupil::Pupil p("data/benches/beer.json", "data/tutorials/beer.json", false);
+	p.drag("item:spec", "square:3,13");
+	p.click("item:spec");
+	CHECK(p.drawn("holder off"));
+	p.click("cell:spec");
+	CHECK(*p.item("spec").holder_c == 25.0);
+	p.click("cell:spec:+");
+	p.click("cell:spec:+");
+	CHECK(*p.item("spec").holder_c == 35.0);
+	CHECK(p.drawn("holder 35 C"));
+	p.click("cell:spec:-");
+	CHECK(*p.item("spec").holder_c == 30.0);
+	p.click("cell:spec");
+	CHECK_FALSE(p.item("spec").holder_c);
+}

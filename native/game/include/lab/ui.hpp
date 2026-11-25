@@ -187,6 +187,7 @@ public:
 	//   record:<item>:<what>   report:<k>   report:check (Stage 54)
 	//   nm:<spectrophotometer>@<nm> (its slider)   nm:<spectrophotometer>:<+|->   blank:<spectrophotometer>
 	//   predict:<n> (the n-th prediction's field)   predict:make (Stage 55)
+	//   cell:<spectrophotometer> (its cell holder's switch)   cell:<spectrophotometer>:<+|-> (Stage 56)
 	// false when it is not on the screen now.
 	bool locate(std::string_view what, float &x, float &y) const;
 
