@@ -443,6 +443,35 @@ double gas_diffusion(const SpeciesTable &table, SpeciesId species, double temper
 	return def.air_diffusion * chem::pow(temperature / 298.15, def.air_exponent);
 }
 
+double liquid_density(const SpeciesTable &table, const CellState &cell) {
+	double kg = 0.0, m3 = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		const SpeciesId id{ static_cast<int32_t>(s) };
+		const SpeciesDef &def = table.species(id);
+		if (cell.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+			const double mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
+			kg += mol * static_cast<double>(table.molar_mass_ug(id)) * 1e-9;
+			m3 += mol * def.molar_volume;
+		}
+	}
+	return m3 > 0.0 ? kg / m3 : 0.0;
+}
+
+double dissipation_per_kg(const SpeciesTable &table, const CellState &cell, double watts) {
+	if (!(watts > 0.0)) {
+		return 0.0;
+	}
+	double kg = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		const SpeciesId id{ static_cast<int32_t>(s) };
+		const SpeciesDef &def = table.species(id);
+		if (cell.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+			kg += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(id)) * 1e-9;
+		}
+	}
+	return kg > 0.0 ? watts / kg : 0.0;
+}
+
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {
 	const SpeciesDef &def = table.species(species);
 	if (def.phase != Phase::Aqueous || !(temperature > 0.0)) {

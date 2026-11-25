@@ -38,7 +38,8 @@ std::string build_name() {
 
 namespace {
 
-constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7)
+constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7); since Stage 57 it changes no rate (kept in saves)
+constexpr double STIRRED_W_KG = 0.1; // a stirred beaker's dissipation, W/kg, for "stirring would make it faster" (Stage 57)
 // A stirrer (GAME_SPEC §11, Stage 32): the work it does on the liquid a second, W, and how long a liquid left
 // alone keeps turning, s (dE/dt = P - E / tau). The game's choices: a small stir bar at a few hundred turns a
 // minute; a beaker of water stops turning in a few seconds.
@@ -5824,8 +5825,9 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	const double mol = static_cast<double>(state.amount[in]) * MOL_PER_QUANTUM;
 	const double area = 4.835975862049409 * std::cbrt(static_cast<double>(state.particles[in])) * std::pow(mol * solid.molar_volume, 2.0 / 3.0); // m^2
 	// which of its two steps holds it back (GAME_SPEC §7): the reaction at the surface, or transport to it
-	const double mixing = world.meta(cell).mixing;
-	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, mixing, &world.meta(cell));
+	// (Stage 57: transport by the stirring's own dissipation, Sano's)
+	const double dissipation = chem::dissipation_per_kg(table, state, world.meta(cell).stirring);
+	const SurfaceSteps steps = surface_steps(table, state, reaction, kelvin, a, dissipation, &world.meta(cell));
 	const bool by_transport = steps.transported && steps.transport < steps.surface;
 	const bool alike = steps.transported && steps.transport < 3.0 * steps.surface && steps.surface < 3.0 * steps.transport;
 	std::string says = alike ? "limited by its surface and by transport to it alike: " : by_transport ? "limited by transport to its surface: " : "limited at its surface: ";
@@ -5833,8 +5835,8 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 	if (table.has(k.driver)) {
 		says += text_of(", %.3g mol/kg of ", molality(table, state, k.driver)) + named(table, k.driver);
 	}
-	if (mixing < STIRRED) {
-		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED, &world.meta(cell)).both / steps.both : 1.0;
+	if (!(dissipation > 0.0) && !(world.meta(cell).mixing > 1.0)) { // (a stirrer just switched on has dissipated nothing yet)
+		const double faster = steps.both > 0.0 ? surface_steps(table, state, reaction, kelvin, a, STIRRED_W_KG, &world.meta(cell)).both / steps.both : 1.0;
 		says += faster < 1.05 ? std::string("; stirring would hardly speed it") : text_of("; stirring would make it %.1f times faster", faster);
 	} else {
 		says += "; stirred";

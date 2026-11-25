@@ -146,21 +146,21 @@ TEST_CASE("measured: malachite dissolves in sulfuric acid at Nicol's surface rat
 	// and Kopylov and Orlov 1964: 3.6e-7
 	const Reaction &r = reaction(builtin::reaction::malachite_dissolution);
 	const SpeciesDef &malachite = builtin_species().species(builtin::malachite);
-	const auto steps_at = [&](double acid, double kelvin, double mixing) {
+	const auto steps_at = [&](double acid, double kelvin, double dissipation) {
 		Cell c;
 		c.put(builtin::sulfuric_acid_aq, acid).put(builtin::malachite, 1e-3, 1000000); // grains of 44 um
-		return surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), mixing);
+		return surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), dissipation);
 	};
 	const auto nicol = [&](double acid, double kelvin) { // his shrinking rate times the model's own moles a m^3
 		const double shrink = 1.44e7 * std::exp(-6447.0 / kelvin) * std::pow(acid * 1e-3, 0.65) * 1e-2; // m/s
 		return shrink / malachite.molar_volume;
 	};
-	const SurfaceSteps at25 = steps_at(0.2, 298.15, 1.0);
+	const SurfaceSteps at25 = steps_at(0.2, 298.15, 0.0);
 	CHECK(near(at25.surface, nicol(0.2, 298.15), 0.01)); // (mol/kg here, mol/L there: a 0.2 % difference)
 	CHECK(near(at25.surface, 4.1e-3, 0.05));
 	CHECK(near(at25.surface, 3.6e-3, 0.15));
-	CHECK(near(steps_at(0.1, 298.15, 1.0).surface, nicol(0.1, 298.15), 0.01));
-	CHECK(near(steps_at(0.1, 318.15, 1.0).surface, nicol(0.1, 318.15), 0.01)); // his range: 25 to 45 C
+	CHECK(near(steps_at(0.1, 298.15, 0.0).surface, nicol(0.1, 298.15), 0.01));
+	CHECK(near(steps_at(0.1, 318.15, 0.0).surface, nicol(0.1, 318.15), 0.01)); // his range: 25 to 45 C
 	REQUIRE(at25.transported);
 	MESSAGE("in 0.2 M acid at 25 C, grains of 44 um: surface " << at25.surface << ", transport " << at25.transport << " mol/m2/s");
 }
