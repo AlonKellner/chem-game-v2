@@ -439,7 +439,7 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   room at any turn, as the surface does: a band's top is the level that holds the liquid of the layers under it,
   read in the vessel's frame as the surface's is.
 - **The wall in rings** (Stage 53; `lab/walls.hpp`, `docs/TDD_53_WALLS.md`). A glassware vessel's glass is its
-  floor and rings of about 5 mm up to its brim (4 to 24), each a cell of the glass by its share. Each loses heat to
+  floor and rings of about 1 cm up to its brim (4 to 24), each a cell of the glass by its share. Each loses heat to
   the room by its share of the vessel's `loss` (by outside area). It conducts to the ring over it through the glass
   (the wall species' `conductivity`; borosilicate 1.2 W/(m K)). Each step its contact with each cell of the column
   is what it touches there times how fast heat crosses: natural convection on a vertical wall (Churchill and Chu),

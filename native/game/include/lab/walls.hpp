@@ -21,7 +21,7 @@ struct Ring {
 	bool floor = false;
 };
 
-// how many rings a vessel's wall is cut into, and how tall each (data/walls.json: about 5 mm, at least 4, at most
+// how many rings a vessel's wall is cut into, and how tall each (data/walls.json: about 1 cm, at least 4, at most
 // 24), over the floor; with the floor first
 std::vector<Ring> rings_of(const glass::Vessel &vessel);
 

@@ -10,7 +10,6 @@
 
 #include <doctest/doctest.h>
 
-#include <chrono>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -73,7 +72,7 @@ TEST_CASE("measured: a vessel's glass conducts at SCHOTT DURAN's 1.2 W/m K (Stag
 	CHECK(table.species(chem::builtin::glass).conductivity == 1.2);
 }
 
-TEST_CASE("walls: a beaker's wall is its floor and rings of about 5 mm to its brim, their glass all of its glass (Stage 53)") {
+TEST_CASE("walls: a beaker's wall is its floor and rings of about 1 cm to its brim, their glass all of its glass (Stage 53)") {
 	std::string why;
 	const auto beaker = lab::glass::make("beaker", 250.0, why);
 	REQUIRE_MESSAGE(beaker.has_value(), why);
@@ -85,8 +84,8 @@ TEST_CASE("walls: a beaker's wall is its floor and rings of about 5 mm to its br
 	double glass = 0.0;
 	for (size_t k = 1; k < rings.size(); ++k) {
 		CHECK(rings[k].from == doctest::Approx(rings[k - 1].to));
-		CHECK(rings[k].to - rings[k].from < 0.6);
-		CHECK(rings[k].to - rings[k].from > 0.4);
+		CHECK(rings[k].to - rings[k].from < 1.2);
+		CHECK(rings[k].to - rings[k].from > 0.8);
 		CHECK(rings[k].inside_cm2 > 0.0);
 		glass += rings[k].glass_cm3;
 	}

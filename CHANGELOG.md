@@ -3,7 +3,7 @@
 ## 0.53.0 (2026-11-25, Stage 53)
 
 - §6 (Stage 53, `docs/TDD_53_WALLS.md`; the roadmap's area 8b): **the glass in rings**. A glassware vessel's wall
-  is its floor and rings up to its brim, each a cell of its glass:
+  is its floor and rings of about 1 cm up to its brim, each a cell of its glass:
   - each conducts to the next through the glass (`conductivity` on wall species: DURAN's 1.2 W/(m K));
   - each loses to the room by its share of the vessel's `loss`;
   - each touches the column's liquid layers and the gas over them by natural convection on a vertical wall

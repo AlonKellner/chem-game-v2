@@ -49,7 +49,7 @@ GAME_SPEC 0.53.0 covers:
 
 ## 53.2 and 53.3 The rings
 
-A glassware vessel's wall (`wall_g`) is its floor and rings up to its brim (`walls::rings_of`): about 5 mm each, at
+A glassware vessel's wall (`wall_g`) is its floor and rings up to its brim (`walls::rings_of`): about 1 cm each, at
 least 4 and at most 24. Each is a cell of the glass, by the share of the glass it holds (the shape's integrals). Its
 edges:
 - **to the room:** the vessel's calibrated `loss` by its share of the outside;
@@ -66,9 +66,27 @@ The bubbles take their floor's heat from the floor's edges into the column. A ve
 (summed once from the rings) and its rings' temperatures (`wall_c`, in a full view only: a monitor's reading does not
 need them). A save keeps the rings, and a load finds their edges again.
 
-The cost: a step of a beaker of water was 590 µs at first. The shape's level inverted every call, and the wetted
-area integrated for every contact every step. It is 13 µs with a table of 256 levels per glassware kind and a ring's
-area by its share of the height.
+**The cost.** A step of a beaker of water was 590 µs at first. The shape's level was inverted every call and the
+wetted area integrated for every contact every step. A table of 256 levels per glassware kind and a ring's area by
+its share of the height brought it to 13 µs.
+
+The Godot host's suite then failed on time: a frame of a second ran 36 of its 60 steps under its 3 ms budget while
+the gates loaded the machine. Its free lab, all glassware in the cabinet, stepped at 31 µs against main's 6.5 µs.
+The cuts:
+- **exact, each one checked against the goldens digest for digest:**
+  - the floor's boiling onset is looked for only where the floor can boil;
+  - each vessel's ring and cell temperatures are read once a step;
+  - the landing speed's level comes from the same table (this also removes Stage 51's cost);
+  - a vessel whose rings and column are unchanged keeps its contacts' conductances. The setting is kept only if
+    every temperature it needed was known and every setting was taken: a world refuses a conductance mid-step, and
+    has no temperatures before its first step;
+  - a cell of nothing but wall is passed over by the reactions and the fast equilibria;
+  - a cell's thermal state is kept while its energy, amounts and the settings it reads are the same;
+  - an edge's relaxation factor, 1 − exp(−G h / C), is kept while its G and C are the same;
+- **a design change:** rings of about 1 cm rather than 5 mm (a beaker's 9 and its floor). The demo's results moved
+  by a hair: malachite in 40.6 s, the distillate 33.76 g, the crystals 9.123 g.
+
+The free lab now steps at 16 µs (main: 6.5) and the demo at 34 µs (main: 57).
 
 ## 53.4 A powder on the floor
 
@@ -99,7 +117,8 @@ Heat now goes through the glass:
   - the controller's overshoot under 5 °C at every speed.
 - **The controller.** The trial now fits the flask as an integrator, so the gentle speed overshoots a step of
   setpoint by about a tenth (4 °C on 40), more than the fast. That is open.
-- **Goldens:** both sessions re-recorded with the user's approval.
+- **Goldens:** both sessions re-recorded with the user's approval. They were re-recorded once more, on Stage 52 and
+  with the 1 cm rings, under the same approval; the changes from the run reviewed were within a hair.
 
 ## Open
 
@@ -110,3 +129,5 @@ Heat now goes through the glass:
 - **The thermal camera** sees a vessel at one temperature; a wall's rings could be its picture's gradient (a row of
   the set by height, as the bands are).
 - **A burette** is 24 rings of about 3 cm.
+- **The free lab** steps at 16 µs against main's 6.5: its idle cabinet's rings still conduct to the room each step.
+  A vessel at rest could keep its wall as one cell until it is heated.

@@ -85,6 +85,9 @@ struct Item {
 	std::vector<Contact> contacts;
 	// what its rings hold of each wall species, summed once (their glass never changes)
 	mutable std::vector<std::pair<int32_t, int64_t>> wall_amounts;
+	// what its rings' and its column's cells were when their contacts were last set: unchanged, they stand (not saved:
+	// a lab loaded sets them again at its first step, to the same values)
+	std::vector<int64_t> walls_were;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -1849,7 +1852,7 @@ struct Lab::Impl {
 				return 0.0;
 			}
 			const Fill held = fill(t);
-			const double level = held.defined ? g->level(held.condensed * 1e6) : g->floor;
+			const double level = held.defined ? std::max(shape_of(g).level(held.condensed * 1e6), g->floor) : g->floor; // (Stage 53: its table)
 			return std::sqrt(2.0 * GRAVITY * (std::max(g->height - level, 0.0) / 100.0 + LIP_GAP));
 		};
 		std::vector<double> speed(items.size(), 0.0);
@@ -1969,6 +1972,39 @@ struct Lab::Impl {
 		}
 	}
 
+	// A kind of glassware's rings and the height under which it holds a volume (Stage 53: a table of 256 heights, read
+	// between them; worked out once for each kind of vessel, on each thread)
+	struct Shape {
+		std::vector<walls::Ring> rings;
+		std::vector<double> volume; // cm^3 under heights 0, rise, 2 rise, ... to the brim
+		double rise = 0.0;
+		double level(double cm3) const {
+			if (!(cm3 > 0.0)) {
+				return 0.0;
+			}
+			const auto at = std::upper_bound(volume.begin(), volume.end(), cm3);
+			if (at == volume.end()) {
+				return rise * static_cast<double>(volume.size() - 1);
+			}
+			const size_t k = static_cast<size_t>(at - volume.begin()) - 1;
+			const double span = volume[k + 1] - volume[k];
+			return rise * (static_cast<double>(k) + (span > 0.0 ? (cm3 - volume[k]) / span : 0.0));
+		}
+	};
+	static const Shape &shape_of(const glass::Vessel *g) {
+		static thread_local std::map<const glass::Vessel *, Shape> cut;
+		auto found = cut.find(g);
+		if (found == cut.end()) {
+			Shape shape;
+			shape.rings = walls::rings_of(*g);
+			shape.rise = g->height / 255.0;
+			for (int k = 0; k < 256; ++k) {
+				shape.volume.push_back(g->volume_below(k * shape.rise));
+			}
+			found = cut.emplace(g, std::move(shape)).first;
+		}
+		return found->second;
+	}
 	// A vessel's wall as rings (GAME_SPEC §6, Stage 53): each step, the conductance between each ring and each cell of
 	// its column is what the ring touches of that cell (the height of the cell's liquid, or of the gas over the
 	// liquid, along the ring) times how fast heat crosses there: natural convection on a vertical wall into the
@@ -1984,37 +2020,7 @@ struct Lab::Impl {
 			if (g == nullptr) {
 				continue;
 			}
-			// its rings, and the height under which it holds a volume (a table of 256 heights, read between them),
-			// worked out once for each kind of vessel
-			struct Shape {
-				std::vector<walls::Ring> rings;
-				std::vector<double> volume; // cm^3 under heights 0, rise, 2 rise, ... to the brim
-				double rise = 0.0;
-				double level(double cm3) const {
-					if (!(cm3 > 0.0)) {
-						return 0.0;
-					}
-					const auto at = std::upper_bound(volume.begin(), volume.end(), cm3);
-					if (at == volume.end()) {
-						return rise * static_cast<double>(volume.size() - 1);
-					}
-					const size_t k = static_cast<size_t>(at - volume.begin()) - 1;
-					const double span = volume[k + 1] - volume[k];
-					return rise * (static_cast<double>(k) + (span > 0.0 ? (cm3 - volume[k]) / span : 0.0));
-				}
-			};
-			static thread_local std::map<const glass::Vessel *, Shape> cut;
-			auto found = cut.find(g);
-			if (found == cut.end()) {
-				Shape shape;
-				shape.rings = walls::rings_of(*g);
-				shape.rise = g->height / 255.0;
-				for (int k = 0; k < 256; ++k) {
-					shape.volume.push_back(g->volume_below(k * shape.rise));
-				}
-				found = cut.emplace(g, std::move(shape)).first;
-			}
-			const Shape &shape = found->second;
+			const Shape &shape = shape_of(g);
 			const std::vector<walls::Ring> &rings = shape.rings;
 			if (rings.size() != x.rings.size()) {
 				continue;
@@ -2027,6 +2033,26 @@ struct Lab::Impl {
 			if (x.contacts.empty()) {
 				find_contacts(x, column);
 			}
+			// nothing in its rings or its column changed since its contacts were set (a vessel at rest): they stand
+			std::vector<int64_t> now;
+			now.reserve(4 * (x.rings.size() + column.size()));
+			for (const CellId c : x.rings) {
+				now.push_back(world().snapshot_cell(c).energy);
+			}
+			for (const CellId c : column) {
+				const CellState &st = world().snapshot_cell(c);
+				now.push_back(c.index);
+				now.push_back(st.energy);
+				for (const int64_t a : st.amount) {
+					now.push_back(a);
+				}
+			}
+			now.push_back(static_cast<int64_t>(std::llround(std::clamp(x.suspended, 0.0, 1.0) * 1e15)));
+			now.push_back(static_cast<int64_t>(world().meta(x.cell).volume * 1e15));
+			if (now == x.walls_were) {
+				continue;
+			}
+			x.walls_were.clear(); // (kept below only if every temperature it needed was known and every setting taken)
 			for (const CellId c : column) {
 				bool known = false;
 				for (const Item::Contact &k : x.contacts) {
@@ -2054,11 +2080,36 @@ struct Lab::Impl {
 			}
 			const double surface = shape.level(below), depth_m = std::max(surface - g->floor, 0.0) * 1e-2, dry_m = std::max(g->height - surface, 0.0) * 1e-2;
 			const bool wet = below > 0.0 && liquid_m3(x) > 0.0;
+			// each ring's and each cell's temperature, read once this step (0: none, an empty layer)
+			std::vector<double> ring_k(x.rings.size(), 0.0);
+			for (size_t k = 0; k < x.rings.size(); ++k) {
+				world().temperature(x.rings[k], ring_k[k]);
+			}
+			std::map<int32_t, double> cell_temperature;
+			bool all_known = true; // (the world has no temperature before its first step: a setting then is not kept)
+			for (const double t : ring_k) {
+				all_known = all_known && t > 0.0;
+			}
+			for (const CellId c : column) {
+				double t = 0.0;
+				const bool known = world().temperature(c, t) && t > 0.0;
+				cell_temperature[c.index] = known ? t : 0.0;
+				bool holds = false;
+				for (const int64_t a : world().snapshot_cell(c).amount) {
+					holds = holds || a != 0;
+				}
+				all_known = all_known && (known || !holds);
+			}
+			if (all_known) {
+				x.walls_were = now;
+			}
 			for (const Item::Contact &c : x.contacts) {
 				const walls::Ring &r = rings[c.ring];
-				double wall_k = 0.0, cell_k = 0.0;
+				const double wall_k = ring_k[c.ring];
+				const auto known = cell_temperature.find(c.cell.index);
+				const double cell_k = known == cell_temperature.end() ? 0.0 : known->second;
 				double conductance = 0.0;
-				if (world().temperature(x.rings[c.ring], wall_k) && world().temperature(c.cell, cell_k) && span.count(c.cell.index) != 0) {
+				if (wall_k > 0.0 && cell_k > 0.0 && span.count(c.cell.index) != 0) {
 					const auto [from, to] = span[c.cell.index];
 					if (r.floor) {
 						const double area = r.inside_cm2 * 1e-4;
@@ -2113,8 +2164,8 @@ struct Lab::Impl {
 						}
 					}
 				}
-				if (world().edges()[static_cast<size_t>(c.edge.index)].conductance != conductance) {
-					world().set_conductance(c.edge, conductance);
+				if (world().edges()[static_cast<size_t>(c.edge.index)].conductance != conductance && world().set_conductance(c.edge, conductance) != Refusal::None) {
+					x.walls_were.clear(); // (refused mid-step: set again at the next)
 				}
 			}
 		}

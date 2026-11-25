@@ -210,6 +210,19 @@ void Simulation::react() {
 			continue;
 		}
 		const CellState &state = world_.snapshot_cell(cell);
+		// (Stage 53) a cell of nothing but wall (a vessel's ring of glass): no reaction has anything there, as the
+		// loop below would find for each
+		bool any = false;
+		for (size_t s = 0; s < state.amount.size() && !any; ++s) {
+			any = state.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall;
+		}
+		if (!any) {
+			for (size_t r = 0; r < reactions_.size(); ++r) {
+				reaction_remainder_[c * reactions_.size() + r] = 0.0;
+				nucleation_remainder_[c * reactions_.size() + r] = 0.0;
+			}
+			continue;
+		}
 		for (size_t r = 0; r < reactions_.size(); ++r) {
 			const Reaction &reaction = reactions_[r];
 			const Kinetics &kinetics = reaction.kinetics();
@@ -343,6 +356,7 @@ void Simulation::react() {
 void Simulation::conduct_heat() {
 	const std::span<const Edge> edges = world_.edges();
 	heat_remainder_.resize(edges.size(), 0.0);
+	relaxing_.resize(edges.size());
 	for (size_t i = 0; i < edges.size(); ++i) {
 		const Edge edge = edges[i];
 		double &remainder = heat_remainder_[i];
@@ -372,7 +386,11 @@ void Simulation::conduct_heat() {
 			const double cb = state_b.heat_capacity;
 			const double ceff = ma.reservoir ? cb : mb.reservoir ? ca : ca * cb / (ca + cb);
 			equalising = ceff * dt;
-			heat = equalising * (1.0 - exp(-edge.conductance * h / ceff));
+			Relaxing &kept = relaxing_[i];
+			if (kept.conductance != edge.conductance || kept.capacity != ceff) {
+				kept = Relaxing{ edge.conductance, ceff, 1.0 - exp(-edge.conductance * h / ceff) };
+			}
+			heat = equalising * kept.factor;
 		}
 		const double quanta = heat / JOULE_PER_QUANTUM;
 		if ((remainder > 0.0 && quanta < 0.0) || (remainder < 0.0 && quanta > 0.0) || quanta == 0.0) {
@@ -667,6 +685,14 @@ bool Simulation::project(CellId cell) {
 	const SpeciesTable &table = world_.species();
 	const CellState &state = world_.snapshot_cell(cell);
 	bool changed = false;
+	// (Stage 53) a cell of nothing but wall (a vessel's ring of glass) has no equilibrium to be at
+	bool any = false;
+	for (size_t s = 0; s < state.amount.size() && !any; ++s) {
+		any = state.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall;
+	}
+	if (!any) {
+		return false;
+	}
 	// several equilibria that share a species are taken in turn until none
 	// moves; each is probed again only if the cell changed since it was last
 	// probed (Stage 44: one that cannot move, or that moved last, is at rest
@@ -1044,7 +1070,24 @@ void Simulation::settle_cells() {
 const Thermal &Simulation::thermal(CellId cell) {
 	const auto c = static_cast<size_t>(cell.index);
 	if (!thermal_valid_[c]) {
-		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell), &world_.meta(cell));
+		const CellState &state = world_.snapshot_cell(cell);
+		const CellMeta &meta = world_.meta(cell);
+		if (thermal_key_.size() <= c) {
+			thermal_key_.resize(c + 1);
+		}
+		ThermalKey &key = thermal_key_[c];
+		// (Stage 53) derived again only if what it is derived from changed since: the same value, exactly
+		if (!(key.known && key.energy == state.energy && key.volume == meta.volume && key.sealed == meta.sealed && key.rigid == meta.rigid &&
+					key.reservoir == meta.reservoir && key.amount == state.amount)) {
+			thermal_[c] = thermal_state(world_.species(), state, &meta);
+			key.known = true;
+			key.energy = state.energy;
+			key.amount = state.amount;
+			key.volume = meta.volume;
+			key.sealed = meta.sealed;
+			key.rigid = meta.rigid;
+			key.reservoir = meta.reservoir;
+		}
 		thermal_valid_[c] = 1;
 	}
 	return thermal_[c];
