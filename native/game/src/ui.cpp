@@ -5484,6 +5484,22 @@ struct Ui::Impl {
 				for (const char *n : { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog", "write:label", "write:value", "write" }) {
 					buttons.push_back(notebook_rect(n));
 				}
+				// (Stage 58) its tabs, the calculator's kinds, arrows, note and fields, the reference's pages
+				for (const char *n : TABS) {
+					buttons.push_back(notebook_rect(n));
+				}
+				for (const char *n : KINDS) {
+					buttons.push_back(notebook_rect(std::string("calc:") + n));
+				}
+				for (const char *n : PAGES) {
+					buttons.push_back(notebook_rect(std::string("ref:") + n));
+				}
+				for (const char *n : { "calc:prev", "calc:next", "calc:note" }) {
+					buttons.push_back(notebook_rect(n));
+				}
+				for (int k = 0; k < 8; ++k) {
+					buttons.push_back(notebook_rect("calc:field:" + std::to_string(k)));
+				}
 			}
 			for (const auto &[w, b] : record_buttons()) {
 				buttons.push_back(b);
