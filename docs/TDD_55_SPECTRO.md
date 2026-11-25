@@ -54,11 +54,69 @@ instrument and plot.
 
 | Phase | Topic | Status |
 |---|---|---|
-| 55.1 | GAME_SPEC; the instrument's data | |
-| 55.2 | `lab/spectro.hpp`: the slit, the stray light, the lamp; the sample's transmittance; against Beer–Lambert | |
-| 55.3 | The lab: the kind, the cuvette, insert, tune, blank; the beam's height; saved, not digested | |
-| 55.4 | The screen: the case, the well, the display; the readout's controls; a cuvette carried onto it | |
-| 55.5 | The notebook's written entries; the plot's pairing | |
-| 55.6 | Predictions; progress and the list's marks; the C API and the host | |
-| 55.7 | The experiment: Beer–Lambert's line and an unknown | |
+| 55.1 | GAME_SPEC; the instrument's data | Done |
+| 55.2 | `lab/spectro.hpp`: the slit, the stray light, the lamp; the sample's transmittance; against Beer–Lambert | Done |
+| 55.3 | The lab: the kind, the cuvette, insert, tune, blank; the beam's height; saved, not digested | Done |
+| 55.4 | The screen: the case, the well, the display; the readout's controls; a cuvette carried onto it | Done |
+| 55.5 | The notebook's written entries; the plot's pairing | Done |
+| 55.6 | Predictions; progress and the list's marks; the C API and the host | Done |
+| 55.7 | The experiment: Beer–Lambert's line and an unknown | Done |
 | 55.8 | This document, CHANGELOG, `make gates`, the user's sign-off | |
+
+## The goldens
+
+None moved: the instrument, its blank and wavelength, written notes, predictions and progress are read, not stepped,
+and not digested; the new kind and the cuvette are appended (a save made before loads).
+
+## What was built
+
+**`lab/spectro.hpp`** (pure). `absorbance(sample)`: Beer and Lambert's sum at 1 nm from each solute's decadic molar
+absorptivity (the pass's spectra) and water's own; `absorbance_at`, between the nanometres, narrow lines read
+exactly. `signal(model, nm, sample)`: the lamp (Planck's law at 2900 K) under a triangular slit of 4 nm through the
+sample, integrated at 0.1 nm, plus stray light (0.1 % of the band's light in a blank, of the lamp's whole visible
+spectrum through the sample); a solid in the beam lets none through. `reading`: −log10 of the signal over the blank's,
+to 0.001, none past 3. The displays' texts.
+
+**The lab** (`lab.cpp`). The `spectrophotometer` kind (`Kind::Spectro`, appended), standing under a cuvette as a
+balance stands under a vessel (`stands_under`: one rule for both); `insert` (a cuvette only, nothing on its mouth),
+`remove`, `tune`, `blank`; the sample at the beam's height (`spectro_sample`: the column's layer there, air below the
+liquid, opaque at a sediment); the true wavelength the one set plus ±2 nm from the seed. Saved (`spectro`: its
+wavelength, its blank's signal and wavelength), not digested. `note`. The report's JSON.
+
+**Conditions**: `absorbance`, `nm` (quantities of the instrument), `noted` (`noted_value`), `recorded_count`; the
+tutorial's own `predicted`.
+
+**The screen** (`ui.cpp`). The case, well and two displays as bodies; a cuvette drawn 30 px across; the slider (the
+valve's, mapped over 380–780 nm), ±1 nm, blank, "+ A"; the notebook's write row; predictions in the readout's place
+while nothing is selected; "done" and "next" in the experiments list; `Ui::progress`, `set_progress`.
+
+**The C API and the host**: `cg_ui_progress`, `cg_ui_set_progress`; `ChemLab.progress_path`, `user://progress.json`,
+loaded at start and written whenever it changes.
+
+**The experiment** `beer` (10 steps): a prediction, the instrument, 750 nm, the blank, four standards, the unknown.
+
+## Measured
+
+- A 0.0499 M copper sulfate solution reads A 0.511 against Beer and Lambert's 0.510 at 750 nm; six standards from
+  0.01 to 0.10 M lie on a line through zero within 0.003, its slope ε within 0.5 %.
+- Stray light: an ideal 0.5 reads 0.499, an ideal 2.5 reads 2.453; past about 3, `OL`.
+- Water blanked at 750 nm and read at 600 nm without a new blank: 0.223, the lamp's own fall between them.
+- A cuvette filled below the beam reads the air against a water blank: −0.012.
+- `beer`: the standards' slope 10.12 L/mol (R² 0.999999, intercept 0.0005) against NBS's 10.23; the unknown 0.0363
+  mol/L against its true 0.0362.
+
+**Tests**:
+
+| Test | What it checks |
+|---|---|
+| `test_spectro.cpp` (2) | Beer and Lambert's line through zero, twice the path twice the absorbance, the blank zero; stray light's flattening, `OL`, the displays, the lamp's slope after a wavelength's change, a steep band's side |
+| `test_spectro_lab.cpp` (3) | a cuvette alone fits; blank, read, tune, saved and loaded; the air under the beam; on the screen the slider, ±1 nm, a refused blank, a cuvette carried into the well |
+| `test_experiments.cpp` (4) | `beer` strict (the line, the unknown, the report, the prediction beside it, progress and the list's marks), at a person's pace, free; progress kept and refused |
+
+## Open
+
+- **A cuvette's glass is not in the beam**: a blank in the same kind of cell would take it off; matched cells are
+  assumed (§20).
+- **Prepared standards**: the bench's cuvettes come filled; making them by dilution is experiment 2's (Stage 52).
+- **The rates, the half-life and the solubility curve** (curriculum 4, 36, 37, 45) are the next stage's, on this
+  instrument and the notebook's plot.

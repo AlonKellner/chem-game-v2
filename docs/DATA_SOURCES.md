@@ -897,7 +897,7 @@ CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. 
 
 Chosen for the game (`data/instruments.json`, design): a top-loading balance reads 0.01 g to 620 g within
 0.02 g, an analytical one 0.1 mg to 220 g within 0.2 mg; a thermometer 0.1 °C within 0.2 °C; a pH meter 0.01
-within 0.02; a pressure gauge 0.1 kPa within 0.5 kPa (Stage 54); a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
+within 0.02; a pressure gauge 0.1 kPa within 0.5 kPa (Stage 54); a spectrophotometer (Stage 55) of a student's kind: 380 to 780 nm (the simulation's light), a 4 nm band, 0.1 % stray light, its wavelength within 2 nm, its absorbance to 0.001 up to 3, a tungsten lamp at 2900 K, its beam 15 mm over a cell's floor (the common centre height); a round cuvette 12 mm across, its wall 1 mm, so its path 10 mm; a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
 or 50 mL) within 5 %, a bottle's within 10 % (`data/glassware.json`). Confidence: these are of the order
 makers state; they are not claims about any one instrument.
 

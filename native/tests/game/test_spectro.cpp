@@ -61,6 +61,7 @@ TEST_CASE("spectro: stray light flattens a high absorbance; a wavelength changed
 	const double low = read(750, copper(0.5 / beer(750, 1.0)), 750, water);
 	CHECK(low == doctest::Approx(0.5).epsilon(0.008));
 	const double high = read(750, copper(2.5 / beer(750, 1.0)), 750, water);
+	MESSAGE("an ideal 0.5 reads " << low << ", an ideal 2.5 reads " << high);
 	CHECK(high < 2.5 - 0.02);
 	CHECK(high > 2.0);
 	// far past it, no reading: "OL"
@@ -71,6 +72,7 @@ TEST_CASE("spectro: stray light flattens a high absorbance; a wavelength changed
 	CHECK(wavelength_text(750.0) == "750");
 	// blanked at 750 and set to 600 without a new blank: water reads the lamp's fall from 750 to 600 nm
 	const double slope = read(600, water, 750, water);
+	MESSAGE("water blanked at 750 nm, read at 600: " << slope);
 	CHECK(slope > 0.05);
 	CHECK(slope == doctest::Approx(-std::log10(chem::optics::planck(600, m.lamp_k) / chem::optics::planck(750, m.lamp_k))).epsilon(0.05));
 	// a steep side of a band read through the slit's band: within a little of the ideal, not exactly it

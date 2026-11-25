@@ -299,7 +299,7 @@
 			"design": "the experiments (Stage 41, GAME_SPEC §13.7): their steps' thresholds, read off each experiment played through (native/tests/game/test_experiments.cpp)"
 		},
 		{
-			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**", "plays/layers.json/**", "plays/prism.json/**", "plays/volumetric.json/**"],
+			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**", "plays/layers.json/**", "plays/prism.json/**", "plays/volumetric.json/**", "plays/beer.json/**"],
 			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display; the spectral viewer's and the view's (Stage 42), with the bench it sets out"
 		},
 		{"data": ["species.json/species/copper_hydroxide/thermo/*"], "measured": "Puigdomenech and Taxen 2000 (SKB TR-00-13), Table 2: its Gibbs energy, entropy and heat capacity; the enthalpy with CODATA's elements", "doc": ["Precipitation and gas (Stage 44)", "SKB TR-00-13"], "tests": ["sources: every species' thermodynamic row is the one cited", "measured: the tables' solubility constants of copper hydroxide and copper oxide are the evaluated ones"]},

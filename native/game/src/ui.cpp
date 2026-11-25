@@ -511,7 +511,7 @@ struct Ui::Impl {
 	}
 
 	// ---- the notebook (GAME_SPEC §13.1, Stage 54): its button, its panel's table, plot and logger
-	static Rect notebook_button() { return Rect{ 1110, 14, 110, 36 }; } // after reset, before the newest notice
+	static Rect notebook_button() { return Rect{ 1006, 14, 104, 36 }; } // after reset, before the clock (Stage 55: not over it)
 	static Rect notebook_rect(const std::string &what) {
 		// close, erase; x, its transform, y, its transform, fit; log every 1, 5, 30 s, stop
 		static const char *const NAMES[] = { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog" };
@@ -527,7 +527,7 @@ struct Ui::Impl {
 					return Rect{ NOTEBOOK.x + NOTEBOOK.w - 210 + static_cast<float>(k) * 100, NOTEBOOK.y + 12, 90, 30 };
 				}
 				if (k < 7) {
-					static const float AT[] = { 20, 190, 260, 430, 500 }, W[] = { 165, 64, 165, 64, 64 };
+					static const float AT[] = { 20, 170, 240, 390, 460 }, W[] = { 145, 64, 145, 64, 64 }; // (Stage 55: within the panel)
 					return Rect{ NOTEBOOK.x + AT[k - 2], NOTEBOOK.y + 316, W[k - 2], 30 };
 				}
 				return Rect{ NOTEBOOK.x + 150 + static_cast<float>(k - 7) * 84, NOTEBOOK.y + 980, 78, 28 };
@@ -691,7 +691,7 @@ struct Ui::Impl {
 		}
 		rect_fill(NOTEBOOK, PANEL_FILL);
 		outline(NOTEBOOK, GLASS, 1);
-		text(NOTEBOOK.x + 20, NOTEBOOK.y + 36, view.instruments ? "notebook: what the instruments read" : "notebook", INK, 20);
+		text(NOTEBOOK.x + 20, NOTEBOOK.y + 36, view.instruments ? "notebook, by instruments" : "notebook", INK, 20);
 		button(notebook_rect("close"), "close");
 		button(notebook_rect("erase"), "erase");
 		// the table: the newest at the foot, as written
@@ -768,8 +768,11 @@ struct Ui::Impl {
 				}
 			}
 		}
-		if (!view.notebook.empty()) {
-			text(NOTEBOOK.x + 20, NOTEBOOK.y + 1000, "log " + view.notebook.back().label + ":", DIM, 14);
+		if (const auto read = std::find_if(view.notebook.rbegin(), view.notebook.rend(), [](const NoteEntry &e) { return !e.quantity.item.empty(); });
+				read != view.notebook.rend()) {
+			// the last quantity recorded (Stage 55: not a number written), short of the buttons
+			const std::string named = read->label.size() > 14 ? read->label.substr(0, 13) + "." : read->label;
+			text(NOTEBOOK.x + 20, NOTEBOOK.y + 1000, "log " + named + ":", DIM, 14);
 			button(notebook_rect("log:1"), "1 s", false, 13);
 			button(notebook_rect("log:5"), "5 s", false, 13);
 			button(notebook_rect("log:30"), "30 s", false, 13);
@@ -2022,10 +2025,10 @@ struct Ui::Impl {
 		return true;
 	}
 
-	Rect speed_rect(int i) const { return Rect{ 380 + static_cast<float>(i) * 84, 14, 76, 36 }; }
+	Rect speed_rect(int i) const { return Rect{ 380 + static_cast<float>(i) * 80, 14, 72, 36 }; }
 	static Rect pause_rect() { return Rect{ 270, 14, 96, 36 }; }
-	static Rect check_rect() { return Rect{ 760, 14, 220, 36 }; }
-	static Rect reset_rect() { return Rect{ 1000, 14, 96, 36 }; }
+	static Rect check_rect() { return Rect{ 704, 14, 200, 36 }; }
+	static Rect reset_rect() { return Rect{ 916, 14, 80, 36 }; } // (Stage 55: narrower, for the notebook's button)
 	static Rect view_rect() { return Rect{ 1440, 14, 150, 36 }; } // while zoomed: back to all of the room (Stage 42)
 	static Rect empty_rect() { return Rect{ TRASH.x + TRASH.w - 70, TRASH.y + 4, 64, 24 }; } // the trash's "empty" (Stage 38)
 	static Rect pour_slider() { return Rect{ PANEL.x + 30, PANEL.y + 84, PANEL.w - 60, 18 }; }
@@ -5050,8 +5053,29 @@ struct Ui::Impl {
 			r = square_rect(static_cast<int>((x - BENCH.x) / square()), static_cast<int>((y - BENCH.y) / square()));
 			return true;
 		}
-		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@") {
-			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect() };
+		if (what.substr(0, 6) != "valve:" && what.substr(0, 13) != "panel:slider@" && what.find('@') == std::string::npos) {
+			std::vector<Rect> buttons{ pause_rect(), check_rect(), reset_rect(), notebook_button() };
+			// (Stage 54, 55) the notebook's, the readout's "+", a spectrophotometer's, a prediction's and the report's
+			if (notebook_open) {
+				for (const char *n : { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog", "write:label", "write:value", "write" }) {
+					buttons.push_back(notebook_rect(n));
+				}
+			}
+			for (const auto &[w, b] : record_buttons()) {
+				buttons.push_back(b);
+			}
+			if (predict_shown()) {
+				for (size_t n = 0; n < predicted_items().size(); ++n) {
+					buttons.push_back(guess_field(static_cast<int>(n)));
+				}
+				buttons.push_back(guess_make());
+			}
+			if (report_active()) {
+				for (size_t k = 0; k < tutorial->report().size(); ++k) {
+					buttons.push_back(report_field(static_cast<int>(k)));
+				}
+				buttons.push_back(report_check());
+			}
 			for (int i = 0; i < 4; ++i) {
 				buttons.push_back(speed_rect(i));
 			}
@@ -5070,6 +5094,9 @@ struct Ui::Impl {
 				}
 				if (screw_rect(i, b)) {
 					buttons.push_back(b);
+				}
+				for (const auto &[n, sb] : spectro_buttons(i)) {
+					buttons.push_back(sb);
 				}
 			}
 			for (const Rect &b : buttons) {
@@ -5860,7 +5887,7 @@ struct Ui::Impl {
 				for (const auto &[name, b] : spectro_buttons(showing)) {
 					button(b, name == "blank" ? "blank" : name == "-" ? "-1" : "+1", false, 15);
 				}
-				y += spectro_buttons(showing).empty() ? 0 : 40;
+				y += spectro_buttons(showing).empty() ? 0 : 52;
 			} else if (stir_rect(showing, control)) {
 				button(control, v.stirred ? "stirring" : "stir", v.stirred, 15);
 				Rect screw;

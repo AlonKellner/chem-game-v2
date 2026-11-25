@@ -1,5 +1,20 @@
 # GAME_SPEC version history
 
+## 0.55.0 (2026-11-25, Stage 55)
+
+- §13 (Stage 55, `docs/TDD_55_SPECTRO.md`; `docs/CURRICULUM.md`, step B's second half): **a spectrophotometer**, a
+  single-beam instrument: a cuvette in its well, its wavelength tuned (380 to 780 nm), a blank, the absorbance read from
+  the pass's own spectra through its slit's band and with its stray light, at the beam's height in the cuvette. **A
+  cuvette**, 10 mm across inside. **A number written** in the notebook (`note`); the plot pairs a y with the x of its
+  moment, or else the last before it.
+- §13.1: the instrument and its controls on the screen; the notebook's write row (and Stage 54's faults seen in this
+  stage's pictures: its button over the clock, its plot's "fit" past the panel's edge); **predictions** in place of the
+  readout before a run; **progress** through the experiments, "done" and "next" in the list.
+- §13.2: a report's item marked `predict`; conditions `predicted`, `noted` (`noted_value`) and `recorded_count`.
+- §13.7: the experiment `beer` (Beer and Lambert's line and an unknown).
+- §14: `cg_ui_progress`, `cg_ui_set_progress`; the Godot host keeps progress in `user://progress.json`.
+- §20: the spectrophotometer's simplifications. The goldens unchanged.
+
 ## 0.54.0 (2026-11-25, Stage 54; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 54, `docs/TDD_54_NOTEBOOK.md`; `docs/CURRICULUM.md`, step B's first half): **the notebook**, kept by the
