@@ -545,6 +545,7 @@ void Simulation::overflow() {
 		return;
 	}
 	const SpeciesTable &table = world_.species();
+	bool spilled = false;
 	for (int32_t c = 0; c < world_.cell_count(); ++c) {
 		const CellId cell{ c };
 		const CellMeta &meta = world_.meta(cell);
@@ -596,6 +597,12 @@ void Simulation::overflow() {
 		}
 		const Refusal refused = transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal(cell).temperature));
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		spilled = true;
+	}
+	// (Stage 51) what spilled meets what the spill cell holds after this step's settling: it is brought to its fast
+	// equilibria here, as every cell is at a step's end (P1)
+	if (spilled && thermal(spill).defined) {
+		project(spill);
 	}
 }
 

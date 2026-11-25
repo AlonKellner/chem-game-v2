@@ -270,6 +270,11 @@ TEST_CASE("column: a held pour onto a layered vessel at any speed, a frame's fir
 				}
 				ui->frame(1.0 / 60.0);
 			}
+			for (const lab::Notice &n : ui->lab().view().notices) {
+				if (n.says.find("invariant") != std::string::npos) {
+					MESSAGE(target << " at " << speed << ", step " << n.step << ": " << n.says);
+				}
+			}
 			CHECK_MESSAGE(ui->message().empty(), target << " at " << speed << ": " << ui->message());
 			CHECK_FALSE(ui->lab().failed());
 		}
