@@ -114,6 +114,20 @@
 			"burst_kpa": 20
 		},
 		{
+			"name": "filter_funnel",
+			"standard": "a filter funnel of ISO 4798's form, a 60 degree cone on a stem, with a Whatman grade 1 paper folded in quarters",
+			"sizes": [
+				{"ml": 100, "diameter_mm": 75, "height_mm": 140, "stem_mm": 75, "stem_diameter_mm": 8, "wall_mm": 1.5}
+			],
+			"cone_degrees": 60,
+			"paper": {"herzberg_s": 150, "diameter_mm": 110},
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 10,
+			"cap_bore_mm": 4,
+			"burst_kpa": 150,
+			"outlet": true
+		},
+		{
 			"name": "cuvette",
 			"standard": "a round cell for a spectrophotometer, 10 mm across inside (design)",
 			"sizes": [
