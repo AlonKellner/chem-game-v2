@@ -135,7 +135,9 @@ prism-shots: native
 	perl -e 'alarm 60; exec @ARGV' $(GODOT) --path $(GODOT_PROJECT) -s tools/prism_shot.gd -- $(CURDIR)/build/screenshots
 
 # The game.
-run:
+# the game as the sources stand: the extension rebuilt as far as it changed, data/ copied again (a stale copy once
+# played a tutorial already fixed)
+run: native
 	$(GODOT) --path $(GODOT_PROJECT)
 
 # The optical pass's cost on the GPU (Stage 33): a play (data/plays/cost.json: settled, a vessel carried, poured
