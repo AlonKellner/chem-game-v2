@@ -312,3 +312,29 @@ TEST_CASE("bubbles: on the screen they are a white haze in the liquid, from the 
 	broken.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + 6) * 4] = -1.0f;
 	CHECK(lab::check_O1(broken).rfind("O1", 0) == 0);
 }
+
+TEST_CASE("bubbles: a floor starts boiling past its onset and goes on down to its boiling point: boiling's hysteresis (Stage 53)") {
+	// between its boiling point and the onset a floor boils only if its cavities already hold vapour: a floor held
+	// there by a flame's heat neither flips to boiling and back each step (the limit cycle a cell of glass under a
+	// liquid would make of it) nor stops while its nuclei stay
+	Floor f = beaker(300.0, 100.0);
+	const Bubbles b = boil(f);
+	REQUIRE(b.onset_c > b.saturation_floor_c + 1.0);
+	const double between = 0.5 * (b.saturation_floor_c + b.onset_c);
+	CHECK_FALSE(floor_nucleates(f, between)); // fresh: it waits for the onset
+	CHECK(floor_nucleates(f, b.onset_c + 0.1));
+	const double still = floor_flux(f, between);
+	f.nucleating = true;
+	CHECK(floor_nucleates(f, between)); // nucleated: it goes on
+	CHECK_FALSE(floor_nucleates(f, b.saturation_floor_c - 0.1)); // under its boiling point its nuclei condense
+	const double boiling = floor_flux(f, between);
+	CHECK(boiling > 2.0 * still);
+	// past the onset both alike: the flux is one curve there, nucleated or not
+	Floor fresh = f;
+	fresh.nucleating = false;
+	CHECK(near(floor_flux(fresh, b.onset_c + 2.0), floor_flux(f, b.onset_c + 2.0), 1e-12));
+	// and the bubbles: a nucleated floor's heat between the two goes to boiling
+	const Bubbles on = boil(f);
+	CHECK(on.boiling_w >= b.boiling_w);
+	MESSAGE("boiling point " << b.saturation_floor_c << " C, onset " << b.onset_c << " C; between, " << still << " W fresh, " << boiling << " W nucleated");
+}

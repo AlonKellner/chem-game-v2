@@ -88,6 +88,8 @@ struct Item {
 	// what its rings' and its column's cells were when their contacts were last set: unchanged, they stand (not saved:
 	// a lab loaded sets them again at its first step, to the same values)
 	std::vector<int64_t> walls_were;
+	// its floor's cavities hold nuclei (Stage 53): it boiled and has not cooled under its boiling point since
+	bool floor_nucleating = false;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -2067,6 +2069,7 @@ struct Lab::Impl {
 			}
 			now.push_back(static_cast<int64_t>(std::llround(std::clamp(x.suspended, 0.0, 1.0) * 1e15)));
 			now.push_back(static_cast<int64_t>(world().meta(x.cell).volume * 1e15));
+			now.push_back(x.floor_nucleating ? 1 : 0);
 			if (now == x.walls_were) {
 				continue;
 			}
@@ -2118,9 +2121,7 @@ struct Lab::Impl {
 				}
 				all_known = all_known && (known || !holds);
 			}
-			if (all_known) {
-				x.walls_were = now;
-			}
+			bool nucleating = false; // (its floor's, decided below as it is set)
 			for (const Item::Contact &c : x.contacts) {
 				const walls::Ring &r = rings[c.ring];
 				const double wall_k = ring_k[c.ring];
@@ -2165,6 +2166,9 @@ struct Lab::Impl {
 							f.bulk_c = cell_k - 273.15;
 							f.pressure_pa = pressure_pa(x);
 							f.water_activity = activity(table(), world().snapshot_cell(c.cell), builtin::water, &world().meta(c.cell));
+							f.nucleating = x.floor_nucleating;
+							nucleating = bubbles::floor_nucleates(f, wall_k - 273.15);
+							f.nucleating = nucleating;
 							const double q = wall_k > cell_k ? bubbles::floor_flux(f, wall_k - 273.15) : 0.0;
 							conductance = std::max(q / std::max(wall_k - cell_k, 1e-9), walls::into_water(f.floor_m2 / std::max(f.perimeter_m, 1e-9), wall_k, cell_k) * area);
 						} else if (c.cell == lowest) {
@@ -2183,8 +2187,13 @@ struct Lab::Impl {
 					}
 				}
 				if (world().edges()[static_cast<size_t>(c.edge.index)].conductance != conductance && world().set_conductance(c.edge, conductance) != Refusal::None) {
-					x.walls_were.clear(); // (refused mid-step: set again at the next)
+					all_known = false; // (refused mid-step: set again at the next)
 				}
+			}
+			x.floor_nucleating = nucleating;
+			if (all_known) {
+				now.back() = nucleating ? 1 : 0;
+				x.walls_were = std::move(now);
 			}
 		}
 	}
@@ -3203,6 +3212,7 @@ struct Lab::Impl {
 		f.bulk_c = kelvin - 273.15;
 		f.pressure_pa = pressure_pa(item);
 		f.water_activity = activity(table(), cell, builtin::water, &world().meta(item.cell));
+		f.nucleating = item.floor_nucleating;
 		const StepFlows &flows = sim->flows();
 		const std::span<const Edge> edges = world().edges();
 		for (const Item::Contact &c : item.contacts) { // (Stage 53) what its floor passed into its column
@@ -6233,6 +6243,9 @@ std::string Lab::digest() const {
 			hash.update_double(x.swirl);
 			hash.update_double(x.suspended);
 		}
+		if (x.floor_nucleating) { // (Stage 53) its floor nucleating
+			hash.update_u64(0x6e75636c00000000u | static_cast<uint64_t>(&x - m.items.data()));
+		}
 	}
 	if (!m.sim->work_remainders().empty()) {
 		hash.update_u64(m.sim->work_remainders().size());
@@ -6482,6 +6495,9 @@ json Lab::Impl::save() const {
 				rings.push_back(r.index);
 			}
 			list.back()["rings"] = std::move(rings);
+			if (item.floor_nucleating) {
+				list.back()["nucleating"] = true;
+			}
 		}
 		if (item.stirs.index >= 0) { // (Stage 32)
 			list.back()["stirs"] = item.stirs.index;
@@ -6670,6 +6686,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					item.rings.push_back(CellId{ r.get<int32_t>() });
 				}
 			}
+			item.floor_nucleating = j.value("nucleating", false);
 
 			item.mouth = EdgeId{ j.at("mouth").get<int32_t>() };
 			item.heats = EdgeId{ j.at("heats").get<int32_t>() };

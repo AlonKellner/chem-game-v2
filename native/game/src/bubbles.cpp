@@ -189,13 +189,30 @@ double floor_flux(const Floor &f, double floor_c) {
 	}
 	const double floor_k = boiling_point(floor_pa, f.water_activity);
 	const Surface &surf = surface(f.surface);
-	const double onset_k = root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
+	const double onset_k = f.nucleating ? floor_k : root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
 	if (floor_c + KELVIN > onset_k) {
 		const double sat_c = floor_k - KELVIN, sigma = surface_tension(floor_k);
 		const double h_fg = latent(floor_k), rho_v = floor_pa * molar_mass() / (chem::GAS_CONSTANT * floor_k);
 		q += f.floor_m2 * rohsenow(floor_c - sat_c, water_at(sat_c), sigma, h_fg, rho_v, surf);
 	}
 	return q;
+}
+
+bool floor_nucleates(const Floor &f, double floor_c) {
+	if (!(f.depth_m > 0.0)) {
+		return false;
+	}
+	const double floor_pa = f.pressure_pa + water_at(f.bulk_c).rho * G * f.depth_m;
+	const double a_w = f.water_activity > 0.0 ? f.water_activity : 1.0;
+	if (a_w * saturation_pressure(floor_c + KELVIN) <= floor_pa) {
+		return false; // under its boiling point: its nuclei condense
+	}
+	if (f.nucleating) {
+		return true;
+	}
+	const double floor_k = boiling_point(floor_pa, f.water_activity);
+	const Surface &surf = surface(f.surface);
+	return floor_c + KELVIN > root([&](double t) { return a_w * saturation_pressure(t) - floor_pa - 2.0 * surface_tension(t) / surf.cavity; }, floor_k, floor_k + 150.0);
 }
 
 Bubbles boil(const Floor &f) {
@@ -227,7 +244,8 @@ Bubbles boil(const Floor &f) {
 		return b;
 	}
 	const auto carried = [&](double t_c) { return convection(f.floor_m2, f.perimeter_m, t_c, f.bulk_c) * f.floor_m2 * (t_c - f.bulk_c); };
-	const double floor_lo = f.bulk_c, onset = b.onset_c;
+	// (Stage 53) a nucleating floor boils from its boiling point: past it the bubbles take their share
+	const double floor_lo = f.bulk_c, onset = f.nucleating ? std::max(b.saturation_floor_c, f.bulk_c) : b.onset_c;
 	if (f.heat_w <= carried(onset)) {
 		// convection alone takes it: the floor stands where it carries the heat, and nothing boils
 		b.floor_c = root([&](double t) { return carried(t) - f.heat_w; }, floor_lo, onset);

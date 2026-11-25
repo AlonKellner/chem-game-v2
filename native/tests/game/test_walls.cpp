@@ -6,11 +6,16 @@
 #include "chem/species.hpp"
 #include "lab/glassware.hpp"
 #include "lab/lab.hpp"
+#include "lab/optics_scene.hpp"
+#include "lab/ui.hpp"
 #include "lab/walls.hpp"
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <sstream>
 #include <memory>
 #include <string>
 
@@ -182,4 +187,49 @@ TEST_CASE("walls: a powder on a flask's floor over a flame takes its heat throug
 	const lab::ItemView v = item(*l, "flask");
 	MESSAGE("decomposed; the floor " << v.wall_c.front() << " C, the powder " << v.celsius << " C, the brim " << v.wall_c.back() << " C");
 	CHECK(v.wall_c.front() > v.wall_c.back());
+}
+
+// the demo's blue solution brought to the boil by its burner at 0.2: the flask's floor stands between its boiling point
+// and its cavities' onset. A floor that went in and out of boiling there pulsed its heat, and the bubbles' haze
+// flickered between two pictures from frame to frame (the user's report)
+TEST_CASE("walls: a floor held near its boiling onset boils steadily, its bubbles' haze alike frame to frame (Stage 53)") {
+	std::string why;
+	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/data/benches/demo.json");
+	std::ostringstream text;
+	text << in.rdbuf();
+	auto ui = lab::Ui::open(text.str(), why);
+	REQUIRE(ui != nullptr);
+	for (const char *c : { R"({"do": "heat", "burner": "burner", "vessel": "flask"})", R"({"do": "tip", "species": "malachite", "from": "jar", "to": "flask", "all": true})",
+				 R"({"do": "attach", "item": "balloon", "to": "flask"})", R"({"do": "valve", "burner": "burner", "to": 1})",
+				 R"({"do": "wait_until", "item": "flask", "species": "malachite", "below_g": 0.005, "timeout": 1800})", R"({"do": "detach", "item": "balloon"})",
+				 R"({"do": "valve", "burner": "burner", "to": 0})", R"({"do": "wait_until", "item": "flask", "below_c": 30, "timeout": 1800})",
+				 R"({"do": "pour", "from": "acid", "to": "flask", "ml": 50})", R"({"do": "stir", "vessel": "flask", "on": true})", R"({"do": "valve", "burner": "burner", "to": 0.2})",
+				 R"({"do": "wait_until", "item": "flask", "species": "copper_oxide", "below_g": 0.001, "timeout": 3600})", R"({"do": "stir", "vessel": "flask", "on": false})" }) {
+		REQUIRE_MESSAGE(ui->lab().command(c, why), c << ": " << why);
+	}
+	REQUIRE(item(ui->lab(), "flask").boiling);
+	double least = 1e300, most = 0.0, floor_least = 1e300, floor_most = -1e300;
+	for (int k = 0; k < 30; ++k) {
+		ui->frame(1.0 / 60.0);
+		const lab::OpticsScene &scene = ui->optics();
+		const int body = lab::optics_body(scene, "flask");
+		REQUIRE(body >= 0);
+		const float haze = scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + body * lab::optics_layout::BODY_VECS + 6) * 4]; // the bubbles' extinction at the floor
+		least = std::min(least, static_cast<double>(haze));
+		most = std::max(most, static_cast<double>(haze));
+		const double floor_c = item(ui->lab(), "flask").wall_c.front();
+		floor_least = std::min(floor_least, floor_c);
+		floor_most = std::max(floor_most, floor_c);
+	}
+	REQUIRE(least > 0.0);
+	CHECK(most / least < 1.02); // (it went 0.03 to 0.35 and back every few frames)
+	CHECK(floor_most - floor_least < 0.02);
+	MESSAGE("the haze " << least << " to " << most << "; the floor " << floor_least << " to " << floor_most << " C");
+	// its floor's nucleating is state: saved and loaded, it goes on exactly
+	auto copy = lab::Lab::load(ui->lab().save(), why);
+	REQUIRE_MESSAGE(copy != nullptr, why);
+	CHECK(copy->digest() == ui->lab().digest());
+	REQUIRE(ui->lab().advance(60, why));
+	REQUIRE(copy->advance(60, why));
+	CHECK(copy->digest() == ui->lab().digest());
 }
