@@ -439,7 +439,8 @@ struct Lab::Impl {
 			if (static_cast<int64_t>(world().step()) >= l.next) {
 				std::string no;
 				record_note(l.quantity, l.label, no);
-				l.next = static_cast<int64_t>(world().step()) + std::max<int64_t>(1, std::llround(l.every_s / STEP_SECONDS));
+				const int64_t n = std::max<int64_t>(1, std::llround(l.every_s / STEP_SECONDS));
+				l.next = (static_cast<int64_t>(world().step()) / n + 1) * n; // (the next whole multiple)
 			}
 		}
 	}
@@ -5211,7 +5212,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		loggers.erase(std::remove_if(loggers.begin(), loggers.end(), same), loggers.end());
-		loggers.push_back(NoteLogger{ named.empty() ? label_of(q) : named, q, every, static_cast<int64_t>(world().step()) });
+		// (on the whole multiples of its interval: two loggers of one interval write at the same moments, a row a moment)
+		const int64_t n = std::max<int64_t>(1, std::llround(every / STEP_SECONDS)), now = static_cast<int64_t>(world().step());
+		loggers.push_back(NoteLogger{ named.empty() ? label_of(q) : named, q, every, (now + n - 1) / n * n });
 		return true;
 	}
 	if (what == "fill") {

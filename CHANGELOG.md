@@ -1,5 +1,20 @@
 # GAME_SPEC version history
 
+## 0.54.0 (2026-11-25, Stage 54)
+
+- §13 (Stage 54, `docs/TDD_54_NOTEBOOK.md`; `docs/CURRICULUM.md`, step B's first half): **the notebook**, kept by the
+  lab: `record` a reading, `log` one every so many seconds, `unlog`, `erase`; by instruments an instrument's reading,
+  never the truth; saved, not digested. A table, a plot with each axis as it is, ln or 1/x, and a least-squares line.
+  - **A pressure gauge** by instruments (0.1 kPa, ±0.5 kPa).
+  - **Unknowns**: a bench's amount as a range, drawn once from its seed.
+- §13.1: the notebook's panel; "+" beside each reading; the report on the card; the experiments list in up to three
+  columns.
+- §13.2: the tutorial's `report` (expressions over the lab's quantities, checked within a tolerance, beside the
+  textbook's ideal); conditions `logging` and `recorded`.
+- §13.7: the experiments `titration_curve` (an unknown acid's curve and end point) and `vapour` (water's vapour
+  pressure, Clausius and Clapeyron's line).
+- §20: a logger's and the fit's simplifications. The goldens unchanged.
+
 ## 0.52.0 (2026-11-25, Stage 52; signed off by the user: "Approved, proceed")
 
 - §13 (Stage 52, `docs/TDD_52_VOLUMETRIC.md`; `docs/CURRICULUM.md`, step A's second half): **volumetric glassware**,

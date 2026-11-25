@@ -3,6 +3,7 @@
 // digested; an unknown drawn from its range.
 #include "lab/notebook.hpp"
 #include "lab/lab.hpp"
+#include "lab/tutorial.hpp"
 
 #include <doctest/doctest.h>
 
@@ -68,6 +69,17 @@ TEST_CASE("notebook: a fitted line, an axis's transform and a report's expressio
 	CHECK_FALSE(evaluate("1 / 0", v, x, why));
 	CHECK_FALSE(evaluate("(1 + 2", v, x, why));
 	CHECK_FALSE(evaluate("2 3", v, x, why));
+	// a tutorial's report: an expression naming what the bench has not is refused as it opens; a zero divided by now
+	// is the end's
+	const auto tutorial = [&](const std::string &truth) {
+		return Tutorial::open(R"({"format": "chem-tutorial/1", "steps": [{"title": "t", "text": "t", "checks": [{"text": "c", "when": {"item": "beaker", "place": "bench"}}]}],
+			"report": [{"label": "r", "truth": ")" + truth + R"(", "tolerance": 1}]})",
+			v, why);
+	};
+	REQUIRE_MESSAGE(tutorial("beaker.sulfuric_acid_aq.mol * 2") != nullptr, why);
+	CHECK(tutorial("beaker.water / (beaker.sulfuric_acid_aq.mol - 0.025)") != nullptr);
+	CHECK(tutorial("kettle.celsius") == nullptr);
+	CHECK(why.find("kettle") != std::string::npos);
 }
 
 TEST_CASE("notebook: the lab records and logs readings, by instruments what an instrument reads, saved and not digested (Stage 54)") {

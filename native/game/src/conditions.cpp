@@ -663,6 +663,18 @@ bool holds(const Cond &c, const CondContext &x) {
 		return false;
 	}
 	const ItemView &v = *found;
+	if (c.logging || c.recorded) { // (Stage 54)
+		bool logged = !c.logging, written = !c.recorded;
+		for (const NoteLogger &l : x.view.loggers) {
+			logged = logged || (l.quantity.item == c.item && l.quantity.what == *c.logging);
+		}
+		for (const NoteEntry &e : x.view.notebook) {
+			written = written || (e.quantity.item == c.item && e.quantity.what == *c.recorded);
+		}
+		if (!logged || !written) {
+			return false;
+		}
+	}
 	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
 		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to)) {
 		return false;

@@ -1,4 +1,5 @@
 #include "lab/tutorial.hpp"
+#include "lab/notebook.hpp"
 
 #include "chem/species.hpp"
 #include "conditions_json.hpp"
@@ -209,6 +210,7 @@ struct Tutorial::Impl {
 	std::vector<Check> fails; // `text` is what went wrong
 	std::vector<Check> goal;
 	std::vector<Result> results;
+	std::vector<TutorialReport> report; // (Stage 54)
 	TutorialView view;
 	std::vector<TutorialGesture> no_gestures;
 
@@ -354,6 +356,32 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 		why = r.why;
 		return nullptr;
 	}
+	for (const json &j : doc.value("report", json::array())) {
+		// (Stage 54) {label, unit, truth, ideal?, tolerance, relative?, why?}
+		if (!j.is_object() || !j.contains("label") || !j["label"].is_string() || !j.contains("truth") || !j["truth"].is_string() || !j.contains("tolerance") ||
+				!j["tolerance"].is_number() || !(j["tolerance"].get<double>() > 0.0)) {
+			why = "a report's item is {\"label\", \"unit\", \"truth\": an expression, \"tolerance\" > 0, \"ideal\"?, \"relative\"?, \"why\"?}";
+			return nullptr;
+		}
+		TutorialReport item;
+		item.label = j["label"].get<std::string>();
+		item.unit = j.value("unit", std::string());
+		item.truth = j["truth"].get<std::string>();
+		if (j.contains("ideal") && j["ideal"].is_number()) {
+			item.ideal = j["ideal"].get<double>();
+		}
+		item.tolerance = j["tolerance"].get<double>();
+		item.relative = j.value("relative", false);
+		item.why = j.value("why", std::string());
+		// what it names must be on the bench; a zero it divides by now may not be zero at the end
+		double now = 0.0;
+		std::string why_not;
+		if (!evaluate(item.truth, bench, now, why_not) && why_not != "a division by zero") {
+			why = "the report's \"" + item.label + "\": " + why_not;
+			return nullptr;
+		}
+		impl->report.push_back(item);
+	}
 	for (const json &j : doc.value("results", json::array())) {
 		Result res;
 		if (j.is_object() && j.contains("quantity")) {
@@ -473,6 +501,10 @@ void Tutorial::restart() {
 	impl_->view.step = 0;
 	impl_->view.failure.clear();
 	impl_->view.results.clear();
+}
+
+const std::vector<TutorialReport> &Tutorial::report() const {
+	return impl_->report;
 }
 
 const TutorialView &Tutorial::view() const {

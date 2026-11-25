@@ -96,6 +96,8 @@ struct RigPattern {
 struct Cond {
 	std::string item;
 	std::optional<std::string> place, on, under, drains_to, selected;
+	// (Stage 54) the notebook: a quantity of the item (`what`) is logged, or has been recorded
+	std::optional<std::string> logging, recorded;
 	std::optional<std::string> goal; // that goal is met (§13.5)
 	std::optional<bool> goals_met; // every game goal is met (and there is one)
 	std::optional<int> slot; // the item is in that slot of the outbox

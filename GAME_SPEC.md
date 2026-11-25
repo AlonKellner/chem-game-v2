@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.52.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.54.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1694,6 +1694,11 @@ integer (0 without one). By instruments:
   proportion to how far along its scale the reading is), to a tenth of its division, one digit past its scale as
   it is read by eye. A pipette's or a volumetric flask's **mark** stands at its own true volume, its nominal plus
   its tolerance times a share drawn once.
+- **A pressure gauge** (Stage 54): a sealed vessel's pressure, read to 0.1 kPa within ±0.5 kPa (`data/instruments.json`,
+  `gauge`, design), its offset drawn once from the seed; an open vessel's is the room's.
+- **Unknowns** (Stage 54): a bench's amount given as a range, `{"mol": [lo, hi]}` (or `g`), is drawn once within it
+  from the seed (the item's id and the species its key): the same bench holds the same unknown on every machine and
+  after every reset; its truth is in the debug panel and the report.
 
 **Volumetric glassware** (Stage 52), each made to its ISO standard's rows (`data/glassware.json`,
 `docs/DATA_SOURCES.md`, Volumetric glassware): a 50 mL **burette** (ISO 385, ±0.05 mL), a 25 mL bulb **pipette**
@@ -1711,6 +1716,22 @@ the calorimeter's).
   stands on something.
 - Tall glassware stands on tall footprints (a burette 2 × 12, a pipette 2 × 11, a cylinder or a volumetric flask
   2 × 6 or 2 × 8).
+
+**The notebook** (Stage 54, `lab/notebook.hpp`; `docs/TDD_54_NOTEBOOK.md`). What a student writes down, kept by the lab:
+- **An entry** is a moment's reading: its step, its label (the item and what was read, or the student's), its
+  quantity (§13.3's `item`, `what`, `measure`), its value and unit, and whether an instrument read it. By instruments
+  a reading is the instrument's (a thermometer's, a pH meter's, a burette's or a cylinder's scale, marks', a balance's
+  display, the gauge's), never the truth it hides; what no instrument reads (a species' amount) is refused, "no
+  instrument reads it". With the truth, it is the truth.
+- **`record {item, what, measure?, label?}`** writes one now; **`log {…, every}`** keeps a **logger** that writes one
+  at every whole multiple of `every` seconds (1 to 3600) from the next, at the end of the step that reaches it;
+  **`unlog {item, what, measure?}`**; **`erase {entry?}`** one entry, or every one. At most 2000 entries: the oldest
+  go first.
+- It is saved with the lab (`notebook`: its pages and loggers, only when it has any) and not digested: it changes
+  nothing in the world, and a lab with a notebook is the same lab as one without.
+- **A table and a line**: the notebook's columns by label, a row a moment (paired by the step they were read at, or
+  each against time); each axis as it is, its natural logarithm or its reciprocal (of a Celsius temperature, 1/K);
+  a least-squares line through the points (`fit_line`), its slope, intercept and R².
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
 - **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
@@ -1914,6 +1935,17 @@ draws to its mark while it is empty, and stands on it and delivers while it hold
 vessel stands on it; neither pours by tilting. The pour menu into a volumetric flask has "to the mark". A burette's
 readout has its tap's slider and its reading; a mark's vessel says how its liquid stands to it.
 
+**The notebook on the screen** (Stage 54). The top bar's "notebook" opens its panel over the bench: the last ten
+entries, a plot of one column against another or against time (the column buttons cycle through them; each axis's
+transform cycles as it is, ln, 1/x; "fit" draws the least-squares line, with its slope, intercept and R²), and the
+loggers; "log 1 s", "5 s", "30 s" log the column last recorded, "unlog" stops them. In the readout, a "+" beside each
+reading records it (`record:<item>:<what>`): a vessel's temperature, pH, volume and pressure, a balance's display.
+
+**The report** (Stage 54): a tutorial's `report` (§13.2) takes the student's numbers on the card once the run is
+complete, in place of the readout: a field for each result, typed (digits, a point, a sign, an exponent; Backspace,
+Enter checks, Escape leaves it) and checked: the truth, worked out then, and whether the student's value is within
+its tolerance or how far off it is, beside the textbook's ideal and why they differ.
+
 **By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
 what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
 buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
@@ -2039,6 +2071,8 @@ gestures, and a run with a tutorial is the same lab as one without.
   - The selection, and the part editor while it is open (`selected`, `editor`).
   - The goals (§13.5): an item's `slot`; a goal met (`goal`: its id); every game goal met
     (`goals_met`).
+  - The notebook (Stage 54): a quantity of an item being logged (`logging`), or recorded at least
+    once (`recorded`).
 
   Conditions combine with `all`, `any` and `not`. They are the shared module's
   (`lab/conditions.hpp`), as signals read them. A check is marked
@@ -2078,6 +2112,12 @@ gestures, and a run with a tutorial is the same lab as one without.
   began, its least and its most while it ran, read each time the tutorial follows the lab, and
   now); if one does not,
   the run has failed, and the card says which.
+- **The report** (Stage 54): `report`, a list of results the student works out and types in at the
+  end: each its label, unit, its **truth** as an expression over the lab's quantities (numbers,
+  + − × ÷, parentheses, unary minus, and `item.what` or `item.what.measure`, §13.3's), worked out
+  when the student checks it; its `tolerance`, absolute or `relative`; the textbook's `ideal`, if it
+  has one, and `why` they differ. An expression that names what the bench does not have is refused
+  when the tutorial is opened. The report is the screen's, not the lab's: typed numbers are not saved.
 - **On the screen** the card stands above the readout: the part, the step's number and a progress
   bar, the title, what to do and why, and each check with a box, ticked when it holds, with the
   value it waits on ("now 1.509 g"). A pulsing outline points at the last of the step's gestures
@@ -2571,12 +2611,22 @@ stand on.
   - `calorimeter`, *the heat of neutralisation* (Stage 52; experiment 22): read by instruments. 50 mL of 1 M base
     and 25 mL of 1 M acid measured in a cylinder and mixed in a foam cup: 20.0 to 28.0 °C, the thermometer a few
     seconds behind.
+  - `titration_curve`, *a titration's curve* (Stage 54; experiment 13's curve): read by instruments, the acid an
+    unknown (0.0125 to 0.0175 mol of sulfuric acid in its 250 mL, drawn from the seed). The flask's pH and the
+    burette's scale logged every second while the base runs in slowly; the notebook's plot of pH against the
+    burette's reading shows the end point. Its report: the end point (mL, within 0.4 mL) and the acid's
+    concentration (mol/L, within 3 %).
+  - `vapour`, *water's vapour pressure* (Stage 54; experiment 30): read by instruments, with a gauge. Water boiled in
+    a flask to drive the air out, stoppered, and its temperature and pressure logged every 5 s while it cools; ln P
+    against 1/T is a line whose slope is −ΔH/R: 41.7 kJ/mol (R² 0.9998), against the textbook's 40.65 at the boil:
+    water's heat of vaporisation is larger at the lower temperatures the line spans (43.99 at 25 °C). Its report
+    the heat of vaporisation within 6 %.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
   melting; pressure and temperature; humidity and saturation; the vertical dimension (a vessel as a column of
   layers); two liquids (oil and water); and the lessons' own mechanics (a
-  measurement log, a prediction, a plot). The first-year curriculum's experiments, each with what it needs, are listed in
+  prediction; the notebook and the plot are Stage 54's). The first-year curriculum's experiments, each with what it needs, are listed in
   `docs/CURRICULUM.md`.
 
 **Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).
@@ -2958,5 +3008,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A balance (Stage 50) reads a conventional mass with no drift, no noise, no warm-up, no draught and no convection over a hot load; its tare and its zero are exact | A hot vessel on a real balance reads light by its convection too (several mg on an analytical one); here only by its air's buoyancy |
 | A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
 | A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
+| A logger (Stage 54) reads at the end of the step that reaches its time, every reading at once; the plot's fit is an unweighted least squares | A student reads a thermometer and a burette a second or so apart, and weighs points by their errors |
 | A foam cup (Stage 52) loses heat at one calibrated conductance, with no lid to lift; its light a flat translucent white | Its loss is of the right order (a double cup with a lid loses about 24 C in 40 minutes); a real cup's foam scatters white and lets little through |
 | The hand (Stage 50) misses a typed amount by a share uniform within ±10 %, whatever it pours or scoops, and never spills | A practised hand pours closer, and a scoop of a coarse solid misses by more |

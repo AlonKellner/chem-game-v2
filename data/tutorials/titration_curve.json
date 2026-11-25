@@ -1,0 +1,287 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 54; docs/CURRICULUM.md, experiment 13) on data/benches/titration_curve.json: a titration's curve. The pH against the base run in rises slowly, then leaps at the end point; its steepest point is the end point, and the acid's concentration follows.",
+	"title": "Experiment: a titration's curve",
+	"bench": "../benches/titration_curve.json",
+	"steps": [
+		{
+			"part": "Setting up",
+			"title": "Fill the burette",
+			"text": "Pick up the sodium hydroxide, right-click the burette, type 55 and click \"pour\".",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:burette"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "25 mL of the unknown acid",
+			"text": "Pick up the pipette and click the acid: it draws to its mark.",
+			"checks": [
+				{
+					"text": "the pipette at its mark",
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:acid"
+					]
+				}
+			]
+		},
+		{
+			"title": "Into the flask",
+			"text": "Pick up the pipette and click the flask.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The burette over the flask",
+			"text": "Pick up the pipette and click a free square; then pick up the burette and click the flask.",
+			"checks": [
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:24,3"
+					]
+				},
+				{
+					"drag": [
+						"item:burette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"part": "Logging",
+			"title": "Log the pH",
+			"text": "Right-click the flask, click \"+ pH\" under its readings to write it down, then open the notebook and click \"1 s\": it logs the pH every second.",
+			"why": "A logger writes a reading down at every whole second: the notebook's rows are moments, and what two loggers of one interval write share them.",
+			"checks": [
+				{
+					"text": "the flask's pH logged",
+					"when": {
+						"item": "flask",
+						"logging": "ph"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "record:flask:ph"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				}
+			]
+		},
+		{
+			"title": "Log the burette",
+			"text": "Close the notebook, right-click the burette, click \"+ mL\", open the notebook again and click \"1 s\".",
+			"checks": [
+				{
+					"text": "the burette's reading logged",
+					"when": {
+						"item": "burette",
+						"logging": "scale_ml"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				}
+			]
+		},
+		{
+			"part": "Titrating",
+			"title": "A slow stream",
+			"text": "Close the notebook, right-click the burette, drag its tap to about 15 % and click 60x.",
+			"why": "Slowly enough that the logger catches the leap near the end point in a dozen points.",
+			"checks": [
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							10,
+							20
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@0.15"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Past the end point",
+			"text": "Watch the pH leap past 11.",
+			"checks": [
+				{
+					"text": "the flask's pH past 11",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "ph"
+						},
+						"compare": "above",
+						"value": 11
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag the burette's tap shut. Open the notebook: x the burette's reading, y the pH. The end point is where the curve is steepest.",
+			"why": "Halfway up the leap the acid and the base are equal: H2SO4 + 2 NaOH. Its volume of the 0.100 M base holds twice the acid's moles.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the end point",
+			"unit": "mL of base",
+			"truth": "2 * flask.sodium_sulfate_aq.mol / (base.sodium_hydroxide_aq.mol / base.liquid_ml)",
+			"tolerance": 0.4,
+			"why": "The truth is the base that held twice the acid's moles. Read from the plot, where the pH leaps (the middle of the leap); a burette reads within 0.05 mL, a logger every second."
+		},
+		{
+			"label": "the acid's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * acid.sulfuric_acid_aq.mol / acid.liquid_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"why": "c = 0.100 x V(end point) / (2 x 25.00 mL). The base's label is 0.100 M; it is 0.0997 (0.040 mol in 401 mL), and the pipette delivers its own 25 mL within 0.03."
+		}
+	]
+}
