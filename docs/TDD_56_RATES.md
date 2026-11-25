@@ -82,8 +82,7 @@ the oxide in and stirred, stirred up, blank and the start, until 0.050, its end 
 
 | Test | What it checks |
 |---|---|
-| `test_spectro_lab.cpp` (3 more) | a suspension's turbidity, stirred and settled; |
-| `test_spectro_lab.cpp` | the holder: refused past its range, nothing warmed with an empty well, warmed and held, saved and loaded mid-warming, the cuvette cooling once out; on the screen its switch and steps |
+| `test_spectro_lab.cpp` (3 more) | a suspension's turbidity, stirred and settled; the holder: refused past its range, nothing warmed with an empty well, warmed and held, saved and loaded mid-warming, the cuvette cooling once out; on the screen its switch and steps |
 | `test_experiments.cpp` (3) | `rates` strict (Ea and the order from the notebook, the report and the prediction beside it), at a person's pace, free |
 
 ## Open
