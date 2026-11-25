@@ -91,3 +91,15 @@ TEST_CASE("instruments: a balance's display is its net to its readability, its l
 	CHECK(marks_ml(112.0, 25.0, 0.05, 0.0) == 100.0);
 	CHECK(marks_ml(100.0, 10.0, 0.05, 1.0) == 110.0); // 105 to the nearest 10 (half rounds away)
 }
+
+TEST_CASE("measured: a thermometer reaches 90 % of a step in its probe's 10 s (Stage 52)") {
+	// the Vernier TMP-BTA's t90 in stirred water, as the lab steps it (1/60 s)
+	const double tau = thermometer().time_constant_s;
+	double reading = 20.0, seconds = 0.0;
+	while (reading < 20.0 + 0.9 * 30.0 && seconds < 60.0) {
+		reading = lagged(reading, 50.0, 1.0 / 60.0, tau);
+		seconds += 1.0 / 60.0;
+	}
+	CHECK(seconds == doctest::Approx(10.0).epsilon(0.01));
+	CHECK(lagged(20.0, 50.0, 1.0, 0.0) == 50.0); // no lag: at once
+}

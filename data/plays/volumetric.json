@@ -1,0 +1,21 @@
+{
+	"format": "chem-play/1",
+	"note": "Volumetric glassware (Stage 52): the titration's bench chosen from the experiments' list, its burette filled and set on its flask with the pipette, then the calorimeter's; pictures of each (LAB_SHOTS). Free: no tutorial's steps.",
+	"steps": [
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:titration", "button": "click"},
+		{"frames": 30, "mark": "titration"},
+		{"do": {"do": "pour", "from": "base", "to": "burette", "ml": 55}},
+		{"do": {"do": "fill", "item": "pipette", "from": "acid"}},
+		{"frames": 90, "mark": "set-out", "shot": "volumetric-set-out"},
+		{"do": {"do": "attach", "item": "burette", "to": "flask"}},
+		{"do": {"do": "cap", "item": "burette", "to": 0.4}},
+		{"frames": 120, "mark": "running", "shot": "volumetric-burette-running"},
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:standard", "button": "click"},
+		{"frames": 90, "mark": "standard", "shot": "volumetric-standard"},
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:calorimeter", "button": "click"},
+		{"frames": 90, "mark": "calorimeter", "shot": "volumetric-calorimeter"}
+	]
+}

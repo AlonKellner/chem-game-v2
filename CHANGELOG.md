@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## 0.52.0 (2026-11-25, Stage 52; signed off by the user: "Approved, proceed")
+
+- §13 (Stage 52, `docs/TDD_52_VOLUMETRIC.md`; `docs/CURRICULUM.md`, step A's second half): **volumetric glassware**,
+  each to its ISO standard's rows: a 50 mL burette, a 25 mL bulb pipette, 100 and 250 mL volumetric flasks, 10, 25 and
+  100 mL measuring cylinders; and a foam-cup calorimeter (expanded polystyrene, a wall species).
+  - **An outlet at its foot**: a burette or a pipette stands on a vessel's mouth and drains into it through its tip
+    under its own head, as far open as its stopcock (`cap`); the tip's bore gives its standard's delivery time.
+  - **`fill`, to the mark**: a pipette draws, a volumetric flask is made up; each mark at its piece's own true
+    volume, within its class from the seed.
+  - **Readings**: a burette's and a cylinder's scale to its class and a tenth of a division; a thermometer's lag.
+  - `mark_off_ml`, `scale_ml`, `tap`: quantities for steps, results, monitors.
+- §13.1: tall glassware drawn to fit; a stopcock, a mark; a pipette and a burette carried onto a vessel; "to the
+  mark"; the tap's slider.
+- §13.7: the experiments `standard`, `titration` and `calorimeter`.
+- §20: the volumetric glass's, the thermometer's and the foam cup's simplifications. A mouth's diffusion path
+  integrated finely (Stage 50's), and a species more: the goldens re-recorded with the user's approval.
+
 ## 0.51.0 (2026-11-25, Stage 51; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 51, `docs/TDD_51_COLUMN.md`), more of the vertical dimension:

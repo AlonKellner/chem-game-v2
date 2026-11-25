@@ -69,9 +69,16 @@ struct Vessel {
 	double head_inverted(double cm3) const;
 	// Its open mouth's path for a gas (GAME_SPEC §6, Stage 50: Stefan's tube): the integral of dz / A(z) over the inside
 	// from what it holds (cm^3 of solids and liquids) up to its brim, 1/cm, at least `least` cm over the mouth's area.
-	// From a table made with the vessel (65 fills from empty to full), interpolated.
+	// From a table made with the vessel (PATHS + 1 fills from empty to full), interpolated.
 	double mouth_path(double held_cm3) const;
-	std::vector<double> paths; // the table: at k/64 of its capacity
+	// Volumetric glassware (Stage 52): its class A tolerance and the spacing of its scale, mL (0: none); an outlet at
+	// its foot (a burette's, a pipette's) and its tip's bore, cm, made to give the standard's delivery time `delivery_s`
+	// (Torricelli's, the orifice's Cd, from its zero line or its mark to empty); a burette's zero line, cm over its tip
+	double tolerance_ml = 0.0, graduation_ml = 0.0, delivery_s = 0.0, tip_bore = 0.0, zero = 0.0;
+	bool outlet = false;
+	bool mark = false; // one mark it is filled to (a pipette's, a volumetric flask's)
+	static constexpr size_t PATHS = 256; // (Stage 52: a slender pipette's bore changes too fast for 64)
+	std::vector<double> paths; // the table: at k / PATHS of its capacity
 	double capacity_cached = 0.0; // capacity(), kept with the table
 	void make_paths();
 };

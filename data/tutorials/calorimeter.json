@@ -1,0 +1,47 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 52; docs/CURRICULUM.md, experiment 22) on data/benches/calorimeter.json: the heat of neutralisation. q = m c dT (the solution's mass, about 4.18 J/(g K), the rise), over the moles of water made: about -56 kJ/mol, a little less in the cup, which loses some and holds some.",
+	"title": "Experiment: the heat of neutralisation",
+	"bench": "../benches/calorimeter.json",
+	"steps": [
+		{
+			"part": "Measuring",
+			"title": "50 mL of the base",
+			"text": "Pick up the sodium hydroxide, right-click the cylinder, type 50 and click \"pour\". Right-click the cylinder and write down what it reads.",
+			"why": "A 100 mL cylinder reads to a tenth of its 1 mL divisions, within 0.5 mL. You poured about 50: the cylinder says how much.",
+			"checks": [{"text": "base in the cylinder", "when": {"quantity": {"item": "cylinder", "what": "condensed_ml"}, "compare": "above", "value": 40}}],
+			"play": [{"drag": ["item:base", "item:cylinder"]}, {"type": "50"}, {"click": "panel:pour"}, {"click": "item:cylinder"}]
+		},
+		{
+			"title": "Into the cup",
+			"text": "Pick up the cylinder, right-click the cup, drag the slider to the end and click \"pour it all\". Right-click the cup and write down its thermometer's reading: the start.",
+			"why": "The foam cup and its lid let little heat through: what the reaction gives out stays in the solution, nearly all of it.",
+			"checks": [{"text": "the base in the cup", "when": {"item": "cup", "species": "sodium_hydroxide_aq", "above_g": 1.5}}],
+			"play": [{"drag": ["item:cylinder", "item:cup"]}, {"click": "panel:slider@1"}, {"click": "panel:pour"}, {"click": "item:cup"}]
+		},
+		{
+			"title": "25 mL of the acid",
+			"text": "Pick up the sulfuric acid, right-click the cylinder, type 25 and click \"pour\". Write down what the cylinder reads.",
+			"why": "25 mL of 1 M sulfuric acid neutralises 50 mL of 1 M sodium hydroxide exactly: H2SO4 + 2 NaOH -> Na2SO4 + 2 H2O, 0.050 mol of water made.",
+			"checks": [{"text": "acid in the cylinder", "when": {"quantity": {"item": "cylinder", "what": "condensed_ml"}, "compare": "above", "value": 20}}],
+			"play": [{"drag": ["item:acid", "item:cylinder"]}, {"type": "25"}, {"click": "panel:pour"}]
+		},
+		{
+			"part": "Mixing",
+			"title": "The acid into the cup",
+			"text": "Pick up the cylinder, right-click the cup, drag the slider to the end and click \"pour it all\". Then right-click the cup and click \"stir\".",
+			"checks": [{"text": "mixed and stirred", "when": {"all": [{"item": "cup", "species": "sodium_sulfate_aq", "above_g": 1}, {"item": "cup", "stirred": true}]}}],
+			"play": [{"drag": ["item:cylinder", "item:cup"]}, {"click": "panel:slider@1"}, {"click": "panel:pour"}, {"click": "item:cup"}, {"click": "stir:cup"}]
+		},
+		{
+			"title": "The highest temperature",
+			"text": "Watch the thermometer climb, and write down the highest it reads.",
+			"why": "The thermometer follows the solution a few seconds behind (its probe's lag), and the cup slowly loses heat to the room: the highest reading is a little under the rise the reaction gave. A careful lab draws the cooling back to the moment of mixing. dH = -m c dT / n(water).",
+			"checks": [{"text": "warmed by more than 6 K", "wait": true, "when": {"item": "cup", "above_c": 26}}]
+		}
+	],
+	"results": [
+		{"label": "the cup (the truth)", "quantity": {"item": "cup", "what": "celsius"}, "show": ["start", "most"]},
+		{"label": "the water the reaction made (the truth: sodium sulfate in it, a mole for two of water)", "quantity": {"item": "cup", "what": "sodium_sulfate_aq", "measure": "mol"}, "show": ["now"]}
+	]
+}

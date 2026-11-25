@@ -1,0 +1,310 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 52; docs/CURRICULUM.md, experiment 13) on data/benches/titration.json: a titration. H2SO4 + 2 NaOH -> Na2SO4 + 2 H2O: the acid's concentration = 0.100 x V(base) / (2 x 25.00).",
+	"title": "Experiment: a titration",
+	"bench": "../benches/titration.json",
+	"steps": [
+		{
+			"part": "Setting up",
+			"title": "Fill the burette",
+			"text": "Pick up the sodium hydroxide, right-click the burette, type 55 and click \"pour\". Right-click the burette and write down its reading.",
+			"why": "A burette reads down from its zero line near its top, to 0.01 mL by eye between its 0.1 mL lines. What it reads first is subtracted from what it reads at the end: the base you ran in.",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:burette"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette"
+				}
+			]
+		},
+		{
+			"title": "25 mL of the acid",
+			"text": "Pick up the pipette and click the acid: it draws up to its mark.",
+			"why": "The pipette delivers 25.00 mL within 0.03 mL: the acid you titrate.",
+			"checks": [
+				{
+					"text": "the pipette at its mark",
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:acid"
+					]
+				}
+			]
+		},
+		{
+			"title": "Into the flask",
+			"text": "Pick up the pipette again and click the flask: it stands in its neck and runs into it.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The burette over the flask",
+			"text": "Pick up the pipette and click a free square. Then pick up the burette and click the flask: its tip stands in the flask's neck.",
+			"checks": [
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:24,3"
+					]
+				},
+				{
+					"drag": [
+						"item:burette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"part": "Titrating",
+			"title": "Open the tap",
+			"text": "Right-click the burette, drag its tap fully open, and click 60x on the clock. Watch the flask's pH meter.",
+			"why": "The base neutralises the acid as it runs in: H2SO4 + 2 NaOH -> Na2SO4 + 2 H2O. The pH hardly moves while acid is left over, so the start can run fast.",
+			"checks": [
+				{
+					"text": "the tap open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "above",
+						"value": 90
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@1"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Nearly there",
+			"text": "Watch the pH climb past 2.2: little acid is left.",
+			"checks": [
+				{
+					"text": "the flask's pH past 2.2",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "ph"
+						},
+						"compare": "above",
+						"value": 2.2
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag the burette's tap shut.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				}
+			]
+		},
+		{
+			"title": "Drop by drop",
+			"text": "Open the tap a little, to about 5 %, and watch the pH meter.",
+			"why": "Near the end point a drop changes the pH by units: the base slowly, so as not to run past it.",
+			"checks": [
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							3,
+							10
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0.05"
+				}
+			]
+		},
+		{
+			"title": "The end point",
+			"text": "Watch the pH leap past 7.",
+			"checks": [
+				{
+					"text": "the flask's pH past 7",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "ph"
+						},
+						"compare": "above",
+						"value": 7
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it, read it",
+			"text": "Drag the tap shut and write down the burette's reading.",
+			"why": "The base run in is the end's reading less the start's. In moles, 0.100 mol/L times that volume; the acid's are half of them, in 25.00 mL.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				}
+			]
+		}
+	],
+	"results": [
+		{
+			"label": "the burette's reading (the truth)",
+			"quantity": {
+				"item": "burette",
+				"what": "scale_ml"
+			},
+			"show": [
+				"start",
+				"now"
+			]
+		},
+		{
+			"label": "the flask's pH",
+			"quantity": {
+				"item": "flask",
+				"what": "ph"
+			},
+			"show": [
+				"now"
+			]
+		},
+		{
+			"label": "the acid's sulfuric acid in 25 mL (the truth: what was pipetted)",
+			"quantity": {
+				"item": "flask",
+				"what": "sodium_sulfate_aq",
+				"measure": "mol"
+			},
+			"show": [
+				"now"
+			]
+		}
+	]
+}

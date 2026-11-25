@@ -22,7 +22,10 @@ struct Balance {
 // A meter's resolution and stated accuracy, in its own unit
 struct Meter {
 	double resolution = 0.1, accuracy = 0.2;
+	double time_constant_s = 0.0; // its response, first order (Stage 52: a thermometer's); 0: at once
 };
+// A first-order instrument's reading a step on (Stage 52): toward `truth` by 1 - e^(-dt / tau)
+double lagged(double reading, double truth, double dt, double tau);
 
 const std::vector<Balance> &balances(); // in data/instruments.json's order; the first is a bench's default
 const Balance *balance(std::string_view name); // null if there is none of that name

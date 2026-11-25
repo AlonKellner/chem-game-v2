@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.51.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.52.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1686,6 +1686,31 @@ integer (0 without one). By instruments:
   typed amount is what is aimed at, and what was taken is known by weighing it.
 - With `seed` or `about` set the seed is digested (the hand's draws depend on it); a bench without them
   digests as before.
+- **A thermometer's lag** (Stage 52): by instruments a vessel's thermometer follows it as a first-order instrument,
+  its probe's time constant (4.3 s: t90 10 s in stirred water, `data/instruments.json`); what it reads is saved,
+  not digested.
+- **Volumetric glass** (Stage 52) reads to its class: a burette from its zero line down, a measuring cylinder up,
+  each the truth plus its scale's error (its class A tolerance times a share drawn once from the seed, in
+  proportion to how far along its scale the reading is), to a tenth of its division, one digit past its scale as
+  it is read by eye. A pipette's or a volumetric flask's **mark** stands at its own true volume, its nominal plus
+  its tolerance times a share drawn once.
+
+**Volumetric glassware** (Stage 52), each made to its ISO standard's rows (`data/glassware.json`,
+`docs/DATA_SOURCES.md`, Volumetric glassware): a 50 mL **burette** (ISO 385, ±0.05 mL), a 25 mL bulb **pipette**
+(ISO 648, ±0.03 mL), 100 and 250 mL **volumetric flasks** (ISO 1042, ±0.10 / ±0.15 mL), 10, 25 and 100 mL
+**measuring cylinders** (ISO 4788, ±0.1 / ±0.25 / ±0.5 mL), and a **foam cup** (expanded polystyrene, a wall species,
+the calorimeter's).
+- **An outlet at its foot** (a burette, a pipette): `attach` stands it on a vessel's mouth, its tip in it, the mouth
+  still open to the room; it drains into the vessel through its tip at Torricelli's rate under its own head over
+  the tip, through a sharp-edged orifice (Cd 0.61), as far open as its **stopcock** (its `cap`, 0 shut to 1 open: a
+  slider, rigged, followed by a controller). The tip's bore is the one that gives its standard's delivery time
+  (the burette's scale in 80 s, ISO 385's 60–100; the pipette's volume in 35 s, ISO 648's 25–50). A pipette has no
+  stopcock: it delivers as it stands. `detach` lifts it off, holding what is left.
+- **`fill {item, from}`, to the mark**: a pipette draws, a volumetric flask is made up, from a vessel's liquid with
+  what is dissolved in it, until its own liquid stands at its mark; refused past it, from too little, or while it
+  stands on something.
+- Tall glassware stands on tall footprints (a burette 2 × 12, a pipette 2 × 11, a cylinder or a volumetric flask
+  2 × 6 or 2 × 8).
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
 - **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
@@ -1882,6 +1907,12 @@ pan, and its model's readability, capacity and linearity.
 **Amounts** (Stage 50). While the pour menu is open, digits and a point type its amount, shown top right: mL of
 the vessel's liquid, or, from a vessel with none, g of its solid. Backspace takes one back, Enter pours (or tips)
 it, Escape closes the menu; the slider clears it. A tip button tips the amount typed, or all without one.
+
+**Volumetric glassware on the screen** (Stage 52): tall pieces drawn no taller than 400 px, in their proportions; a
+burette's stopcock a key across it, a mark etched round a neck at its true volume. A pipette carried onto a vessel
+draws to its mark while it is empty, and stands on it and delivers while it holds liquid; a burette carried onto a
+vessel stands on it; neither pours by tilting. The pour menu into a volumetric flask has "to the mark". A burette's
+readout has its tap's slider and its reading; a mark's vessel says how its liquid stands to it.
 
 **By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
 what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
@@ -2531,6 +2562,15 @@ stand on.
   - `carbonate`, *what heat takes from a carbonate* (Stage 50; experiment 7): read by instruments, weighed
     by difference on a top-loading balance: about 1.5 g of malachite (1.548 g) heated until black leaves
     1.114 g of copper oxide, the equation's 72.0 %.
+  - `standard`, *a standard solution* (Stage 52; experiment 2): read by instruments. About 2.5 g of the
+    pentahydrate weighed into a tared volumetric flask (2.745 g), dissolved, made up to the mark; 25 mL pipetted
+    into a second flask and made up: a quarter of it, by the pipette's and the flask's own volumes.
+  - `titration`, *a titration* (Stage 52; experiment 13): read by instruments. 25 mL of about 0.05 M sulfuric acid
+    pipetted into a flask, 0.100 M sodium hydroxide run in from the burette, fast until the pH passes 2.2, then
+    slowly past 7: 25.96 mL, the pH 9.04 after the last drops.
+  - `calorimeter`, *the heat of neutralisation* (Stage 52; experiment 22): read by instruments. 50 mL of 1 M base
+    and 25 mL of 1 M acid measured in a cylinder and mixed in a foam cup: 20.0 to 28.0 °C, the thermometer a few
+    seconds behind.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -2916,4 +2956,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | By instruments (Stage 50), every vessel has a thermometer and a pH meter in it that read at once, with no lag, and are not bodies of the pass; each instrument's error is a fixed offset, with no noise and no drift; marks are read to the nearest one, as by an eye level with them | A real thermometer lags by seconds (the calorimeter's extrapolation is the next stage's), a reading flickers in its last digit, and a student misreads a meniscus |
 | By instruments, monitors, controllers, goals and the tutorial's checks still read the truth, and a sensing part's editor offers what a vessel holds (Stage 50) | A real monitor reads its sensor; until sensing parts read instruments, a lesson that hides composition can be read around through them |
 | A balance (Stage 50) reads a conventional mass with no drift, no noise, no warm-up, no draught and no convection over a hot load; its tare and its zero are exact | A hot vessel on a real balance reads light by its convection too (several mg on an analytical one); here only by its air's buoyancy |
+| A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
+| A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
+| A foam cup (Stage 52) loses heat at one calibrated conductance, with no lid to lift; its light a flat translucent white | Its loss is of the right order (a double cup with a lid loses about 24 C in 40 minutes); a real cup's foam scatters white and lets little through |
 | The hand (Stage 50) misses a typed amount by a share uniform within ±10 %, whatever it pours or scoops, and never spills | A practised hand pours closer, and a scoop of a coarse solid misses by more |

@@ -136,6 +136,10 @@ struct ItemView {
 	std::string label;
 	std::optional<double> read_c, read_ph, read_ml;
 	double marks_ml = 0.0;
+	// volumetric glass (Stage 52): its class A tolerance and its scale's divisions, mL; a mark's true volume (a pipette's,
+	// a volumetric flask's); a burette's reading down from its zero line, the truth (`read_ml` the instrument's)
+	double tolerance_ml = 0.0, graduation_ml = 0.0;
+	std::optional<double> mark_ml, scale_ml;
 	// a balance (Stage 50): its model and what it states; its load's conventional mass (what I1 holds its display
 	// to), its tare; its display (none: off the bench), and whether its load is past its capacity
 	std::string model;

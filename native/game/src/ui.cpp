@@ -883,6 +883,7 @@ struct Ui::Impl {
 	// an item's footprint on the bench
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
+	static constexpr float TALL_MOST = 400; // the tallest glassware is drawn (Stage 52: a burette over a flask, under the top bar)
 	// a balance (Stage 50): its case, the pan on it, and its display in the case's front; a vessel on it stands on the pan
 	static constexpr float BALANCE_W = 150, BALANCE_H = 44, BALANCE_PAN = 8;
 	static Rect balance_case(const Rect &r) { return Rect{ r.x, r.y + BALANCE_PAN, r.w, r.h - BALANCE_PAN }; }
@@ -929,6 +930,10 @@ struct Ui::Impl {
 			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
 			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
 			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
+			if (h > TALL_MOST) { // tall glassware (Stage 52): no taller than fits over a flask, in its own proportions
+				w *= TALL_MOST / h;
+				h = TALL_MOST;
+			}
 		} else {
 			w = static_cast<float>(40.0 + 8.0 * std::cbrt(v.volume_ml));
 			h = w * 1.25f;
@@ -1382,10 +1387,15 @@ struct Ui::Impl {
 	// the selected item's name, for the item that is selected. Where the readout's rows begin:
 	float readout_top() const { return tutorial ? TUTOR.y + TUTOR.h + 30 : READOUT.y + 30; }
 	// a burner's valve: a slider, shut at its left and open at its right, while it is on the bench or under a vessel
-	// a burner's valve, or a vessel's cap set upside down over another (Stage 27): one slider, shut to open
+	// a vessel with an outlet at its foot (Stage 52: a burette, a pipette), and one with a mark it is filled to
+	static const glass::Vessel *glass_of(const ItemView &v) { return v.kind == "vessel" && !v.glassware.empty() ? glass::find(v.glassware, v.nominal_ml) : nullptr; }
+	static bool has_outlet(const ItemView &v) { return glass_of(v) != nullptr && glass_of(v)->outlet; }
+	static bool has_mark(const ItemView &v) { return glass_of(v) != nullptr && glass_of(v)->mark; }
+	// a burner's valve, or a vessel's cap set upside down over another (Stage 27): one slider, shut to open; and a
+	// burette's stopcock (Stage 52)
 	bool valve_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
-		const bool cap = v.kind == "vessel" && v.inverted && v.pours_into >= 0;
+		const bool cap = v.kind == "vessel" && ((v.inverted && v.pours_into >= 0) || (has_outlet(v) && v.glassware == "burette"));
 		if (index != selected || (v.kind != "burner" && !cap) || (v.place != "bench" && v.place != "under" && !cap) || draft.edit != Draft::None) {
 			return false;
 		}
@@ -1437,6 +1447,8 @@ struct Ui::Impl {
 	static Rect cancel_button() { return Rect{ PANEL.x + PANEL.w - 126, PANEL.y + PANEL.h - 50, 96, 36 }; }
 	// upside down over it, with a cap: a placed pour (Stage 27)
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
+	// into a volumetric flask: up to its mark (Stage 52), beside the pours
+	static Rect mark_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 168, 120, 34 }; }
 	// the solids of the vessel being emptied, each with its button; by instruments (Stage 50) one button for them all,
 	// "solid", which names none of them
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
@@ -1742,7 +1754,7 @@ struct Ui::Impl {
 			return false;
 		}
 		const ItemView &a = view.items[static_cast<size_t>(carried)], &b = view.items[static_cast<size_t>(target)];
-		return a.kind == "vessel" && !a.glassware.empty() && b.kind == "vessel" && !b.condenser && b.place == "bench";
+		return a.kind == "vessel" && !a.glassware.empty() && !has_outlet(a) && b.kind == "vessel" && !b.condenser && b.place == "bench"; // (a burette or a pipette delivers by its tip: Stage 52)
 	}
 	// what is in hand is set back on its place, as it was
 	void put_back() {
@@ -1814,6 +1826,14 @@ struct Ui::Impl {
 			} else if (v.kind == "balance") {
 				if (t.kind == "vessel") { // under the vessel, where it stands (Stage 50)
 					act({ { "do", "weigh" }, { "balance", v.id }, { "vessel", t.id } });
+				}
+			} else if (has_outlet(v) && t.kind == "vessel") {
+				// (Stage 52) a pipette, empty, draws to its mark from what it is dipped into; full, or a burette, stands on
+				// the vessel, its tip in the mouth, and drains into it
+				if (v.glassware == "pipette" && !(v.condensed_ml > 1e-6)) {
+					act({ { "do", "fill" }, { "item", v.id }, { "from", t.id } });
+				} else {
+					act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
 				}
 			} else if (t.kind == "balance" && v.kind == "vessel" && t.place == "bench") {
 				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
@@ -1968,6 +1988,14 @@ struct Ui::Impl {
 					}
 					return;
 				}
+			}
+			if (mark_button().has(x, y) && has_mark(view.items[static_cast<size_t>(to)]) && !has_mark(view.items[static_cast<size_t>(from)])) {
+				// (Stage 52) a volumetric flask made up to its mark from what is over it
+				if (allowed_click("panel:mark") && act({ { "do", "fill" }, { "item", id(to) }, { "from", id(from) } })) {
+					panel = false;
+					put_back();
+				}
+				return;
 			}
 			if (invert_button().has(x, y) && (!guided() || asks_click("panel:invert"))) {
 				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
@@ -4591,6 +4619,18 @@ struct Ui::Impl {
 				if (v.condenser) {
 					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
+				if (const glass::Vessel *g = glass_of(v); g != nullptr && (g->outlet || g->mark) && !body.flipped && body.angle == 0.0f) {
+					// (Stage 52) a burette's stopcock, a key across it; a mark etched round its neck, at its true volume
+					const float px_cm = r.h / static_cast<float>(g->height);
+					if (v.glassware == "burette") {
+						const float y = r.y + r.h - static_cast<float>(0.1 + 0.075 * g->height) * px_cm;
+						thing(v.id, "stopcock", OpticsBody::Slab, Rect{ r.cx() - 2.5f * r.w, y - 3.0f, 5.0f * r.w, 6.0f }, 2.0f, "cap_plastic", nullptr, in_hand);
+					}
+					if (g->mark && v.mark_ml) {
+						const float y = r.y + r.h - static_cast<float>(g->level(*v.mark_ml)) * px_cm, half = static_cast<float>(g->radius_inside(g->level(*v.mark_ml))) * px_cm + 2.0f;
+						bar(v.id, "mark", r.cx() - half, y, r.cx() + half, y, 1.0f, "lcd_black", in_hand);
+					}
+				}
 			} else if (v.kind == "thermal") {
 				// a thermal camera (Stage 48): its case and its screen, hidden from its own rays; on the bench (switched on)
 				// its screen shows what its frame sees, and its frame, away from it, is four thin bars; its handle's tab
@@ -5161,7 +5201,7 @@ struct Ui::Impl {
 			Rect control;
 			if (valve_rect(showing, control)) {
 				const double open = v.kind == "burner" ? v.valve : v.cap;
-				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : "cap", INK, 16);
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : has_outlet(v) ? "tap" : "cap", INK, 16);
 				rect_fill(control, BUTTON);
 				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
@@ -5296,9 +5336,29 @@ struct Ui::Impl {
 				} else if (v.sealed) {
 					row(text_of("sealed: it gives way past %.0f kPa", v.gives_way_kpa), v.pressure_kpa > 0.8 * v.gives_way_kpa ? WARN : DIM, 15);
 				}
+				// volumetric glass (Stage 52): a burette's reading from its zero line; a mark, and how the liquid stands to it
+				if (v.scale_ml) {
+					row(measured && v.read_ml ? text_of("reads %.2f mL from its zero line", *v.read_ml) + text_of(" (class A, +-%.2f)", v.tolerance_ml)
+											  : text_of("%.3f mL from its zero line", *v.scale_ml),
+							INK, 16);
+				}
+				if (v.mark_ml) {
+					const double off = v.condensed_ml - *v.mark_ml;
+					const double near = 0.002; // (as close as an eye sets a meniscus on a mark)
+					std::string says = std::fabs(off) <= near ? (measured ? text_of("at its mark: %.2f mL", v.nominal_ml) + text_of(" (class A, +-%.2f)", v.tolerance_ml) : text_of("at its mark: %.4f mL", *v.mark_ml))
+							: off < 0.0 ? (measured ? std::string("under its mark") : text_of("%.3f mL under its mark", -off))
+										: (measured ? std::string("over its mark") : text_of("%.3f mL over its mark", off));
+					if (!(v.condensed_ml > 0.0)) {
+						says = "empty";
+					}
+					row(says, INK, 16);
+				}
 				if (measured) {
 					// what its marks read of its liquid; what it holds is for the student to find out
-					if (v.read_ml) {
+					if (v.read_ml && v.graduation_ml > 0.0 && !v.scale_ml) {
+						const int places = v.graduation_ml >= 1.0 ? 1 : 2;
+						row(text_of("reads %.*f mL", places, *v.read_ml) + text_of(" (divisions of %g mL)", v.graduation_ml), DIM, 15);
+					} else if (v.read_ml && !v.scale_ml && !v.mark_ml) {
 						row(!(v.liquid_ml > 0.0) ? "no liquid"
 								: *v.read_ml > 0.0 ? text_of("liquid to about %.0f mL by its marks", *v.read_ml) + text_of(" (every %.0f mL)", v.marks_ml)
 												   : text_of("liquid under its first mark (%.0f mL)", v.marks_ml),
@@ -5544,6 +5604,9 @@ struct Ui::Impl {
 		}
 		if (!guided() || asks_click("panel:invert")) {
 			button(invert_button(), "upside down, with a cap");
+		}
+		if (has_mark(view.items[static_cast<size_t>(to)]) && !has_mark(source) && source.liquid_ml > 0.0) {
+			button(mark_button(), "to the mark");
 		}
 		button(cancel_button(), "cancel");
 	}
@@ -6344,6 +6407,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:cancel") {
 		return centre(Impl::cancel_button());
+	}
+	if (what == "panel:mark") { // (Stage 52)
+		return m.panel && centre(Impl::mark_button());
 	}
 	if (what == "panel:amount") { // (Stage 50)
 		return m.panel && centre(Impl::amount_field());

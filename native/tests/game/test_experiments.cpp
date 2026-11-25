@@ -531,3 +531,72 @@ TEST_CASE("experiment carbonate: followed with its own gestures, free, it comple
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment standard: followed with its own gestures, strict, the flask holds what was weighed in its own volume, and the second a quarter of it (Stage 52)") {
+	Pupil p("data/benches/standard.json", "data/tutorials/standard.json");
+	CHECK(pupil::follow_through(p, 3600) > 7);
+	completed(p);
+	const double first = p.ui->lab().view().items.empty() ? 0.0 : p.grams("flask", "copper_sulfate_aq"), second = p.grams("diluted", "copper_sulfate_aq");
+	// a quarter of the first's, by the pipette's true volume over the first flask's
+	const double share = *p.item("pipette").mark_ml / (*p.item("flask").mark_ml + 0.0);
+	CHECK(second / (first + second) == doctest::Approx(share).epsilon(2e-3));
+	CHECK(std::fabs(p.item("flask").condensed_ml - 100.0) < 0.1 + 25.1);
+}
+
+TEST_CASE("experiment standard: played as a person plays it, strict, it completes (Stage 52)") {
+	Pupil p("data/benches/standard.json", "data/tutorials/standard.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment standard: followed with its own gestures, free, it completes (Stage 52)") {
+	Pupil p("data/benches/standard.json", "data/tutorials/standard.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment titration: followed with its own gestures, strict, the base run in gives the acid's concentration (Stage 52)") {
+	Pupil p("data/benches/titration.json", "data/tutorials/titration.json");
+	CHECK(pupil::follow_through(p, 7200) > 8);
+	completed(p);
+	// the end point: the base run in neutralised the acid pipetted, within the last drops' overshoot
+	const double acid_mol = p.grams("flask", "sodium_sulfate_aq") / 142.04; // all of it neutralised, as sodium sulfate
+	const double base_ml = p.item("flask").condensed_ml - *p.item("pipette").mark_ml;
+	MESSAGE("base run in " << base_ml << " mL for " << acid_mol << " mol of acid");
+	CHECK(*p.item("flask").ph > 7.0);
+	CHECK(*p.item("flask").ph < 11.0); // not far past it
+	CHECK(base_ml > 25.0);
+	CHECK(base_ml < 27.5);
+}
+
+TEST_CASE("experiment titration: played as a person plays it, strict, it completes (Stage 52)") {
+	Pupil p("data/benches/titration.json", "data/tutorials/titration.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+	CHECK(*p.item("flask").ph < 11.0);
+}
+
+TEST_CASE("experiment titration: followed with its own gestures, free, it completes (Stage 52)") {
+	Pupil p("data/benches/titration.json", "data/tutorials/titration.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment calorimeter: followed with its own gestures, strict, the cup warms by about 8 K and its thermometer follows (Stage 52)") {
+	Pupil p("data/benches/calorimeter.json", "data/tutorials/calorimeter.json");
+	CHECK(pupil::follow_through(p, 3600) > 4);
+	completed(p);
+	CHECK(p.grams("cup", "sodium_sulfate_aq") / 142.04 == doctest::Approx(0.025).epsilon(0.15)); // 25 mL of the 1 M acid, by hand
+}
+
+TEST_CASE("experiment calorimeter: played as a person plays it, strict, it completes (Stage 52)") {
+	Pupil p("data/benches/calorimeter.json", "data/tutorials/calorimeter.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment calorimeter: followed with its own gestures, free, it completes (Stage 52)") {
+	Pupil p("data/benches/calorimeter.json", "data/tutorials/calorimeter.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

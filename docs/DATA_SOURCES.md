@@ -919,3 +919,52 @@ density at 1 atm and the two cells' mean temperature, `G` the mouth's area over 
 `dz / A(z)` from what the vessel holds up to its brim, inverted). Water's vapour pressure in the model at 20 °C is
 2.338 kPa (2.339 measured), so an open beaker evaporates at Stefan's rate. Not modelled: convection, which a warm
 vessel's gas really leaves by much faster than by diffusion (§20).
+
+## Volumetric glassware (Stage 52)
+
+Read from the standards' own pages (the iTeh previews of ISO 385:2005, ISO 385/2 and /3-1984, ISO 648-1977,
+ISO 1042-1981 and ISO 4788:2005), 2026-11-25. Class A throughout.
+
+| Piece | Tolerance | What else | Source |
+|---|---|---|---|
+| Burette, 50 mL | ±0.05 mL | divisions 0.1 mL; scale 500–600 mm (used: 550); at most 820 mm (750); zero line 50 mm from the top; lowest line 50 mm over the stopcock; jet 50 mm under it; delivery 60–100 s (80); outside 13 mm | ISO 385:2005 Tables 1–2; ISO 385/2-1984; a class A catalogue (ASTM) for the diameter |
+| Bulb pipette, 25 mL | ±0.03 mL | at most 530 mm (510, a maker's); bulb at most 24 mm (22); delivery tube 7 ± 1 mm, at least 220 mm (230); inside at the mark at most 5.5 mm (4.5); wall at least 1.0 mm; delivery 25–50 s (35) | ISO 648-1977 Tables 1–4 |
+| Volumetric flask, 100 / 250 mL | ±0.10 / ±0.15 mL | neck inside at the mark 12–14 / 14–17 mm (13 / 15.5); height 170 / 220 mm; bulb about 60 / 80 mm; base 40 / 55 mm; the mark in the neck's lower two thirds | ISO 1042-1981 Tables 1–3 |
+| Measuring cylinder, 10 / 25 / 100 mL | ±0.1 / ±0.25 / ±0.5 mL | subdivisions 0.2 / 0.5 / 1 mL; at most 140 / 170 / 260 mm; the top at least 20 / 25 / 35 mm over the highest line (22 / 27 / 37); 100 mL outside 29 mm (DURAN) | ISO 4788:2005 Table 1 |
+
+Derived, not given: a burette's and a cylinder's bore (the nominal volume over the scale's length, in the
+standard's outside diameter); a flask's bulb radius (the one that puts the nominal volume a third up the neck:
+59.8 and 81.2 mm against the standard's approximate 60 and 80); a pipette's bulb length (the nominal volume 50 mm up
+the suction tube); a tip's bore (Torricelli's through a sharp-edged orifice, Cd 0.61, giving the delivery time
+from the zero line or the mark: 0.69 mm for the burette). Confidence: the tolerances and the delivery times are the
+standards' (the delivery times from the superseded 1984 and 1977 editions: the current ones' tables were past the
+previews); the shapes within the standards' words.
+
+**A foam cup** (the calorimeter's): an 8 oz expanded-polystyrene cup, 81 mm across its top, 51 mm its base, 89 mm
+high (a cup maker's listing), its wall about 2.5 mm (J. Chem. Educ. 2025, 102, 1281: 5.09 mm for two nested cups).
+
+## A thermometer's lag (Stage 52)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A thermometer probe's response | t90 = 10 s in stirred water (90 s in moving air, 400 s in still air); a first order's time constant t90 / ln 10 = 4.3 s | Vernier TMP-BTA's manual (a 20 kΩ NTC thermistor in a 4.0 mm 316 stainless sheath) | `measured: a thermometer reaches 90 % of a step in its probe's 10 s` |
+| A laboratory thermometer, for comparison | time constant 2–6 s in vigorously stirred water by its bulb; one calorimetric thermometer 4.3 s stirred, 14.5 s unstirred | Harper, NBS Bulletin 8(4), 1912, Table II | — |
+
+By instruments each vessel's thermometer follows its vessel as a first-order instrument with that time constant,
+stirred or not (§20).
+
+## A foam cup (Stage 52)
+
+The calorimeter's cup: an 8 oz expanded-polystyrene cup (`data/glassware.json`, `foam_cup`; its shape above) of a
+new wall species, `polystyrene_foam` (C8H8, the styrene unit).
+
+| What | Value | Source |
+|---|---|---|
+| Its heat capacity | 1.17 J/(g·K) near 293 K: 121.86 J/(mol·K) of the styrene unit | NIST's cryogenic material correlations for polystyrene foam (near 293 K: 1161 to 1307 J/(kg·K) by the foam's density) |
+| Its conductivity | 0.035 W/(m·K) near 293 K | the same (32 kg/m³) |
+| Its mass | about 2.6 g | a cup's wall of about 52 cm³ at about 0.05 g/cm³ (calibrated) |
+| Its heat lost (a bench's `loss`) | 0.12 W/K | calibrated: the foam's 0.035 W/(m·K) through its 2.5 mm over about 0.021 m² (0.29 W/K) in series with an outside film of about 7 W/(m²·K) over 0.025 m² (0.18 W/K) and a lid; a double cup with a lid lost 23.8 °C in 40 min (J. Chem. Educ. 2025, 102, 1281; its start unknown) |
+
+Its light: searched and not found measured. Real foam scatters white; the pass has no wall that scatters light back,
+so the cup's wall lets a flat 0.8 of the visible through (pale, where a third made it a smoked grey) and a fifth of
+the long-wave (`data/optics/media.json`), calibrated.

@@ -64,6 +64,8 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		{ builtin::copper_hydroxide, -443.99, 87.0, 87.85 },
 		// NBS 1982, p. 2-167, NiSO4 "ai" (Stage 47); NBS gives no heat capacity: CuSO4(aq)'s, a stand-in
 		{ builtin::nickel_sulfate_aq, -963.2, -108.8, 211.81 },
+		// NIST's polystyrene foam correlation near 293 K, 1.17 J/g/K, the styrene unit (Stage 52); a wall's formation terms 0
+		{ builtin::polystyrene_foam, 0.0, 0.0, 121.86 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -76,6 +78,7 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 	// the Shomate fits' and ISO 3585's figures behind two of them
 	CHECK(near(0.8 * (SI + 2 * O), 48.066, 1e-4)); // glass: 0.8 J/g/K times SiO2's molar mass
 	CHECK(near(1.91 * (5 * C + 8 * H), 130.1, 1e-3)); // latex: the isoprene unit
+	CHECK(near(1.17 * (8 * C + 8 * H), 121.86, 1e-4)); // polystyrene foam: the styrene unit
 	const double t = 298.15 / 1000.0; // water's liquid fit (Chase 1998, 298-500 K)
 	CHECK(near(-203.6060 + 1523.290 * t - 3196.413 * t * t + 2474.455 * t * t * t + 3.855326 / (t * t), 75.375, 1e-4));
 }

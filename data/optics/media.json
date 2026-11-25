@@ -96,6 +96,13 @@
 			"rise": 0.9,
 			"edge_nm": 600,
 			"edge_width_nm": 18
+		},
+		"polystyrene_foam": {
+			"kind": "transmit",
+			"base": 0.8,
+			"rise": 0.05,
+			"edge_nm": 450,
+			"edge_width_nm": 40
 		}
 	},
 	"indices_note": "Refractive indices n(lambda) (GAME_SPEC §12.3). sellmeier_um: n^2 - 1 = sum of B lambda^2 / (lambda^2 - C), lambda in micrometres, [B, C] pairs. table: [nm, n] pairs, fitted at build by n = A + B/lambda^2 + C/lambda^4; density_g_cm3 for a wall's thickness. Sources: docs/DATA_SOURCES.md.",
@@ -453,7 +460,8 @@
 			"copper_hydroxide": 0.9
 		},
 		"transmittance": {
-			"latex": 0.3
+			"latex": 0.3,
+			"polystyrene_foam": 0.2
 		},
 		"flames": {
 			"flame_blue": {

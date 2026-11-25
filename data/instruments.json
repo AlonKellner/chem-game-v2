@@ -6,8 +6,8 @@
 		{"name": "top_loading", "readability_g": 0.01, "capacity_g": 620, "linearity_g": 0.02},
 		{"name": "analytical", "readability_g": 0.0001, "capacity_g": 220, "linearity_g": 0.0002}
 	],
-	"thermometer": {"resolution_c": 0.1, "accuracy_c": 0.2},
+	"thermometer": {"resolution_c": 0.1, "accuracy_c": 0.2, "time_constant_s": 4.3},
 	"ph_meter": {"resolution": 0.01, "accuracy": 0.02},
 	"hand": 0.10,
-	"walls_g_cm3": {"glass": 2.23, "latex": 0.92}
+	"walls_g_cm3": {"glass": 2.23, "latex": 0.92, "polystyrene_foam": 0.05}
 }

@@ -125,7 +125,16 @@ struct Item {
 	// a balance (Stage 50): its model (data/instruments.json) and its tare, a conventional mass, g; a vessel's label
 	std::string model, label;
 	double tare = 0.0;
+	// a vessel's thermometer by instruments (Stage 52): what it reads, K, following its vessel with its own lag; NaN until
+	// it has read anything
+	double read_kelvin = std::numeric_limits<double>::quiet_NaN();
 };
+
+// a vessel with an outlet at its foot (Stage 52: a burette, a pipette): its glassware, or null
+const glass::Vessel *outlet_of(const Item &x) {
+	const glass::Vessel *g = x.kind == Kind::Vessel && !x.glassware.empty() ? glass::find(x.glassware, x.nominal_ml) : nullptr;
+	return g != nullptr && g->outlet ? g : nullptr;
+}
 
 // whether an item holds matter of its own (a burner's cell is its flame, a viewer has none)
 bool holds_matter(const Item &x) {
@@ -197,7 +206,13 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 // An item's footprint on the bench, in squares of the grid (GAME_SPEC §13):
 // room for its body, what stands on its mouth starts above it, and a vessel's
 // stand over a burner. A bench may give its own ("size").
-void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
+void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h, const std::string &glassware = "") {
+	// tall glassware (Stage 52): a burette, a pipette, a cylinder, a volumetric flask stand on narrow, tall footprints
+	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask")) {
+		w = 2;
+		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : volume_ml > 50.0 ? 8 : 6;
+		return;
+	}
 	if (kind == "viewer") {
 		w = 7; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
 		h = 4;
@@ -534,6 +549,9 @@ struct Lab::Impl {
 		const int i = find(item_id);
 		if (control == "cap" && i >= 0 && items[static_cast<size_t>(i)].pours_into >= 0 && items[static_cast<size_t>(i)].inverted) {
 			return items[static_cast<size_t>(i)].cap; // an upside-down vessel's cap (Stage 27)
+		}
+		if (control == "cap" && i >= 0 && outlet_of(items[static_cast<size_t>(i)]) != nullptr) {
+			return items[static_cast<size_t>(i)].cap; // a burette's stopcock (Stage 52)
 		}
 		if (control == "cap" && screw_cap(i)) {
 			return items[static_cast<size_t>(i)].screwed ? 0.0 : 1.0; // upright: on (0, sealed) or off (1)
@@ -883,7 +901,7 @@ struct Lab::Impl {
 			record(item_id, control, on ? 1.0 : 0.0, by);
 			return true;
 		}
-		if (control == "cap" && x.pours_into >= 0 && x.inverted) {
+		if (control == "cap" && ((x.pours_into >= 0 && x.inverted) || outlet_of(x) != nullptr)) { // (Stage 52: an outlet's stopcock)
 			x.cap = std::clamp(value, 0.0, 1.0);
 			record(item_id, control, x.cap, by);
 			return true;
@@ -1899,6 +1917,46 @@ struct Lab::Impl {
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		mid_step = true; // (moved before the step: a trace begun after it cannot start where the last one ended)
 	}
+	// By instruments, each vessel's thermometer follows it a step (Stage 52): first order, its probe's time constant
+	void follow_thermometers() {
+		if (!instruments) {
+			return;
+		}
+		const double tau = instruments::thermometer().time_constant_s;
+		for (Item &x : items) {
+			if (x.kind != Kind::Vessel || x.burst) {
+				continue;
+			}
+			const double t = kelvin(x);
+			x.read_kelvin = std::isnan(x.read_kelvin) ? t : instruments::lagged(x.read_kelvin, t, chem::STEP_SECONDS, tau);
+		}
+	}
+
+	// The true volume at a piece's mark (Stage 52): its nominal, off by its class's tolerance as drawn from the seed
+	double mark_ml(const Item &x) const {
+		const glass::Vessel *g = x.glassware.empty() ? nullptr : glass::find(x.glassware, x.nominal_ml);
+		return g == nullptr || !g->mark ? 0.0 : g->nominal_ml + g->tolerance_ml * instruments::share(seed, x.id + ":mark");
+	}
+
+	// A vessel with an outlet at its foot on another's mouth (Stage 52) drains into it through its tip, as far open as its
+	// stopcock: Torricelli's under its liquid's head over the tip, through a sharp-edged orifice of the tip's bore
+	void set_outlets() {
+		for (Item &x : items) {
+			const glass::Vessel *g = outlet_of(x);
+			if (g == nullptr || x.drains_to < 0 || x.place != Place::On) {
+				continue;
+			}
+			const EdgeId edge = drain_from(x, items[static_cast<size_t>(x.drains_to)].cell);
+			if (edge.index < 0) {
+				continue;
+			}
+			const Fill held = fill(x);
+			const double head_m = held.defined ? g->level(held.condensed * 1e6) / 100.0 : 0.0, bore_m = g->tip_bore / 100.0;
+			const double rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * std::max(head_m, 0.0));
+			world().set_drain(edge, rate, 0.0, 0.0);
+		}
+	}
+
 	// An open vessel's gas exchanges with the room's air by diffusion through its mouth (GAME_SPEC §6, Stage 50): its
 	// mouth's edge passes each gas as a tube from what the vessel holds up to its brim would (Stefan's), the area over
 	// the length inverted from the integral of dz / A(z). Set at a step boundary, again only when it has changed.
@@ -2319,6 +2377,7 @@ struct Lab::Impl {
 		set_stirring();
 		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
 		set_pours();
+		set_outlets();
 		set_exchanges();
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
@@ -2336,6 +2395,7 @@ struct Lab::Impl {
 				return false;
 			}
 		}
+		follow_thermometers();
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (!trials.empty()) {
 			run_trials();
@@ -2798,13 +2858,34 @@ struct Lab::Impl {
 				// its instruments' readings (GAME_SPEC §13, Readings; Stage 50): the truth and an offset drawn from the seed
 				v.label = item.label;
 				const instruments::Meter t = instruments::thermometer(), ph = instruments::ph_meter();
-				v.read_c = instruments::rounded(v.celsius + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
+				const double reads_c = m.instruments && !std::isnan(item.read_kelvin) ? item.read_kelvin - 273.15 : v.celsius; // (its lag, Stage 52)
+				v.read_c = instruments::rounded(reads_c + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
 				if (v.ph) {
 					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
 				}
-				if (const glass::Vessel *g = item.glassware.empty() ? nullptr : glass::find(item.glassware, item.nominal_ml); g != nullptr && g->marks_ml > 0.0) {
+				const glass::Vessel *g = item.glassware.empty() ? nullptr : glass::find(item.glassware, item.nominal_ml);
+				if (g != nullptr && g->marks_ml > 0.0) {
 					v.marks_ml = g->marks_ml;
 					v.read_ml = instruments::marks_ml(v.liquid_ml, g->marks_ml, g->marks_error, instruments::share(m.seed, item.id + ":marks"));
+				}
+				// volumetric glass (Stage 52): its class's tolerance; a mark's true volume; a burette's scale, read down from
+				// its zero line; a graduated cylinder's; each read by instruments with its scale's error, in proportion to
+				// how far along it the reading is, to a tenth of a division (one digit past the scale, as it is read)
+				if (g != nullptr && g->tolerance_ml > 0.0) {
+					v.tolerance_ml = g->tolerance_ml;
+					v.graduation_ml = g->graduation_ml;
+					if (g->mark) {
+						v.mark_ml = m.mark_ml(item);
+					}
+					const double share = instruments::share(m.seed, item.id + ":scale");
+					if (g->zero > 0.0) {
+						v.scale_ml = g->volume_below(g->zero) - v.condensed_ml;
+						v.read_ml = instruments::rounded(*v.scale_ml + g->tolerance_ml * share * std::clamp(*v.scale_ml / g->nominal_ml, 0.0, 1.0), g->graduation_ml / 10.0);
+						v.marks_ml = g->graduation_ml;
+					} else if (g->graduation_ml > 0.0) {
+						v.read_ml = instruments::rounded(v.condensed_ml + g->tolerance_ml * share * std::clamp(v.condensed_ml / g->nominal_ml, 0.0, 1.0), g->graduation_ml / 10.0);
+						v.marks_ml = g->graduation_ml;
+					}
 				}
 			}
 		} else {
@@ -3178,7 +3259,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			}
 			const std::string kind = j.at("kind").get<std::string>();
 			if (squares) {
-				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h);
+				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h, j.value("glassware", ""));
 			}
 			if (squares && j.contains("size")) {
 				item.w = j.at("size").at(0).get<int>();
@@ -4883,6 +4964,43 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" has burst";
 			return false;
 		}
+		if (const glass::Vessel *g = outlet_of(x); g != nullptr) {
+			// (Stage 52) a vessel with an outlet at its foot stands on the mouth, its tip in it, and drains into the vessel
+			// through its stopcock (a pipette has none: it delivers as it stands); the mouth stays open to the room
+			if (x.place == Place::Outbox || x.place == Place::Trash || !on_bench(v, why)) {
+				if (why.empty()) {
+					why = "\"" + x.id + "\" is not on the bench";
+				}
+				return false;
+			}
+			if (v.holds >= 0) {
+				why = "the mouth of \"" + v.id + "\" is taken";
+				return false;
+			}
+			if (x.drains_to >= 0 || x.pours_into >= 0 || x.holds >= 0 || fixed_under(thing) >= 0) {
+				why = "\"" + x.id + "\" is joined to something: take it off first";
+				return false;
+			}
+			if (!boundary(why)) {
+				return false;
+			}
+			if (world().connect_drain(x.cell, v.cell) != Refusal::None) {
+				why = "\"" + x.id + "\" cannot stand there";
+				return false;
+			}
+			const Item was = x;
+			x.on = to;
+			x.place = Place::On;
+			x.col = x.row = -1;
+			x.drains_to = to;
+			v.holds = thing;
+			leave_balances(thing, was);
+			if (g->kind == "pipette") {
+				x.cap = 1.0;
+				record(x.id, "cap", 1.0, "player");
+			}
+			return true;
+		}
 		// adjacency (Stage 27): its fitting seals a neck, not a wide mouth
 		if (const glass::Vessel *g = glass::find(v.glassware, v.nominal_ml); g != nullptr && 2.0 * g->mouth() > glass::seals()) {
 			why = "\"" + x.id + "\" does not seal \"" + v.id + "\"'s " + text_of("%.0f mm mouth", 20.0 * g->mouth()) + text_of(": it fits a neck up to %.0f mm", 10.0 * glass::seals());
@@ -4954,6 +5072,18 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!boundary(why)) {
 			return false;
 		}
+		if (outlet_of(x) != nullptr && x.drains_to >= 0) {
+			// (Stage 52) a burette or a pipette lifted off: its drain off, its liquid stays in it (a pipette's tip held shut)
+			if (!take_off_drain(static_cast<size_t>(thing), why)) {
+				return false;
+			}
+			v.holds = -1;
+			x.on = -1;
+			x.place = Place::Cabinet;
+			x.col = x.row = -1;
+			set_beside(thing, v);
+			return true;
+		}
 		EdgeId mouth;
 		world().connect(v.cell, air, PHASES_GAS, &mouth);
 		if (x.kind != Kind::Stopper && world().disconnect(x.joint) != Refusal::None) {
@@ -4970,6 +5100,68 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.col = x.row = -1;
 		set_beside(thing, v);
 		return true;
+	}
+	if (what == "fill") {
+		// to the mark (Stage 52): a pipette draws, a volumetric flask is made up, from a vessel's liquid with what is
+		// dissolved in it, until its own stands at its mark (its true volume there, within its class's tolerance)
+		int thing = -1, from = -1;
+		if (!item(c, "item", Kind::Vessel, thing, why) || !item(c, "from", Kind::Vessel, from, why)) {
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(thing)];
+		const glass::Vessel *g = x.glassware.empty() ? nullptr : glass::find(x.glassware, x.nominal_ml);
+		if (g == nullptr || !g->mark) {
+			why = "\"" + x.id + "\" has no mark to fill to: a pipette or a volumetric flask has";
+			return false;
+		}
+		if (thing == from) {
+			why = "a vessel is not filled from itself";
+			return false;
+		}
+		if (!on_bench(x, why) || !on_bench(items[static_cast<size_t>(from)], why)) {
+			return false;
+		}
+		if (x.place != Place::Bench) {
+			why = "\"" + x.id + "\" stands on something: take it off first";
+			return false;
+		}
+		if (sealed(x) || sealed(items[static_cast<size_t>(from)])) {
+			why = "\"" + items[static_cast<size_t>(sealed(x) ? thing : from)].id + "\" is sealed: open it first";
+			return false;
+		}
+		const Fill held = fill(x);
+		const double want = (mark_ml(x) - (held.defined ? held.condensed * 1e6 : 0.0)) * 1e-6; // m^3
+		if (!(want > 0.0)) {
+			why = "\"" + x.id + "\" stands at its mark already, or over it";
+			return false;
+		}
+		const CellState &source = world().snapshot_cell(items[static_cast<size_t>(from)].cell);
+		double solution = 0.0; // m^3: its liquid and what is dissolved in it
+		for (size_t s = 0; s < source.amount.size(); ++s) {
+			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+			if (source.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+				solution += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+			}
+		}
+		if (want > solution * (1.0 - 1e-12)) {
+			why = "\"" + items[static_cast<size_t>(from)].id + "\" does not hold enough liquid to fill \"" + x.id + "\" to its mark";
+			return false;
+		}
+		const double fraction = want / solution;
+		std::vector<SpeciesAmount> amounts;
+		for (size_t s = 0; s < source.amount.size(); ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const SpeciesDef &def = table().species(id);
+			if (source.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+				const auto moves = static_cast<int64_t>(std::llround(static_cast<double>(source.amount[s]) * fraction));
+				if (moves > 0) {
+					amounts.push_back(SpeciesAmount{ id, Amount{ std::min(moves, source.amount[s]) } });
+				}
+			}
+		}
+		touched.resize(items.size(), 0);
+		touched[static_cast<size_t>(thing)] = touched[static_cast<size_t>(from)] = 1; // what a hand moves is not noticed as appearing
+		return move(items[static_cast<size_t>(from)], x, amounts, why);
 	}
 	if (what == "under") {
 		int thing = -1, of = -1;
@@ -5968,6 +6160,12 @@ json Lab::Impl::save() const {
 		if (!item.label.empty()) {
 			list.back()["label"] = item.label;
 		}
+		if (outlet_of(item) != nullptr && item.pours_into < 0 && item.cap != 0.0) { // a burette's stopcock (Stage 52)
+			list.back()["stopcock"] = bits(item.cap);
+		}
+		if (!std::isnan(item.read_kelvin)) { // its thermometer by instruments (Stage 52)
+			list.back()["thermometer"] = bits(item.read_kelvin);
+		}
 		if (item.kind == Kind::Thermal) { // a camera's frame and settings (Stage 48)
 			const ThermalSettings &t = item.thermal;
 			list.back()["thermal"] = { { "room", t.frame_room }, { "at", { bits(t.frame_x), bits(t.frame_y) } }, { "palette", t.palette }, { "emissivity", bits(t.emissivity) },
@@ -6165,6 +6363,14 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.glassware = j.value("glassware", "");
 			item.screwed = j.value("screwed", false);
 			item.label = j.value("label", "");
+			if (j.contains("thermometer") && !from_bits(j.at("thermometer"), item.read_kelvin)) { // (Stage 52)
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
+			if (j.contains("stopcock") && !from_bits(j.at("stopcock"), item.cap)) { // (Stage 52)
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			if (j.contains("balance")) { // (Stage 50)
 				item.model = j.at("balance").at("model").get<std::string>();
 				if (instruments::balance(item.model) == nullptr || !from_bits(j.at("balance").at("tare"), item.tare)) {

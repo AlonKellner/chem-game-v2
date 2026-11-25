@@ -1,6 +1,7 @@
 #include "lab/conditions.hpp"
 
 #include "chem/species.hpp"
+#include "lab/glassware.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +13,7 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g";
+			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap";
 }
 
 bool is_gas(const std::string &species) {
@@ -156,6 +157,16 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "ph") { // its liquid's (Stage 43): none without one
 		return v->ph;
 	}
+	if (q.what == "mark_off_ml") { // (Stage 52) how its liquid stands to its mark: over it above 0, under it below
+		return v->mark_ml ? std::optional<double>(v->condensed_ml - *v->mark_ml) : std::nullopt;
+	}
+	if (q.what == "scale_ml") { // (Stage 52) a burette's reading from its zero line
+		return v->scale_ml;
+	}
+	if (q.what == "tap") { // (Stage 52) a burette's or a pipette's stopcock, how far open, %
+		const glass::Vessel *g = v->kind == "vessel" && !v->glassware.empty() ? glass::find(v->glassware, v->nominal_ml) : nullptr;
+		return g != nullptr && g->outlet ? std::optional<double>(100.0 * v->cap) : std::nullopt;
+	}
 	if (q.what == "mass_g") { // all it holds, its wall not
 		double all = 0.0;
 		for (const SubstanceView &s : v->contents) {
@@ -204,6 +215,12 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		if (item.liquid_ml > 0.0) {
 			out.push_back(Quantity{ item.id, "bubbles_cm", "g" }); // Stage 45
 		}
+		if (item.mark_ml) {
+			out.push_back(Quantity{ item.id, "mark_off_ml", "g" }); // Stage 52
+		}
+		if (item.scale_ml) {
+			out.push_back(Quantity{ item.id, "scale_ml", "g" });
+		}
 	}
 	if (item.kind == "balloon") {
 		out.push_back(Quantity{ item.id, "fill", "g" });
@@ -217,7 +234,7 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 }
 
 QuantityKind kind_of(const Quantity &q) {
-	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g") {
+	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap") {
 		return QuantityKind::Other;
 	}
 	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
@@ -255,7 +272,7 @@ std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind k
 		}
 	}
 	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
-		static const char *const ORDER[] = { "celsius", "kpa", "ph", "bubbles_cm", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		static const char *const ORDER[] = { "celsius", "kpa", "ph", "bubbles_cm", "scale_ml", "mark_off_ml", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
 		std::vector<std::string> ordered;
 		for (const char *w : ORDER) {
 			if (std::find(out.begin(), out.end(), w) != out.end()) {
@@ -285,7 +302,7 @@ std::string unit(const Quantity &q) {
 	if (q.what == "celsius") {
 		return "C";
 	}
-	if (q.what == "valve" || q.what == "fill") {
+	if (q.what == "valve" || q.what == "fill" || q.what == "tap") {
 		return "%";
 	}
 	if (q.what == "met" || q.what == "ph") {
@@ -322,6 +339,12 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "total mass";
 	} else if (q.what == "reads_g") {
 		what = "reading";
+	} else if (q.what == "scale_ml") {
+		what = "burette reading";
+	} else if (q.what == "tap") {
+		what = "tap";
+	} else if (q.what == "mark_off_ml") {
+		what = "from its mark";
 	} else if (q.what == "kpa") {
 		what = "pressure";
 	} else if (q.what == "ph") {
@@ -356,6 +379,9 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "reads_g") { // to an analytical balance's 0.1 mg (Stage 50)
 		return fmt("%.4f g", value);
+	}
+	if (q.what == "scale_ml" || q.what == "mark_off_ml") { // (Stage 52)
+		return fmt("%.2f mL", value);
 	}
 	if (q.what == "kpa") {
 		return fmt("%.1f kPa", value);

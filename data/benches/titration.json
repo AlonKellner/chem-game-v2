@@ -1,0 +1,17 @@
+{
+	"format": "chem-bench/2",
+	"note": "A titration (GAME_SPEC §13, Stage 52; docs/CURRICULUM.md, experiment 13): a 50 mL burette, a 25 mL bulb pipette, a 250 mL conical flask, a bottle of 0.1 mol/kg sodium hydroxide (0.04 mol in 400 g of water) and one of sulfuric acid of about 0.05 mol/L (0.0156 mol in 300 g of water). Read by instruments: 25 mL of the acid pipetted into the flask, the base run in from the burette until the flask's pH meter passes 7, about 26 mL.",
+	"readings": "instruments",
+	"seed": 33,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "loss": 0.1, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "loss": 0.1, "at": [4, 3], "label": "25 mL pipette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "loss": 0.5, "at": [8, 8], "label": "titration flask"},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [14, 7], "label": "sodium hydroxide, 0.100 M",
+			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.04}}},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [19, 7], "label": "sulfuric acid, about 0.05 M",
+			"contents": {"water": {"g": 300}, "sulfuric_acid_aq": {"mol": 0.0156}}}
+	]
+}
