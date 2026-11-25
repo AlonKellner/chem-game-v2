@@ -6,6 +6,7 @@
 #include <cmath>
 #include <numbers>
 #include <string>
+#include <tuple>
 
 using namespace lab::glass;
 
@@ -197,7 +198,7 @@ TEST_CASE("glassware: a mouth's path for a gas is its table's, the integral of d
 		for (const double ml : o.ml) {
 			const lab::glass::Vessel *g = lab::glass::find(o.kind, ml);
 			REQUIRE(g != nullptr);
-			REQUIRE(g->paths.size() == 65);
+			REQUIRE(g->paths.size() == Vessel::PATHS + 1);
 			for (const double share : { 0.0, 0.137, 0.5, 0.731, 0.96 }) {
 				const double held = share * g->capacity();
 				const double from = g->level(held);
@@ -216,4 +217,52 @@ TEST_CASE("glassware: a mouth's path for a gas is its table's, the integral of d
 			CHECK(g->mouth_path(0.9 * g->capacity()) < g->mouth_path(0.1 * g->capacity()));
 		}
 	}
+}
+
+TEST_CASE("glassware: volumetric glassware is made to its standard's rows (Stage 52)") {
+	// the burette (ISO 385): 50 mL between its zero line, 50 mm under its top, and its lowest line, at least 50 mm over
+	// its stopcock; no longer than 820 mm; its bore uniform; a tip that empties its scale in its 80 s
+	const Vessel &b = *find("burette", 50);
+	CHECK(b.outlet);
+	CHECK(b.height <= 82.0);
+	CHECK(b.zero == doctest::Approx(b.height - 5.0));
+	const double lowest = b.level(b.volume_below(b.zero) - 50.0);
+	CHECK(b.zero - lowest == doctest::Approx(55.0).epsilon(1e-6)); // its scale: 550 mm
+	CHECK(lowest >= 5.0 + 5.0 + 5.0 - 1e-9); // the jet, the stopcock and 50 mm under the lowest line
+	CHECK(b.tip_bore > 0.03);
+	CHECK(b.tip_bore < 0.15);
+	CHECK(b.tolerance_ml == 0.05);
+	CHECK(b.graduation_ml == 0.1);
+	// the bulb pipette (ISO 648): no longer than 530 mm, its bulb at most 24 mm across, its mark in the suction tube,
+	// whose inside there is at most 5.5 mm across
+	const Vessel &p = *find("pipette", 25);
+	CHECK(p.outlet);
+	CHECK(p.height <= 53.0);
+	CHECK(p.widest() <= 1.2 + 1e-9);
+	CHECK(2.0 * p.radius_inside(p.level(25.0)) <= 0.55);
+	CHECK(p.level(25.0) > 23.0 + 4.0); // over the bulb
+	CHECK(p.tip_bore > 0.03);
+	// volumetric flasks (ISO 1042): the mark in the neck's lower two thirds, its inside there 12-14 / 14-17 mm
+	for (const auto &[ml, lo, hi] : { std::tuple{ 100.0, 1.2, 1.4 }, std::tuple{ 250.0, 1.4, 1.7 } }) {
+		const Vessel &f = *find("volumetric_flask", ml);
+		const double mark = f.level(ml);
+		CHECK(2.0 * f.radius_inside(mark) >= lo);
+		CHECK(2.0 * f.radius_inside(mark) <= hi);
+		// where the neck's inside starts: the lowest height with the mark's radius
+		double shoulder = mark;
+		while (shoulder > 0.0 && std::fabs(f.radius_inside(shoulder - 0.01) - f.radius_inside(mark)) < 1e-6) {
+			shoulder -= 0.01;
+		}
+		CHECK(mark < shoulder + 2.0 / 3.0 * (f.height - shoulder));
+		CHECK(f.widest() == doctest::Approx(ml == 100.0 ? 3.0 : 4.0).epsilon(0.05)); // the bulb about the standard's
+	}
+	// measuring cylinders (ISO 4788): the nominal volume at the highest line, at least 20 / 25 / 35 mm under the top
+	for (const auto &[ml, top, height] : { std::tuple{ 10.0, 2.0, 14.0 }, std::tuple{ 25.0, 2.5, 17.0 }, std::tuple{ 100.0, 3.5, 26.0 } }) {
+		const Vessel &m = *find("measuring_cylinder", ml);
+		CHECK(m.height <= height);
+		CHECK(m.level(ml) <= m.height - top + 1e-9);
+		CHECK(m.capacity() > ml);
+	}
+	// the foam cup: its 8 oz below its brim
+	CHECK(find("foam_cup", 237)->capacity() > 237.0);
 }

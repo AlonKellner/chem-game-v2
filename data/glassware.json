@@ -49,6 +49,67 @@
 			"burst_kpa": 300,
 			"screw_cap": true,
 			"marks_error": 0.10
+		},
+		{
+			"name": "burette",
+			"standard": "ISO 385",
+			"sizes": [
+				{"ml": 50, "diameter_mm": 13, "height_mm": 750, "scale_mm": 550, "zero_mm": 50, "stopcock_mm": 50, "jet_mm": 50, "jet_diameter_mm": 3.0, "graduation_ml": 0.1, "tolerance_ml": 0.05, "delivery_s": 80}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 2,
+			"cap_bore_mm": 4,
+			"burst_kpa": 200,
+			"outlet": true
+		},
+		{
+			"name": "pipette",
+			"standard": "ISO 648",
+			"sizes": [
+				{"ml": 25, "height_mm": 510, "diameter_mm": 22, "wall_mm": 1.0, "delivery_mm": 230, "delivery_diameter_mm": 7, "suction_diameter_mm": 6.5, "mark_over_bulb_mm": 50, "jet_diameter_mm": 3.0, "tolerance_ml": 0.03, "delivery_s": 35}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 2,
+			"cap_bore_mm": 4,
+			"burst_kpa": 200,
+			"outlet": true
+		},
+		{
+			"name": "volumetric_flask",
+			"standard": "ISO 1042",
+			"sizes": [
+				{"ml": 100, "height_mm": 170, "diameter_mm": 60, "base_mm": 40, "neck_inside_mm": 13, "wall_mm": 1.0, "tolerance_ml": 0.10},
+				{"ml": 250, "height_mm": 220, "diameter_mm": 80, "base_mm": 55, "neck_inside_mm": 15.5, "wall_mm": 1.2, "tolerance_ml": 0.15}
+			],
+			"floor_per_wall": 2.0,
+			"pour_ml_s": 10,
+			"cap_bore_mm": 4,
+			"burst_kpa": 200
+		},
+		{
+			"name": "measuring_cylinder",
+			"standard": "ISO 4788",
+			"sizes": [
+				{"ml": 10, "height_mm": 140, "diameter_mm": 13, "top_mm": 22, "foot_mm": 38, "graduation_ml": 0.2, "tolerance_ml": 0.1},
+				{"ml": 25, "height_mm": 170, "diameter_mm": 18, "top_mm": 27, "foot_mm": 48, "graduation_ml": 0.5, "tolerance_ml": 0.25},
+				{"ml": 100, "height_mm": 260, "diameter_mm": 29, "top_mm": 37, "foot_mm": 70, "graduation_ml": 1, "tolerance_ml": 0.5}
+			],
+			"foot_height_mm": 10,
+			"floor_per_wall": 2.0,
+			"pour_ml_s": 12,
+			"cap_bore_mm": 4,
+			"burst_kpa": 150
+		},
+		{
+			"name": "foam_cup",
+			"standard": "an 8 oz expanded-polystyrene cup",
+			"sizes": [
+				{"ml": 237, "height_mm": 89, "diameter_mm": 81, "base_mm": 51, "wall_mm": 2.5}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 20,
+			"cap_bore_mm": 4,
+			"burst_kpa": 20
 		}
 	]
 }

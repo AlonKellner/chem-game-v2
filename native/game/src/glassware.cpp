@@ -260,26 +260,26 @@ void Vessel::make_paths() {
 	constexpr double least_cm = 0.3; // a vessel full to its brim keeps its gas a few mm under it
 	const double all = capacity(), r_mouth = mouth();
 	capacity_cached = all;
-	paths.assign(65, 0.0);
-	for (int k = 0; k <= 64; ++k) {
-		const double from = std::min(level(all * k / 64.0), height);
-		constexpr int SLICES = 32;
+	paths.assign(PATHS + 1, 0.0);
+	for (size_t k = 0; k <= PATHS; ++k) {
+		const double from = std::min(level(all * static_cast<double>(k) / PATHS), height);
+		constexpr int SLICES = 1000; // (made once: a slender tube's 1/A(z) changes fast)
 		const double dz = (height - from) / SLICES;
 		double path = 0.0;
 		for (int i = 0; i < SLICES; ++i) {
 			const double r = std::max(radius_inside(from + (i + 0.5) * dz), 0.1 * r_mouth);
 			path += dz / (PI_ * r * r);
 		}
-		paths[static_cast<size_t>(k)] = std::max(path, least_cm / (PI_ * r_mouth * r_mouth));
+		paths[k] = std::max(path, least_cm / (PI_ * r_mouth * r_mouth));
 	}
 }
 
 double Vessel::mouth_path(double held_cm3) const {
-	if (paths.size() != 65) {
+	if (paths.size() != PATHS + 1) {
 		return 0.0;
 	}
-	const double f = std::clamp(held_cm3 / capacity_cached * 64.0, 0.0, 64.0);
-	const auto k = std::min(static_cast<size_t>(f), size_t{ 63 });
+	const double f = std::clamp(held_cm3 / capacity_cached * PATHS, 0.0, static_cast<double>(PATHS));
+	const auto k = std::min(static_cast<size_t>(f), size_t{ PATHS - 1 });
 	return paths[k] + (paths[k + 1] - paths[k]) * (f - static_cast<double>(k));
 }
 
@@ -384,7 +384,20 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	v.nominal_ml = nominal_ml;
 	v.diameter = mm("diameter_mm");
 	v.height = mm("height_mm");
-	v.wall = mm("wall_mm");
+	// (Stage 52) a burette's and a cylinder's wall follow from their scales: the bore that holds the nominal volume
+	// over the scale's length, in the standard's outside diameter
+	if (kind == "burette") {
+		v.wall = 0.5 * v.diameter - std::sqrt(nominal_ml / (pi * mm("scale_mm")));
+	} else if (kind == "measuring_cylinder") {
+		const double line = v.height - mm("top_mm"), floor_top = k->at("foot_height_mm").get<double>() / 10.0;
+		v.wall = 0.5 * v.diameter - std::sqrt(nominal_ml / (pi * (line - floor_top)));
+	} else {
+		v.wall = mm("wall_mm");
+	}
+	v.tolerance_ml = row->value("tolerance_ml", 0.0);
+	v.graduation_ml = row->value("graduation_ml", 0.0);
+	v.delivery_s = row->value("delivery_s", 0.0);
+	v.outlet = k->value("outlet", false);
 	v.floor = v.wall * k->at("floor_per_wall").get<double>();
 	v.pour_ml_s = k->at("pour_ml_s").get<double>();
 	v.cap_bore = k->at("cap_bore_mm").get<double>() / 10.0;
@@ -436,6 +449,99 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		bead.a = bead.at(0.0);
 		bead.b = bead.at(1.0);
 		top.push_back(bead);
+	} else if (kind == "burette") {
+		// ISO 385 (Stage 52): a jet under a stopcock, a cone to the tube, the tube of a uniform bore to the top; its zero
+		// line under the top, its scale down to its lowest line, uniform 50 mm below that to the stopcock
+		const double jet = mm("jet_mm"), cock = mm("stopcock_mm"), rj = mm("jet_diameter_mm") / 2.0;
+		v.floor = 0.05;
+		c = { { { 0.0, 0.0 }, 0.0, v.floor }, { { rj, 0.0 }, 0.0, std::min(t, 0.8 * rj) }, { { rj, jet }, 0.2, std::min(t, 0.8 * rj) }, { { R, jet + 0.6 * cock }, 0.3, t },
+			{ { R, H }, 0.0, t } };
+		v.zero = H - mm("zero_mm");
+	} else if (kind == "pipette") {
+		// ISO 648 (Stage 52): a jet, the delivery tube, a bulb, the suction tube to the top; the bulb as long as puts
+		// the mark `mark_over_bulb_mm` up the suction tube (made below, once the shape is known)
+		const double rj = mm("jet_diameter_mm") / 2.0, rd = mm("delivery_diameter_mm") / 2.0, rs = mm("suction_diameter_mm") / 2.0;
+		const double tube = mm("delivery_mm");
+		v.floor = 0.05;
+		const auto shape = [&](double bulb) {
+			return std::vector<Corner>{ { { 0.0, 0.0 }, 0.0, v.floor }, { { rj, 0.0 }, 0.0, std::min(t, 0.8 * rj) }, { { rd, 2.0 }, 0.3, t }, { { rd, tube }, 0.8, t },
+				{ { R, tube + 2.0 }, 0.8, t }, { { R, tube + 2.0 + bulb }, 0.8, t }, { { rs, tube + 4.0 + bulb }, 0.5, t }, { { rs, H }, 0.0, t } };
+		};
+		// the bulb's length by bisection: the nominal volume stands `mark_over_bulb_mm` up the suction tube
+		double lo = 0.5, hi = H - tube - 6.0;
+		for (int i = 0; i < 60; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			Vessel trial = v;
+			std::vector<Corner> in = inward(shape(mid));
+			reach(in, H);
+			trial.inside = below(rounded(in), H);
+			(trial.volume_below(tube + 4.0 + mid + mm("mark_over_bulb_mm")) < nominal_ml ? lo : hi) = mid;
+		}
+		c = shape(0.5 * (lo + hi));
+	} else if (kind == "volumetric_flask") {
+		// ISO 1042 (Stage 52): a flat base cut from a round bulb, the bulb up to the neck, a long neck. The bulb's radius
+		// (the standard's diameter is approximate) is the one that puts the nominal volume a third up the neck, in its
+		// lower two thirds as §8.6 asks
+		const double rb = mm("base_mm") / 2.0, rn_in = mm("neck_inside_mm") / 2.0, rn = rn_in + t;
+		const auto build = [&](double radius, Vessel &into) {
+			const double yc = std::sqrt(std::max(radius * radius - rb * rb, 1e-9)), ri = radius - t;
+			const auto arc = [&](double rr, double y_from_r, double r_to) {
+				// the circle about (0, yc) from the point at radius y_from_r under its centre up to radius r_to over it
+				Piece p;
+				p.arc = true;
+				p.centre = { 0.0, yc };
+				p.radius = rr;
+				p.t0 = -std::acos(std::clamp(y_from_r / rr, -1.0, 1.0));
+				p.t1 = std::acos(std::clamp(r_to / rr, -1.0, 1.0));
+				p.a = p.at(0.0);
+				p.b = p.at(1.0);
+				return p;
+			};
+			const auto line = [](Point a, Point b) {
+				Piece p;
+				p.a = a;
+				p.b = b;
+				return p;
+			};
+			const Piece base_out = line({ 0.0, 0.0 }, { rb, 0.0 });
+			const Piece bulb_out = arc(radius, rb, rn);
+			const Piece neck_out = line(bulb_out.b, { rn, H });
+			into.outside = { base_out, bulb_out, neck_out };
+			const double rbi = std::sqrt(std::max(ri * ri - (yc - f) * (yc - f), 1e-9));
+			const Piece base_in = line({ 0.0, f }, { rbi, f });
+			const Piece bulb_in = arc(ri, rbi, rn_in);
+			const Piece neck_in = line(bulb_in.b, { rn_in, H });
+			into.inside = { base_in, bulb_in, neck_in };
+			return bulb_in.b.y; // the shoulder, where the neck starts inside
+		};
+		double lo = 0.6 * R, hi = 1.6 * R;
+		for (int i = 0; i < 60; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			Vessel trial = v;
+			const double shoulder = build(mid, trial);
+			(trial.volume_below(shoulder + (H - shoulder) / 3.0) < nominal_ml ? lo : hi) = mid;
+		}
+		build(0.5 * (lo + hi), v);
+		v.diameter = (lo + hi);
+		v.make_paths();
+		return v;
+	} else if (kind == "measuring_cylinder") {
+		// ISO 4788 (Stage 52): a foot, the tube on it; inside, the tube from the foot's top (worked out below)
+		const double foot = mm("foot_mm") / 2.0, fh = k->at("foot_height_mm").get<double>() / 10.0;
+		c = { { { 0.0, 0.0 }, 0.0, fh }, { { foot, 0.0 }, 0.05, 0.5 * fh }, { { foot, 0.5 * fh }, 0.05, 0.5 * fh }, { { R, fh }, 0.05, t }, { { R, H }, 0.0, t } };
+		v.floor = fh;
+	} else if (kind == "foam_cup") {
+		// a cup (Stage 52): a cone from its base to its rim, a rolled lip
+		c = { { { 0.0, 0.0 }, 0.0, f }, { { mm("base_mm") / 2.0, 0.0 }, 0.3, t }, { { R, H - t }, 0.0, t } };
+		Piece bead;
+		bead.arc = true;
+		bead.centre = { R, H - t };
+		bead.radius = t;
+		bead.t0 = -0.5 * pi;
+		bead.t1 = 0.5 * pi;
+		bead.a = bead.at(0.0);
+		bead.b = bead.at(1.0);
+		top.push_back(bead);
 	} else {
 		why = "no profile for glassware of kind '" + std::string(kind) + "'";
 		return std::nullopt;
@@ -445,9 +551,26 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.outside.push_back(p);
 	}
 	std::vector<Corner> in = inward(c);
+	if (kind == "measuring_cylinder") {
+		// its inside is the tube's alone, its floor the foot's top: the foot is solid glass
+		in = inward(std::vector<Corner>{ { { 0.0, v.floor }, 0.0, 0.0 }, { { R, v.floor }, 0.05, t }, { { R, H }, 0.0, t } });
+	}
 	reach(in, H);
 	v.inside = below(rounded(in), H);
 	v.make_paths(); // (Stage 50)
+	if (v.outlet && v.delivery_s > 0.0) {
+		// the tip's bore (Stage 52): what drains from the zero line (a burette) or the brim's volume's mark (a pipette, its
+		// nominal volume) to empty in the delivery time, Torricelli's through a sharp-edged orifice
+		const double from = kind == "burette" ? v.zero : v.level(nominal_ml), to = kind == "burette" ? v.level(v.volume_below(v.zero) - nominal_ml) : v.floor;
+		constexpr int SLICES = 4000;
+		double integral = 0.0; // the integral of A(y) dy / sqrt(2 g y), s * cm^2
+		for (int i = 0; i < SLICES; ++i) {
+			const double y = to + (from - to) * (i + 0.5) / SLICES, r = v.radius_inside(y);
+			integral += pi * r * r * (from - to) / SLICES / std::sqrt(2.0 * 980.665 * y);
+		}
+		const double area = integral / (0.61 * v.delivery_s); // cm^2 (the orifice's Cd, as the lab's)
+		v.tip_bore = 2.0 * std::sqrt(area / pi);
+	}
 	return v;
 }
 
