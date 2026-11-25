@@ -392,6 +392,30 @@ wall; the existing `loss` calibration, split by area. Each value gets a gate tes
 
 **Invariants:** the rings' glass sums to the vessel's `wall_g`; T1 to T3 as for any cell.
 
+### 8d. Supplies, Storage and Trash (PLANNED: Stage 55)
+
+The user, 2026-11-25 (after Stage 53's step cost): "We should have the following: 1. Supplies - things which are not
+simulated at all, just like parts, once you take them out, they join the room simulation 2. Storage - things which
+are put aside to save grid space, but are actually still simulated as part of the room 3. Trash - things stop
+simulating here. Elements may not be put back into Supplies, they may be put into Storage or Trash." Asked which
+the Cabinet becomes, the user chose **Supplies**, and a stage of its own after Stage 53.
+
+- **Supplies:** today's Cabinet, where every item starts. An item there is no part of the world: no cells, no edges,
+  no steps, as a signal part in the drawer is not. Its picture is captured ahead of time, not rendered live (the
+  memory "precompute before runtime"). Taking one out makes it in the world, its contents at the room's temperature,
+  from its bench's description. Nothing goes back to Supplies.
+- **Storage:** a new shelf for items set aside off the grid. They are still simulated with the room: they cool, react
+  and evaporate.
+- **Trash:** stops simulating, as now (Stage 34: restored from the trash, it is as it was).
+- **What it settles:** a bench full of glassware steps only what is out of Supplies. The free lab's idle cabinet
+  stepped at 16 µs against 6.5 before Stage 53's rings, and steps at almost nothing.
+- **To decide in its spec:**
+  - items made at take-out: the world's cells are never reused, so they are appended;
+  - a save of what is still in Supplies: its description, not cells;
+  - the tutorials and sessions that place items from the cabinet: their commands keep their meaning (`place` takes
+    out of Supplies);
+  - the goldens: a world without the cabinet's cells digests differently.
+
 ### 8c. Liquids that expand with temperature (PLANNED: a stage of its own)
 
 Found in Stage 51; the user chose to give it its own stage (2026-11-25). Every liquid volume in the core is the

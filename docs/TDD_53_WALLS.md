@@ -134,4 +134,5 @@ Heat now goes through the glass:
   the set by height, as the bands are).
 - **A burette** is 24 rings of about 3 cm.
 - **The free lab** steps at 16 µs against main's 6.5: its idle cabinet's rings still conduct to the room each step.
-  A vessel at rest could keep its wall as one cell until it is heated.
+  Settled by the user's Supplies (Stage 55, the roadmap's area 8d): the cabinet's items are then no part of the
+  world until taken out.
