@@ -150,7 +150,7 @@ func _play(dir: String) -> void:
 		return
 	if _lab.paused(): # the alarm stopped the clock at 12 g, and the rig closed the valve
 		_click("pause")
-	if not _watch(func(): return _of("flask") < 21.0, "the flask to cool", 8000): # (Stage 53: some 1700 s through its glass)
+	if not _watch(func(): return _of("flask") < 30.0, "the flask to cool", 12000): # (Stage 53: its own outside, slow; crystals by 30 C)
 		return
 	for i in 90:
 		_lab.frame(1.0 / 60.0)

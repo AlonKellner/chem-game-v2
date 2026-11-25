@@ -179,7 +179,13 @@ wall's; with every part at one temperature that is exactly the picture it was (a
 visible a vessel no part of which reaches 500 K reads nothing more, and a pixel's history follows the signature
 only in the long-wave or from 500 K, so the visible pass costs what it did. A beaker graded from 90 °C at its floor
 to 30 °C at its brim reads 72.6 °C near its floor and 27.8 °C near its brim (emissivity 1, the glass reflecting
-the room a little), at most 0.7 K from one row of pixels to the next (a ring is some 11 rows).
+the room a little), at most 0.7 K from one row of pixels to the next (a ring is some 11 rows). The signature a
+pixel's history follows is the parts' weighted mean, on the scale of one temperature (a sum of them all, some
+12,000, would drown the other terms of a float's key).
+
+`make screenshots`: every scene's O4 as before 53.8 but the infrared one's (above, Open); the demo's cooling now
+waits for 30 °C, not 21 (the crystals are out by then; 21 °C takes some 5700 s of the lab's clock, more frames
+than its alarm allows).
 
 ## Open
 
@@ -187,6 +193,14 @@ the room a little), at most 0.7 K from one row of pixels to the next (a ring is 
   of the step; a weighted setpoint (or a ramp) would give the gentle speed its gentleness back.
 - **The foam cup** keeps its bench's `loss` until polystyrene foam's conductivity and emittance are sourced (the
   other agent's, after this stage merges); then it loses by its own outside through its foam, as glass does.
+- **The GPU at the boiling flask's floor:** `make screenshots`' 4_boiling has 16 visible pixels at (683–688, 572),
+  the largest 15: the GPU's settled picture bluish (0.49 0.54 0.65) where the reference, the truth of the area and
+  the CPU's own frames in double and in single precision all agree (0.69 grey). It is the same with the pass as it
+  was before 53.8 (the run repeated with those files restored, pixel for pixel), so it is no part of the parts'
+  temperatures: a divergence of the GPU's own that the boiling's new state (53.6's hysteresis, 53.7's slower
+  floor) brings out. 4_infrared's largest is beside it, 13 at (683, 590), 5 visible (9 before 53.8, the largest 11
+  at (710, 437)). Deferred, as hard renderer issues are: the next look is the GPU's kept beams there (`O13`'s
+  pass against the CPU's `OpticsFrames::keep`).
 - **The front and back walls** are read at one ring's temperature where a ray crosses the silhouette at a height;
   a vessel tipped far enough that its two walls differ in height there is read by the place, not each wall.
 - **A burette** is 24 rings of about 3 cm.

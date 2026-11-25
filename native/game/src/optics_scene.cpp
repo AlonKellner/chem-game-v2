@@ -745,7 +745,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// own (a vessel of one layer: its one temperature, the body's)
 				if (!(body.kelvin > 0.0)) {
 					const size_t temps = static_cast<size_t>((set * ROWS_PER_SET + TEMPS_ROW) * ROW);
-					double hottest = v.celsius + 273.15, signature = hottest;
+					// (the signature a weighted mean, on the scale of one temperature: a pixel's key is a float's sum, and a
+					// larger term would drown its others)
+					double hottest = v.celsius + 273.15, signature = hottest, weights = 1.0;
 					int n = 0;
 					const std::vector<walls::Ring> &rings = rings_cut(made);
 					if (!rings.empty() && v.wall_c.size() == rings.size() && rings.size() <= static_cast<size_t>(MAX_RINGS) + 1) {
@@ -756,6 +758,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 							rows[temps + 2 + 2 * k] = static_cast<float>(kelvin);
 							hottest = std::max(hottest, kelvin);
 							signature += kelvin * (1.0 + 0.0137 * ++n);
+							weights += 1.0 + 0.0137 * n;
 						}
 					}
 					if (held.size() > 1) {
@@ -765,10 +768,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 							rows[temps + TEMPS_CONTENTS + 2 + 2 * k] = static_cast<float>(held[k].second);
 							hottest = std::max(hottest, held[k].second);
 							signature += held[k].second * (1.0 + 0.0137 * ++n);
+							weights += 1.0 + 0.0137 * n;
 						}
 					}
 					rows[temps + TEMPS_HOTTEST] = static_cast<float>(hottest);
-					rows[temps + TEMPS_HOTTEST + 1] = static_cast<float>(signature);
+					rows[temps + TEMPS_HOTTEST + 1] = static_cast<float>(signature / weights);
 				}
 			}
 			const double aspect = static_cast<double>(body.h) / body.w;
