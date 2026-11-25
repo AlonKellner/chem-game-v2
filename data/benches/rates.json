@@ -1,0 +1,193 @@
+{
+	"format": "chem-bench/2",
+	"note": "Rates by absorbance (GAME_SPEC §13, Stage 56; docs/CURRICULUM.md, experiment 36): the spectrophotometer at 750 nm with its cell holder, four cuvettes of sulfuric acid (1 M three times, 0.5 M once, 3.5 mL each) and four portions of 50 mg of copper oxide. Read by instruments: each portion tipped into a cuvette held at its temperature and stirred; the time its copper takes to read 0.050 is inversely as the rate. ln t against 1/T gives the activation energy (69 kJ/mol); 0.5 M against 1 M at 35 C, the order in the acid (0.5).",
+	"readings": "instruments",
+	"seed": 91,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "spec",
+			"kind": "spectrophotometer",
+			"nm": 750,
+			"at": [
+				2,
+				12
+			]
+		},
+		{
+			"id": "a25",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				9,
+				7
+			],
+			"label": "1 M sulfuric acid",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.0035
+				}
+			}
+		},
+		{
+			"id": "a35",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				11,
+				7
+			],
+			"label": "1 M sulfuric acid",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.0035
+				}
+			}
+		},
+		{
+			"id": "a45",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				13,
+				7
+			],
+			"label": "1 M sulfuric acid",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.0035
+				}
+			}
+		},
+		{
+			"id": "h35",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				15,
+				7
+			],
+			"label": "0.5 M sulfuric acid",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.00175
+				}
+			}
+		},
+		{
+			"id": "o1",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				18,
+				7
+			],
+			"label": "50 mg copper oxide",
+			"contents": {
+				"copper_oxide": {
+					"g": 0.05,
+					"particles": 35000
+				}
+			}
+		},
+		{
+			"id": "o2",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				20,
+				7
+			],
+			"label": "50 mg copper oxide",
+			"contents": {
+				"copper_oxide": {
+					"g": 0.05,
+					"particles": 35000
+				}
+			}
+		},
+		{
+			"id": "o3",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				22,
+				7
+			],
+			"label": "50 mg copper oxide",
+			"contents": {
+				"copper_oxide": {
+					"g": 0.05,
+					"particles": 35000
+				}
+			}
+		},
+		{
+			"id": "o4",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				24,
+				7
+			],
+			"label": "50 mg copper oxide",
+			"contents": {
+				"copper_oxide": {
+					"g": 0.05,
+					"particles": 35000
+				}
+			}
+		}
+	]
+}

@@ -402,6 +402,7 @@ struct Ui::Impl {
 	// (Stage 55) the notebook's write row: a label and a number the student writes, and which field is typed in
 	std::string note_label, note_value;
 	int note_focus = 0; // 0 none, 1 the label, 2 the value
+	bool note_fresh = false; // a field just clicked: what is typed next replaces it (Stage 56)
 	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
 	bool debug_open = false;
 	bool infrared = false; // the debug infrared view (Stage 46): the whole pass in the long-wave range
@@ -615,6 +616,7 @@ struct Ui::Impl {
 		};
 		const auto cycle = [](AxisTransform t) { return static_cast<AxisTransform>((static_cast<int>(t) + 1) % 3); };
 		note_focus = notebook_rect("write:label").has(x, y) ? 1 : notebook_rect("write:value").has(x, y) ? 2 : 0;
+		note_fresh = note_focus != 0;
 		if (notebook_rect("close").has(x, y)) {
 			notebook_open = false;
 		} else if (notebook_rect("write").has(x, y)) {
@@ -673,8 +675,15 @@ struct Ui::Impl {
 		std::string &f = note_focus == 1 ? note_label : note_value;
 		const bool letter = (codepoint >= 'a' && codepoint <= 'z') || (codepoint >= 'A' && codepoint <= 'Z') || codepoint == ' ' || codepoint == '_';
 		const bool digit = (codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e';
-		if (key == Ui::KeyText && (digit || (note_focus == 1 && letter)) && f.size() < 16) {
-			f += static_cast<char>(codepoint);
+		const bool replacing = note_fresh;
+		note_fresh = false;
+		if (key == Ui::KeyText && (digit || (note_focus == 1 && letter))) {
+			if (replacing) {
+				f.clear(); // a field just clicked: what is typed replaces it (Stage 56)
+			}
+			if (f.size() < 16) {
+				f += static_cast<char>(codepoint);
+			}
 		} else if (key == Ui::KeyBackspace && !f.empty()) {
 			f.pop_back();
 		} else if (key == Ui::KeyEnter) {

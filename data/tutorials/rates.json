@@ -1,0 +1,866 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 56; docs/CURRICULUM.md, experiment 36) on data/benches/rates.json: what sets a rate, timed by absorbance. Copper oxide dissolving in sulfuric acid in a stirred cuvette held at 25, 35 and 45 C, then at 35 C in half the acid; the time for its copper to read 0.050 is inversely as the rate.",
+	"title": "Experiment: rates, the order and the activation energy",
+	"bench": "../benches/rates.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Half as strong an acid: how much slower will the oxide dissolve? Type the order you expect: 1 if half the acid halves the rate, 0 if it makes no difference. Then click \"predict\".",
+			"why": "The order in a reactant says how the rate follows its concentration: rate = k [acid]^n. Predicted first, it is kept as you made it.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: 25 C, 1 M acid",
+			"title": "The cuvette in the holder at 25 C",
+			"text": "Pick up the cuvette of 1 M acid and click the spectrophotometer. Right-click the spectrophotometer and switch its cell holder on (\"holder off\": it starts at 25 C).",
+			"why": "A rate depends on the temperature: the cell holder keeps the cuvette at one, so each run is at a known temperature.",
+			"checks": [
+				{
+					"text": "a25 in its well",
+					"when": {
+						"item": "spec",
+						"under": "a25"
+					}
+				},
+				{
+					"text": "the holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:a25",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "cell:spec"
+				}
+			]
+		},
+		{
+			"title": "Warming to 25 C",
+			"text": "Wait for the acid to come to the holder's temperature.",
+			"checks": [
+				{
+					"text": "the acid at 25 C",
+					"wait": true,
+					"when": {
+						"item": "a25",
+						"above_c": 24.7
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Blank, then the oxide in",
+			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
+			"why": "Blanked with the acid itself, the absorbance is the copper's alone. Stirred, the copper that leaves the oxide's surface reaches the beam at once, and the solid is kept off the floor.",
+			"checks": [
+				{
+					"text": "the oxide in",
+					"when": {
+						"item": "o1",
+						"species": "copper_oxide",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "a25",
+						"stirred": true
+					}
+				},
+				{
+					"text": "the start recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				},
+				{
+					"drag": [
+						"item:o1",
+						"item:a25"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a25"
+				},
+				{
+					"click": "stir:a25"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Until it reads 0.050",
+			"text": "Watch the absorbance climb as copper ions leave the oxide's surface. Speed the clock up if you like.",
+			"checks": [
+				{
+					"text": "A 0.050",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.0495
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Its end, and its temperature",
+			"text": "Right-click the spectrophotometer and click \"+ A\"; right-click the cuvette and click \"+ T\". Open the notebook and write how long it took (the time of this reading less the start's): the label \"t\" and the number, then \"write\". Close the notebook.",
+			"why": "The same change in the same volume: the rate is inversely as the time it took.",
+			"checks": [
+				{
+					"text": "the end recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 2
+					}
+				},
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "a25",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "the time written",
+					"when": {
+						"noted": "t",
+						"noted_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				},
+				{
+					"click": "item:a25"
+				},
+				{
+					"click": "record:a25:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "t"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "300"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"part": "2: 35 C, 1 M acid",
+			"title": "The cuvette in the holder at 35 C",
+			"text": "Pick up the cuvette of 1 M acid and click the spectrophotometer. Right-click the spectrophotometer and click +5 twice: 35 C.",
+			"why": "The same oxide, the same acid, warmer: only the temperature differs.",
+			"checks": [
+				{
+					"text": "a35 in its well",
+					"when": {
+						"item": "spec",
+						"under": "a35"
+					}
+				},
+				{
+					"text": "the holder at 35 C",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							34.5,
+							35.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:a25",
+						"square:9,12"
+					]
+				},
+				{
+					"drag": [
+						"item:a35",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "cell:spec:+"
+				},
+				{
+					"click": "cell:spec:+"
+				}
+			]
+		},
+		{
+			"title": "Warming to 35 C",
+			"text": "Wait for the acid to come to the holder's temperature.",
+			"checks": [
+				{
+					"text": "the acid at 35 C",
+					"wait": true,
+					"when": {
+						"item": "a35",
+						"above_c": 34.7
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Blank, then the oxide in",
+			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
+			"why": "Each run is started the same way: its time is counted from this reading.",
+			"checks": [
+				{
+					"text": "the oxide in",
+					"when": {
+						"item": "o2",
+						"species": "copper_oxide",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "a35",
+						"stirred": true
+					}
+				},
+				{
+					"text": "the start recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 3
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				},
+				{
+					"drag": [
+						"item:o2",
+						"item:a35"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a35"
+				},
+				{
+					"click": "stir:a35"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Until it reads 0.050",
+			"text": "Watch the absorbance climb as copper ions leave the oxide's surface. Speed the clock up if you like.",
+			"checks": [
+				{
+					"text": "A 0.050",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.0495
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Its end, and its temperature",
+			"text": "Right-click the spectrophotometer and click \"+ A\"; right-click the cuvette and click \"+ T\". Open the notebook and write how long it took (the time of this reading less the start's): the number, then \"write\". Close the notebook.",
+			"why": "Warmer, faster: the time is shorter.",
+			"checks": [
+				{
+					"text": "the end recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 4
+					}
+				},
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "a35",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "the time written",
+					"when": {
+						"noted": "t",
+						"noted_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				},
+				{
+					"click": "item:a35"
+				},
+				{
+					"click": "record:a35:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "300"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"part": "3: 45 C, 1 M acid",
+			"title": "The cuvette in the holder at 45 C",
+			"text": "Pick up the cuvette of 1 M acid and click the spectrophotometer. Right-click the spectrophotometer and click +5 twice: 45 C.",
+			"why": "The same oxide, the same acid, warmer: only the temperature differs.",
+			"checks": [
+				{
+					"text": "a45 in its well",
+					"when": {
+						"item": "spec",
+						"under": "a45"
+					}
+				},
+				{
+					"text": "the holder at 45 C",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							44.5,
+							45.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:a35",
+						"square:11,12"
+					]
+				},
+				{
+					"drag": [
+						"item:a45",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "cell:spec:+"
+				},
+				{
+					"click": "cell:spec:+"
+				}
+			]
+		},
+		{
+			"title": "Warming to 45 C",
+			"text": "Wait for the acid to come to the holder's temperature.",
+			"checks": [
+				{
+					"text": "the acid at 45 C",
+					"wait": true,
+					"when": {
+						"item": "a45",
+						"above_c": 44.7
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Blank, then the oxide in",
+			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
+			"why": "Each run is started the same way: its time is counted from this reading.",
+			"checks": [
+				{
+					"text": "the oxide in",
+					"when": {
+						"item": "o3",
+						"species": "copper_oxide",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "a45",
+						"stirred": true
+					}
+				},
+				{
+					"text": "the start recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 5
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				},
+				{
+					"drag": [
+						"item:o3",
+						"item:a45"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a45"
+				},
+				{
+					"click": "stir:a45"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Until it reads 0.050",
+			"text": "Watch the absorbance climb as copper ions leave the oxide's surface. Speed the clock up if you like.",
+			"checks": [
+				{
+					"text": "A 0.050",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.0495
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Its end, and its temperature",
+			"text": "Right-click the spectrophotometer and click \"+ A\"; right-click the cuvette and click \"+ T\". Open the notebook and write how long it took (the time of this reading less the start's): the number, then \"write\". Close the notebook.",
+			"why": "Warmer, faster: the time is shorter.",
+			"checks": [
+				{
+					"text": "the end recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 6
+					}
+				},
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "a45",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "the time written",
+					"when": {
+						"noted": "t",
+						"noted_count": 3
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				},
+				{
+					"click": "item:a45"
+				},
+				{
+					"click": "record:a45:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "300"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"part": "4: 35 C, 0.5 M acid",
+			"title": "The cuvette in the holder at 35 C",
+			"text": "Pick up the cuvette of 0.5 M acid and click the spectrophotometer. Right-click the spectrophotometer and click -5 twice: back to 35 C.",
+			"why": "The same temperature as the second run, half the acid: only the acid's concentration differs.",
+			"checks": [
+				{
+					"text": "h35 in its well",
+					"when": {
+						"item": "spec",
+						"under": "h35"
+					}
+				},
+				{
+					"text": "the holder at 35 C",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							34.5,
+							35.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:a45",
+						"square:13,12"
+					]
+				},
+				{
+					"drag": [
+						"item:h35",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "cell:spec:-"
+				},
+				{
+					"click": "cell:spec:-"
+				}
+			]
+		},
+		{
+			"title": "Warming to 35 C",
+			"text": "Wait for the acid to come to the holder's temperature.",
+			"checks": [
+				{
+					"text": "the acid at 35 C",
+					"wait": true,
+					"when": {
+						"item": "h35",
+						"above_c": 34.7
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Blank, then the oxide in",
+			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
+			"why": "Each run is started the same way: its time is counted from this reading.",
+			"checks": [
+				{
+					"text": "the oxide in",
+					"when": {
+						"item": "o4",
+						"species": "copper_oxide",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "h35",
+						"stirred": true
+					}
+				},
+				{
+					"text": "the start recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 7
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				},
+				{
+					"drag": [
+						"item:o4",
+						"item:h35"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:h35"
+				},
+				{
+					"click": "stir:h35"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Until it reads 0.050",
+			"text": "Watch the absorbance climb as copper ions leave the oxide's surface. Speed the clock up if you like.",
+			"checks": [
+				{
+					"text": "A 0.050",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.0495
+					}
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Its end, and its temperature",
+			"text": "Right-click the spectrophotometer and click \"+ A\"; right-click the cuvette and click \"+ T\". Open the notebook and write how long it took (the time of this reading less the start's): the label \"t half\" and the number, then \"write\". Close the notebook.",
+			"why": "Half the acid: if the rate goes as its square root, the time is longer by about 1.41.",
+			"checks": [
+				{
+					"text": "the end recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 8
+					}
+				},
+				{
+					"text": "its temperature recorded",
+					"when": {
+						"item": "h35",
+						"recorded": "celsius"
+					}
+				},
+				{
+					"text": "the time written",
+					"when": {
+						"noted": "t half",
+						"noted_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				},
+				{
+					"click": "item:h35"
+				},
+				{
+					"click": "record:h35:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "t half"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "300"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the activation energy",
+			"unit": "kJ/mol",
+			"truth": "69",
+			"tolerance": 0.15,
+			"relative": true,
+			"why": "In the notebook: x the cuvettes' temperatures as 1/K, y the column t as ln, fit: the slope is Ea / R, so Ea = slope x 8.314 J/(mol K). Each portion's grains are the same, so the oxide's surface is too; a hand tips within a few percent of all of it."
+		},
+		{
+			"label": "the order in the acid",
+			"unit": "",
+			"truth": "0.5",
+			"tolerance": 0.15,
+			"predict": true,
+			"why": "n = ln(t half / t at 35 C) / ln 2. The acid reacts at the oxide's surface, where its rate follows the square root of the acid's concentration: halving the acid slows it by 1.41, not 2."
+		}
+	]
+}

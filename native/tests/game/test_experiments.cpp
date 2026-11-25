@@ -795,3 +795,62 @@ TEST_CASE("experiments: progress is kept as given back, refused when it is not o
 	CHECK(p.drawn("done"));
 	CHECK(p.drawn("next")); // solution_heat, the first not done
 }
+
+namespace {
+
+// the rates' runs from the notebook, as a student reads them: each run's start and end, its temperature, its time
+struct Run {
+	double celsius = 0.0, seconds = 0.0;
+};
+std::vector<Run> rate_runs(const lab::LabView &v) {
+	std::vector<Run> runs;
+	std::vector<int64_t> marks;
+	double celsius = 0.0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.what == "absorbance") {
+			marks.push_back(e.step);
+		} else if (e.quantity.what == "celsius") {
+			celsius = e.value;
+			runs.push_back(Run{ celsius, static_cast<double>(marks.back() - marks[marks.size() - 2]) / 60.0 });
+		}
+	}
+	return runs;
+}
+
+} // namespace
+
+TEST_CASE("experiment rates: followed with its own gestures, strict, ln t against 1/T gives the activation energy, half the acid its order (Stage 56)") {
+	Pupil p("data/benches/rates.json", "data/tutorials/rates.json");
+	CHECK(pupil::follow_through(p, 1800) > 40);
+	completed(p);
+	const std::vector<Run> runs = rate_runs(p.ui->lab().view());
+	REQUIRE(runs.size() == 4);
+	std::vector<double> x, y;
+	for (size_t k = 0; k < 3; ++k) {
+		x.push_back(1.0 / (runs[k].celsius + 273.15));
+		y.push_back(std::log(runs[k].seconds));
+		MESSAGE(runs[k].celsius << " C: " << runs[k].seconds << " s");
+	}
+	MESSAGE("half the acid at " << runs[3].celsius << " C: " << runs[3].seconds << " s");
+	const lab::LineFit f = lab::fit_line(x, y);
+	REQUIRE(f.ok);
+	const double ea = f.slope * 8.314462618 / 1000.0, order = std::log(runs[3].seconds / runs[1].seconds) / std::log(2.0);
+	MESSAGE("Ea " << ea << " kJ/mol (R2 " << f.r2 << "), order " << order);
+	CHECK(ea == doctest::Approx(69.0).epsilon(0.15));
+	CHECK(order == doctest::Approx(0.5).epsilon(0.3));
+	report(p, { ea, order });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 1"));
+}
+
+TEST_CASE("experiment rates: played as a person plays it, strict, it completes (Stage 56)") {
+	Pupil p("data/benches/rates.json", "data/tutorials/rates.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment rates: followed with its own gestures, free, it completes (Stage 56)") {
+	Pupil p("data/benches/rates.json", "data/tutorials/rates.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}
