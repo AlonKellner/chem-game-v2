@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.57.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.58.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1998,6 +1998,22 @@ well (Stage 56). The top bar's
 speed buttons, "check every step" and "reset" are narrower (Stage 55), so the notebook's button stands between reset
 and the clock, no longer over it.
 
+**The calculator and the reference** (Stage 58, `lab/calculator.hpp`; `docs/TDD_58_CALCULATOR.md`): the notebook's
+panel has three tabs (`notebook:tab:<notebook|calculator|reference>`).
+- **The calculator** (`notebook:calc:<mass|moles|solution|dilution|reaction>`): the student chooses what to work out
+  and types its fields (`notebook:calc:field:<k>`: a formula's letters, a number's digits; a field clicked into is
+  replaced by what is typed next); its working is shown as it is typed. A formula's molar mass and composition from the
+  tables' standard atomic weights (`chem/formula.hpp`'s grammar, shared with the data generator; one of an element the
+  tables do not hold is refused, naming it); moles, n = m / M; a solution's mass, m = c V M; a dilution, V1 = c2 V2 /
+  c1; a reaction (chosen with `notebook:calc:prev`, `:next`): a mass for each term, each reactant's extent, the limiting
+  one, what each term uses or makes, and from what was got of its first product, the yield. `notebook:calc:note`
+  writes its main result in the notebook under its label (M, n, m, V1, theoretical, yield).
+- **The reference** (`notebook:ref:<elements|species|reactions|solubility>`), from the simulation's own tables: the
+  periodic table's first four periods with the elements the tables hold lit and their weights; every species' formula,
+  phase, molar mass, ΔfH, S°, Cp; every reaction's equation and law; copper sulfate's solubility every ten degrees from
+  0 to 90 C, the model's own equilibrium.
+- A tutorial's check `calculated` (§13.2): the calculator shows a result of that kind.
+
 **Predictions** (Stage 55): while a tutorial runs and its report's predictions are not all made, and nothing is
 selected, the readout's place holds a field for each (`predict:<n>`) and "predict" (`predict:make`); a prediction made
 is kept as typed, and the report shows it beside the result ("you predicted ...").
@@ -2136,6 +2152,8 @@ gestures, and a run with a tutorial is the same lab as one without.
     once (`recorded`; Stage 55: at least `recorded_count` times); a number written under a label
     (`noted`, and `noted_value`: that number; Stage 55; `noted_count`: at least so many, Stage 56).
   - Predictions (Stage 55): at least so many of the report's predictions made (`predicted`).
+  - The calculator (Stage 58): it shows a result of that kind (`calculated`: mass, moles, solution, dilution,
+    reaction).
 
   Conditions combine with `all`, `any` and `not`. They are the shared module's
   (`lab/conditions.hpp`), as signals read them. A check is marked
@@ -2705,6 +2723,11 @@ stand on.
     warming, as a student heating too fast finds). ln s against 1/T: 16.1 kJ/mol against the model's 15.0 over
     25–60 C; 32.4 g at 50 C against its 34.6 and the handbook's 33.3. Its report: the solubility at 50 C (within 8 %,
     predicted first) and the heat of solution (within 25 %).
+  - `prepare`, *a solution by calculation* (Stage 58; experiment 2 with S2): read by instruments. The calculator works
+    out the pentahydrate's molar mass (249.68 g/mol) and the mass for 100 mL of 0.0500 M (1.248 g, written in the
+    notebook); about that much is weighed into a tared volumetric flask (1.2101 g at the bench's seed: a hand's few
+    percent short), dissolved and made up; the moles the balance's reading gives, in the flask's 0.100 L, are the
+    concentration made: 0.04847 mol/L against the flask's 0.04850. Its report: that concentration, within 1 %.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
