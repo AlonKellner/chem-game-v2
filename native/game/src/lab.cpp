@@ -1875,8 +1875,58 @@ struct Lab::Impl {
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		mid_step = true;
 	}
-	// A burner under a layered vessel heats its lowest layer (Stage 47): its edge follows it, at a step boundary
+	// the lowest layer of a vessel's column that holds anything; its own cell where none does (Stage 47)
+	CellId lowest_cell(const Item &v) const {
+		CellId out = v.cell;
+		for (const CellId c : layers_of(v)) {
+			if (layered_cell(c)) {
+				out = c;
+			}
+		}
+		return out;
+	}
+	// a drain from a vessel's column (its own cell or a layer) into a cell, if there is one
+	EdgeId drain_from(const Item &v, CellId into) const {
+		std::vector<CellId> cells = layers_of(v);
+		cells.push_back(v.cell);
+		const std::span<const Edge> edges = world().edges();
+		for (size_t e = 0; e < edges.size(); ++e) {
+			if (edges[e].open && edges[e].drain && edges[e].b == into && std::find(cells.begin(), cells.end(), edges[e].a) != cells.end()) {
+				return EdgeId{ static_cast<int32_t>(e) };
+			}
+		}
+		return EdgeId{};
+	}
+	// a drain moved to start from another cell, its rate kept
+	EdgeId redrain(EdgeId edge, CellId from) {
+		const Edge old = world().edges()[static_cast<size_t>(edge.index)];
+		world().disconnect(edge);
+		EdgeId moved;
+		if (world().connect_drain(from, old.b, &moved) != Refusal::None) {
+			return EdgeId{};
+		}
+		world().set_drain(moved, old.rate, old.carried, old.solids_rate);
+		return moved;
+	}
+	// What lies under a layered vessel follows its lowest layer, at a step boundary: a burner heats it (Stage 47);
+	// an outlet at its bottom, and the cap of one upside down, draw from it (Stage 49), as a pour over its lip
+	// draws from its top
 	void follow_columns() {
+		for (Item &x : items) {
+			if (x.kind != Kind::Vessel || (x.drains_to < 0 && !(x.pours_into >= 0 && x.inverted))) {
+				continue;
+			}
+			const CellId lowest = lowest_cell(x);
+			if (x.pours_into >= 0 && x.inverted && x.pour.index >= 0 && world().edges()[static_cast<size_t>(x.pour.index)].a != lowest) {
+				x.pour = redrain(x.pour, lowest);
+			}
+			if (x.drains_to >= 0) {
+				const EdgeId outlet = drain_from(x, items[static_cast<size_t>(x.drains_to)].cell);
+				if (outlet.index >= 0 && world().edges()[static_cast<size_t>(outlet.index)].a != lowest) {
+					redrain(outlet, lowest);
+				}
+			}
+		}
 		for (Item &b : items) {
 			if (b.kind != Kind::Burner || b.under < 0 || b.heats.index < 0) {
 				continue;
@@ -1914,16 +1964,12 @@ struct Lab::Impl {
 	// the drain from one vessel's outlet
 	bool take_off_drain(size_t u, std::string &why) {
 		Item &upper = items[u];
-		const CellId lower = items[static_cast<size_t>(upper.drains_to)].cell;
-		const auto edges = world().edges();
-		for (size_t e = 0; e < edges.size(); ++e) {
-			if (edges[e].open && edges[e].drain && edges[e].a == upper.cell && edges[e].b == lower) {
-				if (!boundary(why)) {
-					return false;
-				}
-				world().disconnect(EdgeId{ static_cast<int32_t>(e) });
-				break;
+		const EdgeId outlet = drain_from(upper, items[static_cast<size_t>(upper.drains_to)].cell); // (from its lowest layer, Stage 49)
+		if (outlet.index >= 0) {
+			if (!boundary(why)) {
+				return false;
 			}
+			world().disconnect(outlet);
 		}
 		upper.drains_to = -1;
 		return true;
@@ -2220,8 +2266,8 @@ struct Lab::Impl {
 		// this step runs unchecked and the next is checked.
 		// (Stage 47: after the pours are set, for a pour that lands as a layer moves the liquid there first)
 		set_stirring();
+		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
 		set_pours();
-		follow_columns();
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
 		if (!check || !traceable) {
@@ -2311,9 +2357,11 @@ struct Lab::Impl {
 				set_beside(static_cast<int>(&b - items.data()), v);
 			}
 		}
+		std::vector<CellId> own = layers_of(v); // (a drain may leave from its lowest layer: Stage 49)
+		own.push_back(v.cell);
 		const auto edges = world().edges();
 		for (size_t e = 0; e < edges.size(); ++e) { // its drains, in and out
-			if (edges[e].open && edges[e].drain && (edges[e].a == v.cell || edges[e].b == v.cell)) {
+			if (edges[e].open && edges[e].drain && (std::find(own.begin(), own.end(), edges[e].a) != own.end() || edges[e].b == v.cell)) {
 				world().disconnect(EdgeId{ static_cast<int32_t>(e) });
 			}
 		}

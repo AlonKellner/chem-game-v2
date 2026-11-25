@@ -340,3 +340,53 @@ TEST_CASE("column: a layered vessel tipped to pour shows its layers level in the
 	CHECK(blues > 20);
 	CHECK(greens > 20);
 }
+
+namespace {
+
+// a bottle of green nickel sulfate over blue copper sulfate, and an empty beaker to drain it into
+const char *const LAYERED_BOTTLE = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+	{"id": "bottle", "at": [4, 7], "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "loss": 0.8,
+		"layers": [{"water": {"g": 80}, "nickel_sulfate_aq": {"mol": 0.064}}, {"water": {"g": 80}, "copper_sulfate_aq": {"mol": 0.112}}]},
+	{"id": "cup", "at": [12, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5}]})";
+
+} // namespace
+
+TEST_CASE("column: an outlet at a layered vessel's bottom draws its lowest layer first (Stage 49)") {
+	// Stage 47's Open: the outlet drew from the top layer
+	auto l = open(read("data/benches/layers.json"));
+	l->set_checking(true);
+	ok(*l, R"({"do": "under", "item": "empty", "of": "beaker"})");
+	std::string why;
+	REQUIRE_MESSAGE(l->advance(1, why), why); // (an outlet runs all of what is over it each step: the lowest layer, then the next)
+	const lab::ItemView got = item(*l, "empty");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.11); // the blue, from the bottom
+	CHECK(mol_in(got, "nickel_sulfate_aq") < 1e-6);
+	CHECK(mol_in(item(*l, "beaker"), "nickel_sulfate_aq") > 0.0639); // the green all still in it
+	ok(*l, R"({"do": "undrain", "of": "beaker"})"); // its line comes off, from whichever layer it left
+	const double there = item(*l, "empty").liquid_ml;
+	REQUIRE_MESSAGE(l->advance(60, why), why);
+	CHECK(item(*l, "empty").liquid_ml == doctest::Approx(there).epsilon(1e-3));
+}
+
+TEST_CASE("column: a layered bottle upside down runs its lowest layer out through its cap first, the one over it after (Stage 49)") {
+	auto l = open(LAYERED_BOTTLE);
+	l->set_checking(true);
+	ok(*l, R"({"do": "invert", "item": "bottle", "over": "cup"})");
+	ok(*l, R"({"do": "cap", "item": "bottle", "to": 1})");
+	std::string why;
+	REQUIRE_MESSAGE(l->advance(60, why), why); // a second: some of the blue
+	lab::ItemView got = item(*l, "cup");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.005);
+	CHECK(mol_in(got, "nickel_sulfate_aq") < 1e-4);
+	// saved and loaded while its cap's drain leaves from a layer, it goes on exactly
+	auto copy = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(copy != nullptr, why);
+	REQUIRE_MESSAGE(copy->advance(60 * 10, why), why);
+	REQUIRE_MESSAGE(l->advance(60 * 10, why), why);
+	CHECK(copy->digest() == l->digest());
+	REQUIRE_MESSAGE(l->advance(60 * 110, why), why); // two minutes: all of it, the green last
+	got = item(*l, "cup");
+	CHECK(mol_in(got, "copper_sulfate_aq") > 0.11);
+	CHECK(mol_in(got, "nickel_sulfate_aq") > 0.06);
+	MESSAGE("through the cap: " << got.liquid_ml << " mL");
+}
