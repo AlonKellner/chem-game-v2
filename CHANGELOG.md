@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.55.0 (2026-11-25, Stage 55)
+## 0.55.0 (2026-11-25, Stage 55; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 55, `docs/TDD_55_SPECTRO.md`; `docs/CURRICULUM.md`, step B's second half): **a spectrophotometer**, a
   single-beam instrument: a cuvette in its well, its wavelength tuned (380 to 780 nm), a blank, the absorbance read from
