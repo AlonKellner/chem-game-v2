@@ -146,6 +146,11 @@ struct ItemView {
 	double readability_g = 0.0, capacity_g = 0.0, linearity_g = 0.0;
 	double gross_g = 0.0, tare_g = 0.0;
 	std::optional<double> display_g;
+	// a spectrophotometer (Stage 55): the wavelength set, nm; whether it has a blank and the wavelength it was taken at;
+	// what it reads (none without a blank, or past its range: `overload`)
+	double nm = 0.0, blank_nm = 0.0;
+	bool blanked = false;
+	std::optional<double> absorbance;
 	bool overload = false;
 };
 

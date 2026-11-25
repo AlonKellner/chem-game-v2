@@ -726,3 +726,72 @@ TEST_CASE("experiment vapour: followed with its own gestures, free, it completes
 	pupil::follow_through(p, 7200);
 	completed(p);
 }
+
+TEST_CASE("experiment beer: followed with its own gestures, strict, the standards' line and the unknown on it, beside a prediction (Stage 55)") {
+	Pupil p("data/benches/beer.json", "data/tutorials/beer.json");
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->experiments(read("data/experiments.json"), why, [](const std::string &path) -> std::optional<std::string> { return read("data/" + path); }), why);
+	REQUIRE_MESSAGE(p.ui->choose("beer", why), why); // from the list: its progress is the list's
+	CHECK(p.ui->progress().find("\"beer\"") == std::string::npos);
+	CHECK(pupil::follow_through(p, 600) > 30);
+	completed(p);
+	// the calibration line from the notebook, paired as the plot pairs them: c written, then A recorded
+	const lab::LabView v = p.ui->lab().view();
+	std::vector<double> c, a;
+	double unknown_a = 0.0, last_c = -1.0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.label == "c") {
+			last_c = e.value;
+		} else if (e.quantity.what == "absorbance") {
+			if (c.size() < 4) {
+				c.push_back(last_c);
+				a.push_back(e.value);
+			} else {
+				unknown_a = e.value;
+			}
+		}
+	}
+	REQUIRE(c.size() == 4);
+	const lab::LineFit f = lab::fit_line(c, a);
+	REQUIRE(f.ok);
+	const double found = (unknown_a - f.intercept) / f.slope, truth = truth_of(p, p.ui->tutorial()->report()[1].truth);
+	MESSAGE("slope " << f.slope << " L/mol, intercept " << f.intercept << ", R2 " << f.r2 << "; the unknown " << found << " mol/L against " << truth);
+	CHECK(f.r2 > 0.999);
+	CHECK(f.slope == doctest::Approx(10.23).epsilon(0.04));
+	CHECK(found == doctest::Approx(truth).epsilon(0.03));
+	report(p, { f.slope, found });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 0.05"));
+	// progress: done, marked in the list; the next lesson is another
+	CHECK(p.ui->progress().find("\"beer\"") != std::string::npos);
+	p.click("menu:experiments");
+	CHECK(p.drawn("done"));
+	CHECK(p.drawn("next"));
+}
+
+TEST_CASE("experiment beer: played as a person plays it, strict, it completes (Stage 55)") {
+	Pupil p("data/benches/beer.json", "data/tutorials/beer.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment beer: followed with its own gestures, free, it completes (Stage 55)") {
+	Pupil p("data/benches/beer.json", "data/tutorials/beer.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiments: progress is kept as given back, refused when it is not one, and marks the next lesson (Stage 55)") {
+	Pupil p;
+	std::string why;
+	REQUIRE_MESSAGE(p.ui->experiments(read("data/experiments.json"), why, [](const std::string &path) -> std::optional<std::string> { return read("data/" + path); }), why);
+	CHECK(p.ui->progress() == R"({"done":[],"format":"chem-progress/1"})");
+	REQUIRE_MESSAGE(p.ui->set_progress(R"({"format": "chem-progress/1", "done": ["demo", "vacuum", "gone"]})", why), why);
+	CHECK(p.ui->progress() == R"({"done":["demo","gone","vacuum"],"format":"chem-progress/1"})"); // an id another catalogue may have, kept
+	CHECK_FALSE(p.ui->set_progress("{}", why));
+	CHECK_FALSE(p.ui->set_progress(R"({"format": "chem-progress/1", "done": [1]})", why));
+	CHECK(p.ui->progress().find("vacuum") != std::string::npos); // a refusal changes nothing
+	p.click("menu:experiments");
+	CHECK(p.drawn("done"));
+	CHECK(p.drawn("next")); // solution_heat, the first not done
+}

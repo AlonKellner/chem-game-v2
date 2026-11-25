@@ -142,6 +142,11 @@ public:
 	bool choose(std::string_view id, std::string &why);
 	// the id of the experiment shown, "" for none of the catalogue's
 	std::string experiment() const;
+	// Progress through the experiments (GAME_SPEC §13.7, Stage 55): the ids of those completed, in a
+	// `chem-progress/1` document {"format", "done": [ids]}; the host keeps it between runs and gives it back. The
+	// list marks each done, and the next in the catalogue's order. set_progress refuses a document that is not one.
+	std::string progress() const;
+	bool set_progress(std::string_view progress_json, std::string &why);
 	// The item selected ("" for none): the last one chosen.
 	std::string selected() const;
 	// Everything selected, in the order it was chosen (§13.1).
@@ -178,6 +183,10 @@ public:
 	//       edit:compare:<above|below|at_least|at_most|reaches|between|outside>   edit:value:<0|1>   edit:nudge:<-3..3>
 	//     a timer's: edit:value   edit:nudge:<-3..3>
 	//     a rig's: edit:form:<onoff|change>   edit:<on|off|change>:<stir|stop|reset|leave|value|nudge:<-2..2>>
+	//   notebook   notebook:<close|erase|x|tx|y|ty|fit|log:1|log:5|log:30|unlog|write:label|write:value|write>
+	//   record:<item>:<what>   report:<k>   report:check (Stage 54)
+	//   nm:<spectrophotometer>@<nm> (its slider)   nm:<spectrophotometer>:<+|->   blank:<spectrophotometer>
+	//   predict:<n> (the n-th prediction's field)   predict:make (Stage 55)
 	// false when it is not on the screen now.
 	bool locate(std::string_view what, float &x, float &y) const;
 

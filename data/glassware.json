@@ -112,6 +112,17 @@
 			"pour_ml_s": 20,
 			"cap_bore_mm": 4,
 			"burst_kpa": 20
+		},
+		{
+			"name": "cuvette",
+			"standard": "a round cell for a spectrophotometer, 10 mm across inside (design)",
+			"sizes": [
+				{"ml": 5, "diameter_mm": 12, "height_mm": 75, "wall_mm": 1.0, "corner": 0.1}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 3,
+			"cap_bore_mm": 4,
+			"burst_kpa": 150
 		}
 	]
 }

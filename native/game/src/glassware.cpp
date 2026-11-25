@@ -543,6 +543,9 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		bead.a = bead.at(0.0);
 		bead.b = bead.at(1.0);
 		top.push_back(bead);
+	} else if (kind == "cuvette") {
+		// a round cell (Stage 55): a flat floor, a straight tube to an open top; its inside across is its path
+		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
 	} else {
 		why = "no profile for glassware of kind '" + std::string(kind) + "'";
 		return std::nullopt;

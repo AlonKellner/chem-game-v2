@@ -1,0 +1,462 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 55; docs/CURRICULUM.md, experiment 34) on data/benches/beer.json: Beer and Lambert's law. Four standards' absorbance at 750 nm against their concentration is a line through zero, its slope the molar absorptivity times the 1 cm path; the unknown is read on it.",
+	"title": "Experiment: Beer and Lambert's line",
+	"bench": "../benches/beer.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Look at the cuvettes: four standards of copper sulfate, 0.020 to 0.080 M, and an unknown. Compare the unknown's blue with theirs, type your guess of its concentration (mol/L) in the field, then click \"predict\".",
+			"why": "A prediction made before measuring is kept as you made it: the report sets it beside what you find.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "0.05"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "The instrument",
+			"title": "The spectrophotometer",
+			"text": "Pick up the spectrophotometer in the cabinet and set it on the bench, at the left.",
+			"why": "It shines one colour at a time through a cuvette and measures how much comes out: the absorbance, A = -log10 of the share that passes.",
+			"checks": [
+				{
+					"text": "the spectrophotometer on the bench",
+					"when": {
+						"item": "spec",
+						"place": "bench"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:spec",
+						"square:3,13"
+					]
+				}
+			]
+		},
+		{
+			"title": "750 nm",
+			"text": "Right-click the spectrophotometer and drag its wavelength to 750 nm (the -1 and +1 buttons move it a nanometre).",
+			"why": "Copper(II) in water absorbs red light, more and more toward the infrared: its blue is what is left. 750 nm is near the top of this instrument's range, where copper absorbs most of what it can reach.",
+			"checks": [
+				{
+					"text": "set to 750 nm",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "nm"
+						},
+						"compare": "between",
+						"values": [
+							749.5,
+							750.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "nm:spec@750"
+				}
+			]
+		},
+		{
+			"title": "The blank",
+			"text": "Pick up the cuvette of water and click the spectrophotometer: it stands in its well.",
+			"why": "The blank is the solvent alone: what it absorbs, and what the cuvette's glass reflects, are set as zero.",
+			"checks": [
+				{
+					"text": "the water in its well",
+					"when": {
+						"item": "spec",
+						"under": "c0"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"item:spec"
+					]
+				}
+			]
+		},
+		{
+			"title": "Blank it",
+			"text": "Right-click the spectrophotometer and click \"blank\".",
+			"why": "A single-beam instrument compares each sample's light with the blank's at the same wavelength: blank again whenever you change it.",
+			"checks": [
+				{
+					"text": "it reads 0.000",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "absorbance"
+						},
+						"compare": "between",
+						"values": [
+							-0.0005,
+							0.0005
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				}
+			]
+		},
+		{
+			"part": "The standards",
+			"title": "The 0.020 M standard",
+			"text": "Take the water out and set it back on the bench; put the 0.020 M standard in the well. Open the notebook and write its concentration: the label \"c\" and the number 0.020, then \"write\". Close the notebook, right-click the spectrophotometer and click \"+ A\".",
+			"why": "Each standard's concentration is known: written beside its absorbance, the pair is a point of the calibration line.",
+			"checks": [
+				{
+					"text": "the 0.020 M standard in its well",
+					"when": {
+						"item": "spec",
+						"under": "s1"
+					}
+				},
+				{
+					"text": "c = 0.020 written",
+					"when": {
+						"noted": "c",
+						"noted_value": 0.02
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:9,12"
+					]
+				},
+				{
+					"drag": [
+						"item:s1",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "c"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.020"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "The 0.040 M standard",
+			"text": "Take the last standard out and set it back on the bench; put the 0.040 M standard in the well. Open the notebook and write its concentration: the number 0.040, then \"write\". Close the notebook, right-click the spectrophotometer and click \"+ A\".",
+			"why": "Beer and Lambert: A = epsilon c l. At one wavelength and one path, the absorbance rises in proportion to the concentration.",
+			"checks": [
+				{
+					"text": "the 0.040 M standard in its well",
+					"when": {
+						"item": "spec",
+						"under": "s2"
+					}
+				},
+				{
+					"text": "c = 0.040 written",
+					"when": {
+						"noted": "c",
+						"noted_value": 0.04
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s1",
+						"square:11,12"
+					]
+				},
+				{
+					"drag": [
+						"item:s2",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.040"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "The 0.060 M standard",
+			"text": "Take the last standard out and set it back on the bench; put the 0.060 M standard in the well. Open the notebook and write its concentration: the number 0.060, then \"write\". Close the notebook, right-click the spectrophotometer and click \"+ A\".",
+			"why": "Beer and Lambert: A = epsilon c l. At one wavelength and one path, the absorbance rises in proportion to the concentration.",
+			"checks": [
+				{
+					"text": "the 0.060 M standard in its well",
+					"when": {
+						"item": "spec",
+						"under": "s3"
+					}
+				},
+				{
+					"text": "c = 0.060 written",
+					"when": {
+						"noted": "c",
+						"noted_value": 0.06
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s2",
+						"square:13,12"
+					]
+				},
+				{
+					"drag": [
+						"item:s3",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.060"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "The 0.080 M standard",
+			"text": "Take the last standard out and set it back on the bench; put the 0.080 M standard in the well. Open the notebook and write its concentration: the number 0.080, then \"write\". Close the notebook, right-click the spectrophotometer and click \"+ A\".",
+			"why": "Beer and Lambert: A = epsilon c l. At one wavelength and one path, the absorbance rises in proportion to the concentration.",
+			"checks": [
+				{
+					"text": "the 0.080 M standard in its well",
+					"when": {
+						"item": "spec",
+						"under": "s4"
+					}
+				},
+				{
+					"text": "c = 0.080 written",
+					"when": {
+						"noted": "c",
+						"noted_value": 0.08
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 4
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s3",
+						"square:15,12"
+					]
+				},
+				{
+					"drag": [
+						"item:s4",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.080"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"part": "The unknown",
+			"title": "The unknown",
+			"text": "Take the last standard out, put the unknown in the well, right-click the spectrophotometer and click \"+ A\".",
+			"why": "Read on the same instrument, at the same wavelength, against the same blank: its absorbance falls on the standards' line.",
+			"checks": [
+				{
+					"text": "the unknown in its well",
+					"when": {
+						"item": "spec",
+						"under": "unknown"
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s4",
+						"square:17,12"
+					]
+				},
+				{
+					"drag": [
+						"item:unknown",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "copper's molar absorptivity at 750 nm",
+			"unit": "L/(mol cm)",
+			"truth": "10.23",
+			"ideal": 10.23,
+			"tolerance": 0.04,
+			"relative": true,
+			"why": "In the notebook: x the column c, y the absorbance, fit: the slope is epsilon l, the cuvette 1.00 cm across. NBS measured 10.23 at 750 nm; this instrument's wavelength is within 2 nm of what it shows, where epsilon climbs 0.6 % a nanometre."
+		},
+		{
+			"label": "the unknown's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * unknown.copper_sulfate_aq.mol / unknown.liquid_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"predict": true,
+			"why": "c = (A - intercept) / slope, from the line through the standards. The eye judges a blue's depth poorly: a prediction by eye is often off by a third."
+		}
+	]
+}

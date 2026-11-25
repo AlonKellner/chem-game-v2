@@ -1,0 +1,153 @@
+{
+	"format": "chem-bench/2",
+	"note": "Beer and Lambert (GAME_SPEC §13, Stage 55; docs/CURRICULUM.md, experiment 34): a spectrophotometer, a cuvette of water to blank it, four standards of copper sulfate (0.020 to 0.080 M, each 3.5 mL in its cuvette) and an unknown (0.035 to 0.065 M, drawn by the seed). Read by instruments: each standard's absorbance at 750 nm against its concentration is a line through zero, its slope epsilon times the cuvette's 1 cm; the unknown's absorbance on that line gives its concentration.",
+	"readings": "instruments",
+	"seed": 81,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "spec",
+			"kind": "spectrophotometer",
+			"nm": 600
+		},
+		{
+			"id": "c0",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				9,
+				7
+			],
+			"label": "blank: water",
+			"contents": {
+				"water": {
+					"g": 3.5
+				}
+			}
+		},
+		{
+			"id": "s1",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				11,
+				7
+			],
+			"label": "standard, 0.020 M copper sulfate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"copper_sulfate_aq": {
+					"mol": 7e-05
+				}
+			}
+		},
+		{
+			"id": "s2",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				13,
+				7
+			],
+			"label": "standard, 0.040 M copper sulfate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.00014
+				}
+			}
+		},
+		{
+			"id": "s3",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				15,
+				7
+			],
+			"label": "standard, 0.060 M copper sulfate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.00021
+				}
+			}
+		},
+		{
+			"id": "s4",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				17,
+				7
+			],
+			"label": "standard, 0.080 M copper sulfate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.00028
+				}
+			}
+		},
+		{
+			"id": "unknown",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"loss": 0.05,
+			"at": [
+				19,
+				7
+			],
+			"label": "unknown copper sulfate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"copper_sulfate_aq": {
+					"mol": [
+						0.0001225,
+						0.0002275
+					]
+				}
+			}
+		}
+	]
+}

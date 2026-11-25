@@ -22,6 +22,10 @@ const ItemView *find_item(const LabView &view, const std::string &id) {
 
 std::optional<double> reading(const LabView &view, const Quantity &q, bool &instrument) {
 	instrument = false;
+	if (q.what == "absorbance") {
+		instrument = true; // (Stage 55) a spectrophotometer's reading, truth or not: there is no other
+		return measure(view, q);
+	}
 	if (!view.instruments) {
 		return measure(view, q);
 	}
@@ -48,7 +52,7 @@ std::optional<double> reading(const LabView &view, const Quantity &q, bool &inst
 	if (q.what == "kpa" && v->kind == "vessel") {
 		return v->read_kpa;
 	}
-	if (q.what == "tap" || q.what == "valve" || q.what == "met" || q.what == "mark_off_ml") {
+	if (q.what == "tap" || q.what == "valve" || q.what == "met" || q.what == "mark_off_ml" || q.what == "nm") {
 		instrument = false;
 		return measure(view, q); // what is set, or seen at a glance: not an instrument's reading
 	}

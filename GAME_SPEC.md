@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.54.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.55.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1731,7 +1731,29 @@ the calorimeter's).
   nothing in the world, and a lab with a notebook is the same lab as one without.
 - **A table and a line**: the notebook's columns by label, a row a moment (paired by the step they were read at, or
   each against time); each axis as it is, its natural logarithm or its reciprocal (of a Celsius temperature, 1/K);
-  a least-squares line through the points (`fit_line`), its slope, intercept and R².
+  a least-squares line through the points (`fit_line`), its slope, intercept and R². A y pairs with the x written at
+  the same moment, or else the last x written before it (Stage 55).
+- **`note {label, value, unit?}`** (Stage 55): a number the student writes, under a label (a standard's
+  concentration): an entry of no quantity and no instrument.
+
+**A spectrophotometer** (Stage 55, `lab/spectro.hpp`; `docs/TDD_55_SPECTRO.md`): a single-beam instrument, matterless
+like a balance, its own kind (`spectrophotometer`, a footprint of 5 × 3).
+- **A cuvette** (`data/glassware.json`, `cuvette`, design): a round glass cell 12 mm across outside, 10 mm inside: its
+  path. Only a cuvette fits the well: `insert {spectrophotometer, cuvette, onto?}` stands it there (as `weigh` sets a
+  vessel on a pan), `remove` takes the instrument from under it; a cuvette lifted out leaves it where it stood.
+- **Its wavelength**, `tune {spectrophotometer, nm}`: 380 to 780 nm (the simulation's light), to the nanometre; the
+  true wavelength is the one set plus an error drawn once from the seed within ±2 nm.
+- **`blank {spectrophotometer}`**: the detector's signal through what stands in its well now, at the wavelength set,
+  kept as its 100 % T (saved, not digested). What it reads after is −log10 of the signal over the blank's, to 0.001;
+  past 3.000, `OL`; without a blank, nothing.
+- **Its light** (`data/instruments.json`, design): a tungsten lamp (Planck's law at 2900 K) through a triangular slit
+  of 4 nm, the sample's transmittance from the pass's own spectra (each solute's decadic molar absorptivity at 1 nm,
+  water's own) along its path at the beam's height, 15 mm over the cuvette's floor: the layer there, or air when the
+  liquid stands lower, nothing through solids at it. Stray light: 0.1 % of the band's light in the blank, of every
+  colour the lamp gives, through the sample. So Beer and Lambert hold where they do (A within half a percent of
+  ε c l at 750 nm up to 1), a high absorbance flattens (an ideal 2.5 reads about 2.45), and a wavelength changed after
+  the blank reads the lamp's slope.
+- Quantities: `absorbance`, `nm` (§13.3); both are an instrument's in the notebook, by instruments or not.
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
 - **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
@@ -1946,6 +1968,23 @@ complete, in place of the readout: a field for each result, typed (digits, a poi
 Enter checks, Escape leaves it) and checked: the truth, worked out then, and whether the student's value is within
 its tolerance or how far off it is, beside the textbook's ideal and why they differ.
 
+**A spectrophotometer on the screen** (Stage 55): its case, a dark well on its top and two displays in seven segments
+(the absorbance, and the wavelength set) are bodies of the pass; a cuvette carried onto it stands in its well, drawn
+30 px across in its own proportions. Its readout: the wavelength's slider (`nm:<id>@<nm>`), a nanometre down or up
+(`nm:<id>:-`, `:+`), "blank", "+ A" (record), what it reads, and a warning when it was blanked at another wavelength.
+The notebook's **write row** (Stage 55): a label's field, a number's, "write"; the label stays for the next. The top bar's
+speed buttons, "check every step" and "reset" are narrower (Stage 55), so the notebook's button stands between reset
+and the clock, no longer over it.
+
+**Predictions** (Stage 55): while a tutorial runs and its report's predictions are not all made, and nothing is
+selected, the readout's place holds a field for each (`predict:<n>`) and "predict" (`predict:make`); a prediction made
+is kept as typed, and the report shows it beside the result ("you predicted ...").
+
+**Progress** (Stage 55): the experiments list marks each completed experiment "done" and the first not done in the
+catalogue's order, with a tutorial, "next". `Ui::progress`, `set_progress` (`chem-progress/1`: `{"format", "done":
+[ids]}`; an id the catalogue has not is kept); the C API's `cg_ui_progress`, `cg_ui_set_progress`; the Godot host
+keeps it in `progress_path` (`user://progress.json`), written whenever it changes.
+
 **By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
 what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
 buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
@@ -2072,7 +2111,9 @@ gestures, and a run with a tutorial is the same lab as one without.
   - The goals (§13.5): an item's `slot`; a goal met (`goal`: its id); every game goal met
     (`goals_met`).
   - The notebook (Stage 54): a quantity of an item being logged (`logging`), or recorded at least
-    once (`recorded`).
+    once (`recorded`; Stage 55: at least `recorded_count` times); a number written under a label
+    (`noted`, and `noted_value`: that number; Stage 55).
+  - Predictions (Stage 55): at least so many of the report's predictions made (`predicted`).
 
   Conditions combine with `all`, `any` and `not`. They are the shared module's
   (`lab/conditions.hpp`), as signals read them. A check is marked
@@ -2118,6 +2159,7 @@ gestures, and a run with a tutorial is the same lab as one without.
   when the student checks it; its `tolerance`, absolute or `relative`; the textbook's `ideal`, if it
   has one, and `why` they differ. An expression that names what the bench does not have is refused
   when the tutorial is opened. The report is the screen's, not the lab's: typed numbers are not saved.
+  An item marked `predict` (Stage 55) is also asked for before the run, as a prediction.
 - **On the screen** the card stands above the readout: the part, the step's number and a progress
   bar, the title, what to do and why, and each check with a box, ticked when it holds, with the
   value it waits on ("now 1.509 g"). A pulsing outline points at the last of the step's gestures
@@ -2621,6 +2663,12 @@ stand on.
     against 1/T is a line whose slope is −ΔH/R: 41.7 kJ/mol (R² 0.9998), against the textbook's 40.65 at the boil:
     water's heat of vaporisation is larger at the lower temperatures the line spans (43.99 at 25 °C). Its report
     the heat of vaporisation within 6 %.
+  - `beer`, *Beer and Lambert's line* (Stage 55; experiment 34): read by instruments. A guess of the unknown's
+    concentration by eye first; the spectrophotometer set at 750 nm and blanked with water; four standards of copper
+    sulfate (0.020 to 0.080 M) read, each concentration written in the notebook beside its absorbance; the unknown
+    (0.035 to 0.065 M, from the seed) read. A against c is a line through zero, its slope 10.12 L/mol at the bench's
+    seed (R² 0.99999) against NBS's 10.23 at 750 nm: the instrument's true wavelength is a little under what it shows.
+    Its report: the molar absorptivity (within 4 %) and the unknown's concentration (within 3 %, predicted first).
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -2657,7 +2705,8 @@ stand on.
   `cg_ui_report`, `cg_ui_locate` (where a named thing is on the screen, for tests and scripts),
   `cg_ui_tutor` and `cg_ui_tutorial` (a tutorial over the screen, §13.2, and how far it is, and
   whether the screen is strict), `cg_ui_set_strict`, `cg_ui_experiments`, `cg_ui_choose` and
-  `cg_ui_experiment` (the experiments, §13.7).
+  `cg_ui_experiment` (the experiments, §13.7); `cg_ui_progress` and `cg_ui_set_progress` (Stage 55: progress through
+  them, kept by the host).
 - **The optical pass through the C API:** `cg_ui_optics` (the scene of §12.3: the table, each
   body's spectra, the lines, the room light's energy table, with one revision; Stage 42: the images
   things emit by, with a revision of their own, and the view the scene was made at, the view now and
@@ -3008,6 +3057,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A balance (Stage 50) reads a conventional mass with no drift, no noise, no warm-up, no draught and no convection over a hot load; its tare and its zero are exact | A hot vessel on a real balance reads light by its convection too (several mg on an analytical one); here only by its air's buoyancy |
 | A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
 | A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
+| A spectrophotometer (Stage 55) has no noise and no drift: a reading is the same each time; its cuvette's glass is not in the beam (a blank in the same kind of cell takes it off); its lamp's light is Planck's at one temperature, its detector equally sensitive at every wavelength; stray light a fixed share | A real instrument's last digit flickers, its lamp warms and drifts (it is blanked again every few minutes), cells are matched within a few thousandths of an absorbance, and a silicon detector is weak in the blue |
 | A logger (Stage 54) reads at the end of the step that reaches its time, every reading at once; the plot's fit is an unweighted least squares | A student reads a thermometer and a burette a second or so apart, and weighs points by their errors |
 | A foam cup (Stage 52) loses heat at one calibrated conductance, with no lid to lift; its light a flat translucent white | Its loss is of the right order (a double cup with a lid loses about 24 C in 40 minutes); a real cup's foam scatters white and lets little through |
 | The hand (Stage 50) misses a typed amount by a share uniform within ±10 %, whatever it pours or scoops, and never spills | A practised hand pours closer, and a scoop of a coarse solid misses by more |
