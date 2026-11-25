@@ -391,10 +391,28 @@ struct Lab::Impl {
 		if (i < 0) {
 			return std::nullopt;
 		}
-		LabView one;
-		one.items.push_back(item_view(items[static_cast<size_t>(i)], false, q.what == "bubbles_cm"));
-		return measure(one, q);
+		// (Stage 53) a view is built once a step for each item and kind: monitors that read one item at one step read one view
+		const bool bubbling = q.what == "bubbles_cm";
+		if (!read_view.valid || read_view.step != world().step() || read_view.item != i || read_view.bubbling != bubbling) {
+			read_view.view.items.clear();
+			read_view.view.items.push_back(item_view(items[static_cast<size_t>(i)], false, bubbling));
+			read_view.valid = true;
+			read_view.step = world().step();
+			read_view.item = i;
+			read_view.bubbling = bubbling;
+		}
+		return measure(read_view.view, q);
 	}
+	// the view a monitor read last, and of what at which step (a command between steps does not change the step: it
+	// is dropped there, below)
+	struct ReadView {
+		bool valid = false;
+		uint64_t step = 0;
+		int item = -1;
+		bool bubbling = false;
+		LabView view;
+	};
+	mutable ReadView read_view;
 
 	// ---- goals (§13.5)
 	int find_goal(const std::string &id) const {
@@ -3803,6 +3821,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 }
 
 bool Lab::Impl::run(const json &c, std::string &why) {
+	read_view.valid = false; // (a command may change what a monitor reads without a step: Stage 53)
 	if (!c.is_object() || !c.contains("do") || !c.at("do").is_string()) {
 		why = "a command is an object with a \"do\"";
 		return false;

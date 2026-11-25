@@ -83,6 +83,9 @@ The cuts:
   - a cell of nothing but wall is passed over by the reactions and the fast equilibria;
   - a cell's thermal state is kept while its energy, amounts and the settings it reads are the same;
   - an edge's relaxation factor, 1 − exp(−G h / C), is kept while its G and C are the same;
+  - monitors that read one item at one step share one view of it (dropped at any command): three monitors cost about
+    1 ms a frame at 600x, not 2.7 (the gates, running the sanitizers, ctest and Godot side by side, had found the
+    bound of 3 ms exceeded under their own load);
 - **a design change:** rings of about 1 cm rather than 5 mm (a beaker's 9 and its floor). The demo's results moved
   by a hair: malachite in 40.6 s, the distillate 33.76 g, the crystals 9.123 g.
 
