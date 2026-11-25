@@ -24,7 +24,8 @@ GAME_SPEC 0.51.0 covers:
 | 51.3 | A conical flask's narrowing in its layers: the column's shape from its glassware | Done |
 | 51.4 | Liquid volumes that grow with temperature | Its own stage (the user, 2026-11-25): roadmap area 8c |
 | 51.5 | The glass in layers: the design (roadmap area 8b) | Documented; a stage of its own |
-| 51.6 | GAME_SPEC 0.51.0, `make gates`, the user's sign-off | |
+| 51.6 | Rebased onto Stage 50 (gas exchanged at an open mouth); overflow's spill brought to its fast equilibria | Done; the demo's golden re-recorded on Stage 50's with the user's approval |
+| 51.7 | GAME_SPEC 0.51.0, `make gates`, the user's sign-off | |
 
 ## 51.1 A pour's stream
 
@@ -115,6 +116,23 @@ for heat, 3/2 for salt). The exponent is disputed (Fernando 1991's review: n > 1
 misreading), and no coefficient K was found to source (searched 2026-11-25). By the project's rule (a value is used
 only once its row is verified), the efficiency stays Linden's 0.2. Open: the full texts of Turner 1968, Thompson and
 Turner 1975, and E and Hopfinger 1986, for K.
+
+## 51.6 On Stage 50
+
+Stage 50 (the measured lab; gas exchanged by diffusion at an open vessel's mouth, a process after the drains) merged
+first, and Stage 51 was rebased onto it. Main kept Stage 47's `stir_in_surface`, which Stage 51 removes, beside its new
+`set_exchanges`; the resolution keeps theirs.
+
+**P1 at the spill.** The held pour at speed (Stage 47's regression test) then failed P1 in the spill tray. The
+overflow runs after the step's settling. The solution it spilled met what the tray already held, a little copper
+hydroxide an earlier spill had brought out, and nothing brought the tray back to its fast equilibria within that
+step. This is a gap since Stage 8, never met because no spill had copper in it. Stage 51's stream does: it carries the
+blue up into the top, which the overfilled beaker spills. The overflow now projects the spill cell when it
+receives anything.
+
+**The goldens.** Against main's own build, the pressure session's measured output is identical, and the demo's
+differs in one line by a microgram (H2O(l) 37.787113 g against 37.787114 g, rounding on the pour's new path).
+Re-recorded on Stage 50's with the user's approval (2026-11-25).
 
 ## Open
 

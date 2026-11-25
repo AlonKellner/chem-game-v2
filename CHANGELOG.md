@@ -14,6 +14,7 @@
 - `docs/DATA_SOURCES.md`: a jet's entrainment (Ricou and Spalding 1961) and a fountain's height (Turner 1966), gated.
   §20: the stream's simplifications.
 - Tests: energy checks compare ratios, doctest's `Approx` being absolute below 1.
+- §6: the overflow brings its spill cell to its fast equilibria when it receives anything (P1; a gap since Stage 8).
 
 
 ## 0.50.0 (2026-11-25, Stage 50; signed off by the user: "Looks good! Approved, merge and proceed")
