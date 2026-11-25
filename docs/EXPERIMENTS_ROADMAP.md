@@ -266,6 +266,11 @@ These are not chemistry, but every principle lesson will need them.
 - **Lessons in order.** The catalogue grows prerequisites and a player's progress. That progress is
   the first state outside the lab that needs saving.
 
+**Taken up by the curriculum** (`docs/CURRICULUM.md`, 2026-11-24): this area grows into its steps A to C,
+the first to build: the measured lab (a reagent shelf, a balance, volumetric glassware, a burette,
+instruments with their error, composition hidden per experiment), the notebook and the report (a table,
+a plot, a fitted line, predictions, unknowns), and the calculator, the planner and the reference.
+
 ## 8. The vertical dimension
 
 **Built in Stage 47** (`docs/TDD_47_COLUMN.md`):
@@ -341,3 +346,19 @@ After area 8. Water and an oil do not mix, yet pass heat between them.
 shared between the layers (an extraction).
 
 **Depends on:** area 8.
+
+## The curriculum's areas
+
+`docs/CURRICULUM.md` (2026-11-24) lists a first-year student's experiments and what each needs. Areas 1 to 9
+carry most of its chemistry: area 1 its step D, area 2 its step E, area 4 its step I, areas 5 and 6 its step
+G, area 9 its step J. It adds these areas, each a stage of its own when it is taken:
+
+10. **Solution kinetics and redox** (step F): homogeneous rate laws in the concentrations, catalysts
+    (GAME_SPEC §7, planned); redox in solution: permanganate, iodine and thiosulfate, peroxide, a metal
+    displacing another. The iodine clock, crystal violet, the vanishing cross, redox titrations, the
+    activity series.
+11. **Electrochemistry** (step H): a wire as an edge that carries charge, a cell's potential from its
+    affinity, electrolysis as electrical work, a conductivity derived from the ions' mobilities. Galvanic
+    and concentration cells, Faraday's constant, conductometric titration.
+12. **Burning and emission** (steps E and I): a fuel and magnesium burning in air as reactions, and the
+    emission lines of flame tests and atomic spectra.
