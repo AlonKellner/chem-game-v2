@@ -1,0 +1,286 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 59; docs/CURRICULUM.md, experiment 3) on data/benches/separate.json: copper oxide separated from copper sulfate by dissolving and filtering, and weighed.",
+	"title": "Experiment: separating a mixture",
+	"bench": "../benches/separate.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "The beaker holds 2.000 g of blue copper sulfate crystals and some black copper oxide. How many grams of the oxide do you think there are? Type your guess, then click \"predict\".",
+			"why": "A separation works on a difference: here, that copper sulfate dissolves in water and copper oxide does not.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "Dissolving",
+			"title": "Water, stirred",
+			"text": "Pick up the water and right-click the mixture's beaker; type 40 and click \"pour\". Right-click the beaker and click \"stir\".",
+			"why": "40 mL of water holds the 2 g of crystals many times over; stirred, they dissolve in a few minutes.",
+			"checks": [
+				{
+					"text": "water in the mixture",
+					"when": {
+						"item": "mix",
+						"species": "water",
+						"above_g": 30
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "mix",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:mix"
+					]
+				},
+				{
+					"type": "40"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:mix"
+				},
+				{
+					"click": "stir:mix"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until the crystals are gone",
+			"text": "Watch the blue spread through the water while the black powder swirls in it.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "mix",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"part": "Filtering",
+			"title": "The funnel on the flask",
+			"text": "Pick up the filter funnel and click the flask: it stands in its neck.",
+			"why": "The paper's pores are about 11 um across: the solution runs through them, the powder's grains are caught.",
+			"checks": [
+				{
+					"text": "the funnel on the flask",
+					"when": {
+						"item": "funnel",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Pour it through",
+			"text": "Pick up the stirred mixture and right-click the funnel; type 40 and click \"pour\": the stirring keeps the powder up, and much of it goes with the liquid.",
+			"checks": [
+				{
+					"text": "the liquid poured in",
+					"when": {
+						"item": "mix",
+						"species": "water",
+						"below_g": 5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:mix",
+						"item:funnel"
+					]
+				},
+				{
+					"type": "40"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "The rest of the powder",
+			"text": "Pick up the beaker again and right-click the funnel; click \"tip in the solid\": scrape and rinse what is left in the beaker onto the paper.",
+			"why": "Every grain left behind is missing from what you weigh: a quantitative transfer leaves none.",
+			"checks": [
+				{
+					"text": "none left in the beaker",
+					"when": {
+						"item": "mix",
+						"species": "copper_oxide",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:mix",
+						"item:funnel"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Until it has drained",
+			"text": "Wait while the blue filtrate drips into the flask.",
+			"checks": [
+				{
+					"text": "the funnel drained",
+					"wait": true,
+					"when": {
+						"item": "funnel",
+						"species": "water",
+						"below_g": 0.05
+					}
+				}
+			]
+		},
+		{
+			"part": "Weighing",
+			"title": "The dish on the balance",
+			"text": "Pick up the weighing dish and click the balance; right-click the balance and click \"tare\".",
+			"checks": [
+				{
+					"text": "the dish on the balance, tared",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "dish"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:dish",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "The powder into the dish",
+			"text": "Pick up the funnel and right-click the dish; click \"tip in the solid\": scrape the powder off the paper.",
+			"checks": [
+				{
+					"text": "the powder in the dish",
+					"when": {
+						"item": "funnel",
+						"species": "copper_oxide",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:dish"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Its mass",
+			"text": "Right-click the balance and click \"+ mass\".",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the copper oxide in the mixture",
+			"unit": "g",
+			"truth": "mix.copper_oxide.g + funnel.copper_oxide.g + flask.copper_oxide.g + dish.copper_oxide.g",
+			"tolerance": 0.01,
+			"relative": true,
+			"predict": true,
+			"why": "The balance's reading of the dish, tared: every grain transferred, none through the paper. A real residue is weighed dried: a paper and its powder hold water until an oven drives it off."
+		}
+	]
+}

@@ -2374,6 +2374,9 @@ struct Ui::Impl {
 	static const glass::Vessel *glass_of(const ItemView &v) { return v.kind == "vessel" && !v.glassware.empty() ? glass::find(v.glassware, v.nominal_ml) : nullptr; }
 	static bool has_outlet(const ItemView &v) { return glass_of(v) != nullptr && glass_of(v)->outlet; }
 	static bool has_mark(const ItemView &v) { return glass_of(v) != nullptr && glass_of(v)->mark; }
+	// a filter funnel drained, its residue on its paper (Stage 59): carried onto a vessel, it is scraped into it, not
+	// stood on it
+	static bool residue_only(const ItemView &v) { return glass_of(v) != nullptr && glass_of(v)->paper_herzberg_s > 0.0 && v.solid_ml > 0.0 && !(v.liquid_ml > 0.1); } // (a drained paper holds a drop or two)
 	// a burner's valve, or a vessel's cap set upside down over another (Stage 27): one slider, shut to open; and a
 	// burette's stopcock (Stage 52)
 	bool valve_rect(int index, Rect &r) const {
@@ -2757,7 +2760,8 @@ struct Ui::Impl {
 			return false;
 		}
 		const ItemView &a = view.items[static_cast<size_t>(carried)], &b = view.items[static_cast<size_t>(target)];
-		return a.kind == "vessel" && !a.glassware.empty() && !has_outlet(a) && b.kind == "vessel" && !b.condenser && b.place == "bench"; // (a burette or a pipette delivers by its tip: Stage 52)
+		// (a burette or a pipette delivers by its tip: Stage 52; a drained funnel's residue is scraped out: Stage 59)
+		return a.kind == "vessel" && !a.glassware.empty() && (!has_outlet(a) || residue_only(a)) && b.kind == "vessel" && !b.condenser && b.place == "bench";
 	}
 	// what is in hand is set back on its place, as it was
 	void put_back() {
@@ -2836,7 +2840,7 @@ struct Ui::Impl {
 				if (t.kind == "vessel") { // under a cuvette, where it stands (Stage 55)
 					act({ { "do", "insert" }, { "spectrophotometer", v.id }, { "cuvette", t.id } });
 				}
-			} else if (has_outlet(v) && t.kind == "vessel") {
+			} else if (has_outlet(v) && t.kind == "vessel" && !residue_only(v)) {
 				// (Stage 52) a pipette, empty, draws to its mark from what it is dipped into; full, or a burette, stands on
 				// the vessel, its tip in the mouth, and drains into it
 				if (v.glassware == "pipette" && !(v.condensed_ml > 1e-6)) {

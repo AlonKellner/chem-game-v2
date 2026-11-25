@@ -143,6 +143,13 @@
 			"tutorial": "tutorials/prepare.json"
 		},
 		{
+			"id": "separate",
+			"title": "Separating a mixture",
+			"summary": "Measured: blue copper sulfate crystals mixed with black copper oxide; water dissolves the one and not the other, a filter paper keeps the powder, and the balance weighs it. A guess first.",
+			"bench": "benches/separate.json",
+			"tutorial": "tutorials/separate.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",
