@@ -52,7 +52,7 @@ The spectrophotometer (T5), predictions and lessons in order (S6) are the next s
 | 54.4 | The screen: the notebook's panel, its table, plot and fit; "+" in the readout | Done |
 | 54.5 | The report on the tutorial's card | Done |
 | 54.6 | The experiments: a titration's curve, water's vapour pressure | Done |
-| 54.7 | This document, CHANGELOG, `make gates`, the user's sign-off | |
+| 54.7 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1206 s: ASan+UBSan 1192, ctest 934, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
 
 ## The goldens
 
