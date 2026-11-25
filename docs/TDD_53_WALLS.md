@@ -27,7 +27,7 @@ GAME_SPEC 0.53.0 covers:
 | 53.3 | The lab: rings and their edges, `set_walls` each step, the burner on the floor, the bubbles' floor heat, save and load, the view | Done |
 | 53.4 | A powder bed on the floor | Done |
 | 53.5 | The demo's shifts: tests restated, the goldens re-recorded with the user's approval | Done |
-| 53.6 | GAME_SPEC 0.53.0, `make gates`, the user's sign-off | |
+| 53.6 | GAME_SPEC 0.53.0, `make gates`, the user's sign-off | `make gates` passed (1984 s: ASan+UBSan, ctest 517, Godot 13 of 13); `make screenshots` O4 as Stage 48 recorded (the largest 13 to 17 at x = 26), its headless and windowed alarms 120 s and 240 s (the demo's slower cooling takes more frames); awaiting sign-off |
 
 ## 53.1 Data
 

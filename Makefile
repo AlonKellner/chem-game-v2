@@ -153,5 +153,5 @@ pass-cost: native
 # the engine's thread must never be able to hang a window.
 screenshots gpu-parity: native
 	mkdir -p build/screenshots
-	perl -e 'alarm 60; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
-	perl -e 'alarm 120; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 120; exec @ARGV' $(GODOT) --headless --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots
+	perl -e 'alarm 240; exec @ARGV' $(GODOT) --disable-vsync --path $(GODOT_PROJECT) -s tools/screenshot.gd -- $(CURDIR)/build/screenshots

@@ -32,8 +32,8 @@ func _of(id: String, species := "") -> float: # an item's grams of a species; wi
 				if row["species"] == species: return row["g"]
 	return 0.0
 
-func _watch(done: Callable, what: String) -> bool:
-	for i in 2000:
+func _watch(done: Callable, what: String, most: int = 2000) -> bool:
+	for i in most:
 		if done.call():
 			return true
 		_lab.frame(1.0 / 60.0)
@@ -150,7 +150,8 @@ func _play(dir: String) -> void:
 		return
 	if _lab.paused(): # the alarm stopped the clock at 12 g, and the rig closed the valve
 		_click("pause")
-	if not _watch(func(): return _of("flask") < 21.0, "the flask to cool"):
+	# (Stage 53: cooling through its glass takes some 1700 s of the lab's clock, more than 2000 frames under the budget)
+	if not _watch(func(): return _of("flask") < 21.0, "the flask to cool", 8000):
 		return
 	for i in 90:
 		_lab.frame(1.0 / 60.0)
