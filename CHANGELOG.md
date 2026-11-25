@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.52.0 (2026-11-25, Stage 52; the user's sign-off pending)
+## 0.52.0 (2026-11-25, Stage 52; signed off by the user: "Approved, proceed")
 
 - §13 (Stage 52, `docs/TDD_52_VOLUMETRIC.md`; `docs/CURRICULUM.md`, step A's second half): **volumetric glassware**,
   each to its ISO standard's rows: a 50 mL burette, a 25 mL bulb pipette, 100 and 250 mL volumetric flasks, 10, 25 and

@@ -62,7 +62,7 @@ What it builds:
 | 52.4 | The thermometer's lag; the volumetric readings | Done |
 | 52.5 | The screen: tall glassware drawn to fit, the stopcock, the gestures, the readout | Done |
 | 52.6 | The experiments: a standard solution, a titration, a calorimeter | Done |
-| 52.7 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1098 s: ASan+UBSan 1098, ctest 699, Godot 13 of 13, goldens unchanged); the user's sign-off pending |
+| 52.7 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1098 s: ASan+UBSan 1098, ctest 699, Godot 13 of 13, goldens unchanged); signed off by the user, 2026-11-25 ("Approved, proceed") |
 
 ## What was built
 
