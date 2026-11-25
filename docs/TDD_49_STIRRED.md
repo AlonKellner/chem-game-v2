@@ -24,7 +24,7 @@ GAME_SPEC 0.49.0 covers:
 | 49.2 | The core: `CellMeta::stirring`, `World::set_stirring`; the column mixes as far as the turning pays | Done |
 | 49.3 | The lab: the turning's dissipation to the core each step | Done |
 | 49.4 | Drains from a layered vessel's bottom follow its lowest layer | Done |
-| 49.5 | GAME_SPEC 0.49.0, `make gates`, the user's sign-off | `make gates` passed (704 s: ASan+UBSan 704, ctest 381, Godot); the goldens unchanged; on the GPU the layered beaker stirred is green over blue as the vortex builds, the blue taking in the green from below, one teal in a second; awaiting sign-off |
+| 49.5 | GAME_SPEC 0.49.0, `make gates`, the user's sign-off | `make gates` passed (704 s: ASan+UBSan 704, ctest 381, Godot); the goldens unchanged; on the GPU the layered beaker stirred is green over blue as the vortex builds, the blue taking in the green from below, one teal in a second; signed off by the user ("Approved, merge and proceed") |
 
 ## 49.1 The mixing efficiency
 

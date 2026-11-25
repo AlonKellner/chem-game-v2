@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.49.0 (2026-11-25, Stage 49)
+## 0.49.0 (2026-11-25, Stage 49; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 49, `docs/TDD_49_STIRRED.md`), Stage 47's open items:
   - **stirred, a layered column mixes as far as the turning pays**: of what the turning dissipates
