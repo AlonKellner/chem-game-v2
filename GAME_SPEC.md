@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.58.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.59.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1725,6 +1725,14 @@ the calorimeter's).
 - Tall glassware stands on tall footprints (a burette 2 × 12, a pipette 2 × 11, a cylinder or a volumetric flask
   2 × 6 or 2 × 8).
 
+**A filter funnel** (Stage 59, `docs/TDD_59_FILTERING.md`): `filter_funnel`, a 60° cone 75 mm across on a stem
+(ISO 4798's form) with a Whatman grade 1 paper folded in quarters; an outlet vessel with no stopcock, `attach`ed on a
+mouth it runs into it as it stands. Its paper drains by Darcy's law, every patch of the wetted cone in proportion to the
+head over it, the stem's column hanging under it, `Q = k 2π tan 30° / cos 30° (h³/6 + L h²/2)`, its permeance from the
+paper's Herzberg time (150 s: 100 mL at 20 °C through 10 cm² under 10 cm), as water's viscosity goes; its cone drained,
+its stem runs out. It keeps every grain (an outlet's drain carries liquid only). Drained, holding only a residue,
+carried onto a vessel it opens the pour menu: its residue is scraped out ("tip in the solid").
+
 **The notebook** (Stage 54, `lab/notebook.hpp`; `docs/TDD_54_NOTEBOOK.md`). What a student writes down, kept by the lab:
 - **An entry** is a moment's reading: its step, its label (the item and what was read, or the student's), its
   quantity (§13.3's `item`, `what`, `measure`), its value and unit, and whether an instrument read it. By instruments
@@ -2728,6 +2736,11 @@ stand on.
     notebook); about that much is weighed into a tared volumetric flask (1.2101 g at the bench's seed: a hand's few
     percent short), dissolved and made up; the moles the balance's reading gives, in the flask's 0.100 L, are the
     concentration made: 0.04847 mol/L against the flask's 0.04850. Its report: that concentration, within 1 %.
+  - `separate`, *separating a mixture* (Stage 59; experiment 3): read by instruments. 2.000 g of the pentahydrate mixed
+    with an unknown mass of copper oxide (0.6 to 1.4 g from the seed); a guess first; water and stirring dissolve the
+    sulfate; poured through the filter funnel, the rest of the powder scraped after it, drained, scraped into a tared
+    dish and weighed: 0.9515 g at the bench's seed against its 0.95148, none through the paper. Its report: the oxide's
+    mass, within 1 %.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3117,6 +3130,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
 | A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
 | Grains held up in a cuvette (Stage 56) take twice their cross-section out of the beam, at every wavelength, all of them alike | A detector takes in some light scattered forward, so a real suspension reads a little less; small grains scatter blue more than red |
+| A filter paper (Stage 59) keeps every grain, adds no resistance as its cake grows, and holds no water once drained: a residue is dry and clean | Whatman grade 1 keeps grains over 11 µm and a fresh precipitate's 0.3 µm grains would pass it but for their flocs; a cake slows a filtration; a residue is washed and dried in an oven |
 | A grain's transport (Stage 57) is one correlation for every grain, crystal or oxide, its slip in the liquid set by the stirring's dissipation alone; a crystal's dissolving surface a fixed thousand times its growth's | Sano's correlation holds within 31 %; a crystal resting on a floor, unstirred, has natural convection about it; real faces dissolve at their own rates |
 | A cell holder (Stage 56) heats in proportion, a little under its set temperature (0.3 K at 50 C), and never cools; its heat goes into the cuvette's lowest layer at once | A real holder is a Peltier under a PID controller: it settles on its set point, cools as well as heats, and warms the cell through its walls in a minute or two |
 | A spectrophotometer (Stage 55) has no noise and no drift: a reading is the same each time; its cuvette's glass is not in the beam (a blank in the same kind of cell takes it off); its lamp's light is Planck's at one temperature, its detector equally sensitive at every wavelength; stray light a fixed share | A real instrument's last digit flickers, its lamp warms and drifts (it is blanked again every few minutes), cells are matched within a few thousandths of an absorbance, and a silicon detector is weak in the blue |

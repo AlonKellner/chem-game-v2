@@ -1,5 +1,13 @@
 # GAME_SPEC version history
 
+## 0.59.0 (2026-11-25, Stage 59)
+
+- §13 (Stage 59, `docs/TDD_59_FILTERING.md`; `docs/CURRICULUM.md`, step C's second half, T6): **a filter funnel** with a
+  Whatman grade 1 paper: it stands on a mouth and drains through its paper by Darcy's law from the paper's Herzberg
+  time, keeping every grain; a drained residue is scraped out by the pour menu.
+- §13.7: the experiment `separate` (copper oxide off copper sulfate, filtered and weighed).
+- §20: the paper's simplifications. The goldens unchanged.
+
 ## 0.58.0 (2026-11-25, Stage 58; signed off by the user: "Approved, merge and proceed")
 
 - §13.1 (Stage 58, `docs/TDD_58_CALCULATOR.md`; `docs/CURRICULUM.md`, step C's first half): the notebook's panel in
