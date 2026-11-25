@@ -530,8 +530,7 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 	}
 	MESSAGE("a frame at 600x: " << without << " ms, with three monitors " << with << " ms");
 #ifndef CHEM_SANITIZED // a sanitizer's build is several times slower: its costs are reported, not bounded
-	// (Stage 53: a share of the frame, not 3 ms of it: the frame grew with the vessels' rings, a reading did not)
-	CHECK((with - without) / without < 0.15);
+	CHECK(with - without < 3.0);
 #endif
 }
 

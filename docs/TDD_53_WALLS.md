@@ -113,7 +113,8 @@ Heat now goes through the glass:
   - the circuit's 40 s;
   - the tutorial's distillate over 30 g;
   - the gentle pour's green counted over the copper (it lies as two layers);
-  - the monitors' cost as a share of the frame;
+  - the Godot host's timer, played in frames of a sixtieth of a second until it rings rather than in one frame of
+    3.5 s (210 steps, over the frame's budget, Stage 36: the clock ran slow by design);
   - the controller's overshoot under 5 °C at every speed.
 - **The controller.** The trial now fits the flask as an integrator, so the gentle speed overshoots a step of
   setpoint by about a tenth (4 °C on 40), more than the fast. That is open.

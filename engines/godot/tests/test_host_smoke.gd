@@ -119,7 +119,12 @@ func test_a_timer_typed_in_rings_an_alarm_and_pauses_the_clock() -> void:
 	_drag("port:timer1", "item:alarm1")
 	assert_eq(_lab.signals().size(), 2, "a timer and an alarm")
 	assert_false(_lab.paused(), "the clock plays on once the timer is set")
-	_lab.frame(3.5)
+	# frames as a display gives them, a sixtieth of a second each, until it rings (at most ten seconds of them: a
+	# single frame of seconds runs under the frame's budget and carries the rest, Stage 36)
+	for i in 600:
+		_lab.frame(1.0 / 60.0)
+		if _lab.signals()[1]["ringing"]:
+			break
 	var alarm: Dictionary = _lab.signals()[1]
 	assert_true(alarm["ringing"], "the alarm rang when the timer reached zero")
 	assert_true(_lab.paused(), "the clock stopped when it rang")
