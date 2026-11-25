@@ -184,7 +184,7 @@ Each step is a stage of its own, numbered when it is taken, by `docs/WORKFLOW.md
 |---|---|---|---|
 | A | **The measured lab** | T1 T2 T3 T4; the calorimeter (T7) and the crucible (T6); composition hidden per experiment | 1, 2, 5, 6, 7, 13 (readings by hand), 22, 23, 24, 32 |
 | B | **The notebook and the report** (Stages 54 to 56) | S1 S5 S6 S7; T5 | 13 (the curve), 30, 34, 36 (4, 37 and 45 moved: Stage 56) |
-| B2 | **Crystals that dissolve** | C15 | 4, 45 |
+| B2 | **Crystals that dissolve** (Stage 57) | C15 | 4, 45 |
 | C | **The calculator, the planner, the reference** | S2 S3 S4; filtering (T6) | 3, 8, 35, 50 |
 | D | **Acids, bases and buffers** (area 1) | C2; the cap of C1 and a first pack (Cl, K, acetate, ammonia, carbonate, phosphate); C12; heat of dilution (C11) | 14 to 20 |
 | E | **Salts, precipitates and complexes** (area 2) | C1 C3 C14; the rest of T6 | 10, 12, 42, 43, 44, 51, 52, 54 |

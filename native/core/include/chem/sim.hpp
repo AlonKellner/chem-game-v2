@@ -55,7 +55,9 @@ double jet_entrains(double flux, double speed);
 // flux `buoyancy` (g' times its volume flux, m^4/s^3): 2.46 M^(3/4) B^(-1/2) (Turner 1966's forced fountain)
 double fountain_reach(double momentum, double buoyancy);
 
-SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing, const CellMeta *meta = nullptr);
+// (Stage 57) `dissipation`: the power stirring dissipates in the cell's liquid, W/kg: transport to a grain is Sano,
+// Yamaguchi and Adachi's (1974), Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3), 2 at rest
+SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta = nullptr);
 
 class Simulation {
 public:

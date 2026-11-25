@@ -94,17 +94,17 @@ TEST_CASE("measured: copper oxide dissolves at Majima's rate, half order in the 
 	// 2.5e-7 mol/cm2/min in 0.2 M sulfuric acid at 25 C (Nicol and Akilan 2018, Table 4, citing Majima et al.
 	// 1980), half order in the acid; the rate does not depend on agitation
 	const Reaction &r = reaction(builtin::reaction::copper_oxide_dissolution);
-	const auto steps_at = [&](double acid, double mixing) {
+	const auto steps_at = [&](double acid, double dissipation) {
 		Cell c;
 		c.put(builtin::sulfuric_acid_aq, acid).put(builtin::copper_oxide, 0.01, 240000000); // grains of 10 um
-		return surface_steps(builtin_species(), c.state, r, 298.15, affinity_of(c, r, 298.15), mixing);
+		return surface_steps(builtin_species(), c.state, r, 298.15, affinity_of(c, r, 298.15), dissipation);
 	};
-	const SurfaceSteps still = steps_at(0.2, 1.0);
+	const SurfaceSteps still = steps_at(0.2, 0.0);
 	CHECK(near(still.surface, 2.5e-7 * 1e4 / 60.0, 0.002));
-	CHECK(near(steps_at(0.8, 1.0).surface / still.surface, 2.0, 0.002));
+	CHECK(near(steps_at(0.8, 0.0).surface / still.surface, 2.0, 0.002));
 	REQUIRE(still.transported);
 	CHECK(still.transport > 100.0 * still.surface); // the acid reaches the grains far faster than they use it
-	CHECK(steps_at(0.2, 3.0).both / still.both < 1.01); // so stirring hardly matters
+	CHECK(steps_at(0.2, 1.0).both / still.both < 1.01); // so stirring hardly matters (1 W/kg: hard stirring, Stage 57)
 	CHECK(near(still.both, 1.0 / (1.0 / still.surface + 1.0 / still.transport), 1e-12));
 }
 
@@ -120,7 +120,7 @@ TEST_CASE("measured: the pentahydrate grows at Tanimoto's surface rate, in serie
 		const double kelvin = row.celsius + 273.15, ms = saturation(kelvin), m = 1.01 * ms;
 		Cell c;
 		c.put(builtin::copper_sulfate_aq, m).put(builtin::copper_sulfate_pentahydrate, 0.001, 1400); // 1400 crystals of 0.53 mm
-		const SurfaceSteps still = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 1.0);
+		const SurfaceSteps still = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 0.0);
 		const double gap = (m - ms) / litres_of_water(); // mol/m^3
 		CHECK(near(still.surface, row.kr / 3600.0 * gap, 0.03));
 		// transport: Sh = 2 at rest, the measured diffusion, the gap to the model's own saturation
@@ -129,8 +129,12 @@ TEST_CASE("measured: the pentahydrate grows at Tanimoto's surface rate, in serie
 		REQUIRE(still.transported);
 		CHECK(near(still.transport, 2.0 * diffusion(builtin_species(), builtin::copper_sulfate_aq, kelvin) / d * gap, 0.02));
 		CHECK(near(still.both, 1.0 / (1.0 / still.surface + 1.0 / still.transport), 1e-12));
-		const SurfaceSteps stirred = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 3.0);
-		CHECK(near(stirred.transport, 3.0 * still.transport, 1e-12));
+		// stirred at 0.1 W/kg (Stage 57): Sano, Yamaguchi and Adachi's Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3)
+		const SurfaceSteps stirred = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 0.1);
+		const double nu = solvent_viscosity(builtin_species(), kelvin) / liquid_density(builtin_species(), c.state);
+		const double dc = diffusion(builtin_species(), builtin::copper_sulfate_aq, kelvin);
+		const double sano = 2.0 + 0.4 * std::pow(0.1 * std::pow(d, 4.0) / (nu * nu * nu), 0.25) * std::cbrt(nu / dc);
+		CHECK(near(stirred.transport, sano / 2.0 * still.transport, 1e-9));
 		CHECK(stirred.surface == still.surface); // stirring brings the salt, and does not change the surface's own step
 		CHECK(stirred.both > still.both);
 		MESSAGE(row.celsius << " C: surface " << still.surface << ", transport " << still.transport << " mol/m2/s; stirred " << stirred.both / still.both << " times faster");
@@ -143,15 +147,36 @@ TEST_CASE("measured: a crystal in water dissolves by transport, read from one qu
 	c.put(builtin::copper_sulfate_pentahydrate, 0.001, 1400);
 	const double a = affinity_of(c, r, 298.15); // -infinity: none of the salt is dissolved
 	CHECK(a < 0.0);
-	const SurfaceSteps steps = surface_steps(builtin_species(), c.state, r, 298.15, a, 1.0);
+	const SurfaceSteps steps = surface_steps(builtin_species(), c.state, r, 298.15, a, 0.0);
 	REQUIRE(steps.transported);
+	CHECK(near(steps.both, steps.transport, 0.01)); // (Stage 57) dissolving, its surface a thousand times growth's: transport's pace
 	// the gap is the whole saturation: transport carries it away as from a solution with none
 	const double d = particle_diameter(builtin_species(), c.state, builtin::copper_sulfate_pentahydrate);
 	const double saturated = saturation(298.15) / litres_of_water();
 	CHECK(near(steps.transport, 2.0 * diffusion(builtin_species(), builtin::copper_sulfate_aq, 298.15) / d * saturated, 0.01));
 	CHECK(steps.both > 0.0);
-	CHECK(steps.both < steps.surface);
 	MESSAGE("dissolving into pure water: transport " << steps.transport << " mol/m2/s, against " << 2.0 * diffusion(builtin_species(), builtin::copper_sulfate_aq, 298.15) / d * saturated << " from the saturation");
+}
+
+TEST_CASE("measured: a stirred crystal dissolves by transport at Sano's Sherwood number, many times a still one's (Stage 57)") {
+	// Sano, Yamaguchi and Adachi 1974 (J. Chem. Eng. Japan 7, 255): particles of 60 to 1100 um, dissolving granules
+	// among them, in stirred vessels: Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3), within 31 %; at rest, 2
+	const Reaction &r = reaction(builtin::reaction::pentahydrate_crystallization);
+	Cell c;
+	c.put(builtin::copper_sulfate_pentahydrate, 0.001, 1400); // 0.53 mm, into pure water
+	const double a = affinity_of(c, r, 298.15), d = particle_diameter(builtin_species(), c.state, builtin::copper_sulfate_pentahydrate);
+	const SurfaceSteps still = surface_steps(builtin_species(), c.state, r, 298.15, a, 0.0);
+	const double nu = solvent_viscosity(builtin_species(), 298.15) / liquid_density(builtin_species(), c.state);
+	const double dc = diffusion(builtin_species(), builtin::copper_sulfate_aq, 298.15);
+	for (const double eps : { 0.01, 0.1, 1.0 }) { // W/kg: a gentle stir, a beaker's magnetic stirrer, hard
+		CAPTURE(eps);
+		const SurfaceSteps stirred = surface_steps(builtin_species(), c.state, r, 298.15, a, eps);
+		const double sh = 2.0 + 0.4 * std::pow(eps * std::pow(d, 4.0) / (nu * nu * nu), 0.25) * std::cbrt(nu / dc);
+		CHECK(near(stirred.both, stirred.transport, 0.02));
+		CHECK(near(stirred.transport / still.transport, sh / 2.0, 1e-9));
+		MESSAGE(eps << " W/kg: Sh " << sh);
+	}
+	CHECK(near(liquid_density(builtin_species(), c.state), 997.0, 0.003));
 }
 
 TEST_CASE("measured: malachite at Koga's isothermal run: nearly all gone after 589 minutes at 498 K (Stage 23)") {

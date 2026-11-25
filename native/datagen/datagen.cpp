@@ -453,6 +453,12 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				if (!(row.kinetics.driver_order > 0.0) || (k.contains("driver_order") && !k.contains("driver"))) {
 					fail(reactions_file, "reaction " + row.id + ": a driver's order is positive, and only a reaction with a driver has one");
 				}
+				if (k.contains("dissolution")) { // (Stage 57) "transport": its solid dissolves by transport alone
+					if (k.at("dissolution") != "transport") {
+						fail(reactions_file, "reaction " + row.id + ": a surface law's dissolution is \"transport\", or not given");
+					}
+					row.kinetics.dissolves_by_transport = true;
+				}
 			} else {
 				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
 			}
@@ -554,13 +560,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < row.terms.size(); ++i) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
-		char kinetics[360];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g }",
+		char kinetics[400];
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s }",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
 						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
 						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
 				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
-				row.kinetics.nucleation_order, row.kinetics.driver_order);
+				row.kinetics.nucleation_order, row.kinetics.driver_order, row.kinetics.dissolves_by_transport ? "true" : "false");
 		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
 	cpp << "};\n\n"

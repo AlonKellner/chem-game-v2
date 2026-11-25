@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.56.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.57.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -471,7 +471,8 @@ gas also exchanges with the room's air by **diffusion** through its mouth.
   - The affinity factor makes every reaction reversible and stops it at equilibrium.
 - **All reactions run concurrently.** There is no priority order. Competition for a reactant is
   resolved by the limiter of §4.5.
-- **Mixing** scales transport-limited rates (stirring, convection), never equilibrium.
+- **Stirring** speeds transport-limited rates, never equilibrium (Stage 57: by the dissipation it puts into the liquid,
+  through the Sherwood number below; until then a factor, `mixing`, of 3 stirred).
 - **Catalysts and inhibitors** change `k`, continuously in their concentration.
 - **No yield factors.** An imperfect yield is the result of side reactions and equilibrium, each
   balanced.
@@ -491,8 +492,11 @@ gas also exchanges with the room's air by **diffusion** through its mouth.
   - **by transport** through the liquid, to the surface or away from it,
     `t = (Sh · D / d) · |C − C_eq| / ν`: `D` the carried species' diffusion coefficient, `d` the
     particles' diameter, `C` its concentration (mol per m³ of the solvent), `ν` its coefficient
-    in the reaction, `Sh` the Sherwood number: 2 for a sphere in still liquid, and `mixing` times
-    that. `C_eq` is the concentration at which the reaction would be at equilibrium with all else
+    in the reaction, `Sh` the Sherwood number (Stage 57): Sano, Yamaguchi and Adachi's (1974), measured for suspended
+    particles of 60–1100 µm in stirred vessels, `Sh = 2 + 0.4 (ε d⁴ / ν³)^(1/4) Sc^(1/3)`, ε the power the cell's
+    stirring dissipates for each kg of its liquid (`CellMeta::stirring`, the lab's, Stage 49), ν the liquid's
+    kinematic viscosity (water's table over the liquid's own density), `Sc = ν / D`: 2 in still liquid, 43 for a
+    half-millimetre crystal in a beaker stirred at 0.1 W/kg. `C_eq` is the concentration at which the reaction would be at equilibrium with all else
     held: what the surface is at when transport alone limits. It is found from the affinity
     itself (Newton's steps in `ln n`, from the affinity's slope, until a step would move the gap
     by under 1%: one or two near equilibrium), so activity coefficients count as they do
@@ -501,6 +505,10 @@ gas also exchanges with the room's air by **diffusion** through its mouth.
     transport puts no limit on what it makes.
   - The carried species is the driver, if any (the acid an oxide's dissolving uses up), else the
     reaction's dissolved species (a crystal's salt).
+  - **A crystal dissolving** (Stage 57; `"dissolution": "transport"`, the copper sulfates): its surface step is a
+    thousand times its growth's (it gives up its ions; only growing builds a lattice), so transport sets the pace, as
+    in a real crystal (Mullin: dissolution is generally diffusion controlled); the surface's factor still brings it
+    to nothing at equilibrium. Stirred, 3 g of the pentahydrate in 10 g of water is all but gone in five minutes.
   - `1/r = 1/s + 1/t`, times the area. The slower step limits: a reaction controlled at its
     surface (copper oxide in the acid) is hardly sped by stirring; one held back by transport (a
     crystal of a millimetre growing) is, as far as transport is its limit. Both are read at the
@@ -2690,6 +2698,13 @@ stand on.
     35 C (120 s). ln t against 1/T: 68.8 kJ/mol (R² 0.9999) against the oxide's 69; the order ln(120 / 85) / ln 2 =
     0.50, the surface law's square root, against the guess of 1 the card makes. Its report: the activation energy
     (within 15 %) and the order (within 0.15).
+  - `solubility`, *a solubility curve* (Stage 57; experiments 4 and 45): read by instruments. A guess of the solubility
+    at 50 C first; then four beakers of 10.0 g of water with 5, 6, 7 and 8 g of the pentahydrate (27.1 to 39.7 g of
+    the salt per 100 g), each heated gently and stirred until its last crystal goes, its thermometer read then: 40.4,
+    48.9, 55.8 and 60.8 C at the bench's seed, 3 to 4 K past the model's own saturation (the solution lags the
+    warming, as a student heating too fast finds). ln s against 1/T: 16.1 kJ/mol against the model's 15.0 over
+    25–60 C; 32.4 g at 50 C against its 34.6 and the handbook's 33.3. Its report: the solubility at 50 C (within 8 %,
+    predicted first) and the heat of solution (within 25 %).
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3079,6 +3094,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
 | A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
 | Grains held up in a cuvette (Stage 56) take twice their cross-section out of the beam, at every wavelength, all of them alike | A detector takes in some light scattered forward, so a real suspension reads a little less; small grains scatter blue more than red |
+| A grain's transport (Stage 57) is one correlation for every grain, crystal or oxide, its slip in the liquid set by the stirring's dissipation alone; a crystal's dissolving surface a fixed thousand times its growth's | Sano's correlation holds within 31 %; a crystal resting on a floor, unstirred, has natural convection about it; real faces dissolve at their own rates |
 | A cell holder (Stage 56) heats in proportion, a little under its set temperature (0.3 K at 50 C), and never cools; its heat goes into the cuvette's lowest layer at once | A real holder is a Peltier under a PID controller: it settles on its set point, cools as well as heats, and warms the cell through its walls in a minute or two |
 | A spectrophotometer (Stage 55) has no noise and no drift: a reading is the same each time; its cuvette's glass is not in the beam (a blank in the same kind of cell takes it off); its lamp's light is Planck's at one temperature, its detector equally sensitive at every wavelength; stray light a fixed share | A real instrument's last digit flickers, its lamp warms and drifts (it is blanked again every few minutes), cells are matched within a few thousandths of an absorbance, and a silicon detector is weak in the blue |
 | A logger (Stage 54) reads at the end of the step that reaches its time, every reading at once; the plot's fit is an unweighted least squares | A student reads a thermometer and a burette a second or so apart, and weighs points by their errors |

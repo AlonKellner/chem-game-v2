@@ -1,5 +1,16 @@
 # GAME_SPEC version history
 
+## 0.57.0 (2026-11-25, Stage 57; signed off by the user: "Approved, merge and proceed")
+
+- §7 (Stage 57, `docs/TDD_57_DISSOLVING.md`; `docs/CURRICULUM.md`, step B2): **transport to a grain** by Sano,
+  Yamaguchi and Adachi's measured Sherwood number from the stirring's own dissipation (2 at rest), the old factor of
+  three for stirring retired; **a crystal dissolves at transport's pace** (its surface step a thousand times its
+  growth's), as real crystals do: stirred, minutes, not an hour.
+- §13.7: the experiment `solubility` (copper sulfate's curve by the temperature its last crystal dissolves at; ln s
+  against 1/T, the heat of solution).
+- §20: the grain's transport. The goldens re-recorded with the user's approval: the demo's results by a hair (the
+  oxide gone at 1010.1 s, not 1007.1; the crystals 9.197167 g; the distillate 37.764 g).
+
 ## 0.56.0 (2026-11-25, Stage 56; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 56, `docs/TDD_56_RATES.md`; `docs/CURRICULUM.md`, step B's last part): the spectrophotometer's **heated
