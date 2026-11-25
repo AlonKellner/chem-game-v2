@@ -60,6 +60,12 @@ edges:
   height). The floor and the lowest liquid use Stage 45's heated floor (`bubbles::floor_flux`: convection, and
   Rohsenow's boiling past the onset). A floor no warmer than the liquid passes heat as a wall into the liquid, and a
   dry floor into the gas.
+- **Boiling's hysteresis:** a floor starts boiling past its cavities' onset and goes on boiling down to its
+  boiling point (a cavity that has nucleated keeps its vapour; `bubbles::floor_nucleates`, the item's
+  `floor_nucleating`, saved and digested). Without it a floor ring that a flame holds between the two flipped in and
+  out of boiling every few steps: the demo's blue solution at the burner's 0.2, the floor saw-toothing 109.2 to
+  109.3 °C, and the bubbles' haze flickering between two pictures (0.03 and 0.35 at the floor) frame to frame (the
+  user's report). With it the floor stands at 106.9 °C and the haze is steady.
 
 A layer the column grows is connected to every ring at the next step. A burner heats the floor ring, not the liquid.
 The bubbles take their floor's heat from the floor's edges into the column. A vessel's view lists its glass as before
@@ -122,7 +128,9 @@ Heat now goes through the glass:
 - **The controller.** The trial now fits the flask as an integrator, so the gentle speed overshoots a step of
   setpoint by about a tenth (4 °C on 40), more than the fast. That is open.
 - **Goldens:** both sessions re-recorded with the user's approval. They were re-recorded once more, on Stage 52 and
-  with the 1 cm rings, under the same approval; the changes from the run reviewed were within a hair.
+  with the 1 cm rings, under the same approval; the changes from the run reviewed were within a hair. Again for
+  boiling's hysteresis, approved: the demo's oxide dissolves 0.5 s sooner and its crystals are 9.134 g (9.123); the
+  pressure session's burst 0.1 s sooner.
 
 ## Open
 
