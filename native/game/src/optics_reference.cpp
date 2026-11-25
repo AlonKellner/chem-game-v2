@@ -572,7 +572,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 				glow = truth_image_glow(*shader::current, m.body, m.cross, m.cross_y, size, size, nm, l.solid); // a screen's: its image's (Stage 42)
 			}
 			const shader::vec2 does = shader::body_does(l, shader::row_at(start + optics_layout::ROW, nm), shader::haze_colour(m.body, start, m.cross_y, nm), glow, shader::row_at(start + 2 * optics_layout::ROW, nm),
-					per_cm * (m.bent ? chord : l.depth_cm + l.glowing), m.pass, m.absorbed, room, shader::theta_of(nm, shader::body_kelvin(m.body)));
+					per_cm * (m.bent ? chord : l.depth_cm + l.glowing), m.pass, m.absorbed, room, shader::heat_of(m.body, start, shader::vec2(m.cross, m.cross_y), nm));
 			b += a * does.y;
 			a *= does.x;
 		}
@@ -1950,6 +1950,24 @@ std::string check_O1(const OpticsScene &scene) {
 			if (bands < 0 || bands > MAX_BANDS) {
 				std::snprintf(text, sizeof text, "O1: body %d: %d bands", i, bands);
 				return text;
+			}
+			// its parts' temperatures by height (Stage 53): within their counts, rising, each a temperature, none over
+			// the hottest
+			const size_t temps = own + static_cast<size_t>(TEMPS_ROW - BANDS_ROW) * ROW;
+			const double hottest = scene.rows[temps + TEMPS_HOTTEST];
+			for (const auto [from, most] : { std::pair<size_t, int>{ temps, MAX_RINGS + 1 }, std::pair<size_t, int>{ temps + TEMPS_CONTENTS, MAX_BANDS } }) {
+				const int n = static_cast<int>(scene.rows[from]);
+				if (n < 0 || n > most) {
+					std::snprintf(text, sizeof text, "O1: body %d: %d temperatures by height", i, n);
+					return text;
+				}
+				for (int k = 0; k < n; ++k) {
+					const double z = scene.rows[from + 1 + 2 * static_cast<size_t>(k)], kelvin = scene.rows[from + 2 + 2 * static_cast<size_t>(k)];
+					if (!(kelvin > 0.0) || kelvin > hottest || (k > 0 && !(z >= scene.rows[from - 1 + 2 * static_cast<size_t>(k)]))) {
+						std::snprintf(text, sizeof text, "O1: body %d: its temperature %d (%g K at %g cm) is none, over the hottest (%g K), or does not rise", i, k, kelvin, z, hottest);
+						return text;
+					}
+				}
 			}
 		}
 		const size_t body = static_cast<size_t>(HEADER_VECS + i * BODY_VECS) * 4;

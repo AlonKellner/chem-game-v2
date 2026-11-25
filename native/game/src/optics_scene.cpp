@@ -8,6 +8,7 @@
 #include "lab/colour.hpp"
 #include "lab/contents.hpp"
 #include "lab/optics_trace.hpp"
+#include "lab/walls.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -21,6 +22,16 @@
 namespace lab {
 
 namespace {
+
+// a vessel's wall as rings (Stage 53: lab/walls.hpp), cut once for each shape
+const std::vector<lab::walls::Ring> &rings_cut(const lab::glass::Vessel *made) {
+	static thread_local std::map<const lab::glass::Vessel *, std::vector<lab::walls::Ring>> cut;
+	auto found = cut.find(made);
+	if (found == cut.end()) {
+		found = cut.emplace(made, made != nullptr ? lab::walls::rings_of(*made) : std::vector<lab::walls::Ring>{}).first;
+	}
+	return found->second;
+}
 
 // A revision names what it is of across every scene (Stage 47): a host that shows one scene and then another (the
 // lab, then the prism) uploads what changed by its revision, and two scenes' counts from 0 would name different
@@ -650,6 +661,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// room at any turn, as its surface does: a band's top is the level that holds the liquid of the layers
 				// under it, as the surface is the one that holds all of it (in its frame, as lie[15]); tipped to pour,
 				// its top layer is the one at the lip, and each under it reaches the lip as the level falls to it.
+				std::vector<std::pair<double, double>> held; // (Stage 53) each layer's middle and its temperature, from the bottom
 				if (v.layers.size() > 1 && l.liquid) {
 					const size_t bands = std::min(v.layers.size(), static_cast<size_t>(MAX_BANDS));
 					std::vector<float> table(1 + 3 * bands, 0.0f);
@@ -700,6 +712,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 						table[1 + 3 * k] = static_cast<float>(band_set);
 						table[2 + 3 * k] = static_cast<float>(under);
 						table[3 + 3 * k] = static_cast<float>(std::max(over, under));
+						held.emplace_back(0.5 * ((k == 0 ? made->floor : under) + (k + 1 == bands ? drawn(l.liquid_level) : std::max(over, under))), layer.celsius + 273.15);
 						under = std::max(over, under);
 					}
 					float *band_table = &rows[static_cast<size_t>((set * ROWS_PER_SET + BANDS_ROW) * ROW)];
@@ -728,6 +741,35 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				lie[25] = drawn(l.pile.deep);
 				lie[26] = drawn(l.pile.x);
 				lie[27] = drawn(l.pile.y);
+				// (Stage 53) its parts' temperatures by height: its wall's rings, each at its own; its layers, each at its
+				// own (a vessel of one layer: its one temperature, the body's)
+				if (!(body.kelvin > 0.0)) {
+					const size_t temps = static_cast<size_t>((set * ROWS_PER_SET + TEMPS_ROW) * ROW);
+					double hottest = v.celsius + 273.15, signature = hottest;
+					int n = 0;
+					const std::vector<walls::Ring> &rings = rings_cut(made);
+					if (!rings.empty() && v.wall_c.size() == rings.size() && rings.size() <= static_cast<size_t>(MAX_RINGS) + 1) {
+						rows[temps] = static_cast<float>(rings.size());
+						for (size_t k = 0; k < rings.size(); ++k) {
+							const double kelvin = v.wall_c[k] + 273.15;
+							rows[temps + 1 + 2 * k] = static_cast<float>(0.5 * (rings[k].from + rings[k].to));
+							rows[temps + 2 + 2 * k] = static_cast<float>(kelvin);
+							hottest = std::max(hottest, kelvin);
+							signature += kelvin * (1.0 + 0.0137 * ++n);
+						}
+					}
+					if (held.size() > 1) {
+						rows[temps + TEMPS_CONTENTS] = static_cast<float>(held.size());
+						for (size_t k = 0; k < held.size(); ++k) {
+							rows[temps + TEMPS_CONTENTS + 1 + 2 * k] = static_cast<float>(held[k].first);
+							rows[temps + TEMPS_CONTENTS + 2 + 2 * k] = static_cast<float>(held[k].second);
+							hottest = std::max(hottest, held[k].second);
+							signature += held[k].second * (1.0 + 0.0137 * ++n);
+						}
+					}
+					rows[temps + TEMPS_HOTTEST] = static_cast<float>(hottest);
+					rows[temps + TEMPS_HOTTEST + 1] = static_cast<float>(signature);
+				}
 			}
 			const double aspect = static_cast<double>(body.h) / body.w;
 			const double d_cm = made ? 2.0 * made->widest() : std::cbrt(4.0 * (v.volume_ml > 0.0 ? v.volume_ml : 1.0) / (PI * aspect));
@@ -785,14 +827,14 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		if (solid_g > 0.0) {
 			double rgb[3];
-			glow_of(v.celsius + 273.15, reflectance, rgb);
+			glow_of((v.layers.empty() ? v.celsius : v.layers.back().celsius) + 273.15, reflectance, rgb); // (its solids lie in its lowest layer)
 			for (int c = 0; c < 3; ++c) {
 				put(at + GLOW, c, rgb[c]); // its colour: a pixel's history follows it
 			}
 		}
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
 		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
-		uint64_t h = fnv(liquid, ROWS_PER_SET * ROW * sizeof(float));
+		uint64_t h = fnv(liquid, (ROWS_PER_SET - 1) * ROW * sizeof(float)); // (its temperatures not: its key follows them where they show, Stage 53)
 		h = fnv(lw, ROWS_PER_SET * LWIR_ROW * sizeof(float), h);
 		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);
 		h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it

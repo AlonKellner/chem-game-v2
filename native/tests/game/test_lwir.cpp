@@ -3,6 +3,8 @@
 // reads the room's light (O21); a ray's shares are whole (O22); the light's table is its integral (O23); and the
 // visible picture is as it was (O24).
 #include "lab/optics_scene.hpp"
+#include "lab/glassware.hpp"
+#include "lab/walls.hpp"
 
 #include "chem/optics.hpp"
 
@@ -429,4 +431,45 @@ TEST_CASE("long-wave: a sensor's display shows its frame's long-wave light, sett
 		frames.frame(hot);
 	}
 	CHECK(lab::check_O25(hot, frames, 100, 300, 140, 330, step) == "");
+}
+
+TEST_CASE("long-wave: a vessel's glass reads each ring's own temperature, and between two rings what runs between them (Stage 53)") {
+	// a beaker whose rings stand from 90 C at its floor to 30 C at its brim: the camera reads its glass hotter low
+	// and cooler high, with no step where one ring meets the next (heat crosses there: its temperature runs on)
+	std::string why;
+	const auto beaker = lab::glass::make("beaker", 250.0, why);
+	REQUIRE_MESSAGE(beaker.has_value(), why);
+	const size_t n = lab::walls::rings_of(*beaker).size();
+	ItemView plain = vessel("ringed", 250.0, 0.0, 50.0);
+	plain.glassware = "beaker";
+	plain.nominal_ml = 250.0;
+	ItemView even = plain, graded = plain;
+	even.wall_c.assign(n, 50.0);
+	for (size_t k = 0; k < n; ++k) {
+		graded.wall_c.push_back(90.0 - 60.0 * static_cast<double>(k) / static_cast<double>(n - 1));
+	}
+	const auto scene_of = [&](const ItemView &v) { return compose(room(1), { OpticsBody{ &v, 200, 100, 90, 112.5f } }); };
+	const OpticsScene a = scene_of(plain), b = scene_of(even), c = scene_of(graded);
+	// rings all at the vessel's own temperature: the picture it had with one
+	for (int y = 102; y < 212; y += 6) {
+		for (int x = 205; x < 290; x += 12) {
+			CHECK(std::fabs(band_kelvin(a, x, y) - band_kelvin(b, x, y)) < 1e-6);
+		}
+	}
+	// graded: hotter down the wall, and smoothly
+	double last = 0.0, first = 0.0, top = 0.0, steepest = 0.0;
+	for (int y = 106; y <= 206; ++y) {
+		const double t = band_kelvin(c, 245, y);
+		if (y == 106) {
+			top = t;
+		} else {
+			CHECK(t >= last - 1e-6);
+			steepest = std::max(steepest, t - last);
+		}
+		last = t;
+		first = t;
+	}
+	MESSAGE("the glass reads " << top - 273.15 << " C near its brim, " << first - 273.15 << " C near its floor; at most " << steepest << " K a row");
+	CHECK(first - top > 30.0);
+	CHECK(steepest < 2.0); // (a ring is some 11 rows: a step at each would be some 5 K)
 }
