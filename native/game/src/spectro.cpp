@@ -35,8 +35,15 @@ const Model &model() {
 	return m;
 }
 
+double turbidity(double grains_per_cm3, double diameter_cm) {
+	constexpr double EXTINCTION = 2.0; // a large grain's efficiency: what it blocks and what it diffracts
+	const double pi = 3.14159265358979323846;
+	return EXTINCTION * pi * 0.25 * diameter_cm * diameter_cm * grains_per_cm3 / std::log(10.0);
+}
+
 optics::Spectrum absorbance(const Sample &sample) {
 	optics::Spectrum a{};
+	a.fill(sample.turbidity * sample.path_cm);
 	for (const auto &[id, c] : sample.molar) {
 		if (optics::kind(id) != optics::Kind::Absorb || !(c > 0.0)) {
 			continue;

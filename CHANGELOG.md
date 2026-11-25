@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.56.0 (2026-11-25, Stage 56)
+
+- §13 (Stage 56, `docs/TDD_56_RATES.md`; `docs/CURRICULUM.md`, step B's last part): the spectrophotometer's **heated
+  cell holder** (20 to 80 C; a heater from the mains into the cuvette's lowest layer; saved, digested while set); the
+  quantity `holder`. **A suspension dims the beam**: grains held up by stirring, twice their cross-section;
+  the quantity `suspended`.
+- §13.1: the holder's switch and steps, the cuvette's warmth in the readout; a notebook field clicked into is replaced
+  by what is typed.
+- §13.2: the condition `noted_count`.
+- §13.7: the experiment `rates` (the order in the acid and the activation energy, timed by absorbance).
+- `docs/CURRICULUM.md`: experiment 37 moved to step F (no instrument reads the solids' decompositions as they run);
+  4 and 45 to a new step B2, after crystals dissolve by mass transfer (C15: the pentahydrate dissolves as slowly as it
+  grows, an hour to saturate). §20: the holder's simplifications. The goldens unchanged.
+
 ## 0.55.0 (2026-11-25, Stage 55; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 55, `docs/TDD_55_SPECTRO.md`; `docs/CURRICULUM.md`, step B's second half): **a spectrophotometer**, a

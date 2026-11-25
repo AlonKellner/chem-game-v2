@@ -190,3 +190,24 @@ TEST_CASE("spectro screen: its cell holder's switch and 5 C steps (Stage 56)") {
 	p.click("cell:spec");
 	CHECK_FALSE(p.item("spec").holder_c);
 }
+
+TEST_CASE("spectro lab: grains held up in a stirred cuvette dim the beam; settled, they leave it (Stage 56)") {
+	// a large grain takes twice its cross-section out of the beam: 10^4 grains of 40 um a cm^3, 0.109 a cm
+	CHECK(lab::spectro::turbidity(1e4, 40e-4) == doctest::Approx(2.0 * 3.14159265 * 0.25 * 16e-6 * 1e4 / std::log(10.0)).epsilon(1e-9));
+	auto l = open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "spec", "kind": "spectrophotometer", "nm": 750, "at": [2, 12]},
+		{"id": "c", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [9, 7], "contents": {"water": {"g": 3.5}}},
+		{"id": "o", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 30, "at": [18, 7], "contents": {"copper_oxide": {"g": 0.05, "particles": 35000}}}]})");
+	must(*l, R"({"do": "insert", "spectrophotometer": "spec", "cuvette": "c", "onto": true})");
+	must(*l, R"({"do": "blank", "spectrophotometer": "spec"})");
+	must(*l, R"({"do": "tip", "from": "o", "to": "c", "species": "copper_oxide", "all": true})");
+	CHECK(*item(*l, "spec").absorbance == 0.0); // in water it does not dissolve; settled, under the beam
+	must(*l, R"({"do": "stir", "vessel": "c", "on": true})");
+	must(*l, R"({"do": "wait", "seconds": 20})");
+	const double stirred = *item(*l, "spec").absorbance;
+	MESSAGE("50 mg of copper oxide held up in 3.5 mL: A " << stirred);
+	CHECK(stirred > 0.2);
+	must(*l, R"({"do": "stir", "vessel": "c", "on": false})");
+	must(*l, R"({"do": "wait", "seconds": 60})");
+	CHECK(*item(*l, "spec").absorbance < 0.01);
+}

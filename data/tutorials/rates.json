@@ -84,13 +84,12 @@
 						"above_c": 24.7
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
-			"title": "Blank, then the oxide in",
-			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
-			"why": "Blanked with the acid itself, the absorbance is the copper's alone. Stirred, the copper that leaves the oxide's surface reaches the beam at once, and the solid is kept off the floor.",
+			"title": "The oxide in, stirred",
+			"text": "Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\".",
+			"why": "Stirred, the copper that leaves the oxide's surface reaches the beam at once. The grains are held up in the liquid too: watch the absorbance jump as they dim the beam.",
 			"checks": [
 				{
 					"text": "the oxide in",
@@ -106,7 +105,49 @@
 						"item": "a25",
 						"stirred": true
 					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:o1",
+						"item:a25"
+					]
 				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a25"
+				},
+				{
+					"click": "stir:a25"
+				}
+			]
+		},
+		{
+			"title": "Stirred up",
+			"text": "Wait a few seconds while the stirrer lifts the grains.",
+			"checks": [
+				{
+					"text": "its grains held up",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "a25",
+							"what": "suspended"
+						},
+						"compare": "above",
+						"value": 95
+					}
+				}
+			]
+		},
+		{
+			"title": "Blank, and the start",
+			"text": "Right-click the spectrophotometer, click \"blank\", then \"+ A\": the start.",
+			"why": "Blanked with the stirred suspension, what climbs after is the copper's alone. The rate is steady at the start: timed from here, the time to read 0.050 is as long as from the oxide going in would be.",
+			"checks": [
 				{
 					"text": "the start recorded",
 					"when": {
@@ -122,24 +163,6 @@
 				},
 				{
 					"click": "blank:spec"
-				},
-				{
-					"drag": [
-						"item:o1",
-						"item:a25"
-					]
-				},
-				{
-					"click": "panel:tip:solid"
-				},
-				{
-					"click": "item:a25"
-				},
-				{
-					"click": "stir:a25"
-				},
-				{
-					"click": "item:spec"
 				},
 				{
 					"click": "record:spec:absorbance"
@@ -162,8 +185,7 @@
 						"value": 0.0495
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
 			"title": "Its end, and its temperature",
@@ -293,13 +315,12 @@
 						"above_c": 34.7
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
-			"title": "Blank, then the oxide in",
-			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
-			"why": "Each run is started the same way: its time is counted from this reading.",
+			"title": "The oxide in, stirred",
+			"text": "Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\".",
+			"why": "The same portion, the same stirring: the same grains in the beam.",
 			"checks": [
 				{
 					"text": "the oxide in",
@@ -315,7 +336,49 @@
 						"item": "a35",
 						"stirred": true
 					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:o2",
+						"item:a35"
+					]
 				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a35"
+				},
+				{
+					"click": "stir:a35"
+				}
+			]
+		},
+		{
+			"title": "Stirred up",
+			"text": "Wait a few seconds while the stirrer lifts the grains.",
+			"checks": [
+				{
+					"text": "its grains held up",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "a35",
+							"what": "suspended"
+						},
+						"compare": "above",
+						"value": 95
+					}
+				}
+			]
+		},
+		{
+			"title": "Blank, and the start",
+			"text": "Right-click the spectrophotometer, click \"blank\", then \"+ A\": the start.",
+			"why": "Each run is timed from its own blank.",
+			"checks": [
 				{
 					"text": "the start recorded",
 					"when": {
@@ -331,24 +394,6 @@
 				},
 				{
 					"click": "blank:spec"
-				},
-				{
-					"drag": [
-						"item:o2",
-						"item:a35"
-					]
-				},
-				{
-					"click": "panel:tip:solid"
-				},
-				{
-					"click": "item:a35"
-				},
-				{
-					"click": "stir:a35"
-				},
-				{
-					"click": "item:spec"
 				},
 				{
 					"click": "record:spec:absorbance"
@@ -371,8 +416,7 @@
 						"value": 0.0495
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
 			"title": "Its end, and its temperature",
@@ -496,13 +540,12 @@
 						"above_c": 44.7
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
-			"title": "Blank, then the oxide in",
-			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
-			"why": "Each run is started the same way: its time is counted from this reading.",
+			"title": "The oxide in, stirred",
+			"text": "Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\".",
+			"why": "The same portion, the same stirring: the same grains in the beam.",
 			"checks": [
 				{
 					"text": "the oxide in",
@@ -518,7 +561,49 @@
 						"item": "a45",
 						"stirred": true
 					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:o3",
+						"item:a45"
+					]
 				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:a45"
+				},
+				{
+					"click": "stir:a45"
+				}
+			]
+		},
+		{
+			"title": "Stirred up",
+			"text": "Wait a few seconds while the stirrer lifts the grains.",
+			"checks": [
+				{
+					"text": "its grains held up",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "a45",
+							"what": "suspended"
+						},
+						"compare": "above",
+						"value": 95
+					}
+				}
+			]
+		},
+		{
+			"title": "Blank, and the start",
+			"text": "Right-click the spectrophotometer, click \"blank\", then \"+ A\": the start.",
+			"why": "Each run is timed from its own blank.",
+			"checks": [
 				{
 					"text": "the start recorded",
 					"when": {
@@ -534,24 +619,6 @@
 				},
 				{
 					"click": "blank:spec"
-				},
-				{
-					"drag": [
-						"item:o3",
-						"item:a45"
-					]
-				},
-				{
-					"click": "panel:tip:solid"
-				},
-				{
-					"click": "item:a45"
-				},
-				{
-					"click": "stir:a45"
-				},
-				{
-					"click": "item:spec"
 				},
 				{
 					"click": "record:spec:absorbance"
@@ -574,8 +641,7 @@
 						"value": 0.0495
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
 			"title": "Its end, and its temperature",
@@ -699,13 +765,12 @@
 						"above_c": 34.7
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
-			"title": "Blank, then the oxide in",
-			"text": "Right-click the spectrophotometer and click \"blank\": the warm acid is the blank. Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\". Right-click the spectrophotometer and click \"+ A\": the start.",
-			"why": "Each run is started the same way: its time is counted from this reading.",
+			"title": "The oxide in, stirred",
+			"text": "Pick up the copper oxide and right-click the cuvette; click \"tip in the solid\". Right-click the cuvette and click \"stir\".",
+			"why": "The same portion, the same stirring: the same grains in the beam.",
 			"checks": [
 				{
 					"text": "the oxide in",
@@ -721,7 +786,49 @@
 						"item": "h35",
 						"stirred": true
 					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:o4",
+						"item:h35"
+					]
 				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:h35"
+				},
+				{
+					"click": "stir:h35"
+				}
+			]
+		},
+		{
+			"title": "Stirred up",
+			"text": "Wait a few seconds while the stirrer lifts the grains.",
+			"checks": [
+				{
+					"text": "its grains held up",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "h35",
+							"what": "suspended"
+						},
+						"compare": "above",
+						"value": 95
+					}
+				}
+			]
+		},
+		{
+			"title": "Blank, and the start",
+			"text": "Right-click the spectrophotometer, click \"blank\", then \"+ A\": the start.",
+			"why": "Each run is timed from its own blank.",
+			"checks": [
 				{
 					"text": "the start recorded",
 					"when": {
@@ -737,24 +844,6 @@
 				},
 				{
 					"click": "blank:spec"
-				},
-				{
-					"drag": [
-						"item:o4",
-						"item:h35"
-					]
-				},
-				{
-					"click": "panel:tip:solid"
-				},
-				{
-					"click": "item:h35"
-				},
-				{
-					"click": "stir:h35"
-				},
-				{
-					"click": "item:spec"
 				},
 				{
 					"click": "record:spec:absorbance"
@@ -777,8 +866,7 @@
 						"value": 0.0495
 					}
 				}
-			],
-			"play": []
+			]
 		},
 		{
 			"title": "Its end, and its temperature",
@@ -852,7 +940,7 @@
 			"truth": "69",
 			"tolerance": 0.15,
 			"relative": true,
-			"why": "In the notebook: x the cuvettes' temperatures as 1/K, y the column t as ln, fit: the slope is Ea / R, so Ea = slope x 8.314 J/(mol K). Each portion's grains are the same, so the oxide's surface is too; a hand tips within a few percent of all of it."
+			"why": "In the notebook: x the cuvettes' temperatures as 1/K, y the column t as ln, fit: the slope is Ea / R, so Ea = slope x 8.314 J/(mol K). Each portion's grains are the same, so the oxide's surface is too; a hand tips within a few percent of all of it, and the grains' dimming falls a little as they dissolve, the same in every run."
 		},
 		{
 			"label": "the order in the acid",

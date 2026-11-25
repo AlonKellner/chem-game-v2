@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.55.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.56.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1754,6 +1754,17 @@ like a balance, its own kind (`spectrophotometer`, a footprint of 5 × 3).
   ε c l at 750 nm up to 1), a high absorbance flattens (an ideal 2.5 reads about 2.45), and a wavelength changed after
   the blank reads the lamp's slope.
 - Quantities: `absorbance`, `nm` (§13.3); both are an instrument's in the notebook, by instruments or not.
+- **Its cell holder** (Stage 56; `docs/TDD_56_RATES.md`): `holder {spectrophotometer, celsius}` sets it (20 to 80 C;
+  without `celsius`, off). While it is set and a cuvette stands in its well, a heater along an edge from the mains
+  into the cuvette's lowest layer (warmth at a column's foot overturns through it), its power 5 W for each kelvin the
+  cuvette is under the set temperature, at most 10 W (`data/instruments.json`, design); it only heats. The edge is made
+  when it is wanted and taken off when it is not; the set temperature is saved and, while set, digested. A quantity:
+  `holder` (C).
+- **A suspension in the beam** (Stage 56): the grains a cuvette's stirring holds up (its `suspended` share, Stage 32)
+  dim the beam, each taking twice its cross-section out of it (a grain far larger than the light's wavelength), the
+  same at every wavelength: 50 mg of copper oxide's 38 µm grains held up in 3.5 mL read 0.39. Only the settled share
+  stacks at the floor. Stopped, they settle out of the beam within half a minute. A vessel's quantity: `suspended`
+  (%, the share of its solids held up).
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
 - **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
@@ -1972,7 +1983,10 @@ its tolerance or how far off it is, beside the textbook's ideal and why they dif
 (the absorbance, and the wavelength set) are bodies of the pass; a cuvette carried onto it stands in its well, drawn
 30 px across in its own proportions. Its readout: the wavelength's slider (`nm:<id>@<nm>`), a nanometre down or up
 (`nm:<id>:-`, `:+`), "blank", "+ A" (record), what it reads, and a warning when it was blanked at another wavelength.
-The notebook's **write row** (Stage 55): a label's field, a number's, "write"; the label stays for the next. The top bar's
+The notebook's **write row** (Stage 55): a label's field, a number's, "write"; the label stays for the next; a field
+clicked into is replaced by what is typed next (Stage 56). A spectrophotometer's readout has its cell holder's switch
+("holder off", on at 25 C: `cell:<id>`) and 5 C down or up (`cell:<id>:-`, `:+`), and the warmth of the cuvette in its
+well (Stage 56). The top bar's
 speed buttons, "check every step" and "reset" are narrower (Stage 55), so the notebook's button stands between reset
 and the clock, no longer over it.
 
@@ -2112,7 +2126,7 @@ gestures, and a run with a tutorial is the same lab as one without.
     (`goals_met`).
   - The notebook (Stage 54): a quantity of an item being logged (`logging`), or recorded at least
     once (`recorded`; Stage 55: at least `recorded_count` times); a number written under a label
-    (`noted`, and `noted_value`: that number; Stage 55).
+    (`noted`, and `noted_value`: that number; Stage 55; `noted_count`: at least so many, Stage 56).
   - Predictions (Stage 55): at least so many of the report's predictions made (`predicted`).
 
   Conditions combine with `all`, `any` and `not`. They are the shared module's
@@ -2669,6 +2683,13 @@ stand on.
     (0.035 to 0.065 M, from the seed) read. A against c is a line through zero, its slope 10.12 L/mol at the bench's
     seed (R² 0.99999) against NBS's 10.23 at 750 nm: the instrument's true wavelength is a little under what it shows.
     Its report: the molar absorptivity (within 4 %) and the unknown's concentration (within 3 %, predicted first).
+  - `rates`, *rates: the order and the activation energy* (Stage 56; experiment 36): read by instruments. A guess of the
+    order in the acid first; then four runs, each 50 mg of copper oxide tipped into 3.5 mL of sulfuric acid in a
+    cuvette held by the cell holder and stirred; once its grains are held up, blanked against the suspension, and its
+    time to read 0.050 at 750 nm written down: 1 M at 25, 35 and 45 C (208, 85 and 37 s at the bench's seed), 0.5 M at
+    35 C (120 s). ln t against 1/T: 68.8 kJ/mol (R² 0.9999) against the oxide's 69; the order ln(120 / 85) / ln 2 =
+    0.50, the surface law's square root, against the guess of 1 the card makes. Its report: the activation energy
+    (within 15 %) and the order (within 0.15).
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3057,6 +3078,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A balance (Stage 50) reads a conventional mass with no drift, no noise, no warm-up, no draught and no convection over a hot load; its tare and its zero are exact | A hot vessel on a real balance reads light by its convection too (several mg on an analytical one); here only by its air's buoyancy |
 | A burette and a pipette (Stage 52) drain as a sharp-edged orifice under their head, with no viscosity's own pull; a pipette delivers all it holds (no drop left in its tip, no drainage of its wall); a meniscus is set on its mark exactly; marks stand at their true volume at any temperature (no glass's expansion) | A real tip is a capillary whose flow viscosity slows; a real pipette's calibrated "to deliver" leaves its last drop and a film; a student sets a meniscus within about 0.01 mL |
 | A thermometer (Stage 52) follows its vessel with one time constant, stirred or not | A probe in still water lags several times as long as in stirred (NBS: 4.3 s against 14.5 s) |
+| Grains held up in a cuvette (Stage 56) take twice their cross-section out of the beam, at every wavelength, all of them alike | A detector takes in some light scattered forward, so a real suspension reads a little less; small grains scatter blue more than red |
+| A cell holder (Stage 56) heats in proportion, a little under its set temperature (0.3 K at 50 C), and never cools; its heat goes into the cuvette's lowest layer at once | A real holder is a Peltier under a PID controller: it settles on its set point, cools as well as heats, and warms the cell through its walls in a minute or two |
 | A spectrophotometer (Stage 55) has no noise and no drift: a reading is the same each time; its cuvette's glass is not in the beam (a blank in the same kind of cell takes it off); its lamp's light is Planck's at one temperature, its detector equally sensitive at every wavelength; stray light a fixed share | A real instrument's last digit flickers, its lamp warms and drifts (it is blanked again every few minutes), cells are matched within a few thousandths of an absorbance, and a silicon detector is weak in the blue |
 | A logger (Stage 54) reads at the end of the step that reaches its time, every reading at once; the plot's fit is an unweighted least squares | A student reads a thermometer and a burette a second or so apart, and weighs points by their errors |
 | A foam cup (Stage 52) loses heat at one calibrated conductance, with no lid to lift; its light a flat translucent white | Its loss is of the right order (a double cup with a lid loses about 24 C in 40 minutes); a real cup's foam scatters white and lets little through |

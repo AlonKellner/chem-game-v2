@@ -38,7 +38,12 @@ struct Sample {
 	std::vector<std::pair<chem::SpeciesId, double>> molar;
 	double path_cm = 1.0;
 	bool opaque = false; // a solid in the beam: no light through
+	// (Stage 56) grains held up in the liquid: their extinction, decadic, per cm, the same at every wavelength (grains
+	// far larger than the light's wavelength take twice their cross-section out of the beam)
+	double turbidity = 0.0;
 };
+// A suspension's turbidity, decadic per cm: `grains` per cm^3 of the liquid, each `diameter_cm` across
+double turbidity(double grains_per_cm3, double diameter_cm);
 // Its absorbance at 1 nm (decadic): Beer and Lambert, sum of epsilon c l over what absorbs
 chem::optics::Spectrum absorbance(const Sample &sample);
 // Its absorbance at a wavelength, between the nanometres, its narrow lines read exactly

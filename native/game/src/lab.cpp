@@ -2780,19 +2780,26 @@ struct Lab::Impl {
 			}
 		}
 		double filled = 0.0;
+		const double held = std::clamp(cuvette.suspended, 0.0, 1.0); // the share of its solids its stirring holds up (Stage 56)
 		for (auto c = cells.rbegin(); c != cells.rend(); ++c) {
 			const CellState &state = world().snapshot_cell(*c);
 			const double liquid = liquid_m3(state), solid = solid_m3(state);
-			if (filled + solid > below) {
-				out.opaque = true; // its solids stand at the beam
+			if (filled + solid * (1.0 - held) > below) {
+				out.opaque = true; // its settled solids stand at the beam
 				return out;
 			}
 			filled += liquid + solid;
 			if (filled > below && liquid > 0.0) {
 				for (size_t s = 0; s < state.amount.size(); ++s) {
-					const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+					const SpeciesId id{ static_cast<int32_t>(s) };
+					const SpeciesDef &def = table().species(id);
 					if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
-						out.molar.emplace_back(SpeciesId{ static_cast<int32_t>(s) }, static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM / (liquid * 1000.0));
+						out.molar.emplace_back(id, static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM / (liquid * 1000.0));
+					}
+					if (state.amount[s] > 0 && !def.wall && def.phase == Phase::Solid && held > 0.0 && s < state.particles.size() && state.particles[s] > 0) {
+						// (Stage 56) its grains held up in the liquid, in the beam
+						const double grains = static_cast<double>(state.particles[s]) * held / (liquid * 1e6);
+						out.turbidity += spectro::turbidity(grains, chem::particle_diameter(table(), state, id) * 100.0);
 					}
 				}
 				return out;

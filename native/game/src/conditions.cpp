@@ -14,7 +14,7 @@ namespace {
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
 			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
-			what == "absorbance" || what == "nm" || what == "holder";
+			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended";
 }
 
 bool is_gas(const std::string &species) {
@@ -139,6 +139,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	}
 	if (q.what == "fill") {
 		return v->kind == "balloon" && v->capacity_ml > 0.0 ? std::optional<double>(100.0 * v->gas_ml / v->capacity_ml) : std::nullopt;
+	}
+	if (q.what == "suspended") { // the share of its solids its stirring holds up (Stage 56; Stage 32's)
+		return v->kind == "vessel" ? std::optional<double>(100.0 * v->suspended) : std::nullopt;
 	}
 	if (q.what == "celsius") {
 		return v->celsius;
@@ -315,7 +318,7 @@ std::string unit(const Quantity &q) {
 	if (q.what == "celsius") {
 		return "C";
 	}
-	if (q.what == "valve" || q.what == "fill" || q.what == "tap") {
+	if (q.what == "valve" || q.what == "fill" || q.what == "tap" || q.what == "suspended") {
 		return "%";
 	}
 	if (q.what == "met" || q.what == "ph" || q.what == "absorbance") {
@@ -364,6 +367,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "wavelength";
 	} else if (q.what == "holder") {
 		what = "cell holder";
+	} else if (q.what == "suspended") {
+		what = "solids held up";
 	} else if (q.what == "scale_ml") {
 		what = "burette reading";
 	} else if (q.what == "tap") {
