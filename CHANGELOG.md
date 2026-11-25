@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.59.0 (2026-11-25, Stage 59)
+## 0.59.0 (2026-11-25, Stage 59; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 59, `docs/TDD_59_FILTERING.md`; `docs/CURRICULUM.md`, step C's second half, T6): **a filter funnel** with a
   Whatman grade 1 paper: it stands on a mouth and drains through its paper by Darcy's law from the paper's Herzberg
