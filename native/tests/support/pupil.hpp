@@ -92,7 +92,8 @@ struct Pupil {
 			b = x.id == to.substr(5) ? &x : b;
 		}
 		const lab::glass::Vessel *g = a != nullptr && !a->glassware.empty() ? lab::glass::find(a->glassware, a->nominal_ml) : nullptr;
-		return a != nullptr && b != nullptr && a->kind == "vessel" && g != nullptr && !g->outlet && b->kind == "vessel" && !b->condenser && b->place == "bench"; // (an outlet's: a drop, Stage 52)
+		const bool residue = g != nullptr && g->paper_herzberg_s > 0.0 && a->solid_ml > 0.0 && !(a->liquid_ml > 0.1); // (Stage 59: a funnel's residue, scraped)
+		return a != nullptr && b != nullptr && a->kind == "vessel" && g != nullptr && (!g->outlet || residue) && b->kind == "vessel" && !b->condenser && b->place == "bench"; // (an outlet's: a drop, Stage 52)
 	}
 	void type(const std::string &text) {
 		for (const char c : text) {

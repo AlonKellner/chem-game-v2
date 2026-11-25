@@ -944,6 +944,19 @@ previews); the shapes within the standards' words.
 **A foam cup** (the calorimeter's): an 8 oz expanded-polystyrene cup, 81 mm across its top, 51 mm its base, 89 mm
 high (a cup maker's listing), its wall about 2.5 mm (J. Chem. Educ. 2025, 102, 1281: 5.09 mm for two nested cups).
 
+## A filter funnel (Stage 59)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A filter paper's permeance | Whatman grade 1: a Herzberg time of 150 s, so 100 mL / (150 s × 10 cm² × 10 cm) = 6.7e-3 cm/s per cm of head at 20 °C, as water's viscosity goes at other temperatures (Darcy) | Whatman grade 1 qualitative filter paper (Cytiva; Sigma-Aldrich's, Avantor's and Fisher Scientific's listings, 2026-11-25): Herzberg 150 s; particle retention 11 µm at 98 %. The Herzberg test: 100 mL of prefiltered water at 20 °C through 10 cm² of paper under a constant 10 cm head (Cytiva, *Principles of laboratory filtration*) | `measured: a filter paper passes water at its Herzberg time, at the test's own conditions` |
+
+The funnel (design, after ISO 4798's form): a 60° cone 75 mm across on a stem 75 mm long and 8 mm across; a 110 mm
+circle of the paper folded in quarters, its cone's slant its radius, 47.6 mm high. Through it the liquid drains by
+Darcy's law, each patch of the wetted paper passing water in proportion to the head over it, the stem's column hanging
+under it (Q = k 2π tan 30° / cos 30° (h³/6 + L h²/2)); the stem, once the cone is drained, runs out freely. The paper
+keeps every grain (§20: a real paper lets grains under its retention through, and a fresh precipitate's fine grains
+clump into flocs it keeps).
+
 ## A thermometer's lag (Stage 52)
 
 | What | Value | Source | Held by |

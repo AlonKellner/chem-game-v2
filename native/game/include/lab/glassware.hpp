@@ -77,6 +77,10 @@ struct Vessel {
 	double tolerance_ml = 0.0, graduation_ml = 0.0, delivery_s = 0.0, tip_bore = 0.0, zero = 0.0;
 	bool outlet = false;
 	bool mark = false; // one mark it is filled to (a pipette's, a volumetric flask's)
+	// (Stage 59) a filter funnel's: its stem's length over which its cone starts, cm; its cone's half-angle, radians;
+	// its paper's Herzberg time (s for 100 mL of water at 20 C through 10 cm2 under 10 cm of head) and the height its
+	// paper cone stands to, cm over the cone's apex (0: no paper)
+	double stem = 0.0, cone_half_angle = 0.0, paper_herzberg_s = 0.0, paper_height = 0.0;
 	static constexpr size_t PATHS = 256; // (Stage 52: a slender pipette's bore changes too fast for 64)
 	std::vector<double> paths; // the table: at k / PATHS of its capacity
 	double capacity_cached = 0.0; // capacity(), kept with the table
