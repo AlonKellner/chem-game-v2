@@ -191,3 +191,29 @@ TEST_CASE("glassware: the liquid's level is the inside's volume turned around (S
 	const Vessel flask = vessel("conical_flask", 250);
 	CHECK(flask.level(200.0) - flask.level(100.0) > flask.level(100.0) - flask.level(0.0));
 }
+
+TEST_CASE("glassware: a mouth's path for a gas is its table's, the integral of dz / A(z) from what it holds to its brim (Stage 50)") {
+	for (const lab::glass::Offer &o : lab::glass::offered()) {
+		for (const double ml : o.ml) {
+			const lab::glass::Vessel *g = lab::glass::find(o.kind, ml);
+			REQUIRE(g != nullptr);
+			REQUIRE(g->paths.size() == 65);
+			for (const double share : { 0.0, 0.137, 0.5, 0.731, 0.96 }) {
+				const double held = share * g->capacity();
+				const double from = g->level(held);
+				double direct = 0.0;
+				for (int i = 0; i < 4000; ++i) {
+					const double z = from + (g->height - from) * (i + 0.5) / 4000.0, r = std::max(g->radius_inside(z), 0.1 * g->mouth());
+					direct += (g->height - from) / 4000.0 / (3.14159265358979323846 * r * r);
+				}
+				direct = std::max(direct, 0.3 / (3.14159265358979323846 * g->mouth() * g->mouth()));
+				CAPTURE(o.kind);
+				CAPTURE(ml);
+				CAPTURE(share);
+				CHECK(g->mouth_path(held) == doctest::Approx(direct).epsilon(0.02));
+			}
+			// fuller, a shorter path: the mouth exchanges faster
+			CHECK(g->mouth_path(0.9 * g->capacity()) < g->mouth_path(0.1 * g->capacity()));
+		}
+	}
+}

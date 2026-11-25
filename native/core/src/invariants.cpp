@@ -322,6 +322,20 @@ Violations check_C8(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+// a transfer that is one of the step's exchanges by diffusion (Stage 50): its edge, the cell that gave, its one gas
+// and its amount, as the simulation recorded them
+static bool exchanged_as(const StepTrace &trace, const LedgerEntry &entry) {
+	if (entry.delta.size() != 1) {
+		return false;
+	}
+	for (const Exchanged &x : trace.exchanged) {
+		if (x.edge == entry.edge && x.from == entry.from && x.to == entry.to && x.species == entry.delta[0].species && x.moved == entry.delta[0].amount.quanta) {
+			return true;
+		}
+	}
+	return false;
+}
+
 Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
 	if (!trace.thermal) {
@@ -367,8 +381,10 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 					out.push_back(buffer);
 				}
 			} else if (gas_only && (trace.meta[from].rigid || trace.meta[to].rigid) &&
-					!(entry.edge.index >= 0 && static_cast<size_t>(entry.edge.index) < trace.edges.size() && trace.edges[static_cast<size_t>(entry.edge.index)].column)) {
-				// (a bubble rising up a column, Stage 47, is buoyancy, not pressure)
+					!(entry.edge.index >= 0 && static_cast<size_t>(entry.edge.index) < trace.edges.size() && trace.edges[static_cast<size_t>(entry.edge.index)].column) &&
+					!exchanged_as(trace, entry)) {
+				// (a bubble rising up a column, Stage 47, is buoyancy, not pressure; a gas exchanged at a mouth, Stage 50,
+				// diffusion, which E1 holds)
 				bool from_defined = false, to_defined = false;
 				const double from_excess = trace.meta[from].rigid ? gas_excess(table, trace.meta[from], replay.cells[from], from_defined) : 0.0;
 				const double to_excess = trace.meta[to].rigid ? gas_excess(table, trace.meta[to], replay.cells[to], to_defined) : 0.0;
@@ -729,6 +745,32 @@ Violations check_L1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_E1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	for (const Exchanged &x : trace.exchanged) {
+		if (out.size() >= MAX_MESSAGES) {
+			break;
+		}
+		const bool known = x.edge.index >= 0 && static_cast<size_t>(x.edge.index) < trace.edges.size();
+		const Edge *e = known ? &trace.edges[static_cast<size_t>(x.edge.index)] : nullptr;
+		const bool joins = e != nullptr && e->open && e->exchange > 0.0 && (e->phases & PHASES_GAS) != 0 &&
+				((e->a == x.from && e->b == x.to) || (e->a == x.to && e->b == x.from));
+		const bool gas = x.species.index >= 0 && x.species.index < static_cast<int32_t>(table.species_count()) && table.species(x.species).phase == Phase::Gas;
+		// at most what takes the two fractions to equal, and a quantum besides (the move is a whole number of them)
+		const double most = x.gas_from > 0.0 && x.gas_to > 0.0 ? (x.x_from - x.x_to) / (1.0 / x.gas_from + 1.0 / x.gas_to) : 0.0;
+		if (!joins || !gas) {
+			out.push_back(text("E1: step %lld: a gas exchanged along edge %lld, which does not exchange gas between those cells", static_cast<long long>(trace.step),
+					static_cast<long long>(x.edge.index)));
+		} else if (x.moved <= 0 || x.x_from < x.x_to) {
+			out.push_back(text("E1: step %lld: species %lld moved against its mole fraction, or nothing", static_cast<long long>(trace.step), static_cast<long long>(x.species.index)));
+		} else if (static_cast<double>(x.moved - 1) * MOL_PER_QUANTUM > most * (1.0 + 1e-12)) {
+			out.push_back(text("E1: step %lld: species %lld moved %lld quanta, past equal fractions", static_cast<long long>(trace.step), static_cast<long long>(x.species.index),
+					static_cast<long long>(x.moved)));
+		}
+	}
+	return out;
+}
+
 Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
@@ -738,7 +780,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 		Violations v = check_V2(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

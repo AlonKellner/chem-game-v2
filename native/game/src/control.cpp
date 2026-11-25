@@ -51,8 +51,8 @@ bool fit_process(const std::vector<double> &t, const std::vector<double> &r, Pro
 	for (size_t i = 0; i < n; ++i) {
 		largest = std::max(largest, std::fabs(r[i]));
 	}
-	if (!(largest > 0.0)) {
-		return false;
+	if (!(largest > LEAST_RESPONSE)) {
+		return false; // (Stage 50: a response no sensor resolves is none, as the room's air carries a trace of anything)
 	}
 	const double end = t[n - 1], first = t[0];
 	std::vector<double> rr(r.begin(), r.begin() + static_cast<std::ptrdiff_t>(n)), phi(n);

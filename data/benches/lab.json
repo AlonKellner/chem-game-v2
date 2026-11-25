@@ -112,6 +112,11 @@
 		{
 			"id": "camera",
 			"kind": "thermal"
+		},
+		{
+			"id": "scale",
+			"kind": "balance",
+			"model": "top_loading"
 		}
 	],
 	"goals": [

@@ -467,3 +467,67 @@ TEST_CASE("experiments: the prism chosen after the lab is its dark room on the s
 	}
 	CHECK(luminance(wall_x, wall_y) > 0.3);
 }
+
+TEST_CASE("experiment hydrate: followed with its own gestures, strict, the crystals lose their water and the balance gives x of 5 (Stage 50)") {
+	Pupil p("data/benches/hydrate.json", "data/tutorials/hydrate.json");
+	CHECK(pupil::follow_through(p, 3600) > 9);
+	completed(p);
+	REQUIRE(p.tutorial().results.size() == 4);
+	// every copper is in the dish or the jar, as the salt or a hydrate (the jar's crystals lose a little water to the
+	// room's dry air: GAME_SPEC §20)
+	const auto copper = [&](const std::string &id) {
+		return p.grams(id, "copper_sulfate") / 159.609 + p.grams(id, "copper_sulfate_monohydrate") / 177.624 + p.grams(id, "copper_sulfate_trihydrate") / 213.655 +
+				p.grams(id, "copper_sulfate_pentahydrate") / 249.685;
+	};
+	CHECK(std::fabs(copper("dish") + copper("jar") - 10.0 / 249.685) < 1e-6); // (a micromole: the tables' molar masses against these)
+	// what was taken: the crystals of the dish's copper
+	const double taken = copper("dish") * 249.685;
+	CHECK(taken > 1.8);
+	CHECK(taken < 2.2);
+	// the balance, tared on the dish, reads its solids, less the air they displace
+	double solids = 0.0;
+	for (const lab::SubstanceView &s : p.item("dish").contents) {
+		solids += s.phase == 's' && !s.wall ? s.g : 0.0;
+	}
+	const double reads = *p.item("scale").display_g;
+	CHECK(std::fabs(reads - solids) < 0.002);
+	// what the student works out from the balance: 5, to the balance's readability and the crystals' few mg lost in the jar
+	const double x = (taken - reads) / 18.015 / (reads / 159.609);
+	MESSAGE("x from the balance: " << x);
+	CHECK(x > 4.95);
+	CHECK(x < 5.05);
+}
+
+TEST_CASE("experiment hydrate: played as a person plays it, strict, it completes (Stage 50)") {
+	Pupil p("data/benches/hydrate.json", "data/tutorials/hydrate.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment hydrate: followed with its own gestures, free, it completes (Stage 50)") {
+	Pupil p("data/benches/hydrate.json", "data/tutorials/hydrate.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment carbonate: followed with its own gestures, strict, the malachite keeps 72 % of its mass as black oxide (Stage 50)") {
+	Pupil p("data/benches/carbonate.json", "data/tutorials/carbonate.json");
+	CHECK(pupil::follow_through(p, 3600) > 6);
+	completed(p);
+	const double taken = 10.0 - p.grams("jar", "malachite"), oxide = p.grams("dish", "copper_oxide");
+	CHECK(std::fabs(oxide / taken - 2.0 * 79.545 / 221.116) < 0.002);
+	CHECK(taken > 1.35);
+	CHECK(taken < 1.65);
+}
+
+TEST_CASE("experiment carbonate: played as a person plays it, strict, it completes (Stage 50)") {
+	Pupil p("data/benches/carbonate.json", "data/tutorials/carbonate.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment carbonate: followed with its own gestures, free, it completes (Stage 50)") {
+	Pupil p("data/benches/carbonate.json", "data/tutorials/carbonate.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

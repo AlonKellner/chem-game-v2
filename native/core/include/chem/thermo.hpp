@@ -86,6 +86,9 @@ bool liquid_density(const SpeciesTable &table, const CellState &cell, double tem
 // and scaled as T / viscosity(T). 0 when it is not dissolved or a particle of
 // it has no coefficient: not known.
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature);
+// How fast a gas diffuses through the room's air at 1 atm (GAME_SPEC §6, Stage 50), m^2/s: its coefficient at
+// 298.15 K times (T / 298.15)^n. 0 for a species that is not a gas, or has none.
+double gas_diffusion(const SpeciesTable &table, SpeciesId species, double temperature);
 
 // true when the cell holds a dissolved species and no liquid to hold it: not a
 // state a solution can be in (GAME_SPEC §9).

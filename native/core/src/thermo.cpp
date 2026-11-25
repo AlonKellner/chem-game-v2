@@ -435,6 +435,14 @@ bool liquid_density(const SpeciesTable &table, const CellState &cell, double tem
 	return true;
 }
 
+double gas_diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {
+	const SpeciesDef &def = table.species(species);
+	if (def.phase != Phase::Gas || !(def.air_diffusion > 0.0) || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	return def.air_diffusion * chem::pow(temperature / 298.15, def.air_exponent);
+}
+
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature) {
 	const SpeciesDef &def = table.species(species);
 	if (def.phase != Phase::Aqueous || !(temperature > 0.0)) {

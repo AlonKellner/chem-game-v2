@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.49.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.50.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -426,6 +426,24 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   room at any turn, as the surface does: a band's top is the level that holds the liquid of the layers under it,
   read in the vessel's frame as the surface's is.
 - **L1** (§18) holds a column together.
+
+**Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
+a dish keeping its own carbon dioxide and steam). Gas moved only by bulk flow until Stage 50; now an open vessel's
+gas also exchanges with the room's air by **diffusion** through its mouth.
+- An edge may exchange gas (`Edge::exchange`, `World::set_exchange`): its area over the length it diffuses along,
+  m. Each step, after the drains and before the settling (`Process::Exchange`), each gas crosses it from the cell
+  where its **mole fraction** is the higher, at `D c G (x_a − x_b)` mol/s: `D` its diffusion in air at the two
+  cells' mean temperature (`gas_diffusion`: `D298 (T / 298.15)^n`, `data/species.json`'s `air_diffusion`,
+  `docs/DATA_SOURCES.md`), `c` the gas's molar density at 1 atm there, `G` the edge's. Over the step, the exact
+  relaxation of the two cells' fractions toward each other, never past equal, each gas with its own enthalpy.
+  Driven by the mole fraction, the same air at two temperatures exchanges nothing.
+- **A vessel's mouth** (the lab, at each step's boundary): Stefan's tube from what the vessel holds up to its
+  brim, `G` the integral of `dz / A(z)` over the inside's cross-section inverted (at least 3 mm under the brim's
+  mouth). A vessel of no standard shape, and one closed by what is on its mouth, exchange nothing.
+- **What follows**: an open beaker of water evaporates into the room's air at Stefan's rate (in the model's 20 °C,
+  2.338 kPa of vapour; a 250 mL beaker of water loses a few tenths of a gram an hour, its water a little under the
+  room's temperature); a dish's own carbon dioxide and steam leave it as it stands.
+- **E1** (§18) holds each exchange to its difference; T1 holds every other gas transfer to bulk flow.
 
 ## 7. Chemical kinetics
 
@@ -1621,7 +1639,40 @@ drawer). Items:
     below 120 °C).
   - Its own body is hidden from its rays: it does not see itself, and sees every other instrument.
   - Off the bench it is off, its screen dark.
+- **balance** (Stage 50): an instrument with no cell and no edge, like the viewer, that goes **under** a
+  vessel as a burner does (`weigh`), never under one with a burner under it. Its **load** is the vessel,
+  what it holds and what is on its mouth (a stopper; a balloon and its gas; a condenser and what it holds).
+  - **What it reads.** Calibrated with steel weights, it reads a load's **conventional mass** (OIML D 28):
+    `(m − ρ_air V) / (1 − ρ_air / ρ_ref)`, `V` all the load's own volume (its glass, its solids and liquids,
+    its gas), `ρ_air` the room's air from its state (its composition and temperature, at 1 atm), `ρ_ref`
+    8000 kg/m³. An open vessel's air weighs nothing on it; a hot vessel's air weighs less than nothing, so
+    the vessel reads light; carbon dioxide in a beaker weighs something.
+  - **Its display**: the net reading, the conventional mass less its **tare**, plus its linearity's error
+    (an offset in proportion to the load, drawn once from the bench's seed), to its readability; `OL` past
+    its capacity. `tare` makes the tare the load's conventional mass now (its display 0).
+  - **Its models** (`data/instruments.json`, design): `top_loading`, 0.01 g to 620 g, linearity 0.02 g; and
+    `analytical`, 0.1 mg to 220 g, linearity 0.2 mg.
+  - It is in the report; its tare is saved, not digested. Off the bench its display is dark.
 - **the tray:** the bench's own, under everything: where what overflows goes (§6).
+
+**Readings** (Stage 50). A bench's `readings` is `truth` (the default) or `instruments`, and its `seed` an
+integer (0 without one). By instruments:
+- each vessel has a **thermometer** (0.1 °C, ±0.2 °C) and, while it holds a liquid, a **pH meter** (0.01,
+  ±0.02); a reading is the truth plus its instrument's offset, drawn once from the seed within its
+  accuracy, rounded to its resolution;
+- its liquid's volume is read by its **marks** (`data/glassware.json`: a size's spacing of marks, and the
+  marks' error, ±5 % on a beaker or a flask, ±10 % on a bottle): the truth scaled by a share drawn once
+  within that error, to the nearest mark;
+- the readout shows those readings and the vessel's **label** (a bench's text for it), not what it holds;
+  a balance shows its display. The debug panel still shows the truth (§13.6).
+- An offset is a hash of the seed and the instrument's key (the vessel's id and what it reads) taken to a
+  uniform share in [−1, 1] (FNV-1a, then SplitMix64): the same bench draws the same instruments on every
+  machine.
+- **The hand**: a pour or a tip with `about` moves the amount asked times `1 + 0.10 u`, `u` the hash of the
+  seed, the step and the two vessels, and at most what there is. The screen sends `about` by instruments: a
+  typed amount is what is aimed at, and what was taken is known by weighing it.
+- With `seed` or `about` set the seed is digested (the hand's draws depend on it); a bench without them
+  digests as before.
 
 **Places.** The bench is a grid of squares (28 × 15 in the demo's benches).
 - **Footprints.** An item on the bench stands on a footprint of squares: the room for its body,
@@ -1632,6 +1683,7 @@ drawer). Items:
   - a balloon, 4 × 5;
   - a burner, 3 × 3;
   - a viewer, 7 × 4 (its case and screen, and its probe's holder beside them);
+  - a balance, 4 × 2 (Stage 50);
   - a signal part, 1 × 1.
 
   Footprints never overlap; `at` is the footprint's top-left square.
@@ -1660,8 +1712,11 @@ input to them, and a session script is a list of them.
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
-| `pour` | `from`, `to`, `ml` or `all` | moves liquid, with what is dissolved in it in proportion, and its enthalpy |
-| `tip` | `from`, `to`, `species`, `g` or `all` | moves a solid, with its particles in proportion |
+| `pour` | `from`, `to`, `ml` or `all`; `about` | moves liquid, with what is dissolved in it in proportion, and its enthalpy; with `about` (Stage 50), the hand's amount (Readings) |
+| `tip` | `from`, `to`, `species`, `g` or `all`; `about` | moves a solid, with its particles in proportion; with no `species` (Stage 50), the solids in proportion to their masses; with `about`, the hand's amount |
+| `weigh` | `balance`, `vessel`, `onto` | (Stage 50) puts the balance under the vessel where the vessel stands, from the bench or straight from the cabinet; with `onto`, sets the vessel on the balance where the balance stands (its foot on the balance's, centred), from the bench or the cabinet, as `place` moves it. Refused under a vessel with a burner or a balance under it, and over anything the vessel would stand on |
+| `unweigh` | `balance` | (Stage 50) takes it away, to stand beside the vessel |
+| `tare` | `balance` | (Stage 50) its tare becomes its load's conventional mass now (0 with nothing on it). Saved; not digested |
 | `probe` | `viewer`, `on`, `at` | (Stage 42) fixes a viewer's probe: `on` an item or a part (its id; the viewer itself too: it reads its own screen, a frame late), at `at` [u, v] of it in its own frame (0 to 1 across and down its rectangle upright; 0.5, 0.5 without); with `at` alone, on the room at that point (in squares from the bench's top-left corner); with neither, back in its holder. Refused for a viewer off the bench, or on what is in the trash or is not there. It goes back to its holder when what it is on leaves the lab (a part scrapped, the trash emptied) or the viewer leaves the bench. Saved; not digested: it acts on nothing in the world |
 | `frame` | `item`, `room` or `home` | (Stage 48) fixes a thermal camera's frame on the room, its top-left at `room` [x, y] in squares from the bench's top-left corner; or sends it `home`, over the camera's own screen. Refused for a camera off the bench. Saved; not digested |
 | `thermal` | `item`, any of `palette`, `emissivity`, `reflected_c` (a number, or "room"), `markers`, `range` ("auto", "lock"), `level_c`, `span_c`, `gain` ("auto", "high", "low") | (Stage 48) a thermal camera's settings, each checked first (a refused command changes none of them). Saved; not digested |
@@ -1804,6 +1859,20 @@ Its controls are in the readout, while it is selected: the palette's chips, mark
 home", the emissivity and the reflected temperature − and +, AUTO or LOCK (locking at the span it shows), and the
 level and span − and +. The readout says where its frame is, its hottest and coldest and where they are, its
 centre, and the span it shows at what gain.
+
+**A balance** (Stage 50) is a case with a steel pan and a display in its front, whose seven segments show its
+reading (dark off the bench). A vessel carried onto it is set on its pan (`weigh` with `onto`); the balance
+carried onto a vessel goes under it (`weigh`); carried away from under a vessel, it comes out (`unweigh`); a vessel
+carried off it leaves it where it stood. Selected, its readout has "tare", and says what it reads, what is on its
+pan, and its model's readability, capacity and linearity.
+
+**Amounts** (Stage 50). While the pour menu is open, digits and a point type its amount, shown top right: mL of
+the vessel's liquid, or, from a vessel with none, g of its solid. Backspace takes one back, Enter pours (or tips)
+it, Escape closes the menu; the slider clears it. A tip button tips the amount typed, or all without one.
+
+**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
+what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
+buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
 
 **An item's controls are not on the bench** (Stage 22, signed off by the user on 2026-11-21; asked for on 2026-11-20).
 Until Stage 22 a vessel's "stir" button and a burner's valve stood on the grid beside the item,
@@ -2441,12 +2510,21 @@ stand on.
     sulfate in a beaker, no tutorial: the clock at 600x blurs their boundary as each diffuses into the
     other (about a centimetre in ten hours), a stirrer mixes them, a burner under it heats the lower.
   - `prism`, *light through a prism and a grating* (§12.3, Stage 47): the optics demo, now in the list.
+  - `hydrate`, *the water in blue crystals* (§13 the balance and Readings, Stage 50; `docs/CURRICULUM.md`
+    experiment 6): read by instruments. A dish tared on an analytical balance, about 2 g of the
+    pentahydrate scooped into it (2.178 g at the bench's seed), heated until white, cooled and weighed
+    again: the balance reads 1.414 g, and x from the two readings comes out 4.8, a little under 5, as in
+    a lab that cools its dish in the air: the dry salt takes back some of its own water as it cools.
+  - `carbonate`, *what heat takes from a carbonate* (Stage 50; experiment 7): read by instruments, weighed
+    by difference on a top-loading balance: about 1.5 g of malachite (1.548 g) heated until black leaves
+    1.114 g of copper oxide, the equation's 72.0 %.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
   melting; pressure and temperature; humidity and saturation; the vertical dimension (a vessel as a column of
   layers); two liquids (oil and water); and the lessons' own mechanics (a
-  measurement log, a prediction, a plot).
+  measurement log, a prediction, a plot). The first-year curriculum's experiments, each with what it needs, are listed in
+  `docs/CURRICULUM.md`.
 
 **Demo subset:** the catalogue above. The Godot host lists it by default (`experiments_path`).
 **Status:** Stage 41; the acids' two in Stage 43, precipitation's and the gas's in Stage 44.
@@ -2514,7 +2592,10 @@ spectrum probe of §12).
 
 **Demo subset:** none; the debug panel shows true composition. **Status:** specified; after the demo.
 The spectrometer is built as the spectral viewer (Stage 42, §13): it measures the light, exactly,
-with no uncertainty stated yet, and identifies nothing.
+with no uncertainty stated yet, and identifies nothing. Stage 50 builds the balance, and readings by
+instruments (§13, Readings): a thermometer, a pH meter and a vessel's marks, each with its resolution and
+an error drawn from the bench's seed, and the readout that shows them and a label in place of what a
+vessel holds. A sample is not yet named by what is established about it.
 
 ## 17. The demo
 
@@ -2661,6 +2742,8 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
 | G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
 | G4 | A control following a controller by PWM is on, over each whole period, for the steps the level at the period's start gives (its share of the period, rounded to a whole step) | exact | 26 |
+| E1 | A gas exchanged at an open mouth moves only down its mole fraction's difference (Stage 50; `chem/invariants.hpp`): along an open edge that exchanges gas and joins the two cells, no further than to equal fractions; every other gas transfer still bulk flow (T1). It fires on a gas moved against its fraction, a move a thousand times what equalises, and an exchange along an edge that does not exchange | exact | 50 |
+| I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer and pH meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -2789,7 +2872,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
 | No pressure below 1 atm: a rigid cell that cannot draw enough gas is left under-full and flagged | Arises only when a closed flask cools below the temperature at which it was closed with nothing to draw from |
-| Gas moves only by bulk flow; gases do not diffuse between cells | A flask and its balloon keep different compositions until gas flows between them |
+| Gas moves by bulk flow, and by diffusion only at an open vessel's mouth (Stage 50: Stefan's tube, from what it holds to its brim); none between cells joined otherwise; no convection | A flask and its balloon keep different compositions until gas flows between them; a warm vessel's gas really leaves it by convection far faster than by diffusion, so a hot dish keeps its own gas longer here than in a lab |
 | Air is 79% N₂ and 21% O₂ | Argon (0.9%) and the rest are left out |
 | Steam is an ideal gas with a constant heat capacity | Water boils at 100.44 °C at 1 atm (373.124 K is 99.97 °C); its saturation pressure is within 2% from 25 to 100 °C |
 | Fast phase change has no barrier | No superheating, no supercooling, no fog: vapour condenses the moment it is saturated |
@@ -2816,3 +2899,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The spectral viewer's screen is an LED panel of three smooth primaries (Gaussians of 30 nm at 620, 530 and 450 nm, design), its pixels' subpixels side by side, each 0.8 of its third lit across and the pixel 0.9 lit down; its colour management is the panel's own, toward grey of a colour's luminance where its primaries cannot reach (Stage 42) | Its rainbow is each wavelength as the game shows a spike of it, seen through the pass within 3 on the eye metric (8 is visible); a real panel's primaries are narrower and its maker's colour management its own |
 | A probe's disc is 4 px of the layout across its radius, and reads the light that reaches the eye from it (the probe's own head and cable are not in its reading), at 1 nm with no noise of its own (Stage 42) | A real fibre probe sees a cone and adds its own noise and stray light |
 | A view of the room is the room laid out anew at it; past the view's own screen its wall is the far wall's mean, not the wall drawn (Stage 42) | A ray that a vessel bends past the view's screen (at its rims, zoomed in) reads about 1% other light than it would laid out |
+| By instruments (Stage 50), every vessel has a thermometer and a pH meter in it that read at once, with no lag, and are not bodies of the pass; each instrument's error is a fixed offset, with no noise and no drift; marks are read to the nearest one, as by an eye level with them | A real thermometer lags by seconds (the calorimeter's extrapolation is the next stage's), a reading flickers in its last digit, and a student misreads a meniscus |
+| By instruments, monitors, controllers, goals and the tutorial's checks still read the truth, and a sensing part's editor offers what a vessel holds (Stage 50) | A real monitor reads its sensor; until sensing parts read instruments, a lesson that hides composition can be read around through them |
+| A balance (Stage 50) reads a conventional mass with no drift, no noise, no warm-up, no draught and no convection over a hot load; its tare and its zero are exact | A hot vessel on a real balance reads light by its convection too (several mg on an analytical one); here only by its air's buoyancy |
+| The hand (Stage 50) misses a typed amount by a share uniform within ±10 %, whatever it pours or scoops, and never spills | A practised hand pours closer, and a scoop of a coarse solid misses by more |

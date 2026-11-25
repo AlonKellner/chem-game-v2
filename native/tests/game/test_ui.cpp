@@ -289,7 +289,7 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 	}
 	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3 + 2); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42); the thermal camera's case and its dark screen, in the cabinet (Stage 48)
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3 + 2 + 3); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42); the thermal camera's case and its dark screen, in the cabinet (Stage 48); the balance's case, pan and dark display, in the cabinet (Stage 50)
 	CHECK(bars == 3 + 2 + 6 + 1 + 6); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27); the viewer's probe in its holder: its ring, its handle, its cable (Stage 42)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
@@ -570,7 +570,9 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	CHECK(p.grams("balloon", "carbon_dioxide") > 0.8);
 	CHECK(p.grams("beaker", "water") > 35.0);
 	for (const lab::SubstanceView &s : p.item("beaker").contents) {
-		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass"));
+		// (Stage 50: with a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
+		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass" ||
+				(s.species == "carbon_dioxide" && s.g < 1e-3)));
 	}
 	const double crystals = p.grams("flask", "copper_sulfate_pentahydrate");
 	CHECK(crystals > 8.0);

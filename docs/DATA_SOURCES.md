@@ -875,3 +875,35 @@ burst; a capped bottle heated with water in it bursts near 144 °C (its water's 
 ## Constants
 
 CODATA 2018: R = 8.314462618 J/mol·K (used: `chem/thermo.hpp`). T0 = 298.15 K. Standard atmosphere 101325 Pa (from Stage 4).
+
+## The balance (Stage 50)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A load's conventional mass | `m_c = (m − ρ_air V) / (1 − ρ_air / ρ_ref)`, `ρ_ref` = 8000 kg/m³ | OIML D 28 (2004), *Conventional value of the result of weighing in air*: the mass of reference weights of 8000 kg/m³ that balance the load in air of 1.2 kg/m³ at 20 °C. A balance is adjusted with such weights, so what it shows is a conventional mass. Its own case: a kilogram of water at 20 °C (998.21 kg/m³, 1001.8 cm³) in air of 1.2 kg/m³ reads 998.95 g | `measured: a balance reads OIML's conventional mass` |
+| The room's air | `ρ_air = P M / (R T)` of the room's own gas | the ideal gas: the room's composition (79 % N₂, 21 % O₂, dry: 28.85 g/mol, where real air's argon makes 28.96), 1 atm and its temperature; 1.199 kg/m³ at 20 °C, 0.4 % under real dry air's 1.204 (a buoyancy 5 µg lighter a mL) | `lab: a balance reads its load's conventional mass` |
+
+Chosen for the game (`data/instruments.json`, design): a top-loading balance reads 0.01 g to 620 g within
+0.02 g, an analytical one 0.1 mg to 220 g within 0.2 mg; a thermometer 0.1 °C within 0.2 °C; a pH meter 0.01
+within 0.02; a hand misses an amount aimed at by up to 10 %. The marks on a beaker or a flask (every 10, 25
+or 50 mL) within 5 %, a bottle's within 10 % (`data/glassware.json`). Confidence: these are of the order
+makers state; they are not claims about any one instrument.
+
+## Gases' diffusion in air (Stage 50)
+
+An open vessel's gas exchanges with the room's air by diffusion through its mouth (GAME_SPEC §6). Each gas's
+coefficient in air at 298.15 K and 1 atm, and its power of the temperature, `D = D298 (T / 298.15)^n`
+(`data/species.json`, `air_diffusion`). Retrieved 2026-11-25.
+
+| Gas | D298 (cm²/s) | n | Source | Held by |
+|---|---|---|---|---|
+| H₂O | 0.254 | 1.87 | NIST TN 2279 (D. R. Burgess Jr., *Self-Diffusion and Binary-Diffusion Coefficients in Gases*, 2024), Table 1a: H₂O in N₂, 0.254 at 298 K (2–3 %), ln D = −10.324 − 84.181/T + 1.620 ln T over 150–2000 K; n its local power at 298 K. Incropera's Table A.8 gives H₂O–air 0.26 | `measured: gases diffuse in air at NIST's and Incropera's coefficients` (within 1 % of NIST's fit from 280 to 450 K); `exchange: an open flask of water evaporates into dry air at Stefan's rate` |
+| CO₂ | 0.160 | 1.75 | Incropera, *Fundamentals of Heat and Mass Transfer*, Table A.8, CO₂–air (via Wikipedia's *Mass diffusivity*, after Cussler); n Fuller, Schettler and Giddings' 1.75. **Medium confidence**: NIST TN 2279 lists CO₂–N₂ at 0.224 (1–3 %, its ref. 31) where the handbooks give 0.16–0.17 | the same |
+| O₂ | 0.21 | 1.80 | Incropera Table A.8, O₂–air; n NIST TN 2279's O₂ self-diffusion fit at 298 K | the same |
+| N₂ | 0.21 | 1.76 | calibrated: nitrogen's exchange in air is with its oxygen, O₂–air's coefficient; NIST TN 2279's self-diffusion of N₂ (0.209) and O₂ (0.215) bracket it; n its N₂ fit | — |
+
+The exchange is Stefan's tube: a gas crosses the mouth at `D c G (x_vessel − x_room)` mol/s, `c` the gas's molar
+density at 1 atm and the two cells' mean temperature, `G` the mouth's area over its length (the integral of
+`dz / A(z)` from what the vessel holds up to its brim, inverted). Water's vapour pressure in the model at 20 °C is
+2.338 kPa (2.339 measured), so an open beaker evaporates at Stefan's rate. Not modelled: convection, which a warm
+vessel's gas really leaves by much faster than by diffusion (§20).

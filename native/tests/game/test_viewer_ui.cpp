@@ -294,7 +294,7 @@ TEST_CASE("viewer: the viewer is bodies of the pass: its case, its screen, its h
 	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
 		screens += scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::MORE) * 4 + 1] > 0.5f && scene.table[static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS + L::FORM) * 4] == 3.0f ? 1 : 0;
 	}
-	CHECK(screens == 1);
+	CHECK(screens == 2); // its own, and the balance's display in the cabinet (Stage 50)
 	CHECK(lab::check_O1(scene) == "");
 	CHECK(lab::check_O17(scene, 50) == "");
 	// nothing filled is drawn over it while it is not chosen

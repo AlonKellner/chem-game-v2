@@ -1,0 +1,67 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 50; docs/CURRICULUM.md, experiment 7) on data/benches/carbonate.json: a carbonate decomposed. Malachite is weighed by difference into a dish, heated until black, cooled and weighed again: Cu2CO3(OH)2 -> 2 CuO + CO2 + H2O keeps 2 x 79.55 / 221.12 = 72.0 % of its mass.",
+	"title": "Experiment: what heat takes from a carbonate",
+	"bench": "../benches/carbonate.json",
+	"steps": [
+		{
+			"part": "Weighing by difference",
+			"title": "The empty dish",
+			"text": "Click the dish to pick it up, then click the balance. Write down what it reads: the empty dish.",
+			"why": "This balance reads to 0.01 g. Rather than taring it, you weigh the dish empty, then with the sample: the sample is the difference. Every later weighing is taken the same way, so the balance's own small error cancels.",
+			"checks": [{"text": "the dish on the balance", "when": {"item": "scale", "under": "dish"}}],
+			"play": [{"drag": ["item:dish", "item:scale"]}]
+		},
+		{
+			"title": "About 1.5 g of malachite",
+			"text": "Pick up the jar, then right-click the dish for the menu. Type 1.5, then click \"tip 1.5 g of the solid\". Write down the new reading: dish and malachite.",
+			"why": "Malachite is a basic copper carbonate, Cu2CO3(OH)2: green, and 221.1 g a mole.",
+			"checks": [{"text": "malachite in the dish", "when": {"item": "dish", "species": "malachite", "above_g": 1.0}}],
+			"play": [{"drag": ["item:jar", "item:dish"]}, {"type": "1.5"}, {"click": "panel:tip:solid"}]
+		},
+		{
+			"part": "Heating",
+			"title": "Off the balance, a burner under it",
+			"text": "Pick up the dish and click a free square of the bench. Then pick up the burner in the cabinet and click the dish.",
+			"checks": [{"text": "the burner under the dish", "when": {"item": "burner", "under": "dish"}}],
+			"play": [{"drag": ["item:dish", "square:20,13"]}, {"drag": ["item:burner", "item:dish"]}]
+		},
+		{
+			"title": "Full flame",
+			"text": "Right-click the burner, drag its valve fully open, then click 60x on the clock.",
+			"why": "Above about 300 C malachite comes apart: its carbonate leaves as carbon dioxide and its hydroxide as steam, and black copper oxide stays.",
+			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.9}}],
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Until it is black",
+			"text": "Watch the green powder darken to black.",
+			"checks": [
+				{"text": "copper oxide in the dish", "when": {"item": "dish", "species": "copper_oxide", "above_g": 0.7}},
+				{"text": "and no malachite left", "when": {"item": "dish", "species": "malachite", "below_g": 0.001}}
+			]
+		},
+		{
+			"title": "Flame off, burner away, cold again",
+			"text": "Right-click the burner, drag its valve shut, and put the burner back in the cabinet. Wait until the dish's thermometer reads 20 C.",
+			"checks": [
+				{"text": "the burner in the cabinet", "when": {"item": "burner", "place": "cabinet"}},
+				{"text": "the dish below 21 C", "wait": true, "when": {"item": "dish", "below_c": 21}}
+			],
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@0"}, {"drag": ["item:burner", "cabinet"]}]
+		},
+		{
+			"part": "Weighing again",
+			"title": "Back on the balance",
+			"text": "Pick up the dish and click the balance. Write down the reading: dish and oxide.",
+			"why": "What is left over what you put in: 2 CuO (159.1 g) from one Cu2CO3(OH)2 (221.1 g) is 72.0 %. Your two differences should come within the balance's 0.02 g of that.",
+			"checks": [{"text": "the dish on the balance", "when": {"item": "scale", "under": "dish"}}],
+			"play": [{"drag": ["item:dish", "item:scale"]}]
+		}
+	],
+	"results": [
+		{"label": "the malachite taken (the truth)", "quantity": {"item": "dish", "what": "malachite"}, "show": ["most"]},
+		{"label": "the oxide left (the truth)", "quantity": {"item": "dish", "what": "copper_oxide"}, "show": ["now"]},
+		{"label": "the balance", "quantity": {"item": "scale", "what": "reads_g"}, "show": ["most", "now"]}
+	]
+}

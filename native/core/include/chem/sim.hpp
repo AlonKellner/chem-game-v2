@@ -22,8 +22,8 @@ inline constexpr double STEP_SECONDS = 1.0 / 60.0;
 
 // The last step's flows (GAME_SPEC §13.6): what the step's primitives moved,
 // summed by process. Kept whether the step was traced or not; not state.
-enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5, Column = 6 };
-inline constexpr size_t PROCESSES = 7;
+enum class Process : uint8_t { Reaction = 0, Heat = 1, Drain = 2, Settle = 3, Overflow = 4, Work = 5, Column = 6, Exchange = 7 };
+inline constexpr size_t PROCESSES = 8;
 // a column grows by this many layers at a time (Stage 47; a design value)
 inline constexpr int COLUMN_BLOCK = 4;
 struct StepFlows {
@@ -111,6 +111,7 @@ private:
 	void conduct_heat();
 	void do_work();
 	void drain_liquids();
+	void exchange_gases(); // (Stage 50) each gas down its mole fraction along an edge that exchanges it
 	void overflow();
 	void settle();
 	void build_tree();
@@ -152,6 +153,7 @@ private:
 	StepFlows flows_;
 	Process process_ = Process::Reaction; // what the primitives are applied for now
 	std::vector<uint8_t> starved_;
+	std::vector<Exchanged> exchanged_; // the step's (Stage 50)
 	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
 	std::vector<uint8_t> thermal_valid_;
 	double step_seconds_ = STEP_SECONDS;

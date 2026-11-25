@@ -1,0 +1,85 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 50; docs/CURRICULUM.md, experiment 6) on data/benches/hydrate.json: the formula of a hydrate. Blue copper sulfate crystals are weighed into a tared dish, heated until white, cooled and weighed again: the mass lost is their water. x = (water / 18.02) / (salt / 159.6), about 5.",
+	"title": "Experiment: the water in blue crystals",
+	"bench": "../benches/hydrate.json",
+	"steps": [
+		{
+			"part": "Weighing",
+			"title": "The dish on the balance",
+			"text": "Click the dish (the empty beaker) to pick it up, then click the balance to set it on its pan.",
+			"why": "This lab is read by instruments: nothing tells you what a vessel holds except what you measure. The analytical balance reads to a tenth of a milligram.",
+			"checks": [{"text": "the dish on the balance", "when": {"item": "scale", "under": "dish"}}],
+			"play": [{"drag": ["item:dish", "item:scale"]}]
+		},
+		{
+			"title": "Tare",
+			"text": "Right-click the balance to choose it, then click \"tare\" in the readout: it reads 0 with the empty dish on it.",
+			"why": "Taring takes the dish's own mass off the reading: from now on the balance reads only what you put in the dish. A balance reads a conventional mass, less the air a thing displaces; the dish displaces the same air before and after, so that cancels too.",
+			"checks": [{"text": "the balance reads 0", "when": {"quantity": {"item": "scale", "what": "reads_g"}, "compare": "between", "values": [-0.0002, 0.0002]}}],
+			"play": [{"click": "item:scale"}, {"click": "tare:scale"}]
+		},
+		{
+			"title": "About 2 g of the crystals",
+			"text": "Pick up the jar, then right-click the dish for the menu. Type 2, then click \"tip 2 g of the solid\". Read what the balance says you took, and write it down.",
+			"why": "A hand never takes exactly what it aims at: you asked for about 2 g, and the balance tells you how much it was. That number, not the 2, is your sample's mass.",
+			"checks": [{"text": "crystals in the dish", "when": {"item": "dish", "species": "copper_sulfate_pentahydrate", "above_g": 1.5}}],
+			"play": [{"drag": ["item:jar", "item:dish"]}, {"type": "2"}, {"click": "panel:tip:solid"}]
+		},
+		{
+			"part": "Driving off the water",
+			"title": "Off the balance",
+			"text": "Pick up the dish and click a free square of the bench to set it down. The balance stays where it is.",
+			"why": "A balance is never heated: the dish goes to the burner, and back to the balance once it is cold.",
+			"checks": [{"text": "the dish off the balance", "when": {"all": [{"item": "dish", "place": "bench"}, {"not": {"item": "scale", "under": "dish"}}]}}],
+			"play": [{"drag": ["item:dish", "square:20,13"]}]
+		},
+		{
+			"title": "A burner under it",
+			"text": "Pick up the burner in the cabinet, then click the dish.",
+			"checks": [{"text": "the burner under the dish", "when": {"item": "burner", "under": "dish"}}],
+			"play": [{"drag": ["item:burner", "item:dish"]}]
+		},
+		{
+			"title": "Full flame",
+			"text": "Right-click the burner to choose it, then drag its valve fully open. Then click 60x on the clock to hurry the wait.",
+			"why": "Heated, the crystals give up their water in steps: CuSO4.5H2O to the trihydrate near 90 C, to the monohydrate near 110 C, and the last water only above about 200 C.",
+			"checks": [{"text": "the valve fully open", "when": {"item": "burner", "valve_at_least": 0.9}}],
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@1"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Until it is white",
+			"text": "Watch the dish: the blue crystals pale to grey-white as their water leaves as steam.",
+			"why": "Anhydrous copper sulfate, CuSO4, is white. The blue was the water bound to the copper ions in the crystal.",
+			"checks": [
+				{"text": "white copper sulfate in the dish", "when": {"item": "dish", "species": "copper_sulfate", "above_g": 1.0}},
+				{"text": "and no hydrate left", "when": {"all": [{"item": "dish", "species": "copper_sulfate_pentahydrate", "below_g": 0.001}, {"item": "dish", "species": "copper_sulfate_trihydrate", "below_g": 0.001}, {"item": "dish", "species": "copper_sulfate_monohydrate", "below_g": 0.001}]}}
+			]
+		},
+		{
+			"title": "Flame off, burner away",
+			"text": "Right-click the burner, drag its valve shut, then pick the burner up and put it back in the cabinet.",
+			"checks": [{"text": "the burner in the cabinet", "when": {"item": "burner", "place": "cabinet"}}],
+			"play": [{"click": "item:burner"}, {"click": "valve:burner@0"}, {"drag": ["item:burner", "cabinet"]}]
+		},
+		{
+			"title": "Cold again",
+			"text": "Wait until the dish's thermometer reads the room's 20 C.",
+			"why": "A warm dish weighs light: its air is thinner than the room's, and on a tenth of a milligram that shows. Weigh only what is at the room's temperature.",
+			"checks": [{"text": "the dish below 21 C", "when": {"item": "dish", "below_c": 21}}]
+		},
+		{
+			"part": "Weighing again",
+			"title": "Back on the balance",
+			"text": "Pick up the dish and click the balance. It still has the empty dish's tare: it reads the white salt alone. Write it down.",
+			"why": "The crystals' mass less the salt's is the water. In moles: water / 18.02 g/mol and salt / 159.6 g/mol; their ratio is x in CuSO4.xH2O, which is 5. In a real lab the air is humid, and dry copper sulfate takes water back from it as it cools, so the result comes out a little under 5 unless the dish cools in a desiccator, a closed jar kept dry. This lab's air is dry.",
+			"checks": [{"text": "the dish on the balance", "when": {"item": "scale", "under": "dish"}}],
+			"play": [{"drag": ["item:dish", "item:scale"]}]
+		}
+	],
+	"results": [
+		{"label": "the crystals taken (the truth)", "quantity": {"item": "dish", "what": "copper_sulfate_pentahydrate"}, "show": ["most"]},
+		{"label": "the white salt left (the truth)", "quantity": {"item": "dish", "what": "copper_sulfate"}, "show": ["now"]},
+		{"label": "the balance", "quantity": {"item": "scale", "what": "reads_g"}, "show": ["now"]}
+	]
+}
