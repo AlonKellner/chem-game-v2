@@ -19,8 +19,8 @@ std::string bench(const std::string &extra = "") {
 			{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 0]},
 			{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 0]},
 			{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [8, 8]},
-			{"id": "volumetric", "kind": "vessel", "glassware": "volumetric_flask", "volume_ml": 100, "wall": "glass", "wall_g": 60, "at": [12, 8]},
-			{"id": "cylinder", "kind": "vessel", "glassware": "measuring_cylinder", "volume_ml": 100, "wall": "glass", "wall_g": 120, "at": [16, 8]},
+			{"id": "volumetric", "kind": "vessel", "glassware": "volumetric_flask", "volume_ml": 100, "wall": "glass", "wall_g": 60, "at": [12, 7]},
+			{"id": "cylinder", "kind": "vessel", "glassware": "measuring_cylinder", "volume_ml": 100, "wall": "glass", "wall_g": 120, "at": [16, 7]},
 			{"id": "bottle", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [20, 8],
 				"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.04}}}
 		]})";

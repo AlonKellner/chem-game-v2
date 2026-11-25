@@ -206,7 +206,13 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount) {
 // An item's footprint on the bench, in squares of the grid (GAME_SPEC §13):
 // room for its body, what stands on its mouth starts above it, and a vessel's
 // stand over a burner. A bench may give its own ("size").
-void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h) {
+void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h, const std::string &glassware = "") {
+	// tall glassware (Stage 52): a burette, a pipette, a cylinder, a volumetric flask stand on narrow, tall footprints
+	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask")) {
+		w = 2;
+		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : volume_ml > 50.0 ? 8 : 6;
+		return;
+	}
 	if (kind == "viewer") {
 		w = 7; // the spectral viewer (Stage 42): its screen, and its probe's holder beside it
 		h = 4;
@@ -3253,7 +3259,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			}
 			const std::string kind = j.at("kind").get<std::string>();
 			if (squares) {
-				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h);
+				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h, j.value("glassware", ""));
 			}
 			if (squares && j.contains("size")) {
 				item.w = j.at("size").at(0).get<int>();

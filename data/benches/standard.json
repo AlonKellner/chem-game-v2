@@ -1,0 +1,17 @@
+{
+	"format": "chem-bench/2",
+	"note": "A standard solution and its dilution (GAME_SPEC §13, Stage 52; docs/CURRICULUM.md, experiment 2): an analytical balance, two 100 mL volumetric flasks, a 25 mL bulb pipette, a jar of the pentahydrate and a bottle of water. Read by instruments: about 2.5 g of the crystals weighed into a tared flask, dissolved and made up to the mark (about 0.1 mol/L), then 25 mL of it pipetted into the second flask and made up (a quarter of it).",
+	"readings": "instruments",
+	"seed": 21,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "scale", "kind": "balance", "model": "analytical", "at": [1, 13]},
+		{"id": "flask", "kind": "vessel", "glassware": "volumetric_flask", "volume_ml": 100, "wall": "glass", "wall_g": 60, "loss": 0.4, "at": [7, 6], "label": "100 mL volumetric flask"},
+		{"id": "diluted", "kind": "vessel", "glassware": "volumetric_flask", "volume_ml": 100, "wall": "glass", "wall_g": 60, "loss": 0.4, "at": [10, 6], "label": "100 mL volumetric flask"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "loss": 0.1, "at": [13, 3], "label": "25 mL pipette"},
+		{"id": "jar", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "loss": 0.3, "at": [16, 8], "label": "copper sulfate, blue crystals",
+			"contents": {"copper_sulfate_pentahydrate": {"g": 20, "particles": 4000000}}},
+		{"id": "water", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [20, 7], "label": "water", "contents": {"water": {"g": 450}}}
+	]
+}

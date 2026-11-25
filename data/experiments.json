@@ -80,6 +80,27 @@
 			"tutorial": "tutorials/carbonate.json"
 		},
 		{
+			"id": "standard",
+			"title": "A standard solution",
+			"summary": "Measured: blue copper sulfate crystals weighed into a tared volumetric flask, dissolved and made up to the mark: a known concentration. Then 25 mL of it pipetted into a second flask and made up: a quarter of it.",
+			"bench": "benches/standard.json",
+			"tutorial": "tutorials/standard.json"
+		},
+		{
+			"id": "titration",
+			"title": "A titration",
+			"summary": "Measured: 25 mL of sulfuric acid pipetted into a flask, and 0.100 M sodium hydroxide run in from a burette, fast, then slowly, until the pH leaps past 7. The burette's two readings give the acid's concentration.",
+			"bench": "benches/titration.json",
+			"tutorial": "tutorials/titration.json"
+		},
+		{
+			"id": "calorimeter",
+			"title": "The heat of neutralisation",
+			"summary": "Measured: 50 mL of 1 M base and 25 mL of 1 M acid, each in a measuring cylinder, mixed in a foam-cup calorimeter; the thermometer, a few seconds behind, climbs about 8 K. The heat over the water made is the heat of neutralisation.",
+			"bench": "benches/calorimeter.json",
+			"tutorial": "tutorials/calorimeter.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

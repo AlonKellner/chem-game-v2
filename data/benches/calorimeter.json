@@ -1,0 +1,16 @@
+{
+	"format": "chem-bench/2",
+	"note": "The heat of neutralisation in a calorimeter (GAME_SPEC §13, Stage 52; docs/CURRICULUM.md, experiment 22): a foam cup with a lid (2.6 g of expanded polystyrene; its heat lost 0.12 W/K, calibrated: docs/DATA_SOURCES.md, A foam cup), a 100 mL measuring cylinder, a bottle of 1 mol/kg sodium hydroxide (0.4 mol in 400 g of water) and one of 1 mol/kg sulfuric acid (0.3 mol in 300 g). Read by instruments: 50 mL of the base and 25 mL of the acid measured in the cylinder and mixed in the cup; it warms by about 8 K, which the thermometer follows with its lag.",
+	"readings": "instruments",
+	"seed": 44,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "cup", "kind": "vessel", "glassware": "foam_cup", "volume_ml": 237, "wall": "polystyrene_foam", "wall_g": 2.6, "loss": 0.12, "at": [9, 8], "label": "foam cup, with a lid and a thermometer"},
+		{"id": "cylinder", "kind": "vessel", "glassware": "measuring_cylinder", "volume_ml": 100, "wall": "glass", "wall_g": 120, "loss": 0.3, "at": [4, 6], "label": "100 mL measuring cylinder"},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [15, 7], "label": "sodium hydroxide, 1.0 M",
+			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.4}}},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [20, 7], "label": "sulfuric acid, 1.0 M",
+			"contents": {"water": {"g": 300}, "sulfuric_acid_aq": {"mol": 0.3}}}
+	]
+}

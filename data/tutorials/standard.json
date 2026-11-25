@@ -1,0 +1,317 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 52; docs/CURRICULUM.md, experiment 2) on data/benches/standard.json: a standard solution and its dilution. c = (m / 249.69 g/mol) / 0.1000 L; diluted 25 to 100, a quarter of it.",
+	"title": "Experiment: a standard solution",
+	"bench": "../benches/standard.json",
+	"steps": [
+		{
+			"part": "Weighing",
+			"title": "The flask on the balance",
+			"text": "Click the first volumetric flask to pick it up, then click the balance. Then right-click the balance and click \"tare\".",
+			"why": "A volumetric flask holds its nominal volume at its mark, to within its class: 100 mL within 0.10 mL. Tared, the balance reads only what goes into it.",
+			"checks": [
+				{
+					"text": "the flask tared on the balance",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "flask"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:flask",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "About 2.5 g of the crystals",
+			"text": "Pick up the jar, then right-click the flask for the menu. Type 2.5, then click \"tip 2.5 g of the solid\". Write down what the balance reads.",
+			"why": "Copper sulfate pentahydrate, CuSO4.5H2O, is 249.69 g a mole: 2.5 g of it is about 0.0100 mol. The balance's reading, not the 2.5, is what you took.",
+			"checks": [
+				{
+					"text": "crystals in the flask",
+					"when": {
+						"item": "flask",
+						"species": "copper_sulfate_pentahydrate",
+						"above_g": 2.0
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:flask"
+					]
+				},
+				{
+					"type": "2.5"
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"part": "Making it up",
+			"title": "Water to dissolve them",
+			"text": "Pick up the water bottle, right-click the flask, type 50 and click \"pour\". Then right-click the flask, click \"stir\", and click 60x on the clock.",
+			"why": "A solid dissolves in some of the water first; the flask is made up to its mark only once it has, or the volume would change as it dissolved.",
+			"checks": [
+				{
+					"text": "water in the flask, stirred",
+					"when": {
+						"all": [
+							{
+								"item": "flask",
+								"above_g": 0,
+								"species": "water"
+							},
+							{
+								"item": "flask",
+								"stirred": true
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:flask"
+					]
+				},
+				{
+					"type": "50"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "stir:flask"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until it is dissolved",
+			"text": "Watch the blue crystals go into the water.",
+			"checks": [
+				{
+					"text": "no crystals left",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "To the mark",
+			"text": "Pick up the water bottle, right-click the flask and click \"to the mark\".",
+			"why": "The bottom of the meniscus on the mark: the flask now holds its own 100 mL (within 0.10 mL) of a solution of all the copper sulfate you weighed. Its concentration is the moles you weighed over 0.1000 L.",
+			"checks": [
+				{
+					"text": "made up to its mark",
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:mark"
+				}
+			]
+		},
+		{
+			"part": "Diluting it",
+			"title": "25 mL of it in the pipette",
+			"text": "Pick up the pipette, then click the flask: it draws up to its mark.",
+			"why": "A 25 mL bulb pipette delivers 25 mL within 0.03 mL: a quarter of the flask.",
+			"checks": [
+				{
+					"text": "the pipette at its mark",
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Into the second flask",
+			"text": "Pick up the pipette and click the second flask: it stands in its neck and runs out.",
+			"checks": [
+				{
+					"text": "the pipette on the second flask",
+					"when": {
+						"item": "pipette",
+						"on": "diluted"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:diluted"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out, about half a minute.",
+			"why": "A bulb pipette is made to deliver its volume as it runs out freely, the last drop left in its tip.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The pipette away, the second flask to its mark",
+			"text": "Pick up the pipette and click a free square. Then pick up the water bottle, right-click the second flask and click \"to the mark\".",
+			"why": "25 mL made up to 100 mL: a quarter of the concentration. c2 = c1 x 25.00 / 100.0.",
+			"checks": [
+				{
+					"text": "the second flask made up",
+					"when": {
+						"quantity": {
+							"item": "diluted",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:24,3"
+					]
+				},
+				{
+					"drag": [
+						"item:water",
+						"item:diluted"
+					]
+				},
+				{
+					"click": "panel:mark"
+				}
+			]
+		}
+	],
+	"results": [
+		{
+			"label": "the crystals taken (the truth)",
+			"quantity": {
+				"item": "flask",
+				"what": "copper_sulfate_pentahydrate"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "copper sulfate in the first flask (the truth)",
+			"quantity": {
+				"item": "flask",
+				"what": "copper_sulfate_aq",
+				"measure": "mol"
+			},
+			"show": [
+				"now"
+			]
+		},
+		{
+			"label": "copper sulfate in the second flask (the truth)",
+			"quantity": {
+				"item": "diluted",
+				"what": "copper_sulfate_aq",
+				"measure": "mol"
+			},
+			"show": [
+				"now"
+			]
+		}
+	]
+}

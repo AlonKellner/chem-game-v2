@@ -2,6 +2,7 @@
 // A pupil (GAME_SPEC §13.2): a tutorial played through the screen with the pointer and nothing but its own
 // gestures, instantly or as a person plays; shared by the tutorial's tests and the experiments' (Stage 41).
 #include "lab/conditions.hpp"
+#include "lab/glassware.hpp"
 #include "lab/tutorial.hpp"
 #include "lab/ui.hpp"
 
@@ -90,7 +91,8 @@ struct Pupil {
 			a = x.id == id ? &x : a;
 			b = x.id == to.substr(5) ? &x : b;
 		}
-		return a != nullptr && b != nullptr && a->kind == "vessel" && !a->glassware.empty() && b->kind == "vessel" && !b->condenser && b->place == "bench";
+		const lab::glass::Vessel *g = a != nullptr && !a->glassware.empty() ? lab::glass::find(a->glassware, a->nominal_ml) : nullptr;
+		return a != nullptr && b != nullptr && a->kind == "vessel" && g != nullptr && !g->outlet && b->kind == "vessel" && !b->condenser && b->place == "bench"; // (an outlet's: a drop, Stage 52)
 	}
 	void type(const std::string &text) {
 		for (const char c : text) {

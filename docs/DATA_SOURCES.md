@@ -952,3 +952,18 @@ high (a cup maker's listing), its wall about 2.5 mm (J. Chem. Educ. 2025, 102, 1
 
 By instruments each vessel's thermometer follows its vessel as a first-order instrument with that time constant,
 stirred or not (§20).
+
+## A foam cup (Stage 52)
+
+The calorimeter's cup: an 8 oz expanded-polystyrene cup (`data/glassware.json`, `foam_cup`; its shape above) of a
+new wall species, `polystyrene_foam` (C8H8, the styrene unit).
+
+| What | Value | Source |
+|---|---|---|
+| Its heat capacity | 1.17 J/(g·K) near 293 K: 121.86 J/(mol·K) of the styrene unit | NIST's cryogenic material correlations for polystyrene foam (near 293 K: 1161 to 1307 J/(kg·K) by the foam's density) |
+| Its conductivity | 0.035 W/(m·K) near 293 K | the same (32 kg/m³) |
+| Its mass | about 2.6 g | a cup's wall of about 52 cm³ at about 0.05 g/cm³ (calibrated) |
+| Its heat lost (a bench's `loss`) | 0.12 W/K | calibrated: the foam's 0.035 W/(m·K) through its 2.5 mm over about 0.021 m² (0.29 W/K) in series with an outside film of about 7 W/(m²·K) over 0.025 m² (0.18 W/K) and a lid; a double cup with a lid lost 23.8 °C in 40 min (J. Chem. Educ. 2025, 102, 1281; its start unknown) |
+
+Its light: searched and not found measured. A flat third of the visible through its wall, scattered white, and a
+fifth of the long-wave (`data/optics/media.json`), calibrated.

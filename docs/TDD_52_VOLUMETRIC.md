@@ -48,6 +48,9 @@ What it builds:
   pipette's and the burette's bores change too fast for 32), and its table is 257 fills, not 65. Every open vessel's
   exchange is refined: the demo's open beaker ends with 37.786999 g of water, not 37.787113 g; its crystals 7 µg
   heavier; the pressure session's results unchanged to their printed places. Both records re-recorded.
+- 2026-11-25, approved by the user: the foam cup's wall species appended to the table, so every cell hashes one more
+  amount: every digest moves, every measured result of both sessions the same. Both records re-recorded. (And once on
+  Stage 51's, merged meanwhile: the demo's results those approved.)
 
 ## Phases
 
@@ -57,6 +60,6 @@ What it builds:
 | 52.2 | The profiles: cylinder, volumetric flask, pipette, burette, cup; marks; the tip's bore from the delivery time | Done |
 | 52.3 | The lab: an outlet vessel on a mouth, its drain through its stopcock; `fill` to the mark; each piece's tolerance from the seed; the burette's reading | Done |
 | 52.4 | The thermometer's lag; the volumetric readings | Done |
-| 52.5 | The screen: tall glassware drawn to fit, the stopcock, the gestures, the readout | |
-| 52.6 | The experiments: a standard solution, a titration, a calorimeter | |
+| 52.5 | The screen: tall glassware drawn to fit, the stopcock, the gestures, the readout | Done |
+| 52.6 | The experiments: a standard solution, a titration, a calorimeter | Done |
 | 52.7 | This document, CHANGELOG, `make gates`, the user's sign-off | |
