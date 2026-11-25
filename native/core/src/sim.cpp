@@ -522,6 +522,15 @@ void Simulation::drain_liquids() {
 		if (!amounts.empty()) {
 			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			// what lands below (Stage 51): the liquid's volume and mass, for a column's jet
+			for (const SpeciesAmount &m : amounts) {
+				const SpeciesDef &def = table.species(m.species);
+				if (def.phase == Phase::Liquid || def.phase == Phase::Aqueous) {
+					const double mol = static_cast<double>(m.amount.quanta) * MOL_PER_QUANTUM;
+					landed_m3_[static_cast<size_t>(edge.b.index)] += mol * def.molar_volume;
+					landed_kg_[static_cast<size_t>(edge.b.index)] += mol * static_cast<double>(table.molar_mass_ug(m.species)) * 1e-9;
+				}
+			}
 		}
 	}
 }
@@ -1095,6 +1104,8 @@ void Simulation::begin_step() {
 	flows_.energy.assign(world_.edges().size() * PROCESSES, 0);
 	flows_.grams.assign(world_.edges().size() * PROCESSES, 0.0);
 	flows_.extent.assign(cells * flows_.reactions, 0);
+	landed_m3_.assign(cells, 0.0);
+	landed_kg_.assign(cells, 0.0);
 	process_ = Process::Reaction;
 	configure_columns();
 }

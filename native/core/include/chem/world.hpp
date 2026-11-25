@@ -100,6 +100,11 @@ struct CellMeta {
 	// 49): a column's layers mix as far as it pays. Set by whoever turns it,
 	// before each step; a rate the column reads, not state.
 	double stirring = 0.0;
+	// The speed what drains into the cell lands at, m/s (GAME_SPEC §6, Stage
+	// 51): a stream's fall. A column's top takes it in as a jet: it carries
+	// what it entrains of the layers under it up into the top. Set by whoever
+	// pours, before each step; a rate the column reads, not state.
+	double landing = 0.0;
 	// A rigid cell with no gas path to an elastic cell (Stage 28): kept by the
 	// world from its edges, not set (V3).
 	bool sealed = false;
@@ -326,6 +331,8 @@ public:
 	Refusal set_mixing(CellId cell, double mixing);
 	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)
 	Refusal set_stirring(CellId cell, double watts);
+	// the speed what drains into a cell lands at, m/s (Stage 51): at any time (a rate, as a drain's)
+	Refusal set_landing(CellId cell, double speed);
 	// A column's top made the size its layers leave it (Stage 47): the
 	// simulation's own act within a step, as the column moves liquid between
 	// them (no more than the vessel's whole volume, more than nothing).

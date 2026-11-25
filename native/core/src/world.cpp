@@ -410,6 +410,17 @@ Refusal World::set_stirring(CellId cell, double watts) {
 	return Refusal::None;
 }
 
+Refusal World::set_landing(CellId cell, double speed) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!good_conductance(speed)) { // (at least 0 and finite)
+		return Refusal::BadValue;
+	}
+	meta_[static_cast<size_t>(cell.index)].landing = speed;
+	return Refusal::None;
+}
+
 Refusal World::set_mixing(CellId cell, double mixing) {
 	if (!ledger_.empty()) {
 		return Refusal::MidStep;

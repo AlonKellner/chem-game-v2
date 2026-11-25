@@ -44,7 +44,10 @@ constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
 // A source of work is a reservoir so hot that its energy carries no entropy (the limit of a heat reservoir as
 // its temperature grows without bound): what it gives is work, and the second law holds as it is checked (T1, T2).
 constexpr double WORK_KELVIN = 1.0e300;
-constexpr double GENTLE_POUR = 2e-6; // m^3/s: a pour no faster than this lays its liquid on what is there (a design value)
+constexpr double GENTLE_POUR = 2e-6; // m^3/s: a gentle pour's trickle down the wall (a design value)
+// a pouring lip, an outlet, a cap over the mouth it runs into, m (Stage 51: the screen's 10 pixels at its scale; a
+// design value)
+constexpr double LIP_GAP = 0.01;
 constexpr double WATER_VISCOSITY = 1.0016e-3; // Pa s, at 20 C (docs/DATA_SOURCES.md): what a settling grain falls through
 constexpr int TRIAL_SECONDS = 3600;
 constexpr int TRIAL_PER_STEP = 2; // a trial's seconds run at each of the lab's steps (Stage 39): what a step costs is bounded
@@ -65,9 +68,11 @@ struct Item {
 	std::string id;
 	Kind kind = Kind::Vessel;
 	CellId cell; // a vessel's or a bag's contents; a burner's flame
-	// pouring (Stage 47): 0 nothing yet; 1 a gentle pour of it has laid its liquid on the other's as a layer of its own;
-	// 2 it poured faster than that, and stirred it in: it lays nothing more until it ends
+	// pouring (Stage 47): 0 nothing yet; 1 it has laid its liquid on the other's as a layer of its own (Stage 51: every
+	// pour, its stream then mixing in what it entrains); and whether it runs down the wall (a gentle pour: it lands
+	// at no speed), for a scripted pour's while
 	int landed = 0;
+	bool gentle = false;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -1762,9 +1767,9 @@ struct Lab::Impl {
 	// a pour's rate this step: a held one's by what stands over its lip at its tilt, a script's the vessel's own,
 	// an upside-down one's an orifice's under its head
 	void set_pours() {
-		// what lands as a layer, or is stirred back in, moves after every drain's rate is set (a drain's rate is set
+		// what lands as a layer moves after every drain's rate is set (a drain's rate is set
 		// before the step's first transfer)
-		std::vector<int> lay, stir;
+		std::vector<int> lay;
 		for (Item &x : items) {
 			if (x.pours_into < 0) {
 				continue;
@@ -1791,24 +1796,48 @@ struct Lab::Impl {
 			if (x.pour_left_m3 >= 0.0) {
 				rate = std::min(rate, x.pour_left_m3 / chem::STEP_SECONDS); // a scripted pour's last step: exactly what is left
 			}
-			// a gentle pour (Stage 47: a trickle, no more than GENTLE_POUR) lays what it pours on the liquid there as a
-			// layer of its own, as a syrup is layered under a spirit; a faster one stirs it in as it lands
-			if (rate > 0.0 && nominal <= GENTLE_POUR * (1.0 + 1e-9) && x.landed == 0) {
+			// what it pours lands as a layer of its own on the liquid there (Stage 47; Stage 51: every pour, its stream
+			// then mixing in what it entrains, §6)
+			(void)nominal;
+			if (rate > 0.0 && x.landed == 0) {
 				lay.push_back(x.pours_into);
 				x.landed = 1;
-			} else if (nominal > GENTLE_POUR * (1.0 + 1e-9) && rate > 0.0) {
-				if (x.landed == 1) {
-					stir.push_back(x.pours_into); // (a pour that sped up: what it laid it stirs in)
-				}
-				x.landed = 2;
 			}
 			world().set_drain(x.pour, rate, solids, solids_rate);
 		}
 		for (const int t : lay) {
 			push_surface(items[static_cast<size_t>(t)]);
 		}
-		for (const int t : stir) {
-			stir_in_surface(items[static_cast<size_t>(t)]);
+		set_landings();
+	}
+	// The speed what runs into each vessel lands at (Stage 51): a stream falls from a lip, an outlet or a cap held
+	// LIP_GAP over its mouth to its liquid's surface; a gentle pour runs down the wall and lands at none
+	void set_landings() {
+		const auto fall = [&](const Item &t) {
+			const glass::Vessel *g = glass::find(t.glassware, t.nominal_ml);
+			if (g == nullptr) {
+				return 0.0;
+			}
+			const Fill held = fill(t);
+			const double level = held.defined ? g->level(held.condensed * 1e6) : g->floor;
+			return std::sqrt(2.0 * GRAVITY * (std::max(g->height - level, 0.0) / 100.0 + LIP_GAP));
+		};
+		std::vector<double> speed(items.size(), 0.0);
+		for (const Item &x : items) {
+			if (x.kind != Kind::Vessel) {
+				continue;
+			}
+			if (x.pours_into >= 0) {
+				speed[static_cast<size_t>(x.pours_into)] = std::max(speed[static_cast<size_t>(x.pours_into)], x.gentle ? 0.0 : fall(items[static_cast<size_t>(x.pours_into)]));
+			}
+			if (x.drains_to >= 0) {
+				speed[static_cast<size_t>(x.drains_to)] = std::max(speed[static_cast<size_t>(x.drains_to)], fall(items[static_cast<size_t>(x.drains_to)]));
+			}
+		}
+		for (size_t i = 0; i < items.size(); ++i) {
+			if (items[i].kind == Kind::Vessel && world().meta(items[i].cell).landing != speed[i]) {
+				world().set_landing(items[i].cell, speed[i]);
+			}
 		}
 	}
 
@@ -1869,23 +1898,6 @@ struct Lab::Impl {
 		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), t.cell, down, enthalpy_carried(table(), down, kelvin(t.cell)));
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		mid_step = true; // (moved before the step: a trace begun after it cannot start where the last one ended)
-	}
-	// What a pour laid on a vessel stirred back in (Stage 47): the layer under its own cell moved up into it, once
-	void stir_in_surface(Item &t) {
-		const std::vector<CellId> layers = layers_of(t);
-		if (layers.empty() || !layered_cell(layers[0])) {
-			return;
-		}
-		const CellState &c = world().snapshot_cell(layers[0]);
-		std::vector<SpeciesAmount> amounts;
-		for (size_t s = 0; s < c.amount.size(); ++s) {
-			if (c.amount[s] != 0) {
-				amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ c.amount[s] } });
-			}
-		}
-		const Refusal refused = world().transfer(column_edge(layers[0], t.cell), layers[0], amounts, Energy{ c.energy });
-		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
-		mid_step = true;
 	}
 	// An open vessel's gas exchanges with the room's air by diffusion through its mouth (GAME_SPEC §6, Stage 50): its
 	// mouth's edge passes each gas as a tube from what the vessel holds up to its brim would (Stefan's), the area over
@@ -4560,6 +4572,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		const double tilted = std::max(glass::find(x.glassware, x.nominal_ml)->pour_ml_s * 1e-6, 1e-12);
 		const bool gentle = c.value("gentle", false);
 		const double full_rate = gentle ? std::min(GENTLE_POUR, tilted) : tilted;
+		x.gentle = gentle; // (down the wall: it lands at no speed, Stage 51)
 		const int64_t most = static_cast<int64_t>((wanted / full_rate + 60.0) * 60.0);
 		x.tilt = full_rate / tilted;
 		double ran = 0.0; // what the drain was given to run: its rate's volume each step, not what evaporation took
@@ -4577,6 +4590,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		items[static_cast<size_t>(from)].pour_left_m3 = -1.0;
 		items[static_cast<size_t>(from)].tilt = 0.0;
+		items[static_cast<size_t>(from)].gentle = false;
 		return !started || end_pour(static_cast<size_t>(from), why);
 	}
 	if (what == "pour" || what == "tip") {
