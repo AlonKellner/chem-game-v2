@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.57.0 (2026-11-25, Stage 57)
+## 0.57.0 (2026-11-25, Stage 57; signed off by the user: "Approved, merge and proceed")
 
 - §7 (Stage 57, `docs/TDD_57_DISSOLVING.md`; `docs/CURRICULUM.md`, step B2): **transport to a grain** by Sano,
   Yamaguchi and Adachi's measured Sherwood number from the stirring's own dissipation (2 at rest), the old factor of

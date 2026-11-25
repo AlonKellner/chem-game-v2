@@ -51,7 +51,7 @@ temperature. A real crystal of half a millimetre dissolves in a stirred beaker i
 | 57.2 | The core: Sano's transport, dissolving at transport's pace; the measured gates | Done |
 | 57.3 | The goldens: the evidence and the user's approval | Done |
 | 57.4 | The experiment: the solubility curve | Done |
-| 57.5 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (893 s: ASan+UBSan 893, ctest 705, Godot 13 of 13, goldens unchanged; a first run's `signals.12`, a frame's budget of 3 ms for three monitors, read 3.06 under the full load and passed alone 3 of 3); awaiting the user's sign-off |
+| 57.5 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (893 s: ASan+UBSan 893, ctest 705, Godot 13 of 13, goldens unchanged; a first run's `signals.12`, a frame's budget of 3 ms for three monitors, read 3.06 under the full load and passed alone 3 of 3); signed off by the user, 2026-11-25 ("Approved, merge and proceed") |
 
 ## What was built
 
