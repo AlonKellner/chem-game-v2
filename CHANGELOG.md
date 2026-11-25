@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.49.0 (2026-11-25, Stage 49)
+
+- §6 (Stage 49, `docs/TDD_49_STIRRED.md`), Stage 47's open items:
+  - **stirred, a layered column mixes as far as the turning pays**: of what the turning dissipates
+    (`CellMeta::stirring`, set by the lab from its turning energy each step), Linden's mixing efficiency 0.2 raises
+    the column's potential energy, from the bottom up; two layers exchange what it pays for and merge when it pays
+    for all. The layers bench mixes in about a second as the turning builds; a short stir leaves it part mixed;
+  - **an outlet at a layered vessel's bottom, and the cap of one upside down, draw its lowest layer**: their drains
+    follow it at each step's boundary, as a burner's edge does.
+- `docs/DATA_SOURCES.md`: the mixing efficiency (Linden 1979, Osborn 1980), gated by its measured test. §20: the
+  stirred column's simplifications.
+
 ## 0.48.0 (2026-11-24, Stage 48; signed off by the user: "Works perfectly! Approved, merge and proceed")
 
 - §13 (Stage 48, `docs/TDD_48_CAMERA.md`): **a thermal camera**, an 8–14 µm instrument in the cabinet.

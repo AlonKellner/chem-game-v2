@@ -254,11 +254,12 @@ The user played the stage and reported three things:
 ## Open
 
 - **An outlet at a layered vessel's bottom, or one upside down through its cap,** draws from its top layer. It
-  should draw from its lowest: the drain's edge following the lowest layer, as a burner's does.
+  should draw from its lowest: the drain's edge following the lowest layer, as a burner's does. *Done in Stage 49.*
 
 - **Stirring mixes a column whole in one step.** It should be an entrainment limited by the stirrer's power and
   the stratification's potential energy (mixing efficiency about 0.2, Osborn 1980). For the layers bench this is
-  about half a second, so the step is close, but a short stir should leave a partly mixed column.
+  about half a second, so the step is close, but a short stir should leave a partly mixed column. *Done in Stage
+  49* (`docs/TDD_49_STIRRED.md`: Linden 1979's 0.2, the turning's dissipation).
 
 - **A gradient's other causes** (the user's "other considerations"):
   - entrainment where a pour lands (a gentle pour lays nothing at its boundary but what it pours);

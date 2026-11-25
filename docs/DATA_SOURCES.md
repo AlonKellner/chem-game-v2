@@ -848,6 +848,15 @@ Chosen for the game (`native/game/src/lab.cpp`; GAME_SPEC §11): the stirrer's w
 order of a 3 cm stir bar at 600 turns a minute, `Np ρ N³ d⁵` with a power number near 1: 0.02 W);
 how long a liquid left alone keeps turning, 1.5 s.
 
+## Stirring a layered column: the mixing efficiency (Stage 49)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| The mixing efficiency of a stirred stable stratification: the share of the stirring's dissipated work that raises the fluid's potential energy | `Γ` = 0.2 (`MIXING_EFFICIENCY`, `native/core/src/strata.cpp`) | P. F. Linden, 1979, "Mixing in stratified fluids", *Geophys. Astrophys. Fluid Dyn.* 13, 3–23 (doi:10.1080/03091927908243758): over the laboratory experiments it reviews, the mixing efficiency rises from zero with the Richardson number to a maximum of 0.2 ± 0.05 (the abstract, read 2026-11-25). T. R. Osborn, 1980, *J. Phys. Oceanogr.* 10, 83–89: 0.2 (a flux Richardson number of 0.17), the value used for the ocean since (as later authors report it; the paper not read). Confidence: the maximum, used as a constant: a weakly stratified column (a small Richardson number) mixes faster here than it would; ± 25% at the maximum | `measured: stirred, a layered column's potential energy rises at Linden's 0.2 of what the turning dissipates`: two layers of the experiment `layers` stirred at 1 mW for six steps, the potential energy gained against a still copy's, within 5% of 0.2 × the work |
+
+The work the turning dissipates is the game's (above: 0.01 W while it turns, its energy decaying over 1.5 s
+after); the mixing reads that dissipation, so a column mixes as the turning builds and dies away.
+
 ## Glass and stoppers under pressure (Stage 28)
 
 Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass
