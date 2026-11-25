@@ -92,6 +92,9 @@ double whole_share(const Model &m, const optics::Spectrum &a) {
 } // namespace
 
 double signal(const Model &m, double nm, const Sample &sample) {
+	if (sample.opaque) {
+		return 0.0;
+	}
 	const optics::Spectrum a = absorbance(sample);
 	// stray light: a share of the band's own light in the blank, of every colour the lamp gives, through the sample
 	return band(m, nm, sample, a, true) + m.stray * band(m, nm, sample, a, false) * whole_share(m, a);

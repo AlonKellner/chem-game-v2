@@ -34,6 +34,7 @@ const Model &model();
 struct Sample {
 	std::vector<std::pair<chem::SpeciesId, double>> molar;
 	double path_cm = 1.0;
+	bool opaque = false; // a solid in the beam: no light through
 };
 // Its absorbance at 1 nm (decadic): Beer and Lambert, sum of epsilon c l over what absorbs
 chem::optics::Spectrum absorbance(const Sample &sample);
