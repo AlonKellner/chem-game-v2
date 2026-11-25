@@ -47,6 +47,14 @@ struct SurfaceSteps {
 	double both = 0.0;
 	bool transported = false; // a species is carried, and transport has a finite rate
 };
+// A pour's stream (GAME_SPEC §6, Stage 51; docs/DATA_SOURCES.md). A round turbulent jet of volume flux `flux` (m^3/s)
+// leaving at `speed` (m/s) entrains this much of what it passes, m^3/s a metre of its path: its flux grows as
+// 0.32 Q0 x / d0 (Ricou and Spalding 1961), d0 the diameter of a jet of that flux and speed.
+double jet_entrains(double flux, double speed);
+// How far a jet of momentum flux `momentum` (m^4/s^2) driven into a denser liquid plunges, m, against its buoyancy
+// flux `buoyancy` (g' times its volume flux, m^4/s^3): 2.46 M^(3/4) B^(-1/2) (Turner 1966's forced fountain)
+double fountain_reach(double momentum, double buoyancy);
+
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double mixing, const CellMeta *meta = nullptr);
 
 class Simulation {
@@ -147,6 +155,8 @@ private:
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
 	std::vector<double> work_remainder_; // per edge; empty while no edge has done work
+	// what drained into each cell this step (Stage 51): its liquid's volume, m^3, and mass, kg (a column's jet)
+	std::vector<double> landed_m3_, landed_kg_;
 	std::vector<double> reaction_remainder_;
 	std::vector<double> nucleation_remainder_;
 	std::vector<int64_t> tally_; // cell * reactions + reaction

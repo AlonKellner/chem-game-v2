@@ -331,6 +331,94 @@ derived again; more cells to a vessel only where a gradient stands.
 
 **Depends on:** area 3's floor film (the heated floor's boundary layer is the column's lowest layer).
 
+### 8b. The glass in layers (PLANNED: a stage of its own)
+
+The user, 2026-11-25 (during Stage 51): "separating the vessel glass into the same layers as the liquids, each
+vessel layer should have an independent heat transfer dynamic with the layer it touches, and vessel layers should
+have heat transfer between them. The glass layers should also have gradients between them [...] decide on the
+approach which you think is best, document it and let's implement it as a future stage."
+
+**Today.** A vessel's glass (`wall_g`) is a wall species in its own cell, at that cell's temperature. Its loss to the
+room (`loss`, W/K) leaves from that cell. A burner heats the lowest liquid layer directly (Stage 47). Stage 45's
+heated floor is derived each step, not state.
+
+**Three ways considered.**
+- **A. Glass that follows the liquid's layers**, one glass cell beside each liquid layer. Rejected. The liquid's
+  layers are Lagrangian: they move, merge, split and thin as the gradient and the drains act. The glass does not
+  move. Fitted to the layers, it would:
+  - average two layers' glass temperatures when they merge (an artificial conduction);
+  - halve a layer's glass when it splits;
+  - move glass as the liquid drains.
+
+  The wall above the liquid has no layer to fit to at all, and that wall matters most: a heated flask's cool upper
+  glass is where vapour condenses and runs back.
+- **B. A fixed grid of glass rings** (Eulerian), chosen. The floor (a disc) and rings up the wall to the brim, each
+  a cell holding its own glass. Its mass and areas come from the glassware's shape (`lab/glassware.hpp`:
+  `radius_inside`, `radius_outside`). Rings are about 5 mm tall, so a 250 mL beaker has about 18 and its floor.
+  Each step their conductances are set from where things are, as the column's are (`configure_columns`):
+  - a ring and each liquid layer it overlaps in height: the contact area (perimeter times overlap) times the
+    liquid's natural convection on a vertical wall (Churchill and Chu 1975, to be sourced). The floor uses
+    Stage 45's heated floor (its convection, its onset, Rohsenow's boiling), which becomes the floor ring's state
+    rather than a derived view;
+  - a ring over the liquid and the gas in the top cell;
+  - neighbouring rings, by conduction along the glass: k A / Δz, A the ring's cross-section (borosilicate,
+    k ≈ 1.1 W/m·K, to be sourced);
+  - each ring and the room: today's calibrated `loss`, shared by outer area. Later, natural convection and
+    radiation (the long-wave range of Stage 46 already gives each surface its emissivity);
+  - the burner and the floor ring, not the liquid.
+
+  The grid is fixed, so nothing moves glass between cells. A gradient in the glass is resolved at the ring height
+  and drawn between ring centres. The thermal camera (Stage 48) would see a hot floor, a hot wet wall and a cooler
+  dry wall.
+- **C. An analytic wall, a fin equation solved each step** with the liquid as its boundary. Rejected: the wall's
+  heat would be held outside the cells, while state changes only through `transfer` and `transform` (§4.3).
+
+**Why B.** It is physical (the glass stays where it is), conserved by construction (rings are cells, heat moves
+along edges), independent of the liquid's refinement, and covers the dry wall and the floor. Explicit steps are
+stable: a ring's conduction time is about 40 s and its contact with the liquid about 8 s, against a 1/60 s step.
+The cost is about 20 cells a glassware vessel and a conductance update over rings and layers each step. If that
+shows in the frame's cost, rings at one temperature (within 0.1 K) can share a cell, as alike liquid layers do.
+
+**It gives:**
+- a heating lag through the floor;
+- the floor hotter than the liquid (Stage 45's superheat as state);
+- a reflux ring where the upper wall is cooler than the vapour, and condensation on it (with §11's wall films, a
+  later step);
+- heat lost layer by layer;
+- the thermal camera's wall gradient.
+
+**Data:** borosilicate's conductivity (and its Cp, already the `glass` species'); natural convection on a vertical
+wall; the existing `loss` calibration, split by area. Each value gets a gate test.
+
+**Invariants:** the rings' glass sums to the vessel's `wall_g`; T1 to T3 as for any cell.
+
+### 8c. Liquids that expand with temperature (PLANNED: a stage of its own)
+
+Found in Stage 51; the user chose to give it its own stage (2026-11-25). Every liquid volume in the core is the
+table's at 25 °C (§20). Water grows about 4% from 20 to 100 °C (Lienhard's rows, already in `data/solutions.json`'s
+`solvent` and read by `liquid_density`, Stage 47). Solutes would follow the solvent, as their density already does;
+solids stay fixed.
+
+**What has to change together.**
+- `fill_of`: a liquid's and a solute's volume at the cell's temperature, at every caller; today several pass 25 °C on
+  purpose.
+- A sealed cell's free volume (`free_volume`, `thermo.cpp`), so its pressure (P = nRT / V_free); expansion compresses
+  the gas over a nearly full flask.
+- The sealed cell's energy, E = H − n_gas R T + P_atm V_free (`world.cpp`): V_free(T) makes the temperature's solve
+  from the energy implicit in it, a small term against the heat capacity (P_atm dV/dT is about 5 mJ/K against
+  hundreds of J/K).
+- Settling a rigid cell exactly full (`sim.cpp`); the overflow's room check; the column's layer heights and its
+  top's size (`strata.cpp`); the drains' rates by volume.
+- The volume invariants V1 to V3 and L1, each at the cell's own temperature.
+- The lab's readings (`liquid_ml`, `condensed_ml`), the pour by hand's levels, the picture's levels (a hot liquid
+  stands higher).
+
+**Data:** water's density by temperature (have, verified); a solute's own apparent molar volume by temperature is a
+later refinement (Krumgalz's tables, as nickel sulfate's 25 °C value).
+
+**Goldens:** every session's measured values shift (the pressure session's vacuum most); evidence and the user's
+approval first.
+
 ## 9. Two liquids
 
 After area 8. Water and an oil do not mix, yet pass heat between them.

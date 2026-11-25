@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## 0.51.0 (2026-11-25, Stage 51; signed off by the user: "Approved, merge and proceed")
+
+- §6 (Stage 51, `docs/TDD_51_COLUMN.md`), more of the vertical dimension:
+  - **a pour's stream mixes where it lands**: every pour lands as a layer of its own. Its kinetic energy is work on
+    the column, Linden's 0.2 of it raising the potential energy; its entrainment comes first (Ricou and Spalding's
+    0.32 Q0 x / d0, as far as Turner's fountain plunges, lifted into the top and paid for exactly) and the rest mixes
+    from the top down. A gentle pour runs down the wall and lands at no speed. Stage 47's 2 mL/s rule is gone;
+  - **a column's shape is its glassware's**: its layers' heights and its interfaces' areas, so a conical flask
+    narrows.
+- The roadmap: area 8b, the glass in layers (a fixed grid of rings, decided); area 8c, liquids that expand with
+  temperature (their own stage).
+- `docs/DATA_SOURCES.md`: a jet's entrainment (Ricou and Spalding 1961) and a fountain's height (Turner 1966), gated.
+  §20: the stream's simplifications.
+- Tests: energy checks compare ratios, doctest's `Approx` being absolute below 1.
+- §6: the overflow brings its spill cell to its fast equilibria when it receives anything (P1; a gap since Stage 8).
+
+
 ## 0.50.0 (2026-11-25, Stage 50; signed off by the user: "Looks good! Approved, merge and proceed")
 
 - §13 (Stage 50, `docs/TDD_50_MEASURED.md`; `docs/CURRICULUM.md`, step A): **the measured lab**.

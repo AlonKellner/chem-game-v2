@@ -193,7 +193,7 @@ TEST_CASE("column: a denser solution under water stays under it, and what is dis
 		rose += c == lowest(b) ? 0.0 : copper(c);
 	}
 	MESSAGE("the first step moves " << rose << " mol up; Fick: " << expected);
-	CHECK(rose == doctest::Approx(expected).epsilon(0.02));
+	CHECK(rose / expected == doctest::Approx(1.0).epsilon(0.02)); // (a ratio: Approx's tolerance is absolute below 1)
 	// an hour on: still layered, the denser under, the total the same, every layer in order of density
 	run(b, 60 * 3600);
 	CHECK(used(b) >= 1);
@@ -247,7 +247,7 @@ TEST_CASE("column: gas in a layer rises, solids in the top sink into the liquid 
 	run(b, 2);
 	CHECK(mol(b, b.layers[0], builtin::carbon_dioxide) == 0.0);
 	CHECK(mol(b, b.top, builtin::copper_oxide) == 0.0);
-	CHECK(mol(b, lowest(b), builtin::copper_oxide) == doctest::Approx(0.01).epsilon(1e-3));
+	CHECK(mol(b, lowest(b), builtin::copper_oxide) / 0.01 == doctest::Approx(1.0).epsilon(1e-3));
 	REQUIRE(b.sim->world().set_mixing(b.top, 3.0) == Refusal::None);
 	REQUIRE(b.sim->world().set_stirring(b.top, 0.01) == Refusal::None); // (Stage 49: as far as the turning pays)
 	run(b, 600);
@@ -315,7 +315,7 @@ TEST_CASE("measured: stirred, a layered column's potential energy rises at Linde
 	const double paid = 0.2 * watts * steps * STEP_SECONDS;
 	MESSAGE("gained " << gained * 1e6 << " uJ of " << paid * 1e6 << " uJ paid");
 	CHECK(used(stirred) >= 1); // (not yet one: it is paying for the exchange)
-	CHECK(gained == doctest::Approx(paid).epsilon(0.05));
+	CHECK(gained / paid == doctest::Approx(1.0).epsilon(0.05)); // (a ratio: Approx's own tolerance is absolute below 1)
 }
 
 TEST_CASE("column: stirred, two layers become one in the time the turning pays for; a stir stopped short leaves them part mixed (Stage 49)") {
@@ -327,7 +327,7 @@ TEST_CASE("column: stirred, two layers become one in the time the turning pays f
 	REQUIRE(b.sim->world().set_stirring(b.top, 0.002) == Refusal::None); // a fifth of a stirrer's full turning
 	run(b, 30); // half a second: 0.2 mJ of the 0.7 that make them one
 	const double partly = potential(b);
-	CHECK(partly - start == doctest::Approx(0.2 * 0.002 * 0.5).epsilon(0.05));
+	CHECK((partly - start) / (0.2 * 0.002 * 0.5) == doctest::Approx(1.0).epsilon(0.05));
 	CHECK(used(b) >= 1);
 	CHECK(mol(b, lowest(b), builtin::nickel_sulfate_aq) > 1e-3); // the green down in the blue
 	REQUIRE(b.sim->world().set_stirring(b.top, 0.0) == Refusal::None);
@@ -399,3 +399,128 @@ TEST_CASE("column: a column grows as it needs, a block of four layers at a time,
 	CHECK(column(mixed).empty());
 }
 
+
+// ---- a pour's stream (Stage 51)
+
+TEST_CASE("measured: a round jet entrains at Ricou and Spalding's 0.32 Q0 x / d0; one driven into a denser liquid plunges to Turner's 2.46 M^(3/4) B^(-1/2) (Stage 51)") {
+	// Ricou and Spalding 1961 (J. Fluid Mech. 11, 21-32): a jet of volume flux Q0 from a nozzle of diameter d0 carries
+	// 0.32 Q0 x / d0 at x diameters down (of the same density as what it passes). Turner 1966 (J. Fluid Mech. 26,
+	// 779-792): a forced fountain rises to 2.46 M^(3/4) B^(-1/2). Each at its source's own form, for a few jets
+	// (docs/DATA_SOURCES.md).
+	for (const double d0 : { 0.002, 0.005, 0.01 }) {
+		for (const double u0 : { 0.3, 1.2, 3.0 }) {
+			const double q0 = 3.14159265358979323846 * d0 * d0 / 4.0 * u0;
+			const double x = 20.0 * d0;
+			CHECK(jet_entrains(q0, u0) * x / (0.32 * q0 * x / d0) == doctest::Approx(1.0).epsilon(1e-12));
+			const double buoyancy = 9.80665 * 0.08 * q0, momentum = q0 * u0;
+			CHECK(fountain_reach(momentum, buoyancy) / (2.46 * std::pow(momentum, 0.75) / std::sqrt(buoyancy)) == doctest::Approx(1.0).epsilon(1e-12));
+		}
+	}
+	CHECK(jet_entrains(0.0, 1.0) == 0.0);
+	CHECK(fountain_reach(1e-5, 0.0) == 0.0);
+}
+
+TEST_CASE("measured: a stream landing on a layered column raises its potential energy by Linden's 0.2 of its kinetic energy (Stage 51)") {
+	// The stream's kinetic energy, half its mass times its landing speed squared, is the work it does on the column;
+	// 0.2 of it (Linden 1979, as a stirrer's, Stage 49) goes to the column's potential energy, its entrainment first.
+	// Water at 20 mL/s landing at 1.2 m/s (a 7 cm fall) on water over copper sulfate, a step; against a copy with the
+	// same pour landing at no speed.
+	const auto bench = [](double speed) {
+		EdgeId into;
+		Bench b = beaker([&](World::Builder &w, Bench &x) {
+			water(w, x.top, 60.0, 293.15);
+			w.set_amount(x.layers[0], builtin::water, amount_of(80.0 / 18.015)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.112)).set_temperature(x.layers[0], 293.15);
+			const CellId bottle = w.add_cell("bottle");
+			water(w, bottle, 200.0, 293.15);
+			into = w.add_drain(bottle, x.top);
+		});
+		REQUIRE(b.sim->world().set_drain(into, 20e-6, 0.0) == Refusal::None);
+		REQUIRE(b.sim->world().set_landing(b.top, speed) == Refusal::None);
+		return b;
+	};
+	Bench jet = bench(1.2), still = bench(0.0);
+	const double before = potential(jet);
+	REQUIRE(potential(still) == doctest::Approx(before).epsilon(1e-12));
+	run(jet, 1);
+	run(still, 1);
+	const double gained = potential(jet) - potential(still);
+	const double landed_kg = 20e-6 * STEP_SECONDS * 18.015e-3 / builtin_species().species(builtin::water).molar_volume;
+	const double paid = 0.2 * 0.5 * landed_kg * 1.2 * 1.2;
+	MESSAGE("gained " << gained * 1e6 << " uJ of " << paid * 1e6 << " uJ paid; lifted " << mol(jet, jet.top, builtin::copper_sulfate_aq) << " mol of copper sulfate");
+	CHECK(gained / paid == doctest::Approx(1.0).epsilon(0.05)); // (a ratio: Approx's own tolerance is absolute below 1)
+	CHECK(mol(jet, jet.top, builtin::copper_sulfate_aq) > 0.0);
+}
+
+TEST_CASE("column: a stream landing slowly, or on a liquid much denser, plunges less far: Turner's fountain (Stage 51)") {
+	// a trickle at 2 mL/s landing at 0.3 m/s into the water over the blue: the fountain's reach, 2.46 M^(3/4) B^(-1/2),
+	// is under the blue's depth; it lifts less than the whole depth's share
+	EdgeId into;
+	Bench b = beaker([&](World::Builder &w, Bench &x) {
+		water(w, x.top, 60.0, 293.15);
+		w.set_amount(x.layers[0], builtin::water, amount_of(80.0 / 18.015)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.112)).set_temperature(x.layers[0], 293.15);
+		const CellId bottle = w.add_cell("bottle");
+		water(w, bottle, 200.0, 293.15);
+		into = w.add_drain(bottle, x.top);
+	});
+	REQUIRE(b.sim->world().set_drain(into, 2e-6, 0.0) == Refusal::None);
+	REQUIRE(b.sim->world().set_landing(b.top, 0.3) == Refusal::None);
+	run(b, 1);
+	const double area = b.sim->world().meta(b.top).column_area;
+	const double whole = 0.112 * 0.32 * 0.8862269254527580 * std::sqrt(2e-6 * 0.3) * STEP_SECONDS / area;
+	const double lifted = mol(b, b.top, builtin::copper_sulfate_aq);
+	MESSAGE("a trickle lifts " << lifted << " mol; through the whole blue it would " << whole);
+	CHECK(lifted > 0.0);
+	CHECK(lifted < 0.8 * whole);
+}
+
+// ---- a column's shape (Stage 51)
+
+TEST_CASE("column: a column that narrows takes its layers' heights and its interfaces' areas from its shape: diffusion across a narrow neck is slower (Stage 51)") {
+	// A column of the floor's area A0 for 2 cm, then of half of it. Copper sulfate fills it to 3 cm (2 cm of the wide,
+	// 1 cm of the narrow), water over it 2 cm more. By its shape the interface is in the neck (A0 / 2) and the middles
+	// 2.75 cm apart (1.25 cm and 4 cm); as a cylinder of A0 the same volumes stand 1.75 cm apart across A0. Fick's
+	// first step moves D A dc / dz: the narrowing's (1/2 / 2.75) / (1 / 1.75) of the cylinder's.
+	const double a0 = PI * RADIUS * RADIUS, rise = 0.001;
+	const double lower = a0 * 0.02 + 0.5 * a0 * 0.01, upper = 0.5 * a0 * 0.02; // m^3
+	const auto bench = [&](bool shaped) {
+		return beaker([&](World::Builder &w, Bench &x) {
+			const double water_l = lower / builtin_species().species(builtin::water).molar_volume, water_u = upper / builtin_species().species(builtin::water).molar_volume;
+			w.set_amount(x.top, builtin::water, amount_of(water_u)).set_temperature(x.top, 293.15);
+			w.set_amount(x.layers[0], builtin::water, amount_of(water_l)).set_amount(x.layers[0], builtin::copper_sulfate_aq, amount_of(0.05)).set_temperature(x.layers[0], 293.15);
+			if (shaped) {
+				std::vector<double> volumes;
+				for (int k = 0; k <= 80; ++k) {
+					const double z = k * rise;
+					volumes.push_back(z <= 0.02 ? a0 * z : a0 * 0.02 + 0.5 * a0 * (z - 0.02));
+				}
+				w.set_column_shape(x.top, rise, volumes);
+			}
+		});
+	};
+	Bench narrow = bench(true), straight = bench(false);
+	// the layers' own volumes (the solute's adds to the water's), stacked by each shape
+	const auto volume_of = [&](CellId c) {
+		double v = 0.0;
+		const CellState &state = narrow.sim->world().snapshot_cell(c);
+		for (size_t k = 0; k < state.amount.size(); ++k) {
+			const SpeciesDef &d = builtin_species().species(SpeciesId{ static_cast<int32_t>(k) });
+			if (state.amount[k] > 0 && (d.phase == Phase::Liquid || d.phase == Phase::Aqueous)) {
+				v += static_cast<double>(state.amount[k]) * MOL_PER_QUANTUM * d.molar_volume;
+			}
+		}
+		return v;
+	};
+	const double vl = volume_of(narrow.layers[0]), vu = volume_of(narrow.top);
+	const auto height = [&](double v) { return v <= a0 * 0.02 ? v / a0 : 0.02 + (v - a0 * 0.02) / (0.5 * a0); };
+	const double dz_narrow = height(vl + 0.5 * vu) - height(0.5 * vl), across = height(vl) <= 0.02 ? a0 : 0.5 * a0;
+	const double dz_straight = (vl + 0.5 * vu) / a0 - 0.5 * vl / a0;
+	const double expected = (across / dz_narrow) / (a0 / dz_straight);
+	run(narrow, 1);
+	run(straight, 1);
+	// (the copper that crosses, in both its forms: some hydrolyses in the water it reaches, Stage 47)
+	const auto copper = [&](const Bench &b) { return mol(b, b.top, builtin::copper_sulfate_aq) + mol(b, b.top, builtin::copper_hydroxide); };
+	const double ratio = copper(narrow) / copper(straight);
+	MESSAGE("through the neck " << ratio << " of the cylinder's; by the shapes " << expected << " (" << dz_narrow * 100.0 << " cm against " << dz_straight * 100.0 << " cm)");
+	CHECK(expected < 0.4); // (the neck's)
+	CHECK(ratio / expected == doctest::Approx(1.0).epsilon(0.01));
+}

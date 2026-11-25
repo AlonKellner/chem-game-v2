@@ -522,6 +522,15 @@ void Simulation::drain_liquids() {
 		if (!amounts.empty()) {
 			const Refusal refused = transfer(EdgeId{ static_cast<int32_t>(i) }, edge.a, amounts, enthalpy_carried(table, amounts, thermal.temperature));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			// what lands below (Stage 51): the liquid's volume and mass, for a column's jet
+			for (const SpeciesAmount &m : amounts) {
+				const SpeciesDef &def = table.species(m.species);
+				if (def.phase == Phase::Liquid || def.phase == Phase::Aqueous) {
+					const double mol = static_cast<double>(m.amount.quanta) * MOL_PER_QUANTUM;
+					landed_m3_[static_cast<size_t>(edge.b.index)] += mol * def.molar_volume;
+					landed_kg_[static_cast<size_t>(edge.b.index)] += mol * static_cast<double>(table.molar_mass_ug(m.species)) * 1e-9;
+				}
+			}
 		}
 	}
 }
@@ -536,6 +545,7 @@ void Simulation::overflow() {
 		return;
 	}
 	const SpeciesTable &table = world_.species();
+	bool spilled = false;
 	for (int32_t c = 0; c < world_.cell_count(); ++c) {
 		const CellId cell{ c };
 		const CellMeta &meta = world_.meta(cell);
@@ -587,6 +597,12 @@ void Simulation::overflow() {
 		}
 		const Refusal refused = transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal(cell).temperature));
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		spilled = true;
+	}
+	// (Stage 51) what spilled meets what the spill cell holds after this step's settling: it is brought to its fast
+	// equilibria here, as every cell is at a step's end (P1)
+	if (spilled && thermal(spill).defined) {
+		project(spill);
 	}
 }
 
@@ -1095,6 +1111,8 @@ void Simulation::begin_step() {
 	flows_.energy.assign(world_.edges().size() * PROCESSES, 0);
 	flows_.grams.assign(world_.edges().size() * PROCESSES, 0.0);
 	flows_.extent.assign(cells * flows_.reactions, 0);
+	landed_m3_.assign(cells, 0.0);
+	landed_kg_.assign(cells, 0.0);
 	process_ = Process::Reaction;
 	configure_columns();
 }

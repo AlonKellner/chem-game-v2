@@ -857,6 +857,18 @@ how long a liquid left alone keeps turning, 1.5 s.
 The work the turning dissipates is the game's (above: 0.01 W while it turns, its energy decaying over 1.5 s
 after); the mixing reads that dissipation, so a column mixes as the turning builds and dies away.
 
+## A pour's stream: a jet's entrainment and how far it plunges (Stage 51)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A round turbulent jet's entrainment: its volume flux at x down from a nozzle of diameter d0 | `Q(x) = 0.32 Q0 x / d0` (`JET_ENTRAINMENT`, `native/core/src/strata.cpp`; so 0.32 sqrt(π/4) sqrt(M) a metre, M = Q0 u0) | F. P. Ricou and D. B. Spalding, 1961, "Measurements of entrainment by axisymmetrical turbulent jets", *J. Fluid Mech.* 11, 21–32: m/m0 = 0.32 (x/d0)(ρ_s/ρ_0)^½ (the abstract, and the form as reproduced by later reports: a University of Utah report's OCR of the equation; a 1966 College of Aeronautics memo, m/m0 = 0.32 h/d, its own impinging jets about 0.3; searched 2026-11-25). Densities alike here (a liquid into a liquid), so the ratio is 1. Confidence: measured for gas jets into still air far from the nozzle; a stream poured a few centimetres into a beaker is short and confined, so ± 30% | `measured: a round jet entrains at Ricou and Spalding's 0.32 Q0 x / d0; ...`: `jet_entrains` against the source's form for nine jets |
+| A forced fountain's height: a jet driven into a denser fluid | `z = 2.46 M^(3/4) B^(-1/2)` (`FOUNTAIN_HEIGHT`) | J. S. Turner, 1966, "Jets and plumes with negative or reversing buoyancy", *J. Fluid Mech.* 26, 779–792: salt water injected into fresh water, the final (steady) height (as later authors report it: Williamson et al. 2011, Burridge and Hunt; a range of 2.1 to 3.06 across later experiments; the initial height is about 1.43 times the final). Confidence: ± 20% | the same test: `fountain_reach` against the form |
+| The share of the stream's kinetic energy that mixes | 0.2 (Linden 1979, as the stirrer's: above, Stage 49) | a stream's turbulence, as a stirrer's, raises the column's potential energy at most at this efficiency | `measured: a stream landing on a layered column raises its potential energy by Linden's 0.2 of its kinetic energy`: a step's gain against a still copy, within 5% (it is 47.85 µJ of 47.86) |
+
+Chosen for the game: a pouring lip, an outlet or a cap stands 1 cm over the mouth it runs into (`LIP_GAP`,
+`native/game/src/lab.cpp`; the screen's 10 pixels at its scale); a stream lands at the speed of its fall from there to
+the liquid's surface, `sqrt(2 g h)`; a gentle pour runs down the wall and lands at none.
+
 ## Glass and stoppers under pressure (Stage 28)
 
 Calibrated, not measured: no source found gives the pressure at which ordinary laboratory glass

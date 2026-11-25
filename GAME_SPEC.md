@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.50.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.51.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -384,8 +384,11 @@ user, 2026-11-24: "allowing for things like water and oil to not mix permanently
 transfer"; "adjacent cells should have a gradient between them, not always a crisp line").
 - **A column.** A vessel of a standard shape is a column: its own rigid cell (its wall, its gas, the uppermost of
   its liquid) and, under it, layer cells, each a homogeneous layer of liquid with what is dissolved in it and its
-  solids. Joined by column edges, which are no gas path (no gas tree, no sealing runs along them). The column's
-  cross-section is its floor's.
+  solids. Joined by column edges, which are no gas path (no gas tree, no sealing runs along them). Its shape is its
+  glassware's (Stage 51): the inside's volume at 64 heights from the floor to the brim (`CellMeta::column_shape`,
+  saved). A layer's bottom, middle (by volume) and top heights, and the area across each interface, come from it,
+  so a conical flask's narrowing is in its diffusion, conduction and mixing; a column given none is a cylinder of
+  its floor's area.
 - **Grown as it needs.** A vessel starts as one cell. A column with no spare layer, where a steep step wants one,
   grows by four empty layers under its bottom at the next step's start (from the state alone: a saved lab grows as
   an unsaved one); one a gentle pour needs grows the same way. Emptied layers stay as spares (a world's cell ids are
@@ -403,6 +406,15 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
     (each mixed as it lands) raise it by g (ρ_lower − ρ_upper) v d, d the distance between their middles; at
     V_u V_l / (V_u + V_l) they are one and merge, and what is left goes to the interface over them; where it pays
     for less, they exchange what it pays for. A stir stopped short leaves the column part mixed;
+  - a pour's stream (Stage 51): what drained into the top this step landed at the speed of its fall (from a lip, an
+    outlet or a cap 1 cm over the mouth to the liquid's surface, `sqrt(2 g h)`; `CellMeta::landing`). Its kinetic
+    energy, ½ m u², is work on the column, of which Γ raises the potential energy. Its entrainment first: a jet of
+    flux q and momentum flux M = q u entrains 0.32 sqrt(π/4) sqrt(M) a metre of its path (Ricou and Spalding 1961:
+    0.32 Q0 x / d0). It passes the top and each layer no denser than its mixture, and plunges into a denser one no
+    further than a forced fountain rises (Turner 1966: 2.46 M^(3/4) B^(-1/2), B = g' q). What it entrains it lifts
+    into the top, paying g [Σ between (ρ_k − ρ_j) h_j + (ρ_k − ρ_top) h_top / 2] a cubic metre from the work. What
+    is left mixes from the top down. Liquids of nearly one density mix fully as they are poured; strongly
+    different ones as far as the stream's energy pays; a gentle pour lays a clean layer;
   - two layers that stay exchange what is dissolved down its gradient (Fick's law across the distance between
     their middles, each species' own diffusion coefficient, §7) and heat (by conduction, k A / dz, the solvent's
     conductivity; the edge's conductance set at the step's start);
@@ -414,9 +426,10 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   molar volumes scaled by the solvent's own expansion from 25 °C (Lienhard's water, `data/solutions.json`'s
   `solvent`).
 - **In the lab.** A layered vessel reads as a whole (its contents, its temperature as they would come to mixed); the
-  readout and the debug panel say how it is layered. A gentle pour (`"gentle": true`, the pour menu's "pour gently", or a
-  trickle by hand, no more than 2 mL/s) pushes the liquid there down a place and lands as a layer of its own; a faster pour stirs it in. A
-  burner under a layered vessel heats its lowest layer. A bench may start a vessel layered (`"layers"`, from the top
+  readout and the debug panel say how it is layered. Every pour pushes the liquid there down a place and lands as a
+  layer of its own (Stage 51); its stream then mixes it as below. A gentle pour (`"gentle": true`, the pour menu's
+  "pour gently") runs down the wall as a trickle and lands at no speed. A burner under a layered vessel heats its
+  lowest layer. A bench may start a vessel layered (`"layers"`, from the top
   down). Saved and loaded, a column goes on exactly.
 - **Poured from.** A layered vessel tipped to pour gives its top layer first; the one under it rises to the lip as
   the level falls to it. A pour reads the whole vessel's liquid (how much it holds, whether any stands over its
@@ -2848,7 +2861,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Boiling's bubbles are derived each step from a vessel's floor and its bulk, over the floor's whole area, as a haze (Stage 45) | A bulk that superheats, bumping, boiling chips and the onset's hysteresis are not modelled; bubbles rise in a column the floor's width, not narrowing with the vessel; at a strong flame the floor boils from the start (450 W through 34 cm² is more than convection carries at any bulk temperature); a bubble does not grow as the pressure falls up the column, nor merge |
 | The long-wave range (Stage 46): the room one temperature, its wall, cube and room in front a black body; fused silica for the lab's glass; grey emissivities; a flame a grey gas and its soot, calibrated; the sensor's response flat over 8–14 µm | A camera sees no hot thing in a glass's reflection; borosilicate's weaker Reststrahlen band reads a few per cent more emissive than silica's 0.79; a real flame's CO₂ and H₂O bands are lines, not grey |
 | A thermal camera (Stage 48): one sensor pixel a layout pixel, every frame; no noise of its own, no lens's blur, no frame rate; its search a few times a second; its overlay a 3 × 5 font | A real camera's 160 × 120 or 320 × 240 pixels, its NETD of about 0.05 K and its 9 Hz are a better experience left out (the user's word: "same resolution and frame rate as the rest of the rendered lab") |
-| A vessel's column (Stage 47): layers homogeneous, the column's cross-section its floor's, its volumes the table's at 25 °C | A layer's buoyancy reads the solvent's measured expansion, but its volume does not change with it; an overturn mixes the two layers whole (no plume); a pour lays nothing at its boundary but what it pours (a gentle one) or stirs all in (a fast one), no entrainment between; water does not diffuse back against a solute; a conical flask's narrowing is not in its layers' thicknesses; a band ignores the narrow lines of its liquid |
+| A vessel's column (Stage 47): layers homogeneous, its volumes the table's at 25 °C; a layer's middle by volume (Stage 51) | A layer's buoyancy reads the solvent's measured expansion, but its volume does not change with it (roadmap area 8c); an overturn mixes the two layers whole (no plume); water does not diffuse back against a solute; a band ignores the narrow lines of its liquid; in a narrowing column a layer's centre of mass is a little under its middle by volume |
+| A pour's stream (Stage 51): a free round jet's entrainment (Ricou and Spalding's, from gas jets far from their nozzle) and a forced fountain's reach, from where it lands; all of its kinetic energy work on the column at Linden's 0.2 | A stream a few centimetres long in a beaker is near its nozzle and confined, ± 30%; the energy that stays in the layer it lands in is counted as if it reached the interfaces below, so a pour mixes at most as much as it could |
 | Stirring a column (Stage 49): the mixing efficiency a constant, Linden's maximum (0.2); the stirring's work spent from the bottom up, at the interfaces alone; the potential energy it raises not in the ledger | A weakly stratified column mixes faster than it would (its efficiency would be lower); the layer the stirrer stirs deepens up the column, the top's mixed last; the joules raised (under a millijoule) are not taken from the liquid's heat |
 | One temperature per vessel (a vessel of no standard shape; any vessel while it is mixed) | The whole flask reaches the solid's temperature in stage 1; heat losses are overstated |
 | Constant heat capacities | A few percent over the demo's temperature range |

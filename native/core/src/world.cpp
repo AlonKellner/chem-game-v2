@@ -106,13 +106,19 @@ CellId World::Builder::add_cell(std::string name) {
 
 CellId World::Builder::add_rigid_cell(std::string name, double volume) {
 	names_.push_back(std::move(name));
-	meta_.push_back(CellMeta{ false, 0.0, true, volume, 1.0 });
+	CellMeta m;
+	m.rigid = true;
+	m.volume = volume;
+	meta_.push_back(std::move(m));
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
 CellId World::Builder::add_reservoir(std::string name, double temperature) {
 	names_.push_back(std::move(name));
-	meta_.push_back(CellMeta{ true, temperature, false, 0.0, 1.0 });
+	CellMeta m;
+	m.reservoir = true;
+	m.reservoir_temperature = temperature;
+	meta_.push_back(std::move(m));
 	return CellId{ static_cast<int32_t>(names_.size() - 1) };
 }
 
@@ -141,6 +147,15 @@ World::Builder &World::Builder::set_column(CellId top, double area, double whole
 		CellMeta &m = meta_[static_cast<size_t>(top.index)];
 		m.column_volume = whole > 0.0 ? whole : m.volume;
 		m.column_area = area;
+	}
+	return *this;
+}
+
+World::Builder &World::Builder::set_column_shape(CellId top, double rise, std::vector<double> volumes) {
+	if (top.index >= 0 && static_cast<size_t>(top.index) < meta_.size() && rise > 0.0 && volumes.size() >= 2) {
+		CellMeta &m = meta_[static_cast<size_t>(top.index)];
+		m.column_rise = rise;
+		m.column_shape = std::move(volumes);
 	}
 	return *this;
 }
@@ -407,6 +422,17 @@ Refusal World::set_stirring(CellId cell, double watts) {
 		return Refusal::BadValue;
 	}
 	meta_[static_cast<size_t>(cell.index)].stirring = watts;
+	return Refusal::None;
+}
+
+Refusal World::set_landing(CellId cell, double speed) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!good_conductance(speed)) { // (at least 0 and finite)
+		return Refusal::BadValue;
+	}
+	meta_[static_cast<size_t>(cell.index)].landing = speed;
 	return Refusal::None;
 }
 
