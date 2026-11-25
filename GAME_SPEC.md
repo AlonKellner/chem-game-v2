@@ -1730,7 +1730,7 @@ the calorimeter's).
 mouth it runs into it as it stands. Its paper drains by Darcy's law, every patch of the wetted cone in proportion to the
 head over it, the stem's column hanging under it, `Q = k 2π tan 30° / cos 30° (h³/6 + L h²/2)`, its permeance from the
 paper's Herzberg time (150 s: 100 mL at 20 °C through 10 cm² under 10 cm), as water's viscosity goes; its cone drained,
-its stem runs out. It keeps every grain (an outlet's drain carries liquid only). Drained, holding only a residue,
+its stem runs out. It keeps every grain (an outlet's drain carries liquid only); its inside is its cone's, the paper its floor, where its residue rests. Drained, holding only a residue,
 carried onto a vessel it opens the pour menu: its residue is scraped out ("tip in the solid").
 
 **The notebook** (Stage 54, `lab/notebook.hpp`; `docs/TDD_54_NOTEBOOK.md`). What a student writes down, kept by the lab:

@@ -5059,9 +5059,10 @@ struct Ui::Impl {
 				continue;
 			}
 			paint_item(i, drawn(i));
-			// what stands under a condenser's outlet is joined to it by a drip
+			// what stands under a condenser's outlet is joined to it by a drip (Stage 59: a condenser's alone; a burette, a
+			// pipette or a funnel delivers from its tip, in the mouth under it)
 			const ItemView &v = view.items[static_cast<size_t>(i)];
-			if (v.drains_to >= 0) {
+			if (v.drains_to >= 0 && v.condenser) {
 				const Rect a = rect(i), b = rect(v.drains_to);
 				line(a.x + a.w + 26, a.y + a.h + 14, b.cx(), b.y, rgba(70, 120, 190, 200), 1);
 			}

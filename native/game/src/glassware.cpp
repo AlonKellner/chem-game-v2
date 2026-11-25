@@ -569,6 +569,11 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	if (kind == "measuring_cylinder") {
 		// its inside is the tube's alone, its floor the foot's top: the foot is solid glass
 		in = inward(std::vector<Corner>{ { { 0.0, v.floor }, 0.0, 0.0 }, { { R, v.floor }, 0.05, t }, { { R, H }, 0.0, t } });
+	} else if (kind == "filter_funnel") {
+		// (Stage 59) its inside is its cone's, from the apex up, its paper there its floor (what it keeps rests on it);
+		// its stem a fine bore under it that runs full while it drains
+		v.floor = v.stem;
+		in = inward(std::vector<Corner>{ { { 0.0, v.stem }, 0.0, 0.0 }, { { R, H }, 0.0, t } });
 	}
 	reach(in, H);
 	v.inside = below(rounded(in), H);

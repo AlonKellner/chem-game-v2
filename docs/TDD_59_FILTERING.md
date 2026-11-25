@@ -20,6 +20,11 @@ The curriculum's step C, its second half (`docs/CURRICULUM.md`: T6, S3), after S
   on the paper.
 - **A residue is scraped out**: a drained funnel holding only solids, carried onto a vessel, opens the pour menu
   ("tip in the solid"), where any other outlet vessel stands on it.
+- **Its inside is its cone's**, from the apex up: the paper is its floor, and what it keeps rests on it; its stem a
+  fine bore under it (as a measuring cylinder's foot is solid glass). Seen in the stage's first picture: the residue
+  sat at the stem's foot, the inside's floor then.
+- **A drip line** is drawn from a condenser's outlet alone: a burette, a pipette or a funnel delivers from its tip, in
+  the mouth under it (the picture showed a line from the funnel's stem off to its side, Stage 52's burette's too).
 - **The experiment** `separate`: copper oxide separated from copper sulfate by water and a filter, weighed.
 
 ## Phases
@@ -38,7 +43,7 @@ None moved: no session holds a funnel.
 
 ## Measured
 
-- 28 mL of water through the funnel's paper in 55 s, a gram of copper oxide kept on it, none through.
+- 28 mL of water through the funnel's paper in 35 s, a gram of copper oxide kept on it, none through.
 - `separate` at the bench's seed: 0.9515 g weighed against the mixture's 0.95148 g of oxide; the filtrate holds all
   1.278 g of the sulfate.
 
