@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.51.0 (2026-11-25, Stage 51)
+## 0.51.0 (2026-11-25, Stage 51; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 51, `docs/TDD_51_COLUMN.md`), more of the vertical dimension:
   - **a pour's stream mixes where it lands**: every pour lands as a layer of its own. Its kinetic energy is work on

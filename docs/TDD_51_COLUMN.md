@@ -25,7 +25,7 @@ GAME_SPEC 0.51.0 covers:
 | 51.4 | Liquid volumes that grow with temperature | Its own stage (the user, 2026-11-25): roadmap area 8c |
 | 51.5 | The glass in layers: the design (roadmap area 8b) | Documented; a stage of its own |
 | 51.6 | Rebased onto Stage 50 (gas exchanged at an open mouth); overflow's spill brought to its fast equilibria | Done; the demo's golden re-recorded on Stage 50's with the user's approval |
-| 51.7 | GAME_SPEC 0.51.0, `make gates`, the user's sign-off | `make gates` passed on Stage 50 (862 s: ASan+UBSan 862, ctest 511, Godot); on the GPU "pour gently" lays the green on the blue and "pour" mixes them; awaiting sign-off |
+| 51.7 | GAME_SPEC 0.51.0, `make gates`, the user's sign-off | `make gates` passed on Stage 50 (862 s: ASan+UBSan 862, ctest 511, Godot); on the GPU "pour gently" lays the green on the blue and "pour" mixes them; signed off by the user ("Approved, merge and proceed") |
 
 ## 51.1 A pour's stream
 
