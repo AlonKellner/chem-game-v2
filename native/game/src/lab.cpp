@@ -1598,6 +1598,7 @@ struct Lab::Impl {
 			if (!(liquid > 0.0)) {
 				x.swirl = 0.0;
 				x.suspended = 0.0;
+				world().set_stirring(x.cell, 0.0);
 				continue;
 			}
 			// what the liquid can hold, and what its solids take: worked out when it holds something else (within
@@ -1643,6 +1644,8 @@ struct Lab::Impl {
 			if (x.swirl < 1e-9) {
 				x.swirl = 0.0;
 			}
+			// what the turning dissipates, which mixes a layered column as far as it pays (§6, Stage 49)
+			world().set_stirring(x.cell, x.swirl / SWIRL_SECONDS);
 			if (!(solid > 0.0)) {
 				x.suspended = 0.0;
 				continue;

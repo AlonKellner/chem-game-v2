@@ -32,6 +32,11 @@ constexpr double SPLIT_ABOVE = 1.0, MERGE_BELOW = 0.1;
 constexpr double KELVIN_UNIT = 1.0, FRACTION_UNIT = 1e-3;
 constexpr double OVERTURN_BELOW = 1e-9; // the lower lighter by more than this share overturns
 constexpr double THINNEST = 2.5e-4; // m: no layer is split below twice this (a diffusion zone is sub-millimetre for minutes)
+// Stirred (Stage 49): of the work a stirrer's turning dissipates, this share raises the column's potential energy
+// (Linden 1979: the mixing efficiency of stirred stratified fluids, at most 0.2 +- 0.05; Osborn 1980's 0.2;
+// docs/DATA_SOURCES.md)
+constexpr double MIXING_EFFICIENCY = 0.2;
+constexpr double GRAVITY = 9.80665; // m/s^2, standard
 
 bool holds(const SpeciesTable &table, const CellState &c, Phase phase) {
 	for (size_t s = 0; s < c.amount.size(); ++s) {
@@ -231,14 +236,6 @@ void Simulation::stratify(const Column &col) {
 	};
 	const auto liquid = [&](size_t i) { return holds(table, state(i), Phase::Liquid); };
 	const PhaseMask solids = phase_bit(Phase::Solid), gas = phase_bit(Phase::Gas);
-	// stirred, the column is one cell: everything up into the top, from the bottom
-	if (world_.meta(col.top).mixing > 1.0) {
-		for (size_t i = n - 1; i >= 1; --i) {
-			if (!empty(state(i))) {
-				move(i, i - 1, PHASES_ALL, 1.0);
-			}
-		}
-	}
 	// gas rises, from the bottom up
 	for (size_t i = n - 1; i >= 1; --i) {
 		if (holds(table, state(i), Phase::Gas)) {
@@ -291,6 +288,71 @@ void Simulation::stratify(const Column &col) {
 		}
 		if (!merged) {
 			break;
+		}
+	}
+	// Stirred (Stage 49): the turning's work mixes the layers as far as it pays, from the bottom up (the stirrer stands
+	// on the floor). Of what it dissipates this step, MIXING_EFFICIENCY raises the column's potential energy. Two layers
+	// that exchange a volume v (each mixed as it lands) raise it by g (rho_lower - rho_upper) v d, d the distance
+	// between their middles; at V_u V_l / (V_u + V_l) they are one, and merge. What is left of the step's work goes to
+	// the interface over them; where it pays for less, they exchange what it pays for, and the step's work is spent.
+	{
+		const double area_m2 = world_.meta(col.top).column_area;
+		double budget = MIXING_EFFICIENCY * world_.meta(col.top).stirring * step_seconds_; // J
+		for (size_t guard = 0; budget > 0.0 && area_m2 > 0.0 && guard < 2 * n; ++guard) {
+			size_t i = n; // the lowest interface: between i and i + 1, both liquid
+			for (size_t k = n - 1; k >= 1; --k) {
+				if (liquid(k) && liquid(k - 1)) {
+					i = k - 1;
+					break;
+				}
+			}
+			if (i == n) {
+				break;
+			}
+			double up = 0.0, down = 0.0;
+			const double vu = solution_m3(table, state(i)), vl = solution_m3(table, state(i + 1));
+			if (!liquid_density(table, state(i), kelvin(i), up) || !liquid_density(table, state(i + 1), kelvin(i + 1), down) || !(vu > 0.0) || !(vl > 0.0)) {
+				break;
+			}
+			const double whole = vu * vl / (vu + vl); // the volume exchanged that makes them one
+			const double per_m3 = GRAVITY * (down > up ? down - up : 0.0) * 0.5 * (vu + vl) / area_m2; // J a m^3 exchanged
+			const double pays = per_m3 > 0.0 ? budget / per_m3 : whole;
+			if (pays >= whole) {
+				// one: the lower up into the upper, the layers under it up a place
+				budget -= per_m3 * whole;
+				move(i + 1, i, PHASES_ALL & ~gas, 1.0);
+				for (size_t k = i + 2; k < n; ++k) {
+					if (!empty(state(k))) {
+						move(k, k - 1, PHASES_ALL, 1.0);
+					}
+				}
+				continue;
+			}
+			// an exchange: v of each into the other, of its liquid and what is dissolved in it
+			const PhaseMask wet = phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous);
+			const double tu = kelvin(i), tl = kelvin(i + 1);
+			const auto share_of = [&](size_t from, double share) {
+				std::vector<SpeciesAmount> amounts;
+				const CellState &c = state(from);
+				for (size_t s = 0; s < c.amount.size(); ++s) {
+					const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+					const auto q = static_cast<int64_t>(static_cast<double>(c.amount[s]) * share);
+					if (c.amount[s] > 0 && !d.wall && (wet & phase_bit(d.phase)) != 0 && q > 0) {
+						amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ q } });
+					}
+				}
+				return amounts;
+			};
+			const std::vector<SpeciesAmount> sinks = share_of(i, pays / vu), rises = share_of(i + 1, pays / vl);
+			if (!sinks.empty()) {
+				const Refusal refused = transfer(col.up[i], col.cells[i], sinks, enthalpy_carried(table, sinks, tu));
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+			if (!rises.empty()) {
+				const Refusal refused = transfer(col.up[i], col.cells[i + 1], rises, enthalpy_carried(table, rises, tl));
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+			budget = 0.0;
 		}
 	}
 	// what is dissolved moves down its gradient between two layers that stay (Fick's law across the distance between

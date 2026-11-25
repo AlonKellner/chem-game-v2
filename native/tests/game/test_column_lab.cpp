@@ -109,11 +109,30 @@ TEST_CASE("column: a gentle pour lays a lighter liquid on a denser one; a fast p
 	CHECK(item(*fast, "beaker").layers.empty()); // one liquid
 }
 
-TEST_CASE("column: a stirrer mixes a layered vessel into one; a burner heats its lowest layer (Stage 47)") {
+TEST_CASE("column: a stirrer mixes a layered vessel into one as its turning builds; a short stir leaves it part mixed; a burner heats its lowest layer (Stage 47, Stage 49)") {
+	// (Stage 49, the user's test: stirred, the layers merged at once) the turning builds over a second and a half,
+	// and mixes the layers as far as what it dissipates pays
 	auto stirred = open(read("data/benches/layers.json"));
+	stirred->set_checking(true);
 	ok(*stirred, R"({"do": "stir", "vessel": "beaker", "on": true})");
-	ok(*stirred, R"({"do": "wait", "seconds": 1})");
+	ok(*stirred, R"({"do": "wait", "seconds": 0.25})");
+	CHECK(item(*stirred, "beaker").layers.size() >= 2); // a quarter of a second: still layered
+	ok(*stirred, R"({"do": "wait", "seconds": 5})");
 	CHECK(item(*stirred, "beaker").layers.empty());
+	auto brief = open(read("data/benches/layers.json"));
+	ok(*brief, R"({"do": "stir", "vessel": "beaker", "on": true})");
+	ok(*brief, R"({"do": "wait", "seconds": 0.3})");
+	ok(*brief, R"({"do": "stir", "vessel": "beaker", "on": false})");
+	ok(*brief, R"({"do": "wait", "seconds": 10})"); // its turning gone
+	const lab::ItemView part = item(*brief, "beaker");
+	REQUIRE(part.layers.size() >= 2);
+	CHECK(mol_in(part.layers.back(), "nickel_sulfate_aq") > 1e-3); // the green stirred down into the blue
+	// the top still the greener: less of the blue than an even mixture, more of the green than the bottom
+	const lab::LayerView &top = part.layers.front(), &bottom = part.layers.back();
+	CHECK(mol_in(top, "copper_sulfate_aq") / top.liquid_ml < 0.5 * 0.112 / part.liquid_ml);
+	CHECK(mol_in(top, "nickel_sulfate_aq") / top.liquid_ml > mol_in(bottom, "nickel_sulfate_aq") / bottom.liquid_ml);
+	MESSAGE("a short stir: " << part.layers.size() << " layers; the top " << top.liquid_ml << " mL, Cu " << mol_in(top, "copper_sulfate_aq") << " mol; the bottom "
+							 << bottom.liquid_ml << " mL, Ni " << mol_in(bottom, "nickel_sulfate_aq") << " mol");
 	auto heated = open(read("data/benches/layers.json"));
 	ok(*heated, R"({"do": "heat", "burner": "burner", "vessel": "beaker"})");
 	ok(*heated, R"({"do": "valve", "burner": "burner", "to": 0.2})");
