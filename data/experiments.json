@@ -129,6 +129,13 @@
 			"tutorial": "tutorials/rates.json"
 		},
 		{
+			"id": "solubility",
+			"title": "A solubility curve",
+			"summary": "Measured and written down: four beakers of copper sulfate crystals in water, each heated gently and stirred until its last crystal dissolves; its solubility against that temperature is the curve, and ln s against 1/T the heat of solution. A guess first.",
+			"bench": "benches/solubility.json",
+			"tutorial": "tutorials/solubility.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

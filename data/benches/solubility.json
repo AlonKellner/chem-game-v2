@@ -1,0 +1,114 @@
+{
+	"format": "chem-bench/2",
+	"note": "A solubility curve (GAME_SPEC §13, Stage 57; docs/CURRICULUM.md, experiments 4 and 45): four beakers of 10.0 g of water with 5, 6, 7 and 8 g of copper sulfate pentahydrate, more than dissolves at room temperature. Read by instruments: each heated gently and stirred until its last crystal dissolves, its thermometer read then; the salt's solubility in g per 100 g of water against that temperature is the solubility curve, and ln s against 1/T its heat of solution.",
+	"readings": "instruments",
+	"seed": 101,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "b5",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				4,
+				7
+			],
+			"label": "5.00 g of blue crystals in 10.0 g of water",
+			"contents": {
+				"water": {
+					"g": 10
+				},
+				"copper_sulfate_pentahydrate": {
+					"g": 5.0,
+					"particles": 2000
+				}
+			}
+		},
+		{
+			"id": "b6",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				8,
+				7
+			],
+			"label": "6.00 g of blue crystals in 10.0 g of water",
+			"contents": {
+				"water": {
+					"g": 10
+				},
+				"copper_sulfate_pentahydrate": {
+					"g": 6.0,
+					"particles": 2000
+				}
+			}
+		},
+		{
+			"id": "b7",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				12,
+				7
+			],
+			"label": "7.00 g of blue crystals in 10.0 g of water",
+			"contents": {
+				"water": {
+					"g": 10
+				},
+				"copper_sulfate_pentahydrate": {
+					"g": 7.0,
+					"particles": 2000
+				}
+			}
+		},
+		{
+			"id": "b8",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"loss": 0.3,
+			"at": [
+				16,
+				7
+			],
+			"label": "8.00 g of blue crystals in 10.0 g of water",
+			"contents": {
+				"water": {
+					"g": 10
+				},
+				"copper_sulfate_pentahydrate": {
+					"g": 8.0,
+					"particles": 2000
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

@@ -47,8 +47,46 @@ temperature. A real crystal of half a millimetre dissolves in a stirred beaker i
 
 | Phase | Topic | Status |
 |---|---|---|
-| 57.1 | The sources, GAME_SPEC, DATA_SOURCES | |
+| 57.1 | The sources, GAME_SPEC, DATA_SOURCES | Done |
 | 57.2 | The core: Sano's transport, dissolving at transport's pace; the measured gates | Done |
 | 57.3 | The goldens: the evidence and the user's approval | Done |
-| 57.4 | The experiment: the solubility curve | |
+| 57.4 | The experiment: the solubility curve | Done |
 | 57.5 | This document, CHANGELOG, `make gates`, the user's sign-off | |
+
+## What was built
+
+**The core** (`sim.cpp` `surface_steps`, `thermo.cpp`). The surface law's transport, `Sh D / d` its gap, with Sh
+Sano's from the dissipation per kg of the cell's liquid (`dissipation_per_kg`: the cell's `stirring` watts over its
+liquid's and dissolved species' mass; `liquid_density`; water's viscosity from its table); `mixing` no longer read. A
+reaction whose kinetics say `"dissolution": "transport"` (`Kinetics::dissolves_by_transport`, from the data
+generator) has, when its solid dissolves, its surface step times `DETACHMENT` (1000), in series. The lab's debug
+panel: what limits a reaction read at the stirring's own dissipation; "stirring would make it faster" at a stirred
+beaker's 0.1 W/kg.
+
+**The experiment** `solubility` (13 steps): a prediction; four beakers, each the burner under it, stirred, a gentle
+flame; until its last crystal goes; its temperature recorded, its solubility written, the flame off.
+
+## Measured
+
+- Stirred, 3 g of the pentahydrate in 10 g of water is down to 0.018 g in five minutes (it was an hour); heated at
+  about 1 K/min, a mixture's last crystal goes 3 to 9 K past its saturation temperature, faster heating later.
+- A 0.53 mm crystal's Sherwood number: 25, 43 and 76 at 0.01, 0.1 and 1 W/kg (2 still).
+- The model's solubility: 19.75, 23.8, 28.8, 34.6 and 41.2 g per 100 g of water at 20, 30, 40, 50 and 60 C (the
+  handbook's 20.7, 25.0, 28.5, 33.3, 40.0); van 't Hoff's slope 13.4 to 15.7 kJ/mol rising with the temperature,
+  15.0 over 25–60 C.
+- `solubility` at the bench's seed: the last crystals at 40.4, 48.9, 55.8, 60.8 C for 27.1, 31.5, 35.7, 39.7 g;
+  16.1 kJ/mol (R² 0.997); 32.4 g at 50 C.
+
+**Tests**:
+
+| Test | What it checks |
+|---|---|
+| `test_measured.cpp` | the oxide's and the pentahydrate's transport at rest and at 0.1 W/kg against Sano's formula; a crystal dissolving at transport's pace; Sano's Sherwood number at 0.01, 0.1, 1 W/kg |
+| `test_solution.cpp` | its benches stirred by watts, not the old factor; equilibrium untouched (the oracle's saturated solution moves nothing) |
+| `test_experiments.cpp` (3) | `solubility` strict (the curve and its heat of solution from the notebook, the report, the prediction), at a person's pace, free |
+
+## Open
+
+- **Cooling's side**: a solution cooled nucleates only deeply supersaturated (Sheng's rate, a lower bound; Lyall et
+  al. found a metastable zone of 3–4 K), so the crystals' reappearing temperature is not a lesson yet.
+- **Natural convection** about a crystal on an unstirred floor: Sh = 2 there, slower than a real still beaker.

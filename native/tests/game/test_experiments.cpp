@@ -854,3 +854,47 @@ TEST_CASE("experiment rates: followed with its own gestures, free, it completes 
 	pupil::follow_through(p, 1800);
 	completed(p);
 }
+
+TEST_CASE("experiment solubility: followed with its own gestures, strict, the curve and its heat of solution (Stage 57)") {
+	Pupil p("data/benches/solubility.json", "data/tutorials/solubility.json");
+	CHECK(pupil::follow_through(p, 3600) > 30);
+	completed(p);
+	// the points as the plot pairs them: a temperature recorded, then s written
+	std::vector<double> x, y, celsius, s;
+	double t = 0.0;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.quantity.what == "celsius") {
+			t = e.value;
+		} else if (e.label == "s") {
+			celsius.push_back(t);
+			s.push_back(e.value);
+			x.push_back(1.0 / (t + 273.15));
+			y.push_back(std::log(e.value));
+		}
+	}
+	REQUIRE(x.size() == 4);
+	for (size_t k = 0; k < 4; ++k) {
+		MESSAGE(s[k] << " g per 100 g: its last crystal gone at " << celsius[k] << " C");
+	}
+	const lab::LineFit f = lab::fit_line(x, y);
+	REQUIRE(f.ok);
+	const double dh = -f.slope * 8.314462618 / 1000.0, at50 = std::exp(f.intercept + f.slope / 323.15);
+	MESSAGE("dH " << dh << " kJ/mol (R2 " << f.r2 << "), " << at50 << " g at 50 C");
+	CHECK(dh == doctest::Approx(15.0).epsilon(0.25));
+	CHECK(at50 == doctest::Approx(34.6).epsilon(0.08));
+	report(p, { at50, dh });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 30"));
+}
+
+TEST_CASE("experiment solubility: played as a person plays it, strict, it completes (Stage 57)") {
+	Pupil p("data/benches/solubility.json", "data/tutorials/solubility.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment solubility: followed with its own gestures, free, it completes (Stage 57)") {
+	Pupil p("data/benches/solubility.json", "data/tutorials/solubility.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
