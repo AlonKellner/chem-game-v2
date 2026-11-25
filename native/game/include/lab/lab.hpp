@@ -151,6 +151,7 @@ struct ItemView {
 	double nm = 0.0, blank_nm = 0.0;
 	bool blanked = false;
 	std::optional<double> absorbance;
+	std::optional<double> holder_c; // its cell holder's set temperature, C (Stage 56); none: off
 	bool overload = false;
 };
 

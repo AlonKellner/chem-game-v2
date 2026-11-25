@@ -27,6 +27,9 @@ struct Model {
 	double most = 3.0; // what it displays at most ("OL" past it)
 	double lamp_k = 2900.0; // its lamp's filament
 	double beam_mm = 15.0; // the beam's height over a cell's floor
+	// its cell holder (Stage 56): what it may be set to, C; how hard it heats, W per kelvin under the set
+	// temperature, and at most, W
+	double holder_least_c = 20.0, holder_most_c = 80.0, holder_gain_w_k = 5.0, holder_most_w = 10.0;
 };
 const Model &model();
 
@@ -35,7 +38,12 @@ struct Sample {
 	std::vector<std::pair<chem::SpeciesId, double>> molar;
 	double path_cm = 1.0;
 	bool opaque = false; // a solid in the beam: no light through
+	// (Stage 56) grains held up in the liquid: their extinction, decadic, per cm, the same at every wavelength (grains
+	// far larger than the light's wavelength take twice their cross-section out of the beam)
+	double turbidity = 0.0;
 };
+// A suspension's turbidity, decadic per cm: `grains` per cm^3 of the liquid, each `diameter_cm` across
+double turbidity(double grains_per_cm3, double diameter_cm);
 // Its absorbance at 1 nm (decadic): Beer and Lambert, sum of epsilon c l over what absorbs
 chem::optics::Spectrum absorbance(const Sample &sample);
 // Its absorbance at a wavelength, between the nanometres, its narrow lines read exactly

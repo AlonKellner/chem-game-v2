@@ -23,8 +23,8 @@ std::string bench() {
 				"contents": {"water": {"g": 100}}},
 			{"id": "blue", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [14, 7],
 				"contents": {"water": {"g": 100}, "copper_sulfate_aq": {"mol": 0.005}}},
-			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [20, 8]},
-			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [23, 8]}
+			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [20, 8]},
+			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [23, 8]}
 		]})";
 }
 
@@ -138,4 +138,76 @@ TEST_CASE("spectro screen: its slider and a nanometre's buttons tune it; a blank
 	p.click("blank:spec");
 	CHECK(p.item("spec").blanked);
 	CHECK(p.drawn("absorbance 0.000"));
+}
+
+TEST_CASE("spectro lab: its cell holder warms the cuvette in its well to a set temperature and holds it, every invariant kept (Stage 56)") {
+	auto l = open(bench());
+	l->set_checking(true);
+	std::string why;
+	must(*l, R"({"do": "pour", "from": "blue", "to": "c1", "ml": 3.5})");
+	CHECK_FALSE(l->command(R"({"do": "holder", "spectrophotometer": "spec", "celsius": 95})", why));
+	must(*l, R"({"do": "holder", "spectrophotometer": "spec", "celsius": 50})");
+	CHECK(*item(*l, "spec").holder_c == 50.0);
+	must(*l, R"({"do": "wait", "seconds": 30})"); // nothing in its well: nothing warms
+	CHECK(item(*l, "c1").celsius == doctest::Approx(20.0).epsilon(0.01));
+	must(*l, R"({"do": "insert", "spectrophotometer": "spec", "cuvette": "c1", "onto": true})");
+	must(*l, R"({"do": "wait", "seconds": 60})");
+	const double warming = item(*l, "c1").celsius;
+	MESSAGE("the cuvette after a minute in the holder: " << warming << " C");
+	CHECK(warming > 40.0);
+	// saved and loaded while it warms: the same lab, step by step
+	auto loaded = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(loaded != nullptr, why);
+	CHECK(loaded->digest() == l->digest());
+	must(*l, R"({"do": "wait", "seconds": 240})");
+	must(*loaded, R"({"do": "wait", "seconds": 240})");
+	CHECK(loaded->digest() == l->digest());
+	const double held = item(*l, "c1").celsius;
+	MESSAGE("held at " << held << " C");
+	CHECK(held == doctest::Approx(50.0).epsilon(0.02)); // within a kelvin of it: its loss to the room against its gain
+	CHECK(held < 50.0);
+	// lifted out, it cools; off, the holder takes its edge away
+	must(*l, R"({"do": "remove", "spectrophotometer": "spec"})");
+	must(*l, R"({"do": "wait", "seconds": 120})");
+	CHECK(item(*l, "c1").celsius < held - 5.0);
+	must(*l, R"({"do": "holder", "spectrophotometer": "spec"})");
+	CHECK_FALSE(item(*l, "spec").holder_c);
+}
+
+TEST_CASE("spectro screen: its cell holder's switch and 5 C steps (Stage 56)") {
+	pupil::Pupil p("data/benches/beer.json", "data/tutorials/beer.json", false);
+	p.drag("item:spec", "square:3,13");
+	p.click("item:spec");
+	CHECK(p.drawn("holder off"));
+	p.click("cell:spec");
+	CHECK(*p.item("spec").holder_c == 25.0);
+	p.click("cell:spec:+");
+	p.click("cell:spec:+");
+	CHECK(*p.item("spec").holder_c == 35.0);
+	CHECK(p.drawn("holder 35 C"));
+	p.click("cell:spec:-");
+	CHECK(*p.item("spec").holder_c == 30.0);
+	p.click("cell:spec");
+	CHECK_FALSE(p.item("spec").holder_c);
+}
+
+TEST_CASE("spectro lab: grains held up in a stirred cuvette dim the beam; settled, they leave it (Stage 56)") {
+	// a large grain takes twice its cross-section out of the beam: 10^4 grains of 40 um a cm^3, 0.109 a cm
+	CHECK(lab::spectro::turbidity(1e4, 40e-4) == doctest::Approx(2.0 * 3.14159265 * 0.25 * 16e-6 * 1e4 / std::log(10.0)).epsilon(1e-9));
+	auto l = open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "spec", "kind": "spectrophotometer", "nm": 750, "at": [2, 12]},
+		{"id": "c", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [9, 7], "contents": {"water": {"g": 3.5}}},
+		{"id": "o", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 30, "at": [18, 7], "contents": {"copper_oxide": {"g": 0.05, "particles": 35000}}}]})");
+	must(*l, R"({"do": "insert", "spectrophotometer": "spec", "cuvette": "c", "onto": true})");
+	must(*l, R"({"do": "blank", "spectrophotometer": "spec"})");
+	must(*l, R"({"do": "tip", "from": "o", "to": "c", "species": "copper_oxide", "all": true})");
+	CHECK(*item(*l, "spec").absorbance == 0.0); // in water it does not dissolve; settled, under the beam
+	must(*l, R"({"do": "stir", "vessel": "c", "on": true})");
+	must(*l, R"({"do": "wait", "seconds": 20})");
+	const double stirred = *item(*l, "spec").absorbance;
+	MESSAGE("50 mg of copper oxide held up in 3.5 mL: A " << stirred);
+	CHECK(stirred > 0.2);
+	must(*l, R"({"do": "stir", "vessel": "c", "on": false})");
+	must(*l, R"({"do": "wait", "seconds": 60})");
+	CHECK(*item(*l, "spec").absorbance < 0.01);
 }

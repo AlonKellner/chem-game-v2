@@ -25,13 +25,25 @@ const Model &model() {
 		o.most = j.at("most").get<double>();
 		o.lamp_k = j.at("lamp_k").get<double>();
 		o.beam_mm = j.at("beam_mm").get<double>();
+		const nlohmann::json &h = j.at("holder");
+		o.holder_least_c = h.at("range_c").at(0).get<double>();
+		o.holder_most_c = h.at("range_c").at(1).get<double>();
+		o.holder_gain_w_k = h.at("gain_w_k").get<double>();
+		o.holder_most_w = h.at("most_w").get<double>();
 		return o;
 	}();
 	return m;
 }
 
+double turbidity(double grains_per_cm3, double diameter_cm) {
+	constexpr double EXTINCTION = 2.0; // a large grain's efficiency: what it blocks and what it diffracts
+	const double pi = 3.14159265358979323846;
+	return EXTINCTION * pi * 0.25 * diameter_cm * diameter_cm * grains_per_cm3 / std::log(10.0);
+}
+
 optics::Spectrum absorbance(const Sample &sample) {
 	optics::Spectrum a{};
+	a.fill(sample.turbidity * sample.path_cm);
 	for (const auto &[id, c] : sample.molar) {
 		if (optics::kind(id) != optics::Kind::Absorb || !(c > 0.0)) {
 			continue;
