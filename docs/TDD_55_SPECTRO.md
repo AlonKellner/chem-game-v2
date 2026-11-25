@@ -61,7 +61,7 @@ instrument and plot.
 | 55.5 | The notebook's written entries; the plot's pairing | Done |
 | 55.6 | Predictions; progress and the list's marks; the C API and the host | Done |
 | 55.7 | The experiment: Beer–Lambert's line and an unknown | Done |
-| 55.8 | This document, CHANGELOG, `make gates`, the user's sign-off | |
+| 55.8 | This document, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (1142 s: ASan+UBSan 1142, ctest 833, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
 
 ## The goldens
 
