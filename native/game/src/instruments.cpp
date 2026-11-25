@@ -29,7 +29,7 @@ const Data &data() {
 		for (const json &b : j.at("balances")) {
 			o.balances.push_back(Balance{ b.at("name").get<std::string>(), b.at("readability_g").get<double>(), b.at("capacity_g").get<double>(), b.at("linearity_g").get<double>() });
 		}
-		o.thermometer = Meter{ j.at("thermometer").at("resolution_c").get<double>(), j.at("thermometer").at("accuracy_c").get<double>() };
+		o.thermometer = Meter{ j.at("thermometer").at("resolution_c").get<double>(), j.at("thermometer").at("accuracy_c").get<double>(), j.at("thermometer").value("time_constant_s", 0.0) };
 		o.ph = Meter{ j.at("ph_meter").at("resolution").get<double>(), j.at("ph_meter").at("accuracy").get<double>() };
 		o.hand = j.at("hand").get<double>();
 		for (const auto &[name, density] : j.at("walls_g_cm3").items()) {
@@ -91,6 +91,10 @@ double share(uint64_t seed, std::string_view key) {
 	z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
 	z ^= z >> 31;
 	return static_cast<double>(z >> 11) / static_cast<double>(1ull << 52) - 1.0; // 53 bits to [-1, 1)
+}
+
+double lagged(double reading, double truth, double dt, double tau) {
+	return tau > 0.0 ? reading + (truth - reading) * (1.0 - std::exp(-dt / tau)) : truth;
 }
 
 double rounded(double value, double resolution) {

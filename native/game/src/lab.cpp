@@ -125,6 +125,9 @@ struct Item {
 	// a balance (Stage 50): its model (data/instruments.json) and its tare, a conventional mass, g; a vessel's label
 	std::string model, label;
 	double tare = 0.0;
+	// a vessel's thermometer by instruments (Stage 52): what it reads, K, following its vessel with its own lag; NaN until
+	// it has read anything
+	double read_kelvin = std::numeric_limits<double>::quiet_NaN();
 };
 
 // a vessel with an outlet at its foot (Stage 52: a burette, a pipette): its glassware, or null
@@ -1908,6 +1911,21 @@ struct Lab::Impl {
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		mid_step = true; // (moved before the step: a trace begun after it cannot start where the last one ended)
 	}
+	// By instruments, each vessel's thermometer follows it a step (Stage 52): first order, its probe's time constant
+	void follow_thermometers() {
+		if (!instruments) {
+			return;
+		}
+		const double tau = instruments::thermometer().time_constant_s;
+		for (Item &x : items) {
+			if (x.kind != Kind::Vessel || x.burst) {
+				continue;
+			}
+			const double t = kelvin(x);
+			x.read_kelvin = std::isnan(x.read_kelvin) ? t : instruments::lagged(x.read_kelvin, t, chem::STEP_SECONDS, tau);
+		}
+	}
+
 	// The true volume at a piece's mark (Stage 52): its nominal, off by its class's tolerance as drawn from the seed
 	double mark_ml(const Item &x) const {
 		const glass::Vessel *g = x.glassware.empty() ? nullptr : glass::find(x.glassware, x.nominal_ml);
@@ -2371,6 +2389,7 @@ struct Lab::Impl {
 				return false;
 			}
 		}
+		follow_thermometers();
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (!trials.empty()) {
 			run_trials();
@@ -2833,7 +2852,8 @@ struct Lab::Impl {
 				// its instruments' readings (GAME_SPEC §13, Readings; Stage 50): the truth and an offset drawn from the seed
 				v.label = item.label;
 				const instruments::Meter t = instruments::thermometer(), ph = instruments::ph_meter();
-				v.read_c = instruments::rounded(v.celsius + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
+				const double reads_c = m.instruments && !std::isnan(item.read_kelvin) ? item.read_kelvin - 273.15 : v.celsius; // (its lag, Stage 52)
+				v.read_c = instruments::rounded(reads_c + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
 				if (v.ph) {
 					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
 				}
@@ -6137,6 +6157,9 @@ json Lab::Impl::save() const {
 		if (outlet_of(item) != nullptr && item.pours_into < 0 && item.cap != 0.0) { // a burette's stopcock (Stage 52)
 			list.back()["stopcock"] = bits(item.cap);
 		}
+		if (!std::isnan(item.read_kelvin)) { // its thermometer by instruments (Stage 52)
+			list.back()["thermometer"] = bits(item.read_kelvin);
+		}
 		if (item.kind == Kind::Thermal) { // a camera's frame and settings (Stage 48)
 			const ThermalSettings &t = item.thermal;
 			list.back()["thermal"] = { { "room", t.frame_room }, { "at", { bits(t.frame_x), bits(t.frame_y) } }, { "palette", t.palette }, { "emissivity", bits(t.emissivity) },
@@ -6334,6 +6357,10 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.glassware = j.value("glassware", "");
 			item.screwed = j.value("screwed", false);
 			item.label = j.value("label", "");
+			if (j.contains("thermometer") && !from_bits(j.at("thermometer"), item.read_kelvin)) { // (Stage 52)
+				why = "the save holds a number that is not one";
+				return nullptr;
+			}
 			if (j.contains("stopcock") && !from_bits(j.at("stopcock"), item.cap)) { // (Stage 52)
 				why = "the save holds a number that is not one";
 				return nullptr;

@@ -942,3 +942,13 @@ previews); the shapes within the standards' words.
 
 **A foam cup** (the calorimeter's): an 8 oz expanded-polystyrene cup, 81 mm across its top, 51 mm its base, 89 mm
 high (a cup maker's listing), its wall about 2.5 mm (J. Chem. Educ. 2025, 102, 1281: 5.09 mm for two nested cups).
+
+## A thermometer's lag (Stage 52)
+
+| What | Value | Source | Held by |
+|---|---|---|---|
+| A thermometer probe's response | t90 = 10 s in stirred water (90 s in moving air, 400 s in still air); a first order's time constant t90 / ln 10 = 4.3 s | Vernier TMP-BTA's manual (a 20 kΩ NTC thermistor in a 4.0 mm 316 stainless sheath) | `measured: a thermometer reaches 90 % of a step in its probe's 10 s` |
+| A laboratory thermometer, for comparison | time constant 2–6 s in vigorously stirred water by its bulb; one calorimetric thermometer 4.3 s stirred, 14.5 s unstirred | Harper, NBS Bulletin 8(4), 1912, Table II | — |
+
+By instruments each vessel's thermometer follows its vessel as a first-order instrument with that time constant,
+stirred or not (§20).

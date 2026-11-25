@@ -172,3 +172,27 @@ TEST_CASE("lab: a volumetric flask made up to its mark holds its own true volume
 	REQUIRE(b.read_ml);
 	CHECK(lab::instruments::check_I1({ lab::instruments::Read{ "burette", *b.scale_ml, *b.read_ml, b.tolerance_ml, 0.01 } }) == "");
 }
+
+TEST_CASE("lab: by instruments a vessel's thermometer lags it by its time constant, and is saved (Stage 52)") {
+	auto l = open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "readings": "instruments",
+		"items": [{"id": "beaker", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [8, 7], "contents": {"water": {"g": 100}}},
+			{"id": "flame", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})");
+	must(*l, R"({"do": "heat", "burner": "flame", "vessel": "beaker"})");
+	must(*l, R"({"do": "valve", "burner": "flame", "to": 1})");
+	must(*l, R"({"do": "wait", "seconds": 60})");
+	// heating at a steady rate r, a first-order thermometer reads r tau behind: the truth tau seconds ago
+	const double t0 = item(l->view(), "beaker").celsius;
+	must(*l, R"({"do": "wait", "seconds": 4.3})");
+	const lab::ItemView now = item(l->view(), "beaker");
+	const double rate = (now.celsius - t0) / 4.3; // K/s
+	CHECK(rate > 0.05);
+	// (its offset within its 0.2 C, its resolution 0.1 C)
+	CHECK(std::fabs(*now.read_c - (now.celsius - rate * lab::instruments::thermometer().time_constant_s)) <= 0.2 + 0.05 + 0.02);
+	CHECK(*now.read_c < now.celsius - 0.5 * rate * 4.3);
+	// saved and loaded, it reads on as it was
+	std::string why;
+	auto copy = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(copy != nullptr, why);
+	CHECK(*item(copy->view(), "beaker").read_c == *now.read_c);
+	CHECK(copy->digest() == l->digest());
+}
