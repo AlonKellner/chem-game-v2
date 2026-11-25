@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.50.0 (2026-11-25, Stage 50; the user's sign-off pending)
+## 0.50.0 (2026-11-25, Stage 50; signed off by the user: "Looks good! Approved, merge and proceed")
 
 - §13 (Stage 50, `docs/TDD_50_MEASURED.md`; `docs/CURRICULUM.md`, step A): **the measured lab**.
   - **A balance** (`balance`, top-loading 0.01 g or analytical 0.1 mg): no cell, no edge; under a vessel as a

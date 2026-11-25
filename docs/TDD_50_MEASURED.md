@@ -84,7 +84,7 @@ the tables' water reads the closed form of its glass, water and air, to its read
 | 50.6 | The screen: a typed amount in the pour menu, a scoop in the tip menu | Done |
 | 50.7 | The experiments: the hydrate, the carbonate; played strict, at a person's pace and free | Done |
 | 50.8 | Gas exchanged at an open mouth (the user's choice, 2026-11-25): the gases' diffusion in air, the core's process, E1, the lab's mouths, the sweeps | Done |
-| 50.9 | The goldens re-recorded with the user's approval; this document, CHANGELOG, `make gates`, the user's sign-off | Goldens re-recorded (approved 2026-11-25); `make gates` passed (754 s: ASan+UBSan 754, ctest 501, Godot 13 of 13, goldens unchanged); the user's sign-off pending |
+| 50.9 | The goldens re-recorded with the user's approval; this document, CHANGELOG, `make gates`, the user's sign-off | Goldens re-recorded (approved 2026-11-25); `make gates` passed (754 s: ASan+UBSan 754, ctest 501, Godot 13 of 13, goldens unchanged); signed off by the user, 2026-11-25 ("Looks good! Approved, merge and proceed") |
 
 ## What was built
 
