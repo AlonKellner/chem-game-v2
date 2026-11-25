@@ -658,6 +658,26 @@ const char *cg_ui_experiment(cg_ui *ui) {
 	return ui->text.c_str();
 }
 
+const char *cg_ui_progress(cg_ui *ui) {
+	if (ui == nullptr) {
+		return "";
+	}
+	ui->text = ui->ui->progress();
+	return ui->text.c_str();
+}
+
+cg_status cg_ui_set_progress(cg_ui *ui, const char *progress_json) {
+	if (ui == nullptr || progress_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_set_progress: null argument");
+	}
+	try {
+		std::string why;
+		return ui->ui->set_progress(progress_json, why) ? CG_OK : fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	} catch (const std::exception &e) {
+		return fail(CG_ERR_INTERNAL, e.what());
+	}
+}
+
 const char *cg_ui_message(cg_ui *ui) {
 	return ui != nullptr ? ui->ui->message().c_str() : "";
 }

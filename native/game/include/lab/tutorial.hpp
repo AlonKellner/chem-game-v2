@@ -50,6 +50,7 @@ struct TutorialScreen {
 	bool paused = false;
 	std::string selected; // the item selected, "" for none
 	TutorialEdit edit;
+	int predicted = 0; // how many of the report's predictions are made (Stage 55)
 };
 
 struct TutorialView {
@@ -73,6 +74,7 @@ struct TutorialReport {
 	double tolerance = 0.0;
 	bool relative = false;
 	std::string why;
+	bool predict = false; // (Stage 55) asked for as a prediction before the run, then shown beside the result
 };
 
 class Tutorial {

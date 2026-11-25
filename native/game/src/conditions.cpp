@@ -702,9 +702,11 @@ bool holds(const Cond &c, const CondContext &x) {
 		for (const NoteLogger &l : x.view.loggers) {
 			logged = logged || (l.quantity.item == c.item && l.quantity.what == *c.logging);
 		}
+		int count = 0;
 		for (const NoteEntry &e : x.view.notebook) {
-			written = written || (e.quantity.item == c.item && e.quantity.what == *c.recorded);
+			count += c.recorded && e.quantity.item == c.item && e.quantity.what == *c.recorded ? 1 : 0;
 		}
+		written = written || count >= c.recorded_count.value_or(1);
 		if (!logged || !written) {
 			return false;
 		}

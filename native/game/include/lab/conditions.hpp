@@ -101,6 +101,7 @@ struct Cond {
 	// (Stage 55) a number written in the notebook under that label (and, with `noted_value`, that number)
 	std::optional<std::string> noted;
 	std::optional<double> noted_value;
+	std::optional<int> recorded_count; // with `recorded`: at least that many entries of it (Stage 55)
 	std::optional<std::string> goal; // that goal is met (§13.5)
 	std::optional<bool> goals_met; // every game goal is met (and there is one)
 	std::optional<int> slot; // the item is in that slot of the outbox

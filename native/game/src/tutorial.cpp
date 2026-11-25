@@ -103,6 +103,17 @@ struct Reader : CondReader {
 			CondReader{ b, {}, {} } {
 		// the screen's part editor, which only a tutorial reads (§13.3)
 		extra_key = [](const std::string &key, const json &value, Cond &c, CondReader &r, bool &ok) {
+			if (key == "predicted") {
+				// (Stage 55) at least that many of the report's predictions made, on the screen
+				ok = value.is_number_integer() && value.get<int>() >= 1;
+				if (!ok) {
+					r.why = "\"predicted\" is how many predictions are made, at least 1";
+					return true;
+				}
+				const int n = value.get<int>();
+				c.extra.push_back([n](const CondContext &x) { return x.host != nullptr && static_cast<const TutorialScreen *>(x.host)->predicted >= n; });
+				return true;
+			}
 			if (key != "editor") {
 				return false;
 			}
@@ -373,6 +384,7 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 		item.tolerance = j["tolerance"].get<double>();
 		item.relative = j.value("relative", false);
 		item.why = j.value("why", std::string());
+		item.predict = j.value("predict", false);
 		// what it names must be on the bench; a zero it divides by now may not be zero at the end
 		double now = 0.0;
 		std::string why_not;

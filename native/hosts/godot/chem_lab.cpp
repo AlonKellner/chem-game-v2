@@ -77,6 +77,30 @@ godot::String ChemLab::get_experiments_path() const {
 	return experiments_path_;
 }
 
+void ChemLab::set_progress_path(const godot::String &path) {
+	progress_path_ = path;
+}
+
+godot::String ChemLab::get_progress_path() const {
+	return progress_path_;
+}
+
+// progress through the experiments (Stage 55): written whenever it has changed
+void ChemLab::keep_progress() {
+	if (ui_ == nullptr || progress_path_.is_empty()) {
+		return;
+	}
+	const std::string now = cg_ui_progress(ui_);
+	if (now == progress_) {
+		return;
+	}
+	const godot::Ref<godot::FileAccess> file = godot::FileAccess::open(progress_path_, godot::FileAccess::WRITE);
+	if (file.is_valid()) {
+		file->store_string(godot::String::utf8(now.c_str()));
+		progress_ = now;
+	}
+}
+
 godot::PackedInt32Array ChemLab::tutorial() const {
 	godot::PackedInt32Array out;
 	cg_tutorial t;
@@ -182,6 +206,14 @@ void ChemLab::_ready() {
 			godot::UtilityFunctions::push_error("ChemLab: the experiments ", experiments_path_, ": ", catalogue.is_empty() ? godot::String("cannot be read") : godot::String::utf8(cg_last_error()));
 		}
 	}
+	// progress kept from an earlier run (Stage 55)
+	if (!progress_path_.is_empty() && godot::FileAccess::file_exists(progress_path_)) {
+		const godot::String kept = godot::FileAccess::get_file_as_string(progress_path_);
+		if (cg_ui_set_progress(ui_, kept.utf8().get_data()) != CG_OK) {
+			godot::UtilityFunctions::push_warning("ChemLab: the progress ", progress_path_, " is not one: ", godot::String::utf8(cg_last_error()));
+		}
+	}
+	progress_ = cg_ui_progress(ui_);
 	// the optical pass: a compute shader over the whole screen, shown under what is painted over it
 	optics_ = memnew(godot::TextureRect);
 	optics_->set_size(godot::Vector2(1920.0f, 1080.0f));
@@ -221,6 +253,7 @@ void ChemLab::_process(double delta) {
 		// (a play's frames are a 120 Hz display's, whatever this machine makes of them: the same play each time)
 		cg_ui_frame(ui_, cg_ui_playing(ui_) != nullptr ? 1.0 / 120.0 : delta);
 		ui_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - now) / 1000.0;
+		keep_progress();
 		const char *mark = cg_ui_playing(ui_);
 		mark_ = mark != nullptr ? godot::String::utf8(mark) : godot::String();
 		// a picture the play asks for (Stage 42): taken once the frame is painted, into LAB_SHOTS (or user://)
@@ -569,6 +602,9 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_experiments_path", "path"), &ChemLab::set_experiments_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_experiments_path"), &ChemLab::get_experiments_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "experiments_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_experiments_path", "get_experiments_path");
+	godot::ClassDB::bind_method(godot::D_METHOD("set_progress_path", "path"), &ChemLab::set_progress_path);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_progress_path"), &ChemLab::get_progress_path);
+	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "progress_path"), "set_progress_path", "get_progress_path");
 	godot::ClassDB::bind_method(godot::D_METHOD("tutorial"), &ChemLab::tutorial);
 	godot::ClassDB::bind_method(godot::D_METHOD("set_strict", "strict"), &ChemLab::set_strict);
 	godot::ClassDB::bind_method(godot::D_METHOD("experiment"), &ChemLab::experiment);

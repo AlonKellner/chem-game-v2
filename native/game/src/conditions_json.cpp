@@ -153,6 +153,12 @@ bool CondReader::cond(const json &j, Cond &c) {
 			} else {
 				c.noted = v.get<std::string>();
 			}
+		} else if (key == "recorded_count") {
+			if (!v.is_number_integer() || v.get<int>() < 1) {
+				ok = fail("\"recorded_count\" is a whole number, at least 1");
+			} else {
+				c.recorded_count = v.get<int>();
+			}
 		} else if (key == "noted_value") {
 			if (!v.is_number()) {
 				ok = fail("\"noted_value\" is a number");
