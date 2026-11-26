@@ -619,6 +619,42 @@ void cg_ui_set_strict(cg_ui *ui, int32_t strict) {
 	}
 }
 
+cg_status cg_ui_add_pictures(cg_ui *ui, const char *pictures_json) {
+	if (ui == nullptr || pictures_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_add_pictures: null argument");
+	}
+	std::string why;
+	if (!ui->ui->add_pictures(pictures_json, why)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	}
+	return CG_OK;
+}
+
+const char *cg_ui_pictures(cg_ui *ui) {
+	if (ui == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_pictures: null screen");
+		return nullptr;
+	}
+	ui->text = ui->ui->pictures();
+	return ui->text.c_str();
+}
+
+int32_t cg_ui_pictures_changed(const cg_ui *ui) {
+	return ui != nullptr && ui->ui->pictures_changed() ? 1 : 0;
+}
+
+void cg_ui_set_capture_ahead(cg_ui *ui, int32_t on) {
+	if (ui != nullptr) {
+		ui->ui->set_capture_ahead(on != 0);
+	}
+}
+
+void cg_ui_capture_pictures(cg_ui *ui) {
+	if (ui != nullptr) {
+		ui->ui->capture_pictures();
+	}
+}
+
 cg_status cg_ui_experiments(cg_ui *ui, const char *catalogue_json, cg_read_file read, void *user) {
 	if (ui == nullptr || catalogue_json == nullptr) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_experiments: null argument");

@@ -28,6 +28,7 @@ build/
 native/build*/
 # The Godot project's build output and copied data (make native)
 engines/godot/bin/
+engines/godot/pictures/
 engines/godot/data/
 engines/godot/shaders/optics_pixel.glslinc
 

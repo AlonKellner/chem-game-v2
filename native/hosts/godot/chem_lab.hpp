@@ -110,6 +110,10 @@ private:
 	godot::String tutorial_path_ = "res://data/tutorials/demo.json";
 	godot::String experiments_path_ = "res://data/experiments.json";
 	godot::String progress_path_ = "user://progress.json";
+	// the supplies' pictures (Stage 61): those built ahead (make native), and those this host captured since
+	godot::String pictures_built_ = "res://pictures/supplies.json";
+	godot::String pictures_kept_ = "user://pictures.json";
+	void keep_pictures();
 	std::string progress_; // as last kept (Stage 55)
 	void keep_progress();
 	godot::CharString read_; // the last file the catalogue's reader gave (cg_read_file's text is borrowed)

@@ -318,6 +318,15 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
  * strict, a running tutorial takes only its step's gestures and its clock waits for them; free, it only
  * points at them. The screen's own: it stays through a reset and another experiment. */
 CG_API void cg_ui_set_strict(cg_ui *ui, int32_t strict);
+/* The supplies' pictures (GAME_SPEC §13.1, Stage 61): a host gives back those it kept ("chem-pictures/1"); takes
+ * every one the screen has (borrowed until the next call on this screen), and whether one was captured since it last
+ * took them; chooses whether a supply with none has its own captured apart (off as opened); and (a build's tool)
+ * has every one the bench lacks captured, waiting. */
+CG_API cg_status cg_ui_add_pictures(cg_ui *ui, const char *pictures_json);
+CG_API const char *cg_ui_pictures(cg_ui *ui);
+CG_API int32_t cg_ui_pictures_changed(const cg_ui *ui);
+CG_API void cg_ui_set_capture_ahead(cg_ui *ui, int32_t on);
+CG_API void cg_ui_capture_pictures(cg_ui *ui);
 
 /* The experiments (GAME_SPEC §13.7, Stage 41): a chem-experiments/1 catalogue (data/experiments.json), each
  * entry's bench and tutorial (null for none) inlined or a path, read by `read`: the file's text, borrowed

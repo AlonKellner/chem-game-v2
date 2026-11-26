@@ -3,9 +3,13 @@
 // outbox, holds what is put aside, still simulated, in as many slots as it needs.
 #include "lab/lab.hpp"
 #include "lab/search.hpp"
+#include "lab/optics_scene.hpp"
+#include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -224,4 +228,59 @@ TEST_CASE("search: a query's words, in any order and case, each start a keyword 
 	hot.celsius = 80.0;
 	CHECK(lab::search::matches("hot beaker", lab::search::keywords(hot)));
 	CHECK(lab::search::matches("water", lab::search::keywords(hot, "Pure water")));
+}
+
+namespace {
+
+// a bench whose only supply is a beaker of water
+const char *const ONE_SUPPLY = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+	{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 100}}}]})";
+
+// the screen's colour over a supply's box, sampled
+std::vector<double> box_colours(lab::Ui &ui) {
+	std::vector<double> out;
+	const lab::OpticsScene &scene = ui.optics();
+	for (int y = 100; y < 196; y += 7) {
+		for (int x = 12; x < 108; x += 7) {
+			double rgba[4];
+			lab::optics_pixel(scene, x, y, rgba);
+			for (int c = 0; c < 3; ++c) {
+				out.push_back(rgba[c] * rgba[3]);
+			}
+		}
+	}
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("pictures: a supply's box is its picture, captured once of it alone, showing what the pass drew there; given back, none is captured again (Stage 61)") {
+	std::string why;
+	auto ui = lab::Ui::open(ONE_SUPPLY, why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(1.0 / 60.0);
+	const std::vector<double> live = box_colours(*ui);
+	CHECK_FALSE(ui->pictures_changed());
+	ui->capture_pictures();
+	CHECK(ui->pictures_changed());
+	const std::string kept = ui->pictures();
+	CHECK_FALSE(ui->pictures_changed());
+	ui->frame(1.0 / 60.0);
+	const std::vector<double> shown = box_colours(*ui);
+	REQUIRE(shown.size() == live.size());
+	double worst = 0.0, sum = 0.0;
+	for (size_t k = 0; k < live.size(); ++k) {
+		worst = std::max(worst, std::fabs(shown[k] - live[k]));
+		sum += std::fabs(shown[k] - live[k]);
+	}
+	MESSAGE("the picture against the pass: mean " << sum / static_cast<double>(live.size()) << ", worst " << worst);
+	CHECK(sum / static_cast<double>(live.size()) < 0.03);
+	// given back to a screen of the same bench, it is shown at once, and nothing is captured
+	auto again = lab::Ui::open(ONE_SUPPLY, why);
+	REQUIRE(again != nullptr);
+	REQUIRE_MESSAGE(again->add_pictures(kept, why), why);
+	again->capture_pictures(); // (it has every one: none to capture)
+	CHECK_FALSE(again->pictures_changed());
+	again->frame(1.0 / 60.0);
+	CHECK(box_colours(*again) == shown);
 }

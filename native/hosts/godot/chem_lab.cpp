@@ -86,6 +86,17 @@ godot::String ChemLab::get_progress_path() const {
 }
 
 // progress through the experiments (Stage 55): written whenever it has changed
+void ChemLab::keep_pictures() {
+	if (ui_ == nullptr || !cg_ui_pictures_changed(ui_)) {
+		return;
+	}
+	const char *now = cg_ui_pictures(ui_);
+	const godot::Ref<godot::FileAccess> file = godot::FileAccess::open(pictures_kept_, godot::FileAccess::WRITE);
+	if (now != nullptr && file.is_valid()) {
+		file->store_string(godot::String::utf8(now));
+	}
+}
+
 void ChemLab::keep_progress() {
 	if (ui_ == nullptr || progress_path_.is_empty()) {
 		return;
@@ -184,6 +195,15 @@ void ChemLab::_ready() {
 	// A frame of the display (120 Hz: 8.3 ms) gives the lab's steps 3 ms of the CPU at most (Stage 36): the scene,
 	// the draw list and the optical pass have the rest, at any speed of the clock.
 	cg_ui_set_budget(ui_, LAB_STEP_BUDGET_MS);
+	// the supplies' pictures (Stage 61): those built ahead, then those kept from before; any still missing captured
+	// apart, a supply at a time, and kept
+	for (const godot::String &path : { pictures_built_, pictures_kept_ }) {
+		const godot::String text = godot::FileAccess::file_exists(path) ? godot::FileAccess::get_file_as_string(path) : godot::String();
+		if (!text.is_empty() && cg_ui_add_pictures(ui_, text.utf8().get_data()) != CG_OK) {
+			godot::UtilityFunctions::push_warning("ChemLab: the pictures ", path, ": ", godot::String::utf8(cg_last_error()));
+		}
+	}
+	cg_ui_set_capture_ahead(ui_, 1);
 	if (!tutorial_path_.is_empty()) {
 		const godot::String tutorial = godot::FileAccess::get_file_as_string(tutorial_path_);
 		if (tutorial.is_empty() || cg_ui_tutor(ui_, tutorial.utf8().get_data()) != CG_OK) {
@@ -254,6 +274,7 @@ void ChemLab::_process(double delta) {
 		cg_ui_frame(ui_, cg_ui_playing(ui_) != nullptr ? 1.0 / 120.0 : delta);
 		ui_ms_ = static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - now) / 1000.0;
 		keep_progress();
+		keep_pictures();
 		const char *mark = cg_ui_playing(ui_);
 		mark_ = mark != nullptr ? godot::String::utf8(mark) : godot::String();
 		// a picture the play asks for (Stage 42): taken once the frame is painted, into LAB_SHOTS (or user://)

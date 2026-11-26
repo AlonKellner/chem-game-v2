@@ -9,6 +9,7 @@
 
 int run_study(const char *name); // study.cpp
 int run_session(int argc, char **argv, bool bench); // run.cpp
+int run_capture(int argc, char **argv); // capture.cpp (Stage 61)
 
 namespace {
 
@@ -19,6 +20,7 @@ int usage() {
 						 "  run SESSION [--record FILE | --check FILE] [--quiet]\n"
 						 "             a session script played through the C API, every invariant checked\n"
 						 "  bench SESSION   the same with the checks off, timed\n"
+						 "  capture PICTURES BENCH...   the supplies' pictures built ahead (Stage 61), kept in PICTURES\n"
 						 "  study cooling         a flask cooling in a room, against Newton's law\n"
 						 "  study decomposition   malachite in a flask over a flame\n"
 						 "  study balloon         the same flask with a balloon on its mouth\n"
@@ -48,6 +50,9 @@ int main(int argc, char **argv) {
 	}
 	if (std::strcmp(argv[1], "run") == 0 || std::strcmp(argv[1], "bench") == 0) {
 		return run_session(argc - 2, argv + 2, std::strcmp(argv[1], "bench") == 0);
+	}
+	if (std::strcmp(argv[1], "capture") == 0) {
+		return run_capture(argc - 2, argv + 2);
 	}
 	if (std::strcmp(argv[1], "study") == 0 && argc >= 3) {
 		return run_study(argv[2]);

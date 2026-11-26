@@ -26,6 +26,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <cstring>
+#include <future>
 #include <map>
 #include <set>
 #include <utility>
@@ -350,6 +352,14 @@ struct Ui::Impl {
 	// first slot on the screen and whether its bar is held; the two searches, and which of them is typed into (0 none,
 	// 1 Supplies, 2 Storage)
 	int supply_base = 0;
+	// (Stage 61) the supplies' pictures, by what is drawn of each (picture_key); the one being captured apart (its
+	// key, and its picture as it comes); whether one was captured since the host last took them; one to capture,
+	// alone in the cabinet's first box (capture_one)
+	std::map<std::string, Picture> pictures;
+	std::string capturing_key;
+	std::future<Picture> capturing;
+	bool pictures_new = false;
+	std::string capture_only;
 	int storage_from = 0;
 	bool storage_scrolling = false;
 	std::string supplies_query, storage_query;
@@ -441,7 +451,7 @@ struct Ui::Impl {
 		view = lab->view();
 		supply_base = static_cast<int>(view.items.size());
 		for (const ItemView &s : view.supplies) { // (Stage 61) those the search leaves, in the cabinet's boxes
-			if (lab::search::matches(supplies_query, lab::search::keywords(s))) {
+			if (capture_only.empty() ? lab::search::matches(supplies_query, lab::search::keywords(s)) : s.id == capture_only) {
 				view.items.push_back(s);
 				view.items.back().place = "cabinet";
 			}
@@ -780,6 +790,112 @@ struct Ui::Impl {
 		if (act({ { "do", "note" }, { "label", note_label }, { "value", v } })) {
 			note_value.clear();
 			note_focus = 2;
+		}
+	}
+	// ---- the supplies' pictures (Stage 61): what is drawn of a supply, as a key (FNV-1a: the same on every build of
+	// the same source, so a picture built ahead is found again); a box's pixels read from a scene; one captured alone
+	OpticsRoom room_was;
+	bool capture_ahead = false; // (a host's: supplies with no picture captured apart, one at a time)
+	static std::string picture_key(const ItemView &s) {
+		json j = { { "pictures", 1 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
+			{ "h", s.h }, { "label", s.label }, { "wall", s.wall_mm }, { "floor", s.floor_mm }, { "condenser", s.condenser } };
+		json held = json::array();
+		for (const SubstanceView &c : s.contents) {
+			held.push_back({ c.species, std::string(1, c.phase), std::round(c.mol * 1e9) / 1e9, c.particles, std::round(c.size_um) });
+		}
+		j["holds"] = held;
+		const std::string text = j.dump();
+		uint64_t h = 1469598103934665603ull;
+		for (const char c : text) {
+			h = (h ^ static_cast<uint8_t>(c)) * 1099511628211ull;
+		}
+		char out[17];
+		std::snprintf(out, sizeof out, "%016llx", static_cast<unsigned long long>(h));
+		return out;
+	}
+	// the wall's grey where no body is (as the room's shapes draw it)
+	static double wall_at(const OpticsRoom &room, double x, double y) {
+		double r = x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h ? room.bench : room.elsewhere;
+		for (const OpticsShape &s : room.shapes) {
+			if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) {
+				r = s.radiance;
+			}
+		}
+		return r;
+	}
+	static Picture capture_box(const OpticsScene &scene, const OpticsRoom &room, Rect box) {
+		Picture p;
+		p.w = static_cast<int>(box.w);
+		p.h = static_cast<int>(box.h);
+		p.rgb.assign(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 3, 0);
+		const auto encode = [](double v) {
+			v = std::clamp(v, 0.0, 1.0);
+			return v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+		};
+		uint64_t h = 1469598103934665603ull;
+		for (int y = 0; y < p.h; ++y) {
+			for (int x = 0; x < p.w; ++x) {
+				const int sx = static_cast<int>(box.x) + x, sy = static_cast<int>(box.y) + y;
+				double rgba[4];
+				optics_pixel(scene, sx, sy, rgba);
+				const double wall = encode(wall_at(room, sx + 0.5, sy + 0.5));
+				for (int c = 0; c < 3; ++c) {
+					const double v = rgba[c] * rgba[3] + wall * (1.0 - rgba[3]);
+					const auto byte = static_cast<uint8_t>(std::lround(std::clamp(v, 0.0, 1.0) * 255.0));
+					p.rgb[(static_cast<size_t>(y) * static_cast<size_t>(p.w) + static_cast<size_t>(x)) * 3 + static_cast<size_t>(c)] = byte;
+					h = (h ^ byte) * 1099511628211ull;
+				}
+			}
+		}
+		p.hash = h;
+		return p;
+	}
+	// a supply alone in the cabinet's first box, composed; its picture captured now (wait), or apart
+	void capture_one(const std::string &supply, bool wait) {
+		const ItemView *s = nullptr;
+		for (const ItemView &v : view.supplies) {
+			s = v.id == supply ? &v : s;
+		}
+		if (s == nullptr) {
+			return;
+		}
+		const std::string key = picture_key(*s);
+		const int scrolled = cabinet_from;
+		const View seen = vw;
+		vw = view_whole(VIEW_ROOM);
+		capture_only = supply;
+		cabinet_from = 0;
+		refresh();
+		compose();
+		const std::optional<Rect> box = cabinet_box(0);
+		if (box) {
+			if (wait) {
+				pictures[key] = capture_box(scene, room_was, *box);
+				pictures_new = true;
+			} else {
+				capturing_key = key;
+				capturing = std::async(std::launch::async, [frozen = scene, room = room_was, at = *box]() { return capture_box(frozen, room, at); });
+			}
+		}
+		capture_only.clear();
+		cabinet_from = scrolled;
+		vw = seen;
+		refresh();
+	}
+	// at a frame: a picture captured apart taken in; the next supply with none, begun
+	void follow_pictures() {
+		if (capturing.valid() && capturing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+			pictures[capturing_key] = capturing.get();
+			pictures_new = true;
+		}
+		if (!capture_ahead || capturing.valid()) {
+			return;
+		}
+		for (const ItemView &s : view.supplies) {
+			if (pictures.find(picture_key(s)) == pictures.end()) {
+				capture_one(s.id, false);
+				return;
+			}
 		}
 	}
 	// ---- the searches (Stage 61): a field over Supplies and one over Storage
@@ -6285,6 +6401,18 @@ struct Ui::Impl {
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (i != drag && !hidden(i)) {
+				// (Stage 61) a supply's box: its picture, captured ahead, shown by a screen of the box's size; drawn by the
+				// pass only until it has one (and while its own is being captured)
+				const auto pic = i >= supply_base && capture_only.empty() ? pictures.find(picture_key(view.items[static_cast<size_t>(i)])) : pictures.end();
+				const std::optional<Rect> box = pic != pictures.end() ? cabinet_box(slot(i, "cabinet")) : std::nullopt;
+				if (box) {
+					const size_t k = thing(id(i), "picture", OpticsBody::Screen, *box, 1.0f, nullptr, nullptr, false);
+					bodies[k].image = pic->second.rgb.data();
+					bodies[k].image_w = pic->second.w;
+					bodies[k].image_h = pic->second.h;
+					bodies[k].image_hash = pic->second.hash;
+					continue;
+				}
 				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
 			}
 		}
@@ -6535,6 +6663,7 @@ struct Ui::Impl {
 		if (!zoomed()) {
 			whole = room;
 		}
+		room_was = room; // (Stage 61: the wall a supply's picture is captured against)
 		// while the view moves, the scene stands as it was made: the host carries its pixels to the view now
 		if (!view_moving() || scene.table.empty()) {
 			if (!zoomed()) {
@@ -7365,12 +7494,113 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 	m.follow();
 }
 
+namespace {
+
+// (Stage 61) a picture's bytes as text, and back
+const char *const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string to_base64(const std::vector<uint8_t> &in) {
+	std::string out;
+	out.reserve((in.size() + 2) / 3 * 4);
+	for (size_t i = 0; i < in.size(); i += 3) {
+		const uint32_t n = (static_cast<uint32_t>(in[i]) << 16) | (i + 1 < in.size() ? static_cast<uint32_t>(in[i + 1]) << 8 : 0u) | (i + 2 < in.size() ? in[i + 2] : 0u);
+		out += BASE64[(n >> 18) & 63];
+		out += BASE64[(n >> 12) & 63];
+		out += i + 1 < in.size() ? BASE64[(n >> 6) & 63] : '=';
+		out += i + 2 < in.size() ? BASE64[n & 63] : '=';
+	}
+	return out;
+}
+bool from_base64(const std::string &in, std::vector<uint8_t> &out) {
+	out.clear();
+	uint32_t n = 0;
+	int bits = 0;
+	for (const char c : in) {
+		if (c == '=') {
+			break;
+		}
+		const char *at = std::strchr(BASE64, c);
+		if (at == nullptr || c == 0) {
+			return false;
+		}
+		n = (n << 6) | static_cast<uint32_t>(at - BASE64);
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			out.push_back(static_cast<uint8_t>((n >> bits) & 0xff));
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+bool Ui::add_pictures(std::string_view text, std::string &why) {
+	json j;
+	try {
+		j = json::parse(text);
+		if (!j.is_object() || j.value("format", "") != "chem-pictures/1") {
+			why = "the pictures are not \"chem-pictures/1\"";
+			return false;
+		}
+		for (const json &p : j.at("pictures")) {
+			Picture pic;
+			pic.w = p.at("w").get<int>();
+			pic.h = p.at("h").get<int>();
+			if (!from_base64(p.at("rgb").get<std::string>(), pic.rgb) || pic.w <= 0 || pic.h <= 0 || pic.rgb.size() != static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h) * 3) {
+				why = "a picture's pixels are not its size";
+				return false;
+			}
+			uint64_t h = 1469598103934665603ull;
+			for (const uint8_t b : pic.rgb) {
+				h = (h ^ b) * 1099511628211ull;
+			}
+			pic.hash = h;
+			impl_->pictures[p.at("key").get<std::string>()] = std::move(pic);
+		}
+	} catch (const std::exception &e) {
+		why = std::string("the pictures are malformed: ") + e.what();
+		return false;
+	}
+	return true;
+}
+
+std::string Ui::pictures() {
+	json list = json::array();
+	for (const auto &[key, p] : impl_->pictures) {
+		list.push_back({ { "key", key }, { "w", p.w }, { "h", p.h }, { "rgb", to_base64(p.rgb) } });
+	}
+	impl_->pictures_new = false;
+	return json{ { "format", "chem-pictures/1" }, { "pictures", list } }.dump();
+}
+
+bool Ui::pictures_changed() const {
+	return impl_->pictures_new;
+}
+
+void Ui::capture_pictures() {
+	Impl &m = *impl_;
+	if (m.capturing.valid()) {
+		m.pictures[m.capturing_key] = m.capturing.get();
+		m.pictures_new = true;
+	}
+	for (const ItemView &s : std::vector<ItemView>(m.view.supplies)) {
+		if (m.pictures.find(Impl::picture_key(s)) == m.pictures.end()) {
+			m.capture_one(s.id, true);
+		}
+	}
+}
+
+void Ui::set_capture_ahead(bool on) {
+	impl_->capture_ahead = on;
+}
+
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
 	if (m.shown_scene) { // a scene of the optics alone: no clock, no lab
 		m.clock += seconds > 0.0 ? seconds : 0.0;
 		return;
 	}
+	m.follow_pictures(); // (Stage 61)
 	if (m.pouring && m.drag >= 0 && seconds > 0.0) {
 		// A pour by hand (Stage 27; Stage 31): to the pouring place, then tilting further while the button is held;
 		// let go, upright again, then back to the hand, where it ends
