@@ -143,6 +143,19 @@ range; a reaction of another species table.
 Every primitive call is appended to the step's **ledger**. The state change of a step equals the
 sum of its ledger entries (invariant C5).
 
+**The world at its boundary** (Stage 61). Between steps only (refused mid-step, as a connection is), the world is
+open at three kinds of event, none a primitive of a step and none in a step's ledger:
+- **a cell added** (`add_cell`), empty, and **supplied** (`supply`): matter and energy brought into an empty cell
+  from outside, its state whole (a supply taken out of Supplies, §13);
+- **a cell retired** (`retire`): everything it holds leaves the world, its edges close for good, it is empty and
+  frozen from then on (an item emptied out of the trash);
+- **a cell frozen** (`freeze`): it takes part in no process (no reaction, no settling, no column; its edges closed,
+  and opened again as they were when it thaws, where the other end is not frozen), its state standing as it is.
+
+The lab keeps **the ledger of the boundary**: the totals of everything supplied and everything retired. C1 to C4 hold
+within every step as before; across the boundary, **C9**: what the world holds is what it began with, plus what was
+supplied, less what was retired, exactly.
+
 ### 4.4 Failure policy
 
 A violated invariant aborts in Debug and sanitizer builds. In a release build it is reported
@@ -2950,6 +2963,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C6 | Every amount is non-negative | exact | 1 |
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
+| C9 | (Stage 61) The world's totals are its start's, plus what was supplied, less what was retired: every element, the mass, the charge and the energy | exact | 61 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
 | T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4); between cells sealed together, only from the higher pressure to the lower (Stage 28) | sign-exact | 2–4, 28 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |

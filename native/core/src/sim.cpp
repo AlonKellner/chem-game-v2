@@ -224,8 +224,8 @@ void Simulation::react() {
 	nucleation_remainder_.resize(cells * reactions_.size(), 0.0);
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
-		if (world_.meta(cell).reservoir) {
-			continue;
+		if (world_.meta(cell).reservoir || world_.meta(cell).frozen) {
+			continue; // (Stage 61: a frozen cell takes part in nothing)
 		}
 		const CellState &state = world_.snapshot_cell(cell);
 		// (Stage 53) a cell of nothing but wall (a vessel's ring of glass): no reaction has anything there, as the
@@ -585,8 +585,8 @@ void Simulation::overflow() {
 	for (int32_t c = 0; c < world_.cell_count(); ++c) {
 		const CellId cell{ c };
 		const CellMeta &meta = world_.meta(cell);
-		if (!meta.rigid || meta.sealed) {
-			continue; // a sealed cell lets nothing out (Stage 28)
+		if (!meta.rigid || meta.sealed || meta.frozen) {
+			continue; // a sealed cell lets nothing out (Stage 28); a frozen one does nothing (Stage 61)
 		}
 		const CellState &state = world_.snapshot_cell(cell);
 		const Fill fill = fill_of(table, state, T0);
@@ -899,7 +899,7 @@ void Simulation::settle() {
 	// in it, which the column takes up at the next step)
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
-		if (world_.meta(cell).layer && thermal(cell).defined) {
+		if (world_.meta(cell).layer && !world_.meta(cell).frozen && thermal(cell).defined) {
 			project(cell);
 		}
 	}
@@ -918,7 +918,7 @@ void Simulation::build_tree() {
 	order_.clear();
 	for (size_t c = 0; c < cells; ++c) {
 		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
-		if (!m.reservoir && !m.rigid && !m.layer) { // (a layer is no root of the air: Stage 47)
+		if (!m.reservoir && !m.rigid && !m.layer && !m.frozen) { // (a layer is no root of the air: Stage 47; a frozen cell none at all: Stage 61)
 			depth_[c] = 0;
 			order_.push_back(c);
 		}
@@ -949,7 +949,7 @@ void Simulation::build_tree() {
 	sealed_groups_.clear();
 	for (size_t c = 0; c < cells; ++c) {
 		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
-		if (depth_[c] != -1 || m.reservoir || !m.rigid) {
+		if (depth_[c] != -1 || m.reservoir || !m.rigid || m.frozen) {
 			continue;
 		}
 		const size_t begin = sealed_order_.size();

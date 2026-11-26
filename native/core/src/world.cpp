@@ -672,6 +672,135 @@ CellId World::add_layer_under(CellId lower, Refusal *why) {
 	return made;
 }
 
+CellId World::add_cell(const std::string &name, const CellMeta &meta, Refusal *why) {
+	const auto refuse = [&](Refusal r) {
+		if (why != nullptr) {
+			*why = r;
+		}
+		return CellId{};
+	};
+	if (!ledger_.empty()) {
+		return refuse(Refusal::MidStep);
+	}
+	if (meta.layer || meta.retired || meta.frozen || (meta.rigid && !(meta.volume > 0.0))) {
+		return refuse(Refusal::BadValue); // (a layer grows under its column; a rigid cell has a volume)
+	}
+	const auto species = static_cast<size_t>(table_->species_count());
+	names_.push_back(name);
+	meta_.push_back(meta);
+	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
+	cells_.push_back(none);
+	before_.cells.push_back(none); // (the step's trace starts with it, empty: no total changes)
+	++topology_version_;
+	if (why != nullptr) {
+		*why = Refusal::None;
+	}
+	return CellId{ static_cast<int32_t>(cells_.size() - 1) };
+}
+
+Refusal World::supply(CellId cell, const CellState &state) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	const auto c = static_cast<size_t>(cell.index);
+	const auto species = static_cast<size_t>(table_->species_count());
+	if (meta_[c].reservoir || meta_[c].frozen || meta_[c].retired || state.amount.size() != species || (!state.particles.empty() && state.particles.size() != species)) {
+		return Refusal::BadValue;
+	}
+	for (const int64_t a : cells_[c].amount) {
+		if (a != 0) {
+			return Refusal::BadValue; // (into an empty cell only: what is supplied is the whole of it)
+		}
+	}
+	if (cells_[c].energy != 0) {
+		return Refusal::BadValue;
+	}
+	for (const int64_t a : state.amount) {
+		if (a < 0) {
+			return Refusal::NegativeAmount;
+		}
+	}
+	CellState whole = state;
+	if (whole.particles.empty()) {
+		whole.particles.assign(species, 0);
+	}
+	cells_[c] = whole;
+	before_.cells[c] = whole; // (between steps: the next step's trace starts with it)
+	++topology_version_;
+	return Refusal::None;
+}
+
+Refusal World::retire(CellId cell, CellState *left) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	const auto c = static_cast<size_t>(cell.index);
+	if (meta_[c].reservoir || meta_[c].retired) {
+		return Refusal::BadValue;
+	}
+	if (left != nullptr) {
+		*left = cells_[c];
+	}
+	for (Edge &e : edges_) {
+		if (e.open && (e.a == cell || e.b == cell)) {
+			e.open = false;
+		}
+		if (e.a == cell || e.b == cell) {
+			e.frozen = false; // (closed for good)
+		}
+	}
+	const auto species = static_cast<size_t>(table_->species_count());
+	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
+	cells_[c] = none;
+	before_.cells[c] = none;
+	meta_[c].retired = true;
+	meta_[c].frozen = true;
+	refresh_sealed();
+	++topology_version_;
+	return Refusal::None;
+}
+
+Refusal World::freeze(CellId cell, bool on) {
+	if (!ledger_.empty()) {
+		return Refusal::MidStep;
+	}
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	const auto c = static_cast<size_t>(cell.index);
+	if (meta_[c].reservoir || meta_[c].retired) {
+		return Refusal::BadValue;
+	}
+	if (meta_[c].frozen == on) {
+		return Refusal::None;
+	}
+	meta_[c].frozen = on;
+	for (Edge &e : edges_) {
+		if (!(e.a == cell || e.b == cell)) {
+			continue;
+		}
+		if (on && e.open) {
+			e.open = false;
+			e.frozen = true;
+		} else if (!on && e.frozen) {
+			const CellId other = e.a == cell ? e.b : e.a;
+			if (!meta_[static_cast<size_t>(other.index)].frozen) {
+				e.open = true;
+				e.frozen = false;
+			}
+		}
+	}
+	refresh_sealed();
+	++topology_version_;
+	return Refusal::None;
+}
+
 Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {
 	EdgeId edge;
 	const Refusal refused = connect(from, to, PHASES_LIQUID, &edge);
