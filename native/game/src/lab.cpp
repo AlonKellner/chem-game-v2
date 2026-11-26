@@ -6615,7 +6615,14 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 			const double born = k.nucleation * liquid * std::pow(s_ratio - 1.0, k.nucleation_order);
 			return text_of("supersaturated (S = %.4f): no crystals yet, %.3g starting a second", s_ratio, born);
 		}
-		return text_of("supersaturated (S = %.4f): growing on ", s_ratio) + text_of("%.0f crystals", static_cast<double>(state.particles[in]));
+		std::string growing = text_of("supersaturated (S = %.4f): growing on ", s_ratio) + text_of("%.0f crystals", static_cast<double>(state.particles[in]));
+		// (Stage 66) stirred, the crystals breed: fragments the turning chips off them grow as crystals of their own
+		const double dissipation = dissipation_per_kg(table, state, world.meta(cell).stirring);
+		if (k.secondary > 0.0 && dissipation > 0.0) {
+			const double kg = static_cast<double>(state.amount[in]) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(k.in)) * 1e-9;
+			growing += text_of(", the stirring breeding %.3g more a second", k.secondary * dissipation * kg * std::pow(s_ratio - 1.0, k.secondary_order));
+		}
+		return growing;
 	}
 	if (!forward) {
 		return text_of("running backwards: %.3g mol/s", -rate);

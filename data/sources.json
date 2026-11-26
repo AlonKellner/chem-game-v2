@@ -112,6 +112,12 @@
 			"tests": ["measured: the pentahydrate's first crystal appears at Sheng's induction times"]
 		},
 		{
+			"data": ["reactions.json/reactions/pentahydrate_crystallization/kinetics/{secondary,secondary_order}"],
+			"calibrated": "searched and not found measured open (Ishii and Fujita 1981, Garside and Davey 1980, Lyall et al. 2004 paywalled; Tanimoto 1962 a scan): the textbook form, linear in the stirring's dissipation (Garside and Davey) and in the crystals' mass, the order Lyall et al.'s measured nucleation order (1.7), the rate set so a stirred seed sets out a solution's excess 5 % over saturation half in a quarter of an hour, in crystals under 100 um (Justel et al. 2019)",
+			"doc": ["Seeds (Stage 66)"],
+			"tests": ["seeds: stirred, a seed breeds and sets out the solution's excess (Stage 66)", "seeds: the crystals bred go with the stirring, the crystals' mass and (S - 1)^1.7 (Stage 66)"]
+		},
+		{
 			"data": ["reactions.json/reactions/{trihydrate_crystallization,monohydrate_crystallization,anhydrous_crystallization}/kinetics/*"],
 			"calibrated": "no source gives the other hydrates' growth and nucleation: assumed equal to the pentahydrate's",
 			"doc": ["assumed equal"]

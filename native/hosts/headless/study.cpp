@@ -755,6 +755,73 @@ int precipitation() {
 
 } // namespace
 
+// Stage 66 (curriculum 35): a seed in a supersaturated solution. 100 g of water held at 25 C with copper sulfate 5 %
+// over its saturation, clear; a 10 mg crystal of the pentahydrate dropped in, the beaker still or stirred (0.01 W,
+// the lab's stirrer). What comes out of the solution, in how many crystals, and how far from saturation it is left.
+int seed() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const Reaction &grow = builtin_reactions()[static_cast<size_t>(builtin::reaction::pentahydrate_crystallization)];
+	const double kelvin = 298.15, water_g = 100.0, over = 1.05, seed_mg = 10.0;
+	// the model's own solubility: the molality at which the crystals neither grow nor dissolve
+	const auto affinity_at = [&](double m) {
+		CellState state;
+		state.amount.assign(static_cast<size_t>(table.species_count()), 0);
+		state.particles.assign(static_cast<size_t>(table.species_count()), 0);
+		state.amount[static_cast<size_t>(builtin::water.index)] = amount_from_mol(1000.0 / 18.015, ok).quanta;
+		put_amount(table, state, builtin::copper_sulfate_aq, amount_from_mol(m, ok).quanta);
+		bool defined = false;
+		return affinity(table, state, grow.terms(), kelvin, defined);
+	};
+	double lo = 0.5, hi = 3.0;
+	for (int i = 0; i < 60; ++i) {
+		const double mid = 0.5 * (lo + hi);
+		(affinity_at(mid) > 0.0 ? hi : lo) = mid;
+	}
+	const double saturated = 0.5 * (lo + hi);
+	std::printf("the model's solubility at 25 C: %.4f mol/kg (%.2f g of CuSO4 in 100 g of water); the solution at %.2f times it, S = %.4f\n", saturated,
+			saturated * 159.609 / 10.0, over, std::exp(affinity_at(saturated * over) / (GAS_CONSTANT * kelvin)));
+	for (const double watts : { 0.0, 0.01 }) {
+		World::Builder b(table);
+		const CellId beaker = b.add_rigid_cell("beaker", 250e-6);
+		const CellId room = b.add_reservoir("room", kelvin);
+		b.add_edge(beaker, room, PHASES_NONE, 50.0); // held at the room's temperature
+		const double water = water_g / 18.015;
+		b.set_amount(beaker, builtin::water, amount_from_mol(water, ok)).set_amount(beaker, builtin::copper_sulfate_aq, amount_from_mol(saturated * over * water_g * 1e-3, ok));
+		b.set_amount(beaker, builtin::copper_sulfate_pentahydrate, amount_from_mol(seed_mg * 1e-3 / 249.677, ok)).set_particles(beaker, builtin::copper_sulfate_pentahydrate, 1);
+		b.set_amount(beaker, builtin::glass, amount_from_mol(80.0 / 60.083, ok));
+		const double n = P_ATMOSPHERE * (250e-6 - 120e-6) / (GAS_CONSTANT * kelvin);
+		b.set_amount(beaker, builtin::nitrogen, amount_from_mol(0.79 * n, ok)).set_amount(beaker, builtin::oxygen, amount_from_mol(0.21 * n, ok));
+		b.set_temperature(beaker, kelvin);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		Simulation sim(std::move(*world), shipped());
+		sim.set_checking(false);
+		sim.world().set_stirring(beaker, watts);
+		const double excess_g = (saturated * (over - 1.0)) * water_g * 1e-3 * 249.677; // about: the excess as pentahydrate, its water taken from the solution aside
+		std::printf("\n%s (%.2f W): a %.0f mg seed; the excess about %.3f g of the pentahydrate\n", watts > 0.0 ? "stirred" : "still", watts, seed_mg, excess_g);
+		std::printf("%8s %12s %12s %10s %8s\n", "time min", "crystals g", "crystals", "size um", "S");
+		for (int step = 0; step <= 60 * 7200; ++step) {
+			if (step % (60 * 600) == 0) {
+				const CellState &c = sim.world().snapshot_cell(beaker);
+				bool defined = false;
+				double t = 0.0;
+				sim.world().temperature(beaker, t);
+				const double a = affinity(table, c, grow.terms(), t, defined);
+				std::printf("%8.0f %12.5f %12lld %10.1f %8.4f\n", step * STEP_SECONDS / 60.0, sim.world().amount(beaker, builtin::copper_sulfate_pentahydrate).mol() * 249.677,
+						static_cast<long long>(sim.world().particles(beaker, builtin::copper_sulfate_pentahydrate)),
+						particle_diameter(table, c, builtin::copper_sulfate_pentahydrate) * 1e6, std::exp(a / (GAS_CONSTANT * t)));
+			}
+			sim.step();
+		}
+	}
+	return 0;
+}
+
 int spectrum_study(); // spectrum.cpp
 int frames_study(); // frames.cpp
 int tilt_study(); // lying.cpp
@@ -804,6 +871,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "precipitation") == 0) {
 		return precipitation();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, spectrum, frames, tilt, vortex)\n", name);
+	if (std::strcmp(name, "seed") == 0) {
+		return seed();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }
