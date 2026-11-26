@@ -37,7 +37,7 @@ GAME_SPEC 0.53.0 covers:
 | 53.5 | The demo's shifts: tests restated, the goldens re-recorded with the user's approval | Done |
 | 53.7 | Each ring's own outside (convection, a base facing down, radiation by its emittance), half its glass in series to either side; the chosen `loss` gone from glassware | Done |
 | 53.8 | The pass and the camera see each ring and each layer at its own temperature, continuous between their middles | Done |
-| 53.6 | GAME_SPEC 0.53.0, `make gates`, the user's sign-off | `make gates` passed (1984 s: ASan+UBSan, ctest 517, Godot 13 of 13); `make screenshots` O4 as Stage 48 recorded (the largest 13 to 17 at x = 26), its headless and windowed alarms 120 s and 240 s (the demo's slower cooling takes more frames); awaiting sign-off |
+| 53.6 | GAME_SPEC 0.53.0, `make gates`, the user's sign-off | `make gates` passed after main's Stages 55 to 57 were merged in (2481 s: ASan+UBSan, ctest, Godot 13 of 13, the goldens); signed off by the user, 2026-11-25: "Approved, merge and proceed" |
 
 ## 53.1 Data
 
