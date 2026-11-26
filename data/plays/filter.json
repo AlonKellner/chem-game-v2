@@ -1,0 +1,18 @@
+{
+	"format": "chem-play/1",
+	"note": "Filtering (Stage 59): the separation's bench chosen from the experiments' list, the mixture dissolved, the funnel on the flask and the liquid poured through; a picture while it drains (LAB_SHOTS).",
+	"steps": [
+		{"to": "menu:experiments", "button": "click"},
+		{"to": "experiment:separate", "button": "click"},
+		{"frames": 20, "mark": "separate"},
+		{"do": {"do": "pour", "from": "water", "to": "mix", "ml": 40}},
+		{"do": {"do": "stir", "vessel": "mix", "on": true}},
+		{"do": {"do": "wait", "seconds": 600}},
+		{"do": {"do": "attach", "item": "funnel", "to": "flask"}},
+		{"do": {"do": "pour", "from": "mix", "to": "funnel", "all": true}},
+		{"do": {"do": "tip", "from": "mix", "to": "funnel", "species": "copper_oxide", "all": true}},
+		{"do": {"do": "wait", "seconds": 8}},
+		{"frames": 60, "mark": "draining", "shot": "filter-draining"},
+		{"frames": 30}
+	]
+}

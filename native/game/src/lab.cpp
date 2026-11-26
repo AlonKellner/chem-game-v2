@@ -39,6 +39,7 @@ std::string build_name() {
 
 namespace {
 
+constexpr double PAPER_DRAINED_CM = 0.3; // a filter cone this shallow is drained: its stem runs out (Stage 59)
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7); since Stage 57 it changes no rate (kept in saves)
 constexpr double STIRRED_W_KG = 0.1; // a stirred beaker's dissipation, W/kg, for "stirring would make it faster" (Stage 57)
 // A stirrer (GAME_SPEC §11, Stage 32): the work it does on the liquid a second, W, and how long a liquid left
@@ -2091,7 +2092,21 @@ struct Lab::Impl {
 			}
 			const Fill held = fill(x);
 			const double head_m = held.defined ? g->level(held.condensed * 1e6) / 100.0 : 0.0, bore_m = g->tip_bore / 100.0;
-			const double rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * std::max(head_m, 0.0));
+			double rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * std::max(head_m, 0.0));
+			if (g->paper_herzberg_s > 0.0) {
+				// (Stage 59) a filter funnel: through its paper by Darcy's law, every patch of the wetted cone passing water in
+				// proportion to the head over it, its stem's column hanging under it: Q = k 2 pi tan(a) / cos(a) (h^3 / 6 +
+				// L h^2 / 2), h the liquid's depth in the cone (no higher than its paper), L the stem; k from the paper's
+				// Herzberg time (100 mL through 10 cm2 under 10 cm, at 20 C), as water's viscosity goes. Empty of its cone,
+				// what is in its stem runs out of it.
+				const double h = std::min(head_m * 100.0 - g->stem, g->paper_height);
+				if (h > PAPER_DRAINED_CM) { // (under it, the cone is drained: its stem's column falls out of it, as an orifice)
+					const double kelvin_now = kelvin(x.cell);
+					const double k = 100.0 / (g->paper_herzberg_s * 10.0 * 10.0) * chem::solvent_viscosity(table(), 293.15) / chem::solvent_viscosity(table(), kelvin_now); // cm/s per cm
+					const double a = g->cone_half_angle;
+					rate = x.cap * k * 2.0 * PI * std::tan(a) / std::cos(a) * (h * h * h / 6.0 + g->stem * h * h / 2.0) * 1e-6;
+				}
+			}
 			world().set_drain(edge, rate, 0.0, 0.0);
 		}
 	}
@@ -5672,7 +5687,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			x.drains_to = to;
 			v.holds = thing;
 			leave_balances(thing, was);
-			if (g->kind == "pipette") {
+			if (g->kind == "pipette" || g->kind == "filter_funnel") { // (no stopcock: it runs as it stands)
 				x.cap = 1.0;
 				record(x.id, "cap", 1.0, "player");
 			}

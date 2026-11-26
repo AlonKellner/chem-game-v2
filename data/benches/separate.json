@@ -1,0 +1,108 @@
+{
+	"format": "chem-bench/2",
+	"note": "Separating a mixture (GAME_SPEC §13, Stage 59; docs/CURRICULUM.md, experiment 3): 2.000 g of copper sulfate pentahydrate mixed with an unknown mass of copper oxide (0.6 to 1.4 g, drawn by the seed). Read by instruments: water dissolves the sulfate and not the oxide; filtered, the oxide stays on the paper, is scraped into a tared dish and weighed.",
+	"readings": "instruments",
+	"seed": 121,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "scale",
+			"kind": "balance",
+			"model": "analytical",
+			"at": [
+				1,
+				13
+			]
+		},
+		{
+			"id": "mix",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"at": [
+				6,
+				7
+			],
+			"label": "a mixture: 2.000 g of blue crystals and some black powder",
+			"contents": {
+				"copper_sulfate_pentahydrate": {
+					"g": 2.0,
+					"particles": 2000
+				},
+				"copper_oxide": {
+					"g": [
+						0.6,
+						1.4
+					],
+					"particles": 700000
+				}
+			}
+		},
+		{
+			"id": "funnel",
+			"kind": "vessel",
+			"glassware": "filter_funnel",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				11,
+				2
+			],
+			"label": "filter funnel, grade 1 paper"
+		},
+		{
+			"id": "flask",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				14,
+				7
+			],
+			"label": "filtrate"
+		},
+		{
+			"id": "dish",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"at": [
+				19,
+				7
+			],
+			"label": "weighing dish"
+		},
+		{
+			"id": "water",
+			"kind": "vessel",
+			"glassware": "bottle",
+			"volume_ml": 500,
+			"wall": "glass",
+			"wall_g": 300,
+			"at": [
+				23,
+				7
+			],
+			"label": "water",
+			"contents": {
+				"water": {
+					"g": 450
+				}
+			}
+		}
+	]
+}

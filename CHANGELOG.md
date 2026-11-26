@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## 0.59.0 (2026-11-25, Stage 59; signed off by the user: "Approved, merge and proceed")
+
+- §13 (Stage 59, `docs/TDD_59_FILTERING.md`; `docs/CURRICULUM.md`, step C's second half, T6): **a filter funnel** with a
+  Whatman grade 1 paper: it stands on a mouth and drains through its paper by Darcy's law from the paper's Herzberg
+  time, keeping every grain; a drained residue is scraped out by the pour menu.
+- §13.7: the experiment `separate` (copper oxide off copper sulfate, filtered and weighed).
+- §20: the paper's simplifications. The goldens unchanged.
+
+## 0.58.0 (2026-11-25, Stage 58; signed off by the user: "Approved, merge and proceed")
+
+- §13.1 (Stage 58, `docs/TDD_58_CALCULATOR.md`; `docs/CURRICULUM.md`, step C's first half): the notebook's panel in
+  three tabs; **the calculator** (molar mass and composition, moles, a solution's mass, a dilution, a reaction's
+  stoichiometry, limiting reagent and yield; its working shown, its result written in the notebook); **the reference**
+  (the elements, the species, the reactions, the model's own solubility). The formula grammar moved into the core.
+- §13.2: the check `calculated`. A play may type.
+- §13.7: the experiment `prepare` (a solution planned with the calculator, weighed, made up, worked out from the
+  balance). The goldens unchanged.
+
 ## 0.57.0 (2026-11-25, Stage 57; signed off by the user: "Approved, merge and proceed")
 
 - §7 (Stage 57, `docs/TDD_57_DISSOLVING.md`; `docs/CURRICULUM.md`, step B2): **transport to a grain** by Sano,
@@ -55,7 +73,7 @@
   pressure, Clausius and Clapeyron's line).
 - §20: a logger's and the fit's simplifications. The goldens unchanged.
 
-## 0.53.0 (2026-11-25, Stage 53, merged after 0.57.0; signed off by the user: "Approved, merge and proceed")
+## 0.53.0 (2026-11-25, Stage 53, merged after 0.59.0; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 53, `docs/TDD_53_WALLS.md`; the roadmap's area 8b): **the glass in rings**. A glassware vessel's wall
   is its floor and rings of about 1 cm up to its brim, each a cell of its glass:

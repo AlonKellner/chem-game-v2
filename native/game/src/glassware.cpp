@@ -543,6 +543,17 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		bead.a = bead.at(0.0);
 		bead.b = bead.at(1.0);
 		top.push_back(bead);
+	} else if (kind == "filter_funnel") {
+		// (Stage 59) a stem, open at its foot, then a 60 degree cone to its rim; a folded paper in the cone
+		const double rs = mm("stem_diameter_mm") / 2.0, stem = mm("stem_mm");
+		v.floor = 0.05;
+		v.stem = stem;
+		v.cone_half_angle = k->at("cone_degrees").get<double>() / 2.0 * pi / 180.0;
+		c = { { { 0.0, 0.0 }, 0.0, v.floor }, { { rs, 0.0 }, 0.0, std::min(t, 0.8 * rs) }, { { rs, stem }, 0.2, std::min(t, 0.8 * rs) }, { { R, H }, 0.0, t } };
+		const nlohmann::json &paper = k->at("paper");
+		v.paper_herzberg_s = paper.at("herzberg_s").get<double>();
+		v.paper_height = paper.at("diameter_mm").get<double>() / 20.0 * std::cos(v.cone_half_angle); // a quarter-folded circle: its radius the cone's slant
+		v.tip_bore = 2.0 * (rs - std::min(t, 0.8 * rs));
 	} else if (kind == "cuvette") {
 		// a round cell (Stage 55): a flat floor, a straight tube to an open top; its inside across is its path
 		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
@@ -558,6 +569,11 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	if (kind == "measuring_cylinder") {
 		// its inside is the tube's alone, its floor the foot's top: the foot is solid glass
 		in = inward(std::vector<Corner>{ { { 0.0, v.floor }, 0.0, 0.0 }, { { R, v.floor }, 0.05, t }, { { R, H }, 0.0, t } });
+	} else if (kind == "filter_funnel") {
+		// (Stage 59) its inside is its cone's, from the apex up, its paper there its floor (what it keeps rests on it);
+		// its stem a fine bore under it that runs full while it drains
+		v.floor = v.stem;
+		in = inward(std::vector<Corner>{ { { 0.0, v.stem }, 0.0, 0.0 }, { { R, H }, 0.0, t } });
 	}
 	reach(in, H);
 	v.inside = below(rounded(in), H);

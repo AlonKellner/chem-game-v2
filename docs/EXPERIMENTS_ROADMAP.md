@@ -392,7 +392,7 @@ wall; the existing `loss` calibration, split by area. Each value gets a gate tes
 
 **Invariants:** the rings' glass sums to the vessel's `wall_g`; T1 to T3 as for any cell.
 
-### 8d. Supplies, Storage and Trash (PLANNED: Stage 59)
+### 8d. Supplies, Storage and Trash (PLANNED: Stage 61)
 
 The user, 2026-11-25 (after Stage 53's step cost): "We should have the following: 1. Supplies - things which are not
 simulated at all, just like parts, once you take them out, they join the room simulation 2. Storage - things which
