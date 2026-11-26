@@ -92,8 +92,9 @@ TEST_CASE("pressure: water sealed alone with its vapour stands at its saturation
 		CAPTURE(row.kelvin);
 		World::Builder b(builtin_species());
 		// 249 mL of water in a 250 mL flask, nothing else: its vapour fills the last millilitre, and evaporating it hardly cools the water
+		// (249 mL at the row's temperature, Stage 67: as much at 25 C would not fit hotter)
 		const CellId flask = b.add_rigid_cell("flask", FLASK);
-		const double water = 249e-6 / builtin_species().species(builtin::water).molar_volume;
+		const double water = 249e-6 / molar_volume_at(builtin_species(), builtin_species().species(builtin::water), row.kelvin);
 		b.set_amount(flask, builtin::water, mol(water)).set_temperature(flask, row.kelvin);
 		std::string why;
 		auto built = b.build(&why);
@@ -101,7 +102,9 @@ TEST_CASE("pressure: water sealed alone with its vapour stands at its saturation
 		Simulation sim(std::move(*built), equilibria());
 		run(sim, 3);
 		const Thermal t = state(sim.world(), flask);
-		CHECK(t.temperature == doctest::Approx(row.kelvin).epsilon(1e-5));
+		// (Stage 67: its water first at no pressure, then at its vapour's: a liquid that grows with temperature warms as it
+		// is squeezed, T V' dP, 14 J at 2 atm: 0.013 K)
+		CHECK(t.temperature == doctest::Approx(row.kelvin).epsilon(5e-5));
 		CHECK(sim.world().amount(flask, builtin::steam).quanta > 0);
 		CHECK(t.pressure == doctest::Approx(row.pascal).epsilon(0.025));
 		MESSAGE((row.kelvin - 273.15) << " C: " << t.pressure << " Pa (NIST " << row.pascal << ")");

@@ -1,5 +1,16 @@
 # GAME_SPEC version history
 
+## 0.67.0 (2026-11-26, Stage 67)
+
+- §6 (Stage 67, `docs/TDD_67_EXPANSION.md`; the roadmap's area 8c): **liquids that expand**: a liquid's and a
+  dissolved species' molar volume at T is the table's times water's ρ(25 °C)/ρ(T), Kell's density (1975,
+  `data/solutions.json`'s `density`, held to Lienhard's rows); solids keep the table's. Every volume of a liquid is
+  read at its cell's temperature: a vessel's fill, level and picture, its overflow, what fits, drains, pours, marks,
+  a column's layers, concentrations. **A sealed cell** from one Gibbs energy of its solids and liquids,
+  G0(T) + V_c(T)(P − P_atm): its energy gains −T V_c'(T)(P − P_atm), its entropy −V_c'(T)(P − P_atm), each condensed
+  species' potential v_i(T)(P − P_atm); its temperature is its energy's root. §18: V2, V3 and L1 at each cell's own
+  temperature. §20: the condensed phases' Gibbs energy. The goldens re-recorded with the user's approval.
+
 ## 0.63.0 (2026-11-26, Stage 63; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 63, `docs/TDD_63_IONS.md`; `docs/CURRICULUM.md`, step D's first part, C2): **dissolved matter as its

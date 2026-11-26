@@ -59,6 +59,13 @@ bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Sna
 	return t.defined;
 }
 
+// The temperature a cell's volumes are read at (Stage 67: its liquids grow with it): its own, or 25 C where it has
+// none (a trace without temperatures, or a cell T3 reports)
+double volume_kelvin(const SpeciesTable &table, const StepTrace &trace, size_t cell) {
+	double kelvin = T0;
+	return trace.thermal && cell < trace.meta.size() && temperature_of(table, trace, trace.after, cell, kelvin) && kelvin > 0.0 ? kelvin : T0;
+}
+
 // A cell's entropy in J/K: a reservoir's is its energy over its temperature.
 // false when the cell has no positive finite temperature.
 bool entropy_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &s) {
@@ -677,12 +684,16 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace) {
 		if (!meta.sealed) {
 			continue;
 		}
-		const Fill fill = fill_of(table, trace.after.cells[c], T0);
 		bool gas = false;
 		for (size_t s = 0; s < trace.after.cells[c].amount.size(); ++s) {
 			gas = gas || (trace.after.cells[c].amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas);
 		}
-		if (fill.defined && gas && !(fill.condensed < meta.volume)) {
+		// no room for its gas: at 25 C, or (Stage 67, its liquids grown) at any temperature that holds its energy, when
+		// open it would have one
+		const Fill fill = fill_of(table, trace.after.cells[c], T0);
+		const bool roomless = fill.defined && (!(fill.condensed < meta.volume) ||
+				(trace.thermal && !thermal_state(table, trace.after.cells[c], &meta).defined && thermal_state(table, trace.after.cells[c]).defined));
+		if (gas && roomless) {
 			out.push_back(text("V3: step %lld: sealed cell %lld leaves its gas no room: its pressure is not defined", static_cast<long long>(trace.step), static_cast<long long>(c)));
 		}
 	}
@@ -699,7 +710,7 @@ Violations check_V2(const SpeciesTable &table, const StepTrace &trace) {
 		if (!meta.rigid) {
 			continue;
 		}
-		const Fill fill = fill_of(table, trace.after.cells[c], T0);
+		const Fill fill = fill_of(table, trace.after.cells[c], volume_kelvin(table, trace, c));
 		if (fill.defined && fill.condensed > meta.volume * (1.0 + 1e-12)) {
 			char buffer[200];
 			std::snprintf(buffer, sizeof buffer, "V2: step %lld: rigid cell %lld of %.6g m^3 holds %.6g m^3 of solids and liquids", static_cast<long long>(trace.step),
@@ -791,7 +802,7 @@ Violations check_L1(const SpeciesTable &table, const StepTrace &trace) {
 		}
 		const CellMeta &m = trace.meta[top];
 		double held = 0.0; // m^3 of solids and liquids, the whole column's
-		const Fill own = fill_of(table, trace.after.cells[top], T0);
+		const Fill own = fill_of(table, trace.after.cells[top], volume_kelvin(table, trace, top));
 		held += own.defined ? own.condensed : 0.0;
 		bool gap = false;
 		for (int32_t at = below[top]; at >= 0 && static_cast<size_t>(at) < cells; at = below[static_cast<size_t>(at)]) {
@@ -803,7 +814,7 @@ Violations check_L1(const SpeciesTable &table, const StepTrace &trace) {
 				break;
 			}
 			gap = gap || none;
-			const Fill f = fill_of(table, c, T0);
+			const Fill f = fill_of(table, c, volume_kelvin(table, trace, static_cast<size_t>(at)));
 			held += f.defined ? f.condensed : 0.0;
 		}
 		if (m.column_volume > 0.0 && (m.volume > m.column_volume * (1.0 + 1e-12) || held > m.column_volume * (1.0 + 1e-9))) {

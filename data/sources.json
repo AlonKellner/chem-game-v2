@@ -42,6 +42,12 @@
 			"tests": ["sources: every species' thermodynamic row is the one cited", "acidity: the neutralisation gives out 55.84 kJ"]
 		},
 		{
+			"data": ["solutions.json/density/*", "solutions.json/density/numerator/#", "solutions.json/density/celsius/#"],
+			"measured": "Kell 1975 (J. Chem. Eng. Data 20, 97), eq. 16: air-free water at 1 atm, 0 to 150 C; held to Lienhard's Table A.3 rows and to the density's maximum at 3.98 C",
+			"doc": ["Liquids that expand (Stage 67)", "Kell 1975"],
+			"tests": ["measured: water's density is Kell's, within Lienhard's rows"]
+		},
+		{
 			"data": ["solutions.json/water_ionisation/*"],
 			"measured": "NBS 1982's OH-(aq) and H2O(l); held to IAPWS R11-24's pKw from 0 to 100 C",
 			"doc": ["Acids and bases (Stage 43)", "IAPWS R11-24"],

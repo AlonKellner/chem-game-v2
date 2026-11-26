@@ -589,7 +589,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			if (kind == Kind::Absorb && v.liquid_ml > 0.0 && s.phase != 's' && s.phase != 'g') {
-				const double molar = s.mol / (v.liquid_ml / 1000.0);
+				// (a concentration to 0.2 %, as a layer's: its liquid's volume follows its temperature, Stage 67, and a
+				// pixel's history is kept while it drifts by less)
+				const double exact = s.mol / (v.liquid_ml / 1000.0);
+				const double molar = exact > 0.0 ? std::exp(std::round(std::log(exact) / 0.002) * 0.002) : 0.0;
 				const Spectrum &e = chem::optics::spectrum(id);
 				for (size_t i = 0; i < e.size(); ++i) {
 					liquid[i] += static_cast<float>(e[i] * LN10 * molar);
