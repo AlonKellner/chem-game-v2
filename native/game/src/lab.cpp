@@ -2778,6 +2778,7 @@ struct Lab::Impl {
 		return true;
 	}
 	std::vector<int64_t> restored_tally; // put back once the simulation is made
+	StepTrace step_trace; // a checked step's, its buffers kept from step to step (Stage 68)
 
 	// one step; false when an invariant fails
 	bool step_once(std::string &why) {
@@ -2799,7 +2800,8 @@ struct Lab::Impl {
 			untraced = true;
 		} else {
 			untraced = false;
-			const StepTrace trace = sim->step();
+			sim->step(step_trace);
+			const StepTrace &trace = step_trace;
 			const Violations violations = check_all(table(), trace, sim->equilibria());
 			if (!violations.empty()) {
 				broken = true;
@@ -3901,13 +3903,15 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
 			double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
 			item.nominal_ml = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() : 0.0;
-			std::optional<glass::Vessel> made;
+			const glass::Vessel *made = nullptr;
 			if (item.kind == Kind::Vessel && j.contains("glassware")) {
-				// GAME_SPEC §12.3, Stage 24: its standard's shape, and what that shape holds to the brim
+				// GAME_SPEC §12.3, Stage 24: its standard's shape, and what that shape holds to the brim (Stage 68:
+				// each shape made once a process, as the view's own glass::find has it)
 				item.glassware = j.at("glassware").get<std::string>();
-				std::string no;
-				made = glass::make(item.glassware, item.nominal_ml, no);
-				if (!made) {
+				made = glass::find(item.glassware, item.nominal_ml);
+				if (made == nullptr) {
+					std::string no;
+					glass::make(item.glassware, item.nominal_ml, no); // why it is not
 					why = "item \"" + item.id + "\": " + no;
 					return nullptr;
 				}

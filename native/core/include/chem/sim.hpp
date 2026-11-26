@@ -72,6 +72,8 @@ public:
 	// Advances one step and returns its trace. With checking on, a violated
 	// invariant is a CHEM_ASSERT (abort in Debug, report and continue otherwise).
 	StepTrace step();
+	// The same into a trace kept from step to step, its buffers reused (Stage 68)
+	void step(StepTrace &trace);
 	// Advances one step without building its trace or checking it: the same
 	// state, bit for bit, at a fraction of the cost.
 	void advance();

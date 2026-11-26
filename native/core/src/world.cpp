@@ -61,10 +61,36 @@ bool good_conductance(double c) {
 } // namespace
 
 std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges) {
-	// flood from the elastic cells along the gas edges
-	std::vector<uint8_t> reached(meta.size(), 0);
+	// flood from the elastic cells along the gas edges, each cell's gas edges listed once (Stage 68: a flood that
+	// scanned every edge at every cell it reached grew as cells times edges; what it reaches is the same)
+	const size_t n = meta.size();
+	std::vector<size_t> first(n + 1, 0), to;
+	const auto gas_path = [&](const Edge &e) {
+		// (a column's edge is no gas path: Stage 47)
+		return e.open && (e.phases & PHASES_GAS) != 0 && !e.column && static_cast<size_t>(e.a.index) < n && static_cast<size_t>(e.b.index) < n &&
+				e.a.index >= 0 && e.b.index >= 0;
+	};
+	for (const Edge &e : edges) {
+		if (gas_path(e)) {
+			++first[static_cast<size_t>(e.a.index) + 1];
+			++first[static_cast<size_t>(e.b.index) + 1];
+		}
+	}
+	for (size_t c = 0; c < n; ++c) {
+		first[c + 1] += first[c];
+	}
+	to.resize(first[n]);
+	std::vector<size_t> fill(first.begin(), first.end() - 1);
+	for (const Edge &e : edges) {
+		if (gas_path(e)) {
+			const auto a = static_cast<size_t>(e.a.index), b = static_cast<size_t>(e.b.index);
+			to[fill[a]++] = b;
+			to[fill[b]++] = a;
+		}
+	}
+	std::vector<uint8_t> reached(n, 0);
 	std::vector<size_t> frontier;
-	for (size_t c = 0; c < meta.size(); ++c) {
+	for (size_t c = 0; c < n; ++c) {
 		if (!meta[c].reservoir && !meta[c].rigid && !meta[c].layer) { // (a layer is no root of the air: Stage 47)
 			reached[c] = 1;
 			frontier.push_back(c);
@@ -73,16 +99,8 @@ std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const
 	while (!frontier.empty()) {
 		const size_t at = frontier.back();
 		frontier.pop_back();
-		for (const Edge &e : edges) {
-			if (!e.open || (e.phases & PHASES_GAS) == 0 || e.column) { // (a column's edge is no gas path: Stage 47)
-				continue;
-			}
-			const auto a = static_cast<size_t>(e.a.index);
-			const auto b = static_cast<size_t>(e.b.index);
-			if (a >= meta.size() || b >= meta.size() || (a != at && b != at)) {
-				continue;
-			}
-			const size_t other = a == at ? b : a;
+		for (size_t k = first[at]; k < first[at + 1]; ++k) {
+			const size_t other = to[k];
 			if (!reached[other] && !meta[other].reservoir) {
 				reached[other] = 1;
 				frontier.push_back(other);
@@ -787,22 +805,29 @@ void World::skip_step() {
 }
 
 void World::rebase() {
-	before_ = Snapshot{ cells_ };
+	before_.cells = cells_;
 }
 
 StepTrace World::close_step() {
 	StepTrace trace;
+	close_step(trace);
+	return trace;
+}
+
+void World::close_step(StepTrace &trace) {
 	trace.step = step_;
-	trace.before = std::move(before_);
-	trace.after = Snapshot{ cells_ };
-	trace.ledger = std::move(ledger_);
+	// the step's start into the trace, and the trace's old start back as the buffer the next start is copied into
+	std::swap(trace.before, before_);
+	trace.after.cells = cells_; // copy-assigned: the old buffers kept
+	std::swap(trace.ledger, ledger_);
 	trace.edges = edges_;
 	trace.meta = meta_;
 	trace.thermal = thermal_;
+	trace.starved.clear();
+	trace.exchanged.clear();
 	ledger_.clear();
-	before_ = trace.after;
+	before_.cells = cells_;
 	++step_;
-	return trace;
 }
 
 } // namespace chem

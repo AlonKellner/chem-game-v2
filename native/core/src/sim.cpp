@@ -1210,6 +1210,12 @@ void Simulation::advance() {
 }
 
 StepTrace Simulation::step() {
+	StepTrace trace;
+	step(trace);
+	return trace;
+}
+
+void Simulation::step(StepTrace &trace) {
 	if (!traced_) {
 		world_.rebase(); // steps were skipped: this one's trace starts here
 		traced_ = true;
@@ -1233,7 +1239,7 @@ StepTrace Simulation::step() {
 		process_ = Process::Overflow;
 		overflow();
 	}
-	StepTrace trace = world_.close_step();
+	world_.close_step(trace);
 	if (world_.thermal()) {
 		trace.starved = starved_;
 		trace.exchanged = exchanged_;
@@ -1242,7 +1248,6 @@ StepTrace Simulation::step() {
 		const Violations violations = check_all(world_.species(), trace, equilibria_);
 		CHEM_ASSERT(violations.empty(), violations.empty() ? "" : violations[0].c_str());
 	}
-	return trace;
 }
 
 } // namespace chem

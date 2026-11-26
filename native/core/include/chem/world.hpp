@@ -353,6 +353,9 @@ public:
 	// Ends the step: the trace of everything since the last close (or since
 	// the world was built), then the next step begins.
 	StepTrace close_step();
+	// The same into a trace kept from step to step: its buffers reused, so a
+	// step allocates nothing for its copies of the state (Stage 68).
+	void close_step(StepTrace &trace);
 	// Ends the step without building its trace (no copies of the state). The
 	// next close_step() after one of these must follow a rebase().
 	void skip_step();
