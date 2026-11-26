@@ -88,6 +88,8 @@ TEST_CASE("measured: gases diffuse in air at NIST's and Incropera's coefficients
 	CHECK(gas_diffusion(t, builtin::carbon_dioxide, 298.15) == doctest::Approx(0.160e-4).epsilon(1e-12));
 	CHECK(gas_diffusion(t, builtin::oxygen, 298.15) == doctest::Approx(0.21e-4).epsilon(1e-12));
 	CHECK(gas_diffusion(t, builtin::nitrogen, 298.15) == doctest::Approx(0.21e-4).epsilon(1e-12));
+	// (Stage 64) ammonia in air, Tang, Cox and Kalberer 2014's 176 Torr cm^2/s at 296 K, by Weissman's power 1.78
+	CHECK(gas_diffusion(t, builtin::ammonia, 296.0) == doctest::Approx(176.0 / 760.0 * 1e-4).epsilon(1e-4));
 	CHECK(gas_diffusion(t, builtin::water, 298.15) == 0.0); // a liquid
 	CHECK(gas_diffusion(t, builtin::glass, 298.15) == 0.0);
 	// water's power of the temperature holds NIST's own fit, ln D = -10.324 - 84.181 / T + 1.620 ln T, within 1 %

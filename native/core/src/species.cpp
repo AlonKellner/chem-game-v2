@@ -78,7 +78,7 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			return std::nullopt;
 		}
 		// (Stage 63: an ion's apparent molar volume, by the convention of H+'s at nought, may be negative)
-		if (!(s.molar_volume >= 0.0 || (s.charge != 0 && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
+		if (!(s.molar_volume >= 0.0 || ((s.charge != 0 || s.retired) && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
 			set_why(why, "species " + name + " has a molar volume that is negative or not finite");
 			return std::nullopt;
 		}

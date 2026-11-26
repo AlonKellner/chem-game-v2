@@ -1061,3 +1061,83 @@ through the model's settled acid (0.1 mol/kg: 0.1266 mol/kg H⁺ at 25 °C, 0.11
 0.8: 0.9742): Majima's half order between 0.2 and 0.8 M becomes 0.5027 in H⁺, his 69 kJ/mol 70.22 with the
 bisulfate's shift with temperature, the prefactor 1.6937e8; Nicol's 0.65 between 0.1 and 0.2 M becomes 0.6812, his
 53.6 kJ/mol 55.372, the prefactor 5.186e7. Each gate holds the model to the source's law in the acid.
+
+## Weak acids and bases (Stage 64)
+
+Chloride, potassium, ammonium and ammonia, acetate and acetic acid, carbonate, hydrogen carbonate and dissolved CO2,
+the phosphates and phosphoric acid; ammonia gas (GAME_SPEC §9, §10). Read 2026-11-26.
+
+**Formation enthalpies and entropies: the NBS tables** (Wagman et al. 1982, J. Phys. Chem. Ref. Data 11 Suppl. 2,
+srd.nist.gov/JPCRD/jpcrdS2Vol11.pdf, a scan read page by page), the ao rows, the convention H+ = 0: one table with
+Stage 63's Na+, OH- and SO4 2-.
+
+| Species | NBS page | ΔfH° kJ/mol | S° J/mol·K | Cp° (OBIGT) J/mol·K | V° (OBIGT) cm³/mol |
+|---|---|---|---|---|---|
+| Cl⁻ | 2-47 | −167.159 | 56.5 | −123.18 | 17.79 |
+| K⁺ | 2-328 | −252.38 | 102.5 | 8.28 | 9.06 |
+| NH₄⁺ | 2-65 | −132.51 | 113.4 | 65.86 | 18.13 |
+| NH₃(aq) | 2-64 | −80.29 | 111.3 | 65.40 | 24.43 |
+| NH₃(g) | 2-64 | −46.11 | 192.45 | 35.06 (NBS) | — |
+| CH₃COO⁻ | 2-93 | −486.01 | 86.6 | 25.94 | 40.5 |
+| CH₃COOH(aq) | 2-93 | −485.76 | 178.7 | 169.70 | 52.01 |
+| CO₃²⁻ | 2-83 | −677.14 | −56.9 | −290.8 | −5.02 |
+| HCO₃⁻ | 2-83 | −691.99 | 91.2 | −35.40 | 24.6 |
+| CO₂(aq) | 2-83 | −413.80 | 117.6 | 216.98 | 33.5 |
+| PO₄³⁻ | 2-73 | −1277.4 | **−220.35** (see below) | −521.33 | −30.6 |
+| HPO₄²⁻ | 2-73 | −1292.14 | −33.5 | −243.93 | 5.4 |
+| H₂PO₄⁻ | 2-73 | −1296.29 | 90.4 | −29.29 | 31.3 |
+| H₃PO₄(aq) | 2-74 | −1288.34 | 158.2 | 98.74 | 48.1 |
+
+- **PO₄³⁻'s entropy** is the one NBS's own ΔfG and ΔfH of PO₄³⁻ and HPO₄²⁻ imply, −220.35: its printed −222.
+  (a row whose G-H-S constraint NBS relaxed) put pKa3 at 12.43 against the databases' 12.32 to 12.38.
+- **Heat capacities and volumes: OBIGT** (the CHNOSZ package's database, github.com/cran/CHNOSZ,
+  `inst/extdata/OBIGT/inorganic_aq.csv` and `organic_aq.csv`): Cp and V at 25 C and 1 bar as tabulated, from Shock
+  and Helgeson 1988 (the ions), Shock, Helgeson and Sverjensky 1989 (NH₃, H₃PO₄), Shock et al. 1997 (PO₄³⁻), Shock
+  1995 (acetate and acetic acid) and Plyasunov and Shock 2001 (CO₂); NBS prints none for most. Each value was
+  checked against its row's HKF parameters (volumes to 0.01 cm³; Cp but for NH₃, CO₂ and NH₄⁺, whose tabulated
+  values are kept). An ion's is shifted to the model's footing by its charge z: **Cp − 216.35 z, V − 16.74 z**.
+- **The footing, 216.35 J/K a unit of charge.** Stage 63's ions are NBS's heat capacities less 216.35 z (Na⁺ −169.95
+  against NBS's 46.4, OH⁻ 67.85 against −148.5), the sulfuric acid's stand-in carried through the split; H⁺ was left
+  at nought, so every neutral salt had NBS's heat capacity but every reaction making H⁺ 216.35 J/K too much (water's
+  ionisation −7.5 against −223.8). Stage 64 puts H⁺ on the same footing, **−216.35**, and moves the bisulfate's (to
+  161.75, keeping pitzer.dat's 239.2 for its reaction) and CuOH⁺'s (to 364.635, keeping its reaction's nought) with
+  it: water's ionisation then has NBS's −223.8, sulfuric acid's unit −293.8 against NBS's −293. The volumes keep H⁺
+  at nought (the acid's apparent volume, 35.7 cm³/mol at its working strength, is right as it is), so an acid's
+  volume is off by 16.74 cm³ a hydrogen ion at infinite dilution: a declared simplification.
+
+**The constants that follow, against their sources at 25 C** (`measured: ammonia's, carbonic acid's and the gases'
+constants are PHREEQC's from 0 to 60 C`, `measured: acetic acid's and phosphoric acid's constants are MINTEQ's`):
+
+| Reaction | The tables | Source |
+|---|---|---|
+| CH₃COOH ⇌ CH₃COO⁻ + H⁺ | pKa 4.767 | minteq.v4.dat 4.757 (NIST 46.4) |
+| NH₄⁺ ⇌ NH₃ + H⁺ | pKa 9.258 | phreeqc.dat 9.252, its analytic within 0.02 from 0 to 60 C |
+| CO₂ + H₂O ⇌ HCO₃⁻ + H⁺ | pKa1 6.371 | phreeqc.dat 6.352 (within 0.05 to 60 C) |
+| HCO₃⁻ ⇌ CO₃²⁻ + H⁺ | pKa2 10.337 | phreeqc.dat 10.329 (within 0.02 to 60 C) |
+| H₃PO₄ ⇌ H₂PO₄⁻ + H⁺ | pKa1 2.149 | minteq.v4.dat 2.148 |
+| H₂PO₄⁻ ⇌ HPO₄²⁻ + H⁺ | pKa2 7.199 | minteq.v4.dat 7.198 |
+| HPO₄²⁻ ⇌ PO₄³⁻ + H⁺ | pKa3 12.342 | minteq.v4.dat 12.375, phreeqc.dat 12.346 |
+| CO₂(g) ⇌ CO₂(aq) | log K −1.469 | phreeqc.dat −1.468 (within 0.02 to 60 C) |
+| NH₃(g) ⇌ NH₃(aq) | log K 1.749 | phreeqc.dat 1.7966, wateq4f.dat 1.77, NBS's own 1.761 |
+
+**Ammonia's diffusion in air**: Tang, Cox and Kalberer 2014 (Atmos. Chem. Phys. 14, 9233), Table 2, NH₃ in air
+176 ± 10 Torr cm²/s at 296 K, that is 0.2316 cm²/s at 1 atm; carried to 298.15 K by the power 1.78 fitted to
+Weissman 1964's NH₃–N₂ rows at 293 to 523 K (their Table 3): **0.2346 cm²/s, exponent 1.78**.
+
+**The ions' diffusion**: the CRC Handbook's "Ionic conductivity and diffusion at infinite dilution" (Vanýsek, pp.
+5-77 to 5-79): Cl⁻ 2.032, K⁺ 1.957, NH₄⁺ 1.957, acetate 1.089, HCO₃⁻ 1.185, CO₃²⁻ 0.923, H₂PO₄⁻ 0.959, HPO₄²⁻ 0.759,
+PO₄³⁻ 0.824 (10⁻⁹ m²/s; its Na⁺, H⁺, OH⁻ and SO₄²⁻ agree with Li and Gregory's to the printed digit). Dissolved CO₂
+1.92 and NH₃ 2.28, PHREEQC v3's phreeqc.dat `-dw`.
+
+**The activity model**: Pitzer and Mayorga 1973 (read from the LBL preprint of J. Phys. Chem. 77, 2300, through the
+Wayback Machine; pytzer's transcription of the published paper agrees): Table I HCl (0.1775, 0.2945, Cφ 0.0008),
+NaCl (0.0765, 0.2664, 0.00127), KCl (0.04835, 0.2122, −0.00084), NH₄Cl (0.0522, 0.1918, −0.00301), KOH, NaH₂PO₄,
+KH₂PO₄; Table II the acetates; Table VI K₂SO4, (NH₄)₂SO₄, Na₂HPO₄, K₂HPO₄, CuCl₂, NiCl₂ (their (4/3)β and
+(2^(5/2)/3)Cφ unscaled); Table VIII Na₃PO₄ and K₃PO₄ ((3/2)β, (3^(3/2)/2)Cφ unscaled). The carbonates are Harvie,
+Møller and Weare 1984's (Na⁺–CO₃²⁻ 0.0399, 1.389, 0.0044 and K⁺–CO₃²⁻ as pitzer.dat has them; Na⁺–HCO₃⁻ 0.0277,
+0.0411 and K⁺–HCO₃⁻ 0.0296, −0.013, −0.008 as pytzer transcribes them: pitzer.dat's newer refits, Appelo 2015, were
+not taken), K⁺–HSO₄⁻ pitzer.dat's. Gates: Hamer and Wu 1972 (J. Phys. Chem. Ref. Data 1, 1047, Tables 4, 16 and 28)
+for HCl, NaCl and KCl within 2 % to 3, 6 and 4 mol/kg (`measured: hydrochloric acid's, sodium chloride's and
+potassium chloride's mean activity coefficients are Hamer and Wu's`), and IUPAC's primary pH standards (Buck et al.
+2002, Pure Appl. Chem. 74, 2169, Table 2): 0.025 mol/kg KH₂PO₄ + 0.025 Na₂HPO₄ reads 6.863 (6.865), 0.025 NaHCO₃ +
+0.025 Na₂CO₃ 9.987 (10.012), within 0.04 at 10 and 40 C (`measured: the IUPAC primary pH standards`).

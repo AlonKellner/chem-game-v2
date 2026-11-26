@@ -835,9 +835,10 @@ bool Simulation::solve_together(CellId cell) {
 		bool ok = true, dissolved = false;
 		for (const Term &t : equilibria_[e].terms()) {
 			const SpeciesDef &def = table.species(t.species);
-			// a dissolved species of a few quanta is at the limit of its rounding: reach() alone
+			// (Stage 64) a dissolved trace is taken in too (H+ of a few hundred quanta in a carbonate at pH 10, which the
+			// carbonic acid's balance draws through water's ionisation: alone, a round moved only those few hundred)
 			const int64_t held = state.amount[static_cast<size_t>(t.species.index)];
-			ok = ok && def.phase != Phase::Gas && held > 0 && (def.phase != Phase::Aqueous || held >= FEW_QUANTA);
+			ok = ok && def.phase != Phase::Gas && held > 0;
 			dissolved = dissolved || def.phase == Phase::Aqueous;
 		}
 		if (ok && dissolved && !stands(table, state, equilibria_[e].terms())) {
@@ -976,7 +977,8 @@ bool Simulation::solve_together(CellId cell) {
 		// a solid used up, or a dissolved species down to a few quanta (the limit of its rounding): its reactions leave
 		// the system, reach()'s alone
 		for (size_t q = 0; q < x.size(); ++q) {
-			const bool gone = q == used_up || (x[q] < static_cast<double>(FEW_QUANTA) && table.species(SpeciesId{ static_cast<int32_t>(q) }).phase == Phase::Aqueous);
+			const bool gone = q == used_up || (x[q] < static_cast<double>(FEW_QUANTA) && x[q] < 0.5 * static_cast<double>(state.amount[q]) &&
+					table.species(SpeciesId{ static_cast<int32_t>(q) }).phase == Phase::Aqueous);
 			if (!gone) {
 				continue;
 			}

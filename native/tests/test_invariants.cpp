@@ -454,8 +454,9 @@ TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (S
 	// water's evaporation; water's ionisation (the neutralisation, Stage 43; in ions, Stage 63), the hydroxide's
 	// precipitation and its dissolving in acid (Stage 44; in ions the second is the first and water's ionisation
 	// together, kept as the route that works where hydroxide ions are a few quanta, Stage 63), the bisulfate's
-	// dissociation and copper's hydrolysis (Stage 63), whose species the cell lacks
-	REQUIRE(equilibria.size() == 6);
+	// dissociation and copper's hydrolysis (Stage 63), whose species the cell lacks; the weak acids and bases and
+	// the gases' dissolving (Stage 64)
+	REQUIRE(equilibria.size() == 15);
 	CHECK(check_all(builtin_species(), honest, equilibria).empty());
 	const auto water = static_cast<size_t>(builtin::water.index);
 	const auto steam = static_cast<size_t>(builtin::steam.index);

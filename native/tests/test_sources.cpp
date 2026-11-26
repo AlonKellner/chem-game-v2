@@ -53,7 +53,9 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		{ builtin::copper_sulfate_pentahydrate, -2279.7, 300.4, 280.0 }, // Atkins (NBS 1982 rounded)
 		{ builtin::copper_sulfate_trihydrate, -1684.31, 221.3, 205.0 }, // NBS 1982, p. 2-156
 		{ builtin::copper_sulfate_monohydrate, -1085.83, 146.0, 134.0 },
-		{ builtin::sulfuric_acid_aq, -909.27, 20.1, 138.9 }, // Atkins's SO4 2-(aq); Cp a stand-in
+		// Atkins's SO4 2-(aq); Cp its ions' sum (Stage 64: H+ on the ions' footing; NBS's -293, where it was the pure
+		// liquid acid's 138.9, a stand-in)
+		{ builtin::sulfuric_acid_aq, -909.27, 20.1, -293.8 },
 		{ builtin::copper_sulfate_aq, -835.990, -51.520, 211.81 }, // fitted to the CRC's solubility (Stage 19)
 		{ builtin::latex, 0.0, 0.0, 130.1 }, // NETZSCH's 1.91 J/g/K
 		{ builtin::sodium_hydroxide_aq, -470.114, 48.1, -102.1 }, // NBS 1982, p. 2-299, NaOH "ai" (Stage 43)
@@ -160,12 +162,14 @@ TEST_CASE("sources: malachite's activation energy lies in Seguin's range, and th
 TEST_CASE("sources: each ion's data is its formula units' split exactly, the hydrogen ion's at nought (Stage 63)") {
 	// the ions' formation enthalpies, entropies, heat capacities and apparent molar volumes are the retired formula
 	// units' (each cited above) split by the convention that H+(aq) has none: so every solution keeps its energy,
-	// its entropy, its volume and so its solubility (docs/TDD_63_IONS.md)
+	// its entropy, its volume and so its solubility (docs/TDD_63_IONS.md). (Stage 64) But for its heat capacity:
+	// -216.35 J/K mol, the shift every ion's has from NBS's (216.35 a unit of charge), so water's ionisation keeps
+	// NBS's -223.8; and every retired unit's row is its ions' sum
 	const SpeciesTable &t = builtin_species();
 	const SpeciesDef &h = t.species(builtin::hydrogen_ion);
 	CHECK(h.hf == 0.0);
 	CHECK(h.s0 == 0.0);
-	CHECK(h.cp == 0.0);
+	CHECK(h.cp == -216.35);
 	CHECK(h.molar_volume == 0.0);
 	int retired = 0;
 	for (int k = 0; k < t.species_count(); ++k) {
@@ -188,5 +192,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 5);
+	CHECK(retired == 18);
 }

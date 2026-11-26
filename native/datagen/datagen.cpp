@@ -323,8 +323,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		if (s.contains("volume_cm3")) {
 			const double v = s.at("volume_cm3").get<double>();
 			// (Stage 63: an ion's, by the convention of H+'s at nought, may be negative, as Cu2+'s is)
-			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0 || (row.charge != 0 && std::isfinite(v)))) {
-				fail(species_file, "species " + row.id + ": volume_cm3 is a dissolved species' positive apparent molar volume (an ion's may be negative)");
+			// (Stage 64: a retired unit's is its ions' sum, and may be too)
+			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0 || ((row.charge != 0 || s.value("retired", false)) && std::isfinite(v)))) {
+				fail(species_file, "species " + row.id + ": volume_cm3 is a dissolved species' positive apparent molar volume (an ion's or a retired unit's may be negative)");
 			}
 			row.molar_volume = v * 1e-6;
 		}
@@ -341,6 +342,18 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			fail(species_file, "species " + key + " is listed twice");
 		}
 		species.push_back(row);
+	}
+
+	// (Stage 64) a dissolved species that names no ions is a neutral particle of its own, named by its id (as the core
+	// would name it), so solutions.json may give it a diffusion coefficient
+	for (SpeciesRow &row : species) {
+		if (row.phase->phase == chem::Phase::Aqueous && row.ions.empty() && !row.wall) {
+			IonRow ion;
+			ion.name = row.id;
+			ion.atoms = row.atoms;
+			row.ions.emplace_back(static_cast<int>(ions.size()), 1);
+			ions.push_back(ion);
+		}
 	}
 
 	// (Stage 64) each basis by its masters' indices: dissolved species named by formula
@@ -389,7 +402,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		// each ion's diffusion coefficient at 25 C, and the solvent's viscosity (GAME_SPEC §7)
 		if (solutions_json.contains("diffusion")) {
 			for (const auto &[name, value] : solutions_json.at("diffusion").items()) {
-				if (name == "note" || name == "source") {
+				if (name == "note" || name.rfind("source", 0) == 0) {
 					continue;
 				}
 				bool found = false;
