@@ -9,6 +9,10 @@ JOBS ?= $(NCPU)
 GODOTCPP_LIB := $(wildcard native/build/bin/libgodot-cpp*.a)
 JOBS_EXT ?= $(if $(GODOTCPP_LIB),$(JOBS),4)
 CTEST_JOBS ?= $(NCPU)
+# CTEST_LOAD=n: no ctest entry started while the machine's load is over n (Stage 68). Off unless asked: ctest then
+# starts none at all while another's run keeps the load up (a gate waited out another worktree's whole run)
+CTEST_LOAD ?=
+ctest_load = $(if $(CTEST_LOAD),--test-load $(CTEST_LOAD),)
 # a tree configured for the first time gets Ninja when installed
 NINJA := $(shell command -v ninja 2>/dev/null)
 gen = $(if $(wildcard $(1)/CMakeCache.txt),,$(if $(NINJA),-G Ninja,))
@@ -17,7 +21,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: pictures pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: pictures pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate gates-full test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -41,7 +45,7 @@ check_re_core := ^chem_
 check_re_lab := ^lab|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/chem_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
-	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
+	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure -R '$(check_re_$(AREA))'; fi
 
 # Between commits: core, then every ctest entry a change can affect (the result
 # cache, tools/gate_cache.py)
@@ -93,16 +97,32 @@ native-debug:
 ASAN_SWEEP_WORLDS ?= 300
 # and every third sample of the optics tests' heaviest comparisons against the truth (tests/support/sparse.hpp)
 ASAN_SPARSE ?= 3
-native-asan:
+# and no lab checks an invariant (LAB_CHECK=0, Stage 68): the release ctest checks every one on the same steps (a lab's
+# state is the same checked or not, D1); the sanitizers want the code's paths. chem_tests keeps every check, its
+# self-tests and sweeps among them, so check_all itself still runs under the sanitizers.
+ASAN_LAB_CHECK ?= 0
+ASAN_ENV = CHEM_SWEEP_WORLDS=$(ASAN_SWEEP_WORLDS) LAB_SPARSE=$(ASAN_SPARSE) LAB_CHECK=$(ASAN_LAB_CHECK)
+asan-build:
 	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O2" -DCMAKE_C_FLAGS_DEBUG="-g -O2" \
 		-DCHEM_SANITIZE=address,undefined -DCHEM_BUILD_EXTENSION=OFF -DCHEM_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
-	CHEM_SWEEP_WORLDS=$(ASAN_SWEEP_WORLDS) LAB_SPARSE=$(ASAN_SPARSE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --output-on-failure
+native-asan: asan-build
+	$(ASAN_ENV) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure
+# the gates' (gates.sh): the same through the result cache, at the gate's level (GATE_LEVEL); and (Stage 68) no entry
+# that took more than ASAN_MOST_S seconds in the release tree, nor more than ASAN_OWN_MOST_S under the sanitizers
+# (ctest's own measured costs; the sanitizers want the code's paths, which the short entries take, and the long ones
+# play longer): make gates-full sets them to 0, every entry
+ASAN_MOST_S ?= 30
+ASAN_OWN_MOST_S ?= 20
+asan_limits = $(if $(filter-out 0,$(ASAN_MOST_S)),--limit $(BUILD_CORE)/Testing/Temporary/CTestCostData.txt:$(ASAN_MOST_S),) \
+	$(if $(filter-out 0,$(ASAN_OWN_MOST_S)),--limit $(BUILD_ASAN)/Testing/Temporary/CTestCostData.txt:$(ASAN_OWN_MOST_S),)
+asan-gate: asan-build
+	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS) $(asan_limits)
 
 # the release ctest (build-core; `make core` first)
 ctest:
-	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure
+	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure
 
 # Every gate before a merge or a stage close (gates.sh LEVEL=merge), with a timed
 # summary; `make gate` is the commit gate (LEVEL=commit).
@@ -110,6 +130,10 @@ gates:
 	LEVEL=merge ./gates.sh
 gate:
 	LEVEL=commit ./gates.sh
+# (Stage 68) every sample of the truth's comparisons and every entry under the sanitizers: before a release, and when
+# a change touches what only the long plays reach (docs/WORKFLOW.md)
+gates-full:
+	LEVEL=full ./gates.sh
 
 # ------------------------------------------------------------------ sessions
 # The 3-stage demo (GAME_SPEC §17), headless, through the C API: every command,
@@ -119,7 +143,7 @@ demo: core
 demo-bench: core
 	$(BUILD_CORE)/chem_tool bench data/sessions/demo.json
 # The sessions' golden records (bench/sessions/*.jsonl: the state's digest after
-# every command). `sessions-check` replays against them (also ctest demo_session);
+# every command). `sessions-check` replays against them (in ctest: lab_tests.demo_record, pressure_session);
 # `sessions` re-records them: a changed record is a behaviour change, to be shown
 # and approved before it is committed.
 sessions-check: core

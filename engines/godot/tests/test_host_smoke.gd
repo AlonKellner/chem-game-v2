@@ -9,6 +9,10 @@ var _lab: ChemLab
 func before_each() -> void:
 	_lab = ChemLab.new()
 	_lab.tutorial_path = "" # the wiring alone: a tutorial holds the clock while it asks for a gesture
+	# and no catalogue (Stage 68: opening every experiment's bench was most of the suite's time; the tests that list
+	# them make their own ChemLab), nor the player's progress read or written
+	_lab.experiments_path = ""
+	_lab.progress_path = ""
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 

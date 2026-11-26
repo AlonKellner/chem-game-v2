@@ -66,15 +66,42 @@ double volume_kelvin(const SpeciesTable &table, const StepTrace &trace, size_t c
 	return trace.thermal && cell < trace.meta.size() && temperature_of(table, trace, trace.after, cell, kelvin) && kelvin > 0.0 ? kelvin : T0;
 }
 
-// A cell's entropy in J/K: a reservoir's is its energy over its temperature.
-// false when the cell has no positive finite temperature.
-bool entropy_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &s) {
-	double kelvin = 0.0;
-	if (!temperature_of(table, trace, state, cell, kelvin) || !(kelvin > 0.0) || !finite(kelvin)) {
-		return false;
+// A cell's temperature and entropy in J/K (a reservoir's, its energy over its temperature; none without a positive
+// finite temperature), kept for the cell's slot on each thread
+// while its table, state and kind are the same (Stage 68): a step's checks ask the entropy of every cell after it
+// (S1), and of each changed cell before and after it (T2), and a cell's state before a step is its state after the
+// last. Both are functions of the table, the state and the kind alone, so a kept one is the one computed.
+struct Thermo {
+	bool t_ok = false, s_ok = false;
+	double kelvin = 0.0, s = 0.0;
+};
+const Thermo &thermo_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell) {
+	struct Kept {
+		const SpeciesTable *table = nullptr;
+		CellState state;
+		CellMeta meta;
+		Thermo thermo;
+	};
+	thread_local std::vector<Kept> kept;
+	if (kept.size() <= cell) {
+		kept.resize(cell + 1);
 	}
-	s = trace.meta[cell].reservoir ? static_cast<double>(state.cells[cell].energy) * JOULE_PER_QUANTUM / kelvin : entropy(table, state.cells[cell], kelvin, meta_of(trace, cell));
-	return true;
+	Kept &k = kept[cell];
+	const CellState &now = state.cells[cell];
+	if (k.table == &table && k.state == now && k.meta == trace.meta[cell]) {
+		return k.thermo;
+	}
+	Thermo t;
+	t.t_ok = temperature_of(table, trace, state, cell, t.kelvin);
+	if (t.t_ok && t.kelvin > 0.0 && finite(t.kelvin)) {
+		t.s_ok = true;
+		t.s = trace.meta[cell].reservoir ? static_cast<double>(now.energy) * JOULE_PER_QUANTUM / t.kelvin : entropy(table, now, t.kelvin, meta_of(trace, cell));
+	}
+	k.table = &table;
+	k.state = now;
+	k.meta = trace.meta[cell];
+	k.thermo = t;
+	return k.thermo;
 }
 
 // sum of (S_after - S_before) and of |S| over the cells that changed
@@ -88,14 +115,27 @@ void entropy_sums(const SpeciesTable &table, const StepTrace &trace, double &cha
 		double before = 0.0, after = 0.0;
 		// an empty cell's entropy is none (Stage 47: a column's layer that fills, or empties, in the step)
 		const auto none = [](const CellState &x) { return std::all_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a == 0; }) && x.energy == 0; };
-		const bool was = none(trace.before.cells[c]) || entropy_of(table, trace, trace.before, c, before);
-		const bool is = none(trace.after.cells[c]) || entropy_of(table, trace, trace.after, c, after);
+		const auto entropy_at = [&](const Snapshot &state, double &s) {
+			const Thermo &t = thermo_of(table, trace, state, c);
+			s = t.s_ok ? t.s : s;
+			return t.s_ok;
+		};
+		const bool was = none(trace.before.cells[c]) || entropy_at(trace.before, before);
+		const bool is = none(trace.after.cells[c]) || entropy_at(trace.after, after);
 		if (!was || !is) {
 			continue; // T3 reports a cell without a temperature
 		}
 		change += after - before;
 		magnitude += (before < 0.0 ? -before : before) + (after < 0.0 ? -after : after);
 	}
+}
+
+// The step's start, to replay its ledger on: one copy a thread, its buffers kept from step to step, so a checked
+// step allocates nothing for it (Stage 68). Copy-assigned, so it is the start exactly.
+Snapshot &replay_of(const Snapshot &before) {
+	thread_local Snapshot scratch;
+	scratch.cells = before.cells;
+	return scratch;
 }
 
 bool cell_in(const StepTrace &trace, CellId c) {
@@ -108,9 +148,12 @@ Totals totals(const SpeciesTable &table, const Snapshot &snapshot) {
 	Totals t;
 	for (const CellState &cell : snapshot.cells) {
 		for (size_t s = 0; s < cell.amount.size() && s < static_cast<size_t>(table.species_count()); ++s) {
+			const int64_t n = cell.amount[s];
+			if (n == 0) {
+				continue; // adds nothing (Stage 68: most species are absent from most cells)
+			}
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
-			const int64_t n = cell.amount[s];
 			for (size_t e = 0; e < t.atoms.size(); ++e) {
 				t.atoms[e] = wrap_add(t.atoms[e], wrap_mul(n, def.atoms[e]));
 			}
@@ -202,10 +245,18 @@ bool totals_fit(const SpeciesTable &table, const Snapshot &snapshot) {
 	return true;
 }
 
+// C1 to C4 on the two totals, computed once a step by check_all (Stage 68)
+static Violations c1_of(const SpeciesTable &table, const StepTrace &trace, const Totals &a, const Totals &b);
+static Violations c2_of(const SpeciesTable &table, const StepTrace &trace, const Totals &a, const Totals &b);
+static Violations c3_of(const SpeciesTable &table, const StepTrace &trace, const Totals &a, const Totals &b);
+static Violations c4_of(const SpeciesTable &table, const StepTrace &trace, const Totals &a, const Totals &b);
+
 Violations check_C1(const SpeciesTable &table, const StepTrace &trace) {
+	return c1_of(table, trace, totals(table, trace.before), totals(table, trace.after));
+}
+
+static Violations c1_of(const SpeciesTable &table, const StepTrace &trace, const Totals &a, const Totals &b) {
 	Violations out;
-	const Totals a = totals(table, trace.before);
-	const Totals b = totals(table, trace.after);
 	for (int e = 0; e < table.element_count(); ++e) {
 		const auto i = static_cast<size_t>(e);
 		if (a.atoms[i] != b.atoms[i]) {
@@ -217,9 +268,11 @@ Violations check_C1(const SpeciesTable &table, const StepTrace &trace) {
 }
 
 Violations check_C2(const SpeciesTable &table, const StepTrace &trace) {
+	return c2_of(table, trace, totals(table, trace.before), totals(table, trace.after));
+}
+
+static Violations c2_of(const SpeciesTable &, const StepTrace &trace, const Totals &a, const Totals &b) {
 	Violations out;
-	const Totals a = totals(table, trace.before);
-	const Totals b = totals(table, trace.after);
 	if (!(a.mass == b.mass)) {
 		out.push_back(text("C2: step %lld: the world's mass changed (limbs %lld:%lld", static_cast<long long>(trace.step), a.mass.hi, a.mass.lo) +
 				text(" to %lld:%lld)", b.mass.hi, b.mass.lo));
@@ -228,9 +281,11 @@ Violations check_C2(const SpeciesTable &table, const StepTrace &trace) {
 }
 
 Violations check_C3(const SpeciesTable &table, const StepTrace &trace) {
+	return c3_of(table, trace, totals(table, trace.before), totals(table, trace.after));
+}
+
+static Violations c3_of(const SpeciesTable &, const StepTrace &trace, const Totals &a, const Totals &b) {
 	Violations out;
-	const Totals a = totals(table, trace.before);
-	const Totals b = totals(table, trace.after);
 	if (a.energy != b.energy) {
 		out.push_back(text("C3: step %lld: the world's energy changed from %lld to %lld quanta", static_cast<long long>(trace.step), a.energy, b.energy));
 	}
@@ -238,9 +293,11 @@ Violations check_C3(const SpeciesTable &table, const StepTrace &trace) {
 }
 
 Violations check_C4(const SpeciesTable &table, const StepTrace &trace) {
+	return c4_of(table, trace, totals(table, trace.before), totals(table, trace.after));
+}
+
+static Violations c4_of(const SpeciesTable &, const StepTrace &trace, const Totals &a, const Totals &b) {
 	Violations out;
-	const Totals a = totals(table, trace.before);
-	const Totals b = totals(table, trace.after);
 	if (a.charge != b.charge) {
 		out.push_back(text("C4: step %lld: the world's charge changed from %lld to %lld quanta", static_cast<long long>(trace.step), a.charge, b.charge));
 	}
@@ -267,7 +324,7 @@ Violations check_N1(const SpeciesTable &table, const StepTrace &trace) {
 
 Violations check_C5(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
-	Snapshot replay = trace.before;
+	Snapshot &replay = replay_of(trace.before);
 	const auto species = static_cast<size_t>(table.species_count());
 	for (size_t i = 0; i < trace.ledger.size(); ++i) {
 		const LedgerEntry &entry = trace.ledger[i];
@@ -419,7 +476,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 	if (!trace.thermal) {
 		return out;
 	}
-	Snapshot replay = trace.before;
+	Snapshot &replay = replay_of(trace.before);
 	for (size_t i = 0; i < trace.ledger.size(); ++i) {
 		const LedgerEntry &entry = trace.ledger[i];
 		const bool transfer = entry.kind == LedgerEntry::Kind::Transfer;
@@ -614,12 +671,12 @@ Violations check_S1(const SpeciesTable &table, const StepTrace &trace) {
 		return out;
 	}
 	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
-		double kelvin = 0.0;
-		if (!temperature_of(table, trace, trace.after, c, kelvin)) {
+		const Thermo &t = thermo_of(table, trace, trace.after, c);
+		if (!t.t_ok) {
 			continue; // T3 reports it
 		}
-		double s = 0.0;
-		const bool has_entropy = entropy_of(table, trace, trace.after, c, s);
+		const double kelvin = t.kelvin, s = t.s;
+		const bool has_entropy = t.s_ok;
 		if (!finite(kelvin) || (has_entropy && !finite(s))) {
 			out.push_back(text("S1: step %lld: cell %lld has a temperature or an entropy that is not finite", static_cast<long long>(trace.step), static_cast<long long>(c)));
 		}
@@ -735,6 +792,9 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 		for (const Reaction &reaction : equilibria) {
 			if (reaction.table() != &table || stands(table, cell, reaction.terms())) {
 				continue; // (Stage 63) past the activity model's range, an equilibrium among dissolved species stands
+			}
+			if (feasible_extent(cell, reaction.terms(), true) <= 0 && feasible_extent(cell, reaction.terms(), false) <= 0) {
+				continue; // it can go neither way, whatever its affinity (below): no probe for it (Stage 68)
 			}
 			const AffinityProbe probe(table, cell, reaction.terms(), meta_of(trace, c));
 			double a = 0.0;
@@ -862,7 +922,13 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 		Violations v = check_V2(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
+	{
+		const Totals a = totals(table, trace.before), b = totals(table, trace.after);
+		for (Violations v : { c1_of(table, trace, a, b), c2_of(table, trace, a, b), c3_of(table, trace, a, b), c4_of(table, trace, a, b) }) {
+			out.insert(out.end(), v.begin(), v.end());
+		}
+	}
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

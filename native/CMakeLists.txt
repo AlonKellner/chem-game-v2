@@ -22,20 +22,45 @@ set(CHEM_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/../engines/godot/bin" CACHE P
     "Where the GDExtension library is written (engines/godot/chem.gdextension points at engines/godot/bin)")
 
 # ccache when installed. Content-keyed, so a branch switch or a stash that
-# restores a file compiles nothing twice.
-if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
-    find_program(CHEM_CCACHE ccache)
-    if(CHEM_CCACHE)
-        set(CMAKE_CXX_COMPILER_LAUNCHER "${CHEM_CCACHE}" CACHE STRING "compiler launcher (ccache)")
-    endif()
+# restores a file compiles nothing twice. Stage 68: one cache for every worktree,
+# the project's own (CHEM_CCACHE_DIR, its own size; the user's ccache untouched),
+# with paths under the worktree's root made relative and the working directory
+# left out (base_dir, hash_dir), so a worktree compiles what another already has.
+get_filename_component(CHEM_WORKTREE_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
+if(APPLE)
+    set(CHEM_CACHE_HOME "$ENV{HOME}/Library/Caches/chem-game-v2")
+elseif(DEFINED ENV{XDG_CACHE_HOME})
+    set(CHEM_CACHE_HOME "$ENV{XDG_CACHE_HOME}/chem-game-v2")
+else()
+    set(CHEM_CACHE_HOME "$ENV{HOME}/.cache/chem-game-v2")
+endif()
+set(CHEM_CCACHE_DIR "${CHEM_CACHE_HOME}/ccache" CACHE PATH "the project's ccache, shared by its worktrees")
+set(CHEM_CCACHE_SIZE "40G" CACHE STRING "the project's ccache's size")
+option(CHEM_CCACHE_SHARED "compile through the project's shared ccache" ON)
+find_program(CHEM_CCACHE ccache)
+if(CHEM_CCACHE AND CHEM_CCACHE_SHARED)
+    # (a normal variable, over a launcher an older configure left in the cache; the compiler's version in the key,
+    # as /usr/bin/c++ is a shim whose mtime and content do not change with the compiler)
+    foreach(lang CXX C)
+        set(CMAKE_${lang}_COMPILER_LAUNCHER "${CMAKE_COMMAND};-E;env;CCACHE_DIR=${CHEM_CCACHE_DIR};CCACHE_MAXSIZE=${CHEM_CCACHE_SIZE};CCACHE_BASEDIR=${CHEM_WORKTREE_ROOT};CCACHE_NOHASHDIR=1;CCACHE_COMPILERCHECK=string:${CMAKE_CXX_COMPILER_ID}-${CMAKE_CXX_COMPILER_VERSION};${CHEM_CCACHE}")
+    endforeach()
+elseif(CHEM_CCACHE AND NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CHEM_CCACHE}" CACHE STRING "compiler launcher (ccache)")
 endif()
 
 # A link is a function of its objects: macOS writes each object's mtime into the
 # binary's debug map; zeroed, relinking the same objects gives the same bytes.
-# The commit gate's result cache keys on the binaries (tools/gate_cache.py).
+# The gates' result cache keys on the binaries (tools/gate_cache.py).
 if(APPLE AND NOT DEFINED CMAKE_CXX_LINKER_LAUNCHER)
     set(CMAKE_CXX_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
     set(CMAKE_C_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
+endif()
+# And no path of the worktree in an object (Stage 68): the debug info's directory is "." (the sources' paths are
+# relative, ccache's base_dir). A binary's debug map still names its objects by their whole paths: relative ones
+# (-oso_prefix) left a sanitizer's report and atos without a line; the gates' cache reads a binary with its
+# worktree's root left out (tools/gate_cache.py), so two worktrees on one commit still share their results.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-fdebug-compilation-dir=.)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -108,8 +133,23 @@ configure_file(game/thermal_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/thermal
 file(READ "${CHEM_DATA_DIR}/instruments.json" CHEM_INSTRUMENTS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/instruments.json")
 configure_file(game/instruments_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/instruments_data.hpp" @ONLY)
+# Every shape of the glassware table made at build time (Stage 68): chem_glassgen compiles glassware.cpp as the lab
+# does, makes each shape, and writes it out to the last bit; glass::find takes them (making them was more than half a
+# short test's time, and the game's opening). test_glassware.cpp holds each to glass::make.
+add_executable(chem_glassgen datagen/glassgen.cpp game/src/glassware.cpp)
+target_include_directories(chem_glassgen PRIVATE game/include "${CHEM_GEN_DIR}/lab_include")
+target_include_directories(chem_glassgen SYSTEM PRIVATE extern)
+target_compile_definitions(chem_glassgen PRIVATE CHEM_GLASSGEN=1)
+set_target_properties(chem_glassgen PROPERTIES POSITION_INDEPENDENT_CODE ON) # (compiled as chem_lab's)
+chem_apply_flags(chem_glassgen)
+set(CHEM_GLASSWARE_BUILT "${CHEM_GEN_DIR}/lab_include/lab/glassware_built.inc")
+add_custom_command(
+    OUTPUT "${CHEM_GLASSWARE_BUILT}"
+    COMMAND chem_glassgen "${CHEM_GLASSWARE_BUILT}"
+    DEPENDS chem_glassgen "${CHEM_DATA_DIR}/glassware.json"
+    COMMENT "Making every shape of the glassware table (data/glassware.json)")
 file(GLOB CHEM_LAB_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
-add_library(chem_lab STATIC ${CHEM_LAB_SOURCES})
+add_library(chem_lab STATIC ${CHEM_LAB_SOURCES} "${CHEM_GLASSWARE_BUILT}")
 target_include_directories(chem_lab PUBLIC game/include "${CHEM_GEN_DIR}/lab_include")
 target_include_directories(chem_lab SYSTEM PUBLIC extern)
 target_link_libraries(chem_lab PUBLIC chem_core)
@@ -136,9 +176,14 @@ file(GLOB CHEM_TOOL_SOURCES CONFIGURE_DEPENDS hosts/headless/*.cpp)
 add_executable(chem_tool ${CHEM_TOOL_SOURCES})
 target_link_libraries(chem_tool PRIVATE chem_capi chem_lab) # the studies drive the core directly
 chem_apply_flags(chem_tool)
-# (the studies that open the repository's benches and tutorials: chem_tool study speed)
-get_filename_component(CHEM_TOOL_REPO_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
-target_compile_definitions(chem_tool PRIVATE "CHEM_REPO_ROOT=\"${CHEM_TOOL_REPO_ROOT}\"")
+# (the studies that open the repository's benches and tutorials: chem_tool study speed) The repository's root found
+# at run time, from where the binary is (Stage 68: tests/support/repo_root.hpp), so no flag names the worktree
+function(chem_repo_root_at_run_time target)
+    target_sources(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests/support/repo_root.cpp")
+    target_compile_definitions(${target} PRIVATE "CHEM_REPO_ROOT=chem_repo_root()")
+    target_compile_options(${target} PRIVATE -include "${CMAKE_CURRENT_SOURCE_DIR}/tests/support/repo_root.hpp")
+endfunction()
+chem_repo_root_at_run_time(chem_tool)
 
 # ---------------------------------------------------------------------- chem_gd
 if(CHEM_BUILD_EXTENSION)
@@ -183,7 +228,7 @@ if(CHEM_BUILD_TESTS)
     # vendored single headers: <doctest/doctest.h>, <nlohmann/json.hpp>
     target_include_directories(chem_tests SYSTEM PRIVATE extern)
     target_include_directories(chem_tests PRIVATE tests/support datagen)
-    target_compile_definitions(chem_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
+    chem_repo_root_at_run_time(chem_tests)
     chem_apply_flags(chem_tests NO_CONVERSION)
     # One ctest entry for each source file of a test binary (its test cases, by doctest's source-file
     # filter): ctest runs them side by side, and the gate's cache keeps each apart. And one that fails if a
@@ -210,7 +255,10 @@ if(CHEM_BUILD_TESTS)
     # i-th share of its heaviest loop, tests/support/part.hpp; under the sanitizers only the first part runs, on
     # four threads);
     # `// ctest: threads N`, N threads, and ctest
-    # counts it as N processors. Each file's count is checked against doctest's own (.count), each entry runs a
+    # counts it as N processors; `// ctest: fixture setup NAME`, the case makes the fixture NAME (its files in the
+    # tree's fixtures/NAME, tests/support/fixtures.hpp), and `// ctest: fixture NAME`, the case starts from it: ctest
+    # runs the setup first, and whenever a case that needs it runs (Stage 68: a simulation played once for the cases
+    # that share it). Each file's count is checked against doctest's own (.count), each entry runs a
     # case (FAIL on none), and an edit to a file configures again (CMAKE_CONFIGURE_DEPENDS).
     function(chem_add_cases target)
         set(all "")
@@ -222,15 +270,21 @@ if(CHEM_BUILD_TESTS)
             string(REGEX REPLACE "^test_" "" short ${stem})
             list(APPEND all "*${stem}.cpp")
             set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${source})
-            file(STRINGS ${source} lines REGEX "^(TEST_CASE\\(|// ctest: (parts|threads) [0-9]+)")
+            file(STRINGS ${source} lines REGEX "^(TEST_CASE\\(|// ctest: (parts|threads) [0-9]+|// ctest: fixture )")
             set(case 0)
             set(parts 1)
             set(threads 1)
+            set(fixture_setup "")
+            set(fixture_needed "")
             foreach(line IN LISTS lines)
                 if(line MATCHES "^// ctest: parts ([0-9]+)")
                     set(parts ${CMAKE_MATCH_1})
                 elseif(line MATCHES "^// ctest: threads ([0-9]+)")
                     set(threads ${CMAKE_MATCH_1})
+                elseif(line MATCHES "^// ctest: fixture setup ([a-z_0-9]+)")
+                    set(fixture_setup ${CMAKE_MATCH_1})
+                elseif(line MATCHES "^// ctest: fixture ([a-z_0-9]+)")
+                    set(fixture_needed ${CMAKE_MATCH_1})
                 elseif(line MATCHES "^TEST_CASE\\(")
                     math(EXPR case "${case} + 1")
                     math(EXPR last "${parts} - 1")
@@ -250,9 +304,17 @@ if(CHEM_BUILD_TESTS)
                         endif()
                         add_test(NAME ${name} COMMAND ${target} --source-file=*${stem}.cpp --first=${case} --last=${case})
                         set_tests_properties(${name} PROPERTIES ENVIRONMENT "${environment}" PROCESSORS ${threads} FAIL_REGULAR_EXPRESSION "test cases: +0 [|]")
+                        if(fixture_setup)
+                            set_tests_properties(${name} PROPERTIES FIXTURES_SETUP ${fixture_setup})
+                        endif()
+                        if(fixture_needed)
+                            set_tests_properties(${name} PROPERTIES FIXTURES_REQUIRED ${fixture_needed})
+                        endif()
                     endforeach()
                     set(parts 1)
                     set(threads 1)
+                    set(fixture_setup "")
+                    set(fixture_needed "")
                 endif()
             endforeach()
             add_test(NAME ${target}.${short}.count COMMAND ${target} --count --source-file=*${stem}.cpp)
@@ -262,7 +324,8 @@ if(CHEM_BUILD_TESTS)
         add_test(NAME ${target}.every_file_runs COMMAND ${target} --count --source-file-exclude=${excluded})
         set_tests_properties(${target}.every_file_runs PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: 0")
     endfunction()
-    chem_add_tests(chem_tests ${CHEM_TEST_SOURCES})
+    # (Stage 68: an entry a case, as the lab's: a file of the core's tests was one entry, the longest 212 s)
+    chem_add_cases(chem_tests ${CHEM_TEST_SOURCES})
 
     # the lab layer's tests
     file(GLOB LAB_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
@@ -270,7 +333,7 @@ if(CHEM_BUILD_TESTS)
     target_link_libraries(lab_tests PRIVATE chem_lab)
     target_include_directories(lab_tests SYSTEM PRIVATE extern)
     target_include_directories(lab_tests PRIVATE tests/support)
-    target_compile_definitions(lab_tests PRIVATE "CHEM_REPO_ROOT=\"${CHEM_REPO_ROOT}\"")
+    chem_repo_root_at_run_time(lab_tests)
     chem_apply_flags(lab_tests NO_CONVERSION)
     chem_add_cases(lab_tests ${LAB_TEST_SOURCES})
 
@@ -293,7 +356,12 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_tables COMMAND chem_tool tables)
     # the demo, played through the C API with every invariant on every step,
     # reproduces its golden record digest for digest (GAME_SPEC §18: D4)
-    add_test(NAME demo_session COMMAND chem_tool run ${CHEM_REPO_ROOT}/data/sessions/demo.json --quiet --check ${CHEM_REPO_ROOT}/bench/sessions/demo.jsonl)
+    # (The demo session against its record: lab_tests.demo_record, Stage 68, which plays it once for the gates, every
+    # invariant at every step, its digests, results and notices held; `make sessions-check` plays it through chem_tool.
+    # The C API's checked path in the gates is the pressure session's.)
+    # the pressure session (Stage 28) against its golden record, through the C API, every invariant checked (Stage
+    # 68: until then only `make sessions-check` played it)
+    add_test(NAME pressure_session COMMAND chem_tool run ../../data/sessions/pressure.json --quiet --check ../../bench/sessions/pressure.jsonl)
     add_test(NAME chem_tool_study_cooling COMMAND chem_tool study cooling)
     add_test(NAME chem_tool_study_decomposition COMMAND chem_tool study decomposition)
     add_test(NAME chem_tool_study_balloon COMMAND chem_tool study balloon)

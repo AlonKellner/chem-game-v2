@@ -149,16 +149,16 @@ struct Pupil {
 		}
 		return out;
 	}
-	// frames of 1/60 s until `done`, at most `seconds` of the lab's time
+	// frames of `frame` s (1/60: a screen's) until `done`, at most `seconds` of the lab's time
 	template <typename Done>
-	void watch(Done done, double seconds) {
+	void watch(Done done, double seconds, double frame = 1.0 / 60.0) {
 		const int64_t until = ui->lab().step() + static_cast<int64_t>(seconds * 60.0);
 		while (!done()) {
 			resume();
 			REQUIRE_MESSAGE(ui->lab().step() < until, "waited too long on step " << tutorial().step + 1 << ": " << tutorial().title << open_checks());
 			REQUIRE_MESSAGE((!ui->strict() || ui->tutorial()->waiting() || tutorial().state != TutorialView::Running),
 					"step " << tutorial().step + 1 << " (" << tutorial().title << "): the clock waits for a gesture its gestures did not make; " << ui->message() << open_checks());
-			ui->frame(1.0 / 60.0);
+			ui->frame(frame);
 			REQUIRE_MESSAGE(!ui->lab().failed(), ui->message());
 		}
 	}
@@ -241,8 +241,11 @@ struct Pupil {
 
 
 // The whole run, each step's gestures played at once and then the lab waited on (at most `wait_s` of the
-// lab's time a step); returns the gestures played. Strict or free, as the screen is.
+// lab's time a step); returns the gestures played. Strict or free, as the screen is. The lab waited on a second's
+// frame at a time (Stage 68: the screen's view taken once a frame, sixty steps of the lab at 1x, not once a step; a
+// wait ends at most a second later than in a screen's frames of 1/60 s, and every experiment's results held so)
 inline int follow_through(Pupil &p, double wait_s) {
+	const double frame = 1.0;
 	const int steps = p.tutorial().steps;
 	int played = 0;
 	while (p.tutorial().state == TutorialView::Running && p.tutorial().step < steps) {
@@ -253,7 +256,7 @@ inline int follow_through(Pupil &p, double wait_s) {
 			CHECK_MESSAGE(p.ui->message().empty(), "step " << step + 1 << ": " << p.ui->message());
 		}
 		played += static_cast<int>(gestures.size());
-		p.watch([&] { return p.tutorial().step != step || p.tutorial().state != TutorialView::Running; }, wait_s);
+		p.watch([&] { return p.tutorial().step != step || p.tutorial().state != TutorialView::Running; }, wait_s, frame);
 		if (p.tutorial().state == TutorialView::Failed) {
 			FAIL("step " << step + 1 << " (" << p.tutorial().title << "): " << p.tutorial().failure);
 		}
@@ -262,7 +265,9 @@ inline int follow_through(Pupil &p, double wait_s) {
 }
 
 // The whole run as a person plays it: a second and a half before each gesture, the pointer moved across the
-// screen, then the card read every half second while the lab is waited on.
+// screen, then the card read every half second while the lab is waited on (Stage 68: those waits a frame each, the
+// same time of the clock, the screen's view taken once a frame; what a person's run holds is its gestures and that
+// it ends).
 inline void play_as_person(Pupil &p, double wait_s) {
 	const int steps = p.tutorial().steps;
 	while (p.tutorial().state == TutorialView::Running && p.tutorial().step < steps) {
@@ -280,10 +285,10 @@ inline void play_as_person(Pupil &p, double wait_s) {
 		const int64_t limit = p.ui->lab().step() + static_cast<int64_t>(wait_s * 60.0);
 		while (p.tutorial().step == step && p.tutorial().state == TutorialView::Running) {
 			REQUIRE_MESSAGE(p.ui->lab().step() < limit, "waited too long on step " << step + 1 << ": " << title);
-			p.frames(45);
+			p.ui->frame(0.75);
 			p.resume();
 			const int64_t before = p.ui->lab().step();
-			p.frames(30);
+			p.ui->frame(0.5);
 			REQUIRE_MESSAGE(!p.ui->lab().failed(), "step " << step + 1 << " (" << title << "): " << p.ui->message());
 			if (p.ui->lab().step() == before && p.tutorial().step == step) {
 				FAIL("step " << step + 1 << " (" << title << "): the clock stands, waiting for a gesture its gestures did not make; " << p.ui->message());

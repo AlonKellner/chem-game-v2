@@ -8,7 +8,9 @@
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
 
+#include "fixtures.hpp"
 #include "part.hpp"
+#include "scene_file.hpp"
 #include "sparse.hpp"
 
 #include <doctest/doctest.h>
@@ -430,17 +432,15 @@ TEST_CASE("optics: the picture is the pixels, and the table moves only when what
 }
 
 // ctest: parts 12
+// ctest: fixture demo
 TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the flask turns blue (Stage 10)") {
 	std::string why;
 	const std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
-	const auto flask_colour = [&] {
-		float x = 0, y = 0;
-		REQUIRE(ui->locate("item:flask", x, y));
-		ui->frame(0.0);
+	// the flask's colour in a scene, the flask at (x, y) on the screen
+	const auto flask_colour = [&](const lab::OpticsScene &scene, float x, float y) {
 		// low in the flask, clear of the heap, over its floor of glass (Stage 21: what it holds rests on that),
 		// half way up its liquid (Stage 24: a conical flask's wide base holds what is left in a thin layer)
-		const lab::OpticsScene &scene = ui->optics();
 		const float *rect = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS) * 4];
 		for (int i = 0; i < static_cast<int>(scene.table[0]); ++i, rect += lab::optics_layout::BODY_VECS * 4) {
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
@@ -470,7 +470,12 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	CHECK(list.above > 0);
 	CHECK(list.above < static_cast<int32_t>(list.commands.size()));
 	CHECK(ui->optics().table[0] == 9); // five vessels, the jar, the balloon; the burner and the condenser's outlet (Stage 22)
-	const lab::CieLab empty = flask_colour();
+	const lab::CieLab empty = [&] {
+		float x = 0, y = 0;
+		REQUIRE(ui->locate("item:flask", x, y));
+		ui->frame(0.0);
+		return flask_colour(ui->optics(), x, y);
+	}();
 	CHECK(std::fabs(empty.b) < 1.0); // nearly neutral (the base's glass disperses a little: Stage 25)
 
 	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
@@ -486,25 +491,32 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	}
 	// as ctest runs it, twelve entries, each a twelfth of the scenes' pixels, a scene's pixel by a scene's pixel
 	// (Stage 40, part.hpp: a few pixels through the glass are a second or more at every scene, and so are shared
-	// out). The lab unchecked: its state is the same (D1), and the demo's session is checked by demo_session and
-	// lab_tests.lab
-	ui->lab().set_checking(false);
+	// out). Each command's scene as the screen made it, playing the session (Stage 68: the fixture `demo`,
+	// test_demo_record.cpp, which played it once, every invariant checked at every step; here
+	// nothing is played). A command that leaves the scene as it was, by its revisions there, leaves every pixel as it was.
+	const nlohmann::json kept = nlohmann::json::parse(fixtures::read("demo", "scenes.json"));
+	REQUIRE(kept.size() == session.at("script").size());
 	std::vector<std::pair<int, int>> mine;
-	// what a scene is known by: a command that leaves all of it as it was leaves every pixel as it was
-	std::array<uint64_t, 3> scanned{};
 	for (const nlohmann::json &command : session.at("script")) {
-		REQUIRE_MESSAGE(ui->lab().command(command.dump(), why), why);
-		ui->frame(0.0);
-		const lab::OpticsScene &scene = ui->optics();
+		const nlohmann::json &at = kept[static_cast<size_t>(n)];
+		const bool scan = at.at("changed").get<bool>();
+		const bool colour = (command.value("do", "") == "stir" && !command.at("on").get<bool>()) || (command.contains("below_g") && command.value("species", "") == "water");
+		if (!scan && !colour) {
+			++n;
+			continue; // the scene before it, whose O1 and O2 were held
+		}
+		lab::OpticsScene scene;
+		REQUIRE(scene_file::read(fixtures::read("demo", std::to_string(n) + ".scene"), scene));
+		const float fx = at.at("flask")[0].get<float>(), fy = at.at("flask")[1].get<float>();
 		REQUIRE(lab::check_O1(scene) == "");
-		const std::array<uint64_t, 3> now{ scene.revision, scene.wall_revision, scene.shapes_revision };
-		if (scans == 0 || now != scanned) {
+		if (scan) {
 			// (Stage 35: the pixels dealt one by one among the threads, the reference's scene in use each thread's
 			// own. Dealt by rows, a row a thread, the threads whose rows cross the vessels worked alone for most
 			// of the scan, read as it now is by each pixel's own rays: 10 s a command, 3 s so.)
 			mine.clear();
 			for (size_t i = 0; i < places.size(); ++i) {
-				if (part().mine(static_cast<size_t>(scans) * places.size() + i)) {
+				// (Stage 68: and every sparse()-th of them, the gates every second, a full gate each)
+				if (part().mine(static_cast<size_t>(scans) * places.size() + i) && (static_cast<size_t>(scans) + i) % static_cast<size_t>(sparse()) == 0) {
 					mine.push_back(places[i]);
 				}
 			}
@@ -524,14 +536,13 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			for (const std::string &o2 : said) {
 				REQUIRE_MESSAGE(o2.empty(), o2 << " after command " << n);
 			}
-			scanned = now;
 			++scans;
 		}
 		if (command.value("do", "") == "stir" && !command.at("on").get<bool>()) {
-			after_dissolving = flask_colour();
+			after_dissolving = flask_colour(scene, fx, fy);
 		}
 		if (command.contains("below_g") && command.value("species", "") == "water") {
-			boiled_down = flask_colour();
+			boiled_down = flask_colour(scene, fx, fy);
 		}
 		++n;
 	}
