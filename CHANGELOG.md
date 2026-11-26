@@ -1,5 +1,15 @@
 # GAME_SPEC version history
 
+## 0.60.0 (2026-11-26, Stage 60; signed off by the user: "Approved, merge and proceed")
+
+- §13.1 (Stage 60, `docs/TDD_60_PLANNER.md`; `docs/CURRICULUM.md`, step C's last part, S3): **the planner**, the
+  notebook's fourth tab: a target and its route back, each step's reaction and expected yield, what each step needs,
+  carried or bought; set as a goal in the outbox.
+- §13.2: `calculated` "plan".
+- §13.7: the experiment `yield` (limiting reagent and percent yield of copper hydroxide).
+- `docs/CURRICULUM.md`: experiment 35 (seeding) moved to a chemistry step with secondary nucleation (C16); 50 its own
+  stage. The goldens unchanged.
+
 ## 0.59.0 (2026-11-25, Stage 59; signed off by the user: "Approved, merge and proceed")
 
 - §13 (Stage 59, `docs/TDD_59_FILTERING.md`; `docs/CURRICULUM.md`, step C's second half, T6): **a filter funnel** with a

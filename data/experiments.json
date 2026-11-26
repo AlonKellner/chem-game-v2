@@ -150,6 +150,13 @@
 			"tutorial": "tutorials/separate.json"
 		},
 		{
+			"id": "yield",
+			"title": "Limiting reagent and percent yield",
+			"summary": "Planned and measured: the planner works out the crystals and the base for 0.600 g of copper hydroxide; the crystals are weighed and dissolved, the base added in excess, the precipitate filtered and weighed, and its yield worked out. A guess first.",
+			"bench": "benches/yield.json",
+			"tutorial": "tutorials/yield.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

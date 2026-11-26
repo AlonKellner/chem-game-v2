@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.59.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.60.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2043,6 +2043,15 @@ panel has three tabs (`notebook:tab:<notebook|calculator|reference>`).
   phase, molar mass, ΔfH, S°, Cp; every reaction's equation and law; copper sulfate's solubility every ten degrees from
   0 to 90 C, the model's own equilibrium.
 - A tutorial's check `calculated` (§13.2): the calculator shows a result of that kind.
+- **The planner** (Stage 60, `lab/planner.hpp`; `docs/TDD_60_PLANNER.md`), the panel's fourth tab
+  (`notebook:tab:planner`): a target's formula, grams and purity (`notebook:plan:target`, `:grams`, `:purity`); the
+  route back from it a step at a time (`notebook:plan:add`, `:remove`), each step a reaction chosen with arrows
+  (`notebook:plan:prev:<k>`, `:next:<k>`) among those that make what it is asked for (the target, or the first reactant
+  of the step before that some reaction makes; another choice drops the steps after it) and the yield expected of it
+  (`notebook:plan:yield:<k>`, %). Worked back: each step's extent, its product needed over its yield; every reactant
+  it needs, the one the next step makes carried, the rest bought. `notebook:plan:goal` sets the target as a player's
+  goal (§13.5) on the first free slot: its mass, at least, and its purity. `calculated` "plan" while it is worked out.
+  The panel's close and erase stand at its right.
 
 **Predictions** (Stage 55): while a tutorial runs and its report's predictions are not all made, and nothing is
 selected, the readout's place holds a field for each (`predict:<n>`) and "predict" (`predict:make`); a prediction made
@@ -2181,6 +2190,7 @@ gestures, and a run with a tutorial is the same lab as one without.
   - The notebook (Stage 54): a quantity of an item being logged (`logging`), or recorded at least
     once (`recorded`; Stage 55: at least `recorded_count` times); a number written under a label
     (`noted`, and `noted_value`: that number; Stage 55; `noted_count`: at least so many, Stage 56).
+  - The planner (Stage 60): `calculated` "plan", while it shows a route worked out.
   - Predictions (Stage 55): at least so many of the report's predictions made (`predicted`).
   - The calculator (Stage 58): it shows a result of that kind (`calculated`: mass, moles, solution, dilution,
     reaction).
@@ -2763,6 +2773,12 @@ stand on.
     sulfate; poured through the filter funnel, the rest of the powder scraped after it, drained, scraped into a tared
     dish and weighed: 0.9515 g at the bench's seed against its 0.95148, none through the paper. Its report: the oxide's
     mass, within 1 %.
+  - `yield`, *limiting reagent and percent yield* (Stage 60; experiment 8): read by instruments. A guess of the yield
+    first; the planner works out the crystals (1.536 g) and the base (12.3 mL of 1.00 M) for 0.600 g of copper
+    hydroxide; about that much of the crystals weighed into a tared beaker, dissolved, 15 mL of the base poured in
+    (in excess: the copper limits), the precipitate filtered, scraped into a tared dish and weighed: 0.6344 g from
+    1.6232 g of the crystals at the bench's seed, 100.0 % of the theoretical 0.6342 g. Its report: the percent yield,
+    within 1 point, predicted first.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
