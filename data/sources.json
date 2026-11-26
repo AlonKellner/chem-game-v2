@@ -71,13 +71,13 @@
 		},
 		{
 			"data": ["solutions.json/{a_phi,b}", "solutions.json/pairs/#/*"],
-			"measured": "Pitzer and Mayorga; the acid's set fitted to Staples; the base's and its salt's held to Hamer and Wu and to Goldberg",
+			"measured": "Pitzer and Mayorga; the acid by Pitzer, Roy and Silvester with the bisulfate as PHREEQC v3's pitzer.dat has it (H+ with SO4 2- and with HSO4-, Na+ with HSO4-; Stage 63), held to Staples; the base's and its salt's held to Hamer and Wu and to Goldberg",
 			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples", "Hamer and Wu", "Goldberg 1981"],
 			"tests": ["solution: the data oracle: copper sulfate and the acid as electrolytes", "solution: the acid lowers the salt's solubility", "measured: sodium hydroxide's and sodium sulfate's mean activity coefficients"]
 		},
 		{
 			"data": ["solutions.json/diffusion/*", "solutions.json/viscosity/#/*"],
-			"measured": "Li and Gregory 1974; NIST WebBook (IAPWS 2008)",
+			"measured": "Li and Gregory 1974; the bisulfate's PHREEQC v3's pitzer.dat (Stage 63); NIST WebBook (IAPWS 2008)",
 			"doc": ["Li and Gregory", "IAPWS 2008"],
 			"tests": ["measured: water's viscosity, and the ions' diffusion"]
 		},
@@ -344,6 +344,13 @@
 		{"data": ["glassware.json/kinds/cuvette/sizes/#/*", "glassware.json/kinds/cuvette/{floor_per_wall,pour_ml_s,cap_bore_mm,burst_kpa}"], "design": "a round cuvette (Stage 55): a glass cell 12 mm across outside, 1 mm its wall, so 10 mm across inside, its path; 75 mm tall, as round cells for student spectrophotometers are, chosen for the game"},
 		{"data": ["glassware.json/kinds/{burette,pipette,volumetric_flask,measuring_cylinder,foam_cup}/{pour_ml_s,cap_bore_mm,burst_kpa}"], "design": "pouring and pressure for the new kinds (Stage 52), as the others': a narrow neck pours slowly; a foam cup gives way at little; a burette and a pipette have an outlet at their foot"},
 		{"data": ["species.json/species/polystyrene_foam/thermo/*"], "measured": "NIST's cryogenic material correlations for polystyrene foam: about 1.17 J/(g K) near 293 K, times the styrene unit (C8H8, 104.15 g/mol); a wall never reacts, so its formation terms are 0", "doc": ["A foam cup (Stage 52)", "NIST"], "tests": ["sources: every species' thermodynamic row is the one cited"]},
-		{"data": ["optics/media.json/media/polystyrene_foam/**", "optics/media.json/lwir/transmittance/polystyrene_foam", "instruments.json/walls_g_cm3/polystyrene_foam"], "calibrated": "searched and not found measured: a foam cup's wall white: the pass has no wall that scatters light back, so it lets most through (0.8, flat) to look pale rather than a smoked grey; a fifth of the long-wave; its density a cup's 2.6 g over its 52 cm3 of wall", "doc": ["A foam cup (Stage 52)"]}
+		{"data": ["optics/media.json/media/polystyrene_foam/**", "optics/media.json/lwir/transmittance/polystyrene_foam", "instruments.json/walls_g_cm3/polystyrene_foam"], "calibrated": "searched and not found measured: a foam cup's wall white: the pass has no wall that scatters light back, so it lets most through (0.8, flat) to look pale rather than a smoked grey; a fifth of the long-wave; its density a cup's 2.6 g over its 52 cm3 of wall", "doc": ["A foam cup (Stage 52)"]},
+		{"data": ["species.json/species/{copper_ion,sulfate_ion,sodium_ion,hydroxide_ion,nickel_ion}/thermo/*", "species.json/species/{copper_ion,sulfate_ion,sodium_ion,hydroxide_ion,nickel_ion}/volume_cm3"], "measured": "the retired formula units' rows (each cited for its unit) split exactly, the hydrogen ion's at nought: SO4 2- the acid's, Cu2+ copper sulfate's less it, Na+ half of sodium sulfate's less it, OH- sodium hydroxide's less Na+, Ni2+ nickel sulfate's less SO4 2- (Stage 63)", "doc": ["Ions as species (Stage 63)", "split exactly"], "tests": ["sources: each ion's data is its formula units' split exactly"]},
+		{"data": ["species.json/species/hydrogen_ion/thermo/*", "species.json/species/hydrogen_ion/volume_cm3"], "design": "the convention of every table of ions: H+(aq) has no formation enthalpy, entropy, heat capacity or apparent volume (Stage 63)"},
+		{"data": ["species.json/species/hydrogen_sulfate_ion/thermo/*"], "measured": "PHREEQC v3's pitzer.dat (USGS): SO4-2 + H+ = HSO4-, log K 1.988, 3.85 kcal at 25 C, its heat capacity the slope of its analytic log K at 25 C (239.2 J/K/mol), over the model's own SO4 2- (Stage 63)", "doc": ["Ions as species (Stage 63)", "pitzer.dat"], "tests": ["measured: the bisulfate's dissociation constant is PHREEQC's"]},
+		{"data": ["species.json/species/hydrogen_sulfate_ion/volume_cm3"], "design": "sulfate's own apparent volume, a stand-in (Stage 63: no source read for the bisulfate's)"},
+		{"data": ["species.json/species/copper_hydroxide_ion/thermo/{hf_kj,s0}"], "measured": "PHREEQC v3's minteq.v4.dat (USGS): Cu+2 + H2O = CuOH+ + H+, log K -7.497, 35.81 kJ, over the model's own Cu2+ and water (Stage 63)", "doc": ["Ions as species (Stage 63)", "minteq.v4.dat"], "tests": ["measured: copper's first hydrolysis constant and heat are MINTEQ's"]},
+		{"data": ["species.json/species/copper_hydroxide_ion/thermo/cp", "species.json/species/copper_hydroxide_ion/volume_cm3"], "design": "Cu2+'s and water's together: the hydrolysis's own heat capacity and volume held at nought, MINTEQ giving neither (Stage 63)"},
+		{"data": ["species.json/species/{hydrogen_ion,hydroxide_ion,copper_ion,sulfate_ion,hydrogen_sulfate_ion,sodium_ion,nickel_ion,copper_hydroxide_ion}/ions/*"], "design": "an ion is its own particle (Stage 63)"}
 	]
 }

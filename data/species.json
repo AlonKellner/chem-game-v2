@@ -26,7 +26,7 @@
 		{"id": "hydroxide_ion", "formula": "OH-1", "phase": "aq", "ions": {"OH-1": 1}, "volume_cm3": 17.85, "thermo": {"hf_kj": -229.994, "cp": 67.85, "s0": -10.9}},
 		{"id": "copper_ion", "formula": "Cu+2", "phase": "aq", "ions": {"Cu+2": 1}, "volume_cm3": -33.0, "thermo": {"hf_kj": 73.28, "cp": 72.91, "s0": -71.62}},
 		{"id": "sulfate_ion", "formula": "SO4-2", "phase": "aq", "ions": {"SO4-2": 1}, "volume_cm3": 35.7, "thermo": {"hf_kj": -909.27, "cp": 138.9, "s0": 20.1}},
-		{"id": "hydrogen_sulfate_ion", "formula": "HSO4-1", "phase": "aq", "ions": {"HSO4-1": 1}, "volume_cm3": 35.7, "thermo": {"hf_kj": -893.162, "cp": 347.9, "s0": 112.19}},
+		{"id": "hydrogen_sulfate_ion", "formula": "HSO4-1", "phase": "aq", "ions": {"HSO4-1": 1}, "volume_cm3": 35.7, "thermo": {"hf_kj": -893.162, "cp": 378.1, "s0": 112.19}},
 		{"id": "sodium_ion", "formula": "Na+1", "phase": "aq", "ions": {"Na+1": 1}, "volume_cm3": -17.85, "thermo": {"hf_kj": -240.12, "cp": -169.95, "s0": 59.0}},
 		{"id": "nickel_ion", "formula": "Ni+2", "phase": "aq", "ions": {"Ni+2": 1}, "volume_cm3": -34.89, "thermo": {"hf_kj": -53.93, "cp": 72.91, "s0": -128.9}},
 		{"id": "copper_hydroxide_ion", "formula": "CuOH+1", "phase": "aq", "ions": {"CuOH+1": 1}, "volume_cm3": -14.93, "thermo": {"hf_kj": -176.74, "cp": 148.285, "s0": -25.09}}

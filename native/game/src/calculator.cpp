@@ -74,7 +74,7 @@ std::string phase_of(chem::Phase p) {
 
 std::string term_text(const chem::SpeciesTable &table, chem::SpeciesId id) {
 	const chem::SpeciesDef &def = table.species(id);
-	return std::string(def.formula) + "(" + phase_of(def.phase) + ")";
+	return chem::written(def.formula) + "(" + phase_of(def.phase) + ")";
 }
 
 } // namespace

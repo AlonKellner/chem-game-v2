@@ -313,6 +313,26 @@ private:
 	int32_t term_count_ = 0;
 };
 
+// A formula as it is written for a reader (Stage 63): an ion's charge after it, its size before its sign and
+// one left unwritten, a space where the formula ends in a count ("Cu+2" is Cu2+, "SO4-2" SO4 2-, "H+1" H+); any
+// other formula as it is.
+inline std::string written(std::string_view formula) {
+	size_t at = formula.size();
+	while (at > 0 && formula[at - 1] >= '0' && formula[at - 1] <= '9') {
+		--at;
+	}
+	if (at == 0 || at == formula.size() || (formula[at - 1] != '+' && formula[at - 1] != '-') || at < 2) {
+		return std::string(formula);
+	}
+	const std::string_view base = formula.substr(0, at - 1), size = formula.substr(at);
+	const char sign = formula[at - 1];
+	if (size == "1") {
+		return std::string(base) + sign;
+	}
+	const bool count = base.back() >= '0' && base.back() <= '9';
+	return std::string(base) + (count ? " " : "") + std::string(size) + sign;
+}
+
 // The build's tables (data/elements.json, data/species.json, data/reactions.json,
 // embedded and checked by native/datagen): the species the game ships and its
 // reactions, in the files' order. chem/builtin_ids.hpp names their indices.

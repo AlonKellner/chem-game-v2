@@ -194,3 +194,49 @@ TEST_CASE("acidity: an acid and a base mixed neutralise in the step, the solutio
 	}
 }
 
+
+namespace {
+
+// a reaction's equilibrium constant from the tables at temperature T: K = exp(-dG / RT), each species' G its
+// formation enthalpy and entropy carried by its constant heat capacity (as the model's affinity has it)
+double constant_of(std::initializer_list<std::pair<SpeciesId, int>> terms, double kelvin) {
+	double g = 0.0;
+	for (const auto &[s, nu] : terms) {
+		const SpeciesDef &d = builtin_species().species(s);
+		g += nu * (d.hf + d.cp * (kelvin - T0) - kelvin * (d.s0 + d.cp * std::log(kelvin / T0)));
+	}
+	return std::exp(-g / (GAS_CONSTANT * kelvin));
+}
+
+} // namespace
+
+TEST_CASE("measured: the bisulfate's dissociation constant is PHREEQC's (pitzer.dat) from 0 to 100 C (Stage 63)") {
+	// pitzer.dat (PHREEQC v3, USGS): SO4-2 + H+ = HSO4-, log K 1.988 and 3.85 kcal at 25 C, and its analytic
+	// log K = -56.889 + 0.006473 T + 2307.9 / T + 19.8858 log10 T; the model's heat capacity held at its 25 C slope
+	for (const double celsius : { 0.0, 25.0, 50.0, 75.0, 100.0 }) {
+		const double kelvin = celsius + 273.15;
+		const double model = std::log10(constant_of({ { builtin::hydrogen_sulfate_ion, -1 }, { builtin::hydrogen_ion, 1 }, { builtin::sulfate_ion, 1 } }, kelvin));
+		const double source = -(-56.889 + 0.006473 * kelvin + 2307.9 / kelvin + 19.8858 * std::log10(kelvin));
+		INFO(celsius << " C: log K2 " << model << " against " << source);
+		CHECK(std::abs(model - source) < (celsius == 25.0 ? 0.001 : 0.02));
+	}
+	const SpeciesTable &t = builtin_species();
+	const double heat = t.species(builtin::hydrogen_ion).hf + t.species(builtin::sulfate_ion).hf - t.species(builtin::hydrogen_sulfate_ion).hf;
+	CHECK(heat == doctest::Approx(-3.85 * 4184.0).epsilon(1e-4));
+}
+
+TEST_CASE("measured: copper's first hydrolysis constant and heat are MINTEQ's (Stage 63)") {
+	// minteq.v4.dat (PHREEQC v3, USGS): Cu+2 + H2O = CuOH+ + H+, log K -7.497, 35.81 kJ; no heat capacity of its own
+	// is given (the model's holds it at nought)
+	const SpeciesTable &t = builtin_species();
+	const auto terms = { std::pair{ builtin::copper_ion, -1 }, std::pair{ builtin::water, -1 }, std::pair{ builtin::copper_hydroxide_ion, 1 }, std::pair{ builtin::hydrogen_ion, 1 } };
+	CHECK(std::log10(constant_of(terms, 298.15)) == doctest::Approx(-7.497).epsilon(1e-4));
+	const double heat = t.species(builtin::copper_hydroxide_ion).hf + t.species(builtin::hydrogen_ion).hf - t.species(builtin::copper_ion).hf - t.species(builtin::water).hf;
+	CHECK(heat == doctest::Approx(35.81e3).epsilon(1e-4));
+	// and, the copper sulfate solution it makes acid: 0.5 mol/kg reads under 5 (measured about 4; the dimer is left
+	// out, GAME_SPEC §20)
+	const double p = ph_of(Cell().put(builtin::copper_sulfate_aq, 0.5));
+	MESSAGE("copper sulfate 0.5 mol/kg: pH " << p);
+	CHECK(p > 4.0);
+	CHECK(p < 5.0);
+}

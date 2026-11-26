@@ -1003,3 +1003,54 @@ new wall species, `polystyrene_foam` (C8H8, the styrene unit).
 Its light: searched and not found measured. Real foam scatters white; the pass has no wall that scatters light back,
 so the cup's wall lets a flat 0.8 of the visible through (pale, where a third made it a smoked grey) and a fifth of
 the long-wave (`data/optics/media.json`), calibrated.
+
+## Ions as species (Stage 63)
+
+Dissolved matter as its ions (GAME_SPEC §9, §10): hydrogen, hydroxide, copper, sulfate, bisulfate, sodium, nickel
+and CuOH⁺, each a species of its own. Read 2026-11-26 from PHREEQC v3's databases (USGS,
+`github.com/usgs-coupled/phreeqc3`, `database/pitzer.dat` and `database/minteq.v4.dat`, as text).
+
+**The ions' rows, split exactly.** The retired formula units' rows (sulfuric acid, copper sulfate, sodium
+hydroxide, sodium sulfate, nickel sulfate, each cited in its own section) are split into their ions, H⁺(aq) at
+nought by the tables' convention: SO₄²⁻ is the acid's row, Cu²⁺ copper sulfate's less it, Na⁺ half of sodium
+sulfate's less it, OH⁻ sodium hydroxide's less Na⁺, Ni²⁺ nickel sulfate's less SO₄²⁻. Every solution keeps its
+energy, entropy, volume and solubility; the single ions' values are not NBS's own (Cu²⁺'s is Stage 19's fit), and an
+ion's apparent volume may be negative.
+
+| Ion | ΔfH° kJ/mol | S° J/mol·K | Cp° J/mol·K | V cm³/mol |
+|---|---|---|---|---|
+| H⁺ | 0 | 0 | 0 | 0 |
+| SO₄²⁻ | −909.27 | 20.1 | 138.9 | 35.7 |
+| Cu²⁺ | 73.28 | −71.62 | 72.91 | −33.0 |
+| Na⁺ | −240.12 | 59.0 | −169.95 | −17.85 |
+| OH⁻ | −229.994 | −10.9 | 67.85 | 17.85 |
+| Ni²⁺ | −53.93 | −128.9 | 72.91 | −34.89 |
+
+Water's ionisation follows from them: H⁺ + OH⁻ → H₂O gives out 55.836 kJ (NBS's), log Kw 14.005 at 25 °C; its heat
+capacity is the formula units' (the old fit's), not the measured −224 J/K·mol, so pKw is 12.03 at 100 °C against
+IAPWS's 12.25 (§20); the pH itself reads water's own measured ionisation (Stage 43).
+
+**The bisulfate, from pitzer.dat.** SO4-2 + H+ = HSO4-: log K 1.988, ΔH 3.85 kcal (16.108 kJ), and its analytic
+log K = −56.889 + 0.006473 T + 2307.9/T + 19.8858 log₁₀ T, whose slope at 25 °C gives ΔCp = 239.2 J/K·mol. Over the
+model's own SO₄²⁻: ΔfH° −893.162, S° 112.19, Cp° 378.1. Its diffusion coefficient 0.731e−9 m²/s is the file's
+`-dw`. The model's K2 is within 0.02 in log K of the analytic form from 0 to 100 °C (the gate:
+`measured: the bisulfate's dissociation constant is PHREEQC's`). Its apparent volume is sulfate's, a stand-in.
+
+The acid's activity model, from pitzer.dat (Pitzer, Roy and Silvester 1977 with the bisulfate): H⁺–SO₄²⁻
+β0 0.0298, β1 0, Cφ 0.0438; H⁺–HSO₄⁻ β0 0.2065, β1 0.5556; Na⁺–HSO₄⁻ β0 0.0454, β1 0.398. With the bisulfate at its
+equilibrium the acid's stoichiometric osmotic and mean activity coefficients keep to Staples's within 2% to
+5 mol/kg (`solution: the data oracle: copper sulfate and the acid as electrolytes`); 0.1 mol/kg of the acid holds
+0.073 mol/kg of bisulfate and reads pH 1.02.
+
+**Copper's hydrolysis, from minteq.v4.dat.** Cu+2 + H2O = CuOH+ + H+: log K −7.497, ΔH 35.81 kJ. Over the model's own
+Cu²⁺ and water: ΔfH° −176.74, S° −25.09; its heat capacity and volume Cu²⁺'s and water's together (the reaction's own
+held at nought, the file giving neither). Its dimer, Cu₂(OH)₂²⁺ (log K −10.359), is left out: with no interaction
+parameters for it, a solution boiled down held most of its copper in it (§20). 0.5 mol/kg copper sulfate reads
+pH 4.8 (measured about 4).
+
+**The surface rates in hydrogen ions.** The oxide's and malachite's rates were measured against the acid's
+concentration; their driver is now the free hydrogen ion, so each is fitted again at its source's own conditions
+through the model's settled acid (0.1 mol/kg: 0.1266 mol/kg H⁺ at 25 °C, 0.1186 at 45 °C; 0.2: 0.2453, 0.2307;
+0.8: 0.9742): Majima's half order between 0.2 and 0.8 M becomes 0.5027 in H⁺, his 69 kJ/mol 70.22 with the
+bisulfate's shift with temperature, the prefactor 1.6937e8; Nicol's 0.65 between 0.1 and 0.2 M becomes 0.6812, his
+53.6 kJ/mol 55.372, the prefactor 5.186e7. Each gate holds the model to the source's law in the acid.

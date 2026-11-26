@@ -344,7 +344,7 @@ std::string text_of(const std::string &format, double v, double w) {
 std::string named(const SpeciesTable &table, SpeciesId s) {
 	const SpeciesDef &def = table.species(s);
 	static const char *const PHASE[] = { "s", "l", "g", "aq" };
-	return std::string(def.formula) + "(" + PHASE[static_cast<int>(def.phase)] + ")";
+	return chem::written(def.formula) + "(" + PHASE[static_cast<int>(def.phase)] + ")";
 }
 
 } // namespace
@@ -3355,7 +3355,7 @@ struct Lab::Impl {
 				const SpeciesDef &def = table.species(id);
 				SubstanceView row;
 				row.species = std::string(def.id);
-				row.formula = std::string(def.formula);
+				row.formula = chem::written(def.formula);
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.wall = def.wall;
 				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
@@ -3399,7 +3399,7 @@ struct Lab::Impl {
 					const SpeciesDef &def = table.species(SpeciesId{ s });
 					SubstanceView row;
 					row.species = std::string(def.id);
-					row.formula = std::string(def.formula);
+					row.formula = chem::written(def.formula);
 					row.phase = PHASE[static_cast<int>(def.phase)];
 					row.wall = true;
 					row.mol = static_cast<double>(q) * MOL_PER_QUANTUM;
@@ -3641,7 +3641,7 @@ struct Lab::Impl {
 				}
 				SubstanceView row;
 				row.species = std::string(def.id);
-				row.formula = std::string(def.formula);
+				row.formula = chem::written(def.formula);
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.mol = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
 				row.g = grams(c, id);

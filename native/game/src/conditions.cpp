@@ -62,7 +62,7 @@ std::string species_name(const std::string &id) {
 	}
 	const chem::SpeciesDef &def = table.species(s);
 	const char *phase = def.phase == chem::Phase::Gas ? "g" : def.phase == chem::Phase::Liquid ? "l" : def.phase == chem::Phase::Aqueous ? "aq" : "s";
-	return std::string(def.formula) + "(" + phase + ")";
+	return chem::written(def.formula) + "(" + phase + ")";
 }
 
 } // namespace
