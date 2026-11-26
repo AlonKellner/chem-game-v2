@@ -19,7 +19,7 @@ digest is as it was (the proof), GAME_SPEC stays at 0.62.0.
 | 68.5 | The Godot suite opens no catalogue it does not read | Done |
 | 68.6 | The result cache: merge-level passes, one cache for every worktree | Done |
 | 68.7 | One ccache for every worktree; no worktree's path in a binary | Done |
-| 68.8 | `make gates`; the user's sign-off | open |
+| 68.8 | `make gates` (1,307 s uncached; 20 s again with nothing changed); the user's sign-off | gates passed; sign-off open |
 
 ## 68.0 Measured (M3 Pro: 6 fast cores, 6 slow; the machine shared with other worktrees' gates)
 
@@ -135,6 +135,19 @@ its UUID and its signature are.) godot-cpp's 1,089 files are compiled once for
 every worktree. Held: a new worktree on the branch's head built its core tree with 99 of 134 compiles from the
 cache (the others' sources not compiled anywhere yet); after the last change to the flags, its `chem_tests`,
 `lab_tests` and `chem_tool` read the same to the result cache as this worktree's (main's `chem_tests` does not).
+
+## 68.8 The gates
+
+`GATE_CACHE=0 make gates`, the machine shared with another worktree's gate at its start (a load of 16 to 35): 1,307 s,
+every gate passed. The release ctest 614 s (6,683 s summed; Stage 62: 1,389 s, 16,067 s), the sanitizers' 1,306 s
+(12,148 s; 2,122 s, 22,908 s), the Godot suite 11 s (1,396 s). The sanitizers' run is now the gate's length, bound by
+its work, its longest entries the demo's record (592 s) and the plays through the screen (ui.9, the experiments,
+the tutorials: 350 to 530 s each, their time the view of every frame). `make gates` again with nothing changed but
+a new entry: 20 s (573 and 555 entries passed at the merge level, 11 run).
+
+Not done, and where the time is next: the experiments' and tutorials' plays spend two thirds of their time in the
+screen's view (each vessel's level and bubbles worked out at every step); the sanitizers' run could run the three
+variants of each experiment once, or the plays more sparsely, if the user wants less of them there.
 
 ## Open
 

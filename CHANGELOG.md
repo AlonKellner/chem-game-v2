@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## Stage 68 (2026-11-26; GAME_SPEC stays 0.62.0: no behaviour of the game changes; awaiting the user's sign-off)
+
+- The gates (`docs/TDD_68_GATES_FAST.md`, `docs/WORKFLOW.md`): `make gates` 2,579 s to 1,307 s uncached, every golden
+  and digest as it was. The invariants checked at a third of the cost and a step's copies of the state allocated
+  once; a vessel's shape made once a process and its level found with fewer points of its pieces; a screen's view
+  taken once a change; the demo played once for the O2 scan's twelve parts (a ctest fixture: its scenes); the
+  sanitizer build's labs unchecked (`LAB_CHECK=0`, the release build checking every step); the Godot suite 1,396 s to
+  11 s; the result cache at two levels (a merge gate takes what passed at one) and one for every worktree; one ccache
+  for every worktree. The pressure session's golden record held by the gates (`pressure_session`). Found, open: a
+  save just after the demo's command 1 does not continue as the record does (D2); a loaded lab's first view has no
+  boiling's bubbles.
+
 ## 0.62.0 (2026-11-26, Stage 62; signed off by the user: "Approved, merge and proceed")
 
 - §13.7 (Stage 62, `docs/TDD_62_QUOTA.md`; `docs/CURRICULUM.md`, experiment 50): the experiment `quota` (copper
