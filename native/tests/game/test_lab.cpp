@@ -6,6 +6,8 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include "fixtures.hpp"
+
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -20,14 +22,6 @@ namespace {
 std::string read(const std::string &relative) {
 	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	REQUIRE_MESSAGE(static_cast<bool>(in), relative);
-	std::ostringstream out;
-	out << in.rdbuf();
-	return out.str();
-}
-
-// the same, asserting nothing: for a thread that is not the test's
-std::string read_file(const std::string &relative) {
-	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	std::ostringstream out;
 	out << in.rdbuf();
 	return out.str();
@@ -261,64 +255,8 @@ TEST_CASE("lab: the same commands give the same state, however the steps are gro
 	CHECK(play(false, 18000) == reference);
 }
 
-TEST_CASE("lab: the demo session reproduces its golden record, and its results are what was measured (Stage 7)") {
-	// D4. bench/sessions/demo.jsonl: a digest of the whole state after every command
-	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
-	std::istringstream golden(read("bench/sessions/demo.jsonl"));
-	auto lab = demo_bench();
-	// unchecked (Stage 40): its state is the same (D1), and every invariant is checked at every step of the same
-	// session by demo_session (chem_tool run)
-	lab->set_checking(false);
-	int index = 0;
-	for (const json &command : session.at("script")) {
-		json plain = command;
-		plain.erase("note");
-		std::string why;
-		REQUIRE_MESSAGE(lab->command(plain.dump(), why), "command " << index << ": " << why);
-		std::string line;
-		REQUIRE(std::getline(golden, line));
-		const json recorded = json::parse(line);
-		CAPTURE(index);
-		CHECK(recorded.at("i") == index);
-		CHECK(recorded.at("step") == lab->step());
-		CHECK(recorded.at("digest") == lab->digest());
-		++index;
-	}
-	std::string extra;
-	CHECK_FALSE(std::getline(golden, extra));
-
-	// GAME_SPEC §17: "done when"
-	const json report = json::parse(lab->report());
-	CHECK(report.at("conserved").at("unchanged").get<bool>());
-	const json flask = item(report, "flask"), beaker = item(report, "beaker"), balloon = item(report, "balloon");
-	CHECK(flask.at("submitted").get<bool>());
-	CHECK(beaker.at("submitted").get<bool>());
-	CHECK(balloon.at("submitted").get<bool>());
-	// a sealed balloon of CO2
-	CHECK(grams(balloon, "carbon_dioxide") > 0.8);
-	CHECK(balloon.at("on").is_null());
-	// a beaker of water and nothing else that is not air
-	CHECK(grams(beaker, "water") > 30.0); // (Stage 53: 33.6 g; its hot distillate cools slower through its glass and evaporates more)
-	for (const json &row : beaker.at("contents")) {
-		const std::string s = row.at("species");
-		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
-		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass" || (s == "carbon_dioxide" && row.at("g").get<double>() < 1e-3)));
-	}
-	// a flask whose only solid or liquid, beside a trace of undecomposed malachite, is the pentahydrate
-	const double crystals = grams(flask, "copper_sulfate_pentahydrate");
-	CHECK(crystals > 8.0);
-	CHECK(grams(flask, "water") == 0.0);
-	CHECK(grams(flask, "copper_sulfate_aq") == 0.0);
-	CHECK(grams(flask, "sulfuric_acid_aq") == 0.0);
-	CHECK(grams(flask, "copper_sulfate") == 0.0); // not overheated
-	CHECK(crystals / (crystals + grams(flask, "malachite") + grams(flask, "copper_oxide")) > 0.999);
-	for (const json &row : flask.at("contents")) {
-		if (row.at("species") == "copper_sulfate_pentahydrate") {
-			CHECK(row.at("particles").get<int64_t>() > 500); // (Stage 53: 971, a little fewer and larger as the flask cools slower)
-			CHECK(row.at("size_um").get<double>() > 50.0);
-		}
-	}
-}
+// (the demo session's golden record and its results, Stage 7: test_demo_record.cpp, which plays it once for all that
+// holds it; Stage 68)
 
 // ---------------------------------------------------------------- Stage 8
 
@@ -484,9 +422,13 @@ TEST_CASE("lab: a vessel filled past its brim overflows into the tray (Stage 8)"
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 }
 
+// ctest: fixture demo
 TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not saved (Stage 8)") {
-	// D2. The demo, saved after each of several commands, in the middle of each stage:
-	// the loaded lab reproduces the rest of the golden record.
+	// D2. The demo, saved after each of several commands, in the middle of each stage: the loaded lab is the saved
+	// one, saved again it is the same text, and it reproduces the rest of the golden record. (Stage 68: the saves
+	// from the fixture `demo`, test_demo_record.cpp, which played the session once; until then each cut played it
+	// again to its command. A save after command 1, the malachite just tipped in, does not continue so: the open
+	// issue in docs/TDD_68_GATES_FAST.md.)
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::vector<json> golden;
 	{
@@ -504,6 +446,11 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 	// each cut on a thread of its own (a lab is its own world: nothing is shared but the tables); what goes
 	// wrong is said here, on the test's thread
 	const std::vector<size_t> cuts{ 0, 4, 9, 12, 17, 20 };
+	std::vector<std::string> saves, reports;
+	for (const size_t cut : cuts) {
+		saves.push_back(fixtures::read("demo", std::to_string(cut) + ".json"));
+		reports.push_back(fixtures::read("demo", std::to_string(cut) + ".report.json"));
+	}
 	std::vector<std::string> wrong(cuts.size());
 	std::vector<std::thread> threads;
 	for (size_t k = 0; k < cuts.size(); ++k) {
@@ -512,26 +459,16 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 			std::string &said = wrong[k];
 			const auto fail = [&](const std::string &what) { said = "saved after command " + std::to_string(cut) + ": " + what; };
 			std::string why;
-			auto first = lab::Lab::open(read_file("data/benches/demo.json"), why);
-			if (first == nullptr) {
-				return fail(why);
-			}
-			first->set_checking(false); // (the state is the same, D1: what is held here is the record's digests; Stage 40)
-			for (size_t i = 0; i <= cut; ++i) {
-				if (!first->command(command(i), why)) {
-					return fail(why);
-				}
-			}
-			const std::string saved = first->save();
-			auto second = lab::Lab::load(saved, why);
+			auto second = lab::Lab::load(saves[k], why);
 			if (second == nullptr) {
 				return fail(why);
 			}
-			second->set_checking(false);
-			if (second->digest() != first->digest() || second->step() != first->step() || json::parse(second->report()) != json::parse(first->report())) {
+			second->set_checking(false); // (the state is the same, D1: what is held here is the record's digests; Stage 40)
+			if (second->digest() != golden[cut].at("digest").get<std::string>() || second->step() != golden[cut].at("step").get<int64_t>() ||
+					json::parse(second->report()) != json::parse(reports[k])) {
 				return fail("the loaded lab is not the saved one");
 			}
-			if (second->save() != saved) {
+			if (second->save() != saves[k]) {
 				return fail("saving what was loaded gives another text");
 			}
 			for (size_t i = cut + 1; i < golden.size(); ++i) {
