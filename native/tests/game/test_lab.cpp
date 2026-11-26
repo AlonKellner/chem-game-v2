@@ -6,8 +6,6 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
-#include "fixtures.hpp"
-
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -22,6 +20,14 @@ namespace {
 std::string read(const std::string &relative) {
 	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	REQUIRE_MESSAGE(static_cast<bool>(in), relative);
+	std::ostringstream out;
+	out << in.rdbuf();
+	return out.str();
+}
+
+// the same, asserting nothing: for a thread that is not the test's
+std::string read_file(const std::string &relative) {
+	std::ifstream in(std::string(CHEM_REPO_ROOT) + "/" + relative);
 	std::ostringstream out;
 	out << in.rdbuf();
 	return out.str();
@@ -422,13 +428,12 @@ TEST_CASE("lab: a vessel filled past its brim overflows into the tray (Stage 8)"
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 }
 
-// ctest: fixture demo
 TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not saved (Stage 8)") {
-	// D2. The demo, saved after each of several commands, in the middle of each stage: the loaded lab is the saved
-	// one, saved again it is the same text, and it reproduces the rest of the golden record. (Stage 68: the saves
-	// from the fixture `demo`, test_demo_record.cpp, which played the session once; until then each cut played it
-	// again to its command. A save after command 1, the malachite just tipped in, does not continue so: the open
-	// issue in docs/TDD_68_GATES_FAST.md.)
+	// D2. The demo, saved after each of several commands, in the middle of each stage:
+	// the loaded lab reproduces the rest of the golden record. (Stage 68: each cut plays its own way to its command,
+	// not from the fixture `demo`: nine tenths of the record's steps lie after the cuts but the last, so a save read
+	// there saved a tenth of the work and cost a whole play's wait. A save after command 1, the malachite just
+	// tipped in, does not continue so: the open issue in docs/TDD_68_GATES_FAST.md.)
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::vector<json> golden;
 	{
@@ -446,11 +451,6 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 	// each cut on a thread of its own (a lab is its own world: nothing is shared but the tables); what goes
 	// wrong is said here, on the test's thread
 	const std::vector<size_t> cuts{ 0, 4, 9, 12, 17, 20 };
-	std::vector<std::string> saves, reports;
-	for (const size_t cut : cuts) {
-		saves.push_back(fixtures::read("demo", std::to_string(cut) + ".json"));
-		reports.push_back(fixtures::read("demo", std::to_string(cut) + ".report.json"));
-	}
 	std::vector<std::string> wrong(cuts.size());
 	std::vector<std::thread> threads;
 	for (size_t k = 0; k < cuts.size(); ++k) {
@@ -459,16 +459,26 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 			std::string &said = wrong[k];
 			const auto fail = [&](const std::string &what) { said = "saved after command " + std::to_string(cut) + ": " + what; };
 			std::string why;
-			auto second = lab::Lab::load(saves[k], why);
+			auto first = lab::Lab::open(read_file("data/benches/demo.json"), why);
+			if (first == nullptr) {
+				return fail(why);
+			}
+			first->set_checking(false); // (the state is the same, D1: what is held here is the record's digests; Stage 40)
+			for (size_t i = 0; i <= cut; ++i) {
+				if (!first->command(command(i), why)) {
+					return fail(why);
+				}
+			}
+			const std::string saved = first->save();
+			auto second = lab::Lab::load(saved, why);
 			if (second == nullptr) {
 				return fail(why);
 			}
-			second->set_checking(false); // (the state is the same, D1: what is held here is the record's digests; Stage 40)
-			if (second->digest() != golden[cut].at("digest").get<std::string>() || second->step() != golden[cut].at("step").get<int64_t>() ||
-					json::parse(second->report()) != json::parse(reports[k])) {
+			second->set_checking(false);
+			if (second->digest() != first->digest() || second->step() != first->step() || json::parse(second->report()) != json::parse(first->report())) {
 				return fail("the loaded lab is not the saved one");
 			}
-			if (second->save() != saves[k]) {
+			if (second->save() != saved) {
 				return fail("saving what was loaded gives another text");
 			}
 			for (size_t i = cut + 1; i < golden.size(); ++i) {

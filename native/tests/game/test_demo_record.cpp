@@ -1,8 +1,6 @@
 // The demo session played once for all that holds it (GAME_SPEC §17, §18 D4; Stage 68): its golden record digest for
-// digest, its results, what the lab told of it, and its checkpoints, the ctest fixture `demo` the cases that start
-// from a command read (the lab saved after every command, its report, and the screen's scene): a lab saved and
-// loaded continues as it would have (test_lab.cpp, D2), and the screen's scene through the demo holds O2
-// (test_optics.cpp), which reads the screen's scene at each command as this play made it.
+// digest, its results, what the lab told of it, and the screen's scene after every command, the ctest fixture `demo`:
+// the screen's scene through the demo holds O2 (test_optics.cpp), which reads each scene as this play made it.
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
@@ -72,7 +70,7 @@ std::string all(const lab::Lab &l) {
 } // namespace
 
 // ctest: fixture setup demo
-TEST_CASE("demo: the session reproduces its golden record, its results are what was measured, and the lab tells it; its checkpoints kept (Stage 7, Stage 16, Stage 68)") {
+TEST_CASE("demo: the session reproduces its golden record, its results are what was measured, and the lab tells it; its scenes kept (Stage 7, Stage 16, Stage 68)") {
 	// D4. bench/sessions/demo.jsonl: a digest of the whole state after every command
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::istringstream golden(read("bench/sessions/demo.jsonl"));
@@ -99,9 +97,8 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 		CHECK(recorded.at("i") == index);
 		CHECK(recorded.at("step") == l.step());
 		CHECK(recorded.at("digest") == l.digest());
-		// the checkpoint: the lab saved and its report (for test_lab.cpp's D2), and the screen's scene (for
-		// test_optics.cpp's O2): whether it is another than the last command's, by its revisions as the screen keeps
-		// them, the scene itself, and where the flask is on the screen
+		// the screen's scene (for test_optics.cpp's O2): whether it is another than the last command's, by its
+		// revisions as the screen keeps them, the scene itself, and where the flask is on the screen
 		ui->frame(0.0);
 		const lab::OpticsScene &scene = ui->optics();
 		const std::array<uint64_t, 3> now{ scene.revision, scene.wall_revision, scene.shapes_revision };
@@ -109,8 +106,6 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 		REQUIRE(ui->locate("item:flask", fx, fy));
 		scenes.push_back(json{ { "step", l.step() }, { "changed", index == 0 || now != last }, { "flask", { fx, fy } } });
 		last = now;
-		fixtures::write("demo", std::to_string(index) + ".json", l.save());
-		fixtures::write("demo", std::to_string(index) + ".report.json", l.report());
 		const std::string written = scene_file::write(scene);
 		fixtures::write("demo", std::to_string(index) + ".scene", written);
 		lab::OpticsScene back;
