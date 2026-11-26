@@ -122,7 +122,8 @@ TEST_CASE("debug: each reaction says why it happens and what limits it: too cold
 		const lab::ReactionDebug r = reaction(l->debug("flask"), "copper_oxide_dissolution");
 		INFO(r.limit);
 		CHECK(begins(r.limit, "limited at its surface: ")); // the reaction there, not the acid reaching it (Stage 23)
-		CHECK(r.limit.find("cm2 of CuO(s), 2 mol/kg of H+(aq)") != std::string::npos);
+		// (Stage 64: the bench opens at its fast equilibria, its bisulfate formed: 1.23 mol/kg of the acid's 2 is free)
+		CHECK(r.limit.find("cm2 of CuO(s), 1.23 mol/kg of H+(aq)") != std::string::npos);
 		CHECK(r.limit.find("; stirring would hardly speed it") != std::string::npos);
 		must(*l, R"({"do": "stir", "vessel": "flask", "on": true})");
 		CHECK(r.limit != reaction(l->debug("flask"), "copper_oxide_dissolution").limit);

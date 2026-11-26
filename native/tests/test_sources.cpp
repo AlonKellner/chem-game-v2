@@ -19,6 +19,7 @@ bool near(double a, double b, double rel) {
 
 // IUPAC's abridged standard atomic weights (CIAAW), g/mol
 constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990, NI = 58.693;
+constexpr double CL = 35.45, K = 39.098, P = 30.974, BR = 79.904; // (Stage 64)
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -103,6 +104,17 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::sodium_sulfate_aq, 2 * NA + S + 4 * O, 0.0 },
 		{ builtin::nickel_sulfate_aq, NI + S + 4 * O, 0.0 }, // Stage 47
 		{ builtin::copper_hydroxide, CU + 2 * O + 2 * H, 3.93 }, // spertiniite, measured: Handbook of Mineralogy (Stage 44)
+		// (Stage 64) the CRC Handbook's densities (PubChem), the decahydrate's the Merck Index's, KHP's its crystal's cell
+		{ builtin::sodium_chloride, NA + CL, 2.17 },
+		{ builtin::potassium_chloride, K + CL, 1.988 },
+		{ builtin::ammonium_chloride, N + 4 * H + CL, 1.519 },
+		{ builtin::sodium_bicarbonate, NA + H + C + 3 * O, 2.20 },
+		{ builtin::sodium_carbonate, 2 * NA + C + 3 * O, 2.54 },
+		{ builtin::sodium_carbonate_decahydrate, 2 * NA + C + 3 * O + 10 * (2 * H + O), 1.46 },
+		{ builtin::sodium_acetate, 2 * C + 3 * H + 2 * O + NA, 1.528 },
+		{ builtin::potassium_hydrogen_phthalate, K + 8 * C + 5 * H + 4 * O, 1.644 }, // COD 1511782 (Riley et al. 2013), 296 K
+		{ builtin::phosphoric_acid_aq, 3 * H + P + 4 * O, 0.0 },
+		{ builtin::bromothymol_blue_ion, 27 * C + 27 * H + 2 * BR + 5 * O + S, 0.0 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);

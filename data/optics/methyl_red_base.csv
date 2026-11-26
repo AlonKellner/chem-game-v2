@@ -1,0 +1,14 @@
+# Methyl red's yellow base (MR-) in water: its molar absorption coefficient, decadic, L/mol/cm.
+# Read from Tobey, J. Chem. Educ. 35, 514 (1958), Fig. 2, the plotted points (1 cm, about 27 C, pH about 8), each absorbance over
+# 2.97e-5 M (his recipe: 1 g in 500 ml, 4 ml to 100 ml, 10 ml to 100 ml). Merck's specification agrees. Between his points
+# linear; beyond his last, nought by 575 nm (Stage 64; docs/DATA_SOURCES.md, Indicators).
+380,13541.2
+399,17270
+425,18410
+450,17100
+474,11950
+500,5150
+526,1280
+550,610
+575,0
+780,0

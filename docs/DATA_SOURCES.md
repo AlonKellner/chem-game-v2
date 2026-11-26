@@ -1141,3 +1141,70 @@ for HCl, NaCl and KCl within 2 % to 3, 6 and 4 mol/kg (`measured: hydrochloric a
 potassium chloride's mean activity coefficients are Hamer and Wu's`), and IUPAC's primary pH standards (Buck et al.
 2002, Pure Appl. Chem. 74, 2169, Table 2): 0.025 mol/kg KH₂PO₄ + 0.025 Na₂HPO₄ reads 6.863 (6.865), 0.025 NaHCO₃ +
 0.025 Na₂CO₃ 9.987 (10.012), within 0.04 at 10 and 40 C (`measured: the IUPAC primary pH standards`).
+
+## Salts (Stage 64)
+
+The crystals experiments 14 to 20 weigh: sodium chloride, potassium chloride, ammonium chloride, sodium hydrogen
+carbonate, sodium carbonate and its decahydrate (the solid in contact with its saturated solution at 25 C), anhydrous
+sodium acetate, and potassium hydrogen phthalate (KHP). Read 2026-11-26.
+
+| Crystal | NBS page | ΔfH° kJ/mol | S° (the model's) | Cp° | density g/cm³ |
+|---|---|---|---|---|---|
+| NaCl | 2-301 | −411.153 | 72.31 (NBS 72.13) | 50.50 | 2.17 |
+| KCl | 2-330 | −436.747 | 83.31 (82.59) | 51.30 | 1.988 |
+| NH₄Cl | 2-68 | −314.43 | 94.70 (94.6) | 84.1 | 1.519 |
+| NaHCO₃ | 2-314 | −950.81 | **95.33** (101.7) | 87.61 | 2.20 |
+| Na₂CO₃ | 2-313 | −1130.68 | **126.50** (134.98) | 112.30 | 2.54 |
+| Na₂CO₃·10H₂O | 2-314 | −4081.32 | 556.31 (562.7) | 550.32 | 1.46 (Merck) |
+| CH₃COONa | 2-315 | −708.81 | 123.13 (123.0) | 79.9 | 1.528 |
+| KHC₈H₄O₄ (KHP) | Kong et al. 2010 | −1028.05 | 229 (derived) | 211.14 | 1.644 (COD 1511782) |
+
+- **Each crystal's entropy is the one NBS's own Gibbs energies imply** through its dissolution, S° = S°(its ions in
+  water) − (ΔsolH − ΔsolG)/T, ΔsolG and ΔsolH from NBS's printed ΔfG and ΔfH of the crystal and of its "ai" row: NBS
+  relaxed the G-H-S constraint of the carbonates, and NaHCO₃'s printed S° made its solubility half the measured.
+  For the chlorides and the acetate the two agree within 0.7 J/K mol.
+- **KHP**: Kong, Di, Xu, Yang and Tan 2010 (J. Chem. Eng. Data 55, 2185; NIST ThermoML): ΔfH −1028.05 ± 0.61
+  kJ/mol, and Cp 211.14 J/K mol at 298.15 K between their points. Its S°, 229 ± 10 J/K mol, is their heat capacities
+  integrated (182.90 from 78.7 to 298.15 K, trapezoids) and a Debye curve fitted to their 78.7 to 100 K points below
+  (46): a derived value; only its difference from phthalate's anchor enters, and that is fitted to the solubility.
+- **Solubilities, the gates** (`measured: each salt saturates its solution at its measured solubility`), the
+  saturation index at the measured molality: NaCl 6.157 mol/kg at 25 C and 6.490 at 80 (IUPAC-NIST Solubility Data
+  Series 47, the evaluators' values), +0.007 and +0.076 (Pitzer's 25 C parameters held); KCl 4.769 and 6.139 at 60
+  (SDS 47), −0.045 and −0.052; NH₄Cl 7.393 (SDS 47), −0.10, past Pitzer and Mayorga's 6 mol/kg; NaHCO₃ 1.2207 (Zhou
+  et al. 2017, ThermoML) and 1.720 at 50 C (Seidell 1919: Dibbits, Fedotieff), +0.004 and +0.003; the decahydrate
+  2.79 at 25 C and 1.179 at 10 (Wells and McAdam 1907, Seidell 1919), +0.011 and +0.077; KHP 0.558 at 25 C and 0.710
+  at 35 (Hendrixson 1920, Seidell 1940), nought by the calibration below. Anhydrous Na₂CO₃ dissolves past the
+  decahydrate's saturation, as it does.
+- **Their growth** is copper sulfate's pentahydrate's (Stage 23), a stand-in: no rate read. Each dissolves at
+  transport's pace (Stage 57), which is what an experiment weighs it for.
+- Not modelled: sodium acetate's trihydrate (no heat capacity read), the phosphates' hydrates, KHP's own Pitzer pair
+  with K⁺ (none exists in the sources read).
+
+## Indicators (Stage 64)
+
+Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Read 2026-11-26.
+
+- **Phenolphthalein** (C₂₀H₁₄O₄): Tamura, Abe, Ito and Maeda 1996 (Anal. Sci. 12, 927, J-STAGE): the colourless
+  lactone H₂PP and HPP⁻, pK1 9.05, the red dianion PP²⁻, pK2 9.50 (25 ± 2 C, 0.2 M phosphate buffers). Its fading to
+  the colourless carbinol in strong base (Tam and Chau 1992: k1 0.43 per M per s; Tamura's own is fifty times slower)
+  is not modelled. Its dianion's spectrum is **read from published plots**: Tamura's Fig. 1, the pH 11.5 curve, traced
+  (552.8 nm, 3.71 × 10⁴ L/mol/cm, its second band near 376 nm), the wavelengths moved +2.8 nm to the paper's stated peak.
+- **Bromothymol blue** (C₂₇H₂₈Br₂O₅S): the yellow monoanion and the blue dianion (Shimada and Hasegawa 2017,
+  Spectrochim. Acta A 185, 104), the thermodynamic pKa 7.5; Schill's 7.12 at an ionic strength of 0.1 (quoted by
+  Avdeef 2023) is the gate on the activity model, which gives 7.10 there. Spectra: Hoang et al. 2026 (J. Sci. Tech.,
+  Le Quy Don Tech. Univ., Fig. 2(d)), traced every 5 nm and scaled to the 49th IChO's (2017) 16,600 at 430 nm and
+  38,000 at 620 nm. The red form below pH 1 is left out (its spectrum unread).
+- **Methyl red** (C₁₅H₁₅N₃O₂): the red zwitterion HMR and the yellow MR⁻, pKa 4.82 at 25 C (Ramette, Dratz and Kelly
+  1962, from IUPAC's digitised pKa dataset; Tobey 1958 measured 5.02 at 27.2 C). Spectra: Tobey's Fig. 2, his plotted
+  points over 2.97 × 10⁻⁵ M (his recipe): HMR 520 nm, 4.42 × 10⁴; MR⁻ 425 nm, 1.84 × 10⁴ (Merck's specification agrees;
+  the IChO's 21,500 for the red form, half, is not taken). H₂MR⁺ below pH 2.5 is left out.
+- **Their thermodynamics**: each fully deprotonated form anchored at nought (no reaction makes or breaks the dye), the
+  others by the acid's constant with no heat of ionisation: none was read, so their colours do not move with
+  temperature. Their diffusion, 3.8 to 4.5 × 10⁻¹⁰ m²/s, is the mean of the Wilke–Chang and Hayduk–Minhas correlations
+  (no measurement read); acetic acid's 1.35 × 10⁻⁹ and phosphoric acid's 1.25 × 10⁻⁹ likewise.
+- **Phthalic acid**: Hamer, Pinching and Acree 1945 (J. Res. NBS 35, 539): pK1 2.9496 at 25 C, ΔH −2.665 kJ/mol, ΔS
+  −65.4, ΔCp −90.0; Hamer and Acree 1945 (J. Res. NBS 35, 381): pK2 5.4083, ΔH −2.074, ΔS −110.5, ΔCp −293.3 (minteq.v4.dat
+  agrees to 0.001). Its anchor, phthalate's ΔfH −749.62 kJ/mol and S° 89.23 J/K mol, is **calibrated** so that KHP
+  saturates at Hendrixson's 0.558 and 0.710 mol/kg (25 and 35 C): KHP's heat of solution then 28.1 kJ/mol. 0.05 mol/kg
+  KHP reads pH 3.987 against IUPAC's primary standard 4.005 (`measured: phthalic acid's constants`), K⁺ with hydrogen
+  phthalate given no Pitzer pair.

@@ -1,0 +1,48 @@
+# Bromothymol blue's yellow monoanion (HIn-) in water: its molar absorption coefficient, decadic, L/mol/cm.
+# Read from Hoang et al., J. Sci. Tech. (Le Quy Don Tech. Univ.) 4(1), 2026, Fig. 2(d) (pH 1.86), traced every 5 nm and scaled
+# to the absorptivities the 49th IChO (2017) practical states (16,600 at 430 nm for the acid form, 38,000 at 620 nm for
+# the basic). Its rise beyond 590 nm, a trace of the other form, is set to nought; nought from 585 nm (Stage 64; docs/DATA_SOURCES.md, Indicators).
+380,10390
+385,10940
+390,11730
+395,12550
+400,13380
+405,14160
+410,14900
+415,15590
+420,16140
+425,16460
+430,16600
+435,16600
+440,16320
+445,16000
+450,15450
+455,14710
+460,13840
+465,12920
+470,11910
+475,10810
+480,9700
+485,8640
+490,7590
+495,6580
+500,5660
+505,4780
+510,4050
+515,3360
+520,2710
+525,2210
+530,1790
+535,1380
+540,1100
+545,830
+550,640
+555,460
+560,320
+565,230
+570,140
+575,90
+580,50
+585,0
+600,0
+780,0
