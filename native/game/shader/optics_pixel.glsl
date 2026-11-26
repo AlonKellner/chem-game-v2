@@ -440,6 +440,37 @@ bool beyond_outline(int i, vec2 p, float size) {
 
 // what the pixel at p looks through; `size` is how wide a sample it is, in pixels: 1 for a pixel (its
 // outlines blend by how much of it they cover), less for a sample of the truth (GAME_SPEC §12.3)
+// (Stage 61) A body of the screen's panels (Supplies' pictures, what stands in Storage or the trash): the panels are
+// the screen's, not things of the room, so what is in hand over them sees the room's wall through it, not them. Its
+// bit among the hidden ones (cameras use the 23 below it).
+const int PANEL_BIT = 8388608;
+bool in_panel(int body) {
+	return (int(scene_vec(HEADER_VECS + body * BODY_VECS + 3).w) & PANEL_BIT) != 0;
+}
+// whether something in hand (a layer nearer the eye) covers p, within its outline
+bool hand_over(vec2 p) {
+	int square = square_at(p);
+	int listed = int(scene_vec(square).x);
+	for (int k = 0; k < GRID_SLOTS; k++) {
+		if (k >= listed) {
+			break;
+		}
+		int i = square_body(square, k);
+		if (scene_vec(HEADER_VECS + i * BODY_VECS + 5).y < 0.5) {
+			continue;
+		}
+		vec4 rect = scene_vec(HEADER_VECS + i * BODY_VECS);
+		if (p.x >= rect.x && p.x <= rect.x + rect.z && p.y >= rect.y && p.y <= rect.y + rect.w && !beyond_outline(i, p, 1.0)) {
+			return true;
+		}
+	}
+	return false;
+}
+// hidden from this ray (a sensor's), or a panel's under what is in hand at p
+bool hidden_at(int body, vec2 p) {
+	return hidden(body) || (in_panel(body) && hand_over(p));
+}
+
 Path path_of(vec2 p, float size) {
 	Path q;
 	if (!range_fixed) {
@@ -474,7 +505,7 @@ Path path_of(vec2 p, float size) {
 		int i = square_body(square, k);
 		int at = HEADER_VECS + i * BODY_VECS;
 		vec4 rect = scene_vec(at);
-		if (hidden(i)) {
+		if (hidden_at(i, p)) {
 			continue;
 		}
 		if (p.y < rect.y - 1.0 || p.y > rect.y + rect.w + 1.0 || p.x < rect.x - 1.0 || p.x > rect.x + rect.z + 1.0) {
@@ -2145,7 +2176,7 @@ RayMet ray_met(vec2 p, float nm) {
 		int met_core = 0;
 		for (int k = first; k <= last; k++) {
 			vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-			if (trace_bends(k) && !hidden(k) && where.y >= rect.y && where.y <= rect.y + rect.w) {
+			if (trace_bends(k) && !hidden_at(k, where) && where.y >= rect.y && where.y <= rect.y + rect.w) {
 				// (a ray whose line passes the body's axis further off than it reaches does not meet it)
 				float off = abs((lp.x - (rect.x + rect.z * 0.5)) * lu.z - (lp.z - z) * lu.x) / sqrt(lu.x * lu.x + lu.z * lu.z);
 				if (off > rect.z * 1.6 + 2.0) {
@@ -2170,7 +2201,7 @@ RayMet ray_met(vec2 p, float nm) {
 			bool bent = k == hit;
 			if (!bent) {
 				vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-				if (trace_bends(k) || hidden(k) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
+				if (trace_bends(k) || hidden_at(k, where) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
 					continue;
 				}
 			}

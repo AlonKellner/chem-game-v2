@@ -356,3 +356,62 @@ TEST_CASE("supplies: a supply pressed is its copy in hand at its full size, simu
 	ui->pointer(cx, cy, false);
 	CHECK(ui->lab().digest() == placed_digest);
 }
+
+namespace {
+
+// the screen's colours over a held flask's middle
+std::vector<double> held_colours(lab::Ui &ui) {
+	const lab::OpticsScene &scene = ui.optics();
+	const int b = lab::optics_body(scene, "flask");
+	REQUIRE(b >= 0);
+	const float *r = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS) * 4];
+	std::vector<double> out;
+	for (int y = static_cast<int>(r[1] + r[3] * 0.55f); y < static_cast<int>(r[1] + r[3] * 0.9f); y += 5) {
+		for (int x = static_cast<int>(r[0] + r[2] * 0.3f); x < static_cast<int>(r[0] + r[2] * 0.7f); x += 5) {
+			double rgba[4];
+			lab::optics_pixel(scene, x, y, rgba);
+			out.insert(out.end(), { rgba[0], rgba[1], rgba[2] });
+		}
+	}
+	return out;
+}
+
+void type(lab::Ui &ui, const std::string &field, const std::string &text) {
+	float x = 0, y = 0;
+	REQUIRE(ui.locate(field, x, y));
+	ui.pointer(x, y, true);
+	ui.pointer(x, y, false);
+	for (const char c : text) {
+		ui.key(lab::Ui::KeyText, static_cast<uint32_t>(c));
+	}
+	ui.key(lab::Ui::KeyEnter, 0);
+}
+
+} // namespace
+
+TEST_CASE("supplies: what is held over Supplies sees the room's wall through it, not the panel's boxes (Stage 61)") {
+	std::string why;
+	auto ui = lab::Ui::open(read("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	REQUIRE(ui->lab().command(R"({"do": "take", "supply": "flask", "at": [12, 6]})", why));
+	ui->frame(1.0 / 60.0);
+	const auto held_over_first_box = [&](const std::string &query) {
+		type(*ui, "search:supplies", query); // (the first box shows what the search leaves)
+		float fx = 0, fy = 0;
+		REQUIRE(ui->locate("item:flask", fx, fy));
+		ui->pointer(fx, fy, true);
+		ui->pointer(fx, fy, false);
+		ui->pointer(60.0f, 150.0f, false); // over Supplies' first box
+		std::vector<double> seen = held_colours(*ui);
+		ui->key(lab::Ui::KeyEscape, 0); // back where it stood
+		float sx = 0, sy = 0;
+		REQUIRE(ui->locate("search:supplies", sx, sy));
+		ui->pointer(sx, sy, true);
+		ui->pointer(sx, sy, false);
+		ui->key(lab::Ui::KeyEscape, 0); // the search cleared
+		return seen;
+	};
+	const std::vector<double> over_beaker = held_over_first_box("beaker"), over_camera = held_over_first_box("camera");
+	REQUIRE(!over_beaker.empty());
+	CHECK(over_beaker == over_camera); // whatever box is behind it, it sees the same wall
+}

@@ -2011,6 +2011,10 @@ top the clock.
   it), built ahead for the benches of `data/` (`make pictures`, `chem_tool capture`: the file is its cache), given
   back by the host and kept by it; a box with none yet is drawn by the pass while its own is captured apart, a
   supply at a time.
+- **The panels are the screen's, not the room's** (Stage 61, the user): what is held over Supplies, Storage or the
+  trash sees the room's wall through it, the bench's grid continued over them, not their boxes, pictures or what
+  stands in them (their bodies carry the pixel source's `PANEL_BIT`, passed over wherever something in hand covers
+  them within its outline; their outlines are drawn over the pass). A vessel in a panel likewise sees the wall.
 - Dragged out, a supply gives a copy (`take`): onto a free square, onto equipment as the copy would be, back over
   Supplies or into the trash nothing. Carried to Supplies, an item goes to Storage.
 - **Search** (Stage 61): a field over Supplies and one over Storage (`search:supplies`, `search:storage`), typed

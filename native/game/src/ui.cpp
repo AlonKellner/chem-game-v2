@@ -798,10 +798,10 @@ struct Ui::Impl {
 	}
 	// ---- the supplies' pictures (Stage 61): what is drawn of a supply, as a key (FNV-1a: the same on every build of
 	// the same source, so a picture built ahead is found again); a box's pixels read from a scene; one captured alone
-	OpticsRoom room_was;
+	OpticsRoom room_was, room_drawn; // (the wall behind glass, and as it is painted)
 	bool capture_ahead = false; // (a host's: supplies with no picture captured apart, one at a time)
 	static std::string picture_key(const ItemView &s) {
-		json j = { { "pictures", 1 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
+		json j = { { "pictures", 2 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
 			{ "h", s.h }, { "label", s.label }, { "wall", s.wall_mm }, { "floor", s.floor_mm }, { "condenser", s.condenser } };
 		json held = json::array();
 		for (const SubstanceView &c : s.contents) {
@@ -874,11 +874,11 @@ struct Ui::Impl {
 		const std::optional<Rect> box = cabinet_box(0);
 		if (box) {
 			if (wait) {
-				pictures[key] = capture_box(scene, room_was, *box);
+				pictures[key] = capture_box(scene, room_drawn, *box);
 				pictures_new = true;
 			} else {
 				capturing_key = key;
-				capturing = std::async(std::launch::async, [frozen = scene, room = room_was, at = *box]() { return capture_box(frozen, room, at); });
+				capturing = std::async(std::launch::async, [frozen = scene, room = room_drawn, at = *box]() { return capture_box(frozen, room, at); });
 			}
 		}
 		capture_only.clear();
@@ -2506,7 +2506,7 @@ struct Ui::Impl {
 		for (int i = 0; i < index; ++i) {
 			k += view.items[static_cast<size_t>(i)].kind == "thermal" ? 1 : 0;
 		}
-		return 1u << (k % 24);
+		return 1u << (k % 23); // (Stage 61: the 24th the panels')
 	}
 	// its frame: in hand, where the pointer has it; fixed on the room, there; else over its own screen
 	Rect camera_frame(int index) const {
@@ -3892,6 +3892,7 @@ struct Ui::Impl {
 	// ---- Storage (Stage 61: the outbox, as many slots as it needs): at least six, always one free after the last that
 	// holds anything or has a goal; those its search leaves, six on the screen at a time, scrolled a slot at a time
 	static constexpr int SHOWN_SLOTS = 6;
+	static constexpr uint32_t PANEL_BIT = 1u << 23; // (Stage 61: the pixel source's PANEL_BIT)
 	int storage_count() const {
 		int last = OUTBOX_SLOTS - 1;
 		for (const ItemView &v : view.items) {
@@ -5656,15 +5657,16 @@ struct Ui::Impl {
 		for (int r = 0; r <= view.rows; ++r) {
 			ruled(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq);
 		}
+		// ---- the optical pass goes here: what is in the vessels and the balloons
+		list.above = static_cast<int32_t>(list.commands.size());
+		room_paint = 2; // over the room: its names and highlights, placed by the view
+		// (Stage 61) the panels' outlines over it: the panels are the screen's, no part of the wall seen through glass
 		for (const Rect &box : { CABINET, OUTBOX }) {
 			ruled(box.x, box.y, box.x + box.w, box.y);
 			ruled(box.x, box.y + box.h, box.x + box.w, box.y + box.h);
 			ruled(box.x, box.y, box.x, box.y + box.h);
 			ruled(box.x + box.w, box.y, box.x + box.w, box.y + box.h);
 		}
-		// ---- the optical pass goes here: what is in the vessels and the balloons
-		list.above = static_cast<int32_t>(list.commands.size());
-		room_paint = 2; // over the room: its names and highlights, placed by the view
 		text(CABINET.x + 16, CABINET.y + 24, "supplies", WALL_INK); // (Stage 61: never runs out)
 		paint_search(1);
 		if (cabinet_most_from() > 0) {
@@ -6512,9 +6514,15 @@ struct Ui::Impl {
 					bodies[k].image_w = pic->second.w;
 					bodies[k].image_h = pic->second.h;
 					bodies[k].image_hash = pic->second.hash;
+					bodies[k].hidden |= PANEL_BIT;
 					continue;
 				}
+				const size_t first = bodies.size();
 				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
+				const std::string &place = view.items[static_cast<size_t>(i)].place;
+				for (size_t k = first; (place == "cabinet" || place == "outbox" || place == "trash") && k < bodies.size(); ++k) {
+					bodies[k].hidden |= PANEL_BIT; // (Stage 61: the panels' own: what is in hand over them does not see them)
+				}
 			}
 		}
 		if (drag >= 0) {
@@ -6748,6 +6756,28 @@ struct Ui::Impl {
 				shape(std::min(x, static_cast<double>(c.w)), y - half, std::max(x, static_cast<double>(c.w)), y + half, r);
 			} else if (c.type == DrawCommand::Line && c.x == c.w) {
 				shape(x - half, std::min(y, static_cast<double>(c.h)), x + half, std::max(y, static_cast<double>(c.h)), r);
+			}
+		}
+		room_drawn = room; // (Stage 61: as painted, for a supply's picture where no body is)
+		// (Stage 61) behind glass the panels are the wall as the bench rules it: its grid continued over them
+		{
+			const double ruled_r = radiance(WALL_GRID);
+			const float sq = square();
+			for (const Rect &box : { CABINET, OUTBOX }) {
+				const float c0 = std::floor((box.x - BENCH.x) / sq), c1 = std::ceil((box.x + box.w - BENCH.x) / sq);
+				for (float c = c0; c <= c1; c += 1.0f) {
+					const float x = BENCH.x + c * sq;
+					if (x >= box.x && x <= box.x + box.w) {
+						shape(sx(x - 1.0f), sy(box.y), sx(x), sy(box.y + box.h), ruled_r);
+					}
+				}
+				const float r0 = std::floor((box.y - BENCH.y) / sq), r1 = std::ceil((box.y + box.h - BENCH.y) / sq);
+				for (float r = r0; r <= r1; r += 1.0f) {
+					const float y = BENCH.y + r * sq;
+					if (y >= box.y && y <= box.y + box.h) {
+						shape(sx(box.x), sy(y - 1.0f), sx(box.x + box.w), sy(y), ruled_r);
+					}
+				}
 			}
 		}
 		return room;
