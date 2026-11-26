@@ -7,6 +7,7 @@
 
 #include "chem/builtin_ids.hpp"
 #include "lab/calculator.hpp"
+#include "lab/planner.hpp"
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/spectrometer.hpp"
@@ -414,6 +415,12 @@ struct Ui::Impl {
 	// the reference: its page; the model's solubility, worked out once it is shown
 	int reference_page = 0;
 	std::vector<std::pair<double, double>> solubility_rows; // C, mol/kg
+	// (Stage 60) the planner: its target's fields, its route (each step's reaction and its yield's field), what is typed in
+	std::string plan_target, plan_grams, plan_purity = "99";
+	std::vector<int> plan_reactions;
+	std::vector<std::string> plan_yields;
+	std::string plan_focus;
+	bool plan_fresh = false;
 	// the debug panel (§13.6): open, its first line shown, and a save for the host to write
 	bool debug_open = false;
 	bool infrared = false; // the debug infrared view (Stage 46): the whole pass in the long-wave range
@@ -524,17 +531,39 @@ struct Ui::Impl {
 
 	// ---- the notebook (GAME_SPEC §13.1, Stage 54): its button, its panel's table, plot and logger
 	static Rect notebook_button() { return Rect{ 1006, 14, 104, 36 }; } // after reset, before the clock (Stage 55: not over it)
-	static constexpr const char *TABS[] = { "tab:notebook", "tab:calculator", "tab:reference" };
+	static constexpr const char *TABS[] = { "tab:notebook", "tab:calculator", "tab:reference", "tab:planner" };
 	static constexpr const char *PAGES[] = { "elements", "species", "reactions", "solubility" };
 	static constexpr const char *KINDS[] = { "mass", "moles", "solution", "dilution", "reaction" };
 	static Rect notebook_rect(const std::string &what) {
 		// close, erase; x, its transform, y, its transform, fit; log every 1, 5, 30 s, stop
 		static const char *const NAMES[] = { "close", "erase", "x", "tx", "y", "ty", "fit", "log:1", "log:5", "log:30", "unlog" };
 		// (Stage 58) the panel's tabs; the reference's pages; the calculator's kinds, its reaction's arrows, its note
-		for (int k = 0; k < 3; ++k) {
+		for (int k = 0; k < 4; ++k) {
 			if (what == TABS[k]) {
-				return Rect{ NOTEBOOK.x + 20 + static_cast<float>(k) * 100, NOTEBOOK.y + 12, 96, 30 };
+				return Rect{ NOTEBOOK.x + 20 + static_cast<float>(k) * 84, NOTEBOOK.y + 12, 80, 30 }; // (Stage 60: four)
 			}
+		}
+		if (what == "close" || what == "erase") {
+			return Rect{ NOTEBOOK.x + NOTEBOOK.w - 100, NOTEBOOK.y + (what == "close" ? 12.0f : 52.0f), 80, 30 };
+		}
+		// (Stage 60) the planner: its target's fields, each step's arrows and yield, adding and taking off a step, the goal
+		if (what == "plan:target" || what == "plan:grams" || what == "plan:purity") {
+			const float x = what == "plan:target" ? 90.0f : what == "plan:grams" ? 300.0f : 430.0f;
+			return Rect{ NOTEBOOK.x + x, NOTEBOOK.y + 100, what == "plan:target" ? 160.0f : what == "plan:grams" ? 80.0f : 60.0f, 30 };
+		}
+		if (what.rfind("plan:", 0) == 0 && (what.rfind("plan:prev:", 0) == 0 || what.rfind("plan:next:", 0) == 0 || what.rfind("plan:yield:", 0) == 0)) {
+			const int k = std::atoi(what.c_str() + what.rfind(':') + 1);
+			const float row = NOTEBOOK.y + 150 + static_cast<float>(k) * 66;
+			if (what.rfind("plan:yield:", 0) == 0) {
+				return Rect{ NOTEBOOK.x + 430, row + 20, 60, 30 };
+			}
+			return Rect{ NOTEBOOK.x + (what.rfind("plan:prev:", 0) == 0 ? 20.0f : 56.0f), row + 22, 32, 28 };
+		}
+		if (what == "plan:add" || what == "plan:remove") {
+			return Rect{ NOTEBOOK.x + (what == "plan:add" ? 20.0f : 140.0f), NOTEBOOK.y + 420, 110, 30 };
+		}
+		if (what == "plan:goal") {
+			return Rect{ NOTEBOOK.x + 20, NOTEBOOK.y + 960, 240, 30 };
 		}
 		for (int k = 0; k < 4; ++k) {
 			if (what == std::string("ref:") + PAGES[k]) {
@@ -640,7 +669,7 @@ struct Ui::Impl {
 		if (!notebook_open) {
 			return false;
 		}
-		for (int k = 0; k < 3; ++k) {
+		for (int k = 0; k < 4; ++k) {
 			if (notebook_rect(TABS[k]).has(x, y)) {
 				notebook_tab = k; // (Stage 58)
 				note_focus = 0;
@@ -654,6 +683,10 @@ struct Ui::Impl {
 		}
 		if (notebook_tab == 1) {
 			calc_press(x, y);
+			return NOTEBOOK.has(x, y);
+		}
+		if (notebook_tab == 3) {
+			plan_press(x, y);
 			return NOTEBOOK.has(x, y);
 		}
 		if (notebook_tab == 2) {
@@ -1075,6 +1108,228 @@ struct Ui::Impl {
 			}
 		}
 	}
+	// ---- the planner (GAME_SPEC §13.1, Stage 60): a target, the route back to it, what each step needs, the goal
+	chem::SpeciesId plan_species() const {
+		const chem::SpeciesTable &table = chem::builtin_species();
+		chem::SpeciesId best{};
+		int rank = 9;
+		for (int s = 0; s < table.species_count(); ++s) {
+			const chem::SpeciesDef &d = table.species(chem::SpeciesId{ s });
+			if (d.wall || std::string(d.formula) != plan_target) {
+				continue;
+			}
+			const int r = d.phase == chem::Phase::Solid ? 0 : d.phase == chem::Phase::Aqueous ? 1 : d.phase == chem::Phase::Liquid ? 2 : 3;
+			if (r < rank) {
+				rank = r;
+				best = chem::SpeciesId{ s };
+			}
+		}
+		return best;
+	}
+	// what step k is asked to make: the target, or the first reactant of the step before that some reaction makes
+	chem::SpeciesId plan_asked(size_t k) const {
+		if (k == 0) {
+			return plan_species();
+		}
+		const auto all = chem::builtin_reactions();
+		const chem::SpeciesTable &table = chem::builtin_species();
+		if (k > plan_reactions.size() || plan_reactions[k - 1] < 0) {
+			return {};
+		}
+		for (const chem::Term &t : all[static_cast<size_t>(plan_reactions[k - 1])].terms()) {
+			const chem::SpeciesDef &d = table.species(t.species);
+			if (t.nu < 0 && std::string(d.formula) != "H2O" && !plan::makers(t.species).empty()) {
+				return t.species;
+			}
+		}
+		return {};
+	}
+	std::vector<plan::Step> plan_route() const {
+		std::vector<plan::Step> route;
+		for (size_t k = 0; k < plan_reactions.size(); ++k) {
+			char *end = nullptr;
+			const double pct = std::strtod(plan_yields[k].c_str(), &end);
+			route.push_back({ plan_reactions[k], end != nullptr && *end == '\0' && !plan_yields[k].empty() ? pct / 100.0 : -1.0 });
+		}
+		return route;
+	}
+	plan::Plan plan_now() const {
+		const chem::SpeciesId target = plan_species();
+		if (target.index < 0) {
+			plan::Plan p;
+			p.why = plan_target.empty() ? "type a target's formula, such as CuSO4.5H2O" : "the tables hold no " + plan_target;
+			return p;
+		}
+		char *end = nullptr;
+		const double g = std::strtod(plan_grams.c_str(), &end);
+		if (plan_grams.empty() || end == nullptr || *end != '\0') {
+			plan::Plan p;
+			p.why = "type how many grams of it";
+			return p;
+		}
+		return plan::work_back(chem::builtin_species(), target, g, plan_route());
+	}
+	void plan_press(float x, float y) {
+		plan_focus.clear();
+		for (const char *f : { "plan:target", "plan:grams", "plan:purity" }) {
+			if (notebook_rect(f).has(x, y)) {
+				plan_focus = f;
+				plan_fresh = true;
+				return;
+			}
+		}
+		for (size_t k = 0; k < plan_reactions.size(); ++k) {
+			const std::string n = std::to_string(k);
+			if (notebook_rect("plan:yield:" + n).has(x, y)) {
+				plan_focus = "plan:yield:" + n;
+				plan_fresh = true;
+				return;
+			}
+			const bool prev = notebook_rect("plan:prev:" + n).has(x, y), next = notebook_rect("plan:next:" + n).has(x, y);
+			if (prev || next) {
+				// another reaction making what this step is asked for; the steps after it follow from it, so they go
+				const std::vector<int> choices = plan::makers(plan_asked(k));
+				if (!choices.empty()) {
+					const auto at = std::find(choices.begin(), choices.end(), plan_reactions[k]);
+					const int i = at == choices.end() ? 0 : static_cast<int>(at - choices.begin());
+					const int count = static_cast<int>(choices.size());
+					plan_reactions[k] = choices[static_cast<size_t>((i + (next ? 1 : count - 1)) % count)];
+					plan_reactions.resize(k + 1);
+					plan_yields.resize(k + 1);
+				}
+				return;
+			}
+		}
+		if (notebook_rect("plan:add").has(x, y) && plan_reactions.size() < 4) {
+			const std::vector<int> choices = plan::makers(plan_asked(plan_reactions.size()));
+			if (!choices.empty()) {
+				plan_reactions.push_back(choices.front());
+				plan_yields.emplace_back("100");
+			}
+			return;
+		}
+		if (notebook_rect("plan:remove").has(x, y) && !plan_reactions.empty()) {
+			plan_reactions.pop_back();
+			plan_yields.pop_back();
+			return;
+		}
+		if (notebook_rect("plan:goal").has(x, y)) {
+			const plan::Plan p = plan_now();
+			char *end = nullptr;
+			const double purity = std::strtod(plan_purity.c_str(), &end);
+			if (!p.ok) {
+				message = p.why;
+				return;
+			}
+			int slot = 0;
+			for (int k = 1; k <= 6 && slot == 0; ++k) {
+				slot = std::none_of(view.goals.begin(), view.goals.end(), [k](const Goal &g) { return g.slot == k; }) ? k : 0;
+			}
+			if (slot == 0) {
+				message = "every slot of the outbox has a goal: take one off first";
+				return;
+			}
+			const std::string id(chem::builtin_species().species(plan_species()).id);
+			json terms = json::array({ { { "quantity", { { "what", id }, { "measure", "g" } } }, { "compare", "at_least" }, { "value", std::strtod(plan_grams.c_str(), nullptr) } } });
+			if (end != nullptr && *end == '\0' && purity > 0.0) {
+				terms.push_back({ { "quantity", { { "what", id }, { "measure", "purity" } } }, { "compare", "at_least" }, { "value", purity } });
+			}
+			act({ { "do", "goal" }, { "slot", slot }, { "name", plan_grams + " g of " + plan_target }, { "terms", terms } });
+		}
+	}
+	bool type_plan(Ui::Key key, uint32_t codepoint) {
+		if (!notebook_open || notebook_tab != 3 || plan_focus.empty()) {
+			return false;
+		}
+		std::string *f = plan_focus == "plan:target" ? &plan_target : plan_focus == "plan:grams" ? &plan_grams : plan_focus == "plan:purity" ? &plan_purity : nullptr;
+		if (f == nullptr) {
+			const size_t k = static_cast<size_t>(std::atoi(plan_focus.c_str() + 11));
+			if (k >= plan_yields.size()) {
+				return false;
+			}
+			f = &plan_yields[k];
+		}
+		const bool formula = plan_focus == "plan:target";
+		const bool ok = formula ? (std::isalnum(static_cast<int>(codepoint)) != 0 || codepoint == '(' || codepoint == ')' || codepoint == '.') : ((codepoint >= '0' && codepoint <= '9') || codepoint == '.');
+		const bool replacing = plan_fresh;
+		plan_fresh = false;
+		if (key == Ui::KeyText && ok && codepoint < 128) {
+			if (replacing) {
+				f->clear();
+			}
+			if (f->size() < 24) {
+				*f += static_cast<char>(codepoint);
+			}
+			if (formula && plan_reactions.empty()) {
+				const std::vector<int> choices = plan::makers(plan_species());
+				if (!choices.empty()) { // its first step offered at once
+					plan_reactions.push_back(choices.front());
+					plan_yields.emplace_back("100");
+				}
+			} else if (formula) {
+				plan_reactions.clear(); // another target: its route anew
+				plan_yields.clear();
+				const std::vector<int> choices = plan::makers(plan_species());
+				if (!choices.empty()) {
+					plan_reactions.push_back(choices.front());
+					plan_yields.emplace_back("100");
+				}
+			}
+		} else if (key == Ui::KeyBackspace && !f->empty()) {
+			f->pop_back();
+		} else if (key == Ui::KeyEnter || key == Ui::KeyEscape) {
+			plan_focus.clear();
+		}
+		return true;
+	}
+	void paint_planner() {
+		const chem::SpeciesTable &table = chem::builtin_species();
+		const auto field = [&](const std::string &name, const std::string &value) {
+			const Rect f = notebook_rect(name);
+			rect_fill(f, rgba(24, 24, 24));
+			outline(f, plan_focus == name ? GUIDE : GRID, plan_focus == name ? 2.0f : 1.0f);
+			text(f.x + 6, f.y + 21, value + (plan_focus == name ? "_" : ""), INK, 15);
+		};
+		text(NOTEBOOK.x + 20, NOTEBOOK.y + 80, "a target, and the route to it, from the target back", DIM, 13);
+		text(NOTEBOOK.x + 20, NOTEBOOK.y + 121, "target", INK, 15);
+		field("plan:target", plan_target);
+		field("plan:grams", plan_grams);
+		text(NOTEBOOK.x + 384, NOTEBOOK.y + 121, "g", DIM, 14);
+		field("plan:purity", plan_purity);
+		text(NOTEBOOK.x + 494, NOTEBOOK.y + 121, "%", DIM, 14);
+		const auto all = chem::builtin_reactions();
+		for (size_t k = 0; k < plan_reactions.size(); ++k) {
+			const std::string n = std::to_string(k);
+			const float row = NOTEBOOK.y + 150 + static_cast<float>(k) * 66;
+			const chem::SpeciesId asked = plan_asked(k);
+			text(NOTEBOOK.x + 20, row + 14, text_of("step %.0f makes ", static_cast<double>(k + 1)) + (asked.index >= 0 ? std::string(table.species(asked).formula) : std::string("?")), INK, 14);
+			button(notebook_rect("plan:prev:" + n), "<", false, 14);
+			button(notebook_rect("plan:next:" + n), ">", false, 14);
+			text(NOTEBOOK.x + 96, row + 42, calc::equation(table, all[static_cast<size_t>(plan_reactions[k])]), INK, 12);
+			text(NOTEBOOK.x + 380, row + 14, "yield %", DIM, 13);
+			field("plan:yield:" + n, plan_yields[k]);
+		}
+		button(notebook_rect("plan:add"), "+ step", false, 14);
+		button(notebook_rect("plan:remove"), "- step", false, 14);
+		const plan::Plan p = plan_now();
+		float y = NOTEBOOK.y + 480;
+		if (!p.ok) {
+			text(NOTEBOOK.x + 20, y, p.why, DIM, 15);
+		} else {
+			for (size_t k = 0; k < p.extents.size(); ++k) {
+				text(NOTEBOOK.x + 20, y, text_of("step %.0f: ", static_cast<double>(k + 1)) + text_of("%.5g mol of its reaction, making ", p.extents[k]) + std::string(table.species(p.made[k]).formula), INK, 14);
+				y += 21;
+				for (const plan::Need &need : p.needs) {
+					if (need.step == static_cast<int>(k)) {
+						text(NOTEBOOK.x + 40, y, text_of("%.4g g", need.g) + text_of(" (%.5g mol) of ", need.mol) + need.formula + (need.carried ? "  <- made by the next step" : ""), need.carried ? GOOD : DIM, 14);
+						y += 20;
+					}
+				}
+				y += 6;
+			}
+		}
+		button(notebook_rect("plan:goal"), p.ok ? "set it as a goal in the outbox" : "nothing to set yet", false, 13);
+	}
 	void paint_notebook() {
 		button(notebook_button(), text_of("notebook %.0f", static_cast<double>(view.notebook.size())), notebook_open, 15);
 		if (!notebook_open) {
@@ -1082,8 +1337,8 @@ struct Ui::Impl {
 		}
 		rect_fill(NOTEBOOK, PANEL_FILL);
 		outline(NOTEBOOK, GLASS, 1);
-		static const char *const TAB_NAMES[] = { "notebook", "calculator", "reference" };
-		for (int k = 0; k < 3; ++k) {
+		static const char *const TAB_NAMES[] = { "notebook", "calculator", "reference", "planner" };
+		for (int k = 0; k < 4; ++k) {
 			button(notebook_rect(TABS[k]), TAB_NAMES[k], notebook_tab == k, 14); // (Stage 58)
 		}
 		button(notebook_rect("close"), "close");
@@ -1093,6 +1348,10 @@ struct Ui::Impl {
 		}
 		if (notebook_tab == 2) {
 			paint_reference();
+			return;
+		}
+		if (notebook_tab == 3) {
+			paint_planner();
 			return;
 		}
 		button(notebook_rect("erase"), "erase");
@@ -1582,6 +1841,9 @@ struct Ui::Impl {
 		screen.predicted = predictions_made(); // (Stage 55)
 		if (notebook_open && notebook_tab == 1 && calc_result().ok) {
 			screen.calculated = KINDS[calc_kind]; // (Stage 58)
+		}
+		if (notebook_open && notebook_tab == 3 && plan_now().ok) {
+			screen.calculated = "plan"; // (Stage 60)
 		}
 		static const char *const EDITING[] = { "", "monitor", "timer", "rig", "choose", "notice", "writer", "goal", "controller" };
 		screen.edit.editing = EDITING[draft.edit];
@@ -4351,6 +4613,9 @@ struct Ui::Impl {
 		if (type_predict(key, codepoint) || type_report(key, codepoint)) {
 			return; // a prediction's field (Stage 55), the report's (Stage 54)
 		}
+		if (type_plan(key, codepoint)) {
+			return; // the planner's fields (Stage 60)
+		}
 		if (type_calc(key, codepoint)) {
 			return; // the calculator's fields (Stage 58)
 		}
@@ -5498,6 +5763,14 @@ struct Ui::Impl {
 				}
 				for (const char *n : PAGES) {
 					buttons.push_back(notebook_rect(std::string("ref:") + n));
+				}
+				for (const char *n : { "plan:target", "plan:grams", "plan:purity", "plan:add", "plan:remove", "plan:goal" }) {
+					buttons.push_back(notebook_rect(n));
+				}
+				for (size_t k = 0; k < plan_reactions.size(); ++k) {
+					for (const char *n : { "plan:prev:", "plan:next:", "plan:yield:" }) {
+						buttons.push_back(notebook_rect(n + std::to_string(k)));
+					}
 				}
 				for (const char *n : { "calc:prev", "calc:next", "calc:note" }) {
 					buttons.push_back(notebook_rect(n));
@@ -7634,7 +7907,10 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	if (after("notebook:", rest)) {
 		// (Stage 58) on the tab that shows it: the calculator's, the reference's, the notebook's own
 		const std::string name(rest);
-		const int tab = name.rfind("calc:", 0) == 0 ? 1 : name.rfind("ref:", 0) == 0 ? 2 : name.rfind("tab:", 0) == 0 || name == "close" ? m.notebook_tab : 0;
+		const int tab = name.rfind("calc:", 0) == 0 ? 1 : name.rfind("ref:", 0) == 0 ? 2 : name.rfind("plan:", 0) == 0 ? 3 : name.rfind("tab:", 0) == 0 || name == "close" ? m.notebook_tab : 0;
+		if (name.rfind("plan:", 0) == 0 && name.find_first_of("0123456789") != std::string::npos && std::atoi(name.c_str() + name.rfind(':') + 1) >= static_cast<int>(m.plan_reactions.size())) {
+			return false;
+		}
 		if (name.rfind("calc:field:", 0) == 0 && std::atoi(name.c_str() + 11) >= static_cast<int>(m.calc_fields_of().size())) {
 			return false;
 		}

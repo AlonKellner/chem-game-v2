@@ -101,6 +101,7 @@ This file is what a stage reads to choose its experiments. The property areas of
 | C12 | Conductivity, derived (the ions' mobilities are in `data/solutions.json` already) | new |
 | C13 | Two liquids and a solute shared between them | 9 |
 | C14 | Emission lines: flame tests, atomic spectra (the optics have lines; no species has data) | new |
+| C16 | Secondary nucleation: a seed's or a crop's fragments, chipped off by stirring, grow as crystals of their own (Stage 60 found a 10 mg seed in a solution 5 % over saturation growing only to 15 mg in an hour; a real seed sets the excess out in minutes) | the crystals' kinetics (GAME_SPEC §9) |
 | C15 | Crystals that dissolve by mass transfer: through the liquid's film, much faster than they grow (Stage 56 found the pentahydrate dissolving as slowly as it grows: an hour to saturate, its last crystal gone 50 K above its saturation temperature) | the crystals' kinetics (GAME_SPEC §9) |
 
 ## The experiments
@@ -150,7 +151,7 @@ are missing.
 | 32 | Boiling-point elevation | the ebullioscopic constant | Now | T4 T2 |
 | 33 | Freezing-point depression; a solute's molar mass | the cryoscopic constant | C8 | T7 T4 |
 | 34 | Beer–Lambert: a calibration line and an unknown | a concentration | Now (CuSO₄) | T5 T3 S1 S7 |
-| 35 | Supersaturation and a seed | — | Now | T2 |
+| 35 | Supersaturation and a seed | — | C16 | T2 |
 | | **7. Kinetics** | | | |
 | 36 | What sets a rate; the order in the acid; the activation energy | the order (0.5), Ea | Now (`rate`) | S1 |
 | 37 | First-order decay and a half-life (crystal violet by absorbance; the solids' decompositions are read by no instrument while they run) | k, the half-life | C4 | T5 S1 |
@@ -185,7 +186,8 @@ Each step is a stage of its own, numbered when it is taken, by `docs/WORKFLOW.md
 | A | **The measured lab** | T1 T2 T3 T4; the calorimeter (T7) and the crucible (T6); composition hidden per experiment | 1, 2, 5, 6, 7, 13 (readings by hand), 22, 23, 24, 32 |
 | B | **The notebook and the report** (Stages 54 to 56) | S1 S5 S6 S7; T5 | 13 (the curve), 30, 34, 36 (4, 37 and 45 moved: Stage 56) |
 | B2 | **Crystals that dissolve** (Stage 57) | C15 | 4, 45 |
-| C | **The calculator, the planner, the reference** (Stage 58: the calculator and the reference; Stage 59: filtering; the planner next) | S2 S3 S4; filtering (T6) | 2 (by calculation: Stage 58), 3 (Stage 59), 8, 35, 50 |
+| C | **The calculator, the planner, the reference** (Stages 58 to 60) | S2 S3 S4; filtering (T6) | 2 (by calculation: Stage 58), 3 (Stage 59), 8 (Stage 60), 50 (its own stage next) |
+| C2 | **Seeds** | C16 | 35 |
 | D | **Acids, bases and buffers** (area 1) | C2; the cap of C1 and a first pack (Cl, K, acetate, ammonia, carbonate, phosphate); C12; heat of dilution (C11) | 14 to 20 |
 | E | **Salts, precipitates and complexes** (area 2) | C1 C3 C14; the rest of T6 | 10, 12, 42, 43, 44, 51, 52, 54 |
 | F | **Solution kinetics and redox** | C4 C5 | 11, 37, 38 to 41, 46, 47 |
