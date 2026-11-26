@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.62.0 (2026-11-26, Stage 62)
+## 0.62.0 (2026-11-26, Stage 62; signed off by the user: "Approved, merge and proceed")
 
 - §13.7 (Stage 62, `docs/TDD_62_QUOTA.md`; `docs/CURRICULUM.md`, experiment 50): the experiment `quota` (copper
   sulfate crystals from malachite to a quota of 3.00 g, planned with the planner, made, and handed in against the
