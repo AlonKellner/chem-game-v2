@@ -352,6 +352,9 @@ struct Ui::Impl {
 	// first slot on the screen and whether its bar is held; the two searches, and which of them is typed into (0 none,
 	// 1 Supplies, 2 Storage)
 	int supply_base = 0;
+	// (Stage 61) a copy just taken out of Supplies by a press, in hand: the lab before it was taken, and whether it was
+	// put somewhere it stays (a square, equipment, Storage)
+	std::string fresh_copy, fresh_undo;
 	// (Stage 61) the supplies' pictures, by what is drawn of each (picture_key); the one being captured apart (its
 	// key, and its picture as it comes); whether one was captured since the host last took them; one to capture,
 	// alone in the cabinet's first box (capture_one)
@@ -2033,6 +2036,7 @@ struct Ui::Impl {
 		return screen;
 	}
 	void follow() {
+		settle_fresh();
 		if (tutorial) {
 			tutorial->follow(view, screen_now());
 			if (tutorial->view().state == TutorialView::Complete && shown_k >= 0) {
@@ -2950,6 +2954,36 @@ struct Ui::Impl {
 	}
 
 	const std::string &id(int index) const { return view.items[static_cast<size_t>(index)].id; }
+	// (Stage 61) a fresh copy's carry over: put where it stays (on the bench, on or under equipment, handed in to
+	// Storage's slot it was dropped on), it is kept; still in Storage otherwise (put nowhere, back over Supplies, a
+	// drop refused), the lab is loaded back as it was before it was taken
+	bool fresh_dropped_in_storage = false;
+	void settle_fresh() {
+		if (fresh_copy.empty()) {
+			return;
+		}
+		const int at = item_index(fresh_copy);
+		if (at >= 0 && at == drag) {
+			return; // still in hand
+		}
+		const std::string &place = at >= 0 ? view.items[static_cast<size_t>(at)].place : std::string();
+		const bool stays = place == "bench" || place == "on" || place == "under" || (place == "outbox" && fresh_dropped_in_storage);
+		if (!stays) {
+			const std::string refused = message;
+			std::string no;
+			if (std::unique_ptr<Lab> was = Lab::load(fresh_undo, no)) {
+				lab = std::move(was);
+				drag = -1;
+				carrying = false;
+				refresh();
+				choose_only(-1);
+			}
+			message = refused;
+		}
+		fresh_copy.clear();
+		fresh_undo.clear();
+		fresh_dropped_in_storage = false;
+	}
 	// (Stage 61) the name a supply's box is known by in the pass, apart from its first copy's
 	std::map<std::string, std::string> supply_names;
 	const char *supply_name(const std::string &id) {
@@ -3161,6 +3195,15 @@ struct Ui::Impl {
 	Rect drawn(int index) const {
 		Rect r = rect(index);
 		if (index == drag) {
+			const ItemView &v = view.items[static_cast<size_t>(index)];
+			if (v.place == "cabinet" || v.place == "outbox" || v.place == "trash") {
+				// (Stage 61) taken up from off the bench: in hand at its full size, held at the same share of it
+				float w = 0, h = 0;
+				size_of(v, w, h);
+				const float sx = r.w > 0.0f ? w / r.w : 1.0f, sy = r.h > 0.0f ? h / r.h : 1.0f;
+				r = Rect{ px - grab_x * sx, py - grab_y * sy, w, h };
+				return r;
+			}
 			r.x = px - grab_x;
 			r.y = py - grab_y;
 			float lx = 0, ly = 0, tx = 0, ty = 0;
@@ -3376,7 +3419,7 @@ struct Ui::Impl {
 			if (slot_at(x, y) > 0) {
 				c["slot"] = slot_at(x, y);
 			}
-			act(c);
+			fresh_dropped_in_storage = act(c) && v.id == fresh_copy; // (Stage 61: a fresh copy set in Storage stays there)
 			return;
 		}
 		if (TRASH.has(x, y)) {
@@ -3702,9 +3745,23 @@ struct Ui::Impl {
 			}
 			return;
 		}
-		const int hit = item_at(x, y);
+		int hit = item_at(x, y);
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
 			return; // the open circuit's panel: no rectangle across it
+		}
+		if (hit >= supply_base && !(mods & Ui::ModAny)) {
+			// (Stage 61) a supply pressed: its copy taken out at once, a real item in hand at its full size, simulated and
+			// drawn by the pass; put nowhere, back over Supplies or refused where it is dropped, the lab is as it was
+			const std::string before = lab->save();
+			if (!act({ { "do", "take" }, { "supply", id(hit) } })) {
+				return;
+			}
+			fresh_copy = lab->last_taken();
+			fresh_undo = before;
+			hit = item_index(fresh_copy);
+			if (hit < 0) {
+				return;
+			}
 		}
 		if (hit < 0 && BENCH.has(x, y)) {
 			marquee = true; // a rectangle, or, let go where it began, a click on nothing
@@ -3713,14 +3770,7 @@ struct Ui::Impl {
 		if (hit < 0 && (CABINET.has(x, y) || OUTBOX.has(x, y)) && !(mods & Ui::ModAny)) {
 			choose_only(-1); // a click on nothing lets go of the selection
 		}
-		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place == "outbox") {
-			if (mods & Ui::ModAny) {
-				toggle(hit);
-			} else {
-				choose_only(hit); // handed in: it can be read, and watched, but not moved
-			}
-		}
-		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
+		if (hit >= 0) { // (Stage 61: what is in Storage is taken up as anything off the bench is)
 			// a press takes it in hand; a release without moving it selects it (§13.3),
 			// and a drop the tutorial does not ask for is refused when it is let go
 			const Rect r = rect(hit);

@@ -284,3 +284,61 @@ TEST_CASE("pictures: a supply's box is its picture, captured once of it alone, s
 	again->frame(1.0 / 60.0);
 	CHECK(box_colours(*again) == shown);
 }
+
+namespace {
+
+float body_width(lab::Ui &ui, const std::string &id) {
+	const lab::OpticsScene &scene = ui.optics();
+	const int b = lab::optics_body(scene, id);
+	REQUIRE_MESSAGE(b >= 0, "no body " << id);
+	return scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS) * 4 + 2];
+}
+
+} // namespace
+
+TEST_CASE("supplies: a supply pressed is its copy in hand at its full size, simulated and drawn; put nowhere, the lab is as it was (Stage 61)") {
+	std::string why;
+	auto ui = lab::Ui::open(read("data/benches/lab.json"), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(1.0 / 60.0);
+	float x = 0, y = 0, sx = 0, sy = 0;
+	REQUIRE(ui->locate("item:flask", x, y));
+	REQUIRE(ui->locate("square:12,6", sx, sy));
+	// pressed: a copy, in the world, in hand
+	const std::string start = ui->lab().digest(); // (the lab as it is at the press: the clock runs between frames)
+	ui->pointer(x, y, true);
+	ui->pointer(x, y, false);
+	CHECK(ui->lab().last_taken() == "flask");
+	CHECK(ui->lab().digest() != start);
+	ui->pointer(sx, sy, false);
+	const float in_hand = body_width(*ui, "flask");
+	// Escape: nothing was taken
+	ui->key(lab::Ui::KeyEscape, 0);
+	CHECK(ui->lab().digest() == start);
+	// pressed again and put on a square: it stays, as large as it was in hand
+	REQUIRE(ui->locate("item:flask", x, y));
+	ui->pointer(x, y, true);
+	ui->pointer(x, y, false);
+	ui->pointer(sx, sy, false);
+	ui->pointer(sx, sy, true);
+	ui->pointer(sx, sy, false);
+	ui->frame(1.0 / 60.0);
+	bool placed = false;
+	for (const lab::ItemView &v : ui->lab().view().items) {
+		placed = placed || (v.id == "flask" && v.place == "bench");
+	}
+	CHECK(placed);
+	CHECK(body_width(*ui, "flask") == doctest::Approx(in_hand).epsilon(0.02));
+	CHECK(in_hand > 60.0f); // (its box is 100 px: in hand it is the size it stands on the bench)
+	// a second copy pressed and put back over Supplies: nothing more was taken
+	const std::string placed_digest = ui->lab().digest();
+	float cx = 0, cy = 0;
+	REQUIRE(ui->locate("cabinet", cx, cy));
+	REQUIRE(ui->locate("item:beaker", x, y));
+	ui->pointer(x, y, true);
+	ui->pointer(x, y, false);
+	ui->pointer(cx, cy, false);
+	ui->pointer(cx, cy, true);
+	ui->pointer(cx, cy, false);
+	CHECK(ui->lab().digest() == placed_digest);
+}

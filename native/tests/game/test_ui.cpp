@@ -196,7 +196,7 @@ TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, a
 	CHECK(p.supplied("beaker")); // (Stage 61: refused, no copy is taken out)
 	CHECK(p.ui->message().find("stands there") != std::string::npos);
 	p.drag("item:beaker", "item:flask"); // onto the flask itself, the right button: the menu, with nothing to pour
-	CHECK(p.supplied("beaker")); // (Stage 61: a supply in hand, over the flask: no copy taken out yet)
+	CHECK_FALSE(p.supplied("beaker")); // (Stage 61: a supply pressed is its copy in hand, over the flask; Escape takes it back)
 	p.click("panel:cancel");
 	float x = 0, y = 0;
 	CHECK_FALSE(p.ui->locate("panel:cancel", x, y)); // closed; the beaker still in hand
