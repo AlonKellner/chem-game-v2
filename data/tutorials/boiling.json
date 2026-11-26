@@ -7,7 +7,7 @@
 		{
 			"part": "Heat from below",
 			"title": "A burner under the beaker",
-			"text": "Pick up the burner in the cabinet, then click the beaker.",
+			"text": "Pick up the burner in Supplies, then click the beaker.",
 			"why": "The beaker holds 200 g of water, 5.9 cm deep. A flame heats its floor; the water takes the heat from the floor.",
 			"checks": [
 				{

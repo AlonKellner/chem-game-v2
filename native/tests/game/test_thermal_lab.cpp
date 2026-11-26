@@ -66,9 +66,12 @@ TEST_CASE("lab: a thermal camera is equipment of the cabinet that changes nothin
 	std::string why;
 	auto without = lab::Lab::open(without_camera(), why);
 	REQUIRE_MESSAGE(without != nullptr, why);
-	const lab::ItemView v = item(with->view(), "camera");
+	lab::ItemView v;
+	for (const lab::ItemView &s : with->view().supplies) { // (Stage 61: the cabinet's are Supplies, no item until taken out)
+		v = s.id == "camera" ? s : v;
+	}
 	CHECK(v.kind == "thermal");
-	CHECK(v.place == "cabinet");
+	CHECK(v.place == "supplies");
 	CHECK(v.w == 5);
 	CHECK(v.h == 4);
 	CHECK(v.contents.empty());
@@ -106,7 +109,7 @@ TEST_CASE("lab: a thermal camera is equipment of the cabinet that changes nothin
 
 TEST_CASE("lab: a camera's frame is on the room or home over its screen; put away, it goes home (Stage 48)") {
 	auto l = open_lab();
-	CHECK(refused(*l, R"({"do":"frame","item":"camera","room":[3,3]})").find("cabinet") != std::string::npos);
+	CHECK(refused(*l, R"({"do":"frame","item":"camera","room":[3,3]})").find("storage") != std::string::npos); // (Stage 61: taken out of Supplies, it is in storage, not on the bench)
 	must(*l, R"({"do":"place","item":"camera","at":[16,2]})");
 	must(*l, R"({"do":"frame","item":"camera","room":[3,4]})");
 	CHECK(item(l->view(), "camera").thermal.frame_room);
@@ -129,6 +132,7 @@ TEST_CASE("lab: a camera's frame is on the room or home over its screen; put awa
 
 TEST_CASE("lab: a camera's settings are checked, each refused with its reason, and only the camera's (Stage 48)") {
 	auto l = open_lab();
+	must(*l, R"({"do":"take","supply":"camera"})"); // (Stage 61: a copy out of Supplies, into storage, whose settings are set)
 	CHECK(refused(*l, R"({"do":"thermal","item":"camera","palette":"sepia"})").find("ironbow") != std::string::npos);
 	CHECK(refused(*l, R"({"do":"thermal","item":"camera","emissivity":0.05})").find("emissivity") != std::string::npos);
 	CHECK(refused(*l, R"({"do":"thermal","item":"camera","emissivity":1.2})").find("emissivity") != std::string::npos);

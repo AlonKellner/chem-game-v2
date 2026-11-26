@@ -14,7 +14,7 @@
 		},
 		{
 			"title": "A burner under the right one",
-			"text": "Pick up the burner in the cabinet, then click the right beaker.",
+			"text": "Pick up the burner in Supplies, then click the right beaker.",
 			"checks": [{"text": "the burner is under the right beaker", "when": {"item": "burner", "under": "hot"}}],
 			"play": [{"drag": ["item:burner", "item:hot"]}]
 		},

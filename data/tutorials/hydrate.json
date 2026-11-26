@@ -36,7 +36,7 @@
 		},
 		{
 			"title": "A burner under it",
-			"text": "Pick up the burner in the cabinet, then click the dish.",
+			"text": "Pick up the burner in Supplies, then click the dish.",
 			"checks": [{"text": "the burner under the dish", "when": {"item": "burner", "under": "dish"}}],
 			"play": [{"drag": ["item:burner", "item:dish"]}]
 		},
@@ -58,8 +58,8 @@
 		},
 		{
 			"title": "Flame off, burner away",
-			"text": "Right-click the burner, drag its valve shut, then pick the burner up and put it back in the cabinet.",
-			"checks": [{"text": "the burner in the cabinet", "when": {"item": "burner", "place": "cabinet"}}],
+			"text": "Right-click the burner, drag its valve shut, then pick the burner up and put it away: carried back to Supplies, it goes to Storage.",
+			"checks": [{"text": "the burner in Storage", "when": {"item": "burner", "place": "outbox"}}],
 			"play": [{"click": "item:burner"}, {"click": "valve:burner@0"}, {"drag": ["item:burner", "cabinet"]}]
 		},
 		{

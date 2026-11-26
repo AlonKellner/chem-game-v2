@@ -586,6 +586,11 @@ TEST_CASE("lab: a vessel's wall is as thick as its bench says, apart from its ma
 				return v.wall_mm;
 			}
 		}
+		for (const lab::ItemView &v : l.view().supplies) { // (Stage 61: a bench item without a square is a supply)
+			if (v.id == id) {
+				return v.wall_mm;
+			}
+		}
 		FAIL("no item " << id);
 		return -1.0;
 	};
@@ -790,7 +795,10 @@ TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its
 		std::string why;
 		auto l = lab::Lab::open(read(bench), why);
 		REQUIRE_MESSAGE(l != nullptr, why);
-		for (const lab::ItemView &v : l->view().items) {
+		const lab::LabView seen = l->view();
+		std::vector<lab::ItemView> all = seen.items; // (Stage 61: and the supplies, the free lab's all of them)
+		all.insert(all.end(), seen.supplies.begin(), seen.supplies.end());
+		for (const lab::ItemView &v : all) {
 			if (v.kind != "vessel" || v.condenser) {
 				continue;
 			}
