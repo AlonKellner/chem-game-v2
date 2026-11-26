@@ -6617,6 +6617,7 @@ std::string Lab::report() const {
 			json row;
 			row["species"] = std::string(def.id);
 			row["formula"] = std::string(def.formula);
+			row["written"] = chem::written(def.formula); // (Stage 63) as a reader writes it: Cu2+, SO4 2-
 			row["phase"] = PHASE[static_cast<int>(def.phase)];
 			row["wall"] = def.wall;
 			row["mol"] = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;

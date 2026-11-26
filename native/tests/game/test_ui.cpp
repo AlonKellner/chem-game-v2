@@ -1,5 +1,6 @@
 // The screen (GAME_SPEC §13): a pointer in, lab commands and a draw list out.
 // The demo is played here with nothing but the pointer.
+#include "lab/conditions.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 
@@ -118,12 +119,7 @@ struct Player {
 		return ItemView{};
 	}
 	double grams(const std::string &id, const std::string &species) {
-		for (const lab::SubstanceView &s : item(id).contents) {
-			if (s.species == species) {
-				return s.g;
-			}
-		}
-		return 0.0;
+		return lab::grams(item(id), species); // (Stage 63: a retired salt as its ions make it)
 	}
 	// frames of 1/60 s at the speed chosen, until `done` (a player watching)
 	template <typename Done>
@@ -568,10 +564,14 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	CHECK(p.item("beaker").submitted);
 	CHECK(p.item("flask").submitted);
 	CHECK(p.grams("balloon", "carbon_dioxide") > 0.8);
-	CHECK(p.grams("beaker", "water") > 35.0);
+	// (Stage 63: the oxide's dissolving slows at its end, the sulfate made holding the last of the acid as bisulfate, so
+	// more of the water is gone before the distilling)
+	CHECK(p.grams("beaker", "water") > 28.0);
 	for (const lab::SubstanceView &s : p.item("beaker").contents) {
-		// (Stage 50: with a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
+		// (Stage 50: with a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it;
+		// Stage 63: and water's own ions)
 		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass" ||
+				s.species == "hydrogen_ion" || s.species == "hydroxide_ion" ||
 				(s.species == "carbon_dioxide" && s.g < 1e-3)));
 	}
 	const double crystals = p.grams("flask", "copper_sulfate_pentahydrate");

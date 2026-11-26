@@ -113,7 +113,7 @@ struct Cond {
 	std::optional<bool> submitted, stirred, burst, conserved, broken;
 	std::optional<double> valve_at_least, valve_at_most, above_c, below_c, liquid_above_ml, liquid_below_ml, above_g, below_g, purity_above, speed_at_least;
 	std::string species;
-	std::optional<std::vector<std::string>> holds_only;
+	std::optional<std::vector<std::string>> holds_only; // (Stage 63: with water listed, its own ions, H+ and OH-, are water's)
 	// any quantity of the item, compared: {"quantity": {"what", "measure"}, "compare", "value" | "values"}
 	std::optional<Quantity> quantity;
 	Comparison comparison;

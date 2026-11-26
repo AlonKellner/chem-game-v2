@@ -67,7 +67,9 @@ TEST_CASE("tutorial: followed with its own gestures, step by step, it completes 
 	CHECK(p.item("beaker").submitted);
 	CHECK(p.item("flask").submitted);
 	CHECK(p.grams("balloon", "carbon_dioxide") > 0.8);
-	CHECK(p.grams("beaker", "water") > 30.0); // (Stage 53: its hot distillate cools slower through its glass, and evaporates more)
+	// (Stage 53: its hot distillate cools slower through its glass, and evaporates more; Stage 63: the oxide's dissolving
+	// slows at its end, the sulfate made holding the last of the acid as bisulfate, and the flask is warm meanwhile)
+	CHECK(p.grams("beaker", "water") > 25.0);
 	CHECK(p.grams("flask", "copper_sulfate_pentahydrate") > 8.9);
 	CHECK(p.ui->lab().view().conserved);
 	REQUIRE(p.tutorial().results.size() == 4);

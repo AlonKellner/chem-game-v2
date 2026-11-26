@@ -61,7 +61,7 @@ void print_results(const json &report, const json &start) {
 			if (row.at("wall").get<bool>()) {
 				continue;
 			}
-			const std::string name = row.at("formula").get<std::string>() + "(" + row.at("phase").get<std::string>() + ")";
+			const std::string name = row.value("written", row.at("formula").get<std::string>()) + "(" + row.at("phase").get<std::string>() + ")";
 			if (row.at("phase") == "g") {
 				std::printf("    %-16s %10.6f g  %6.2f%% of the gas\n", name.c_str(), row.at("g").get<double>(), 100.0 * row.at("mol").get<double>() / gas_mol);
 			} else if (row.contains("particles")) {

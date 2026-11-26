@@ -75,12 +75,12 @@ elements, weak acids and bases and indicators (64), then the experiments and con
 
 | Phase | Topic | Status |
 |---|---|---|
-| 63.1 | The data: ions' thermodynamics, HSO4-, CuOH+, sulfuric acid's Pitzer model; sources and gates | |
-| 63.2 | The tables: ion species, retired formula units; the loader's and the saves' conversion | |
-| 63.3 | The reactions in ions; the surface rates fitted again | |
-| 63.4 | The solver: the fast equilibria together; electroneutrality; a column's diffusion as electrolytes | |
-| 63.5 | pH; the measured gates (acidity, precipitation, solution, measured) | |
-| 63.6 | The lab, the screen, the benches, tutorials and spectra in ions | |
+| 63.1 | The data: ions' thermodynamics, HSO4-, CuOH+, sulfuric acid's Pitzer model; sources and gates | done (sources and gates: `docs/DATA_SOURCES.md`, Ions as species; copper with the bisulfate calibrated) |
+| 63.2 | The tables: ion species, retired formula units; the loader's and the saves' conversion | done (the builder takes a retired unit as its ions; benches exactly, in quanta) |
+| 63.3 | The reactions in ions; the surface rates fitted again | done (Majima 0.5027, 70.22 kJ; Nicol 0.6812, 55.372 kJ; the hydroxide's dissolving kept) |
+| 63.4 | The solver: the fast equilibria together; electroneutrality; a column's diffusion as electrolytes | done (`solve_together`; N1; Nernst and Planck at no current; `stands`) |
+| 63.5 | pH; the measured gates (acidity, precipitation, solution, measured) | done |
+| 63.6 | The lab, the screen, the benches, tutorials and spectra in ions | done (readings by `formula_units`; written equations; spectra; the readout) |
 | 63.7 | The goldens: the evidence and the user's approval | |
 | 63.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 

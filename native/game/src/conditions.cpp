@@ -792,9 +792,21 @@ bool holds(const Cond &c, const CondContext &x) {
 			if (s.wall || !(s.mol > 0.0)) {
 				continue;
 			}
-			bool listed = false;
+			bool listed = false, water = false;
 			for (const std::string &name : *c.holds_only) {
 				listed = listed || name == s.species;
+				water = water || name == "water";
+			}
+			// (Stage 63) where water may be, so may its own ions: what is dissolved of hydrogen and oxygen alone
+			if (!listed && water && s.phase == 'a') {
+				const chem::SpeciesTable &table = chem::builtin_species();
+				const chem::SpeciesId id = table.find(s.species);
+				bool own = table.has(id);
+				for (int e = 0; own && e < table.element_count(); ++e) {
+					const std::string_view symbol = table.element(e).symbol;
+					own = table.species(id).atoms[static_cast<size_t>(e)] == 0 || symbol == "H" || symbol == "O";
+				}
+				listed = own;
 			}
 			if (!listed) {
 				return false;
