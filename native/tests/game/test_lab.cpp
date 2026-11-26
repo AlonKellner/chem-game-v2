@@ -6,6 +6,8 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include "part.hpp"
+
 #include <fstream>
 #include <map>
 #include <sstream>
@@ -428,6 +430,7 @@ TEST_CASE("lab: a vessel filled past its brim overflows into the tray (Stage 8)"
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 }
 
+// ctest: parts 6
 TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not saved (Stage 8)") {
 	// D2. The demo, saved after each of several commands, in the middle of each stage:
 	// the loaded lab reproduces the rest of the golden record. (Stage 68: each cut plays its own way to its command,
@@ -454,6 +457,10 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 	std::vector<std::string> wrong(cuts.size());
 	std::vector<std::thread> threads;
 	for (size_t k = 0; k < cuts.size(); ++k) {
+		if (static_cast<int>(k % static_cast<size_t>(part().count)) != part().index) {
+			continue; // (Stage 68: as ctest runs it, six entries, a cut each, each a whole play's work; under the
+					  // sanitizers the first alone)
+		}
 		threads.emplace_back([&, k] {
 			const size_t cut = cuts[k];
 			std::string &said = wrong[k];
