@@ -128,6 +128,9 @@ struct Item {
 	bool submitted = false;
 	int slot = 0; // in the outbox: its slot, 1 to 6 (GAME_SPEC §13.5)
 	Place place = Place::Cabinet;
+	// emptied out of the trash (Stage 61): it has left the world (its cells retired) and is no longer an item; kept
+	// so that indices stand and its id is never given again
+	bool retired = false;
 	int col = -1, row = -1; // on the bench: its footprint's top-left square
 	int w = 1, h = 1; // its footprint, in squares (GAME_SPEC §13)
 	double capacity = 0.0; // a balloon: the volume at which it bursts, m^3
@@ -352,6 +355,196 @@ std::string named(const SpeciesTable &table, SpeciesId s) {
 struct Lab::Impl {
 	std::optional<Simulation> sim;
 	std::vector<Item> items;
+	// Supplies (GAME_SPEC §13, Stage 61): what the bench gives without a square. Each is a template in a world of its
+	// own (a bench of it alone, never stepped), no part of the room's world until a copy of it is taken out; it never
+	// runs out. Its bench entry as written (what a save keeps), and how many copies it has had.
+	struct Supply {
+		std::string id;
+		json spec;
+		std::unique_ptr<Lab> made;
+		int copies = 0;
+	};
+	std::vector<Supply> supplies;
+	// the ledger of the world's boundary (Stage 61, C9): the totals of what was supplied to it and retired from it
+	Totals supplied, retired;
+	std::string last_taken; // the last copy taken out of Supplies
+	int find_supply(std::string_view id) const {
+		for (size_t s = 0; s < supplies.size(); ++s) {
+			if (supplies[s].id == id) {
+				return static_cast<int>(s);
+			}
+		}
+		return -1;
+	}
+	// Storage's first free slot (Stage 61: the outbox, as many slots as it needs): one no item is in and no goal is on
+	int storage_slot() const {
+		for (int k = 1;; ++k) {
+			bool used = goal_in(k) >= 0;
+			for (const Item &x : items) {
+				used = used || (x.place == Place::Outbox && x.slot == k);
+			}
+			if (!used) {
+				return k;
+			}
+		}
+	}
+	// an item put aside in Storage (Stage 61: what went to the cabinet before), off the grid
+	void to_storage(Item &x) {
+		x.place = Place::Outbox;
+		x.slot = 0;
+		x.slot = storage_slot();
+		x.col = x.row = -1;
+	}
+	// A copy of a supply taken out into the room's world (Stage 61): its template's own cells added and supplied as
+	// they are there (at the room's temperature, as the bench describes them), each layer under the cell over it, its
+	// edges joined to the room, the room's air and the mains as the loader joins them; in Storage until a command puts
+	// it elsewhere. Its id the supply's, or the first of id2, id3... that names nothing.
+	int take(size_t s, std::string &why) {
+		Supply &sup = supplies[s];
+		if (!boundary(why)) {
+			return -1;
+		}
+		Impl &t = *sup.made->impl_;
+		const int ti = t.find(sup.id);
+		if (ti < 0) {
+			why = "the supply \"" + sup.id + "\" has no template";
+			return -1;
+		}
+		std::string id = sup.id;
+		const auto ever = [&](const std::string &name) { return std::any_of(items.begin(), items.end(), [&](const Item &x) { return x.id == name; }); };
+		for (int n = 2; ever(id) || find_part(id) >= 0 || find_binned(id) >= 0 || find_goal(id) >= 0 || (id != sup.id && find_supply(id) >= 0); ++n) {
+			id = sup.id + std::to_string(n);
+		}
+		World &w = world();
+		const World &tw = t.world();
+		const size_t cells = static_cast<size_t>(tw.cell_count());
+		std::vector<int32_t> cell(cells, -1);
+		std::vector<uint8_t> own(cells, 0);
+		cell[static_cast<size_t>(t.room.index)] = room.index;
+		cell[static_cast<size_t>(t.air.index)] = air.index;
+		if (t.mains.index >= 0 && mains.index >= 0) {
+			cell[static_cast<size_t>(t.mains.index)] = mains.index;
+		}
+		std::vector<uint8_t> skip(cells, 0); // (the template bench's own tray)
+		for (const Item &x : t.items) {
+			if (x.kind == Kind::Tray) {
+				skip[static_cast<size_t>(x.cell.index)] = 1;
+			}
+		}
+		const auto renamed = [&](const std::string &name) { return name.rfind(sup.id, 0) == 0 ? id + name.substr(sup.id.size()) : id + "." + name; };
+		for (size_t c = 0; c < cells; ++c) {
+			if (cell[c] >= 0 || skip[c] || tw.meta(CellId{ static_cast<int32_t>(c) }).layer) {
+				continue;
+			}
+			Refusal r = Refusal::None;
+			const CellId added = w.add_cell(renamed(tw.cell_name(CellId{ static_cast<int32_t>(c) })), tw.meta(CellId{ static_cast<int32_t>(c) }), &r);
+			if (r != Refusal::None) {
+				why = "the supply \"" + sup.id + "\" cannot be taken out: a cell is refused";
+				return -1;
+			}
+			cell[c] = added.index;
+			own[c] = 1;
+		}
+		for (bool grew = true; grew;) { // its column's layers, each under the one over it
+			grew = false;
+			for (const Edge &e : tw.edges()) {
+				const auto a = static_cast<size_t>(e.a.index), b = static_cast<size_t>(e.b.index);
+				if (e.open && e.column && cell[a] < 0 && cell[b] >= 0) {
+					Refusal r = Refusal::None;
+					const CellId added = w.add_layer_under(CellId{ cell[b] }, &r);
+					if (r != Refusal::None) {
+						why = "the supply \"" + sup.id + "\" cannot be taken out: a layer is refused";
+						return -1;
+					}
+					cell[a] = added.index;
+					own[a] = 1;
+					grew = true;
+				}
+			}
+		}
+		Snapshot in;
+		for (size_t c = 0; c < cells; ++c) {
+			const CellId from{ static_cast<int32_t>(c) };
+			if (!own[c] || tw.meta(from).reservoir) {
+				continue;
+			}
+			const CellState &st = tw.snapshot_cell(from);
+			if (w.supply(CellId{ cell[c] }, st) != Refusal::None) {
+				why = "the supply \"" + sup.id + "\" cannot be taken out: what it holds is refused";
+				return -1;
+			}
+			in.cells.push_back(st);
+		}
+		supplied = plus(supplied, totals(table(), in));
+		std::vector<int32_t> edge(tw.edges().size(), -1);
+		for (size_t i = 0; i < tw.edges().size(); ++i) {
+			const Edge &e = tw.edges()[i];
+			const int32_t a = cell[static_cast<size_t>(e.a.index)], b = cell[static_cast<size_t>(e.b.index)];
+			if (!e.open || a < 0 || b < 0) {
+				continue;
+			}
+			if (e.column) {
+				edge[i] = column_edge(CellId{ a }, CellId{ b }).index;
+				continue;
+			}
+			EdgeId joined;
+			const Refusal r = e.drain ? w.connect_drain(CellId{ a }, CellId{ b }, &joined) : w.connect(CellId{ a }, CellId{ b }, e.phases, &joined, e.conductance);
+			if (r != Refusal::None) {
+				why = "the supply \"" + sup.id + "\" cannot be taken out: an edge is refused";
+				return -1;
+			}
+			if (e.drain) {
+				w.set_drain(joined, e.rate, e.carried, e.solids_rate);
+				w.set_conductance(joined, e.conductance);
+			}
+			if (e.exchange > 0.0) {
+				w.set_exchange(joined, e.exchange);
+			}
+			if (e.power != 0.0) {
+				w.set_power(joined, e.power);
+			}
+			edge[i] = joined.index;
+		}
+		const auto cell_of = [&](CellId c) { return c.index < 0 ? c : CellId{ cell[static_cast<size_t>(c.index)] }; };
+		const auto edge_of = [&](EdgeId e) { return e.index < 0 ? e : EdgeId{ edge[static_cast<size_t>(e.index)] }; };
+		Item x = t.items[static_cast<size_t>(ti)];
+		x.id = id;
+		x.cell = cell_of(x.cell);
+		for (CellId &r : x.rings) {
+			r = cell_of(r);
+		}
+		for (Item::Contact &k : x.contacts) {
+			k.cell = cell_of(k.cell);
+			k.edge = edge_of(k.edge);
+		}
+		for (EdgeId &e : x.outside) {
+			e = edge_of(e);
+		}
+		x.mouth = edge_of(x.mouth);
+		x.heats = edge_of(x.heats);
+		x.joint = edge_of(x.joint);
+		x.pour = edge_of(x.pour);
+		x.stirs = edge_of(x.stirs);
+		x.under = x.on = x.holds = x.drains_to = x.pours_into = -1;
+		x.wall_amounts.clear();
+		x.walls_were.clear();
+		to_storage(x);
+		items.push_back(std::move(x));
+		++sup.copies;
+		last_taken = id;
+		read_view.valid = false;
+		return static_cast<int>(items.size() - 1);
+	}
+	// a command's item that is not yet in the world: a supply of that id, taken out (to Storage, from where the
+	// command puts it: Stage 61), so a bench's commands name what its cabinet held as they did
+	int find_or_take(const std::string &id, std::string &why) {
+		const int at = find(id);
+		if (at >= 0 || find_part(id) >= 0) {
+			return at;
+		}
+		const int s = find_supply(id);
+		return s < 0 ? -1 : take(static_cast<size_t>(s), why);
+	}
 	std::vector<Event> events;
 	int cols = 28, rows = 15; // the bench's grid, in squares
 	// readings (GAME_SPEC §13, Stage 50): by instruments, or the truth; the seed the instruments' offsets and a hand's
@@ -406,7 +599,7 @@ struct Lab::Impl {
 
 	int find(const std::string &id) const {
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].id == id) {
+			if (items[i].id == id && !items[i].retired) {
 				return static_cast<int>(i);
 			}
 		}
@@ -430,7 +623,7 @@ struct Lab::Impl {
 		return -1;
 	}
 	// a name in use: an item's, a part's, or that of a part in the trash
-	bool taken(const std::string &id) const { return find(id) >= 0 || find_part(id) >= 0 || find_binned(id) >= 0; }
+	bool taken(const std::string &id) const { return find(id) >= 0 || find_part(id) >= 0 || find_binned(id) >= 0 || find_supply(id) >= 0; }
 	// the name of what standing_in found: an item, or a part after the items
 	const std::string &name_of(int index) const {
 		return index < static_cast<int>(items.size()) ? items[static_cast<size_t>(index)].id : parts[static_cast<size_t>(index) - items.size()].id;
@@ -1536,11 +1729,68 @@ struct Lab::Impl {
 		}
 	}
 	// an element leaves the trash's history
+	// an item out of the trash (Stage 61: it thaws, as it was when it went in)
 	void forget_trash(const std::string &id) {
+		const bool was = std::any_of(trash.begin(), trash.end(), [&](const Binned &b) { return b.id == id && !b.part; });
 		std::erase_if(trash, [&](const Binned &b) { return b.id == id; });
+		if (const int at = find(id); was && at >= 0) {
+			std::string no;
+			freeze_item(items[static_cast<size_t>(at)], false, no);
+		}
 	}
-	// Past its capacity the oldest leaves the trash for good: an item to the cabinet (it holds matter, which
-	// nothing destroys), a part scrapped with all it holds.
+	// the cells an item is made of (Stage 61): its own cell (a burner's flame, a reservoir, is none), its rings and
+	// its column's layers
+	std::vector<CellId> own_cells(const Item &x) const {
+		std::vector<CellId> out;
+		if (x.cell.index >= 0 && !world().meta(x.cell).reservoir) {
+			out.push_back(x.cell);
+		}
+		out.insert(out.end(), x.rings.begin(), x.rings.end());
+		if (x.kind == Kind::Vessel && x.cell.index >= 0) {
+			for (const CellId c : layers_of(x)) {
+				out.push_back(c);
+			}
+		}
+		return out;
+	}
+	// In the trash an item is frozen (Stage 61): it takes part in nothing, as it was put in; out of it, it thaws
+	bool freeze_item(Item &x, bool on, std::string &why) {
+		if (!boundary(why)) {
+			return false;
+		}
+		for (const CellId c : own_cells(x)) {
+			if (world().freeze(c, on) != Refusal::None) {
+				why = "\"" + x.id + "\" cannot be " + (on ? "frozen" : "thawed");
+				return false;
+			}
+		}
+		read_view.valid = false;
+		return true;
+	}
+	// Emptied out of the trash (Stage 61): everything it holds leaves the world (the ledger counts it: C9), and it is no
+	// longer an item
+	bool retire_item(Item &x, std::string &why) {
+		if (!boundary(why)) {
+			return false;
+		}
+		Snapshot out;
+		for (const CellId c : own_cells(x)) {
+			CellState left;
+			if (world().retire(c, &left) != Refusal::None) {
+				why = "\"" + x.id + "\" cannot leave the world";
+				return false;
+			}
+			out.cells.push_back(std::move(left));
+		}
+		retired = plus(retired, totals(table(), out));
+		x.retired = true;
+		x.place = Place::Trash;
+		x.col = x.row = -1;
+		read_view.valid = false;
+		return true;
+	}
+	// Past its capacity the oldest leaves the trash for good: an item out of the world (Stage 61), a part scrapped with
+	// all it holds.
 	void trim_trash() {
 		while (trash.size() > static_cast<size_t>(TRASH_MOST)) {
 			const Binned oldest = trash.front();
@@ -1549,8 +1799,9 @@ struct Lab::Impl {
 				unbin_part(oldest.id, true);
 				note(Notice::Detail, "", "the trash is full: " + oldest.id + " left it for good");
 			} else {
-				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
-				note(Notice::Detail, oldest.id, "the trash is full: " + oldest.id + " went to the cabinet");
+				std::string no;
+				retire_item(items[static_cast<size_t>(find(oldest.id))], no);
+				note(Notice::Detail, oldest.id, "the trash is full: " + oldest.id + " left the world");
 			}
 		}
 	}
@@ -1608,10 +1859,7 @@ struct Lab::Impl {
 			why = "a vessel made as glassware pours, into a vessel";
 			return false;
 		}
-		if (x.place == Place::Outbox) { // from the bench, or straight from the cabinet, as a burner or a balloon is used
-			why = "\"" + x.id + "\" has been handed in";
-			return false;
-		}
+		// (from the bench, or straight from Storage, as a burner or a balloon is used: Stage 61)
 		if (!on_bench(t, why)) {
 			return false;
 		}
@@ -2848,7 +3096,7 @@ struct Lab::Impl {
 				world().connect(v.cell, air, PHASES_GAS, &v.mouth);
 				v.holds = -1;
 				x.on = -1;
-				x.place = Place::Cabinet;
+				to_storage(x);
 				x.col = x.row = -1;
 				set_beside(s, v);
 				events.push_back(Event{ static_cast<int64_t>(world().step()), "popped", x.id });
@@ -2868,7 +3116,7 @@ struct Lab::Impl {
 			}
 			x.on = -1;
 			x.joint = EdgeId{};
-			x.place = Place::Cabinet;
+			to_storage(x);
 			x.col = x.row = -1;
 			set_beside(v.holds, v);
 			v.holds = -1;
@@ -2879,7 +3127,7 @@ struct Lab::Impl {
 				world().disconnect(b.heats);
 				b.under = -1;
 				b.heats = EdgeId{};
-				b.place = Place::Cabinet;
+				to_storage(b);
 				b.col = b.row = -1;
 				set_beside(static_cast<int>(&b - items.data()), v);
 			}
@@ -2932,7 +3180,7 @@ struct Lab::Impl {
 		touched[i] = 1;
 		v.burst = true;
 		forget_trash(v.id); // burst in the trash (Stage 34), it leaves it: broken, in the cabinet, as any
-		v.place = Place::Cabinet;
+		to_storage(v);
 		v.col = v.row = -1;
 		events.push_back(Event{ static_cast<int64_t>(world().step()), "burst", v.id });
 		note(Notice::Danger, v.id, v.id + text_of(" burst at %.0f kPa", kpa) + text_of(" (%.0f C): its contents went into the room and the tray", kelvin_before - 273.15));
@@ -3055,7 +3303,7 @@ struct Lab::Impl {
 		for (size_t i = 0; i < items.size(); ++i) {
 			if (stands_under(items[i].kind) && items[i].under == thing) {
 				items[i].under = -1;
-				items[i].place = Place::Cabinet;
+				to_storage(items[i]);
 				items[i].col = items[i].row = -1;
 				set_beside(static_cast<int>(i), was);
 			}
@@ -3220,7 +3468,7 @@ struct Lab::Impl {
 
 	bool on_bench(const Item &x, std::string &why) const {
 		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
-			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in the outbox") + ", not on the bench";
+			why = "\"" + x.id + "\" is " + (x.place == Place::Cabinet ? "in the cabinet" : x.place == Place::Trash ? "in the trash" : "in storage") + ", not on the bench";
 			return false;
 		}
 		return true;
@@ -3687,15 +3935,16 @@ struct Lab::Impl {
 	}
 
 	// the item named by a command's field, of the kind wanted
-	bool item(const json &c, const char *key, Kind kind, int &index, std::string &why) const {
+	bool item(const json &c, const char *key, Kind kind, int &index, std::string &why) {
 		if (!c.contains(key) || !c.at(key).is_string()) {
 			why = std::string("the command needs \"") + key + "\"";
 			return false;
 		}
 		const std::string id = c.at(key).get<std::string>();
-		index = find(id);
+		why.clear();
+		index = find_or_take(id, why); // (a supply of that id: taken out, Stage 61)
 		if (index < 0) {
-			why = "there is no \"" + id + "\" on the bench";
+			why = why.empty() ? "there is no \"" + id + "\" on the bench" : why;
 			return false;
 		}
 		const Kind is = items[static_cast<size_t>(index)].kind;
@@ -3832,6 +4081,18 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				return nullptr;
 			}
 			const std::string kind = j.at("kind").get<std::string>();
+			if (impl->find_supply(item.id) >= 0) {
+				why = "an item's id is empty or used twice: \"" + item.id + "\"";
+				return nullptr;
+			}
+			if (!j.contains("at")) {
+				// a supply (GAME_SPEC §13, Stage 61): a template, made below in a world of its own, no part of this one
+				Impl::Supply s;
+				s.id = item.id;
+				s.spec = j;
+				impl->supplies.push_back(std::move(s));
+				continue;
+			}
 			if (squares) {
 				default_size(kind, number(j, "volume_ml", 0.0), j.contains("coolant"), item.w, item.h, j.value("glassware", ""));
 			}
@@ -4088,6 +4349,29 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false); // the lab checks, and reports through its own status
 	impl->genesis = totals(table, impl->world().snapshot());
+	// each supply's template (Stage 61): a bench of it alone, in the same room, built as the bench would build it
+	for (Impl::Supply &s : impl->supplies) {
+		json alone = json::object();
+		alone["format"] = format;
+		alone["room"] = bench.at("room");
+		for (const char *key : { "readings", "seed" }) {
+			if (bench.contains(key)) {
+				alone[key] = bench.at(key);
+			}
+		}
+		json entry = s.spec;
+		entry["at"] = { 0, 0 };
+		if (squares) {
+			alone["grid"] = { 60, 40 };
+		}
+		alone["items"] = json::array({ entry });
+		std::string no;
+		s.made = Lab::open(alone.dump(), no);
+		if (!s.made) {
+			why = "the supply \"" + s.id + "\": " + no;
+			return nullptr;
+		}
+	}
 	// the game's goals (§13.5): locked
 	if (bench.contains("goals")) {
 		if (!bench.at("goals").is_array()) {
@@ -4210,8 +4494,41 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		return true;
 	}
+	if (what == "take") {
+		// (Stage 61) a new copy of a supply, onto a free square of the bench or, with no square, into Storage
+		if (!c.contains("supply") || !c.at("supply").is_string() || find_supply(c.at("supply").get<std::string>()) < 0) {
+			why = "there is no such supply";
+			return false;
+		}
+		const int s = find_supply(c.at("supply").get<std::string>());
+		if (c.contains("at")) {
+			const Item &shape = supplies[static_cast<size_t>(s)].made->impl_->items.front();
+			if (!c.at("at").is_array() || c.at("at").size() != 2 || !c.at("at").at(0).is_number_integer() || !c.at("at").at(1).is_number_integer()) {
+				why = "a place is \"at\" [column, row]";
+				return false;
+			}
+			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
+			if (!on_grid(col, row, shape.w, shape.h) || standing_in(col, row, shape.w, shape.h) >= 0) {
+				why = "there is no room for it there";
+				return false;
+			}
+		}
+		const int made_at = take(static_cast<size_t>(s), why);
+		if (made_at < 0) {
+			return false;
+		}
+		Item &x = items[static_cast<size_t>(made_at)];
+		if (c.contains("at")) {
+			x.place = Place::Bench;
+			x.slot = 0;
+			x.col = c.at("at").at(0).get<int>();
+			x.row = c.at("at").at(1).get<int>();
+		}
+		note(Notice::Detail, x.id, x.id + " taken out of supplies");
+		return true;
+	}
 	if (what == "place") {
-		// from the cabinet or the trash onto the bench, or along it
+		// from Storage or the trash onto the bench, or along it; a supply none of whose copies is out, taken out
 		int thing = -1;
 		if (c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0) {
 			// a signal part carried out of the trash, with all it holds, onto a free square of the bench (Stage 34)
@@ -4251,7 +4568,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			p.row = row;
 			return true;
 		}
-		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
+		if (!c.contains("item") || !c.at("item").is_string() || (thing = find_or_take(c.at("item").get<std::string>(), why)) < 0) {
 			why = "there is no such item to place";
 			return false;
 		}
@@ -4260,7 +4577,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is broken: its glass burst";
 			return false;
 		}
-		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash) || x.holds >= 0) {
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash && x.place != Place::Outbox) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
@@ -4852,7 +5169,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	if (what == "stow") {
 		int thing = -1;
-		if (!c.contains("item") || !c.at("item").is_string() || (thing = find(c.at("item").get<std::string>())) < 0) {
+		if (!c.contains("item") || !c.at("item").is_string() || (thing = find_or_take(c.at("item").get<std::string>(), why)) < 0) {
 			const bool binned_part = c.contains("item") && c.at("item").is_string() && find_binned(c.at("item").get<std::string>()) >= 0;
 			why = binned_part ? "\"" + c.at("item").get<std::string>() + "\" is in the trash: restore it first" : "there is no such item to stow";
 			return false;
@@ -4860,7 +5177,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		Item &x = items[static_cast<size_t>(thing)];
 		const bool free = x.kind != Kind::Tray && (x.place == Place::Bench || x.place == Place::Trash) && x.holds < 0 && fixed_under(thing) < 0; // from the trash too (Stage 34)
 		if (!free) {
-			why = "\"" + x.id + "\" cannot go back in the cabinet as it is";
+			why = "\"" + x.id + "\" cannot be put in storage as it is";
 			return false;
 		}
 		if (!take_off_drains(thing, why)) {
@@ -4868,7 +5185,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		forget_trash(x.id);
 		const Item was = x;
-		x.place = Place::Cabinet;
+		to_storage(x);
 		x.col = x.row = -1;
 		leave_balances(thing, was); // (Stage 50)
 		return true;
@@ -4900,8 +5217,6 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		std::string no;
 		if (x.kind == Kind::Tray) {
 			no = "the tray is the bench's own: it does not go in the trash";
-		} else if (x.place == Place::Outbox) {
-			no = "\"" + x.id + "\" has been handed in";
 		} else if (x.place == Place::On || x.place == Place::Under) {
 			const int other = x.place == Place::On ? x.on : x.under;
 			no = "\"" + x.id + "\" is " + (x.place == Place::On ? "on" : "under") + " \"" + (other >= 0 ? items[static_cast<size_t>(other)].id : std::string("something")) + "\": take it away first";
@@ -4918,11 +5233,17 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!take_off_drains(thing, why)) {
 			return false;
 		}
+		if (!boundary(why)) {
+			return false;
+		}
 		trash.push_back(Binned{ x.id, false, x.place == Place::Bench ? x.col : -1, x.place == Place::Bench ? x.row : -1 });
 		const Item was = x;
 		x.place = Place::Trash;
 		x.col = x.row = -1;
 		leave_balances(thing, was); // (Stage 50)
+		if (!freeze_item(items[static_cast<size_t>(thing)], true, why)) { // (Stage 61: frozen as it goes in)
+			return false;
+		}
 		trim_trash();
 		return true;
 	}
@@ -4939,11 +5260,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			trash.erase(trash.begin());
 			if (oldest.part) {
 				unbin_part(oldest.id, true);
-			} else {
-				items[static_cast<size_t>(find(oldest.id))].place = Place::Cabinet;
+			} else if (!retire_item(items[static_cast<size_t>(find(oldest.id))], why)) {
+				return false;
 			}
 		}
-		note(Notice::Detail, "", text_of("the trash was emptied: %.0f things, its items to the cabinet", static_cast<double>(count)));
+		note(Notice::Detail, "", text_of("the trash was emptied: %.0f things, out of the world", static_cast<double>(count)));
 		return true;
 	}
 	if (what == "restore") {
@@ -4974,17 +5295,20 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			unbin_part(id, false);
 		} else {
-			// to its square, or to the cabinet: where it came from, or because its square is taken
+			// to its square, or to Storage: where it came from, or because its square is taken; thawed, as it went in
 			Item &x = items[static_cast<size_t>(find(id))];
+			if (!freeze_item(x, false, why)) {
+				return false;
+			}
 			const int there = b.col >= 0 ? standing_in(b.col, b.row, x.w, x.h) : -1;
 			if (b.col >= 0 && there < 0 && on_grid(b.col, b.row, x.w, x.h) && !(x.kind == Kind::Vessel && x.burst)) {
 				x.place = Place::Bench;
 				x.col = b.col;
 				x.row = b.row;
 			} else {
-				x.place = Place::Cabinet;
+				to_storage(x);
 				if (there >= 0) {
-					note(Notice::Detail, x.id, x.id + " went to the cabinet: \"" + name_of(there) + "\" stands where it stood");
+					note(Notice::Detail, x.id, x.id + " went to storage: \"" + name_of(there) + "\" stands where it stood");
 				}
 			}
 		}
@@ -5036,7 +5360,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		world().disconnect(flame.heats);
 		// it goes back beside the vessel if there is room, else to the cabinet
 		const Item v = items[static_cast<size_t>(flame.under)];
-		flame.place = Place::Cabinet;
+		to_storage(flame);
 		flame.col = flame.row = -1;
 		set_beside(burner, v);
 		flame.under = -1;
@@ -5066,12 +5390,12 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + v.id + "\" has \"" + items[static_cast<size_t>(v.holds)].id + "\" on it: the well's lid closes over a cuvette alone";
 			return false;
 		}
-		if (v.place == Place::Outbox || v.place == Place::Trash || (v.place == Place::Cabinet && !c.value("onto", false))) {
+		if (v.place == Place::Trash || ((v.place == Place::Cabinet || v.place == Place::Outbox) && !c.value("onto", false))) {
 			on_bench(v, why);
 			return false;
 		}
-		if (scale.place == Place::Trash || scale.place == Place::Outbox) {
-			why = "\"" + scale.id + "\" is " + (scale.place == Place::Trash ? "in the trash" : "handed in");
+		if (scale.place == Place::Trash) {
+			why = "\"" + scale.id + "\" is in the trash";
 			return false;
 		}
 		if (scale.under >= 0) {
@@ -5096,7 +5420,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			Item &x = items[static_cast<size_t>(vessel)];
-			if (x.holds >= 0 || x.drains_to >= 0 || (x.place != Place::Bench && x.place != Place::Cabinet)) {
+			if (x.holds >= 0 || x.drains_to >= 0 || (x.place != Place::Bench && x.place != Place::Cabinet && x.place != Place::Outbox)) {
 				why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 				return false;
 			}
@@ -5138,7 +5462,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		// it goes back beside the vessel if there is room, else to the cabinet
 		const Item v = items[static_cast<size_t>(scale.under)];
-		scale.place = Place::Cabinet;
+		to_storage(scale);
 		scale.col = scale.row = -1;
 		set_beside(balance, v);
 		scale.under = -1;
@@ -5386,9 +5710,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "a vessel is not poured into itself";
 			return false;
 		}
-		if (items[static_cast<size_t>(from)].place == Place::Outbox || !on_bench(items[static_cast<size_t>(to)], why)) {
+		if (items[static_cast<size_t>(from)].place == Place::Trash || !on_bench(items[static_cast<size_t>(to)], why)) {
 			if (why.empty()) {
-				why = "\"" + items[static_cast<size_t>(from)].id + "\" has been handed in";
+				why = "\"" + items[static_cast<size_t>(from)].id + "\" is in the trash";
 			}
 			return false;
 		}
@@ -5634,6 +5958,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 	}
 	if (what == "attach") {
 		int thing = -1, to = -1;
+		if (c.contains("item") && c.at("item").is_string() && find_or_take(c.at("item").get<std::string>(), why) < 0 && !why.empty()) {
+			return false; // (a supply taken out first, Stage 61)
+		}
 		const bool stopper = c.contains("item") && c.at("item").is_string() && find(c.at("item").get<std::string>()) >= 0
 				&& items[static_cast<size_t>(find(c.at("item").get<std::string>()))].kind == Kind::Stopper;
 		if (stopper) {
@@ -5659,7 +5986,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (const glass::Vessel *g = outlet_of(x); g != nullptr) {
 			// (Stage 52) a vessel with an outlet at its foot stands on the mouth, its tip in it, and drains into the vessel
 			// through its stopcock (a pipette has none: it delivers as it stands); the mouth stays open to the room
-			if (x.place == Place::Outbox || x.place == Place::Trash || !on_bench(v, why)) {
+			if (x.place == Place::Trash || !on_bench(v, why)) {
 				if (why.empty()) {
 					why = "\"" + x.id + "\" is not on the bench";
 				}
@@ -5698,9 +6025,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" does not seal \"" + v.id + "\"'s " + text_of("%.0f mm mouth", 20.0 * g->mouth()) + text_of(": it fits a neck up to %.0f mm", 10.0 * glass::seals());
 			return false;
 		}
-		if (x.place == Place::Outbox || !on_bench(v, why)) {
+		if (x.place == Place::Trash || !on_bench(v, why)) {
 			if (why.empty()) {
-				why = "\"" + x.id + "\" has been handed in";
+				why = "\"" + x.id + "\" is in the trash";
 			}
 			return false;
 		}
@@ -5771,7 +6098,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			v.holds = -1;
 			x.on = -1;
-			x.place = Place::Cabinet;
+			to_storage(x);
 			x.col = x.row = -1;
 			set_beside(thing, v);
 			return true;
@@ -5788,7 +6115,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.on = -1;
 		x.joint = EdgeId{};
 		// it is set down beside the vessel if there is room, else in the cabinet
-		x.place = Place::Cabinet;
+		to_storage(x);
 		x.col = x.row = -1;
 		set_beside(thing, v);
 		return true;
@@ -6049,7 +6376,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.col = x.row = -1;
 		for (size_t i = 0; i < items.size(); ++i) {
 			if ((items[i].kind == Kind::Burner || stands_under(items[i].kind)) && items[i].place == Place::Under && items[i].under < 0) {
-				items[i].place = Place::Cabinet;
+				to_storage(items[i]);
 				set_beside(static_cast<int>(i), was); // where the vessel stood, or beside it
 			}
 		}
@@ -6123,6 +6450,19 @@ LabView Lab::view() const {
 	out.rows = m.rows;
 	for (const Item &item : m.items) {
 		out.items.push_back(m.item_view(item));
+		if (item.retired) {
+			out.items.back().place = "retired"; // (Stage 61: left the world; kept so that indices stand)
+		}
+	}
+	for (const Impl::Supply &s : m.supplies) { // (Stage 61) each supply as a copy of it is when taken out
+		const Impl &t = *s.made->impl_;
+		const int at = t.find(s.id);
+		ItemView v = at >= 0 ? t.item_view(t.items[static_cast<size_t>(at)]) : ItemView{};
+		v.id = s.id;
+		v.place = "supplies";
+		v.col = v.row = -1;
+		out.supplies.push_back(std::move(v));
+		out.copies.push_back(s.copies);
 	}
 	for (const Part &p : m.parts) {
 		ItemView v;
@@ -6160,7 +6500,7 @@ LabView Lab::view() const {
 		g.met = m.goal_met(g); // live
 	}
 	const Totals now = totals(table, m.world().snapshot());
-	out.conserved = now == m.genesis;
+	out.conserved = check_C9(m.genesis, m.supplied, m.retired, now).empty(); // (Stage 61: across the boundary)
 	out.room_celsius = m.world().meta(m.room).reservoir_temperature - 273.15; // GAME_SPEC §12.4 (Stage 46)
 	out.instruments = m.instruments; // (Stage 50)
 	out.notebook = m.notebook; // (Stage 54)
@@ -6620,7 +6960,7 @@ std::string Lab::report() const {
 	// the conservation laws, as integers
 	const Totals now = totals(table, m.world().snapshot());
 	json conserved;
-	conserved["unchanged"] = now == m.genesis;
+	conserved["unchanged"] = check_C9(m.genesis, m.supplied, m.retired, now).empty();
 	conserved["mass_g"] = now.mass.grams();
 	conserved["energy_quanta"] = now.energy;
 	json elements;
@@ -6630,6 +6970,10 @@ std::string Lab::report() const {
 	conserved["atom_quanta"] = elements;
 	out["conserved"] = conserved;
 	return out.dump();
+}
+
+std::string Lab::last_taken() const {
+	return impl_->last_taken;
 }
 
 std::string Lab::digest() const {
