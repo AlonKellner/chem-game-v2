@@ -1146,6 +1146,52 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 // settled after its children, and nothing a
 // parent does afterwards changes a child, so one sweep leaves every cell at
 // equilibrium and full.
+void Simulation::equilibrate() {
+	begin_step();
+	if (world_.thermal()) {
+		process_ = Process::Settle;
+		settle();
+	}
+}
+
+std::optional<World> build_settled(World::Builder builder, std::span<const Reaction> reactions, std::string *why) {
+	std::optional<World> world = builder.build(why);
+	for (int round = 0; world && world->thermal() && round < 16; ++round) {
+		Simulation sim(*world, std::vector<Reaction>(reactions.begin(), reactions.end()));
+		sim.set_checking(false);
+		sim.equilibrate();
+		const World &settled = sim.world();
+		bool moved = false;
+		for (int c = 0; c < settled.cell_count(); ++c) {
+			const CellId cell{ c };
+			double before = 0.0, after = 0.0;
+			if (world->temperature(cell, before) && settled.temperature(cell, after) && std::abs(after - before) > 1e-6) {
+				moved = true;
+			}
+		}
+		if (!moved) {
+			break;
+		}
+		const SpeciesTable &table = settled.species();
+		for (int c = 0; c < settled.cell_count(); ++c) {
+			const CellId cell{ c };
+			const CellState &state = settled.snapshot_cell(cell);
+			for (int k = 0; k < table.species_count(); ++k) {
+				const SpeciesId s{ k };
+				if (table.species(s).retired) {
+					continue;
+				}
+				builder.set_amount(cell, s, Amount{ state.amount[static_cast<size_t>(k)] });
+				if (table.species(s).phase == Phase::Solid && !table.species(s).wall) {
+					builder.set_particles(cell, s, state.particles[static_cast<size_t>(k)]);
+				}
+			}
+		}
+		world = builder.build(why);
+	}
+	return world;
+}
+
 void Simulation::settle() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	starved_.assign(cells, 0);

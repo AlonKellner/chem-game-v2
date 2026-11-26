@@ -9,7 +9,8 @@ weights of `data/elements.json`.
 Commission on Isotopic Abundances and Atomic Weights), "Abridged Standard Atomic Weights 2024"
 (ciaaw.org/abridged-atomic-weights.htm, after the "Atomic Weights 2021" report; read 2026-11-21):
 H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed;
-Na 22.990 (Stage 43, the same table).
+Na 22.990 (Stage 43, the same table); Cl 35.45, K 39.098, P 30.974, Br 79.904 (Stage 64, the same table, read
+2026-11-26).
 Check: each molar mass the build derives is these summed by the formula (water 18.015, the
 pentahydrate 249.677): `sources: molar masses are IUPAC's atomic weights`.
 

@@ -123,6 +123,21 @@ TEST_CASE("lab: the demo's bench opens with every vessel full of the room's air 
 	CHECK(lab->digest() != before);
 }
 
+TEST_CASE("lab: a bench's vessels open at their fast equilibria at the temperature it states (Stage 64)") {
+	// the acid is set as its ions; the bench settles it at 20 C, its bisulfate formed, so its first steps do not cool it
+	// (Stage 63 left it to its first step, which took it to 17.44 C)
+	auto lab = demo_bench();
+	const json report = json::parse(lab->report());
+	CHECK(item(report, "acid").at("celsius").get<double>() == doctest::Approx(20.0).epsilon(1e-9));
+	CHECK(mol(item(report, "acid"), "hydrogen_sulfate_ion") > 0.15);
+	std::string why;
+	REQUIRE(lab->advance(10, why));
+	const json later = json::parse(lab->report());
+	MESSAGE("the acid after 10 steps: " << item(later, "acid").at("celsius").get<double>() << " C");
+	CHECK(std::abs(item(later, "acid").at("celsius").get<double>() - 20.0) < 0.01);
+	CHECK(mol(item(later, "acid"), "hydrogen_sulfate_ion") == doctest::Approx(mol(item(report, "acid"), "hydrogen_sulfate_ion")).epsilon(1e-3));
+}
+
 TEST_CASE("lab: a malformed bench is refused with a reason (Stage 7)") {
 	std::string why;
 	CHECK(lab::Lab::open("not json", why) == nullptr);

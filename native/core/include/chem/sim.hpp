@@ -3,6 +3,9 @@
 #include "chem/thermo.hpp"
 #include "chem/world.hpp"
 
+#include <optional>
+#include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -59,6 +62,12 @@ double fountain_reach(double momentum, double buoyancy);
 // Yamaguchi and Adachi's (1974), Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3), 2 at rest
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta = nullptr);
 
+// (Stage 64) The world a builder states, each cell at its fast equilibria at its stated temperature: built, settled
+// (`Simulation::equilibrate`), its settled amounts set again in the builder at the same temperatures, until settling
+// moves no cell's temperature by more than 1e-6 K (at most 16 rounds; the last built). A bench's sulfuric acid, set
+// as its ions, cooled 2.6 K at its first step as its bisulfate formed (Stage 63). The builder's other settings stand.
+std::optional<World> build_settled(World::Builder builder, std::span<const Reaction> reactions, std::string *why = nullptr);
+
 class Simulation {
 public:
 	// `reactions` are the ones that run on their own, in every cell, in this
@@ -75,6 +84,10 @@ public:
 	// Advances one step without building its trace or checking it: the same
 	// state, bit for bit, at a fraction of the cost.
 	void advance();
+
+	// (Stage 64) Every cell to its fast equilibria now, as a step settles, and nothing else: no time passes. What
+	// `build_settled` reads a world's settled amounts by.
+	void equilibrate();
 
 	// Checking runs every invariant on every step. On by default where
 	// CHEM_ASSERT aborts (Debug and sanitizer builds), off otherwise.

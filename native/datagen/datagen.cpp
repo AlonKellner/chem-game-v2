@@ -122,6 +122,8 @@ struct SpeciesRow {
 	double conductivity = 0.0; // a wall's thermal conductivity, W/m K (Stage 53)
 	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
 	bool retired = false; // (Stage 63) a formula unit whose ions are species now: an amount of it is taken as its ions
+	std::vector<std::pair<std::string, int>> basis_names; // (Stage 64) masters by formula, as species.json names them
+	std::vector<std::pair<int, int>> basis; // (Stage 64) (species, count)
 };
 
 // An ion as species.json names it: its formula, then its charge, "SO4-2".
@@ -280,6 +282,19 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				fail(species_file, "species " + row.id + ": its ions do not sum to its formula and charge (at most " + std::to_string(chem::MAX_IONS) + " ions)");
 			}
 		}
+		if (s.contains("basis")) {
+			// (Stage 64) its masters by their formulas ("CO3-2": 1, "H+1": 1), resolved once every species is read
+			for (const auto &[name, count_json] : s.at("basis").items()) {
+				const int count = count_json.get<int>();
+				if (count == 0) {
+					fail(species_file, "species " + row.id + ": a basis names " + name + " with a count of nought");
+				}
+				row.basis_names.emplace_back(name, count);
+			}
+			if (row.basis_names.empty() || row.basis_names.size() > static_cast<size_t>(chem::MAX_BASIS)) {
+				fail(species_file, "species " + row.id + ": a basis names 1 to " + std::to_string(chem::MAX_BASIS) + " masters");
+			}
+		}
 		if (s.contains("grain_um")) {
 			const double g = s.at("grain_um").get<double>();
 			if (row.phase->phase != chem::Phase::Solid || row.wall || !(g > 0.0)) {
@@ -328,6 +343,17 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		species.push_back(row);
 	}
 
+	// (Stage 64) each basis by its masters' indices: dissolved species named by formula
+	for (SpeciesRow &row : species) {
+		for (const auto &[name, count] : row.basis_names) {
+			const auto found = by_key.find(name + "(aq)");
+			if (found == by_key.end()) {
+				fail(species_file, "species " + row.id + ": its basis names " + name + ", which is no dissolved species");
+			}
+			row.basis.emplace_back(found->second, count);
+		}
+	}
+
 	// ---- the table, through the core's own validation
 	std::vector<chem::ElementDef> element_defs;
 	for (size_t i = 0; i < symbols.size(); ++i) {
@@ -344,6 +370,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		def.air_exponent = row.air_exponent;
 		def.conductivity = row.conductivity;
 		def.retired = row.retired;
+		for (size_t i = 0; i < row.basis.size(); ++i) {
+			def.basis[i] = chem::BasisCount{ row.basis[i].first, row.basis[i].second };
+		}
 		species_defs.push_back(def);
 	}
 
@@ -580,7 +609,11 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		char grain[160];
 		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g, %.17g, %s", row.grain, row.air_diffusion, row.air_exponent, row.conductivity, row.retired ? "true" : "false");
-		cpp << " } }, " << grain << " },\n";
+		cpp << " } }, " << grain << ", { {";
+		for (size_t i = 0; i < static_cast<size_t>(chem::MAX_BASIS); ++i) {
+			cpp << (i ? ", " : " ") << "BasisCount{ " << (i < row.basis.size() ? row.basis[i].first : -1) << ", " << (i < row.basis.size() ? row.basis[i].second : 0) << " }";
+		}
+		cpp << " } } },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";
 	for (const chem::IonDef &ion : solution.ions) {
