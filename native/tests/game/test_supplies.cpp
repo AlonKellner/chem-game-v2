@@ -159,3 +159,30 @@ TEST_CASE("trash: emptied, its items leave the world (the ledger counts them: C9
 	REQUIRE_MESSAGE(l->advance(600, why), why);
 	CHECK(l->view().conserved);
 }
+
+TEST_CASE("supplies: a lab with copies out, one frozen in the trash and one emptied out of the world, saved and loaded, goes on exactly (Stage 61)") {
+	auto first = bench();
+	first->set_checking(true);
+	must(*first, R"({"do": "take", "supply": "beaker", "at": [10, 4]})");
+	must(*first, R"({"do": "take", "supply": "flask", "at": [16, 4]})");
+	must(*first, R"({"do": "take", "supply": "beaker"})");
+	must(*first, R"({"do": "trash", "item": "beaker2"})");
+	must(*first, R"({"do": "empty_trash"})");
+	must(*first, R"({"do": "trash", "item": "flask"})");
+	std::string why;
+	REQUIRE_MESSAGE(first->advance(120, why), why);
+	auto second = lab::Lab::load(first->save(), why);
+	REQUIRE_MESSAGE(second != nullptr, why);
+	CHECK(second->digest() == first->digest());
+	CHECK(second->view().supplies.size() == first->view().supplies.size());
+	REQUIRE_MESSAGE(first->advance(600, why), why);
+	REQUIRE_MESSAGE(second->advance(600, why), why);
+	CHECK(second->digest() == first->digest());
+	must(*first, R"({"do": "take", "supply": "beaker"})");
+	must(*second, R"({"do": "take", "supply": "beaker"})");
+	CHECK(second->last_taken() == first->last_taken());
+	CHECK(second->last_taken() == "beaker3"); // (beaker2 left the world: its id is not given again)
+	CHECK(second->digest() == first->digest());
+	must(*second, R"({"do": "restore", "item": "flask"})");
+	CHECK(second->view().conserved);
+}

@@ -361,6 +361,7 @@ struct Lab::Impl {
 	struct Supply {
 		std::string id;
 		json spec;
+		json alone; // the bench of it alone its template is made of (what a save keeps)
 		std::unique_ptr<Lab> made;
 		int copies = 0;
 	};
@@ -2400,8 +2401,8 @@ struct Lab::Impl {
 	// a wall into it. A cell with no temperature (an empty layer) touches nothing.
 	void set_walls() {
 		for (Item &x : items) {
-			if (x.rings.empty()) {
-				continue;
+			if (x.rings.empty() || x.retired || world().meta(x.cell).frozen) {
+				continue; // (frozen in the trash, or out of the world: nothing of it is set, Stage 61)
 			}
 			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
 			if (g == nullptr) {
@@ -2594,7 +2595,7 @@ struct Lab::Impl {
 		if (x.outside.empty()) {
 			for (const CellId ring : x.rings) {
 				for (size_t e = 0; e < edges.size(); ++e) {
-					if (edges[e].a == ring && edges[e].b == room && !edges[e].column && edges[e].phases == PHASES_NONE) {
+					if (edges[e].a == ring && edges[e].b == room && !edges[e].column && edges[e].phases == PHASES_NONE && (edges[e].open || edges[e].frozen)) {
 						x.outside.push_back(EdgeId{ static_cast<int32_t>(e) });
 						break;
 					}
@@ -2603,8 +2604,8 @@ struct Lab::Impl {
 		}
 		for (size_t e = 0; e < edges.size(); ++e) {
 			const Edge &edge = edges[e];
-			if (!edge.open || edge.drain || edge.column || edge.phases != PHASES_NONE) {
-				continue;
+			if ((!edge.open && !edge.frozen) || edge.drain || edge.column || edge.phases != PHASES_NONE) {
+				continue; // (an edge a freeze closed is its still: Stage 61)
 			}
 			for (size_t r = 0; r < x.rings.size(); ++r) {
 				if (edge.a == x.rings[r] && std::find(column.begin(), column.end(), edge.b) != column.end()) {
@@ -4366,6 +4367,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		}
 		alone["items"] = json::array({ entry });
 		std::string no;
+		s.alone = alone;
 		s.made = Lab::open(alone.dump(), no);
 		if (!s.made) {
 			why = "the supply \"" + s.id + "\": " + no;
@@ -7201,6 +7203,10 @@ json Lab::Impl::save() const {
 		if (meta.layer) { // (Stage 47)
 			cell["layer"] = true;
 		}
+		if (meta.frozen || meta.retired) { // (Stage 61)
+			cell["frozen"] = meta.frozen;
+			cell["retired"] = meta.retired;
+		}
 		if (meta.column_volume > 0.0) {
 			cell["column"] = { bits(meta.column_volume), bits(meta.column_area) };
 			if (!meta.column_shape.empty()) { // its shape (Stage 51): its rise, then its volumes
@@ -7235,6 +7241,9 @@ json Lab::Impl::save() const {
 		}
 		if (e.exchange > 0.0) { // (Stage 50)
 			edges.back()["exchange"] = bits(e.exchange);
+		}
+		if (e.frozen) { // (Stage 61)
+			edges.back()["frozen"] = true;
 		}
 	}
 	out["edges"] = edges;
@@ -7272,6 +7281,9 @@ json Lab::Impl::save() const {
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
 		if (item.kind == Kind::Stopper) { // a lab without a stopper or a cap on saves as before (Stage 28)
 			list.back()["hold_n"] = bits(item.hold_n);
+		}
+		if (item.retired) { // (Stage 61)
+			list.back()["retired"] = true;
 		}
 		if (item.screwed) {
 			list.back()["screwed"] = true;
@@ -7349,6 +7361,13 @@ json Lab::Impl::save() const {
 	}
 	bench["notices"] = notices_json(true);
 	bench["goals"] = { { "list", goals_json(true) }, { "made", goals_made } };
+	if (!supplies.empty()) { // (Stage 61) each supply's template, as the bench of it alone, and its copies so far
+		json list_s = json::array();
+		for (const Supply &s : supplies) {
+			list_s.push_back({ { "id", s.id }, { "copies", s.copies }, { "bench", s.alone } });
+		}
+		bench["supplies"] = std::move(list_s);
+	}
 	out["bench"] = bench;
 	return out;
 }
@@ -7434,6 +7453,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			}
 			b.set_energy(id, Energy{ cell.at("energy").get<int64_t>() });
 			b.set_mixing(id, mixing);
+			b.set_boundary(id, cell.value("frozen", false), cell.value("retired", false)); // (Stage 61)
 		}
 		for (const json &e : saved.at("edges")) {
 			Edge edge;
@@ -7443,6 +7463,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.open = e.at("open").get<bool>();
 			edge.drain = e.at("drain").get<bool>();
 			edge.column = e.value("column", false);
+			edge.frozen = e.value("frozen", false); // (Stage 61)
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
 					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power)) ||
 					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange))) {
@@ -7530,6 +7551,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 				return nullptr;
 			}
 			item.submitted = j.at("submitted").get<bool>();
+			item.retired = j.value("retired", false); // (Stage 61)
 			item.col = j.at("col").get<int>();
 			item.row = j.at("row").get<int>();
 			item.w = j.value("w", 1);
@@ -7640,7 +7662,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			impl->trials.push_back(std::move(t));
 		}
 		for (const Item &x : impl->items) {
-			if (x.place == Place::Trash && impl->trash_at(x.id) < 0) {
+			if (x.place == Place::Trash && !x.retired && impl->trash_at(x.id) < 0) {
 				why = "the save holds \"" + x.id + "\" in a trash that does not list it";
 				return nullptr;
 			}
@@ -7690,6 +7712,30 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	impl->sim->set_checking(false);
 	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation), std::move(work));
 	impl->genesis = totals(table, impl->world().snapshot());
+	// (Stage 61) its supplies, each made again from the bench of it alone; what a save from before them kept in the
+	// cabinet is in Storage now (it was in the world, and is)
+	if (saved.at("bench").contains("supplies")) {
+		for (const json &j : saved.at("bench").at("supplies")) {
+			Impl::Supply s;
+			s.id = j.at("id").get<std::string>();
+			s.copies = j.at("copies").get<int>();
+			s.alone = j.at("bench");
+			s.spec = s.alone.at("items").at(0);
+			s.spec.erase("at");
+			std::string no;
+			s.made = Lab::open(s.alone.dump(), no);
+			if (!s.made) {
+				why = "the save's supply \"" + s.id + "\": " + no;
+				return nullptr;
+			}
+			impl->supplies.push_back(std::move(s));
+		}
+	}
+	for (Item &x : impl->items) {
+		if (x.place == Place::Cabinet && x.kind != Kind::Tray) {
+			impl->to_storage(x);
+		}
+	}
 	if (!impl->restored_notices) {
 		impl->detect(true); // a save from before notices: what the detectors see from now on
 	} else {

@@ -232,6 +232,8 @@ public:
 		// a rigid cell that holds more liquid than fits spills the excess into it.
 		Builder &set_spill(CellId cell);
 		Builder &set_mixing(CellId cell, double mixing);
+		// a cell frozen, or retired (Stage 61: a save's)
+		Builder &set_boundary(CellId cell, bool frozen, bool retired);
 		// the step the world resumes at (a saved world)
 		Builder &set_step(uint64_t step);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);

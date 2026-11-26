@@ -182,6 +182,14 @@ World::Builder &World::Builder::set_mixing(CellId cell, double mixing) {
 	return *this;
 }
 
+World::Builder &World::Builder::set_boundary(CellId cell, bool frozen, bool retired) {
+	if (cell.index >= 0 && static_cast<size_t>(cell.index) < meta_.size()) {
+		meta_[static_cast<size_t>(cell.index)].frozen = frozen || retired;
+		meta_[static_cast<size_t>(cell.index)].retired = retired;
+	}
+	return *this;
+}
+
 World::Builder &World::Builder::set_step(uint64_t step) {
 	step_ = step;
 	return *this;
