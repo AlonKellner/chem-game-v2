@@ -7356,6 +7356,11 @@ json Lab::Impl::save() const {
 	}
 	out["edges"] = edges;
 	out["remainders"] = { { "heat", doubles(sim->heat_remainders()) }, { "reaction", doubles(sim->reaction_remainders()) }, { "nucleation", doubles(sim->nucleation_remainders()) } };
+	// the last step's flows (Stage 69): not state, but what a vessel's bubbles and a reaction's rate are read from
+	if (!sim->flows().energy.empty()) {
+		const StepFlows &f = sim->flows();
+		out["flows"] = { { "energy", f.energy }, { "grams", doubles(f.grams) }, { "extent", f.extent }, { "reactions", f.reactions } };
+	}
 	if (!sim->work_remainders().empty()) {
 		out["remainders"]["work"] = doubles(sim->work_remainders());
 	}
@@ -7823,6 +7828,43 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false);
 	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation), std::move(work));
+	if (saved.contains("flows")) {
+		// (Stage 69) the last step's flows, so that its first view reads as the saved one's did: a boiling vessel's
+		// bubbles were none until its first step
+		StepFlows f;
+		const json &j = saved.at("flows");
+		if (!j.is_object() || !j.contains("energy") || !j.contains("grams") || !j.contains("extent") || !j.contains("reactions") ||
+				!j.at("energy").is_array() || !j.at("extent").is_array() || !to_doubles(j.at("grams"), f.grams)) {
+			why = "the save's flows are not flows";
+			return nullptr;
+		}
+		try {
+			f.energy = j.at("energy").get<std::vector<int64_t>>();
+			f.extent = j.at("extent").get<std::vector<int64_t>>();
+			f.reactions = j.at("reactions").get<size_t>();
+		} catch (const std::exception &e) {
+			why = std::string("the save's flows are malformed: ") + e.what();
+			return nullptr;
+		}
+		impl->sim->restore_flows(std::move(f));
+	}
+	// (Stage 69) each vessel's contacts between its rings and what it holds, found from the world's edges now, not at
+	// its first step: its first view reads the heat its floor passes from them (its bubbles)
+	for (Item &x : impl->items) {
+		if (!x.rings.empty() && x.contacts.empty()) {
+			std::vector<CellId> column{ x.cell };
+			for (const CellId c : impl->layers_of(x)) {
+				column.push_back(c);
+			}
+			impl->find_contacts(x, column);
+		}
+	}
+	if (impl->mid_step) {
+		// saved in a step a command had moved matter in (a tip, a pour): its world refuses until the step closes
+		// what the saved one refused, as that one did (Stage 69: D2; a loaded world's ledger is empty, and it set its
+		// walls' contacts a step before the saved one could)
+		impl->world().resume_step();
+	}
 	impl->genesis = totals(table, impl->world().snapshot());
 	// (Stage 61) its supplies, each made again from the bench of it alone; what a save from before them kept in the
 	// cabinet is in Storage now (it was in the world, and is)

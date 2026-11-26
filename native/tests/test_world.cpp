@@ -201,3 +201,21 @@ TEST_CASE("world: 5 g of malachite decomposes into the masses its formula fixes 
 	CHECK(grams(builtin::steam) == doctest::Approx(0.407).epsilon(0.002));
 	CHECK(grams(builtin::carbon_dioxide) + grams(builtin::copper_oxide) + grams(builtin::steam) == doctest::Approx(5.0).epsilon(1e-9));
 }
+
+// (Stage 69) a world saved in a step a command had moved matter in, loaded: its ledger is not kept, and the step is
+// still in progress; it refuses what a world mid-step refuses until the step closes, as the saved one did (D2)
+TEST_CASE("world: a step resumed after a load refuses what a step in progress does, until it closes (Stage 69)") {
+	Bench t = bench();
+	CHECK_FALSE(t.world.mid_step());
+	t.world.resume_step();
+	CHECK(t.world.mid_step());
+	CHECK(t.world.disconnect(t.mouth) == Refusal::MidStep);
+	CHECK(t.world.set_conductance(t.mouth, 1.0) == Refusal::MidStep);
+	CHECK(check_all(builtin_species(), t.world.close_step()).empty());
+	CHECK_FALSE(t.world.mid_step());
+	CHECK(t.world.set_conductance(t.mouth, 1.0) == Refusal::None);
+	t.world.resume_step();
+	t.world.skip_step(); // (a step run unchecked closes it too)
+	CHECK_FALSE(t.world.mid_step());
+	CHECK(t.world.disconnect(t.mouth) == Refusal::None);
+}

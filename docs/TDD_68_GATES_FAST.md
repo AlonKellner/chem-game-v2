@@ -209,6 +209,9 @@ sanitizers' 722 s over all 567 entries; 5,321 s of CPU). What the gates leave ou
 
 ## Open
 
+(Both fixed by Stage 69, `docs/TDD_69_SAVES.md`: `World::resume_step`; the last step's flows saved, a vessel's
+contacts found as it loads.)
+
 - **D2 does not hold for a save just after the demo's command 1** (the malachite tipped into the flask, no step run
   since the heat was set): loaded, command 2's step gives another digest; the flask's rings' conductances to the room
   differ in their last digits after it. Every other command's save continues as the record does (held at every
