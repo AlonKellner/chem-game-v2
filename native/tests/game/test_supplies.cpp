@@ -2,12 +2,14 @@
 // part of the room's world, of which each copy taken out joins it (the ledger counting what came in: C9); Storage, the
 // outbox, holds what is put aside, still simulated, in as many slots as it needs.
 #include "lab/lab.hpp"
+#include "lab/search.hpp"
 
 #include <doctest/doctest.h>
 
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -185,4 +187,41 @@ TEST_CASE("supplies: a lab with copies out, one frozen in the trash and one empt
 	CHECK(second->digest() == first->digest());
 	must(*second, R"({"do": "restore", "item": "flask"})");
 	CHECK(second->view().conserved);
+}
+
+namespace {
+
+std::vector<std::string> found(const lab::LabView &v, const std::string &query) {
+	std::vector<std::string> out;
+	for (const lab::ItemView &s : v.supplies) {
+		if (lab::search::matches(query, lab::search::keywords(s))) {
+			out.push_back(s.id);
+		}
+	}
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("search: a query's words, in any order and case, each start a keyword of what it is, holds, is made of or is like (Stage 61)") {
+	auto l = bench();
+	const lab::LabView v = l->view();
+	CHECK(found(v, "") == std::vector<std::string>{ "flask", "stopper", "balloon", "condenser", "beaker", "waste", "jar", "acid", "burner", "viewer", "camera", "scale" });
+	CHECK(found(v, "BEAKER") == std::vector<std::string>{ "beaker", "waste", "jar" }); // (the waste and the jar are beakers)
+	CHECK(found(v, "conical") == std::vector<std::string>{ "flask" });
+	CHECK(found(v, "250 beaker") == std::vector<std::string>{ "beaker", "waste" });
+	CHECK(found(v, "malach") == std::vector<std::string>{ "jar" });
+	CHECK(found(v, "sulfuric") == std::vector<std::string>{ "acid" });
+	CHECK(found(v, "solution") == std::vector<std::string>{ "acid" });
+	CHECK(found(v, "latex") == std::vector<std::string>{ "stopper", "balloon" });
+	CHECK(found(v, "empty glass") == std::vector<std::string>{ "flask", "condenser", "beaker", "waste" });
+	CHECK(found(v, "camera") == std::vector<std::string>{ "camera" });
+	CHECK(found(v, "balance") == std::vector<std::string>{ "scale" });
+	CHECK(found(v, "hot").empty());
+	CHECK(found(v, "flask malachite").empty()); // (every word, of one item)
+	// its state: a beaker taken out and heated is hot; a goal's name finds what is handed in for it
+	lab::ItemView hot = v.supplies[4];
+	hot.celsius = 80.0;
+	CHECK(lab::search::matches("hot beaker", lab::search::keywords(hot)));
+	CHECK(lab::search::matches("water", lab::search::keywords(hot, "Pure water")));
 }

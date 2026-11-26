@@ -6401,14 +6401,32 @@ bool Lab::command(std::string_view command_json, std::string &why) {
 		why = std::string("the command is not JSON: ") + e.what();
 		return false;
 	}
+	// (Stage 61) a command that names a supply none of whose copies is out takes one out as it runs: refused, it
+	// leaves the lab as it was, that copy too (the lab as saved before it)
+	bool takes = false;
+	if (c.is_object()) {
+		for (const auto &[key, value] : c.items()) {
+			takes = takes || (key != "do" && value.is_string() && impl_->find_supply(value.get<std::string>()) >= 0 && impl_->find(value.get<std::string>()) < 0);
+		}
+	}
+	const std::string before = takes ? save() : std::string();
+	bool ran = false;
 	try {
-		const bool ran = impl_->run(c, why);
+		ran = impl_->run(c, why);
 		impl_->release_probes();
-		return ran;
 	} catch (const std::exception &e) {
 		why = std::string("the command is malformed: ") + e.what();
-		return false;
+		ran = false;
 	}
+	if (!ran && takes) {
+		std::string no;
+		if (std::unique_ptr<Lab> was = Lab::load(before, no)) {
+			const bool checking = impl_->check;
+			impl_ = std::move(was->impl_);
+			impl_->check = checking;
+		}
+	}
+	return ran;
 }
 
 bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
@@ -6947,6 +6965,12 @@ std::string Lab::report() const {
 		items.push_back(j);
 	}
 	out["items"] = items;
+	json supplies = json::array(); // (Stage 61) what Supplies hold: each a template, and its copies so far
+	for (const Impl::Supply &sup : m.supplies) {
+		supplies.push_back({ { "id", sup.id }, { "kind", sup.spec.value("kind", "") }, { "copies", sup.copies } });
+	}
+	out["supplies"] = std::move(supplies);
+
 	out["grid"] = { m.cols, m.rows };
 	json events = json::array();
 	for (const Event &e : m.events) {

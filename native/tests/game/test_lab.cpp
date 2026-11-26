@@ -341,15 +341,19 @@ std::unique_ptr<lab::Lab> small_bench() {
 
 } // namespace
 
-TEST_CASE("lab: equipment is used on the bench, and placed there from the cabinet (Stage 8)") {
+TEST_CASE("lab: equipment is used on the bench, and placed there from Supplies (Stage 8; Stage 61)") {
 	auto lab = small_bench();
 	std::string why;
-	CHECK(item(json::parse(lab->report()), "cup").at("place") == "cabinet");
-	CHECK_FALSE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "cup"})", &why)); // the cup is in the cabinet
-	CHECK(why.find("in the cabinet") != std::string::npos);
+	// (Stage 61) what the bench gives without a square is a supply: no item of it until one is taken out
+	const json start = json::parse(lab->report());
+	CHECK(std::any_of(start.at("supplies").begin(), start.at("supplies").end(), [](const json &s) { return s.at("id") == "cup"; }));
+	const std::string digest = lab->digest();
+	CHECK_FALSE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "cup"})", &why)); // a copy taken out is in storage, not on the bench
+	CHECK(why.find("in storage") != std::string::npos);
+	CHECK(lab->digest() == digest); // refused: nothing was taken out
 	CHECK_FALSE(run(*lab, R"({"do": "attach", "item": "bag", "to": "cup"})", &why));
 	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why));
-	CHECK_FALSE(run(*lab, R"({"do": "submit", "item": "cup"})", &why));
+	CHECK(lab->digest() == digest);
 	REQUIRE(run(*lab, R"({"do": "place", "item": "flame", "at": [0, 0]})"));
 	REQUIRE(run(*lab, R"({"do": "place", "item": "cup", "at": [2, 0]})"));
 	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "bag", "at": [2, 0]})", &why)); // the cup stands there
@@ -357,7 +361,7 @@ TEST_CASE("lab: equipment is used on the bench, and placed there from the cabine
 	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
 	CHECK_FALSE(run(*lab, R"({"do": "place", "item": "flask", "at": [0, 1]})", &why)); // the burner depends on where it stands
 	CHECK_FALSE(run(*lab, R"({"do": "stow", "item": "flask"})", &why));
-	REQUIRE(run(*lab, R"({"do": "attach", "item": "bag", "to": "flask"})")); // from the cabinet straight onto the mouth
+	REQUIRE(run(*lab, R"({"do": "attach", "item": "bag", "to": "flask"})")); // from Supplies straight onto the mouth
 	json report = json::parse(lab->report());
 	CHECK(item(report, "bag").at("place") == "on");
 	CHECK(item(report, "flame").at("place") == "under");
@@ -371,7 +375,7 @@ TEST_CASE("lab: equipment is used on the bench, and placed there from the cabine
 	CHECK(item(report, "flask").at("place") == "outbox");
 	CHECK(item(report, "flame").at("place") == "bench");
 	CHECK(item(report, "flame").at("under").is_null());
-	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why)); // handed in
+	CHECK_FALSE(run(*lab, R"({"do": "pour", "from": "flask", "to": "cup", "ml": 5})", &why)); // (no glassware: it does not pour)
 	CHECK(run(*lab, R"({"do": "wait", "seconds": 2})"));
 }
 
@@ -389,6 +393,11 @@ TEST_CASE("lab: on a bench of squares, an item stands on a footprint of them, an
 	REQUIRE_MESSAGE(lab != nullptr, why);
 	const auto size = [&](const char *id) {
 		for (const lab::ItemView &v : lab->view().items) {
+			if (v.id == id) {
+				return std::make_pair(v.w, v.h);
+			}
+		}
+		for (const lab::ItemView &v : lab->view().supplies) { // (Stage 61: a supply's, as a copy of it is)
 			if (v.id == id) {
 				return std::make_pair(v.w, v.h);
 			}
@@ -414,17 +423,24 @@ TEST_CASE("lab: on a bench of squares, an item stands on a footprint of them, an
 	// set down beside: the first free footprint whose foot is level with the flask's, the nearest column first
 	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
 	REQUIRE(run(*lab, R"({"do": "unheat", "burner": "flame"})"));
-	lab::LabView view = lab->view();
-	CHECK(view.items[5].place == "bench");
-	CHECK(view.items[5].col == 1);
-	CHECK(view.items[5].row == 5); // its foot on row 7, the flask's
+	const auto flame = [&]() {
+		for (const lab::ItemView &v : lab->view().items) {
+			if (v.id == "flame") {
+				return v;
+			}
+		}
+		FAIL("no flame");
+		return lab::ItemView{};
+	};
+	CHECK(flame().place == "bench");
+	CHECK(flame().col == 1);
+	CHECK(flame().row == 5); // its foot on row 7, the flask's
 	REQUIRE(run(*lab, R"({"do": "stow", "item": "flame"})"));
 	REQUIRE(run(*lab, R"({"do": "heat", "burner": "flame", "vessel": "flask"})"));
 	REQUIRE(run(*lab, R"({"do": "submit", "item": "flask"})")); // the burner stays where the flask stood
-	view = lab->view();
-	CHECK(view.items[5].place == "bench");
-	CHECK(view.items[5].col == 4);
-	CHECK(view.items[5].row == 5);
+	CHECK(flame().place == "bench");
+	CHECK(flame().col == 4);
+	CHECK(flame().row == 5);
 	// a bench of one item per cell (chem-bench/1) is read as before: every footprint one square
 	auto cells = small_bench();
 	for (const lab::ItemView &v : cells->view().items) {
@@ -434,8 +450,15 @@ TEST_CASE("lab: on a bench of squares, an item stands on a footprint of them, an
 	// a footprint is saved, and loaded
 	auto again = lab::Lab::load(lab->save(), why);
 	REQUIRE_MESSAGE(again != nullptr, why);
-	CHECK(again->view().items[4].w == 5);
-	CHECK(again->view().items[4].col == 0);
+	bool slab = false;
+	for (const lab::ItemView &v : again->view().items) {
+		if (v.id == "slab") {
+			slab = true;
+			CHECK(v.w == 5);
+			CHECK(v.col == 0);
+		}
+	}
+	CHECK(slab);
 }
 
 TEST_CASE("lab: a balloon filled past its capacity bursts, and its gas is the room's (Stage 8)") {

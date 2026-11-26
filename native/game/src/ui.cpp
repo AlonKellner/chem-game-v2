@@ -8,6 +8,7 @@
 #include "chem/builtin_ids.hpp"
 #include "lab/calculator.hpp"
 #include "lab/planner.hpp"
+#include "lab/search.hpp"
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/spectrometer.hpp"
@@ -344,6 +345,15 @@ struct Ui::Impl {
 	bool slider_drag = false;
 	// the cabinet (Stage 48): its first row on the screen, and whether its scroll bar is held
 	int cabinet_from = 0;
+	// (Stage 61) Supplies (the cabinet's place on the screen) and Storage (the outbox): where the supplies begin among
+	// the screen's items (after the lab's own: each one the cabinet shows, as a copy of it is when taken out); Storage's
+	// first slot on the screen and whether its bar is held; the two searches, and which of them is typed into (0 none,
+	// 1 Supplies, 2 Storage)
+	int supply_base = 0;
+	int storage_from = 0;
+	bool storage_scrolling = false;
+	std::string supplies_query, storage_query;
+	int search_focus = 0;
 	bool cabinet_scrolling = false;
 	int hover = -1;
 	// the pour panel
@@ -429,6 +439,13 @@ struct Ui::Impl {
 
 	void refresh() {
 		view = lab->view();
+		supply_base = static_cast<int>(view.items.size());
+		for (const ItemView &s : view.supplies) { // (Stage 61) those the search leaves, in the cabinet's boxes
+			if (lab::search::matches(supplies_query, lab::search::keywords(s))) {
+				view.items.push_back(s);
+				view.items.back().place = "cabinet";
+			}
+		}
 		if (!opened.empty() && item_index(opened) < 0) {
 			opened.clear(); // the open circuit was given back, or scrapped
 		}
@@ -764,6 +781,49 @@ struct Ui::Impl {
 			note_value.clear();
 			note_focus = 2;
 		}
+	}
+	// ---- the searches (Stage 61): a field over Supplies and one over Storage
+	static Rect search_rect(int which) { return which == 1 ? Rect{ CABINET.x + 104, CABINET.y + 6, 126, 26 } : Rect{ OUTBOX.x + OUTBOX.w - 230, OUTBOX.y + 5, 222, 26 }; }
+	bool search_press(float x, float y) {
+		for (const int which : { 1, 2 }) {
+			if (search_rect(which).has(x, y)) {
+				search_focus = which;
+				return true;
+			}
+		}
+		search_focus = 0;
+		return false;
+	}
+	bool type_search(Ui::Key key, uint32_t codepoint) {
+		if (search_focus == 0) {
+			return false;
+		}
+		std::string &q = search_focus == 1 ? supplies_query : storage_query;
+		if (key == Ui::KeyText && codepoint >= 32 && codepoint < 127) {
+			if (q.size() < 40) {
+				q += static_cast<char>(codepoint);
+			}
+		} else if (key == Ui::KeyBackspace) {
+			if (!q.empty()) {
+				q.pop_back();
+			}
+		} else if (key == Ui::KeyEscape) {
+			q.clear();
+			search_focus = 0;
+		} else if (key == Ui::KeyEnter) {
+			search_focus = 0;
+		}
+		cabinet_from = 0;
+		storage_from = 0;
+		refresh();
+		return true;
+	}
+	void paint_search(int which) {
+		const Rect r = search_rect(which);
+		const std::string &q = which == 1 ? supplies_query : storage_query;
+		rect_fill(r, PANEL_FILL);
+		outline(r, search_focus == which ? GUIDE : GRID, search_focus == which ? 2.0f : 1.0f);
+		text(r.x + 8, r.y + 18, q.empty() && search_focus != which ? "search" : q + (search_focus == which ? "_" : ""), q.empty() ? DIM : INK, 14);
 	}
 	bool type_note(Ui::Key key, uint32_t codepoint) {
 		if (!notebook_open || note_focus == 0) {
@@ -3052,6 +3112,29 @@ struct Ui::Impl {
 		if (!guided_drop(index, target, x, y)) {
 			return; // back where it was
 		}
+		if (index >= supply_base) {
+			// (Stage 61) a supply: a copy of it is taken out, and it is that copy that lands; back over Supplies or into the
+			// trash, nothing is taken
+			if (CABINET.has(x, y) || TRASH.has(x, y)) {
+				return;
+			}
+			if (BENCH.has(x, y) && target < 0) {
+				const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+				const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+				if (act({ { "do", "take" }, { "supply", v.id }, { "at", { col, row } } })) {
+					choose_only(item_index(lab->last_taken()));
+				}
+				return;
+			}
+			if (!act({ { "do", "take" }, { "supply", v.id } })) {
+				return;
+			}
+			const int made = item_index(lab->last_taken());
+			if (made >= 0 && made < supply_base) {
+				drop(made, x, y);
+			}
+			return;
+		}
 		if (is_part_kind(v.kind)) {
 			// a signal part: along the bench or within its open circuit, or back to the drawer
 			int inner_col = 0, inner_row = 0;
@@ -3166,9 +3249,17 @@ struct Ui::Impl {
 			drop_frame(framing, x, y); // a frame in hand (Stage 48): this press is where it goes
 			return;
 		}
+		if (search_press(x, y)) {
+			return; // a search's field, to type into (Stage 61)
+		}
 		if (cabinet_most_from() > 0 && Rect{ CAB_BAR_X - 6, CAB_TOP, 20, cabinet_track().h }.has(x, y) && drag < 0) {
 			cabinet_scrolling = true; // the cabinet's bar, held (Stage 48)
 			cabinet_scroll_to(y);
+			return;
+		}
+		if (storage_most_from() > 0 && Rect{ storage_track().x, storage_track().y - 6, storage_track().w, 18 }.has(x, y) && drag < 0) {
+			storage_scrolling = true; // Storage's bar, held (Stage 61)
+			storage_scroll_to(x);
 			return;
 		}
 		if (probing >= 0 && probe_in_hand) {
@@ -3584,16 +3675,85 @@ struct Ui::Impl {
 	}
 
 	// ---- the outbox's slots and their goals (§13.5)
-	static Rect slot_rect(int k) { return Rect{ OUTBOX.x + 8 + static_cast<float>(k - 1) * 104, OUTBOX.y + 36, 100, 258 }; }
-	static int slot_at(float x, float y) {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+	// ---- Storage (Stage 61: the outbox, as many slots as it needs): at least six, always one free after the last that
+	// holds anything or has a goal; those its search leaves, six on the screen at a time, scrolled a slot at a time
+	static constexpr int SHOWN_SLOTS = 6;
+	int storage_count() const {
+		int last = OUTBOX_SLOTS - 1;
+		for (const ItemView &v : view.items) {
+			last = v.place == "outbox" ? std::max(last, v.slot) : last;
+		}
+		for (const Goal &g : view.goals) {
+			last = std::max(last, g.slot);
+		}
+		return last + 1;
+	}
+	std::vector<int> shown_slots() const {
+		std::vector<int> out;
+		for (int k = 1; k <= storage_count(); ++k) {
+			const Goal *g = goal_of(k);
+			bool shown = storage_query.empty();
+			for (const ItemView &v : view.items) {
+				if (!shown && v.place == "outbox" && v.slot == k) {
+					shown = lab::search::matches(storage_query, lab::search::keywords(v, g != nullptr ? std::string_view(g->name) : std::string_view{}));
+				}
+			}
+			if (!shown && g != nullptr) {
+				std::vector<std::string> words{ "goal", std::to_string(k) };
+				words.push_back(g->name);
+				std::string w;
+				for (const char c : g->name + " ") {
+					if (c == ' ') {
+						if (!w.empty()) {
+							words.push_back(w);
+						}
+						w.clear();
+					} else {
+						w += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+					}
+				}
+				shown = lab::search::matches(storage_query, words);
+			}
+			if (shown) {
+				out.push_back(k);
+			}
+		}
+		return out;
+	}
+	int storage_most_from() const { return std::max(static_cast<int>(shown_slots().size()) - SHOWN_SLOTS, 0); }
+	void storage_scroll(int slots) { storage_from = std::clamp(storage_from + slots, 0, storage_most_from()); }
+	// a slot's box, where it is shown (off the screen while scrolled out of sight, or left by the search)
+	Rect slot_rect(int k) const {
+		const std::vector<int> shown = shown_slots();
+		const auto at = std::find(shown.begin(), shown.end(), k);
+		const int pos = at == shown.end() ? -1 : static_cast<int>(at - shown.begin()) - std::clamp(storage_from, 0, storage_most_from());
+		if (pos < 0 || pos >= SHOWN_SLOTS) {
+			return Rect{ -10000, -10000, 0, 0 };
+		}
+		return Rect{ OUTBOX.x + 8 + static_cast<float>(pos) * 104, OUTBOX.y + 36, 100, 250 };
+	}
+	// its scroll bar (none while every slot shown is on the screen), under the slots
+	Rect storage_track() const { return Rect{ OUTBOX.x + 8, OUTBOX.y + OUTBOX.h - 10, SHOWN_SLOTS * 104.0f - 4, 6 }; }
+	Rect storage_thumb() const {
+		const Rect t = storage_track();
+		const float share = static_cast<float>(SHOWN_SLOTS) / static_cast<float>(std::max<size_t>(shown_slots().size(), 1));
+		const float w = std::fmax(t.w * std::fmin(share, 1.0f), 24.0f);
+		const float at = storage_most_from() > 0 ? static_cast<float>(std::clamp(storage_from, 0, storage_most_from())) / static_cast<float>(storage_most_from()) : 0.0f;
+		return Rect{ t.x + (t.w - w) * at, t.y, w, t.h };
+	}
+	void storage_scroll_to(float x) {
+		const Rect t = storage_track();
+		storage_from = static_cast<int>(std::lround(std::clamp((x - t.x) / std::fmax(t.w, 1.0f), 0.0f, 1.0f) * static_cast<float>(storage_most_from())));
+	}
+	int slot_at(float x, float y) const {
+		for (const int k : shown_slots()) {
 			if (slot_rect(k).has(x, y)) {
 				return k;
 			}
 		}
 		return 0;
 	}
-	static Rect goal_button(int k) { return Rect{ slot_rect(k).x + 20, slot_rect(k).y + 4, 58, 22 }; }
+	Rect goal_button(int k) const { return Rect{ slot_rect(k).x + 20, slot_rect(k).y + 4, 58, 22 }; }
 	const Goal *goal_of(int k) const {
 		for (const Goal &g : view.goals) {
 			if (g.slot == k) {
@@ -3605,7 +3765,7 @@ struct Ui::Impl {
 	// the first free slot, without a goal first: where a drop on "outbox" goes, as a submit with none
 	int free_slot() const {
 		for (const bool goal_ok : { false, true }) {
-			for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+			for (int k = 1; k <= storage_count(); ++k) {
 				bool held = false;
 				for (const ItemView &v : view.items) {
 					held = held || (v.place == "outbox" && v.slot == k);
@@ -3615,10 +3775,10 @@ struct Ui::Impl {
 				}
 			}
 		}
-		return OUTBOX_SLOTS;
+		return storage_count();
 	}
 	bool goal_press(float x, float y) {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+		for (const int k : shown_slots()) {
 			const Goal *g = goal_of(k);
 			if (goal_button(k).has(x, y) && (g == nullptr || !g->game)) {
 				if (allowed_click("goal:" + std::to_string(k))) {
@@ -4610,6 +4770,9 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (type_search(key, codepoint)) {
+			return; // a search's field (Stage 61)
+		}
 		if (type_predict(key, codepoint) || type_report(key, codepoint)) {
 			return; // a prediction's field (Stage 55), the report's (Stage 54)
 		}
@@ -5138,7 +5301,7 @@ struct Ui::Impl {
 
 	// the outbox's slots: each one's goal, its terms now, a lamp lit while it is met (§13.5)
 	void paint_slots() {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+		for (const int k : shown_slots()) {
 			const Rect r = slot_rect(k);
 			const Goal *g = goal_of(k);
 			std::string held; // what is handed in there
@@ -5287,7 +5450,8 @@ struct Ui::Impl {
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
 		room_paint = 2; // over the room: its names and highlights, placed by the view
-		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		text(CABINET.x + 16, CABINET.y + 24, "supplies", WALL_INK); // (Stage 61: never runs out)
+		paint_search(1);
 		if (cabinet_most_from() > 0) {
 			// its scroll bar (Stage 48): where its rows on the screen are among all of them
 			rect_fill(cabinet_track(), WALL_GRID);
@@ -5303,8 +5467,13 @@ struct Ui::Impl {
 			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
 			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
 		}
-		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
+		text(OUTBOX.x + 16, OUTBOX.y + 26, "storage: set aside, or handed in to a goal", WALL_INK); // (Stage 61: the outbox)
+		paint_search(2);
 		paint_slots();
+		if (storage_most_from() > 0) {
+			rect_fill(storage_track(), WALL_GRID);
+			rect_fill(storage_thumb(), storage_scrolling ? INK : WALL_INK);
+		}
 		paint_room_overlays();
 		room_paint = 0;
 		if (zoomed()) {
@@ -5437,12 +5606,12 @@ struct Ui::Impl {
 		}
 		if (after("slot:", rest)) {
 			const int k = number(rest);
-			return k >= 1 && k <= OUTBOX_SLOTS && found(slot_rect(k));
+			return k >= 1 && k <= storage_count() && found(slot_rect(k));
 		}
 		if (after("goal:", rest)) {
 			const int k = number(rest);
-			const Goal *g = k >= 1 && k <= OUTBOX_SLOTS ? goal_of(k) : nullptr;
-			return k >= 1 && k <= OUTBOX_SLOTS && draft.edit == Draft::None && (g == nullptr || !g->game) && found(goal_button(k));
+			const Goal *g = k >= 1 && k <= storage_count() ? goal_of(k) : nullptr;
+			return k >= 1 && k <= storage_count() && draft.edit == Draft::None && (g == nullptr || !g->game) && found(goal_button(k));
 		}
 		if (draft.edit == Draft::Goal && after("edit:", rest)) {
 			if (pick_row >= 0) {
@@ -5733,6 +5902,10 @@ struct Ui::Impl {
 		}
 		if (what == "cabinet") {
 			r = Rect{ CABINET.x, CABINET.y, CABINET.w, TRASH.y - CABINET.y - 8 }; // (over the trash)
+			return true;
+		}
+		if (what == "search:supplies" || what == "search:storage") { // (Stage 61)
+			r = search_rect(what == "search:supplies" ? 1 : 2);
 			return true;
 		}
 		if (what == "trash") {
@@ -7084,6 +7257,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 	if (pressed) {
 		m.press(x, y);
 	} else if (down) {
+		if (m.storage_scrolling) {
+			m.storage_scroll_to(x);
+			return;
+		}
 		if (m.cabinet_scrolling) {
 			m.cabinet_scroll_to(y);
 		} else if (m.slider_drag) {
@@ -7092,6 +7269,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.turn(x);
 		}
 	} else if (released) {
+		if (m.storage_scrolling) {
+			m.storage_scrolling = false;
+			return;
+		}
 		if (m.cabinet_scrolling) {
 			m.cabinet_scrolling = false;
 		} else if (m.framing >= 0 && !m.frame_in_hand) {
@@ -7499,6 +7680,10 @@ void Ui::zoom(float x, float y, float factor) {
 		m.cabinet_scroll(factor > 1.0f ? -1 : 1); // the wheel over the cabinet scrolls it, a row a notch (Stage 48)
 		return;
 	}
+	if (OUTBOX.has(x, y) && factor > 0.0f && factor != 1.0f && std::isfinite(factor)) {
+		m.storage_scroll(factor > 1.0f ? -1 : 1); // and over Storage, a slot a notch (Stage 61)
+		return;
+	}
 	if (!(factor > 0.0f) || !std::isfinite(factor) || !m.room_at(x, y)) {
 		return; // (over a panel, the screen's own: not the room's)
 	}
@@ -7615,6 +7800,12 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = TRASH.y - 30; // (over the trash, Stage 34)
 		return true;
 	}
+	if (what == "search:supplies" || what == "search:storage") { // (Stage 61)
+		const Rect r = Impl::search_rect(what == "search:supplies" ? 1 : 2);
+		x = r.cx();
+		y = r.cy();
+		return true;
+	}
 	if (what == "trash") {
 		x = TRASH.cx();
 		y = TRASH.y + 30;
@@ -7629,7 +7820,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first
-		const Rect r = Impl::slot_rect(m.free_slot());
+		const Rect r = m.slot_rect(m.free_slot());
 		x = r.cx();
 		y = r.y + r.h - 60;
 		return true;
