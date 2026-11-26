@@ -64,8 +64,9 @@ bool empty(const CellState &c) {
 	return true;
 }
 
-// the volume of its liquid with what is dissolved in it, m^3 (the table's molar volumes)
-double solution_m3(const SpeciesTable &table, const CellState &c) {
+// the volume of its liquid with what is dissolved in it at its temperature, m^3 (the table's molar volumes, grown
+// with the solvent: Stage 67)
+double solution_m3(const SpeciesTable &table, const CellState &c, double kelvin) {
 	double v = 0.0;
 	for (size_t s = 0; s < c.amount.size(); ++s) {
 		const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
@@ -73,7 +74,13 @@ double solution_m3(const SpeciesTable &table, const CellState &c) {
 			v += static_cast<double>(c.amount[s]) * MOL_PER_QUANTUM * d.molar_volume;
 		}
 	}
-	return v;
+	return v != 0.0 ? v * expansion(table, kelvin) : 0.0;
+}
+
+// a cell's temperature for its volume: its own, or 25 C where it has none (an empty layer)
+double kelvin_of(const SpeciesTable &table, const World &world, CellId cell) {
+	const Thermal t = thermal_state(table, world.snapshot_cell(cell), &world.meta(cell));
+	return t.defined && t.temperature > 0.0 ? t.temperature : T0;
 }
 
 // each dissolved species' share of its solution's mass
@@ -147,7 +154,7 @@ Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell,
 	Levels out{ std::vector<double>(n), std::vector<double>(n), std::vector<double>(n), std::vector<double>(n) };
 	double below = 0.0;
 	for (size_t k = n; k-- > 0;) {
-		const double v = solution_m3(table, world.snapshot_cell(cells[k]));
+		const double v = solution_m3(table, world.snapshot_cell(cells[k]), kelvin_of(table, world, cells[k]));
 		out.bottom[k] = height_of(m, below);
 		out.middle[k] = height_of(m, below + 0.5 * v);
 		out.top[k] = height_of(m, below + v);
@@ -272,6 +279,11 @@ void Simulation::stratify(const Column &col) {
 	}
 	const auto state = [&](size_t i) -> const CellState & { return world_.snapshot_cell(col.cells[i]); };
 	const auto kelvin = [&](size_t i) { return thermal(col.cells[i]).temperature; };
+	// what its volumes are read at (Stage 67): its temperature, or 25 C where it has none (an empty layer)
+	const auto volume_kelvin = [&](size_t i) {
+		const Thermal &t = thermal(col.cells[i]);
+		return t.defined && t.temperature > 0.0 ? t.temperature : T0;
+	};
 	// what of a cell is of these phases (never its wall), with its enthalpy at its temperature
 	const auto move = [&](size_t from, size_t to, PhaseMask phases, double share) {
 		const CellState &c = state(from);
@@ -380,7 +392,7 @@ void Simulation::stratify(const Column &col) {
 				break;
 			}
 			double up = 0.0, down = 0.0;
-			const double vu = solution_m3(table, state(i)), vl = solution_m3(table, state(i + 1));
+			const double vu = solution_m3(table, state(i), volume_kelvin(i)), vl = solution_m3(table, state(i + 1), volume_kelvin(i + 1));
 			if (!liquid_density(table, state(i), kelvin(i), up) || !liquid_density(table, state(i + 1), kelvin(i + 1), down) || !(vu > 0.0) || !(vl > 0.0)) {
 				break;
 			}
@@ -456,7 +468,7 @@ void Simulation::stratify(const Column &col) {
 			double between_h = 0.0, between_mass = 0.0;
 			for (size_t k = 1; k < n && liquid(k) && top_known && budget > 0.0; ++k) {
 				double d = 0.0;
-				const double v = solution_m3(table, state(k));
+				const double v = solution_m3(table, state(k), volume_kelvin(k));
 				if (!liquid_density(table, state(k), kelvin(k), d) || !(v > 0.0)) {
 					break;
 				}
@@ -518,7 +530,7 @@ void Simulation::stratify(const Column &col) {
 		if (!liquid(i) || !liquid(i + 1)) {
 			continue;
 		}
-		const double vu = solution_m3(table, state(i)), vl = solution_m3(table, state(i + 1));
+		const double vu = solution_m3(table, state(i), volume_kelvin(i)), vl = solution_m3(table, state(i + 1), volume_kelvin(i + 1));
 		if (!(vu > 0.0) || !(vl > 0.0)) {
 			continue;
 		}
@@ -647,7 +659,7 @@ void Simulation::stratify(const Column &col) {
 		for (size_t i = 0; i + 1 < n; ++i) {
 			if (liquid(i) && liquid(i + 1)) {
 				const double c = contrast(table, state(i), kelvin(i), state(i + 1), kelvin(i + 1));
-				const size_t thicker = solution_m3(table, state(i)) >= solution_m3(table, state(i + 1)) ? i : i + 1;
+				const size_t thicker = solution_m3(table, state(i), volume_kelvin(i)) >= solution_m3(table, state(i + 1), volume_kelvin(i + 1)) ? i : i + 1;
 				if (c > steepest && levels.thick(thicker) > 2.0 * THINNEST) {
 					steepest = c;
 					at = i;
@@ -669,7 +681,7 @@ void Simulation::stratify(const Column &col) {
 	const CellMeta &top = world_.meta(col.top);
 	double below = 0.0;
 	for (size_t i = 1; i < n; ++i) {
-		const Fill f = fill_of(table, state(i), T0);
+		const Fill f = fill_of(table, state(i), volume_kelvin(i));
 		below += f.defined ? f.condensed : 0.0;
 	}
 	const double size = top.column_volume - below;

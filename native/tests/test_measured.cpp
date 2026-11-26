@@ -137,7 +137,9 @@ TEST_CASE("measured: the pentahydrate grows at Tanimoto's surface rate, in serie
 		CHECK(near(still.both, 1.0 / (1.0 / still.surface + 1.0 / still.transport), 1e-12));
 		// stirred at 0.1 W/kg (Stage 57): Sano, Yamaguchi and Adachi's Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3)
 		const SurfaceSteps stirred = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 0.1);
-		const double nu = solvent_viscosity(builtin_species(), kelvin) / liquid_density(builtin_species(), c.state);
+		double rho = 0.0; // (Stage 67: the solution's density at its temperature)
+		REQUIRE(liquid_density(builtin_species(), c.state, kelvin, rho));
+		const double nu = solvent_viscosity(builtin_species(), kelvin) / rho;
 		const double dc = diffusion(builtin_species(), builtin::copper_sulfate_aq, kelvin);
 		const double sano = 2.0 + 0.4 * std::pow(0.1 * std::pow(d, 4.0) / (nu * nu * nu), 0.25) * std::cbrt(nu / dc);
 		CHECK(near(stirred.transport, sano / 2.0 * still.transport, 1e-9));
@@ -426,4 +428,21 @@ TEST_CASE("measured: a camera's temperature from its signal round-trips to a mil
 		below += nm < median ? optics::planck(nm, 295.0) * 0.5 : 0.0;
 	}
 	CHECK(below / optics::band_signal(295.0) == doctest::Approx(0.5).epsilon(1e-3));
+}
+
+TEST_CASE("measured: water's density is Kell's, within Lienhard's rows (Stage 67)") {
+	// Kell 1975, eq. 16 (data/solutions.json's density): air-free water at 1 atm, 0 to 150 C; held to Lienhard's Table A.3
+	// (data/solutions.json's solvent, saturated liquid: at 1 atm to 100 C, above it at its own vapour pressure), to the
+	// density's maximum, 999.972 kg/m^3 at 3.98 C, and to the table's 25 C density of water (data/species.json)
+	const SpeciesTable &table = builtin_species();
+	for (const SolventPoint &row : table.solution().solvent) {
+		CAPTURE(row.kelvin);
+		CHECK(std::fabs(solvent_density(table, row.kelvin) - row.rho) < (row.kelvin < 373.2 ? 0.1 : 0.3));
+	}
+	CHECK(solvent_density(table, 277.13) == doctest::Approx(999.972).epsilon(2e-6));
+	double slope = 0.0;
+	solvent_density(table, 277.13, &slope);
+	CHECK(std::fabs(slope) < 1e-3); // its maximum
+	CHECK(solvent_density(table, 298.15) == doctest::Approx(1000.0 * 0.997048).epsilon(5e-6));
+	CHECK(solvent_density(table, 373.15) == doctest::Approx(958.36).epsilon(2e-5));
 }

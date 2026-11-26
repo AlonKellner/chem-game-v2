@@ -1,3 +1,4 @@
+#include "chem/thermo.hpp"
 #include "lab/conditions.hpp"
 
 #include "chem/species.hpp"
@@ -223,7 +224,7 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 		const chem::SpeciesTable &table = chem::builtin_species();
 		const chem::SpeciesId id = table.find(q.what);
 		g = mol * static_cast<double>(table.molar_mass_ug(id)) * 1e-6;
-		ml = mol * table.species(id).molar_volume * 1e6;
+		ml = mol * chem::molar_volume_at(table, table.species(id), v->celsius + 273.15) * 1e6; // at its temperature (Stage 67)
 	}
 	for (const SubstanceView &s : v->contents) {
 		if (s.species == q.what) {

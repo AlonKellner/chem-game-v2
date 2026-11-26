@@ -50,5 +50,6 @@
 		{"celsius": 127, "rho": 937.5, "cp": 4256, "k": 0.6836, "alpha": 1.713e-07, "nu": 2.332e-07, "pr": 1.36, "beta": 0.000895},
 		{"celsius": 147, "rho": 919.9, "cp": 4299, "k": 0.6825, "alpha": 1.726e-07, "nu": 2.03e-07, "pr": 1.18, "beta": 0.001008}
 	],
+	"density": {"note": "the solvent's density at 1 atm (Stage 67: what a liquid's and a solute's volume grow by with temperature), kg/m^3: (a0 + a1 t + ... + a5 t^5) / (1 + b t), t in C, its range in C; beyond it, its value and slope at the end", "source": "Kell, J. Chem. Eng. Data 20 (1975) 97, eq. 16: air-free water, 0 to 150 C", "numerator": [999.83952, 16.945176, -7.9870401e-3, -46.170461e-6, 105.56302e-9, -280.54253e-12], "b": 16.879850e-3, "celsius": [0, 150]},
 	"water_ionisation": {"note": "H2O(l) -> H+(aq) + OH-(aq) at 25 C (GAME_SPEC §9, Stage 43): its enthalpy and Gibbs energy, kJ/mol, and its change of heat capacity, J/mol K, held at every temperature; Kw from them", "source": "NBS tables (Wagman et al. 1982): OH- -229.994, -157.244, -148.5; H2O(l) -285.830, -237.129, 75.291", "h_kj": 55.836, "g_kj": 79.885, "cp": -223.8}
 }

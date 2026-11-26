@@ -2,6 +2,8 @@
 #include "lab/lab.hpp"
 #include "lab/glassware.hpp"
 #include "lab/sha256.hpp"
+#include "chem/species.hpp"
+#include "chem/thermo.hpp"
 
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
@@ -217,8 +219,10 @@ TEST_CASE("lab: pouring and tipping move exactly what was asked, with its heat (
 	REQUIRE(run(*lab, R"({"do": "tip", "from": "jar", "to": "beaker", "species": "malachite", "g": 2})"));
 	REQUIRE(run(*lab, R"({"do": "wait", "seconds": 1})"));
 	const json report = json::parse(lab->report());
-	// 50 mL of the 241.2 mL of water, and the same share of the acid dissolved in it
-	const double share = 50.0 / (240.5 / 0.997048);
+	// 50 mL of the 241.2 mL of water (at 25 C; Stage 67: at the acid's own temperature as it is poured, 17.4 C once its
+	// bisulfate has settled, Stage 63), and the same share of the acid dissolved in it
+	const double poured_at = item(report, "acid").at("celsius").get<double>() + 273.15;
+	const double share = 50.0 / (240.5 / 0.997048 * chem::expansion(chem::builtin_species(), poured_at));
 	// (a few milligrams of the water are vapour over each liquid by now)
 	CHECK(grams(item(report, "flask"), "water") + grams(item(report, "flask"), "steam") == doctest::Approx(240.5 * share).epsilon(1e-4));
 	// (the pour takes seconds, Stage 27: a little water evaporates from what is left meanwhile, and the last drops

@@ -446,7 +446,16 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			if (std::fabs(rect[0] + rect[2] / 2 - x) < 1 && std::fabs(rect[1] + rect[3] / 2 - y) < 1) {
 				const float floor_px = rect[lab::optics_layout::REFRACT * 4 + 2] / rect[lab::optics_layout::FORM * 4 + 1];
 				const float floor_top = rect[1] + rect[3] - floor_px, surface = rect[lab::optics_layout::FORM * 4 + 2];
-				const int px = static_cast<int>(x + rect[2] / 4), py = static_cast<int>(surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				const int px = static_cast<int>(x + rect[2] / 4);
+				int py = static_cast<int>(surface > 0.0f && surface < floor_top - 2.0f ? 0.5f * (surface + floor_top) : floor_top - 4.0f);
+				// (Stage 67) a layer a few pixels thick is read where its liquid shows whole, its darkest row under the
+				// surface's: its middle row is in the surface's own band, whose colour follows where the surface lies in
+				// a pixel (a boiled-down 12 mL, 3.6 px, read L* 57 to 77 in three rows)
+				if (surface > 0.0f && floor_top - surface < 8.0f) {
+					for (int row = static_cast<int>(std::ceil(surface)) + 1; row <= static_cast<int>(std::floor(floor_top)) - 1; ++row) {
+						py = seen(scene, px, row).l < seen(scene, px, py).l ? row : py;
+					}
+				}
 				// (Stage 25: a conical flask's curved base disperses a little; the renderer's colour there is its truth's)
 				double truth[3];
 				lab::optics_area_truth(scene, px, py, 8, truth);
