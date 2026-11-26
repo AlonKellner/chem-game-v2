@@ -127,6 +127,7 @@ private:
 	void build_tree();
 	void settle_cells();
 	bool project(CellId cell);
+	bool solve_together(CellId cell); // (Stage 63) the solution's fast equilibria at once, an accelerator for project()
 	bool fill(CellId cell, CellId up, EdgeId edge, bool may_draw = true);
 	bool equalize(CellId cell, CellId up, EdgeId edge);
 	// the vertical dimension (GAME_SPEC §6, Stage 47; src/strata.cpp): each vessel's column, top first, and the

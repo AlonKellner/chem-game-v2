@@ -132,6 +132,9 @@ struct SpeciesDef {
 	// A wall's or a solid's thermal conductivity, W/m K (GAME_SPEC §6, Stage 53: a vessel's glass as rings that
 	// conduct along it; a powder's grains in a bed on a floor); 0: none given
 	double conductivity = 0.0;
+	// (Stage 63) a dissolved formula unit whose ions are species of their own: no reaction names it, and an amount of
+	// it (a bench's, an old save's) is taken as its ions
+	bool retired = false;
 };
 
 struct SpeciesId {
@@ -246,7 +249,8 @@ public:
 	// symbol or id, a non-positive atomic mass, a negative atom count, a count
 	// for an element the table does not have, a species with no atoms, a molar
 	// mass of 2^30 ug/mol (about 1074 g/mol) or more, thermodynamic data that
-	// is not finite.
+	// is not finite, a charged species that is not dissolved (Stage 63), a molar volume that is negative (but an
+	// ion's, by H+'s convention) or not finite; a retired species (Stage 63) that names no ions.
 	// The solution model (GAME_SPEC §10) is refused when: an ion is named
 	// twice or has no name; a species names ions without being dissolved, an
 	// ion out of range or a count that is not positive, or ions whose charges
@@ -268,6 +272,9 @@ public:
 	bool has(SpeciesId s) const { return s.index >= 0 && s.index < species_count(); }
 	// the species with this id, or an invalid id
 	SpeciesId find(std::string_view id) const;
+	// (Stage 63) what an amount of a species is as species: a retired formula unit's ions, each as the ion species that
+	// is that particle alone, with its count (copper_sulfate_aq: Cu+2 1, SO4-2 1); any other species, itself, once
+	std::vector<std::pair<SpeciesId, int32_t>> as_species(SpeciesId s) const;
 	// the particles in solution and their interactions (GAME_SPEC §10)
 	const SolutionDef &solution() const { return solution_; }
 	int particle_count() const { return static_cast<int>(solution_.ions.size()); }
@@ -310,6 +317,34 @@ private:
 	int32_t term_count_ = 0;
 };
 
+// (Stage 63) How many of a retired formula unit some dissolved matter makes (each species' moles): by the balance
+// of each element and of protons. Every element but H and O has its master ion, the dissolved species of that one
+// atom with oxygen alone (Cu2+, SO4 2-, Na+); a species holds its masters by its atoms, and hydrogen ions by its
+// charge less theirs (HSO4- one, OH- and CuOH+ minus one). An ion of the unit is a master, counted by its element,
+// or hydrogen's or hydroxide's, counted by the hydrogen ions held (an acid in a base holds none); the unit is the
+// fewest over its ions by their counts, never below nought. 0 for a species that is not retired.
+double formula_units(const SpeciesTable &table, std::span<const std::pair<SpeciesId, double>> dissolved, SpeciesId unit);
+
+// A formula as it is written for a reader (Stage 63): an ion's charge after it, its size before its sign and
+// one left unwritten, a space where the formula ends in a count ("Cu+2" is Cu2+, "SO4-2" SO4 2-, "H+1" H+); any
+// other formula as it is.
+inline std::string written(std::string_view formula) {
+	size_t at = formula.size();
+	while (at > 0 && formula[at - 1] >= '0' && formula[at - 1] <= '9') {
+		--at;
+	}
+	if (at == 0 || at == formula.size() || (formula[at - 1] != '+' && formula[at - 1] != '-') || at < 2) {
+		return std::string(formula);
+	}
+	const std::string_view base = formula.substr(0, at - 1), size = formula.substr(at);
+	const char sign = formula[at - 1];
+	if (size == "1") {
+		return std::string(base) + sign;
+	}
+	const bool count = base.back() >= '0' && base.back() <= '9';
+	return std::string(base) + (count ? " " : "") + std::string(size) + sign;
+}
+
 // The build's tables (data/elements.json, data/species.json, data/reactions.json,
 // embedded and checked by native/datagen): the species the game ships and its
 // reactions, in the files' order. chem/builtin_ids.hpp names their indices.
@@ -327,5 +362,11 @@ struct ReactionNote {
 	std::string_view explain; // why it happens (GAME_SPEC §13.6, "explain")
 };
 std::span<const ReactionNote> builtin_reaction_notes();
+
+// (Stage 63) A reaction as a student writes it (reactions.json, "written"): in formula units, the dissolved salts
+// whole (CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)), where the reaction itself is in ions. Its units taken as their
+// ions, the spectators cancelling, it is a whole multiple of the reaction (the generator refuses it otherwise).
+// Empty for a reaction written only in ions (the bisulfate's). For the calculator and the planner; never simulated.
+std::span<const Term> builtin_written(size_t reaction);
 
 } // namespace chem

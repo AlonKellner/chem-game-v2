@@ -2,6 +2,7 @@
 // pour, mixed by a fast pour or a stirrer; a burner under its lowest layer; read as a whole and layer by layer; saved
 // and loaded as it is; and on the screen, a band of each layer's own colour.
 #include "lab/colour.hpp"
+#include "lab/conditions.hpp"
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
@@ -47,12 +48,7 @@ lab::ItemView item(lab::Lab &l, const std::string &id) {
 }
 
 double mol_in(const lab::LayerView &layer, const std::string &species) {
-	for (const lab::SubstanceView &s : layer.contents) {
-		if (s.species == species) {
-			return s.mol;
-		}
-	}
-	return 0.0;
+	return lab::mol_of(layer.contents, species); // (Stage 63: a salt read from its ions)
 }
 
 // what the layers over the copper hold of a species (the green may lie as more than one layer as its boundary is
@@ -60,27 +56,16 @@ double mol_in(const lab::LayerView &layer, const std::string &species) {
 double over_the_copper(const lab::ItemView &v, const std::string &species) {
 	double out = 0.0;
 	for (const lab::LayerView &layer : v.layers) {
-		double copper = 0.0;
-		for (const lab::SubstanceView &s : layer.contents) {
-			copper += s.species == "copper_sulfate_aq" ? s.mol : 0.0;
-		}
-		if (copper >= 1e-4) {
+		if (lab::mol_of(layer.contents, "copper_sulfate_aq") >= 1e-4) {
 			break;
 		}
-		for (const lab::SubstanceView &s : layer.contents) {
-			out += s.species == species ? s.mol : 0.0;
-		}
+		out += lab::mol_of(layer.contents, species);
 	}
 	return out;
 }
 
 double mol_in(const lab::ItemView &v, const std::string &species) {
-	for (const lab::SubstanceView &s : v.contents) {
-		if (s.species == species) {
-			return s.mol;
-		}
-	}
-	return 0.0;
+	return lab::mol_of(v.contents, species);
 }
 
 // a beaker of 1.4 mol/kg copper sulfate, and a bottle of 0.8 mol/kg nickel sulfate

@@ -990,9 +990,9 @@ struct Ui::Impl {
 			const chem::Reaction &r = calc_reaction_def();
 			const chem::SpeciesTable &table = chem::builtin_species();
 			std::string product;
-			for (const chem::Term &t : r.terms()) {
-				out.push_back({ std::string(table.species(t.species).formula) + (t.nu < 0 ? " in (g)" : " made (g)"), false });
-				product = product.empty() && t.nu > 0 ? std::string(table.species(t.species).formula) : product;
+			for (const chem::Term &t : calc::written_terms(r)) {
+				out.push_back({ chem::written(table.species(t.species).formula) + (t.nu < 0 ? " in (g)" : " made (g)"), false });
+				product = product.empty() && t.nu > 0 ? chem::written(table.species(t.species).formula) : product;
 			}
 			out.push_back({ "got of " + product + " (g)", false });
 			return out;
@@ -1075,7 +1075,7 @@ struct Ui::Impl {
 		}
 		default: {
 			const chem::Reaction &r = calc_reaction_def();
-			const auto terms = r.terms();
+			const auto terms = calc::written_terms(r);
 			std::vector<std::optional<double>> given;
 			for (size_t k = 0; k < terms.size(); ++k) {
 				given.push_back(calc_number(static_cast<int>(k)));
@@ -1244,7 +1244,7 @@ struct Ui::Impl {
 			for (int s = 0; s < table.species_count(); ++s) {
 				const chem::SpeciesDef &d = table.species(chem::SpeciesId{ s });
 				y += 21;
-				text(x0, y, std::string(d.formula) + (d.wall ? " (wall)" : ""), INK, 13);
+				text(x0, y, chem::written(d.formula) + (d.wall ? " (wall)" : ""), INK, 13);
 				text(x0 + 170, y, PHASES[static_cast<int>(d.phase) & 3], DIM, 13);
 				text(x0 + 220, y, text_of("%.2f", static_cast<double>(table.molar_mass_ug(chem::SpeciesId{ s })) * 1e-6), INK, 13);
 				if (d.has_thermo) {
@@ -1261,7 +1261,7 @@ struct Ui::Impl {
 				y += 18;
 				const chem::Kinetics &k = r.kinetics();
 				const std::string law = k.law == chem::Kinetics::Law::FirstOrder ? text_of("first order, Ea %.1f kJ/mol", k.activation / 1000.0)
-						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in its acid", k.driver_order) : std::string())
+						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in ", k.driver_order) + chem::written(table.species(k.driver).formula) : std::string())
 						: k.law == chem::Kinetics::Law::Equilibrium										   ? std::string("fast: always at its equilibrium")
 																										   : std::string("runs when it is brought about");
 				text(x0 + 16, y, law, DIM, 12);
@@ -1316,7 +1316,7 @@ struct Ui::Impl {
 		if (k > plan_reactions.size() || plan_reactions[k - 1] < 0) {
 			return {};
 		}
-		for (const chem::Term &t : all[static_cast<size_t>(plan_reactions[k - 1])].terms()) {
+		for (const chem::Term &t : calc::written_terms(all[static_cast<size_t>(plan_reactions[k - 1])])) {
 			const chem::SpeciesDef &d = table.species(t.species);
 			if (t.nu < 0 && std::string(d.formula) != "H2O" && !plan::makers(t.species).empty()) {
 				return t.species;
@@ -7250,8 +7250,8 @@ struct Ui::Impl {
 				row(v.kind == "vessel" ? text_of("%.1f mL gas, %.2f mL solids and liquids", v.gas_ml, v.condensed_ml)
 									   : text_of("%.1f mL of %.0f mL", v.gas_ml + v.condensed_ml, v.capacity_ml));
 				for (const SubstanceView &s : v.contents) {
-					if (s.wall) {
-						continue;
+					if (s.wall || (s.phase == 'a' && s.g < 0.00005)) {
+						continue; // (Stage 63) a dissolved trace that reads nothing here: water's own ions, a hydrolysis's
 					}
 					const std::string phase = s.phase == 'a' ? "aq" : std::string(1, s.phase);
 					std::string line = s.formula + "(" + phase + ")" + text_of("  %.4f g", s.g);

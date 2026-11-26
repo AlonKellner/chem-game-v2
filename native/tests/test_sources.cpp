@@ -156,3 +156,37 @@ TEST_CASE("sources: malachite's activation energy lies in Seguin's range, and th
 	CHECK(GAS_CONSTANT == 8.314462618);
 	CHECK(P_ATMOSPHERE == 101325.0);
 }
+
+TEST_CASE("sources: each ion's data is its formula units' split exactly, the hydrogen ion's at nought (Stage 63)") {
+	// the ions' formation enthalpies, entropies, heat capacities and apparent molar volumes are the retired formula
+	// units' (each cited above) split by the convention that H+(aq) has none: so every solution keeps its energy,
+	// its entropy, its volume and so its solubility (docs/TDD_63_IONS.md)
+	const SpeciesTable &t = builtin_species();
+	const SpeciesDef &h = t.species(builtin::hydrogen_ion);
+	CHECK(h.hf == 0.0);
+	CHECK(h.s0 == 0.0);
+	CHECK(h.cp == 0.0);
+	CHECK(h.molar_volume == 0.0);
+	int retired = 0;
+	for (int k = 0; k < t.species_count(); ++k) {
+		const SpeciesDef &unit = t.species(SpeciesId{ k });
+		if (!unit.retired) {
+			continue;
+		}
+		++retired;
+		CAPTURE(unit.id);
+		double hf = 0.0, s0 = 0.0, cp = 0.0, volume = 0.0;
+		for (const auto &[ion, count] : t.as_species(SpeciesId{ k })) {
+			const SpeciesDef &d = t.species(ion);
+			hf += count * d.hf;
+			s0 += count * d.s0;
+			cp += count * d.cp;
+			volume += count * d.molar_volume;
+		}
+		CHECK(hf == doctest::Approx(unit.hf).epsilon(1e-9));
+		CHECK(s0 == doctest::Approx(unit.s0).epsilon(1e-9));
+		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
+		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
+	}
+	CHECK(retired == 5);
+}

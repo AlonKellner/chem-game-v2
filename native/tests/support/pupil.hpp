@@ -137,12 +137,7 @@ struct Pupil {
 		return found;
 	}
 	double grams(const std::string &id, const std::string &species) {
-		for (const lab::SubstanceView &s : item(id).contents) {
-			if (s.species == species) {
-				return s.g;
-			}
-		}
-		return 0.0;
+		return lab::grams(item(id), species); // (Stage 63: a retired salt as its ions make it)
 	}
 	// the step's checks not yet holding, with what they wait on
 	std::string open_checks() const {

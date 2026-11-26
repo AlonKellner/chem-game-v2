@@ -347,7 +347,7 @@ std::string text_of(const std::string &format, double v, double w) {
 std::string named(const SpeciesTable &table, SpeciesId s) {
 	const SpeciesDef &def = table.species(s);
 	static const char *const PHASE[] = { "s", "l", "g", "aq" };
-	return std::string(def.formula) + "(" + PHASE[static_cast<int>(def.phase)] + ")";
+	return chem::written(def.formula) + "(" + PHASE[static_cast<int>(def.phase)] + ")";
 }
 
 } // namespace
@@ -2848,8 +2848,8 @@ struct Lab::Impl {
 			for (size_t k = 0; k < species; ++k) {
 				const SpeciesId s{ static_cast<int32_t>(k) };
 				const SpeciesDef &def = t.species(s);
-				if (def.wall || def.phase == Phase::Gas) {
-					continue;
+				if (def.wall || def.phase == Phase::Gas || def.retired) {
+					continue; // (Stage 63: a retired formula unit is never held, its ions are)
 				}
 				uint8_t &was = present[i * species + k];
 				const double g = grams(x, s);
@@ -3609,7 +3609,7 @@ struct Lab::Impl {
 				const SpeciesDef &def = table.species(id);
 				SubstanceView row;
 				row.species = std::string(def.id);
-				row.formula = std::string(def.formula);
+				row.formula = chem::written(def.formula);
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.wall = def.wall;
 				row.mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
@@ -3653,7 +3653,7 @@ struct Lab::Impl {
 					const SpeciesDef &def = table.species(SpeciesId{ s });
 					SubstanceView row;
 					row.species = std::string(def.id);
-					row.formula = std::string(def.formula);
+					row.formula = chem::written(def.formula);
 					row.phase = PHASE[static_cast<int>(def.phase)];
 					row.wall = true;
 					row.mol = static_cast<double>(q) * MOL_PER_QUANTUM;
@@ -3869,6 +3869,25 @@ struct Lab::Impl {
 	double solid_m3(const Item &x) const { return layered(x) ? solid_m3(whole(x)) : solid_m3(x.cell); }
 	double liquid_g(const Item &x) const { return layered(x) ? liquid_g(whole(x)) : liquid_g(x.cell); }
 	double grams(const Item &x, SpeciesId s) const {
+		if (table().has(s) && table().species(s).retired) {
+			// (Stage 63) a retired formula unit: as many of it as the item's dissolved matter makes (as lab::grams reads it
+			// from the view)
+			std::vector<CellId> cells{ x.cell };
+			if (layered(x)) {
+				for (const CellId c : layers_of(x)) {
+					cells.push_back(c);
+				}
+			}
+			std::vector<std::pair<SpeciesId, double>> dissolved;
+			for (const CellId c : cells) {
+				for (int k = 0; k < table().species_count(); ++k) {
+					if (table().species(SpeciesId{ k }).phase == Phase::Aqueous && world().amount(c, SpeciesId{ k }).quanta > 0) {
+						dissolved.emplace_back(SpeciesId{ k }, world().amount(c, SpeciesId{ k }).mol());
+					}
+				}
+			}
+			return formula_units(table(), dissolved, s) * static_cast<double>(table().molar_mass_ug(s)) * 1e-6;
+		}
 		if (!layered(x)) {
 			return grams(x.cell, s);
 		}
@@ -3895,7 +3914,7 @@ struct Lab::Impl {
 				}
 				SubstanceView row;
 				row.species = std::string(def.id);
-				row.formula = std::string(def.formula);
+				row.formula = chem::written(def.formula);
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.mol = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
 				row.g = grams(c, id);
@@ -4275,6 +4294,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				holds.push_back({ item.cell, &j.at("contents") });
 			}
 			for (const auto &[into, what] : holds) {
+				std::map<int32_t, int64_t> taken; // (Stage 63) each species' quanta, a retired formula unit's as its ions (exact)
 				for (const auto &[name, spec] : what->items()) {
 					const SpeciesId id = table.find(name);
 					if (!table.has(id) || table.species(id).wall) {
@@ -4286,7 +4306,10 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						return nullptr;
 					}
 					const double mol = mol_of(table, id, spec, impl->seed, item.id + ":" + name); // (an unknown's range, Stage 54)
-					b.set_amount(into, id, amount(mol));
+					const int64_t quanta = amount(mol).quanta;
+					for (const auto &[as, count] : table.as_species(id)) {
+						taken[as.index] += quanta * count;
+					}
 					if (spec.contains("particles")) {
 						b.set_particles(into, id, spec.at("particles").get<int64_t>());
 					}
@@ -4294,6 +4317,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
 						condensed += mol * molar_volume_at(table, def, room_kelvin); // at the room's temperature, as it is set (Stage 67)
 					}
+				}
+				for (const auto &[index, quanta] : taken) {
+					b.set_amount(into, SpeciesId{ index }, Amount{ quanta });
 				}
 				if (into != item.cell) {
 					b.set_temperature(into, room_kelvin);
@@ -6956,6 +6982,7 @@ std::string Lab::report() const {
 			json row;
 			row["species"] = std::string(def.id);
 			row["formula"] = std::string(def.formula);
+			row["written"] = chem::written(def.formula); // (Stage 63) as a reader writes it: Cu2+, SO4 2-
 			row["phase"] = PHASE[static_cast<int>(def.phase)];
 			row["wall"] = def.wall;
 			row["mol"] = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
@@ -7474,12 +7501,16 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					b.set_column_shape(id, rise, std::move(shape));
 				}
 			}
-			const auto amount = cell.at("amount").get<std::vector<int64_t>>();
-			const auto particles = cell.at("particles").get<std::vector<int64_t>>();
-			if (amount.size() != species || particles.size() != species) {
+			auto amount = cell.at("amount").get<std::vector<int64_t>>();
+			auto particles = cell.at("particles").get<std::vector<int64_t>>();
+			if (amount.size() > species || particles.size() != amount.size()) {
 				why = "the save's cells do not match the species table";
 				return nullptr;
 			}
+			// a save made with fewer species (the table grows only at its end); a retired formula unit's amount the
+			// builder takes as its ions (Stage 63)
+			amount.resize(species, 0);
+			particles.resize(species, 0);
 			for (size_t s = 0; s < species; ++s) {
 				const SpeciesId sp{ static_cast<int32_t>(s) };
 				if (amount[s] != 0) {

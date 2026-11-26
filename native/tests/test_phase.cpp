@@ -105,10 +105,15 @@ TEST_CASE("phase: water under dry air evaporates to saturation and cools doing i
 	sim.set_checking(true);
 	const Totals genesis = totals(builtin_species(), sim.world().snapshot());
 	const StepTrace trace = sim.step();
-	REQUIRE(trace.ledger.size() == 1); // one projection
+	// projections only: the evaporation, and water's own ionisation into its 1e-7 mol/kg of ions (Stage 63)
+	REQUIRE(!trace.ledger.empty());
+	for (const LedgerEntry &e : trace.ledger) {
+		REQUIRE(e.kind == LedgerEntry::Kind::Transform);
+	}
 	const double t = temperature(sim.world(), cell);
 	CHECK(t < 298.15); // the vapour's latent heat came from the cell
-	CHECK(vapour_fraction(sim.world(), cell) * P_ATMOSPHERE == doctest::Approx(table_saturation(t)).epsilon(1e-9));
+	// (to 1e-8: water's own ions lower its activity by a few parts in a billion, Stage 63)
+	CHECK(vapour_fraction(sim.world(), cell) * P_ATMOSPHERE == doctest::Approx(table_saturation(t)).epsilon(1e-8));
 	CHECK(entropy_change(builtin_species(), trace) > 0.0);
 	CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 	// D3: at equilibrium nothing moves
@@ -130,7 +135,8 @@ TEST_CASE("phase: supersaturated vapour condenses, and warms the cell (Stage 5)"
 	const double t = temperature(sim.world(), cell);
 	CHECK(t > 300.0);
 	CHECK(sim.world().amount(cell, builtin::water).mol() > 0.4);
-	CHECK(vapour_fraction(sim.world(), cell) * P_ATMOSPHERE == doctest::Approx(table_saturation(t)).epsilon(1e-9));
+	// (to 1e-8: water's own ions lower its activity by a few parts in a billion, Stage 63)
+	CHECK(vapour_fraction(sim.world(), cell) * P_ATMOSPHERE == doctest::Approx(table_saturation(t)).epsilon(1e-8));
 }
 
 TEST_CASE("phase: a little water in a hot cell boils dry, and the vapour stays below saturation (Stage 5)") {
@@ -235,10 +241,11 @@ TEST_CASE("phase: distilled water runs into the beaker, and it is water alone (S
 	const double collected = sim.world().amount(beaker, builtin::water).mol();
 	CHECK(left < 0.6 * liquid); // it boiled
 	CHECK(collected > 0.95 * (liquid - left)); // nearly all of it reached the beaker
-	// the beaker holds water, its own vapour and air: no other species at all
+	// the beaker holds water, its own ions (Stage 63), its own vapour and air: no other species at all
 	for (int s = 0; s < builtin_species().species_count(); ++s) {
 		const SpeciesId id{ s };
-		const bool expected = id == builtin::water || id == builtin::steam || id == builtin::nitrogen || id == builtin::oxygen || id == builtin::glass;
+		const bool expected = id == builtin::water || id == builtin::steam || id == builtin::nitrogen || id == builtin::oxygen || id == builtin::glass ||
+				id == builtin::hydrogen_ion || id == builtin::hydroxide_ion;
 		CAPTURE(builtin_species().species(id).id);
 		CHECK((expected || sim.world().amount(beaker, id).quanta == 0));
 	}

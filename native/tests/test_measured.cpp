@@ -32,7 +32,7 @@ struct Cell {
 		std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0) };
 	Cell() { put(builtin::water, 1.0 / 0.018015); }
 	Cell &put(SpeciesId s, double mol, int64_t particles = 0) {
-		state.amount[static_cast<size_t>(s.index)] = quanta(mol);
+		testing::put_amount(builtin_species(), state, s, quanta(mol));
 		state.particles[static_cast<size_t>(s.index)] = particles;
 		return *this;
 	}
@@ -54,9 +54,12 @@ double affinity_of(const Cell &c, const Reaction &r, double kelvin) {
 double saturation(double kelvin) {
 	const Reaction &r = reaction(builtin::reaction::pentahydrate_crystallization);
 	double lo = 0.05, hi = 8.0;
-	for (int i = 0; i < 70; ++i) {
+	for (int i = 0; i < 40; ++i) {
 		const double middle = 0.5 * (lo + hi);
-		(affinity_of(Cell().put(builtin::copper_sulfate_aq, middle), r, kelvin) > 0.0 ? hi : lo) = middle;
+		Cell c;
+		c.put(builtin::copper_sulfate_aq, middle);
+		c.state = testing::settled(c.state, kelvin); // at its hydrolysis (Stage 63)
+		(affinity_of(c, r, kelvin) > 0.0 ? hi : lo) = middle;
 	}
 	return 0.5 * (lo + hi);
 }
@@ -92,11 +95,13 @@ TEST_CASE("measured: water's viscosity, and the ions' diffusion as they move tog
 
 TEST_CASE("measured: copper oxide dissolves at Majima's rate, half order in the acid, controlled at its surface (Stage 23)") {
 	// 2.5e-7 mol/cm2/min in 0.2 M sulfuric acid at 25 C (Nicol and Akilan 2018, Table 4, citing Majima et al.
-	// 1980), half order in the acid; the rate does not depend on agitation
+	// 1980), half order in the acid; the rate does not depend on agitation. (Stage 63: the model's law is in the free
+	// hydrogen ions, refitted to give the source's in the acid: docs/DATA_SOURCES.md)
 	const Reaction &r = reaction(builtin::reaction::copper_oxide_dissolution);
 	const auto steps_at = [&](double acid, double dissipation) {
 		Cell c;
 		c.put(builtin::sulfuric_acid_aq, acid).put(builtin::copper_oxide, 0.01, 240000000); // grains of 10 um
+		c.state = testing::settled(c.state, 298.15); // the acid at its bisulfate (Stage 63: the rate is the free ions')
 		return surface_steps(builtin_species(), c.state, r, 298.15, affinity_of(c, r, 298.15), dissipation);
 	};
 	const SurfaceSteps still = steps_at(0.2, 0.0);
@@ -120,6 +125,7 @@ TEST_CASE("measured: the pentahydrate grows at Tanimoto's surface rate, in serie
 		const double kelvin = row.celsius + 273.15, ms = saturation(kelvin), m = 1.01 * ms;
 		Cell c;
 		c.put(builtin::copper_sulfate_aq, m).put(builtin::copper_sulfate_pentahydrate, 0.001, 1400); // 1400 crystals of 0.53 mm
+		c.state = testing::settled(c.state, kelvin); // at its hydrolysis, as the saturation is (Stage 63)
 		const SurfaceSteps still = surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), 0.0);
 		const double gap = (m - ms) / litres_of_water(); // mol/m^3
 		CHECK(near(still.surface, row.kr / 3600.0 * gap, 0.03));
@@ -270,8 +276,8 @@ TEST_CASE("measured: the copper sulfate standard's absorbancy is NBS Circular 48
 	const double as[] = { 0.0035, 0.0028, 0.0023, 0.0019, 0.0016, 0.0014, 0.0012, 0.0011, 0.0011, 0.0012, 0.0014, 0.0018, 0.0026,
 		0.0038, 0.0055, 0.0079, 0.0111, 0.0155, 0.0216, 0.0292, 0.039, 0.0518, 0.068, 0.0885, 0.1125, 0.143, 0.18, 0.224, 0.274,
 		0.332, 0.392, 0.459, 0.527, 0.592, 0.656, 0.715, 0.768, 0.817 };
-	const optics::Spectrum &salt = optics::spectrum(builtin::copper_sulfate_aq);
-	REQUIRE(optics::kind(builtin::copper_sulfate_aq) == optics::Kind::Absorb);
+	const optics::Spectrum &salt = optics::spectrum(builtin::copper_ion);
+	REQUIRE(optics::kind(builtin::copper_ion) == optics::Kind::Absorb);
 	const double molar = 0.07986, cm = 1.0;
 	for (int i = 0; i < 38; ++i) {
 		const int nm = 380 + 10 * i;

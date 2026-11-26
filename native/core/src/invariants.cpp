@@ -247,6 +247,24 @@ Violations check_C4(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_N1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	const auto charge = [&](const CellState &cell) {
+		uint64_t q = 0; // wraps modulo 2^64, as the totals do: a corrupted trace is compared, not undefined
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			q += static_cast<uint64_t>(table.species(SpeciesId{ static_cast<int32_t>(s) }).charge) * static_cast<uint64_t>(cell.amount[s]);
+		}
+		return static_cast<int64_t>(q);
+	};
+	for (size_t c = 0; c < trace.after.cells.size() && c < trace.before.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		const int64_t a = charge(trace.before.cells[c]), b = charge(trace.after.cells[c]);
+		if (a != b) {
+			out.push_back(text("N1: step %lld: cell %lld's charge changed from %lld to %lld quanta", static_cast<long long>(trace.step), static_cast<long long>(c), static_cast<long long>(a), static_cast<long long>(b)));
+		}
+	}
+	return out;
+}
+
 Violations check_C5(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
 	Snapshot replay = trace.before;
@@ -715,8 +733,8 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 		}
 		const CellState &cell = trace.after.cells[c];
 		for (const Reaction &reaction : equilibria) {
-			if (reaction.table() != &table) {
-				continue;
+			if (reaction.table() != &table || stands(table, cell, reaction.terms())) {
+				continue; // (Stage 63) past the activity model's range, an equilibrium among dissolved species stands
 			}
 			const AffinityProbe probe(table, cell, reaction.terms(), meta_of(trace, c));
 			double a = 0.0;
@@ -844,7 +862,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 		Violations v = check_V2(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
-	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1 }) {
+	for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

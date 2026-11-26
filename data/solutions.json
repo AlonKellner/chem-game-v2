@@ -3,7 +3,7 @@
 	"note": "The electrolyte model (GAME_SPEC §10): Pitzer's equations at 25 C, used at every temperature. a_phi and b: the Debye-Huckel term. pairs: a cation and an anion, named as in species.json's ions, with beta0, beta1, beta2, c_phi and the exponents alpha1, alpha2. A pair not listed has no specific interaction. diffusion: each ion's diffusion coefficient at 25 C, scaled to other temperatures as T / viscosity (GAME_SPEC §7); an ion not listed puts no limit on transport. viscosity: the solvent's (water's, at 0.5 MPa: the liquid to 150 C), mPa s, by rising temperature; read between points in its logarithm, held beyond the ends. solvent: saturated liquid water's properties by temperature (Lienhard, A Heat Transfer Textbook 6.00, Table A.3: rho kg/m3, cp J/kg K, k W/m K, alpha and nu m2/s, Pr, beta 1/K), read between rows, held beyond the ends: its density, for what floats on what (a column's layers, GAME_SPEC §6), its conduction, and boiling's bubbles (§11). water_ionisation: water's own ionisation, whose constant Kw sets the pH where neither an acid nor a base is left over. Sources: docs/DATA_SOURCES.md.",
 	"a_phi": 0.392,
 	"b": 1.2,
-	"diffusion": {"note": "each ion's diffusion coefficient in water at infinite dilution, 25 C, m2/s (GAME_SPEC §7)", "source": "Li and Gregory 1974, Table 1", "H+1": 9.31e-9, "Cu+2": 7.33e-10, "SO4-2": 1.07e-9, "Ni+2": 6.61e-10},
+	"diffusion": {"note": "each ion's diffusion coefficient in water at infinite dilution, 25 C, m2/s (GAME_SPEC §7)", "source": "Li and Gregory 1974, Table 1", "H+1": 9.31e-9, "Cu+2": 7.33e-10, "SO4-2": 1.07e-9, "Ni+2": 6.61e-10, "Na+1": 1.33e-9, "OH-1": 5.27e-9, "HSO4-1": 0.731e-9},
 	"viscosity": [
 		{"celsius": 0.01, "mpa_s": 1.7902},
 		{"celsius": 10, "mpa_s": 1.3055},
@@ -26,9 +26,12 @@
 	"pairs": [
 		{"cation": "Cu+2", "anion": "SO4-2", "beta0": 0.2358, "beta1": 2.485, "beta2": -47.35, "c_phi": 0, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974; their c_phi, -0.0012, left out: beyond 65 mol/kg it turns the water's activity back up"},
 		{"cation": "Ni+2", "anion": "SO4-2", "beta0": 0.1702, "beta1": 2.907, "beta2": -40.06, "c_phi": 0.0366, "alpha1": 1.4, "alpha2": 12, "source": "Pitzer and Mayorga 1974 (LBL-2282, Table I): 0.005 to 2.5 mol/kg (Stage 47)"},
-		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.12593, "beta1": -8.17145, "beta2": -24.32491, "c_phi": 0, "alpha1": 4.5, "alpha2": 12, "source": "fitted to Staples 1981, fully dissociated"},
+		{"cation": "H+1", "anion": "SO4-2", "beta0": 0.0298, "beta1": 0, "c_phi": 0.0438, "alpha1": 2, "source": "Pitzer, Roy and Silvester 1977, with bisulfate (Stage 63): PHREEQC v3 pitzer.dat"},
+		{"cation": "H+1", "anion": "HSO4-1", "beta0": 0.2065, "beta1": 0.5556, "c_phi": 0, "alpha1": 2, "source": "Pitzer, Roy and Silvester 1977 (Stage 63): PHREEQC v3 pitzer.dat"},
 		{"cation": "Na+1", "anion": "OH-1", "beta0": 0.0864, "beta1": 0.253, "c_phi": 0.0044, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table I (to 6 mol/kg)"},
-		{"cation": "Na+1", "anion": "SO4-2", "beta0": 0.01958, "beta1": 1.113, "c_phi": 0.004974, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table VI (to 4 mol/kg): their (4/3) beta0 0.0261, (4/3) beta1 1.484, (2^(5/2)/3) c_phi 0.00938"}
+		{"cation": "Na+1", "anion": "SO4-2", "beta0": 0.01958, "beta1": 1.113, "c_phi": 0.004974, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table VI (to 4 mol/kg): their (4/3) beta0 0.0261, (4/3) beta1 1.484, (2^(5/2)/3) c_phi 0.00938"},
+		{"cation": "Na+1", "anion": "HSO4-1", "beta0": 0.0454, "beta1": 0.398, "c_phi": 0, "alpha1": 2, "source": "PHREEQC v3 pitzer.dat (Stage 63)"},
+		{"cation": "Cu+2", "anion": "HSO4-1", "beta0": 0.815, "beta1": 0, "c_phi": 0, "alpha1": 2, "source": "calibrated (Stage 63): copper sulfate's solubility in the acid, Holler and Peffer 1916 at 15 C"}
 	],
 	"solvent": [
 		{"celsius": 0.01, "rho": 999.8, "cp": 4220, "k": 0.561, "alpha": 1.33e-07, "nu": 1.791e-06, "pr": 13.47, "beta": -6.8e-05},

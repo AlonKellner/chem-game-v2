@@ -116,7 +116,8 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace);
 // V2. No rigid cell holds more solids and liquids than its volume.
 Violations check_V2(const SpeciesTable &table, const StepTrace &trace);
 // P1. Every cell is at its fast equilibria. For each reaction of the
-// equilibrium law: nothing is left to go in the direction of its affinity
+// equilibrium law (but one among dissolved species past the activity model's range, which stands: `stands`,
+// Stage 63): nothing is left to go in the direction of its affinity
 // (liquid absent: its vapour at or below saturation; vapour absent: nothing
 // would condense), or the affinity is within what rounding leaves. Rounding:
 // gas moved after the equilibrium was taken is whole quanta, a quantum per
@@ -135,6 +136,10 @@ Violations check_L1(const SpeciesTable &table, const StepTrace &trace);
 // E1 (Stage 50): a gas exchanged along an edge (an open vessel's mouth) moves only down its mole fraction's difference,
 // along an open edge that exchanges gas and joins the two cells, and no further than to equal fractions.
 Violations check_E1(const SpeciesTable &table, const StepTrace &trace);
+
+// N1 (Stage 63): electroneutrality. No step changes a cell's charge: what moves between cells moves as neutral matter
+// and every transform is balanced in charge, so a cell made neutral (every bench's) stays so.
+Violations check_N1(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.

@@ -1,0 +1,13 @@
+{
+	"format": "chem-elements/1",
+	"note": "Standard atomic weights (IUPAC abridged values), g/mol, as decimal strings: read exactly, never through a float.",
+	"elements": [
+		{"symbol": "H", "mass": "1.008"},
+		{"symbol": "C", "mass": "12.011"},
+		{"symbol": "N", "mass": "14.007"},
+		{"symbol": "O", "mass": "15.999"},
+		{"symbol": "Si", "mass": "28.085"},
+		{"symbol": "S", "mass": "32.06"},
+		{"symbol": "Cu", "mass": "63.546"}
+	]
+}

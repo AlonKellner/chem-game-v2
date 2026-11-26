@@ -58,6 +58,9 @@ double percent_yield(double actual_g, double theoretical_g);
 double solubility(const chem::SpeciesTable &table, const chem::Reaction &crystallization, chem::SpeciesId dissolved, double kelvin);
 
 // A reaction's equation as the tables' formulas spell it: "CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)"
+// (Stage 63) a reaction's terms as a student writes it: its written equation in formula units (CuO + H2SO4 ->
+// CuSO4 + H2O) where it has one, its own (in ions) where it has none; a built-in reaction or any other
+std::span<const chem::Term> written_terms(const chem::Reaction &reaction);
 std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reaction);
 
 } // namespace lab::calc
