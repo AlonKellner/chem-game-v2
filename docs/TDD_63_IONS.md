@@ -82,7 +82,7 @@ elements, weak acids and bases and indicators (64), then the experiments and con
 | 63.5 | pH; the measured gates (acidity, precipitation, solution, measured) | done |
 | 63.6 | The lab, the screen, the benches, tutorials and spectra in ions | done (readings by `formula_units`; written equations; spectra; the readout) |
 | 63.7 | The goldens: the evidence and the user's approval | done (demo and pressure re-recorded with the user's approval) |
-| 63.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | gates passed (core, ASan+UBSan, Godot 13/13, goldens; ctest 593/593 rerun alone after `signals.12`'s timing ran over under the gates' load: 4.6 ms against 3, 1.8 alone); sign-off pending |
+| 63.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | gates passed (core, ASan+UBSan, Godot 13/13, goldens; ctest 593/593 rerun alone after `signals.12`'s timing ran over under the gates' load: 4.6 ms against 3, 1.8 alone); signed off by the user, 2026-11-26 ("Approved, merge and proceed") |
 
 ## Open
 

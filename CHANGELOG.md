@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.63.0 (2026-11-26, Stage 63)
+## 0.63.0 (2026-11-26, Stage 63; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 63, `docs/TDD_63_IONS.md`; `docs/CURRICULUM.md`, step D's first part, C2): **dissolved matter as its
   ions**, each a species: H⁺, OH⁻, Cu²⁺, SO₄²⁻, HSO₄⁻, Na⁺, Ni²⁺, CuOH⁺. The formula units retired (kept, taken as their
