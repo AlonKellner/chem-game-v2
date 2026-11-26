@@ -124,8 +124,10 @@ worktree's whole run doing nothing (at twelve, and still at 24).
 
 The project's own ccache (`~/Library/Caches/chem-game-v2/ccache`, 40 GB), its paths relative to the worktree's root
 (`base_dir`) and the working directory out of its keys; the compiler's version in them. No worktree's path in an
-object or a binary: `-fdebug-compilation-dir=.`, `-oso_prefix` the build tree, the repository's root found at run time
-(`tests/support/repo_root.hpp`), `demo_session`'s paths from its tree. godot-cpp's 1,089 files are compiled once for
+object: `-fdebug-compilation-dir=.`, the repository's root found at run time (`tests/support/repo_root.hpp`),
+`demo_session`'s paths from its tree. (`-oso_prefix` made the binaries themselves alike too, but a sanitizer's report
+and `atos` lost their lines with the debug map's paths relative; the result cache hashes a binary with its worktree's
+root left out instead.) godot-cpp's 1,089 files are compiled once for
 every worktree. Held: a new worktree on the branch's head built its core tree with 99 of 134 compiles from the
 cache (the others' sources not compiled anywhere yet), and its `chem_tests` was byte for byte this worktree's.
 

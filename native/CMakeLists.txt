@@ -55,14 +55,12 @@ if(APPLE AND NOT DEFINED CMAKE_CXX_LINKER_LAUNCHER)
     set(CMAKE_CXX_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
     set(CMAKE_C_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
 endif()
-# And no path of the worktree in an object or a binary (Stage 68): the debug info's directory is "." (the sources'
-# paths are relative, ccache's base_dir), and the debug map names each object from the build tree, whose name is
-# the same in every worktree. So two worktrees on one commit link the same bytes, and share the gates' results.
+# And no path of the worktree in an object (Stage 68): the debug info's directory is "." (the sources' paths are
+# relative, ccache's base_dir). A binary's debug map still names its objects by their whole paths: relative ones
+# (-oso_prefix) left a sanitizer's report and atos without a line; the gates' cache reads a binary with its
+# worktree's root left out (tools/gate_cache.py), so two worktrees on one commit still share their results.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-fdebug-compilation-dir=.)
-endif()
-if(APPLE)
-    add_link_options("LINKER:-oso_prefix,${CMAKE_BINARY_DIR}/")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)

@@ -69,6 +69,17 @@ def sha_file(path, memo={}):
     return memo[path]
 
 
+def sha_binary(path, memo={}):
+    """A built binary's content with this worktree's root left out (Stage 68): its debug map names its objects by
+    their whole paths, and nothing else of it names the worktree (the repository's root is found at run time), so
+    the same commit's binary in two worktrees reads the same here."""
+    if path not in memo:
+        with open(path, "rb") as f:
+            content = f.read()
+        memo[path] = hashlib.sha256(content.replace(ROOT.encode() + b"/", b"<root>/")).hexdigest()
+    return memo[path]
+
+
 def git(*args):
     return subprocess.run(["git", "-C", ROOT, *args], check=True, capture_output=True, text=True).stdout
 
@@ -175,8 +186,8 @@ def ctest(build, jobs, regex, use_cache):
         props = {p["name"]: p["value"] for p in t.get("properties", [])}
         if cmd and os.path.isfile(cmd[0]) and os.path.abspath(cmd[0]).startswith(build + os.sep):
             if cmd[0] not in lib_memo:
-                lib_memo[cmd[0]] = [(os.path.relpath(l, build), sha_file(l)) for l in linked_libs(cmd[0], build)]
-            key = hashlib.sha256(json.dumps([sha_file(cmd[0]), lib_memo[cmd[0]], cmd[1:], props.get("ENVIRONMENT"),
+                lib_memo[cmd[0]] = [(os.path.relpath(l, build), sha_binary(l)) for l in linked_libs(cmd[0], build)]
+            key = hashlib.sha256(json.dumps([sha_binary(cmd[0]), lib_memo[cmd[0]], cmd[1:], props.get("ENVIRONMENT"),
                                              env, data]).encode()).hexdigest()
             keys[name] = key
             if use_cache and passed(cache, entry_of(build, name), key):

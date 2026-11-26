@@ -35,12 +35,13 @@ always run. `make gate-clear-cache` empties it.
 - **One cache for every worktree** (Stage 68): `~/Library/Caches/chem-game-v2/gate_cache.json`
   (`GATE_CACHE_FILE`), read and written under a lock. An entry is known by its tree's kind
   (`build-core`, `build-asan`) and name; the ASan tree's entries are cached the same way (`make asan-gate`).
-- **The same binaries in every worktree** (Stage 68): the sources' paths are relative (ccache's
-  `base_dir`), the debug info's directory is `.` (`-fdebug-compilation-dir`), the debug map names
-  objects from the build tree (`-oso_prefix`), and the repository's root is found at run time from
-  where the binary is (`tests/support/repo_root.hpp`; `CHEM_REPO_ROOT` in the environment overrides
-  it). So two worktrees on one commit link the same bytes, and main after a merge whose tree is the
-  branch's runs only what the branch did not.
+- **The same binaries in every worktree, as the cache reads them** (Stage 68): the sources' paths are
+  relative (ccache's `base_dir`), the debug info's directory is `.` (`-fdebug-compilation-dir`), and the
+  repository's root is found at run time from where the binary is (`tests/support/repo_root.hpp`;
+  `CHEM_REPO_ROOT` in the environment overrides it). The debug map still names each object by its whole
+  path (relative ones, `-oso_prefix`, left a sanitizer's report and `atos` without a line), and the cache
+  hashes a binary with its worktree's root left out. So two worktrees on one commit share their results,
+  and main after a merge whose tree is the branch's runs only what the branch did not.
 
 ## The shared build cache
 
