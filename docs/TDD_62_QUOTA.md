@@ -29,7 +29,7 @@ No new mechanism: the planner (Stage 60), the balance (50), the filter (59), goa
 |---|---|---|
 | 62.1 | The exploration | Done |
 | 62.2 | The experiment: crystals to a quota | Done |
-| 62.3 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 62.3 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (2579 s: ASan+UBSan 2579, ctest 1692, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
 
 ## The goldens
 
