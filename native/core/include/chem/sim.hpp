@@ -192,6 +192,8 @@ private:
 		bool sealed = false, rigid = false, reservoir = false;
 	};
 	std::vector<ThermalKey> thermal_key_;
+	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly
+	std::vector<ThermalKey> rest_key_;
 	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)
 	struct Relaxing {
 		double conductance = -1.0, capacity = -1.0, factor = 0.0;

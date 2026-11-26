@@ -1,5 +1,7 @@
 #include "chem/thermo.hpp"
 
+#include <algorithm>
+
 #include "chem/math.hpp"
 
 #include <cmath>
@@ -121,11 +123,16 @@ constexpr double SOLVENT_MOL_PER_UNIT = 1.0 / 0.018015;
 // With them, the excess of the solution (GAME_SPEC §10): each particle's
 // ln gamma, and the solvent's share of it.
 struct Mix {
+	// (Stage 64) the table's own particles only are set and read: n of them zeroed, not the whole bound's
+	explicit Mix(size_t n) {
+		std::fill_n(particles.begin(), n, 0.0);
+		std::fill_n(ln_gamma.begin(), n, 0.0);
+	}
 	double gas = 0.0;
 	double liquid = 0.0;
-	std::array<double, MAX_PARTICLES> particles{};
+	std::array<double, MAX_PARTICLES> particles;
 	double dissolved = 0.0; // the particles' sum
-	std::array<double, MAX_PARTICLES> ln_gamma{};
+	std::array<double, MAX_PARTICLES> ln_gamma;
 	double solvent_excess = 0.0; // the excess part of ln a of the solvent
 	double pressure_ratio = P_ATMOSPHERE / P_STANDARD; // the cell's pressure over the standard's (Stage 28: a sealed cell's own)
 };
@@ -148,7 +155,7 @@ void pitzer_g(double x, double &g, double &h) {
 // solvent's share follows: w d(wF)/dw = F - sum m_j F_j, per kg.
 void excess_of(const SolutionDef &model, Mix &mix) {
 	const size_t n = model.ions.size();
-	std::array<double, MAX_PARTICLES> m{};
+	std::array<double, MAX_PARTICLES> m; // (Stage 64: the table's own particles only are set and read)
 	double ionic = 0.0, z_sum = 0.0;
 	for (size_t j = 0; j < n; ++j) {
 		m[j] = mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT;
@@ -163,7 +170,8 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 	const double lnp = log(1.0 + model.b * s);
 	double f = -model.a_phi * 4.0 * ionic / model.b * lnp;
 	const double f_ionic = -model.a_phi * (4.0 / model.b * lnp + 2.0 * s / (1.0 + model.b * s)); // df/dI
-	std::array<double, MAX_PARTICLES> d{};
+	std::array<double, MAX_PARTICLES> d;
+	std::fill_n(d.begin(), n, 0.0);
 	double d_ionic = f_ionic; // dF/dI
 	double d_z = 0.0; // dF/dZ
 	// g and h of each exponent once: pairs share them (alpha2 is 12 for most)
@@ -236,7 +244,7 @@ void complete(const SpeciesTable &table, Mix &mix) {
 
 // The cell's mixtures; with `excess`, the solution's excess too (GAME_SPEC §10)
 Mix mix_of(const SpeciesTable &table, const CellState &cell, bool excess = true) {
-	Mix mix;
+	Mix mix(table.solution().ions.size());
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		if (cell.amount[s] <= 0) {
 			continue;
@@ -726,7 +734,7 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 	const Mix mix = mix_of(table, cell, false); // the amounts: at() works out the excess at each extent
 	gas_ = mix.gas;
 	liquid_ = mix.liquid;
-	particles_ = mix.particles;
+	std::copy_n(mix.particles.begin(), table.solution().ions.size(), particles_.begin());
 	table_ = &table;
 	temperature_ = thermal.temperature;
 	capacity_ = thermal.heat_capacity;
@@ -769,10 +777,10 @@ bool AffinityProbe::at(double extent, double &a) const {
 		}
 	}
 	const auto clamp = [](double v) { return v > 0.0 ? v : 0.0; };
-	Mix mix;
+	Mix mix(table_->solution().ions.size());
 	mix.gas = clamp(gas_ + extent * gas_step_);
 	mix.liquid = clamp(liquid_ + extent * liquid_step_);
-	for (size_t j = 0; j < particles_.size(); ++j) {
+	for (size_t j = 0, n = table_->solution().ions.size(); j < n; ++j) {
 		mix.particles[j] = clamp(particles_[j] + extent * particles_step_[j]);
 		mix.dissolved += mix.particles[j];
 	}

@@ -107,7 +107,8 @@ TEST_CASE("lab: the demo's bench opens with every vessel full of the room's air 
 	CHECK(flask.at("gas_ml").get<double>() > 330.0);
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(5.0).epsilon(1e-9));
 	CHECK(item(report, "balloon").at("gas_ml").get<double>() == 0.0);
-	CHECK(grams(item(report, "acid"), "water") == doctest::Approx(240.5).epsilon(1e-9));
+	// (Stage 64: the bench opens at its fast equilibria, a few milligrams of the acid's water already its vapour)
+	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5).epsilon(1e-9));
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 	// Left alone it is not quite at rest: the acid's water wets the air above
 	// it and the condenser cools to its coolant. Nothing is lost doing so.

@@ -739,6 +739,29 @@ void Simulation::exchange_gases() {
 bool Simulation::project(CellId cell) {
 	const SpeciesTable &table = world_.species();
 	const CellState &state = world_.snapshot_cell(cell);
+	// (Stage 64) a cell as it was when it was last found at rest is at rest: what follows depends on nothing else
+	const auto c = static_cast<size_t>(cell.index);
+	const CellMeta &meta_now = world_.meta(cell);
+	if (rest_key_.size() <= c) {
+		rest_key_.resize(c + 1);
+	}
+	{
+		const ThermalKey &key = rest_key_[c];
+		if (key.known && key.energy == state.energy && key.volume == meta_now.volume && key.sealed == meta_now.sealed && key.rigid == meta_now.rigid &&
+				key.reservoir == meta_now.reservoir && key.amount == state.amount) {
+			return false;
+		}
+	}
+	const auto at_rest = [&] {
+		ThermalKey &key = rest_key_[c];
+		key.known = true;
+		key.energy = state.energy;
+		key.amount = state.amount;
+		key.volume = meta_now.volume;
+		key.sealed = meta_now.sealed;
+		key.rigid = meta_now.rigid;
+		key.reservoir = meta_now.reservoir;
+	};
 	bool changed = false;
 	// (Stage 53) a cell of nothing but wall (a vessel's ring of glass) has no equilibrium to be at
 	bool any = false;
@@ -746,6 +769,7 @@ bool Simulation::project(CellId cell) {
 		any = state.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall;
 	}
 	if (!any) {
+		at_rest();
 		return false;
 	}
 	// several equilibria that share a species are taken in turn until none
@@ -812,6 +836,9 @@ bool Simulation::project(CellId cell) {
 		if (solve_together(cell)) {
 			++version;
 		}
+	}
+	if (!changed) {
+		at_rest();
 	}
 	return changed;
 }
