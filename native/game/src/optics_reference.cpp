@@ -453,6 +453,14 @@ double drawn_at(double x, double y) {
 			seen = d[k + 4];
 		}
 	}
+	if (shader::wall_base != 0) { // (Stage 61) behind glass: what is drawn there only, over it
+		const std::vector<float> &g = shader::current->drawn_glass;
+		for (size_t k = 0; k + 4 < g.size(); k += 5) {
+			if (x >= g[k] && x < static_cast<double>(g[k]) + g[k + 2] && y >= g[k + 1] && y < static_cast<double>(g[k + 1]) + g[k + 3]) {
+				seen = g[k + 4];
+			}
+		}
+	}
 	return seen;
 }
 

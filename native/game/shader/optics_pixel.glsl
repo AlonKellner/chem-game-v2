@@ -29,7 +29,7 @@
 //                            what it showed (3, linear); or what the room showed at 1x when last seen whole (4,
 //                            linear); x and y clamped to the screen (below: a view's change)
 
-const int HEADER_VECS = 6;
+const int HEADER_VECS = 8;
 const int BODY_VECS = 8;
 const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
@@ -128,7 +128,13 @@ struct PixelState {
 OPTICS_THREAD int band_range = 0;
 // the bodies a ray passes by (Stage 46: bits of a body's GLOW w; a sensor's rays do not see its own body)
 OPTICS_THREAD int ray_hide = 0;
-OPTICS_THREAD bool range_fixed = false; // (a sensor's continuation reads in the range it set, whatever the pass's)
+OPTICS_THREAD bool range_fixed = false;
+// (Stage 61) the wall's table read: the wall as drawn (0), or behind glass (the second table, from the header's vec4
+// 5's w): a pixel within a body's outline reads it behind glass (path_of sets it), a bare one as drawn
+OPTICS_THREAD int wall_base = 0;
+vec4 wall_of(int i) {
+	return wall_vec(wall_base + i);
+} // (a sensor's continuation reads in the range it set, whatever the pass's)
 bool hidden(int body) {
 	return ray_hide != 0 && (int(scene_vec(HEADER_VECS + body * BODY_VECS + 3).w) & ray_hide) != 0;
 }
@@ -472,6 +478,7 @@ bool hidden_at(int body, vec2 p) {
 }
 
 Path path_of(vec2 p, float size) {
+	wall_base = 0;
 	Path q;
 	if (!range_fixed) {
 		band_range = scene_vec(4).w > 0.5 ? 1 : 0; // the range the whole pass is read in (Stage 46: the debug infrared view)
@@ -598,6 +605,8 @@ Path path_of(vec2 p, float size) {
 		q.zone = vec2(min(q.zone.x, behind_zone.x), max(q.zone.y, behind_zone.y));
 		q.key.w = q.key.w + 0.73 * scene_vec(HEADER_VECS + q.refractor * BODY_VECS + 7).z + 0.61 * q.shape.x + 0.47 * q.shape.y + 0.53 * q.content.x;
 	}
+	// (Stage 61) within a body's outline: every wall it reads, the wall behind glass
+	wall_base = q.layers > 0 ? int(scene_vec(5).w) : 0;
 	return q;
 }
 
@@ -703,30 +712,30 @@ struct WallAt {
 // the profile of the row a place is on: a row of the screen, the row over it or the row under it (a ray that
 // lands beyond the screen reads the wall as it is just past the screen's edge, Stage 30)
 int wall_profile(float y) {
-	return int(wall_vec(WALL_ROW_BASE + clamp(int(floor(y)), -1, WALL_ROWS)).x);
+	return int(wall_of(WALL_ROW_BASE + clamp(int(floor(y)), -1, WALL_ROWS)).x);
 }
 
 WallAt wall_at(int profile, float x) {
-	int m = int(wall_vec(0).x);
+	int m = int(wall_of(0).x);
 	// the cell: how many breakpoints are at or left of x; from the column's, a few steps
-	int j = x < 0.0 ? 0 : int(wall_vec(WALL_COLUMN_BASE + min(int(x), WALL_COLUMNS - 1)).x);
+	int j = x < 0.0 ? 0 : int(wall_of(WALL_COLUMN_BASE + min(int(x), WALL_COLUMNS - 1)).x);
 	float right = x; // not known: a ray that moves looks again
 	for (int k = 0; k < 64; k++) {
 		if (j >= m) {
 			right = 1.0e30;
 			break;
 		}
-		float next = wall_vec(WALL_BREAK_BASE + j).x;
+		float next = wall_of(WALL_BREAK_BASE + j).x;
 		if (next > x) {
 			right = next;
 			break;
 		}
 		j = j + 1;
 	}
-	vec4 c = wall_vec(WALL_BREAK_BASE + m + profile * (m + 1) + j);
+	vec4 c = wall_of(WALL_BREAK_BASE + m + profile * (m + 1) + j);
 	WallAt w;
 	w.cell = j;
-	w.base = wall_vec(WALL_BREAK_BASE + max(j - 1, 0)).x;
+	w.base = wall_of(WALL_BREAK_BASE + max(j - 1, 0)).x;
 	w.from = x - w.base;
 	w.radiance = c.x;
 	w.coarse = c.y;
@@ -784,7 +793,7 @@ float wall_mean(int profile, WallAt r, WallAt at0, float x0, WallAt at1, float x
 	if (a.cell == b.cell || hi - lo < 1.0e-5) {
 		return s_a + 0.5 * a.radiance * (hi - lo);
 	}
-	int m = int(wall_vec(0).x);
+	int m = int(wall_of(0).x);
 	float sum = 0.0;
 	float at = lo;
 	float s_at = s_a;
@@ -793,8 +802,8 @@ float wall_mean(int profile, WallAt r, WallAt at0, float x0, WallAt at1, float x
 		if (cell > b.cell) {
 			break;
 		}
-		float end = cell == b.cell ? hi : wall_vec(WALL_BREAK_BASE + cell).x; // a cell ends at its own breakpoint
-		float s_end = s_at + wall_vec(WALL_BREAK_BASE + m + profile * (m + 1) + cell).x * (end - at);
+		float end = cell == b.cell ? hi : wall_of(WALL_BREAK_BASE + cell).x; // a cell ends at its own breakpoint
+		float s_end = s_at + wall_of(WALL_BREAK_BASE + m + profile * (m + 1) + cell).x * (end - at);
 		sum = sum + 0.5 * (s_at + s_end) * (end - at);
 		at = end;
 		s_at = s_end;
@@ -2836,13 +2845,13 @@ float wall_one(float x_lo, float x_hi, float y_lo, float y_hi) {
 	if (!(x_hi < w.right)) {
 		return -1.0;
 	}
-	int m = int(wall_vec(0).x);
+	int m = int(wall_of(0).x);
 	for (int r = 1; r < 8; r++) {
 		if (first + r > last) {
 			break;
 		}
 		int other = beam_profile(float(first + r) + 0.5);
-		if (other != profile && wall_vec(WALL_BREAK_BASE + m + other * (m + 1) + w.cell).x != w.radiance) {
+		if (other != profile && wall_of(WALL_BREAK_BASE + m + other * (m + 1) + w.cell).x != w.radiance) {
 			return -1.0;
 		}
 	}
@@ -4628,7 +4637,22 @@ vec3 relay_light(Path q) {
 // A pixel no body covers shows the wall drawn there, its mean over the pixel: the room and the bodies are one
 // picture at the screen's pixels (GAME_SPEC §12.3), which a host scales as one, so the wall seen through glass
 // and beside it cannot part
+// (Stage 61) within one of the screen's panels: a pixel there that sees only the wall is the screen's own drawing
+bool in_panels(vec2 p) {
+	for (int k = 6; k < 8; k++) {
+		vec4 r = scene_vec(k);
+		if (r.z > 0.0 && p.x >= r.x && p.x < r.x + r.z && p.y >= r.y && p.y < r.y + r.w) {
+			return true;
+		}
+	}
+	return false;
+}
+
 vec4 wall_shown(vec2 p, float size) {
+	wall_base = 0; // (bare: the wall as drawn)
+	if (in_panels(p)) {
+		return vec4(0.0); // (the panel as the screen paints it: its background, its pictures)
+	}
 	if (scene_vec(4).w > 0.5) {
 		return infrared_shown(1.0); // the room's own temperature (Stage 46)
 	}
@@ -4640,7 +4664,8 @@ vec4 wall_shown(vec2 p, float size) {
 // the state of a pixel that shows the wall: the wall table's own tag, so it is shown again when the wall changes
 // (and matches no content: a body there starts its history)
 vec4 wall_key() {
-	return vec4(-1.0, wall_vec(0).z, -1.0 - scene_vec(4).w, -1.0); // (and the range it is shown in: Stage 46)
+	wall_base = 0;
+	return vec4(-1.0, wall_of(0).z, -1.0 - scene_vec(4).w, -1.0); // (and the range it is shown in: Stage 46)
 }
 
 // ---- a view's change (GAME_SPEC §12.3, Stage 42)

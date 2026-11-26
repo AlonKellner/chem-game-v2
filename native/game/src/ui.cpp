@@ -801,7 +801,7 @@ struct Ui::Impl {
 	OpticsRoom room_was, room_drawn; // (the wall behind glass, and as it is painted)
 	bool capture_ahead = false; // (a host's: supplies with no picture captured apart, one at a time)
 	static std::string picture_key(const ItemView &s) {
-		json j = { { "pictures", 2 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
+		json j = { { "pictures", 3 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
 			{ "h", s.h }, { "label", s.label }, { "wall", s.wall_mm }, { "floor", s.floor_mm }, { "condenser", s.condenser } };
 		json held = json::array();
 		for (const SubstanceView &c : s.contents) {
@@ -6769,23 +6769,41 @@ struct Ui::Impl {
 			}
 		}
 		room_drawn = room; // (Stage 61: as painted, for a supply's picture where no body is)
+		{
+			int k = 0;
+			for (const Rect &box : { CABINET, OUTBOX }) { // (where the pass leaves the wall to the screen's drawing)
+				const Rect s = on_screen(box);
+				room.panels[k][0] = s.x;
+				room.panels[k][1] = s.y;
+				room.panels[k][2] = s.w;
+				room.panels[k][3] = s.h;
+				++k;
+			}
+		}
 		// (Stage 61) behind glass the panels are the wall as the bench rules it: its grid continued over them
 		{
 			const double ruled_r = radiance(WALL_GRID);
+			// (drawn behind glass only: bare, the panels are as the screen paints them)
+			const auto glass = [&](double x0, double y0, double x1, double y1, double r) {
+				const double left = std::ceil(x0 - 0.5), right = std::ceil(x1 - 0.5), top = std::ceil(y0 - 0.5), bottom = std::ceil(y1 - 0.5);
+				if (right > left && bottom > top) {
+					room.glass_shapes.push_back(OpticsShape{ static_cast<float>(left), static_cast<float>(top), static_cast<float>(right - left), static_cast<float>(bottom - top), r });
+				}
+			};
 			const float sq = square();
 			for (const Rect &box : { CABINET, OUTBOX }) {
 				const float c0 = std::floor((box.x - BENCH.x) / sq), c1 = std::ceil((box.x + box.w - BENCH.x) / sq);
 				for (float c = c0; c <= c1; c += 1.0f) {
 					const float x = BENCH.x + c * sq;
 					if (x >= box.x && x <= box.x + box.w) {
-						shape(sx(x - 1.0f), sy(box.y), sx(x), sy(box.y + box.h), ruled_r);
+						glass(sx(x - 1.0f), sy(box.y), sx(x), sy(box.y + box.h), ruled_r);
 					}
 				}
 				const float r0 = std::floor((box.y - BENCH.y) / sq), r1 = std::ceil((box.y + box.h - BENCH.y) / sq);
 				for (float r = r0; r <= r1; r += 1.0f) {
 					const float y = BENCH.y + r * sq;
 					if (y >= box.y && y <= box.y + box.h) {
-						shape(sx(box.x), sy(y - 1.0f), sx(box.x + box.w), sy(y), ruled_r);
+						glass(sx(box.x), sy(y - 1.0f), sx(box.x + box.w), sy(y), ruled_r);
 					}
 				}
 			}

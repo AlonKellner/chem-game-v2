@@ -291,6 +291,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(5, 1, room.pixel_y0);
 	put(5, 2, GRID_SQUARE * room.pixel);
 	put(4, 3, room.range);
+	for (int k = 0; k < 2; ++k) { // (Stage 61) the screen's panels
+		for (int c = 0; c < 4; ++c) {
+			put(6 + k, c, room.panels[k][c]);
+		}
+	}
 	put(2, 1, room.front);
 	put(2, 2, room.refraction ? 1.0 : 0.0);
 	put(2, 3, room.cuts ? 1.0 : 0.0);
@@ -301,6 +306,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	wall_key = fnv(&room.bench, 2 * sizeof(double), wall_key);
 	for (const OpticsShape &sh : room.shapes) {
 		wall_key = fnv(&sh.x, 4 * sizeof(float), wall_key);
+		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
+	}
+	for (const OpticsShape &sh : room.glass_shapes) { // (Stage 61)
+		wall_key = fnv(&sh.x, 4 * sizeof(float), wall_key ^ 0x9e3779b97f4a7c15ull);
 		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
 	}
 	wall_key |= 1u; // never 0: a scene with no table yet
@@ -1076,10 +1085,27 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	}
 	// the wall's table (GAME_SPEC §12.3): made again only when what is drawn on it changes
 	if (scene.wall_key != wall_key || scene.wall.empty()) {
-		optics_wall(scene, room);
+		// (Stage 61) the wall as drawn, then (with anything drawn behind glass only) the wall behind glass after it
+		scene.drawn_glass.clear();
+		if (!room.glass_shapes.empty()) {
+			OpticsRoom behind = room;
+			behind.shapes.insert(behind.shapes.end(), room.glass_shapes.begin(), room.glass_shapes.end());
+			optics_wall(scene, behind);
+			const std::vector<float> glass = scene.wall;
+			for (const OpticsShape &sh : room.glass_shapes) {
+				scene.drawn_glass.insert(scene.drawn_glass.end(), { sh.x, sh.y, sh.w, sh.h, static_cast<float>(sh.radiance) });
+			}
+			optics_wall(scene, room);
+			scene.wall_glass_base = static_cast<int>(scene.wall.size() / 4);
+			scene.wall.insert(scene.wall.end(), glass.begin(), glass.end());
+		} else {
+			optics_wall(scene, room);
+			scene.wall_glass_base = 0;
+		}
 		scene.wall_key = wall_key;
 		scene.wall[2] = tag(wall_key); // the pixels that show the wall alone follow it
 	}
+	put(5, 3, scene.wall_glass_base); // (Stage 61)
 	put(3, 1, nearest);
 	// The rectangles the passes over the pixels read by their own rays run over (Stage 29): one for every body that
 	// bends, and every grating; with the table, so the scene's revision covers them

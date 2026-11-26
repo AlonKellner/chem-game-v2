@@ -22,8 +22,7 @@ godot::Color colour(uint32_t rgba) {
 }
 
 // (Stage 61) a picture's texture, made once for its hash
-godot::Ref<godot::ImageTexture> texture_of(const cg_draw_image &picture) {
-	static std::unordered_map<uint64_t, godot::Ref<godot::ImageTexture>> kept;
+godot::Ref<godot::ImageTexture> texture_of(const cg_draw_image &picture, Textures &kept) {
 	auto found = kept.find(picture.hash);
 	if (found != kept.end()) {
 		return found->second;
@@ -39,7 +38,7 @@ godot::Ref<godot::ImageTexture> texture_of(const cg_draw_image &picture) {
 
 } // namespace
 
-void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above) {
+void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above, Textures *textures) {
 	const godot::Ref<godot::Font> font = godot::ThemeDB::get_singleton()->get_fallback_font();
 	for (int32_t i = above ? list.above : 0; i < (above ? list.command_count : list.above); ++i) {
 		const cg_draw_command &c = list.commands[i];
@@ -73,8 +72,8 @@ void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above) {
 				}
 				break;
 			case CG_DRAW_IMAGE:
-				if (c.first >= 0 && c.first < list.image_count && list.images[c.first].rgb != nullptr) {
-					on->draw_texture_rect(texture_of(list.images[c.first]), godot::Rect2(c.x, c.y, c.w, c.h), false);
+				if (textures != nullptr && c.first >= 0 && c.first < list.image_count && list.images[c.first].rgb != nullptr) {
+					on->draw_texture_rect(texture_of(list.images[c.first], *textures), godot::Rect2(c.x, c.y, c.w, c.h), false);
 				}
 				break;
 			default:

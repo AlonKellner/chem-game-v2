@@ -608,7 +608,7 @@ void ChemLab::paint(godot::CanvasItem *on, bool above) {
 	cg_draw_list list;
 	list.size = sizeof list;
 	if (cg_ui_draw(ui_, &list) == CG_OK) {
-		paint_list(on, list, above);
+		paint_list(on, list, above, &textures_);
 	}
 	paint_ms_ += static_cast<double>(godot::Time::get_singleton()->get_ticks_usec() - began) / 1000.0;
 }
