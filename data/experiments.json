@@ -179,7 +179,7 @@
 		{
 			"id": "free_lab",
 			"title": "The lab, free",
-			"summary": "The demo's bench with no steps: everything in the cabinet, yours to try.",
+			"summary": "The demo's bench with no steps: everything in Supplies, yours to try.",
 			"bench": "benches/lab.json",
 			"tutorial": null
 		}

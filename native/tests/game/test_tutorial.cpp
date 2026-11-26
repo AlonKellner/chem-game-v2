@@ -172,7 +172,7 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 	std::string before = p.ui->lab().digest();
 	p.drag("item:burner", "square:11,12"); // the flask comes first
 	refused(before);
-	CHECK(p.item("burner").place == "cabinet");
+	CHECK(p.supplied("burner")); // (Stage 61: the cabinet is Supplies: refused, no copy is taken out)
 	p.drag("item:jar", "outbox");
 	refused(before);
 	p.drag("item:flask", "cabinet"); // the right item, the wrong place
@@ -192,7 +192,7 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 	p.click("panel:tip:malachite");
 	p.drag("item:acid", "square:7,12"); // the acid's time is the second stage
 	refused(p.ui->lab().digest());
-	CHECK(p.item("acid").place == "cabinet");
+	CHECK(p.supplied("acid")); // (Stage 61: refused, no copy is taken out of Supplies)
 	p.drag("item:balloon", "item:flask");
 	p.click("valve:burner@1");
 	CHECK(p.tutorial().step == 6);
@@ -226,7 +226,7 @@ TEST_CASE("tutorial: only the step's own gestures are taken, and nothing else ch
 	// reset is the player's too
 	p.click("reset");
 	CHECK(p.tutorial().step == 0);
-	CHECK(p.item("balloon").place == "cabinet");
+	CHECK(p.supplied("balloon")); // (Stage 61: reset, the bench as it began: the balloon a supply again)
 }
 
 TEST_CASE("tutorial: a failure ends the run until a restart (Stage 12)") {

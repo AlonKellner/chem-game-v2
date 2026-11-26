@@ -2,10 +2,15 @@
 
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/global_constants.hpp>
+#include <godot_cpp/classes/image.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
 #include <godot_cpp/variant/color.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
+
+#include <cstring>
+#include <unordered_map>
 
 namespace chem_godot {
 
@@ -16,9 +21,24 @@ godot::Color colour(uint32_t rgba) {
 			static_cast<float>(rgba & 0xff) / 255.0f);
 }
 
+// (Stage 61) a picture's texture, made once for its hash
+godot::Ref<godot::ImageTexture> texture_of(const cg_draw_image &picture, Textures &kept) {
+	auto found = kept.find(picture.hash);
+	if (found != kept.end()) {
+		return found->second;
+	}
+	godot::PackedByteArray bytes;
+	bytes.resize(static_cast<int64_t>(picture.w) * picture.h * 3);
+	std::memcpy(bytes.ptrw(), picture.rgb, static_cast<size_t>(bytes.size()));
+	const godot::Ref<godot::Image> image = godot::Image::create_from_data(picture.w, picture.h, false, godot::Image::FORMAT_RGB8, bytes);
+	const godot::Ref<godot::ImageTexture> texture = godot::ImageTexture::create_from_image(image);
+	kept.emplace(picture.hash, texture);
+	return texture;
+}
+
 } // namespace
 
-void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above) {
+void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above, Textures *textures) {
 	const godot::Ref<godot::Font> font = godot::ThemeDB::get_singleton()->get_fallback_font();
 	for (int32_t i = above ? list.above : 0; i < (above ? list.command_count : list.above); ++i) {
 		const cg_draw_command &c = list.commands[i];
@@ -49,6 +69,11 @@ void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above) {
 				if (font.is_valid()) {
 					on->draw_string(font, godot::Vector2(c.x, c.y), godot::String::utf8(list.text + c.first, c.count), godot::HORIZONTAL_ALIGNMENT_LEFT, -1.0f,
 							static_cast<int>(c.h), color);
+				}
+				break;
+			case CG_DRAW_IMAGE:
+				if (textures != nullptr && c.first >= 0 && c.first < list.image_count && list.images[c.first].rgb != nullptr) {
+					on->draw_texture_rect(texture_of(list.images[c.first], *textures), godot::Rect2(c.x, c.y, c.w, c.h), false);
 				}
 				break;
 			default:

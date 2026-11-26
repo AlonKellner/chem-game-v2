@@ -26,6 +26,22 @@
   sulfate crystals from malachite to a quota of 3.00 g, planned with the planner, made, and handed in against the
   plan's goal). (0.61.0 is another agent's Stage 61.) The goldens unchanged.
 
+## 0.61.0 (2026-11-26, Stage 61, merged after 0.62.0; signed off by the user: "I agree, it looks good! Approved, merge and proceed")
+
+- §4.3 (Stage 61, `docs/TDD_61_SUPPLIES.md`; the roadmap's area 8d): **the world open at its boundary**, between
+  steps only: a cell added and supplied from outside, a cell retired (all it holds leaves), a cell frozen (it takes
+  part in no process, its state standing). §18: **C9**, the world's totals its start's plus what was supplied less
+  what was retired.
+- §13: **Supplies** (the cabinet): what a bench gives without a square is a template, no part of the room's world,
+  that never runs out; `take` (or any command naming one none of whose copies is out) grafts a copy into the world;
+  a refused command leaves the lab as it was. **Storage** (the outbox): as many slots as it needs, goals on any,
+  still simulated, used straight from it; what went to the cabinet goes there. **The trash** freezes, restores as
+  it went in, and emptied sends its items out of the world.
+- §13.1: Supplies and Storage scrolled, each with a **search** (`lab/search.hpp`: what an item is, holds, is made
+  of, is for, and its state); each supply's box a **picture captured ahead** (`chem_tool capture`, `make pictures`;
+  the Godot host gives them back and keeps those it captures apart).
+- The pressure session's golden re-recorded with the user's approval (its physics unchanged).
+
 ## 0.60.0 (2026-11-26, Stage 60; signed off by the user: "Approved, merge and proceed")
 
 - §13.1 (Stage 60, `docs/TDD_60_PLANNER.md`; `docs/CURRICULUM.md`, step C's last part, S3): **the planner**, the

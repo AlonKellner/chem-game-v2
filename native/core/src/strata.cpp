@@ -187,7 +187,7 @@ void Simulation::find_columns() {
 	}
 	for (size_t c = 0; c < cells; ++c) {
 		// the head of a column: its top, over a layer or not yet (a vessel's column has none until it is layered)
-		if (is_lower[c] || !(world_.meta(CellId{ static_cast<int32_t>(c) }).column_volume > 0.0)) {
+		if (is_lower[c] || !(world_.meta(CellId{ static_cast<int32_t>(c) }).column_volume > 0.0) || world_.meta(CellId{ static_cast<int32_t>(c) }).frozen) {
 			continue;
 		}
 		Column column;

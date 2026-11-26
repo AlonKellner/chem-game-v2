@@ -141,14 +141,14 @@ TEST_CASE("experiments: the catalogue's list on the screen opens each bench and 
 	REQUIRE(p.ui->tutorial() != nullptr);
 	CHECK(p.ui->tutorial()->title() == "Experiment: boiling under a vacuum");
 	CHECK(p.item("flask").place == "bench");
-	CHECK(p.item("stopper").place == "cabinet");
+	CHECK(p.supplied("stopper")); // (Stage 61: the cabinet is Supplies, no copy out)
 	// played a little, then reset: the vacuum's bench and its first step again
 	p.drag("item:burner", "item:flask");
 	CHECK(p.tutorial().step == 1);
 	p.click("reset");
 	CHECK(p.ui->experiment() == "vacuum");
 	CHECK(p.tutorial().step == 0);
-	CHECK(p.item("burner").place == "cabinet");
+	CHECK(p.supplied("burner")); // (Stage 61: reset, the burner a supply again)
 	// the mode stays through another experiment
 	p.click("tutorial:strict");
 	p.click("menu:experiments");
@@ -427,7 +427,7 @@ TEST_CASE("experiments: the prism and the grating are in the list; chosen, the s
 	p.click("menu:experiments");
 	p.click("experiment:free_lab");
 	CHECK(p.ui->experiment() == "free_lab");
-	CHECK(p.drawn("cabinet"));
+	CHECK(p.drawn("supplies")); // (Stage 61: the cabinet panel is named Supplies)
 	// a catalogue naming a scene there is not is refused
 	CHECK_FALSE(p.ui->experiments(R"({"format": "chem-experiments/1", "experiments": [{"id": "x", "title": "X", "scene": "kaleidoscope"}]})", why, nullptr));
 	CHECK(why.find("scene") != std::string::npos);
@@ -704,7 +704,7 @@ TEST_CASE("experiment vapour: strict, the valve is shut before the stopper goes 
 	}
 	REQUIRE(p.tutorial().title == "Off");
 	p.drag("item:stopper", "item:flask"); // the stopper first: not yet
-	CHECK(p.item("stopper").place != "on");
+	CHECK(p.supplied("stopper")); // (Stage 61: not on the flask: refused, no copy is taken out of Supplies)
 	CHECK(p.ui->message().find("Not now") != std::string::npos);
 	p.click("item:burner");
 	p.click("valve:burner@0");

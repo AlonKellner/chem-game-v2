@@ -32,7 +32,7 @@
 		{
 			"part": "The instrument",
 			"title": "The spectrophotometer",
-			"text": "Pick up the spectrophotometer in the cabinet and set it on the bench, at the left.",
+			"text": "Pick up the spectrophotometer in Supplies and set it on the bench, at the left.",
 			"why": "It shines one colour at a time through a cuvette and measures how much comes out: the absorbance, A = -log10 of the share that passes.",
 			"checks": [
 				{

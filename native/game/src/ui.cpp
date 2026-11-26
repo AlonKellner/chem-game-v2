@@ -8,6 +8,7 @@
 #include "chem/builtin_ids.hpp"
 #include "lab/calculator.hpp"
 #include "lab/planner.hpp"
+#include "lab/search.hpp"
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
 #include "lab/spectrometer.hpp"
@@ -25,6 +26,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <cstring>
+#include <future>
 #include <map>
 #include <set>
 #include <utility>
@@ -344,6 +347,26 @@ struct Ui::Impl {
 	bool slider_drag = false;
 	// the cabinet (Stage 48): its first row on the screen, and whether its scroll bar is held
 	int cabinet_from = 0;
+	// (Stage 61) Supplies (the cabinet's place on the screen) and Storage (the outbox): where the supplies begin among
+	// the screen's items (after the lab's own: each one the cabinet shows, as a copy of it is when taken out); Storage's
+	// first slot on the screen and whether its bar is held; the two searches, and which of them is typed into (0 none,
+	// 1 Supplies, 2 Storage)
+	int supply_base = 0;
+	// (Stage 61) a copy just taken out of Supplies by a press, in hand: the lab before it was taken, and whether it was
+	// put somewhere it stays (a square, equipment, Storage)
+	std::string fresh_copy, fresh_undo;
+	// (Stage 61) the supplies' pictures, by what is drawn of each (picture_key); the one being captured apart (its
+	// key, and its picture as it comes); whether one was captured since the host last took them; one to capture,
+	// alone in the cabinet's first box (capture_one)
+	std::map<std::string, Picture> pictures;
+	std::string capturing_key;
+	std::future<Picture> capturing;
+	bool pictures_new = false;
+	std::string capture_only;
+	int storage_from = 0;
+	bool storage_scrolling = false;
+	std::string supplies_query, storage_query;
+	int search_focus = 0;
 	bool cabinet_scrolling = false;
 	int hover = -1;
 	// the pour panel
@@ -429,6 +452,13 @@ struct Ui::Impl {
 
 	void refresh() {
 		view = lab->view();
+		supply_base = static_cast<int>(view.items.size());
+		for (const ItemView &s : view.supplies) { // (Stage 61) those the search leaves, in the cabinet's boxes
+			if (capture_only.empty() ? lab::search::matches(supplies_query, lab::search::keywords(s)) : s.id == capture_only) {
+				view.items.push_back(s);
+				view.items.back().place = "cabinet";
+			}
+		}
 		if (!opened.empty() && item_index(opened) < 0) {
 			opened.clear(); // the open circuit was given back, or scrapped
 		}
@@ -451,8 +481,9 @@ struct Ui::Impl {
 			for (const std::string &n : circuit_parts()) {
 				names.push_back(n);
 			}
+			const std::vector<std::string> before = ids_now();
 			if (act({ { "do", "circuit" }, { "parts", names } })) {
-				choose_only(static_cast<int>(view.items.size()) - 1);
+				choose_only(newest(before));
 			}
 			return true;
 		}
@@ -764,6 +795,155 @@ struct Ui::Impl {
 			note_value.clear();
 			note_focus = 2;
 		}
+	}
+	// ---- the supplies' pictures (Stage 61): what is drawn of a supply, as a key (FNV-1a: the same on every build of
+	// the same source, so a picture built ahead is found again); a box's pixels read from a scene; one captured alone
+	OpticsRoom room_was, room_drawn; // (the wall behind glass, and as it is painted)
+	bool capture_ahead = false; // (a host's: supplies with no picture captured apart, one at a time)
+	static std::string picture_key(const ItemView &s) {
+		json j = { { "pictures", 3 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
+			{ "h", s.h }, { "label", s.label }, { "wall", s.wall_mm }, { "floor", s.floor_mm }, { "condenser", s.condenser } };
+		json held = json::array();
+		for (const SubstanceView &c : s.contents) {
+			held.push_back({ c.species, std::string(1, c.phase), std::round(c.mol * 1e9) / 1e9, c.particles, std::round(c.size_um) });
+		}
+		j["holds"] = held;
+		const std::string text = j.dump();
+		uint64_t h = 1469598103934665603ull;
+		for (const char c : text) {
+			h = (h ^ static_cast<uint8_t>(c)) * 1099511628211ull;
+		}
+		char out[17];
+		std::snprintf(out, sizeof out, "%016llx", static_cast<unsigned long long>(h));
+		return out;
+	}
+	// the wall's grey where no body is (as the room's shapes draw it)
+	static double wall_at(const OpticsRoom &room, double x, double y) {
+		double r = x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h ? room.bench : room.elsewhere;
+		for (const OpticsShape &s : room.shapes) {
+			if (x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h) {
+				r = s.radiance;
+			}
+		}
+		return r;
+	}
+	static Picture capture_box(const OpticsScene &scene, const OpticsRoom &room, Rect box) {
+		Picture p;
+		p.w = static_cast<int>(box.w);
+		p.h = static_cast<int>(box.h);
+		p.rgb.assign(static_cast<size_t>(p.w) * static_cast<size_t>(p.h) * 3, 0);
+		const auto encode = [](double v) {
+			v = std::clamp(v, 0.0, 1.0);
+			return v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1.0 / 2.4) - 0.055;
+		};
+		uint64_t h = 1469598103934665603ull;
+		for (int y = 0; y < p.h; ++y) {
+			for (int x = 0; x < p.w; ++x) {
+				const int sx = static_cast<int>(box.x) + x, sy = static_cast<int>(box.y) + y;
+				double rgba[4];
+				optics_pixel(scene, sx, sy, rgba);
+				const double wall = encode(wall_at(room, sx + 0.5, sy + 0.5));
+				for (int c = 0; c < 3; ++c) {
+					const double v = rgba[c] * rgba[3] + wall * (1.0 - rgba[3]);
+					const auto byte = static_cast<uint8_t>(std::lround(std::clamp(v, 0.0, 1.0) * 255.0));
+					p.rgb[(static_cast<size_t>(y) * static_cast<size_t>(p.w) + static_cast<size_t>(x)) * 3 + static_cast<size_t>(c)] = byte;
+					h = (h ^ byte) * 1099511628211ull;
+				}
+			}
+		}
+		p.hash = h;
+		return p;
+	}
+	// a supply alone in the cabinet's first box, composed; its picture captured now (wait), or apart
+	void capture_one(const std::string &supply, bool wait) {
+		const ItemView *s = nullptr;
+		for (const ItemView &v : view.supplies) {
+			s = v.id == supply ? &v : s;
+		}
+		if (s == nullptr) {
+			return;
+		}
+		const std::string key = picture_key(*s);
+		const int scrolled = cabinet_from;
+		const View seen = vw;
+		vw = view_whole(VIEW_ROOM);
+		capture_only = supply;
+		cabinet_from = 0;
+		refresh();
+		compose();
+		const std::optional<Rect> box = cabinet_box(0);
+		if (box) {
+			if (wait) {
+				pictures[key] = capture_box(scene, room_drawn, *box);
+				pictures_new = true;
+			} else {
+				capturing_key = key;
+				capturing = std::async(std::launch::async, [frozen = scene, room = room_drawn, at = *box]() { return capture_box(frozen, room, at); });
+			}
+		}
+		capture_only.clear();
+		cabinet_from = scrolled;
+		vw = seen;
+		refresh();
+	}
+	// at a frame: a picture captured apart taken in; the next supply with none, begun
+	void follow_pictures() {
+		if (capturing.valid() && capturing.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+			pictures[capturing_key] = capturing.get();
+			pictures_new = true;
+		}
+		if (!capture_ahead || capturing.valid()) {
+			return;
+		}
+		for (const ItemView &s : view.supplies) {
+			if (pictures.find(picture_key(s)) == pictures.end()) {
+				capture_one(s.id, false);
+				return;
+			}
+		}
+	}
+	// ---- the searches (Stage 61): a field over Supplies and one over Storage
+	static Rect search_rect(int which) { return which == 1 ? Rect{ CABINET.x + 104, CABINET.y + 6, 126, 26 } : Rect{ OUTBOX.x + OUTBOX.w - 230, OUTBOX.y + 5, 222, 26 }; }
+	bool search_press(float x, float y) {
+		for (const int which : { 1, 2 }) {
+			if (search_rect(which).has(x, y)) {
+				search_focus = which;
+				return true;
+			}
+		}
+		search_focus = 0;
+		return false;
+	}
+	bool type_search(Ui::Key key, uint32_t codepoint) {
+		if (search_focus == 0) {
+			return false;
+		}
+		std::string &q = search_focus == 1 ? supplies_query : storage_query;
+		if (key == Ui::KeyText && codepoint >= 32 && codepoint < 127) {
+			if (q.size() < 40) {
+				q += static_cast<char>(codepoint);
+			}
+		} else if (key == Ui::KeyBackspace) {
+			if (!q.empty()) {
+				q.pop_back();
+			}
+		} else if (key == Ui::KeyEscape) {
+			q.clear();
+			search_focus = 0;
+		} else if (key == Ui::KeyEnter) {
+			search_focus = 0;
+		}
+		cabinet_from = 0;
+		storage_from = 0;
+		refresh();
+		return true;
+	}
+	void paint_search(int which) {
+		const Rect r = search_rect(which);
+		const std::string &q = which == 1 ? supplies_query : storage_query;
+		rect_fill(r, PANEL_FILL);
+		outline(r, search_focus == which ? GUIDE : GRID, search_focus == which ? 2.0f : 1.0f);
+		text(r.x + 8, r.y + 18, q.empty() && search_focus != which ? "search" : q + (search_focus == which ? "_" : ""), q.empty() ? DIM : INK, 14);
 	}
 	bool type_note(Ui::Key key, uint32_t codepoint) {
 		if (!notebook_open || note_focus == 0) {
@@ -1856,6 +2036,7 @@ struct Ui::Impl {
 		return screen;
 	}
 	void follow() {
+		settle_fresh();
 		if (tutorial) {
 			tutorial->follow(view, screen_now());
 			if (tutorial->view().state == TutorialView::Complete && shown_k >= 0) {
@@ -2325,7 +2506,7 @@ struct Ui::Impl {
 		for (int i = 0; i < index; ++i) {
 			k += view.items[static_cast<size_t>(i)].kind == "thermal" ? 1 : 0;
 		}
-		return 1u << (k % 24);
+		return 1u << (k % 23); // (Stage 61: the 24th the panels')
 	}
 	// its frame: in hand, where the pointer has it; fixed on the room, there; else over its own screen
 	Rect camera_frame(int index) const {
@@ -2773,6 +2954,62 @@ struct Ui::Impl {
 	}
 
 	const std::string &id(int index) const { return view.items[static_cast<size_t>(index)].id; }
+	// (Stage 61) a fresh copy's carry over: put where it stays (on the bench, on or under equipment, handed in to
+	// Storage's slot it was dropped on), it is kept; still in Storage otherwise (put nowhere, back over Supplies, a
+	// drop refused), the lab is loaded back as it was before it was taken
+	bool fresh_dropped_in_storage = false;
+	void settle_fresh() {
+		if (fresh_copy.empty()) {
+			return;
+		}
+		const int at = item_index(fresh_copy);
+		if (at >= 0 && at == drag) {
+			return; // still in hand
+		}
+		const std::string &place = at >= 0 ? view.items[static_cast<size_t>(at)].place : std::string();
+		const bool stays = place == "bench" || place == "on" || place == "under" || (place == "outbox" && fresh_dropped_in_storage);
+		if (!stays) {
+			const std::string refused = message;
+			std::string no;
+			if (std::unique_ptr<Lab> was = Lab::load(fresh_undo, no)) {
+				lab = std::move(was);
+				drag = -1;
+				carrying = false;
+				refresh();
+				choose_only(-1);
+			}
+			message = refused;
+		}
+		fresh_copy.clear();
+		fresh_undo.clear();
+		fresh_dropped_in_storage = false;
+	}
+	// (Stage 61) the name a supply's box is known by in the pass, apart from its first copy's
+	std::map<std::string, std::string> supply_names;
+	const char *supply_name(const std::string &id) {
+		std::string &name = supply_names[id];
+		if (name.empty()) {
+			name = "supply:" + id;
+		}
+		return name.c_str();
+	}
+	// the lab's items and parts by id, and the one made since (Stage 61: what the screen lists after them, Supplies,
+	// is not the lab's: the newest is found by its id, not as the last)
+	std::vector<std::string> ids_now() const {
+		std::vector<std::string> out;
+		for (int i = 0; i < supply_base; ++i) {
+			out.push_back(view.items[static_cast<size_t>(i)].id);
+		}
+		return out;
+	}
+	int newest(const std::vector<std::string> &before) const {
+		for (int i = 0; i < supply_base; ++i) {
+			if (std::find(before.begin(), before.end(), view.items[static_cast<size_t>(i)].id) == before.end()) {
+				return i;
+			}
+		}
+		return supply_base - 1;
+	}
 
 	// ------------------------------------------------------------- the selection (§13.1)
 
@@ -2958,6 +3195,15 @@ struct Ui::Impl {
 	Rect drawn(int index) const {
 		Rect r = rect(index);
 		if (index == drag) {
+			const ItemView &v = view.items[static_cast<size_t>(index)];
+			if (v.place == "cabinet" || v.place == "outbox" || v.place == "trash") {
+				// (Stage 61) taken up from off the bench: in hand at its full size, held at the same share of it
+				float w = 0, h = 0;
+				size_of(v, w, h);
+				const float sx = r.w > 0.0f ? w / r.w : 1.0f, sy = r.h > 0.0f ? h / r.h : 1.0f;
+				r = Rect{ px - grab_x * sx, py - grab_y * sy, w, h };
+				return r;
+			}
 			r.x = px - grab_x;
 			r.y = py - grab_y;
 			float lx = 0, ly = 0, tx = 0, ty = 0;
@@ -3052,6 +3298,43 @@ struct Ui::Impl {
 		if (!guided_drop(index, target, x, y)) {
 			return; // back where it was
 		}
+		if (index >= supply_base) {
+			// (Stage 61) a supply: a copy of it is taken out, and it is that copy that lands; back over Supplies or into the
+			// trash, nothing is taken
+			if (CABINET.has(x, y) || TRASH.has(x, y)) {
+				return;
+			}
+			if (BENCH.has(x, y) && target < 0) {
+				const int col = std::clamp(static_cast<int>((x - BENCH.x) / square()) - anchor_c, 0, std::max(0, view.cols - v.w));
+				const int row = std::clamp(static_cast<int>((y - BENCH.y) / square()) - anchor_r, 0, std::max(0, view.rows - v.h));
+				if (act({ { "do", "take" }, { "supply", v.id }, { "at", { col, row } } })) {
+					choose_only(item_index(lab->last_taken()));
+				}
+				return;
+			}
+			// onto equipment: its copy taken out and dropped there; refused there, the lab as it was before, that copy too
+			const std::string before = lab->save();
+			if (!act({ { "do", "take" }, { "supply", v.id } })) {
+				return;
+			}
+			const std::string copy = lab->last_taken();
+			const int made = item_index(copy);
+			message.clear();
+			if (made >= 0 && made < supply_base) {
+				drop(made, x, y);
+			}
+			const int now = item_index(copy);
+			if (!message.empty() && (now < 0 || view.items[static_cast<size_t>(now)].place == "outbox")) {
+				const std::string refused = message;
+				std::string no;
+				if (std::unique_ptr<Lab> was = Lab::load(before, no)) {
+					lab = std::move(was);
+					refresh();
+				}
+				message = refused;
+			}
+			return;
+		}
 		if (is_part_kind(v.kind)) {
 			// a signal part: along the bench or within its open circuit, or back to the drawer
 			int inner_col = 0, inner_row = 0;
@@ -3136,7 +3419,7 @@ struct Ui::Impl {
 			if (slot_at(x, y) > 0) {
 				c["slot"] = slot_at(x, y);
 			}
-			act(c);
+			fresh_dropped_in_storage = act(c) && v.id == fresh_copy; // (Stage 61: a fresh copy set in Storage stays there)
 			return;
 		}
 		if (TRASH.has(x, y)) {
@@ -3166,9 +3449,17 @@ struct Ui::Impl {
 			drop_frame(framing, x, y); // a frame in hand (Stage 48): this press is where it goes
 			return;
 		}
+		if (search_press(x, y)) {
+			return; // a search's field, to type into (Stage 61)
+		}
 		if (cabinet_most_from() > 0 && Rect{ CAB_BAR_X - 6, CAB_TOP, 20, cabinet_track().h }.has(x, y) && drag < 0) {
 			cabinet_scrolling = true; // the cabinet's bar, held (Stage 48)
 			cabinet_scroll_to(y);
+			return;
+		}
+		if (storage_most_from() > 0 && Rect{ storage_track().x, storage_track().y - 6, storage_track().w, 18 }.has(x, y) && drag < 0) {
+			storage_scrolling = true; // Storage's bar, held (Stage 61)
+			storage_scroll_to(x);
 			return;
 		}
 		if (probing >= 0 && probe_in_hand) {
@@ -3454,9 +3745,25 @@ struct Ui::Impl {
 			}
 			return;
 		}
-		const int hit = item_at(x, y);
+		int hit = item_at(x, y);
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
 			return; // the open circuit's panel: no rectangle across it
+		}
+		std::optional<Rect> held_by; // (Stage 61) what was pressed, when it is not what is held: a supply's box
+		if (hit >= supply_base && !(mods & Ui::ModAny)) {
+			// (Stage 61) a supply pressed: its copy taken out at once, a real item in hand at its full size, simulated and
+			// drawn by the pass; put nowhere, back over Supplies or refused where it is dropped, the lab is as it was
+			held_by = rect(hit);
+			const std::string before = lab->save();
+			if (!act({ { "do", "take" }, { "supply", id(hit) } })) {
+				return;
+			}
+			fresh_copy = lab->last_taken();
+			fresh_undo = before;
+			hit = item_index(fresh_copy);
+			if (hit < 0) {
+				return;
+			}
 		}
 		if (hit < 0 && BENCH.has(x, y)) {
 			marquee = true; // a rectangle, or, let go where it began, a click on nothing
@@ -3465,20 +3772,18 @@ struct Ui::Impl {
 		if (hit < 0 && (CABINET.has(x, y) || OUTBOX.has(x, y)) && !(mods & Ui::ModAny)) {
 			choose_only(-1); // a click on nothing lets go of the selection
 		}
-		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place == "outbox") {
-			if (mods & Ui::ModAny) {
-				toggle(hit);
-			} else {
-				choose_only(hit); // handed in: it can be read, and watched, but not moved
-			}
-		}
-		if (hit >= 0 && view.items[static_cast<size_t>(hit)].place != "outbox") {
+		if (hit >= 0) { // (Stage 61: what is in Storage is taken up as anything off the bench is)
 			// a press takes it in hand; a release without moving it selects it (§13.3),
 			// and a drop the tutorial does not ask for is refused when it is let go
-			const Rect r = rect(hit);
+			const Rect r = held_by ? *held_by : rect(hit); // (held where it was pressed: a supply's box, its copy's size)
 			drag = hit;
 			grab_x = x - r.x;
 			grab_y = y - r.y;
+			if (held_by) {
+				const Rect own = rect(hit); // (drawn() scales the hold from the copy's rectangle to its full size)
+				grab_x *= own.w / std::fmax(r.w, 1.0f);
+				grab_y *= own.h / std::fmax(r.h, 1.0f);
+			}
 			moved = false;
 			const ItemView &v = view.items[static_cast<size_t>(hit)];
 			if (v.place == "bench") { // held by the square under the pointer
@@ -3584,16 +3889,86 @@ struct Ui::Impl {
 	}
 
 	// ---- the outbox's slots and their goals (§13.5)
-	static Rect slot_rect(int k) { return Rect{ OUTBOX.x + 8 + static_cast<float>(k - 1) * 104, OUTBOX.y + 36, 100, 258 }; }
-	static int slot_at(float x, float y) {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+	// ---- Storage (Stage 61: the outbox, as many slots as it needs): at least six, always one free after the last that
+	// holds anything or has a goal; those its search leaves, six on the screen at a time, scrolled a slot at a time
+	static constexpr int SHOWN_SLOTS = 6;
+	static constexpr uint32_t PANEL_BIT = 1u << 23; // (Stage 61: the pixel source's PANEL_BIT)
+	int storage_count() const {
+		int last = OUTBOX_SLOTS - 1;
+		for (const ItemView &v : view.items) {
+			last = v.place == "outbox" ? std::max(last, v.slot) : last;
+		}
+		for (const Goal &g : view.goals) {
+			last = std::max(last, g.slot);
+		}
+		return last + 1;
+	}
+	std::vector<int> shown_slots() const {
+		std::vector<int> out;
+		for (int k = 1; k <= storage_count(); ++k) {
+			const Goal *g = goal_of(k);
+			bool shown = storage_query.empty();
+			for (const ItemView &v : view.items) {
+				if (!shown && v.place == "outbox" && v.slot == k) {
+					shown = lab::search::matches(storage_query, lab::search::keywords(v, g != nullptr ? std::string_view(g->name) : std::string_view{}));
+				}
+			}
+			if (!shown && g != nullptr) {
+				std::vector<std::string> words{ "goal", std::to_string(k) };
+				words.push_back(g->name);
+				std::string w;
+				for (const char c : g->name + " ") {
+					if (c == ' ') {
+						if (!w.empty()) {
+							words.push_back(w);
+						}
+						w.clear();
+					} else {
+						w += static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+					}
+				}
+				shown = lab::search::matches(storage_query, words);
+			}
+			if (shown) {
+				out.push_back(k);
+			}
+		}
+		return out;
+	}
+	int storage_most_from() const { return std::max(static_cast<int>(shown_slots().size()) - SHOWN_SLOTS, 0); }
+	void storage_scroll(int slots) { storage_from = std::clamp(storage_from + slots, 0, storage_most_from()); }
+	// a slot's box, where it is shown (off the screen while scrolled out of sight, or left by the search)
+	Rect slot_rect(int k) const {
+		const std::vector<int> shown = shown_slots();
+		const auto at = std::find(shown.begin(), shown.end(), k);
+		const int pos = at == shown.end() ? -1 : static_cast<int>(at - shown.begin()) - std::clamp(storage_from, 0, storage_most_from());
+		if (pos < 0 || pos >= SHOWN_SLOTS) {
+			return Rect{ -10000, -10000, 0, 0 };
+		}
+		return Rect{ OUTBOX.x + 8 + static_cast<float>(pos) * 104, OUTBOX.y + 36, 100, 250 };
+	}
+	// its scroll bar (none while every slot shown is on the screen), under the slots
+	Rect storage_track() const { return Rect{ OUTBOX.x + 8, OUTBOX.y + OUTBOX.h - 10, SHOWN_SLOTS * 104.0f - 4, 6 }; }
+	Rect storage_thumb() const {
+		const Rect t = storage_track();
+		const float share = static_cast<float>(SHOWN_SLOTS) / static_cast<float>(std::max<size_t>(shown_slots().size(), 1));
+		const float w = std::fmax(t.w * std::fmin(share, 1.0f), 24.0f);
+		const float at = storage_most_from() > 0 ? static_cast<float>(std::clamp(storage_from, 0, storage_most_from())) / static_cast<float>(storage_most_from()) : 0.0f;
+		return Rect{ t.x + (t.w - w) * at, t.y, w, t.h };
+	}
+	void storage_scroll_to(float x) {
+		const Rect t = storage_track();
+		storage_from = static_cast<int>(std::lround(std::clamp((x - t.x) / std::fmax(t.w, 1.0f), 0.0f, 1.0f) * static_cast<float>(storage_most_from())));
+	}
+	int slot_at(float x, float y) const {
+		for (const int k : shown_slots()) {
 			if (slot_rect(k).has(x, y)) {
 				return k;
 			}
 		}
 		return 0;
 	}
-	static Rect goal_button(int k) { return Rect{ slot_rect(k).x + 20, slot_rect(k).y + 4, 58, 22 }; }
+	Rect goal_button(int k) const { return Rect{ slot_rect(k).x + 20, slot_rect(k).y + 4, 58, 22 }; }
 	const Goal *goal_of(int k) const {
 		for (const Goal &g : view.goals) {
 			if (g.slot == k) {
@@ -3605,7 +3980,7 @@ struct Ui::Impl {
 	// the first free slot, without a goal first: where a drop on "outbox" goes, as a submit with none
 	int free_slot() const {
 		for (const bool goal_ok : { false, true }) {
-			for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+			for (int k = 1; k <= storage_count(); ++k) {
 				bool held = false;
 				for (const ItemView &v : view.items) {
 					held = held || (v.place == "outbox" && v.slot == k);
@@ -3615,10 +3990,10 @@ struct Ui::Impl {
 				}
 			}
 		}
-		return OUTBOX_SLOTS;
+		return storage_count();
 	}
 	bool goal_press(float x, float y) {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+		for (const int k : shown_slots()) {
 			const Goal *g = goal_of(k);
 			if (goal_button(k).has(x, y) && (g == nullptr || !g->game)) {
 				if (allowed_click("goal:" + std::to_string(k))) {
@@ -4501,10 +4876,11 @@ struct Ui::Impl {
 	// a part let go on the bench, out of the drawer: made there, and its settings opened
 	void drop_making(int kind, float x, float y) {
 		int inner_col = 0, inner_row = 0;
+		const std::vector<std::string> before = ids_now();
 		if (!opened.empty() && circuit_panel().has(x, y)) {
 			if (inner_square(x, y, inner_col, inner_row) &&
 					act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { inner_col, inner_row } }, { "in", opened } })) {
-				const int made = static_cast<int>(view.items.size()) - 1;
+				const int made = newest(before);
 				choose_only(made);
 				edit_part(made);
 			}
@@ -4519,7 +4895,7 @@ struct Ui::Impl {
 		}
 		const int col = static_cast<int>((x - BENCH.x) / square()), row = static_cast<int>((y - BENCH.y) / square());
 		if (act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { col, row } } })) {
-			const int made = static_cast<int>(view.items.size()) - 1;
+			const int made = newest(before);
 			choose_only(made);
 			edit_part(made);
 			if (running() && senses(view.items[static_cast<size_t>(made)].part.kind)) {
@@ -4610,6 +4986,9 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (type_search(key, codepoint)) {
+			return; // a search's field (Stage 61)
+		}
 		if (type_predict(key, codepoint) || type_report(key, codepoint)) {
 			return; // a prediction's field (Stage 55), the report's (Stage 54)
 		}
@@ -4856,6 +5235,13 @@ struct Ui::Impl {
 	void rect_fill(const Rect &r, uint32_t color) {
 		const Rect s = room_paint != 0 ? on_screen(r) : r;
 		list.commands.push_back(DrawCommand{ DrawCommand::Rect, color, 1, 0, 0, s.x, s.y, s.w, s.h });
+	}
+	// (Stage 61) a picture over a rectangle, as the screen paints it: no part of the room (the pass never sees it)
+	void image(const Rect &r, const Picture &p) {
+		const Rect s = room_paint != 0 ? on_screen(r) : r;
+		DrawCommand c{ DrawCommand::Image, 0xffffffff, 1, static_cast<int32_t>(list.images.size()), 0, s.x, s.y, s.w, s.h };
+		list.commands.push_back(c);
+		list.images.push_back(DrawImage{ p.w, p.h, p.rgb.data(), p.hash });
 	}
 	void outline(const Rect &r, uint32_t color, float width = 2) {
 		const Rect s = room_paint != 0 ? on_screen(r) : r;
@@ -5138,7 +5524,7 @@ struct Ui::Impl {
 
 	// the outbox's slots: each one's goal, its terms now, a lamp lit while it is met (§13.5)
 	void paint_slots() {
-		for (int k = 1; k <= OUTBOX_SLOTS; ++k) {
+		for (const int k : shown_slots()) {
 			const Rect r = slot_rect(k);
 			const Goal *g = goal_of(k);
 			std::string held; // what is handed in there
@@ -5262,6 +5648,7 @@ struct Ui::Impl {
 		list.commands.clear();
 		list.points.clear();
 		list.text.clear();
+		list.images.clear();
 		list.above = 0;
 		room_paint = 0;
 		rect_fill(Rect{ 0, 0, 1920, 1080 }, BACKGROUND);
@@ -5278,16 +5665,27 @@ struct Ui::Impl {
 		for (int r = 0; r <= view.rows; ++r) {
 			ruled(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq);
 		}
+		// (Stage 61) the supplies' pictures, under the pass: the screen's own, never in the way of a ray (what is held
+		// over them is drawn by the pass, over them, seeing the room's wall)
+		for (int i = supply_base; i < static_cast<int>(view.items.size()); ++i) {
+			const auto pic = pictures.find(picture_key(view.items[static_cast<size_t>(i)]));
+			const std::optional<Rect> box = pic != pictures.end() && capture_only.empty() ? cabinet_box(slot(i, "cabinet")) : std::nullopt;
+			if (box) {
+				image(*box, pic->second);
+			}
+		}
+		// ---- the optical pass goes here: what is in the vessels and the balloons
+		list.above = static_cast<int32_t>(list.commands.size());
+		room_paint = 2; // over the room: its names and highlights, placed by the view
+		// (Stage 61) the panels' outlines over it: the panels are the screen's, no part of the wall seen through glass
 		for (const Rect &box : { CABINET, OUTBOX }) {
 			ruled(box.x, box.y, box.x + box.w, box.y);
 			ruled(box.x, box.y + box.h, box.x + box.w, box.y + box.h);
 			ruled(box.x, box.y, box.x, box.y + box.h);
 			ruled(box.x + box.w, box.y, box.x + box.w, box.y + box.h);
 		}
-		// ---- the optical pass goes here: what is in the vessels and the balloons
-		list.above = static_cast<int32_t>(list.commands.size());
-		room_paint = 2; // over the room: its names and highlights, placed by the view
-		text(CABINET.x + 16, CABINET.y + 24, "cabinet", WALL_INK);
+		text(CABINET.x + 16, CABINET.y + 24, "supplies", WALL_INK); // (Stage 61: never runs out)
+		paint_search(1);
 		if (cabinet_most_from() > 0) {
 			// its scroll bar (Stage 48): where its rows on the screen are among all of them
 			rect_fill(cabinet_track(), WALL_GRID);
@@ -5303,8 +5701,13 @@ struct Ui::Impl {
 			text(TRASH.x + 8, TRASH.y + 44, "Backspace puts what is chosen here;", WALL_INK, 12);
 			text(TRASH.x + 8, TRASH.y + 60, "Ctrl+Z brings the last back", WALL_INK, 12);
 		}
-		text(OUTBOX.x + 16, OUTBOX.y + 26, "outbox: drop onto a slot to hand in", WALL_INK);
+		text(OUTBOX.x + 16, OUTBOX.y + 26, "storage: set aside, or handed in to a goal", WALL_INK); // (Stage 61: the outbox)
+		paint_search(2);
 		paint_slots();
+		if (storage_most_from() > 0) {
+			rect_fill(storage_track(), WALL_GRID);
+			rect_fill(storage_thumb(), storage_scrolling ? INK : WALL_INK);
+		}
 		paint_room_overlays();
 		room_paint = 0;
 		if (zoomed()) {
@@ -5437,12 +5840,12 @@ struct Ui::Impl {
 		}
 		if (after("slot:", rest)) {
 			const int k = number(rest);
-			return k >= 1 && k <= OUTBOX_SLOTS && found(slot_rect(k));
+			return k >= 1 && k <= storage_count() && found(slot_rect(k));
 		}
 		if (after("goal:", rest)) {
 			const int k = number(rest);
-			const Goal *g = k >= 1 && k <= OUTBOX_SLOTS ? goal_of(k) : nullptr;
-			return k >= 1 && k <= OUTBOX_SLOTS && draft.edit == Draft::None && (g == nullptr || !g->game) && found(goal_button(k));
+			const Goal *g = k >= 1 && k <= storage_count() ? goal_of(k) : nullptr;
+			return k >= 1 && k <= storage_count() && draft.edit == Draft::None && (g == nullptr || !g->game) && found(goal_button(k));
 		}
 		if (draft.edit == Draft::Goal && after("edit:", rest)) {
 			if (pick_row >= 0) {
@@ -5735,6 +6138,10 @@ struct Ui::Impl {
 			r = Rect{ CABINET.x, CABINET.y, CABINET.w, TRASH.y - CABINET.y - 8 }; // (over the trash)
 			return true;
 		}
+		if (what == "search:supplies" || what == "search:storage") { // (Stage 61)
+			r = search_rect(what == "search:supplies" ? 1 : 2);
+			return true;
+		}
 		if (what == "trash") {
 			r = TRASH;
 			return true;
@@ -5971,11 +6378,13 @@ struct Ui::Impl {
 		};
 		const auto add = [&](int i, const Rect &r, bool in_hand) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const std::string who = i >= supply_base ? std::string(supply_name(v.id)) : v.id; // (Stage 61: a supply's box apart from its first copy)
 			if (v.kind == "stopper") { // rubber (Stage 28), opaque, lit by the room
-				thing(v.id, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
+				thing(who, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
 			} else if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
+				body.named = i >= supply_base ? supply_name(v.id) : nullptr; // (Stage 61: a supply's box is not its first copy)
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
 					body.side = side_of(i);
@@ -5984,21 +6393,21 @@ struct Ui::Impl {
 				bodies.push_back(body);
 				if (v.screwed) { // its screw cap on (Stage 28)
 					const float mouth = mouth_px(i) + 8;
-					thing(v.id, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
+					thing(who, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
 				}
 				if (v.condenser) {
-					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
+					bar(who, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
 				if (const glass::Vessel *g = glass_of(v); g != nullptr && (g->outlet || g->mark) && !body.flipped && body.angle == 0.0f) {
 					// (Stage 52) a burette's stopcock, a key across it; a mark etched round its neck, at its true volume
 					const float px_cm = r.h / static_cast<float>(g->height);
 					if (v.glassware == "burette") {
 						const float y = r.y + r.h - static_cast<float>(0.1 + 0.075 * g->height) * px_cm;
-						thing(v.id, "stopcock", OpticsBody::Slab, Rect{ r.cx() - 2.5f * r.w, y - 3.0f, 5.0f * r.w, 6.0f }, 2.0f, "cap_plastic", nullptr, in_hand);
+						thing(who, "stopcock", OpticsBody::Slab, Rect{ r.cx() - 2.5f * r.w, y - 3.0f, 5.0f * r.w, 6.0f }, 2.0f, "cap_plastic", nullptr, in_hand);
 					}
 					if (g->mark && v.mark_ml) {
 						const float y = r.y + r.h - static_cast<float>(g->level(*v.mark_ml)) * px_cm, half = static_cast<float>(g->radius_inside(g->level(*v.mark_ml))) * px_cm + 2.0f;
-						bar(v.id, "mark", r.cx() - half, y, r.cx() + half, y, 1.0f, "lcd_black", in_hand);
+						bar(who, "mark", r.cx() - half, y, r.cx() + half, y, 1.0f, "lcd_black", in_hand);
 					}
 				}
 			} else if (v.kind == "thermal") {
@@ -6007,8 +6416,8 @@ struct Ui::Impl {
 				const float s = r.w / CAMERA_W;
 				const uint32_t bit = camera_bit(i);
 				const bool on = v.place == "bench";
-				bodies[thing(v.id, "case", OpticsBody::Slab, r, 6.0f * s, "viewer_case", nullptr, in_hand)].hidden = bit;
-				const size_t k = thing(v.id, "screen", on ? OpticsBody::Sensor : OpticsBody::Slab, camera_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				bodies[thing(who, "case", OpticsBody::Slab, r, 6.0f * s, "viewer_case", nullptr, in_hand)].hidden = bit;
+				const size_t k = thing(who, "screen", on ? OpticsBody::Sensor : OpticsBody::Slab, camera_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].hidden = bit;
 				if (on) {
 					camera_relay(i);
@@ -6018,16 +6427,16 @@ struct Ui::Impl {
 					if (away) {
 						const float x0 = f.x - 1, y0 = f.y - 1, x1 = f.x + f.w + 1, y1 = f.y + f.h + 1;
 						for (const auto &[a, b, c, d] : { std::array<float, 4>{ x0, y0, x1, y0 }, { x1, y0, x1, y1 }, { x1, y1, x0, y1 }, { x0, y1, x0, y0 } }) {
-							bar(v.id, "frame", a, b, c, d, 2.0f, "rig", framing == i);
+							bar(who, "frame", a, b, c, d, 2.0f, "rig", framing == i);
 							bodies.back().hidden = bit;
 						}
 					}
-					bodies[thing(v.id, "tab", OpticsBody::Slab, tab, 2.0f, "rig", nullptr, framing == i)].hidden = bit;
+					bodies[thing(who, "tab", OpticsBody::Slab, tab, 2.0f, "rig", nullptr, framing == i)].hidden = bit;
 				}
 			} else if (v.kind == "viewer") {
 				// the spectral viewer (Stage 42): its case, its screen showing its picture, its probe's holder
 				const float s = r.w / VIEWER_W;
-				thing(v.id, "case", OpticsBody::Slab, viewer_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, viewer_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
 				ViewerState &st = viewers[v.id];
 				if (!st.plotted) {
 					plot_spectrum({}, 0, st.picture);
@@ -6036,22 +6445,22 @@ struct Ui::Impl {
 				// (off the bench it is switched off: its screen dark, its probe reading nothing)
 				static const Picture OFF{};
 				const Picture &shows = v.place == "bench" ? st.picture : OFF;
-				const size_t k = thing(v.id, "screen", OpticsBody::Screen, viewer_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				const size_t k = thing(who, "screen", OpticsBody::Screen, viewer_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].image = shows.rgb.data();
 				bodies[k].image_w = shows.w;
 				bodies[k].image_h = shows.h;
 				bodies[k].image_hash = shows.hash;
-				thing(v.id, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
+				thing(who, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
 			} else if (v.kind == "balance") {
 				// a balance (Stage 50): its case, its pan of steel, its display showing its reading (dark off the bench)
 				const float s = r.w / BALANCE_W;
-				thing(v.id, "case", OpticsBody::Slab, balance_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
-				thing(v.id, "pan", OpticsBody::Slab, balance_pan(r), 2.0f * s, "burner_metal", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, balance_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "pan", OpticsBody::Slab, balance_pan(r), 2.0f * s, "burner_metal", nullptr, in_hand);
 				const instruments::Balance *model = instruments::balance(v.model);
 				Picture &shows = balances[v.id];
 				const std::string says = model != nullptr ? instruments::display_text(*model, v.display_g, v.overload) : std::string();
 				instruments::plot_display(says, shows);
-				const size_t k = thing(v.id, "display", OpticsBody::Screen, balance_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				const size_t k = thing(who, "display", OpticsBody::Screen, balance_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].image = shows.rgb.data();
 				bodies[k].image_w = shows.w;
 				bodies[k].image_h = shows.h;
@@ -6059,24 +6468,24 @@ struct Ui::Impl {
 			} else if (v.kind == "spectrophotometer") {
 				// a spectrophotometer (Stage 55): its case, its well, its two displays (dark off the bench)
 				const float s = r.w / SPECTRO_W;
-				thing(v.id, "case", OpticsBody::Slab, spectro_case(r), 8.0f * s, "viewer_case", nullptr, in_hand);
-				thing(v.id, "well", OpticsBody::Slab, spectro_well(r), 3.0f * s, "lcd_black", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, spectro_case(r), 8.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "well", OpticsBody::Slab, spectro_well(r), 3.0f * s, "lcd_black", nullptr, in_hand);
 				const bool on = v.place == "bench" || v.place == "under";
 				for (int d = 0; d < 2; ++d) {
 					Picture &shows = spectro_shows[v.id + (d == 0 ? ":a" : ":nm")];
 					instruments::plot_display(!on ? std::string() : d == 0 ? spectro::display_text(v.absorbance, v.blanked, v.overload) : spectro::wavelength_text(v.nm), shows);
-					const size_t k = thing(v.id, d == 0 ? "display" : "nm", OpticsBody::Screen, d == 0 ? spectro_display(r) : spectro_nm_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+					const size_t k = thing(who, d == 0 ? "display" : "nm", OpticsBody::Screen, d == 0 ? spectro_display(r) : spectro_nm_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 					bodies[k].image = shows.rgb.data();
 					bodies[k].image_w = shows.w;
 					bodies[k].image_h = shows.h;
 					bodies[k].image_hash = shows.hash;
 				}
 			} else if (v.kind == "burner") {
-				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
+				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
 					// its flame: from a sooty yellow, barely open, to a blue, wide open
 					const float flame = static_cast<float>(12.0 + 30.0 * v.valve);
-					const size_t k = thing(v.id, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
+					const size_t k = thing(who, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 					bodies[k].kelvin = v.celsius + 273.15; // its flame's temperature (Stage 46)
@@ -6090,29 +6499,40 @@ struct Ui::Impl {
 						ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
 					}
 				}
-				thing(v.id, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
+				thing(who, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
 				if (v.kind == "timer") {
 					// its time left: a strip of light along its foot, as long as the share of its time that is left
 					const Rect strip{ r.x + 5, r.y + r.h - 9, r.w - 10, 4 };
-					thing(v.id, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
+					thing(who, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
 					const double left = v.part.preset > 0 ? static_cast<double>(v.part.left) / static_cast<double>(v.part.preset) : 0.0;
 					if (left > 0.0) {
-						thing(v.id, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
+						thing(who, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
 					}
 				}
-				thing(v.id, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
+				thing(who, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
 				Rect port;
 				if (port_rect(i, port)) {
-					thing(v.id, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
+					thing(who, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
 				}
 				if (sense_rect(i, port)) {
-					thing(v.id, "sense port", OpticsBody::Slab, Rect{ port.cx() - 4, port.cy() - 4, 8, 8 }, 4.0f, "sense", nullptr, in_hand);
+					thing(who, "sense port", OpticsBody::Slab, Rect{ port.cx() - 4, port.cy() - 4, 8, 8 }, 4.0f, "sense", nullptr, in_hand);
 				}
 			}
 		};
 		for (int i = 0; i < static_cast<int>(view.items.size()); ++i) {
 			if (i != drag && !hidden(i)) {
+				// (Stage 61) a supply's box: its picture, captured ahead, shown by a screen of the box's size; drawn by the
+				// pass only until it has one (and while its own is being captured)
+				// (Stage 61) a supply's box with its picture: painted by the screen under the pass (paint), no body of it
+				if (i >= supply_base && capture_only.empty() && pictures.find(picture_key(view.items[static_cast<size_t>(i)])) != pictures.end()) {
+					continue;
+				}
+				const size_t first = bodies.size();
 				add(i, drawn(i), carrying_group() && chosen(i) && view.items[static_cast<size_t>(i)].place == "bench");
+				const std::string &place = view.items[static_cast<size_t>(i)].place;
+				for (size_t k = first; (place == "cabinet" || place == "outbox" || place == "trash") && k < bodies.size(); ++k) {
+					bodies[k].hidden |= PANEL_BIT; // (Stage 61: the panels' own: what is in hand over them does not see them)
+				}
 			}
 		}
 		if (drag >= 0) {
@@ -6348,6 +6768,46 @@ struct Ui::Impl {
 				shape(x - half, std::min(y, static_cast<double>(c.h)), x + half, std::max(y, static_cast<double>(c.h)), r);
 			}
 		}
+		room_drawn = room; // (Stage 61: as painted, for a supply's picture where no body is)
+		{
+			int k = 0;
+			for (const Rect &box : { CABINET, OUTBOX }) { // (where the pass leaves the wall to the screen's drawing)
+				const Rect s = on_screen(box);
+				room.panels[k][0] = s.x;
+				room.panels[k][1] = s.y;
+				room.panels[k][2] = s.w;
+				room.panels[k][3] = s.h;
+				++k;
+			}
+		}
+		// (Stage 61) behind glass the panels are the wall as the bench rules it: its grid continued over them
+		{
+			const double ruled_r = radiance(WALL_GRID);
+			// (drawn behind glass only: bare, the panels are as the screen paints them)
+			const auto glass = [&](double x0, double y0, double x1, double y1, double r) {
+				const double left = std::ceil(x0 - 0.5), right = std::ceil(x1 - 0.5), top = std::ceil(y0 - 0.5), bottom = std::ceil(y1 - 0.5);
+				if (right > left && bottom > top) {
+					room.glass_shapes.push_back(OpticsShape{ static_cast<float>(left), static_cast<float>(top), static_cast<float>(right - left), static_cast<float>(bottom - top), r });
+				}
+			};
+			const float sq = square();
+			for (const Rect &box : { CABINET, OUTBOX }) {
+				const float c0 = std::floor((box.x - BENCH.x) / sq), c1 = std::ceil((box.x + box.w - BENCH.x) / sq);
+				for (float c = c0; c <= c1; c += 1.0f) {
+					const float x = BENCH.x + c * sq;
+					if (x >= box.x && x <= box.x + box.w) {
+						glass(sx(x - 1.0f), sy(box.y), sx(x), sy(box.y + box.h), ruled_r);
+					}
+				}
+				const float r0 = std::floor((box.y - BENCH.y) / sq), r1 = std::ceil((box.y + box.h - BENCH.y) / sq);
+				for (float r = r0; r <= r1; r += 1.0f) {
+					const float y = BENCH.y + r * sq;
+					if (y >= box.y && y <= box.y + box.h) {
+						glass(sx(box.x), sy(y - 1.0f), sx(box.x + box.w), sy(y), ruled_r);
+					}
+				}
+			}
+		}
 		return room;
 		};
 		// The probes read the room as it is laid out, whatever the view (Stage 42); the screen shows it at the view
@@ -6362,6 +6822,7 @@ struct Ui::Impl {
 		if (!zoomed()) {
 			whole = room;
 		}
+		room_was = room; // (Stage 61: the wall a supply's picture is captured against)
 		// while the view moves, the scene stands as it was made: the host carries its pixels to the view now
 		if (!view_moving() || scene.table.empty()) {
 			if (!zoomed()) {
@@ -7084,6 +7545,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 	if (pressed) {
 		m.press(x, y);
 	} else if (down) {
+		if (m.storage_scrolling) {
+			m.storage_scroll_to(x);
+			return;
+		}
 		if (m.cabinet_scrolling) {
 			m.cabinet_scroll_to(y);
 		} else if (m.slider_drag) {
@@ -7092,6 +7557,10 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.turn(x);
 		}
 	} else if (released) {
+		if (m.storage_scrolling) {
+			m.storage_scrolling = false;
+			return;
+		}
 		if (m.cabinet_scrolling) {
 			m.cabinet_scrolling = false;
 		} else if (m.framing >= 0 && !m.frame_in_hand) {
@@ -7184,12 +7653,113 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 	m.follow();
 }
 
+namespace {
+
+// (Stage 61) a picture's bytes as text, and back
+const char *const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+std::string to_base64(const std::vector<uint8_t> &in) {
+	std::string out;
+	out.reserve((in.size() + 2) / 3 * 4);
+	for (size_t i = 0; i < in.size(); i += 3) {
+		const uint32_t n = (static_cast<uint32_t>(in[i]) << 16) | (i + 1 < in.size() ? static_cast<uint32_t>(in[i + 1]) << 8 : 0u) | (i + 2 < in.size() ? in[i + 2] : 0u);
+		out += BASE64[(n >> 18) & 63];
+		out += BASE64[(n >> 12) & 63];
+		out += i + 1 < in.size() ? BASE64[(n >> 6) & 63] : '=';
+		out += i + 2 < in.size() ? BASE64[n & 63] : '=';
+	}
+	return out;
+}
+bool from_base64(const std::string &in, std::vector<uint8_t> &out) {
+	out.clear();
+	uint32_t n = 0;
+	int bits = 0;
+	for (const char c : in) {
+		if (c == '=') {
+			break;
+		}
+		const char *at = std::strchr(BASE64, c);
+		if (at == nullptr || c == 0) {
+			return false;
+		}
+		n = (n << 6) | static_cast<uint32_t>(at - BASE64);
+		bits += 6;
+		if (bits >= 8) {
+			bits -= 8;
+			out.push_back(static_cast<uint8_t>((n >> bits) & 0xff));
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+bool Ui::add_pictures(std::string_view text, std::string &why) {
+	json j;
+	try {
+		j = json::parse(text);
+		if (!j.is_object() || j.value("format", "") != "chem-pictures/1") {
+			why = "the pictures are not \"chem-pictures/1\"";
+			return false;
+		}
+		for (const json &p : j.at("pictures")) {
+			Picture pic;
+			pic.w = p.at("w").get<int>();
+			pic.h = p.at("h").get<int>();
+			if (!from_base64(p.at("rgb").get<std::string>(), pic.rgb) || pic.w <= 0 || pic.h <= 0 || pic.rgb.size() != static_cast<size_t>(pic.w) * static_cast<size_t>(pic.h) * 3) {
+				why = "a picture's pixels are not its size";
+				return false;
+			}
+			uint64_t h = 1469598103934665603ull;
+			for (const uint8_t b : pic.rgb) {
+				h = (h ^ b) * 1099511628211ull;
+			}
+			pic.hash = h;
+			impl_->pictures[p.at("key").get<std::string>()] = std::move(pic);
+		}
+	} catch (const std::exception &e) {
+		why = std::string("the pictures are malformed: ") + e.what();
+		return false;
+	}
+	return true;
+}
+
+std::string Ui::pictures() {
+	json list = json::array();
+	for (const auto &[key, p] : impl_->pictures) {
+		list.push_back({ { "key", key }, { "w", p.w }, { "h", p.h }, { "rgb", to_base64(p.rgb) } });
+	}
+	impl_->pictures_new = false;
+	return json{ { "format", "chem-pictures/1" }, { "pictures", list } }.dump();
+}
+
+bool Ui::pictures_changed() const {
+	return impl_->pictures_new;
+}
+
+void Ui::capture_pictures() {
+	Impl &m = *impl_;
+	if (m.capturing.valid()) {
+		m.pictures[m.capturing_key] = m.capturing.get();
+		m.pictures_new = true;
+	}
+	for (const ItemView &s : std::vector<ItemView>(m.view.supplies)) {
+		if (m.pictures.find(Impl::picture_key(s)) == m.pictures.end()) {
+			m.capture_one(s.id, true);
+		}
+	}
+}
+
+void Ui::set_capture_ahead(bool on) {
+	impl_->capture_ahead = on;
+}
+
 void Ui::frame(double seconds) {
 	Impl &m = *impl_;
 	if (m.shown_scene) { // a scene of the optics alone: no clock, no lab
 		m.clock += seconds > 0.0 ? seconds : 0.0;
 		return;
 	}
+	m.follow_pictures(); // (Stage 61)
 	if (m.pouring && m.drag >= 0 && seconds > 0.0) {
 		// A pour by hand (Stage 27; Stage 31): to the pouring place, then tilting further while the button is held;
 		// let go, upright again, then back to the hand, where it ends
@@ -7499,6 +8069,10 @@ void Ui::zoom(float x, float y, float factor) {
 		m.cabinet_scroll(factor > 1.0f ? -1 : 1); // the wheel over the cabinet scrolls it, a row a notch (Stage 48)
 		return;
 	}
+	if (OUTBOX.has(x, y) && factor > 0.0f && factor != 1.0f && std::isfinite(factor)) {
+		m.storage_scroll(factor > 1.0f ? -1 : 1); // and over Storage, a slot a notch (Stage 61)
+		return;
+	}
 	if (!(factor > 0.0f) || !std::isfinite(factor) || !m.room_at(x, y)) {
 		return; // (over a panel, the screen's own: not the room's)
 	}
@@ -7615,6 +8189,12 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = TRASH.y - 30; // (over the trash, Stage 34)
 		return true;
 	}
+	if (what == "search:supplies" || what == "search:storage") { // (Stage 61)
+		const Rect r = Impl::search_rect(what == "search:supplies" ? 1 : 2);
+		x = r.cx();
+		y = r.cy();
+		return true;
+	}
 	if (what == "trash") {
 		x = TRASH.cx();
 		y = TRASH.y + 30;
@@ -7629,7 +8209,7 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		return true;
 	}
 	if (what == "outbox") { // where a hand-in with no slot goes: the first free one, without a goal first
-		const Rect r = Impl::slot_rect(m.free_slot());
+		const Rect r = m.slot_rect(m.free_slot());
 		x = r.cx();
 		y = r.y + r.h - 60;
 		return true;

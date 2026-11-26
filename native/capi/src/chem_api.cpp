@@ -365,6 +365,9 @@ const char *cg_ui_play_shot(cg_ui *ui) {
 	return ui != nullptr && ui->playing ? ui->play.shot().c_str() : nullptr;
 }
 
+static_assert(sizeof(cg_draw_image) == sizeof(lab::DrawImage) && offsetof(cg_draw_image, rgb) == offsetof(lab::DrawImage, rgb) && offsetof(cg_draw_image, hash) == offsetof(lab::DrawImage, hash),
+		"a draw list's image is the screen's (Stage 61)");
+
 cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_draw: null argument, or the list's size is not set");
@@ -378,6 +381,8 @@ cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 		out->text_size = static_cast<int32_t>(list.text.size());
 		out->text = list.text.c_str();
 		out->above = list.above;
+		out->image_count = static_cast<int32_t>(list.images.size());
+		out->images = reinterpret_cast<const cg_draw_image *>(list.images.data());
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
@@ -428,6 +433,8 @@ void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
 	out->text_size = static_cast<int32_t>(list.text.size());
 	out->text = list.text.c_str();
 	out->above = list.above;
+	out->image_count = static_cast<int32_t>(list.images.size());
+	out->images = reinterpret_cast<const cg_draw_image *>(list.images.data());
 }
 
 } // namespace
@@ -616,6 +623,42 @@ cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out) {
 void cg_ui_set_strict(cg_ui *ui, int32_t strict) {
 	if (ui != nullptr) {
 		ui->ui->set_strict(strict != 0);
+	}
+}
+
+cg_status cg_ui_add_pictures(cg_ui *ui, const char *pictures_json) {
+	if (ui == nullptr || pictures_json == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_add_pictures: null argument");
+	}
+	std::string why;
+	if (!ui->ui->add_pictures(pictures_json, why)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, why.c_str());
+	}
+	return CG_OK;
+}
+
+const char *cg_ui_pictures(cg_ui *ui) {
+	if (ui == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_pictures: null screen");
+		return nullptr;
+	}
+	ui->text = ui->ui->pictures();
+	return ui->text.c_str();
+}
+
+int32_t cg_ui_pictures_changed(const cg_ui *ui) {
+	return ui != nullptr && ui->ui->pictures_changed() ? 1 : 0;
+}
+
+void cg_ui_set_capture_ahead(cg_ui *ui, int32_t on) {
+	if (ui != nullptr) {
+		ui->ui->set_capture_ahead(on != 0);
+	}
+}
+
+void cg_ui_capture_pictures(cg_ui *ui) {
+	if (ui != nullptr) {
+		ui->ui->capture_pictures();
 	}
 }
 

@@ -298,9 +298,9 @@ TEST_CASE("lab: a vessel set onto a balance stands on it where the balance stood
 	CHECK(refused(*l, R"({"do": "weigh", "balance": "scale", "vessel": "beaker", "onto": true})").find("not standing") != std::string::npos);
 	must(*l, R"({"do": "place", "item": "scale", "at": [1, 0]})");
 	CHECK(!refused(*l, R"({"do": "weigh", "balance": "scale", "vessel": "beaker", "onto": true})").empty());
-	// a vessel in the cabinet without "onto" is refused, as a burner's
+	// a vessel in storage without "onto" is refused, as a burner's (Stage 61: storage, where the cabinet was)
 	must(*l, R"({"do": "stow", "item": "dry"})");
-	CHECK(refused(*l, R"({"do": "weigh", "balance": "scale", "vessel": "dry"})").find("cabinet") != std::string::npos);
+	CHECK(refused(*l, R"({"do": "weigh", "balance": "scale", "vessel": "dry"})").find("storage") != std::string::npos);
 }
 
 TEST_CASE("instruments: a balance's display draws its reading in seven segments (Stage 50)") {

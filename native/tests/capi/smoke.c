@@ -117,9 +117,9 @@ int main(void) {
 		fprintf(stderr, "the draw list is not in two parts around the optical pass\n");
 		return 1;
 	}
-	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 6 + 256 * 8 + 48 * 27 * 4 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 1 * 9 * (401 + 301) ||
+	if (cg_ui_optics(ui, &optics) != CG_OK || optics.vec_count != 8 + 256 * 8 + 48 * 27 * 4 || optics.table[0] != 1.0f || optics.revision == 0 || optics.row_count != 1 * 9 * (401 + 301) ||
 			optics.line_count != 256 || optics.light_count != 2 * (4097 + 401) || optics.rows == NULL || optics.lights == NULL || optics.lights[4 * 4096 + 2] < 0.99f) {
-		fprintf(stderr, "the optical pass's scene is not one vessel in 115 vectors, with its spectra, its lines and the room light's table\n");
+		fprintf(stderr, "the optical pass's scene is not one vessel in its vectors, with its spectra, its lines and the room light's table\n");
 		return 1;
 	}
 	/* Stage 20: the wall's table */
@@ -129,7 +129,7 @@ int main(void) {
 	}
 	/* Stage 35: a pixel's own rays are traced in the pass, over the rectangle of each body that bends: the cup's, a
 	 * little more than its rectangle (the scene's body 0: x, y, w, h) */
-	const float *cup = optics.table + 4 * 6; /* (after the header's six vec4s, Stage 46) */
+	const float *cup = optics.table + 4 * 8; /* (after the header's eight vec4s, Stage 61) */
 	if (optics.rectangle_count != 1 || optics.rectangles == NULL || optics.rectangles[0] > cup[0] || optics.rectangles[1] > cup[1] || optics.rectangles[2] < cup[0] + cup[2] || optics.rectangles[3] < cup[1] + cup[3]) {
 		fprintf(stderr, "the optical pass's scene does not name the cup's rectangle for the pass over what bends\n");
 		return 1;

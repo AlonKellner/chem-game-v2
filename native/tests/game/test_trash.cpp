@@ -1,6 +1,7 @@
 // The trash (GAME_SPEC §13, Stage 34): what is put away to be restored. An item
-// in it stays in the world, as one in the cabinet does; a signal part in it
-// keeps its settings and signals nothing.
+// in it stays in the world, frozen (Stage 61: nothing of it changes until it is
+// restored; emptied, it leaves the world); a signal part in it keeps its
+// settings and signals nothing.
 #include "lab/lab.hpp"
 
 #include <doctest/doctest.h>
@@ -119,10 +120,16 @@ TEST_CASE("trash: a vessel with liquid goes in and comes back to its square, the
 	must(*l, R"({"do": "place", "item": "jar", "at": [2, 8]})");
 	must(*l, R"({"do": "place", "item": "jar", "at": [0, 9]})");
 
+	const lab::ItemView went_in = item(l->view(), "acid");
 	must(*l, R"({"do": "wait", "seconds": 2})");
 	must(*twin, R"({"do": "wait", "seconds": 2})");
 	CHECK(l->view().conserved);
 	CHECK_FALSE(l->failed());
+	// (Stage 61: the trash freezes: nothing of the acid changed while it was there; the twin's went on)
+	CHECK(item(l->view(), "acid").celsius == went_in.celsius);
+	CHECK(item(l->view(), "acid").wall_c == went_in.wall_c);
+	CHECK(grams(l->view(), "acid", "water") == water);
+	CHECK(grams(twin->view(), "acid", "water") != water); // (it evaporates, on the bench)
 
 	must(*l, R"({"do": "restore"})");
 	v = l->view();
@@ -131,7 +138,15 @@ TEST_CASE("trash: a vessel with liquid goes in and comes back to its square, the
 	CHECK(item(v, "acid").row == 8);
 	CHECK(v.trash.empty());
 	CHECK(v.conserved);
-	CHECK(l->digest() == twin->digest()); // the world went on as if it had never left the bench
+	// (Stage 61: restored exactly as it went in, not as if it had stayed on the bench; then it runs with the rest)
+	CHECK(item(v, "acid").celsius == item(start, "acid").celsius); // (as it read on the bench before: in the trash it reads sealed)
+	CHECK(item(v, "acid").celsius == doctest::Approx(went_in.celsius).epsilon(1e-4));
+	CHECK(grams(v, "acid", "water") == water);
+	CHECK(l->digest() != twin->digest());
+	must(*l, R"({"do": "wait", "seconds": 2})");
+	CHECK(l->view().conserved);
+	CHECK_FALSE(l->failed());
+	CHECK(grams(l->view(), "acid", "water") != water); // (thawed, it evaporates again)
 	must(*l, R"({"do": "pour", "from": "acid", "to": "flask", "ml": 10})"); // and it is used again
 	CHECK(l->view().conserved);
 
@@ -142,7 +157,7 @@ TEST_CASE("trash: a vessel with liquid goes in and comes back to its square, the
 	CHECK(says(refused(*l, R"({"do": "trash"})"), "needs \"item\""));
 }
 
-TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cabinet (Stage 34)") {
+TEST_CASE("trash: a hot vessel stands in the trash as it went in, while one in storage cools; out of it, it cools (Stage 34, 61)") {
 	const auto hot = [] {
 		auto l = bench();
 		for (const char *c : { R"({"do": "pour", "from": "acid", "to": "flask", "ml": 60})", R"({"do": "heat", "burner": "burner", "vessel": "flask"})",
@@ -156,6 +171,10 @@ TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cab
 	REQUIRE(before > 30.0);
 	must(*binned, R"({"do": "trash", "item": "flask"})");
 	must(*stowed, R"({"do": "stow", "item": "flask"})");
+	const double water = grams(binned->view(), "flask", "water");
+	const double frozen = item(binned->view(), "flask").celsius; // (as read in the trash)
+	REQUIRE(frozen == doctest::Approx(before).epsilon(1e-6));
+	const std::vector<double> wall = item(binned->view(), "flask").wall_c;
 	// (Stage 53: half an hour, not thirty seconds: its floor's glass, hotter than what it holds, gives up its heat to it
 	// first, and the flask warms before it cools, by its own outside, slowly)
 	for (int k = 0; k < 30; ++k) {
@@ -163,19 +182,26 @@ TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cab
 		must(*stowed, R"({"do": "wait", "seconds": 60})");
 		const lab::LabView a = binned->view(), b = stowed->view();
 		CHECK(a.conserved);
-		CHECK(item(a, "flask").celsius == item(b, "flask").celsius);
-		CHECK(grams(a, "flask", "water") == grams(b, "flask", "water"));
-		CHECK(a.energy_j == b.energy_j);
+		CHECK(b.conserved);
+		// (Stage 61: the trash freezes: the trashed flask stands exactly as it went in, its twin in storage goes on)
+		CHECK(item(a, "flask").celsius == frozen);
+		CHECK(item(a, "flask").wall_c == wall);
+		CHECK(grams(a, "flask", "water") == water);
 	}
-	const double after = item(binned->view(), "flask").celsius;
-	CHECK(after < before - 1.0);
+	const double after = item(stowed->view(), "flask").celsius;
+	CHECK(after < before - 1.0); // (Stage 61: in storage it cools, as it did in the cabinet)
 	CHECK(item(binned->view(), "flask").place == "trash");
-	MESSAGE("in the trash the flask cooled from " << before << " C to " << after << " C in half an hour");
-	// out of the trash, the two labs are one state
+	MESSAGE("in storage the flask cooled from " << before << " C to " << after << " C in half an hour; in the trash it stood at " << item(binned->view(), "flask").celsius << " C");
+	// out of the trash, into storage, it cools from where it stood (Stage 61)
 	must(*binned, R"({"do": "stow", "item": "flask"})");
 	CHECK(binned->view().trash.empty());
-	CHECK(item(binned->view(), "flask").place == "cabinet");
-	CHECK(binned->digest() == stowed->digest());
+	CHECK(item(binned->view(), "flask").place == "outbox"); // (Stage 61: storage is the outbox)
+	CHECK(item(binned->view(), "flask").celsius == doctest::Approx(before).epsilon(1e-6));
+	for (int k = 0; k < 30; ++k) {
+		must(*binned, R"({"do": "wait", "seconds": 60})");
+	}
+	CHECK(item(binned->view(), "flask").celsius < before - 1.0);
+	CHECK(binned->view().conserved);
 }
 
 TEST_CASE("trash: what is joined to something is refused as stowing it is, with the reason (Stage 34)") {
@@ -190,7 +216,12 @@ TEST_CASE("trash: what is joined to something is refused as stowing it is, with 
 	CHECK(says(refused(*l, R"({"do": "trash", "item": "balloon"})"), "\"balloon\" is on \"flask\": take it away first"));
 	must(*l, R"({"do": "detach", "item": "balloon"})");
 	must(*l, R"({"do": "submit", "item": "jar"})");
-	CHECK(says(refused(*l, R"({"do": "trash", "item": "jar"})"), "\"jar\" has been handed in"));
+	// (Stage 61: what is handed in is in Storage, and is trashed straight from there; restored, it goes back to it)
+	must(*l, R"({"do": "trash", "item": "jar"})");
+	CHECK(item(l->view(), "jar").place == "trash");
+	must(*l, R"({"do": "restore", "item": "jar"})");
+	CHECK(item(l->view(), "jar").place == "outbox");
+	CHECK(l->view().trash.empty());
 	// a drain comes off, as when it is stowed; a burner and a balloon go in as vessels do
 	must(*l, R"({"do": "under", "item": "beaker", "of": "condenser"})");
 	CHECK(item(l->view(), "condenser").drains_to >= 0);
@@ -228,30 +259,30 @@ TEST_CASE("trash: what is joined to something is refused as stowing it is, with 
 	CHECK(l->view().trash.empty());
 }
 
-TEST_CASE("trash: restored to a square that is taken, an item goes to the cabinet; one from the cabinet goes back there; any element is restored by name (Stage 34)") {
+TEST_CASE("trash: restored to a square that is taken, an item goes to storage; one from storage goes back there; any element is restored by name (Stage 34, 61)") {
 	auto l = bench();
 	must(*l, R"({"do": "trash", "item": "beaker"})"); // from [14, 8]
 	must(*l, R"({"do": "stow", "item": "jar"})");
-	must(*l, R"({"do": "trash", "item": "jar"})"); // from the cabinet
+	must(*l, R"({"do": "trash", "item": "jar"})"); // from storage
 	must(*l, R"({"do": "trash", "item": "condenser"})");
 	lab::LabView v = l->view();
 	CHECK(trashed(v) == Names{ "beaker", "jar", "condenser" });
-	CHECK(item(v, "jar").col == -1); // no square: the cabinet
+	CHECK(item(v, "jar").col == -1); // no square: storage
 	must(*l, R"({"do": "place", "item": "waste", "at": [15, 8]})"); // over the beaker's footprint
 	must(*l, R"({"do": "restore", "item": "beaker"})"); // not the newest
 	v = l->view();
-	CHECK(item(v, "beaker").place == "cabinet");
+	CHECK(item(v, "beaker").place == "outbox"); // (Stage 61: what went to the cabinet goes to storage, the outbox)
 	CHECK(item(v, "beaker").col == -1);
 	CHECK(trashed(v) == Names{ "jar", "condenser" });
-	CHECK(noticed(v, "beaker went to the cabinet: \"waste\" stands where it stood"));
+	CHECK(noticed(v, "beaker went to storage: \"waste\" stands where it stood")); // (Stage 61: storage, not the cabinet)
 	must(*l, R"({"do": "restore", "item": "jar"})");
-	CHECK(item(l->view(), "jar").place == "cabinet");
+	CHECK(item(l->view(), "jar").place == "outbox"); // (Stage 61: back to storage, where it was)
 	must(*l, R"({"do": "restore"})");
 	CHECK(item(l->view(), "condenser").place == "bench");
 	CHECK(item(l->view(), "condenser").col == 12);
 	CHECK(l->view().trash.empty());
 	CHECK(l->view().conserved);
-	must(*l, R"({"do": "place", "item": "beaker", "at": [22, 0]})"); // from the cabinet, as ever
+	must(*l, R"({"do": "place", "item": "beaker", "at": [22, 0]})"); // from storage, as from the cabinet before
 }
 
 TEST_CASE("trash: an item is carried out of the trash onto a free square, or stowed from it (Stage 34)") {
@@ -269,7 +300,7 @@ TEST_CASE("trash: an item is carried out of the trash onto a free square, or sto
 	CHECK(trashed(v) == Names{ "waste" });
 	must(*l, R"({"do": "stow", "item": "waste"})");
 	v = l->view();
-	CHECK(item(v, "waste").place == "cabinet");
+	CHECK(item(v, "waste").place == "outbox"); // (Stage 61: stowed is in storage, the outbox)
 	CHECK(v.trash.empty());
 	CHECK(says(refused(*l, R"({"do": "restore"})"), "the trash is empty"));
 	CHECK(v.conserved);
@@ -474,7 +505,7 @@ TEST_CASE("trash: a circuit goes in and comes back with the parts in it, the wir
 	CHECK(l->view().trash.empty());
 }
 
-TEST_CASE("trash: it holds 64 elements; one more and the oldest leaves for good, an item to the cabinet, a part scrapped (Stage 34)") {
+TEST_CASE("trash: it holds 64 elements; one more and the oldest leaves for good, an item out of the world, a part scrapped (Stage 34, 61)") {
 	REQUIRE(lab::TRASH_MOST == 64);
 	auto l = bench();
 	const lab::LabView start = l->view();
@@ -492,16 +523,19 @@ TEST_CASE("trash: it holds 64 elements; one more and the oldest leaves for good,
 	CHECK(trashed(v).front() == "jar");
 	CHECK(item(v, "jar").place == "trash");
 
-	another(64); // the 65th: the jar leaves, and cannot be destroyed
+	const double held = l->view().mass_g;
+	another(64); // the 65th: the jar leaves the world (Stage 61: it is retired, the ledger counting what left)
 	v = l->view();
 	CHECK(v.trash.size() == 64);
-	CHECK(item(v, "jar").place == "cabinet");
-	CHECK(grams(v, "jar", "malachite") == grams(start, "jar", "malachite"));
+	CHECK(item(v, "jar").place == "retired"); // (Stage 61: kept in the view, out of the world)
+	CHECK(grams(v, "jar", "malachite") == 0.0); // (Stage 61: what it held left with it)
+	CHECK(grams(start, "jar", "malachite") > 0.0);
 	CHECK(trashed(v).front() == "timer1");
 	CHECK(trashed(v).back() == "timer64");
-	CHECK(noticed(v, "the trash is full: jar went to the cabinet"));
-	CHECK(v.conserved);
-	CHECK(v.mass_g == start.mass_g);
+	CHECK(noticed(v, "the trash is full: jar left the world")); // (Stage 61: no longer "went to the cabinet")
+	CHECK(v.conserved); // (Stage 61: C9, the totals less what was retired)
+	CHECK(v.mass_g < held - grams(start, "jar", "malachite")); // (Stage 61: its glass and its malachite are gone)
+	CHECK(held == start.mass_g);
 
 	another(65); // and now a part: scrapped
 	v = l->view();
@@ -518,7 +552,7 @@ TEST_CASE("trash: it holds 64 elements; one more and the oldest leaves for good,
 	CHECK_FALSE(l->failed());
 }
 
-TEST_CASE("trash: emptied, everything in it leaves for good: an item to the cabinet with all it holds, a part scrapped with what joined it (Stage 38)") {
+TEST_CASE("trash: emptied, everything in it leaves for good: an item out of the world with all it holds, a part scrapped with what joined it (Stage 38, 61)") {
 	auto l = bench();
 	CHECK(says(refused(*l, R"({"do": "empty_trash"})"), "the trash is empty"));
 	for (const char *c : { R"({"do": "part", "kind": "timer", "at": [0, 0]})", R"({"do": "part", "kind": "alarm", "at": [1, 0]})", R"({"do": "wire", "from": "timer1", "to": "alarm1"})",
@@ -527,11 +561,14 @@ TEST_CASE("trash: emptied, everything in it leaves for good: an item to the cabi
 	}
 	const double malachite = grams(l->view(), "jar", "malachite");
 	REQUIRE(malachite > 0.0);
+	const double mass = l->view().mass_g;
 	must(*l, R"({"do": "empty_trash"})");
 	const lab::LabView v = l->view();
 	CHECK(v.trash.empty());
-	CHECK(item(v, "jar").place == "cabinet");
-	CHECK(grams(v, "jar", "malachite") == malachite);
+	CHECK(item(v, "jar").place == "retired"); // (Stage 61: emptied out of the world, not to the cabinet)
+	CHECK(grams(v, "jar", "malachite") == 0.0); // (Stage 61: all it held left with it)
+	CHECK(v.mass_g < mass - malachite);
+	CHECK(says(refused(*l, R"({"do": "restore", "item": "jar"})"), "\"jar\" is not in the trash")); // (Stage 61: gone for good)
 	CHECK_FALSE(there(v, "timer1")); // gone: its name free again, its wire to the alarm with it
 	CHECK(v.wires.empty());
 	CHECK(noticed(v, "the trash was emptied: 2 things")); // (the count once read 0)

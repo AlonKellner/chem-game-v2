@@ -59,9 +59,16 @@ TEST_CASE("play: the play a host times sets the bench up, carries the bottle, po
 		ui->frame(1.0 / 120.0);
 		++frames[play.mark()];
 		const lab::LabView now = ui->lab().view();
-		const lab::ItemView &acid = item(now, "acid");
-		most_turn = std::max(most_turn, acid.turn);
-		most_pour = std::max(most_pour, acid.pours_ml_s);
+		const lab::ItemView *acid = nullptr; // (Stage 61: a supply, no item, until the play takes a copy out)
+		for (const lab::ItemView &v : now.items) {
+			acid = v.id == "acid" ? &v : acid;
+		}
+		if (acid == nullptr) {
+			CHECK(frames["settled"] == 0); // (out before the bench is set)
+			continue;
+		}
+		most_turn = std::max(most_turn, acid->turn);
+		most_pour = std::max(most_pour, acid->pours_ml_s);
 		if (play.mark() == "stir") {
 			held_up = std::max(held_up, item(now, "flask").suspended);
 		}

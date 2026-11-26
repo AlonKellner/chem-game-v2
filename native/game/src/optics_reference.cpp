@@ -344,6 +344,10 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 	};
 	Line line{ x, y, -1.0e5, 0.0, 0.0, 1.0 };
 	bool lands = true, cut_off = false;
+	// (Stage 61) whether the ray has met something in hand: from there on the panels are not in its way, as the
+	// pass's own (ray_met)
+	bool through_hand = shader::hand_over(shader::vec2(x, y)); // (its pixel within what is in hand's outline)
+	const auto panel = [&](int body) { return (static_cast<int>(vec_of(body, 3).w) & shader::PANEL_BIT) != 0; };
 	for (int last = count - 1; last >= 0 && lands;) {
 		const double layer = vec_of(last, 5).y, z = -layer * gap;
 		int first = last;
@@ -355,7 +359,7 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		int hit = -1;
 		double nearest = 1e30;
 		for (int k = first; k <= last; ++k) {
-			if (bends(k) && in_rows(k, cross_y)) {
+			if (bends(k) && in_rows(k, cross_y) && !(through_hand && panel(k))) {
 				Line trial = line;
 				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, trial);
 				if (e.met && e.meetings > 0 && e.entry < nearest) {
@@ -364,7 +368,14 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 				}
 			}
 		}
+		const bool hand_layer = layer > 0.5;
 		for (int k = last; k >= first; --k) {
+			if (through_hand && panel(k)) {
+				continue;
+			}
+			if (hand_layer && (k == hit || (!bends(k) && shader::layer_at(k, shader::vec2(cross, cross_y), 1.0e-3, 1.0e-3).cover > 0.5))) {
+				through_hand = true; // (after this layer)
+			}
 			if (k == hit) {
 				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, line);
 				out.met.push_back(Met{ k, cross, cross_y, true, e.pass, e.chord, e.route + (e.out && line.uz > 0.05 ? 0u : 0x80000000u), core_in(k, cross_y), e.solid, e.absorbed });
@@ -440,6 +451,14 @@ double drawn_at(double x, double y) {
 	for (size_t k = 0; k + 4 < d.size(); k += 5) {
 		if (x >= d[k] && x < static_cast<double>(d[k]) + d[k + 2] && y >= d[k + 1] && y < static_cast<double>(d[k + 1]) + d[k + 3]) {
 			seen = d[k + 4];
+		}
+	}
+	if (shader::wall_base != 0) { // (Stage 61) behind glass: what is drawn there only, over it
+		const std::vector<float> &g = shader::current->drawn_glass;
+		for (size_t k = 0; k + 4 < g.size(); k += 5) {
+			if (x >= g[k] && x < static_cast<double>(g[k]) + g[k + 2] && y >= g[k + 1] && y < static_cast<double>(g[k + 1]) + g[k + 3]) {
+				seen = g[k + 4];
+			}
 		}
 	}
 	return seen;

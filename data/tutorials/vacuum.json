@@ -7,7 +7,7 @@
 		{
 			"part": "Drive the air out",
 			"title": "A burner under the flask",
-			"text": "Pick up the burner in the cabinet on the left, then click the flask: it goes under it.",
+			"text": "Pick up the burner in Supplies on the left, then click the flask: it goes under it.",
 			"why": "The flask holds 100 g of water and, above it, about 150 mL of air.",
 			"checks": [{"text": "the burner is under the flask", "when": {"item": "burner", "under": "flask"}}],
 			"play": [{"drag": ["item:burner", "item:flask"]}]
@@ -42,7 +42,7 @@
 		},
 		{
 			"title": "Stopper it at once",
-			"text": "Pick up the stopper in the cabinet, then click the flask.",
+			"text": "Pick up the stopper in Supplies, then click the flask.",
 			"why": "The flask is full of steam and nothing else. Wait, and as it cools it would draw the room's air back in.",
 			"checks": [{"text": "the stopper is in the flask", "when": {"item": "stopper", "on": "flask"}}],
 			"play": [{"drag": ["item:stopper", "item:flask"]}]
