@@ -36,7 +36,7 @@ needs, the target tracked as a goal. With it, experiment 8 (limiting reagent and
 | 60.1 | The explorations; `lab/planner.hpp` and its test | Done |
 | 60.2 | The screen: the planner's tab, the goal | Done |
 | 60.3 | The experiment: limiting reagent and percent yield | Done |
-| 60.4 | This document, GAME_SPEC, CHANGELOG, the curriculum, `make gates`, the user's sign-off | `make gates` passed (1746 s: ASan+UBSan 1684, ctest 1324, Godot 13 of 13, goldens unchanged); awaiting the user's sign-off |
+| 60.4 | This document, GAME_SPEC, CHANGELOG, the curriculum, `make gates`, the user's sign-off | `make gates` passed (1746 s), and again rebased onto Stage 53 (1663 s: ASan+UBSan 1663, ctest 977, Godot 13 of 13, goldens unchanged; the yield bench's glass losing by its own outside); awaiting the user's sign-off |
 
 ## The goldens
 
