@@ -337,9 +337,15 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	for (const json &row : beaker.at("contents")) {
 		const std::string s = row.at("species");
 		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it;
-		// Stage 63: and water's own ions)
+		// Stage 63: and water's own ions; Stage 64: the carbon dioxide the water takes up by Henry's law, and its bicarbonate)
+		const double g = row.at("g").get<double>();
+		INFO(s << ": " << g << " g");
+		const bool carbon = s == "carbon_dioxide" || s == "carbon_dioxide_aq" || s == "bicarbonate_ion" || s == "carbonate_ion";
 		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass" || s == "hydrogen_ion" || s == "hydroxide_ion" ||
-				(s == "carbon_dioxide" && row.at("g").get<double>() < 1e-3)));
+				(carbon && g < 1e-3)));
+		if (carbon) {
+			MESSAGE("the beaker's distillate: " << s << " " << g << " g");
+		}
 	}
 	// a flask whose only solid or liquid, beside a trace of undecomposed malachite, is the pentahydrate
 	const double crystals = grams(flask, "copper_sulfate_pentahydrate");
