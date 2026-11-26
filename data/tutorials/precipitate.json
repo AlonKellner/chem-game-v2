@@ -85,7 +85,7 @@
 		{
 			"part": "Black with heat",
 			"title": "A burner under it",
-			"text": "Pick up the burner in the cabinet, then click the beaker.",
+			"text": "Pick up the burner in Supplies, then click the beaker.",
 			"why": "Copper hydroxide holds its water less firmly than it seems: it is less stable than copper oxide and water, and only slow to change.",
 			"checks": [
 				{

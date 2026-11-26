@@ -124,6 +124,18 @@ struct Pupil {
 		FAIL("no item " << id);
 		return ItemView{};
 	}
+	// a supply none of whose copies is out (Stage 61: what the cabinet held, until a copy is taken out of Supplies)
+	bool supplied(const std::string &id) {
+		const lab::LabView view = ui->lab().view();
+		bool found = false;
+		for (const ItemView &s : view.supplies) {
+			found = found || s.id == id;
+		}
+		for (const ItemView &v : view.items) {
+			found = found && !(v.id == id && v.place != "retired");
+		}
+		return found;
+	}
 	double grams(const std::string &id, const std::string &species) {
 		for (const lab::SubstanceView &s : item(id).contents) {
 			if (s.species == species) {
