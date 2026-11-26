@@ -14,6 +14,7 @@
 #include <atomic>
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <cmath>
 #include <map>
 #include <string>
@@ -531,7 +532,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				lw[WALL_INDEX_ROW * LWIR_ROW + i] = static_cast<float>(media.glass_n[static_cast<size_t>(i)]);
 			}
 			put(at + REFRACT, 3, room.refraction ? 1.0 : 0.0);
-			put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
+			put(at + IDS, 0, body.named != nullptr ? tag(fnv(body.named, std::strlen(body.named))) : tag(fnv(v.id.data(), v.id.size()))); // (Stage 61: its own name, a supply's box)
 			uint64_t h = fnv(&t[static_cast<size_t>(at) * 4], static_cast<size_t>(BODY_VECS) * 4 * sizeof(float));
 			h = fnv(&wall_key, sizeof wall_key, h); // what it sees behind it
 			put(at + IDS, 1, tag(h));
@@ -837,7 +838,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		// which body this is, and a signature of what it holds and sees: a pixel's history follows them (GAME_SPEC §12.2)
-		put(at + IDS, 0, tag(fnv(v.id.data(), v.id.size())));
+		put(at + IDS, 0, body.named != nullptr ? tag(fnv(body.named, std::strlen(body.named))) : tag(fnv(v.id.data(), v.id.size()))); // (Stage 61: its own name, a supply's box)
 		uint64_t h = fnv(liquid, (ROWS_PER_SET - 1) * ROW * sizeof(float)); // (its temperatures not: its key follows them where they show, Stage 53)
 		h = fnv(lw, ROWS_PER_SET * LWIR_ROW * sizeof(float), h);
 		h = fnv(&t[static_cast<size_t>(at + REFRACT) * 4], 4 * sizeof(float), h);

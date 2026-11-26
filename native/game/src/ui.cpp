@@ -478,8 +478,9 @@ struct Ui::Impl {
 			for (const std::string &n : circuit_parts()) {
 				names.push_back(n);
 			}
+			const std::vector<std::string> before = ids_now();
 			if (act({ { "do", "circuit" }, { "parts", names } })) {
-				choose_only(static_cast<int>(view.items.size()) - 1);
+				choose_only(newest(before));
 			}
 			return true;
 		}
@@ -2949,6 +2950,32 @@ struct Ui::Impl {
 	}
 
 	const std::string &id(int index) const { return view.items[static_cast<size_t>(index)].id; }
+	// (Stage 61) the name a supply's box is known by in the pass, apart from its first copy's
+	std::map<std::string, std::string> supply_names;
+	const char *supply_name(const std::string &id) {
+		std::string &name = supply_names[id];
+		if (name.empty()) {
+			name = "supply:" + id;
+		}
+		return name.c_str();
+	}
+	// the lab's items and parts by id, and the one made since (Stage 61: what the screen lists after them, Supplies,
+	// is not the lab's: the newest is found by its id, not as the last)
+	std::vector<std::string> ids_now() const {
+		std::vector<std::string> out;
+		for (int i = 0; i < supply_base; ++i) {
+			out.push_back(view.items[static_cast<size_t>(i)].id);
+		}
+		return out;
+	}
+	int newest(const std::vector<std::string> &before) const {
+		for (int i = 0; i < supply_base; ++i) {
+			if (std::find(before.begin(), before.end(), view.items[static_cast<size_t>(i)].id) == before.end()) {
+				return i;
+			}
+		}
+		return supply_base - 1;
+	}
 
 	// ------------------------------------------------------------- the selection (§13.1)
 
@@ -3242,12 +3269,26 @@ struct Ui::Impl {
 				}
 				return;
 			}
+			// onto equipment: its copy taken out and dropped there; refused there, the lab as it was before, that copy too
+			const std::string before = lab->save();
 			if (!act({ { "do", "take" }, { "supply", v.id } })) {
 				return;
 			}
-			const int made = item_index(lab->last_taken());
+			const std::string copy = lab->last_taken();
+			const int made = item_index(copy);
+			message.clear();
 			if (made >= 0 && made < supply_base) {
 				drop(made, x, y);
+			}
+			const int now = item_index(copy);
+			if (!message.empty() && (now < 0 || view.items[static_cast<size_t>(now)].place == "outbox")) {
+				const std::string refused = message;
+				std::string no;
+				if (std::unique_ptr<Lab> was = Lab::load(before, no)) {
+					lab = std::move(was);
+					refresh();
+				}
+				message = refused;
 			}
 			return;
 		}
@@ -4777,10 +4818,11 @@ struct Ui::Impl {
 	// a part let go on the bench, out of the drawer: made there, and its settings opened
 	void drop_making(int kind, float x, float y) {
 		int inner_col = 0, inner_row = 0;
+		const std::vector<std::string> before = ids_now();
 		if (!opened.empty() && circuit_panel().has(x, y)) {
 			if (inner_square(x, y, inner_col, inner_row) &&
 					act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { inner_col, inner_row } }, { "in", opened } })) {
-				const int made = static_cast<int>(view.items.size()) - 1;
+				const int made = newest(before);
 				choose_only(made);
 				edit_part(made);
 			}
@@ -4795,7 +4837,7 @@ struct Ui::Impl {
 		}
 		const int col = static_cast<int>((x - BENCH.x) / square()), row = static_cast<int>((y - BENCH.y) / square());
 		if (act({ { "do", "part" }, { "kind", DRAWN[kind] }, { "at", { col, row } } })) {
-			const int made = static_cast<int>(view.items.size()) - 1;
+			const int made = newest(before);
 			choose_only(made);
 			edit_part(made);
 			if (running() && senses(view.items[static_cast<size_t>(made)].part.kind)) {
@@ -6260,11 +6302,13 @@ struct Ui::Impl {
 		};
 		const auto add = [&](int i, const Rect &r, bool in_hand) {
 			const ItemView &v = view.items[static_cast<size_t>(i)];
+			const std::string who = i >= supply_base ? std::string(supply_name(v.id)) : v.id; // (Stage 61: a supply's box apart from its first copy)
 			if (v.kind == "stopper") { // rubber (Stage 28), opaque, lit by the room
-				thing(v.id, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
+				thing(who, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
 			} else if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
 				body.layer = in_hand ? 1 : 0;
+				body.named = i >= supply_base ? supply_name(v.id) : nullptr; // (Stage 61: a supply's box is not its first copy)
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
 					body.side = side_of(i);
@@ -6273,21 +6317,21 @@ struct Ui::Impl {
 				bodies.push_back(body);
 				if (v.screwed) { // its screw cap on (Stage 28)
 					const float mouth = mouth_px(i) + 8;
-					thing(v.id, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
+					thing(who, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
 				}
 				if (v.condenser) {
-					bar(v.id, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
+					bar(who, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
 				}
 				if (const glass::Vessel *g = glass_of(v); g != nullptr && (g->outlet || g->mark) && !body.flipped && body.angle == 0.0f) {
 					// (Stage 52) a burette's stopcock, a key across it; a mark etched round its neck, at its true volume
 					const float px_cm = r.h / static_cast<float>(g->height);
 					if (v.glassware == "burette") {
 						const float y = r.y + r.h - static_cast<float>(0.1 + 0.075 * g->height) * px_cm;
-						thing(v.id, "stopcock", OpticsBody::Slab, Rect{ r.cx() - 2.5f * r.w, y - 3.0f, 5.0f * r.w, 6.0f }, 2.0f, "cap_plastic", nullptr, in_hand);
+						thing(who, "stopcock", OpticsBody::Slab, Rect{ r.cx() - 2.5f * r.w, y - 3.0f, 5.0f * r.w, 6.0f }, 2.0f, "cap_plastic", nullptr, in_hand);
 					}
 					if (g->mark && v.mark_ml) {
 						const float y = r.y + r.h - static_cast<float>(g->level(*v.mark_ml)) * px_cm, half = static_cast<float>(g->radius_inside(g->level(*v.mark_ml))) * px_cm + 2.0f;
-						bar(v.id, "mark", r.cx() - half, y, r.cx() + half, y, 1.0f, "lcd_black", in_hand);
+						bar(who, "mark", r.cx() - half, y, r.cx() + half, y, 1.0f, "lcd_black", in_hand);
 					}
 				}
 			} else if (v.kind == "thermal") {
@@ -6296,8 +6340,8 @@ struct Ui::Impl {
 				const float s = r.w / CAMERA_W;
 				const uint32_t bit = camera_bit(i);
 				const bool on = v.place == "bench";
-				bodies[thing(v.id, "case", OpticsBody::Slab, r, 6.0f * s, "viewer_case", nullptr, in_hand)].hidden = bit;
-				const size_t k = thing(v.id, "screen", on ? OpticsBody::Sensor : OpticsBody::Slab, camera_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				bodies[thing(who, "case", OpticsBody::Slab, r, 6.0f * s, "viewer_case", nullptr, in_hand)].hidden = bit;
+				const size_t k = thing(who, "screen", on ? OpticsBody::Sensor : OpticsBody::Slab, camera_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].hidden = bit;
 				if (on) {
 					camera_relay(i);
@@ -6307,16 +6351,16 @@ struct Ui::Impl {
 					if (away) {
 						const float x0 = f.x - 1, y0 = f.y - 1, x1 = f.x + f.w + 1, y1 = f.y + f.h + 1;
 						for (const auto &[a, b, c, d] : { std::array<float, 4>{ x0, y0, x1, y0 }, { x1, y0, x1, y1 }, { x1, y1, x0, y1 }, { x0, y1, x0, y0 } }) {
-							bar(v.id, "frame", a, b, c, d, 2.0f, "rig", framing == i);
+							bar(who, "frame", a, b, c, d, 2.0f, "rig", framing == i);
 							bodies.back().hidden = bit;
 						}
 					}
-					bodies[thing(v.id, "tab", OpticsBody::Slab, tab, 2.0f, "rig", nullptr, framing == i)].hidden = bit;
+					bodies[thing(who, "tab", OpticsBody::Slab, tab, 2.0f, "rig", nullptr, framing == i)].hidden = bit;
 				}
 			} else if (v.kind == "viewer") {
 				// the spectral viewer (Stage 42): its case, its screen showing its picture, its probe's holder
 				const float s = r.w / VIEWER_W;
-				thing(v.id, "case", OpticsBody::Slab, viewer_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, viewer_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
 				ViewerState &st = viewers[v.id];
 				if (!st.plotted) {
 					plot_spectrum({}, 0, st.picture);
@@ -6325,22 +6369,22 @@ struct Ui::Impl {
 				// (off the bench it is switched off: its screen dark, its probe reading nothing)
 				static const Picture OFF{};
 				const Picture &shows = v.place == "bench" ? st.picture : OFF;
-				const size_t k = thing(v.id, "screen", OpticsBody::Screen, viewer_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				const size_t k = thing(who, "screen", OpticsBody::Screen, viewer_screen(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].image = shows.rgb.data();
 				bodies[k].image_w = shows.w;
 				bodies[k].image_h = shows.h;
 				bodies[k].image_hash = shows.hash;
-				thing(v.id, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
+				thing(who, "holder", OpticsBody::Slab, viewer_holder(r), 4.0f * s, "burner_metal", nullptr, in_hand);
 			} else if (v.kind == "balance") {
 				// a balance (Stage 50): its case, its pan of steel, its display showing its reading (dark off the bench)
 				const float s = r.w / BALANCE_W;
-				thing(v.id, "case", OpticsBody::Slab, balance_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
-				thing(v.id, "pan", OpticsBody::Slab, balance_pan(r), 2.0f * s, "burner_metal", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, balance_case(r), 6.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "pan", OpticsBody::Slab, balance_pan(r), 2.0f * s, "burner_metal", nullptr, in_hand);
 				const instruments::Balance *model = instruments::balance(v.model);
 				Picture &shows = balances[v.id];
 				const std::string says = model != nullptr ? instruments::display_text(*model, v.display_g, v.overload) : std::string();
 				instruments::plot_display(says, shows);
-				const size_t k = thing(v.id, "display", OpticsBody::Screen, balance_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+				const size_t k = thing(who, "display", OpticsBody::Screen, balance_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 				bodies[k].image = shows.rgb.data();
 				bodies[k].image_w = shows.w;
 				bodies[k].image_h = shows.h;
@@ -6348,24 +6392,24 @@ struct Ui::Impl {
 			} else if (v.kind == "spectrophotometer") {
 				// a spectrophotometer (Stage 55): its case, its well, its two displays (dark off the bench)
 				const float s = r.w / SPECTRO_W;
-				thing(v.id, "case", OpticsBody::Slab, spectro_case(r), 8.0f * s, "viewer_case", nullptr, in_hand);
-				thing(v.id, "well", OpticsBody::Slab, spectro_well(r), 3.0f * s, "lcd_black", nullptr, in_hand);
+				thing(who, "case", OpticsBody::Slab, spectro_case(r), 8.0f * s, "viewer_case", nullptr, in_hand);
+				thing(who, "well", OpticsBody::Slab, spectro_well(r), 3.0f * s, "lcd_black", nullptr, in_hand);
 				const bool on = v.place == "bench" || v.place == "under";
 				for (int d = 0; d < 2; ++d) {
 					Picture &shows = spectro_shows[v.id + (d == 0 ? ":a" : ":nm")];
 					instruments::plot_display(!on ? std::string() : d == 0 ? spectro::display_text(v.absorbance, v.blanked, v.overload) : spectro::wavelength_text(v.nm), shows);
-					const size_t k = thing(v.id, d == 0 ? "display" : "nm", OpticsBody::Screen, d == 0 ? spectro_display(r) : spectro_nm_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
+					const size_t k = thing(who, d == 0 ? "display" : "nm", OpticsBody::Screen, d == 0 ? spectro_display(r) : spectro_nm_display(r), 1.0f * s, "lcd_black", nullptr, in_hand);
 					bodies[k].image = shows.rgb.data();
 					bodies[k].image_w = shows.w;
 					bodies[k].image_h = shows.h;
 					bodies[k].image_hash = shows.hash;
 				}
 			} else if (v.kind == "burner") {
-				thing(v.id, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
+				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
 					// its flame: from a sooty yellow, barely open, to a blue, wide open
 					const float flame = static_cast<float>(12.0 + 30.0 * v.valve);
-					const size_t k = thing(v.id, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
+					const size_t k = thing(who, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 					bodies[k].kelvin = v.celsius + 273.15; // its flame's temperature (Stage 46)
@@ -6379,23 +6423,23 @@ struct Ui::Impl {
 						ringing = ringing || (o.kind == "alarm" && o.part.ringing && holds(v.id, o.id));
 					}
 				}
-				thing(v.id, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
+				thing(who, "face", OpticsBody::Slab, r, 4.0f, face_of(v.kind), nullptr, in_hand);
 				if (v.kind == "timer") {
 					// its time left: a strip of light along its foot, as long as the share of its time that is left
 					const Rect strip{ r.x + 5, r.y + r.h - 9, r.w - 10, 4 };
-					thing(v.id, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
+					thing(who, "strip", OpticsBody::Slab, strip, 2.0f, "lamp_glass", nullptr, in_hand);
 					const double left = v.part.preset > 0 ? static_cast<double>(v.part.left) / static_cast<double>(v.part.preset) : 0.0;
 					if (left > 0.0) {
-						thing(v.id, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
+						thing(who, "time", OpticsBody::Slab, Rect{ strip.x, strip.y, strip.w * static_cast<float>(std::min(left, 1.0)), strip.h }, 2.0f, "lamp_glass", "lamp_green", in_hand);
 					}
 				}
-				thing(v.id, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
+				thing(who, "lamp", OpticsBody::Slab, Rect{ r.x + r.w - 12, r.y + 4, 8, 8 }, 4.0f, "lamp_glass", ringing ? "lamp_amber" : lit ? "lamp_green" : nullptr, in_hand);
 				Rect port;
 				if (port_rect(i, port)) {
-					thing(v.id, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
+					thing(who, "port", OpticsBody::Slab, Rect{ port.cx() - 5, port.cy() - 5, 10, 10 }, 5.0f, "wire", nullptr, in_hand);
 				}
 				if (sense_rect(i, port)) {
-					thing(v.id, "sense port", OpticsBody::Slab, Rect{ port.cx() - 4, port.cy() - 4, 8, 8 }, 4.0f, "sense", nullptr, in_hand);
+					thing(who, "sense port", OpticsBody::Slab, Rect{ port.cx() - 4, port.cy() - 4, 8, 8 }, 4.0f, "sense", nullptr, in_hand);
 				}
 			}
 		};

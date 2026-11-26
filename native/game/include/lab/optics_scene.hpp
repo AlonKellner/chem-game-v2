@@ -265,6 +265,8 @@ struct OpticsBody {
 	const char *light_to = nullptr;
 	double toward = 0.0, strength = 1.0;
 	uint64_t id = 0; // which thing it is: a pixel's history follows it
+	// an item's body known by another name than its item's id (Stage 61: a supply's box, whose first copy has its id)
+	const char *named = nullptr;
 	const uint8_t *image = nullptr;
 	int image_w = 0, image_h = 0;
 	uint64_t image_hash = 0;

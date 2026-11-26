@@ -16,7 +16,11 @@ bool CondReader::item(const json &j, const char *key, std::string &out) {
 		return fail(std::string("\"") + key + "\" is not an item's id");
 	}
 	out = j.get<std::string>();
-	return item_of(bench, out) != nullptr || fail("the bench has no item \"" + out + "\"");
+	bool supply = false; // (Stage 61: a supply, whose first copy has its id)
+	for (const ItemView &s : bench.supplies) {
+		supply = supply || s.id == out;
+	}
+	return item_of(bench, out) != nullptr || supply || fail("the bench has no item \"" + out + "\"");
 }
 
 bool CondReader::number(const json &j, const char *key, std::optional<double> &out) {

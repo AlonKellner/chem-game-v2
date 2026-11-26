@@ -481,8 +481,8 @@ struct Lab::Impl {
 		for (size_t i = 0; i < tw.edges().size(); ++i) {
 			const Edge &e = tw.edges()[i];
 			const int32_t a = cell[static_cast<size_t>(e.a.index)], b = cell[static_cast<size_t>(e.b.index)];
-			if (!e.open || a < 0 || b < 0) {
-				continue;
+			if (!e.open || a < 0 || b < 0 || (!own[static_cast<size_t>(e.a.index)] && !own[static_cast<size_t>(e.b.index)])) {
+				continue; // (the template's own room: its air's edge to it is not the copy's)
 			}
 			if (e.column) {
 				edge[i] = column_edge(CellId{ a }, CellId{ b }).index;
@@ -4510,8 +4510,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			const int col = c.at("at").at(0).get<int>(), row = c.at("at").at(1).get<int>();
-			if (!on_grid(col, row, shape.w, shape.h) || standing_in(col, row, shape.w, shape.h) >= 0) {
-				why = "there is no room for it there";
+			if (const int there = on_grid(col, row, shape.w, shape.h) ? standing_in(col, row, shape.w, shape.h) : -1; !on_grid(col, row, shape.w, shape.h) || there >= 0) {
+				why = there >= 0 ? "\"" + name_of(there) + "\" stands there" : "that is off the bench"; // (as a place is refused)
 				return false;
 			}
 		}
