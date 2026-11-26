@@ -1,5 +1,8 @@
 // Search in Supplies and in Storage (GAME_SPEC §13.1, Stage 61): lab/search.hpp.
 #include "lab/search.hpp"
+#include "lab/conditions.hpp"
+
+#include "chem/species.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -70,6 +73,15 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 		out.push_back(s.phase == 's' ? "solid" : s.phase == 'l' ? "liquid" : s.phase == 'g' ? "gas" : "dissolved");
 		if (s.phase == 'a') {
 			out.push_back("solution");
+		}
+	}
+	// (Stage 63) what its dissolved ions make: a retired formula unit's name and formula (sulfuric acid, copper sulfate)
+	const chem::SpeciesTable &table = chem::builtin_species();
+	for (int k = 0; k < table.species_count(); ++k) {
+		const chem::SpeciesDef &d = table.species(chem::SpeciesId{ k });
+		if (d.retired && mol_of(v.contents, std::string(d.id)) > 1e-9) {
+			add_name(out, std::string(d.id));
+			add_name(out, std::string(d.formula));
 		}
 	}
 	if ((v.kind == "vessel" || v.kind == "balloon") && !holds) {
