@@ -50,6 +50,12 @@ stirred, sets the excess out in minutes. The model nucleated only from the solut
 - the crystals bred go with the stirring, the crystals' mass and (S − 1)^1.7 (each doubled, twice as many in 10 s);
 - none are bred unstirred, without crystals, or where they dissolve.
 
+`native/tests/game/test_experiments.cpp`: the experiment `seed` followed with its own gestures, strict (the stirred
+beaker's crop 1.05 g within 3 % in over 100,000 crystals, the still seed one crystal under 20 mg; the report checked
+beside the prediction), played at a person's pace, and free.
+
+`datagen_refuses_secondary_alone` (ctest): a surface law with a breeding rate and no order.
+
 ## Open
 
 - **Equal spheres** (§20): a seed's fragments share its mass at once, so a 2 mm seed and its first thousand fragments
