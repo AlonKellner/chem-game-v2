@@ -104,7 +104,10 @@ written; a member added to `OpticsScene` fails the build until the file holds it
 
 `LAB_CHECK=0` (`ASAN_LAB_CHECK`, `make asan-gate`): no lab of the process checks an invariant, whatever it is asked.
 The release build checks every invariant on the same trajectories; `chem_tests` keeps every check under the
-sanitizers, so `check_all` still runs instrumented. `demo_session` under the sanitizers holds the record's digests.
+sanitizers, so `check_all` still runs instrumented. A deliberate read past a vector's end put in `Lab::view` was
+caught by the sanitizers in a lab case under `LAB_CHECK=0`. `demo_session` does not run under the sanitizers:
+unchecked there, it was the demo record's play again (567 s and 592 s of the sanitizers' run); the C API's path
+under them is `pressure_session`'s, a new entry in both trees (until then only `make sessions-check` played it).
 
 ## 68.5 The Godot suite
 

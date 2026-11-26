@@ -145,7 +145,8 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 | `chem_tests.<file>`, `lab_tests.<file>.<n>` | the core's doctest cases, an entry a source file; the lab layer's, an entry a test case (`.<n>.<i>`: a part of one); `lab_tests.<file>.count`: the file's cases are those counted; `.every_file_runs`: no test case is left out |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
-| `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest |
+| `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest (not under the sanitizers: `lab_tests.demo_record` plays it there, holding the same digests) |
+| `pressure_session` | the pressure session the same way, against its own record (Stage 68) |
 | `chem_tool_study_cooling`, `_decomposition`, `_balloon`, `_distillation`, `_dissolution`, `_crystals` | the studies run with every invariant checked on every step and end with the world's totals unchanged |
 | `chem_tool_study_spectrum` | the band-count measurement runs, and the game's bands are within the colour threshold (GAME_SPEC §12.2) |
 | `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |

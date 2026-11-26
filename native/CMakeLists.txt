@@ -340,8 +340,15 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_tables COMMAND chem_tool tables)
     # the demo, played through the C API with every invariant on every step,
     # reproduces its golden record digest for digest (GAME_SPEC §18: D4)
-    # (its paths from the tree it runs in, ../..: the same command in every worktree, Stage 68)
-    add_test(NAME demo_session COMMAND chem_tool run ../../data/sessions/demo.json --quiet --check ../../bench/sessions/demo.jsonl)
+    # (its paths from the tree it runs in, ../..: the same command in every worktree, Stage 68). Not under the
+    # sanitizers (Stage 68): there no lab checks an invariant (LAB_CHECK=0), and lab_tests.demo_record plays the same
+    # session holding the same digests; the C API's path under them is the pressure session's, below.
+    if(NOT CHEM_SANITIZE)
+        add_test(NAME demo_session COMMAND chem_tool run ../../data/sessions/demo.json --quiet --check ../../bench/sessions/demo.jsonl)
+    endif()
+    # the pressure session (Stage 28) against its golden record, through the C API, every invariant checked (Stage
+    # 68: until then only `make sessions-check` played it)
+    add_test(NAME pressure_session COMMAND chem_tool run ../../data/sessions/pressure.json --quiet --check ../../bench/sessions/pressure.jsonl)
     add_test(NAME chem_tool_study_cooling COMMAND chem_tool study cooling)
     add_test(NAME chem_tool_study_decomposition COMMAND chem_tool study decomposition)
     add_test(NAME chem_tool_study_balloon COMMAND chem_tool study balloon)
