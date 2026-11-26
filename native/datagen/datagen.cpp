@@ -121,6 +121,7 @@ struct SpeciesRow {
 	double air_diffusion = 0.0, air_exponent = 0.0; // a gas's in the room's air: m^2/s at 298.15 K, and its exponent (Stage 50)
 	double conductivity = 0.0; // a wall's thermal conductivity, W/m K (Stage 53)
 	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
+	bool retired = false; // (Stage 63) a formula unit whose ions are species now: an amount of it is taken as its ions
 };
 
 // An ion as species.json names it: its formula, then its charge, "SO4-2".
@@ -201,7 +202,22 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			fail(species_file, "species " + row.id + ": a density is positive, and only a solid or a liquid has one");
 		}
 		chemdata::AtomCounts counts;
-		if (!chemdata::parse_formula(row.formula, counts, why)) {
+		// (Stage 63) an ion's formula ends in its charge, "SO4-2": the charge read off it, the rest a formula
+		std::string bare = row.formula;
+		if (const size_t sign = row.formula.find_last_of("+-"); sign != std::string::npos && sign > 0 && sign + 1 < row.formula.size() &&
+				row.formula.find_first_not_of("0123456789", sign + 1) == std::string::npos) {
+			const int charge = std::stoi(row.formula.substr(sign + 1)) * (row.formula[sign] == '-' ? -1 : 1);
+			if (row.phase->phase != chem::Phase::Aqueous || (s.contains("charge") && row.charge != charge)) {
+				fail(species_file, "species " + row.id + ": an ion is dissolved, and its charge is its formula's");
+			}
+			row.charge = charge;
+			bare = row.formula.substr(0, sign);
+		}
+		row.retired = s.value("retired", false);
+		if (row.retired && (row.phase->phase != chem::Phase::Aqueous || !s.contains("ions"))) {
+			fail(species_file, "species " + row.id + ": a retired species is a dissolved formula unit, with its ions");
+		}
+		if (!chemdata::parse_formula(bare, counts, why)) {
 			fail(species_file, "species " + row.id + ": formula \"" + row.formula + "\": " + why);
 		}
 		for (const auto &[symbol, n] : counts) {
@@ -290,8 +306,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		if (s.contains("volume_cm3")) {
 			const double v = s.at("volume_cm3").get<double>();
-			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0)) {
-				fail(species_file, "species " + row.id + ": volume_cm3 is a dissolved species' positive apparent molar volume");
+			// (Stage 63: an ion's, by the convention of H+'s at nought, may be negative, as Cu2+'s is)
+			if (row.phase->phase != chem::Phase::Aqueous || !(v > 0.0 || (row.charge != 0 && std::isfinite(v)))) {
+				fail(species_file, "species " + row.id + ": volume_cm3 is a dissolved species' positive apparent molar volume (an ion's may be negative)");
 			}
 			row.molar_volume = v * 1e-6;
 		}
@@ -325,6 +342,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		def.air_diffusion = row.air_diffusion;
 		def.air_exponent = row.air_exponent;
 		def.conductivity = row.conductivity;
+		def.retired = row.retired;
 		species_defs.push_back(def);
 	}
 
@@ -519,7 +537,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			cpp << (i ? ", " : " ") << "IonCount{ " << (i < row.ions.size() ? row.ions[i].first : -1) << ", " << (i < row.ions.size() ? row.ions[i].second : 0) << " }";
 		}
 		char grain[160];
-		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g, %.17g", row.grain, row.air_diffusion, row.air_exponent, row.conductivity);
+		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g, %.17g, %s", row.grain, row.air_diffusion, row.air_exponent, row.conductivity, row.retired ? "true" : "false");
 		cpp << " } }, " << grain << " },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";

@@ -4008,6 +4008,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				holds.push_back({ item.cell, &j.at("contents") });
 			}
 			for (const auto &[into, what] : holds) {
+				std::map<int32_t, double> taken; // (Stage 63) each species' moles, a retired formula unit's as its ions
 				for (const auto &[name, spec] : what->items()) {
 					const SpeciesId id = table.find(name);
 					if (!table.has(id) || table.species(id).wall) {
@@ -4019,7 +4020,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						return nullptr;
 					}
 					const double mol = mol_of(table, id, spec, impl->seed, item.id + ":" + name); // (an unknown's range, Stage 54)
-					b.set_amount(into, id, amount(mol));
+					for (const auto &[as, count] : table.as_species(id)) {
+						taken[as.index] += mol * count;
+					}
 					if (spec.contains("particles")) {
 						b.set_particles(into, id, spec.at("particles").get<int64_t>());
 					}
@@ -4027,6 +4030,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
 						condensed += mol * def.molar_volume;
 					}
+				}
+				for (const auto &[index, mol] : taken) {
+					b.set_amount(into, SpeciesId{ index }, amount(mol));
 				}
 				if (into != item.cell) {
 					b.set_temperature(into, room_kelvin);
@@ -7073,12 +7079,16 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					b.set_column_shape(id, rise, std::move(shape));
 				}
 			}
-			const auto amount = cell.at("amount").get<std::vector<int64_t>>();
-			const auto particles = cell.at("particles").get<std::vector<int64_t>>();
-			if (amount.size() != species || particles.size() != species) {
+			auto amount = cell.at("amount").get<std::vector<int64_t>>();
+			auto particles = cell.at("particles").get<std::vector<int64_t>>();
+			if (amount.size() > species || particles.size() != amount.size()) {
 				why = "the save's cells do not match the species table";
 				return nullptr;
 			}
+			// a save made with fewer species (the table grows only at its end); a retired formula unit's amount the
+			// builder takes as its ions (Stage 63)
+			amount.resize(species, 0);
+			particles.resize(species, 0);
 			for (size_t s = 0; s < species; ++s) {
 				const SpeciesId sp{ static_cast<int32_t>(s) };
 				if (amount[s] != 0) {

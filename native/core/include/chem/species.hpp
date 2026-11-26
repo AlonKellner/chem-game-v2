@@ -128,6 +128,9 @@ struct SpeciesDef {
 	// A wall's or a solid's thermal conductivity, W/m K (GAME_SPEC §6, Stage 53: a vessel's glass as rings that
 	// conduct along it; a powder's grains in a bed on a floor); 0: none given
 	double conductivity = 0.0;
+	// (Stage 63) a dissolved formula unit whose ions are species of their own: no reaction names it, and an amount of
+	// it (a bench's, an old save's) is taken as its ions
+	bool retired = false;
 };
 
 struct SpeciesId {
@@ -242,7 +245,8 @@ public:
 	// symbol or id, a non-positive atomic mass, a negative atom count, a count
 	// for an element the table does not have, a species with no atoms, a molar
 	// mass of 2^30 ug/mol (about 1074 g/mol) or more, thermodynamic data that
-	// is not finite.
+	// is not finite, a charged species that is not dissolved (Stage 63), a molar volume that is negative (but an
+	// ion's, by H+'s convention) or not finite; a retired species (Stage 63) that names no ions.
 	// The solution model (GAME_SPEC §10) is refused when: an ion is named
 	// twice or has no name; a species names ions without being dissolved, an
 	// ion out of range or a count that is not positive, or ions whose charges
@@ -264,6 +268,9 @@ public:
 	bool has(SpeciesId s) const { return s.index >= 0 && s.index < species_count(); }
 	// the species with this id, or an invalid id
 	SpeciesId find(std::string_view id) const;
+	// (Stage 63) what an amount of a species is as species: a retired formula unit's ions, each as the ion species that
+	// is that particle alone, with its count (copper_sulfate_aq: Cu+2 1, SO4-2 1); any other species, itself, once
+	std::vector<std::pair<SpeciesId, int32_t>> as_species(SpeciesId s) const;
 	// the particles in solution and their interactions (GAME_SPEC §10)
 	const SolutionDef &solution() const { return solution_; }
 	int particle_count() const { return static_cast<int>(solution_.ions.size()); }

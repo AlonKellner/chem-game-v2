@@ -227,6 +227,7 @@ public:
 		Builder &set_mixing(CellId cell, double mixing);
 		// the step the world resumes at (a saved world)
 		Builder &set_step(uint64_t step);
+		// a retired formula unit (Stage 63: `SpeciesDef::retired`) is set as its ions, each adding its share
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
 		Builder &set_energy(CellId cell, Energy energy);
 		// how many particles a solid is in (default: one lump)
@@ -240,7 +241,7 @@ public:
 		// negative or not finite, matter in a reservoir, a temperature that is
 		// not positive and finite or set in a cell that cannot have one (a
 		// species without thermodynamic data, no heat capacity), totals that
-		// do not fit the integer range. In a thermal world every cell must
+		// do not fit the integer range, a cell whose charge is not nought (Stage 63). In a thermal world every cell must
 		// have a temperature, and a cell with a dissolved species a liquid. A
 		// particle count for a species that is not a solid, or less than one
 		// for a solid that is there. A rigid cell: a volume that is not positive and
@@ -253,6 +254,7 @@ public:
 			CellId cell;
 			SpeciesId species;
 			Amount amount;
+			bool add = false; // a retired formula unit's ions add to what is there (Stage 63)
 		};
 		struct SetEnergy {
 			CellId cell;
@@ -302,7 +304,9 @@ public:
 	// `edge`: one cell loses exactly what the other gains. `energy` may be
 	// negative (heat flowing toward `from`). Refused, with the state untouched,
 	// unless the edge is open and joins `from`, every species' phase may pass,
-	// `from` holds every amount, and nothing overflows.
+	// `from` holds every amount, and nothing overflows. Matter moves without charge (Stage 63, GAME_SPEC §10): where
+	// the ions asked for carry a net charge, the fewest quanta of them are left behind (`neutral_part`), so a cell
+	// that was neutral stays so.
 	Refusal transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy);
 
 	// Primitive 2. Applies amount += nu * extent to every species of a balanced
@@ -378,5 +382,22 @@ private:
 	uint64_t topology_version_ = 0;
 	CellId spill_;
 };
+
+// An amount put into a state by hand, outside a world (Stage 63): a retired formula unit as its ions, each adding its
+// share (as World::Builder::set_amount takes one); any other species set to it.
+inline void put_amount(const SpeciesTable &table, CellState &state, SpeciesId species, int64_t quanta) {
+	if (table.species(species).retired) {
+		for (const auto &[ion, count] : table.as_species(species)) {
+			state.amount[static_cast<size_t>(ion.index)] += quanta * count;
+		}
+		return;
+	}
+	state.amount[static_cast<size_t>(species.index)] = quanta;
+}
+
+// What of `amounts` moves as neutral matter (Stage 63): each charged species' amount lowered by the fewest quanta that
+// leave their charges summing to nought, greedily (the side in excess loses an ion whose charge fits what is in
+// excess, the most plentiful); where that does not close, no charged species moves at all. Uncharged species as asked.
+void neutral_part(const SpeciesTable &table, std::vector<SpeciesAmount> &amounts);
 
 } // namespace chem

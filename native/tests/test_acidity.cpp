@@ -1,5 +1,6 @@
 // Acids, bases and pH (GAME_SPEC §9, Stage 43): water's ionisation against IAPWS, the base's and its salt's
 // activity against their evaluated tables, the neutralisation's heat from the tables, and the pH.
+#include "tables.hpp"
 #include "chem/builtin_ids.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
@@ -27,7 +28,7 @@ struct Cell {
 		std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0) };
 	Cell() { put(builtin::water, 1.0 / 0.018015); }
 	Cell &put(SpeciesId s, double mol) {
-		state.amount[static_cast<size_t>(s.index)] = quanta(mol);
+		testing::put_amount(builtin_species(), state, s, quanta(mol));
 		return *this;
 	}
 };
@@ -37,9 +38,14 @@ bool near_enough(double model, double measured) {
 	return std::abs(model / measured - 1.0) < 0.025;
 }
 
+// what is put in the cell, taken to its fast equilibria at the temperature
+CellState settled(const Cell &c, double kelvin) {
+	return testing::settled(c.state, kelvin);
+}
+
 double ph_of(const Cell &c, double kelvin = 298.15) {
 	double p = 0.0;
-	REQUIRE(ph(builtin_species(), c.state, kelvin, p));
+	REQUIRE(ph(builtin_species(), settled(c, kelvin), kelvin, p));
 	return p;
 }
 
@@ -80,16 +86,19 @@ TEST_CASE("acidity: the neutralisation gives out 55.84 kJ for each water it make
 	CHECK(heat == doctest::Approx(-111.672e3).epsilon(1e-5));
 	// and at infinite dilution H+ + OH- -> H2O is the ionisation backwards (NBS: 55.836 kJ/mol)
 	CHECK(-heat / 2.0 == doctest::Approx(t.solution().ionisation_h).epsilon(1e-4));
+	// in ions (Stage 63), the neutralisation itself: the same heat, the ions' data the formula units' split exactly
+	CHECK(hf(builtin::water) - hf(builtin::hydrogen_ion) - hf(builtin::hydroxide_ion) == doctest::Approx(heat / 2.0).epsilon(1e-9));
+	CHECK(hf(builtin::sodium_sulfate_aq) == doctest::Approx(2.0 * hf(builtin::sodium_ion) + hf(builtin::sulfate_ion)).epsilon(1e-12));
 }
 
 TEST_CASE("acidity: pure water is neutral at every temperature; an acid's pH is its hydrogen ions', a base's is set by Kw (Stage 43)") {
 	const SpeciesTable &t = builtin_species();
 	for (const double kelvin : { 273.15, 298.15, 323.15, 373.15 }) {
-		CHECK(ph_of(Cell(), kelvin) == doctest::Approx(-0.5 * std::log10(water_ionisation(t, kelvin))).epsilon(1e-9));
+		// (to a millionth: its own ions, 1e-7 mol/kg of each, take their activity coefficients a hair under one)
+		CHECK(ph_of(Cell(), kelvin) == doctest::Approx(-0.5 * std::log10(water_ionisation(t, kelvin))).epsilon(1e-6));
 	}
 	CHECK(ph_of(Cell()) == doctest::Approx(6.998).epsilon(1e-3));
-	// 0.01 mol/kg of the acid, fully dissociated: 0.02 mol/kg of H+ at its activity coefficient (0.69 by the
-	// acid's fit: about 1.87 measured, where the bisulfate holds a share of it back)
+	// 0.01 mol/kg of the acid: its second hydrogen held back in part as bisulfate (Stage 63), about 1.87 measured
 	const double acid = ph_of(Cell().put(builtin::sulfuric_acid_aq, 0.01));
 	CHECK(acid > 1.7);
 	CHECK(acid < 1.95);
@@ -101,8 +110,11 @@ TEST_CASE("acidity: pure water is neutral at every temperature; an acid's pH is 
 	const double base = ph_of(Cell().put(builtin::sodium_hydroxide_aq, 0.01));
 	CHECK(base > 11.8);
 	CHECK(base < 12.0);
-	// the salt of the two is neutral
-	CHECK(ph_of(Cell().put(builtin::sodium_sulfate_aq, 0.1)) == doctest::Approx(7.0).epsilon(0.01));
+	// the salt of the two is all but neutral: sulfate is the bisulfate's base (Stage 63: Kb = Kw / K2, about 1e-12), a
+	// little over 7
+	const double salt = ph_of(Cell().put(builtin::sodium_sulfate_aq, 0.1));
+	CHECK(salt > 7.05);
+	CHECK(salt < 7.5);
 	// past the activity model's range, a base boiled nearly dry: no pH (Stage 44)
 	CHECK(ph_of(Cell().put(builtin::sodium_hydroxide_aq, 5.9)) > 14.0);
 	double none = 0.0;
@@ -143,22 +155,30 @@ TEST_CASE("acidity: an acid and a base mixed neutralise in the step, the solutio
 		const Violations violations = check_all(table, trace, equilibria); // P1 among them: the cell at its fast equilibria
 		CHECK_MESSAGE(violations.empty(), (violations.empty() ? std::string() : violations.front()));
 		// one of the two is used up, to what water's own ionisation leaves of it (at the equivalence, both: a
-		// hundred-millionth of a mole of each, the 1e-7 mol/kg of neutral water)
+		// hundred-millionth of a mole of each, the 1e-7 mol/kg of neutral water); the acid left is free hydrogen ions
+		// and bisulfate (Stage 63)
 		const auto mol = [&](SpeciesId s) { return static_cast<double>(end.amount[static_cast<size_t>(s.index)]) * MOL_PER_QUANTUM; };
-		const double made = std::min(0.025, base / 2.0);
-		CHECK(mol(builtin::sodium_sulfate_aq) == doctest::Approx(made).epsilon(1e-6));
-		CHECK(std::min(mol(builtin::sulfuric_acid_aq), mol(builtin::sodium_hydroxide_aq)) < (base == 0.05 ? 1e-7 : 1e-11));
-		INFO("left: acid " << mol(builtin::sulfuric_acid_aq) << " mol, base " << mol(builtin::sodium_hydroxide_aq) << " mol");
-		// the closed form: the heat of the waters made, at 20 C, over what the beaker holds now
-		const auto cp = [&](SpeciesId s) { return table.species(s).cp; };
-		const auto hf = [&](SpeciesId s) { return table.species(s).hf; };
-		const double reaction_heat = hf(builtin::sodium_sulfate_aq) + 2.0 * hf(builtin::water) - hf(builtin::sulfuric_acid_aq) - 2.0 * hf(builtin::sodium_hydroxide_aq) +
-				(cp(builtin::sodium_sulfate_aq) + 2.0 * cp(builtin::water) - cp(builtin::sulfuric_acid_aq) - 2.0 * cp(builtin::sodium_hydroxide_aq)) * (293.15 - T0);
+		const double acid_left = mol(builtin::hydrogen_ion) + mol(builtin::hydrogen_sulfate_ion);
+		const double base_left = mol(builtin::hydroxide_ion);
+		CHECK(acid_left - base_left == doctest::Approx(0.05 - base).epsilon(1e-6));
+		CHECK(std::min(acid_left, base_left) < (base == 0.05 ? 1e-7 : 1e-11));
+		INFO("left: acid " << acid_left << " mol, base " << base_left << " mol");
+		// the closed form: the heat of what the step made and used, at 20 C, over what the beaker holds now
+		const CellState &start = trace.before.cells[static_cast<size_t>(beaker.index)];
+		double reaction_heat = 0.0;
+		for (size_t s = 0; s < end.amount.size(); ++s) {
+			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (d.phase != Phase::Gas) {
+				reaction_heat += static_cast<double>(end.amount[s] - start.amount[s]) * MOL_PER_QUANTUM * (d.hf + d.cp * (293.15 - T0));
+			}
+		}
+		const double made = std::min(0.05, base);
+		CHECK(reaction_heat < -0.9 * made * 55.836e3); // the waters' heat, less the bisulfate's in the acid left
 		double before = 0.0, after = 0.0;
 		REQUIRE(sim.world().temperature(beaker, after));
 		before = 293.15;
 		const double capacity = thermal_state(table, end).heat_capacity;
-		CHECK(after - before == doctest::Approx(-made * reaction_heat / capacity).epsilon(0.01));
+		CHECK(after - before == doctest::Approx(-reaction_heat / capacity).epsilon(0.01));
 		INFO("base " << base << " mol: " << after - before << " K");
 		// the pH: acid left, neutral, base left
 		double p = 0.0;
@@ -168,7 +188,9 @@ TEST_CASE("acidity: an acid and a base mixed neutralise in the step, the solutio
 		} else if (base > 0.05) {
 			CHECK(p > 12.0);
 		} else {
-			CHECK(std::abs(p - 7.0) < 0.2);
+			CHECK(p > 7.0); // the sodium sulfate made: sulfate a weak base (Stage 63)
+			CHECK(p < 7.5);
 		}
 	}
 }
+

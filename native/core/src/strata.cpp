@@ -28,10 +28,11 @@ namespace chem {
 namespace {
 
 // how much two layers differ, in units of what is worth a layer of its own: a kelvin, or a thousandth of the
-// solution's mass in any dissolved species (GAME_SPEC §6: design values)
+// solution's mass in what is dissolved, summed over its species (GAME_SPEC §6: design values)
 constexpr double SPLIT_ABOVE = 1.0, MERGE_BELOW = 0.1;
 constexpr double KELVIN_UNIT = 1.0, FRACTION_UNIT = 1e-3;
 constexpr double OVERTURN_BELOW = 1e-9; // the lower lighter by more than this share overturns
+constexpr double TRACE_SHARE = 1e-3; // (Stage 63) an ion carrying less of a layer's conductance than this is a trace
 constexpr double THINNEST = 2.5e-4; // m: no layer is split below twice this (a diffusion zone is sub-millimetre for minutes)
 // Stirred (Stage 49): of the work a stirrer's turning dissipates, this share raises the column's potential energy
 // (Linden 1979: the mixing efficiency of stirred stratified fluids, at most 0.2 +- 0.05; Osborn 1980's 0.2;
@@ -97,11 +98,14 @@ std::vector<double> fractions(const SpeciesTable &table, const CellState &c) {
 
 double contrast(const SpeciesTable &table, const CellState &a, double ta, const CellState &b, double tb) {
 	double out = std::fabs(ta - tb) / KELVIN_UNIT;
+	// what is dissolved: the sum of the differences of its species' shares (Stage 63: a salt is its ions, and the sum
+	// is the salt's own difference whichever way it is split)
 	const std::vector<double> wa = fractions(table, a), wb = fractions(table, b);
+	double dissolved = 0.0;
 	for (size_t s = 0; s < wa.size(); ++s) {
-		out = std::max(out, std::fabs(wa[s] - wb[s]) / FRACTION_UNIT);
+		dissolved += std::fabs(wa[s] - wb[s]);
 	}
-	return out;
+	return std::max(out, dissolved / FRACTION_UNIT);
 }
 
 // A column's heights (Stage 51): the height over its floor under which its inside holds a volume, and its
@@ -500,9 +504,16 @@ void Simulation::stratify(const Column &col) {
 		}
 	}
 	// what is dissolved moves down its gradient between two layers that stay (Fick's law across the distance between
-	// their middles), no further than to equal concentrations
+	// their middles); an ion with its field (Stage 63: Nernst and Planck's at no current, J_i = D_i (g_i - z_i c_i phi),
+	// g_i its difference of concentration, c_i their mean, phi what carries no net charge), so a fast ion drags its
+	// slow counter-ion and none runs ahead of it. A species moves no further than half the way to equal concentrations
+	// (the ions together, by one factor); each direction's ions made whole by a carrier of the opposite charge that
+	// moves both ways (what moves is neutral matter, `neutral_part`)
 	const double area = world_.meta(col.top).column_area;
 	const double dt = step_seconds_;
+	const size_t species_n = static_cast<size_t>(table.species_count());
+	std::vector<double> flux(species_n);
+	std::vector<char> scaled(species_n);
 	for (size_t i = 0; i + 1 < n && area > 0.0; ++i) {
 		if (!liquid(i) || !liquid(i + 1)) {
 			continue;
@@ -513,24 +524,110 @@ void Simulation::stratify(const Column &col) {
 		}
 		const Levels at = levels_of(table, world_, col.top, col.cells);
 		const double dz = at.middle[i] - at.middle[i + 1], across = at.across[i], t = 0.5 * (kelvin(i) + kelvin(i + 1));
-		std::vector<SpeciesAmount> down_moves, up_moves;
-		for (size_t s = 0; s < state(i).amount.size(); ++s) {
+		if (!(dz > 0.0)) {
+			continue;
+		}
+		const CellState &upper = state(i), &lower = state(i + 1);
+		const auto conc = [&](const CellState &c, size_t s, double v) { return static_cast<double>(c.amount[s]) * MOL_PER_QUANTUM / v; };
+		double field_num = 0.0, field_den = 0.0;
+		for (size_t s = 0; s < species_n; ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
-			if (table.species(id).phase != Phase::Aqueous) {
+			const SpeciesDef &def = table.species(id);
+			flux[s] = 0.0;
+			scaled[s] = 0;
+			if (def.phase != Phase::Aqueous || def.charge == 0) {
 				continue;
 			}
-			const double cu = static_cast<double>(state(i).amount[s]) * MOL_PER_QUANTUM / vu, cl = static_cast<double>(state(i + 1).amount[s]) * MOL_PER_QUANTUM / vl;
 			const double d = diffusion(table, id, t);
-			if (!(d > 0.0) || cu == cl) {
+			if (!(d > 0.0)) {
 				continue;
 			}
-			const double most = std::fabs(cu - cl) / (1.0 / vu + 1.0 / vl) * 0.5; // half the way to equal, at most
-			const double mol = dz > 0.0 ? std::min(d * across * std::fabs(cu - cl) / dz * dt, most) : 0.0;
-			const auto q = static_cast<int64_t>(mol / MOL_PER_QUANTUM);
-			if (q > 0) {
-				(cu > cl ? down_moves : up_moves).push_back(SpeciesAmount{ id, Amount{ q } });
+			const double cu = conc(upper, s, vu), cl = conc(lower, s, vl), z = def.charge;
+			field_num += z * d * (cu - cl);
+			field_den += z * z * d * 0.5 * (cu + cl);
+		}
+		const double phi = field_den > 0.0 ? field_num / field_den : 0.0;
+		double ions_scale = 1.0;
+		for (size_t s = 0; s < species_n; ++s) {
+			const SpeciesId id{ static_cast<int32_t>(s) };
+			const SpeciesDef &def = table.species(id);
+			if (def.phase != Phase::Aqueous) {
+				continue;
+			}
+			const double d = diffusion(table, id, t);
+			if (!(d > 0.0)) {
+				continue;
+			}
+			const double cu = conc(upper, s, vu), cl = conc(lower, s, vl), z = def.charge;
+			const double drive = (cu - cl) - z * 0.5 * (cu + cl) * phi;
+			const double mol = d * across * drive / dz * dt; // downward
+			const double most = std::fabs(cu - cl) / (1.0 / vu + 1.0 / vl) * 0.5; // half the way to equal
+			// an ion that carries a share of the current under TRACE_SHARE (a trace: H+ and OH- in a salt) is held to its
+			// own bound, as a neutral species is; the rest by the one factor, so no current runs
+			const bool trace = !(z * z * d * 0.5 * (cu + cl) >= TRACE_SHARE * field_den);
+			if (def.charge == 0 || trace) {
+				const double bound = mol * (cu - cl) >= 0.0 ? most : static_cast<double>((mol > 0.0 ? upper : lower).amount[s]) * MOL_PER_QUANTUM * 0.5;
+				flux[s] = mol > 0.0 ? std::min(mol, bound) : -std::min(-mol, bound);
+			} else {
+				flux[s] = mol;
+				scaled[s] = 1;
+				// down its own gradient: no further than half the way; against it (pulled by the field): what it holds
+				const double cap = mol * (cu - cl) > 0.0 ? most : static_cast<double>((mol > 0.0 ? upper : lower).amount[s]) * MOL_PER_QUANTUM * 0.5;
+				if (std::fabs(mol) > cap) {
+					ions_scale = std::min(ions_scale, cap / std::fabs(mol));
+				}
 			}
 		}
+		std::vector<SpeciesAmount> down_moves, up_moves;
+		for (size_t s = 0; s < species_n; ++s) {
+			const double mol = scaled[s] ? flux[s] * ions_scale : flux[s];
+			const auto q = static_cast<int64_t>(std::fabs(mol) / MOL_PER_QUANTUM);
+			if (q > 0) {
+				(mol > 0.0 ? down_moves : up_moves).push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ q } });
+			}
+		}
+		// each direction made neutral by a carrier that moves both ways: the charged species of the sign each lacks that
+		// both layers hold the most of
+		const auto carry = [&](std::vector<SpeciesAmount> &moves, const CellState &from) {
+			int64_t q = 0;
+			for (const SpeciesAmount &m : moves) {
+				q += table.species(m.species).charge * m.amount.quanta;
+			}
+			if (q == 0) {
+				return;
+			}
+			size_t best = species_n;
+			int64_t most = 0;
+			for (size_t s = 0; s < species_n; ++s) {
+				const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+				if (def.phase != Phase::Aqueous || def.charge * q >= 0 || (q % def.charge) != 0) {
+					continue;
+				}
+				int64_t held = std::min(upper.amount[s], lower.amount[s]);
+				for (const SpeciesAmount &m : moves) {
+					if (static_cast<size_t>(m.species.index) == s) {
+						held = std::min(held, from.amount[s] - m.amount.quanta);
+					}
+				}
+				if (held > most) {
+					most = held;
+					best = s;
+				}
+			}
+			if (best == species_n) {
+				return; // what is left is trimmed as it moves
+			}
+			const int64_t k = std::min(q / -static_cast<int64_t>(table.species(SpeciesId{ static_cast<int32_t>(best) }).charge), most);
+			for (SpeciesAmount &m : moves) {
+				if (static_cast<size_t>(m.species.index) == best) {
+					m.amount.quanta += k;
+					return;
+				}
+			}
+			moves.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(best) }, Amount{ k } });
+		};
+		carry(down_moves, upper);
+		carry(up_moves, lower);
 		if (!down_moves.empty()) {
 			const Refusal refused = transfer(col.up[i], col.cells[i], down_moves, enthalpy_carried(table, down_moves, kelvin(i)));
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
@@ -540,30 +637,32 @@ void Simulation::stratify(const Column &col) {
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		}
 	}
-	// a steep step and a spare layer: the thicker neighbour splits in two halves (one split a step)
+	// a steep step and a spare layer: the thicker neighbour splits in two halves (one split a step); the steepest
+	// step whose thicker neighbour can still be halved (Stage 63: a step resolved to the thinnest layers beside it
+	// leaves the next steepest its turn)
 	if (empty(state(n - 1)) && area > 0.0) {
-		size_t at = n;
+		size_t at = n, thick = n;
 		double steepest = SPLIT_ABOVE;
+		const Levels levels = levels_of(table, world_, col.top, col.cells);
 		for (size_t i = 0; i + 1 < n; ++i) {
 			if (liquid(i) && liquid(i + 1)) {
 				const double c = contrast(table, state(i), kelvin(i), state(i + 1), kelvin(i + 1));
-				if (c > steepest) {
+				const size_t thicker = solution_m3(table, state(i)) >= solution_m3(table, state(i + 1)) ? i : i + 1;
+				if (c > steepest && levels.thick(thicker) > 2.0 * THINNEST) {
 					steepest = c;
 					at = i;
+					thick = thicker;
 				}
 			}
 		}
 		if (at < n) {
-			const size_t thick = solution_m3(table, state(at)) >= solution_m3(table, state(at + 1)) ? at : at + 1;
-			if (levels_of(table, world_, col.top, col.cells).thick(thick) > 2.0 * THINNEST) {
-				// every layer under it down a place, then half of it into the place it leaves
-				for (size_t k = n - 1; k > thick + 1; --k) {
-					if (!empty(state(k - 1))) {
-						move(k - 1, k, PHASES_ALL, 1.0);
-					}
+			// every layer under it down a place, then half of it into the place it leaves
+			for (size_t k = n - 1; k > thick + 1; --k) {
+				if (!empty(state(k - 1))) {
+					move(k - 1, k, PHASES_ALL, 1.0);
 				}
-				move(thick, thick + 1, PHASES_ALL & ~gas, 0.5);
 			}
+			move(thick, thick + 1, PHASES_ALL & ~gas, 0.5);
 		}
 	}
 	// the top is the size its layers leave it

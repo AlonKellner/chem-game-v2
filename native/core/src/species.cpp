@@ -70,7 +70,14 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "species " + name + " has no atoms");
 			return std::nullopt;
 		}
-		if (!(s.molar_volume >= 0.0) || !(s.molar_volume - s.molar_volume == 0.0)) {
+		// (Stage 63) only what is dissolved carries a charge: matter moves between cells as neutral matter, and a
+		// charged solid or gas would have no counter-ion to move with
+		if (s.charge != 0 && s.phase != Phase::Aqueous) {
+			set_why(why, "species " + name + " is charged and not dissolved");
+			return std::nullopt;
+		}
+		// (Stage 63: an ion's apparent molar volume, by the convention of H+'s at nought, may be negative)
+		if (!(s.molar_volume >= 0.0 || (s.charge != 0 && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
 			set_why(why, "species " + name + " has a molar volume that is negative or not finite");
 			return std::nullopt;
 		}
@@ -163,6 +170,31 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 	table.species_ = std::move(species);
 	table.solution_ = std::move(solution);
 	return table;
+}
+
+std::vector<std::pair<SpeciesId, int32_t>> SpeciesTable::as_species(SpeciesId s) const {
+	std::vector<std::pair<SpeciesId, int32_t>> out;
+	if (!has(s)) {
+		return out;
+	}
+	const SpeciesDef &def = species(s);
+	if (!def.retired) {
+		out.emplace_back(s, 1);
+		return out;
+	}
+	for (const IonCount &ion : def.ions) {
+		if (ion.count <= 0) {
+			break;
+		}
+		for (int k = 0; k < species_count(); ++k) {
+			const SpeciesDef &d = species(SpeciesId{ k });
+			if (!d.retired && d.phase == Phase::Aqueous && d.charge != 0 && d.ions[0].ion == ion.ion && d.ions[0].count == 1 && d.ions[1].count <= 0) {
+				out.emplace_back(SpeciesId{ k }, ion.count);
+				break;
+			}
+		}
+	}
+	return out;
 }
 
 SpeciesId SpeciesTable::find(std::string_view id) const {

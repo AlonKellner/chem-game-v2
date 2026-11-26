@@ -158,14 +158,26 @@ double activity(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 // table's ionisation at 25 C and its heat capacity held constant. 0 for a table without it.
 double water_ionisation(const SpeciesTable &table, double temperature);
 
-// The cell's pH at temperature T (GAME_SPEC §9, Stage 43): -log10 a(H+). The strong acids and bases are fully
-// dissociated, and the neutralisation between them is a fast equilibrium, so what is left over of one sets the
-// hydrogen ions' molality; water's own ionisation adds what it adds, the free ions solving
-// (m_H + x)(m_OH + x) gamma_H gamma_OH = Kw a(H2O). Each particle's activity coefficient is Pitzer's (§10).
+// The cell's pH at temperature T (GAME_SPEC §9, Stages 43 and 63): -log10 a(H+). Hydrogen and hydroxide ions are
+// species (Stage 63), at their fast equilibria with water, the bisulfate and copper's hydrolysis; their difference,
+// m_H - m_OH, is what the ionisation of water leaves unchanged, so the free ions solve
+// (m_H + x)(m_OH + x) gamma_H gamma_OH = Kw a(H2O) from it exactly, below a quantum of either as well. Each particle's
+// activity coefficient is Pitzer's (§10).
 // false, and `ph` left, where the cell holds no liquid or its table no ionisation of water, or where what is left
 // over of the acid or the base is more than PH_MOST_EXCESS mol/kg, past the activity model's range (Stage 44).
 inline constexpr double PH_MOST_EXCESS = 6.0;
 bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &ph);
+
+// The solution's ionic strength, I = 1/2 sum m_j z_j^2 over its particles, mol/kg (0 with no liquid).
+double ionic_strength(const SpeciesTable &table, const CellState &cell);
+// (Stage 63) The activity model's range: Pitzer's fits hold to about 6 mol/kg of a salt; past an ionic strength of
+// MOST_IONIC_STRENGTH (a 2:2 salt at 5 mol/kg, a 1:1 at 20) the game cannot say how a solution's ions share
+// themselves, and a fast equilibrium among dissolved species alone (every species dissolved, or the solvent: water's
+// ionisation, the bisulfate, copper's hydrolysis) stands as it was (`stands`). A solution boiled nearly dry keeps the
+// traces its ions held, and what crystallizes out of it still does (its solid is not among the dissolved).
+inline constexpr double MOST_IONIC_STRENGTH = 20.0;
+bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms);
+bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
 
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
