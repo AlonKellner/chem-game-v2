@@ -324,7 +324,8 @@ if(CHEM_BUILD_TESTS)
         add_test(NAME ${target}.every_file_runs COMMAND ${target} --count --source-file-exclude=${excluded})
         set_tests_properties(${target}.every_file_runs PROPERTIES PASS_REGULAR_EXPRESSION "passing the current filters: 0")
     endfunction()
-    chem_add_tests(chem_tests ${CHEM_TEST_SOURCES})
+    # (Stage 68: an entry a case, as the lab's: a file of the core's tests was one entry, the longest 212 s)
+    chem_add_cases(chem_tests ${CHEM_TEST_SOURCES})
 
     # the lab layer's tests
     file(GLOB LAB_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
