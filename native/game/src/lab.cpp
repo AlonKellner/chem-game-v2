@@ -6994,6 +6994,15 @@ std::string Lab::report() const {
 		elements[std::string(table.element(e).symbol)] = now.atoms[static_cast<size_t>(e)];
 	}
 	conserved["atom_quanta"] = elements;
+	// (Stage 61) what it should hold: its start, plus what was supplied to it, less what was retired from it (C9)
+	const Totals should = minus(plus(m.genesis, m.supplied), m.retired);
+	json expected_elements;
+	for (int e = 0; e < table.element_count(); ++e) {
+		expected_elements[std::string(table.element(e).symbol)] = should.atoms[static_cast<size_t>(e)];
+	}
+	conserved["expected"] = { { "atom_quanta", expected_elements }, { "energy_quanta", should.energy }, { "mass_g", should.mass.grams() } };
+	conserved["supplied_g"] = m.supplied.mass.grams();
+	conserved["retired_g"] = m.retired.mass.grams();
 	out["conserved"] = conserved;
 	return out.dump();
 }
