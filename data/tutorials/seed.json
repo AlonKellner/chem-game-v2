@@ -1,0 +1,85 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §9, §13.7, Stage 66; docs/CURRICULUM.md, experiment 35) on data/benches/seed.json: a supersaturated solution and a seed. The two beakers hold the same clear solution, 1.06 times what water holds at 20 C. A seed left still only grows; stirred, it breeds (secondary nucleation) and the solution's excess, about 1 g of the pentahydrate, comes out in minutes.",
+	"title": "Experiment: supersaturation and a seed",
+	"bench": "../benches/seed.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Both beakers hold 50 g of water with more copper sulfate dissolved than it can hold at 20 C, yet no crystal has formed. A seed, one 10 mg crystal, will go into each; the right beaker will be stirred. How many grams of crystals do you think the stirred beaker will hold at the end? Type your guess, then click \"predict\".",
+			"why": "A solution that holds more than it can at its temperature is supersaturated. The extra stays dissolved until a crystal gives it somewhere to go: a crystal must start before it can grow, and a new one starts only rarely this close to saturation.",
+			"checks": [{"text": "a prediction made", "when": {"predicted": 1}}],
+			"play": [{"click": "predict:0"}, {"type": "0.1"}, {"click": "predict:make"}]
+		},
+		{
+			"part": "Two seeds",
+			"title": "A seed into the still beaker",
+			"text": "Pick up the left jar, then right-click the left beaker. In the menu that opens, click \"tip in\".",
+			"why": "The left jar holds a single blue crystal of copper sulfate pentahydrate, CuSO4.5H2O, 10 mg.",
+			"checks": [{"text": "the seed in the left beaker", "when": {"item": "seed1", "species": "copper_sulfate_pentahydrate", "below_g": 0.001}}],
+			"play": [{"drag": ["item:seed1", "item:still"]}, {"click": "panel:tip:copper_sulfate_pentahydrate"}]
+		},
+		{
+			"title": "A seed into the other beaker",
+			"text": "Pick up the right jar, then right-click the right beaker, and tip it in.",
+			"checks": [{"text": "the seed in the right beaker", "when": {"item": "seed2", "species": "copper_sulfate_pentahydrate", "below_g": 0.001}}],
+			"play": [{"drag": ["item:seed2", "item:stirred"]}, {"click": "panel:tip:copper_sulfate_pentahydrate"}]
+		},
+		{
+			"title": "Stir the right beaker",
+			"text": "Right-click the right beaker to choose it, then \"stir\" in the column on the right. Leave the left one still.",
+			"checks": [{"text": "the right beaker is stirred", "when": {"item": "stirred", "stirred": true}}],
+			"play": [{"click": "item:stirred"}, {"click": "stir:stirred"}]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"60x\" at the top.",
+			"checks": [{"text": "time runs at least 60 times faster", "when": {"speed_at_least": 60}}],
+			"play": [{"click": "speed:60"}]
+		},
+		{
+			"part": "Watch",
+			"title": "A shower of crystals",
+			"text": "Point at the right beaker and watch its crystals: their number, their mass.",
+			"why": "The stirrer knocks the seed about, and tiny fragments chip off it. Each is a crystal of its own and grows, and is chipped in turn: secondary nucleation. The more crystals there are, the faster the solution's excess goes onto them.",
+			"checks": [{"text": "0.3 g of crystals in the right beaker", "when": {"item": "stirred", "species": "copper_sulfate_pentahydrate", "above_g": 0.3}}]
+		},
+		{
+			"title": "The excess is out",
+			"text": "Wait until the right beaker's crystals stop growing.",
+			"why": "They stop when the solution is just saturated: about 1 g of the pentahydrate has come out, the copper sulfate water cannot hold at 20 C, with the five waters each unit takes from the solution.",
+			"checks": [{"text": "1.03 g of crystals in the right beaker", "when": {"item": "stirred", "species": "copper_sulfate_pentahydrate", "above_g": 1.03}}]
+		},
+		{
+			"title": "The still seed",
+			"text": "Now point at the left beaker.",
+			"why": "Its seed has only grown, by a few milligrams: one crystal, and the solution around it is still supersaturated. Left long enough it would grow into a large single crystal, which is how crystals are grown for show: a seed hung in a still, slightly supersaturated solution.",
+			"checks": [{"text": "the left beaker's seed still under 50 mg", "when": {"item": "still", "species": "copper_sulfate_pentahydrate", "below_g": 0.05}}]
+		}
+	],
+	"fails": [
+		{"text": "The left beaker was stirred: the two seeds cannot be compared now. Press reset to start again.", "when": {"item": "still", "stirred": true}}
+	],
+	"goal": [
+		{"text": "every element, mass and energy unchanged", "when": {"conserved": true}}
+	],
+	"results": [
+		{"label": "the crystals, still", "quantity": {"item": "still", "what": "copper_sulfate_pentahydrate"}, "show": ["now"]},
+		{"label": "how many, still", "quantity": {"item": "still", "what": "copper_sulfate_pentahydrate", "measure": "count"}, "show": ["now"]},
+		{"label": "the crystals, stirred", "quantity": {"item": "stirred", "what": "copper_sulfate_pentahydrate"}, "show": ["now"]},
+		{"label": "how many, stirred", "quantity": {"item": "stirred", "what": "copper_sulfate_pentahydrate", "measure": "count"}, "show": ["now"]},
+		{"label": "their size, stirred (um)", "quantity": {"item": "stirred", "what": "copper_sulfate_pentahydrate", "measure": "size"}, "show": ["now"]}
+	],
+	"report": [
+		{
+			"label": "the crystals in the stirred beaker",
+			"unit": "g",
+			"truth": "stirred.copper_sulfate_pentahydrate.g",
+			"tolerance": 0.02,
+			"relative": true,
+			"predict": true,
+			"why": "Point at the stirred beaker and read its crystals. What came out is what water cannot hold at 20 C: 0.0656 mol of copper sulfate in 50 g of water is 1.06 times its solubility, and each unit that comes out takes five waters with it, so about 1.04 g comes out onto the 10 mg seed."
+		}
+	]
+}

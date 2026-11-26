@@ -2902,6 +2902,11 @@ stand on.
     dissolved in 20 mL of the acid, boiled down to about 7 mL, cooled until the crop has grown past 2.5 g, filtered
     and handed in: 2.50 g, 59.5 % of the copper, short of the quota (the liquor keeps the rest; a crop harvested later
     is larger). Its report: the crystals' mass, predicted first, and the share of the copper that crystallized.
+  - `seed`, *supersaturation and a seed* (Stage 66; experiment 35): two beakers of the same clear solution, 0.0656 mol
+    of copper sulfate in 50 g of water (1.06 times its solubility at 20 °C), and a 10 mg seed crystal for each. A guess
+    first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
+    excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
+    one crystal. Its report: the stirred beaker's crystals, predicted first.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and

@@ -764,15 +764,26 @@ int seed() {
 	const Reaction &grow = builtin_reactions()[static_cast<size_t>(builtin::reaction::pentahydrate_crystallization)];
 	const double kelvin = 298.15, water_g = 100.0, over = 1.05, seed_mg = 10.0;
 	// the model's own solubility: the molality at which the crystals neither grow nor dissolve
-	const auto affinity_at = [&](double m) {
+	const auto affinity_at = [&](double m, double at = 298.15) {
 		CellState state;
 		state.amount.assign(static_cast<size_t>(table.species_count()), 0);
 		state.particles.assign(static_cast<size_t>(table.species_count()), 0);
 		state.amount[static_cast<size_t>(builtin::water.index)] = amount_from_mol(1000.0 / 18.015, ok).quanta;
 		put_amount(table, state, builtin::copper_sulfate_aq, amount_from_mol(m, ok).quanta);
 		bool defined = false;
-		return affinity(table, state, grow.terms(), kelvin, defined);
+		return affinity(table, state, grow.terms(), at, defined);
 	};
+	const auto solubility_at = [&](double at) {
+		double low = 0.5, high = 3.0;
+		for (int i = 0; i < 60; ++i) {
+			const double mid = 0.5 * (low + high);
+			(affinity_at(mid, at) > 0.0 ? high : low) = mid;
+		}
+		return 0.5 * (low + high);
+	};
+	for (const double c : { 15.0, 20.0, 25.0, 30.0 }) {
+		std::printf("the model's solubility at %.0f C: %.4f mol/kg\n", c, solubility_at(c + 273.15));
+	}
 	double lo = 0.5, hi = 3.0;
 	for (int i = 0; i < 60; ++i) {
 		const double mid = 0.5 * (lo + hi);
