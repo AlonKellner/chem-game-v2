@@ -9,9 +9,10 @@ JOBS ?= $(NCPU)
 GODOTCPP_LIB := $(wildcard native/build/bin/libgodot-cpp*.a)
 JOBS_EXT ?= $(if $(GODOTCPP_LIB),$(JOBS),4)
 CTEST_JOBS ?= $(NCPU)
-# no ctest entry started while the machine's load is over its cores (Stage 68): the gates of several worktrees, and
-# a gate's release and sanitizer runs, share the machine instead of each filling it
-CTEST_LOAD ?= $(NCPU)
+# CTEST_LOAD=n: no ctest entry started while the machine's load is over n (Stage 68). Off unless asked: ctest then
+# starts none at all while another's run keeps the load up (a gate waited out another worktree's whole run)
+CTEST_LOAD ?=
+ctest_load = $(if $(CTEST_LOAD),--test-load $(CTEST_LOAD),)
 # a tree configured for the first time gets Ninja when installed
 NINJA := $(shell command -v ninja 2>/dev/null)
 gen = $(if $(wildcard $(1)/CMakeCache.txt),,$(if $(NINJA),-G Ninja,))
@@ -44,7 +45,7 @@ check_re_core := ^chem_
 check_re_lab := ^lab|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/chem_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
-	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure -R '$(check_re_$(AREA))'; fi
+	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure -R '$(check_re_$(AREA))'; fi
 
 # Between commits: core, then every ctest entry a change can affect (the result
 # cache, tools/gate_cache.py)
@@ -99,14 +100,14 @@ asan-build:
 		-DCHEM_SANITIZE=address,undefined -DCHEM_BUILD_EXTENSION=OFF -DCHEM_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
 native-asan: asan-build
-	$(ASAN_ENV) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure
+	$(ASAN_ENV) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure
 # the gates' (gates.sh): the same through the result cache, at the gate's level (GATE_LEVEL)
 asan-gate: asan-build
 	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS)
 
 # the release ctest (build-core; `make core` first)
 ctest:
-	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure
+	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure
 
 # Every gate before a merge or a stage close (gates.sh LEVEL=merge), with a timed
 # summary; `make gate` is the commit gate (LEVEL=commit).

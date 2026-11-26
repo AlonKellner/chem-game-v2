@@ -189,11 +189,12 @@ def ctest(build, jobs, regex, use_cache):
     if run:
         junit = os.path.join(build, "Testing", "gate_cache_junit.xml")
         regex_run = "^(" + "|".join(re.escape(n) for n in run) + ")$"
-        # (Stage 68) no entry started while the machine's load is over its cores: gates in other worktrees, and
-        # the release and sanitizer runs of one gate, share it instead of each filling it
-        load = os.environ.get("GATE_TEST_LOAD", str(os.cpu_count() or 4))
-        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs), "--test-load", load, "--output-on-failure",
-                                 "-R", regex_run, "--output-junit", junit]).returncode
+        # (Stage 68) GATE_TEST_LOAD=n: no entry started while the machine's load is over n. Off unless asked: ctest
+        # then starts none at all, its own first among them, while another's run keeps the load up, and a gate
+        # waited out another worktree's whole run
+        most_load = os.environ.get("GATE_TEST_LOAD", "")
+        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs)] + (["--test-load", most_load] if most_load else [])
+                                + ["--output-on-failure", "-R", regex_run, "--output-junit", junit]).returncode
         ok = set()
         try:
             text = open(junit).read()
