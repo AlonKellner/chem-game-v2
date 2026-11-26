@@ -53,36 +53,8 @@ std::string all(const lab::Lab &l) {
 
 } // namespace
 
-TEST_CASE("notices: the demo, as the lab tells it: each thing once, at its level, what a hand moved not news (Stage 16)") {
-	auto l = open();
-	l->set_checking(false);
-	CHECK(l->view().notices.empty()); // what is there from the start is not news
-	const nlohmann::json session = nlohmann::json::parse(read("data/sessions/demo.json"));
-	for (nlohmann::json c : session.at("script")) {
-		c.erase("note");
-		must(*l, c.dump());
-	}
-	INFO(all(*l));
-	CHECK(count(*l, Notice::Event, "the malachite is breaking down") == 1);
-	CHECK(count(*l, Notice::Event, "CuO(s) appeared in flask") == 1);
-	CHECK(count(*l, Notice::Detail, "flask: malachite decomposition stopped") == 1);
-	CHECK(count(*l, Notice::Event, "the copper oxide dissolves") == 1);
-	CHECK(count(*l, Notice::Event, "CuO(s) is used up in flask") == 1);
-	CHECK(count(*l, Notice::Event, "flask boils") == 1);
-	CHECK(count(*l, Notice::Event, "flask stopped boiling") == 1);
-	CHECK(count(*l, Notice::Event, "blue copper sulfate crystals are growing") == 1);
-	CHECK(count(*l, Notice::Event, "CuSO4.5H2O(s) appeared in flask") == 1);
-	// poured and tipped by hand: no news
-	CHECK(count(*l, Notice::Event, "Cu2CO3(OH)2(s) appeared") == 0);
-	CHECK(count(*l, Notice::Event, "H2SO4(aq) appeared") == 0);
-	// nothing went wrong
-	CHECK(count(*l, Notice::Warning, "") == 0);
-	CHECK(count(*l, Notice::Danger, "") == 0);
-	// in order, and of the step they happened in
-	const std::vector<Notice> n = l->view().notices;
-	CHECK(std::is_sorted(n.begin(), n.end(), [](const Notice &a, const Notice &b) { return a.step < b.step; }));
-	CHECK(nlohmann::json::parse(l->report()).at("notices").size() == n.size());
-}
+// (the demo, as the lab tells it, Stage 16: test_demo_record.cpp, on the one play of the session that holds its record;
+// Stage 68)
 
 TEST_CASE("notices: warnings and dangers: a balloon nearly full, then bursting; a flask boiled dry; a spill into the tray (Stage 16)") {
 	// the balloon: malachite heated hard under it, a small balloon

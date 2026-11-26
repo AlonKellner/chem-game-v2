@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
-"""The commit gate's result cache (docs/WORKFLOW.md, "The result cache").
+"""The gates' result cache (docs/WORKFLOW.md, "The result cache").
 
 A test whose inputs hash the same as on a run where it passed passes again: the
 native tests are deterministic functions of their binary, their command line,
 their environment and the repo data they read. So `make gate` reruns only what a
 change can affect. A change to the game layer leaves `chem_tests` (the core alone)
 byte for byte the same, and its sweeps and goldens are not run again.
-`make gates` (a merge, a phase close) never reads the cache: it runs everything.
 
-  gate_cache.py ctest BUILD_DIR [--jobs N] [--regex RE] [--no-cache]
+Two levels (Stage 68), GATE_LEVEL=commit (the default) or merge:
+  - a pass at the merge level (`make gates`) is kept as one, and as a commit pass;
+  - `make gates` takes only a merge-level pass for its own, `make gate` either.
+So a `make gates` run again after one entry failed, or on main after a merge whose
+binaries are the branch's, runs only what is not known to pass. GATE_CACHE=0 runs
+everything (and still records what passed).
+
+One cache for every worktree (Stage 68): GATE_CACHE_FILE, by default
+~/Library/Caches/chem-game-v2/gate_cache.json (XDG_CACHE_HOME elsewhere), read and
+written under a lock, so gates in several worktrees share what passed.
+
+  gate_cache.py ctest BUILD_DIR [--jobs N] [--regex RE] [--no-cache] [--limit COSTS:SECONDS ...]
       ctest in BUILD_DIR, skipping the entries that passed with the same key.
       An entry is cacheable when its command is a binary of BUILD_DIR. Its key
       covers that binary and the shared libraries it links from BUILD_DIR, its
@@ -30,8 +40,21 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE = os.path.join(ROOT, "native", "build-core", "gate_cache.json")
-KEEP = 8  # passing keys kept per entry (a revert, a branch switch back: still cached)
+
+
+def cache_file():
+    if os.environ.get("GATE_CACHE_FILE"):
+        return os.environ["GATE_CACHE_FILE"]
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Caches")
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, "chem-game-v2", "gate_cache.json")
+
+
+CACHE = cache_file()
+LEVEL = os.environ.get("GATE_LEVEL", "commit")
+KEEP = 16  # passing keys kept per entry (a revert, a branch switch back, another worktree: still cached)
 # what the native tests read from the repo (CHEM_REPO_ROOT)
 DATA = ["data", "bench"]
 
@@ -42,6 +65,41 @@ def sha_file(path, memo={}):
         with open(path, "rb") as f:
             for chunk in iter(lambda: f.read(1 << 20), b""):
                 h.update(chunk)
+        memo[path] = h.hexdigest()
+    return memo[path]
+
+
+def sha_binary(path, memo={}):
+    """A built binary as it behaves (Stage 68): of a Mach-O binary, its sections' names and contents (its code and
+    data), not its header nor its link-edit data, where its debug map names each object by its whole path, the
+    worktree's among them, and its UUID and signature follow from those. So the same commit's binary in two
+    worktrees reads the same here. Any other file: its whole content."""
+    import struct
+    if path not in memo:
+        with open(path, "rb") as f:
+            content = f.read()
+        h = hashlib.sha256()
+        if content[:4] == b"\xcf\xfa\xed\xfe":  # MH_MAGIC_64, little-endian
+            ncmds, = struct.unpack_from("<I", content, 16)
+            at = 32
+            for _ in range(ncmds):
+                cmd, size = struct.unpack_from("<II", content, at)
+                if cmd == 0x19:  # LC_SEGMENT_64
+                    segname = content[at + 8:at + 24]
+                    nsects, = struct.unpack_from("<I", content, at + 64)
+                    if not segname.startswith(b"__LINKEDIT"):
+                        for k in range(nsects):
+                            sec = at + 72 + 80 * k
+                            names = content[sec:sec + 32]
+                            sec_size, = struct.unpack_from("<Q", content, sec + 40)
+                            offset, = struct.unpack_from("<I", content, sec + 48)
+                            flags, = struct.unpack_from("<I", content, sec + 64)
+                            h.update(names + struct.pack("<Q", sec_size))
+                            if offset != 0 and (flags & 0xff) not in (0x1, 0xc, 0x12):  # zerofill sections hold no bytes
+                                h.update(content[offset:offset + sec_size])
+                at += size
+        else:
+            h.update(content)
         memo[path] = h.hexdigest()
     return memo[path]
 
@@ -100,26 +158,73 @@ def keys_of(cache, entry):
 
 
 def passed(cache, entry, key):
-    return key in keys_of(cache, entry)
+    """Passed at this run's level: a merge run takes only a merge-level pass."""
+    return key in keys_of(cache, ("merge|" if LEVEL == "merge" else "") + entry)
 
 
-def record(cache, entry, key, ok):
+def record_one(cache, entry, key, ok):
     keys = [k for k in keys_of(cache, entry) if k != key]
     cache[entry] = ([key] + keys)[:KEEP] if ok else keys
 
 
-def save(cache):
+def record(cache, entry, key, ok):
+    record_one(cache, entry, key, ok)
+    if LEVEL == "merge" or not ok:
+        record_one(cache, "merge|" + entry, key, ok)
+
+
+def update(changes):
+    """Applies changes(cache) to the cache on disk under a lock: gates in other
+    worktrees write it too."""
+    import fcntl
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-    tmp = CACHE + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(cache, f, indent=0, sort_keys=True)
-    os.replace(tmp, CACHE)
+    with open(CACHE + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cache = load()
+        changes(cache)
+        tmp = f"{CACHE}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(cache, f, indent=0, sort_keys=True)
+        os.replace(tmp, CACHE)
 
 
-def ctest(build, jobs, regex, use_cache):
+def entry_of(build, name):
+    """A ctest entry by its tree's kind (build-core, build-asan) and name."""
+    return f"ctest:{os.path.basename(build)}:{name}"
+
+
+def costs_of(path):
+    """ctest's measured seconds an entry (Testing/Temporary/CTestCostData.txt: name, runs, seconds)."""
+    out = {}
+    try:
+        for line in open(path):
+            if line.startswith("---"):
+                break
+            parts = line.split()
+            if len(parts) == 3:
+                out[parts[0]] = float(parts[2])
+    except OSError:
+        pass
+    return out
+
+
+def ctest(build, jobs, regex, use_cache, limits=()):
     build = os.path.abspath(build)
+    # (Stage 68) --limit FILE:S, as many as asked: no entry that took more than S seconds where FILE measured it
+    # (ctest's CTestCostData.txt, a tree's); one no FILE has measured runs
+    measured = [(costs_of(f), most) for f, most in limits if most > 0]
+    too_long = lambda name: any(m.get(name, 0.0) > most for m, most in measured)
+    left = []
     listing = json.loads(subprocess.run(["ctest", "--test-dir", build, "--show-only=json-v1"], check=True,
                                         capture_output=True, text=True).stdout)
+    # an entry left out takes the fixtures it sets up with it, and every entry that needs one of them: ctest would
+    # run a fixture's setup for any entry that needs it
+    gone = set()
+    if measured:
+        for t in listing["tests"]:
+            props = {p["name"]: p["value"] for p in t.get("properties", [])}
+            if too_long(t["name"]):
+                gone.update(props.get("FIXTURES_SETUP", []) or [])
     data = fingerprint(DATA)
     env = rc_env()
     cache = load()
@@ -129,26 +234,37 @@ def ctest(build, jobs, regex, use_cache):
         name = t["name"]
         if regex and not re.search(regex, name):
             continue
+        if measured and (too_long(name) or
+                         any(f in gone for f in ({p["name"]: p["value"] for p in t.get("properties", [])}.get("FIXTURES_REQUIRED", []) or []))):
+            left.append(name)
+            continue
         cmd = t.get("command") or []
         props = {p["name"]: p["value"] for p in t.get("properties", [])}
         if cmd and os.path.isfile(cmd[0]) and os.path.abspath(cmd[0]).startswith(build + os.sep):
             if cmd[0] not in lib_memo:
-                lib_memo[cmd[0]] = [(os.path.relpath(l, build), sha_file(l)) for l in linked_libs(cmd[0], build)]
-            key = hashlib.sha256(json.dumps([sha_file(cmd[0]), lib_memo[cmd[0]], cmd[1:], props.get("ENVIRONMENT"),
+                lib_memo[cmd[0]] = [(os.path.relpath(l, build), sha_binary(l)) for l in linked_libs(cmd[0], build)]
+            key = hashlib.sha256(json.dumps([sha_binary(cmd[0]), lib_memo[cmd[0]], cmd[1:], props.get("ENVIRONMENT"),
                                              env, data]).encode()).hexdigest()
             keys[name] = key
-            if use_cache and passed(cache, "ctest:" + name, key):
+            if use_cache and passed(cache, entry_of(build, name), key):
                 skipped.append(name)
                 continue
         run.append(name)
     print(f"gate_cache: {len(run)} ctest entries to run, {len(skipped)} unchanged since they passed"
-          + ("" if use_cache else " (cache off)"), flush=True)
+          + (f" at the {LEVEL} level" if use_cache else " (cache off)") + f" ({os.path.basename(build)})"
+          + (f"; {len(left)} left to the full gates, each over its limit ("
+             + ", ".join(f"{most:g} s in {os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(f))))}" for f, most in limits) + ")"
+             if left else ""), flush=True)
     status = 0
     if run:
         junit = os.path.join(build, "Testing", "gate_cache_junit.xml")
         regex_run = "^(" + "|".join(re.escape(n) for n in run) + ")$"
-        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs), "--output-on-failure", "-R", regex_run,
-                                 "--output-junit", junit]).returncode
+        # (Stage 68) GATE_TEST_LOAD=n: no entry started while the machine's load is over n. Off unless asked: ctest
+        # then starts none at all, its own first among them, while another's run keeps the load up, and a gate
+        # waited out another worktree's whole run
+        most_load = os.environ.get("GATE_TEST_LOAD", "")
+        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs)] + (["--test-load", most_load] if most_load else [])
+                                + ["--output-on-failure", "-R", regex_run, "--output-junit", junit]).returncode
         ok = set()
         try:
             text = open(junit).read()
@@ -156,11 +272,11 @@ def ctest(build, jobs, regex, use_cache):
             ok -= set(re.findall(r'<testcase name="([^"]+)"[^>]*status="fail"', text))
         except OSError:
             pass
-        cache = load()
-        for name in run:
-            if name in keys:
-                record(cache, "ctest:" + name, keys[name], name in ok)
-        save(cache)
+        def changes(cache):
+            for name in run:
+                if name in keys:
+                    record(cache, entry_of(build, name), keys[name], name in ok)
+        update(changes)
     return status
 
 
@@ -170,9 +286,7 @@ def step(name, inputs, command, use_cache):
         print(f"gate_cache: {name} unchanged since it passed", flush=True)
         return 0
     status = subprocess.run(command).returncode
-    cache = load()
-    record(cache, "step:" + name, key, status == 0)
-    save(cache)
+    update(lambda cache: record(cache, "step:" + name, key, status == 0))
     return status
 
 
@@ -187,6 +301,7 @@ def main(argv):
         return 0
     if argv[0] == "ctest" and len(argv) >= 2:
         jobs, regex, args = os.cpu_count() or 4, None, argv[2:]
+        limits = []
         while args:
             if args[0] == "--jobs":
                 jobs, args = int(args[1]), args[2:]
@@ -194,10 +309,14 @@ def main(argv):
                 regex, args = args[1], args[2:]
             elif args[0] == "--no-cache":
                 use_cache, args = False, args[1:]
+            elif args[0] == "--limit":
+                f, _, most = args[1].rpartition(":")
+                limits.append((f, float(most)))
+                args = args[2:]
             else:
                 print(f"unknown option {args[0]}")
                 return 2
-        return ctest(argv[1], jobs, regex, use_cache)
+        return ctest(argv[1], jobs, regex, use_cache, limits)
     if argv[0] == "step" and "--" in argv and len(argv) >= 4 and argv[2] == "--inputs":
         sep = argv.index("--")
         return step(argv[1], argv[3:sep], argv[sep + 1:], use_cache)

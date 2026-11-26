@@ -315,6 +315,10 @@ public:
 	bool failed() const;
 
 	int64_t step() const;
+	// A stamp of the lab's state (Stage 68): another after every command or advance, whatever it did, and no two labs'
+	// alike in one process. A view taken at a stamp is the view at every moment the stamp stands (a screen takes it
+	// once).
+	uint64_t stamp() const;
 	// An alarm started ringing in the last step (§13.3).
 	bool rang() const;
 	// What is where, measured, as plain data.

@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0)
+## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0 and Stage 68; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 66, `docs/TDD_66_SEEDS.md`; the curriculum's C2, C16): **secondary nucleation**: where a surface law grows
   its solid and the cell is stirred, the crystals breed, `secondary · ε · M · (S − 1)^secondary_order` fragments a
@@ -10,6 +10,21 @@
   seed`; the generator refuses a rate without its order; the debug panel says what the stirring breeds. §13.7: the
   experiment `seed` (curriculum 35). §20: equal spheres share a seed's mass with its fragments; the secondary rate
   calibrated. No golden moved.
+
+## Stage 68 (2026-11-26; GAME_SPEC stays 0.67.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed to fix the open bugs")
+
+- The gates (`docs/TDD_68_GATES_FAST.md`, `docs/WORKFLOW.md`): `make gates` 2,579 s to 1,307 s, then (68.9, the user's
+  compromises approved) 253 s uncached: the glassware's shapes made at build time, plays waited on a second at a
+  time, D2 checked in windows from the demo's saves, the sanitizers on the short entries and the truth's
+  comparisons every third sample in the gates, `make gates-full` for all of it. Before that: every golden
+  and digest as it was. The invariants checked at a third of the cost and a step's copies of the state allocated
+  once; a vessel's shape made once a process and its level found with fewer points of its pieces; a screen's view
+  taken once a change; the demo played once for the O2 scan's twelve parts (a ctest fixture: its scenes); the
+  sanitizer build's labs unchecked (`LAB_CHECK=0`, the release build checking every step); the Godot suite 1,396 s to
+  11 s; the result cache at two levels (a merge gate takes what passed at one) and one for every worktree; one ccache
+  for every worktree. The pressure session's golden record held by the gates (`pressure_session`). Found, open: a
+  save just after the demo's command 1 does not continue as the record does (D2); a loaded lab's first view has no
+  boiling's bubbles.
 
 ## 0.67.0 (2026-11-26, Stage 67)
 

@@ -21,7 +21,9 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -38,6 +40,22 @@ std::string build_name() {
 }
 
 namespace {
+
+// (Stage 68) Lab::stamp's: one count for the process
+uint64_t next_stamp() {
+	static std::atomic<uint64_t> last{ 0 };
+	return ++last;
+}
+
+// LAB_CHECK=0: no lab of the process checks an invariant, whatever it is asked (Stage 68: the sanitizer build's tests;
+// the release build checks every one on the same steps, and a lab's state is the same checked or not, D1)
+bool checks_allowed() {
+	static const bool allowed = [] {
+		const char *v = std::getenv("LAB_CHECK");
+		return v == nullptr || std::strcmp(v, "0") != 0;
+	}();
+	return allowed;
+}
 
 constexpr double PAPER_DRAINED_CM = 0.3; // a filter cone this shallow is drained: its stem runs out (Stage 59)
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7); since Stage 57 it changes no rate (kept in saves)
@@ -559,7 +577,8 @@ struct Lab::Impl {
 	CellId room;
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
 	Totals genesis;
-	bool check = true;
+	bool check = checks_allowed();
+	uint64_t stamp = next_stamp(); // (Stage 68: Lab::stamp)
 	bool broken = false;
 	// a command has moved matter since the last step ended: a step is in
 	// progress, and a change of connections waits for its end
@@ -3032,6 +3051,7 @@ struct Lab::Impl {
 		return true;
 	}
 	std::vector<int64_t> restored_tally; // put back once the simulation is made
+	StepTrace step_trace; // a checked step's, its buffers kept from step to step (Stage 68)
 
 	// one step; false when an invariant fails
 	bool step_once(std::string &why) {
@@ -3053,7 +3073,8 @@ struct Lab::Impl {
 			untraced = true;
 		} else {
 			untraced = false;
-			const StepTrace trace = sim->step();
+			sim->step(step_trace);
+			const StepTrace &trace = step_trace;
 			const Violations violations = check_all(table(), trace, sim->equilibria());
 			if (!violations.empty()) {
 				broken = true;
@@ -3822,20 +3843,34 @@ struct Lab::Impl {
 	double grams(CellId cell, SpeciesId s) const { return world().amount(cell, s).mol() * static_cast<double>(table().molar_mass_ug(s)) * 1e-6; }
 
 	// a vessel's column's layers (GAME_SPEC §6, Stage 47), from the top down: the world's column edges under its cell
+	// each cell's layer above it in its column: the first open column edge into it (Stage 68: made again when the
+	// world's topology changes; each layer was found by a scan of every edge, many times a step)
+	mutable const World *above_of = nullptr;
+	mutable uint64_t above_version = 0;
+	mutable size_t above_edges = 0;
+	mutable std::vector<int32_t> above;
 	std::vector<CellId> layers_of(const Item &x) const {
-		std::vector<CellId> out;
-		const std::span<const Edge> edges = world().edges();
-		for (CellId at = x.cell;;) {
-			CellId next{};
+		const World &w = world();
+		const std::span<const Edge> edges = w.edges();
+		if (above_of != &w || above_version != w.topology_version() || above_edges != edges.size()) {
+			above.assign(static_cast<size_t>(w.cell_count()), -1);
 			for (const Edge &e : edges) {
-				if (e.open && e.column && e.b == at) {
-					next = e.a;
-					break;
+				const auto b = static_cast<size_t>(e.b.index);
+				if (e.open && e.column && e.b.index >= 0 && b < above.size() && above[b] < 0) {
+					above[b] = e.a.index;
 				}
 			}
-			if (next.index < 0) {
+			above_of = &w;
+			above_version = w.topology_version();
+			above_edges = edges.size();
+		}
+		std::vector<CellId> out;
+		for (CellId at = x.cell;;) {
+			const auto i = static_cast<size_t>(at.index);
+			if (at.index < 0 || i >= above.size() || above[i] < 0) {
 				return out;
 			}
+			const CellId next{ above[i] };
 			out.push_back(next);
 			at = next;
 		}
@@ -4187,13 +4222,15 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			item.capacity = item.kind == Kind::Bag ? number(j, "capacity_ml", 3000.0) * 1e-6 : 0.0;
 			double volume = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() * 1e-6 : 0.0;
 			item.nominal_ml = item.kind == Kind::Vessel ? j.at("volume_ml").get<double>() : 0.0;
-			std::optional<glass::Vessel> made;
+			const glass::Vessel *made = nullptr;
 			if (item.kind == Kind::Vessel && j.contains("glassware")) {
-				// GAME_SPEC §12.3, Stage 24: its standard's shape, and what that shape holds to the brim
+				// GAME_SPEC §12.3, Stage 24: its standard's shape, and what that shape holds to the brim (Stage 68:
+				// each shape made once a process, as the view's own glass::find has it)
 				item.glassware = j.at("glassware").get<std::string>();
-				std::string no;
-				made = glass::make(item.glassware, item.nominal_ml, no);
-				if (!made) {
+				made = glass::find(item.glassware, item.nominal_ml);
+				if (made == nullptr) {
+					std::string no;
+					glass::make(item.glassware, item.nominal_ml, no); // why it is not
 					why = "item \"" + item.id + "\": " + no;
 					return nullptr;
 				}
@@ -6421,6 +6458,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 }
 
 bool Lab::command(std::string_view command_json, std::string &why) {
+	impl_->stamp = next_stamp();
 	if (impl_->broken) {
 		why = "an invariant failed earlier: the lab takes no more commands";
 		return false;
@@ -6461,6 +6499,7 @@ bool Lab::command(std::string_view command_json, std::string &why) {
 }
 
 bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
+	impl_->stamp = next_stamp();
 	if (impl_->broken) {
 		why = "an invariant failed earlier: the lab takes no more commands";
 		return false;
@@ -6477,7 +6516,11 @@ bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
 }
 
 void Lab::set_checking(bool on) {
-	impl_->check = on;
+	impl_->check = on && checks_allowed();
+}
+
+uint64_t Lab::stamp() const {
+	return impl_->stamp;
 }
 
 bool Lab::failed() const {

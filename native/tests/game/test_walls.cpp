@@ -128,7 +128,11 @@ TEST_CASE("walls: a beaker of water on a flame: its floor heats first and hottes
 	const double wet = v.wall_c[3];
 	CHECK(std::fabs(wet - v.celsius) < std::fabs(top - v.celsius));
 	ok(*l, R"({"do": "unheat", "burner": "burner"})");
-	REQUIRE_MESSAGE(l->advance(60 * 3600 * 6, why), why); // six hours (a time constant of about an hour: its own outside, Stage 53)
+	// six hours (a time constant of about an hour: its own outside, Stage 53); every step of the first checked, where
+	// the floor, the rings and the water trade their heat fastest, the slow decay after it not (Stage 68)
+	REQUIRE_MESSAGE(l->advance(60 * 3600, why), why);
+	l->set_checking(false);
+	REQUIRE_MESSAGE(l->advance(60 * 3600 * 5, why), why);
 	v = item(*l, "beaker");
 	for (const double c : v.wall_c) {
 		CHECK(std::fabs(c - 20.0) < 1.0);
