@@ -1,12 +1,22 @@
 #!/usr/bin/env python3
-"""The commit gate's result cache (docs/WORKFLOW.md, "The result cache").
+"""The gates' result cache (docs/WORKFLOW.md, "The result cache").
 
 A test whose inputs hash the same as on a run where it passed passes again: the
 native tests are deterministic functions of their binary, their command line,
 their environment and the repo data they read. So `make gate` reruns only what a
 change can affect. A change to the game layer leaves `chem_tests` (the core alone)
 byte for byte the same, and its sweeps and goldens are not run again.
-`make gates` (a merge, a phase close) never reads the cache: it runs everything.
+
+Two levels (Stage 68), GATE_LEVEL=commit (the default) or merge:
+  - a pass at the merge level (`make gates`) is kept as one, and as a commit pass;
+  - `make gates` takes only a merge-level pass for its own, `make gate` either.
+So a `make gates` run again after one entry failed, or on main after a merge whose
+binaries are the branch's, runs only what is not known to pass. GATE_CACHE=0 runs
+everything (and still records what passed).
+
+One cache for every worktree (Stage 68): GATE_CACHE_FILE, by default
+~/Library/Caches/chem-game-v2/gate_cache.json (XDG_CACHE_HOME elsewhere), read and
+written under a lock, so gates in several worktrees share what passed.
 
   gate_cache.py ctest BUILD_DIR [--jobs N] [--regex RE] [--no-cache]
       ctest in BUILD_DIR, skipping the entries that passed with the same key.
@@ -30,8 +40,21 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE = os.path.join(ROOT, "native", "build-core", "gate_cache.json")
-KEEP = 8  # passing keys kept per entry (a revert, a branch switch back: still cached)
+
+
+def cache_file():
+    if os.environ.get("GATE_CACHE_FILE"):
+        return os.environ["GATE_CACHE_FILE"]
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Caches")
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(base, "chem-game-v2", "gate_cache.json")
+
+
+CACHE = cache_file()
+LEVEL = os.environ.get("GATE_LEVEL", "commit")
+KEEP = 16  # passing keys kept per entry (a revert, a branch switch back, another worktree: still cached)
 # what the native tests read from the repo (CHEM_REPO_ROOT)
 DATA = ["data", "bench"]
 
@@ -100,20 +123,39 @@ def keys_of(cache, entry):
 
 
 def passed(cache, entry, key):
-    return key in keys_of(cache, entry)
+    """Passed at this run's level: a merge run takes only a merge-level pass."""
+    return key in keys_of(cache, ("merge|" if LEVEL == "merge" else "") + entry)
 
 
-def record(cache, entry, key, ok):
+def record_one(cache, entry, key, ok):
     keys = [k for k in keys_of(cache, entry) if k != key]
     cache[entry] = ([key] + keys)[:KEEP] if ok else keys
 
 
-def save(cache):
+def record(cache, entry, key, ok):
+    record_one(cache, entry, key, ok)
+    if LEVEL == "merge" or not ok:
+        record_one(cache, "merge|" + entry, key, ok)
+
+
+def update(changes):
+    """Applies changes(cache) to the cache on disk under a lock: gates in other
+    worktrees write it too."""
+    import fcntl
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-    tmp = CACHE + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(cache, f, indent=0, sort_keys=True)
-    os.replace(tmp, CACHE)
+    with open(CACHE + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        cache = load()
+        changes(cache)
+        tmp = f"{CACHE}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(cache, f, indent=0, sort_keys=True)
+        os.replace(tmp, CACHE)
+
+
+def entry_of(build, name):
+    """A ctest entry by its tree's kind (build-core, build-asan) and name."""
+    return f"ctest:{os.path.basename(build)}:{name}"
 
 
 def ctest(build, jobs, regex, use_cache):
@@ -137,18 +179,21 @@ def ctest(build, jobs, regex, use_cache):
             key = hashlib.sha256(json.dumps([sha_file(cmd[0]), lib_memo[cmd[0]], cmd[1:], props.get("ENVIRONMENT"),
                                              env, data]).encode()).hexdigest()
             keys[name] = key
-            if use_cache and passed(cache, "ctest:" + name, key):
+            if use_cache and passed(cache, entry_of(build, name), key):
                 skipped.append(name)
                 continue
         run.append(name)
     print(f"gate_cache: {len(run)} ctest entries to run, {len(skipped)} unchanged since they passed"
-          + ("" if use_cache else " (cache off)"), flush=True)
+          + (f" at the {LEVEL} level" if use_cache else " (cache off)") + f" ({os.path.basename(build)})", flush=True)
     status = 0
     if run:
         junit = os.path.join(build, "Testing", "gate_cache_junit.xml")
         regex_run = "^(" + "|".join(re.escape(n) for n in run) + ")$"
-        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs), "--output-on-failure", "-R", regex_run,
-                                 "--output-junit", junit]).returncode
+        # (Stage 68) no entry started while the machine's load is over its cores: gates in other worktrees, and
+        # the release and sanitizer runs of one gate, share it instead of each filling it
+        load = os.environ.get("GATE_TEST_LOAD", str(os.cpu_count() or 4))
+        status = subprocess.run(["ctest", "--test-dir", build, "-j", str(jobs), "--test-load", load, "--output-on-failure",
+                                 "-R", regex_run, "--output-junit", junit]).returncode
         ok = set()
         try:
             text = open(junit).read()
@@ -156,11 +201,11 @@ def ctest(build, jobs, regex, use_cache):
             ok -= set(re.findall(r'<testcase name="([^"]+)"[^>]*status="fail"', text))
         except OSError:
             pass
-        cache = load()
-        for name in run:
-            if name in keys:
-                record(cache, "ctest:" + name, keys[name], name in ok)
-        save(cache)
+        def changes(cache):
+            for name in run:
+                if name in keys:
+                    record(cache, entry_of(build, name), keys[name], name in ok)
+        update(changes)
     return status
 
 
@@ -170,9 +215,7 @@ def step(name, inputs, command, use_cache):
         print(f"gate_cache: {name} unchanged since it passed", flush=True)
         return 0
     status = subprocess.run(command).returncode
-    cache = load()
-    record(cache, "step:" + name, key, status == 0)
-    save(cache)
+    update(lambda cache: record(cache, "step:" + name, key, status == 0))
     return status
 
 

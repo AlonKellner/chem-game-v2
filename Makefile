@@ -9,6 +9,9 @@ JOBS ?= $(NCPU)
 GODOTCPP_LIB := $(wildcard native/build/bin/libgodot-cpp*.a)
 JOBS_EXT ?= $(if $(GODOTCPP_LIB),$(JOBS),4)
 CTEST_JOBS ?= $(NCPU)
+# no ctest entry started while the machine's load is over its cores (Stage 68): the gates of several worktrees, and
+# a gate's release and sanitizer runs, share the machine instead of each filling it
+CTEST_LOAD ?= $(NCPU)
 # a tree configured for the first time gets Ninja when installed
 NINJA := $(shell command -v ninja 2>/dev/null)
 gen = $(if $(wildcard $(1)/CMakeCache.txt),,$(if $(NINJA),-G Ninja,))
@@ -17,7 +20,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -41,7 +44,7 @@ check_re_core := ^chem_
 check_re_lab := ^lab|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/chem_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
-	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
+	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure -R '$(check_re_$(AREA))'; fi
 
 # Between commits: core, then every ctest entry a change can affect (the result
 # cache, tools/gate_cache.py)
@@ -85,16 +88,25 @@ native-debug:
 ASAN_SWEEP_WORLDS ?= 300
 # and every third sample of the optics tests' heaviest comparisons against the truth (tests/support/sparse.hpp)
 ASAN_SPARSE ?= 3
-native-asan:
+# and no lab checks an invariant (LAB_CHECK=0, Stage 68): the release ctest checks every one on the same steps (a lab's
+# state is the same checked or not, D1); the sanitizers want the code's paths. chem_tests keeps every check, its
+# self-tests and sweeps among them, so check_all itself still runs under the sanitizers.
+ASAN_LAB_CHECK ?= 0
+ASAN_ENV = CHEM_SWEEP_WORLDS=$(ASAN_SWEEP_WORLDS) LAB_SPARSE=$(ASAN_SPARSE) LAB_CHECK=$(ASAN_LAB_CHECK)
+asan-build:
 	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O2" -DCMAKE_C_FLAGS_DEBUG="-g -O2" \
 		-DCHEM_SANITIZE=address,undefined -DCHEM_BUILD_EXTENSION=OFF -DCHEM_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
-	CHEM_SWEEP_WORLDS=$(ASAN_SWEEP_WORLDS) LAB_SPARSE=$(ASAN_SPARSE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --output-on-failure
+native-asan: asan-build
+	$(ASAN_ENV) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure
+# the gates' (gates.sh): the same through the result cache, at the gate's level (GATE_LEVEL)
+asan-gate: asan-build
+	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS)
 
 # the release ctest (build-core; `make core` first)
 ctest:
-	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure
+	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --test-load $(CTEST_LOAD) --output-on-failure
 
 # Every gate before a merge or a stage close (gates.sh LEVEL=merge), with a timed
 # summary; `make gate` is the commit gate (LEVEL=commit).

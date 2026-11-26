@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <optional>
@@ -38,6 +39,16 @@ std::string build_name() {
 }
 
 namespace {
+
+// LAB_CHECK=0: no lab of the process checks an invariant, whatever it is asked (Stage 68: the sanitizer build's tests;
+// the release build checks every one on the same steps, and a lab's state is the same checked or not, D1)
+bool checks_allowed() {
+	static const bool allowed = [] {
+		const char *v = std::getenv("LAB_CHECK");
+		return v == nullptr || std::strcmp(v, "0") != 0;
+	}();
+	return allowed;
+}
 
 constexpr double PAPER_DRAINED_CM = 0.3; // a filter cone this shallow is drained: its stem runs out (Stage 59)
 constexpr double STIRRED = 3.0; // a stirred vessel's mixing (GAME_SPEC §7); since Stage 57 it changes no rate (kept in saves)
@@ -365,7 +376,7 @@ struct Lab::Impl {
 	CellId room;
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
 	Totals genesis;
-	bool check = true;
+	bool check = checks_allowed();
 	bool broken = false;
 	// a command has moved matter since the last step ended: a step is in
 	// progress, and a change of connections waits for its end
@@ -6103,7 +6114,7 @@ bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
 }
 
 void Lab::set_checking(bool on) {
-	impl_->check = on;
+	impl_->check = on && checks_allowed();
 }
 
 bool Lab::failed() const {
