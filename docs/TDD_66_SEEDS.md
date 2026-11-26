@@ -38,8 +38,8 @@ stirred, sets the excess out in minutes. The model nucleated only from the solut
 | 66.3 | Data: the calibration, `data/sources.json`, `docs/DATA_SOURCES.md` | Done |
 | 66.4 | Tests: `test_seeds.cpp`, the generator's refusal | Done: 1.57 g of 1.94 out at 20 min, 2.2 million crystals at 40, S 0.99996; 1,134 bred in the first 10 s; `make check` 594 of 594 before them, the goldens unchanged (no session stirs a growing crop) |
 | 66.5 | The experiment `seed` (curriculum 35): a bench and its tutorial | Done: strict, at a person's pace and free; the stirred beaker 1.03 g in 1.24 million crystals, the still seed 10.3 mg, one crystal |
-| 66.6 | Sessions, plays and the goldens (with the user's approval) | |
-| 66.7 | GAME_SPEC, CHANGELOG 0.66.0, `make gates`, the user's sign-off | |
+| 66.6 | Sessions, plays and the goldens (with the user's approval) | Done: none moved (no session stirs a growing crop) |
+| 66.7 | GAME_SPEC, CHANGELOG 0.66.0, `make gates`, the user's sign-off | `make gates` passed (51 min, merge level): core, ctest, ASan+UBSan, the Godot suite (13 of 13), the goldens. Awaiting the user's sign-off |
 
 ## Tests
 
