@@ -37,7 +37,8 @@ make check TC="sweeps*"         # one doctest filter in chem_tests (CHEM_SWEEP_W
 make quick                      # between commits: only what a change can affect (result cache)
 make gate                       # before every commit: core, ctest, the extension, the Godot suite, goldens unchanged
 SKIP_GODOT=1 make gate          # every engine-free gate
-make gates                      # before a merge or a stage close: plus ASan+UBSan; its cache takes only what passed at a merge gate (GATE_CACHE=0: everything)
+make gates                      # before a merge or a stage close (about 4 min): plus ASan+UBSan on the short entries; the truth's comparisons every third sample; its cache takes only what passed at a merge gate (GATE_CACHE=0: everything)
+make gates-full                 # before a release: every sample, every entry under the sanitizers
 make native                     # the Godot extension, data copy, import
 ./run_tests_parallel.sh         # the Godot host's GUT suite
 make run                        # the game (the Godot host)

@@ -16,7 +16,8 @@ The first `make native` compiles godot-cpp (about 1100 files) with 4 jobs; later
 |---|---|---|
 | `make check` | while working | `make core`, then ctest (`AREA=core\|lab`, or `TC=<doctest filter>`) |
 | `make gate` | before every commit | core, ctest, the extension, the Godot host's suite, goldens unchanged; through the result cache |
-| `make gates` | before a merge or a stage close | the same, its cache taking only what passed at a merge gate, and ctest under ASan+UBSan side by side with it from the start |
+| `make gates` | before a merge or a stage close | the same, its cache taking only what passed at a merge gate, and ctest under ASan+UBSan side by side with it from the start: of the sanitizers', the entries of 30 s or less in the release tree and 20 s or less under them; the truth's heaviest comparisons every third sample (`LAB_SPARSE=3`) |
+| `make gates-full` | before a release, and when a change touches what only the long plays reach (Stage 68) | the merge gate with every sample (`LAB_SPARSE=1`) and every entry under the sanitizers |
 
 `SKIP_GODOT=1 make gate` runs every engine-free gate. Every gate runs even after a failure; the
 summary table gives each gate's seconds and result, the log directory, and each ctest run's summed
@@ -78,15 +79,34 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   starts while the machine's load is over n. Four ctest runs of twelve, from three worktrees, were seen at a load
   of 106 on twelve cores. It is off by default: ctest starts none at all while the load stays up, its first among
   them, and a gate waited out another worktree's whole run (one without the threshold) doing nothing.
+- **What a case needs that the build can make is made at build time** (Stage 68): the glassware's shapes
+  (`chem_glassgen`, `data/glassware.json`: `glass::find` takes them; a test holds each to `glass::make` to the last
+  bit). Making them was more than half of a short case's time, in every process.
+- **The gates sample, a full gate takes all** (Stage 68): `make gates` runs the truth's heaviest comparisons at
+  every third sample (`GATE_SPARSE`, `LAB_SPARSE=3`, as the sanitizer build always has; a bound on how many were
+  compared scales with `sparse()`) and, under the sanitizers, the entries of 30 s or less in the release tree and
+  20 s or less under the sanitizers (`ASAN_MOST_S`, `ASAN_OWN_MOST_S`, by ctest's own measured costs,
+  `CTestCostData.txt`, `gate_cache.py --limit`; an entry not yet measured runs; one that needs a fixture whose
+  setup is left out is left out with it), the rest named in the summary as left to `make gates-full`. A long play
+  reaches the code's paths its short cases reach, and plays them longer. As the game grows the gates' sanitizer
+  run grows with its short cases only; `make gates-full` runs everything.
+- **A play waits a second at a time** (Stage 68): a tutorial followed, strictly or free, or played as a person,
+  waits on the lab a second's frame at a time, the screen's view taken once a frame, not once a step (a wait ends
+  at most a second later than in frames of 1/60 s; every experiment's and tutorial's results held so). The
+  person's gestures keep their frames.
+- **The budget** (Stage 68): the summary names every release entry over `GATE_BUDGET_S` (60 s). A new long one
+  takes one of the ways here: a fixture, parts, `sparse()`, coarse frames where only its end is held.
 - **A simulation several cases start from is played once** (Stage 68): a ctest fixture. `// ctest: fixture setup
   NAME` before the case that plays it, `// ctest: fixture NAME` before each that reads it (`chem_add_cases`;
   FIXTURES_SETUP and FIXTURES_REQUIRED): ctest runs the setup first, and runs it whenever a case that needs it
   runs (the result cache's subsets too). Its files are in the tree's `fixtures/NAME` (`tests/support/fixtures.hpp`).
   The demo's (`test_demo_record.cpp`): the session played once, unchecked, its golden digests, results and notices
-  held; after every command the screen's scene (`tests/support/scene_file.hpp`, read back and held to what was
+  held; at D2's cuts the lab's save and report (D2's eight windows load them and play on checked to the next cut:
+  together the gates' one checked play of the session, side by side); after every command the screen's scene (`tests/support/scene_file.hpp`, read back and held to what was
   written). The O2 scan's twelve parts read the scenes and play nothing (each part played the whole session before:
-  207 to 395 s a part, 33 to 69 s now). A fixture is worth it where what it saves is most of the play: D2's cuts
-  read saves from it once and were put back, nine tenths of the steps lying after them, the wait a whole play.
+  207 to 395 s a part, 33 to 69 s now). A fixture is worth it where what it saves is most of the play: D2 read its
+  saves once with each cut playing to the end, nine tenths of the steps after them, and waited a whole play for
+  nothing; in windows from the saves, each cut to the next, it reads them again.
 - **The sanitizer build's labs check no invariant** (Stage 68, `LAB_CHECK=0`, `ASAN_LAB_CHECK`): the release build
   checks every invariant at every step of the same trajectories (a lab's state is the same checked or not, D1),
   and `chem_tests` keeps every check under the sanitizers, its self-tests on corrupted traces and the four sweeps
@@ -106,7 +126,7 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   2.3 ms as its state drifts over an hour. A change's cost is the difference between it and the
   code before it, measured one after the other, three times each (`make pass-cost`).
 - **The replays of the demo that hold digests run unchecked**: the lab's state is the same checked or not
-  (D1), and `demo_session` checks every invariant at every step of the same session. So the cases that
+  (D1), and `lab_tests.demo_record` checks every invariant at every step of the same session. So the cases that
   hold the record's digests (`lab: the demo session reproduces…`, `lab: a saved lab, loaded, continues…`)
   and the screen's O2 scan through the demo do not check each step again.
 - Measured (Stage 40, M3 Pro, `docs/TDD_40_GATES.md`): `make gates` 614 s before (the release ctest 165 s,
@@ -145,8 +165,9 @@ In the reacting sweeps one world in three has a reaction of the equilibrium law,
 | `chem_tests.<file>`, `lab_tests.<file>.<n>` | the core's doctest cases, an entry a source file; the lab layer's, an entry a test case (`.<n>.<i>`: a part of one); `lab_tests.<file>.count`: the file's cases are those counted; `.every_file_runs`: no test case is left out |
 | `capi_c_smoke` | a C11 host compiles against `chem_api.h` and links the shared library |
 | `chem_tool_version`, `chem_tool_tables` | the headless host runs and prints the built-in tables |
-| `demo_session` | the 3-stage demo, played through the C API with every invariant on every step, reproduces its golden record digest for digest (not under the sanitizers: `lab_tests.demo_record` plays it there, holding the same digests) |
-| `pressure_session` | the pressure session the same way, against its own record (Stage 68) |
+| `lab_tests.demo_record.1` | the 3-stage demo reproduces its golden record digest for digest, its results and notices as measured, and keeps the screen's scenes for the O2 scan and the saves D2's windows start from (Stage 68; `demo_session` before) |
+| `lab_tests.lab.13.<i>` | D2: the demo loaded at a cut plays on to the next, every invariant on every step, into the record's digests (together, every step of the session checked) |
+| `pressure_session` | the pressure session through the C API (`chem_tool run`), every invariant on every step, against its own record (Stage 68) |
 | `chem_tool_study_cooling`, `_decomposition`, `_balloon`, `_distillation`, `_dissolution`, `_crystals` | the studies run with every invariant checked on every step and end with the world's totals unchanged |
 | `chem_tool_study_spectrum` | the band-count measurement runs, and the game's bands are within the colour threshold (GAME_SPEC §12.2) |
 | `datagen_refuses_*` | `chem_datagen` refuses data that breaks a conservation law (an element or the charge out of balance, an unknown species, a malformed formula), so such data does not build |

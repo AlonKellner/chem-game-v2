@@ -19,7 +19,9 @@ digest is as it was (the proof), GAME_SPEC stays at 0.62.0.
 | 68.5 | The Godot suite opens no catalogue it does not read | Done |
 | 68.6 | The result cache: merge-level passes, one cache for every worktree | Done |
 | 68.7 | One ccache for every worktree; no worktree's path in a binary | Done |
-| 68.8 | `make gates` (1,307 s uncached; 20 s again with nothing changed); the user's sign-off | gates passed; sign-off open |
+| 68.8 | `make gates` (1,307 s uncached; 20 s again with nothing changed) | Done |
+| 68.9 | Under five minutes, the user's compromises approved ("Compromises are expected, I approve"): 253 s | Done |
+| 68.10 | `make gates-full` (722 s: every sample, all 567 entries under the sanitizers); the user's sign-off | gates passed; sign-off open |
 
 ## 68.0 Measured (M3 Pro: 6 fast cores, 6 slow; the machine shared with other worktrees' gates)
 
@@ -148,6 +150,62 @@ a new entry: 20 s (573 and 555 entries passed at the merge level, 11 run).
 Not done, and where the time is next: the experiments' and tutorials' plays spend two thirds of their time in the
 screen's view (each vessel's level and bubbles worked out at every step); the sanitizers' run could run the three
 variants of each experiment once, or the plays more sparsely, if the user wants less of them there.
+
+## 68.9 Under five minutes
+
+The user, 2026-11-26: "Let's try and make faster still. Aim for less than 5 minutes and think of future scalability
+when the amount of features grows larger still. Compromises are expected, I approve."
+
+`GATE_CACHE=0 make gates`: **253 s**, every gate passed, another worktree's gate on the machine (a load of 14 to 28).
+Its CPU 1,554 s (2,615 s before this section). The release ctest 252 s (2,801 s summed), the sanitizers' 135 s (467
+entries, 819 s summed; 100 left to the full gate), the Godot suite 6 s.
+
+What made it, measured:
+
+- **The glassware's shapes made at build time** (`chem_glassgen`): `glass::make`'s own code, compiled as the lab's,
+  makes every shape of the table, written out in hex to the last bit; `glass::find` takes them, and a test holds
+  each to `glass::make`. More than half of a short case's time (ui.17 2 to 5 s at a gate, 0.38 s alone), in every
+  process of the ~500, and the game's opening.
+- **Plays wait a second at a time**: the screen's view once a frame, not once a step of the lab at 1x
+  (experiments.60, the followed solubility, 170 to 36 s; the person's and free variants about 200 to 70 s). Every
+  experiment's and tutorial's results held with waits ending up to a second later.
+- **D2 in eight windows from the fixture's saves, checked**: the cuts 0, 4, 9, 12, 17, 18, 19 and 20 (the cooling and
+  its two-hour wait each a window), each loaded from the demo record's save and played on checked to the next cut.
+  Together they are the gates' one checked play of the session, side by side (the longest, command 20, 432,000
+  steps); the demo record itself unchecked, so its scenes come first. `demo_session` (a second checked play) gone;
+  `pressure_session` keeps the C API's checked path.
+- **The sanitizers on the short entries**: those of 30 s or less in the release tree and 20 s or less under the
+  sanitizers (ctest's measured costs); an entry needing a fixture whose setup is left out is left out with it.
+- **The truth's comparisons every third sample** in the gates (`LAB_SPARSE=3`, as the sanitizer build always ran them);
+  the O2 scan and pour.9 read `sparse()` too, pour.9's count bound scaled by it.
+- column_lab.8 parted four ways; check_all keeps each cell's temperature and entropy while its state stands (S1 and T2
+  asked them up to three times a step); a vessel's layers from a table made again when the topology changes; the
+  cut piece's search stops where it stands still.
+
+`GATE_CACHE=0 make gates-full`, the same commit: 722 s, every gate passed (the release ctest 451 s at every sample, the
+sanitizers' 722 s over all 567 entries; 5,321 s of CPU). What the gates leave out today hides no failure.
+
+**The compromises** (approved by the user; all of it still in `make gates-full`):
+
+1. The sanitizers run 467 of 567 entries in the gates: the long plays (the experiments, the tutorials, the demo's,
+   the controllers', the truth's heaviest scans) only in the full gate. Their code paths are the short cases'.
+2. The truth's heaviest comparisons every third sample in the gates, every one in the full gate.
+3. A tutorial's waits end at a second's frame, not at a screen's (1/60 s): up to 59 steps of the lab later.
+4. D2 loads each cut and plays to the next cut, not to the end of the record: a loaded lab's hidden difference
+   that showed only after the next cut would be seen by the next window's load only if it is saved.
+5. The demo is checked once, by D2's windows, not by a play of its own through the C API (the pressure session is).
+6. walls.4's last five hours and trash.2's stowed twin unchecked (68.3).
+
+**As the game grows** (what keeps the gates' length):
+
+- The release ctest's length is its longest entry or its work over the cores; the budget (`GATE_BUDGET_S`, 60 s)
+  names each entry past it at every gate, so a new long one is seen at once and given a fixture, parts,
+  `sparse()` or coarse frames.
+- The sanitizers' run grows with the short cases only; the long ones fall to `make gates-full` by their measured
+  cost, without a list to keep.
+- The result cache skips every entry whose binary, arguments and data are as when it passed, in every worktree; the
+  ccache compiles nothing twice in any worktree.
+- What a case needs that the build can make (the shapes) is made at build time, once for every process.
 
 ## Open
 

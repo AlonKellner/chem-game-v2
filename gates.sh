@@ -139,7 +139,7 @@ done
 # (Stage 68) the release run's budget: an entry over GATE_BUDGET_S seconds is named (it does not fail the gate: a
 # machine's load moves the times). A new long play belongs with what makes the long ones short (docs/WORKFLOW.md,
 # "What keeps the gates quick"): a fixture, parts, sparse(), coarse frames where only its end is held.
-if [ -s "$LOGDIR/ctest.times" ]; then
+if [ "$LEVEL" != full ] && [ -s "$LOGDIR/ctest.times" ]; then # (a full gate takes every sample: its times are longer by design)
 	over=$(awk -v most="${GATE_BUDGET_S:-60}" '$1 > most {printf " %s %ds,", $2, $1}' "$LOGDIR/ctest.times" | sed 's/,$//')
 	[ -n "$over" ] && echo "!! over the budget of ${GATE_BUDGET_S:-60} s an entry:$over"
 fi
