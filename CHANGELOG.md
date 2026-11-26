@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.69.0 (2026-11-26, Stage 69; awaiting the user's sign-off)
+## 0.69.0 (2026-11-26, Stage 69; signed off by the user: "Approved, merge and proceed")
 
 - §13, Save and load; §18, D2 (Stage 69, `docs/TDD_69_SAVES.md`): a lab saved in a step a command moved matter in (a
   tip, a pour) continues exactly as the saved one would have: its world refuses until the step closes what a step in

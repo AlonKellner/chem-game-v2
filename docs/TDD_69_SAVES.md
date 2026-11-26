@@ -9,7 +9,7 @@ found and left open (`docs/TDD_68_GATES_FAST.md`, "Open"). GAME_SPEC 0.69.0 (§1
 |---|---|---|
 | 69.1 | A save made in a step in progress continues as the saved lab would have (D2) | Done |
 | 69.2 | A loaded lab's first view is the saved one's: its boiling's bubbles | Done |
-| 69.3 | `make gates` (916 s, the machine at a load of 45 to 63); the user's sign-off | gates passed; sign-off open |
+| 69.3 | `make gates` (916 s, the machine at a load of 45 to 63); the user's sign-off | signed off 2026-11-26 ("Approved, merge and proceed") |
 
 ## 69.1 A save made mid-step
 
