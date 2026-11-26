@@ -6,6 +6,8 @@
 #include "lab/glassware.hpp"
 #include "lab/lab.hpp"
 
+#include "sparse.hpp"
+
 #include <doctest/doctest.h>
 
 #include <algorithm>
@@ -353,7 +355,7 @@ TEST_CASE("pour: a vessel set upside down is drawn upside down over what it pour
 	int compared = 0, visible = 0;
 	for (const float f : { 0.12f, 0.3f, 0.5f, 0.7f, 0.9f }) { // down the bottle: its base, now at the top; its shoulder; its acid; its neck
 		const int y = static_cast<int>(rect[1] + f * rect[3]);
-		for (int x = static_cast<int>(rect[0]) + 1; x < static_cast<int>(rect[0] + rect[2]); x += 3) {
+		for (int x = static_cast<int>(rect[0]) + 1; x < static_cast<int>(rect[0] + rect[2]); x += 3 * sparse()) { // (Stage 68: every sparse()-th)
 			if (lab::optics_cover(scene, x, y) <= 0.0) {
 				continue;
 			}
@@ -368,7 +370,7 @@ TEST_CASE("pour: a vessel set upside down is drawn upside down over what it pour
 		}
 	}
 	MESSAGE(compared << " pixels of the bottle upside down: worst " << worst << " on the eye metric, mean " << sum / std::max(compared, 1) << ", " << visible << " visible");
-	CHECK(compared > 80);
+	CHECK(compared > 80 / sparse()); // (Stage 68: as many as it samples)
 	CHECK(sum / compared < 1.5);
 	CHECK(visible <= compared / 100);
 }

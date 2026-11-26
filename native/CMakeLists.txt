@@ -133,8 +133,23 @@ configure_file(game/thermal_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/thermal
 file(READ "${CHEM_DATA_DIR}/instruments.json" CHEM_INSTRUMENTS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/instruments.json")
 configure_file(game/instruments_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/instruments_data.hpp" @ONLY)
+# Every shape of the glassware table made at build time (Stage 68): chem_glassgen compiles glassware.cpp as the lab
+# does, makes each shape, and writes it out to the last bit; glass::find takes them (making them was more than half a
+# short test's time, and the game's opening). test_glassware.cpp holds each to glass::make.
+add_executable(chem_glassgen datagen/glassgen.cpp game/src/glassware.cpp)
+target_include_directories(chem_glassgen PRIVATE game/include "${CHEM_GEN_DIR}/lab_include")
+target_include_directories(chem_glassgen SYSTEM PRIVATE extern)
+target_compile_definitions(chem_glassgen PRIVATE CHEM_GLASSGEN=1)
+set_target_properties(chem_glassgen PROPERTIES POSITION_INDEPENDENT_CODE ON) # (compiled as chem_lab's)
+chem_apply_flags(chem_glassgen)
+set(CHEM_GLASSWARE_BUILT "${CHEM_GEN_DIR}/lab_include/lab/glassware_built.inc")
+add_custom_command(
+    OUTPUT "${CHEM_GLASSWARE_BUILT}"
+    COMMAND chem_glassgen "${CHEM_GLASSWARE_BUILT}"
+    DEPENDS chem_glassgen "${CHEM_DATA_DIR}/glassware.json"
+    COMMENT "Making every shape of the glassware table (data/glassware.json)")
 file(GLOB CHEM_LAB_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
-add_library(chem_lab STATIC ${CHEM_LAB_SOURCES})
+add_library(chem_lab STATIC ${CHEM_LAB_SOURCES} "${CHEM_GLASSWARE_BUILT}")
 target_include_directories(chem_lab PUBLIC game/include "${CHEM_GEN_DIR}/lab_include")
 target_include_directories(chem_lab SYSTEM PUBLIC extern)
 target_link_libraries(chem_lab PUBLIC chem_core)
@@ -340,12 +355,9 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_tables COMMAND chem_tool tables)
     # the demo, played through the C API with every invariant on every step,
     # reproduces its golden record digest for digest (GAME_SPEC §18: D4)
-    # (its paths from the tree it runs in, ../..: the same command in every worktree, Stage 68). Not under the
-    # sanitizers (Stage 68): there no lab checks an invariant (LAB_CHECK=0), and lab_tests.demo_record plays the same
-    # session holding the same digests; the C API's path under them is the pressure session's, below.
-    if(NOT CHEM_SANITIZE)
-        add_test(NAME demo_session COMMAND chem_tool run ../../data/sessions/demo.json --quiet --check ../../bench/sessions/demo.jsonl)
-    endif()
+    # (The demo session against its record: lab_tests.demo_record, Stage 68, which plays it once for the gates, every
+    # invariant at every step, its digests, results and notices held; `make sessions-check` plays it through chem_tool.
+    # The C API's checked path in the gates is the pressure session's.)
     # the pressure session (Stage 28) against its golden record, through the C API, every invariant checked (Stage
     # 68: until then only `make sessions-check` played it)
     add_test(NAME pressure_session COMMAND chem_tool run ../../data/sessions/pressure.json --quiet --check ../../bench/sessions/pressure.jsonl)

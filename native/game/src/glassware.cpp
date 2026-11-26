@@ -141,7 +141,11 @@ private:
 				path_y_[d] = at_mid;
 				path_depth_ = d + 1;
 			}
+			const bool still = mid == lo || mid == hi; // (as level's own search: from here every turn is the same)
 			((at_mid < y) == path_up_ ? lo : hi) = mid;
+			if (still) {
+				break;
+			}
 		}
 		return 0.5 * (lo + hi);
 	}
@@ -441,10 +445,26 @@ double Vessel::widest() const {
 	return r;
 }
 
+#ifndef CHEM_GLASSGEN
+// every shape of the table as glass::make makes it, made at build time (Stage 68: chem_glassgen)
+#include "lab/glassware_built.inc"
+#endif
+
 const Vessel *find(std::string_view kind, double nominal_ml) {
 	static std::mutex lock;
 	static std::vector<std::unique_ptr<Vessel>> made;
 	const std::lock_guard<std::mutex> hold(lock);
+#ifndef CHEM_GLASSGEN
+	static const bool built = [] {
+		std::vector<Vessel> shapes;
+		built_shapes(shapes);
+		for (Vessel &v : shapes) {
+			made.push_back(std::make_unique<Vessel>(std::move(v)));
+		}
+		return true;
+	}();
+	(void)built;
+#endif
 	for (const auto &v : made) {
 		if (v->kind == kind && v->nominal_ml == nominal_ml) {
 			return v.get();

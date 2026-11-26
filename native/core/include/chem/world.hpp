@@ -122,6 +122,7 @@ struct CellMeta {
 	double column_volume = 0.0, column_area = 0.0;
 	double column_rise = 0.0;
 	std::vector<double> column_shape;
+	bool operator==(const CellMeta &) const = default;
 };
 
 struct SpeciesAmount {

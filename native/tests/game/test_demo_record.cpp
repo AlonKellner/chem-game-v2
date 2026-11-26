@@ -78,8 +78,9 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 	const std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
 	lab::Lab &l = ui->lab();
-	// unchecked (Stage 40): its state is the same (D1), and every invariant is checked at every step of the same
-	// session by demo_session (chem_tool run)
+	// unchecked (Stage 40): its state is the same (D1); every step of the session is checked by D2's windows
+	// (test_lab.cpp, each a loaded lab played on checked to the next cut), side by side, not before the scenes here
+	// (Stage 68)
 	l.set_checking(false);
 	CHECK(l.view().notices.empty()); // what is there from the start is not news (Stage 16)
 	fixtures::fresh("demo");
@@ -106,6 +107,13 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 		REQUIRE(ui->locate("item:flask", fx, fy));
 		scenes.push_back(json{ { "step", l.step() }, { "changed", index == 0 || now != last }, { "flask", { fx, fy } } });
 		last = now;
+		// and at D2's cuts (test_lab.cpp) the lab saved and its report, where its windows start
+		for (const int cut : { 0, 4, 9, 12, 17, 18, 19, 20 }) {
+			if (index == cut) {
+				fixtures::write("demo", std::to_string(index) + ".json", l.save());
+				fixtures::write("demo", std::to_string(index) + ".report.json", l.report());
+			}
+		}
 		const std::string written = scene_file::write(scene);
 		fixtures::write("demo", std::to_string(index) + ".scene", written);
 		lab::OpticsScene back;

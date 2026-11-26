@@ -21,7 +21,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate gates-full test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -101,9 +101,16 @@ asan-build:
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
 native-asan: asan-build
 	$(ASAN_ENV) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure
-# the gates' (gates.sh): the same through the result cache, at the gate's level (GATE_LEVEL)
+# the gates' (gates.sh): the same through the result cache, at the gate's level (GATE_LEVEL); and (Stage 68) no entry
+# that took more than ASAN_MOST_S seconds in the release tree, nor more than ASAN_OWN_MOST_S under the sanitizers
+# (ctest's own measured costs; the sanitizers want the code's paths, which the short entries take, and the long ones
+# play longer): make gates-full sets them to 0, every entry
+ASAN_MOST_S ?= 30
+ASAN_OWN_MOST_S ?= 20
+asan_limits = $(if $(filter-out 0,$(ASAN_MOST_S)),--limit $(BUILD_CORE)/Testing/Temporary/CTestCostData.txt:$(ASAN_MOST_S),) \
+	$(if $(filter-out 0,$(ASAN_OWN_MOST_S)),--limit $(BUILD_ASAN)/Testing/Temporary/CTestCostData.txt:$(ASAN_OWN_MOST_S),)
 asan-gate: asan-build
-	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS)
+	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS) $(asan_limits)
 
 # the release ctest (build-core; `make core` first)
 ctest:
@@ -115,6 +122,10 @@ gates:
 	LEVEL=merge ./gates.sh
 gate:
 	LEVEL=commit ./gates.sh
+# (Stage 68) every sample of the truth's comparisons and every entry under the sanitizers: before a release, and when
+# a change touches what only the long plays reach (docs/WORKFLOW.md)
+gates-full:
+	LEVEL=full ./gates.sh
 
 # ------------------------------------------------------------------ sessions
 # The 3-stage demo (GAME_SPEC §17), headless, through the C API: every command,
@@ -124,7 +135,7 @@ demo: core
 demo-bench: core
 	$(BUILD_CORE)/chem_tool bench data/sessions/demo.json
 # The sessions' golden records (bench/sessions/*.jsonl: the state's digest after
-# every command). `sessions-check` replays against them (also ctest demo_session);
+# every command). `sessions-check` replays against them (in ctest: lab_tests.demo_record, pressure_session);
 # `sessions` re-records them: a changed record is a behaviour change, to be shown
 # and approved before it is committed.
 sessions-check: core

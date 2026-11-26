@@ -18,7 +18,7 @@ One cache for every worktree (Stage 68): GATE_CACHE_FILE, by default
 ~/Library/Caches/chem-game-v2/gate_cache.json (XDG_CACHE_HOME elsewhere), read and
 written under a lock, so gates in several worktrees share what passed.
 
-  gate_cache.py ctest BUILD_DIR [--jobs N] [--regex RE] [--no-cache]
+  gate_cache.py ctest BUILD_DIR [--jobs N] [--regex RE] [--no-cache] [--limit COSTS:SECONDS ...]
       ctest in BUILD_DIR, skipping the entries that passed with the same key.
       An entry is cacheable when its command is a binary of BUILD_DIR. Its key
       covers that binary and the shared libraries it links from BUILD_DIR, its
@@ -193,10 +193,38 @@ def entry_of(build, name):
     return f"ctest:{os.path.basename(build)}:{name}"
 
 
-def ctest(build, jobs, regex, use_cache):
+def costs_of(path):
+    """ctest's measured seconds an entry (Testing/Temporary/CTestCostData.txt: name, runs, seconds)."""
+    out = {}
+    try:
+        for line in open(path):
+            if line.startswith("---"):
+                break
+            parts = line.split()
+            if len(parts) == 3:
+                out[parts[0]] = float(parts[2])
+    except OSError:
+        pass
+    return out
+
+
+def ctest(build, jobs, regex, use_cache, limits=()):
     build = os.path.abspath(build)
+    # (Stage 68) --limit FILE:S, as many as asked: no entry that took more than S seconds where FILE measured it
+    # (ctest's CTestCostData.txt, a tree's); one no FILE has measured runs
+    measured = [(costs_of(f), most) for f, most in limits if most > 0]
+    too_long = lambda name: any(m.get(name, 0.0) > most for m, most in measured)
+    left = []
     listing = json.loads(subprocess.run(["ctest", "--test-dir", build, "--show-only=json-v1"], check=True,
                                         capture_output=True, text=True).stdout)
+    # an entry left out takes the fixtures it sets up with it, and every entry that needs one of them: ctest would
+    # run a fixture's setup for any entry that needs it
+    gone = set()
+    if measured:
+        for t in listing["tests"]:
+            props = {p["name"]: p["value"] for p in t.get("properties", [])}
+            if too_long(t["name"]):
+                gone.update(props.get("FIXTURES_SETUP", []) or [])
     data = fingerprint(DATA)
     env = rc_env()
     cache = load()
@@ -205,6 +233,10 @@ def ctest(build, jobs, regex, use_cache):
     for t in listing["tests"]:
         name = t["name"]
         if regex and not re.search(regex, name):
+            continue
+        if measured and (too_long(name) or
+                         any(f in gone for f in ({p["name"]: p["value"] for p in t.get("properties", [])}.get("FIXTURES_REQUIRED", []) or []))):
+            left.append(name)
             continue
         cmd = t.get("command") or []
         props = {p["name"]: p["value"] for p in t.get("properties", [])}
@@ -219,7 +251,10 @@ def ctest(build, jobs, regex, use_cache):
                 continue
         run.append(name)
     print(f"gate_cache: {len(run)} ctest entries to run, {len(skipped)} unchanged since they passed"
-          + (f" at the {LEVEL} level" if use_cache else " (cache off)") + f" ({os.path.basename(build)})", flush=True)
+          + (f" at the {LEVEL} level" if use_cache else " (cache off)") + f" ({os.path.basename(build)})"
+          + (f"; {len(left)} left to the full gates, each over its limit ("
+             + ", ".join(f"{most:g} s in {os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(f))))}" for f, most in limits) + ")"
+             if left else ""), flush=True)
     status = 0
     if run:
         junit = os.path.join(build, "Testing", "gate_cache_junit.xml")
@@ -266,6 +301,7 @@ def main(argv):
         return 0
     if argv[0] == "ctest" and len(argv) >= 2:
         jobs, regex, args = os.cpu_count() or 4, None, argv[2:]
+        limits = []
         while args:
             if args[0] == "--jobs":
                 jobs, args = int(args[1]), args[2:]
@@ -273,10 +309,14 @@ def main(argv):
                 regex, args = args[1], args[2:]
             elif args[0] == "--no-cache":
                 use_cache, args = False, args[1:]
+            elif args[0] == "--limit":
+                f, _, most = args[1].rpartition(":")
+                limits.append((f, float(most)))
+                args = args[2:]
             else:
                 print(f"unknown option {args[0]}")
                 return 2
-        return ctest(argv[1], jobs, regex, use_cache)
+        return ctest(argv[1], jobs, regex, use_cache, limits)
     if argv[0] == "step" and "--" in argv and len(argv) >= 4 and argv[2] == "--inputs":
         sep = argv.index("--")
         return step(argv[1], argv[3:sep], argv[sep + 1:], use_cache)

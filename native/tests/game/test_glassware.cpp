@@ -1,9 +1,12 @@
 // A vessel in its whole shape (GAME_SPEC §12.3, Stage 24): glassware to its standard, one profile.
 #include "lab/glassware.hpp"
+#include "lab/glassware_data.hpp"
 
 #include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
 
 #include <cmath>
+#include <cstring>
 #include <numbers>
 #include <string>
 #include <tuple>
@@ -265,4 +268,51 @@ TEST_CASE("glassware: volumetric glassware is made to its standard's rows (Stage
 	}
 	// the foam cup: its 8 oz below its brim
 	CHECK(find("foam_cup", 237)->capacity() > 237.0);
+}
+
+// (Stage 68) every shape glass::find gives is made at build time (chem_glassgen): each is glass::make's, to the last bit
+TEST_CASE("glassware: every shape made at build time is the one glass::make makes, to the last bit (Stage 68)") {
+	const nlohmann::json table = nlohmann::json::parse(GLASSWARE_JSON);
+	const auto same_chain = [](const Chain &a, const Chain &b) {
+		if (a.size() != b.size()) {
+			return false;
+		}
+		for (size_t i = 0; i < a.size(); ++i) {
+			const Piece &p = a[i], &q = b[i];
+			if (p.arc != q.arc || p.a.r != q.a.r || p.a.y != q.a.y || p.b.r != q.b.r || p.b.y != q.b.y || p.centre.r != q.centre.r || p.centre.y != q.centre.y ||
+					p.radius != q.radius || p.t0 != q.t0 || p.t1 != q.t1) {
+				return false;
+			}
+		}
+		return true;
+	};
+	int shapes = 0;
+	for (const nlohmann::json &kind : table.at("kinds")) {
+		for (const nlohmann::json &size : kind.at("sizes")) {
+			const std::string name = kind.at("name").get<std::string>();
+			const double ml = size.at("ml").get<double>();
+			CAPTURE(name);
+			CAPTURE(ml);
+			const Vessel made = vessel(name.c_str(), ml);
+			const Vessel *built = find(name, ml);
+			REQUIRE(built != nullptr);
+			CHECK(built->kind == made.kind);
+			for (const auto &[a, b] : { std::pair{ built->nominal_ml, made.nominal_ml }, { built->diameter, made.diameter }, { built->height, made.height }, { built->wall, made.wall },
+						 { built->floor, made.floor }, { built->pour_ml_s, made.pour_ml_s }, { built->cap_bore, made.cap_bore }, { built->burst, made.burst },
+						 { built->marks_ml, made.marks_ml }, { built->marks_error, made.marks_error }, { built->tolerance_ml, made.tolerance_ml },
+						 { built->graduation_ml, made.graduation_ml }, { built->delivery_s, made.delivery_s }, { built->tip_bore, made.tip_bore }, { built->zero, made.zero },
+						 { built->stem, made.stem }, { built->cone_half_angle, made.cone_half_angle }, { built->paper_herzberg_s, made.paper_herzberg_s },
+						 { built->paper_height, made.paper_height }, { built->capacity_cached, made.capacity_cached } }) {
+				CHECK(std::memcmp(&a, &b, sizeof a) == 0);
+			}
+			CHECK(built->screw_cap == made.screw_cap);
+			CHECK(built->outlet == made.outlet);
+			CHECK(built->mark == made.mark);
+			CHECK(same_chain(built->outside, made.outside));
+			CHECK(same_chain(built->inside, made.inside));
+			CHECK(built->paths == made.paths);
+			++shapes;
+		}
+	}
+	CHECK(shapes >= 14);
 }

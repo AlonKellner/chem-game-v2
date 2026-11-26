@@ -59,15 +59,42 @@ bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Sna
 	return t.defined;
 }
 
-// A cell's entropy in J/K: a reservoir's is its energy over its temperature.
-// false when the cell has no positive finite temperature.
-bool entropy_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &s) {
-	double kelvin = 0.0;
-	if (!temperature_of(table, trace, state, cell, kelvin) || !(kelvin > 0.0) || !finite(kelvin)) {
-		return false;
+// A cell's temperature and entropy in J/K (a reservoir's, its energy over its temperature; none without a positive
+// finite temperature), kept for the cell's slot on each thread
+// while its table, state and kind are the same (Stage 68): a step's checks ask the entropy of every cell after it
+// (S1), and of each changed cell before and after it (T2), and a cell's state before a step is its state after the
+// last. Both are functions of the table, the state and the kind alone, so a kept one is the one computed.
+struct Thermo {
+	bool t_ok = false, s_ok = false;
+	double kelvin = 0.0, s = 0.0;
+};
+const Thermo &thermo_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell) {
+	struct Kept {
+		const SpeciesTable *table = nullptr;
+		CellState state;
+		CellMeta meta;
+		Thermo thermo;
+	};
+	thread_local std::vector<Kept> kept;
+	if (kept.size() <= cell) {
+		kept.resize(cell + 1);
 	}
-	s = trace.meta[cell].reservoir ? static_cast<double>(state.cells[cell].energy) * JOULE_PER_QUANTUM / kelvin : entropy(table, state.cells[cell], kelvin, meta_of(trace, cell));
-	return true;
+	Kept &k = kept[cell];
+	const CellState &now = state.cells[cell];
+	if (k.table == &table && k.state == now && k.meta == trace.meta[cell]) {
+		return k.thermo;
+	}
+	Thermo t;
+	t.t_ok = temperature_of(table, trace, state, cell, t.kelvin);
+	if (t.t_ok && t.kelvin > 0.0 && finite(t.kelvin)) {
+		t.s_ok = true;
+		t.s = trace.meta[cell].reservoir ? static_cast<double>(now.energy) * JOULE_PER_QUANTUM / t.kelvin : entropy(table, now, t.kelvin, meta_of(trace, cell));
+	}
+	k.table = &table;
+	k.state = now;
+	k.meta = trace.meta[cell];
+	k.thermo = t;
+	return k.thermo;
 }
 
 // sum of (S_after - S_before) and of |S| over the cells that changed
@@ -81,8 +108,13 @@ void entropy_sums(const SpeciesTable &table, const StepTrace &trace, double &cha
 		double before = 0.0, after = 0.0;
 		// an empty cell's entropy is none (Stage 47: a column's layer that fills, or empties, in the step)
 		const auto none = [](const CellState &x) { return std::all_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a == 0; }) && x.energy == 0; };
-		const bool was = none(trace.before.cells[c]) || entropy_of(table, trace, trace.before, c, before);
-		const bool is = none(trace.after.cells[c]) || entropy_of(table, trace, trace.after, c, after);
+		const auto entropy_at = [&](const Snapshot &state, double &s) {
+			const Thermo &t = thermo_of(table, trace, state, c);
+			s = t.s_ok ? t.s : s;
+			return t.s_ok;
+		};
+		const bool was = none(trace.before.cells[c]) || entropy_at(trace.before, before);
+		const bool is = none(trace.after.cells[c]) || entropy_at(trace.after, after);
 		if (!was || !is) {
 			continue; // T3 reports a cell without a temperature
 		}
@@ -561,12 +593,12 @@ Violations check_S1(const SpeciesTable &table, const StepTrace &trace) {
 		return out;
 	}
 	for (size_t c = 0; c < trace.after.cells.size() && out.size() < MAX_MESSAGES; ++c) {
-		double kelvin = 0.0;
-		if (!temperature_of(table, trace, trace.after, c, kelvin)) {
+		const Thermo &t = thermo_of(table, trace, trace.after, c);
+		if (!t.t_ok) {
 			continue; // T3 reports it
 		}
-		double s = 0.0;
-		const bool has_entropy = entropy_of(table, trace, trace.after, c, s);
+		const double kelvin = t.kelvin, s = t.s;
+		const bool has_entropy = t.s_ok;
 		if (!finite(kelvin) || (has_entropy && !finite(s))) {
 			out.push_back(text("S1: step %lld: cell %lld has a temperature or an entropy that is not finite", static_cast<long long>(trace.step), static_cast<long long>(c)));
 		}

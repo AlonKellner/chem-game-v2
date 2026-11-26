@@ -5,6 +5,9 @@
 #     result cache (tools/gate_cache.py): a ctest entry or the Godot suite whose
 #     inputs are the same as when it last passed is not run again (GATE_CACHE=0:
 #     run everything).
+#   LEVEL=full (make gates-full, Stage 68): the merge gate with every sample of the truth's comparisons (LAB_SPARSE=1;
+#     the others take every third) and every entry under the sanitizers (the others, those of 30 s or less in the
+#     release tree and 20 s or less under the sanitizers: ASAN_MOST_S, ASAN_OWN_MOST_S).
 #   LEVEL=merge (make gates): the same, and ctest under ASan+UBSan (build-asan),
 #     side by side with the rest from the start (Stage 40: every ctest entry a test
 #     case, the machine kept full; docs/TDD_40_GATES.md). Its cache takes only
@@ -16,6 +19,7 @@
 #
 #   LEVEL=commit ./gates.sh     # or: make gate
 #   LEVEL=merge ./gates.sh      # or: make gates
+#   LEVEL=full ./gates.sh       # or: make gates-full
 #   SKIP_GODOT=1 make gate
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -68,8 +72,17 @@ gate_join() {
 }
 
 # the result cache at the gate's level (tools/gate_cache.py, Stage 68): a merge gate takes only what passed at a merge
-# gate; GATE_CACHE=0 runs everything
+# gate (a full gate's passes are merge passes); GATE_CACHE=0 runs everything
 export GATE_LEVEL=$LEVEL
+[ "$LEVEL" = full ] && export GATE_LEVEL=merge
+# (Stage 68) how the gates sample the truth's heaviest comparisons (LAB_SPARSE: every third sample, as the sanitizer
+# build always has; a full gate, every one) and which entries the sanitizers run (those of 30 s or less in the
+# release tree and 20 s or less under the sanitizers, ASAN_MOST_S and ASAN_OWN_MOST_S; a full gate, all)
+if [ "$LEVEL" = full ]; then
+	export GATE_SPARSE="${GATE_SPARSE:-1}" ASAN_MOST_S="${ASAN_MOST_S:-0}" ASAN_OWN_MOST_S="${ASAN_OWN_MOST_S:-0}"
+else
+	export GATE_SPARSE="${GATE_SPARSE:-3}"
+fi
 cached() {
 	python3 -I tools/gate_cache.py "$@"
 }
@@ -95,12 +108,12 @@ godot_gate() {
 
 wall0=$(date +%s)
 # the sanitizers' build and run, from the start, beside everything else
-if [ "$LEVEL" = merge ]; then
+if [ "$LEVEL" != commit ]; then
 	gate_bg asan make asan-gate
 fi
 gate core make core
 # side by side: ctest, the Godot extension and suite
-gate_bg ctest cached ctest native/build-core
+gate_bg ctest env LAB_SPARSE="$GATE_SPARSE" python3 -I tools/gate_cache.py ctest native/build-core
 if [ -z "${SKIP_GODOT:-}" ]; then
 	gate_bg godot godot_gate
 fi
@@ -123,5 +136,12 @@ for run in ctest asan; do
 	head -"${GATE_SLOWEST:-8}" "$LOGDIR/$run.times" | awk '{printf " %s %ds,", $2, $1}' | sed 's/,$//'
 	echo
 done
-printf "%-10s %6d  %s   (wall; LEVEL=%s%s, logs: %s)\n" total "$(( $(date +%s) - wall0 ))" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LEVEL" "${SKIP_GODOT:+, SKIP_GODOT}" "$LOGDIR"
+# (Stage 68) the release run's budget: an entry over GATE_BUDGET_S seconds is named (it does not fail the gate: a
+# machine's load moves the times). A new long play belongs with what makes the long ones short (docs/WORKFLOW.md,
+# "What keeps the gates quick"): a fixture, parts, sparse(), coarse frames where only its end is held.
+if [ -s "$LOGDIR/ctest.times" ]; then
+	over=$(awk -v most="${GATE_BUDGET_S:-60}" '$1 > most {printf " %s %ds,", $2, $1}' "$LOGDIR/ctest.times" | sed 's/,$//')
+	[ -n "$over" ] && echo "!! over the budget of ${GATE_BUDGET_S:-60} s an entry:$over"
+fi
+printf "%-10s %6d  %s   (wall; LEVEL=%s%s, LAB_SPARSE=$GATE_SPARSE, logs: %s)\n" total "$(( $(date +%s) - wall0 ))" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LEVEL" "${SKIP_GODOT:+, SKIP_GODOT}" "$LOGDIR"
 exit $status

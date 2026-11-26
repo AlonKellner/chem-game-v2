@@ -1,7 +1,7 @@
 #pragma once
 // A ctest fixture's files (Stage 68; native/CMakeLists.txt, `// ctest: fixture setup NAME` and `// ctest: fixture
 // NAME`): what one case makes once for the cases that start from it, in LAB_FIXTURES/NAME, by default fixtures/NAME
-// in the tree ctest runs the entries in. ctest runs the setup first whenever a case that needs it runs.
+// in the binary's own tree (wherever it is run from). ctest runs the setup first whenever a case that needs it runs.
 #include <doctest/doctest.h>
 
 #include <cstdlib>
@@ -14,7 +14,7 @@ namespace fixtures {
 
 inline std::string dir(const std::string &name) {
 	const char *v = std::getenv("LAB_FIXTURES");
-	return (v != nullptr && *v != '\0' ? std::string(v) : std::string("fixtures")) + "/" + name;
+	return (v != nullptr && *v != '\0' ? std::string(v) : std::string(chem_binary_dir()) + "/fixtures") + "/" + name;
 }
 
 // a fresh directory for the setup to write

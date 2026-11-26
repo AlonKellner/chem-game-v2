@@ -6,6 +6,8 @@
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
 
+#include "part.hpp"
+
 #include <doctest/doctest.h>
 
 #include <cmath>
@@ -259,11 +261,17 @@ TEST_CASE("column: on the screen the pour menu's \"pour gently\" lays the green 
 	}
 }
 
+// ctest: parts 4
 TEST_CASE("column: a held pour onto a layered vessel at any speed, a frame's first step checked, keeps every invariant (Stage 47)") {
 	// the user's test: poured by hand, the lab stopped on C5. A pour that lands as a layer moves the liquid there
 	// before the step; after unchecked steps a checked one could not then start where the last one ended.
+	// (Stage 68: as ctest runs it, four entries, a target and a speed each)
+	int screen = -1;
 	for (const char *target : { "blue", "beaker" }) {
 		for (const char *speed : { "speed:10", "speed:600" }) {
+			if (++screen % part().count != part().index) {
+				continue;
+			}
 			std::string why;
 			std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/layers.json"), why);
 			REQUIRE(ui != nullptr);

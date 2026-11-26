@@ -3589,20 +3589,34 @@ struct Lab::Impl {
 	double grams(CellId cell, SpeciesId s) const { return world().amount(cell, s).mol() * static_cast<double>(table().molar_mass_ug(s)) * 1e-6; }
 
 	// a vessel's column's layers (GAME_SPEC §6, Stage 47), from the top down: the world's column edges under its cell
+	// each cell's layer above it in its column: the first open column edge into it (Stage 68: made again when the
+	// world's topology changes; each layer was found by a scan of every edge, many times a step)
+	mutable const World *above_of = nullptr;
+	mutable uint64_t above_version = 0;
+	mutable size_t above_edges = 0;
+	mutable std::vector<int32_t> above;
 	std::vector<CellId> layers_of(const Item &x) const {
-		std::vector<CellId> out;
-		const std::span<const Edge> edges = world().edges();
-		for (CellId at = x.cell;;) {
-			CellId next{};
+		const World &w = world();
+		const std::span<const Edge> edges = w.edges();
+		if (above_of != &w || above_version != w.topology_version() || above_edges != edges.size()) {
+			above.assign(static_cast<size_t>(w.cell_count()), -1);
 			for (const Edge &e : edges) {
-				if (e.open && e.column && e.b == at) {
-					next = e.a;
-					break;
+				const auto b = static_cast<size_t>(e.b.index);
+				if (e.open && e.column && e.b.index >= 0 && b < above.size() && above[b] < 0) {
+					above[b] = e.a.index;
 				}
 			}
-			if (next.index < 0) {
+			above_of = &w;
+			above_version = w.topology_version();
+			above_edges = edges.size();
+		}
+		std::vector<CellId> out;
+		for (CellId at = x.cell;;) {
+			const auto i = static_cast<size_t>(at.index);
+			if (at.index < 0 || i >= above.size() || above[i] < 0) {
 				return out;
 			}
+			const CellId next{ above[i] };
 			out.push_back(next);
 			at = next;
 		}

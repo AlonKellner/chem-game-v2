@@ -483,7 +483,7 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 	// as ctest runs it, twelve entries, each a twelfth of the scenes' pixels, a scene's pixel by a scene's pixel
 	// (Stage 40, part.hpp: a few pixels through the glass are a second or more at every scene, and so are shared
 	// out). Each command's scene as the screen made it, playing the session (Stage 68: the fixture `demo`,
-	// test_demo_record.cpp, which played it once, unchecked, its state the same, D1, and checked by demo_session; here
+	// test_demo_record.cpp, which played it once, every invariant checked at every step; here
 	// nothing is played). A command that leaves the scene as it was, by its revisions there, leaves every pixel as it was.
 	const nlohmann::json kept = nlohmann::json::parse(fixtures::read("demo", "scenes.json"));
 	REQUIRE(kept.size() == session.at("script").size());
@@ -506,7 +506,8 @@ TEST_CASE("optics: through the demo the screen's scene holds O1 and O2, and the 
 			// of the scan, read as it now is by each pixel's own rays: 10 s a command, 3 s so.)
 			mine.clear();
 			for (size_t i = 0; i < places.size(); ++i) {
-				if (part().mine(static_cast<size_t>(scans) * places.size() + i)) {
+				// (Stage 68: and every sparse()-th of them, the gates every second, a full gate each)
+				if (part().mine(static_cast<size_t>(scans) * places.size() + i) && (static_cast<size_t>(scans) + i) % static_cast<size_t>(sparse()) == 0) {
 					mine.push_back(places[i]);
 				}
 			}
