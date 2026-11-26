@@ -129,4 +129,8 @@ case). The keywords (`lab/search.hpp`, pure):
 
 ## Open
 
-- The free lab's step cost: measured once its cabinet is Supplies (it stepped at 16 µs, 6.5 before Stage 53).
+- (Settled) The free lab's step cost: idle, it steps at 0.23 µs (`chem_tool bench` of a ten-minute wait on
+  `data/benches/lab.json`), against 18.7 µs on Stage 53's build and 6.5 before its rings: none of its twelve
+  supplies is in the world until one is taken out.
+- `lab_tests.signals.12` (three monitors' cost at 600x) passes alone and fails under the gate's full load by a
+  tenth of a millisecond (3.13 against 3 ms), as it did in Stage 53's merge: its bound is the CPU's, not the code's.
