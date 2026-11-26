@@ -2154,6 +2154,10 @@ RayMet ray_met(vec2 p, float nm) {
 	int last = count - 1;
 	r.x = p.x;
 	r.y = p.y;
+	// (Stage 61) whether the ray is seen through something in hand (its pixel within that thing's outline, or the ray
+	// met it): from there on the panels are not in its way (it sees the room's wall, wherever it goes, as over the
+	// bench)
+	bool through_hand = hand_over(p);
 	for (int guard = 0; guard < 16; guard++) {
 		if (last < 0 || !lands) {
 			break;
@@ -2176,7 +2180,7 @@ RayMet ray_met(vec2 p, float nm) {
 		int met_core = 0;
 		for (int k = first; k <= last; k++) {
 			vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-			if (trace_bends(k) && !hidden_at(k, where) && where.y >= rect.y && where.y <= rect.y + rect.w) {
+			if (trace_bends(k) && !hidden(k) && !(through_hand && in_panel(k)) && where.y >= rect.y && where.y <= rect.y + rect.w) {
 				// (a ray whose line passes the body's axis further off than it reaches does not meet it)
 				float off = abs((lp.x - (rect.x + rect.z * 0.5)) * lu.z - (lp.z - z) * lu.x) / sqrt(lu.x * lu.x + lu.z * lu.z);
 				if (off > rect.z * 1.6 + 2.0) {
@@ -2201,7 +2205,7 @@ RayMet ray_met(vec2 p, float nm) {
 			bool bent = k == hit;
 			if (!bent) {
 				vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
-				if (trace_bends(k) || hidden_at(k, where) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
+				if (trace_bends(k) || hidden(k) || (through_hand && in_panel(k)) || !(where.x >= rect.x - 1.0 && where.x <= rect.x + rect.z + 1.0 && where.y >= rect.y - 1.0 && where.y <= rect.y + rect.w + 1.0)) {
 					continue;
 				}
 			}
@@ -2209,6 +2213,7 @@ RayMet ray_met(vec2 p, float nm) {
 			if (!bent && !(l.cover > 0.5)) {
 				continue; // a thing the ray passes beside
 			}
+			through_hand = through_hand || layer > 0.5; // (it met what is in hand: Stage 61)
 			if (bent && lies_in(k)) {
 				// what lies in it is traced (Stage 30): its sediment is where a ray ends, not a heap drawn over it
 				l.solid = met.solid ? 1.0 : 0.0;

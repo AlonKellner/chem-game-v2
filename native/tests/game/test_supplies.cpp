@@ -415,3 +415,72 @@ TEST_CASE("supplies: what is held over Supplies sees the room's wall through it,
 	REQUIRE(!over_beaker.empty());
 	CHECK(over_beaker == over_camera); // whatever box is behind it, it sees the same wall
 }
+
+namespace {
+
+// every pixel whose ray goes through a held flask's glass (its rims too: where rays are bent far), relative to its
+// rectangle, the rays at a middle wavelength
+std::vector<double> glass_colours(lab::Ui &ui) {
+	const lab::OpticsScene &scene = ui.optics();
+	const int b = lab::optics_body(scene, "flask");
+	REQUIRE(b >= 0);
+	const float *r = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS) * 4];
+	std::vector<double> out;
+	for (int dy = 0; dy < static_cast<int>(r[3]); ++dy) {
+		for (int dx = 0; dx < static_cast<int>(r[2]); ++dx) {
+			const int x = static_cast<int>(r[0]) + dx, y = static_cast<int>(r[1]) + dy;
+			const lab::OpticsRay ray = lab::optics_ray(scene, x + 0.5, y + 0.5, 550.0);
+			if (ray.bent > 0 && ray.body[0] == b) {
+				double rgba[4];
+				lab::optics_pixel(scene, x, y, rgba);
+				out.insert(out.end(), { static_cast<double>(dx), static_cast<double>(dy), rgba[0], rgba[1], rgba[2] });
+			}
+		}
+	}
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("supplies: a flask held over Supplies sees through its glass exactly what it sees with nothing in Supplies there, its rims too (Stage 61)") {
+	// (the user: its rims pixelated over Supplies, not over the bench: a ray seen through what is in hand met the
+	// panel's boxes beside it, bent far at a rim, or passing its glass where its outline still covers the pixel)
+	const auto held_at = [](const std::string &bench, float x, float y) {
+		std::string why;
+		auto ui = lab::Ui::open(bench, why);
+		REQUIRE_MESSAGE(ui != nullptr, why);
+		REQUIRE(ui->lab().command(R"({"do": "take", "supply": "flask", "at": [20, 1]})", why));
+		ui->frame(1.0 / 60.0);
+		float fx = 0, fy = 0;
+		REQUIRE(ui->locate("item:flask", fx, fy));
+		ui->pointer(fx, fy, true);
+		ui->pointer(fx, fy, false);
+		ui->pointer(x, y, false);
+		return glass_colours(*ui);
+	};
+	// the free lab, its boxes under the flask; and a lab whose only supply is the flask (nothing in Supplies there)
+	const char *const ALONE = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100}]})";
+	for (const float y : { 500.0f, 620.0f }) {
+		const std::vector<double> over_boxes = held_at(read("data/benches/lab.json"), 60.0f, y), over_nothing = held_at(ALONE, 60.0f, y);
+		REQUIRE(over_boxes.size() > 1000);
+		REQUIRE(over_boxes.size() == over_nothing.size());
+		size_t differ = 0;
+		double worst = 0.0;
+		std::ostringstream where;
+		for (size_t k = 0; k < over_boxes.size(); k += 5) {
+			const double d = std::fabs(over_boxes[k + 2] - over_nothing[k + 2]) + std::fabs(over_boxes[k + 3] - over_nothing[k + 3]) + std::fabs(over_boxes[k + 4] - over_nothing[k + 4]);
+			differ += d > 0.0 ? 1 : 0;
+			if (d > worst) {
+				worst = d;
+				where.str("");
+				where << "(" << over_boxes[k] << ", " << over_boxes[k + 1] << ")";
+			}
+		}
+		MESSAGE("at " << y << ": " << differ << " of " << over_boxes.size() / 5 << " differ, the most " << worst << " at " << where.str());
+		// (a pixel at its mouth's edge reaches past the glass beside the opening, and sees what is there: under an
+		// 8-bit step, and a few of thousands)
+		CHECK(worst < 3.0 / 255.0);
+		CHECK(differ * 200 < over_boxes.size() / 5);
+	}
+}
