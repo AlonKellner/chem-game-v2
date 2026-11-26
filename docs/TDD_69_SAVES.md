@@ -9,7 +9,7 @@ found and left open (`docs/TDD_68_GATES_FAST.md`, "Open"). GAME_SPEC 0.69.0 (§1
 |---|---|---|
 | 69.1 | A save made in a step in progress continues as the saved lab would have (D2) | Done |
 | 69.2 | A loaded lab's first view is the saved one's: its boiling's bubbles | Done |
-| 69.3 | `make gates`; the user's sign-off | open |
+| 69.3 | `make gates` (916 s, the machine at a load of 45 to 63); the user's sign-off | gates passed; sign-off open |
 
 ## 69.1 A save made mid-step
 
@@ -53,4 +53,8 @@ saved and loaded, shows the same bubbles, floor and digest, and saves the same t
 
 ## The gates
 
-`make gate` passed at each commit; the goldens unchanged (the sessions never save and load).
+`make gate` passed at each commit; the goldens unchanged (the sessions never save and load). `make gates` passed:
+916 s, other worktrees' gates on the machine (a load of 45 to 63), and the sanitizers' tree of this new worktree
+not yet measured, so its own limit left nothing out (730 entries ran, 35 left to the full gate by the release
+tree's costs; the next run has its costs). Open: ctest's measured costs kept for every worktree, as the result
+cache is, so a new worktree's first gate is as short as the others'.
