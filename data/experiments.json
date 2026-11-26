@@ -157,6 +157,13 @@
 			"tutorial": "tutorials/yield.json"
 		},
 		{
+			"id": "quota",
+			"title": "Crystals to a quota",
+			"summary": "Planned, made and handed in: the planner works back from 3.00 g of copper sulfate crystals to the malachite; weighed, dissolved in acid, boiled down and cooled, the crop filtered off and handed in against the plan's goal. A guess first.",
+			"bench": "benches/quota.json",
+			"tutorial": "tutorials/quota.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

@@ -1,0 +1,123 @@
+{
+	"format": "chem-bench/2",
+	"note": "Crystals to a quota (GAME_SPEC §13, Stage 62; docs/CURRICULUM.md, experiment 50): malachite, sulfuric acid, a burner, a filter funnel and a top-loading balance. Read by instruments: the planner works back from 3.00 g of copper sulfate crystals to the malachite; weighed, dissolved in the acid, boiled down, cooled until the crop grows, filtered and handed in against the plan's goal.",
+	"readings": "instruments",
+	"seed": 141,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "scale",
+			"kind": "balance",
+			"model": "top_loading",
+			"at": [
+				1,
+				13
+			]
+		},
+		{
+			"id": "jar",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				5,
+				7
+			],
+			"label": "malachite, green powder",
+			"contents": {
+				"malachite": {
+					"g": 6,
+					"particles": 150000
+				}
+			}
+		},
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"at": [
+				8,
+				7
+			],
+			"label": "reaction beaker"
+		},
+		{
+			"id": "funnel",
+			"kind": "vessel",
+			"glassware": "filter_funnel",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				12,
+				0
+			],
+			"label": "filter funnel, grade 1 paper"
+		},
+		{
+			"id": "flask",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				15,
+				7
+			],
+			"label": "mother liquor"
+		},
+		{
+			"id": "dish",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"at": [
+				19,
+				7
+			],
+			"label": "crystals"
+		},
+		{
+			"id": "acid",
+			"kind": "vessel",
+			"glassware": "bottle",
+			"volume_ml": 500,
+			"wall": "glass",
+			"wall_g": 300,
+			"at": [
+				22,
+				7
+			],
+			"label": "sulfuric acid, 1.00 M",
+			"contents": {
+				"water": {
+					"g": 183
+				},
+				"sulfuric_acid_aq": {
+					"mol": 0.2
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		}
+	]
+}

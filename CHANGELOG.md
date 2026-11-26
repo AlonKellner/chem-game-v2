@@ -1,5 +1,11 @@
 # GAME_SPEC version history
 
+## 0.62.0 (2026-11-26, Stage 62; signed off by the user: "Approved, merge and proceed")
+
+- §13.7 (Stage 62, `docs/TDD_62_QUOTA.md`; `docs/CURRICULUM.md`, experiment 50): the experiment `quota` (copper
+  sulfate crystals from malachite to a quota of 3.00 g, planned with the planner, made, and handed in against the
+  plan's goal). (0.61.0 is another agent's Stage 61.) The goldens unchanged.
+
 ## 0.60.0 (2026-11-26, Stage 60; signed off by the user: "Approved, merge and proceed")
 
 - §13.1 (Stage 60, `docs/TDD_60_PLANNER.md`; `docs/CURRICULUM.md`, step C's last part, S3): **the planner**, the

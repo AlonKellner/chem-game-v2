@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.60.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.62.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2779,6 +2779,12 @@ stand on.
     (in excess: the copper limits), the precipitate filtered, scraped into a tared dish and weighed: 0.6344 g from
     1.6232 g of the crystals at the bench's seed, 100.0 % of the theoretical 0.6342 g. Its report: the percent yield,
     within 1 point, predicted first.
+  - `quota`, *crystals to a quota* (Stage 62; experiment 50): read by instruments. A guess first; the planner works back
+    from 3.00 g of the pentahydrate at 99 %, 70 % expected to crystallize, by malachite in sulfuric acid (1.90 g of
+    malachite, 17.2 mL of 1 M acid) and sets the goal on slot 1; the malachite weighed (1.86 g at the bench's seed),
+    dissolved in 20 mL of the acid, boiled down to about 7 mL, cooled until the crop has grown past 2.5 g, filtered
+    and handed in: 2.50 g, 59.5 % of the copper, short of the quota (the liquor keeps the rest; a crop harvested later
+    is larger). Its report: the crystals' mass, predicted first, and the share of the copper that crystallized.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and

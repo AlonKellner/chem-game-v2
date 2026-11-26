@@ -1,0 +1,485 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 62; docs/CURRICULUM.md, experiment 50) on data/benches/quota.json: copper sulfate crystals from malachite to a quota of 3.00 g, planned, made and handed in against the plan's goal.",
+	"title": "Experiment: crystals to a quota",
+	"bench": "../benches/quota.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "You will make blue copper sulfate crystals from green malachite, aiming at 3.00 g. How many grams do you think you will hand in? Type it, then click \"predict\".",
+			"why": "A quota is a target to meet; a plan is how much to start from to meet it, with what each step is expected to lose.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "The plan",
+			"title": "Worked back from 3.00 g",
+			"text": "Open the notebook's planner. Type the target CuSO4.5H2O and 3.00 g. Step 1, the crystals out of the solution: expect 70 % of the salt to come out (click its yield, type 70). Click \"+ step\", and the arrows of step 2 until it reads malachite in the acid. Click \"set it as a goal in the outbox\".",
+			"why": "Cooled, a saturated solution keeps much of its salt: it is the mother liquor. 70 % is a guess the experiment will test. Malachite in sulfuric acid: Cu2CO3(OH)2 + 2 H2SO4 -> 2 CuSO4 + CO2 + 3 H2O, two of the sulfate from each malachite.",
+			"checks": [
+				{
+					"text": "the plan worked out",
+					"when": {
+						"calculated": "plan"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:tab:planner"
+				},
+				{
+					"click": "notebook:plan:target"
+				},
+				{
+					"type": "CuSO4.5H2O"
+				},
+				{
+					"click": "notebook:plan:grams"
+				},
+				{
+					"type": "3.00"
+				},
+				{
+					"click": "notebook:plan:yield:0"
+				},
+				{
+					"type": "70"
+				},
+				{
+					"click": "notebook:plan:add"
+				},
+				{
+					"click": "notebook:plan:next:1"
+				},
+				{
+					"click": "notebook:plan:next:1"
+				},
+				{
+					"click": "notebook:plan:goal"
+				}
+			]
+		},
+		{
+			"part": "Weighing",
+			"title": "The beaker on the balance",
+			"text": "Close the notebook. Pick up the reaction beaker and click the balance; right-click the balance and click \"tare\".",
+			"checks": [
+				{
+					"text": "the beaker on the balance, tared",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "beaker"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.01,
+									0.01
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"drag": [
+						"item:beaker",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "About 1.90 g of malachite",
+			"text": "The plan asks for 1.90 g of malachite. Pick up its jar and right-click the beaker; type 1.90 and click \"tip in the solid\". Right-click the balance and click \"+ mass\".",
+			"checks": [
+				{
+					"text": "malachite in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "malachite",
+						"above_g": 1.5
+					}
+				},
+				{
+					"text": "its mass recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "1.90"
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		},
+		{
+			"part": "Dissolving",
+			"title": "The acid",
+			"text": "Set the beaker on the bench. Pick up the acid and right-click the beaker; type 20 and click \"pour\": the plan's 17.2 mL and a little more. Right-click the beaker and click \"stir\".",
+			"why": "A little more acid than the plan, so the malachite all dissolves: fizzing, as its carbonate leaves as carbon dioxide.",
+			"checks": [
+				{
+					"text": "acid on the malachite",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"above_g": 15
+					}
+				},
+				{
+					"text": "stirred",
+					"when": {
+						"item": "beaker",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"square:9,12"
+					]
+				},
+				{
+					"drag": [
+						"item:acid",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "20"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:beaker"
+				},
+				{
+					"click": "stir:beaker"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until the green is gone",
+			"text": "Wait while it fizzes and turns blue.",
+			"checks": [
+				{
+					"text": "the malachite dissolved",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "malachite",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"part": "Crystallizing",
+			"title": "Boil it down",
+			"text": "Pick up the burner and click the beaker. Right-click the burner and drag its valve to 40 %.",
+			"why": "Boiling water off concentrates the solution: cooled, it can hold less of the salt than it holds, and the rest comes out as crystals.",
+			"checks": [
+				{
+					"text": "the burner under it",
+					"when": {
+						"item": "burner",
+						"under": "beaker"
+					}
+				},
+				{
+					"text": "its flame",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.35
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.4"
+				},
+				{
+					"click": "speed:600"
+				}
+			]
+		},
+		{
+			"title": "To about 7 mL",
+			"text": "Wait while the water boils away.",
+			"checks": [
+				{
+					"text": "boiled down",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 7.5
+					}
+				}
+			]
+		},
+		{
+			"title": "Off, to cool",
+			"text": "Right-click the burner and close its valve.",
+			"checks": [
+				{
+					"text": "the flame off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"title": "Until the crop has grown",
+			"text": "Watch it cool. Crystals appear only once it is well past saturated; then they grow. The longer you wait, the more come out.",
+			"checks": [
+				{
+					"text": "crystals growing",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_pentahydrate",
+						"above_g": 2.5
+					}
+				}
+			]
+		},
+		{
+			"part": "Collecting",
+			"title": "The funnel on the flask",
+			"text": "Pick up the filter funnel and click the flask.",
+			"checks": [
+				{
+					"text": "the funnel on the flask",
+					"when": {
+						"item": "funnel",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "The liquor through",
+			"text": "Pick up the beaker and right-click the funnel; type 100 and click \"pour\": the mother liquor runs through.",
+			"checks": [
+				{
+					"text": "the liquor poured",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"type": "100"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "The crystals onto the paper",
+			"text": "Pick up the beaker again and right-click the funnel; click \"tip in the solid\".",
+			"checks": [
+				{
+					"text": "the crystals on the paper",
+					"when": {
+						"item": "beaker",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Drained",
+			"text": "Wait while the liquor drips through.",
+			"checks": [
+				{
+					"text": "the funnel drained",
+					"wait": true,
+					"when": {
+						"item": "funnel",
+						"species": "water",
+						"below_g": 0.05
+					}
+				}
+			]
+		},
+		{
+			"title": "Into the dish",
+			"text": "Pick up the funnel and right-click the crystals' dish; click \"tip in the solid\".",
+			"checks": [
+				{
+					"text": "the crystals in the dish",
+					"when": {
+						"item": "funnel",
+						"species": "copper_sulfate_pentahydrate",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:dish"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"part": "The quota",
+			"title": "Hand them in",
+			"text": "Pick up the dish and drop it on the outbox's slot 1, where the plan's goal is.",
+			"why": "The goal says whether the quota is met: the crystals' mass, and their purity.",
+			"checks": [
+				{
+					"text": "handed in",
+					"when": {
+						"item": "dish",
+						"slot": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:dish",
+						"slot:1"
+					]
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the crystals you handed in",
+			"unit": "g",
+			"truth": "dish.copper_sulfate_pentahydrate.g",
+			"tolerance": 0.02,
+			"relative": true,
+			"predict": true,
+			"why": "Weigh them, or read the goal's slot. The quota is 3.00 g: the plan's 70 % for the crystallizing was a guess; this crop is what it was."
+		},
+		{
+			"label": "the share of the copper that crystallized",
+			"unit": "%",
+			"truth": "100 * dish.copper_sulfate_pentahydrate.mol / (dish.copper_sulfate_pentahydrate.mol + beaker.copper_sulfate_pentahydrate.mol + beaker.copper_sulfate_aq.mol + funnel.copper_sulfate_pentahydrate.mol + flask.copper_sulfate_aq.mol + flask.copper_sulfate_pentahydrate.mol)",
+			"tolerance": 3.0,
+			"why": "The crystals' moles over the malachite's copper (two moles of the sulfate for each mole of malachite weighed). The rest stayed in the mother liquor, saturated at the temperature it was poured off at; boiled down further, or cooled colder, more comes out."
+		}
+	]
+}
