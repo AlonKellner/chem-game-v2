@@ -425,7 +425,11 @@ the Cabinet becomes, the user chose **Supplies**, and a stage of its own after S
     out of Supplies);
   - the goldens: a world without the cabinet's cells digests differently.
 
-### 8c. Liquids that expand with temperature (PLANNED: a stage of its own)
+### 8c. Liquids that expand with temperature (Stage 67: built, `docs/TDD_67_EXPANSION.md`)
+
+Built as planned, with Kell's density (smooth, with its slope) in place of Lienhard's rows, and the sealed cell made
+thermodynamically consistent: its solids' and liquids' Gibbs energy G0(T) + V(T)(P − P_atm), which the second law's
+check (T2) needs once V depends on T. What was planned:
 
 Found in Stage 51; the user chose to give it its own stage (2026-11-25). Every liquid volume in the core is the
 table's at 25 °C (§20). Water grows about 4% from 20 to 100 °C (Lienhard's rows, already in `data/solutions.json`'s

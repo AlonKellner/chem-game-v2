@@ -44,7 +44,7 @@ L1 and the lab's millilitres read the table's molar volumes as they were.
 | 67.2 | The core: `expansion`, `fill_of` at T, the sealed cell's energy, entropy and potentials, its root, the probe; the world's `energy_at` | Done |
 | 67.3 | The core's consumers: drains, overflow, columns, transport; V2, V3, L1 at the cell's temperature | Done |
 | 67.4 | The lab: its millilitres, a pour's and a mark's, what fits, the bench's air | Done |
-| 67.5 | Sessions, plays and the goldens (with the user's approval) | |
+| 67.5 | Sessions, plays and the goldens (with the user's approval) | Done: both records re-recorded, approved by the user on the evidence (the pressure session's stopper and bottle give way at the same pressures a few seconds later; the demo's crop 9.550 g against 9.544, its distillate 33.80 g against 33.69) |
 | 67.6 | GAME_SPEC 0.67.0, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Tests
@@ -66,6 +66,18 @@ Changed, with the reason: Stage 4's `gas` (water at 0 °C is 18.02 mL/mol, Kell'
 Sano check (the solution's viscosity over its density at its temperature, as the code now reads it); Stage 28's
 saturation rows (249 mL of water at the row's temperature, as much at 25 °C no longer fits hotter; and 5e-5 for
 its temperature: water set at no pressure, then at its vapour's, warms as it is squeezed, `T V' dP`, 14 J at 2 atm).
+
+**What the picture keeps** (`optics_scene.cpp`): a vessel's absorbing species enter its rows by molarity, mol over
+its liquid's volume; that volume now follows its temperature at every step, and water is itself an absorber, so its
+rows changed at every frame and every pixel's history and the spectral viewer's probe restarted (`view: what the
+probe reads does not change with the view`, Stage 42). A single cell's concentration is held to 0.2 %, as a layer's
+already was (Stage 47).
+
+Changed in the optics' test (`optics: through the demo ... the flask turns blue`, Stage 10): the boiled-down flask's
+12 mL is a layer 3.6 px thick, and the test's middle row lies in its surface's own band, whose colour follows where
+the surface lies in a pixel (L* 57 to 77 in three rows; 4.5 % more volume at 105 °C raised the surface 0.14 px and
+the middle row's L* from 60.3 to 63.1, the truth agreeing). A layer under 8 px is read at its darkest row under the
+surface's.
 
 ## Open
 - **A sealed cell squeezed toward full.** As its liquid grows into the last of its free volume its gas's pressure
