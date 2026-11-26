@@ -16,16 +16,39 @@ The first `make native` compiles godot-cpp (about 1100 files) with 4 jobs; later
 |---|---|---|
 | `make check` | while working | `make core`, then ctest (`AREA=core\|lab`, or `TC=<doctest filter>`) |
 | `make gate` | before every commit | core, ctest, the extension, the Godot host's suite, goldens unchanged; through the result cache |
-| `make gates` | before a merge or a stage close | the same uncached, and ctest under ASan+UBSan side by side with it from the start |
+| `make gates` | before a merge or a stage close | the same, its cache taking only what passed at a merge gate, and ctest under ASan+UBSan side by side with it from the start |
 
 `SKIP_GODOT=1 make gate` runs every engine-free gate. Every gate runs even after a failure; the
-summary table gives each gate's seconds and result, and the log directory.
+summary table gives each gate's seconds and result, the log directory, and each ctest run's summed
+seconds and its slowest entries (Stage 68: a slow new test is seen at its first gate).
 
 ## The result cache
 
 `tools/gate_cache.py`: a ctest entry whose binary, arguments, environment (`CHEM_*`, `LAB_*`) and
 repo data (`data/`, `bench/`) hash the same as on a run where it passed is not run again. Lints
-always run. `make gates` never reads the cache. `make gate-clear-cache` empties it.
+always run. `make gate-clear-cache` empties it.
+
+- **Two levels** (Stage 68, `GATE_LEVEL`): a pass at a merge gate (`make gates`) is kept as one, and as
+  a commit pass; `make gates` takes only a merge-level pass, `make gate` either. A failure forgets the
+  entry's key at both. So `make gates` run again after one entry failed runs that entry and what
+  changed, not the hour. `GATE_CACHE=0` runs everything (and records what passed).
+- **One cache for every worktree** (Stage 68): `~/Library/Caches/chem-game-v2/gate_cache.json`
+  (`GATE_CACHE_FILE`), read and written under a lock. An entry is known by its tree's kind
+  (`build-core`, `build-asan`) and name; the ASan tree's entries are cached the same way (`make asan-gate`).
+- **The same binaries in every worktree** (Stage 68): the sources' paths are relative (ccache's
+  `base_dir`), the debug info's directory is `.` (`-fdebug-compilation-dir`), the debug map names
+  objects from the build tree (`-oso_prefix`), and the repository's root is found at run time from
+  where the binary is (`tests/support/repo_root.hpp`; `CHEM_REPO_ROOT` in the environment overrides
+  it). So two worktrees on one commit link the same bytes, and main after a merge whose tree is the
+  branch's runs only what the branch did not.
+
+## The shared build cache
+
+Every tree compiles through the project's own ccache, `~/Library/Caches/chem-game-v2/ccache`
+(`CHEM_CCACHE_DIR`, 40 GB, `CHEM_CCACHE_SIZE`; the user's own ccache is untouched; `-DCHEM_CCACHE_SHARED=OFF`
+for the plain one): its paths relative to the worktree's root and the working directory left out of
+its key, so a new worktree compiles from what another already compiled, godot-cpp's 1,100 files among
+them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
 
 ## What keeps the gates quick
 
@@ -49,6 +72,24 @@ always run. `make gates` never reads the cache. `make gate-clear-cache` empties 
   results are joined in the pieces' order, so a result does not depend on the number of threads.
   `LAB_THREADS=n` sets it (default: half the machine's, six at most); ctest gives each case one, or
   what its mark says.
+- **A load threshold, when asked** (Stage 68, `CTEST_LOAD=n`, `GATE_TEST_LOAD=n`: ctest's `--test-load`): no entry
+  starts while the machine's load is over n. Four ctest runs of twelve, from three worktrees, were seen at a load
+  of 106 on twelve cores. It is off by default: ctest starts none at all while the load stays up, its first among
+  them, and a gate waited out another worktree's whole run (one without the threshold) doing nothing.
+- **A simulation several cases start from is played once** (Stage 68): a ctest fixture. `// ctest: fixture setup
+  NAME` before the case that plays it, `// ctest: fixture NAME` before each that reads it (`chem_add_cases`;
+  FIXTURES_SETUP and FIXTURES_REQUIRED): ctest runs the setup first, and runs it whenever a case that needs it
+  runs (the result cache's subsets too). Its files are in the tree's `fixtures/NAME` (`tests/support/fixtures.hpp`).
+  The demo's (`test_demo_record.cpp`): the session played once, unchecked, its golden digests, results and notices
+  held; after every command the screen's scene (`tests/support/scene_file.hpp`, read back and held to what was
+  written). The O2 scan's twelve parts read the scenes and play nothing (each part played the whole session before:
+  207 to 395 s a part, 33 to 69 s now). A fixture is worth it where what it saves is most of the play: D2's cuts
+  read saves from it once and were put back, nine tenths of the steps lying after them, the wait a whole play.
+- **The sanitizer build's labs check no invariant** (Stage 68, `LAB_CHECK=0`, `ASAN_LAB_CHECK`): the release build
+  checks every invariant at every step of the same trajectories (a lab's state is the same checked or not, D1),
+  and `chem_tests` keeps every check under the sanitizers, its self-tests on corrupted traces and the four sweeps
+  among them, so `check_all` itself still runs instrumented. The sanitizers want the code's paths; checking was
+  60 % of their time.
 - **The sanitizer build samples the heaviest comparisons sparsely**: `LAB_SPARSE=n` takes every
   n-th sample across in the tests that hold every pixel to 64 traced rays
   (`native/tests/support/sparse.hpp`; `ASAN_SPARSE`, default 3), as it runs fewer sweep worlds; and

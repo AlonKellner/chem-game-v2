@@ -37,7 +37,7 @@ make check TC="sweeps*"         # one doctest filter in chem_tests (CHEM_SWEEP_W
 make quick                      # between commits: only what a change can affect (result cache)
 make gate                       # before every commit: core, ctest, the extension, the Godot suite, goldens unchanged
 SKIP_GODOT=1 make gate          # every engine-free gate
-make gates                      # before a merge or a stage close: uncached, plus ASan+UBSan
+make gates                      # before a merge or a stage close: plus ASan+UBSan; its cache takes only what passed at a merge gate (GATE_CACHE=0: everything)
 make native                     # the Godot extension, data copy, import
 ./run_tests_parallel.sh         # the Godot host's GUT suite
 make run                        # the game (the Godot host)
@@ -49,7 +49,7 @@ make demo-bench                 # its step cost
 make sessions-check             # the sessions against their golden records (make sessions re-records: a behaviour change)
 ```
 
-- Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`. Each `chem_tests` source file is a ctest entry and each `lab_tests` test case one (`lab_tests.<file>.<n>`; a `// ctest: parts N` or `// ctest: threads N` line before a case splits its loop or gives it threads), run side by side; a test that holds many pixels to the brute-force truth leans on the reference's own threads (`LAB_THREADS`) and, under the sanitizers, samples sparsely (`sparse()`, `tests/support/sparse.hpp`): `docs/WORKFLOW.md`.
+- Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`chem_tests`) and `native/tests/game/*.cpp` (`lab_tests`); names end with their stage, `(Stage N)`. Each `chem_tests` source file is a ctest entry and each `lab_tests` test case one (`lab_tests.<file>.<n>`; a `// ctest: parts N` or `// ctest: threads N` line before a case splits its loop or gives it threads), run side by side; a test that holds many pixels to the brute-force truth leans on the reference's own threads (`LAB_THREADS`) and, under the sanitizers, samples sparsely (`sparse()`, `tests/support/sparse.hpp`): `docs/WORKFLOW.md`. A simulation several cases start from is played once, by a ctest fixture (`// ctest: fixture setup NAME` before the case that plays it, `// ctest: fixture NAME` before those that read it; `tests/support/fixtures.hpp`; the demo's: `test_demo_record.cpp`). The sanitizer build's labs check no invariant (`LAB_CHECK=0`: the release build checks every one on the same steps; `chem_tests` keeps them under the sanitizers). The result cache and the build cache are shared by every worktree (`~/Library/Caches/chem-game-v2/`; Stage 68).
 - Godot host tests: `engines/godot/tests/test_*.gd`, extending `GutTest`. The screen itself is tested natively (`native/tests/game/test_ui.cpp`), through `Ui::locate`.
 - **A script that runs on Godot's own thread never waits unbounded**: every loop in `engines/godot/tools/` has a limit, and a windowed Godot started from a shell is given a time limit (`perl -e 'alarm 90; exec @ARGV' godot …`). An unbounded wait froze the window once.
 - **Invariants over examples**: a property goes in the catalogue (GAME_SPEC §18) as a named check with a self-test that proves it fires on a corrupted trace.
