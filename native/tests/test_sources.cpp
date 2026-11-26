@@ -204,5 +204,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 18);
+	CHECK(retired == 20);
 }

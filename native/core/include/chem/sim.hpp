@@ -64,7 +64,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 
 // (Stage 64) The world a builder states, each cell at its fast equilibria at its stated temperature: built, settled
 // (`Simulation::equilibrate`), its settled amounts set again in the builder at the same temperatures, until settling
-// moves no cell's temperature by more than 1e-6 K (at most 16 rounds; the last built). A bench's sulfuric acid, set
+// moves no amount and no cell's temperature by more than 1e-6 K (at most 16 rounds; the last built). A bench's sulfuric acid, set
 // as its ions, cooled 2.6 K at its first step as its bisulfate formed (Stage 63). The builder's other settings stand.
 std::optional<World> build_settled(World::Builder builder, std::span<const Reaction> reactions, std::string *why = nullptr);
 

@@ -1218,6 +1218,8 @@ std::optional<World> build_settled(World::Builder builder, std::span<const React
 			if (world->temperature(cell, before) && settled.temperature(cell, after) && std::abs(after - before) > 1e-6) {
 				moved = true;
 			}
+			// and nothing moved at all: a cell made exactly full (its gas drawn or expelled) is not yet the world returned
+			moved = moved || world->snapshot_cell(cell).amount != settled.snapshot_cell(cell).amount;
 		}
 		if (!moved) {
 			break;
