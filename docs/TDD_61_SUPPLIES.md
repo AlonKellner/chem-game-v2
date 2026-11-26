@@ -93,7 +93,7 @@ case). The keywords (`lab/search.hpp`, pure):
 | 61.6 | The screen: the two panels scrolled, their search fields; `lab/search.hpp` | Done |
 | 61.7 | The pictures: captured on the CPU, cached, built for `data/`'s benches | Done |
 | 61.8 | Benches, tutorials, sessions and plays; the goldens (with the user's approval); the host | Done |
-| 61.9 | GAME_SPEC 0.61.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (2122 s: ASan+UBSan, ctest, Godot 13 of 13, the goldens); awaiting the user's sign-off |
+| 61.9 | GAME_SPEC 0.61.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (2172 s: ASan+UBSan, ctest, Godot 13 of 13, the goldens) after the user's tests; signed off by the user, 2026-11-26: "I agree, it looks good! Approved, merge and proceed" |
 
 ## What was built
 
@@ -138,6 +138,13 @@ case). The keywords (`lab/search.hpp`, pure):
   passed over by the pixel source wherever something in hand covers them; their outlines are drawn over the pass;
   behind glass the bench's grid goes on over them (the test: a flask held over the first box sees the same wall
   whatever supply the search puts there).
+
+- "Most of the visual difference is while settling, with the supplies the rims have many colors which slowly fade
+  away [...] Could it be some RGB image seen through the rims? I don't want the images of the supplies to be
+  simulated as rendered in the scene": they were screens of three primaries in the scene. Now the screen paints them
+  under the pass (the draw list's `Image`), and the pass leaves a bare pixel in a panel to it; the wall is two
+  tables, as drawn and behind glass (the panels' ruling behind glass only), a pixel within a body's outline reading
+  the second. A ray seen through what is in hand never meets the panels' bodies (`ray_met`, `exact_ray`).
 
 ## Open
 

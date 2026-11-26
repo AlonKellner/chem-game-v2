@@ -6,7 +6,7 @@
   sulfate crystals from malachite to a quota of 3.00 g, planned with the planner, made, and handed in against the
   plan's goal). (0.61.0 is another agent's Stage 61.) The goldens unchanged.
 
-## 0.61.0 (2026-11-26, Stage 61, merged after 0.62.0)
+## 0.61.0 (2026-11-26, Stage 61, merged after 0.62.0; signed off by the user: "I agree, it looks good! Approved, merge and proceed")
 
 - §4.3 (Stage 61, `docs/TDD_61_SUPPLIES.md`; the roadmap's area 8d): **the world open at its boundary**, between
   steps only: a cell added and supplied from outside, a cell retired (all it holds leaves), a cell frozen (it takes
