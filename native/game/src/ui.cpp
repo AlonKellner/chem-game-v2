@@ -427,8 +427,13 @@ struct Ui::Impl {
 	int debug_from = 0;
 	std::string exported;
 
+	uint64_t viewed = 0; // the lab's stamp its view was taken at (Stage 68)
 	void refresh() {
-		view = lab->view();
+		// (Stage 68) taken again only once the lab has changed: a tutorial's frame took it twice a second of the clock
+		if (lab->stamp() != viewed) {
+			view = lab->view();
+			viewed = lab->stamp();
+		}
 		if (!opened.empty() && item_index(opened) < 0) {
 			opened.clear(); // the open circuit was given back, or scrapped
 		}

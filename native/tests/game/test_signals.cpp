@@ -522,9 +522,10 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 		return (thread_ms() - start) / 10.0; // per 600 steps: one frame at 600x
 	};
 	cost(true); // warm
-	// the best of three each, taken in turn: the tests run side by side, and a moment's load is not the monitors'
+	// the best of five each, taken in turn: the tests run side by side, and a moment's load is not the monitors' (Stage
+	// 68: of three, main's own build read 3.5 ms more under a gate's load in one run of four)
 	double without = 1e30, with = 1e30;
-	for (int k = 0; k < 3; ++k) {
+	for (int k = 0; k < 5; ++k) {
 		without = std::min(without, cost(false));
 		with = std::min(with, cost(true));
 	}

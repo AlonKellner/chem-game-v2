@@ -21,6 +21,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -39,6 +40,12 @@ std::string build_name() {
 }
 
 namespace {
+
+// (Stage 68) Lab::stamp's: one count for the process
+uint64_t next_stamp() {
+	static std::atomic<uint64_t> last{ 0 };
+	return ++last;
+}
 
 // LAB_CHECK=0: no lab of the process checks an invariant, whatever it is asked (Stage 68: the sanitizer build's tests;
 // the release build checks every one on the same steps, and a lab's state is the same checked or not, D1)
@@ -377,6 +384,7 @@ struct Lab::Impl {
 	CellId mains; // what does the stirrers' work (Stage 32); none in a save from before it
 	Totals genesis;
 	bool check = checks_allowed();
+	uint64_t stamp = next_stamp(); // (Stage 68: Lab::stamp)
 	bool broken = false;
 	// a command has moved matter since the last step ended: a step is in
 	// progress, and a change of connections waits for its end
@@ -6076,6 +6084,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 }
 
 bool Lab::command(std::string_view command_json, std::string &why) {
+	impl_->stamp = next_stamp();
 	if (impl_->broken) {
 		why = "an invariant failed earlier: the lab takes no more commands";
 		return false;
@@ -6098,6 +6107,7 @@ bool Lab::command(std::string_view command_json, std::string &why) {
 }
 
 bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
+	impl_->stamp = next_stamp();
 	if (impl_->broken) {
 		why = "an invariant failed earlier: the lab takes no more commands";
 		return false;
@@ -6115,6 +6125,10 @@ bool Lab::advance(int64_t steps, std::string &why, bool stop_on_ring) {
 
 void Lab::set_checking(bool on) {
 	impl_->check = on && checks_allowed();
+}
+
+uint64_t Lab::stamp() const {
+	return impl_->stamp;
 }
 
 bool Lab::failed() const {

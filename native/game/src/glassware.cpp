@@ -6,6 +6,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -110,13 +112,43 @@ public:
 		if (k < pieces_.size()) {
 			const Piece &p = chain_[pieces_[k]];
 			if (std::min(p.a.y, p.b.y) < y) {
-				v += swept(p, s_at(p, y)); // the one y cuts; every later piece starts over it
+				v += swept(p, s_along(k, p, y)); // the one y cuts; every later piece starts over it
 			}
 		}
 		return v;
 	}
 
 private:
+	// s_at's search, its points along the piece kept from the last search on the same piece: a search for a nearby
+	// height takes the same first turns, at the same midpoints, so it reads the same points again (each the piece's
+	// own at(mid), a function of mid alone) and computes only where it turns otherwise. The same turns, the same s.
+	double s_along(size_t k, const Piece &p, double y) const {
+		if (path_piece_ != k) {
+			path_piece_ = k;
+			path_depth_ = 0;
+			path_up_ = p.at(1.0).y > p.at(0.0).y;
+		}
+		double lo = 0.0, hi = 1.0;
+		for (int i = 0; i < 80; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			const auto d = static_cast<size_t>(i);
+			double at_mid = 0.0;
+			if (d < path_depth_ && path_mid_[d] == mid) {
+				at_mid = path_y_[d];
+			} else {
+				at_mid = p.at(mid).y;
+				path_mid_[d] = mid;
+				path_y_[d] = at_mid;
+				path_depth_ = d + 1;
+			}
+			((at_mid < y) == path_up_ ? lo : hi) = mid;
+		}
+		return 0.5 * (lo + hi);
+	}
+	mutable size_t path_piece_ = SIZE_MAX, path_depth_ = 0;
+	mutable bool path_up_ = false;
+	mutable std::array<double, 80> path_mid_{}, path_y_{};
+
 	double slow(double y) const {
 		double v = 0.0;
 		for (const Piece &p : chain_) {
