@@ -810,7 +810,7 @@ struct Ui::Impl {
 			const chem::Reaction &r = calc_reaction_def();
 			const chem::SpeciesTable &table = chem::builtin_species();
 			std::string product;
-			for (const chem::Term &t : r.terms()) {
+			for (const chem::Term &t : calc::written_terms(r)) {
 				out.push_back({ chem::written(table.species(t.species).formula) + (t.nu < 0 ? " in (g)" : " made (g)"), false });
 				product = product.empty() && t.nu > 0 ? chem::written(table.species(t.species).formula) : product;
 			}
@@ -895,7 +895,7 @@ struct Ui::Impl {
 		}
 		default: {
 			const chem::Reaction &r = calc_reaction_def();
-			const auto terms = r.terms();
+			const auto terms = calc::written_terms(r);
 			std::vector<std::optional<double>> given;
 			for (size_t k = 0; k < terms.size(); ++k) {
 				given.push_back(calc_number(static_cast<int>(k)));
@@ -1081,7 +1081,7 @@ struct Ui::Impl {
 				y += 18;
 				const chem::Kinetics &k = r.kinetics();
 				const std::string law = k.law == chem::Kinetics::Law::FirstOrder ? text_of("first order, Ea %.1f kJ/mol", k.activation / 1000.0)
-						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in its acid", k.driver_order) : std::string())
+						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in ", k.driver_order) + chem::written(table.species(k.driver).formula) : std::string())
 						: k.law == chem::Kinetics::Law::Equilibrium										   ? std::string("fast: always at its equilibrium")
 																										   : std::string("runs when it is brought about");
 				text(x0 + 16, y, law, DIM, 12);
@@ -1136,7 +1136,7 @@ struct Ui::Impl {
 		if (k > plan_reactions.size() || plan_reactions[k - 1] < 0) {
 			return {};
 		}
-		for (const chem::Term &t : all[static_cast<size_t>(plan_reactions[k - 1])].terms()) {
+		for (const chem::Term &t : calc::written_terms(all[static_cast<size_t>(plan_reactions[k - 1])])) {
 			const chem::SpeciesDef &d = table.species(t.species);
 			if (t.nu < 0 && std::string(d.formula) != "H2O" && !plan::makers(t.species).empty()) {
 				return t.species;

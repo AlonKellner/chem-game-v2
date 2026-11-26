@@ -116,7 +116,7 @@
 			"title": "Wait for the oxide to dissolve",
 			"text": "Watch the black powder disappear and the liquid turn blue.",
 			"why": "The blue is the copper ion in water, Cu2+(aq): copper sulfate solution.",
-			"checks": [{"text": "less than 1 mg of copper oxide left", "when": {"item": "flask", "species": "copper_oxide", "below_g": 0.001}}]
+			"checks": [{"text": "the copper oxide all dissolved (under a microgram left)", "when": {"item": "flask", "species": "copper_oxide", "below_g": 0.000001}}]
 		},
 		{
 			"title": "Stop stirring",

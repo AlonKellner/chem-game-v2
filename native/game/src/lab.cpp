@@ -2594,8 +2594,8 @@ struct Lab::Impl {
 			for (size_t k = 0; k < species; ++k) {
 				const SpeciesId s{ static_cast<int32_t>(k) };
 				const SpeciesDef &def = t.species(s);
-				if (def.wall || def.phase == Phase::Gas) {
-					continue;
+				if (def.wall || def.phase == Phase::Gas || def.retired) {
+					continue; // (Stage 63: a retired formula unit is never held, its ions are)
 				}
 				uint8_t &was = present[i * species + k];
 				const double g = grams(x, s);
@@ -3615,6 +3615,25 @@ struct Lab::Impl {
 	double solid_m3(const Item &x) const { return layered(x) ? solid_m3(whole(x)) : solid_m3(x.cell); }
 	double liquid_g(const Item &x) const { return layered(x) ? liquid_g(whole(x)) : liquid_g(x.cell); }
 	double grams(const Item &x, SpeciesId s) const {
+		if (table().has(s) && table().species(s).retired) {
+			// (Stage 63) a retired formula unit: as many of it as the item's dissolved matter makes (as lab::grams reads it
+			// from the view)
+			std::vector<CellId> cells{ x.cell };
+			if (layered(x)) {
+				for (const CellId c : layers_of(x)) {
+					cells.push_back(c);
+				}
+			}
+			std::vector<std::pair<SpeciesId, double>> dissolved;
+			for (const CellId c : cells) {
+				for (int k = 0; k < table().species_count(); ++k) {
+					if (table().species(SpeciesId{ k }).phase == Phase::Aqueous && world().amount(c, SpeciesId{ k }).quanta > 0) {
+						dissolved.emplace_back(SpeciesId{ k }, world().amount(c, SpeciesId{ k }).mol());
+					}
+				}
+			}
+			return formula_units(table(), dissolved, s) * static_cast<double>(table().molar_mass_ug(s)) * 1e-6;
+		}
 		if (!layered(x)) {
 			return grams(x.cell, s);
 		}
@@ -4008,7 +4027,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				holds.push_back({ item.cell, &j.at("contents") });
 			}
 			for (const auto &[into, what] : holds) {
-				std::map<int32_t, double> taken; // (Stage 63) each species' moles, a retired formula unit's as its ions
+				std::map<int32_t, int64_t> taken; // (Stage 63) each species' quanta, a retired formula unit's as its ions (exact)
 				for (const auto &[name, spec] : what->items()) {
 					const SpeciesId id = table.find(name);
 					if (!table.has(id) || table.species(id).wall) {
@@ -4020,8 +4039,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						return nullptr;
 					}
 					const double mol = mol_of(table, id, spec, impl->seed, item.id + ":" + name); // (an unknown's range, Stage 54)
+					const int64_t quanta = amount(mol).quanta;
 					for (const auto &[as, count] : table.as_species(id)) {
-						taken[as.index] += mol * count;
+						taken[as.index] += quanta * count;
 					}
 					if (spec.contains("particles")) {
 						b.set_particles(into, id, spec.at("particles").get<int64_t>());
@@ -4031,8 +4051,8 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 						condensed += mol * def.molar_volume;
 					}
 				}
-				for (const auto &[index, mol] : taken) {
-					b.set_amount(into, SpeciesId{ index }, amount(mol));
+				for (const auto &[index, quanta] : taken) {
+					b.set_amount(into, SpeciesId{ index }, Amount{ quanta });
 				}
 				if (into != item.cell) {
 					b.set_temperature(into, room_kelvin);

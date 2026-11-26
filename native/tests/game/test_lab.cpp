@@ -59,6 +59,15 @@ const json item(const json &report, const char *id) {
 	return json();
 }
 
+double mol(const json &item, const char *species) {
+	for (const json &row : item.at("contents")) {
+		if (row.at("species") == species) {
+			return row.at("mol").get<double>();
+		}
+	}
+	return 0.0;
+}
+
 double grams(const json &item, const char *species) {
 	for (const json &row : item.at("contents")) {
 		if (row.at("species") == species) {
@@ -219,9 +228,11 @@ TEST_CASE("lab: pouring and tipping move exactly what was asked, with its heat (
 	CHECK(grams(item(report, "flask"), "water") + grams(item(report, "flask"), "steam") == doctest::Approx(240.5 * share).epsilon(1e-4));
 	// (the pour takes seconds, Stage 27: a little water evaporates from what is left meanwhile, and the last drops
 	// are that much stronger)
-	CHECK(grams(item(report, "flask"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * share).epsilon(1e-4));
+	// (the acid is its ions, Stage 63: its sulfate, free and as bisulfate)
+	const auto sulfate = [&](const char *id) { return mol(item(report, id), "sulfate_ion") + mol(item(report, id), "hydrogen_sulfate_ion"); };
+	CHECK(sulfate("flask") == doctest::Approx(0.25 * share).epsilon(1e-4));
 	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5 * (1.0 - share)).epsilon(1e-4));
-	CHECK(grams(item(report, "acid"), "sulfuric_acid_aq") / 98.072 == doctest::Approx(0.25 * (1.0 - share)).epsilon(1e-4));
+	CHECK(sulfate("acid") == doctest::Approx(0.25 * (1.0 - share)).epsilon(1e-4));
 	CHECK(grams(item(report, "beaker"), "malachite") == doctest::Approx(2.0).epsilon(1e-9));
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(3.0).epsilon(1e-9));
 	// the powder's grains went with it, in proportion

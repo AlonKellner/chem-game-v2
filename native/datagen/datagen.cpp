@@ -138,6 +138,7 @@ struct ReactionRow {
 	int notice_level = 0; // GAME_SPEC §13.4: detail, event, warning, danger
 	std::string notice_says;
 	std::string explain; // GAME_SPEC §13.6: why it happens
+	std::vector<chem::Term> written; // (Stage 63) as a student writes it, in formula units
 };
 
 std::string quoted(const std::string &s) {
@@ -508,6 +509,47 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		if (!chem::Reaction::make(*table, row.id, row.terms, &why, row.kinetics)) {
 			fail(reactions_file, "\"" + equation + "\": " + why);
 		}
+		if (r.contains("written")) {
+			// (Stage 63) as a student writes it: balanced, and its units' ions, the spectators cancelling, a whole
+			// multiple of the reaction itself
+			const std::string written = r.at("written").get<std::string>();
+			std::vector<chemdata::EquationTerm> wterms;
+			if (!chemdata::parse_equation(written, wterms, why)) {
+				fail(reactions_file, "reaction " + row.id + ": written \"" + written + "\": " + why);
+			}
+			for (const chemdata::EquationTerm &t : wterms) {
+				const auto found = by_key.find(t.species);
+				if (found == by_key.end()) {
+					fail(reactions_file, "reaction " + row.id + ": written: species " + t.species + " is not in species.json");
+				}
+				row.written.push_back(chem::Term{ chem::SpeciesId{ found->second }, t.nu });
+			}
+			if (!chem::Reaction::make(*table, row.id + "_written", row.written, &why)) {
+				fail(reactions_file, "reaction " + row.id + ": written \"" + written + "\": " + why);
+			}
+			std::map<int32_t, int64_t> net; // each ion's, the written units taken as their ions
+			for (const chem::Term &t : row.written) {
+				for (const auto &[ion, count] : table->as_species(t.species)) {
+					net[ion.index] += static_cast<int64_t>(t.nu) * count;
+				}
+			}
+			int64_t multiple = 0;
+			bool whole = true;
+			for (const chem::Term &t : row.terms) {
+				const int64_t w = net.count(t.species.index) ? net[t.species.index] : 0;
+				if (multiple == 0) {
+					multiple = t.nu != 0 && w % t.nu == 0 ? w / t.nu : 0;
+				}
+				whole = whole && multiple > 0 && w == multiple * t.nu;
+				net[t.species.index] = 0;
+			}
+			for (const auto &[ion, left] : net) {
+				whole = whole && left == 0;
+			}
+			if (!whole) {
+				fail(reactions_file, "reaction " + row.id + ": written \"" + written + "\" is not the reaction in formula units");
+			}
+		}
 		reactions.push_back(row);
 	}
 
@@ -630,7 +672,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	for (const ReactionRow &row : reactions) {
 		cpp << "\t\t{ " << quoted(row.id) << ", " << row.notice_level << ", " << quoted(row.notice_says) << ", " << quoted(row.explain) << " },\n";
 	}
-	cpp << "\t};\n\treturn NOTES;\n}\n\n"
+	cpp << "\t};\n\treturn NOTES;\n}\n\n";
+	// (Stage 63) each reaction as a student writes it
+	cpp << "std::span<const Term> builtin_written(size_t reaction) {\n";
+	for (size_t k = 0; k < reactions.size(); ++k) {
+		cpp << "\tstatic constexpr Term W" << k << "[] = { ";
+		for (const chem::Term &t : reactions[k].written) {
+			cpp << "{ SpeciesId{ " << t.species.index << " }, " << t.nu << " }, ";
+		}
+		cpp << "{ SpeciesId{}, 0 } };\n";
+	}
+	cpp << "\tstatic constexpr std::span<const Term> ALL[] = { ";
+	for (size_t k = 0; k < reactions.size(); ++k) {
+		cpp << "std::span<const Term>(W" << k << ", " << reactions[k].written.size() << "), ";
+	}
+	cpp << "};\n\treturn reaction < " << reactions.size() << " ? ALL[reaction] : std::span<const Term>();\n}\n\n"
 		<< "} // namespace chem\n";
 
 	std::ostringstream hpp;
@@ -694,6 +750,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	emit(optics, "D65", column_of("d65.csv", 1));
 	optics << "constexpr Spectrum NOTHING = {};\n\n";
 	std::vector<std::pair<int, std::string>> kinds; // species index -> its Kind
+	std::map<int, std::vector<double>> absorbs; // (Stage 63) each absorber's spectrum, for the formula units of its ions
 	for (const auto &[name, m] : media.at("media").items()) {
 		int index = -1;
 		for (size_t i = 0; i < species.size(); ++i) {
@@ -790,6 +847,33 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		optics << (line_list.empty() ? "" : " } };\n\n");
 		kinds.emplace_back(index, kind == "absorb" ? "Kind::Absorb" : kind == "reflect" ? "Kind::Reflect" : "Kind::Transmit");
+		if (kind == "absorb") {
+			absorbs[index] = values;
+		}
+	}
+	// (Stage 63) a retired formula unit absorbs as its ions together, each by its count (copper sulfate as its Cu2+):
+	// a view or a scene that names one sees what its ions would
+	for (size_t i = 0; i < species.size(); ++i) {
+		if (!species[i].retired) {
+			continue;
+		}
+		std::vector<double> sum(401, 0.0);
+		bool any = false;
+		for (const auto &[ion, count] : table->as_species(chem::SpeciesId{ static_cast<int32_t>(i) })) {
+			const auto found = absorbs.find(ion.index);
+			if (found == absorbs.end()) {
+				continue;
+			}
+			any = true;
+			for (size_t k = 0; k < sum.size(); ++k) {
+				sum[k] += static_cast<double>(count) * found->second[k];
+			}
+		}
+		if (any) {
+			emit(optics, ("MEDIUM_" + std::to_string(i)).c_str(), sum);
+			optics << "constexpr std::array<Line, 0> LINES_" << i << "{};\n\n";
+			kinds.emplace_back(static_cast<int>(i), "Kind::Absorb");
+		}
 	}
 	// a refractive index at 1 nm from a Sellmeier formula (micrometres) or a table fitted by Cauchy's
 	const auto index_of = [&](const std::string &name, const json &m) {

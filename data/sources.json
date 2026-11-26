@@ -71,8 +71,8 @@
 		},
 		{
 			"data": ["solutions.json/{a_phi,b}", "solutions.json/pairs/#/*"],
-			"measured": "Pitzer and Mayorga; the acid by Pitzer, Roy and Silvester with the bisulfate as PHREEQC v3's pitzer.dat has it (H+ with SO4 2- and with HSO4-, Na+ with HSO4-; Stage 63), held to Staples; the base's and its salt's held to Hamer and Wu and to Goldberg",
-			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples", "Hamer and Wu", "Goldberg 1981"],
+			"measured": "Pitzer and Mayorga; the acid by Pitzer, Roy and Silvester with the bisulfate as PHREEQC v3's pitzer.dat has it (H+ with SO4 2- and with HSO4-, Na+ with HSO4-; Stage 63), held to Staples; the base's and its salt's held to Hamer and Wu and to Goldberg; copper's with the bisulfate (beta0 alone) calibrated to Holler and Peffer's solubility in the acid (Stage 63)",
+			"doc": ["Pitzer's equations", "Pitzer and Mayorga", "Staples", "Hamer and Wu", "Goldberg 1981", "Cu²⁺–HSO₄⁻ β0 0.815"],
 			"tests": ["solution: the data oracle: copper sulfate and the acid as electrolytes", "solution: the acid lowers the salt's solubility", "measured: sodium hydroxide's and sodium sulfate's mean activity coefficients"]
 		},
 		{

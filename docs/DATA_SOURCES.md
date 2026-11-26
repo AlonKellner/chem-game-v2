@@ -190,7 +190,13 @@ Derived, not fitted:
 **The common-ion effect.** Holler and Peffer, NBS Bulletin 13 (1916), at 15 °C: "395 grams of
 crystallized copper sulphate … in 1 liter of the saturated solution … addition of 100 grams per
 liter of sulphuric acid reduces the solubility … to 215 grams per liter". That is a ratio of 0.54
-on a basis the text leaves unclear. The model gives 0.70 with 1.0 mol/kg of acid at 15 °C.
+on a basis the text leaves unclear. The model gave 0.70 with 1.0 mol/kg of acid at 15 °C (Stage 19). With the acid's
+bisulfate (Stage 63) the acid alone would raise the salt's solubility, 1.9 times at 1 mol/kg: the bisulfate takes up
+the sulfate it adds while the ionic strength lowers the 2:2 activity coefficients. Copper's own interaction with the
+bisulfate is needed (Baes, Reardon and Moyer 1993, J. Phys. Chem. 97, 12343, fitted β0 and β1 of Cu²⁺–HSO₄⁻ with
+θ(Cu²⁺, H⁺) and ψ(Cu²⁺, H⁺, HSO₄⁻); their values were not reachable: the paper's full text only). One parameter,
+Cu²⁺–HSO₄⁻ β0 0.815 (β1 and Cφ nought), is calibrated to Holler and Peffer's ratio: the model gives 0.537, and
+0.82, 0.69, 0.54 and 0.33 of water's at 0.25, 0.5, 1 and 2 mol/kg (low confidence: one point, its basis unclear).
 
 **Apparent molar volumes** (GAME_SPEC §10), from densities at 20 °C: Engineering Toolbox,
 "Density of aqueous solutions of inorganic salts and acids" (engineeringtoolbox.com, d_1958).
@@ -1027,8 +1033,8 @@ ion's apparent volume may be negative.
 | Ni²⁺ | −53.93 | −128.9 | 72.91 | −34.89 |
 
 Water's ionisation follows from them: H⁺ + OH⁻ → H₂O gives out 55.836 kJ (NBS's), log Kw 14.005 at 25 °C; its heat
-capacity is the formula units' (the old fit's), not the measured −224 J/K·mol, so pKw is 12.03 at 100 °C against
-IAPWS's 12.25 (§20); the pH itself reads water's own measured ionisation (Stage 43).
+capacity is the formula units' (the old fit's: −7.5 J/K·mol), not the measured −224, so pKw is 12.05 at 100 °C
+against IAPWS's 12.25 (§20); the pH itself reads water's own measured ionisation (Stage 43).
 
 **The bisulfate, from pitzer.dat.** SO4-2 + H+ = HSO4-: log K 1.988, ΔH 3.85 kcal (16.108 kJ), and its analytic
 log K = −56.889 + 0.006473 T + 2307.9/T + 19.8858 log₁₀ T, whose slope at 25 °C gives ΔCp = 239.2 J/K·mol. Over the

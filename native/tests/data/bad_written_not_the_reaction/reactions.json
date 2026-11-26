@@ -1,0 +1,1 @@
+{"format": "chem-reactions/1", "reactions": [{"id": "water_forming", "equation": "2 H2(g) + O2(g) -> 2 H2O(l)", "written": "2 H2O(l) -> 2 H2(g) + O2(g)"}]}

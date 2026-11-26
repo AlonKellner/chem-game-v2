@@ -240,3 +240,32 @@ TEST_CASE("measured: copper's first hydrolysis constant and heat are MINTEQ's (S
 	CHECK(p > 4.0);
 	CHECK(p < 5.0);
 }
+
+TEST_CASE("acidity: a retired formula unit is read as what its ions make, by each element and the balance of protons (Stage 63)") {
+	const SpeciesTable &t = builtin_species();
+	const auto units = [&](const CellState &c, SpeciesId unit) {
+		std::vector<std::pair<SpeciesId, double>> dissolved;
+		for (int k = 0; k < t.species_count(); ++k) {
+			if (t.species(SpeciesId{ k }).phase == Phase::Aqueous && c.amount[static_cast<size_t>(k)] > 0) {
+				dissolved.emplace_back(SpeciesId{ k }, static_cast<double>(c.amount[static_cast<size_t>(k)]) * MOL_PER_QUANTUM);
+			}
+		}
+		return formula_units(t, dissolved, unit);
+	};
+	// the acid at its bisulfate: every hydrogen and sulfate of it, free or held
+	const CellState acid = settled(Cell().put(builtin::sulfuric_acid_aq, 0.2), 298.15);
+	REQUIRE(acid.amount[static_cast<size_t>(builtin::hydrogen_sulfate_ion.index)] > 0);
+	CHECK(units(acid, builtin::sulfuric_acid_aq) == doctest::Approx(0.2).epsilon(1e-9));
+	CHECK(units(acid, builtin::sodium_hydroxide_aq) == 0.0);
+	// a base past the acid: no acid, the base what is left over
+	const CellState base = settled(Cell().put(builtin::sulfuric_acid_aq, 0.1).put(builtin::sodium_hydroxide_aq, 0.3), 298.15);
+	CHECK(units(base, builtin::sulfuric_acid_aq) == 0.0);
+	CHECK(units(base, builtin::sodium_hydroxide_aq) == doctest::Approx(0.1).epsilon(1e-6));
+	CHECK(units(base, builtin::sodium_sulfate_aq) == doctest::Approx(0.1).epsilon(1e-9));
+	// copper sulfate at its hydrolysis, in acid: the copper in any of its ions
+	const CellState copper = settled(Cell().put(builtin::copper_sulfate_aq, 0.5).put(builtin::sulfuric_acid_aq, 0.05), 298.15);
+	CHECK(units(copper, builtin::copper_sulfate_aq) == doctest::Approx(0.5).epsilon(1e-9));
+	CHECK(units(copper, builtin::sulfuric_acid_aq) == doctest::Approx(0.05).epsilon(1e-6));
+	// what is not retired reads nothing here
+	CHECK(units(copper, builtin::copper_ion) == 0.0);
+}

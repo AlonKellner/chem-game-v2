@@ -30,7 +30,8 @@
 		{"cation": "H+1", "anion": "HSO4-1", "beta0": 0.2065, "beta1": 0.5556, "c_phi": 0, "alpha1": 2, "source": "Pitzer, Roy and Silvester 1977 (Stage 63): PHREEQC v3 pitzer.dat"},
 		{"cation": "Na+1", "anion": "OH-1", "beta0": 0.0864, "beta1": 0.253, "c_phi": 0.0044, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table I (to 6 mol/kg)"},
 		{"cation": "Na+1", "anion": "SO4-2", "beta0": 0.01958, "beta1": 1.113, "c_phi": 0.004974, "alpha1": 2, "source": "Pitzer and Mayorga 1973, Table VI (to 4 mol/kg): their (4/3) beta0 0.0261, (4/3) beta1 1.484, (2^(5/2)/3) c_phi 0.00938"},
-		{"cation": "Na+1", "anion": "HSO4-1", "beta0": 0.0454, "beta1": 0.398, "c_phi": 0, "alpha1": 2, "source": "PHREEQC v3 pitzer.dat (Stage 63)"}
+		{"cation": "Na+1", "anion": "HSO4-1", "beta0": 0.0454, "beta1": 0.398, "c_phi": 0, "alpha1": 2, "source": "PHREEQC v3 pitzer.dat (Stage 63)"},
+		{"cation": "Cu+2", "anion": "HSO4-1", "beta0": 0.815, "beta1": 0, "c_phi": 0, "alpha1": 2, "source": "calibrated (Stage 63): copper sulfate's solubility in the acid, Holler and Peffer 1916 at 15 C"}
 	],
 	"solvent": [
 		{"celsius": 0.01, "rho": 999.8, "cp": 4220, "k": 0.561, "alpha": 1.33e-07, "nu": 1.791e-06, "pr": 13.47, "beta": -6.8e-05},

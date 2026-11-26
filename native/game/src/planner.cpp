@@ -1,5 +1,6 @@
 // The planner (GAME_SPEC §13, Stage 60).
 #include "lab/planner.hpp"
+#include "lab/calculator.hpp"
 
 #include <cmath>
 
@@ -8,7 +9,7 @@ namespace lab::plan {
 namespace {
 
 int nu_of(const chem::Reaction &r, chem::SpeciesId s) {
-	for (const chem::Term &t : r.terms()) {
+	for (const chem::Term &t : calc::written_terms(r)) {
 		if (t.species.index == s.index) {
 			return t.nu;
 		}
@@ -65,7 +66,7 @@ Plan work_back(const chem::SpeciesTable &table, chem::SpeciesId target, double t
 		chem::SpeciesId next{};
 		const bool more = k + 1 < route.size();
 		if (more && route[k + 1].reaction >= 0 && route[k + 1].reaction < static_cast<int>(all.size())) {
-			for (const chem::Term &t : r.terms()) {
+			for (const chem::Term &t : calc::written_terms(r)) {
 				if (t.nu < 0 && nu_of(all[static_cast<size_t>(route[k + 1].reaction)], t.species) > 0) {
 					next = t.species;
 					break;
@@ -76,7 +77,7 @@ Plan work_back(const chem::SpeciesTable &table, chem::SpeciesId target, double t
 				return out;
 			}
 		}
-		for (const chem::Term &t : r.terms()) {
+		for (const chem::Term &t : calc::written_terms(r)) {
 			if (t.nu >= 0) {
 				continue;
 			}

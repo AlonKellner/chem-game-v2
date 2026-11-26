@@ -358,7 +358,9 @@ double saturation(int crystallisation, double kelvin, double acid) {
 	for (int i = 0; i < 60; ++i) {
 		const double middle = 0.5 * (lo + hi);
 		bool defined = false;
-		const double a = affinity(builtin_species(), solution_of(middle, acid), reaction(crystallisation).terms(), kelvin, defined);
+		// (Stage 63) with acid, at its bisulfate: what the acid does to the salt is through it
+		const CellState cell = acid > 0.0 ? testing::settled(solution_of(middle, acid), kelvin) : solution_of(middle, acid);
+		const double a = affinity(builtin_species(), cell, reaction(crystallisation).terms(), kelvin, defined);
 		REQUIRE(defined);
 		(a > 0.0 ? hi : lo) = middle;
 	}
@@ -498,7 +500,9 @@ TEST_CASE("solution: the data oracle: the pentahydrate gives way to the trihydra
 
 TEST_CASE("solution: the acid lowers the salt's solubility: the common-ion effect (Stage 19)") {
 	// K1: both carry sulfate. Holler and Peffer (1916) at 15 C: about 0.54 of
-	// it with 100 g/L of acid (about 1 mol/kg), on an unclear basis.
+	// it with 100 g/L of acid (about 1 mol/kg), on an unclear basis. (Stage 63: the acid at its bisulfate, which
+	// alone would raise the salt's solubility, twice over at 1 mol/kg; copper's interaction with the bisulfate,
+	// beta0 0.815, is calibrated to Holler and Peffer's ratio: docs/DATA_SOURCES.md)
 	using namespace builtin::reaction;
 	const double water = saturation(pentahydrate_crystallization, 288.15, 0.0);
 	double last = water;
@@ -508,8 +512,7 @@ TEST_CASE("solution: the acid lowers the salt's solubility: the common-ion effec
 		last = m;
 	}
 	const double ratio = saturation(pentahydrate_crystallization, 288.15, 1.0) / water;
-	CHECK(ratio > 0.5);
-	CHECK(ratio < 0.85);
+	CHECK(ratio == doctest::Approx(0.54).epsilon(0.02));
 	MESSAGE("15 C: " << water << " mol/kg in water, " << ratio << " of it with 1 mol/kg of acid");
 }
 
@@ -616,3 +619,4 @@ TEST_CASE("solution: malformed surface laws, particle counts and stirring are re
 	CHECK(world.set_mixing(c, -1.0) == Refusal::BadValue);
 	CHECK(world.set_mixing(CellId{ 7 }, 1.0) == Refusal::UnknownCell);
 }
+

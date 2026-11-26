@@ -79,9 +79,20 @@ std::string term_text(const chem::SpeciesTable &table, chem::SpeciesId id) {
 
 } // namespace
 
+std::span<const chem::Term> written_terms(const chem::Reaction &reaction) {
+	const auto all = chem::builtin_reactions();
+	for (size_t k = 0; k < all.size(); ++k) {
+		if (&all[k] == &reaction || all[k].id() == reaction.id()) {
+			const auto written = chem::builtin_written(k);
+			return written.empty() ? reaction.terms() : written;
+		}
+	}
+	return reaction.terms();
+}
+
 std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reaction) {
 	std::string left, right;
-	for (const chem::Term &t : reaction.terms()) {
+	for (const chem::Term &t : written_terms(reaction)) {
 		std::string &side = t.nu < 0 ? left : right;
 		const int n = t.nu < 0 ? -t.nu : t.nu;
 		side += (side.empty() ? "" : " + ") + (n > 1 ? std::to_string(n) + " " : std::string()) + term_text(table, t.species);
@@ -91,7 +102,7 @@ std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reac
 
 Stoichiometry stoichiometry(const chem::SpeciesTable &table, const chem::Reaction &reaction, const std::vector<std::optional<double>> &given_g) {
 	Stoichiometry out;
-	const auto terms = reaction.terms();
+	const auto terms = written_terms(reaction);
 	out.extent = -1.0;
 	for (size_t k = 0; k < terms.size(); ++k) {
 		Stoichiometry::Term t;

@@ -313,6 +313,14 @@ private:
 	int32_t term_count_ = 0;
 };
 
+// (Stage 63) How many of a retired formula unit some dissolved matter makes (each species' moles): by the balance
+// of each element and of protons. Every element but H and O has its master ion, the dissolved species of that one
+// atom with oxygen alone (Cu2+, SO4 2-, Na+); a species holds its masters by its atoms, and hydrogen ions by its
+// charge less theirs (HSO4- one, OH- and CuOH+ minus one). An ion of the unit is a master, counted by its element,
+// or hydrogen's or hydroxide's, counted by the hydrogen ions held (an acid in a base holds none); the unit is the
+// fewest over its ions by their counts, never below nought. 0 for a species that is not retired.
+double formula_units(const SpeciesTable &table, std::span<const std::pair<SpeciesId, double>> dissolved, SpeciesId unit);
+
 // A formula as it is written for a reader (Stage 63): an ion's charge after it, its size before its sign and
 // one left unwritten, a space where the formula ends in a count ("Cu+2" is Cu2+, "SO4-2" SO4 2-, "H+1" H+); any
 // other formula as it is.
@@ -350,5 +358,11 @@ struct ReactionNote {
 	std::string_view explain; // why it happens (GAME_SPEC §13.6, "explain")
 };
 std::span<const ReactionNote> builtin_reaction_notes();
+
+// (Stage 63) A reaction as a student writes it (reactions.json, "written"): in formula units, the dissolved salts
+// whole (CuO(s) + H2SO4(aq) -> CuSO4(aq) + H2O(l)), where the reaction itself is in ions. Its units taken as their
+// ions, the spectators cancelling, it is a whole multiple of the reaction (the generator refuses it otherwise).
+// Empty for a reaction written only in ions (the bisulfate's). For the calculator and the planner; never simulated.
+std::span<const Term> builtin_written(size_t reaction);
 
 } // namespace chem
