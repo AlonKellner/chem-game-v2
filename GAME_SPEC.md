@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.67.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.69.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2035,7 +2035,11 @@ input to them, and a session script is a list of them.
 - **Save and load.** A lab saves as text (`chem-save/1`): every amount, energy and particle
   count, the connections, the processes' carried remainders, where each item stands, and whether
   a step is in progress. Numbers that are not integers are saved as their bits. A loaded lab
-  continues exactly as the saved one would have (invariant D2).
+  continues exactly as the saved one would have (invariant D2): saved in a step a command moved
+  matter in, it refuses until the step closes what a step in progress refuses (a change of the
+  connections), as the saved one did (Stage 69). And it reads as the saved one read: the save holds
+  the last step's flows (not state; what a vessel's boiling's bubbles and a reaction's rate are read
+  from), and a vessel's contacts with what it holds are found as it loads (Stage 69).
 - **Invariants.** With checking on (the default) every invariant of §18 is checked on every
   step. A failure stops the lab: it reports the invariant and takes no more commands.
 - **Reports** are functions of state: per item its temperature, the volume of its gas and of its
@@ -3080,7 +3084,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
-| D2 | Save, load, continue equals the uninterrupted run: the demo saved at six points, one in the middle of a step, reproduces the rest of its record | exact | 8 |
+| D2 | Save, load, continue equals the uninterrupted run: the demo saved after every command (Stage 69; at six points until then), those in the middle of a step among them, reproduces its record to the next command, every invariant held | exact | 8 |
 | D3 | A world at rest is bit-identical, carried remainders included: thermal rest after 1e5 steps (Stage 2), chemical equilibrium after 5e4 (Stage 3) | exact | 2–3 |
 | D4 | A session replay reproduces its record: the digest of the whole state after every command (`bench/sessions/demo.jsonl`; ctest `demo_session`) | exact | 7 |
 | M1 | Shifting `Hf` by a per-element constant leaves `T` and `n` trajectories unchanged | metamorphic | 3 |

@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## 0.69.0 (2026-11-26, Stage 69; awaiting the user's sign-off)
+
+- §13, Save and load; §18, D2 (Stage 69, `docs/TDD_69_SAVES.md`): a lab saved in a step a command moved matter in (a
+  tip, a pour) continues exactly as the saved one would have: its world refuses until the step closes what a step in
+  progress refuses (`World::resume_step`), as the saved one did; the demo's save after its command 1 did not. A
+  loaded lab reads as the saved one did: a save holds the last step's flows (not state), and a vessel finds its
+  contacts as it loads, so its boiling's bubbles show at once. D2 holds at every command of the demo. The goldens
+  unchanged.
+
 ## Stage 68 (2026-11-26; GAME_SPEC stays 0.67.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed to fix the open bugs")
 
 - The gates (`docs/TDD_68_GATES_FAST.md`, `docs/WORKFLOW.md`): `make gates` 2,579 s to 1,307 s, then (68.9, the user's
