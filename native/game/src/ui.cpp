@@ -3749,9 +3749,11 @@ struct Ui::Impl {
 		if (hit < 0 && !opened.empty() && circuit_panel().has(x, y)) {
 			return; // the open circuit's panel: no rectangle across it
 		}
+		std::optional<Rect> held_by; // (Stage 61) what was pressed, when it is not what is held: a supply's box
 		if (hit >= supply_base && !(mods & Ui::ModAny)) {
 			// (Stage 61) a supply pressed: its copy taken out at once, a real item in hand at its full size, simulated and
 			// drawn by the pass; put nowhere, back over Supplies or refused where it is dropped, the lab is as it was
+			held_by = rect(hit);
 			const std::string before = lab->save();
 			if (!act({ { "do", "take" }, { "supply", id(hit) } })) {
 				return;
@@ -3773,10 +3775,15 @@ struct Ui::Impl {
 		if (hit >= 0) { // (Stage 61: what is in Storage is taken up as anything off the bench is)
 			// a press takes it in hand; a release without moving it selects it (§13.3),
 			// and a drop the tutorial does not ask for is refused when it is let go
-			const Rect r = rect(hit);
+			const Rect r = held_by ? *held_by : rect(hit); // (held where it was pressed: a supply's box, its copy's size)
 			drag = hit;
 			grab_x = x - r.x;
 			grab_y = y - r.y;
+			if (held_by) {
+				const Rect own = rect(hit); // (drawn() scales the hold from the copy's rectangle to its full size)
+				grab_x *= own.w / std::fmax(r.w, 1.0f);
+				grab_y *= own.h / std::fmax(r.h, 1.0f);
+			}
 			moved = false;
 			const ItemView &v = view.items[static_cast<size_t>(hit)];
 			if (v.place == "bench") { // held by the square under the pointer

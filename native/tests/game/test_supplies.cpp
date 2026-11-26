@@ -312,6 +312,20 @@ TEST_CASE("supplies: a supply pressed is its copy in hand at its full size, simu
 	CHECK(ui->lab().digest() != start);
 	ui->pointer(sx, sy, false);
 	const float in_hand = body_width(*ui, "flask");
+	{
+		// (the user: it was drawn off the screen, held by its storage slot's place, not by where its box was pressed)
+		const lab::OpticsScene &scene = ui->optics();
+		const int b = lab::optics_body(scene, "flask");
+		REQUIRE(b >= 0);
+		const float *r = &scene.table[static_cast<size_t>(lab::optics_layout::HEADER_VECS + b * lab::optics_layout::BODY_VECS) * 4];
+		CHECK(sx >= r[0]);
+		CHECK(sx <= r[0] + r[2]);
+		CHECK(sy >= r[1]);
+		CHECK(sy <= r[1] + r[3]); // under the pointer
+		double rgba[4];
+		lab::optics_pixel(scene, static_cast<int>(r[0] + r[2] / 2), static_cast<int>(r[1] + r[3] / 2), rgba);
+		CHECK(rgba[3] > 0.5); // and seen there
+	}
 	// Escape: nothing was taken
 	ui->key(lab::Ui::KeyEscape, 0);
 	CHECK(ui->lab().digest() == start);
