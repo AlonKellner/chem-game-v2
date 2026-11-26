@@ -1011,6 +1011,32 @@ Its light: searched and not found measured. Real foam scatters white; the pass h
 so the cup's wall lets a flat 0.8 of the visible through (pale, where a third made it a smoked grey) and a fifth of
 the long-wave (`data/optics/media.json`), calibrated.
 
+## Liquids that expand (Stage 67)
+
+What a liquid's and a dissolved species' volume grow by with temperature (GAME_SPEC §6): water's density at one
+atmosphere, `data/solutions.json`'s `density`, read 2026-11-26.
+
+**Kell 1975**: G. S. Kell, "Density, thermal expansivity, and compressibility of liquid water from 0° to 150 °C:
+correlations and tables for atmospheric pressure and saturation reviewed and expressed on 1968 temperature scale",
+*J. Chem. Eng. Data* **20** (1975) 97–105, doi:10.1021/je60064a005, **eq. 16**: air-free water at 101.325 kPa,
+ρ = (999.83952 + 16.945176 t − 7.9870401e-3 t² − 46.170461e-6 t³ + 105.56302e-9 t⁴ − 280.54253e-12 t⁵) /
+(1 + 16.879850e-3 t) kg/m³, t in °C (IPTS-68), 0 to 150 °C. Its coefficients as the correlation is widely
+reproduced; no readable copy of the paper itself was reached (NIST's reprints fetched as images), so they are held
+to independent measurements rather than to the printed page:
+- Lienhard's Table A.3 (above, Stage 45), every row: within 0.07 kg/m³ from 0.01 to 100 °C (his rows are printed
+  to 0.1), within 0.27 above (his are saturated liquid, at its vapour pressure, not at 1 atm);
+- the density's maximum: 999.972 kg/m³ at 3.98 °C, its slope there zero;
+- the table's own 25 °C water, 0.997048 g/cm³ (`data/species.json`): 997.045, within 3e-6.
+Beyond 0–150 °C the game extends it by its value and slope at the end, so it and its slope are continuous (a
+sealed cell's temperature is the root of its energy, which holds the slope).
+
+**Confidence: high** (to 1e-4 over 0–100 °C, what a level or a sealed flask's pressure can show). The test:
+`measured: water's density is Kell's, within Lienhard's rows (Stage 67)`.
+
+**How it is used** (code, `chem::expansion`): a liquid's and a solute's molar volume at T is the table's (25 °C)
+times ρ(25 °C)/ρ(T); a solute's apparent molar volume is scaled as the solvent's, as Stage 47's buoyancy already
+did (its own expansion differs; not modelled). Solids keep the table's (about 1e-5/K, not modelled).
+
 ## Ions as species (Stage 63)
 
 Dissolved matter as its ions (GAME_SPEC §9, §10): hydrogen, hydroxide, copper, sulfate, bisulfate, sodium, nickel

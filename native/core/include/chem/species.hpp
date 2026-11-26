@@ -98,6 +98,10 @@ struct SolutionDef {
 	// ionisation_g 0: none, and no pH
 	double ionisation_h = 0.0, ionisation_g = 0.0, ionisation_cp = 0.0;
 	std::vector<SolventPoint> solvent; // by rising temperature; empty: none known (no column's buoyancy, Stage 47)
+	// the solvent's density at 1 atm (Stage 67, Kell's form): (n0 + n1 t + ... + n5 t^5) / (1 + b t) kg/m^3, t in C,
+	// from `low` to `high` C, beyond them its value and slope at the end; all zero: none known (nothing expands)
+	std::array<double, 6> density{};
+	double density_b = 0.0, density_low = 0.0, density_high = 0.0;
 };
 
 struct SpeciesDef {

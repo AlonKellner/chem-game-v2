@@ -1835,9 +1835,9 @@ struct Lab::Impl {
 
 	// ---- drains (§6, §13): a vessel under another's outlet leaves it when either is moved
 	// away, stowed or handed in; the drain comes off at a step boundary
-	// the volume of a cell's liquid species, m^3 (what a pour's amount is of)
-	double liquid_m3(CellId cell) const { return liquid_m3(world().snapshot_cell(cell)); }
-	double liquid_m3(const CellState &state) const {
+	// the volume of a cell's liquid species at its temperature, m^3 (what a pour's amount is of; Stage 67: grown with it)
+	double liquid_m3(CellId cell) const { return liquid_m3(world().snapshot_cell(cell), volume_kelvin(cell)); }
+	double liquid_m3(const CellState &state, double kelvin) const {
 		double volume = 0.0;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
@@ -1845,7 +1845,12 @@ struct Lab::Impl {
 				volume += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
 			}
 		}
-		return volume;
+		return volume != 0.0 ? volume * expansion(table(), kelvin) : 0.0;
+	}
+	// the temperature a cell's volumes are read at: its own, or 25 C where it has none (an empty one)
+	double volume_kelvin(CellId cell) const {
+		const double t = kelvin(cell);
+		return t > 0.0 ? t : T0;
 	}
 	// A vessel into a pouring position over another (GAME_SPEC §13, Stage 27): held, or upside down with its cap
 	// shut; a drain from it into the other, its rate set each step
@@ -3373,7 +3378,7 @@ struct Lab::Impl {
 		const double held = std::clamp(cuvette.suspended, 0.0, 1.0); // the share of its solids its stirring holds up (Stage 56)
 		for (auto c = cells.rbegin(); c != cells.rend(); ++c) {
 			const CellState &state = world().snapshot_cell(*c);
-			const double liquid = liquid_m3(state), solid = solid_m3(state);
+			const double liquid = liquid_m3(state, volume_kelvin(*c)), solid = solid_m3(state);
 			if (filled + solid * (1.0 - held) > below) {
 				out.opaque = true; // its settled solids stand at the beam
 				return out;
@@ -3616,14 +3621,14 @@ struct Lab::Impl {
 					}
 					row.ml = gas > 0.0 ? fill.gas * 1e6 * static_cast<double>(cell.amount[s]) / gas : 0.0;
 				} else if (!def.wall) {
-					row.ml = row.mol * def.molar_volume * 1e6;
+					row.ml = row.mol * molar_volume_at(table, def, kelvin > 0.0 ? kelvin : T0) * 1e6; // at its temperature (Stage 67)
 				}
 				if (def.phase == Phase::Solid && !def.wall) {
 					row.particles = cell.particles[s];
 					row.size_um = particle_diameter(table, cell, id) * 1e6;
 				}
 				if (def.phase == Phase::Liquid && !def.wall) {
-					v.liquid_ml += row.mol * def.molar_volume * 1e6;
+					v.liquid_ml += row.mol * molar_volume_at(table, def, kelvin > 0.0 ? kelvin : T0) * 1e6;
 				}
 				if (def.phase == Phase::Solid && !def.wall) {
 					v.solid_ml += row.mol * def.molar_volume * 1e6;
@@ -3860,7 +3865,7 @@ struct Lab::Impl {
 		}
 		return out;
 	}
-	double liquid_m3(const Item &x) const { return layered(x) ? liquid_m3(whole(x)) : liquid_m3(x.cell); }
+	double liquid_m3(const Item &x) const { return layered(x) ? liquid_m3(whole(x), kelvin(x)) : liquid_m3(x.cell); }
 	double solid_m3(const Item &x) const { return layered(x) ? solid_m3(whole(x)) : solid_m3(x.cell); }
 	double liquid_g(const Item &x) const { return layered(x) ? liquid_g(whole(x)) : liquid_g(x.cell); }
 	double grams(const Item &x, SpeciesId s) const {
@@ -3898,7 +3903,7 @@ struct Lab::Impl {
 		const auto one = [&](CellId c) {
 			LayerView l;
 			const CellState &state = world().snapshot_cell(c);
-			l.liquid_ml = liquid_m3(state) * 1e6;
+			l.liquid_ml = liquid_m3(state, volume_kelvin(c)) * 1e6;
 			l.solid_ml = solid_m3(state) * 1e6;
 			l.celsius = kelvin(c) - 273.15;
 			for (size_t s = 0; s < state.amount.size(); ++s) {
@@ -3913,7 +3918,7 @@ struct Lab::Impl {
 				row.phase = PHASE[static_cast<int>(def.phase)];
 				row.mol = static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
 				row.g = grams(c, id);
-				row.ml = def.phase == Phase::Solid || def.phase == Phase::Liquid || def.phase == Phase::Aqueous ? row.mol * def.molar_volume * 1e6 : 0.0;
+				row.ml = def.phase == Phase::Solid || def.phase == Phase::Liquid || def.phase == Phase::Aqueous ? row.mol * molar_volume_at(table(), def, volume_kelvin(c)) * 1e6 : 0.0;
 				l.contents.push_back(row);
 			}
 			return l;
@@ -3993,10 +3998,10 @@ struct Lab::Impl {
 			for (const SpeciesAmount &a : amounts) {
 				const SpeciesDef &def = table().species(a.species);
 				if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
-					adds += a.amount.mol() * def.molar_volume;
+					adds += a.amount.mol() * molar_volume_at(table(), def, volume_kelvin(to.cell)); // at its temperature (Stage 67)
 				}
 			}
-			const Fill fill = fill_of(table(), world().snapshot_cell(to.cell), T0);
+			const Fill fill = fill_of(table(), world().snapshot_cell(to.cell), volume_kelvin(to.cell));
 			if (!fill.defined || fill.condensed + adds > meta.volume) {
 				why = "that does not fit in \"" + to.id + "\"";
 				return false;
@@ -4310,7 +4315,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					}
 					const SpeciesDef &def = table.species(id);
 					if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
-						condensed += mol * def.molar_volume;
+						condensed += mol * molar_volume_at(table, def, room_kelvin); // at the room's temperature, as it is set (Stage 67)
 					}
 				}
 				for (const auto &[index, quanta] : taken) {
@@ -5757,7 +5762,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			for (size_t s = 0; s < source.amount.size(); ++s) {
 				const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
 				if (source.amount[s] > 0 && def.phase == Phase::Liquid) {
-					volume += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+					volume += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table(), def, volume_kelvin(items[static_cast<size_t>(from)].cell));
 				}
 			}
 			double fraction = 1.0;
@@ -6242,7 +6247,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		const Fill held = fill(x);
 		const double want = (mark_ml(x) - (held.defined ? held.condensed * 1e6 : 0.0)) * 1e-6; // m^3
-		if (!(want > 0.0)) {
+		if (!(want > 1e-6 * mark_ml(x) * 1e-6)) { // (within a millionth: its liquid at its own temperature, Stage 67)
 			why = "\"" + x.id + "\" stands at its mark already, or over it";
 			return false;
 		}
@@ -6251,7 +6256,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		for (size_t s = 0; s < source.amount.size(); ++s) {
 			const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
 			if (source.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
-				solution += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+				solution += static_cast<double>(source.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table(), def, volume_kelvin(items[static_cast<size_t>(from)].cell));
 			}
 		}
 		if (want > solution * (1.0 - 1e-12)) {

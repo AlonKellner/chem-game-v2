@@ -167,6 +167,23 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			return std::nullopt;
 		}
 	}
+	// the solvent's density (Stage 67): none, or finite with a range, positive at both its ends and between
+	if (std::any_of(solution.density.begin(), solution.density.end(), [](double c) { return c != 0.0; })) {
+		bool good = std::all_of(solution.density.begin(), solution.density.end(), [&](double c) { return finite(c); }) && finite(solution.density_b) && finite(solution.density_low) &&
+				finite(solution.density_high) && solution.density_low < solution.density_high;
+		for (int i = 0; good && i <= 100; ++i) {
+			const double t = solution.density_low + (solution.density_high - solution.density_low) * i / 100.0;
+			double n = 0.0;
+			for (size_t k = solution.density.size(); k-- > 0;) {
+				n = n * t + solution.density[k];
+			}
+			good = 1.0 + solution.density_b * t > 0.0 && n > 0.0;
+		}
+		if (!good) {
+			set_why(why, "the solvent's density is finite and positive over its range, a range from low to high");
+			return std::nullopt;
+		}
+	}
 	const auto ion_count = static_cast<int32_t>(solution.ions.size());
 	for (SpeciesDef &s : species) {
 		const std::string name(s.id);

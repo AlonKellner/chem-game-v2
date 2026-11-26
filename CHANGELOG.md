@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.64.0 (2026-11-26, Stage 64)
+## 0.67.1 (2026-11-26, Stage 64, merged after Stage 67)
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
   pack, C2): **weak acids, bases, indicators and the salts experiments 14 to 20 weigh**. New elements Cl, K, P, Br (32
@@ -18,6 +18,17 @@
 - §13: a bench opens at its fast equilibria at the temperatures it states (`build_settled`); the free lab's reagents
   (hydrochloric acid, sodium hydroxide, vinegar, ammonia, the three indicators, six salts).
 - §20: the declared simplifications of the weak acids, the indicators and the salts.
+
+## 0.67.0 (2026-11-26, Stage 67)
+
+- §6 (Stage 67, `docs/TDD_67_EXPANSION.md`; the roadmap's area 8c): **liquids that expand**: a liquid's and a
+  dissolved species' molar volume at T is the table's times water's ρ(25 °C)/ρ(T), Kell's density (1975,
+  `data/solutions.json`'s `density`, held to Lienhard's rows); solids keep the table's. Every volume of a liquid is
+  read at its cell's temperature: a vessel's fill, level and picture, its overflow, what fits, drains, pours, marks,
+  a column's layers, concentrations. **A sealed cell** from one Gibbs energy of its solids and liquids,
+  G0(T) + V_c(T)(P − P_atm): its energy gains −T V_c'(T)(P − P_atm), its entropy −V_c'(T)(P − P_atm), each condensed
+  species' potential v_i(T)(P − P_atm); its temperature is its energy's root. §18: V2, V3 and L1 at each cell's own
+  temperature. §20: the condensed phases' Gibbs energy. The goldens re-recorded with the user's approval.
 
 ## 0.63.0 (2026-11-26, Stage 63; signed off by the user: "Approved, merge and proceed")
 

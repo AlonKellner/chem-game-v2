@@ -100,7 +100,7 @@ TEST_CASE("gas: a volume is the ideal gas law at one atmosphere plus the solids 
 	const Fill fill = fill_of(builtin_species(), world.snapshot_cell(cell), temperature(world, cell));
 	REQUIRE(fill.defined);
 	CHECK(fill.gas == doctest::Approx(22.414e-3).epsilon(1e-4)); // the molar volume of a gas at 0 C
-	CHECK(fill.condensed == doctest::Approx(18.015 / 0.997048 * 1e-6).epsilon(1e-9)); // 18.07 mL of water; the glass takes no room
+	CHECK(fill.condensed == doctest::Approx(18.015 / 0.9998395 * 1e-6).epsilon(1e-6)); // 18.02 mL of water at 0 C (Stage 67: Kell's density there); the glass takes no room
 }
 
 TEST_CASE("gas: heated air leaves an open flask: what stays is T0/T of it (Stage 4)") {
