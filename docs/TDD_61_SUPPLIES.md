@@ -93,7 +93,7 @@ case). The keywords (`lab/search.hpp`, pure):
 | 61.6 | The screen: the two panels scrolled, their search fields; `lab/search.hpp` | Done |
 | 61.7 | The pictures: captured on the CPU, cached, built for `data/`'s benches | Done |
 | 61.8 | Benches, tutorials, sessions and plays; the goldens (with the user's approval); the host | Done |
-| 61.9 | GAME_SPEC 0.61.0, CHANGELOG, `make gates`, the user's sign-off | |
+| 61.9 | GAME_SPEC 0.61.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (2122 s: ASan+UBSan, ctest, Godot 13 of 13, the goldens); awaiting the user's sign-off |
 
 ## What was built
 
@@ -126,6 +126,18 @@ case). The keywords (`lab/search.hpp`, pure):
   on each), which found the four bugs fixed above.
 - **Goldens**: the pressure session's re-recorded with the user's approval: every measured value and event as
   before; its stopper and burner supplies (8 g supplied). The demo's unchanged (its bench has no supplies).
+
+## The user's tests
+
+- "When I press on a supply item, I want it to be picked up in my hand, already in full size and rendering": a
+  press takes the copy out at once, in hand at its full size, simulated and drawn; put nowhere, the lab is loaded back.
+  Then "it's invisible in my hand until I place it": it was held by its storage slot's place scaled to its full size,
+  off the screen; held now where its box was pressed (the test holds it under the pointer, and seen).
+- "Vessels rendered over the Supplies cabinet look super strange [...] the Supplies cabinet itself should not render
+  as the background for the vessel. Same should be true for Trash and Storage": the panels' bodies carry `PANEL_BIT`,
+  passed over by the pixel source wherever something in hand covers them; their outlines are drawn over the pass;
+  behind glass the bench's grid goes on over them (the test: a flask held over the first box sees the same wall
+  whatever supply the search puts there).
 
 ## Open
 
