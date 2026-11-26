@@ -167,7 +167,8 @@ enum {
 	CG_DRAW_LINE = 2, /* from (x, y) to (w, h); width */
 	CG_DRAW_POLYGON = 3, /* points[2 * first .. 2 * (first + count)): filled */
 	CG_DRAW_CIRCLE = 4, /* centre x, y; radius w: filled */
-	CG_DRAW_TEXT = 5 /* text + first, count bytes (also NUL-ended); baseline starts at x, y; size h */
+	CG_DRAW_TEXT = 5, /* text + first, count bytes (also NUL-ended); baseline starts at x, y; size h */
+	CG_DRAW_IMAGE = 6 /* (Stage 61) images[first] stretched over x, y, w, h: a picture the screen paints */
 };
 
 typedef struct cg_draw_command {
@@ -179,6 +180,14 @@ typedef struct cg_draw_command {
 	float x, y, w, h;
 } cg_draw_command;
 
+/* (Stage 61) a picture: w by h pixels of 8-bit sRGB red, green and blue, row by row from the top; a hash that moves
+ * only when a pixel does (keep its texture by it) */
+typedef struct cg_draw_image {
+	int32_t w, h;
+	const uint8_t *rgb;
+	uint64_t hash;
+} cg_draw_image;
+
 typedef struct cg_draw_list {
 	uint32_t size; /* sizeof(cg_draw_list), set by the caller */
 	int32_t command_count;
@@ -188,6 +197,8 @@ typedef struct cg_draw_list {
 	int32_t text_size;
 	const char *text;
 	int32_t above; /* the first command painted over the optical pass; those before it are under it */
+	int32_t image_count; /* (Stage 61) */
+	const cg_draw_image *images;
 } cg_draw_list;
 
 /* What to paint now. Borrowed until the next call on this ui. */

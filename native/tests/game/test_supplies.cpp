@@ -9,6 +9,7 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -236,53 +237,65 @@ namespace {
 const char *const ONE_SUPPLY = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
 	{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 100}}}]})";
 
-// the screen's colour over a supply's box, sampled
-std::vector<double> box_colours(lab::Ui &ui) {
-	std::vector<double> out;
-	const lab::OpticsScene &scene = ui.optics();
-	for (int y = 100; y < 196; y += 7) {
-		for (int x = 12; x < 108; x += 7) {
-			double rgba[4];
-			lab::optics_pixel(scene, x, y, rgba);
-			for (int c = 0; c < 3; ++c) {
-				out.push_back(rgba[c] * rgba[3]);
-			}
-		}
-	}
-	return out;
-}
-
 } // namespace
 
-TEST_CASE("pictures: a supply's box is its picture, captured once of it alone, showing what the pass drew there; given back, none is captured again (Stage 61)") {
+TEST_CASE("pictures: a supply's box is its picture, captured once of it alone, painted by the screen under the pass as the pass drew it there, and no body of the pass; given back, none is captured again (Stage 61)") {
 	std::string why;
 	auto ui = lab::Ui::open(ONE_SUPPLY, why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
 	ui->frame(1.0 / 60.0);
-	const std::vector<double> live = box_colours(*ui);
+	// drawn live by the pass until it has its picture
+	const lab::OpticsScene &live_scene = ui->optics();
+	CHECK(lab::optics_body(live_scene, "supply:beaker") >= 0);
+	std::vector<std::array<double, 4>> live;
+	for (int y = 100; y < 196; y += 7) {
+		for (int x = 12; x < 108; x += 7) {
+			std::array<double, 4> rgba{};
+			lab::optics_pixel(live_scene, x, y, rgba.data());
+			live.push_back(rgba);
+		}
+	}
 	CHECK_FALSE(ui->pictures_changed());
 	ui->capture_pictures();
 	CHECK(ui->pictures_changed());
 	const std::string kept = ui->pictures();
 	CHECK_FALSE(ui->pictures_changed());
 	ui->frame(1.0 / 60.0);
-	const std::vector<double> shown = box_colours(*ui);
-	REQUIRE(shown.size() == live.size());
-	double worst = 0.0, sum = 0.0;
-	for (size_t k = 0; k < live.size(); ++k) {
-		worst = std::max(worst, std::fabs(shown[k] - live[k]));
-		sum += std::fabs(shown[k] - live[k]);
+	// (the user: a picture in the scene was seen, a screen's three primaries, through the rims of what was held)
+	CHECK(lab::optics_body(ui->optics(), "supply:beaker") < 0);
+	const lab::DrawList &list = ui->draw();
+	const lab::DrawCommand *painted = nullptr;
+	for (int k = 0; k < list.above; ++k) {
+		painted = list.commands[static_cast<size_t>(k)].type == lab::DrawCommand::Image ? &list.commands[static_cast<size_t>(k)] : painted;
 	}
-	MESSAGE("the picture against the pass: mean " << sum / static_cast<double>(live.size()) << ", worst " << worst);
-	CHECK(sum / static_cast<double>(live.size()) < 0.03);
-	// given back to a screen of the same bench, it is shown at once, and nothing is captured
+	REQUIRE(painted != nullptr); // under the pass
+	const lab::DrawImage &picture = list.images[static_cast<size_t>(painted->first)];
+	REQUIRE(picture.rgb != nullptr);
+	double worst = 0.0;
+	size_t k = 0;
+	for (int y = 100; y < 196; y += 7) {
+		for (int x = 12; x < 108; x += 7, ++k) {
+			if (live[k][3] < 0.999) {
+				continue; // (where the pass drew nothing the picture holds the wall as painted)
+			}
+			const int px = static_cast<int>((static_cast<float>(x) - painted->x) * static_cast<float>(picture.w) / painted->w);
+			const int py = static_cast<int>((static_cast<float>(y) - painted->y) * static_cast<float>(picture.h) / painted->h);
+			for (int c = 0; c < 3; ++c) {
+				const double shown = picture.rgb[(static_cast<size_t>(py) * static_cast<size_t>(picture.w) + static_cast<size_t>(px)) * 3 + static_cast<size_t>(c)] / 255.0;
+				worst = std::max(worst, std::fabs(shown - live[k][static_cast<size_t>(c)]));
+			}
+		}
+	}
+	MESSAGE("the picture against the pass: worst " << worst);
+	CHECK(worst < 1.5 / 255.0);
+	// given back to a screen of the same bench, it is painted at once, and nothing is captured
 	auto again = lab::Ui::open(ONE_SUPPLY, why);
 	REQUIRE(again != nullptr);
 	REQUIRE_MESSAGE(again->add_pictures(kept, why), why);
 	again->capture_pictures(); // (it has every one: none to capture)
 	CHECK_FALSE(again->pictures_changed());
 	again->frame(1.0 / 60.0);
-	CHECK(box_colours(*again) == shown);
+	CHECK(lab::optics_body(again->optics(), "supply:beaker") < 0);
 }
 
 namespace {

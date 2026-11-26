@@ -24,15 +24,24 @@
 namespace lab {
 
 struct DrawCommand {
-	enum Type : int32_t { Rect = 0, Outline = 1, Line = 2, Polygon = 3, Circle = 4, Text = 5 };
+	enum Type : int32_t { Rect = 0, Outline = 1, Line = 2, Polygon = 3, Circle = 4, Text = 5, Image = 6 };
 	int32_t type = Rect;
 	uint32_t color = 0xffffffff; // 0xRRGGBBAA
 	float width = 1.0f; // Outline, Line
 	int32_t first = 0; // Polygon: its first point (a pair of floats). Text: the offset of its string
 	int32_t count = 0; // Polygon: how many points
 	// Rect, Outline: x, y, w, h. Line: x1, y1, x2, y2. Circle: centre and w = radius.
-	// Text: x, y of its baseline's start and h = its size.
+	// Text: x, y of its baseline's start and h = its size. Image (Stage 61): x, y, w, h, the picture `first` of the
+	// list's images stretched over it.
 	float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+};
+
+// A picture the screen paints (Stage 61: a supply's, captured ahead): its pixels across and down, 8-bit sRGB red,
+// green and blue row by row from the top, and a hash that moves only when a pixel does (a host keeps its texture by it)
+struct DrawImage {
+	int32_t w = 0, h = 0;
+	const uint8_t *rgb = nullptr;
+	uint64_t hash = 0;
 };
 
 struct DrawList {
@@ -40,6 +49,7 @@ struct DrawList {
 	int32_t above = 0; // the first command painted over the optical pass (§12); those before it are under it
 	std::vector<float> points; // x, y pairs
 	std::string text; // the strings, each ended by a NUL
+	std::vector<DrawImage> images; // (Stage 61) the pictures painted, borrowed until the next frame
 };
 
 class Ui {

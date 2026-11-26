@@ -365,6 +365,9 @@ const char *cg_ui_play_shot(cg_ui *ui) {
 	return ui != nullptr && ui->playing ? ui->play.shot().c_str() : nullptr;
 }
 
+static_assert(sizeof(cg_draw_image) == sizeof(lab::DrawImage) && offsetof(cg_draw_image, rgb) == offsetof(lab::DrawImage, rgb) && offsetof(cg_draw_image, hash) == offsetof(lab::DrawImage, hash),
+		"a draw list's image is the screen's (Stage 61)");
+
 cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 	if (ui == nullptr || out == nullptr || out->size < sizeof(cg_draw_list)) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_draw: null argument, or the list's size is not set");
@@ -378,6 +381,8 @@ cg_status cg_ui_draw(cg_ui *ui, cg_draw_list *out) {
 		out->text_size = static_cast<int32_t>(list.text.size());
 		out->text = list.text.c_str();
 		out->above = list.above;
+		out->image_count = static_cast<int32_t>(list.images.size());
+		out->images = reinterpret_cast<const cg_draw_image *>(list.images.data());
 		return CG_OK;
 	} catch (const std::exception &e) {
 		return fail(CG_ERR_INTERNAL, e.what());
@@ -428,6 +433,8 @@ void fill_draw(const lab::DrawList &list, cg_draw_list *out) {
 	out->text_size = static_cast<int32_t>(list.text.size());
 	out->text = list.text.c_str();
 	out->above = list.above;
+	out->image_count = static_cast<int32_t>(list.images.size());
+	out->images = reinterpret_cast<const cg_draw_image *>(list.images.data());
 }
 
 } // namespace

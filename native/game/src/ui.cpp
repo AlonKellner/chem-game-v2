@@ -5236,6 +5236,13 @@ struct Ui::Impl {
 		const Rect s = room_paint != 0 ? on_screen(r) : r;
 		list.commands.push_back(DrawCommand{ DrawCommand::Rect, color, 1, 0, 0, s.x, s.y, s.w, s.h });
 	}
+	// (Stage 61) a picture over a rectangle, as the screen paints it: no part of the room (the pass never sees it)
+	void image(const Rect &r, const Picture &p) {
+		const Rect s = room_paint != 0 ? on_screen(r) : r;
+		DrawCommand c{ DrawCommand::Image, 0xffffffff, 1, static_cast<int32_t>(list.images.size()), 0, s.x, s.y, s.w, s.h };
+		list.commands.push_back(c);
+		list.images.push_back(DrawImage{ p.w, p.h, p.rgb.data(), p.hash });
+	}
 	void outline(const Rect &r, uint32_t color, float width = 2) {
 		const Rect s = room_paint != 0 ? on_screen(r) : r;
 		list.commands.push_back(DrawCommand{ DrawCommand::Outline, color, pw(width), 0, 0, s.x, s.y, s.w, s.h });
@@ -5641,6 +5648,7 @@ struct Ui::Impl {
 		list.commands.clear();
 		list.points.clear();
 		list.text.clear();
+		list.images.clear();
 		list.above = 0;
 		room_paint = 0;
 		rect_fill(Rect{ 0, 0, 1920, 1080 }, BACKGROUND);
@@ -5656,6 +5664,15 @@ struct Ui::Impl {
 		}
 		for (int r = 0; r <= view.rows; ++r) {
 			ruled(BENCH.x, BENCH.y + static_cast<float>(r) * sq, BENCH.x + static_cast<float>(view.cols) * sq, BENCH.y + static_cast<float>(r) * sq);
+		}
+		// (Stage 61) the supplies' pictures, under the pass: the screen's own, never in the way of a ray (what is held
+		// over them is drawn by the pass, over them, seeing the room's wall)
+		for (int i = supply_base; i < static_cast<int>(view.items.size()); ++i) {
+			const auto pic = pictures.find(picture_key(view.items[static_cast<size_t>(i)]));
+			const std::optional<Rect> box = pic != pictures.end() && capture_only.empty() ? cabinet_box(slot(i, "cabinet")) : std::nullopt;
+			if (box) {
+				image(*box, pic->second);
+			}
 		}
 		// ---- the optical pass goes here: what is in the vessels and the balloons
 		list.above = static_cast<int32_t>(list.commands.size());
@@ -6506,15 +6523,8 @@ struct Ui::Impl {
 			if (i != drag && !hidden(i)) {
 				// (Stage 61) a supply's box: its picture, captured ahead, shown by a screen of the box's size; drawn by the
 				// pass only until it has one (and while its own is being captured)
-				const auto pic = i >= supply_base && capture_only.empty() ? pictures.find(picture_key(view.items[static_cast<size_t>(i)])) : pictures.end();
-				const std::optional<Rect> box = pic != pictures.end() ? cabinet_box(slot(i, "cabinet")) : std::nullopt;
-				if (box) {
-					const size_t k = thing(id(i), "picture", OpticsBody::Screen, *box, 1.0f, nullptr, nullptr, false);
-					bodies[k].image = pic->second.rgb.data();
-					bodies[k].image_w = pic->second.w;
-					bodies[k].image_h = pic->second.h;
-					bodies[k].image_hash = pic->second.hash;
-					bodies[k].hidden |= PANEL_BIT;
+				// (Stage 61) a supply's box with its picture: painted by the screen under the pass (paint), no body of it
+				if (i >= supply_base && capture_only.empty() && pictures.find(picture_key(view.items[static_cast<size_t>(i)])) != pictures.end()) {
 					continue;
 				}
 				const size_t first = bodies.size();

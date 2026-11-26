@@ -2006,8 +2006,10 @@ top the clock.
   (a notch a row; over the room the wheel zooms), or by its bar, dragged.
 - What is scrolled out of sight is not on the screen.
 - **A box is a picture** (Stage 61), captured ahead, never rendered live: of the supply alone in its box, by the
-  renderer's own source on the CPU (`optics_pixel`) from the screen's own scene, and shown by a screen of the box's
-  size (it holds to the pass within 8-bit rounding). Pictures are kept by what is drawn of a supply (a hash of
+  renderer's own source on the CPU (`optics_pixel`) from the screen's own scene, and **painted by the screen under the
+  pass** (the draw list's `Image`, the host's texture kept by its hash): it is no part of the scene, and no ray of
+  anything rendered meets it (the user: a picture in the scene was a screen's three primaries, seen in colours through
+  the rims of what was held). It holds to the pass within 8-bit rounding. Pictures are kept by what is drawn of a supply (a hash of
   it), built ahead for the benches of `data/` (`make pictures`, `chem_tool capture`: the file is its cache), given
   back by the host and kept by it; a box with none yet is drawn by the pass while its own is captured apart, a
   supply at a time.
