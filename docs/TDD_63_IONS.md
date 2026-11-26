@@ -81,8 +81,8 @@ elements, weak acids and bases and indicators (64), then the experiments and con
 | 63.4 | The solver: the fast equilibria together; electroneutrality; a column's diffusion as electrolytes | done (`solve_together`; N1; Nernst and Planck at no current; `stands`) |
 | 63.5 | pH; the measured gates (acidity, precipitation, solution, measured) | done |
 | 63.6 | The lab, the screen, the benches, tutorials and spectra in ions | done (readings by `formula_units`; written equations; spectra; the readout) |
-| 63.7 | The goldens: the evidence and the user's approval | |
-| 63.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 63.7 | The goldens: the evidence and the user's approval | done (demo and pressure re-recorded with the user's approval) |
+| 63.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | gates passed (core, ASan+UBSan, Godot 13/13, goldens; ctest 593/593 rerun alone after `signals.12`'s timing ran over under the gates' load: 4.6 ms against 3, 1.8 alone); sign-off pending |
 
 ## Open
 
