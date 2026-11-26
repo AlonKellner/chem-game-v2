@@ -44,7 +44,7 @@ L1 and the lab's millilitres read the table's molar volumes as they were.
 | 67.2 | The core: `expansion`, `fill_of` at T, the sealed cell's energy, entropy and potentials, its root, the probe; the world's `energy_at` | Done |
 | 67.3 | The core's consumers: drains, overflow, columns, transport; V2, V3, L1 at the cell's temperature | Done |
 | 67.4 | The lab: its millilitres, a pour's and a mark's, what fits, the bench's air | Done |
-| 67.5 | Sessions, plays and the goldens (with the user's approval) | Done: both records re-recorded, approved by the user on the evidence (the pressure session's stopper and bottle give way at the same pressures a few seconds later; the demo's crop 9.550 g against 9.544, its distillate 33.80 g against 33.69) |
+| 67.5 | Sessions, plays and the goldens (with the user's approval) | Done: both records re-recorded, approved by the user on the evidence (the pressure session's stopper and bottle give way at the same pressures a few seconds later; the demo's crop 9.550 g against 9.544, its distillate 33.80 g against 33.69); again after Stage 63 was merged in (ions as species), approved: the pressure session as before, the demo's crop 10.062 g against 10.055 (1383 crystals against 1370), its distillate 26.76 g against 26.64 |
 | 67.6 | GAME_SPEC 0.67.0, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Tests
@@ -80,6 +80,11 @@ the middle row's L* from 60.3 to 63.1, the truth agreeing). A layer under 8 px i
 surface's.
 
 ## Open
+
+- **Found while merging Stage 63** (reported to its author, to be fixed on Stage 64): a bench's formula units are
+  loaded as fully split ions at the stated temperature, and the first settle moves their heat, so the demo's acid,
+  loaded at 20 °C, is at 17.4 °C a few steps later. Volumes following temperature showed it (a 50 mL pour at 17.4 °C
+  holds 0.05% more than at 20 °C); the pour's test reads the acid's own temperature.
 - **A sealed cell squeezed toward full.** As its liquid grows into the last of its free volume its gas's pressure
   climbs without bound, and `- T V_c' (P - P_atm)` with it: E(T) has a maximum, near 100 bar for a flask of water
   (where `dE/dT = Cv - V_c' P - T V_c'^2 P / V_free` reaches zero). Past it the cell has no temperature (V3: no room
