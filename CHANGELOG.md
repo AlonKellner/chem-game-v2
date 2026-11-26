@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.60.0 (2026-11-25, Stage 60)
+## 0.60.0 (2026-11-26, Stage 60; signed off by the user: "Approved, merge and proceed")
 
 - §13.1 (Stage 60, `docs/TDD_60_PLANNER.md`; `docs/CURRICULUM.md`, step C's last part, S3): **the planner**, the
   notebook's fourth tab: a target and its route back, each step's reaction and expected yield, what each step needs,
