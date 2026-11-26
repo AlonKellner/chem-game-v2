@@ -7823,6 +7823,12 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false);
 	impl->sim->restore_remainders(std::move(heat), std::move(reaction), std::move(nucleation), std::move(work));
+	if (impl->mid_step) {
+		// saved in a step a command had moved matter in (a tip, a pour): its world refuses until the step closes
+		// what the saved one refused, as that one did (Stage 69: D2; a loaded world's ledger is empty, and it set its
+		// walls' contacts a step before the saved one could)
+		impl->world().resume_step();
+	}
 	impl->genesis = totals(table, impl->world().snapshot());
 	// (Stage 61) its supplies, each made again from the bench of it alone; what a save from before them kept in the
 	// cabinet is in Storage now (it was in the world, and is)
