@@ -23,7 +23,11 @@ inline constexpr double P_STANDARD = 100000.0; // Pa: the species table's standa
 // one atmosphere and full that is its enthalpy, so a cell sealed or opened
 // keeps its temperature there. With the condensed phases incompressible and
 // the gas ideal, E = H(T) - n_gas R T + P_atm V_free, V_free the volume its
-// solids and liquids leave, and its pressure is n_gas R T / V_free.
+// solids and liquids leave, and its pressure is n_gas R T / V_free. Stage 67:
+// its liquids grow with temperature (expansion()), their Gibbs energy
+// G0(T) + V_c(T) (P - P_atm), so E gains - T V_c'(T) (P - P_atm), its entropy
+// - V_c'(T) (P - P_atm), each condensed species' potential v_i(T) (P - P_atm);
+// its temperature is then E's root (Newton's), V_free at it.
 struct Thermal {
 	// false when the cell holds a species without thermodynamic data, or its
 	// heat capacity is not positive, or it is sealed and its solids and
@@ -55,6 +59,8 @@ struct Fill {
 
 // The volume the cell's contents take at temperature T (GAME_SPEC §6). Solutes
 // take their apparent molar volume (GAME_SPEC §10), or none if they have none.
+// Liquids and solutes grow with the solvent from 25 C (Stage 67: expansion());
+// solids keep the table's.
 Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta = nullptr);
 
 // How far a rigid cell is from exactly full, in m^3: gas + condensed - volume.
@@ -75,9 +81,21 @@ double solvent_viscosity(const SpeciesTable &table, double temperature);
 // between rows, held beyond the ends; all 0 where the table has none.
 SolventPoint solvent_at(const SpeciesTable &table, double temperature);
 
+// Stage 67 (GAME_SPEC §6): the solvent's density at T at one atmosphere, kg/m^3 (Kell's form, data/solutions.json's
+// density; beyond its range its value and slope at the end), and its first and second derivatives by T; 0 with none
+double solvent_density(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
+// What a liquid's and a solute's volume at T is of the table's (at 25 C): rho(25 C) / rho(T), and its derivatives by
+// T (1/K, 1/K^2); 1 where the solvent's density is not known.
+double expansion(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
+// A species' molar volume at T, m^3/mol: a liquid's or a solute's the table's times the expansion, a solid's the table's.
+double molar_volume_at(const SpeciesTable &table, const SpeciesDef &def, double temperature);
+// The energy, in J, the cell's contents hold at temperature T: open, their enthalpy; sealed (`meta`), E as Thermal has
+// it. false where it has none (a species without thermodynamic data, or sealed with no room for its gas).
+bool energy_at(const SpeciesTable &table, const CellState &cell, const CellMeta *meta, double temperature, double &joule);
+
 // A cell's liquid's density at a temperature, kg/m^3 (Stage 47: what floats on what in a column, GAME_SPEC §6): the
 // mass of its liquid and of what is dissolved in it over their volume, the table's molar volumes (at 25 C) scaled by
-// the solvent's own expansion from 25 C. false, and `density` left, where it holds no liquid.
+// the solvent's own expansion from 25 C (Stage 67: expansion()). false, and `density` left, where it holds no liquid.
 bool liquid_density(const SpeciesTable &table, const CellState &cell, double temperature, double &density);
 
 // A dissolved species' diffusion coefficient in the solvent at T, m^2/s
@@ -139,9 +157,12 @@ private:
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
 	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
 	const SpeciesTable *table_ = nullptr; // its solution model
-	// sealed (Stage 28): its free volume before, and what a quantum of extent frees (m^3)
+	// sealed (Stage 28; Stage 67, its solids and liquids growing with temperature): its energy (J), its sum of n_i Hf_i
+	// (J) and of n_i Cp_i (J/K), its gas (mol), its volume, and its solids' and its liquids' (at 25 C) volumes (m^3);
+	// what a quantum of extent adds to the last two
 	bool sealed_ = false;
-	double free_ = 0.0, free_step_ = 0.0;
+	double energy_ = 0.0, formation_ = 0.0, cp_ = 0.0, gas_mol_ = 0.0, volume_ = 0.0, fixed_ = 0.0, expanding_ = 0.0;
+	double fixed_step_ = 0.0, expanding_step_ = 0.0;
 };
 
 // The activity of a species in the cell (GAME_SPEC §4.6). A gas: its partial

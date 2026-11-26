@@ -148,7 +148,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	double solvent = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
-		solvent += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * def.molar_volume : 0.0;
+		solvent += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, temperature) : 0.0; // at T (Stage 67)
 	}
 	if (!(solvent > 0.0)) {
 		return steps;
@@ -206,7 +206,9 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	const double gap = c > c_eq ? c - c_eq : c_eq - c;
 	// the film's: Sano, Yamaguchi and Adachi (1974), Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3); 2 at rest (Stage 57)
 	double sherwood = 2.0;
-	const double mu = solvent_viscosity(table, temperature), rho = liquid_density(table, cell);
+	double rho = 0.0; // at T (Stage 67)
+	const double mu = solvent_viscosity(table, temperature);
+	liquid_density(table, cell, temperature, rho);
 	if (dissipation > 0.0 && mu > 0.0 && rho > 0.0) {
 		const double kinematic = mu / rho;
 		sherwood += 0.4 * pow(dissipation * d * d * d * d / (kinematic * kinematic * kinematic), 0.25) * pow(kinematic / coefficient, 1.0 / 3.0);
@@ -508,7 +510,7 @@ void Simulation::drain_liquids() {
 			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 			if (upper.amount[s] > 0 && def.phase == Phase::Liquid && !def.wall) {
 				known = known && def.molar_volume > 0.0;
-				runs += static_cast<double>(upper.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+				runs += static_cast<double>(upper.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, thermal.temperature); // at its temperature (Stage 67)
 			}
 			if (edge.solids_rate > 0.0 && upper.amount[s] > 0 && def.phase == Phase::Solid && !def.wall && def.molar_volume > 0.0) {
 				rests += static_cast<double>(upper.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
@@ -526,7 +528,9 @@ void Simulation::drain_liquids() {
 		}
 		const CellMeta &below = world_.meta(edge.b);
 		if (below.rigid && world_.spill().index < 0) { // with nowhere to spill, the rest stays above
-			const Fill fill = fill_of(table, world_.snapshot_cell(edge.b), T0);
+			const Thermal &at = this->thermal(edge.b);
+			const Fill fill = fill_of(table, world_.snapshot_cell(edge.b), at.defined ? at.temperature : T0);
+			// the room below at its own temperature; what runs in, at the upper's (Stage 67: a share of its volume there)
 			const double room = fill.defined ? below.volume - fill.condensed : 0.0;
 			if (runs > 0.0) {
 				fraction = std::min(fraction, room >= runs ? 1.0 : room > 0.0 ? room / runs : 0.0);
@@ -563,7 +567,7 @@ void Simulation::drain_liquids() {
 				const SpeciesDef &def = table.species(m.species);
 				if (def.phase == Phase::Liquid || def.phase == Phase::Aqueous) {
 					const double mol = static_cast<double>(m.amount.quanta) * MOL_PER_QUANTUM;
-					landed_m3_[static_cast<size_t>(edge.b.index)] += mol * def.molar_volume;
+					landed_m3_[static_cast<size_t>(edge.b.index)] += mol * molar_volume_at(table, def, thermal.temperature);
 					landed_kg_[static_cast<size_t>(edge.b.index)] += mol * static_cast<double>(table.molar_mass_ug(m.species)) * 1e-9;
 				}
 			}
@@ -589,7 +593,9 @@ void Simulation::overflow() {
 			continue; // a sealed cell lets nothing out (Stage 28); a frozen one does nothing (Stage 61)
 		}
 		const CellState &state = world_.snapshot_cell(cell);
-		const Fill fill = fill_of(table, state, T0);
+		const Thermal &at = thermal(cell);
+		const double kelvin = at.defined ? at.temperature : T0; // its liquids grown to its temperature (Stage 67)
+		const Fill fill = fill_of(table, state, kelvin);
 		if (!fill.defined || !(fill.condensed > meta.volume)) {
 			continue;
 		}
@@ -597,7 +603,7 @@ void Simulation::overflow() {
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Solid)) {
-				(def.phase == Phase::Liquid ? liquid : solids) += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+				(def.phase == Phase::Liquid ? liquid : solids) += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, kelvin);
 			}
 		}
 		if (!(liquid > 0.0)) {

@@ -349,6 +349,17 @@ hot that its energy carries no entropy (the limit of a heat reservoir as its tem
 without bound; 10^300 K stands for it), so the second law holds as it is checked, by T1 and T2
 unchanged. A stirrer's work on the liquid it turns enters so (§11), from the lab's mains.
 
+**Liquids that expand** *(Stage 67)*. A liquid's and a dissolved species' volume grow with the
+solvent's density from 25 °C: its molar volume at `T` is the table's times `e(T) = ρ(25 °C) / ρ(T)`,
+`ρ` water's at 1 atm by Kell's correlation (1975, 0–150 °C; beyond it, its value and slope at its
+end; `data/solutions.json`'s `density`). Water grows by 4.0% from 25 to 100 °C and 0.12% from 20 to
+25 °C, and is densest at 3.98 °C. Solids keep the table's (their expansion, about 1e-5/K, is not
+modelled). Every volume of a liquid is read at its cell's temperature: a vessel's fill and level,
+its overflow (a brim-full vessel warmed spills what its liquid grows by), what fits in it, a drain's
+and a pour's volume (at the giver's), a column's layers and its top's size, concentrations in mol/m³,
+and V1, V2, V3 and L1. An open cell's energy is unchanged: its liquid's work against the room is in
+its `Cp`.
+
 **Overflow.** A world may name one elastic cell where spills go (the bench's tray). A rigid cell
 that holds more solids and liquids than its volume then spills the excess of its liquid, with
 what is dissolved in it, into that cell, at the end of the step: it is left full to the brim. In
@@ -358,10 +369,17 @@ a world with no such cell, a drain gives a rigid cell only what fits and the res
 is sealed; the world keeps the mark as its edges change (V3).
 - **Its energy** is `E = U + P_atm V`: its internal energy and the room's work on its volume. With
   its solids and liquids incompressible and its gas ideal, `E = H(T) - n_gas R T + P_atm V_free`,
-  `V_free` the volume its solids and liquids leave; its temperature follows (linear in `T`), and
-  heat raises it at constant volume (`Cv = Cp - n_gas R` for its gas). Full at 1 atm, `E` is its
-  enthalpy: so the stored integers of every open cell, and its temperature when it is sealed or
-  opened there, are unchanged.
+  `V_free` the volume its solids and liquids leave; heat raises it at constant volume
+  (`Cv = Cp - n_gas R` for its gas). Full at 1 atm, `E` is its enthalpy: so the stored integers of
+  every open cell, and its temperature when it is sealed or opened there, are unchanged.
+  **Stage 67:** its liquids grow with temperature, `V_c(T) = V_solids + V_liquids(25 °C) e(T)`, and
+  `V_free = V - V_c(T)`. Their Gibbs energy is `G0(T) + V_c(T) (P - P_atm)` (the table's at the
+  room's pressure), so that its energy, its entropy and each species' potential are one potential's
+  (`dE = T dS`, T2): `E = H(T) - n_gas R T + P_atm V_free(T) - T V_c'(T) (P - P_atm)`, its entropy
+  gains `- V_c'(T) (P - P_atm)`, and each condensed species' chemical potential `v_i(T) (P - P_atm)`.
+  Its temperature is `E`'s root, by Newton's steps from the linear model's; its heat capacity is
+  `dE/dT`. A flask nearly full of water, heated sealed, squeezes its own gas: 230 mL of water in
+  250 mL from 20 to 89 °C leaves its air 12.7 mL of its 20.3.
 - **Its pressure** is `n_gas R T / V_free`; a sealed cell with gas and no free volume has none
   (refused by V3). Each gas's activity is its partial pressure over the standard's (§4.6), so its
   fast equilibria (§8) and its reactions run at that pressure: water boils where the steam tables
@@ -3014,8 +3032,8 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | T3 | In a world with temperatures every cell has one: data for every species it holds, a positive heat capacity, T > 0. An empty cell (Stage 47: a column's spare layer) has none and holds no energy | exact | 2, 47 |
 | P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: R T Σ\|ν_i\| N (1/n_i + 1/n_gas) over the reaction's gases, n_i each one's quanta and n_gas the cell's (Stage 19: before, 2 N R T / n_gas, which a minor gas exceeds: the steam over a cold condenser drawing dry air), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5, 19 |
 | V1 | An open rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
-| V2 | No rigid cell holds more solids and liquids than its volume. In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8 |
-| V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed) | exact | 4, 28 |
+| V2 | No rigid cell holds more solids and liquids than its volume, at its own temperature (Stage 67). In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8, 67 |
+| V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed); Stage 67: room at the temperature its energy holds, its liquids grown to it | exact | 4, 28, 67 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
@@ -3056,7 +3074,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O26 | A camera's search finds every pixel's hottest and coldest (Stage 48): a step at a time (every second sensor pixel, each a 2 × 2 square of them, at 8 bands; then the 3 × 3 squares about the four hottest and coldest at 16; its centre's spot), the hottest and coldest within 0.05 K of brute force over every sensor pixel at 16 bands, a one-pixel hot stream too. It fires on the first pass alone, which misses the stream's own pixel | 0.05 K | 48 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | B1 | A vessel's bubbles lie in its liquid: they end from its floor to its surface, their extinction and holdup are no less than nothing and the holdup under one, and the heat its steam bubbles take is no more than its floor took (Stage 45) | exact | 45 |
-| L1 | A vessel's column holds together: the layers in use are one run under its top (nothing under an empty layer), its top is no larger than the vessel, and the column holds no more than fits in it (Stage 47) | exact | 47 |
+| L1 | A vessel's column holds together: the layers in use are one run under its top (nothing under an empty layer), its top is no larger than the vessel, and the column holds no more than fits in it, each layer's at its temperature (Stage 47; 67) | exact | 47, 67 |
 | H2 | A pile is no steeper than the angle of repose and stands on its flat section; a vortex is no wider than the liquid's surface and no deeper than the liquid under its middle (Stage 30) | exact | 30 |
 | G1 | Every control of the lab is as its last setting left it, a rig's or the player's (§13.3): a vessel's stirring, a burner's valve | exact | 13 |
 | G2 | Every part's signal is its own condition while its inputs, as they were at the end of the step before, let it; an alarm sends none | exact | 13 |
@@ -3158,7 +3176,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 
 | Simplification | Size of the error |
 |---|---|
-| Every open cell at 1 atm; balloon is a slack membrane; gas between connected cells flows at once (infinite conductance); a sealed cell's solids and liquids are incompressible and their enthalpy does not depend on the pressure | Ignores about 2 J of elastic energy against 2.35 kJ of reaction heat; a sealed cell opened is at 1 atm within the step, its gas mixed as one (the gas left in a real vessel cools more, the gas let out less) |
+| Every open cell at 1 atm; balloon is a slack membrane; gas between connected cells flows at once (infinite conductance); a sealed cell's solids and liquids are incompressible, their Gibbs energy `G0(T) + V(T) (P - P_atm)` (Stage 67: their enthalpy depends on the pressure only through their expansion); solids do not expand, and a solute's volume grows with the solvent's | Ignores about 2 J of elastic energy against 2.35 kJ of reaction heat; a sealed cell opened is at 1 atm within the step, its gas mixed as one (the gas left in a real vessel cools more, the gas let out less) |
 | No gravitational energy in the ledger | About 0.2 J per pour |
 | A pile and a vortex are cones, each centred on its own level surface; no meniscus, no sloshing; a liquid's surface is level at once as its vessel turns | A real vortex is a paraboloid in a rigid turning and flatter beyond it: the cone has its volume and its depth's order, not its outline; a carried liquid does not swing |
 | A stirrer's work (0.01 W) and a liquid's turning time (1.5 s) are the game's choices; the work is heat in the liquid at once, not when the turning dies | 0.015 J of a liquid's turning, against the joules a minute of stirring adds |

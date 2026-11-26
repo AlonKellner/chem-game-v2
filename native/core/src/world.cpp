@@ -307,14 +307,10 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		if (!thermal_state(*table_, cell, &m).defined) {
 			return refuse("a temperature is set in a cell that cannot have one (a species without thermodynamic data, or no heat capacity, or sealed with no room for its gas)");
 		}
-		bool ok = false;
-		double joule = enthalpy_at(*table_, cell, s.temperature, ok);
-		if (m.sealed) { // E = H(T) - n_gas R T + P_atm V_free (chem/thermo.hpp)
-			double gas = 0.0;
-			for (size_t k = 0; k < cell.amount.size(); ++k) {
-				gas += table_->species(SpeciesId{ static_cast<int32_t>(k) }).phase == Phase::Gas ? static_cast<double>(cell.amount[k]) * MOL_PER_QUANTUM : 0.0;
-			}
-			joule += -gas * GAS_CONSTANT * s.temperature + P_ATMOSPHERE * (m.volume - fill_of(*table_, cell, T0).condensed);
+		double joule = 0.0; // sealed, E = H(T) - n_gas R T + P_atm V_free ... (chem/thermo.hpp)
+		bool ok = energy_at(*table_, cell, &m, s.temperature, joule);
+		if (!ok) {
+			return refuse("a temperature is set in a cell that cannot have one (a species without thermodynamic data, or no heat capacity, or sealed with no room for its gas)");
 		}
 		const Energy energy = energy_from_joule(joule, ok);
 		if (!ok) {
@@ -349,7 +345,9 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		if (!(meta_[c].volume > 0.0) || !(meta_[c].volume - meta_[c].volume == 0.0)) {
 			return refuse("a rigid cell's volume is positive and finite");
 		}
-		const Fill fill = fill_of(*table_, world.cells_[c], T0);
+		// at its temperature (Stage 67: its liquids grown with it), or at 25 C in a world without temperatures
+		const Thermal thermal = world.thermal_ ? thermal_state(*table_, world.cells_[c], &world.meta_[c]) : Thermal{};
+		const Fill fill = fill_of(*table_, world.cells_[c], thermal.defined ? thermal.temperature : T0);
 		if (!fill.defined) {
 			return refuse("a rigid cell holds a condensed species whose molar volume is unknown");
 		}
