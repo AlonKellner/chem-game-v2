@@ -11,6 +11,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <deque>
+#include <functional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -221,6 +223,8 @@ namespace {
 // and gas flows to keep the rigid cells full.
 // every gas exchanged by diffusion in the sweeps' steps (Stage 50)
 long long exchanges_seen = 0;
+// called with every step's trace when set (Stage 68: check_all against the checks one by one)
+std::function<void(const SpeciesTable &, const StepTrace &, std::span<const Reaction>)> each_trace;
 
 void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = false, long long *transforms = nullptr, bool volumes = false,
 		long long *gas_moves = nullptr) {
@@ -416,6 +420,9 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 			}
 		}
 		const Violations violations = check_all(*table, trace, sim.equilibria());
+		if (each_trace) {
+			each_trace(*table, trace, sim.equilibria());
+		}
 		if (!violations.empty() && std::getenv("CHEM_SWEEP_DUMP") != nullptr) {
 			// CHEM_SWEEP_DUMP=1: the failing step's ledger and cells, to stderr
 			for (const LedgerEntry &e : trace.ledger) {
@@ -480,4 +487,65 @@ TEST_CASE("sweeps: rigid cells stay exactly full on every step of every random w
 				   << transfers - gas_moves << " heat transfers, " << exchanges_seen << " gases exchanged by diffusion");
 	CHECK(gas_moves > worlds);
 	CHECK(exchanges_seen > worlds); // (Stage 50) the sweep exchanges gas at its edges
+}
+
+// (Stage 68) check_all shares its work among the checks (the totals once, a replay's buffers kept): what it reports is
+// still every check's report, one by one, in its order, on honest traces and on traces corrupted every way a check
+// looks at
+TEST_CASE("sweeps: check_all reports exactly what the checks report one by one, honest or corrupted (Stage 68)") {
+	const auto one_by_one = [](const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
+		Violations out = check_P1(table, trace, equilibria);
+		const auto add = [&](const Violations &v) { out.insert(out.end(), v.begin(), v.end()); };
+		add(check_V2(table, trace));
+		for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2,
+					 check_S1, check_V1, check_V3, check_L1, check_E1 }) {
+			add(check(table, trace));
+		}
+		return out;
+	};
+	long long traces = 0, reported = 0;
+	Rng pick(0x68c4ec);
+	each_trace = [&](const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
+		std::vector<StepTrace> cases{ trace };
+		const size_t cells = trace.after.cells.size();
+		const size_t species = static_cast<size_t>(table.species_count());
+		if (cells > 0 && species > 0) {
+			const auto c = static_cast<size_t>(pick.range(0, static_cast<int64_t>(cells) - 1));
+			const auto sp = static_cast<size_t>(pick.range(0, static_cast<int64_t>(species) - 1));
+			cases.push_back(trace);
+			cases.back().after.cells[c].amount[sp] += 1; // an atom from nowhere (C1, C2, C5)
+			cases.push_back(trace);
+			cases.back().after.cells[c].energy += 1000; // energy from nowhere (C3, C5, T2)
+			cases.push_back(trace);
+			cases.back().before.cells[c].amount[sp] -= 7; // the start not the last step's end (C1, C5, C6)
+			cases.push_back(trace);
+			cases.back().meta[c].sealed = !cases.back().meta[c].sealed; // the wrong kind (V3, T1)
+		}
+		if (!trace.ledger.empty()) {
+			cases.push_back(trace);
+			LedgerEntry &e = cases.back().ledger[static_cast<size_t>(pick.range(0, static_cast<int64_t>(trace.ledger.size()) - 1))];
+			for (SpeciesAmount &d : e.delta) {
+				d.amount.quanta = -d.amount.quanta; // an entry run backwards (C5, C7, C8, T1)
+			}
+			e.energy.quanta = -e.energy.quanta;
+		}
+		if (!trace.edges.empty()) {
+			cases.push_back(trace);
+			cases.back().edges[static_cast<size_t>(pick.range(0, static_cast<int64_t>(trace.edges.size()) - 1))].open = false; // (C7, V3)
+		}
+		for (const StepTrace &t : cases) {
+			const Violations all = check_all(table, t, equilibria), each = one_by_one(table, t, equilibria);
+			REQUIRE(all == each);
+			++traces;
+			reported += all.empty() ? 0 : 1;
+		}
+	};
+	long long transfers = 0, transforms = 0, gas_moves = 0;
+	for (uint64_t w = 0; w < 40; ++w) {
+		run_thermal_world(0x68a11000ull + w, transfers, true, &transforms, true, &gas_moves);
+	}
+	each_trace = nullptr;
+	MESSAGE(traces << " traces, " << reported << " with violations");
+	CHECK(reported > traces / 4); // the corrupted ones are reported
+	CHECK(reported < traces); // the honest ones are not
 }

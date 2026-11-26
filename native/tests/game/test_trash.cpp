@@ -152,6 +152,9 @@ TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cab
 		return l;
 	};
 	auto binned = hot(), stowed = hot();
+	// the stowed one unchecked (Stage 68): what is held here is that the two are one physical state minute by minute,
+	// and the binned one, checked, is checked on every step of it
+	stowed->set_checking(false);
 	const double before = item(binned->view(), "flask").celsius;
 	REQUIRE(before > 30.0);
 	must(*binned, R"({"do": "trash", "item": "flask"})");
