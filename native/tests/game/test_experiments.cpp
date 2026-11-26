@@ -990,3 +990,40 @@ TEST_CASE("experiment yield: followed with its own gestures, free, it completes 
 	pupil::follow_through(p, 1800);
 	completed(p);
 }
+
+TEST_CASE("experiment quota: followed with its own gestures, strict, planned from 3.00 g, made and handed in against the plan's goal (Stage 62)") {
+	Pupil p("data/benches/quota.json", "data/tutorials/quota.json");
+	CHECK(pupil::follow_through(p, 7200) > 30);
+	completed(p);
+	const lab::LabView v = p.ui->lab().view();
+	const lab::Goal *goal = nullptr;
+	for (const lab::Goal &g : v.goals) {
+		goal = g.slot == 1 ? &g : goal;
+	}
+	REQUIRE(goal != nullptr);
+	CHECK(goal->name == "3.00 g of CuSO4.5H2O");
+	double malachite = 0.0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		malachite = e.quantity.what == "reads_g" ? e.value : malachite;
+	}
+	const double crop = p.grams("dish", "copper_sulfate_pentahydrate"), share = truth_of(p, p.ui->tutorial()->report()[1].truth);
+	MESSAGE("malachite " << malachite << " g (the plan's 1.90); the crop " << crop << " g, " << share << " % of the copper");
+	CHECK(malachite == doctest::Approx(1.90).epsilon(0.12)); // a hand's within 10 %
+	CHECK(crop > 2.4);
+	CHECK(p.grams("flask", "copper_sulfate_pentahydrate") == 0.0); // the paper keeps the crystals
+	report(p, { crop, share });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 3"));
+}
+
+TEST_CASE("experiment quota: played as a person plays it, strict, it completes (Stage 62)") {
+	Pupil p("data/benches/quota.json", "data/tutorials/quota.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment quota: followed with its own gestures, free, it completes (Stage 62)") {
+	Pupil p("data/benches/quota.json", "data/tutorials/quota.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
