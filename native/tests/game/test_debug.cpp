@@ -117,12 +117,12 @@ TEST_CASE("debug: each reaction says why it happens and what limits it: too cold
 	}
 	SUBCASE("copper oxide: no acid, then its surface, which stirring hardly speeds, then stirred") {
 		auto dry = one(R"({"copper_oxide": {"g": 2, "particles": 100000}})");
-		CHECK(reaction(dry->debug("flask"), "copper_oxide_dissolution").limit == "no H2SO4(aq) left");
+		CHECK(reaction(dry->debug("flask"), "copper_oxide_dissolution").limit == "no H+(aq) left"); // (Stage 63: the acid's driver its hydrogen ions)
 		auto l = one(R"({"water": {"g": 100}, "sulfuric_acid_aq": {"mol": 0.1}, "copper_oxide": {"g": 2, "particles": 100000}})");
 		const lab::ReactionDebug r = reaction(l->debug("flask"), "copper_oxide_dissolution");
 		INFO(r.limit);
 		CHECK(begins(r.limit, "limited at its surface: ")); // the reaction there, not the acid reaching it (Stage 23)
-		CHECK(r.limit.find("cm2 of CuO(s), 1 mol/kg of H2SO4(aq)") != std::string::npos);
+		CHECK(r.limit.find("cm2 of CuO(s), 2 mol/kg of H+(aq)") != std::string::npos);
 		CHECK(r.limit.find("; stirring would hardly speed it") != std::string::npos);
 		must(*l, R"({"do": "stir", "vessel": "flask", "on": true})");
 		CHECK(r.limit != reaction(l->debug("flask"), "copper_oxide_dissolution").limit);

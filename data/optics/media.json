@@ -7,12 +7,12 @@
 			"table": "water.csv",
 			"mol_per_litre": 55.345
 		},
-		"copper_sulfate_aq": {
+		"copper_ion": {
 			"kind": "absorb",
 			"table": "copper_sulfate_aq.csv",
 			"units": "L/mol/cm"
 		},
-		"nickel_sulfate_aq": {
+		"nickel_ion": {
 			"kind": "absorb",
 			"bands": [
 				{

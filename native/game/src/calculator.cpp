@@ -74,14 +74,25 @@ std::string phase_of(chem::Phase p) {
 
 std::string term_text(const chem::SpeciesTable &table, chem::SpeciesId id) {
 	const chem::SpeciesDef &def = table.species(id);
-	return std::string(def.formula) + "(" + phase_of(def.phase) + ")";
+	return chem::written(def.formula) + "(" + phase_of(def.phase) + ")";
 }
 
 } // namespace
 
+std::span<const chem::Term> written_terms(const chem::Reaction &reaction) {
+	const auto all = chem::builtin_reactions();
+	for (size_t k = 0; k < all.size(); ++k) {
+		if (&all[k] == &reaction || all[k].id() == reaction.id()) {
+			const auto written = chem::builtin_written(k);
+			return written.empty() ? reaction.terms() : written;
+		}
+	}
+	return reaction.terms();
+}
+
 std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reaction) {
 	std::string left, right;
-	for (const chem::Term &t : reaction.terms()) {
+	for (const chem::Term &t : written_terms(reaction)) {
 		std::string &side = t.nu < 0 ? left : right;
 		const int n = t.nu < 0 ? -t.nu : t.nu;
 		side += (side.empty() ? "" : " + ") + (n > 1 ? std::to_string(n) + " " : std::string()) + term_text(table, t.species);
@@ -91,7 +102,7 @@ std::string equation(const chem::SpeciesTable &table, const chem::Reaction &reac
 
 Stoichiometry stoichiometry(const chem::SpeciesTable &table, const chem::Reaction &reaction, const std::vector<std::optional<double>> &given_g) {
 	Stoichiometry out;
-	const auto terms = reaction.terms();
+	const auto terms = written_terms(reaction);
 	out.extent = -1.0;
 	for (size_t k = 0; k < terms.size(); ++k) {
 		Stoichiometry::Term t;
@@ -141,7 +152,7 @@ double solubility(const chem::SpeciesTable &table, const chem::Reaction &crystal
 		state.amount.assign(static_cast<size_t>(table.species_count()), 0);
 		bool ok = false;
 		state.amount[static_cast<size_t>(table.find("water").index)] = chem::amount_from_mol(1000.0 / 18.015, ok).quanta;
-		state.amount[static_cast<size_t>(dissolved.index)] = chem::amount_from_mol(m, ok).quanta;
+		chem::put_amount(table, state, dissolved, chem::amount_from_mol(m, ok).quanta); // a salt as its ions (Stage 63)
 		return chem::affinity(table, state, crystallization.terms(), kelvin, defined);
 	};
 	// up from a dilute solution, doubling until crystals would grow (far past the activity model's range, at tens of

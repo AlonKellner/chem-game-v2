@@ -16,7 +16,7 @@
 		{"note": "Stage 2: copper sulfate solution", "do": "pour", "from": "acid", "to": "flask", "ml": 50},
 		{"do": "stir", "vessel": "flask", "on": true},
 		{"do": "valve", "burner": "burner", "to": 0.2},
-		{"do": "wait_until", "item": "flask", "species": "copper_oxide", "below_g": 0.001, "timeout": 3600},
+		{"do": "wait_until", "item": "flask", "species": "copper_oxide", "below_g": 0.000001, "timeout": 3600},
 		{"do": "stir", "vessel": "flask", "on": false},
 
 		{"note": "Stage 3: water and crystals", "do": "attach", "item": "condenser", "to": "flask"},

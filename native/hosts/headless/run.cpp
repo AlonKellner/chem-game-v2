@@ -61,7 +61,7 @@ void print_results(const json &report, const json &start) {
 			if (row.at("wall").get<bool>()) {
 				continue;
 			}
-			const std::string name = row.at("formula").get<std::string>() + "(" + row.at("phase").get<std::string>() + ")";
+			const std::string name = row.value("written", row.at("formula").get<std::string>()) + "(" + row.at("phase").get<std::string>() + ")";
 			if (row.at("phase") == "g") {
 				std::printf("    %-16s %10.6f g  %6.2f%% of the gas\n", name.c_str(), row.at("g").get<double>(), 100.0 * row.at("mol").get<double>() / gas_mol);
 			} else if (row.contains("particles")) {
@@ -73,8 +73,12 @@ void print_results(const json &report, const json &start) {
 		}
 	}
 	const json &now = report.at("conserved");
-	const json &then = start.at("conserved");
-	std::printf("\n  conservation, start -> end (integers):\n");
+	// (Stage 61) the start with what came in from Supplies and what left from the trash (C9): what the end should be
+	const json &then = now.contains("expected") ? now.at("expected") : start.at("conserved");
+	if (now.value("supplied_g", 0.0) != 0.0 || now.value("retired_g", 0.0) != 0.0) {
+		std::printf("\n  across the world's boundary: %.9f g supplied, %.9f g retired\n", now.at("supplied_g").get<double>(), now.at("retired_g").get<double>());
+	}
+	std::printf("\n  conservation, start (with what crossed its boundary) -> end (integers):\n");
 	for (const auto &[symbol, atoms] : now.at("atom_quanta").items()) {
 		std::printf("    %-3s %22lld -> %22lld quanta of atoms\n", symbol.c_str(), static_cast<long long>(then.at("atom_quanta").at(symbol).get<int64_t>()),
 				static_cast<long long>(atoms.get<int64_t>()));

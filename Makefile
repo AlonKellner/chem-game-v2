@@ -21,7 +21,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate gates-full test run godot-data demo demo-bench sessions sessions-check screenshots
+.PHONY: pictures pass-cost prism prism-shots core check quick gate-clear-cache native native-debug native-asan asan-build asan-gate ctest gates gate gates-full test run godot-data demo demo-bench sessions sessions-check screenshots
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -62,8 +62,16 @@ native:
 		-DCHEM_BUILD_EXTENSION=ON -DCHEM_BUILD_TESTS=OFF -DCHEM_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build $(BUILD_EXT) -j $(JOBS_EXT)
 	@$(MAKE) -s godot-data
+	@$(MAKE) -s pictures
 	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/chem.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
+
+# The supplies' pictures (Stage 61), built ahead: every bench of data/ opened, each supply it gives captured once
+# (of it alone in its box, by the renderer's own source on the CPU) and kept in the file, which is the cache
+# (gitignored): a supply whose picture is there is not captured again.
+pictures: core
+	mkdir -p $(GODOT_PROJECT)/pictures
+	$(BUILD_CORE)/chem_tool capture $(GODOT_PROJECT)/pictures/supplies.json data/benches/*.json
 
 # The Godot project reads only res://: the data is copied in (gitignored), and the
 # per-pixel source.

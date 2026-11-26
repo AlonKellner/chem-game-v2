@@ -62,10 +62,40 @@ std::string species_name(const std::string &id) {
 	}
 	const chem::SpeciesDef &def = table.species(s);
 	const char *phase = def.phase == chem::Phase::Gas ? "g" : def.phase == chem::Phase::Liquid ? "l" : def.phase == chem::Phase::Aqueous ? "aq" : "s";
-	return std::string(def.formula) + "(" + phase + ")";
+	return chem::written(def.formula) + "(" + phase + ")";
+}
+
+// (Stage 63) a retired formula unit (copper sulfate, the acid, ...) read from what an item holds, which is its ions:
+// as many of it as the item's dissolved matter makes (chem::formula_units: each element's, and the hydrogen ions').
+// false for any other species.
+bool unit_mol(const std::vector<SubstanceView> &contents, const std::string &species, double &mol) {
+	const chem::SpeciesTable &table = chem::builtin_species();
+	const chem::SpeciesId id = table.find(species);
+	if (!table.has(id) || !table.species(id).retired) {
+		return false;
+	}
+	std::vector<std::pair<chem::SpeciesId, double>> dissolved;
+	for (const SubstanceView &s : contents) {
+		if (s.phase == 'a') {
+			dissolved.emplace_back(table.find(s.species), s.mol);
+		}
+	}
+	mol = chem::formula_units(table, dissolved, id);
+	return true;
 }
 
 } // namespace
+
+double mol_of(const std::vector<SubstanceView> &contents, const std::string &species) {
+	if (double mol = 0.0; unit_mol(contents, species, mol)) {
+		return mol;
+	}
+	double mol = 0.0;
+	for (const SubstanceView &s : contents) {
+		mol += s.species == species ? s.mol : 0.0;
+	}
+	return mol;
+}
 
 const ItemView *item_of(const LabView &view, const std::string &id) {
 	for (const ItemView &v : view.items) {
@@ -77,6 +107,10 @@ const ItemView *item_of(const LabView &view, const std::string &id) {
 }
 
 double grams(const ItemView &v, const std::string &species) {
+	if (double mol = 0.0; unit_mol(v.contents, species, mol)) {
+		const chem::SpeciesTable &table = chem::builtin_species();
+		return mol * static_cast<double>(table.molar_mass_ug(table.find(species))) * 1e-6;
+	}
 	double g = 0.0;
 	for (const SubstanceView &s : v.contents) {
 		if (s.species == species) {
@@ -185,6 +219,12 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 		return all;
 	}
 	double g = 0.0, mol = 0.0, count = 0.0, size = 0.0, ml = 0.0;
+	if (unit_mol(v->contents, q.what, mol)) { // (Stage 63) a retired formula unit: what its ions make
+		const chem::SpeciesTable &table = chem::builtin_species();
+		const chem::SpeciesId id = table.find(q.what);
+		g = mol * static_cast<double>(table.molar_mass_ug(id)) * 1e-6;
+		ml = mol * table.species(id).molar_volume * 1e6;
+	}
 	for (const SubstanceView &s : v->contents) {
 		if (s.species == q.what) {
 			g += s.g;
@@ -752,9 +792,21 @@ bool holds(const Cond &c, const CondContext &x) {
 			if (s.wall || !(s.mol > 0.0)) {
 				continue;
 			}
-			bool listed = false;
+			bool listed = false, water = false;
 			for (const std::string &name : *c.holds_only) {
 				listed = listed || name == s.species;
+				water = water || name == "water";
+			}
+			// (Stage 63) where water may be, so may its own ions: what is dissolved of hydrogen and oxygen alone
+			if (!listed && water && s.phase == 'a') {
+				const chem::SpeciesTable &table = chem::builtin_species();
+				const chem::SpeciesId id = table.find(s.species);
+				bool own = table.has(id);
+				for (int e = 0; own && e < table.element_count(); ++e) {
+					const std::string_view symbol = table.element(e).symbol;
+					own = table.species(id).atoms[static_cast<size_t>(e)] == 0 || symbol == "H" || symbol == "O";
+				}
+				listed = own;
 			}
 			if (!listed) {
 				return false;

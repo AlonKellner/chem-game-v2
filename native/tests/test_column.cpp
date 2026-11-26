@@ -2,6 +2,7 @@
 // vessel was; layered it keeps a denser liquid under a lighter one, passes heat and what is dissolved between them,
 // overturns where the lower is the lighter, lets gas rise and solids sink, and resolves a steep step into thinner
 // layers. Every invariant holds at every step.
+#include "tables.hpp"
 #include "chem/builtin_ids.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
@@ -82,6 +83,11 @@ void run(Bench &b, int steps) {
 		const Violations v = check_all(builtin_species(), trace, eq);
 		REQUIRE_MESSAGE(v.empty(), v.front());
 	}
+}
+
+// what is dissolved of an element (Stage 63: in each of its ions)
+double dissolved(const Bench &b, CellId c, std::string_view element) {
+	return testing::element_mol(builtin_species(), b.sim->world().snapshot_cell(c), element, Phase::Aqueous);
 }
 
 double mol(const Bench &b, CellId c, SpeciesId s) {
@@ -187,7 +193,7 @@ TEST_CASE("column: a denser solution under water stays under it, and what is dis
 	run(b, 1);
 	// (the step may split the water over it: what rose is in every cell over the dense layer)
 	// (and some of it the trace of hydroxide its hydrolysis makes in pure water, Stage 44)
-	const auto copper = [&](CellId c) { return mol(b, c, builtin::copper_sulfate_aq) + mol(b, c, builtin::copper_hydroxide); };
+	const auto copper = [&](CellId c) { return dissolved(b, c, "Cu") + mol(b, c, builtin::copper_hydroxide); };
 	double rose = copper(b.top);
 	for (const CellId c : column(b)) {
 		rose += c == lowest(b) ? 0.0 : copper(c);
@@ -221,7 +227,7 @@ TEST_CASE("column: a denser liquid over a lighter overturns at once; warm over c
 	});
 	run(dense_on_top, 1);
 	CHECK(used(dense_on_top) == 0);
-	CHECK(mol(dense_on_top, dense_on_top.top, builtin::copper_sulfate_aq) == doctest::Approx(0.075));
+	CHECK(dissolved(dense_on_top, dense_on_top.top, "Cu") == doctest::Approx(0.075));
 	Bench warm_on_cold = beaker([](World::Builder &w, Bench &x) {
 		water(w, x.top, 60.0, 333.15);
 		water(w, x.layers[0], 60.0, 288.15);
@@ -329,7 +335,7 @@ TEST_CASE("column: stirred, two layers become one in the time the turning pays f
 	const double partly = potential(b);
 	CHECK((partly - start) / (0.2 * 0.002 * 0.5) == doctest::Approx(1.0).epsilon(0.05));
 	CHECK(used(b) >= 1);
-	CHECK(mol(b, lowest(b), builtin::nickel_sulfate_aq) > 1e-3); // the green down in the blue
+	CHECK(dissolved(b, lowest(b), "Ni") > 1e-3); // the green down in the blue
 	REQUIRE(b.sim->world().set_stirring(b.top, 0.0) == Refusal::None);
 	run(b, 60); // stopped: it stays as it was mixed (diffusion's micro-joules aside)
 	CHECK(std::fabs(potential(b) - partly) < 0.01 * (partly - start));
@@ -337,8 +343,8 @@ TEST_CASE("column: stirred, two layers become one in the time the turning pays f
 	REQUIRE(b.sim->world().set_stirring(b.top, 0.01) == Refusal::None);
 	run(b, 600); // ten seconds at a stirrer's full turning: one
 	CHECK(used(b) == 0);
-	CHECK(mol(b, b.top, builtin::nickel_sulfate_aq) == doctest::Approx(0.064).epsilon(1e-6));
-	CHECK(mol(b, b.top, builtin::copper_sulfate_aq) > 0.11);
+	CHECK(dissolved(b, b.top, "Ni") == doctest::Approx(0.064).epsilon(1e-6));
+	CHECK(dissolved(b, b.top, "Cu") > 0.11);
 	MESSAGE("mixed: " << (potential(b) - start) * 1e3 << " mJ over the layered column's");
 }
 
@@ -389,10 +395,15 @@ TEST_CASE("column: a column grows as it needs, a block of four layers at a time,
 	CHECK(column(b).size() == 1);
 	run(b, 1);
 	CHECK(column(b).size() == 1 + COLUMN_BLOCK); // the step wanted a spare layer to split into
-	run(b, 600);
-	CHECK(column(b).size() > 1 + COLUMN_BLOCK); // and more, as the gradient is resolved
+	// and more, as the gradient is resolved (Stage 63: within the minute; the step resolved first by the thinnest
+	// layers beside it, then the next steepest)
+	int seconds = 0;
+	for (; seconds < 60 && column(b).size() == 1 + COLUMN_BLOCK; ++seconds) {
+		run(b, 60);
+	}
+	CHECK(column(b).size() > 1 + COLUMN_BLOCK);
 	CHECK((column(b).size() - 1) % COLUMN_BLOCK == 0);
-	MESSAGE("after ten seconds the column has " << column(b).size() << " layers, " << used(b) << " in use");
+	MESSAGE("after " << seconds << " seconds the column has " << column(b).size() << " layers, " << used(b) << " in use");
 	// a mixed vessel: none
 	Bench mixed = beaker([](World::Builder &w, Bench &x) { water(w, x.top, 150.0, 330.0); }, true, 0);
 	run(mixed, 600);
@@ -446,9 +457,9 @@ TEST_CASE("measured: a stream landing on a layered column raises its potential e
 	const double gained = potential(jet) - potential(still);
 	const double landed_kg = 20e-6 * STEP_SECONDS * 18.015e-3 / builtin_species().species(builtin::water).molar_volume;
 	const double paid = 0.2 * 0.5 * landed_kg * 1.2 * 1.2;
-	MESSAGE("gained " << gained * 1e6 << " uJ of " << paid * 1e6 << " uJ paid; lifted " << mol(jet, jet.top, builtin::copper_sulfate_aq) << " mol of copper sulfate");
+	MESSAGE("gained " << gained * 1e6 << " uJ of " << paid * 1e6 << " uJ paid; lifted " << dissolved(jet, jet.top, "Cu") << " mol of copper sulfate");
 	CHECK(gained / paid == doctest::Approx(1.0).epsilon(0.05)); // (a ratio: Approx's own tolerance is absolute below 1)
-	CHECK(mol(jet, jet.top, builtin::copper_sulfate_aq) > 0.0);
+	CHECK(dissolved(jet, jet.top, "Cu") > 0.0);
 }
 
 TEST_CASE("column: a stream landing slowly, or on a liquid much denser, plunges less far: Turner's fountain (Stage 51)") {
@@ -467,7 +478,7 @@ TEST_CASE("column: a stream landing slowly, or on a liquid much denser, plunges 
 	run(b, 1);
 	const double area = b.sim->world().meta(b.top).column_area;
 	const double whole = 0.112 * 0.32 * 0.8862269254527580 * std::sqrt(2e-6 * 0.3) * STEP_SECONDS / area;
-	const double lifted = mol(b, b.top, builtin::copper_sulfate_aq);
+	const double lifted = dissolved(b, b.top, "Cu");
 	MESSAGE("a trickle lifts " << lifted << " mol; through the whole blue it would " << whole);
 	CHECK(lifted > 0.0);
 	CHECK(lifted < 0.8 * whole);
@@ -518,7 +529,7 @@ TEST_CASE("column: a column that narrows takes its layers' heights and its inter
 	run(narrow, 1);
 	run(straight, 1);
 	// (the copper that crosses, in both its forms: some hydrolyses in the water it reaches, Stage 47)
-	const auto copper = [&](const Bench &b) { return mol(b, b.top, builtin::copper_sulfate_aq) + mol(b, b.top, builtin::copper_hydroxide); };
+	const auto copper = [&](const Bench &b) { return dissolved(b, b.top, "Cu") + mol(b, b.top, builtin::copper_hydroxide); };
 	const double ratio = copper(narrow) / copper(straight);
 	MESSAGE("through the neck " << ratio << " of the cylinder's; by the shapes " << expected << " (" << dz_narrow * 100.0 << " cm against " << dz_straight * 100.0 << " cm)");
 	CHECK(expected < 0.4); // (the neck's)

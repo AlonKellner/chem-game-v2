@@ -7,7 +7,7 @@
 		{
 			"part": "Boiling the air out",
 			"title": "A burner under the flask",
-			"text": "Pick up the burner in the cabinet, then click the flask.",
+			"text": "Pick up the burner in Supplies, then click the flask.",
 			"checks": [
 				{
 					"text": "the burner under the flask",

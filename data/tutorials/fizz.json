@@ -33,7 +33,7 @@
 		},
 		{
 			"title": "Close it with the balloon",
-			"text": "Pick up the balloon in the cabinet, then click the flask.",
+			"text": "Pick up the balloon in Supplies, then click the flask.",
 			"why": "The acid takes the carbonate apart: its carbon dioxide is a gas and leaves the liquid as bubbles. With the balloon on the flask's mouth, the gas that leaves the flask goes into the balloon.",
 			"checks": [
 				{

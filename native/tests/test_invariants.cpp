@@ -22,13 +22,15 @@ const SpeciesTable &table() {
 						{ "x", "X", Phase::Solid, 0, Atoms{ { 1 } } },
 						{ "x2", "X2", Phase::Gas, 0, Atoms{ { 2 } } },
 						{ "x_plus", "X", Phase::Aqueous, 1, Atoms{ { 1 } } },
+						{ "x_minus", "X", Phase::Aqueous, -1, Atoms{ { 1 } } },
+						{ "x_two", "X", Phase::Aqueous, 2, Atoms{ { 1 } } },
 				});
 		REQUIRE(made.has_value());
 		return *made;
 	}();
 	return t;
 }
-constexpr SpeciesId X{ 0 }, X2{ 1 }, X_PLUS{ 2 };
+constexpr SpeciesId X{ 0 }, X2{ 1 }, X_PLUS{ 2 }, X_MINUS{ 3 }, X_TWO{ 4 };
 constexpr CellId A{ 0 }, B{ 1 };
 
 // One honest step: 5 x and 7 quanta of energy from A to B, then 2 (2 x -> x2) in B.
@@ -116,6 +118,50 @@ TEST_CASE("invariants: a created charge is detected though every atom balances: 
 	CHECK(has(v, "C8"));
 	CHECK_FALSE(has(v, "C1"));
 	CHECK_FALSE(has(v, "C5"));
+}
+
+TEST_CASE("invariants: a charge carried from one cell to another is detected though the world's is constant: N1 (Stage 63)") {
+	StepTrace t = clean();
+	CHECK_FALSE(has(check_all(table(), t), "N1"));
+	// a lone x+ from A to B, recorded in the ledger and in the state: A held it from the start
+	t.before.cells[0].amount[static_cast<size_t>(X_PLUS.index)] = 1;
+	t.ledger.push_back(LedgerEntry{ LedgerEntry::Kind::Transfer, EdgeId{ 0 }, A, B, { { X_PLUS, Amount{ 1 } } }, Energy{}, 1 });
+	amount(t.after, B, X_PLUS) += 1;
+	const Violations v = check_all(table(), t);
+	CHECK(has(v, "N1"));
+	CHECK_FALSE(has(v, "C4"));
+}
+
+TEST_CASE("invariants: a transfer moves ions only as neutral matter, the fewest quanta left behind (Stage 63)") {
+	World::Builder b(table());
+	const CellId a = b.add_cell("a");
+	const CellId c = b.add_cell("b");
+	const EdgeId edge = b.add_edge(a, c, PHASES_ALL);
+	b.set_amount(a, X_TWO, Amount{ 50 }).set_amount(a, X_MINUS, Amount{ 100 });
+	auto world = b.build();
+	REQUIRE(world.has_value());
+	// asked: 7 of the doubly charged and 13 of the singly, +1 in excess. No cation's charge fits +1, so one x2+ is
+	// kept back (-1 now), then one x-: 6 and 12, three quanta fewer, the least that closes
+	const SpeciesAmount ask[] = { { X_TWO, Amount{ 7 } }, { X_MINUS, Amount{ 13 } } };
+	REQUIRE(world->transfer(edge, a, ask, Energy{ 0 }) == Refusal::None);
+	const StepTrace t = world->close_step();
+	const CellState &to = t.after.cells[1];
+	const int64_t moved_two = to.amount[static_cast<size_t>(X_TWO.index)], moved_minus = to.amount[static_cast<size_t>(X_MINUS.index)];
+	CHECK(2 * moved_two == moved_minus);
+	CHECK(moved_two == 6);
+	CHECK(moved_minus == 12);
+	CHECK(check_all(table(), t).empty());
+	// a request that is neutral moves as asked
+	std::vector<SpeciesAmount> neutral{ { X_TWO, Amount{ 5 } }, { X_MINUS, Amount{ 10 } }, { X, Amount{ 3 } } };
+	neutral_part(table(), neutral);
+	CHECK(neutral[0].amount.quanta == 5);
+	CHECK(neutral[1].amount.quanta == 10);
+	CHECK(neutral[2].amount.quanta == 3);
+	// a lone ion does not move; what is uncharged still does
+	std::vector<SpeciesAmount> lone{ { X_TWO, Amount{ 1 } }, { X, Amount{ 3 } } };
+	neutral_part(table(), lone);
+	CHECK(lone[0].amount.quanta == 0);
+	CHECK(lone[1].amount.quanta == 3);
 }
 
 TEST_CASE("invariants: an unbalanced transform is detected even when recorded: C8, C1 (Stage 1)") {
@@ -405,7 +451,11 @@ StepTrace clean_phase(std::vector<Reaction> &equilibria) {
 TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (Stage 5)") {
 	std::vector<Reaction> equilibria;
 	const StepTrace honest = clean_phase(equilibria);
-	REQUIRE(equilibria.size() == 4); // water's evaporation; the neutralisation (Stage 43), the hydroxide's precipitation and its dissolving (Stage 44), whose species the cell lacks
+	// water's evaporation; water's ionisation (the neutralisation, Stage 43; in ions, Stage 63), the hydroxide's
+	// precipitation and its dissolving in acid (Stage 44; in ions the second is the first and water's ionisation
+	// together, kept as the route that works where hydroxide ions are a few quanta, Stage 63), the bisulfate's
+	// dissociation and copper's hydrolysis (Stage 63), whose species the cell lacks
+	REQUIRE(equilibria.size() == 6);
 	CHECK(check_all(builtin_species(), honest, equilibria).empty());
 	const auto water = static_cast<size_t>(builtin::water.index);
 	const auto steam = static_cast<size_t>(builtin::steam.index);

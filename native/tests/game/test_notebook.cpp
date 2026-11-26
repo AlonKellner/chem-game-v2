@@ -1,6 +1,7 @@
 // The notebook (GAME_SPEC §13, Stage 54): what is read of a quantity (by instruments an instrument's reading, or
 // nothing), a fitted line, an axis's transform, a report's expression; recorded and logged by the lab, saved and not
 // digested; an unknown drawn from its range.
+#include "lab/conditions.hpp"
 #include "lab/notebook.hpp"
 #include "lab/lab.hpp"
 #include "lab/tutorial.hpp"
@@ -143,10 +144,8 @@ TEST_CASE("notebook: an unknown amount is drawn once from its range by the seed 
 	const auto acid = [](uint64_t seed) {
 		auto l = open(bench(R"( "seed": )" + std::to_string(seed) + ",", "[0.02, 0.03]"));
 		for (const lab::ItemView &i : l->view().items) {
-			for (const lab::SubstanceView &s : i.contents) {
-				if (s.species == "sulfuric_acid_aq") {
-					return s.mol;
-				}
+			if (const double mol = lab::mol_of(i.contents, "sulfuric_acid_aq"); mol > 0.0) {
+				return mol; // (Stage 63: the acid read from its ions)
 			}
 		}
 		return 0.0;

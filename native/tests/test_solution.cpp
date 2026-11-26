@@ -46,7 +46,19 @@ const Reaction &reaction(int index) {
 
 // mol of a dissolved species per kg of the cell's water
 double molality(const World &world, CellId cell, SpeciesId solute) {
-	return world.amount(cell, solute).mol() / (world.amount(cell, builtin::water).mol() * 0.018015);
+	return testing::formula_mol(builtin_species(), world.snapshot_cell(cell), solute) / (world.amount(cell, builtin::water).mol() * 0.018015);
+}
+
+// the acid's hydrogen a state holds (Stage 63): free and in the bisulfate, less what water's ionisation and copper's
+// hydrolysis account for (H+ + HSO4- - OH- - CuOH+), by the balance of protons
+double acid_hydrogen(const CellState &c) {
+	const auto n = [&](SpeciesId s) { return static_cast<double>(c.amount[static_cast<size_t>(s.index)]) * MOL_PER_QUANTUM; };
+	return n(builtin::hydrogen_ion) + n(builtin::hydrogen_sulfate_ion) - n(builtin::hydroxide_ion) - n(builtin::copper_hydroxide_ion);
+}
+
+// a species' moles; a retired formula unit's as its ions make whole (Stage 63)
+double held(const World &world, CellId cell, SpeciesId s) {
+	return testing::formula_mol(builtin_species(), world.snapshot_cell(cell), s);
 }
 
 // the crystallisation with a fast surface, to reach equilibrium quickly (stirred hard too: GAME_SPEC §7's transport)
@@ -141,7 +153,7 @@ TEST_CASE("solution: dissolving the pentahydrate cools the solution (Stage 6)") 
 	}
 	CHECK(sim.world().amount(cell, builtin::copper_sulfate_pentahydrate).quanta == 0); // all of it: 0.47 mol/kg is under saturation
 	CHECK(sim.world().particles(cell, builtin::copper_sulfate_pentahydrate) == 0); // X1
-	CHECK(sim.world().amount(cell, builtin::copper_sulfate_aq) == mol(0.05));
+	CHECK(held(sim.world(), cell, builtin::copper_sulfate_aq) == doctest::Approx(0.05).epsilon(1e-12));
 	// 0.05 mol * 14.56 kJ/mol over the solution's heat capacity
 	const double heat = -835990.0 + 5.0 * -285830.0 - -2279700.0;
 	CHECK(heat == doctest::Approx(14560.0));
@@ -189,7 +201,16 @@ TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and h
 		b.add_edge(cell, bath, PHASES_NONE, 500.0);
 		const double oxide = 3.597 / 79.545;
 		b.set_amount(cell, builtin::copper_oxide, mol(oxide)).set_particles(cell, builtin::copper_oxide, 2500000);
-		b.set_amount(cell, builtin::water, mol(96.2 / 18.015)).set_amount(cell, builtin::sulfuric_acid_aq, mol(0.1));
+		// (Stage 63) the acid at its bisulfate already, at the flask's temperature, as a stock bottle's is
+		CellState acid(std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0));
+		acid.amount[static_cast<size_t>(builtin::water.index)] = mol(96.2 / 18.015).quanta;
+		put_amount(builtin_species(), acid, builtin::sulfuric_acid_aq, mol(0.1).quanta);
+		acid = testing::settled(acid, kelvin);
+		for (int k = 0; k < builtin_species().species_count(); ++k) {
+			if (acid.amount[static_cast<size_t>(k)] > 0) {
+				b.set_amount(cell, SpeciesId{ k }, Amount{ acid.amount[static_cast<size_t>(k)] });
+			}
+		}
 		b.set_amount(cell, builtin::glass, mol(1.0)).set_temperature(cell, kelvin);
 		World world = build(b);
 		REQUIRE(world.set_stirring(cell, stirring) == Refusal::None); // (Stage 57: the stirring's watts, Sano's transport)
@@ -201,10 +222,12 @@ TEST_CASE("solution: copper oxide dissolves in the acid, much faster warm, and h
 			sim.step();
 			++step;
 		}
-		// what dissolved is in solution, mole for mole, and the acid paid for it
+		// what dissolved is in solution, mole for mole, and the acid paid for it: two hydrogen ions (free or held as
+		// bisulfate, by the balance of protons) for each copper
 		const double gone = oxide - sim.world().amount(cell, builtin::copper_oxide).mol();
-		CHECK(sim.world().amount(cell, builtin::copper_sulfate_aq).mol() == doctest::Approx(gone).epsilon(1e-9));
-		CHECK(sim.world().amount(cell, builtin::sulfuric_acid_aq).mol() == doctest::Approx(0.1 - gone).epsilon(1e-9));
+		const CellState &now = sim.world().snapshot_cell(cell);
+		CHECK(testing::element_mol(builtin_species(), now, "Cu", Phase::Aqueous) == doctest::Approx(gone).epsilon(1e-9));
+		CHECK(acid_hydrogen(now) == doctest::Approx(0.2 - 2.0 * gone).epsilon(1e-9));
 		CHECK(sim.world().energy(bath).quanta > 0); // exothermic: the bath took the heat
 		CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 		return step * STEP_SECONDS;
@@ -232,7 +255,7 @@ TEST_CASE("solution: with no acid left the oxide stops, and never runs backwards
 		sim.step();
 	}
 	// the acid is the limiting reagent: all but a trace of it is used
-	CHECK(sim.world().amount(cell, builtin::sulfuric_acid_aq).mol() < 1e-4);
+	CHECK(acid_hydrogen(sim.world().snapshot_cell(cell)) < 2e-4);
 	CHECK(sim.world().amount(cell, builtin::copper_oxide).mol() == doctest::Approx(0.04).epsilon(0.01));
 	CHECK(sim.world().particles(cell, builtin::copper_oxide) == 100000); // the grains shrank, none vanished
 }
@@ -320,10 +343,10 @@ CellState solution_of(double m, double acid) {
 	CellState cell{ std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0), 0, {} };
 	cell.amount[static_cast<size_t>(builtin::water.index)] = mol(1.0 / 0.018015).quanta;
 	if (m > 0.0) {
-		cell.amount[static_cast<size_t>(builtin::copper_sulfate_aq.index)] = mol(m).quanta;
+		put_amount(builtin_species(), cell, builtin::copper_sulfate_aq, mol(m).quanta);
 	}
 	if (acid > 0.0) {
-		cell.amount[static_cast<size_t>(builtin::sulfuric_acid_aq.index)] = mol(acid).quanta;
+		put_amount(builtin_species(), cell, builtin::sulfuric_acid_aq, mol(acid).quanta);
 	}
 	return cell;
 }
@@ -335,7 +358,9 @@ double saturation(int crystallisation, double kelvin, double acid) {
 	for (int i = 0; i < 60; ++i) {
 		const double middle = 0.5 * (lo + hi);
 		bool defined = false;
-		const double a = affinity(builtin_species(), solution_of(middle, acid), reaction(crystallisation).terms(), kelvin, defined);
+		// (Stage 63) with acid, at its bisulfate: what the acid does to the salt is through it
+		const CellState cell = acid > 0.0 ? testing::settled(solution_of(middle, acid), kelvin) : solution_of(middle, acid);
+		const double a = affinity(builtin_species(), cell, reaction(crystallisation).terms(), kelvin, defined);
 		REQUIRE(defined);
 		(a > 0.0 ? hi : lo) = middle;
 	}
@@ -366,13 +391,13 @@ TEST_CASE("solution: the data oracle: copper sulfate and the acid as electrolyte
 	} staples[] = { { 0.5, 0.1463, 0.6760 }, { 1.0, 0.1247, 0.7255 }, { 2.0, 0.1195, 0.8400 }, { 3.0, 0.1337, 0.9897 }, { 5.0, 0.1973, 1.3090 } };
 	for (const auto &row : staples) {
 		CAPTURE(row.m);
-		const CellState cell = solution_of(0.0, row.m);
+		const CellState cell = testing::settled(solution_of(0.0, row.m), 298.15); // its bisulfate (Stage 63)
 		const double phi = -std::log(activity(t, cell, builtin::water)) / (3.0 * row.m * 0.018015);
 		const double gamma = std::cbrt(activity(t, cell, builtin::sulfuric_acid_aq) / 4.0) / row.m;
 		CHECK(phi == doctest::Approx(row.phi).epsilon(0.02));
 		CHECK(gamma == doctest::Approx(row.gamma).epsilon(0.02));
 	}
-	CHECK(activity(t, solution_of(0.0, 1.0), builtin::water) == doctest::Approx(0.96155).epsilon(0.001));
+	CHECK(activity(t, testing::settled(solution_of(0.0, 1.0), 298.15), builtin::water) == doctest::Approx(0.96155).epsilon(0.001));
 }
 
 TEST_CASE("solution: stable at every strength: the water's activity falls as water leaves, to 400 mol/kg (Stage 19)") {
@@ -388,10 +413,10 @@ TEST_CASE("solution: stable at every strength: the water's activity falls as wat
 			CellState cell{ std::vector<int64_t>(static_cast<size_t>(t.species_count()), 0), 0, {} };
 			cell.amount[static_cast<size_t>(builtin::water.index)] = mol(1.0 / (0.018015 * m)).quanta; // one mol of solute in 1/m kg
 			if (share < 1.0) {
-				cell.amount[static_cast<size_t>(builtin::copper_sulfate_aq.index)] = mol(1.0 - share).quanta;
+				put_amount(builtin_species(), cell, builtin::copper_sulfate_aq, mol(1.0 - share).quanta);
 			}
 			if (share > 0.0) {
-				cell.amount[static_cast<size_t>(builtin::sulfuric_acid_aq.index)] = mol(share).quanta;
+				put_amount(builtin_species(), cell, builtin::sulfuric_acid_aq, mol(share).quanta);
 			}
 			// the evaporation's affinity carries ln a of the water, finite where a underflows
 			cell.amount[static_cast<size_t>(builtin::steam.index)] = mol(1.0).quanta;
@@ -412,9 +437,13 @@ TEST_CASE("solution: every activity is the derivative of one Gibbs energy (Gibbs
 	const SpeciesTable &t = builtin_species();
 	const auto mixing = [&](const CellState &cell) {
 		double g = 0.0;
-		for (const SpeciesId s : { builtin::water, builtin::copper_sulfate_aq, builtin::sulfuric_acid_aq }) {
-			const int64_t n = cell.amount[static_cast<size_t>(s.index)];
-			g += n > 0 ? static_cast<double>(n) * MOL_PER_QUANTUM * std::log(activity(t, cell, s)) : 0.0; // n ln a -> 0 as n -> 0
+		for (int k = 0; k < t.species_count(); ++k) { // (Stage 63: the solution's ions, each a species)
+			const SpeciesId s{ k };
+			const SpeciesDef &def = t.species(s);
+			const int64_t n = cell.amount[static_cast<size_t>(k)];
+			if (def.phase == Phase::Liquid || def.phase == Phase::Aqueous) {
+				g += n > 0 ? static_cast<double>(n) * MOL_PER_QUANTUM * std::log(activity(t, cell, s)) : 0.0; // n ln a -> 0 as n -> 0
+			}
 		}
 		return g;
 	};
@@ -471,7 +500,9 @@ TEST_CASE("solution: the data oracle: the pentahydrate gives way to the trihydra
 
 TEST_CASE("solution: the acid lowers the salt's solubility: the common-ion effect (Stage 19)") {
 	// K1: both carry sulfate. Holler and Peffer (1916) at 15 C: about 0.54 of
-	// it with 100 g/L of acid (about 1 mol/kg), on an unclear basis.
+	// it with 100 g/L of acid (about 1 mol/kg), on an unclear basis. (Stage 63: the acid at its bisulfate, which
+	// alone would raise the salt's solubility, twice over at 1 mol/kg; copper's interaction with the bisulfate,
+	// beta0 0.815, is calibrated to Holler and Peffer's ratio: docs/DATA_SOURCES.md)
 	using namespace builtin::reaction;
 	const double water = saturation(pentahydrate_crystallization, 288.15, 0.0);
 	double last = water;
@@ -481,8 +512,7 @@ TEST_CASE("solution: the acid lowers the salt's solubility: the common-ion effec
 		last = m;
 	}
 	const double ratio = saturation(pentahydrate_crystallization, 288.15, 1.0) / water;
-	CHECK(ratio > 0.5);
-	CHECK(ratio < 0.85);
+	CHECK(ratio == doctest::Approx(0.54).epsilon(0.02));
 	MESSAGE("15 C: " << water << " mol/kg in water, " << ratio << " of it with 1 mol/kg of acid");
 }
 
@@ -521,7 +551,10 @@ TEST_CASE("solution: boiled down, crystals start once well past saturation, near
 	// saturated near 100 C at 9.4 g of water (77 g of CuSO4 per 100 g); measured nucleation needs it well past that
 	CHECK(first > 6.0);
 	CHECK(first < 9.0);
-	CHECK(sim.world().amount(flask, builtin::copper_sulfate).mol() > 0.0451); // white: the anhydrous salt
+	// white: the anhydrous salt; but for the copper boiling made black oxide of (Stage 63: hot copper sulfate hydrolyses,
+	// its hydroxide coming out and turning to oxide, the acid held as bisulfate, a few percent; no basic sulfate:
+	// GAME_SPEC §20) and the trace of ions the last water holds, past the activity model's range
+	CHECK(sim.world().amount(flask, builtin::copper_sulfate).mol() > 0.96 * 0.0452);
 	CHECK(totals(builtin_species(), sim.world().snapshot()) == genesis);
 	MESSAGE("crystals start with " << first << " g of water; all anhydrous after " << step / 60 << " s at "
 								   << temperature(sim.world(), flask) - 273.15 << " C");
@@ -552,7 +585,7 @@ TEST_CASE("solution: malformed surface laws, particle counts and stirring are re
 	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, surface(builtin::copper_sulfate_pentahydrate, 0.0, 0.0)));
 	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, surface(builtin::copper_sulfate_pentahydrate, 1.0, 0.0, builtin::water))); // a driver that is not dissolved
 	CHECK_FALSE(Reaction::make(builtin_species(), "r", terms, &why, surface(builtin::copper_sulfate_pentahydrate, 1.0, 0.0, SpeciesId{}, -1.0, 3.0)));
-	CHECK(Reaction::make(builtin_species(), "r", terms, &why, surface(builtin::copper_sulfate_pentahydrate, 1.0, 0.0, builtin::copper_sulfate_aq)).has_value());
+	CHECK(Reaction::make(builtin_species(), "r", terms, &why, surface(builtin::copper_sulfate_pentahydrate, 1.0, 0.0, builtin::copper_ion)).has_value());
 	{
 		World::Builder b(builtin_species()); // a dissolved species with nothing to be dissolved in
 		const CellId c = b.add_cell("c");
@@ -586,3 +619,4 @@ TEST_CASE("solution: malformed surface laws, particle counts and stirring are re
 	CHECK(world.set_mixing(c, -1.0) == Refusal::BadValue);
 	CHECK(world.set_mixing(CellId{ 7 }, 1.0) == Refusal::UnknownCell);
 }
+

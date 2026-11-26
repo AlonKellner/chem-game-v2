@@ -7,21 +7,21 @@
 		{
 			"part": "Stage 1: gas from malachite",
 			"title": "Set out the flask",
-			"text": "Click the flask in the cabinet on the left to pick it up, then click a square of the bench to put it down.",
+			"text": "Click the flask in Supplies on the left to pick it up, then click a square of the bench to put it down.",
 			"why": "Everything happens in this 250 mL flask: first the gas, then the solution, then the crystals.",
 			"checks": [{"text": "the flask stands on the bench", "when": {"item": "flask", "place": "bench"}}],
 			"play": [{"drag": ["item:flask", "square:11,12"]}]
 		},
 		{
 			"title": "A burner under the flask",
-			"text": "Pick up the burner in the cabinet, then click the flask: it goes under it.",
+			"text": "Pick up the burner in Supplies, then click the flask: it goes under it.",
 			"why": "A burner heats the vessel it stands under. Chosen, its gas valve shows in the column on the right.",
 			"checks": [{"text": "the burner is under the flask", "when": {"item": "burner", "under": "flask"}}],
 			"play": [{"drag": ["item:burner", "item:flask"]}]
 		},
 		{
 			"title": "Bring the malachite",
-			"text": "Pick up the jar in the cabinet, then click a free square of the bench.",
+			"text": "Pick up the jar in Supplies, then click a free square of the bench.",
 			"why": "The jar holds 5 g of malachite, a green copper carbonate mineral, as a powder.",
 			"checks": [{"text": "the jar stands on the bench", "when": {"item": "jar", "place": "bench"}}],
 			"play": [{"drag": ["item:jar", "square:4,13"]}]
@@ -35,7 +35,7 @@
 		},
 		{
 			"title": "Catch the gas",
-			"text": "Pick up the balloon in the cabinet, then click the flask.",
+			"text": "Pick up the balloon in Supplies, then click the flask.",
 			"why": "The balloon closes the flask's mouth: any gas that leaves the flask now goes into the balloon.",
 			"checks": [{"text": "the balloon is on the flask", "when": {"item": "balloon", "on": "flask"}}],
 			"play": [{"drag": ["item:balloon", "item:flask"]}]
@@ -80,7 +80,7 @@
 		{
 			"part": "Stage 2: copper sulfate solution",
 			"title": "Bring the acid",
-			"text": "Pick up the acid in the cabinet, then click a free square of the bench.",
+			"text": "Pick up the acid in Supplies, then click a free square of the bench.",
 			"why": "It is about 250 mL of 1 M sulfuric acid, H2SO4 in water.",
 			"checks": [{"text": "the acid stands on the bench", "when": {"item": "acid", "place": "bench"}}],
 			"play": [{"drag": ["item:acid", "square:7,12"]}]
@@ -116,7 +116,7 @@
 			"title": "Wait for the oxide to dissolve",
 			"text": "Watch the black powder disappear and the liquid turn blue.",
 			"why": "The blue is the copper ion in water, Cu2+(aq): copper sulfate solution.",
-			"checks": [{"text": "less than 1 mg of copper oxide left", "when": {"item": "flask", "species": "copper_oxide", "below_g": 0.001}}]
+			"checks": [{"text": "the copper oxide all dissolved (under a microgram left)", "when": {"item": "flask", "species": "copper_oxide", "below_g": 0.000001}}]
 		},
 		{
 			"title": "Stop stirring",
@@ -128,14 +128,14 @@
 		{
 			"part": "Stage 3: water and crystals",
 			"title": "The condenser",
-			"text": "Pick up the condenser in the cabinet, then click the flask.",
+			"text": "Pick up the condenser in Supplies, then click the flask.",
 			"why": "Its cold jacket turns the steam from the flask back into liquid water.",
 			"checks": [{"text": "the condenser is on the flask", "when": {"item": "condenser", "on": "flask"}}],
 			"play": [{"drag": ["item:condenser", "item:flask"]}]
 		},
 		{
 			"title": "A beaker for the water",
-			"text": "Pick up the beaker in the cabinet, then click a free square of the bench.",
+			"text": "Pick up the beaker in Supplies, then click a free square of the bench.",
 			"checks": [{"text": "the beaker stands on the bench", "when": {"item": "beaker", "place": "bench"}}],
 			"play": [{"drag": ["item:beaker", "square:19,12"]}]
 		},
@@ -241,7 +241,7 @@
 		},
 		{
 			"title": "A beaker for the liquor",
-			"text": "Pick up the waste beaker in the cabinet, then click a free square of the bench.",
+			"text": "Pick up the waste beaker in Supplies, then click a free square of the bench.",
 			"checks": [{"text": "the waste beaker stands on the bench", "when": {"item": "waste", "place": "bench"}}],
 			"play": [{"drag": ["item:waste", "square:23,12"]}]
 		},

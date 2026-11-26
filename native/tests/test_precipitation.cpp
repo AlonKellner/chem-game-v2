@@ -1,6 +1,7 @@
 // Precipitation and gas (GAME_SPEC §9, Stage 44): copper hydroxide out of a copper sulfate solution and a base,
 // back into an acid, into copper oxide when heated; malachite in an acid, its carbonate leaving as a gas. The
 // tables held to the evaluated solubility constants, the rates to their measurements.
+#include "tables.hpp"
 #include "chem/builtin_ids.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
@@ -36,7 +37,7 @@ struct Cell {
 		std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0) };
 	Cell() { put(builtin::water, 1.0 / 0.018015); }
 	Cell &put(SpeciesId s, double mol, int64_t particles = 0) {
-		state.amount[static_cast<size_t>(s.index)] = quanta(mol);
+		testing::put_amount(builtin_species(), state, s, quanta(mol));
 		state.particles[static_cast<size_t>(s.index)] = particles;
 		return *this;
 	}
@@ -76,6 +77,13 @@ std::vector<Reaction> equilibria() {
 
 double mol(const CellState &c, SpeciesId s) {
 	return static_cast<double>(c.amount[static_cast<size_t>(s.index)]) * MOL_PER_QUANTUM;
+}
+
+// the hydroxide a state holds bound and free, less the hydrogen ions freed (Stage 63): 2 Cu(OH)2 + CuOH+ + OH- -
+// H+ - HSO4-, the base put in less the acid's hydrogen, by its balance of protons
+double bound_hydroxide(const CellState &c) {
+	return 2.0 * mol(c, builtin::copper_hydroxide) + mol(c, builtin::copper_hydroxide_ion) +
+			mol(c, builtin::hydroxide_ion) - mol(c, builtin::hydrogen_ion) - mol(c, builtin::hydrogen_sulfate_ion);
 }
 
 } // namespace
@@ -143,12 +151,14 @@ TEST_CASE("measured: copper hydroxide turns to oxide at Fukuda's first-order rat
 TEST_CASE("measured: malachite dissolves in sulfuric acid at Nicol's surface rate, order 0.65, 53.6 kJ/mol (Stage 44)") {
 	// Nicol 2018 (Hydrometallurgy 177, 214), eq. 4: dR/dt = A exp(-6447 / T) C^0.65, A 1.44e7 cm/s, C in mol/cm^3,
 	// a shrinking particle controlled at its surface; 4.1e-7 mol/cm2/s in 0.2 mol/L acid at 25 C with his density,
-	// and Kopylov and Orlov 1964: 3.6e-7
+	// and Kopylov and Orlov 1964: 3.6e-7. (Stage 63: the model's law is in the free hydrogen ions, refitted at his
+	// conditions to give his in the acid: docs/DATA_SOURCES.md)
 	const Reaction &r = reaction(builtin::reaction::malachite_dissolution);
 	const SpeciesDef &malachite = builtin_species().species(builtin::malachite);
 	const auto steps_at = [&](double acid, double kelvin, double dissipation) {
 		Cell c;
 		c.put(builtin::sulfuric_acid_aq, acid).put(builtin::malachite, 1e-3, 1000000); // grains of 44 um
+		c.state = testing::settled(c.state, kelvin); // the acid at its bisulfate (Stage 63: the rate is the free ions')
 		return surface_steps(builtin_species(), c.state, r, kelvin, affinity_of(c, r, kelvin), dissipation);
 	};
 	const auto nicol = [&](double acid, double kelvin) { // his shrinking rate times the model's own moles a m^3
@@ -185,12 +195,16 @@ TEST_CASE("precipitation: a base into copper sulfate brings the hydroxide out in
 		CHECK_MESSAGE(violations.empty(), (violations.empty() ? std::string() : violations.front()));
 		const CellState &end = sim.world().snapshot_cell(beaker);
 		const double made = std::min(0.05, base / 2.0);
-		INFO("base " << base << ": hydroxide " << mol(end, builtin::copper_hydroxide) << ", copper left " << mol(end, builtin::copper_sulfate_aq) << ", base left " << mol(end, builtin::sodium_hydroxide_aq));
-		// (with copper left over, a trace more: the copper's own hydrolysis, below)
-		CHECK(mol(end, builtin::copper_hydroxide) == doctest::Approx(made).epsilon(1e-4));
-		CHECK(mol(end, builtin::sodium_sulfate_aq) == doctest::Approx(made).epsilon(1e-6));
+		const double copper_left = testing::element_mol(table, end, "Cu", Phase::Aqueous); // in Cu2+ and its hydrolysis's ions
+		INFO("base " << base << ": hydroxide " << mol(end, builtin::copper_hydroxide) << ", copper left " << copper_left << ", base left " << mol(end, builtin::hydroxide_ion));
+		// the base all taken: by the solid, by copper's hydroxo ions (Stage 63) and what is left free, less the hydrogen
+		// ions its hydrolysis freed (a balance of protons, exact)
+		CHECK(bound_hydroxide(end) == doctest::Approx(base).epsilon(1e-9));
+		// with copper left over, a few percent of it held by the hydroxo ions at the hydroxide's saturation, not the solid
+		CHECK(mol(end, builtin::copper_hydroxide) / made > (base < 0.1 ? 0.95 : 0.9999));
+		CHECK(mol(end, builtin::copper_hydroxide) / made < 1.0 + 1e-9);
 		if (base > 0.1) {
-			CHECK(mol(end, builtin::copper_sulfate_aq) < 1e-11); // Ksp 5e-20 over the base left
+			CHECK(copper_left < 1e-11); // Ksp 5e-20 over the base left
 		}
 		// as grains of its own size (grain_um), not one lump
 		const double d = particle_diameter(table, end, builtin::copper_hydroxide);
@@ -232,21 +246,27 @@ TEST_CASE("precipitation: an acid takes the base first, then dissolves the hydro
 		CHECK_MESSAGE(violations.empty(), (violations.empty() ? std::string() : violations.front()));
 		return sim.world().snapshot_cell(beaker);
 	};
-	// 0.02 mol of acid and 0.06 of base: 0.04 of it neutralised, 0.02 left to bring out 0.01 of the hydroxide
-	CHECK(mol(settle(0.02, 0.06, 0.0), builtin::copper_hydroxide) == doctest::Approx(0.01).epsilon(1e-5));
+	// 0.02 mol of acid and 0.06 of base: 0.04 of it neutralised, 0.02 left to bring out 0.01 of the hydroxide, less
+	// what copper's hydroxo ions hold at its saturation (Stage 63: in 0.4 mol/kg of copper left, about a tenth)
+	const CellState mixed = settle(0.02, 0.06, 0.0);
+	CHECK(bound_hydroxide(mixed) == doctest::Approx(0.06 - 0.04).epsilon(1e-9));
+	CHECK(mol(mixed, builtin::copper_hydroxide) > 0.0085);
+	CHECK(mol(mixed, builtin::copper_hydroxide) < 0.01);
 	// the hydroxide into acid: dissolved, a mole of acid a mole
 	const CellState dissolved = settle(0.03, 0.0, 0.02);
 	CHECK(mol(dissolved, builtin::copper_hydroxide) < 1e-12);
-	CHECK(mol(dissolved, builtin::sulfuric_acid_aq) == doctest::Approx(0.01).epsilon(1e-5));
-	CHECK(mol(dissolved, builtin::copper_sulfate_aq) == doctest::Approx(0.07).epsilon(1e-6));
-	// copper sulfate alone: a trace hydrolyses, Cu2+ + 2 H2O -> Cu(OH)2 + 2 H+, and the solution is acid (a 0.5 M
-	// copper sulfate solution reads about pH 4; here the trace is the solid, not the ion CuOH+: GAME_SPEC §20)
+	// (the acid left, 0.02 mol of hydrogen: free and in the bisulfate, Stage 63)
+	CHECK(mol(dissolved, builtin::hydrogen_ion) + mol(dissolved, builtin::hydrogen_sulfate_ion) == doctest::Approx(0.02).epsilon(1e-4));
+	CHECK(testing::element_mol(table, dissolved, "Cu", Phase::Aqueous) == doctest::Approx(0.07).epsilon(1e-6));
+	// copper sulfate alone: a trace hydrolyses, Cu2+ + H2O -> CuOH+ + H+, and the solution is acid:
+	// a 0.5 mol/kg copper sulfate solution reads about pH 4 (Stage 63: the ion, no longer a trace of the solid; its
+	// dimer left out, GAME_SPEC §20, so the model's is under 5)
 	const CellState alone = settle(0.0, 0.0, 0.0);
 	double p = 0.0;
 	REQUIRE(ph(table, alone, 293.15, p));
-	MESSAGE("copper sulfate 0.5 mol/kg: pH " << p << ", the hydroxide " << mol(alone, builtin::copper_hydroxide) << " mol");
-	CHECK(mol(alone, builtin::copper_hydroxide) > 0.0);
-	CHECK(mol(alone, builtin::copper_hydroxide) < 1e-5);
+	MESSAGE("copper sulfate 0.5 mol/kg: pH " << p << ", CuOH+ " << mol(alone, builtin::copper_hydroxide_ion) << " mol");
+	CHECK(mol(alone, builtin::copper_hydroxide) == 0.0);
+	CHECK(mol(alone, builtin::copper_hydroxide_ion) > 0.0);
 	CHECK(p > 3.5);
-	CHECK(p < 6.0);
+	CHECK(p < 5.0);
 }

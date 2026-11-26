@@ -69,6 +69,13 @@ Violations check_C6(const SpeciesTable &table, const StepTrace &trace);
 Violations check_C7(const SpeciesTable &table, const StepTrace &trace);
 // C8. A transform's change is balanced in every element and in charge.
 Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
+// The totals of what crossed the world's boundary (Stage 61), summed and taken away exactly (as a world's own totals
+// wrap, so do these: a corrupted ledger is compared, not undefined)
+Totals plus(const Totals &a, const Totals &b);
+Totals minus(const Totals &a, const Totals &b);
+// C9 (Stage 61: the world open at its boundary). What the world holds is what it began with, plus what was supplied
+// to it, less what was retired from it: every element, the mass, the charge and the energy, exactly.
+Violations check_C9(const Totals &start, const Totals &supplied, const Totals &retired, const Totals &now);
 
 // The thermal invariants: they apply to a trace of a world with temperatures
 // (trace.thermal), and return nothing otherwise.
@@ -109,7 +116,8 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace);
 // V2. No rigid cell holds more solids and liquids than its volume.
 Violations check_V2(const SpeciesTable &table, const StepTrace &trace);
 // P1. Every cell is at its fast equilibria. For each reaction of the
-// equilibrium law: nothing is left to go in the direction of its affinity
+// equilibrium law (but one among dissolved species past the activity model's range, which stands: `stands`,
+// Stage 63): nothing is left to go in the direction of its affinity
 // (liquid absent: its vapour at or below saturation; vapour absent: nothing
 // would condense), or the affinity is within what rounding leaves. Rounding:
 // gas moved after the equilibrium was taken is whole quanta, a quantum per
@@ -128,6 +136,10 @@ Violations check_L1(const SpeciesTable &table, const StepTrace &trace);
 // E1 (Stage 50): a gas exchanged along an edge (an open vessel's mouth) moves only down its mole fraction's difference,
 // along an open edge that exchanges gas and joins the two cells, and no further than to equal fractions.
 Violations check_E1(const SpeciesTable &table, const StepTrace &trace);
+
+// N1 (Stage 63): electroneutrality. No step changes a cell's charge: what moves between cells moves as neutral matter
+// and every transform is balanced in charge, so a cell made neutral (every bench's) stays so.
+Violations check_N1(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.

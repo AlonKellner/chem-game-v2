@@ -6,9 +6,16 @@
 #include "chem_api.h"
 
 #include <godot_cpp/classes/canvas_item.hpp>
+#include <godot_cpp/classes/image_texture.hpp>
+
+#include <cstdint>
+#include <unordered_map>
 
 namespace chem_godot {
 
-void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above);
+// (Stage 61) the pictures' textures a painter keeps, by their hash: its owner's (a node's), freed with it
+using Textures = std::unordered_map<uint64_t, godot::Ref<godot::ImageTexture>>;
+
+void paint_list(godot::CanvasItem *on, const cg_draw_list &list, bool above, Textures *textures = nullptr);
 
 } // namespace chem_godot

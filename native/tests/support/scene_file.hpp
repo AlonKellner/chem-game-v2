@@ -58,12 +58,12 @@ struct Reader {
 
 } // namespace detail
 
-inline constexpr uint64_t MAGIC = 0x3165637332656863ull; // "chem2sce1"
+inline constexpr uint64_t MAGIC = 0x3265637332656863ull; // "chem2sce2" (Stage 61's wall behind glass)
 
 // (lab::OpticsScene's size where this was written: a member added there changes it, and this asks for it here)
 template <size_t N>
 struct SceneSize {
-	static_assert(N == 424, "lab::OpticsScene has changed: write and read its new members here, then set its size");
+	static_assert(N == 456, "lab::OpticsScene has changed: write and read its new members here, then set its size");
 };
 inline constexpr SceneSize<sizeof(lab::OpticsScene)> scene_size{};
 
@@ -83,6 +83,8 @@ inline std::string write(const lab::OpticsScene &s) {
 	put(out, s.wall_revision);
 	put(out, s.wall_key);
 	put(out, s.drawn);
+	put(out, s.drawn_glass);
+	put(out, s.wall_glass_base);
 	put(out, s.far_left);
 	put(out, s.far_right);
 	put(out, s.wall_beyond);
@@ -125,6 +127,8 @@ inline bool read(const std::string &in, lab::OpticsScene &s) {
 	r.get(s.wall_revision);
 	r.get(s.wall_key);
 	r.get(s.drawn);
+	r.get(s.drawn_glass);
+	r.get(s.wall_glass_base);
 	r.get(s.far_left);
 	r.get(s.far_right);
 	r.get(s.wall_beyond);

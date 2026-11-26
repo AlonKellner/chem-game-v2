@@ -1,5 +1,6 @@
 // A spectrophotometer in the lab (GAME_SPEC §13, Stage 55): a cuvette in its well, a blank, a reading of the
 // cuvette's liquid at the beam's height; tuned; saved, not digested.
+#include "lab/conditions.hpp"
 #include "lab/lab.hpp"
 #include "lab/spectro.hpp"
 #include "lab/ui.hpp"
@@ -52,12 +53,7 @@ lab::ItemView item(lab::Lab &l, const std::string &id) {
 
 double molar(lab::Lab &l, const std::string &id, const std::string &species) {
 	const lab::ItemView v = item(l, id);
-	for (const lab::SubstanceView &s : v.contents) {
-		if (s.species == species) {
-			return s.mol / (v.liquid_ml / 1000.0);
-		}
-	}
-	return 0.0;
+	return lab::mol_of(v.contents, species) / (v.liquid_ml / 1000.0); // (Stage 63: a salt read from its ions)
 }
 
 } // namespace

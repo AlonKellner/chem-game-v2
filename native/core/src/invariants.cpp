@@ -158,6 +158,59 @@ Totals totals(const SpeciesTable &table, const Snapshot &snapshot) {
 	return t;
 }
 
+Totals plus(const Totals &a, const Totals &b) {
+	Totals t;
+	for (size_t e = 0; e < t.atoms.size(); ++e) {
+		t.atoms[e] = wrap_add(a.atoms[e], b.atoms[e]);
+	}
+	t.charge = wrap_add(a.charge, b.charge);
+	t.energy = wrap_add(a.energy, b.energy);
+	t.mass.hi = wrap_add(a.mass.hi, b.mass.hi);
+	t.mass.lo = a.mass.lo + b.mass.lo; // (each under 2^32: no overflow)
+	t.mass.hi = wrap_add(t.mass.hi, t.mass.lo >> 32);
+	t.mass.lo &= 0xffffffff;
+	return t;
+}
+
+Totals minus(const Totals &a, const Totals &b) {
+	Totals t;
+	for (size_t e = 0; e < t.atoms.size(); ++e) {
+		t.atoms[e] = wrap_add(a.atoms[e], wrap_mul(b.atoms[e], -1));
+	}
+	t.charge = wrap_add(a.charge, wrap_mul(b.charge, -1));
+	t.energy = wrap_add(a.energy, wrap_mul(b.energy, -1));
+	t.mass.hi = wrap_add(a.mass.hi, wrap_mul(b.mass.hi, -1));
+	t.mass.lo = a.mass.lo - b.mass.lo; // (each in [0, 2^32): a borrow at most)
+	if (t.mass.lo < 0) {
+		t.mass.lo += 4294967296LL;
+		t.mass.hi = wrap_add(t.mass.hi, -1);
+	}
+	return t;
+}
+
+Violations check_C9(const Totals &start, const Totals &supplied, const Totals &retired, const Totals &now) {
+	Violations out;
+	const Totals expected = minus(plus(start, supplied), retired);
+	for (size_t e = 0; e < now.atoms.size(); ++e) {
+		if (now.atoms[e] != expected.atoms[e]) {
+			out.push_back(text("C9: element %lld: %lld quanta of atoms, where its start, what was supplied and what was retired make %lld", static_cast<long long>(e),
+					static_cast<long long>(now.atoms[e]), static_cast<long long>(expected.atoms[e])));
+		}
+	}
+	if (!(now.mass == expected.mass)) {
+		char buffer[200];
+		std::snprintf(buffer, sizeof buffer, "C9: the mass is %.12g g, where its start, what was supplied and what was retired make %.12g g", now.mass.grams(), expected.mass.grams());
+		out.push_back(buffer);
+	}
+	if (now.charge != expected.charge) {
+		out.push_back(text("C9: the charge is %lld quanta, where its ledger makes %lld", static_cast<long long>(now.charge), static_cast<long long>(expected.charge)));
+	}
+	if (now.energy != expected.energy) {
+		out.push_back(text("C9: the energy is %lld quanta, where its ledger makes %lld", static_cast<long long>(now.energy), static_cast<long long>(expected.energy)));
+	}
+	return out;
+}
+
 bool totals_fit(const SpeciesTable &table, const Snapshot &snapshot) {
 	std::array<int64_t, MAX_ELEMENTS> atoms{};
 	int64_t charge = 0;
@@ -240,6 +293,24 @@ static Violations c4_of(const SpeciesTable &, const StepTrace &trace, const Tota
 	Violations out;
 	if (a.charge != b.charge) {
 		out.push_back(text("C4: step %lld: the world's charge changed from %lld to %lld quanta", static_cast<long long>(trace.step), a.charge, b.charge));
+	}
+	return out;
+}
+
+Violations check_N1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	const auto charge = [&](const CellState &cell) {
+		uint64_t q = 0; // wraps modulo 2^64, as the totals do: a corrupted trace is compared, not undefined
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			q += static_cast<uint64_t>(table.species(SpeciesId{ static_cast<int32_t>(s) }).charge) * static_cast<uint64_t>(cell.amount[s]);
+		}
+		return static_cast<int64_t>(q);
+	};
+	for (size_t c = 0; c < trace.after.cells.size() && c < trace.before.cells.size() && out.size() < MAX_MESSAGES; ++c) {
+		const int64_t a = charge(trace.before.cells[c]), b = charge(trace.after.cells[c]);
+		if (a != b) {
+			out.push_back(text("N1: step %lld: cell %lld's charge changed from %lld to %lld quanta", static_cast<long long>(trace.step), static_cast<long long>(c), static_cast<long long>(a), static_cast<long long>(b)));
+		}
 	}
 	return out;
 }
@@ -703,13 +774,13 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 	}
 	const int64_t slack = table.species_count() + 1; // quanta: what moving gas rounds by
 	for (size_t c = 0; c < trace.after.cells.size(); ++c) {
-		if (trace.meta[c].reservoir) {
-			continue;
+		if (trace.meta[c].reservoir || trace.meta[c].frozen) {
+			continue; // (Stage 61: a frozen cell's state stands as it was; no process holds it to its equilibria)
 		}
 		const CellState &cell = trace.after.cells[c];
 		for (const Reaction &reaction : equilibria) {
-			if (reaction.table() != &table) {
-				continue;
+			if (reaction.table() != &table || stands(table, cell, reaction.terms())) {
+				continue; // (Stage 63) past the activity model's range, an equilibrium among dissolved species stands
 			}
 			if (feasible_extent(cell, reaction.terms(), true) <= 0 && feasible_extent(cell, reaction.terms(), false) <= 0) {
 				continue; // it can go neither way, whatever its affinity (below): no probe for it (Stage 68)
@@ -846,7 +917,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

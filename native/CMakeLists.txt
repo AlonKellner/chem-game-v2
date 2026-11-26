@@ -338,7 +338,7 @@ if(CHEM_BUILD_TESTS)
 
     # Data that breaks a conservation law does not build: chem_datagen refuses
     # each of these (tests/data/bad_*), so the custom command above would fail.
-    foreach(bad unbalanced_element unbalanced_charge unknown_species bad_formula driver_order_alone unknown_diffusion)
+    foreach(bad unbalanced_element unbalanced_charge unknown_species bad_formula driver_order_alone unknown_diffusion written_not_the_reaction)
         add_test(NAME datagen_refuses_${bad}
             COMMAND chem_datagen ${CMAKE_SOURCE_DIR}/tests/data/bad_${bad} ${CMAKE_CURRENT_BINARY_DIR}/datagen_refused/${bad})
         set_tests_properties(datagen_refuses_${bad} PROPERTIES WILL_FAIL TRUE)

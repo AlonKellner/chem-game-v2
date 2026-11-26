@@ -253,7 +253,7 @@ std::string label(const char *what, double a, const char *unit_a, double b = 0.0
 const std::vector<Sample> &samples() {
 	static const std::vector<Sample> all = [] {
 		using namespace chem;
-		const Spectrum &copper = optics::spectrum(builtin::copper_sulfate_aq);
+		const Spectrum &copper = optics::spectrum(builtin::copper_ion);
 		const Spectrum &latex = optics::spectrum(builtin::latex);
 		const struct {
 			const char *name;

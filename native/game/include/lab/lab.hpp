@@ -229,6 +229,10 @@ struct LabView {
 	// the equipment, then the signal parts, in the order they were made (one restored from the trash comes last),
 	// then the parts in the trash (Stage 34: place "trash"; with a circuit, what it holds, their `part.in` its id)
 	std::vector<ItemView> items;
+	// Supplies (GAME_SPEC §13, Stage 61): what the bench gives without a square, each a template no part of the room's
+	// world, as it is when taken out (place "supplies"), in the bench's order; and how many copies each has had
+	std::vector<ItemView> supplies;
+	std::vector<int> copies;
 	// the trash's elements, oldest first, as indices into `items`: the last is the newest, what `restore` brings
 	// back; a circuit is one element, with what it holds
 	std::vector<int> trash;
@@ -327,6 +331,8 @@ public:
 	// SHA-256 of the whole state: amounts, energies, particles, the processes'
 	// carried remainders, the connections, the step. Equal digests are equal states.
 	std::string digest() const;
+	// the id of the last copy taken out of Supplies (Stage 61; none: empty)
+	std::string last_taken() const;
 
 private:
 	struct Impl;

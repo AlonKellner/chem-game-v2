@@ -46,6 +46,7 @@ void make_chemistry(Rng &rng, RandomChemistry &out) {
 		def.formula = def.id;
 		def.phase = phases[rng.range(0, 3)];
 		def.charge = rng.chance(30) ? static_cast<int32_t>(rng.range(-2, 2)) : 0;
+		def.charge = def.phase == Phase::Aqueous ? def.charge : 0; // (Stage 63) only what is dissolved is charged
 		for (int e = 0; e < elements; ++e) {
 			def.atoms[static_cast<size_t>(e)] = static_cast<int32_t>(rng.range(0, 3));
 		}
@@ -85,6 +86,9 @@ void make_chemistry(Rng &rng, RandomChemistry &out) {
 			}
 			def.charge += k * b.charge;
 		}
+		if (def.charge != 0) {
+			def.phase = Phase::Aqueous; // (Stage 63) only what is dissolved is charged
+		}
 		species.push_back(def);
 		recipes.push_back(recipe);
 	}
@@ -106,6 +110,30 @@ struct Counts {
 	long long steps = 0;
 };
 
+// (Stage 63) a cell is built neutral: what the draws leave charged is balanced by a species of the opposite charge
+// that divides it, or else its charged species are left out
+void neutralise(const SpeciesTable &table, std::vector<int64_t> &amounts) {
+	int64_t q = 0;
+	for (size_t s = 0; s < amounts.size(); ++s) {
+		q += table.species(SpeciesId{ static_cast<int32_t>(s) }).charge * amounts[s];
+	}
+	if (q == 0) {
+		return;
+	}
+	for (size_t s = 0; s < amounts.size(); ++s) {
+		const int64_t z = table.species(SpeciesId{ static_cast<int32_t>(s) }).charge;
+		if (z * q < 0 && q % z == 0) {
+			amounts[s] += -q / z;
+			return;
+		}
+	}
+	for (size_t s = 0; s < amounts.size(); ++s) {
+		if (table.species(SpeciesId{ static_cast<int32_t>(s) }).charge != 0) {
+			amounts[s] = 0;
+		}
+	}
+}
+
 void run_world(uint64_t seed, Counts &counts) {
 	Rng rng(seed);
 	RandomChemistry chem;
@@ -117,9 +145,16 @@ void run_world(uint64_t seed, Counts &counts) {
 	const int cells = static_cast<int>(rng.range(2, 6));
 	for (int c = 0; c < cells; ++c) {
 		const CellId cell = builder.add_cell("cell" + std::to_string(c));
+		std::vector<int64_t> amounts(static_cast<size_t>(species), 0);
 		for (int s = 0; s < species; ++s) {
 			if (rng.chance(60)) {
-				builder.set_amount(cell, SpeciesId{ s }, Amount{ rng.range(0, 1000000000000) });
+				amounts[static_cast<size_t>(s)] = rng.range(0, 1000000000000);
+			}
+		}
+		neutralise(table, amounts);
+		for (int s = 0; s < species; ++s) {
+			if (amounts[static_cast<size_t>(s)] != 0) {
+				builder.set_amount(cell, SpeciesId{ s }, Amount{ amounts[static_cast<size_t>(s)] });
 			}
 		}
 		builder.set_energy(cell, Energy{ rng.range(-1000000000000, 1000000000000) });
@@ -281,6 +316,9 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 			// from a speck to hundreds of moles
 			const int64_t quanta = rng.chance(20) ? rng.range(1000, 1000000) : rng.range(1000000000, 300000000000000);
 			const SpeciesId id{ static_cast<int32_t>(rng.range(0, contents - 1)) };
+			if (table->species(id).charge != 0) {
+				continue; // (Stage 63) a cell is built neutral: an ion comes as a formula unit's, never alone
+			}
 			holds.push_back(SpeciesAmount{ id, Amount{ quanta } }); // a species drawn twice: the last amount stands
 		}
 		// a dissolved species needs a liquid to be dissolved in: without one, it is left out
@@ -292,7 +330,7 @@ void run_thermal_world(uint64_t seed, long long &transfers, bool reactive = fals
 			std::erase_if(holds, [&](const SpeciesAmount &h) { return table->species(h.species).phase == Phase::Aqueous; });
 			if (holds.empty()) {
 				for (int s = 0; s < contents && holds.empty(); ++s) {
-					if (table->species(SpeciesId{ s }).phase != Phase::Aqueous) {
+					if (table->species(SpeciesId{ s }).phase != Phase::Aqueous && table->species(SpeciesId{ s }).charge == 0) {
 						holds.push_back(SpeciesAmount{ SpeciesId{ s }, Amount{ rng.range(1000000000, 300000000000000) } });
 					}
 				}
@@ -498,7 +536,7 @@ TEST_CASE("sweeps: check_all reports exactly what the checks report one by one, 
 		const auto add = [&](const Violations &v) { out.insert(out.end(), v.begin(), v.end()); };
 		add(check_V2(table, trace));
 		for (const auto check : { check_C1, check_C2, check_C3, check_C4, check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2,
-					 check_S1, check_V1, check_V3, check_L1, check_E1 }) {
+					 check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
 			add(check(table, trace));
 		}
 		return out;
