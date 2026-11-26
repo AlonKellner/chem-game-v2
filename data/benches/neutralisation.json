@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "bottle",
 			"wall_g": 250,
-			"loss": 0.8,
 			"contents": {
 				"water": {
 					"g": 250.0
@@ -38,7 +37,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 80,
-			"loss": 0.5,
 			"at": [
 				10,
 				7

@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "conical_flask",
 			"wall_g": 100,
-			"loss": 0.9,
 			"at": [2, 6],
 			"contents": {
 				"water": {
@@ -32,7 +31,6 @@
 			"wall": "glass",
 			"glassware": "bottle",
 			"wall_g": 250,
-			"loss": 0.8,
 			"at": [12, 6],
 			"contents": {
 				"water": {

@@ -23,8 +23,8 @@ std::string bench() {
 				"contents": {"water": {"g": 100}}},
 			{"id": "blue", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [14, 7],
 				"contents": {"water": {"g": 100}, "copper_sulfate_aq": {"mol": 0.005}}},
-			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [20, 8]},
-			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [23, 8]}
+			{"id": "c0", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [20, 8]},
+			{"id": "c1", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [23, 8]}
 		]})";
 }
 
@@ -196,7 +196,7 @@ TEST_CASE("spectro lab: grains held up in a stirred cuvette dim the beam; settle
 	CHECK(lab::spectro::turbidity(1e4, 40e-4) == doctest::Approx(2.0 * 3.14159265 * 0.25 * 16e-6 * 1e4 / std::log(10.0)).epsilon(1e-9));
 	auto l = open(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
 		{"id": "spec", "kind": "spectrophotometer", "nm": 750, "at": [2, 12]},
-		{"id": "c", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "loss": 0.05, "at": [9, 7], "contents": {"water": {"g": 3.5}}},
+		{"id": "c", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [9, 7], "contents": {"water": {"g": 3.5}}},
 		{"id": "o", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 30, "at": [18, 7], "contents": {"copper_oxide": {"g": 0.05, "particles": 35000}}}]})");
 	must(*l, R"({"do": "insert", "spectrophotometer": "spec", "cuvette": "c", "onto": true})");
 	must(*l, R"({"do": "blank", "spectrophotometer": "spec"})");

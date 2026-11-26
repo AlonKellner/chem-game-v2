@@ -1,0 +1,5 @@
+#pragma once
+// data/walls.json, embedded at configure time (GAME_SPEC §6, Stage 53)
+namespace lab::walls {
+inline constexpr const char *WALLS_JSON = R"walls(@CHEM_WALLS_JSON@)walls";
+}

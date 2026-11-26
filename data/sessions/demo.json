@@ -24,7 +24,7 @@
 		{"do": "valve", "burner": "burner", "to": 1},
 		{"do": "wait_until", "item": "flask", "species": "water", "below_g": 12, "timeout": 1800},
 		{"do": "valve", "burner": "burner", "to": 0},
-		{"do": "wait_until", "item": "flask", "below_c": 21, "timeout": 3600},
+		{"do": "wait_until", "item": "flask", "below_c": 21, "timeout": 7200},
 		{"do": "wait", "seconds": 7200, "note": "the crystals grow for two hours: few start, and the salt reaches them by diffusion (GAME_SPEC §7)"},
 		{"do": "detach", "item": "condenser"},
 		{"do": "pour", "from": "flask", "to": "waste", "all": true},

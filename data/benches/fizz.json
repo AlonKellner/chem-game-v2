@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "conical_flask",
 			"wall_g": 100,
-			"loss": 0.9,
 			"at": [
 				12,
 				7
@@ -38,7 +37,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 40,
-			"loss": 0.3,
 			"contents": {
 				"malachite": {
 					"g": 2,

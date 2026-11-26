@@ -81,8 +81,14 @@ inline constexpr int LWIR_ROW = 301;
 // And a layered vessel's bands (Stage 47: its column's layers, GAME_SPEC §6): their count, then for each from the
 // bottom its set (whose liquid row is that layer's) and the heights over the floor it lies between, cm; 0 for a
 // vessel that is one layer (its own liquid row is all of it). At most MAX_BANDS.
-inline constexpr int ROWS_PER_SET = 8;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6, BANDS_ROW = 7;
+// And (Stage 53) a vessel's temperatures by height (TEMPS_ROW): its wall's rings, their count (0: none) and for each
+// from its floor up the height of its middle over its upright base (cm) and its temperature (K); from TEMPS_CONTENTS
+// its contents' layers, their count (0: one temperature, the body's) and for each from the bottom its middle's
+// level in its frame (cm, as its bands') and its temperature; at TEMPS_HOTTEST the hottest of them all, then a
+// signature of them (what a pixel's history follows, in place of the body's one temperature).
+inline constexpr int ROWS_PER_SET = 9;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6, BANDS_ROW = 7, TEMPS_ROW = 8;
+inline constexpr int TEMPS_CONTENTS = 49, TEMPS_HOTTEST = 399, MAX_RINGS = 24;
 inline constexpr int MAX_BANDS = 133; // (1 + 3 a band in a row of 401)
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
 inline constexpr int MAX_LINES = 256;

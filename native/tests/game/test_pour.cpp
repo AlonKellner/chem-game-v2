@@ -67,9 +67,9 @@ std::string pour_at(const std::string &from, double tilt) {
 std::unique_ptr<lab::Lab> muddy() {
 	std::string why;
 	auto l = lab::Lab::open(R"({"format": "chem-bench/2", "room": {"celsius": 20}, "items": [
-		{"id": "muddy", "at": [4, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5,
+		{"id": "muddy", "at": [4, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80,
 			"contents": {"water": {"g": 120}, "copper_oxide": {"g": 12, "particles": 1000000000}}},
-		{"id": "beaker", "at": [10, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5}]})",
+		{"id": "beaker", "at": [10, 8], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80}]})",
 			why);
 	REQUIRE_MESSAGE(l != nullptr, why);
 	return l;

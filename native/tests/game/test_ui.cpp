@@ -548,7 +548,7 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	p.click("valve:burner@1");
 	p.watch([&] { return p.grams("flask", "water") < 10.0; }, 1800);
 	p.click("valve:burner@0");
-	p.watch([&] { return p.item("flask").celsius < 21.0; }, 3600);
+	p.watch([&] { return p.item("flask").celsius < 21.0; }, 7200); // (Stage 53: its glass cools by its own outside)
 	p.wait(7200); // the crystals grow for two hours (Stage 23: measured nucleation and transport)
 	p.drag("item:condenser", "square:23,3");
 	p.drag("item:waste", "square:23,12");

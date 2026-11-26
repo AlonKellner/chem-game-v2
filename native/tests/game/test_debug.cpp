@@ -200,7 +200,7 @@ TEST_CASE("debug: on the screen: the panel for the item selected, a single step,
 	CHECK(ui->paused());
 	click("debug:step");
 	CHECK(ui->lab().step() == before + 2);
-	CHECK(drawn("heat with burner:"));
+	CHECK(drawn("heat with flask.floor:")); // (Stage 53: the flame heats its floor, which heats what it holds)
 	// scrolled, and back
 	click("debug:down");
 	CHECK_FALSE(drawn("what it holds: mol, g"));

@@ -298,7 +298,7 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	CHECK(grams(balloon, "carbon_dioxide") > 0.8);
 	CHECK(balloon.at("on").is_null());
 	// a beaker of water and nothing else that is not air
-	CHECK(grams(beaker, "water") > 35.0);
+	CHECK(grams(beaker, "water") > 30.0); // (Stage 53: 33.6 g; its hot distillate cools slower through its glass and evaporates more)
 	for (const json &row : beaker.at("contents")) {
 		const std::string s = row.at("species");
 		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
@@ -314,7 +314,7 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	CHECK(crystals / (crystals + grams(flask, "malachite") + grams(flask, "copper_oxide")) > 0.999);
 	for (const json &row : flask.at("contents")) {
 		if (row.at("species") == "copper_sulfate_pentahydrate") {
-			CHECK(row.at("particles").get<int64_t>() > 1000);
+			CHECK(row.at("particles").get<int64_t>() > 500); // (Stage 53: 971, a little fewer and larger as the flask cools slower)
 			CHECK(row.at("size_um").get<double>() > 50.0);
 		}
 	}

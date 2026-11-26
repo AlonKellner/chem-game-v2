@@ -67,7 +67,7 @@ TEST_CASE("tutorial: followed with its own gestures, step by step, it completes 
 	CHECK(p.item("beaker").submitted);
 	CHECK(p.item("flask").submitted);
 	CHECK(p.grams("balloon", "carbon_dioxide") > 0.8);
-	CHECK(p.grams("beaker", "water") > 35.0);
+	CHECK(p.grams("beaker", "water") > 30.0); // (Stage 53: its hot distillate cools slower through its glass, and evaporates more)
 	CHECK(p.grams("flask", "copper_sulfate_pentahydrate") > 8.9);
 	CHECK(p.ui->lab().view().conserved);
 	REQUIRE(p.tutorial().results.size() == 4);

@@ -125,6 +125,9 @@ struct SpeciesDef {
 	// temperature (D = D298 (T / 298.15)^n; GAME_SPEC §6, Stage 50: an open vessel's gas exchanged at its mouth);
 	// 0: it does not diffuse
 	double air_diffusion = 0.0, air_exponent = 0.0;
+	// A wall's or a solid's thermal conductivity, W/m K (GAME_SPEC §6, Stage 53: a vessel's glass as rings that
+	// conduct along it; a powder's grains in a bed on a floor); 0: none given
+	double conductivity = 0.0;
 };
 
 struct SpeciesId {

@@ -28,7 +28,6 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 80,
-			"loss": 0.5,
 			"at": [
 				6,
 				7
@@ -55,7 +54,6 @@
 			"volume_ml": 100,
 			"wall": "glass",
 			"wall_g": 40,
-			"loss": 0.2,
 			"at": [
 				11,
 				2
@@ -69,7 +67,6 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 100,
-			"loss": 0.5,
 			"at": [
 				14,
 				7
@@ -83,7 +80,6 @@
 			"volume_ml": 50,
 			"wall": "glass",
 			"wall_g": 30,
-			"loss": 0.3,
 			"at": [
 				19,
 				7
@@ -97,7 +93,6 @@
 			"volume_ml": 500,
 			"wall": "glass",
 			"wall_g": 300,
-			"loss": 0.5,
 			"at": [
 				23,
 				7

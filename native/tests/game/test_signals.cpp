@@ -562,9 +562,9 @@ TEST_CASE("signals: a circuit holds parts as they lie, and gives them back; what
 	CHECK(item(v, "monitor1").row == 1);
 	CHECK(kept->digest() == loose->digest()); // where parts are kept is not the world
 	std::string why;
-	for (int i = 0; i < 20; ++i) {
-		REQUIRE(loose->advance(30, why));
-		REQUIRE(kept->advance(30, why));
+	for (int i = 0; i < 20; ++i) { // (Stage 53: 40 s, its flame's heat into the flask through its floor's glass)
+		REQUIRE(loose->advance(120, why));
+		REQUIRE(kept->advance(120, why));
 		REQUIRE(kept->digest() == loose->digest());
 	}
 	CHECK(item(kept->view(), "alarm1").part.ringing); // through the circuit's monitor

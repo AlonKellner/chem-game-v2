@@ -7,8 +7,8 @@
 	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
 		{"id": "scale", "kind": "balance", "model": "analytical", "at": [3, 12]},
-		{"id": "dish", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "loss": 0.3, "at": [10, 8], "label": "dry, empty"},
-		{"id": "jar", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "loss": 0.3, "at": [15, 8], "label": "copper sulfate, blue crystals",
+		{"id": "dish", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [10, 8], "label": "dry, empty"},
+		{"id": "jar", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [15, 8], "label": "copper sulfate, blue crystals",
 			"contents": {"copper_sulfate_pentahydrate": {"g": 10, "particles": 2000000}}},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}
 	]

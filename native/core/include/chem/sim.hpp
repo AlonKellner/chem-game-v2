@@ -168,6 +168,21 @@ private:
 	std::vector<Exchanged> exchanged_; // the step's (Stage 50)
 	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
 	std::vector<uint8_t> thermal_valid_;
+	// what each cell's kept thermal state was derived from (Stage 53): the same state and meta give it again, so a
+	// cell at rest (a vessel's ring of glass) is not derived anew each step
+	struct ThermalKey {
+		bool known = false;
+		int64_t energy = 0;
+		std::vector<int64_t> amount;
+		double volume = 0.0;
+		bool sealed = false, rigid = false, reservoir = false;
+	};
+	std::vector<ThermalKey> thermal_key_;
+	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)
+	struct Relaxing {
+		double conductance = -1.0, capacity = -1.0, factor = 0.0;
+	};
+	std::vector<Relaxing> relaxing_;
 	double step_seconds_ = STEP_SECONDS;
 	bool traced_ = true; // the last step was step(), not advance()
 	bool checking_;

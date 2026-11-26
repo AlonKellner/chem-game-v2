@@ -7,10 +7,10 @@
 	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
 		{"id": "cup", "kind": "vessel", "glassware": "foam_cup", "volume_ml": 237, "wall": "polystyrene_foam", "wall_g": 2.6, "loss": 0.12, "at": [9, 8], "label": "foam cup, with a lid and a thermometer"},
-		{"id": "cylinder", "kind": "vessel", "glassware": "measuring_cylinder", "volume_ml": 100, "wall": "glass", "wall_g": 120, "loss": 0.3, "at": [4, 6], "label": "100 mL measuring cylinder"},
-		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [15, 7], "label": "sodium hydroxide, 1.0 M",
+		{"id": "cylinder", "kind": "vessel", "glassware": "measuring_cylinder", "volume_ml": 100, "wall": "glass", "wall_g": 120, "at": [4, 6], "label": "100 mL measuring cylinder"},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [15, 7], "label": "sodium hydroxide, 1.0 M",
 			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.4}}},
-		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "loss": 0.5, "at": [20, 7], "label": "sulfuric acid, 1.0 M",
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [20, 7], "label": "sulfuric acid, 1.0 M",
 			"contents": {"water": {"g": 300}, "sulfuric_acid_aq": {"mol": 0.3}}}
 	]
 }

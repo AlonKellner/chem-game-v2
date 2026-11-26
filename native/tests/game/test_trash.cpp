@@ -156,9 +156,11 @@ TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cab
 	REQUIRE(before > 30.0);
 	must(*binned, R"({"do": "trash", "item": "flask"})");
 	must(*stowed, R"({"do": "stow", "item": "flask"})");
-	for (int k = 0; k < 6; ++k) {
-		must(*binned, R"({"do": "wait", "seconds": 5})");
-		must(*stowed, R"({"do": "wait", "seconds": 5})");
+	// (Stage 53: half an hour, not thirty seconds: its floor's glass, hotter than what it holds, gives up its heat to it
+	// first, and the flask warms before it cools, by its own outside, slowly)
+	for (int k = 0; k < 30; ++k) {
+		must(*binned, R"({"do": "wait", "seconds": 60})");
+		must(*stowed, R"({"do": "wait", "seconds": 60})");
 		const lab::LabView a = binned->view(), b = stowed->view();
 		CHECK(a.conserved);
 		CHECK(item(a, "flask").celsius == item(b, "flask").celsius);
@@ -168,7 +170,7 @@ TEST_CASE("trash: a hot vessel cools in the trash exactly as it would in the cab
 	const double after = item(binned->view(), "flask").celsius;
 	CHECK(after < before - 1.0);
 	CHECK(item(binned->view(), "flask").place == "trash");
-	MESSAGE("in the trash the flask cooled from " << before << " C to " << after << " C in 30 s");
+	MESSAGE("in the trash the flask cooled from " << before << " C to " << after << " C in half an hour");
 	// out of the trash, the two labs are one state
 	must(*binned, R"({"do": "stow", "item": "flask"})");
 	CHECK(binned->view().trash.empty());

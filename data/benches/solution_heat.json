@@ -17,7 +17,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 80,
-			"loss": 0.5,
 			"at": [
 				8,
 				7
@@ -35,7 +34,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 80,
-			"loss": 0.5,
 			"at": [
 				18,
 				7
@@ -53,7 +51,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 40,
-			"loss": 0.3,
 			"contents": {
 				"copper_sulfate": {
 					"g": 8,
@@ -72,7 +69,6 @@
 			"wall": "glass",
 			"glassware": "beaker",
 			"wall_g": 40,
-			"loss": 0.3,
 			"contents": {
 				"copper_sulfate_pentahydrate": {
 					"g": 12.5,

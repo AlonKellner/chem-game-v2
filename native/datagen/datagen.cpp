@@ -119,6 +119,7 @@ struct SpeciesRow {
 	double molar_volume = 0.0; // m^3/mol, derived (a dissolved species: from volume_cm3)
 	double grain = 0.0; // m: a precipitate's grains (grain_um)
 	double air_diffusion = 0.0, air_exponent = 0.0; // a gas's in the room's air: m^2/s at 298.15 K, and its exponent (Stage 50)
+	double conductivity = 0.0; // a wall's thermal conductivity, W/m K (Stage 53)
 	std::vector<std::pair<int, int>> ions; // (ion, count): GAME_SPEC §4.6
 };
 
@@ -269,6 +270,14 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			}
 			row.grain = g * 1e-6;
 		}
+		if (s.contains("conductivity")) {
+			// (Stage 53) a wall's or a solid's thermal conductivity, W/m K (a wall's rings; a powder bed's grains)
+			const double k = s.at("conductivity").get<double>();
+			if ((!row.wall && row.phase->phase != chem::Phase::Solid) || !(k > 0.0)) {
+				fail(species_file, "species " + row.id + ": conductivity is a wall's or a solid's positive thermal conductivity, W/m K");
+			}
+			row.conductivity = k;
+		}
 		if (s.contains("air_diffusion")) {
 			// (Stage 50) {"cm2_s": D at 298.15 K and 1 atm, "exponent": n}
 			const nlohmann::json &d = s.at("air_diffusion");
@@ -315,6 +324,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		def.grain = row.grain;
 		def.air_diffusion = row.air_diffusion;
 		def.air_exponent = row.air_exponent;
+		def.conductivity = row.conductivity;
 		species_defs.push_back(def);
 	}
 
@@ -508,8 +518,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < static_cast<size_t>(chem::MAX_IONS); ++i) {
 			cpp << (i ? ", " : " ") << "IonCount{ " << (i < row.ions.size() ? row.ions[i].first : -1) << ", " << (i < row.ions.size() ? row.ions[i].second : 0) << " }";
 		}
-		char grain[120];
-		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g", row.grain, row.air_diffusion, row.air_exponent);
+		char grain[160];
+		std::snprintf(grain, sizeof grain, "%.17g, %.17g, %.17g, %.17g", row.grain, row.air_diffusion, row.air_exponent, row.conductivity);
 		cpp << " } }, " << grain << " },\n";
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";

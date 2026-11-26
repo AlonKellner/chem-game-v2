@@ -208,7 +208,7 @@ void completed(Pupil &p) {
 
 TEST_CASE("experiment vacuum: followed with its own gestures, strict, the flask falls below 10 kPa, boils at 50 C and pops its stopper (Stage 41)") {
 	Pupil p("data/benches/vacuum.json", "data/tutorials/vacuum.json");
-	CHECK(pupil::follow_through(p, 3600) > 15);
+	CHECK(pupil::follow_through(p, 7200) > 15); // (Stage 53: its glass cools by its own outside, slower)
 	completed(p);
 	CHECK(p.item("stopper").place != "on");
 	REQUIRE(p.tutorial().results.size() == 4);
@@ -217,13 +217,13 @@ TEST_CASE("experiment vacuum: followed with its own gestures, strict, the flask 
 
 TEST_CASE("experiment vacuum: played as a person plays it, strict, it completes (Stage 41)") {
 	Pupil p("data/benches/vacuum.json", "data/tutorials/vacuum.json");
-	pupil::play_as_person(p, 3600);
+	pupil::play_as_person(p, 7200);
 	completed(p);
 }
 
 TEST_CASE("experiment vacuum: followed with its own gestures, free, it completes (Stage 41)") {
 	Pupil p("data/benches/vacuum.json", "data/tutorials/vacuum.json", false);
-	pupil::follow_through(p, 3600);
+	pupil::follow_through(p, 7200);
 	completed(p);
 }
 

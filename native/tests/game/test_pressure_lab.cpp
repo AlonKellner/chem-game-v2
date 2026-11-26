@@ -18,11 +18,11 @@ const char *const BENCH = R"({
 	"grid": [28, 15],
 	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
-		{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "loss": 0.9, "at": [2, 6],
+		{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "at": [2, 6],
 			"contents": {"water": {"g": 100}}},
-		{"id": "bottle", "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "loss": 0.8, "at": [10, 6],
+		{"id": "bottle", "kind": "vessel", "volume_ml": 500, "wall": "glass", "glassware": "bottle", "wall_g": 250, "at": [10, 6],
 			"contents": {"water": {"g": 200}}},
-		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "loss": 0.5, "at": [18, 6]},
+		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "at": [18, 6]},
 		{"id": "stopper", "kind": "stopper", "wall": "latex", "wall_g": 8, "hold_n": 30, "loss": 0.1},
 		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}
 	]

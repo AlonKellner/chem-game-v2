@@ -185,7 +185,8 @@ inline vec4 anchor_vec(int which, int x, int y) {
 #endif
 
 static_assert(HEADER_VECS == optics_layout::HEADER_VECS && BODY_VECS == optics_layout::BODY_VECS && ROW == optics_layout::ROW && ROWS_PER_SET == optics_layout::ROWS_PER_SET &&
-				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES,
+				LIGHT_ENTRIES == optics_layout::LIGHT_ENTRIES && TEMPS_ROW == optics_layout::TEMPS_ROW && TEMPS_CONTENTS == optics_layout::TEMPS_CONTENTS &&
+				TEMPS_HOTTEST == optics_layout::TEMPS_HOTTEST && BANDS_ROW == optics_layout::BANDS_ROW,
 		"the per-pixel source and lab/optics_scene.hpp lay the scene out alike");
 static_assert(1 + KEPT_MOST * KEPT_BEAM == optics_layout::KEPT_VECS, "a pixel's kept beams are a record of KEPT_VECS");
 static_assert(RELAY_HEAD_VECS == optics_layout::RELAY_HEAD_VECS && RELAY_PALETTE == optics_layout::RELAY_PALETTE && RELAY_RECORD == optics_layout::RELAY_RECORD, "a sensor display's block and record");

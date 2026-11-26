@@ -40,9 +40,12 @@ const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
-const int ROWS_PER_SET = 8;
+const int ROWS_PER_SET = 9;
 const int BUBBLE_ROW = 6; // what a vessel's bubbles turn back, their albedo (Stage 45)
 const int BANDS_ROW = 7; // a layered vessel's bands (Stage 47)
+const int TEMPS_ROW = 8; // a vessel's temperatures by height, its wall's and its contents' (Stage 53)
+const int TEMPS_CONTENTS = 49; // where its contents' begin in that row (after its wall's, at most 24 points)
+const int TEMPS_HOTTEST = 399; // its hottest
 const int LIGHT_ENTRIES = 4097;
 const int LIGHT_SIZE = LIGHT_ENTRIES + ROW; // a light's table, then the way back (Stage 46: two lights, one a range)
 const int MAX_LAYERS = 4; // bodies one pixel looks through
@@ -513,7 +516,13 @@ Path path_of(vec2 p, float size) {
 		q.key = q.key + vec4((l.depth_cm + 3.0 * l.haze + 0.29 * l.cover) * w, (l.solid + 7.0 * l.wall + 0.13 * l.glowing) * w, ids.x, ids.y * w);
 		// its temperature, where its light depends on it (Stage 46): in the long-wave, and in the visible from 500 K
 		float kelvin = body_kelvin(i);
-		if (band_range == 1 || kelvin >= 500.0) {
+		float hottest = kelvin;
+		int temps = set_of(i) * ROWS_PER_SET * ROW + TEMPS_ROW * ROW;
+		if (row_value(temps) > 0.5 || row_value(temps + TEMPS_CONTENTS) > 0.5) {
+			hottest = row_value(temps + TEMPS_HOTTEST); // (Stage 53: its parts' temperatures, by a signature of them)
+			kelvin = row_value(temps + TEMPS_HOTTEST + 1);
+		}
+		if (band_range == 1 || hottest >= 500.0) {
 			q.key.w = q.key.w + 0.00137 * kelvin * w;
 		}
 		// (10: SHAPE_BLOCK; its vec4s 7 and 8: the body's tags, and where what lies in it changed)
@@ -827,7 +836,8 @@ struct Shade {
 	float solid;
 	float room; // the room in front, which the surfaces turn back
 	int body; // the refracting one's
-	float theta; // what it emits by (Stage 46)
+	float theta; // what it emits by (Stage 46): its contents
+	float theta_wall; // and its wall where it is crossed (Stage 53)
 };
 
 // ---- what a body emits by its temperature (GAME_SPEC §12.4, Stage 46: Kirchhoff)
@@ -858,6 +868,65 @@ float theta_of(float nm, float kelvin) {
 	float m = nm * 1.0e-3; // micrometres
 	// 2 h c^2 / wavelength^5 / (e^(c2 / wavelength T) - 1), W / m2 / sr / nm
 	return 1.191042972e5 / (m * m * m * m * m) / (exp(14387.769 / (m * kelvin)) - 1.0) / max(light, 1.0e-30);
+}
+
+// A vessel's temperature at a height (Stage 53), from a list in its TEMPS row: a count, then (height, K) pairs
+// rising: linear between them, held beyond the first and the last
+float profile_at(int base, float z) {
+	int n = int(row_value(base));
+	float lo_z = row_value(base + 1);
+	float lo_k = row_value(base + 2);
+	if (n < 2 || z <= lo_z) {
+		return lo_k;
+	}
+	for (int k = 1; k < 133; k++) {
+		if (k >= n) {
+			break;
+		}
+		float hz = row_value(base + 1 + 2 * k);
+		float hk = row_value(base + 2 + 2 * k);
+		if (z <= hz) {
+			return mix(lo_k, hk, (z - lo_z) / max(hz - lo_z, 1.0e-6));
+		}
+		lo_z = hz;
+		lo_k = hk;
+	}
+	return lo_k;
+}
+
+// What a body emits by at a place p of the screen (Stage 53, GAME_SPEC §12.4): its contents' (x) and its wall's
+// (y) Planck ratios. A vessel's wall is its rings, each at its own temperature, read along its axis (the place
+// turned back to where it stands upright, so many cm over its base); its contents are its layers, each at its
+// own, read by the level in the room (as its bands lie, band_rows). Both run continuously between their parts'
+// middles: heat crosses from each to the next, and a temperature has no step there. A body without them emits
+// by its one temperature; in the visible nothing under 500 K emits, so a vessel no part of which is that hot
+// reads nothing more.
+vec2 heat_of(int body, int start, vec2 p, float nm) {
+	int temps = start + TEMPS_ROW * ROW;
+	float walls = row_value(temps);
+	float held = row_value(temps + TEMPS_CONTENTS);
+	if (walls < 0.5 && held < 0.5) {
+		float t = theta_of(nm, body_kelvin(body));
+		return vec2(t, t);
+	}
+	if (nm < 7000.0 && row_value(temps + TEMPS_HOTTEST) < 500.0) {
+		return vec2(0.0, 0.0);
+	}
+	vec4 turned = shape_vec(body * SHAPE_BLOCK + 1); // its pivot, the turn's cosine and sine
+	vec4 upright = shape_vec(body * SHAPE_BLOCK + 2); // its rectangle upright
+	float cm = scene_vec(HEADER_VECS + body * BODY_VECS + 1).y;
+	float k_in = body_kelvin(body);
+	if (held > 0.5) {
+		float origin = turned.y + (upright.x + 0.5 * upright.z - turned.x) * turned.w + (upright.y + upright.w - turned.y) * turned.z;
+		k_in = profile_at(temps + TEMPS_CONTENTS, (origin - p.y) * cm);
+	}
+	float k_wall = k_in;
+	if (walls > 0.5) {
+		float dx = p.x - turned.x;
+		float dy = p.y - turned.y;
+		k_wall = profile_at(temps, (upright.y + upright.w - (turned.y - turned.w * dx + turned.z * dy)) * cm);
+	}
+	return vec2(theta_of(nm, k_in), theta_of(nm, k_wall));
 }
 
 // ---- an image a thing emits by (GAME_SPEC §12.1: image weights; Stage 42, the spectral viewer's screen)
@@ -971,10 +1040,11 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float colour = row_at(start + ROW, nm);
 	float glass = exp(-row_at(start + 2 * ROW, nm) * l.wall);
 	float glow = glow_of(body_of(l.body), start, vec2(q.x, q.y), q.size, q.size, nm, l.solid); // what its solids glow with, a multiple of the room's light
-	float theta = theta_of(nm, body_kelvin(body_of(l.body)));
+	vec2 heat = heat_of(body_of(l.body), start, vec2(q.x, q.y), nm);
 	if (body_of(l.body) == q.refractor && !s.own) {
 		s.own = true;
-		s.theta = theta;
+		s.theta = heat.x;
+		s.theta_wall = heat.y;
 		s.per_cm = per_cm;
 		s.colour = colour;
 		s.scatter = mix(colour, row_at(start + BUBBLE_ROW * ROW, nm), white_at(body_of(l.body), q.y));
@@ -993,7 +1063,9 @@ Shade shade_layer(Shade s, Path q, Layer l, int k, float nm) {
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * glass;
 	float scatter = mix(colour, row_at(start + BUBBLE_ROW * ROW, nm), white_at(body_of(l.body), q.y)); // what its haze turns back
 	float b = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * glass;
-	b = b + theta * (1.0 - a - (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid) * glass);
+	// (Stage 53) what its contents neither pass nor turn back they emit at their temperature, what its wall takes
+	// in at the wall's
+	b = b + heat.x * (glass - a - (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid) * glass) + heat.y * (1.0 - glass);
 	if (s.own) {
 		s.b_front = a * s.b_front + b;
 		s.a_front = a * s.a_front;
@@ -1021,6 +1093,7 @@ Shade shade_of(Path q, float nm) {
 	s.body = 0;
 	s.room = room_front();
 	s.theta = 0.0;
+	s.theta_wall = 0.0;
 	s = shade_layer(s, q, q.l0, 0, nm);
 	s = shade_layer(s, q, q.l1, 1, nm);
 	s = shade_layer(s, q, q.l2, 2, nm);
@@ -1046,7 +1119,7 @@ float shaded(Shade s, Path q, float pass, float c0, float c1, bool liquid, float
 		// (Stage 46) what it passes and what it turns back, and the rest it emits
 		float own_a = through * (1.0 - haze) * (1.0 - s.solid) * s.glass;
 		float own_r = ((s.scatter * exp(-depth * 0.5) * haze) * (1.0 - s.solid) + s.colour * through * s.solid) * s.glass;
-		seen = seen + s.theta * (1.0 - own_a - own_r);
+		seen = seen + s.theta * (s.glass - own_a - own_r) + s.theta_wall * (1.0 - s.glass); // (Stage 53: its contents', its wall's)
 	}
 	if (q.refractor >= 0) {
 		seen = pass * seen + (1.0 - pass) * s.room;
@@ -1123,14 +1196,15 @@ float swept_wall(int profile, float a0, float a, float b0, float b) {
 // it; its wall; and its surfaces pass `pass` of all that, the rest showing the room in front.
 // (Stage 46) What it neither passes nor turns away it emits, `theta` times (Kirchhoff, GAME_SPEC §12.4); and of what
 // its surfaces do not pass, `absorbed` was taken in by its glass, which emits as much, the rest turned away.
-vec2 body_does(Layer l, float colour, float scatter, float glow, float skin_depth, float depth, float pass, float absorbed, float room, float theta) {
+// (Stage 53) Its contents emit by heat.x, its wall (what its skin and its surfaces take in) by heat.y.
+vec2 body_does(Layer l, float colour, float scatter, float glow, float skin_depth, float depth, float pass, float absorbed, float room, vec2 heat) {
 	float skin = exp(-skin_depth * l.wall);
 	float through = exp(-depth);
 	float a = through * (1.0 - l.haze) * (1.0 - l.solid) * skin;
 	float b = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid + glow * (exp(-depth * 0.5) * l.solid + l.glowing)) * skin;
 	float r = (scatter * exp(-depth * 0.5) * l.haze * (1.0 - l.solid) + colour * through * l.solid) * skin;
-	b = b + theta * (1.0 - a - r);
-	return vec2(pass * a, pass * b + (1.0 - pass - absorbed) * room + absorbed * theta);
+	b = b + heat.x * (skin - a - r) + heat.y * (1.0 - skin);
+	return vec2(pass * a, pass * b + (1.0 - pass - absorbed) * room + absorbed * heat.y);
 }
 
 
@@ -2703,7 +2777,7 @@ vec2 beam_shade(Beam b, vec4 wp, float nm) {
 			l.haze = haze_along(body, depth_cm, met.w);
 		}
 		float glow = glow_of(body, start, vec2(met.z, met.w), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met.w, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met.w) * depth_cm, pass, absorbed, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met.w, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met.w) * depth_cm, pass, absorbed, room, heat_of(body, start, vec2(met.z, met.w), nm));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
@@ -2930,7 +3004,7 @@ vec2 ray_shade(RayMet m, float nm) {
 		}
 		int start = set_of(body) * ROWS_PER_SET * ROW;
 		float glow = glow_of(body, start, met_where(m, k), 1.0e-3, 1.0e-3, nm, l.solid);
-		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met_where(m, k).y, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met_where(m, k).y) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, theta_of(nm, body_kelvin(body)));
+		vec2 does = body_does(l, row_at(start + ROW, nm), haze_colour(body, start, met_where(m, k).y, nm), glow, row_at(start + 2 * ROW, nm), liquid_at(body, start, nm, met_where(m, k).y) * (bent ? slot.w : l.depth_cm + l.glowing), bent ? slot.z : 1.0, bent ? m.absorb[k] : 0.0, room, heat_of(body, start, met_where(m, k), nm));
 		sum = sum + a * does.y;
 		a = a * does.x;
 	}
