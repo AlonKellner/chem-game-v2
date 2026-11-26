@@ -167,7 +167,8 @@ enum {
 	CG_DRAW_LINE = 2, /* from (x, y) to (w, h); width */
 	CG_DRAW_POLYGON = 3, /* points[2 * first .. 2 * (first + count)): filled */
 	CG_DRAW_CIRCLE = 4, /* centre x, y; radius w: filled */
-	CG_DRAW_TEXT = 5 /* text + first, count bytes (also NUL-ended); baseline starts at x, y; size h */
+	CG_DRAW_TEXT = 5, /* text + first, count bytes (also NUL-ended); baseline starts at x, y; size h */
+	CG_DRAW_IMAGE = 6 /* (Stage 61) images[first] stretched over x, y, w, h: a picture the screen paints */
 };
 
 typedef struct cg_draw_command {
@@ -179,6 +180,14 @@ typedef struct cg_draw_command {
 	float x, y, w, h;
 } cg_draw_command;
 
+/* (Stage 61) a picture: w by h pixels of 8-bit sRGB red, green and blue, row by row from the top; a hash that moves
+ * only when a pixel does (keep its texture by it) */
+typedef struct cg_draw_image {
+	int32_t w, h;
+	const uint8_t *rgb;
+	uint64_t hash;
+} cg_draw_image;
+
 typedef struct cg_draw_list {
 	uint32_t size; /* sizeof(cg_draw_list), set by the caller */
 	int32_t command_count;
@@ -188,6 +197,8 @@ typedef struct cg_draw_list {
 	int32_t text_size;
 	const char *text;
 	int32_t above; /* the first command painted over the optical pass; those before it are under it */
+	int32_t image_count; /* (Stage 61) */
+	const cg_draw_image *images;
 } cg_draw_list;
 
 /* What to paint now. Borrowed until the next call on this ui. */
@@ -318,6 +329,15 @@ CG_API cg_status cg_ui_tutorial(cg_ui *ui, cg_tutorial *out);
  * strict, a running tutorial takes only its step's gestures and its clock waits for them; free, it only
  * points at them. The screen's own: it stays through a reset and another experiment. */
 CG_API void cg_ui_set_strict(cg_ui *ui, int32_t strict);
+/* The supplies' pictures (GAME_SPEC §13.1, Stage 61): a host gives back those it kept ("chem-pictures/1"); takes
+ * every one the screen has (borrowed until the next call on this screen), and whether one was captured since it last
+ * took them; chooses whether a supply with none has its own captured apart (off as opened); and (a build's tool)
+ * has every one the bench lacks captured, waiting. */
+CG_API cg_status cg_ui_add_pictures(cg_ui *ui, const char *pictures_json);
+CG_API const char *cg_ui_pictures(cg_ui *ui);
+CG_API int32_t cg_ui_pictures_changed(const cg_ui *ui);
+CG_API void cg_ui_set_capture_ahead(cg_ui *ui, int32_t on);
+CG_API void cg_ui_capture_pictures(cg_ui *ui);
 
 /* The experiments (GAME_SPEC §13.7, Stage 41): a chem-experiments/1 catalogue (data/experiments.json), each
  * entry's bench and tutorial (null for none) inlined or a path, read by `read`: the file's text, borrowed

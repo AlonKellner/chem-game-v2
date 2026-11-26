@@ -33,7 +33,9 @@ inline constexpr int MAX_BODIES = 256;
 // in (Stage 46: 0 the visible, 1 the long-wave: the debug infrared view). The first vec4's w: where the long-wave
 // rows begin among the rows (Stage 46). The sixth (Stage 46): where the layout's (0, 0) is on the screen, how wide a
 // square of the screen's grid is there (GRID_SQUARE at the view), 0.
-inline constexpr int HEADER_VECS = 6;
+// The seventh and eighth (Stage 61): the screen's panels' rectangles (x, y, w, h, on the screen), where a pixel that
+// sees only the wall is left to the screen's own drawing (alpha 0), and behind glass the bench's ruling is drawn.
+inline constexpr int HEADER_VECS = 8; // (the sixth's w, Stage 61: where the wall behind glass begins in the wall's table)
 inline constexpr int BODY_VECS = 8;
 // The room in squares (GAME_SPEC §12.3, Stage 22; Stage 46: the layout's, at the view, so the whole room is in them
 // at any view, on the screen or off it): each lists the bodies whose rectangles (and a pixel
@@ -167,6 +169,10 @@ struct OpticsScene {
 	// what is drawn on the wall, 5 floats a shape (x, y, w, h, radiance), in painting order: the truth
 	// reads the wall from these, not from the table
 	std::vector<float> drawn;
+	// (Stage 61) and what is drawn behind glass only (the same five floats a shape), over it; and where the second
+	// table, the wall behind glass, begins among the table's vec4s (the header's vec4 5's w)
+	std::vector<float> drawn_glass;
+	int wall_glass_base = 0;
 	// what the wall's table has far off to the left and to the right (where rays that reach a face's black cells,
 	// and its others, are put), and beyond the screen's edges (below 0: as it is at the edge): for the truth's own reading
 	double far_left = 0.0, far_right = 0.0, wall_beyond = -1.0;
@@ -265,6 +271,8 @@ struct OpticsBody {
 	const char *light_to = nullptr;
 	double toward = 0.0, strength = 1.0;
 	uint64_t id = 0; // which thing it is: a pixel's history follows it
+	// an item's body known by another name than its item's id (Stage 61: a supply's box, whose first copy has its id)
+	const char *named = nullptr;
 	const uint8_t *image = nullptr;
 	int image_w = 0, image_h = 0;
 	uint64_t image_hash = 0;
@@ -306,6 +314,11 @@ struct OpticsRoom {
 	// `beyond`. 0: no room (the wall's plane without end, and `front` for a ray that never reaches it).
 	double cube = 0.0, cube_cell = 0.0, edge = 0.0;
 	double cube_x = 960.0, cube_y = 540.0; // its middle, on the screen (Stage 42: the view moves it)
+	// (Stage 61) the screen's panels (Supplies, Storage), on the screen: none where w is 0
+	float panels[2][4] = {};
+	// (Stage 61) what is drawn on the wall behind glass only, over `shapes`: read by every ray of a pixel within a
+	// body's outline (the panels' ruling: seen through glass, the panels are the bench), never seen bare
+	std::vector<OpticsShape> glass_shapes;
 	// the layout's pixels on the screen (Stage 42: a view of the room): how wide one is, and where its x = 0 is. A
 	// vessel made as glassware stands with its axis on a whole one of them.
 	double pixel = 1.0, pixel_x0 = 0.0, pixel_y0 = 0.0;

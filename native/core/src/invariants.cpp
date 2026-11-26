@@ -115,6 +115,59 @@ Totals totals(const SpeciesTable &table, const Snapshot &snapshot) {
 	return t;
 }
 
+Totals plus(const Totals &a, const Totals &b) {
+	Totals t;
+	for (size_t e = 0; e < t.atoms.size(); ++e) {
+		t.atoms[e] = wrap_add(a.atoms[e], b.atoms[e]);
+	}
+	t.charge = wrap_add(a.charge, b.charge);
+	t.energy = wrap_add(a.energy, b.energy);
+	t.mass.hi = wrap_add(a.mass.hi, b.mass.hi);
+	t.mass.lo = a.mass.lo + b.mass.lo; // (each under 2^32: no overflow)
+	t.mass.hi = wrap_add(t.mass.hi, t.mass.lo >> 32);
+	t.mass.lo &= 0xffffffff;
+	return t;
+}
+
+Totals minus(const Totals &a, const Totals &b) {
+	Totals t;
+	for (size_t e = 0; e < t.atoms.size(); ++e) {
+		t.atoms[e] = wrap_add(a.atoms[e], wrap_mul(b.atoms[e], -1));
+	}
+	t.charge = wrap_add(a.charge, wrap_mul(b.charge, -1));
+	t.energy = wrap_add(a.energy, wrap_mul(b.energy, -1));
+	t.mass.hi = wrap_add(a.mass.hi, wrap_mul(b.mass.hi, -1));
+	t.mass.lo = a.mass.lo - b.mass.lo; // (each in [0, 2^32): a borrow at most)
+	if (t.mass.lo < 0) {
+		t.mass.lo += 4294967296LL;
+		t.mass.hi = wrap_add(t.mass.hi, -1);
+	}
+	return t;
+}
+
+Violations check_C9(const Totals &start, const Totals &supplied, const Totals &retired, const Totals &now) {
+	Violations out;
+	const Totals expected = minus(plus(start, supplied), retired);
+	for (size_t e = 0; e < now.atoms.size(); ++e) {
+		if (now.atoms[e] != expected.atoms[e]) {
+			out.push_back(text("C9: element %lld: %lld quanta of atoms, where its start, what was supplied and what was retired make %lld", static_cast<long long>(e),
+					static_cast<long long>(now.atoms[e]), static_cast<long long>(expected.atoms[e])));
+		}
+	}
+	if (!(now.mass == expected.mass)) {
+		char buffer[200];
+		std::snprintf(buffer, sizeof buffer, "C9: the mass is %.12g g, where its start, what was supplied and what was retired make %.12g g", now.mass.grams(), expected.mass.grams());
+		out.push_back(buffer);
+	}
+	if (now.charge != expected.charge) {
+		out.push_back(text("C9: the charge is %lld quanta, where its ledger makes %lld", static_cast<long long>(now.charge), static_cast<long long>(expected.charge)));
+	}
+	if (now.energy != expected.energy) {
+		out.push_back(text("C9: the energy is %lld quanta, where its ledger makes %lld", static_cast<long long>(now.energy), static_cast<long long>(expected.energy)));
+	}
+	return out;
+}
+
 bool totals_fit(const SpeciesTable &table, const Snapshot &snapshot) {
 	std::array<int64_t, MAX_ELEMENTS> atoms{};
 	int64_t charge = 0;
@@ -646,8 +699,8 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 	}
 	const int64_t slack = table.species_count() + 1; // quanta: what moving gas rounds by
 	for (size_t c = 0; c < trace.after.cells.size(); ++c) {
-		if (trace.meta[c].reservoir) {
-			continue;
+		if (trace.meta[c].reservoir || trace.meta[c].frozen) {
+			continue; // (Stage 61: a frozen cell's state stands as it was; no process holds it to its equilibria)
 		}
 		const CellState &cell = trace.after.cells[c];
 		for (const Reaction &reaction : equilibria) {

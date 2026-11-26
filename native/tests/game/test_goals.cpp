@@ -287,14 +287,18 @@ TEST_CASE("goals: on the screen: a slot for each, a drop onto a slot, the player
 	click("edit:remove");
 	CHECK(goal(ui->lab().view(), 4) == nullptr);
 	// a drop onto a slot hands in there; onto the outbox, the first free slot without a goal
-	REQUIRE(ui->lab().command(R"({"do": "place", "item": "beaker", "at": [2, 2]})", why));
-	REQUIRE(ui->lab().command(R"({"do": "place", "item": "waste", "at": [8, 2]})", why));
+	// (Stage 61: taken out of Supplies on the screen, a copy of each dropped on its square, so the screen sees it)
+	drag("item:beaker", "square:2,2");
+	drag("item:waste", "square:8,2");
+	REQUIRE(item(ui->lab().view(), "beaker").place == "bench");
+	REQUIRE(item(ui->lab().view(), "waste").place == "bench");
 	drag("item:beaker", "slot:5");
 	CHECK(item(ui->lab().view(), "beaker").slot == 5);
 	drag("item:waste", "outbox");
 	CHECK(item(ui->lab().view(), "waste").slot == 4);
 	// what falls short of a goal is shown so: the jar is not pure water
-	REQUIRE(ui->lab().command(R"({"do": "place", "item": "jar", "at": [14, 2]})", why));
+	drag("item:jar", "square:14,2"); // (Stage 61: a copy out of Supplies, as above)
+	REQUIRE(item(ui->lab().view(), "jar").place == "bench");
 	drag("item:jar", "slot:2");
 	CHECK(item(ui->lab().view(), "jar").slot == 2);
 	CHECK(drawn("not met"));

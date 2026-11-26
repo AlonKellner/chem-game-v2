@@ -143,6 +143,19 @@ range; a reaction of another species table.
 Every primitive call is appended to the step's **ledger**. The state change of a step equals the
 sum of its ledger entries (invariant C5).
 
+**The world at its boundary** (Stage 61). Between steps only (refused mid-step, as a connection is), the world is
+open at three kinds of event, none a primitive of a step and none in a step's ledger:
+- **a cell added** (`add_cell`), empty, and **supplied** (`supply`): matter and energy brought into an empty cell
+  from outside, its state whole (a supply taken out of Supplies, §13);
+- **a cell retired** (`retire`): everything it holds leaves the world, its edges close for good, it is empty and
+  frozen from then on (an item emptied out of the trash);
+- **a cell frozen** (`freeze`): it takes part in no process (no reaction, no settling, no column; its edges closed,
+  and opened again as they were when it thaws, where the other end is not frozen), its state standing as it is.
+
+The lab keeps **the ledger of the boundary**: the totals of everything supplied and everything retired. C1 to C4 hold
+within every step as before; across the boundary, **C9**: what the world holds is what it began with, plus what was
+supplied, less what was retired, exactly.
+
 ### 4.4 Failure policy
 
 A violated invariant aborts in Debug and sanitizer builds. In a release build it is reported
@@ -1817,14 +1830,30 @@ like a balance, its own kind (`spectrophotometer`, a footprint of 5 × 3).
   - a signal part, 1 × 1.
 
   Footprints never overlap; `at` is the footprint's top-left square.
-- **Places.** An item is in the cabinet, on the bench, on a vessel's mouth, under a vessel (a
-  burner), or in the outbox.
+- **Places.** An item is on the bench, on a vessel's mouth, under a vessel (a burner), in Storage (the outbox),
+  or in the trash; or it has left the world (`retired`, Stage 61).
+- **Supplies** (Stage 61; the cabinet before it). What the bench gives without a square (`at`) is a **supply**: a
+  template, made once in a world of its own (a bench of it alone, never stepped), and **no part of the room's
+  world**: no cell, no edge, no step. A supply never runs out. **Taking one out** (`take`) grafts a copy into the
+  room's world: its template's cells added and supplied as they are there (at the room's temperature, as the bench
+  describes them), each layer under the cell over it, its edges joined to the room, the room's air and the mains;
+  the ledger counts what came in (C9). The first copy has the supply's id, the next `id2`, `id3`... (an id is never
+  given twice). A command that names a supply none of whose copies is out takes one out first, into Storage, from
+  where the command puts it; refused, it leaves the lab as it was, that copy too. Nothing goes back to Supplies.
+- **Storage** (Stage 61: the outbox): as many slots as it needs, at least six, a goal on any (§13.5). What is in it
+  is in the world and simulated (it cools, reacts, evaporates), and is used straight from there (placed, heated,
+  attached, poured from) as the cabinet's was. What went to the cabinet goes to Storage: `stow`, a stopper that
+  pops with no square beside, a shattered vessel, `unheat`, `detach`, `unweigh` and `remove` with no room beside,
+  `restore` where its square is taken.
+- **The trash** (Stage 61): an item put in it is **frozen** (all its cells: it takes part in no process, its edges
+  closed), and `restore` thaws it exactly as it went in. Emptied (`empty_trash`, or past its capacity), an item
+  **leaves the world**: its cells are retired, the ledger counts what left (C9), and it is no longer an item.
 - **Setting down.** The lab sets an item down "beside" another (after `unheat`, `detach`, a
   burner left by `submit`) on the first free footprint: rows by how far their foot is from the
   other's foot, then columns by how far from it, the left first.
-- **Using it.** Equipment is used on the bench: a command on an item still in the cabinet, or
-  handed in, is refused.
-- **The bench file** gives each item its square (`at`), or leaves it in the cabinet. A
+- **Using it.** Equipment is used on the bench, or straight from Storage; a command on an item in the trash is
+  refused (but those that take it out).
+- **The bench file** gives each item its square (`at`), or makes it a supply. A
   `chem-bench/1` file is a grid of cells, one item to a cell: each footprint is one square.
 
 **Commands** are JSON objects with a `do`. They are everything a player can do; a host maps
@@ -1832,12 +1861,13 @@ input to them, and a session script is a list of them.
 
 | `do` | Fields | Effect |
 |---|---|---|
-| `place` | `item`, `at` [column, row] | from the cabinet onto the bench, or along it (a signal part too); refused where something stands, off the grid, or while the item is joined to another |
+| `take` | `supply`, `at` [column, row] or none | (Stage 61) a new copy of a supply, onto a free square of the bench, or with none into Storage; refused where it has no room |
+| `place` | `item`, `at` [column, row] | from Storage or the trash onto the bench, or along it (a signal part too); a supply none of whose copies is out, taken out; refused where something stands, off the grid, or while the item is joined to another |
 | `move` | `items`, `by` [columns, rows] | several items and parts along the bench together, by one offset: all of them or none, with the reason (one would be off the grid, or land on something left behind) |
-| `stow` | `item` | back into the cabinet; a signal part back to the drawer |
-| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item as into the cabinet (its matter stays in the world and goes on as there; refused as `stow` is), a part with its settings kept and its wires and rigs, those to anything outside it too, off the lab and kept with it (a circuit with all it holds; Stage 38: until then those to outside were taken off for good), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item to the cabinet, a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to the cabinet), `restore` and `empty_trash` |
-| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, to where it stood: its square, or the cabinet. Where its square is taken an item goes to the cabinet, and a part stays in the trash and says so. A wire or a rig kept in the trash comes back once both its ends are on the lab again (Stage 38), and a controller rigged again tunes itself |
-| `empty_trash` | — | (Stage 38) everything in the trash leaves it for good, as the oldest does past its capacity: an item to the cabinet with all it holds, a part scrapped with what joined it. Refused when it is empty |
+| `stow` | `item` | into Storage (Stage 61: its first free slot without a goal; nothing goes back to Supplies); a signal part back to the drawer |
+| `trash` | `item` | (Stage 34) puts an item or a signal part in the trash: an item frozen there (Stage 61: as it went in, taking part in nothing; refused as `stow` is), a part with its settings kept and its wires and rigs, those to anything outside it too, off the lab and kept with it (a circuit with all it holds; Stage 38: until then those to outside were taken off for good), signalling nothing while it is there. The trash holds 64 (`TRASH_MOST`), oldest first out: an item out of the world (Stage 61), a part for good. Any other command on what is in the trash is refused, but `place` (out onto a free square), `stow` (an item, to Storage), `restore` and `empty_trash` |
+| `restore` | `item`, or none | (Stage 34) brings back what was last put in the trash, or the one named, thawed as it went in (Stage 61), to where it stood: its square, or Storage. Where its square is taken an item goes to Storage, and a part stays in the trash and says so. A wire or a rig kept in the trash comes back once both its ends are on the lab again (Stage 38), and a controller rigged again tunes itself |
+| `empty_trash` | — | (Stage 38) everything in the trash leaves it for good, as the oldest does past its capacity: an item out of the world with all it holds (Stage 61: its cells retired, the ledger counting it), a part scrapped with what joined it. Refused when it is empty |
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
@@ -1854,7 +1884,7 @@ input to them, and a session script is a list of them.
 | `detach` | `item` | takes it off and sets it down beside the vessel: the vessel's mouth open to the room again; a balloon is then sealed |
 | `under` | `item`, `of` | stands a vessel under another's outlet: a drain (§6). The drain comes off when either vessel is placed elsewhere, moved apart from the other, stowed or handed in (at a step boundary); moved together, they stay joined |
 | `undrain` | `of` | takes away what a vessel's outlet runs into (Stage 34): the drain comes off, both vessels stay where they are |
-| `submit` | `item`, `slot` | hands it in, to a slot of the outbox (§13.5); it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench. With no `slot`, the first free slot without a goal, else the first free one; refused when the slot holds something, or none is free |
+| `submit` | `item`, `slot` | hands it in, to a slot of Storage (§13.5; Stage 61: the outbox, its slots as many as it needs, and what is in one taken out again as from Storage); it must not be on or hold anything. It leaves an outlet it stood under. A burner under it stays on the bench. With no `slot`, the first free slot without a goal, else the first free one; refused when the slot holds something, or none is free |
 | `goal` | `slot`, `name`, `terms` | the player's own goal for a slot (§13.5), made or changed; refused on a game goal's slot |
 | `ungoal` | `slot` | takes the player's goal off a slot; refused for a game goal |
 | `wait` | `seconds` | advances time |
@@ -1970,11 +2000,30 @@ lab command here, so it is the same on every host and is tested without one.
 outbox under it, and the drawer of signal parts beside the outbox; on the right the readout; on
 top the clock.
 
-**The cabinet** (Stage 48: the user's word). Every item is in a box of one size (100 px square), two to a
-row, as large as fits it, its name under it.
-- As many rows as fit over the trash are shown, scrolled a whole row at a time: by the wheel over the cabinet
+**Supplies** (Stage 48: the cabinet, the user's word; Stage 61: Supplies). Every supply is in a box of one size
+(100 px square), two to a row, as large as fits it, its name under it.
+- As many rows as fit over the trash are shown, scrolled a whole row at a time: by the wheel over Supplies
   (a notch a row; over the room the wheel zooms), or by its bar, dragged.
 - What is scrolled out of sight is not on the screen.
+- **A box is a picture** (Stage 61), captured ahead, never rendered live: of the supply alone in its box, by the
+  renderer's own source on the CPU (`optics_pixel`) from the screen's own scene, and **painted by the screen under the
+  pass** (the draw list's `Image`, the host's texture kept by its hash): it is no part of the scene, and no ray of
+  anything rendered meets it (the user: a picture in the scene was a screen's three primaries, seen in colours through
+  the rims of what was held). It holds to the pass within 8-bit rounding. Pictures are kept by what is drawn of a supply (a hash of
+  it), built ahead for the benches of `data/` (`make pictures`, `chem_tool capture`: the file is its cache), given
+  back by the host and kept by it; a box with none yet is drawn by the pass while its own is captured apart, a
+  supply at a time.
+- **The panels are the screen's, not the room's** (Stage 61, the user): what is held over Supplies, Storage or the
+  trash sees the room's wall through it, the bench's grid continued over them, not their boxes, pictures or what
+  stands in them (their bodies carry the pixel source's `PANEL_BIT`, passed over wherever something in hand covers
+  them within its outline; their outlines are drawn over the pass). A vessel in a panel likewise sees the wall.
+- Dragged out, a supply gives a copy (`take`): onto a free square, onto equipment as the copy would be, back over
+  Supplies or into the trash nothing. Carried to Supplies, an item goes to Storage.
+- **Search** (Stage 61): a field over Supplies and one over Storage (`search:supplies`, `search:storage`), typed
+  into once clicked (Escape clears it). Its words, any order, any case, each the start of one of a box's keywords
+  (`lab/search.hpp`): what it is (its id, label, kind, glassware, capacity), what it holds (each species' id, words,
+  formula and phase, "solution", "empty"), what it is made of (its wall), what it is for (a slot's number and its
+  goal's name), its state (hot over 40 °C, cold under 10 °C, boiling, sealed, stoppered, broken).
 - Instruments in it are off (their screens dark).
 
 **A thermal camera's frame** (Stage 48) is taken up by its handle, a tab over its top-right corner, as the
@@ -2565,7 +2614,9 @@ says. The player may silence any level.
 
 ### 13.5 Goals
 
-The outbox is **six slots**, numbered 1 to 6, and a slot may hold a **goal**: what should be handed in there. A goal
+The outbox is **Storage** (Stage 61): **as many slots as it needs** (at least six; always one free after the last
+that holds anything or has a goal), six on the screen at a time, scrolled a slot at a time by the wheel over it or
+its bar, those its search leaves. A slot may hold a **goal**: what should be handed in there. A goal
 does not judge the player: it says what is wanted, and whether what is there meets it now.
 
 - **A goal** has an id, a name, its slot, and its **terms**: each a quantity of whatever is handed
@@ -2956,6 +3007,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C6 | Every amount is non-negative | exact | 1 |
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
 | C8 | A transform's change is balanced in every element and in charge | exact | 1 |
+| C9 | (Stage 61) The world's totals are its start's, plus what was supplied, less what was retired: every element, the mass, the charge and the energy | exact | 61 |
 | L0 | A refused primitive call leaves the state bit-identical | exact | 1 |
 | T1 | Every process runs down its own driving force, as the cells were when it was applied: heat from the hotter cell to the colder (Stage 2); a reaction forward only while its affinity is positive, backward only while it is negative (Stage 3); gas only out of a rigid cell that is over-full or into one that is under-full (Stage 4); between cells sealed together, only from the higher pressure to the lower (Stage 28) | sign-exact | 2–4, 28 |
 | T2 | World entropy does not decrease: over the cells that changed, Σ(S_after − S_before) ≥ −(1e-9 J/K + 4e-16 · Σ\|S\|), the bound of the float64 rounding in the sum | tolerance | 2 |

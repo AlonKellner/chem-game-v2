@@ -69,6 +69,13 @@ Violations check_C6(const SpeciesTable &table, const StepTrace &trace);
 Violations check_C7(const SpeciesTable &table, const StepTrace &trace);
 // C8. A transform's change is balanced in every element and in charge.
 Violations check_C8(const SpeciesTable &table, const StepTrace &trace);
+// The totals of what crossed the world's boundary (Stage 61), summed and taken away exactly (as a world's own totals
+// wrap, so do these: a corrupted ledger is compared, not undefined)
+Totals plus(const Totals &a, const Totals &b);
+Totals minus(const Totals &a, const Totals &b);
+// C9 (Stage 61: the world open at its boundary). What the world holds is what it began with, plus what was supplied
+// to it, less what was retired from it: every element, the mass, the charge and the energy, exactly.
+Violations check_C9(const Totals &start, const Totals &supplied, const Totals &retired, const Totals &now);
 
 // The thermal invariants: they apply to a trace of a world with temperatures
 // (trace.thermal), and return nothing otherwise.

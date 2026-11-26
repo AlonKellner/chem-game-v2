@@ -65,9 +65,12 @@ std::string without_viewer() {
 TEST_CASE("lab: a viewer is equipment of the cabinet that changes nothing in the world (Stage 42)") {
 	auto with = open_text(read("data/benches/lab.json"));
 	auto without = open_text(without_viewer());
-	const lab::ItemView v = item(with->view(), "viewer");
+	lab::ItemView v;
+	for (const lab::ItemView &s : with->view().supplies) { // (Stage 61: the cabinet's are Supplies, no item until taken out)
+		v = s.id == "viewer" ? s : v;
+	}
 	CHECK(v.kind == "viewer");
-	CHECK(v.place == "cabinet");
+	CHECK(v.place == "supplies");
 	CHECK(v.w == 7);
 	CHECK(v.h == 4);
 	CHECK(v.contents.empty());
@@ -99,8 +102,8 @@ TEST_CASE("lab: a viewer is equipment of the cabinet that changes nothing in the
 
 TEST_CASE("lab: the probe is fixed on an item, a part or the room, or back in its holder (Stage 42)") {
 	auto l = open_text(read("data/benches/lab.json"));
-	// in the cabinet it is not used
-	CHECK(refused(*l, R"({"do":"probe","viewer":"viewer","on":"flask"})").find("cabinet") != std::string::npos);
+	// in the cabinet it is not used (Stage 61: taken out of Supplies, it is in storage, and not used there)
+	CHECK(refused(*l, R"({"do":"probe","viewer":"viewer","on":"flask"})").find("storage") != std::string::npos);
 	must(*l, R"({"do":"place","item":"viewer","at":[16,2]})");
 	must(*l, R"({"do":"place","item":"flask","at":[8,4]})");
 	must(*l, R"({"do":"probe","viewer":"viewer","on":"flask","at":[0.25,0.8]})");
@@ -111,7 +114,9 @@ TEST_CASE("lab: the probe is fixed on an item, a part or the room, or back in it
 		CHECK(v.probe_u == 0.25);
 		CHECK(v.probe_v == 0.8);
 	}
-	// on what is in the cabinet: it is drawn there, so it can be read there
+	// on what is in storage: it is drawn there, so it can be read there (Stage 61: a copy taken out into storage)
+	must(*l, R"({"do":"take","supply":"beaker"})");
+	CHECK(item(l->view(), "beaker").place == "outbox");
 	must(*l, R"({"do":"probe","viewer":"viewer","on":"beaker"})");
 	CHECK(item(l->view(), "viewer").probe_u == 0.5);
 	// on itself: its own screen

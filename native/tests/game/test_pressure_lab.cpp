@@ -124,7 +124,7 @@ TEST_CASE("pressure: a bottle's screw cap seals it, a control like any other; he
 	CHECK(said(*l, "its glass bursts past"));
 	CHECK(said(*l, "bottle burst at"));
 	const lab::ItemView b = item(*l, "bottle");
-	CHECK(b.place == "cabinet");
+	CHECK(b.place == "outbox"); // (Stage 61: a shattered vessel goes to storage, the outbox, not the cabinet)
 	CHECK(b.liquid_ml == 0.0);
 	CHECK(item(*l, "tray").liquid_ml > 150.0);
 	CHECK_FALSE(l->command(R"({"do": "place", "item": "bottle", "at": [10, 6]})", why));

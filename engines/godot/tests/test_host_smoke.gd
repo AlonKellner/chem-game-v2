@@ -19,6 +19,12 @@ func _item(id: String) -> Dictionary:
 			return item
 	return {}
 
+func _supplied(id: String) -> bool: # (Stage 61) a supply of the bench's, whether or not a copy of it is out
+	for supply in JSON.parse_string(_lab.report())["supplies"]:
+		if supply["id"] == id:
+			return true
+	return false
+
 func _drag(what: String, to: String) -> void:
 	var a := _lab.locate(what)
 	var b := _lab.locate(to)
@@ -43,9 +49,11 @@ func test_the_main_scene_is_the_host() -> void:
 	add_child_autofree(node)
 	assert_true(node is ChemLab)
 
-func test_it_opens_the_bench_with_everything_in_the_cabinet() -> void:
-	assert_eq(_item("flask")["place"], "cabinet")
-	assert_eq(_item("burner")["place"], "cabinet")
+func test_it_opens_the_bench_with_everything_in_supplies() -> void:
+	# (Stage 61) what the bench gives without a square is a supply, no item until a copy of it is taken out
+	assert_true(_supplied("flask"))
+	assert_true(_supplied("burner"))
+	assert_eq(_item("flask"), {})
 	assert_eq(_lab.message(), "")
 
 func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
@@ -208,13 +216,13 @@ func test_the_debug_panels_export_is_written_to_user_saves() -> void:
 	DirAccess.remove_absolute(path)
 
 func test_a_thermal_camera_its_frame_carried_and_the_cabinet_scrolled_by_the_wheel() -> void:
-	# (Stage 48) taken from the cabinet; its frame's handle dragged onto the room: fixed there
+	# (Stage 48) taken from Supplies (Stage 61); its frame's handle dragged onto the room: fixed there
 	_drag("item:camera", "square:16,2")
 	assert_eq(_item("camera")["place"], "bench")
 	assert_eq(_item("camera")["frame"], "home", "its frame over its own screen at first")
 	_drag("frame:camera", "square:4,8")
 	assert_true(_item("camera")["frame"] is Dictionary, "its frame on the room")
-	# the wheel over the cabinet scrolls it: the room's view stays as it was
+	# the wheel over Supplies scrolls them: the room's view stays as it was
 	var wheel := InputEventMouseButton.new()
 	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
 	wheel.pressed = true
@@ -222,4 +230,4 @@ func test_a_thermal_camera_its_frame_carried_and_the_cabinet_scrolled_by_the_whe
 	wheel.position = Vector2(120, 500)
 	wheel.global_position = wheel.position
 	get_viewport().push_input(wheel, true)
-	assert_eq(_lab.get_view_scale(), 1.0, "the cabinet's wheel is not the room's")
+	assert_eq(_lab.get_view_scale(), 1.0, "the wheel over Supplies is not the room's")

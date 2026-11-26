@@ -75,6 +75,8 @@ struct Edge {
 	// the length it diffuses along, m (the integral of dz / A(z) inverted); 0: none. Each gas crosses down its
 	// mole fraction's difference at its own diffusion in air.
 	double exchange = 0.0;
+	// Closed by a freeze of one of its ends (GAME_SPEC §4, Stage 61): it opens again as it was when both ends thaw.
+	bool frozen = false;
 };
 
 // What a cell is, beside its state. A reservoir is an energy account at a
@@ -122,6 +124,11 @@ struct CellMeta {
 	double column_volume = 0.0, column_area = 0.0;
 	double column_rise = 0.0;
 	std::vector<double> column_shape;
+	// The world at its boundary (GAME_SPEC §4, Stage 61). Frozen: the cell takes part in no process (no reaction,
+	// no settling, no column; its edges closed), its state standing as it is. Retired: everything it held has left
+	// the world (World::retire); it is empty and frozen for good.
+	bool frozen = false;
+	bool retired = false;
 };
 
 struct SpeciesAmount {
@@ -225,6 +232,8 @@ public:
 		// a rigid cell that holds more liquid than fits spills the excess into it.
 		Builder &set_spill(CellId cell);
 		Builder &set_mixing(CellId cell, double mixing);
+		// a cell frozen, or retired (Stage 61: a save's)
+		Builder &set_boundary(CellId cell, bool frozen, bool retired);
 		// the step the world resumes at (a saved world)
 		Builder &set_step(uint64_t step);
 		Builder &set_amount(CellId cell, SpeciesId species, Amount amount);
@@ -320,6 +329,16 @@ public:
 	// last layer), empty, joined to it by a column's edge; between steps only, never inside a step's processes (a
 	// world's cells are its build's and these). The new cell's id, or an invalid one with the refusal in *why.
 	CellId add_layer_under(CellId lower, Refusal *why = nullptr);
+	// The world open at its boundary (GAME_SPEC §4, Stage 61), between steps only (refused mid-step, as a
+	// connection is): a cell added, empty, of a meta's kind (a supply taken out: Supplies are no part of the
+	// world); matter and energy brought into an empty cell from outside, its state whole (the ledger counts it:
+	// C9); everything a cell holds sent out of the world, its edges closed, the cell retired (*left: what left);
+	// and a cell frozen (its edges closed; it takes part in no process) or thawed (its edges open again as they
+	// were, where the other end is not frozen).
+	CellId add_cell(const std::string &name, const CellMeta &meta, Refusal *why = nullptr);
+	Refusal supply(CellId cell, const CellState &state);
+	Refusal retire(CellId cell, CellState *left = nullptr);
+	Refusal freeze(CellId cell, bool on);
 	// A drain's rate (m^3 of liquid a second; below 0, all of it), the share
 	// of the cell's solids that goes with its liquid (0 to 1), and the solids
 	// that run by themselves (m^3 of their own volume a second) (GAME_SPEC §6,

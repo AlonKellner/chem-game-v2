@@ -73,8 +73,12 @@ void print_results(const json &report, const json &start) {
 		}
 	}
 	const json &now = report.at("conserved");
-	const json &then = start.at("conserved");
-	std::printf("\n  conservation, start -> end (integers):\n");
+	// (Stage 61) the start with what came in from Supplies and what left from the trash (C9): what the end should be
+	const json &then = now.contains("expected") ? now.at("expected") : start.at("conserved");
+	if (now.value("supplied_g", 0.0) != 0.0 || now.value("retired_g", 0.0) != 0.0) {
+		std::printf("\n  across the world's boundary: %.9f g supplied, %.9f g retired\n", now.at("supplied_g").get<double>(), now.at("retired_g").get<double>());
+	}
+	std::printf("\n  conservation, start (with what crossed its boundary) -> end (integers):\n");
 	for (const auto &[symbol, atoms] : now.at("atom_quanta").items()) {
 		std::printf("    %-3s %22lld -> %22lld quanta of atoms\n", symbol.c_str(), static_cast<long long>(then.at("atom_quanta").at(symbol).get<int64_t>()),
 				static_cast<long long>(atoms.get<int64_t>()));

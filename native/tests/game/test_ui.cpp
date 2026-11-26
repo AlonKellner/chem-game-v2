@@ -53,6 +53,18 @@ struct Player {
 		ui->pointer(x, y, true, mods);
 		ui->pointer(x, y, false, mods);
 	}
+	// a supply none of whose copies is out (Stage 61: what the cabinet held, until a copy is taken out of Supplies)
+	bool supplied(const std::string &id) {
+		const LabView view = ui->lab().view();
+		bool found = false;
+		for (const ItemView &s : view.supplies) {
+			found = found || s.id == id;
+		}
+		for (const ItemView &v : view.items) {
+			found = found && !(v.id == id && v.place != "retired");
+		}
+		return found;
+	}
 	// what a drag names: an item is carried, a click to pick it up and a click to put it down (Stage 27), a vessel
 	// onto a vessel with the right button (the menu: what to pour or tip); from a port, the drawer or a slider, a drag
 	void drag(const std::string &what, const std::string &to) {
@@ -82,6 +94,9 @@ struct Player {
 		}
 		const lab::LabView v = ui->lab().view();
 		const lab::ItemView *a = nullptr, *b = nullptr;
+		for (const lab::ItemView &x : v.supplies) { // (Stage 61: a supply carried is a copy of it)
+			a = x.id == id ? &x : a;
+		}
 		for (const lab::ItemView &x : v.items) {
 			a = x.id == id ? &x : a;
 			b = x.id == to.substr(5) ? &x : b;
@@ -167,7 +182,7 @@ void well_formed(const lab::DrawList &list) {
 
 TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, and back (Stage 9)") {
 	Player p;
-	CHECK(p.item("flask").place == "cabinet");
+	CHECK(p.supplied("flask")); // (Stage 61: the cabinet is Supplies; dropped, a copy of it lands)
 	p.drag("item:flask", "square:11,12"); // its body lands under the pointer: a 3 x 7 footprint
 	CHECK(p.item("flask").place == "bench");
 	CHECK(p.item("flask").col == 10);
@@ -178,18 +193,19 @@ TEST_CASE("ui: equipment is dragged from the cabinet onto the bench, along it, a
 	CHECK(p.item("flask").col == 18);
 	CHECK(p.item("flask").row == 0);
 	p.drag("item:beaker", "square:17,1"); // a footprint over the flask's
-	CHECK(p.item("beaker").place == "cabinet");
-	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.supplied("beaker")); // (Stage 61: refused, no copy is taken out)
 	CHECK(p.ui->message().find("stands there") != std::string::npos);
 	p.drag("item:beaker", "item:flask"); // onto the flask itself, the right button: the menu, with nothing to pour
+	CHECK_FALSE(p.supplied("beaker")); // (Stage 61: a supply pressed is its copy in hand, over the flask; Escape takes it back)
 	p.click("panel:cancel");
 	float x = 0, y = 0;
 	CHECK_FALSE(p.ui->locate("panel:cancel", x, y)); // closed; the beaker still in hand
 	p.ui->key(lab::Ui::KeyEscape); // put back where it was (Stage 27)
+	CHECK(p.supplied("beaker")); // (Stage 61: back in Supplies, nothing taken)
 	p.drag("item:beaker", "square:23,4");
 	CHECK(p.item("beaker").place == "bench");
 	p.drag("item:beaker", "cabinet");
-	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.item("beaker").place == "outbox"); // (Stage 61: carried to Supplies, it goes to storage: nothing goes back to Supplies)
 	CHECK(p.ui->message().empty());
 	// a click without a drag moves nothing
 	p.click("item:flask");
@@ -287,9 +303,9 @@ TEST_CASE("ui: everything on the bench that takes space is a body of the optical
 		cones += kind == 5.0f ? 1 : 0;
 		vessels += kind == 0.0f ? 1 : 0;
 	}
-	CHECK(vessels == 6); // the flask, and the vessels in the cabinet, as they always were
+	CHECK(vessels == 6 + 1); // the flask, and the vessels in the cabinet, as they always were; (Stage 61) and the flask's own box in Supplies, which never runs out
 	CHECK(cones == 1); // the burner's flame
-	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3 + 2 + 3); // the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42); the thermal camera's case and its dark screen, in the cabinet (Stage 48); the balance's case, pan and dark display, in the cabinet (Stage 50)
+	CHECK(slabs == 1 + 2 * 2 + 1 + 1 + 1 + 1 + 1 + 3 + 2 + 3 + 1); // (Stage 61: the last, the burner's own box in Supplies, which never runs out) the burner; two faces and two lamps; the monitor's port and sensing port; the rig's knob; the gauze (Stage 27); the stopper, in the cabinet (Stage 28); the spectral viewer's case, screen and holder, in the cabinet (Stage 42); the thermal camera's case and its dark screen, in the cabinet (Stage 48); the balance's case, pan and dark display, in the cabinet (Stage 50)
 	CHECK(bars == 3 + 2 + 6 + 1 + 6); // the wire and the rig; the condenser's outlet, in the cabinet; the tripod's two legs (Stage 27); the viewer's probe in its holder: its ring, its handle, its cable (Stage 42)
 	// the flame's light is the burner's valve's: half way to blue at 0.7, between the sooty and the blue
 	MESSAGE("bodies: " << vessels << " vessel, " << slabs << " slabs, " << bars << " bars, " << cones << " cone");
@@ -467,7 +483,7 @@ TEST_CASE("ui: a refusal is shown, and nothing changes (Stage 9)") {
 	const std::string before = p.ui->lab().digest();
 	p.drag("item:condenser", "item:flask"); // the mouth is taken
 	CHECK(p.ui->message().find("taken") != std::string::npos);
-	CHECK(p.item("condenser").place == "cabinet");
+	CHECK(p.supplied("condenser")); // (Stage 61: refused, no copy is taken out of Supplies)
 	p.drag("item:flask", "outbox"); // still joined
 	CHECK(p.ui->message().find("joined") != std::string::npos);
 	CHECK(p.item("flask").place == "bench");
@@ -499,7 +515,7 @@ TEST_CASE("ui: the clock: pause, speeds, and one checked step in every frame (St
 	CHECK_FALSE(p.ui->lab().failed());
 	p.click("reset");
 	CHECK(p.ui->lab().step() == 0);
-	CHECK(p.item("flask").place == "cabinet");
+	CHECK(p.supplied("flask")); // (Stage 61: the cabinet is Supplies, no copy out)
 }
 
 TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stage 9)") {
@@ -638,10 +654,10 @@ TEST_CASE("ui: items are chosen by a click, a click with a key held, or a rectan
 	CHECK(p.item("flask").col == 10);
 	CHECK(p.ui->message().find("stands where \"flask\" would go") != std::string::npos);
 	CHECK(p.ui->selection() == V{ "flask", "beaker" }); // still chosen
-	// back to the cabinet together
+	// back to the cabinet together (Stage 61: carried to Supplies, into storage, the outbox)
 	p.drag("item:flask", "cabinet");
-	CHECK(p.item("flask").place == "cabinet");
-	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.item("flask").place == "outbox");
+	CHECK(p.item("beaker").place == "outbox");
 	CHECK(p.item("jar").place == "bench");
 	well_formed(p.ui->draw());
 }
@@ -651,6 +667,8 @@ TEST_CASE("ui: the trash's box has a button that empties it, while something is 
 	p.click("pause");
 	float x = 0, y = 0;
 	CHECK_FALSE(p.ui->locate("trash:empty", x, y));
+	p.drag("item:beaker", "square:19,12"); // (Stage 61: a copy out of Supplies first; a supply dropped in the trash takes nothing)
+	p.drag("item:flask", "square:11,12");
 	p.drag("item:beaker", "trash");
 	p.drag("item:flask", "trash");
 	REQUIRE(p.ui->lab().view().trash.size() == 2);
@@ -665,8 +683,9 @@ TEST_CASE("ui: the trash's box has a button that empties it, while something is 
 	CHECK(counted);
 	p.click("trash:empty");
 	CHECK(p.ui->lab().view().trash.empty());
-	CHECK(p.item("beaker").place == "cabinet");
-	CHECK(p.item("flask").place == "cabinet");
+	CHECK(p.item("beaker").place == "retired"); // (Stage 61: emptied out of the world, not to the cabinet)
+	CHECK(p.item("flask").place == "retired");
+	CHECK(p.ui->lab().view().conserved);
 	CHECK_FALSE(p.ui->locate("trash:empty", x, y));
 }
 
@@ -717,9 +736,9 @@ TEST_CASE("ui: what is not wanted goes in the trash, carried there or by Backspa
 	p.ui->pointer(x + 40.0f, y - 30.0f, false);
 	p.ui->key(lab::Ui::KeyBackspace);
 	CHECK(p.item("beaker").place == "trash");
-	// out of the trash into the cabinet
+	// out of the trash into the cabinet (Stage 61: carried to Supplies, into storage, the outbox)
 	p.drag("item:beaker", "cabinet");
-	CHECK(p.item("beaker").place == "cabinet");
+	CHECK(p.item("beaker").place == "outbox");
 	// a part: made, its editor closed, chosen, and Backspace: in the trash with its settings; the undo key brings it back
 	p.drag("drawer:timer", "square:2,2");
 	p.ui->key(lab::Ui::KeyBackspace); // (its editor is open: this is typed into it, and trashes nothing)
@@ -1123,7 +1142,20 @@ TEST_CASE("ui: a person makes a controller, lets it sense the flask, holds it at
 }
 
 int body_of(const lab::OpticsScene &scene, const std::string &id) {
-	return lab::optics_body(scene, id);
+	// (Stage 61: a supply's box in Supplies has the id its first copy has: the copy's body is the one off that panel)
+	namespace L = lab::optics_layout;
+	const int first = lab::optics_body(scene, id);
+	if (first < 0) {
+		return first;
+	}
+	const float wanted = scene.table[static_cast<size_t>(L::HEADER_VECS + first * L::BODY_VECS + L::IDS) * 4];
+	for (int b = 0; b < static_cast<int>(scene.table[0]); ++b) {
+		const size_t at = static_cast<size_t>(L::HEADER_VECS + b * L::BODY_VECS) * 4;
+		if (scene.table[at + static_cast<size_t>(L::IDS) * 4] == wanted && scene.table[at + static_cast<size_t>(L::RECT) * 4] >= 240.0f) {
+			return b;
+		}
+	}
+	return first;
 }
 
 TEST_CASE("ui: a vessel carried over another is poured by hand: held, it goes to where its lip is over the other's mouth and turns about its lip, and pours once its liquid reaches the lip; let go, it turns back and is in the hand again; the right button's menu sets it upside down (Stage 27, Stage 31)") {

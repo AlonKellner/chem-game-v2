@@ -166,7 +166,7 @@ TEST_CASE("view: zoomed, the room is the same room larger, laid out anew (O18), 
 	const lab::OpticsScene whole = h.ui->optics();
 	float rx = 0, ry = 0, wx = 0, wy = 0;
 	REQUIRE(h.text_at("reset", rx, ry));
-	REQUIRE(h.text_at("cabinet", wx, wy));
+	REQUIRE(h.text_at("supplies", wx, wy)); // (Stage 61: the cabinet panel is named Supplies)
 	float ax = 0, ay = 0;
 	h.point("item:acid", ax, ay);
 	h.ui->zoom(ax, ay, 4.0f);
@@ -210,7 +210,7 @@ TEST_CASE("view: zoomed, the room is the same room larger, laid out anew (O18), 
 	REQUIRE(h.text_at("reset", zx, zy));
 	CHECK(zx == rx);
 	CHECK(zy == ry);
-	REQUIRE(h.text_at("cabinet", zx, zy));
+	REQUIRE(h.text_at("supplies", zx, zy)); // (Stage 61: Supplies, as above)
 	CHECK(zx == doctest::Approx(ROOM_X + (wx - v.x) * 4.0f));
 	CHECK(lab::check_O1(zoomed) == "");
 }
