@@ -70,7 +70,14 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "species " + name + " has no atoms");
 			return std::nullopt;
 		}
-		if (!(s.molar_volume >= 0.0) || !(s.molar_volume - s.molar_volume == 0.0)) {
+		// (Stage 63) only what is dissolved carries a charge: matter moves between cells as neutral matter, and a
+		// charged solid or gas would have no counter-ion to move with
+		if (s.charge != 0 && s.phase != Phase::Aqueous) {
+			set_why(why, "species " + name + " is charged and not dissolved");
+			return std::nullopt;
+		}
+		// (Stage 63: an ion's apparent molar volume, by the convention of H+'s at nought, may be negative)
+		if (!(s.molar_volume >= 0.0 || (s.charge != 0 && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
 			set_why(why, "species " + name + " has a molar volume that is negative or not finite");
 			return std::nullopt;
 		}
@@ -163,6 +170,31 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 	table.species_ = std::move(species);
 	table.solution_ = std::move(solution);
 	return table;
+}
+
+std::vector<std::pair<SpeciesId, int32_t>> SpeciesTable::as_species(SpeciesId s) const {
+	std::vector<std::pair<SpeciesId, int32_t>> out;
+	if (!has(s)) {
+		return out;
+	}
+	const SpeciesDef &def = species(s);
+	if (!def.retired) {
+		out.emplace_back(s, 1);
+		return out;
+	}
+	for (const IonCount &ion : def.ions) {
+		if (ion.count <= 0) {
+			break;
+		}
+		for (int k = 0; k < species_count(); ++k) {
+			const SpeciesDef &d = species(SpeciesId{ k });
+			if (!d.retired && d.phase == Phase::Aqueous && d.charge != 0 && d.ions[0].ion == ion.ion && d.ions[0].count == 1 && d.ions[1].count <= 0) {
+				out.emplace_back(SpeciesId{ k }, ion.count);
+				break;
+			}
+		}
+	}
+	return out;
 }
 
 SpeciesId SpeciesTable::find(std::string_view id) const {
@@ -272,6 +304,79 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 	}
 	r.term_count_ = static_cast<int32_t>(terms.size());
 	return r;
+}
+
+double formula_units(const SpeciesTable &table, std::span<const std::pair<SpeciesId, double>> dissolved, SpeciesId unit) {
+	if (!table.has(unit) || !table.species(unit).retired) {
+		return 0.0;
+	}
+	// each element's master ion: dissolved, charged, one atom of it, no hydrogen, nothing else but oxygen
+	const int elements = table.element_count();
+	int hydrogen = -1, oxygen = -1;
+	for (int e = 0; e < elements; ++e) {
+		hydrogen = table.element(e).symbol == std::string_view("H") ? e : hydrogen;
+		oxygen = table.element(e).symbol == std::string_view("O") ? e : oxygen;
+	}
+	std::vector<int> master_charge(static_cast<size_t>(elements), 0);
+	std::vector<int> master_of(static_cast<size_t>(table.species_count()), -1); // the element a species is the master of
+	for (int k = 0; k < table.species_count(); ++k) {
+		const SpeciesDef &d = table.species(SpeciesId{ k });
+		if (d.phase != Phase::Aqueous || d.charge == 0 || d.retired) {
+			continue;
+		}
+		int only = -1, others = 0;
+		for (int e = 0; e < elements; ++e) {
+			if (d.atoms[static_cast<size_t>(e)] == 0 || e == oxygen) {
+				continue;
+			}
+			if (e == hydrogen) {
+				others += 2; // holds hydrogen: not a master
+			} else if (d.atoms[static_cast<size_t>(e)] == 1 && only < 0) {
+				only = e;
+			} else {
+				++others;
+			}
+		}
+		if (only >= 0 && others == 0 && master_charge[static_cast<size_t>(only)] == 0) {
+			master_charge[static_cast<size_t>(only)] = d.charge;
+			master_of[static_cast<size_t>(k)] = only;
+		}
+	}
+	// what the matter holds: each element's atoms, and the hydrogen ions by charge
+	std::vector<double> held(static_cast<size_t>(elements), 0.0);
+	double protons = 0.0;
+	for (const auto &[s, mol] : dissolved) {
+		if (!table.has(s) || table.species(s).phase != Phase::Aqueous) {
+			continue;
+		}
+		const SpeciesDef &d = table.species(s);
+		double charge = d.charge;
+		for (int e = 0; e < elements; ++e) {
+			held[static_cast<size_t>(e)] += mol * d.atoms[static_cast<size_t>(e)];
+			if (e != hydrogen && e != oxygen) {
+				charge -= static_cast<double>(d.atoms[static_cast<size_t>(e)]) * master_charge[static_cast<size_t>(e)];
+			}
+		}
+		protons += mol * charge;
+	}
+	double fewest = 0.0;
+	bool any = false;
+	for (const auto &[ion, count] : table.as_species(unit)) {
+		const int e = master_of[static_cast<size_t>(ion.index)];
+		double whole = 0.0;
+		if (e >= 0) {
+			whole = held[static_cast<size_t>(e)] / static_cast<double>(count);
+		} else {
+			const SpeciesDef &d = table.species(ion);
+			if (d.charge == 0) {
+				continue;
+			}
+			whole = protons / static_cast<double>(d.charge) / static_cast<double>(count); // H+: its own; OH-: minus
+		}
+		fewest = !any || whole < fewest ? whole : fewest;
+		any = true;
+	}
+	return fewest > 0.0 ? fewest : 0.0;
 }
 
 } // namespace chem

@@ -584,6 +584,36 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 	return true;
 }
 
+double ionic_strength(const SpeciesTable &table, const CellState &cell) {
+	const Mix mix = mix_of(table, cell, false);
+	if (!(mix.liquid > 0.0)) {
+		return 0.0;
+	}
+	double ionic = 0.0;
+	const std::vector<IonDef> &ions = table.solution().ions;
+	for (size_t j = 0; j < ions.size(); ++j) {
+		const double z = static_cast<double>(ions[j].charge);
+		ionic += 0.5 * mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT * z * z;
+	}
+	return ionic;
+}
+
+bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms) {
+	bool dissolved = false;
+	for (const Term &t : terms) {
+		const Phase phase = table.species(t.species).phase;
+		if (phase != Phase::Aqueous && phase != Phase::Liquid) {
+			return false;
+		}
+		dissolved = dissolved || phase == Phase::Aqueous;
+	}
+	return dissolved;
+}
+
+bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) {
+	return among_dissolved(table, terms) && ionic_strength(table, cell) > MOST_IONIC_STRENGTH;
+}
+
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
 	const Mix mix = mix_of(table, cell);
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;

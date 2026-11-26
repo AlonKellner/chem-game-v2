@@ -57,8 +57,12 @@ bool valid(const Comparison &c, std::string &why);
 // value lies between the two readings, ends included.
 bool meets(const Comparison &c, double now, std::optional<double> before);
 
-// A species in an item: its grams, and its share as `purity` measures it (a fraction).
+// A species in an item: its grams, and its share as `purity` measures it (a fraction). A retired formula unit (Stage
+// 63: copper sulfate, sulfuric acid, sodium hydroxide, sodium sulfate, nickel sulfate, held as their ions) measures
+// as many of it as the item's dissolved matter could make, element by element.
 double grams(const ItemView &v, const std::string &species);
+// the moles of a species in what an item (or a layer of it) holds, a retired formula unit's as above
+double mol_of(const std::vector<SubstanceView> &contents, const std::string &species);
 double purity(const ItemView &v, const std::string &species);
 const SubstanceView *substance(const ItemView &v, const std::string &species);
 const ItemView *item_of(const LabView &view, const std::string &id);
@@ -109,7 +113,7 @@ struct Cond {
 	std::optional<bool> submitted, stirred, burst, conserved, broken;
 	std::optional<double> valve_at_least, valve_at_most, above_c, below_c, liquid_above_ml, liquid_below_ml, above_g, below_g, purity_above, speed_at_least;
 	std::string species;
-	std::optional<std::vector<std::string>> holds_only;
+	std::optional<std::vector<std::string>> holds_only; // (Stage 63: with water listed, its own ions, H+ and OH-, are water's)
 	// any quantity of the item, compared: {"quantity": {"what", "measure"}, "compare", "value" | "values"}
 	std::optional<Quantity> quantity;
 	Comparison comparison;

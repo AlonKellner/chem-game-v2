@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.62.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.63.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -595,6 +595,19 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
 - Several fast equilibria that share a species in one cell are taken in turn, up to sixteen rounds. Each is
   probed again only once the cell has changed since it was last probed (Stage 44): one that cannot move, or
   that moved last, rests until another moves, so a cell where one equilibrium moves settles in one round.
+- **Together** (Stage 63, `docs/TDD_63_IONS.md`). Equilibria that trade a species close on their joint balance
+  slowly in turn (the bisulfate, copper's hydrolysis and water's ionisation trading hydrogen ions). After each
+  round they are solved together: a quasi-Newton step on their extents from the affinities themselves
+  (Pitzer's and all), the slope the ideal solution's, `A_r' = −RT Σ_i ν_ri ν_si / n_i`. It is damped so that no
+  dissolved amount falls below a tenth of what it held, and a solid may be used up (its reaction then leaves
+  the system), as may a dissolved species down to a few quanta, at the limit of its rounding. A reaction found
+  dependent on the others leaves too (the hydroxide's dissolving in acid is its precipitation and water's
+  ionisation together). The joint extents are rounded and applied, each only while it runs down its own
+  affinity (T1); the next round's own projections finish each to its quantum (P1 unchanged).
+- **The activity model's range** (Stage 63). Past an ionic strength of 20 mol/kg (a 2:2 salt at 5 mol/kg, a 1:1
+  at 20; Pitzer's fits hold to about 6 mol/kg of a salt) a fast equilibrium among dissolved species alone
+  stands as it was: the game cannot say how such a solution's ions share themselves. A solution boiled
+  nearly dry keeps the traces its ions held; what crystallizes out of it still does.
 
 **What follows without being written:** water under dry air evaporates until its partial
 pressure is the saturation pressure, and cools doing it. A flask of boiling water sits at the
@@ -657,38 +670,65 @@ temperature.
   - Boiled dry and heated on, the hydrates turn white as their water leaves.
 - Water on the white salt dissolves it and grows the blue pentahydrate.
 
-**Acids and bases** (Stage 43; `docs/TDD_43_ACIDITY.md`). There is a strong acid (H₂SO₄) and a
-strong base (NaOH, in solution: Na⁺ and OH⁻), both fully dissociated, and their salt (Na₂SO₄).
-- **The neutralisation** is a fast equilibrium (§8): H₂SO₄(aq) + 2 NaOH(aq) → Na₂SO₄(aq) + 2 H₂O(l).
-  With K = 1/Kw², an acid and a base never stand together in a solution: the one there is less of
-  is used up, to the little water's own ionisation leaves of it. Its heat follows from the tables,
-  −55.84 kJ a water, so the solution warms.
-- **The pH** is derived, not stored: −log₁₀ a(H⁺).
-  - The hydrogen ions' molality is what is left over of the acid's over the base's.
-  - Water's own ions solve (m_H + x)(m_OH + x)·γ_H·γ_OH = Kw·a(H₂O), so pure water and a neutral
-    salt are at pKw/2, and a base's pH follows from Kw.
-  - Kw comes from water's ionisation at 25 °C (NBS), its heat capacity held constant, and is
-    within 0.06 of IAPWS from 0 to 100 °C. Each γ is Pitzer's single-ion coefficient (§10).
-  - A vessel with a liquid shows it (the readout, the debug panel), and a monitor or a goal can
-    read it (`ph`, §13.3).
+**Ions as species** (Stage 63; `docs/TDD_63_IONS.md`). Dissolved matter is its ions, each a species of its own
+and its own particle: H⁺, OH⁻, Cu²⁺, SO₄²⁻, HSO₄⁻, Na⁺, Ni²⁺, CuOH⁺.
+- **The formula units are retired** (sulfuric acid, copper sulfate, sodium hydroxide, sodium sulfate, nickel
+  sulfate): kept in the table, which grows only at its end, so an old save still loads. A bench's, a save's or
+  a builder's amount of one is taken as its ions. A tutorial's or a goal's reading of one is as many of it as
+  the item's dissolved matter could make, element by element, so copper sulfate reads the copper dissolved,
+  in any of its ions. Their data are the ions' split exactly, H⁺ at nought by the convention: every solution
+  keeps its energy, entropy, volume and solubility.
+- **Electroneutrality** (invariant N1): no step changes a cell's charge. A transfer moves ions only as neutral
+  matter, the fewest quanta left behind where the ions asked for would carry a charge (`neutral_part`). Only
+  what is dissolved is charged, and a world is built neutral.
+- **A column's diffusion** between layers is Nernst and Planck's at no current: each ion by its own
+  coefficient and the field that carries no charge, so a fast ion drags its slow counter-ion and a salt crosses
+  at Nernst and Hartley's coefficient. An ion with a share of the layer's conductance under a thousandth (a
+  trace: H⁺ and OH⁻ in a salt) is held to its own bound.
+- **Transport to a grain** carries an ion with the reaction's other ions on its side, at Nernst and Hartley's
+  coefficient (Σν / Σ(ν/D)).
+- **A reaction as a student writes it** (`"written"`): in formula units, CuO(s) + H₂SO₄(aq) → CuSO₄(aq) + H₂O(l),
+  where the reaction itself is in ions, CuO(s) + 2 H⁺(aq) → Cu²⁺(aq) + H₂O(l). The calculator and the planner
+  use it; the generator refuses one that is not a whole multiple of the reaction once its units are their ions.
+- On the screen an ion is written as chemists write it (Cu2+, SO4 2-, H+), and a dissolved trace that reads
+  nothing at the readout's resolution (water's own ions) is not listed.
+
+**Acids and bases** (Stage 43; `docs/TDD_43_ACIDITY.md`; in ions from Stage 63). A strong base (NaOH: Na⁺ and
+OH⁻) and sulfuric acid, whose second hydrogen is held in part as bisulfate (HSO₄⁻ ⇌ H⁺ + SO₄²⁻, a fast equilibrium
+at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bisulfate and reads pH 1.02).
+- **The neutralisation** is water's own ionisation reversed, a fast equilibrium (§8): H⁺(aq) + OH⁻(aq) → H₂O(l),
+  K = 1/Kw. An acid and a base never stand together in a solution: the one there is less of is used up, to the
+  little water's own ionisation leaves of it. Its heat follows from the tables, −55.84 kJ a water, with the
+  bisulfate's share where the acid's second hydrogen comes from it, so the solution warms. Pure water holds its
+  1e-7 mol/kg of each ion; sodium sulfate is the bisulfate's base and reads a little over 7.
+- **The pH** is −log₁₀ a(H⁺), read from the ions: the difference of the hydrogen ions over the hydroxide ions is
+  what water's ionisation leaves unchanged, and water's own ions solve (m_H + x)(m_OH + x)·γ_H·γ_OH = Kw·a(H₂O)
+  from it, below a quantum of either too.
+  - Kw comes from water's ionisation at 25 °C (NBS), its heat capacity held constant, and is within 0.06 of
+    IAPWS from 0 to 100 °C. Each γ is Pitzer's single-ion coefficient (§10).
+  - A vessel with a liquid shows it (the readout, the debug panel), and a monitor or a goal can read it
+    (`ph`, §13.3).
+- **Copper's hydrolysis**, Cu²⁺ + H₂O ⇌ CuOH⁺ + H⁺ at MINTEQ's constant, a fast equilibrium: a copper sulfate solution
+  is acid, 0.5 mol/kg reads pH 4.8 (measured about 4: the dimer Cu₂(OH)₂²⁺ is left out, §20).
 **Precipitation and gas** (Stage 44; `docs/TDD_44_PRECIPITATION.md`).
 - **A precipitate.** Copper hydroxide, Cu(OH)₂(s), comes out of a copper sulfate solution with a base by a
   fast equilibrium: CuSO₄(aq) + 2 NaOH(aq) → Cu(OH)₂(s) + Na₂SO₄(aq). Its solubility follows from the tables:
   log \*Ks 8.55 (evaluated 8.64 to 8.67), Ksp 4e-20; with base to spare, no copper stays dissolved. It comes
   as grains of 0.3 µm, pale blue.
-- **Back into an acid.** Cu(OH)₂(s) + H₂SO₄(aq) → CuSO₄(aq) + 2 H₂O(l), a fast equilibrium too: an acid takes
-  a base first, then dissolves the hydroxide. Without acid a copper sulfate solution gives up a trace of the
-  hydroxide and is acid itself (pH about 5 at 0.5 mol/kg, measured about 4: §20).
+- **Back into an acid.** Cu(OH)₂(s) + 2 H⁺(aq) → Cu²⁺(aq) + 2 H₂O(l), a fast equilibrium too: an acid takes
+  a base first, then dissolves the hydroxide. A copper sulfate solution heated near its boiling point gives up a
+  little of it, which turns to oxide (Stage 63: hot copper sulfate hydrolyses).
 - **Black with heat.** The hydroxide is less stable than copper oxide and water (−5.5 kJ/mol), and turns into
   it slowly, first order: Cu(OH)₂(s) → CuO(s) + H₂O(g), Fukuda's measured rate (Ea 127 kJ/mol). Two years at
   25 °C, half an hour under boiling water, seconds dry above 150 °C. The oxide keeps its grains.
 - **A gas from a solid.** Malachite dissolves in sulfuric acid at its surface (Nicol's rate: order 0.65 in the
-  acid, Ea 53.6 kJ/mol), its carbonate leaving as carbon dioxide:
-  Cu₂CO₃(OH)₂(s) + 2 H₂SO₄(aq) → 2 CuSO₄(aq) + CO₂(g) + 3 H₂O(l).
+  acid, Ea 53.6 kJ/mol; Stage 63: refitted at his conditions in the free hydrogen ions, order 0.6812 and
+  55.4 kJ/mol), its carbonate leaving as carbon dioxide: Cu₂CO₃(OH)₂(s) + 4 H⁺(aq) → 2 Cu²⁺(aq) + CO₂(g) +
+  3 H₂O(l), written Cu₂CO₃(OH)₂(s) + 2 H₂SO₄(aq) → 2 CuSO₄(aq) + CO₂(g) + 3 H₂O(l).
 - The pH is read only within the activity model's range: past 6 mol/kg left over of an acid or a base (one
   boiled nearly dry), a solution has none.
-- *(PLANNED)* Water's self-ionisation as a species, weak acids and bases, bisulfate, indicators,
-  a salt that comes out of solution (`docs/EXPERIMENTS_ROADMAP.md`, area 1).
+- *(PLANNED)* Weak acids and bases, indicators (Stage 64), a salt that comes out of solution
+  (`docs/EXPERIMENTS_ROADMAP.md`, area 1; `docs/CURRICULUM.md`, step D).
 
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
@@ -706,6 +746,8 @@ strong base (NaOH, in solution: Na⁺ and OH⁻), both fully dissociated, and th
   hydrates and the stepwise dehydration. Signed off by the user on 2026-11-19 (Stage 19).
 - Stage 43 adds the strong base, its salt, the neutralisation and the pH; Stage 44 the precipitate, its
   dissolving in acid and its turning to oxide, and malachite dissolving in acid.
+- Stage 63 makes dissolved matter its ions: the bisulfate, copper's hydrolysis, the fast equilibria solved
+  together, electroneutrality, a column's diffusion at no current.
 
 ## 10. Property models
 
@@ -3003,6 +3045,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
+| N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |
 | C6 | Every amount is non-negative | exact | 1 |
 | C7 | A transfer runs along an open edge, between its two cells, and moves only phases the edge passes | exact | 1 |
@@ -3176,9 +3219,10 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Constant heat capacities | A few percent over the demo's temperature range |
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
-| No mixing terms between the acid's and the salt's ions | The acid lowers the salt's solubility to 0.70 of it at 15 °C with 1 mol/kg of acid; one old measurement gives about 0.54 |
-| Sulfuric acid is fully dissociated into 2 H⁺ and SO₄²⁻, its activity fitted as such | No bisulfate, no vapour of its own; its heat capacity is the pure liquid's. Its pH (Stage 43) is that of all its hydrogen ions: 0.01 mol/kg reads 1.86 (about 1.87 measured), and a neutralisation gives the infinite-dilution heat, −55.8 kJ a water, where the bisulfate's dissociation adds about 11 kJ at 0.5 mol/kg |
-| A copper sulfate solution hydrolyses to a trace of solid copper hydroxide, not to the ion CuOH⁺ (Stage 44) | 1.4e-6 mol of it from 0.05 mol of the salt in 100 g of water: pH about 5, where a real 0.5 mol/kg solution reads about 4 |
+| Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
+| Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. Its heat capacity is the pure liquid's, the ions' split of the old formula units: water's ionisation has their heat capacity (−7.5 J/K·mol) where the measured is −224, so pKw from the tables is 12.05 at 100 °C against IAPWS's 12.25 (0.04 low at 60 °C), the share of hydrogen and hydroxide ions in a hot solution that much off; the pH reads the measured Kw |
+| Copper's hydrolysis to CuOH⁺ alone (Stage 63); no dimer Cu₂(OH)₂²⁺, no basic copper sulfate | 0.5 mol/kg copper sulfate reads pH 4.8, a real one about 4. The dimer, at MINTEQ's constant with no interaction parameters, held most of the copper in a solution boiled down, so it is left out. Hot copper sulfate gives up a little hydroxide that turns to oxide (a few percent of the copper boiled down over 20 minutes), where a real one makes a pale basic sulfate |
+| Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water |
 | Copper hydroxide turns to oxide at the dry solid's rate, in water too (Stage 44) | In a strong base the real one dissolves as Cu(OH)₄²⁻ and comes back as the oxide in minutes; here a boiled suspension takes half an hour, as in water |
 | A solution's pH only to 6 mol/kg of acid or base left over (Stage 44) | Beyond the activity model's fits a boiled-down base reads no pH, where a real one reads about 15 |
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |

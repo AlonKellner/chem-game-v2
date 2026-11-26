@@ -24,7 +24,7 @@ CellState kilogram_with(double molal) {
 	CellState c{ std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0), 0,
 		std::vector<int64_t>(static_cast<size_t>(builtin_species().species_count()), 0) };
 	c.amount[static_cast<size_t>(builtin::water.index)] = quanta(1.0 / 0.018015);
-	c.amount[static_cast<size_t>(builtin::nickel_sulfate_aq.index)] = quanta(molal);
+	put_amount(builtin_species(), c, builtin::nickel_sulfate_aq, quanta(molal)); // as its ions (Stage 63)
 	return c;
 }
 
@@ -50,7 +50,7 @@ TEST_CASE("measured: a mol/kg of nickel sulfate is as dense as Krumgalz, Pogorel
 TEST_CASE("measured: nickel sulfate's absorption peaks are Shigematsu's, and its 394 nm Burke's in sulfate (Stage 47)") {
 	// Shigematsu et al. 1960, Table 1: 394 nm 4.72, 650 nm 1.80, 718 nm 2.06 L/mol/cm (Ni2+ in water, 0.05 M); Burke,
 	// Deardorff and Menis 1972: 5.15 at 394 nm in sulfate, 25 C. The model's decadic molar absorptivity there
-	const optics::Spectrum &s = optics::spectrum(builtin::nickel_sulfate_aq);
+	const optics::Spectrum &s = optics::spectrum(builtin::nickel_ion);
 	const auto at = [&](int nm) { return s[static_cast<size_t>(nm - 380)]; };
 	CHECK(at(394) == doctest::Approx(4.72).epsilon(0.03));
 	CHECK(at(650) == doctest::Approx(1.80).epsilon(0.05));

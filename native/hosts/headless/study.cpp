@@ -571,6 +571,17 @@ int solution_heat() {
 	return status;
 }
 
+// (Stage 63) the heat a step's change of composition gives out at a temperature, from the tables alone: the sum
+// over every species of its change times its enthalpy there (negative: given out)
+double heat_of_change(const SpeciesTable &table, const CellState &before, const CellState &after, double kelvin) {
+	double h = 0.0;
+	for (size_t s = 0; s < before.amount.size(); ++s) {
+		const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		h += static_cast<double>(after.amount[s] - before.amount[s]) * MOL_PER_QUANTUM * (d.hf + d.cp * (kelvin - T0));
+	}
+	return h;
+}
+
 // Stage 43: a titration (GAME_SPEC §9). 25 mL of 1 M sulfuric acid and 1 M sodium hydroxide added to it, mixed
 // at 20 C and settled in a step: the pH against what is left over of either, the warmth against the heat of the
 // waters made. The neutralisation is a fast equilibrium, so each mixture is the step's end.
@@ -584,7 +595,9 @@ int neutralisation() {
 	std::printf("25 mL of 1 M sulfuric acid (0.025 mol in 24.05 g of water), 1 M sodium hydroxide (0.001 mol in 0.96 g of water a mL) added, mixed at 20 C\n");
 	std::printf("H2SO4(aq) + 2 NaOH(aq) -> Na2SO4(aq) + 2 H2O(l): %.2f kJ at 20 C, %.2f kJ a water; Kw %.4g at 20 C (pKw %.3f)\n\n", heat * 1e-3, heat * 5e-4,
 			water_ionisation(table, 293.15), -std::log10(water_ionisation(table, 293.15)));
-	std::printf("%8s %10s %12s %12s %10s %12s %10s\n", "base mL", "pH", "ideal pH", "C", "closed C", "Na2SO4 mol", "invariants");
+	std::printf("(in ions, Stage 63: H+ + OH- -> H2O, %.2f kJ a water; the acid's second hydrogen held in part as bisulfate)\n\n",
+			(hf(builtin::water) - hf(builtin::hydrogen_ion) - hf(builtin::hydroxide_ion)) * 1e-3);
+	std::printf("%8s %10s %12s %12s %10s %12s %10s\n", "base mL", "pH", "ideal pH", "C", "closed C", "HSO4- mol", "invariants");
 	int status = 0;
 	for (int ml = 0; ml <= 70; ml += (ml >= 44 && ml < 56) ? 1 : 4) {
 		const double base = 0.001 * ml, water = (24.05 + 0.96 * ml) / 18.015;
@@ -618,19 +631,19 @@ int neutralisation() {
 			std::fprintf(stderr, "chem_tool: no pH\n");
 			return 1;
 		}
-		const double made = std::min(0.025, 0.5 * base);
-		const double closed = 20.0 - made * heat / thermal_state(table, end).heat_capacity;
+		// the closed form: the heat of what the step made and used (the waters, and the bisulfate's share), at 20 C
+		const double closed = 20.0 - heat_of_change(table, trace.before.cells[static_cast<size_t>(beaker.index)], end, 293.15) / thermal_state(table, end).heat_capacity;
 		// the ideal: what is left over at unit activity, or water's own ions
 		const double kg = water * 0.018015, left = (0.05 - base) / kg;
 		const double kw = water_ionisation(table, kelvin);
 		const double ideal = left > 0.0 ? -std::log10(0.5 * left + std::sqrt(0.25 * left * left + kw)) : -std::log10(kw / (-0.5 * left + std::sqrt(0.25 * left * left + kw)));
-		std::printf("%8d %10.3f %12.3f %12.3f %10.3f %12.5f %10s\n", ml, p, ideal, kelvin - 273.15, closed, static_cast<double>(end.amount[static_cast<size_t>(builtin::sodium_sulfate_aq.index)]) * MOL_PER_QUANTUM,
+		std::printf("%8d %10.3f %12.3f %12.3f %10.3f %12.5f %10s\n", ml, p, ideal, kelvin - 273.15, closed, static_cast<double>(end.amount[static_cast<size_t>(builtin::hydrogen_sulfate_ion.index)]) * MOL_PER_QUANTUM,
 				clean ? "hold" : "BROKEN");
 		status |= clean ? 0 : 1;
 		status |= std::abs(kelvin - 273.15 - closed) < 0.02 ? 0 : 1;
-		// the jump: acid a mL short of the equivalence, near neutral at it, base a mL past (at it, the single ions'
-		// activity coefficients, Pitzer's convention, put it 0.2 from pKw / 2: docs/TDD_43_ACIDITY.md, Open)
-		if ((ml == 49 && !(p < 3.0)) || (ml == 50 && !(std::abs(p - 7.0) < 0.3)) || (ml == 51 && !(p > 11.0))) {
+		// the jump: acid a mL short of the equivalence, near neutral at it, base a mL past (at it, a little over 7: the
+		// sulfate made is the bisulfate's base, Stage 63)
+		if ((ml == 49 && !(p < 3.0)) || (ml == 50 && !(p > 7.0 && p < 7.6)) || (ml == 51 && !(p > 11.0))) {
 			status |= 1;
 		}
 	}
@@ -651,7 +664,7 @@ int precipitation() {
 			(cp(builtin::copper_hydroxide) + cp(builtin::sodium_sulfate_aq) - cp(builtin::copper_sulfate_aq) - 2.0 * cp(builtin::sodium_hydroxide_aq)) * (293.15 - T0);
 	const double grams = 97.561; // Cu(OH)2, g/mol
 	std::printf("25 mL of 0.2 M copper sulfate (0.005 mol in 25 g of water), 1 M sodium hydroxide (0.001 mol in 0.96 g of water a mL) added, mixed at 20 C\n");
-	std::printf("CuSO4(aq) + 2 NaOH(aq) -> Cu(OH)2(s) + Na2SO4(aq): %.2f kJ at 20 C\n\n", heat * 1e-3);
+	std::printf("CuSO4(aq) + 2 NaOH(aq) -> Cu(OH)2(s) + Na2SO4(aq): %.2f kJ at 20 C (in ions, Stage 63: Cu2+ + 2 OH- -> Cu(OH)2)\n\n", heat * 1e-3);
 	std::printf("%8s %12s %12s %14s %8s %10s %10s %10s\n", "base mL", "Cu(OH)2 g", "closed g", "Cu left mol", "pH", "C", "closed C", "invariants");
 	std::vector<Reaction> equilibria;
 	for (const Reaction &r : builtin_reactions()) {
@@ -678,7 +691,11 @@ int precipitation() {
 		Simulation sim(std::move(*world), shipped());
 		const Totals genesis = totals(table, sim.world().snapshot());
 		const StepTrace trace = sim.step();
-		const bool clean = check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis;
+		const Violations broken = check_all(table, trace, equilibria);
+		for (const std::string &v : broken) {
+			std::fprintf(stderr, "chem_tool: %d mL: %s\n", ml, v.c_str());
+		}
+		const bool clean = broken.empty() && totals(table, sim.world().snapshot()) == genesis;
 		const CellState &end = sim.world().snapshot_cell(beaker);
 		double kelvin = 0.0, p = 0.0;
 		sim.world().temperature(beaker, kelvin);
@@ -688,14 +705,19 @@ int precipitation() {
 		}
 		const auto mol = [&](SpeciesId x) { return static_cast<double>(end.amount[static_cast<size_t>(x.index)]) * MOL_PER_QUANTUM; };
 		const double made = std::min(0.005, 0.5 * base), hydroxide = mol(builtin::copper_hydroxide);
-		const double closed = 20.0 - (hydroxide > made ? hydroxide : made) * heat / thermal_state(table, end).heat_capacity;
-		std::printf("%8d %12.5f %12.5f %14.4g %8.3f %10.3f %10.3f %10s\n", ml, hydroxide * grams, made * grams, mol(builtin::copper_sulfate_aq), p, kelvin - 273.15, closed,
+		const double copper = mol(builtin::copper_ion) + mol(builtin::copper_hydroxide_ion); // what is dissolved of it
+		const double closed = 20.0 - heat_of_change(table, trace.before.cells[static_cast<size_t>(beaker.index)], end, 293.15) / thermal_state(table, end).heat_capacity;
+		std::printf("%8d %12.5f %12.5f %14.4g %8.3f %10.3f %10.3f %10s\n", ml, hydroxide * grams, made * grams, copper, p, kelvin - 273.15, closed,
 				clean ? "hold" : "BROKEN");
 		status |= clean ? 0 : 1;
-		// the hydroxide is the base's half up to the copper (a microgram more where copper is left: its own hydrolysis)
-		status |= std::abs(hydroxide - made) < 2e-6 ? 0 : 1;
+		// the base all taken, by the balance of protons: the solid, copper's hydroxo ion and what is free, less the
+		// hydrogen ions freed (Stage 63)
+		const double bound = 2.0 * hydroxide + mol(builtin::copper_hydroxide_ion) + mol(builtin::hydroxide_ion) - mol(builtin::hydrogen_ion) - mol(builtin::hydrogen_sulfate_ion);
+		status |= std::abs(bound - base) < 1e-9 ? 0 : 1;
+		// the hydroxide the base's half up to the copper, within what copper's hydroxo ion holds of it where copper is left
+		status |= std::abs(hydroxide - made) < 0.02 * made + 2e-6 ? 0 : 1;
 		status |= std::abs(kelvin - 273.15 - closed) < 0.02 ? 0 : 1;
-		if (ml >= 11 && !(mol(builtin::copper_sulfate_aq) < 1e-11 && p > 12.0)) {
+		if (ml >= 11 && !(copper < 1e-11 && p > 12.0)) {
 			status |= 1; // past the equivalence, no copper is left in the solution (the last quantum, the equilibrium's own)
 		}
 	}

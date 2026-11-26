@@ -201,6 +201,13 @@ World::Builder &World::Builder::set_temperature(CellId cell, double temperature)
 }
 
 World::Builder &World::Builder::set_amount(CellId cell, SpeciesId species, Amount amount) {
+	// a retired formula unit is its ions (Stage 63): its amount adds to theirs
+	if (table_->has(species) && table_->species(species).retired) {
+		for (const auto &[ion, count] : table_->as_species(species)) {
+			amounts_.push_back(Set{ cell, ion, Amount{ amount.quanta * count }, true });
+		}
+		return *this;
+	}
 	amounts_.push_back(Set{ cell, species, amount });
 	return *this;
 }
@@ -257,7 +264,21 @@ std::optional<World> World::Builder::build(std::string *why) const {
 		if (meta_[static_cast<size_t>(s.cell.index)].reservoir && s.amount.quanta != 0) {
 			return refuse("a reservoir holds energy, never matter");
 		}
-		world.cells_[static_cast<size_t>(s.cell.index)].amount[static_cast<size_t>(s.species.index)] = s.amount.quanta;
+		int64_t &held = world.cells_[static_cast<size_t>(s.cell.index)].amount[static_cast<size_t>(s.species.index)];
+		if (s.add && add_overflows(held, s.amount.quanta)) {
+			return refuse("totals that do not fit the integer range");
+		}
+		held = s.add ? held + s.amount.quanta : s.amount.quanta;
+	}
+	// (Stage 63) every cell neutral: matter moves only as neutral matter, so what is built charged would stay so
+	for (const CellState &cell : world.cells_) {
+		int64_t charge = 0;
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			charge += static_cast<int64_t>(table_->species(SpeciesId{ static_cast<int32_t>(s) }).charge) * cell.amount[s];
+		}
+		if (charge != 0) {
+			return refuse("a cell's charge is not nought");
+		}
 	}
 	for (const SetEnergy &s : energies_) {
 		if (!known_cell(s.cell)) {
@@ -494,6 +515,47 @@ void World::tend_particles(CellState &cell, SpeciesId species) {
 	}
 }
 
+void neutral_part(const SpeciesTable &table, std::vector<SpeciesAmount> &amounts) {
+	const auto charge_of = [&](const SpeciesAmount &m) { return static_cast<int64_t>(table.species(m.species).charge); };
+	int64_t net = 0;
+	for (const SpeciesAmount &m : amounts) {
+		net += charge_of(m) * m.amount.quanta;
+	}
+	// each round takes ions off the side in excess; a round that cannot fit the excess takes one ion of the smallest
+	// charge, which leaves a smaller excess on the other side; bounded, then nothing charged
+	for (int round = 0; round < 16 && net != 0; ++round) {
+		const int64_t side = net > 0 ? 1 : -1, excess = net * side;
+		SpeciesAmount *fits = nullptr, *least = nullptr;
+		for (SpeciesAmount &m : amounts) {
+			const int64_t z = charge_of(m) * side;
+			if (z <= 0 || m.amount.quanta == 0) {
+				continue;
+			}
+			if (z <= excess && (fits == nullptr || z > charge_of(*fits) * side || (z == charge_of(*fits) * side && m.amount.quanta > fits->amount.quanta))) {
+				fits = &m;
+			}
+			if (least == nullptr || z < charge_of(*least) * side || (z == charge_of(*least) * side && m.amount.quanta > least->amount.quanta)) {
+				least = &m;
+			}
+		}
+		if (least == nullptr) {
+			break;
+		}
+		SpeciesAmount &take = fits != nullptr ? *fits : *least;
+		const int64_t z = charge_of(take) * side;
+		const int64_t n = fits != nullptr ? std::min(excess / z, take.amount.quanta) : 1;
+		take.amount.quanta -= n;
+		net -= side * z * n;
+	}
+	if (net != 0) {
+		for (SpeciesAmount &m : amounts) {
+			if (charge_of(m) != 0) {
+				m.amount.quanta = 0;
+			}
+		}
+	}
+}
+
 Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy) {
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
 		return Refusal::UnknownEdge;
@@ -545,6 +607,8 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 			moved.push_back(item);
 		}
 	}
+	neutral_part(*table_, moved);
+	std::erase_if(moved, [](const SpeciesAmount &m) { return m.amount.quanta == 0; });
 	for (const SpeciesAmount &m : moved) {
 		const auto s = static_cast<size_t>(m.species.index);
 		if (src.amount[s] < m.amount.quanta) {
@@ -726,10 +790,15 @@ Refusal World::supply(CellId cell, const CellState &state) {
 	if (cells_[c].energy != 0) {
 		return Refusal::BadValue;
 	}
-	for (const int64_t a : state.amount) {
-		if (a < 0) {
+	int64_t charge = 0;
+	for (size_t k = 0; k < state.amount.size(); ++k) {
+		if (state.amount[k] < 0) {
 			return Refusal::NegativeAmount;
 		}
+		charge += static_cast<int64_t>(table_->species(SpeciesId{ static_cast<int32_t>(k) }).charge) * state.amount[k];
+	}
+	if (charge != 0) {
+		return Refusal::BadValue; // (Stage 63) what comes in is neutral matter, as every cell is
 	}
 	CellState whole = state;
 	if (whole.particles.empty()) {

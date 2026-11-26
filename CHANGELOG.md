@@ -1,5 +1,25 @@
 # GAME_SPEC version history
 
+## 0.63.0 (2026-11-26, Stage 63; signed off by the user: "Approved, merge and proceed")
+
+- §9, §10 (Stage 63, `docs/TDD_63_IONS.md`; `docs/CURRICULUM.md`, step D's first part, C2): **dissolved matter as its
+  ions**, each a species: H⁺, OH⁻, Cu²⁺, SO₄²⁻, HSO₄⁻, Na⁺, Ni²⁺, CuOH⁺. The formula units retired (kept, taken as their
+  ions by a bench, a save and the builder; read by the lab as what their ions make, by each element and the balance
+  of protons); the reactions in ions, each with its written equation in formula units for the calculator and the
+  planner. The bisulfate (PHREEQC's pitzer.dat) and copper's hydrolysis (minteq.v4.dat) as fast equilibria; sulfuric
+  acid by Pitzer, Roy and Silvester; copper's interaction with the bisulfate calibrated to the acid's common-ion
+  effect. Water holds its own ions; sodium sulfate reads a little over pH 7, copper sulfate 4.8.
+- §8: the fast equilibria solved together after each round (a quasi-Newton step on their extents); past an ionic
+  strength of 20 mol/kg the equilibria among dissolved species stand.
+- §6, §7: a transfer moves ions only as neutral matter; a column's diffusion at no current (Nernst and Planck), a
+  grain's transport an electrolyte's (Nernst and Hartley); the oxide's and malachite's surface rates refitted in the
+  free hydrogen ions at their sources' conditions; a column's contrast summed over its species, its split the
+  steepest step that can still be halved.
+- §18: N1, electroneutrality. §12: a formula unit absorbs as its ions. §13: ions written as chemists write them; a
+  dissolved trace that reads nothing is not listed. The demo waits for its oxide to be gone.
+- §20: the bisulfate's and the hydrolysis's rows answered; the dimer left out (pH 4.8 against 4), Kw's heat capacity
+  the formula units', the activity model's range. The goldens re-recorded (the user's approval).
+
 ## 0.62.0 (2026-11-26, Stage 62; signed off by the user: "Approved, merge and proceed")
 
 - §13.7 (Stage 62, `docs/TDD_62_QUOTA.md`; `docs/CURRICULUM.md`, experiment 50): the experiment `quota` (copper

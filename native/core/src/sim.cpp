@@ -130,7 +130,9 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	}
 	steps.transport = HUGE_VAL;
 	steps.both = steps.surface;
-	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it
+	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it; an
+	// ion with the reaction's other ions on its side, in their proportion (Stage 63: an electrolyte moves whole, at
+	// Nernst and Hartley's diffusion, sum nu / sum (nu / D))
 	SpeciesId carried = table.has(kinetics.driver) ? kinetics.driver : SpeciesId{};
 	for (const Term &t : reaction.terms()) {
 		if (!table.has(carried) && table.species(t.species).phase == Phase::Aqueous) {
@@ -138,12 +140,36 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 		}
 	}
 	const double d = particle_diameter(table, cell, kinetics.in);
-	const double coefficient = table.has(carried) ? diffusion(table, carried, temperature) : 0.0;
-	if (!(d > 0.0) || !(coefficient > 0.0)) {
-		return steps; // no particles yet (they nucleate), or a species whose diffusion is not known
+	if (!table.has(carried) || !(d > 0.0)) {
+		return steps; // no particles yet (they nucleate)
 	}
 	const int32_t nu_signed = reaction.nu(carried);
 	const double nu = nu_signed < 0 ? -nu_signed : nu_signed;
+	std::array<Term, MAX_TERMS> with{}; // the carried species and its fellows, each with its coefficient
+	size_t fellows = 0;
+	double coefficient = 0.0;
+	{
+		double count = 0.0, resistance = 0.0;
+		for (const Term &t : reaction.terms()) {
+			const SpeciesDef &def = table.species(t.species);
+			const bool fellow = t.species == carried ||
+					(table.species(carried).charge != 0 && def.charge != 0 && def.phase == Phase::Aqueous && (t.nu < 0) == (nu_signed < 0));
+			if (!fellow) {
+				continue;
+			}
+			const double dt = diffusion(table, t.species, temperature), n = t.nu < 0 ? -t.nu : t.nu;
+			if (!(dt > 0.0)) {
+				return steps; // a species whose diffusion is not known: transport puts no limit on it
+			}
+			count += n;
+			resistance += n / dt;
+			with[fellows++] = t;
+		}
+		coefficient = count / resistance;
+	}
+	if (!(coefficient > 0.0)) {
+		return steps;
+	}
 	// its concentration in the solvent, mol/m^3
 	double solvent = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
@@ -156,12 +182,21 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// How far it is from C_eq, the concentration at which the reaction would be at equilibrium, all else held:
 	// Newton's steps in ln n on the affinity (its activity, coefficients and all), each from the affinity's
 	// slope there, until a step would move the gap by under 1%. Near equilibrium (growth, the usual case) one
-	// step; with none of it yet (a crystal dissolving into pure water) it starts from one quantum's worth.
+	// step; with none of it yet (a crystal dissolving into pure water) it starts from one quantum's worth. Its
+	// fellows follow it by their coefficients.
 	const auto x = static_cast<size_t>(carried.index);
 	const bool used = forward == (nu_signed < 0); // this direction uses it up: it is carried to the surface
 	CellState here = cell;
 	const int64_t n = here.amount[x] > 0 ? here.amount[x] : static_cast<int64_t>(nu);
-	here.amount[x] = n;
+	const auto put = [&](double amount) { // the carried species at `amount`, its fellows by their share of the change
+		const double change = amount - static_cast<double>(cell.amount[x]);
+		for (size_t f = 0; f < fellows; ++f) {
+			const auto j = static_cast<size_t>(with[f].species.index);
+			const double moved = static_cast<double>(cell.amount[j]) + change * with[f].nu / nu_signed;
+			here.amount[j] = j == x ? static_cast<int64_t>(amount) : moved < 1.0 ? 1 : static_cast<int64_t>(moved);
+		}
+	};
+	put(static_cast<double>(n));
 	bool defined = false;
 	double at = affinity(table, here, reaction.terms(), temperature, defined, meta); // every reading from the one function: their differences are what counts
 	if (!defined || at != at || at == 0.0 || (at > 0.0) != forward) {
@@ -177,8 +212,10 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	for (int i = 0; i < 8 && ratio > -1e300; ++i) {
 		const double from = static_cast<double>(here.amount[x]);
 		const int64_t dn = here.amount[x] / 1000000 > 0 ? here.amount[x] / 1000000 : 1;
-		here.amount[x] += dn;
+		const CellState held = here;
+		put(from + static_cast<double>(dn));
 		const double moved = affinity(table, here, reaction.terms(), temperature, defined, meta);
+		here = held;
 		const double slope = (moved - at) / log((from + static_cast<double>(dn)) / from); // J/mol per unit of ln n
 		if (!defined || !(slope != 0.0) || slope != slope) {
 			return steps;
@@ -195,7 +232,7 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 		if (!(next >= 1.0) || next > 9.0e18) {
 			break;
 		}
-		here.amount[x] = static_cast<int64_t>(next);
+		put(next);
 		at = affinity(table, here, reaction.terms(), temperature, defined, meta);
 		if (!defined || at != at || at == HUGE_VAL || at == -HUGE_VAL) {
 			return steps;
@@ -729,6 +766,9 @@ bool Simulation::project(CellId cell) {
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
+			if (stands(table, state, reaction.terms())) {
+				continue; // (Stage 63) past the activity model's range: among dissolved species alone, it stands
+			}
 			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
@@ -766,8 +806,226 @@ bool Simulation::project(CellId cell) {
 		if (!moved) {
 			break;
 		}
+		// (Stage 63) equilibria that share a species, taken in turn, close on their joint balance slowly (copper's
+		// hydrolysis, the bisulfate and water's ionisation trading hydrogen ions): once each has what it needs, they
+		// are solved together, and the round after finishes each to its quantum
+		if (solve_together(cell)) {
+			++version;
+		}
 	}
 	return changed;
+}
+
+// The solution's fast equilibria together (Stage 63, GAME_SPEC §8): each of the equilibrium law whose species are
+// all there (what is dissolved, FEW_QUANTA or more), dissolved or the solvent (a solid's or a gas's is project()'s alone: it may run out), at the cell's
+// temperature:
+// a quasi-Newton step on their extents from the affinities themselves (Pitzer's and all), the slope the ideal
+// solution's, A_r' = -RT sum_i nu_ri nu_si / n_i, damped so no amount dissolved falls below a tenth of what it was
+// (a solid may be used up, its reaction then out of the system); until each is within a quantum of its balance. Its extents are then rounded and applied, each only while it runs down its
+// own affinity (T1) and has what it uses; what is left is project()'s. true when anything moved.
+constexpr int64_t FEW_QUANTA = 64;
+
+bool Simulation::solve_together(CellId cell) {
+	const SpeciesTable &table = world_.species();
+	const CellState &state = world_.snapshot_cell(cell);
+	constexpr size_t MOST = 16;
+	std::array<size_t, MOST> which{};
+	size_t k = 0;
+	for (size_t e = 0; e < equilibria_.size() && k < MOST; ++e) {
+		bool ok = true, dissolved = false;
+		for (const Term &t : equilibria_[e].terms()) {
+			const SpeciesDef &def = table.species(t.species);
+			// a dissolved species of a few quanta is at the limit of its rounding: reach() alone
+			const int64_t held = state.amount[static_cast<size_t>(t.species.index)];
+			ok = ok && def.phase != Phase::Gas && held > 0 && (def.phase != Phase::Aqueous || held >= FEW_QUANTA);
+			dissolved = dissolved || def.phase == Phase::Aqueous;
+		}
+		if (ok && dissolved && !stands(table, state, equilibria_[e].terms())) {
+			which[k++] = e;
+		}
+	}
+	if (k < 2) {
+		return false; // one alone is project()'s
+	}
+	const Thermal &heat = thermal(cell);
+	if (!heat.defined || !(heat.temperature > 0.0)) {
+		return false;
+	}
+	const double t = heat.temperature, rt = GAS_CONSTANT * t;
+	const CellMeta &meta = world_.meta(cell);
+	CellState here = state;
+	std::vector<double> x(state.amount.size());
+	for (size_t s = 0; s < x.size(); ++s) {
+		x[s] = static_cast<double>(state.amount[s]);
+	}
+	std::array<double, MOST> extent{}, a{}, step{};
+	std::array<bool, MOST> active{};
+	active.fill(true);
+	std::array<size_t, MOST> on{}; // the active ones, in the system's order
+	std::array<std::array<double, MOST + 1>, MOST> m{};
+	bool settled = false;
+	for (int iteration = 0; iteration < 32; ++iteration) {
+		size_t n = 0;
+		for (size_t r = 0; r < k; ++r) {
+			if (active[r]) {
+				on[n++] = r;
+			}
+		}
+		for (size_t i = 0; i < n; ++i) {
+			bool defined = false;
+			a[on[i]] = affinity(table, here, equilibria_[which[on[i]]].terms(), t, defined, &meta);
+			if (!defined || a[on[i]] != a[on[i]] || a[on[i]] == HUGE_VAL || a[on[i]] == -HUGE_VAL) {
+				return false;
+			}
+		}
+		// the ideal solution's slope, J/mol per quantum (a solid's activity is one: it adds nothing)
+		bool within = true;
+		for (size_t i = 0; i < n; ++i) {
+			const Reaction &ri = equilibria_[which[on[i]]];
+			for (size_t j = 0; j < n; ++j) {
+				double sum = 0.0;
+				for (const Term &tr : ri.terms()) {
+					if (table.species(tr.species).phase != Phase::Aqueous) {
+						continue;
+					}
+					sum += static_cast<double>(tr.nu) * static_cast<double>(equilibria_[which[on[j]]].nu(tr.species)) / x[static_cast<size_t>(tr.species.index)];
+				}
+				m[i][j] = -rt * sum;
+			}
+			m[i][n] = -a[on[i]];
+			within = within && std::fabs(a[on[i]]) <= std::fabs(m[i][i]); // within a quantum of it
+		}
+		if (within) {
+			settled = true;
+			break;
+		}
+		// Gauss's elimination with partial pivoting
+		size_t dependent = MOST;
+		double scale = 0.0; // the slopes' size, for what counts as no pivot
+		for (size_t i = 0; i < n; ++i) {
+			for (size_t j = 0; j < n; ++j) {
+				scale = std::max(scale, std::fabs(m[i][j]));
+			}
+		}
+		for (size_t c = 0; c < n; ++c) {
+			size_t pivot = c;
+			for (size_t r = c + 1; r < n; ++r) {
+				if (std::fabs(m[r][c]) > std::fabs(m[pivot][c])) {
+					pivot = r;
+				}
+			}
+			if (!(std::fabs(m[pivot][c]) > 1e-12 * scale)) {
+				dependent = on[c]; // the reactions are not independent: one of them leaves the system (its balance is the others')
+				break;
+			}
+			std::swap(m[c], m[pivot]);
+			for (size_t r = c + 1; r < n; ++r) {
+				const double f = m[r][c] / m[c][c];
+				for (size_t q = c; q <= n; ++q) {
+					m[r][q] -= f * m[c][q];
+				}
+			}
+		}
+		if (dependent < MOST) {
+			active[dependent] = false;
+			continue;
+		}
+		for (size_t c = n; c-- > 0;) {
+			double v = m[c][n];
+			for (size_t q = c + 1; q < n; ++q) {
+				v -= m[c][q] * step[on[q]];
+			}
+			step[on[c]] = v / m[c][c];
+		}
+		// damped: nothing dissolved below a tenth of what it holds; a solid may be used up exactly, and its reaction
+		// then leaves the system
+		const auto change_of = [&](size_t s) {
+			double change = 0.0;
+			for (size_t i = 0; i < n; ++i) {
+				change += static_cast<double>(equilibria_[which[on[i]]].nu(SpeciesId{ static_cast<int32_t>(s) })) * step[on[i]];
+			}
+			return change;
+		};
+		double lambda = 1.0;
+		size_t used_up = x.size();
+		for (size_t s = 0; s < x.size(); ++s) {
+			const double change = change_of(s);
+			if (!(change < 0.0) || !(x[s] > 0.0)) {
+				continue;
+			}
+			if (table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Solid) {
+				if (x[s] / -change < lambda) {
+					lambda = x[s] / -change;
+					used_up = s;
+				}
+			} else if (0.9 * x[s] / -change < lambda) {
+				lambda = 0.9 * x[s] / -change;
+				used_up = x.size();
+			}
+		}
+		for (size_t i = 0; i < n; ++i) {
+			extent[on[i]] += lambda * step[on[i]];
+		}
+		for (size_t s = 0; s < x.size(); ++s) {
+			const double change = change_of(s) * lambda;
+			if (change != 0.0) {
+				x[s] = s == used_up ? 0.0 : x[s] + change;
+				here.amount[s] = x[s] > 0.0 ? std::max<int64_t>(1, std::llround(x[s])) : 0; // what is left is there
+			}
+		}
+		// a solid used up, or a dissolved species down to a few quanta (the limit of its rounding): its reactions leave
+		// the system, reach()'s alone
+		for (size_t q = 0; q < x.size(); ++q) {
+			const bool gone = q == used_up || (x[q] < static_cast<double>(FEW_QUANTA) && table.species(SpeciesId{ static_cast<int32_t>(q) }).phase == Phase::Aqueous);
+			if (!gone) {
+				continue;
+			}
+			for (size_t i = 0; i < n; ++i) {
+				if (equilibria_[which[on[i]]].nu(SpeciesId{ static_cast<int32_t>(q) }) != 0) {
+					active[on[i]] = false;
+				}
+			}
+		}
+	}
+	if (!settled) {
+		return false;
+	}
+	std::array<int64_t, MOST> go{};
+	int64_t most = 0;
+	for (size_t r = 0; r < k; ++r) {
+		go[r] = static_cast<int64_t>(std::llround(extent[r]));
+		most = std::max(most, go[r] < 0 ? -go[r] : go[r]);
+	}
+	if (most <= 1) {
+		return false; // a quantum here or there: project()'s own reach finishes it exactly
+	}
+	bool any = false;
+	for (size_t pass = 0; pass < k; ++pass) {
+		bool progressed = false;
+		for (size_t r = 0; r < k; ++r) {
+			if (go[r] == 0) {
+				continue;
+			}
+			const Reaction &reaction = equilibria_[which[r]];
+			const bool forward = go[r] > 0;
+			if (feasible_extent(state, reaction.terms(), forward) < (forward ? go[r] : -go[r])) {
+				continue;
+			}
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &meta);
+			double now = 0.0;
+			if (!probe.at(0.0, now) || now == 0.0 || now != now || (now > 0.0) != forward) {
+				continue;
+			}
+			const Refusal refused = transform(cell, reaction, go[r]);
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			go[r] = 0;
+			progressed = any = true;
+		}
+		if (!progressed) {
+			break;
+		}
+	}
+	return any;
 }
 
 // One rigid cell made exactly full (GAME_SPEC §6): over-full, it expels the
