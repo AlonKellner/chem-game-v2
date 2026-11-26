@@ -70,13 +70,37 @@ def sha_file(path, memo={}):
 
 
 def sha_binary(path, memo={}):
-    """A built binary's content with this worktree's root left out (Stage 68): its debug map names its objects by
-    their whole paths, and nothing else of it names the worktree (the repository's root is found at run time), so
-    the same commit's binary in two worktrees reads the same here."""
+    """A built binary as it behaves (Stage 68): of a Mach-O binary, its sections' names and contents (its code and
+    data), not its header nor its link-edit data, where its debug map names each object by its whole path, the
+    worktree's among them, and its UUID and signature follow from those. So the same commit's binary in two
+    worktrees reads the same here. Any other file: its whole content."""
+    import struct
     if path not in memo:
         with open(path, "rb") as f:
             content = f.read()
-        memo[path] = hashlib.sha256(content.replace(ROOT.encode() + b"/", b"<root>/")).hexdigest()
+        h = hashlib.sha256()
+        if content[:4] == b"\xcf\xfa\xed\xfe":  # MH_MAGIC_64, little-endian
+            ncmds, = struct.unpack_from("<I", content, 16)
+            at = 32
+            for _ in range(ncmds):
+                cmd, size = struct.unpack_from("<II", content, at)
+                if cmd == 0x19:  # LC_SEGMENT_64
+                    segname = content[at + 8:at + 24]
+                    nsects, = struct.unpack_from("<I", content, at + 64)
+                    if not segname.startswith(b"__LINKEDIT"):
+                        for k in range(nsects):
+                            sec = at + 72 + 80 * k
+                            names = content[sec:sec + 32]
+                            sec_size, = struct.unpack_from("<Q", content, sec + 40)
+                            offset, = struct.unpack_from("<I", content, sec + 48)
+                            flags, = struct.unpack_from("<I", content, sec + 64)
+                            h.update(names + struct.pack("<Q", sec_size))
+                            if offset != 0 and (flags & 0xff) not in (0x1, 0xc, 0x12):  # zerofill sections hold no bytes
+                                h.update(content[offset:offset + sec_size])
+                at += size
+        else:
+            h.update(content)
+        memo[path] = h.hexdigest()
     return memo[path]
 
 

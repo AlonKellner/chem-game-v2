@@ -40,7 +40,8 @@ always run. `make gate-clear-cache` empties it.
   repository's root is found at run time from where the binary is (`tests/support/repo_root.hpp`;
   `CHEM_REPO_ROOT` in the environment overrides it). The debug map still names each object by its whole
   path (relative ones, `-oso_prefix`, left a sanitizer's report and `atos` without a line), and the cache
-  hashes a binary with its worktree's root left out. So two worktrees on one commit share their results,
+  hashes a binary by its sections' names and contents (its code and data; not its header nor its link-edit
+  data, where those paths, its UUID and its signature are). So two worktrees on one commit share their results,
   and main after a merge whose tree is the branch's runs only what the branch did not.
 
 ## The shared build cache
