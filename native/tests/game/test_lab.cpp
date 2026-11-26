@@ -309,11 +309,15 @@ TEST_CASE("lab: the demo session reproduces its golden record, and its results a
 	CHECK(grams(balloon, "carbon_dioxide") > 0.8);
 	CHECK(balloon.at("on").is_null());
 	// a beaker of water and nothing else that is not air
-	CHECK(grams(beaker, "water") > 30.0); // (Stage 53: 33.6 g; its hot distillate cools slower through its glass and evaporates more)
+	// (Stage 53: 33.6 g; its hot distillate cools slower through its glass and evaporates more; Stage 63: 26.6 g, the
+	// oxide's dissolving slower at its end, the sulfate made holding the last of the acid as bisulfate)
+	CHECK(grams(beaker, "water") > 25.0);
 	for (const json &row : beaker.at("contents")) {
 		const std::string s = row.at("species");
-		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it)
-		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass" || (s == "carbon_dioxide" && row.at("g").get<double>() < 1e-3)));
+		// (Stage 50: and a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it;
+		// Stage 63: and water's own ions)
+		CHECK((s == "water" || s == "steam" || s == "nitrogen" || s == "oxygen" || s == "glass" || s == "hydrogen_ion" || s == "hydroxide_ion" ||
+				(s == "carbon_dioxide" && row.at("g").get<double>() < 1e-3)));
 	}
 	// a flask whose only solid or liquid, beside a trace of undecomposed malachite, is the pentahydrate
 	const double crystals = grams(flask, "copper_sulfate_pentahydrate");
