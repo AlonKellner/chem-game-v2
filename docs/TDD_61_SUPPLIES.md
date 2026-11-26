@@ -85,15 +85,47 @@ case). The keywords (`lab/search.hpp`, pure):
 
 | Phase | Topic | Status |
 |---|---|---|
-| 61.1 | The core: add a cell, supply, retire, freeze; the ledger; C9 and its self-test | |
-| 61.2 | Supplies: templates in worlds of their own; taking one out (graft); implicit take-out | |
-| 61.3 | Storage: the outbox's slots unbounded, goals on any, `stow` to it, `place` from it | |
-| 61.4 | The trash: frozen, restored as it was, emptied out of the world | |
-| 61.5 | Save, load and digest: the ledger, the frozen, the retired, the supplies' copies | |
-| 61.6 | The screen: the two panels scrolled, their search fields; `lab/search.hpp` | |
-| 61.7 | The pictures: captured on the CPU, cached, built for `data/`'s benches | |
-| 61.8 | Benches, tutorials, sessions and plays; the goldens (with the user's approval); the host | |
+| 61.1 | The core: add a cell, supply, retire, freeze; the ledger; C9 and its self-test | Done |
+| 61.2 | Supplies: templates in worlds of their own; taking one out (graft); implicit take-out | Done |
+| 61.3 | Storage: the outbox's slots unbounded, goals on any, `stow` to it, `place` from it | Done |
+| 61.4 | The trash: frozen, restored as it was, emptied out of the world | Done |
+| 61.5 | Save, load and digest: the ledger, the frozen, the retired, the supplies' copies | Done |
+| 61.6 | The screen: the two panels scrolled, their search fields; `lab/search.hpp` | Done |
+| 61.7 | The pictures: captured on the CPU, cached, built for `data/`'s benches | Done |
+| 61.8 | Benches, tutorials, sessions and plays; the goldens (with the user's approval); the host | Done |
 | 61.9 | GAME_SPEC 0.61.0, CHANGELOG, `make gates`, the user's sign-off | |
+
+## What was built
+
+- **The core** (`world.hpp`): `add_cell`, `supply`, `retire`, `freeze` (and `Builder::set_boundary` for a save),
+  refused mid-step as a connection is; `CellMeta::frozen` and `retired`, `Edge::frozen` (an edge a freeze closed,
+  opened again as it was). Every process skips a frozen cell (`react`, `overflow`, the settling's tree, a column's
+  layers, the column's head); P1 skips it (its state stands as it was frozen). C9 (`check_C9`, `plus`, `minus`).
+- **The lab**: a supply's template is a `Lab` of a bench of it alone (`Supply::made`), never stepped. `take` grafts
+  its own cells (each layer under the cell over it), supplies them, and joins only the edges of its own cells (the
+  template's air-to-room edge is not the copy's: found by the tests, Stage 61's agent), naming them by the copy's id.
+  A command naming a supply none of whose copies is out takes one out (`find_or_take`); `Lab::command` saves the
+  lab first and loads it back if the command is refused, so a refusal changes nothing. Storage: `to_storage` (its
+  first free slot without a goal), every move that went to the cabinet. The trash: `freeze_item`, `retire_item`
+  (`Item::retired`: kept so indices stand; its id never given again); a frozen item's walls are not set. Save and
+  load: the cells' and edges' marks, each supply's bench and copies, the retired. The report lists the supplies and
+  the conservation across the boundary.
+- **The screen**: the supplies after the lab's items in its own list (`supply_base`), place "cabinet"; a supply's
+  drop a `take` (onto a square at once; onto equipment its copy dropped, and the lab loaded back if that is
+  refused); Storage's slots (`storage_count`, `shown_slots`, `slot_rect` by position), its bar and wheel; the
+  search fields (`search:supplies`, `search:storage`), typed into before anything else. A supply's box is known to
+  the pass apart from its first copy (`OpticsBody::named`, "supply:id"). The newest part found by its id.
+- **The pictures**: `capture_one` composes the supply alone in the first box and reads the box with `optics_pixel`
+  over the wall's grey (`wall_at`); within 0.002 of the pass. Keyed by FNV-1a of what is drawn (`picture_key`).
+  `Ui::add_pictures`, `pictures`, `pictures_changed`, `capture_pictures`, `set_capture_ahead`; the C API's; the
+  Godot host gives back `res://pictures/supplies.json` (built by `make pictures`) and `user://pictures.json`, and
+  keeps what it captures. A capture costs 1 to 8 s a supply on the CPU (the free lab's twelve, 30 s; 2 s when all
+  are kept).
+- **Tests**: `test_boundary.cpp` (the core and C9), `test_supplies.cpp` (Supplies, Storage, the trash, save and
+  load, search, the pictures); some seventy older tests restated by an agent to the new meaning (`(Stage 61: ...)`
+  on each), which found the four bugs fixed above.
+- **Goldens**: the pressure session's re-recorded with the user's approval: every measured value and event as
+  before; its stopper and burner supplies (8 g supplied). The demo's unchanged (its bench has no supplies).
 
 ## Open
 
