@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 #include <string>
 #include <vector>
 
@@ -102,8 +103,13 @@ Run hold(const char *speed) {
 
 } // namespace
 
+// ctest: threads 3
 TEST_CASE("controller: water in the flask held at 60 C by the burner, at each speed: settled within a degree, faster when asked (Stage 26)") {
-	const Run gentle = hold("gentle"), normal = hold("normal"), fast = hold("fast");
+	// the three speeds side by side, each lab its own world (Stage 68: an hour each, checked at every step; a failure
+	// in one is the test's, through its future)
+	auto at_gentle = std::async(std::launch::async, hold, "gentle"), at_normal = std::async(std::launch::async, hold, "normal"),
+		 at_fast = std::async(std::launch::async, hold, "fast");
+	const Run gentle = at_gentle.get(), normal = at_normal.get(), fast = at_fast.get();
 	for (const Run *r : { &gentle, &normal, &fast }) {
 		CHECK(r->settled < 3000.0);
 		CHECK(r->last_error < 1.0);

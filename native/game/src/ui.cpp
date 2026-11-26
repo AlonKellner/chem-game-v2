@@ -450,8 +450,16 @@ struct Ui::Impl {
 	int debug_from = 0;
 	std::string exported;
 
+	uint64_t viewed = 0; // the lab's stamp its view was taken at (Stage 68)
+	LabView lab_view; // the lab's own view at that stamp
 	void refresh() {
-		view = lab->view();
+		// (Stage 68) the lab's view taken again only once the lab has changed (a tutorial's frame took it twice a second
+		// of the clock); what the screen adds to it, as it now stands
+		if (lab->stamp() != viewed) {
+			lab_view = lab->view();
+			viewed = lab->stamp();
+		}
+		view = lab_view;
 		supply_base = static_cast<int>(view.items.size());
 		for (const ItemView &s : view.supplies) { // (Stage 61) those the search leaves, in the cabinet's boxes
 			if (capture_only.empty() ? lab::search::matches(supplies_query, lab::search::keywords(s)) : s.id == capture_only) {

@@ -6,6 +6,8 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cmath>
 #include <memory>
 #include <mutex>
@@ -72,6 +74,102 @@ double swept(const Piece &p, double s1) {
 	}
 	return pi * sum * 0.5 * dt;
 }
+
+// A chain's volume under heights, as Vessel::volume_below sums it, for the many heights of one search (Stage 68).
+// volume_below adds, piece by piece in order, each piece's whole volume once it lies wholly below y and a part of the
+// one y cuts; where every piece lies over the ones before it (a vessel's inside from its floor up), those wholly
+// below are the first k, and their sum is the running sum here, made with the same additions in the same order: the
+// same number, bit for bit. A chain that turns back down is summed as volume_below sums it.
+class VolumeBelow {
+public:
+	explicit VolumeBelow(const Chain &chain) : chain_(chain) {
+		run_.push_back(0.0);
+		double v = 0.0, top = -INFINITY;
+		for (size_t i = 0; i < chain.size(); ++i) {
+			const Piece &p = chain[i];
+			const double y0 = std::min(p.a.y, p.b.y), y1 = std::max(p.a.y, p.b.y);
+			if (y1 - y0 < 1e-15) {
+				continue; // volume_below passes it by at every height
+			}
+			if (y0 < top) {
+				ordered_ = false;
+				return;
+			}
+			top = y1;
+			pieces_.push_back(i);
+			tops_.push_back(y1);
+			v += swept(p, 1.0);
+			run_.push_back(v);
+		}
+	}
+	double operator()(double y) const {
+		if (!ordered_) {
+			return slow(y);
+		}
+		// the pieces wholly below: those whose top is at most y (tops_ rises)
+		const size_t k = static_cast<size_t>(std::upper_bound(tops_.begin(), tops_.end(), y) - tops_.begin());
+		double v = run_[k];
+		if (k < pieces_.size()) {
+			const Piece &p = chain_[pieces_[k]];
+			if (std::min(p.a.y, p.b.y) < y) {
+				v += swept(p, s_along(k, p, y)); // the one y cuts; every later piece starts over it
+			}
+		}
+		return v;
+	}
+
+private:
+	// s_at's search, its points along the piece kept from the last search on the same piece: a search for a nearby
+	// height takes the same first turns, at the same midpoints, so it reads the same points again (each the piece's
+	// own at(mid), a function of mid alone) and computes only where it turns otherwise. The same turns, the same s.
+	double s_along(size_t k, const Piece &p, double y) const {
+		if (path_piece_ != k) {
+			path_piece_ = k;
+			path_depth_ = 0;
+			path_up_ = p.at(1.0).y > p.at(0.0).y;
+		}
+		double lo = 0.0, hi = 1.0;
+		for (int i = 0; i < 80; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			const auto d = static_cast<size_t>(i);
+			double at_mid = 0.0;
+			if (d < path_depth_ && path_mid_[d] == mid) {
+				at_mid = path_y_[d];
+			} else {
+				at_mid = p.at(mid).y;
+				path_mid_[d] = mid;
+				path_y_[d] = at_mid;
+				path_depth_ = d + 1;
+			}
+			const bool still = mid == lo || mid == hi; // (as level's own search: from here every turn is the same)
+			((at_mid < y) == path_up_ ? lo : hi) = mid;
+			if (still) {
+				break;
+			}
+		}
+		return 0.5 * (lo + hi);
+	}
+	mutable size_t path_piece_ = SIZE_MAX, path_depth_ = 0;
+	mutable bool path_up_ = false;
+	mutable std::array<double, 80> path_mid_{}, path_y_{};
+
+	double slow(double y) const {
+		double v = 0.0;
+		for (const Piece &p : chain_) {
+			const double y0 = std::min(p.a.y, p.b.y), y1 = std::max(p.a.y, p.b.y);
+			if (y1 - y0 < 1e-15 || y0 >= y) {
+				continue;
+			}
+			v += swept(p, y1 <= y ? 1.0 : s_at(p, y));
+		}
+		return v;
+	}
+	const Chain &chain_;
+	bool ordered_ = true;
+	std::vector<size_t> pieces_; // the pieces volume_below can add, in order
+	std::vector<double> tops_; // their tops
+	std::vector<double> run_; // run_[k]: the first k of them summed, as volume_below sums them
+};
 
 double radius_on(const Chain &chain, double y) {
 	double r = 0.0;
@@ -247,10 +345,18 @@ double Vessel::level(double cm3) const {
 	if (cm3 >= capacity()) {
 		return height;
 	}
+	// (Stage 68) the volume under each height from one table of the pieces' running sum, the same numbers as
+	// volume_below's; and once the midpoint is an end, the search stands still: that step's choice is made and every
+	// later one would make it again, so it stops there, at the same answer
+	const VolumeBelow below(inside);
 	double lo = floor, hi = height;
 	for (int i = 0; i < 70; ++i) {
 		const double mid = 0.5 * (lo + hi);
-		(volume_below(mid) < cm3 ? lo : hi) = mid;
+		const bool still = mid == lo || mid == hi;
+		(below(mid) < cm3 ? lo : hi) = mid;
+		if (still) {
+			break;
+		}
 	}
 	return 0.5 * (lo + hi);
 }
@@ -339,10 +445,26 @@ double Vessel::widest() const {
 	return r;
 }
 
+#ifndef CHEM_GLASSGEN
+// every shape of the table as glass::make makes it, made at build time (Stage 68: chem_glassgen)
+#include "lab/glassware_built.inc"
+#endif
+
 const Vessel *find(std::string_view kind, double nominal_ml) {
 	static std::mutex lock;
 	static std::vector<std::unique_ptr<Vessel>> made;
 	const std::lock_guard<std::mutex> hold(lock);
+#ifndef CHEM_GLASSGEN
+	static const bool built = [] {
+		std::vector<Vessel> shapes;
+		built_shapes(shapes);
+		for (Vessel &v : shapes) {
+			made.push_back(std::make_unique<Vessel>(std::move(v)));
+		}
+		return true;
+	}();
+	(void)built;
+#endif
 	for (const auto &v : made) {
 		if (v->kind == kind && v->nominal_ml == nominal_ml) {
 			return v.get();

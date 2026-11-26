@@ -167,6 +167,9 @@ TEST_CASE("trash: a hot vessel stands in the trash as it went in, while one in s
 		return l;
 	};
 	auto binned = hot(), stowed = hot();
+	// the stowed one unchecked (Stage 68): what is held here is that the two are one physical state minute by minute,
+	// and the binned one, checked, is checked on every step of it
+	stowed->set_checking(false);
 	const double before = item(binned->view(), "flask").celsius;
 	REQUIRE(before > 30.0);
 	must(*binned, R"({"do": "trash", "item": "flask"})");
@@ -641,7 +644,7 @@ TEST_CASE("trash: a lab with things in the trash saves and loads, and goes on di
 }
 
 TEST_CASE("trash: a lab whose trash is empty digests and saves as one that never had a trash (Stage 34)") {
-	// (the sessions' golden records, digest for digest, are the evidence that this is the digest of before: ctest demo_session)
+	// (the sessions' golden records, digest for digest, are the evidence that this is the digest of before: lab_tests.demo_record)
 	auto l = bench(), twin = bench();
 	const std::string fresh = l->save();
 	CHECK_FALSE(says(fresh, "\"trash\""));
