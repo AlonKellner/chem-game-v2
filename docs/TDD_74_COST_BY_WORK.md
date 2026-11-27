@@ -10,7 +10,7 @@ No behaviour of the game changes; GAME_SPEC stays 0.73.0.
 |---|---|---|
 | 74.1 | Why it failed: a core's speed in the thread's own time | Done |
 | 74.2 | The cost as instructions retired, a share of the frame | Done |
-| 74.3 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 74.3 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 ## 74.1 Why
 

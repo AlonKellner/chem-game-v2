@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; awaiting the user's sign-off)
+## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process
   retired, under a tenth of a frame's (5.9 %), not by 3 ms of the thread's CPU time, which a crowded machine's slower
