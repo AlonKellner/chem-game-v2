@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.78.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.80.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -489,6 +489,10 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   bisection's and one, a few where the flux is smooth; the onset is a step in it). The floor's convection takes
   Lienhard's correction for thick boundary layers (8.37b) at every Nusselt number (Stage 73; it stopped at 10, a step
   down there, and two such surfaces stood within it): it rises with the floor's temperature, the surface is one.
+  (Stage 80) What a vessel's walls read is taken on a grid: a temperature to 0.01 K, a level to a micrometre, the
+  water's activity to 1e-6, a pressure to 0.01 Pa; each ring's outside and each contact is worked out again only once
+  what it reads has moved on it. A convection's coefficient goes as dT^1/4, so 0.01 K at 10 K is 0.025 % of it. What
+  the walls pass stays a function of the state alone: a lab saved and loaded sets what it would have (D2).
 - **A powder bed** (Stage 53): solids lying on a floor take its heat through their bed over half its thickness, at
   Zehner and Schlünder's stagnant conductivity (broken grains, C = 1.40; the porosity the sediment's), with the
   liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
@@ -650,7 +654,9 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
 - **The equilibrium law** (`data/reactions.json`, `"law": "equilibrium"`): each step, in each
   cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
   end of what the cell holds. The search is a secant step from the two ends with a bisection
-  every third, on the affinity along the reaction's own extent at fixed enthalpy.
+  every third, on the affinity along the reaction's own extent at fixed enthalpy; (Stage 80) where the affinity at
+  no extent and at one quantum are known, the quantum before the line through them crosses zero and the next are
+  asked first, and the search goes on from them (an equilibrium shifted by a few quanta, the usual step's, in two).
 - Several fast equilibria that share a species in one cell are taken in turn, up to sixteen rounds. Each is
   probed again only once the cell has changed since it was last probed (Stage 44): one that cannot move, or
   that moved last, rests until another moves, so a cell where one equilibrium moves settles in one round.
