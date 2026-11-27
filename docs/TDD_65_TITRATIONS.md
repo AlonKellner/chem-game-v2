@@ -87,3 +87,10 @@ conductivity** (this stage).
 | 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Open
+
+- **A carbonate's first end point stands at pH 8.67, not 8.34** (experiment 16). The flask's dissolved CO2 is at
+  Henry's equilibrium with the flask's air at every step (Stage 64's open item: a real surface exchanges at a finite
+  rate), so the carbon dioxide the hydrogen carbonate makes as it disproportionates leaves into the headspace at once
+  and the pH there stands higher. Phenolphthalein's colour goes about 0.9 mL past the equivalence (near pH 8.3); the
+  curve's step is where it should be (13.85 mL against 13.82), and the second end point is unaffected. It goes when a
+  surface exchanges at a rate (a gas's evolution from a solution, GAME_SPEC §6).

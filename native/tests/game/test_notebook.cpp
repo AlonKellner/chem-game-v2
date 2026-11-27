@@ -36,7 +36,7 @@ void must(lab::Lab &l, const std::string &command) {
 
 } // namespace
 
-TEST_CASE("notebook: a fitted line, an axis's transform and a report's expression (Stage 54)") {
+TEST_CASE("notebook: a fitted line, an axis's transform and a report's expression, with its functions (Stage 54, Stage 65)") {
 	using namespace lab;
 	const LineFit exact = fit_line({ 1, 2, 3, 4 }, { 3, 5, 7, 9 });
 	REQUIRE(exact.ok);
@@ -70,6 +70,14 @@ TEST_CASE("notebook: a fitted line, an axis's transform and a report's expressio
 	CHECK_FALSE(evaluate("1 / 0", v, x, why));
 	CHECK_FALSE(evaluate("(1 + 2", v, x, why));
 	CHECK_FALSE(evaluate("2 3", v, x, why));
+	// (Stage 65) log10, ln and sqrt of a parenthesised expression; undefined where they are, refused
+	REQUIRE(evaluate("4.76 + log10(0.1 / 0.01)", v, x, why));
+	CHECK(x == doctest::Approx(5.76));
+	REQUIRE(evaluate("ln(beaker.celsius + 273.15) * 2 + sqrt (16)", v, x, why));
+	CHECK(x == doctest::Approx(2.0 * std::log(293.15) + 4.0).epsilon(1e-9));
+	CHECK_FALSE(evaluate("log10(0)", v, x, why));
+	CHECK_FALSE(evaluate("sqrt(-1)", v, x, why));
+	CHECK_FALSE(evaluate("log10", v, x, why));
 	// a tutorial's report: an expression naming what the bench has not is refused as it opens; a zero divided by now
 	// is the end's
 	const auto tutorial = [&](const std::string &truth) {

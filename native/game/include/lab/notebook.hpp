@@ -31,7 +31,8 @@ enum class AxisTransform { Plain = 0, Log = 1, Inverse = 2 };
 std::optional<double> transformed(double value, AxisTransform t, bool celsius);
 const char *transform_name(AxisTransform t, bool celsius); // "", "ln ", "1/"
 
-// A report's expression (Stage 54): numbers, + - * /, parentheses, unary minus, and quantities named `item.what` or
+// A report's expression (Stage 54): numbers, + - * /, parentheses, unary minus, (Stage 65) log10, ln and sqrt of a
+// parenthesised expression, and quantities named `item.what` or
 // `item.what.measure` (a species' g, mol, ml...; a vessel's celsius, ph, liquid_ml...), each its truth now. False, with
 // the reason, when it does not parse or a quantity is not there.
 bool evaluate(std::string_view expression, const LabView &view, double &value, std::string &why);

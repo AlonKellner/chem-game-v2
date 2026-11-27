@@ -1170,3 +1170,71 @@ TEST_CASE("experiment vinegar: followed with its own gestures, free, it complete
 	pupil::follow_through(p, 7200);
 	completed(p);
 }
+
+namespace {
+
+// a logged curve: (the burette's reading, the pH) at the same moments
+std::vector<std::pair<double, double>> logged_curve(Pupil &p) {
+	const lab::LabView v = p.ui->lab().view();
+	std::vector<std::pair<double, double>> curve;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.what != "ph") {
+			continue;
+		}
+		for (const lab::NoteEntry &f : v.notebook) {
+			if (f.quantity.what == "scale_ml" && f.step == e.step) {
+				curve.emplace_back(f.value, e.value);
+			}
+		}
+	}
+	return curve;
+}
+
+// where the curve falls (or rises) steepest with its pH between `lo` and `hi`, mL past its start: its slope over
+// `window` mL, as a step's middle is read from a plot (a gentle step's single intervals tie within a reading's 0.01)
+double steepest_between(const std::vector<std::pair<double, double>> &curve, double lo, double hi, double window = 0.6) {
+	double best = 0.0, at = 0.0;
+	for (size_t i = 0; i < curve.size(); ++i) {
+		size_t j = i;
+		while (j + 1 < curve.size() && curve[j].first - curve[i].first < window) {
+			++j;
+		}
+		const double dx = curve[j].first - curve[i].first, mid = 0.5 * (curve[i].second + curve[j].second);
+		if (dx >= 0.5 * window && mid > lo && mid < hi && std::abs(curve[j].second - curve[i].second) / dx > best) {
+			best = std::abs(curve[j].second - curve[i].second) / dx;
+			at = 0.5 * (curve[i].first + curve[j].first);
+		}
+	}
+	return at - curve.front().first;
+}
+
+} // namespace
+
+TEST_CASE("experiment carbonate_curve: followed with its own gestures, strict, the curve's two steps, the second twice the first (Stage 65)") {
+	Pupil p("data/benches/carbonate_curve.json", "data/tutorials/carbonate_curve.json");
+	CHECK(pupil::follow_through(p, 7200) > 9);
+	completed(p);
+	const std::vector<std::pair<double, double>> curve = logged_curve(p);
+	REQUIRE(curve.size() > 20);
+	const double first = steepest_between(curve, 6.5, 10.0), second = steepest_between(curve, 3.0, 6.5);
+	const double t1 = truth_of(p, p.ui->tutorial()->report()[0].truth), t2 = truth_of(p, p.ui->tutorial()->report()[1].truth), tc = truth_of(p, p.ui->tutorial()->report()[2].truth);
+	const double c = 0.100 * first / 25.0;
+	MESSAGE("first end point " << first << " mL (truth " << t1 << "), second " << second << " (truth " << t2 << "), carbonate " << c << " mol/L (truth " << tc << ")");
+	CHECK(std::abs(first - t1) < 0.4);
+	CHECK(std::abs(second - t2) < 0.5);
+	CHECK(std::abs(c / tc - 1.0) < 0.03);
+	report(p, { first, second, c });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment carbonate_curve: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/carbonate_curve.json", "data/tutorials/carbonate_curve.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment carbonate_curve: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/carbonate_curve.json", "data/tutorials/carbonate_curve.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}

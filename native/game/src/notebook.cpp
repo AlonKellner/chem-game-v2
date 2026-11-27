@@ -112,7 +112,7 @@ const char *transform_name(AxisTransform t, bool celsius) {
 namespace {
 
 // a recursive descent over: expression = term {(+|-) term}; term = factor {(*|/) factor}; factor = number | name |
-// ( expression ) | - factor
+// ( expression ) | - factor | function ( expression ) (Stage 65: log10, ln, sqrt)
 struct Parser {
 	std::string_view s;
 	size_t at = 0;
@@ -211,6 +211,19 @@ struct Parser {
 		const std::string name(s.substr(at, end - at));
 		at = end;
 		const size_t dot = name.find('.');
+		// (Stage 65) a function of a parenthesised expression: log10, ln, sqrt
+		space();
+		if (dot == std::string::npos && at < s.size() && s[at] == '(' && (name == "log10" || name == "ln" || name == "sqrt")) {
+			if (!factor(v)) {
+				return false;
+			}
+			if (name == "sqrt" ? !(v >= 0.0) : !(v > 0.0)) {
+				why = name + " of " + std::to_string(v) + ": not defined";
+				return false;
+			}
+			v = name == "log10" ? std::log10(v) : name == "ln" ? std::log(v) : std::sqrt(v);
+			return true;
+		}
 		if (dot == std::string::npos) {
 			why = "\"" + name + "\" is not item.what";
 			return false;
