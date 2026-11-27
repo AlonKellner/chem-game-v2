@@ -890,6 +890,86 @@ int conductivity_study() {
 	return status;
 }
 
+// Stage 76 (GAME_SPEC §9, curriculum C3): precipitates. 25 mL of 0.1 M silver nitrate (0.0025 mol in 25 g of water),
+// 0.1 M sodium chloride (0.0001 mol in 1 g of water a mL) added, each mixture settled in a step: the silver chloride
+// made against the closed form (the less of the two, 143.32 g/mol), the silver left against its solubility product
+// (past the equivalence Ksp / [Cl-]); then a saturated calcium hydroxide from 0 to 80 C, its solubility falling as it
+// warms (retrograde), its pH against NIST SRM 2193b's.
+int precipitates_study() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	std::vector<Reaction> equilibria;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.kinetics().law == Kinetics::Law::Equilibrium) {
+			equilibria.push_back(r);
+		}
+	}
+	int status = 0;
+	const auto settle = [&](const std::vector<std::pair<SpeciesId, double>> &put, double water, double kelvin, CellState &end) {
+		World::Builder b(table);
+		const CellId cell = b.add_cell("beaker");
+		b.set_amount(cell, builtin::water, amount_from_mol(water, ok));
+		for (const auto &[s, mol] : put) {
+			b.set_amount(cell, s, amount_from_mol(mol, ok));
+		}
+		b.set_temperature(cell, kelvin);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			std::exit(1);
+		}
+		Simulation sim(std::move(*world), shipped());
+		const Totals genesis = totals(table, sim.world().snapshot());
+		const StepTrace trace = sim.step();
+		end = sim.world().snapshot_cell(cell);
+		return check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis;
+	};
+	const auto mol = [](const CellState &c, SpeciesId s) { return static_cast<double>(c.amount[static_cast<size_t>(s.index)]) * MOL_PER_QUANTUM; };
+	const double ksp = std::pow(10.0, -9.75); // MINTEQ v4's
+	std::printf("25 mL of 0.1 M silver nitrate, 0.1 M sodium chloride added, 25 C: AgNO3(aq) + NaCl(aq) -> AgCl(s) + NaNO3(aq), Ksp %.3g\n\n", ksp);
+	std::printf("%8s %12s %12s %14s %14s %10s\n", "NaCl mL", "AgCl g", "closed g", "Ag+ mol/kg", "Ksp/[Cl-]", "invariants");
+	for (int ml = 0; ml <= 50; ml += 5) {
+		const double chloride = 1e-4 * ml, water = (25.0 + 1.0 * ml) / 18.015;
+		std::vector<std::pair<SpeciesId, double>> put{ { builtin::silver_nitrate_aq, 0.0025 } };
+		if (chloride > 0.0) {
+			put.emplace_back(builtin::sodium_chloride_aq, chloride);
+		}
+		CellState end;
+		const bool clean = settle(put, water, 298.15, end);
+		const double made = mol(end, builtin::silver_chloride) * 143.32, closed = std::min(0.0025, chloride) * 143.32;
+		const double kg = water * 0.018015, ag = mol(end, builtin::silver_ion) / kg, cl = mol(end, builtin::chloride_ion) / kg;
+		std::printf("%8d %12.5f %12.5f %14.4e %14.4e %10s\n", ml, made, closed, ag, cl > 0.0 ? ksp / cl : 0.0, clean ? "hold" : "BROKEN");
+		status |= clean && std::abs(made - closed) < 0.002 * 0.0025 * 143.32 + 2e-5 ? 0 : 1;
+		// past the equivalence the silver left is the solubility product over the chloride and over the ions' activity
+		// coefficients squared (about 0.6 at a twentieth of an ionic strength): 1.6 times Ksp / [Cl-]
+		if (ml > 30 && !(ag > 1.3 * ksp / cl && ag < 2.0 * ksp / cl)) {
+			status |= 1;
+		}
+	}
+	std::printf("\nsaturated calcium hydroxide (0.1 mol of the solid in a kilogram of water), CO2-free:\n");
+	std::printf("%8s %14s %10s %12s %10s\n", "C", "Ca mol/kg", "pH", "NIST 2193b", "invariants");
+	double last = 1.0;
+	for (const auto &[celsius, certified] : { std::pair{ 0.0, 0.0 }, std::pair{ 10.0, 13.011 }, std::pair{ 25.0, 12.453 }, std::pair{ 40.0, 11.980 }, std::pair{ 50.0, 11.709 },
+				 std::pair{ 80.0, 0.0 } }) {
+		CellState end;
+		const bool clean = settle({ { builtin::calcium_hydroxide, 0.1 } }, 1.0 / 0.018015, celsius + 273.15, end);
+		double p = 0.0;
+		ph(table, end, celsius + 273.15, p);
+		const double dissolved = mol(end, builtin::calcium_ion);
+		if (certified > 0.0) {
+			std::printf("%8.0f %14.5f %10.3f %12.3f %10s\n", celsius, dissolved, p, certified, clean ? "hold" : "BROKEN");
+			status |= std::abs(p - certified) < 0.08 ? 0 : 1;
+		} else {
+			std::printf("%8.0f %14.5f %10.3f %12s %10s\n", celsius, dissolved, p, "", clean ? "hold" : "BROKEN");
+		}
+		status |= clean && dissolved < last ? 0 : 1; // retrograde: less dissolves as it warms
+		last = dissolved;
+	}
+	std::printf("\n%s\n", status == 0 ? "every mixture settled with its invariants holding: the precipitate the closed form's, the silver left the solubility product's, calcium hydroxide less soluble as it warms and at NIST's pH" : "A PRECIPITATE FAILED");
+	return status;
+}
+
 } // namespace
 
 // Stage 66 (curriculum 35): a seed in a supersaturated solution. 100 g of water held at 25 C with copper sulfate 5 %
@@ -1019,12 +1099,15 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "precipitation") == 0) {
 		return precipitation();
 	}
+	if (std::strcmp(name, "precipitates") == 0) {
+		return precipitates_study();
+	}
 	if (std::strcmp(name, "conductivity") == 0) {
 		return conductivity_study();
 	}
 	if (std::strcmp(name, "seed") == 0) {
 		return seed();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, spectrum, frames, tilt, vortex)\n", name);
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, precipitates, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

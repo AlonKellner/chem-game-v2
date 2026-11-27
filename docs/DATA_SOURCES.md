@@ -1337,3 +1337,7 @@ Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, t
   12.815, 12.453, 12.129 and 11.709 at 5, 15, 25, 35 and 50 C: within 0.05 to 35 C, 0.07 low at 50 C (the activity
   model's parameters 25 C's); its calcium 0.0198 mol/kg at 25 C. Silver chloride in water 1.34e-5 mol/kg, in
   0.01 mol/kg NaCl 2.2e-8.
+- **The precipitates' colours** (`data/optics/media.json`): the white ones a white powder's reflectance, 0.85 (as
+  Stage 64's salts); iron(II) hydroxide's greenish white, iron(III) hydroxide's rust brown (sRGB about 139, 79, 45
+  under D65), cobalt hydroxide's rose pink (221, 170, 166) and silver oxide's dark brown (75, 65, 57) searched and not
+  found measured, each a reflectance shape **calibrated** to the colour it is described as.

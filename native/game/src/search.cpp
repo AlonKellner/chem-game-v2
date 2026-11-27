@@ -79,11 +79,25 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 			out.push_back("solution");
 		}
 	}
-	// (Stage 63) what its dissolved ions make: a retired formula unit's name and formula (sulfuric acid, copper sulfate)
+	// (Stage 63) what its dissolved ions make: a retired formula unit's name and formula (sulfuric acid, copper sulfate);
+	// (Stage 76) of them those that are a share of it, a hundredth of the most it holds of one at least (a sulfate
+	// whose metal gives up a hydrogen ion holds a trace of bisulfate, which is no sulfuric acid)
 	const chem::SpeciesTable &table = chem::builtin_species();
+	std::vector<std::pair<int, double>> units;
+	double most = 0.0;
 	for (int k = 0; k < table.species_count(); ++k) {
 		const chem::SpeciesDef &d = table.species(chem::SpeciesId{ k });
-		if (d.retired && mol_of(v.contents, std::string(d.id)) > 1e-9) {
+		if (d.retired) {
+			const double mol = mol_of(v.contents, std::string(d.id));
+			if (mol > 1e-9) {
+				units.emplace_back(k, mol);
+				most = std::max(most, mol);
+			}
+		}
+	}
+	for (const auto &[k, mol] : units) {
+		if (mol >= 0.01 * most) {
+			const chem::SpeciesDef &d = table.species(chem::SpeciesId{ k });
 			add_name(out, std::string(d.id));
 			add_name(out, std::string(d.formula));
 		}
