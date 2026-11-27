@@ -2539,19 +2539,17 @@ struct Lab::Impl {
 			}
 			const double room_k = world().meta(room).reservoir_temperature;
 			const bool own = wall != nullptr && owns_outside(*wall, room_k) && x.outside.size() == x.rings.size();
-			// nothing in its rings or its column changed since its contacts were set (a vessel at rest): they stand
+			// nothing in its rings or its column changed since its contacts were set (a vessel at rest): they stand.
+			// (Stage 75) By each cell's revision: the same revision is the same state and meta (World::revision)
 			std::vector<int64_t> now;
-			now.reserve(4 * (x.rings.size() + column.size()));
+			now.reserve(2 * (x.rings.size() + column.size()) + 3);
 			for (const CellId c : x.rings) {
-				now.push_back(world().snapshot_cell(c).energy);
+				now.push_back(c.index);
+				now.push_back(static_cast<int64_t>(world().revision(c)));
 			}
 			for (const CellId c : column) {
-				const CellState &st = world().snapshot_cell(c);
 				now.push_back(c.index);
-				now.push_back(st.energy);
-				for (const int64_t a : st.amount) {
-					now.push_back(a);
-				}
+				now.push_back(static_cast<int64_t>(world().revision(c)));
 			}
 			now.push_back(static_cast<int64_t>(std::llround(std::clamp(x.suspended, 0.0, 1.0) * 1e15)));
 			now.push_back(static_cast<int64_t>(world().meta(x.cell).volume * 1e15));

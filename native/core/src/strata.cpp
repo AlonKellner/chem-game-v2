@@ -164,7 +164,7 @@ Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell,
 } // namespace
 
 double Simulation::column_kelvin(CellId cell) {
-	const Thermal &t = in_step_ ? thermal(cell) : kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), world_.meta(cell));
+	const Thermal &t = in_step_ ? thermal(cell) : kept_thermal(cell);
 	return t.defined && t.temperature > 0.0 ? t.temperature : T0;
 }
 
@@ -552,6 +552,7 @@ void Simulation::stratify(const Column &col) {
 	const size_t species_n = static_cast<size_t>(table.species_count());
 	std::vector<double> flux(species_n);
 	std::vector<char> scaled(species_n);
+	std::vector<double> d_of(species_n); // (Stage 75) each species' diffusion at the interface's temperature, once
 	for (size_t i = 0; i + 1 < n && area > 0.0; ++i) {
 		if (!liquid(i) || !liquid(i + 1)) {
 			continue;
@@ -568,15 +569,22 @@ void Simulation::stratify(const Column &col) {
 		const CellState &upper = state(i), &lower = state(i + 1);
 		const auto conc = [&](const CellState &c, size_t s, double v) { return static_cast<double>(c.amount[s]) * MOL_PER_QUANTUM / v; };
 		double field_num = 0.0, field_den = 0.0;
+		// (Stage 75) a species neither layer holds adds nothing (its terms are signed zeros, its move none): it is passed
+		// over, and what diffuses has its diffusion worked out once
 		for (size_t s = 0; s < species_n; ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
 			flux[s] = 0.0;
 			scaled[s] = 0;
-			if (def.phase != Phase::Aqueous || def.charge == 0) {
+			d_of[s] = 0.0;
+			if (def.phase != Phase::Aqueous || (upper.amount[s] == 0 && lower.amount[s] == 0)) {
 				continue;
 			}
-			const double d = diffusion(table, id, t);
+			d_of[s] = diffusion(table, id, t);
+			if (def.charge == 0) {
+				continue;
+			}
+			const double d = d_of[s];
 			if (!(d > 0.0)) {
 				continue;
 			}
@@ -589,10 +597,10 @@ void Simulation::stratify(const Column &col) {
 		for (size_t s = 0; s < species_n; ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
-			if (def.phase != Phase::Aqueous) {
+			if (def.phase != Phase::Aqueous || (upper.amount[s] == 0 && lower.amount[s] == 0)) {
 				continue;
 			}
-			const double d = diffusion(table, id, t);
+			const double d = d_of[s];
 			if (!(d > 0.0)) {
 				continue;
 			}
