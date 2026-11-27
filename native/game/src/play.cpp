@@ -4,6 +4,34 @@
 
 namespace lab {
 
+bool scroll_to(Ui &ui, std::string_view what) {
+	float x = 0.0f, y = 0.0f;
+	if (ui.locate(what, x, y)) {
+		return true;
+	}
+	float wx = 0.0f, wy = 0.0f;
+	if (!ui.locate("experiments:scroll", wx, wy)) {
+		return false;
+	}
+	for (const float notch : { 0.8f, 1.25f }) { // down to the end, then up to the start
+		for (int turned = 0; turned < 10000; ++turned) {
+			float bx = 0.0f, by = 0.0f, ax = 0.0f, ay = 0.0f;
+			if (!ui.locate("experiments:bar", bx, by)) {
+				return false; // (every row left in sight: none to scroll to)
+			}
+			ui.zoom(wx, wy, notch);
+			if (ui.locate(what, x, y)) {
+				return true;
+			}
+			ui.locate("experiments:bar", ax, ay);
+			if (ay == by) {
+				break; // (at its end)
+			}
+		}
+	}
+	return false;
+}
+
 bool Play::read(std::string_view text, Play &out, std::string &why) {
 	using json = nlohmann::json;
 	const json j = json::parse(text, nullptr, false);
@@ -75,7 +103,7 @@ bool Play::next(Ui &ui) {
 		if (step.placed) {
 			to_x_ = step.x;
 			to_y_ = step.y;
-		} else if (!step.to.empty() && !ui.locate(step.to, to_x_, to_y_)) {
+		} else if (!step.to.empty() && !(scroll_to(ui, step.to) && ui.locate(step.to, to_x_, to_y_))) {
 			to_x_ = x_;
 			to_y_ = y_;
 			if (missed_.empty()) {

@@ -135,6 +135,12 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 	return out;
 }
 
+std::vector<std::string> words(std::string_view text) {
+	std::vector<std::string> out;
+	add_name(out, text);
+	return out;
+}
+
 bool matches(std::string_view query, const std::vector<std::string> &keywords) {
 	const std::string q = lower(query);
 	std::string word;
