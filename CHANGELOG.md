@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.73.0 (2026-11-27, Stage 73; awaiting the user's sign-off)
+## 0.73.0 (2026-11-27, Stage 73; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings (Stage 73, `docs/TDD_73_SMOOTH_FLOOR.md`): an unstable horizontal plate's convection (a
   floor heated from below, a base colder than the air under it) takes Lienhard's thick boundary layers' correction

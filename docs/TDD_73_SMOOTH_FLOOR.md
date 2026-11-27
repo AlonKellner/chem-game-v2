@@ -12,7 +12,7 @@ merge, the user, 2026-11-27: "Very well, go ahead". GAME_SPEC 0.73.0.
 | 73.2 | One unstable plate's form, the correction at every Nusselt number | Done |
 | 73.3 | Tests: continuous and rising; one surface everywhere | Done |
 | 73.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 73.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 73.5 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 ## 73.1 The source
 
