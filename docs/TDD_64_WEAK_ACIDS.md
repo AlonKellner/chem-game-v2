@@ -57,24 +57,32 @@ core in ions (Stage 63), then **new elements, weak acids and bases and indicator
 - **Diffusion**: the CRC Handbook's (Vanýsek) limiting values for the new ions, PHREEQC's for dissolved CO2 and NH3;
   a neutral solute's particle is named by its species' id so it can be given one.
 - **A bench opens at its fast equilibria at the temperatures it states** (`build_settled`): built, settled, its
-  settled amounts set again at the same temperatures, until settling moves no temperature by 1e-6 K. Saves are
-  loaded as saved.
+  settled amounts set again at the same temperatures, until settling moves no temperature by 1e-6 K and no amount
+  (a stoppered flask's air at the room's pressure, not only its water at its own). Saves are loaded as saved.
 - **The joint solver takes a dissolved trace** (Stage 63 left out a reaction with a species under 64 quanta): in a
   carbonate at pH 10 the carbonic acid's balance draws its hydrogen ions through water's ionisation, a few hundred
   quanta a round, where it needs millions; together they move at once. A species that falls toward nothing during the
   solve still takes its reactions out of it.
+- **The cost.** Every watered cell now holds the room's CO2 and its carbonic acid, so settling probes four or five
+  more equilibria a step, and the table has 45 particles where it had about 10. A cell found at rest is left while it
+  is unchanged; a probe reads Pitzer's excess over the particles its cell has or its reaction touches and the pairs
+  among them (the same sums less their zero terms: the demo's record the same, digest for digest); `reach()` no
+  longer reads the affinity at nought its caller read. The demo's step, unchecked, side by side with main's
+  (0490ba2): 76.5 µs against 54.6, 1.4 times; it plays at 218 times real time. (Before the probe's subset, 2.2
+  times: settling had gone from 18 % of a step to 50 %.) `chem_tool bench SESSION --record FILE` or `--check FILE`
+  makes or checks a record unchecked, with what was measured, in a minute where `run` takes twenty.
 
 ## Phases
 
 | Phase | Topic | Status |
 |---|---|---|
 | 64.1 | Bases, the caps, the elements; a bench at its equilibria | done |
-| 64.2 | The weak acids and bases, the gases, their activity and diffusion; the gates | in progress |
-| 64.3 | The solids: salts weighed in experiments 14 to 20, their solubilities | |
-| 64.4 | Phthalate and KHP | |
-| 64.5 | The indicators: their equilibria and spectra | |
-| 64.6 | The lab: benches, supplies, readings, the calculator | |
-| 64.7 | The goldens: the evidence and the user's approval | |
+| 64.2 | The weak acids and bases, the gases, their activity and diffusion; the gates | done |
+| 64.3 | The solids: salts weighed in experiments 14 to 20, their solubilities | done |
+| 64.4 | Phthalate and KHP | done |
+| 64.5 | The indicators: their equilibria and spectra | done |
+| 64.6 | The lab: benches, supplies, readings, the calculator | done |
+| 64.7 | The goldens: the evidence and the user's approval | in progress |
 | 64.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Open
