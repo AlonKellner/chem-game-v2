@@ -176,7 +176,7 @@ OpticsFramesCore *optics_frames_single(int x, int y, int w, int h, int step) {
 	return new shader32::Frames(x, y, w, h, step);
 }
 
-OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core) {
+OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, double k_core) {
 	OpticsPassage out;
 	namespace L = optics_layout;
 	if (body < 0 || body >= L::MAX_BODIES || scene.shapes.size() < static_cast<size_t>(L::MAX_BODIES) * L::SHAPE_BLOCK * 4) {
@@ -189,7 +189,7 @@ OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const do
 	if (s < 0) {
 		return out;
 	}
-	const shader32::Traced t = shader32::trace_shape(s, shader32::vec3(from[0], from[1], from[2]), shader32::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z.v > 0.5f ? block : -1, 0.0f, 0.0f);
+	const shader32::Traced t = shader32::trace_shape(s, shader32::vec3(from[0], from[1], from[2]), shader32::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z.v > 0.5f ? block : -1, 0.0f, 0.0f, k_core);
 	out.at[0] = t.at.x.v;
 	out.at[1] = t.at.y.v;
 	out.at[2] = t.at.z.v;

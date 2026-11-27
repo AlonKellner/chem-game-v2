@@ -44,6 +44,9 @@ const Spectrum &spectrum(SpeciesId species); // zeros for Kind::None
 // wall's thickness), else 0.
 const Spectrum &refractive_index(SpeciesId species);
 double index_density(SpeciesId species);
+// Its extinction coefficient k at 1 nm, the imaginary part of its index n + ik (Stage 78: a metal's, measured; GAME_SPEC
+// §12.3): zeros for a clear dielectric or none known.
+const Spectrum &extinction_index(SpeciesId species);
 // An optical material that is no species (the prism demo's flint glass, "n_sf11"), or nullptr.
 const Spectrum *material_index(std::string_view name);
 // What the lab's things that are no substance reflect (a part's face, a wire, a burner's metal: a reflectance),
@@ -157,6 +160,10 @@ const LwirSpectrum *lwir_k(SpeciesId species);
 // (what the pass bends and turns by: at least 1); the absorption coefficient, 1/cm (4 pi k / wavelength).
 double normal_reflectance(double n, double k);
 double effective_index(double n, double k);
+// Fresnel's unpolarised reflectance (Stage 78; Born and Wolf §13.2: the mean of the s and p waves') of light arriving
+// at `cos_i` from a medium of index `n1` + i`k1` onto one of `n2` + i`k2`: exact from a clear medium (k1 nought), the
+// customary complex form from an absorbing one. Light past the critical angle is all turned back.
+double fresnel_reflectance(double n1, double k1, double n2, double k2, double cos_i);
 double absorption_per_cm(double k, double nm);
 // Grey values over the band, by name (a surface's, or a solid species'): its emissivity (what it does not emit it
 // reflects), a wall's transmittance at its reference thickness; none where there is no entry.

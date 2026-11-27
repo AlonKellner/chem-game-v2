@@ -1,5 +1,29 @@
 # GAME_SPEC version history
 
+## 0.78.0 (2026-11-27, Stage 78; signed off by the user: "Approved, merge and proceed")
+
+- §12.3 (Stage 78, `docs/TDD_78_REFLECTION.md`; the user's request for reflection simulated as refraction is):
+  **each material's own index, complex where it is a metal**: datagen's measured n + ik tables (`nk_table`, read in
+  the dielectric function against the photon's energy), `chem::optics::extinction_index`; **liquid mercury** as
+  Inagaki, Arakawa and Williams 1981 measured it (checked against Smith and Stromberg 1966 at 546.1 nm; normal
+  reflectance 0.773 to 0.783); a vessel's liquid takes its liquids' index by volume (a row of k a set:
+  `ROWS_PER_SET` 10); **Fresnel with a complex index** (`chem::optics::fresnel_reflectance`; the shader's own
+  `metal_reflectance`): a metal turns back R of what comes to it and takes in the rest, in both tracers, without a
+  branch, so its mirror image is in the kept beam.
+- §12.3: **the room's faces ruled as the wall is** (the user's choice: a mirror shows them), their edge cells with
+  them: a ray that comes to a face is put at its own place on it (the header's ninth vector: the ruling), read exactly
+  by the pass and by the truth; their mean the faces' mean of before.
+- §18: O6 restated for a complex index; **O28** (a mirror shows the room's ruled faces where the truth's rays find
+  them); O27 reserved for clear surfaces' branches, split off to their own stage (the user's choice), built so far on
+  branch `reflection-branches-wip`.
+- §12.3 (the user's report: things held and beside the mercury unseen in it): **a ray turned back toward the eye or
+  sideways meets the room's things in three dimensions**, a vessel by its surfaces, a flat thing as a box as deep as
+  it is wide (the user's choice), in both tracers; a mirror's pixels follow every other body.
+- §13: the experiment mercury (300 g of liquid mercury beside water and copper sulfate); a play of it, a beaker held
+  beside it. §13.7 (the user's report: the experiments hard to navigate): **the experiments' list scrolled and
+  searched** (one column, the wheel and a bar, a search field matching titles, summaries and ids; plays reach a row
+  out of sight by `lab::scroll_to`).
+
 ## Stage 75 (2026-11-27; GAME_SPEC stays 0.77.0 (merged after Stages 71, 76 and 77): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every

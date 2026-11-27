@@ -449,3 +449,44 @@ TEST_CASE("measured: water's density is Kell's, within Lienhard's rows (Stage 67
 	CHECK(solvent_density(table, 298.15) == doctest::Approx(1000.0 * 0.997048).epsilon(5e-6));
 	CHECK(solvent_density(table, 373.15) == doctest::Approx(958.36).epsilon(2e-5));
 }
+
+TEST_CASE("measured: liquid mercury's index is Inagaki's and turns back Smith and Stromberg's share (Stage 78)") {
+	// Inagaki, Arakawa and Williams, Phys. Rev. B 23, 5246 (1981): ellipsometry of liquid mercury at room temperature,
+	// tabulated at round photon energies (data/optics/media.json's nk_table: the source's own points); its normal
+	// reflectance from air, ((n - 1)^2 + k^2) / ((n + 1)^2 + k^2), at each point inside the visible
+	const SpeciesId hg = builtin::mercury;
+	const optics::Spectrum &n = optics::refractive_index(hg), &k = optics::extinction_index(hg);
+	const auto at = [&](const optics::Spectrum &s, double nm) {
+		const double ev = 1239.841984 / nm, lo_nm = std::floor(nm), hi_nm = lo_nm + 1.0; // (between whole nanometres)
+		const double t = (ev - 1239.841984 / lo_nm) / (1239.841984 / hi_nm - 1239.841984 / lo_nm);
+		return s[static_cast<size_t>(lo_nm) - 380] + t * (s[static_cast<size_t>(hi_nm) - 380] - s[static_cast<size_t>(lo_nm) - 380]);
+	};
+	struct Row {
+		double nm, n, k;
+	};
+	for (const Row &r : { Row{ 387.4, 0.79824, 3.29351 }, Row{ 413.3, 0.89800, 3.53785 }, Row{ 442.8, 1.02698, 3.80193 }, Row{ 476.9, 1.18600, 4.08981 },
+			 Row{ 516.6, 1.38332, 4.40608 }, Row{ 563.6, 1.62088, 4.75050 }, Row{ 619.9, 1.90988, 5.14953 }, Row{ 688.8, 2.28417, 5.58189 },
+			 Row{ 774.9, 2.74611, 6.05402 } }) {
+		CAPTURE(r.nm);
+		CHECK(at(n, r.nm) == doctest::Approx(r.n).epsilon(2e-3));
+		CHECK(at(k, r.nm) == doctest::Approx(r.k).epsilon(2e-3));
+		CHECK(optics::normal_reflectance(at(n, r.nm), at(k, r.nm)) == doctest::Approx(optics::normal_reflectance(r.n, r.k)).epsilon(5e-4));
+	}
+	// every visible nanometre: a metal (k several times n), turning back 0.77 to 0.79 (the source's 0.773 to 0.783)
+	for (size_t i = 0; i < n.size(); ++i) {
+		CAPTURE(380 + i);
+		CHECK(k[i] > 2.0 * n[i]);
+		const double r = optics::normal_reflectance(n[i], k[i]);
+		CHECK(r > 0.770);
+		CHECK(r < 0.786);
+	}
+	// Smith and Stromberg, J. Opt. Soc. Am. 56, 1539 (1966), a second ellipsometry at the green mercury line, 546.1 nm:
+	// eps = -18.46 + 13.50 i, so n 1.4849, k 4.5459, R 0.7787 (quoted by Arakawa, Inagaki and Williams, ORNL
+	// CONF-790857-1, 1979). Reflectance hardly depends on n and k apart: theirs differ from Inagaki's by 4 and 2 %
+	const double n546 = at(n, 546.1), k546 = at(k, 546.1);
+	CHECK(optics::normal_reflectance(n546, k546) == doctest::Approx(0.7787).epsilon(2e-3));
+	CHECK(n546 == doctest::Approx(1.4849).epsilon(0.05));
+	CHECK(k546 == doctest::Approx(4.5459).epsilon(0.03));
+	// a clear dielectric has none
+	CHECK(optics::extinction_index(builtin::water)[170] == 0.0);
+}

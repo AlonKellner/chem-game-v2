@@ -382,11 +382,19 @@ struct Ui::Impl {
 	struct Experiment {
 		std::string id, title, summary, bench, tutorial; // bench and tutorial as JSON ("" for no tutorial)
 		std::string scene; // or a scene of the optics alone (Stage 47: "prism", the prism and the grating), no bench
+		std::vector<std::string> words; // (Stage 78) what the list's search matches (lab/search.hpp)
 	};
 	std::unique_ptr<PrismDemo> shown_scene; // the scene shown in place of the lab, if one is
 	std::vector<Experiment> catalogue;
 	int shown_k = -1; // (the experiment shown)
 	bool menu = false;
+	// (Stage 78) the list's search: its query, the catalogue's entries it leaves (in order), the first of them on the
+	// screen, whether the list's bar is held, and a trackpad's pan not yet a whole row
+	std::string menu_query;
+	std::vector<int> menu_shown;
+	int menu_from = 0;
+	bool menu_scrolling = false;
+	float menu_pan = 0.0f;
 	double clock = 0.0;
 	int selected = -1; // the last item chosen
 	// signals (§13.3): the part editor, a part being made or wired, what rang
@@ -2087,20 +2095,101 @@ struct Ui::Impl {
 	}
 	// ---- the experiments (§13.7, Stage 41): a button over the cabinet, the list over the bench
 	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
-	static constexpr float MENU_ROW = 92;
-	// in one column, a column more past each eight (Stage 47: eleven in one ran off the screen; Stage 54: nineteen in
-	// two), at most four (Stage 65: thirty-two in three ran off it)
-	int menu_columns() const { return std::min(4, static_cast<int>((catalogue.size() + 7) / 8)); }
-	int menu_rows() const { return (static_cast<int>(catalogue.size()) + menu_columns() - 1) / menu_columns(); }
-	Rect menu_rect() const {
-		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : menu_columns() == 3 ? 1800.0f : 1880.0f;
-		return Rect{ menu_columns() == 1 ? 480.0f : (1920 - w) / 2, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
+	// (Stage 78) one column of rows under a search field, as many on the screen as fit, scrolled a whole row at a
+	// time (the wheel or a trackpad's two fingers anywhere while it is open, or its bar held), as Supplies' cabinet is;
+	// a row the search leaves, or out of sight, is not drawn and takes no press
+	static constexpr float MENU_ROW = 84, MENU_TOP = 120; // (the rows' first, under the panel's top)
+	static constexpr int MENU_ROWS = 10; // on the screen at once
+	static Rect menu_rect() { return Rect{ 460, 64, 1000, MENU_TOP + MENU_ROW * MENU_ROWS + 8 }; }
+	static Rect menu_field() { return Rect{ menu_rect().x + 16, menu_rect().y + 72, menu_rect().w - 32, 36 }; }
+	// the entries the query leaves, in the catalogue's order; the first shown again
+	void menu_filter() {
+		menu_shown.clear();
+		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
+			if (lab::search::matches(menu_query, catalogue[static_cast<size_t>(k)].words)) {
+				menu_shown.push_back(k);
+			}
+		}
+		menu_from = 0;
 	}
-	Rect menu_row(int k) const {
-		const float column_w = (menu_rect().w - 32) / static_cast<float>(menu_columns());
-		const int column = k / menu_rows(), row = k % menu_rows();
-		return Rect{ menu_rect().x + 16 + column_w * static_cast<float>(column), menu_rect().y + 56 + MENU_ROW * static_cast<float>(row), column_w - (menu_columns() > 1 ? 8 : 0),
-			MENU_ROW - 8 };
+	int menu_most_from() const { return std::max(static_cast<int>(menu_shown.size()) - MENU_ROWS, 0); }
+	void menu_scroll(int rows) { menu_from = std::clamp(menu_from + rows, 0, menu_most_from()); }
+	// opened, the list is the whole catalogue with what is shown in sight; closed, its query is let go
+	void set_menu(bool open) {
+		menu = open;
+		menu_query.clear();
+		menu_scrolling = false;
+		menu_pan = 0.0f;
+		menu_filter();
+		if (open) {
+			search_focus = 0; // (the keys are the list's field's while it is open)
+			menu_from = std::clamp(shown_k - MENU_ROWS / 2, 0, menu_most_from());
+		}
+	}
+	// the j-th row the search leaves (none where it is scrolled out of sight)
+	std::optional<Rect> menu_row(int j) const {
+		const int row = j - std::clamp(menu_from, 0, menu_most_from());
+		if (j < 0 || j >= static_cast<int>(menu_shown.size()) || row < 0 || row >= MENU_ROWS) {
+			return std::nullopt;
+		}
+		const Rect r = menu_rect();
+		return Rect{ r.x + 16, r.y + MENU_TOP + MENU_ROW * static_cast<float>(row), r.w - 16 - 28, MENU_ROW - 8 };
+	}
+	// its scroll bar (none while every row left is on the screen): the track, and the thumb on it
+	static Rect menu_track() { return Rect{ menu_rect().x + menu_rect().w - 20, menu_rect().y + MENU_TOP, 8, MENU_ROW * MENU_ROWS - 8 }; }
+	Rect menu_thumb() const {
+		const Rect t = menu_track();
+		const float share = static_cast<float>(MENU_ROWS) / static_cast<float>(std::max(static_cast<int>(menu_shown.size()), 1));
+		const float h = std::fmax(t.h * std::fmin(share, 1.0f), 24.0f);
+		const float at = menu_most_from() > 0 ? static_cast<float>(std::clamp(menu_from, 0, menu_most_from())) / static_cast<float>(menu_most_from()) : 0.0f;
+		return Rect{ t.x, t.y + (t.h - h) * at, t.w, h };
+	}
+	// the bar held at y: the row whose share of the track y is at
+	void menu_scroll_to(float y) {
+		const Rect t = menu_track();
+		menu_from = static_cast<int>(std::lround(std::clamp((y - t.y) / std::fmax(t.h, 1.0f), 0.0f, 1.0f) * static_cast<float>(menu_most_from())));
+	}
+	// a trackpad's two fingers (a pan of dy pixels): the rows move with them, a whole row at a time
+	void menu_panned(float dy) {
+		menu_pan += dy;
+		const int rows = static_cast<int>(menu_pan / MENU_ROW);
+		menu_pan -= static_cast<float>(rows) * MENU_ROW;
+		menu_scroll(-rows);
+	}
+	// a key while the list is open: its field's (text, backspace), enter opens the first row left, escape clears the
+	// query or, with none, closes the list
+	bool type_menu(Ui::Key key, uint32_t codepoint) {
+		if (!menu) {
+			return false;
+		}
+		if (key == Ui::KeyText && codepoint >= 32 && codepoint < 127) {
+			if (menu_query.size() < 40) {
+				menu_query += static_cast<char>(codepoint);
+				menu_filter();
+			}
+		} else if (key == Ui::KeyBackspace) {
+			if (!menu_query.empty()) {
+				menu_query.pop_back();
+				menu_filter();
+			}
+		} else if (key == Ui::KeyEscape) {
+			if (menu_query.empty()) {
+				set_menu(false);
+			} else {
+				menu_query.clear();
+				menu_filter();
+			}
+		} else if (key == Ui::KeyEnter) {
+			if (!menu_shown.empty()) {
+				std::string why;
+				if (!open_experiment(menu_shown.front(), why)) {
+					message = why;
+				}
+			}
+		} else {
+			return false;
+		}
+		return true;
 	}
 	// opens the k-th experiment: its bench, its tutorial (or none); the screen's mode stays
 	bool open_experiment(int k, std::string &why) {
@@ -2109,7 +2198,7 @@ struct Ui::Impl {
 			// a scene of the optics alone (Stage 47): shown in place of the lab, which waits where it was
 			shown_scene = std::make_unique<PrismDemo>();
 			shown_k = k;
-			menu = false;
+			set_menu(false);
 			return true;
 		}
 		std::unique_ptr<Lab> again = Lab::open(e.bench, why);
@@ -2134,7 +2223,7 @@ struct Ui::Impl {
 		clear_report(); // (Stage 54: a new tutorial's report)
 		tutorial_json = e.tutorial;
 		shown_k = k;
-		menu = false;
+		set_menu(false);
 		shown_scene.reset();
 		follow();
 		return true;
@@ -2164,23 +2253,32 @@ struct Ui::Impl {
 			return false; // with something in hand, a press is where it goes
 		}
 		if (menu_button().has(x, y)) {
-			menu = !menu;
+			set_menu(!menu);
 			return true;
 		}
 		if (!menu) {
 			return false;
 		}
-		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
-			if (menu_row(k).has(x, y)) {
+		const Rect t = menu_track();
+		if (menu_most_from() > 0 && Rect{ t.x - 6, t.y, t.w + 12, t.h }.has(x, y)) {
+			menu_scrolling = true; // its bar, held (Stage 78)
+			menu_scroll_to(y);
+			return true;
+		}
+		for (int j = 0; j < static_cast<int>(menu_shown.size()); ++j) {
+			const std::optional<Rect> row = menu_row(j);
+			if (row && row->has(x, y)) {
 				std::string why;
-				if (!open_experiment(k, why)) {
+				if (!open_experiment(menu_shown[static_cast<size_t>(j)], why)) {
 					message = why;
 				}
 				return true;
 			}
 		}
-		menu = false; // a press elsewhere closes it, and does nothing else
-		return true;
+		if (!menu_rect().has(x, y)) {
+			set_menu(false); // a press elsewhere closes it, and does nothing else
+		}
+		return true; // (on the panel, its field or between its rows: nothing)
 	}
 	void paint_menu() {
 		if (catalogue.empty()) {
@@ -2193,27 +2291,54 @@ struct Ui::Impl {
 		const Rect r = menu_rect();
 		rect_fill(r, PANEL_FILL);
 		outline(r, GRID, 1);
-		text(r.x + 20, r.y + 36, "Experiments: one chosen opens its bench and its steps (or its scene)", INK, 20);
-		for (int k = 0; k < static_cast<int>(catalogue.size()); ++k) {
-			const Experiment &e = catalogue[static_cast<size_t>(k)];
-			const Rect row = menu_row(k);
-			rect_fill(row, k == shown_k ? BUTTON_ON : BUTTON);
-			text(row.x + 12, row.y + 28, e.title, INK, 19);
-			// (Stage 55) progress: each done, and the next
-			if (done.count(e.id) != 0) {
-				text(row.x + row.w - 64, row.y + 28, "done", GOOD, 16);
-			} else if (k == next_lesson()) {
-				outline(row, GUIDE, 2);
-				text(row.x + row.w - 64, row.y + 28, "next", GUIDE, 16);
+		text(r.x + 20, r.y + 34, "Experiments: one chosen opens its bench and its steps (or its scene)", INK, 20);
+		// (Stage 55) progress: each done, and the next; (Stage 78) the next named over the list, wherever it is scrolled
+		int lessons = 0, finished = 0;
+		for (const Experiment &e : catalogue) {
+			lessons += e.tutorial.empty() ? 0 : 1;
+			finished += !e.tutorial.empty() && done.count(e.id) != 0 ? 1 : 0;
+		}
+		const int next = next_lesson();
+		text(r.x + 20, r.y + 60,
+			text_of("%.0f of %.0f with steps done", finished, lessons) + (next >= 0 ? "; next: " + catalogue[static_cast<size_t>(next)].title : std::string()), DIM, 15);
+		// the search field (Stage 78), typed into while the list is open
+		const Rect f = menu_field();
+		rect_fill(f, BACKGROUND);
+		outline(f, GUIDE, 2);
+		text(f.x + 10, f.y + 24, menu_query.empty() ? "search: type a title's, a summary's or an id's words" : menu_query + "_", menu_query.empty() ? DIM : INK, 16);
+		const std::string count = text_of("%.0f of %.0f", static_cast<double>(menu_shown.size()), static_cast<double>(catalogue.size()));
+		text(f.x + f.w - 90, f.y + 24, count, DIM, 15);
+		if (menu_shown.empty()) {
+			text(r.x + 24, r.y + MENU_TOP + 34, "no experiments match \"" + menu_query + "\" (Escape clears the search)", DIM, 18);
+		}
+		for (int j = 0; j < static_cast<int>(menu_shown.size()); ++j) {
+			const std::optional<Rect> at = menu_row(j);
+			if (!at) {
+				continue; // (scrolled out of sight)
 			}
-			float y = row.y + 52;
-			for (const std::string &l : wrapped(e.summary, menu_columns() == 4 ? 50 : menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
+			const int k = menu_shown[static_cast<size_t>(j)];
+			const Experiment &e = catalogue[static_cast<size_t>(k)];
+			const Rect row = *at;
+			rect_fill(row, k == shown_k ? BUTTON_ON : BUTTON);
+			text(row.x + 12, row.y + 26, e.title, INK, 19);
+			if (done.count(e.id) != 0) {
+				text(row.x + row.w - 64, row.y + 26, "done", GOOD, 16);
+			} else if (k == next) {
+				outline(row, GUIDE, 2);
+				text(row.x + row.w - 64, row.y + 26, "next", GUIDE, 16);
+			}
+			float y = row.y + 48;
+			for (const std::string &l : wrapped(e.summary, 112)) {
 				text(row.x + 12, y, l, DIM, 14);
 				y += 18;
 				if (y > row.y + row.h - 4) {
 					break;
 				}
 			}
+		}
+		if (menu_most_from() > 0) {
+			rect_fill(menu_track(), GRID);
+			rect_fill(menu_thumb(), menu_scrolling ? INK : DIM);
 		}
 	}
 	// ---- the tutorial's switch (Stage 41): on its card, while there is one
@@ -5038,6 +5163,9 @@ struct Ui::Impl {
 	}
 
 	void type(Ui::Key key, uint32_t codepoint) {
+		if (type_menu(key, codepoint)) {
+			return; // the experiments' search, while their list is open (Stage 78)
+		}
 		if (type_search(key, codepoint)) {
 			return; // a search's field (Stage 61)
 		}
@@ -6783,6 +6911,12 @@ struct Ui::Impl {
 			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0); // (the layout's: its ruling is as much larger as its squares)
 			const double share = 2.0 / sq - 1.0 / (sq * sq);
 			room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+			// (Stage 78) and the faces ruled so, now that a mirror shows them: a line each way every square, its mean the
+			// same `beyond`
+			room.face_white = WALL_RADIANCE;
+			room.face_ruled = ruled;
+			room.face_pitch = sq * scale;
+			room.face_line = scale;
 			// The room is a cube twice the screen's width on a side, each face ruled in sixteen cells across, the
 			// cells along its twelve edges black (the user's word: endless white planes left a vessel all but
 			// unseen; rays bent far, as at a rim, come to the black cells). What glass reflects is the room as a
@@ -7576,6 +7710,25 @@ std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 
 void Ui::pointer(float x, float y, bool down, int mods) {
 	Impl &m = *impl_;
+	// the experiments' list (Stage 78), the screen's own and never the room's view: while it is open it takes every
+	// press, and its bar held follows the pointer until it is let go
+	if (m.menu_scrolling) {
+		m.down = down;
+		m.px = x;
+		m.py = y;
+		if (down) {
+			m.menu_scroll_to(y);
+		} else {
+			m.menu_scrolling = false;
+		}
+		return;
+	}
+	if (m.menu && down && !m.down && m.menu_press(x, y)) {
+		m.down = down;
+		m.px = x;
+		m.py = y;
+		return;
+	}
 	if (m.shown_scene) {
 		// a scene of the optics alone: a press on the experiments is theirs, every other its own
 		const bool pressed = down && !m.down;
@@ -8002,6 +8155,27 @@ bool Ui::experiments(std::string_view catalogue_json, std::string &why, const st
 		x.id = e["id"].get<std::string>();
 		x.title = e["title"].get<std::string>();
 		x.summary = e.value("summary", "");
+		// (Stage 78) what the list's search matches: its id, title and summary, and its keywords if it has any
+		for (const std::string &t : { x.id, x.title, x.summary }) {
+			for (std::string &w : lab::search::words(t)) {
+				x.words.push_back(std::move(w));
+			}
+		}
+		if (e.contains("keywords")) {
+			if (!e["keywords"].is_array()) {
+				why = "experiment " + x.id + ": its keywords are a list of words";
+				return false;
+			}
+			for (const json &k : e["keywords"]) {
+				if (!k.is_string()) {
+					why = "experiment " + x.id + ": its keywords are a list of words";
+					return false;
+				}
+				for (std::string &w : lab::search::words(k.get<std::string>())) {
+					x.words.push_back(std::move(w));
+				}
+			}
+		}
 		// a bench or a tutorial inlined, or its path, read by the host's `read`
 		const auto text_of_entry = [&](const json &v, std::string &out) {
 			if (v.is_object()) {
@@ -8053,7 +8227,7 @@ bool Ui::experiments(std::string_view catalogue_json, std::string &why, const st
 		out.push_back(std::move(x));
 	}
 	m.catalogue = std::move(out);
-	m.menu = false;
+	m.set_menu(false);
 	m.shown_k = m.shown_now();
 	return true;
 }
@@ -8125,6 +8299,12 @@ void Ui::key(Key key, uint32_t codepoint) {
 }
 
 void Ui::zoom(float x, float y, float factor) {
+	if (impl_->menu) { // the experiments' list, while it is open (Stage 78): the wheel scrolls it, a row a notch
+		if (factor > 0.0f && factor != 1.0f && std::isfinite(factor)) {
+			impl_->menu_scroll(factor > 1.0f ? -1 : 1);
+		}
+		return;
+	}
 	if (impl_->shown_scene) { // in a scene of the optics alone the wheel turns what it shows
 		impl_->shown_scene->turn(factor > 1.0f ? 0.05 : factor < 1.0f ? -0.05 : 0.0);
 		return;
@@ -8146,6 +8326,12 @@ void Ui::zoom(float x, float y, float factor) {
 
 void Ui::pan(float dx, float dy) {
 	Impl &m = *impl_;
+	if (m.menu) { // and a trackpad's two fingers scroll it (Stage 78)
+		if (std::isfinite(dy)) {
+			m.menu_panned(dy);
+		}
+		return;
+	}
 	if (std::isfinite(dx) && std::isfinite(dy)) {
 		m.set_view(view_panned(m.vw, Impl::VIEW_ROOM, dx, dy));
 	}
@@ -8294,13 +8480,36 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	if (what == "menu:experiments") {
 		return !m.catalogue.empty() && centre(Impl::menu_button());
 	}
-	if (after("experiment:", rest)) {
-		for (int k = 0; m.menu && k < static_cast<int>(m.catalogue.size()); ++k) {
-			if (m.catalogue[static_cast<size_t>(k)].id == rest) {
-				return centre(m.menu_row(k));
+	if (after("experiment:", rest)) { // (Stage 78: a row the search leaves and in sight)
+		for (int j = 0; m.menu && j < static_cast<int>(m.menu_shown.size()); ++j) {
+			if (m.catalogue[static_cast<size_t>(m.menu_shown[static_cast<size_t>(j)])].id == rest) {
+				const std::optional<Rect> row = m.menu_row(j);
+				return row && centre(*row);
 			}
 		}
 		return false;
+	}
+	// the experiments' list (Stage 78), while it is open: its search field, where the wheel scrolls it, its bar's thumb
+	// (while not every row left is in sight) and a place on its track
+	if (what == "experiments:search") {
+		return m.menu && centre(Impl::menu_field());
+	}
+	if (what == "experiments:scroll") {
+		const Rect r = Impl::menu_rect();
+		return m.menu && centre(Rect{ r.x + 16, r.y + Impl::MENU_TOP, r.w - 44, Impl::MENU_ROW * Impl::MENU_ROWS });
+	}
+	if (what == "experiments:bar") {
+		return m.menu && m.menu_most_from() > 0 && centre(m.menu_thumb());
+	}
+	if (after("experiments:bar@", rest)) {
+		const double u = std::atof(std::string(rest).c_str());
+		if (!m.menu || m.menu_most_from() <= 0 || !(u >= 0.0 && u <= 1.0)) {
+			return false;
+		}
+		const Rect t = Impl::menu_track();
+		x = t.cx();
+		y = t.y + t.h * static_cast<float>(u);
+		return true;
 	}
 	if (after("speed:", rest)) {
 		for (int i = 0; i < 4; ++i) {

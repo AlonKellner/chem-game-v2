@@ -286,7 +286,10 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	// cylinder's floor
 	const double alpha = row_at(start + 2 * optics_layout::ROW, nm);
 	const std::array<double, trace::MAX_MEDIA> absorb{ 0.0, alpha, prism || core == 2 ? alpha : 0.0, 0.0 };
-	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb);
+	// its liquid's k (Stage 78): a metal turns back what comes to it
+	const double k_in = liquid && !prism ? row_at(start + optics_layout::LIQUID_K_ROW * optics_layout::ROW, nm) : 0.0;
+	const std::array<double, trace::MAX_MEDIA> extinction{ 0.0, 0.0, k_in, 0.0 };
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb, &extinction);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
 		return out;
@@ -347,6 +350,9 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 	// (Stage 61) whether the ray has met something in hand: from there on the panels are not in its way, as the
 	// pass's own (ray_met)
 	bool through_hand = shader::hand_over(shader::vec2(x, y)); // (its pixel within what is in hand's outline)
+	// (Stage 78) whether the ray left a body turned back toward the eye or sideways, and which
+	bool turned_back = false;
+	int left_k = -1;
 	const auto panel = [&](int body) { return (static_cast<int>(vec_of(body, 3).w) & shader::PANEL_BIT) != 0; };
 	for (int last = count - 1; last >= 0 && lands;) {
 		const double layer = vec_of(last, 5).y, z = -layer * gap;
@@ -383,6 +389,8 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 					lands = false;
 					out.x = 100000.0;
 					out.y = line.y;
+					turned_back = e.out && !e.solid;
+					left_k = k;
 					break;
 				}
 			} else if (!bends(k)) {
@@ -412,12 +420,100 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		}
 		last = first - 1;
 	}
+	if (turned_back && !cut_off) {
+		// (Stage 78) turned back toward the eye or sideways: the nearest body in the room's three dimensions, a vessel by
+		// its own surfaces, a flat thing as a box as deep as it is wide showing its picture on every side; four at most
+		for (int turn = 0; turn < 4; ++turn) {
+			double best = 1e30;
+			int which = -1;
+			Exact e_best;
+			Line line_best = line;
+			double where_x = 0.0, where_y = 0.0;
+			for (int k = 0; k < count; ++k) {
+				if (k == left_k || shader::hidden(k) || panel(k)) {
+					continue;
+				}
+				const double zk = -static_cast<double>(vec_of(k, 5).y) * gap;
+				const shader::vec4 rect = vec_of(k, 0);
+				// the box: a flat thing's as deep as it is wide; a vessel's loosely round it
+				const bool bent = bends(k);
+				const double grow = bent ? 0.5 * std::max(static_cast<double>(rect.z), static_cast<double>(rect.w)) + 2.0 : 0.0;
+				const double d = bent ? grow : 0.5 * rect.z;
+				const double lo[3] = { rect.x - grow, rect.y - grow, zk - d }, hi[3] = { static_cast<double>(rect.x) + rect.z + grow, static_cast<double>(rect.y) + rect.w + grow, zk + d };
+				const double o[3] = { line.x, line.y, line.z }, v[3] = { line.ux, line.uy, line.uz };
+				double t0 = -1e300, t1 = 1e300;
+				int axis = -1;
+				bool misses = false;
+				for (int i = 0; i < 3; ++i) {
+					if (std::fabs(v[i]) < 1e-12) {
+						misses = misses || o[i] < lo[i] || o[i] > hi[i];
+						continue;
+					}
+					const double ta = (lo[i] - o[i]) / v[i], tb = (hi[i] - o[i]) / v[i];
+					if (std::min(ta, tb) > t0) {
+						t0 = std::min(ta, tb);
+						axis = i;
+					}
+					t1 = std::min(t1, std::max(ta, tb));
+				}
+				if (misses || !(t0 <= t1) || !(t1 > 0.0) || !(std::max(t0, 0.0) > 1e-3 || bent) || !(std::max(t0, 0.0) < best)) {
+					continue;
+				}
+				if (bent) {
+					Line trial = line;
+					const Exact e = exact_body(k, core_in(k, line.y + std::max(t0, 0.0) * line.uy), nm, zk, trial);
+					if (e.met && e.meetings > 0 && e.entry > 1e-3 && e.entry < best) {
+						best = e.entry;
+						which = k;
+						e_best = e;
+						line_best = trial;
+						where_x = line.x + e.entry * line.ux;
+						where_y = line.y + e.entry * line.uy;
+					}
+					continue;
+				}
+				const double hx = line.x + t0 * line.ux, hy = line.y + t0 * line.uy, hz = line.z + t0 * line.uz;
+				double px = std::clamp(hx, rect.x + 1e-3, static_cast<double>(rect.x) + rect.z - 1e-3), py = std::clamp(hy, rect.y + 1e-3, static_cast<double>(rect.y) + rect.w - 1e-3);
+				if (axis == 0) {
+					px = rect.x + std::clamp((hz - lo[2]) / std::max(2.0 * d, 1e-6), 1e-4, 1.0 - 1e-4) * rect.z; // a side: its width along its depth
+				} else if (axis == 1) {
+					py = line.uy > 0.0 ? rect.y + 1e-3 : static_cast<double>(rect.y) + rect.w - 1e-3; // its top or its bottom
+				}
+				if (shader::layer_at(k, shader::vec2(px, py), 1.0e-3, 1.0e-3).cover > 0.5) {
+					best = t0;
+					which = k;
+					where_x = px;
+					where_y = py;
+				}
+			}
+			if (which < 0) {
+				break;
+			}
+			left_k = which;
+			if (bends(which)) {
+				out.met.push_back(Met{ which, where_x, where_y, true, e_best.pass, e_best.chord, e_best.route, core_in(which, where_y), e_best.solid, e_best.absorbed });
+				line = line_best;
+				if (!e_best.out || e_best.solid) {
+					break;
+				}
+			} else {
+				out.met.push_back(Met{ which, where_x, where_y, false, 1.0, 0.0, 0u, 0 });
+				line.x += (best + 1e-3) * line.ux;
+				line.y += (best + 1e-3) * line.uy;
+				line.z += (best + 1e-3) * line.uz;
+			}
+		}
+	}
 	if (const double side = shader::scene_vec(3).z; side > 0.0 && !cut_off) {
 		// in a room (Stage 33): to whichever face it comes to, as the pass's own ray does
 		const shader::vec3 comes = shader::room_exit(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side, shader::scene_vec(3).w);
 		if (comes.x < 0.5) {
 			out.x = comes.y;
 			out.y = comes.z;
+		} else if (const shader::vec3 face = shader::scene_vec(8).w > 0.0 ? shader::room_face(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side) : shader::vec3(-1.0, 0.0, 0.0); face.x >= 0.0) {
+			// (Stage 78) a face, ruled, its edge cells with it: where on it, put as the pass puts it
+			out.x = optics_layout::FACE_X + face.x * optics_layout::FACE_STRIDE + face.y;
+			out.y = optics_layout::FACE_Y + face.z;
 		} else {
 			out.x = comes.x > 1.5 ? -100000.0 : 100000.0;
 			out.y = line.y;
@@ -439,6 +535,15 @@ double drawn_at(double x, double y) {
 	// beyond the screen's edges, the wall's plane as the room says. Stage 33: the truth read the darkness beside
 	// the bench at both, where the pass read the room.)
 	const OpticsScene &scene = *shader::current;
+	if (const shader::vec4 f = shader::scene_vec(8); x >= 0.5 * optics_layout::FACE_X && f.w > 0.0) {
+		// (Stage 78) a face of the room, ruled: on a line each way, or off them (the truth's own reading of its place)
+		const double k = std::floor((x - optics_layout::FACE_X) / optics_layout::FACE_STRIDE);
+		const double u = x - optics_layout::FACE_X - k * optics_layout::FACE_STRIDE, v = y - optics_layout::FACE_Y;
+		const auto on = [&](double a) { return a - std::floor(a / f.w) * f.w < f.z; };
+		const double side = shader::scene_vec(3).z, cell = shader::scene_vec(3).w;
+		const auto edge = [&](double a) { return a < cell || a > side - cell; };
+		return edge(u) || edge(v) ? scene.far_left : on(u) || on(v) ? f.y : f.x; // (the black of the edge cells: the table's far left)
+	}
 	if (std::fabs(x) >= 5.0e4) {
 		return x < 0.0 ? scene.far_left : scene.far_right;
 	}
@@ -1212,11 +1317,11 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 	return "";
 }
 
-OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core);
+OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, double k_core);
 
-OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single) {
+OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single, double k_core) {
 	if (single) {
-		return optics_passage_single(scene, body, from, heading, n_glass, n_core);
+		return optics_passage_single(scene, body, from, heading, n_glass, n_core, k_core);
 	}
 	OpticsPassage out;
 	if (!shader::ready(scene) || body < 0 || body >= optics_layout::MAX_BODIES || scene.shapes_exact.size() < static_cast<size_t>(optics_layout::MAX_BODIES) * optics_layout::SHAPE_BLOCK * 4) {
@@ -1229,7 +1334,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 	if (s < 0) {
 		return out;
 	}
-	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0);
+	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0, k_core);
 	out.at[0] = t.at.x;
 	out.at[1] = t.at.y;
 	out.at[2] = t.at.z;
@@ -1248,7 +1353,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 
 namespace {
 OpticsPassage passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core) {
-	return optics_passage_single(scene, body, from, heading, n_glass, n_core);
+	return optics_passage_single(scene, body, from, heading, n_glass, n_core, 0.0);
 }
 } // namespace
 
