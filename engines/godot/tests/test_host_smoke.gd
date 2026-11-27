@@ -13,6 +13,8 @@ func before_each() -> void:
 	# them make their own ChemLab), nor the player's progress read or written
 	_lab.experiments_path = ""
 	_lab.progress_path = ""
+	# nor the supplies' pictures captured as it runs (Stage 84: the suite reads none; the native tests hold the capture)
+	_lab.capture_pictures = false
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 
@@ -73,6 +75,8 @@ func test_dragging_puts_equipment_on_the_bench_and_together() -> void:
 func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 	assert_eq(_lab.tutorial(), PackedInt32Array([-1, 0, 0, 1]), "none when its path is empty; strict as opened")
 	_lab = ChemLab.new()
+	assert_true(_lab.capture_pictures, "as opened, it captures the supplies' pictures it lacks (Stage 84)")
+	_lab.capture_pictures = false # (what this asks of it reads none)
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 	assert_eq(_lab.tutorial_path, "res://data/tutorials/demo.json")
@@ -91,6 +95,7 @@ func test_it_opens_with_the_tutorial_and_follows_it() -> void:
 
 func test_it_lists_the_experiments_and_a_free_tutorial_takes_any_gesture() -> void:
 	_lab = ChemLab.new()
+	_lab.capture_pictures = false # (Stage 84: what this asks of it reads none)
 	add_child_autofree(_lab)
 	await wait_process_frames(2)
 	assert_eq(_lab.experiments_path, "res://data/experiments.json")

@@ -1,6 +1,7 @@
 #include "chem/world.hpp"
 
 #include <algorithm>
+#include <atomic>
 
 #include "chem/invariants.hpp"
 #include "chem/thermo.hpp"
@@ -256,6 +257,9 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	world.meta_ = meta_;
 	const auto species_count = static_cast<size_t>(table_->species_count());
 	world.cells_.assign(names_.size(), CellState{ std::vector<int64_t>(species_count, 0), 0, std::vector<int64_t>(species_count, 0) });
+	world.revision_.assign(names_.size(), 0);
+	world.matter_revision_.assign(names_.size(), 0);
+	world.touch_all();
 	for (const Edge &e : edges_) {
 		if (!known_cell(e.a) || !known_cell(e.b)) {
 			return refuse("an edge names a cell the world does not have");
@@ -443,7 +447,11 @@ Refusal World::set_particles(CellId cell, SpeciesId species, int64_t count) {
 	if (def.phase != Phase::Solid || def.wall || (there ? count < 1 : count != 0)) {
 		return Refusal::BadValue;
 	}
-	cells_[static_cast<size_t>(cell.index)].particles[static_cast<size_t>(species.index)] = count;
+	int64_t &held = cells_[static_cast<size_t>(cell.index)].particles[static_cast<size_t>(species.index)];
+	if (held != count) {
+		held = count;
+		touch(static_cast<size_t>(cell.index));
+	}
 	return Refusal::None;
 }
 
@@ -455,7 +463,10 @@ Refusal World::resize_column_top(CellId top, double volume) {
 	if (!m.rigid || !(m.column_volume > 0.0) || !(volume > 0.0) || volume > m.column_volume) {
 		return Refusal::BadValue;
 	}
-	m.volume = volume;
+	if (m.volume != volume) {
+		m.volume = volume;
+		touch(static_cast<size_t>(top.index));
+	}
 	return Refusal::None;
 }
 
@@ -477,6 +488,7 @@ Refusal World::reshape_column(CellId top, double whole, std::vector<double> volu
 	m.volume = top_volume > whole * 1e-9 ? top_volume : whole * 1e-9;
 	m.column_volume = whole;
 	m.column_shape = std::move(volumes);
+	touch(static_cast<size_t>(top.index)); // (Stage 75: its meta changed)
 	return Refusal::None;
 }
 
@@ -489,7 +501,10 @@ Refusal World::set_piston(CellId cell, const Piston &piston) {
 		return Refusal::BadValue;
 	}
 	if (piston.area == 0.0) {
-		m.piston = Piston{};
+		if (!(m.piston == Piston{})) {
+			m.piston = Piston{};
+			touch(static_cast<size_t>(cell.index)); // (Stage 75: its meta changed)
+		}
 		return Refusal::None;
 	}
 	const auto good = [](double v) { return v >= 0.0 && v - v == 0.0; };
@@ -504,7 +519,10 @@ Refusal World::set_piston(CellId cell, const Piston &piston) {
 	if (!(e.a == cell || e.b == cell) || !source.reservoir || source.reservoir_temperature < WORK_KELVIN) {
 		return Refusal::BadValue;
 	}
-	m.piston = piston;
+	if (!(m.piston == piston)) {
+		m.piston = piston;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: its meta changed)
+	}
 	return Refusal::None;
 }
 
@@ -513,6 +531,8 @@ double World::piston_volume(CellId cell) const {
 	return m.column_volume > 0.0 ? m.column_volume : m.volume;
 }
 
+// (its reckoning of a step, and move_piston's of a move, are no part of what is derived from a cell: they draw no
+// revision, Stage 75; a move's volume does)
 void World::rest_pistons() {
 	for (CellMeta &m : meta_) {
 		m.piston.moved = 0.0;
@@ -542,7 +562,10 @@ Refusal World::move_piston(CellId cell, double volume, double force, double pres
 		std::vector<double> shape = m.column_shape;
 		return reshape_column(cell, volume, std::move(shape));
 	}
-	m.volume = volume;
+	if (m.volume != volume) {
+		m.volume = volume;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: its volume moved)
+	}
 	return Refusal::None;
 }
 
@@ -553,7 +576,10 @@ Refusal World::set_stirring(CellId cell, double watts) {
 	if (!good_conductance(watts)) { // (at least 0 and finite)
 		return Refusal::BadValue;
 	}
-	meta_[static_cast<size_t>(cell.index)].stirring = watts;
+	if (meta_[static_cast<size_t>(cell.index)].stirring != watts) {
+		meta_[static_cast<size_t>(cell.index)].stirring = watts;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: set again as it was, it draws none)
+	}
 	return Refusal::None;
 }
 
@@ -564,7 +590,10 @@ Refusal World::set_landing(CellId cell, double speed) {
 	if (!good_conductance(speed)) { // (at least 0 and finite)
 		return Refusal::BadValue;
 	}
-	meta_[static_cast<size_t>(cell.index)].landing = speed;
+	if (meta_[static_cast<size_t>(cell.index)].landing != speed) {
+		meta_[static_cast<size_t>(cell.index)].landing = speed;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: set again as it was, it draws none)
+	}
 	return Refusal::None;
 }
 
@@ -578,7 +607,10 @@ Refusal World::set_mixing(CellId cell, double mixing) {
 	if (!good_conductance(mixing)) {
 		return Refusal::BadValue;
 	}
-	meta_[static_cast<size_t>(cell.index)].mixing = mixing;
+	if (meta_[static_cast<size_t>(cell.index)].mixing != mixing) {
+		meta_[static_cast<size_t>(cell.index)].mixing = mixing;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: set again as it was, it draws none)
+	}
 	return Refusal::None;
 }
 
@@ -727,6 +759,14 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 	if (moved.empty() && energy.quanta == 0) {
 		return Refusal::None; // nothing to move, nothing to record
 	}
+	// (Stage 75: what moves, and only that, draws a revision; an energy alone leaves what they hold as it was)
+	if (moved.empty()) {
+		touch_energy(static_cast<size_t>(from.index));
+		touch_energy(static_cast<size_t>(to.index));
+	} else {
+		touch(static_cast<size_t>(from.index));
+		touch(static_cast<size_t>(to.index));
+	}
 
 	for (const SpeciesAmount &m : moved) {
 		const auto s = static_cast<size_t>(m.species.index);
@@ -785,6 +825,7 @@ Refusal World::transform(CellId cell, const Reaction &reaction, int64_t extent) 
 		}
 		delta.push_back(SpeciesAmount{ t.species, Amount{ d } });
 	}
+	touch(static_cast<size_t>(cell.index));
 	for (const SpeciesAmount &d : delta) {
 		state.amount[static_cast<size_t>(d.species.index)] += d.amount.quanta;
 		tend_particles(state, d.species);
@@ -835,6 +876,9 @@ CellId World::add_layer_under(CellId lower, Refusal *why) {
 	meta_.push_back(m);
 	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
 	cells_.push_back(none);
+	revision_.push_back(0);
+	matter_revision_.push_back(0);
+	touch(revision_.size() - 1);
 	before_.cells.push_back(none); // (the step's trace starts with it, empty)
 	const CellId made{ static_cast<int32_t>(cells_.size() - 1) };
 	Edge e{ made, lower, PHASES_ALL, true, 0.0 };
@@ -865,6 +909,9 @@ CellId World::add_cell(const std::string &name, const CellMeta &meta, Refusal *w
 	meta_.push_back(meta);
 	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
 	cells_.push_back(none);
+	revision_.push_back(0);
+	matter_revision_.push_back(0);
+	touch(revision_.size() - 1);
 	before_.cells.push_back(none); // (the step's trace starts with it, empty: no total changes)
 	++topology_version_;
 	if (why != nullptr) {
@@ -908,6 +955,7 @@ Refusal World::supply(CellId cell, const CellState &state) {
 		whole.particles.assign(species, 0);
 	}
 	cells_[c] = whole;
+	touch(c);
 	before_.cells[c] = whole; // (between steps: the next step's trace starts with it)
 	++topology_version_;
 	return Refusal::None;
@@ -938,6 +986,7 @@ Refusal World::retire(CellId cell, CellState *left) {
 	const auto species = static_cast<size_t>(table_->species_count());
 	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
 	cells_[c] = none;
+	touch(c);
 	before_.cells[c] = none;
 	meta_[c].retired = true;
 	meta_[c].frozen = true;
@@ -961,6 +1010,7 @@ Refusal World::freeze(CellId cell, bool on) {
 		return Refusal::None;
 	}
 	meta_[c].frozen = on;
+	touch(c);
 	for (Edge &e : edges_) {
 		if (!(e.a == cell || e.b == cell)) {
 			continue;
@@ -1032,6 +1082,7 @@ Refusal World::disconnect(EdgeId edge) {
 		if (defined && (excess > tolerance || excess < -tolerance)) {
 			edges_[static_cast<size_t>(edge.index)].open = true;
 			meta_ = was;
+			touch_all();
 			return Refusal::WouldSeal;
 		}
 	}
@@ -1097,11 +1148,41 @@ Refusal World::set_flow(EdgeId edge, double flow, uint8_t foot) {
 }
 
 void World::refresh_sealed() {
+	const std::vector<CellMeta> was = meta_;
 	for (CellMeta &m : meta_) {
 		m.sealed = false;
 	}
 	for (const CellId c : sealed_cells(meta_, edges_)) {
 		meta_[static_cast<size_t>(c.index)].sealed = true;
+	}
+	for (size_t c = 0; c < meta_.size() && c < revision_.size(); ++c) {
+		if (meta_[c].sealed != was[c].sealed) {
+			touch(c);
+		}
+	}
+}
+
+// (Stage 75) one counter for every world of the process: a revision names one write, wherever it was made
+namespace {
+std::atomic<uint64_t> next_revision{ 1 };
+}
+
+void World::touch(size_t cell) {
+	if (cell < revision_.size()) {
+		revision_[cell] = next_revision.fetch_add(1, std::memory_order_relaxed);
+		matter_revision_[cell] = revision_[cell];
+	}
+}
+
+void World::touch_energy(size_t cell) {
+	if (cell < revision_.size()) {
+		revision_[cell] = next_revision.fetch_add(1, std::memory_order_relaxed);
+	}
+}
+
+void World::touch_all() {
+	for (size_t c = 0; c < revision_.size(); ++c) {
+		touch(c);
 	}
 }
 

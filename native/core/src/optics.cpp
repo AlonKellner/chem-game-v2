@@ -285,6 +285,46 @@ double effective_index(double n, double k) {
 	return (1.0 + r) / (1.0 - r);
 }
 
+namespace {
+// complex numbers by hand: the core uses no C-library transcendental (ctest core_no_libm), and std::complex's root
+// may call hypot and atan2
+struct Cx {
+	double re = 0.0, im = 0.0;
+};
+Cx operator+(Cx a, Cx b) {
+	return { a.re + b.re, a.im + b.im };
+}
+Cx operator-(Cx a, Cx b) {
+	return { a.re - b.re, a.im - b.im };
+}
+Cx operator*(Cx a, Cx b) {
+	return { a.re * b.re - a.im * b.im, a.re * b.im + a.im * b.re };
+}
+Cx operator/(Cx a, Cx b) {
+	const double d = b.re * b.re + b.im * b.im;
+	return { (a.re * b.re + a.im * b.im) / d, (a.im * b.re - a.re * b.im) / d };
+}
+double norm2(Cx a) {
+	return a.re * a.re + a.im * a.im;
+}
+// the principal root: its real part at least nought
+Cx root(Cx a) {
+	const double m = std::sqrt(norm2(a));
+	const double re = std::sqrt(std::max(0.0, (m + a.re) / 2.0)), im = std::sqrt(std::max(0.0, (m - a.re) / 2.0));
+	return { re, a.im < 0.0 ? -im : im };
+}
+} // namespace
+
+double fresnel_reflectance(double n1, double k1, double n2, double k2, double cos_i) {
+	const double c = std::clamp(cos_i < 0.0 ? -cos_i : cos_i, 0.0, 1.0);
+	const Cx a{ n1, k1 }, b{ n2, k2 }, ci{ c, 0.0 };
+	// Snell's in complex form: N1 sin i = N2 sin t, cos t the root with its real part at least nought
+	const Cx s2{ 1.0 - c * c, 0.0 }, ratio = a / b;
+	const Cx ct = root(Cx{ 1.0, 0.0 } - ratio * ratio * s2);
+	const Cx rs = (a * ci - b * ct) / (a * ci + b * ct), rp = (b * ci - a * ct) / (b * ci + a * ct);
+	return std::min(1.0, (norm2(rs) + norm2(rp)) / 2.0);
+}
+
 double absorption_per_cm(double k, double nm) {
 	return 4.0 * 3.14159265358979323846 * k / (nm * 1e-7);
 }

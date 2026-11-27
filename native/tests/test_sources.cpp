@@ -21,6 +21,7 @@ bool near(double a, double b, double rel) {
 constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990, NI = 58.693;
 constexpr double CL = 35.45, K = 39.098, P = 30.974, BR = 79.904; // (Stage 64)
 constexpr double CA = 40.078, MG = 24.305, BA = 137.33, AG = 107.87, FE = 55.845, ZN = 65.38, AL = 26.982, CO = 58.933; // (Stage 76)
+constexpr double HG = 200.59; // (mercury: a look at metals)
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -131,6 +132,7 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::zinc_hydroxide, ZN + 2 * (O + H), 3.053 },
 		{ builtin::aluminium_hydroxide, AL + 3 * (O + H), 2.42 },
 		{ builtin::cobalt_hydroxide, CO + 2 * (O + H), 3.597 },
+		{ builtin::mercury, HG, 13.534 }, // the CRC Handbook's at 25 C (PubChem)
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -220,5 +222,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 43); // (Stage 76: 23 more, the new metals' salts)
+	CHECK(retired == 48); // (Stage 76: 23 more, the new metals' salts; Stage 81: KSCN, K2CrO4, K2Cr2O7, disodium EDTA, the dye's salt)
 }

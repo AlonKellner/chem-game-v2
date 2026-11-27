@@ -3,6 +3,7 @@
 // gestures, instantly or as a person plays; shared by the tutorial's tests and the experiments' (Stage 41).
 #include "lab/conditions.hpp"
 #include "lab/glassware.hpp"
+#include "lab/play.hpp"
 #include "lab/tutorial.hpp"
 #include "lab/ui.hpp"
 
@@ -51,6 +52,9 @@ struct Pupil {
 			// an item's controls are shown for the item chosen (Stage 22): it is chosen first
 			const std::string item = what.substr(what.find(':') + 1);
 			click("item:" + item.substr(0, item.find('@')));
+		}
+		if (what.rfind("experiment:", 0) == 0) {
+			lab::scroll_to(*ui, what); // a row of the list scrolled out of sight is scrolled to, as a hand does (Stage 78)
 		}
 		at(what, x, y);
 		const int mods = what.rfind("item:", 0) == 0 ? lab::Ui::ModRight : 0; // an item is chosen by the right button (Stage 27)

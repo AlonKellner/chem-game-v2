@@ -43,6 +43,10 @@ public:
 	// where progress through the experiments is kept between runs (Stage 55); "" keeps none
 	void set_progress_path(const godot::String &path);
 	godot::String get_progress_path() const;
+	// (Stage 84) whether the supplies' pictures it lacks are captured as it runs (the game: on), or it goes without them
+	// (the Godot suite, which reads none: their capture is held by the native tests)
+	void set_capture_pictures(bool on);
+	bool get_capture_pictures() const;
 	// [state (-1 none, 0 running, 1 complete, 2 failed), step, steps, strict (1) or free (0)]
 	godot::PackedInt32Array tutorial() const;
 	// strict or free (§13.2, Stage 41), as the card's switch sets it
@@ -115,6 +119,7 @@ private:
 	godot::String pictures_built_ = "res://pictures/supplies.json";
 	chem_godot::Textures textures_; // (Stage 61) the pictures' textures, freed with the node
 	godot::String pictures_kept_ = "user://pictures.json";
+	bool capture_pictures_ = true;
 	void keep_pictures();
 	std::string progress_; // as last kept (Stage 55)
 	void keep_progress();

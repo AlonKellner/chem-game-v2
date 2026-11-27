@@ -99,7 +99,7 @@ goldens_unchanged() {
 # on the game inside the extension: a game-only change is checked by the C++
 # hosts on the C API at a commit, by every host at a merge.
 godot_gate() {
-	make native || return 1
+	make native PICTURES=0 || return 1 # (Stage 84: the suite reads no picture of the supplies; the native tests hold their capture)
 	local godot_bin
 	godot_bin=$(command -v "${GODOT_BIN:-godot}" || true)
 	cached step gut --inputs engines/godot native/hosts/godot native/capi/include run_tests_parallel.sh data bench \
@@ -112,6 +112,11 @@ if [ "$LEVEL" != commit ]; then
 	gate_bg asan make asan-gate
 fi
 gate core make core
+# (Stage 75) the step's cost, the demo played unchecked once (about a minute of one core), in instructions a step
+# against main's where this branch left it: a warning past GATE_STEPCOST_WARN percent, never a failure
+if [ "$LEVEL" != commit ] || [ -n "${GATE_STEPCOST:-}" ]; then
+	gate_bg stepcost python3 -I tools/gate_cache.py stepcost native/build-core/chem_tool data/sessions/demo.json
+fi
 # side by side: ctest, the Godot extension and suite
 gate_bg ctest env LAB_SPARSE="$GATE_SPARSE" python3 -I tools/gate_cache.py ctest native/build-core
 if [ -z "${SKIP_GODOT:-}" ]; then
@@ -125,7 +130,7 @@ printf "%-10s %6s  %s\n" gate secs result
 for i in "${!NAMES[@]}"; do
 	printf "%-10s %6d  %s\n" "${NAMES[$i]}" "${SECS[$i]}" "${RESULTS[$i]}"
 done
-grep -h "Passing (\|gate_cache:" "$LOGDIR"/{ctest,asan,godot}.log 2>/dev/null
+grep -h "Passing (\|gate_cache:\|^step cost:\|^!! the step" "$LOGDIR"/{ctest,asan,godot,stepcost}.log 2>/dev/null
 # what the time went to (Stage 68): each ctest run's summed seconds and its slowest entries, so a slow new test is
 # seen at its first gate
 for run in ctest asan; do

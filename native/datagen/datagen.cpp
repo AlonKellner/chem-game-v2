@@ -14,6 +14,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -1010,9 +1011,40 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			kinds.emplace_back(static_cast<int>(i), "Kind::Absorb");
 		}
 	}
-	// a refractive index at 1 nm from a Sellmeier formula (micrometres) or a table fitted by Cauchy's
-	const auto index_of = [&](const std::string &name, const json &m) {
+	// a refractive index at 1 nm from a Sellmeier formula (micrometres) or a table fitted by Cauchy's: a clear
+	// dielectric's, k nought; or (Stage 78) a measured table of n and k, a metal's, read between its points linearly in
+	// the dielectric function (n + ik)^2 against the photon's energy, as such sources tabulate it
+	const auto index_of = [&](const std::string &name, const json &m, std::vector<double> &k_out) {
 		std::vector<double> n(401, 0.0);
+		k_out.assign(401, 0.0);
+		if (m.contains("nk_table")) {
+			std::vector<std::array<double, 3>> rows; // (eV, eps1, eps2), by energy
+			for (const json &row : m.at("nk_table")) {
+				const double nm = row.at(0).get<double>(), nn = row.at(1).get<double>(), kk = row.at(2).get<double>();
+				if (!(nm > 0.0 && nn > 0.0 && kk >= 0.0)) {
+					fail(media_file, "\"" + name + "\": an nk_table row needs a wavelength, n > 0 and k >= 0");
+				}
+				rows.push_back({ 1239.841984 / nm, nn * nn - kk * kk, 2.0 * nn * kk });
+			}
+			std::sort(rows.begin(), rows.end(), [](const auto &a, const auto &b) { return a[0] < b[0]; });
+			if (rows.size() < 2 || rows.front()[0] > 1239.841984 / 780.0 || rows.back()[0] < 1239.841984 / 380.0) {
+				fail(media_file, "\"" + name + "\": an nk_table must span 380 to 780 nm (no extrapolation)");
+			}
+			for (size_t i = 0; i < n.size(); ++i) {
+				const double ev = 1239.841984 / (380.0 + static_cast<double>(i));
+				size_t j = 1;
+				while (j + 1 < rows.size() && rows[j][0] < ev) {
+					++j;
+				}
+				const double t = (ev - rows[j - 1][0]) / (rows[j][0] - rows[j - 1][0]);
+				const double e1 = rows[j - 1][1] + t * (rows[j][1] - rows[j - 1][1]), e2 = rows[j - 1][2] + t * (rows[j][2] - rows[j - 1][2]);
+				// n + ik = sqrt(e1 + i e2), the root with n and k both positive
+				const double mod = std::sqrt(e1 * e1 + e2 * e2);
+				n[i] = std::sqrt((mod + e1) / 2.0);
+				k_out[i] = std::sqrt((mod - e1) / 2.0);
+			}
+			return n;
+		}
 		if (m.contains("sellmeier_um")) {
 			for (size_t i = 0; i < n.size(); ++i) {
 				const double um = (380.0 + static_cast<double>(i)) / 1000.0, l2 = um * um;
@@ -1060,7 +1092,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				n[i] = cauchy(380.0 + static_cast<double>(i));
 			}
 		} else {
-			fail(media_file, "\"" + name + "\": an index is a sellmeier_um formula or a table");
+			fail(media_file, "\"" + name + "\": an index is a sellmeier_um formula, a table or an nk_table");
 		}
 		for (const double v : n) {
 			if (!(v >= 1.0 && v < 3.0)) {
@@ -1069,8 +1101,9 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		}
 		return n;
 	};
-	// refractive indices at 1 nm, and the density of what has one (for a wall's thickness)
+	// refractive indices at 1 nm, and the density of what has one (for a wall's thickness); a metal's k (Stage 78)
 	std::vector<std::tuple<int, std::vector<double>, double>> indices;
+	std::vector<int> extinctions;
 	const json index_entries = media.value("indices", json::object()); // held: items() of a temporary would dangle
 	for (const auto &[name, m] : index_entries.items()) {
 		int index = -1;
@@ -1082,8 +1115,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		if (index < 0) {
 			fail(media_file, "an index for \"" + name + "\", which is not a species");
 		}
-		const std::vector<double> n = index_of(name, m);
+		std::vector<double> k;
+		const std::vector<double> n = index_of(name, m, k);
 		emit(optics, ("INDEX_" + std::to_string(index)).c_str(), n);
+		if (std::any_of(k.begin(), k.end(), [](double v) { return v > 0.0; })) {
+			emit(optics, ("EXTINCTION_" + std::to_string(index)).c_str(), k);
+			extinctions.push_back(index);
+		}
 		indices.emplace_back(index, n, m.value("density_g_cm3", 0.0));
 	}
 	optics << "constexpr Spectrum ONES = [] {\n\tSpectrum s{};\n\tfor (double &v : s) {\n\t\tv = 1.0;\n\t}\n\treturn s;\n}();\n\n";
@@ -1098,13 +1136,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		std::snprintf(text, sizeof text, "\t\tcase %d:\n\t\t\treturn %.17g;\n", index, density);
 		optics << text;
 	}
-	optics << "\t\tdefault:\n\t\t\treturn 0.0;\n\t}\n}\n\n";
+	optics << "\t\tdefault:\n\t\t\treturn 0.0;\n\t}\n}\n\nconst Spectrum &extinction_index(SpeciesId species) {\n\tstatic constexpr Spectrum ZEROS{};\n\tswitch (species.index) {\n";
+	for (const int index : extinctions) {
+		optics << "\t\tcase " << index << ":\n\t\t\treturn EXTINCTION_" << index << ";\n";
+	}
+	optics << "\t\tdefault:\n\t\t\treturn ZEROS;\n\t}\n}\n\n";
 	// optical materials that are no species: by name
 	const json material_entries = media.value("materials", json::object());
 	int material_count = 0;
 	std::string material_cases;
 	for (const auto &[name, m] : material_entries.items()) {
-		const std::vector<double> n = index_of(name, m);
+		std::vector<double> k; // (a material's k: none yet is a metal)
+		const std::vector<double> n = index_of(name, m, k);
+		if (std::any_of(k.begin(), k.end(), [](double v) { return v > 0.0; })) {
+			fail(media_file, "\"" + name + "\": a material is a clear dielectric (a metal is a species, or a surface's)");
+		}
 		emit(optics, ("MATERIAL_" + std::to_string(material_count)).c_str(), n);
 		material_cases += "\tif (name == \"" + name + "\") {\n\t\treturn &MATERIAL_" + std::to_string(material_count) + ";\n\t}\n";
 		++material_count;

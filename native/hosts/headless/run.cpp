@@ -4,6 +4,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "lab/work.hpp"
+
 #include <chrono>
 #include <cstdio>
 #include <cstring>
@@ -143,6 +145,7 @@ int run_session(int argc, char **argv, bool bench) {
 	std::vector<std::string> lines;
 	int status = 0;
 	const auto t0 = std::chrono::steady_clock::now();
+	const double work0 = lab::work_done();
 	int index = 0;
 	for (const json &command : session.at("script")) {
 		if (command.contains("note") && !quiet && !bench) {
@@ -169,6 +172,7 @@ int run_session(int argc, char **argv, bool bench) {
 		++index;
 	}
 	const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+	const double work = lab::work_done() - work0;
 	const json report = json::parse(cg_lab_report(lab));
 	const int64_t steps = cg_lab_step(lab);
 	cg_lab_close(lab);
@@ -177,6 +181,8 @@ int run_session(int argc, char **argv, bool bench) {
 		std::printf("%lld steps (%.0f s of simulated time) in %.3f s: %.2f us a step, %.0f times real time\n", static_cast<long long>(steps), static_cast<double>(steps) / 60.0, wall,
 				wall / static_cast<double>(steps) * 1e6, static_cast<double>(steps) / 60.0 / wall);
 		std::printf("at 600 steps a frame (ten simulated seconds a frame): %.2f ms a frame\n", wall / static_cast<double>(steps) * 600.0 * 1e3);
+		// (Stage 75) the work, not the clock: what the gates' step cost compares (gates.sh)
+		std::printf("step cost: %.0f %s a step\n", work / static_cast<double>(steps), lab::work_is_instructions() ? "instructions" : "ns of the thread's time");
 		if (record_path.empty() && check_path.empty()) {
 			return status;
 		}

@@ -262,6 +262,20 @@
 			"tutorial": "tutorials/molar_volume.json"
 		},
 		{
+			"id": "complexes",
+			"title": "The complexes' colours, side by side",
+			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",
+			"bench": "benches/complexes.json",
+			"tutorial": null
+		},
+		{
+			"id": "mercury",
+			"title": "Liquid mercury, beside water",
+			"summary": "A beaker of liquid mercury beside water and a blue solution: a metal as its measured complex index, a curved mirror that shows the room's ruled faces, the beakers beside it and whatever is held near it.",
+			"bench": "benches/mercury.json",
+			"tutorial": null
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

@@ -107,7 +107,9 @@ public:
 	// keeps what is new (`pictures`, a "chem-pictures/1" text of every one there is; `pictures_changed` while one
 	// was captured since it was last taken). A box with no picture yet is drawn by the pass until its own is
 	// captured, apart, a supply at a time. `capture_pictures` captures every one this bench lacks, waiting (a build's
-	// tool, a test).
+	// tool, a test). (Stage 86) A picture's key holds the renderer's (RENDERER_KEY, a hash of the files it is rendered
+	// by), and a file says which renderer made it: one of another renderer's is taken as none, and `pictures` gives
+	// this one's alone, so a change to the renderer captures every picture again and leaves none of the old behind.
 	bool add_pictures(std::string_view text, std::string &why);
 	std::string pictures();
 	bool pictures_changed() const;
@@ -161,6 +163,11 @@ public:
 	// tutorial in place of what is open, and reset starts it again. The entry that is what is open now is
 	// marked as shown. A bench or a tutorial given as a path (the catalogue file's own, data/experiments.json)
 	// is read by `read` (none: refused); it gives the file's text, or nothing for one it cannot read.
+	// (Stage 78) The list is one column of rows under a search field, ten on the screen at once, scrolled a whole row
+	// at a time by the wheel or a trackpad's two fingers (anywhere while it is open) or its bar held; it opens with
+	// the entry shown in sight. While it is open the keys are its field's: each typed word must start one of an
+	// entry's words (its id's, title's, summary's and its "keywords"' if it has them; lab/search.hpp), Enter opens
+	// the first row left, Escape clears the query or, with none, closes the list; closed, the query is let go.
 	bool experiments(std::string_view catalogue_json, std::string &why, const std::function<std::optional<std::string>(const std::string &path)> &read = {});
 	// opens the experiment of this id, as a click on it does; false, with the reason, for none such
 	bool choose(std::string_view id, std::string &why);
@@ -192,7 +199,10 @@ public:
 	//   valve:<burner>@<0..1>   stir:<vessel>
 	//   panel:pour  panel:slider@<0..1>  panel:tip:<species>  panel:cancel
 	//   pause   speed:<1|10|60|600>   check   reset
-	//   tutorial:strict (the card's switch)   menu:experiments   experiment:<id> (while the list is open)
+	//   tutorial:strict (the card's switch)   menu:experiments   experiment:<id> (while the list is open, its row
+	//   left by the search and in sight; a play scrolls to it: lab::scroll_to)   experiments:search (its field)
+	//   experiments:scroll (where the wheel turns it)   experiments:bar (its thumb, while not every row is in sight)
+	//   experiments:bar@<0..1> (a place on its track)   (Stage 78)
 	//   drawer:<timer|monitor|alarm>   port:<part>   choose:<wire|reset>
 	//   part:edit   part:reset   part:unwire:<to>   part:unrig:<item>:<control>
 	//   circuit:create (the drawer's, for the parts chosen)   part:open   part:give_back

@@ -155,17 +155,39 @@ control feature on the handle" (physical controls for other things, a burner's, 
 
 ## Open
 
-- **A step's cost**: the four setups' twelve sub-steps (forty-eight where a liquid crosses outside a hydraulic link)
+**The proper mechanism, planned and approved by the user (2026-11-27), in two stages after this one.** The user
+asked for the mechanisms "to solve connected vessel compression, liquid and gas transfer, and related phenomenon in a
+correct and consistent manner". Reading the kernel for it found what this stage's patches work around:
+
+- **The equation of state has holes**: a sealed cell full of liquid, or a pocket of gas squeezed small, has no
+  pressure (the clearance, and the reading of a state past the model, stand in for it).
+- **Hagen–Poiseuille is used past its range**: water through the 2 mm nozzle at a thumb's 74 kPa runs at a Reynolds
+  number near 14 000 (the law holds under about 2300). It lets about 750 mL/s through where entry and exit losses
+  and turbulent friction leave about 20 mL/s; for air it gives more than the speed of sound.
+- **A sealed vessel's layers are at 1 atm**, only its top at its pressure: liquid moved between them, and the top
+  made the size they leave, book no pressure work (the hops up a column and the flow work at its top stand in).
+- **What leaves a sealed cell carries its enthalpy at 1 atm**, the flow work added by hand, 6 % off the enthalpy at
+  the giver's own pressure for water at 20 C.
+- **Sub-steps move one vessel before its neighbours answer**: a stiffness that depends on the direction, wherever
+  the hydraulic link does not reach.
+
+Stage A (pressure): compressible liquids (one potential, a pressure for every state), one pressure for a vessel's
+cells, enthalpy at the giver's state. Stage B (flow): a conduit's law from its geometry (Churchill's friction,
+losses where a section changes, a gas choked at the speed of sound) and one implicit solve of every joined vessel's
+pressure at the step's end, in rounds with the fast equilibria. The user chose the realistic flow law: water between
+syringes will move at a real syringe's pace. The items below marked (A) or (B) go with them.
+
+- **(B) A step's cost**: the four setups' twelve sub-steps (forty-eight where a liquid crosses outside a hydraulic link)
   take about 8 ms a step with every invariant checked: a 1x clock holds, a fast one runs slow.
-- **A pair of pure liquid stands**: with no gas in either syringe their sealed models have no state at any
+- **(A) A pair of pure liquid stands**: with no gas in either syringe their sealed models have no state at any
   pressure, and neither plunger moves. A liquid's compressibility is the general answer (below).
-- **A link through more than two vessels** (a syringe of water on two others) runs in sub-steps, each vessel against
+- **(B) A link through more than two vessels** (a syringe of water on two others) runs in sub-steps, each vessel against
   its own bubble: there pushing is still stiffer than pulling.
 
-- **A sealed syringe brim-full of a liquid, warmed**: its liquid grows past its volume (V2), as a sealed flask's would;
+- **(A) A sealed syringe brim-full of a liquid, warmed**: its liquid grows past its volume (V2), as a sealed flask's would;
   the plunger yields only at the next step. A liquid's compressibility is the general answer (below).
 
-- A liquid is incompressible: a sealed syringe of water moves by its bubble alone, and with none its plunger stands
+- (A) A liquid is incompressible: a sealed syringe of water moves by its bubble alone, and with none its plunger stands
   on the liquid (a ten-thousandth of its volume left to its gas). Water's compressibility (4.5e-10 /Pa) would give 0.005 mL
   at a hand's most.
 - A liquid's head between joined syringes (a few hundred pascals) is not modelled.

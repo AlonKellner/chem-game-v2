@@ -1381,3 +1381,115 @@ Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, t
     Chem. 10, 51, reports to 400 nm, behind a paywall). Iron(III)'s yellow is this tail.
   - Fe³⁺'s own absorption, under about 100 past 330 nm, and iron(II)'s, at 960 nm, are left out: neither colours a
     solution in the visible.
+
+## Mercury (a look at metals)
+
+A liquid metal for the renderer's sake (the user's request, 2026-11-27: "an experiment which involves a vessel with
+liquid mercury ... to see the coloration and reflection of the metallic look"). Read 2026-11-27.
+
+- **Its weight**: CIAAW's abridged 200.59. **Its thermodynamics**: NIST-JANAF's Hg-001 at 298.15 K, Cp 27.978 and S°
+  76.028 J/mol·K, ΔfH° nought. **Its density**: the CRC Handbook's 13.534 g/cm³ at 25 C (PubChem).
+- **Its look**: until Stage 78 there was no metal in the renderer, and mercury was given an absorption that made it
+  opaque (10,000 L/mol/cm, calibrated). From Stage 78 it is its measured complex index (below): a mirror.
+
+### Liquid mercury's complex index (Stage 78)
+
+Read 2026-11-27, for traced reflection (`docs/TDD_78_REFLECTION.md`).
+
+- **Source**: T. Inagaki, E. T. Arakawa and M. W. Williams, "Optical properties of liquid mercury", Phys. Rev. B 23,
+  5246 (1981), DOI 10.1103/PhysRevB.23.5246 (OSTI 6208778). Spectroscopic ellipsometry of liquid mercury at room
+  temperature, the surface renewed by overflow, under vacuum, cyclohexane and quartz alike (no surface layer: the bulk
+  liquid's), combined with the earlier ellipsometry it lists; tabulated as the dielectric function at round photon
+  energies 0.2 eV apart.
+- **What was read**: the table's n and k from 1.4 to 3.6 eV (885.6 to 344.4 nm, twelve rows: the visible and one row
+  past each end), as transcribed by the refractiveindex.info database (`database/data/main/Hg/nk/Inagaki.yml`, git
+  blob 39e1461d, fetched 2026-11-27); the paper itself was not open to us. Their ε = n² − k², 2nk come out round
+  (−17.50 + 12.19i at 2.4 eV), as a table of ε converted would.
+- **How it is used** (`data/optics/media.json` `indices.mercury.nk_table`): read between the rows linearly in ε against
+  the photon's energy, n + ik its root, at each nanometre from 380 to 780. Normal reflectance from air 0.773 at 387 nm
+  rising to 0.783 at 775 nm.
+- **The check**: L. E. Smith and R. R. Stromberg, J. Opt. Soc. Am. 56, 1539 (1966), a separate ellipsometry at the
+  green line, 546.1 nm: ε = −18.46 + 13.50i (n 1.485, k 4.546; quoted by Arakawa, Inagaki and Williams, ORNL
+  CONF-790857-1, 1979, read through OSTI 6018359), a normal reflectance of 0.7787; Inagaki's at 546.1 nm gives 0.7792.
+  n and k differ by 4 % and 2 %: a reflectance hardly tells them apart. Tuminello, Arakawa, Inagaki and Parks (J.
+  Chem. Phys. 95, 4790, 1991) measured the normal reflectance directly at 24 °C and state it agrees with these
+  constants; their numbers were not open to us.
+- **Gate**: `measured: liquid mercury's index is Inagaki's and turns back Smith and Stromberg's share`.
+- **Confidence**: high for the reflectance (0.78 ± 0.01); medium for n and k apart (a few percent); the transcription
+  not yet compared with the printed table.
+
+## Complexes (Stage 81)
+
+Complex ions, their constants and their colours (GAME_SPEC §9; `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's
+second part). Read 2026-11-27. A complex is written from its measured constant at zero ionic strength and 25 C: its
+heat its measured reaction enthalpy on the model's own parts (or its NBS row where the model's parts are NBS's), its S°
+the one that gives the measured log K, its Cp° and V° its parts' (the reaction's ΔCp and ΔV nought where none is
+measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each complex's constant is its source's at 25 C`.
+
+| Complex | log K (from the free ion) | ΔrH kJ | Source |
+|---|---|---|---|
+| CuNH₃²⁺ | 4.098 | −23.38 | NBS 1982 p. 2-156 (ΔfG° 15.60, ΔfH° −38.9) with Cu²⁺ (p. 2-154: 65.49, 64.77) and NH₃(ao) (p. 2-64: −26.50, −80.29); MINTEQ v4 4.010 (line 3472, NIST 46.4) |
+| Cu(NH₃)₂²⁺ | 7.507 | −46.49 | NBS (−30.36, −142.3); LLNL 7.451 (llnl.dat 2978) |
+| Cu(NH₃)₃²⁺ | 10.329 | −69.50 | NBS (−72.97, −245.6); LLNL 10.272 (llnl.dat 2986) |
+| Cu(NH₃)₄²⁺ | 12.362 | −92.11 | NBS (−111.07, −348.5) |
+| AgNH₃⁺ | 3.310 | −28.14 (calibrated: half the diammine's) | MINTEQ v4 line 3424 (−5.934 from NH₄⁺; NH₄⁺ ⇌ NH₃ + H⁺ 9.244, line 3416). MINTEQ's heats for the silver and copper ammines (−72, −160 kJ written from NH₄⁺) are not those reactions' (from NH₃ they would be −124 and −264 kJ, where NBS's diammine is −56.3): not used |
+| Ag(NH₃)₂⁺ | 7.245 (MINTEQ 7.220) | −56.29 | NBS's row, p. 2-162 (ΔfH° −111.29, S° 245.2), on the model's Ag⁺ and NH₃ (both NBS's) |
+| Zn(OH)₃⁻ | −28.091 (with 3 H₂O, 3 H⁺) | 0 (MINTEQ's: none measured) | MINTEQ v4 line 766 (NIST 46.3) |
+| Zn(OH)₄²⁻ | −40.488 (4 H₂O, 4 H⁺) | 0 | MINTEQ v4 line 774; NBS's ΔfG° −858.52 would give −41.53 |
+| Al(OH)₄⁻ | −22.688 (4 H₂O, 4 H⁺) | 173.24 | MINTEQ v4 line 710 (NIST 46.3); NBS's row (−1502.5, 102.9) beside the model's −1501.1, 104.8 |
+| FeSCN²⁺ | **3.5085, calibrated** (2.981 by Davies) | −6.694 | Below, Connick and Coppel 1958 (JACS 80, 2961, p. 2963): Q₁ = 146 ± 5 at μ = 0.40 (perchlorate), 25 C, ΔH₁ −1600 cal. To μ = 0 by Davies (A 0.5091, Δz² −6) it is 2.981; with that, the model (Pitzer's, no pair for iron(III): Debye–Hückel alone) gives 43 at 0.40. **Calibrated**: the constant that gives 146 at 0.40 in the model's own activities (nitrate in place of perchlorate). At 1.00 Below et al. measured 123; the model gives about 45 (its iron(III) activity falls too fast: Open) |
+| Fe(SCN)₂⁺ | **5.6655, calibrated** | −11.0 | Calibrated to Lister and Rivington's Q₂ = 15.5 at μ = 0.5, 25 C (spectrophotometric; Below et al.'s Table I; Laurence's e.m.f. 20.5 at 0.5, Betts and Dainton's 20 at 1.28 beside it). Its heat Ozutsumi et al. 1992's ΔH₂ −11.0 kJ (p. 524) |
+| CoCl₄²⁻ | **−13.256, calibrated** (ThermoChimie −2.09) | 22.57 | ThermoChimie, PHREEQC's sit.dat line 2971 (Blanc et al. 2006): −2.09 and 22.57 kJ, with which the model put all of the cobalt blue from 7 M HCl (its chloride's activity that far past Pitzer's range rises steeply). **Calibrated** to Bjerrum, Halonin and Skibsted 1975 (Acta Chem. Scand. A 29, 326), Table 1 p. 328, α₄ = 0.496 in 8.23 M HCl at 25.0 C (their HCl rows 5.13 to 12.13 M: 0.166 at 7.12 M, 0.765 at 9.17 M); the model gives 0.0085 and 0.986 there, its rise about three times steeper (Open). Molarity to molality by the model's own volume. CoCl⁺, CoCl₂ and CoCl₃⁻ (lines 2953 to 2965) are left out: with the model's Debye–Hückel alone for complexes and Pitzer and Mayorga's CoCl₂ pair (fitted as wholly dissociated) the four together did not settle in strong hydrochloric acid |
+| HCrO₄⁻ | 6.477 (MINTEQ 6.51) | 2.95 | NBS's rows, p. 2-197 (CrO₄²⁻ −881.15, 50.21; HCrO₄⁻ −878.2, 184.1); MINTEQ v4 line 4984 |
+| Cr₂O₇²⁻ (2 CrO₄²⁻ + 2 H⁺) | 14.51 (MINTEQ 14.56) | −13.83 | NBS's row (−1490.3, 261.9); MINTEQ v4 line 5000 |
+
+- **Thiocyanate, SCN⁻**: NBS p. 2-92 (Table 23:C), ΔfH° 76.44, ΔfG° 92.71, S° 144.3, Cp° −40.2. **Chromium**: CIAAW's
+  abridged 51.996.
+- **Heat capacities and volumes of the chromates and thiocyanate**: OBIGT (CHNOSZ `inorganic_aq.csv`, fetched
+  2026-11-27, Shock, Sassani, Willis and Sverjensky 1997): CrO₄²⁻ Cp −62.6 cal, V 19.8 cm³; HCrO₄⁻ 1.5, 44.9;
+  Cr₂O₇²⁻ −29.1, 72.7; SCN⁻ −9.6, 35.7; on the model's footing, Cp − 216.35 z J/K, V − 16.74 z cm³.
+- **Why each solid dissolves straight into its complex** (no new number): amounts are counted in quanta of 10⁻¹² mol,
+  and where a precipitate or a complex holds a metal its free ion is far under one: a complex formed from the free ion
+  alone never takes the solid. So each series is written step by step (Cu(NH₃)₃²⁺ + NH₃ → Cu(NH₃)₄²⁺), and each solid
+  dissolves into its complex (Cu(OH)₂ + 4 NH₃, AgCl + 2 NH₃, Ag₂O + 4 NH₃ + H₂O, Zn(OH)₂ + OH⁻, Al(OH)₃ + OH⁻; 2 HCrO₄⁻ →
+  Cr₂O₇²⁻ + H₂O): their constants are the species' rows'.
+
+**Colours** (gate: `measured: the complexes' absorption is their sources'`):
+- **CrO₄²⁻**: Haupt 1952 (J. Res. NBS 48(6), 414, RP2331), Table 1 p. 418, column 11 (a_M): 0.0400 g/L K₂CrO₄ in 0.05 N
+  KOH, 25 C, 1 cm; 380 nm 4526, 400 nm 1922, 450 nm 160, 490 nm 6; .000 at 500 nm (`data/optics/chromate.csv`).
+- **Cu(NH₃)₄²⁺**: Bjerrum 1932 (Kgl. Danske Vid. Selsk. Math.-fys. Medd. XI, Nr. 10), Table 14 p. 26: 465 nm 4.3 to 600 nm
+  51.6 (its maximum) to 690 nm 31.3, 15 C; added: nought at 380 nm, 690 nm's value held past it.
+- **The lower ammines**: not measured here; **calibrated** between the aqua ion's and the tetrammine's by n/4.
+- **CoCl₄²⁻**: Bjerrum, Halonin and Skibsted 1975 (Acta Chem. Scand. A 29, 326), Table 1 p. 328, ε₄ in 13.36 M LiCl,
+  25.0 C: 610 nm 279, 624 380, 641 372, 662 550, 690 600; Fig. 1: about 85 at 590 nm, 100 at 705 nm (figure); added:
+  nought below 560 nm and from 740 nm.
+- **FeSCN²⁺**: Ozutsumi et al. 1992, Fig. 2a curve 1 (1 M NaClO₄, 0.1 M HClO₄, 25 C, read from the figure ±10–15 %): 400 nm
+  2700, 460 nm 4500, 500 nm 3800, 550 nm 1900, 600 nm 700; scaled to Betts and Dainton's 5000 ± 50 at 460 nm (JACS 75,
+  5721 (1953), quoted by Below et al. 1958; not seen). **Fe(SCN)₂⁺**: calibrated, FeSCN²⁺'s shape 25 nm to the red at
+  Ozutsumi's maximum, about 8800 near 485 nm (figure).
+- **HCrO₄⁻**: calibrated, chromate's shape times 1576/2715 (their values at 350 nm: NBS SP 260-54 Table 6, Haupt).
+- **Cr₂O₇²⁻**: its near-ultraviolet band at 350 nm, 3576 a dichromate ion (NBS SP 260-54, Burke and Mavrodineanu 1977,
+  Table 6: printed 1788 per chromium; pH 3.0, 25 C, ±5 %), as a band 6000 cm⁻¹ wide; and a band at 440 nm, 250
+  L/mol/cm, 3600 cm⁻¹ wide, **calibrated** to a dichromate's orange. No open source gives dichromate (or HCrO₄⁻) in
+  the visible: Tong and King 1953, Davies and Prue 1955 and Fournier-Salaün 2007 were not reached (the user's choice,
+  2026-11-27: "Calibrate to its look").
+
+**EDTA and Eriochrome Black T** (gate: `measured: EDTA's constants are MINTEQ v4's, Eriochrome Black T's Lindstrom's at
+0.1 ionic strength`):
+- **EDTA** (Y⁴⁻, C₁₀H₁₂N₂O₈⁴⁻): MINTEQ v4 (NIST 46.2), cumulative from Y⁴⁻: HY³⁻ 10.948 (ΔH −23.43 kJ, line 7224),
+  H₂Y²⁻ 17.221 (−41.00, 7232), H₃Y⁻ 20.34 (−35.56, 7240), H₄Y 22.5 (−34.31, 7248); CaY²⁻ 12.42 (−25.52, 7664), MgY²⁻
+  10.57 (13.81, 7648), CuY²⁻ 20.5 (−34.73, 7408), ZnY²⁻ 18.0 (−19.25, 7352), FeY⁻ 27.7 (−11.30, 7552). Y⁴⁻'s own
+  enthalpy, entropy and heat capacity are **design** (nought): no table gives them, and every reaction it is in is
+  among its own forms and complexes, where they cancel. CuY²⁻'s pale blue is not modelled (no spectrum found).
+- **Eriochrome Black T** (In³⁻, C₂₀H₁₀N₃O₇S³⁻): J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and
+  Lindstrom, Anal. Chem. 31, 414), Table 6 (thesis p. 81), at 0.100 ionic strength (KCl): pKa₃ 11.50 (Schwarzenbach
+  and Biedermann's 11.55 beside it), pKa₂ 6.91 (theirs 6.3 at 0.008, 6.9 at 0.08: salt and aggregation dependent);
+  the conditional constants at pH 8 and 10 give log K MgIn⁻ 7.13 to 7.26 and CaIn⁻ 5.23 (Schwarzenbach's 7.0 and
+  5.40). **Calibrated** in the model's own activities to Lindstrom's at 0.100: 11.50, 6.91 (mixed: the pH meter's
+  hydrogen ion activity), 7.26 (from pH 10, the titration's), 5.23; heats unknown, nought. In³⁻'s own values design,
+  as Y⁴⁻'s.
+- **Its colours**: Lindstrom's Figs. 6 and 7 read every 10 nm, 400 to 700 nm (±0.02 absorbance, ±1 nm), ε from the
+  dye concentrations of his methods (4.969e-5 and 4.908e-5 M, 1 cm: assumed, ±3 %): HIn²⁻ blue, its maximum 33,100 at
+  610 nm (his table's 32,300 at 615); In³⁻ orange, 20,900 at 500 nm; MgIn⁻ wine red, 33,200 at 560 nm (its red tail
+  an upper bound: 5–10 % free dye); CaIn⁻ red, 29,300 at 540 nm. H₂In⁻'s, red, not found (his pH 3.91 curve shows no
+  band, the dye aggregated): **calibrated**, MgIn⁻'s.

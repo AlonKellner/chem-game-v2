@@ -1,0 +1,33 @@
+# Eriochrome Black T, In 3- (orange, pH 13.76): its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 400-700 nm: J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and Lindstrom, Anal. Chem. 31, 414), Fig. 6 (printed p. 52), read from
+# the figure every 10 nm (+-0.02 absorbance, +-1 nm), epsilon = A / c with the dye's concentration from the thesis's
+# methods (4.969e-5 M, 1 cm: assumed, +-3 %); ionic strength 0.100 (KCl). Added here: 380 nm its 400 nm value held, nought at 780.
+nm,epsilon
+380,9300
+400,9300
+410,11500
+420,14000
+430,15800
+440,17500
+450,18700
+460,19500
+470,19900
+480,20400
+490,20700
+500,20900
+510,20900
+520,20600
+530,20000
+540,18900
+550,16900
+560,15400
+570,13200
+580,10800
+590,8200
+600,6200
+610,4400
+620,3000
+630,2000
+640,1400
+700,400
+780,0

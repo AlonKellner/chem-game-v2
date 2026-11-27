@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.79.0 (2026-11-27, Stage 79)
+## 0.81.1 (2026-11-27, Stage 79, merged after Stages 78, 80, 81, 84 and 86)
 
 - §6 (Stage 79, `docs/TDD_79_SYRINGE.md`; `docs/CURRICULUM.md`, step G's first part: experiments 27 and 28): **pistons**:
   a rigid cell's (or a column's) volume moved each step by the forces on its plunger, overdamped (its gas's pressure
@@ -14,6 +14,80 @@
   lock, its nozzle capped, on a vessel's mouth or tubed to another's; a bench's `setup`.
 - §13.7: the experiments `syringes` (the user's four setups), `boyle`, `charles` (the user's cool and hot baths),
   `molar_volume`.
+## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 81, `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part): **complexes**, each a fast
+  equilibrium at its measured constant: copper's ammines (NBS's free energies), silver's (MINTEQ v4, NBS), zinc's and
+  aluminium's hydroxo complexes (MINTEQ v4), iron(III)'s thiocyanates (calibrated to Below, Connick and Coppel's and
+  Lister and Rivington's quotients), cobalt's tetrachloro (calibrated to Bjerrum, Halonin and Skibsted's α₄), chromate,
+  hydrogen chromate and dichromate (NBS); **EDTA** and its complexes (MINTEQ v4) and **Eriochrome Black T** (Lindstrom
+  1959, calibrated at 0.1 ionic strength). Each series step by step and each solid straight into its complex (a free
+  ion under one quantum); the fast equilibria's rounds 64 to 256; a table's dissolved particles 64 to 128; chromium.
+- §12: their colours, measured where open (Haupt's chromate, Bjerrum's tetrammine and CoCl₄²⁻, Ozutsumi's and Betts
+  and Dainton's FeSCN²⁺, Lindstrom's indicator) and calibrated where not (dichromate's visible band, the user's
+  choice; hydrogen chromate, the lower ammines, Fe(SCN)₂⁺, the indicator's red form).
+- §13: the free lab's reagents (potassium thiocyanate, chromate and dichromate; 6 M ammonia, concentrated hydrochloric
+  acid, 2 M sodium hydroxide; 0.0100 M EDTA, a pH 10 buffer and Eriochrome Black T).
+- Flame emission is a stage of its own (the user's split).
+
+## Stage 86 (2026-11-27; GAME_SPEC stays 0.81.0: no behaviour of the game changes; signed off by the user)
+
+- The supplies' pictures (`docs/TDD_86_RENDERER_KEY.md`): each picture's key holds the renderer's, a hash made at
+  build time of the 49 files a picture is rendered by (`RENDERER_KEY`: the per-pixel source, the optics' sources,
+  colour, contents, glassware, the core's optics and math, `data/optics/` and the tables made of it), and each file says
+  which renderer made it: another renderer's is taken as none, so a change to the renderer captures every picture again
+  and leaves none of the old behind (ctest `renderer_key_moves`).
+
+## Stage 84 (2026-11-27; GAME_SPEC stays 0.80.0: no behaviour of the game changes; signed off by the user)
+
+- The gates (`docs/TDD_84_GODOT_GATE.md`): the Godot step builds and runs only what needs the engine (the extension,
+  the import, the GUT suite: `make native PICTURES=0`), and the suite captures no supply's picture
+  (`ChemLab.capture_pictures` off): a new worktree's step about 20 s, from about 200 s. `make native` captures the
+  pictures bench by bench side by side, merged by key (`tools/merge_pictures.py`).
+
+## 0.80.0 (2026-11-27, Stage 80, merged after 0.78.0; signed off by the user: "Approved, merge and proceed")
+
+- §6, the wall in rings; §8, the fast equilibria (Stage 80, `docs/TDD_80_WALLS_AND_SEARCH.md`): a vessel's walls read
+  their temperatures, levels, water's activity and pressure on a grid (0.01 K, a micrometre, 1e-6, 0.01 Pa), each
+  ring's outside and contact worked out again only once that moved, a function of the state alone; an equilibrium's
+  search seeded by the line through no extent and one quantum. The demo 1.227 to 1.104 million instructions a step
+  (−10 %); the oxide gone 0.1 s later, the flask cool 0.2 s sooner, 0.12 mg more crystals; the sessions re-recorded
+  with the user's approval.
+
+## 0.78.0 (2026-11-27, Stage 78; signed off by the user: "Approved, merge and proceed")
+
+- §12.3 (Stage 78, `docs/TDD_78_REFLECTION.md`; the user's request for reflection simulated as refraction is):
+  **each material's own index, complex where it is a metal**: datagen's measured n + ik tables (`nk_table`, read in
+  the dielectric function against the photon's energy), `chem::optics::extinction_index`; **liquid mercury** as
+  Inagaki, Arakawa and Williams 1981 measured it (checked against Smith and Stromberg 1966 at 546.1 nm; normal
+  reflectance 0.773 to 0.783); a vessel's liquid takes its liquids' index by volume (a row of k a set:
+  `ROWS_PER_SET` 10); **Fresnel with a complex index** (`chem::optics::fresnel_reflectance`; the shader's own
+  `metal_reflectance`): a metal turns back R of what comes to it and takes in the rest, in both tracers, without a
+  branch, so its mirror image is in the kept beam.
+- §12.3: **the room's faces ruled as the wall is** (the user's choice: a mirror shows them), their edge cells with
+  them: a ray that comes to a face is put at its own place on it (the header's ninth vector: the ruling), read exactly
+  by the pass and by the truth; their mean the faces' mean of before.
+- §18: O6 restated for a complex index; **O28** (a mirror shows the room's ruled faces where the truth's rays find
+  them); O27 reserved for clear surfaces' branches, split off to their own stage (the user's choice), built so far on
+  branch `reflection-branches-wip`.
+- §12.3 (the user's report: things held and beside the mercury unseen in it): **a ray turned back toward the eye or
+  sideways meets the room's things in three dimensions**, a vessel by its surfaces, a flat thing as a box as deep as
+  it is wide (the user's choice), in both tracers; a mirror's pixels follow every other body.
+- §13: the experiment mercury (300 g of liquid mercury beside water and copper sulfate); a play of it, a beaker held
+  beside it. §13.7 (the user's report: the experiments hard to navigate): **the experiments' list scrolled and
+  searched** (one column, the wheel and a bar, a search field matching titles, summaries and ids; plays reach a row
+  out of sight by `lab::scroll_to`).
+
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.77.0 (merged after Stages 71, 76 and 77): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+
+- The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
+  digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
+  a cell's rest and a vessel's walls kept by them, a cell's sums over its matter and its mixtures kept while only
+  energy moves (conduction), each hit held to the full state where assertions abort. The joint solve's mixtures once
+  an iteration; a probe's setup and the activity model's range from the kept mixtures; the column's diffusion over
+  what its layers hold.
+- The gates: `make gates` prints the step's cost in instructions against main's where the branch left it, warning
+  past 10 % (`gate_cache.py stepcost`, `step_costs.json` in the shared cache).
 
 ## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 

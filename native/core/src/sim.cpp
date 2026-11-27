@@ -28,6 +28,17 @@ Simulation::Simulation(World world, std::vector<Reaction> reactions) :
 			equilibria_.push_back(std::move(r));
 		}
 	}
+	// (Stage 81) what each equilibrium consumes each way, as bits
+	needs_words_ = (static_cast<size_t>(world_.species().species_count()) + 63) / 64;
+	needs_forward_.assign(equilibria_.size() * needs_words_, 0);
+	needs_backward_.assign(equilibria_.size() * needs_words_, 0);
+	present_.assign(needs_words_, 0);
+	for (size_t e = 0; e < equilibria_.size(); ++e) {
+		for (const Term &t : equilibria_[e].terms()) {
+			const size_t i = static_cast<size_t>(t.species.index);
+			(t.nu < 0 ? needs_forward_ : needs_backward_)[e * needs_words_ + i / 64] |= uint64_t{ 1 } << (i % 64);
+		}
+	}
 }
 
 namespace {
@@ -38,7 +49,10 @@ namespace {
 // extent, so this is the last quantum before the reaction's own equilibrium.
 // A secant step from the two ends, a bisection every third: a few
 // evaluations when the equilibrium is near, never more than a bisection's.
-int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
+// (Stage 80) `at_none`: the affinity at no extent, the caller's (in the direction, > 0), or 0 where it has none. With
+// it the line through no extent and one quantum says where the affinity crosses zero; that quantum and the next are
+// asked first (a shift of a few quanta, the usual case, in two evaluations), and the search goes on from them.
+int64_t reach(const AffinityProbe &probe, bool forward, int64_t most, double at_none = 0.0) {
 	const auto value = [&](int64_t extent, double &v) {
 		double a = 0.0;
 		if (!probe.at(static_cast<double>(forward ? extent : -extent), a)) {
@@ -63,11 +77,38 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 	}
 	int64_t lo = 1;
 	v_lo = v_hi;
-	ok_hi = value(most, v_hi);
-	if (ok_hi && v_hi >= 0.0) {
-		return most;
-	}
 	int64_t hi = most;
+	bool bracketed = false; // (hi's value asked, and under 0 or undefined)
+	if (at_none > 0.0 && finite(at_none) && finite(v_lo) && at_none > v_lo) {
+		const double cross = at_none / (at_none - v_lo); // where the line crosses zero, in quanta
+		if (cross < static_cast<double>(most - 1)) {
+			const int64_t c = std::max<int64_t>(1, static_cast<int64_t>(cross));
+			double v_c = v_lo;
+			const bool ok_c = c == 1 || value(c, v_c);
+			if (ok_c && v_c >= 0.0) {
+				lo = c;
+				v_lo = v_c;
+				double v_next = 0.0;
+				const bool ok_next = value(c + 1, v_next);
+				if (!(ok_next && v_next >= 0.0)) {
+					return c; // the last quantum before it passes zero
+				}
+				lo = c + 1;
+				v_lo = v_next;
+			} else {
+				hi = c;
+				v_hi = v_c;
+				ok_hi = ok_c;
+				bracketed = true;
+			}
+		}
+	}
+	if (!bracketed) {
+		ok_hi = value(most, v_hi);
+		if (ok_hi && v_hi >= 0.0) {
+			return most;
+		}
+	}
 	for (int i = 0; hi - lo > 1; ++i) {
 		int64_t middle = lo + (hi - lo) / 2;
 		if (ok_hi && finite(v_lo) && finite(v_hi) && i % 3 != 2) {
@@ -219,6 +260,9 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// its concentration in the solvent, mol/m^3
 	double solvent = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] == 0) {
+			continue; // (Stage 75: it adds nothing, and its volume at T is two of Kell's evaluations)
+		}
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 		solvent += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, temperature) : 0.0; // at T (Stage 67)
 	}
@@ -340,7 +384,7 @@ void Simulation::react() {
 				nucleation_remainder = 0.0;
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell), mixtures(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				remainder = 0.0;
@@ -1645,9 +1689,12 @@ void Simulation::exchange_gases() {
 		}
 		const double c = P_ATMOSPHERE / (GAS_CONSTANT * t), inverse = 1.0 / na + 1.0 / nb;
 		for (size_t s = 0; s < a.amount.size(); ++s) {
+			if (a.amount[s] == 0 && b.amount[s] == 0) {
+				continue; // (Stage 75: before its diffusion, a power, is worked out)
+			}
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const double d = gas_diffusion(table, id, t);
-			if (!(d > 0.0) || (a.amount[s] == 0 && b.amount[s] == 0)) {
+			if (!(d > 0.0)) {
 				continue;
 			}
 			const double xa = static_cast<double>(a.amount[s]) * MOL_PER_QUANTUM / na, xb = static_cast<double>(b.amount[s]) * MOL_PER_QUANTUM / nb;
@@ -1677,27 +1724,13 @@ bool Simulation::project(CellId cell) {
 	const CellState &state = world_.snapshot_cell(cell);
 	// (Stage 64) a cell as it was when it was last found at rest is at rest: what follows depends on nothing else
 	const auto c = static_cast<size_t>(cell.index);
-	const CellMeta &meta_now = world_.meta(cell);
 	if (rest_key_.size() <= c) {
 		rest_key_.resize(c + 1);
 	}
-	{
-		const ThermalKey &key = rest_key_[c];
-		if (key.known && key.energy == state.energy && key.volume == meta_now.volume && key.sealed == meta_now.sealed && key.rigid == meta_now.rigid &&
-				key.reservoir == meta_now.reservoir && key.amount == state.amount) {
-			return false;
-		}
+	if (rest_key_[c].same(world_, cell)) {
+		return false;
 	}
-	const auto at_rest = [&] {
-		ThermalKey &key = rest_key_[c];
-		key.known = true;
-		key.energy = state.energy;
-		key.amount = state.amount;
-		key.volume = meta_now.volume;
-		key.sealed = meta_now.sealed;
-		key.rigid = meta_now.rigid;
-		key.reservoir = meta_now.reservoir;
-	};
+	const auto at_rest = [&] { rest_key_[c].keep(world_, cell); };
 	bool changed = false;
 	// (Stage 53) a cell of nothing but wall (a vessel's ring of glass) has no equilibrium to be at
 	bool any = false;
@@ -1721,8 +1754,12 @@ bool Simulation::project(CellId cell) {
 	std::vector<uint64_t> after_joint;
 	bool joint = true;
 	// (Stage 65: 64, from 16: a solution's carbon dioxide trading with its gas through water's ionisation and the
-	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour)
-	for (int round = 0; round < 64; ++round) {
+	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour. Stage 81: 256:
+	// copper hydroxide dissolving in a little ammonia as its ammines, the solid project()'s alone and the ammines,
+	// ammonia's protonation and water's ionisation joint, takes 130 to 250 rounds to its balance; a cell that settles
+	// sooner stops sooner)
+	int present_version = -1; // (Stage 81) the version present_ was taken at
+	for (int round = 0; round < 256; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];
@@ -1730,19 +1767,36 @@ bool Simulation::project(CellId cell) {
 				continue; // nothing changed since it was probed, or since it moved
 			}
 			seen_[e] = version;
+			if (present_version != version) {
+				std::fill(present_.begin(), present_.end(), 0);
+				for (size_t i = 0; i < state.amount.size(); ++i) {
+					if (state.amount[i] > 0) {
+						present_[i / 64] |= uint64_t{ 1 } << (i % 64);
+					}
+				}
+				present_version = version;
+			}
+			bool can_forward = true, can_backward = true; // (Stage 81) all it consumes there, each way
+			for (size_t w = 0; w < needs_words_; ++w) {
+				can_forward = can_forward && (present_[w] & needs_forward_[e * needs_words_ + w]) == needs_forward_[e * needs_words_ + w];
+				can_backward = can_backward && (present_[w] & needs_backward_[e * needs_words_ + w]) == needs_backward_[e * needs_words_ + w];
+			}
+			if (!can_forward && !can_backward) {
+				continue; // none of what it would consume, either way
+			}
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
-			if (stands(table, state, reaction.terms())) {
+			if (stands(table, mixtures(cell), reaction.terms())) {
 				continue; // (Stage 63) past the activity model's range: among dissolved species alone, it stands
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell), mixtures(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				continue;
 			}
 			const bool forward = a > 0.0;
-			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward));
+			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward), forward ? a : -a);
 			if (size != 0) {
 				// a solid that appears out of the solution comes as its grains (a precipitate, Stage 44), not one lump
 				std::array<SpeciesId, MAX_TERMS> appears{};
@@ -1823,7 +1877,7 @@ bool Simulation::solve_together(CellId cell) {
 			ok = ok && held > 0 && (def.phase != Phase::Gas || !world_.meta(cell).sealed);
 			dissolved = dissolved || def.phase == Phase::Aqueous;
 		}
-		if (ok && dissolved && !stands(table, state, equilibria_[e].terms())) {
+		if (ok && dissolved && !stands(table, mixtures(cell), equilibria_[e].terms())) {
 			which[k++] = e;
 		}
 	}
@@ -1854,10 +1908,17 @@ bool Simulation::solve_together(CellId cell) {
 				on[n++] = r;
 			}
 		}
+		// (Stage 75) here's mixtures once for the n of them
+		std::array<std::span<const Term>, MOST> terms_of{};
+		std::array<double, MOST> found{};
+		std::array<bool, MOST> defined_of{};
 		for (size_t i = 0; i < n; ++i) {
-			bool defined = false;
-			a[on[i]] = affinity(table, here, equilibria_[which[on[i]]].terms(), t, defined, &meta);
-			if (!defined || a[on[i]] != a[on[i]] || a[on[i]] == HUGE_VAL || a[on[i]] == -HUGE_VAL) {
+			terms_of[i] = equilibria_[which[on[i]]].terms();
+		}
+		affinities(table, here, std::span<const std::span<const Term>>(terms_of.data(), n), t, &meta, std::span<double>(found.data(), n), std::span<bool>(defined_of.data(), n));
+		for (size_t i = 0; i < n; ++i) {
+			a[on[i]] = found[i];
+			if (!defined_of[i] || a[on[i]] != a[on[i]] || a[on[i]] == HUGE_VAL || a[on[i]] == -HUGE_VAL) {
 				return false;
 			}
 		}
@@ -2012,7 +2073,7 @@ bool Simulation::solve_together(CellId cell) {
 			if (feasible_extent(state, reaction.terms(), forward) < (forward ? go[r] : -go[r])) {
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &meta);
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &meta, mixtures(cell));
 			double now = 0.0;
 			if (!probe.at(0.0, now) || now == 0.0 || now != now || (now > 0.0) != forward) {
 				continue;
@@ -2405,14 +2466,15 @@ void Simulation::settle_cells() {
 const Thermal &Simulation::thermal(CellId cell) {
 	const auto c = static_cast<size_t>(cell.index);
 	if (!thermal_valid_[c]) {
-		kept_thermal(c, world_.snapshot_cell(cell), world_.meta(cell));
+		kept_thermal(cell);
 		thermal_valid_[c] = 1;
 	}
 	return thermal_[c];
 }
 
 // (Stage 53) derived again only if what it is derived from changed since: the same value, exactly
-const Thermal &Simulation::kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const {
+const Thermal &Simulation::kept_thermal(CellId cell) const {
+	const auto c = static_cast<size_t>(cell.index);
 	if (thermal_key_.size() <= c) {
 		thermal_key_.resize(c + 1);
 	}
@@ -2420,18 +2482,78 @@ const Thermal &Simulation::kept_thermal(size_t c, const CellState &state, const 
 		thermal_.resize(c + 1);
 	}
 	ThermalKey &key = thermal_key_[c];
-	if (!(key.known && key.energy == state.energy && key.volume == meta.volume && key.sealed == meta.sealed && key.rigid == meta.rigid &&
-				key.reservoir == meta.reservoir && key.amount == state.amount)) {
-		thermal_[c] = thermal_state(world_.species(), state, &meta);
-		key.known = true;
-		key.energy = state.energy;
-		key.amount = state.amount;
-		key.volume = meta.volume;
-		key.sealed = meta.sealed;
-		key.rigid = meta.rigid;
-		key.reservoir = meta.reservoir;
+	if (!key.same(world_, cell)) {
+		if (sums_.size() <= c) {
+			sums_.resize(c + 1);
+		}
+		KeptSums &kept = sums_[c];
+		const CellState &state = world_.snapshot_cell(cell);
+		if (!kept.known || kept.revision != world_.matter_revision(cell)) {
+			kept.sums = matter_sums(world_.species(), state);
+			kept.revision = world_.matter_revision(cell);
+			kept.known = true;
+		}
+#if CHEM_ASSERT_ABORTS
+		{
+			const MatterSums now = matter_sums(world_.species(), state);
+			CHEM_ASSERT(now.known == kept.sums.known && now.formation == kept.sums.formation && now.capacity == kept.sums.capacity,
+					"a cell's matter changed under the same matter revision (World::touch)");
+		}
+#endif
+		thermal_[c] = thermal_state(world_.species(), state, &world_.meta(cell), kept.sums);
+		key.keep(world_, cell);
 	}
 	return thermal_[c];
+}
+
+const CellMixtures &Simulation::mixtures(CellId cell) {
+	const auto c = static_cast<size_t>(cell.index);
+	if (mixtures_.size() <= c) {
+		mixtures_.resize(c + 1);
+	}
+	KeptMixtures &kept = mixtures_[c];
+	if (!kept.known || kept.revision != world_.matter_revision(cell)) {
+		kept.mixtures = cell_mixtures(world_.species(), world_.snapshot_cell(cell));
+		kept.revision = world_.matter_revision(cell);
+		kept.known = true;
+	}
+#if CHEM_ASSERT_ABORTS
+	{
+		const CellMixtures now = cell_mixtures(world_.species(), world_.snapshot_cell(cell));
+		CHEM_ASSERT(now.gas == kept.mixtures.gas && now.liquid == kept.mixtures.liquid && now.particles == kept.mixtures.particles,
+				"a cell's matter changed under the same matter revision (World::touch)");
+	}
+#endif
+	return kept.mixtures;
+}
+
+bool Simulation::ThermalKey::same(const World &world, CellId cell) const {
+	if (!known || revision != world.revision(cell)) {
+		return false;
+	}
+#if CHEM_ASSERT_ABORTS
+	const CellState &state = world.snapshot_cell(cell);
+	const CellMeta &meta = world.meta(cell);
+	CHEM_ASSERT(energy == state.energy && volume == meta.volume && sealed == meta.sealed && rigid == meta.rigid && reservoir == meta.reservoir &&
+						amount == state.amount,
+			"a cell changed under the same revision: a write to it drew none (World::touch)");
+#endif
+	return true;
+}
+
+void Simulation::ThermalKey::keep(const World &world, CellId cell) {
+	known = true;
+	revision = world.revision(cell);
+#if CHEM_ASSERT_ABORTS
+	const CellState &state = world.snapshot_cell(cell);
+	const CellMeta &meta = world.meta(cell);
+	energy = state.energy;
+	amount = state.amount;
+	volume = meta.volume;
+	sealed = meta.sealed;
+	rigid = meta.rigid;
+	reservoir = meta.reservoir;
+#endif
 }
 
 bool Simulation::temperature(CellId cell, double &kelvin) const {
@@ -2443,7 +2565,7 @@ bool Simulation::temperature(CellId cell, double &kelvin) const {
 		kelvin = meta.reservoir_temperature;
 		return true;
 	}
-	const Thermal &t = kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), meta);
+	const Thermal &t = kept_thermal(cell);
 	kelvin = t.temperature;
 	return t.defined;
 }

@@ -19,6 +19,10 @@ namespace lab::search {
 // - its state: hot (over 40 C), cold (under 10 C), boiling, sealed, stoppered, broken.
 std::vector<std::string> keywords(const ItemView &item, std::string_view goal = {});
 
+// (Stage 78) a text's keywords, as a name's are: lowercase, the whole and each of its words apart (an experiment's id,
+// title and summary, for the experiments' list, GAME_SPEC §13.7)
+std::vector<std::string> words(std::string_view text);
+
 // true when every word of the query starts one of the keywords; an empty query matches everything
 bool matches(std::string_view query, const std::vector<std::string> &keywords);
 

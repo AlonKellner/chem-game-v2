@@ -56,22 +56,32 @@ gate-clear-cache:
 
 # The extension (RelWithDebInfo) loaded by Godot. The headless --import makes a
 # headless Godot discover it (.godot/extension_list.cfg); it runs when that file
-# is missing or older than chem.gdextension.
+# is missing or older than chem.gdextension. PICTURES=0 leaves the supplies' pictures
+# as they are (the gates: the Godot suite reads none, and the native tests hold the
+# capture; Stage 84).
+PICTURES ?= 1
 native:
 	$(CMAKE) -S native -B $(BUILD_EXT) $(call gen,$(BUILD_EXT)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
 		-DCHEM_BUILD_EXTENSION=ON -DCHEM_BUILD_TESTS=OFF -DCHEM_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build $(BUILD_EXT) -j $(JOBS_EXT)
 	@$(MAKE) -s godot-data
-	@$(MAKE) -s pictures
+	@if [ "$(PICTURES)" != 0 ]; then $(MAKE) -s pictures; fi
 	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/chem.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
 
 # The supplies' pictures (Stage 61), built ahead: every bench of data/ opened, each supply it gives captured once
 # (of it alone in its box, by the renderer's own source on the CPU) and kept in the file, which is the cache
-# (gitignored): a supply whose picture is there is not captured again.
+# (gitignored): a supply whose picture is there is not captured again. (Stage 84) The benches side by side, each from
+# what the file holds into a file of its own (build/pictures), merged by key into it (tools/merge_pictures.py); only
+# the benches there are now are read back. (Stage 86) A picture's key holds the renderer's, and a file of another
+# renderer's is taken as none: a change to the renderer captures them all again, and the old ones are left behind.
+PICTURES_FILE ?= $(GODOT_PROJECT)/pictures/supplies.json
+PICTURE_BENCHES := $(wildcard data/benches/*.json)
 pictures: core
-	mkdir -p $(GODOT_PROJECT)/pictures
-	$(BUILD_CORE)/chem_tool capture $(GODOT_PROJECT)/pictures/supplies.json data/benches/*.json
+	mkdir -p $(dir $(PICTURES_FILE)) build/pictures
+	@[ -s $(PICTURES_FILE) ] || echo '{"format": "chem-pictures/1", "pictures": []}' > $(PICTURES_FILE)
+	printf '%s\n' $(PICTURE_BENCHES) | xargs -P $(JOBS) -n 1 sh -c 'out=build/pictures/$$(basename "$$1"); cp $(PICTURES_FILE) "$$out" && $(BUILD_CORE)/chem_tool capture "$$out" "$$1" > /dev/null' _
+	python3 -I tools/merge_pictures.py $(PICTURES_FILE) $(addprefix build/pictures/,$(notdir $(PICTURE_BENCHES)))
 
 # The Godot project reads only res://: the data is copied in (gitignored), and the
 # per-pixel source.

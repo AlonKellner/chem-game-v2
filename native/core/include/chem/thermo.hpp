@@ -42,8 +42,31 @@ struct Thermal {
 	double free_volume = 0.0; // m^3: a sealed cell's V_free
 };
 
+// (Stage 75) What a cell's mixtures hold, in quanta (GAME_SPEC §4.6): its gas, its liquid (the solvent) and each
+// particle dissolved in it, each summed over its species in order. Of its matter alone, so kept while only energy
+// moves (World::matter_revision); what is read from them is what is read from the cell.
+struct CellMixtures {
+	double gas = 0.0, liquid = 0.0;
+	std::array<double, MAX_PARTICLES> particles{};
+	// (Stage 81) the particles it has, ascending, and its ionic strength: what a probe and stands() read, once a matter
+	// change, not once a reaction
+	std::array<uint8_t, MAX_PARTICLES> present{};
+	size_t present_count = 0;
+	double ionic = 0.0;
+};
+CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell);
+
 // `meta` is the cell's (null: open). A reservoir's is not asked for.
 Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta = nullptr);
+// (Stage 75) What a cell's thermal state takes of its matter alone: sum of n_i Hf_i and of n_i Cp_i (J, J/K), each
+// species in order; `known` false when it holds a species without thermodynamic data. The same for any energy, so
+// kept while only energy moves (World::matter_revision); thermal_state from them is the value thermal_state gives.
+struct MatterSums {
+	bool known = true;
+	double formation = 0.0, capacity = 0.0;
+};
+MatterSums matter_sums(const SpeciesTable &table, const CellState &cell);
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta, const MatterSums &sums);
 
 // The enthalpy, in J, of these amounts at temperature T: sum of n_i (Hf_i + Cp_i (T - T0)).
 // `ok` is false when a species present has no thermodynamic data.
@@ -150,6 +173,8 @@ public:
 	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta = nullptr);
 	// the same, given the cell's thermal state (as thermal_state() gives it)
 	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta = nullptr);
+	// (Stage 75) the same, the cell's mixtures given (cell_mixtures: kept by its matter revision)
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta, const CellMixtures &mixtures);
 	// false when the cell has no temperature or a species named has no thermodynamic data
 	bool defined() const { return defined_; }
 	// the cell's temperature before any of the reaction, K
@@ -175,10 +200,12 @@ private:
 	// the cell's mixtures before, and what a quantum of extent adds to each
 	double gas_ = 0.0, gas_step_ = 0.0; // quanta of gas
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
-	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
+	// (Stage 81: only the table's own particles are set and read, as a Mix's: a probe is built tens of millions of times a
+	// play, and filling all MAX_PARTICLES of each cost a fifth of a step)
+	std::array<double, MAX_PARTICLES> particles_, particles_step_; // quanta of each particle dissolved
 	// (Stage 64) the particles it has or the reaction touches, ascending, and the solution's pairs among them: at() reads
 	// these alone (more pairs than fit: every pair)
-	std::array<uint8_t, MAX_PARTICLES> ions_{};
+	std::array<uint8_t, MAX_PARTICLES> ions_;
 	size_t ion_count_ = 0;
 	std::array<uint16_t, 64> pairs_{};
 	size_t pair_count_ = 0;
@@ -218,6 +245,7 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 
 // The solution's ionic strength, I = 1/2 sum m_j z_j^2 over its particles, mol/kg (0 with no liquid).
 double ionic_strength(const SpeciesTable &table, const CellState &cell);
+double ionic_strength(const SpeciesTable &table, const CellMixtures &mixtures);
 // (Stage 63) The activity model's range: Pitzer's fits hold to about 6 mol/kg of a salt; past an ionic strength of
 // MOST_IONIC_STRENGTH (a 2:2 salt at 5 mol/kg, a 1:1 at 20) the game cannot say how a solution's ions share
 // themselves, and a fast equilibrium among dissolved species alone (every species dissolved, or the solvent: water's
@@ -226,6 +254,7 @@ double ionic_strength(const SpeciesTable &table, const CellState &cell);
 inline constexpr double MOST_IONIC_STRENGTH = 20.0;
 bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
+bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms);
 
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
@@ -248,5 +277,9 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 // is false when a species it names has no thermodynamic data, or is dissolved
 // in a cell with no liquid.
 double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta = nullptr);
+// (Stage 75) several reactions' affinities in one cell at one temperature, each the value affinity() gives it: the
+// cell's mixtures and the solution's excess worked out once for them all
+void affinities(const SpeciesTable &table, const CellState &cell, std::span<const std::span<const Term>> reactions, double temperature, const CellMeta *meta, std::span<double> a,
+		std::span<bool> defined);
 
 } // namespace chem

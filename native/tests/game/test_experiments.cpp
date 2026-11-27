@@ -405,6 +405,7 @@ TEST_CASE("experiments: the prism and the grating are in the list; chosen, the s
 	std::string why;
 	REQUIRE_MESSAGE(p.ui->experiments(read("data/experiments.json"), why, [](const std::string &path) -> std::optional<std::string> { return read("data/" + path); }), why);
 	p.click("menu:experiments");
+	CHECK(lab::scroll_to(*p.ui, "experiment:prism")); // (Stage 78: ten rows in sight, the prism's further down)
 	CHECK(p.drawn("Light through a prism and a grating"));
 	p.click("experiment:prism");
 	CHECK(p.ui->message().empty());

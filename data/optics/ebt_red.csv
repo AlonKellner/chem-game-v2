@@ -1,0 +1,37 @@
+# Eriochrome Black T, H2In- (red, below pH 7): its molar absorptivity, decadic, L/mol/cm (Stage 81), CALIBRATED: no reliable
+# spectrum was found (Lindstrom's pH 3.91 curve shows no band: the dye aggregated); MgIn-'s (ebt_magnesium.csv, Lindstrom's
+# Fig. 7), a red of the same dye.
+nm,epsilon
+380,10200
+400,10200
+410,10000
+420,10100
+430,10300
+440,11500
+450,12300
+460,13400
+470,15300
+480,17500
+490,20200
+500,23300
+510,26700
+520,30300
+530,32100
+540,32500
+550,33000
+560,33200
+570,30200
+580,23600
+590,17600
+600,12300
+610,8900
+620,7300
+630,6500
+640,6100
+650,6000
+660,5800
+670,5600
+680,5100
+690,4500
+700,3900
+780,0
