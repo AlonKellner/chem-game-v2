@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69 and 66)
+## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70)
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
   pack, C2): **weak acids, bases, indicators and the salts experiments 14 to 20 weigh**. New elements Cl, K, P, Br (32
@@ -18,6 +18,12 @@
 - §13: a bench opens at its fast equilibria at the temperatures it states (`build_settled`); the free lab's reagents
   (hydrochloric acid, sodium hydroxide, vinegar, ammonia, the three indicators, six salts).
 - §20: the declared simplifications of the weak acids, the indicators and the salts.
+## Stage 70 (2026-11-27; GAME_SPEC stays 0.69.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+
+- The gates (`docs/TDD_70_GATES_AGAIN.md`): `make gates` 262 s uncached on the physics of Stages 63 and 67 (335 to 596
+  s before it): the column's tests check each step once (not twice), D2's windows as the demo's fixture lists them (a
+  long wait in two halves), ctest's measured costs shared by every worktree (a new worktree's first gate as short as
+  the others'), a probe's dead evaluation gone. The goldens unchanged.
 
 ## 0.69.0 (2026-11-26, Stage 69; signed off by the user: "Approved, merge and proceed")
 

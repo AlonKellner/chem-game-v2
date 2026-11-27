@@ -61,7 +61,9 @@ Bench beaker(Fill fill, bool column = true, int layers = LAYERS) {
 	auto world = b.build(&why);
 	REQUIRE_MESSAGE(world, why);
 	out.sim = std::make_unique<Simulation>(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
-	out.sim->set_checking(true);
+	// (Stage 70: the simulation's own checking off; run() holds every step to every invariant, and fails the test where
+	// the simulation's would only report: each step was checked twice)
+	out.sim->set_checking(false);
 	return out;
 }
 

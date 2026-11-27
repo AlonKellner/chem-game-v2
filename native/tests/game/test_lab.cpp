@@ -487,47 +487,30 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 	// the saves from the fixture `demo`, test_demo_record.cpp; the windows together check every step of the session
 	// after its first command, the gates' one checked play of it, dealt among eight entries. Stage 69: every command,
 	// not six; a save after command 1, the malachite just tipped in, its step in progress, did not continue so: its
-	// world set its walls' contacts a step before the saved one could, World::resume_step.)
-	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
-	std::vector<json> golden;
-	{
-		std::istringstream lines(read("bench/sessions/demo.jsonl"));
-		std::string line;
-		while (std::getline(lines, line)) {
-			golden.push_back(json::parse(line));
-		}
-	}
-	const auto command = [&](size_t i) {
-		json plain = session.at("script")[i];
-		plain.erase("note");
-		return plain.dump();
-	};
-	std::vector<size_t> cuts;
-	for (size_t i = 0; i < golden.size(); ++i) {
-		cuts.push_back(i);
-	}
-	// (as ctest runs it, eight entries: the commands dealt among them, the two long ones, 19 and 20, apart; under the
-	// sanitizers the first alone)
-	for (size_t k = 0; k < cuts.size(); ++k) {
+	// world set its walls' contacts a step before the saved one could, World::resume_step. Stage 70: the windows as
+	// the fixture lists them, a long wait in two halves from a save between them.)
+	const json windows = json::parse(fixtures::read("demo", "windows.json"));
+	REQUIRE(windows.size() >= 25);
+	for (size_t k = 0; k < windows.size(); ++k) {
 		if (static_cast<int>(k % static_cast<size_t>(part().count)) != part().index) {
-			continue;
+			continue; // (as ctest runs it, eight entries; under the sanitizers the first alone)
 		}
-		const size_t cut = cuts[k];
-		CAPTURE(cut);
-		const std::string saved = fixtures::read("demo", std::to_string(cut) + ".json");
+		const json &w = windows[k];
+		const std::string from = w.at("from").get<std::string>();
+		CAPTURE(from);
+		const std::string saved = fixtures::read("demo", from);
 		std::string why;
 		auto loaded = lab::Lab::load(saved, why);
 		REQUIRE_MESSAGE(loaded != nullptr, why);
 		loaded->set_checking(true);
-		CHECK(loaded->digest() == golden[cut].at("digest").get<std::string>());
-		CHECK(loaded->step() == golden[cut].at("step").get<int64_t>());
-		CHECK(json::parse(loaded->report()) == json::parse(fixtures::read("demo", std::to_string(cut) + ".report.json")));
+		const std::string report = from.substr(0, from.size() - 5) + ".report.json";
+		CHECK(json::parse(loaded->report()) == json::parse(fixtures::read("demo", report)));
 		CHECK(loaded->save() == saved); // saving what was loaded gives the same text
-		const size_t until = k + 1 < cuts.size() ? cuts[k + 1] + 1 : golden.size();
-		for (size_t i = cut + 1; i < until; ++i) {
-			REQUIRE_MESSAGE(loaded->command(command(i), why), "command " << i << ": " << why);
-			REQUIRE_MESSAGE(loaded->digest() == golden[i].at("digest").get<std::string>(), "command " << i << " departs from the record");
+		for (const json &command : w.at("commands")) {
+			REQUIRE_MESSAGE(loaded->command(command.dump(), why), command.dump() << ": " << why);
 		}
+		CHECK_MESSAGE(loaded->step() == w.at("step").get<int64_t>(), "from " << from);
+		CHECK_MESSAGE(loaded->digest() == w.at("digest").get<std::string>(), "from " << from << ": departs from the record");
 	}
 }
 

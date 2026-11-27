@@ -115,8 +115,9 @@ native-asan: asan-build
 # play longer): make gates-full sets them to 0, every entry
 ASAN_MOST_S ?= 30
 ASAN_OWN_MOST_S ?= 20
-asan_limits = $(if $(filter-out 0,$(ASAN_MOST_S)),--limit $(BUILD_CORE)/Testing/Temporary/CTestCostData.txt:$(ASAN_MOST_S),) \
-	$(if $(filter-out 0,$(ASAN_OWN_MOST_S)),--limit $(BUILD_ASAN)/Testing/Temporary/CTestCostData.txt:$(ASAN_OWN_MOST_S),)
+# (by the trees' kinds: this worktree's measured costs and every other worktree's, Stage 70)
+asan_limits = $(if $(filter-out 0,$(ASAN_MOST_S)),--limit build-core:$(ASAN_MOST_S),) \
+	$(if $(filter-out 0,$(ASAN_OWN_MOST_S)),--limit build-asan:$(ASAN_OWN_MOST_S),)
 asan-gate: asan-build
 	$(ASAN_ENV) python3 -I tools/gate_cache.py ctest $(BUILD_ASAN) --jobs $(CTEST_JOBS) $(asan_limits)
 
