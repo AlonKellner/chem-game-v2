@@ -192,6 +192,13 @@
 			"tutorial": "tutorials/carbonate_curve.json"
 		},
 		{
+			"id": "buffer",
+			"title": "A buffer and its capacity",
+			"summary": "An acetate buffer made from 10 mmol of acetic acid and 10 mmol of sodium acetate weighed on the analytical balance, its pH against Henderson and Hasselbalch's; then the same acid into it and into water: the buffer holds, the water's pH falls by four. A guess first.",
+			"bench": "benches/buffer.json",
+			"tutorial": "tutorials/buffer.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

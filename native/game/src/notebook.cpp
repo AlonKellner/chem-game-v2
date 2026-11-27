@@ -236,7 +236,10 @@ struct Parser {
 		q.measure = second == std::string::npos ? "g" : rest.substr(second + 1);
 		const std::optional<double> got = measure(view, q);
 		if (!got) {
-			why = "\"" + name + "\" is not there";
+			// (Stage 65) an item on the bench whose quantity has no value yet (a vessel's pH before it holds a liquid)
+			// is not one the bench lacks
+			std::string invalid;
+			why = find_item(view, q.item) != nullptr && valid(q, invalid) ? "\"" + name + "\" has none now" : "\"" + name + "\" is not there";
 			return false;
 		}
 		v = *got;

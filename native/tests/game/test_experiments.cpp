@@ -1238,3 +1238,31 @@ TEST_CASE("experiment carbonate_curve: followed with its own gestures, free, it 
 	pupil::follow_through(p, 7200);
 	completed(p);
 }
+
+TEST_CASE("experiment buffer: followed with its own gestures, strict, the buffer's pH is Henderson and Hasselbalch's less its activity, and it holds where water does not (Stage 65)") {
+	Pupil p("data/benches/buffer.json", "data/tutorials/buffer.json");
+	CHECK(pupil::follow_through(p, 3600) > 10);
+	completed(p);
+	const double made = truth_of(p, "buffer.ph"), a = truth_of(p, "a.ph"), b = truth_of(p, "b.ph");
+	const double hh = truth_of(p, "4.76 + log10(buffer.sodium_ion.mol / (buffer.acetic_acid_aq.mol + buffer.acetate_ion.mol - buffer.sodium_ion.mol))");
+	MESSAGE("Henderson and Hasselbalch " << hh << ", the buffer " << made << "; after the acid, the buffer " << a << ", the water " << b);
+	CHECK(made == doctest::Approx(hh - 0.11).epsilon(0.02)); // the ions' activity at 0.1 M
+	CHECK(made - a > 0.03);
+	CHECK(made - a < 0.15);
+	CHECK(b < 2.5);
+	report(p, { made, a, b });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 4.76"));
+}
+
+TEST_CASE("experiment buffer: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/buffer.json", "data/tutorials/buffer.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment buffer: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/buffer.json", "data/tutorials/buffer.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

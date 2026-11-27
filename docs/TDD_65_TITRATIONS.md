@@ -80,7 +80,7 @@ conductivity** (this stage).
 | 65.1 | Conductivity in the core: the data, the model, Walden's exponents, Q1, the gates, the study | done |
 | 65.2 | The lab: the conductivity meter, the quantity, the notebook, the screen | done |
 | 65.3 | Experiments 14 and 15: KHP, vinegar | done |
-| 65.4 | Experiments 16 and 17: two end points, a buffer | |
+| 65.4 | Experiments 16 and 17: two end points, a buffer | done |
 | 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | |
 | 65.6 | Experiment 20: conductivity | |
 | 65.7 | The goldens: the evidence and the user's approval | |
