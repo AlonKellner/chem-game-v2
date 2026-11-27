@@ -107,6 +107,11 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   `~/Library/Caches/chem-game-v2/step_costs.json` by the binary's content and the data, with the source tree when
   it was clean, so an unchanged binary is not played again and a branch's last merge gate gives main its count.
   `make gate` takes it with `GATE_STEPCOST=1`.
+- **The Godot gate builds and runs only what needs the engine** (Stage 84): the extension (`make native PICTURES=0`),
+  Godot's import and the GUT suite. The supplies' pictures are the native layer's (`chem_tool capture`, held by the
+  native tests); the suite reads none. Capturing them was about 180 s of a new worktree's gate, now none.
+  `make native` still captures them for the game, bench by bench side by side (`tools/merge_pictures.py`). The rule
+  for what goes where is the repo's: native first, a thin Godot host.
 - **A cost is held by the work, not the clock** (Stage 74): a test that bounds what something costs compares the
   instructions the process retired (`proc_pid_rusage`, `ri_instructions`; `test_signals.cpp`'s `work_done`), as a
   share of the run it adds to. On a gate's crowded machine a thread moves between the performance cores and the

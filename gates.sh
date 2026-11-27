@@ -99,7 +99,7 @@ goldens_unchanged() {
 # on the game inside the extension: a game-only change is checked by the C++
 # hosts on the C API at a commit, by every host at a merge.
 godot_gate() {
-	make native || return 1
+	make native PICTURES=0 || return 1 # (Stage 84: the suite reads no picture of the supplies; the native tests hold their capture)
 	local godot_bin
 	godot_bin=$(command -v "${GODOT_BIN:-godot}" || true)
 	cached step gut --inputs engines/godot native/hosts/godot native/capi/include run_tests_parallel.sh data bench \
