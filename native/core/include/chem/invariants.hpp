@@ -141,10 +141,10 @@ Violations check_E1(const SpeciesTable &table, const StepTrace &trace);
 // and every transform is balanced in charge, so a cell made neutral (every bench's) stays so.
 Violations check_N1(const SpeciesTable &table, const StepTrace &trace);
 
-// K1 (Stage 65): a solution's conductivity, as read. No less than nought and no more than Kohlrausch's limit (its
+// Q1 (Stage 65): a solution's conductivity, as read. No less than nought and no more than Kohlrausch's limit (its
 // ions' limiting conductivities, what no atmosphere lowers); nought where it holds no ion. `kappa` and `limit` as
 // conductivity() gives them, S/m, for the cell at T.
-Violations check_K1(const SpeciesTable &table, const CellState &cell, double kappa, double limit);
+Violations check_Q1(const SpeciesTable &table, const CellState &cell, double kappa, double limit);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.

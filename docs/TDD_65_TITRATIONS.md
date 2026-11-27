@@ -40,7 +40,7 @@ conductivity** (this stage).
   1 demal at 0, 18 and 25 C); KCl and NaCl from 0.0001 to 0.12 mol/L at 25 C (Shedlovsky); HCl from 0.0001 to 1 mol/L
   and its limiting conductance from 5 to 65 C (NSRDS 33); acetic acid from 2.8e-5 to 0.052 mol/L (MacInnes and
   Shedlovsky: the weak acid's speciation and its conductance together).
-- **Invariant K1**: a solution's conductivity is at least nought and at most Kohlrausch's limit, `Σ c_i λ°_i`; nought
+- **Invariant Q1**: a solution's conductivity is at least nought and at most Kohlrausch's limit, `Σ c_i λ°_i`; nought
   with no ions; a self-test on a corrupted reading.
 - **The lab**: a conductivity meter in `instruments.json` (resolution and accuracy, its readings in µS/cm and mS/cm),
   a vessel's quantity `conductivity` read through it like the pH; the notebook logs it; the screen's readout and the
@@ -77,8 +77,8 @@ conductivity** (this stage).
 
 | Phase | Topic | Status |
 |---|---|---|
-| 65.1 | Conductivity in the core: the data, the model, Walden's exponents, K1, the gates, the study | |
-| 65.2 | The lab: the conductivity meter, the quantity, the notebook, the screen | |
+| 65.1 | Conductivity in the core: the data, the model, Walden's exponents, Q1, the gates, the study | done |
+| 65.2 | The lab: the conductivity meter, the quantity, the notebook, the screen | done |
 | 65.3 | Experiments 14 and 15: KHP, vinegar | |
 | 65.4 | Experiments 16 and 17: two end points, a buffer | |
 | 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | |

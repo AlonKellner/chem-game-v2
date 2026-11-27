@@ -833,6 +833,27 @@ The parameters do not depend on temperature, so neither does `G_ex / T`. That me
 - The excess is all entropy, `S_ex = −G_ex / T`. That is the `−R ln γ` of each species in §4.6's
   sum.
 
+**Conductivity** (Stage 65; `docs/TDD_65_TITRATIONS.md`; `chem/thermo.hpp`, `conductivity`). A solution's, read from its
+ions, no state of its own: `κ = Σ c_i λ_i` over its ions, `c_i` per litre of the liquid at its temperature.
+- Each ion's limiting molar conductivity is Nernst and Einstein's from its diffusion coefficient, `λ°_i = z_i² F² D_i /
+  (R T)`: Kohlrausch's independent migration, one mobility for diffusion and conductance.
+- Its atmosphere lowers it, Debye, Hückel and Onsager's relaxation and electrophoresis over an ion size (Robinson and
+  Stokes): `λ_i = λ°_i − (B1 z_i² λ°_i + ½ B2 z_i²) √I / (1 + B a √I)`, I the ionic strength in mol/L,
+  `B1 = 8.2046·10⁵ / (εT)^1.5`, `B2 = 82.487 / (η (εT)^0.5)`, `B = 50.29 / (εT)^0.5` Å⁻¹, water's dielectric constant ε
+  by temperature (Malmberg and Maryott) and its viscosity η the table's; one size, a = 4.2 Å. Exact for a 1:1
+  electrolyte's pair in the limiting law; for an ion of higher charge the per-ion form is an approximation.
+- The hydrogen and hydroxide ions are taken at their exact balance with water, as the pH is: pure water reads
+  0.055 µS/cm.
+- **An ion's mobility with temperature** is Walden's rule with an exponent of its own, `D ∝ T η^−p`: 0.87 for the
+  ions, 0.61 for H⁺, whose protons hop (Grotthuss); 1, Stokes and Einstein, for a neutral solute. The column's
+  diffusion and the transport to a grain move with it (§6, §9).
+- Held to (`native/tests/test_conductivity.cpp`): KCl and NaCl within 0.5 % of Shedlovsky's from 0.0001 to
+  0.12 mol/L; HCl within 0.5 % of Hamer and DeWane's to 0.1 mol/L, its limiting conductance within 1 % from 5 to
+  45 °C; the KCl standards within 1 % at 0, 18 and 25 °C to 0.1 demal; acetic acid within 2 % of MacInnes and
+  Shedlovsky's. Invariant Q1.
+- **A room's carbon dioxide** (Stage 65): a bench's room may name `co2_ppm`, a share of its air, which every vessel's
+  air takes at the bench's opening; none unless a bench says. Water under 420 ppm reads 0.8 µS/cm.
+
 **Demo subset:**
 - Electrolytes by the equations above, with the parameters of 25 °C at every temperature:
   - CuSO₄: Pitzer and Mayorga (1974), without their C^φ: extrapolated, it turns the water's
@@ -1804,7 +1825,9 @@ drawer). Items:
 **Readings** (Stage 50). A bench's `readings` is `truth` (the default) or `instruments`, and its `seed` an
 integer (0 without one). By instruments:
 - each vessel has a **thermometer** (0.1 °C, ±0.2 °C) and, while it holds a liquid, a **pH meter** (0.01,
-  ±0.02); a reading is the truth plus its instrument's offset, drawn once from the seed within its
+  ±0.02) and (Stage 65) a **conductivity meter** (±0.5 % of its reading, auto-ranging: 0.01 µS/cm below 20, 0.1 to
+  200, 1 to 2000, then 0.01, 0.1 and 1 mS/cm; the solution's conductivity at its own temperature, not compensated to
+  25 °C); a reading is the truth plus its instrument's offset, drawn once from the seed within its
   accuracy, rounded to its resolution;
 - its liquid's volume is read by its **marks** (`data/glassware.json`: a size's spacing of marks, and the
   marks' error, ±5 % on a beaker or a flask, ±10 % on a bottle): the truth scaled by a share drawn once
@@ -2205,7 +2228,8 @@ catalogue's order, with a tutorial, "next". `Ui::progress`, `set_progress` (`che
 [ids]}`; an id the catalogue has not is kept); the C API's `cg_ui_progress`, `cg_ui_set_progress`; the Godot host
 keeps it in `progress_path` (`user://progress.json`), written whenever it changes.
 
-**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
+**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's, its pH meter's and (Stage 65) its
+conductivity meter's readings and
 what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
 buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
 
@@ -3102,6 +3126,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
+| Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |
 | C6 | Every amount is non-negative | exact | 1 |
@@ -3163,7 +3188,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
 | G4 | A control following a controller by PWM is on, over each whole period, for the steps the level at the period's start gives (its share of the period, rounded to a whole step) | exact | 26 |
 | E1 | A gas exchanged at an open mouth moves only down its mole fraction's difference (Stage 50; `chem/invariants.hpp`): along an open edge that exchanges gas and joins the two cells, no further than to equal fractions; every other gas transfer still bulk flow (T1). It fires on a gas moved against its fraction, a move a thousand times what equalises, and an exchange along an edge that does not exchange | exact | 50 |
-| I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer and pH meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
+| I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer, pH meter and (Stage 65) conductivity meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -3278,6 +3303,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
 | Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. (Stage 64: its heat capacity NBS's at infinite dilution, −293.8 J/K mol, no longer the pure liquid's; water's ionisation −223.8, pKw from the tables 12.31 at 100 °C against IAPWS's 12.25, its heat capacity held constant) |
+| Conductivity (Stage 65): one ion size for every ion; the per-ion Onsager form exact only for a 1:1 electrolyte's pair; no ion association; no viscosity of the solution itself; Walden's exponent one for all ions but H⁺, from KCl and HCl (OH⁻ and the rest assumed as K⁺ and Cl⁻); a meter reads at the solution's temperature, uncompensated | Within 0.5 % of the measured to 0.1 mol/L; past it HCl reads high (2.5 % at 0.5 mol/L, 8 % at 1) and 1 M KCl low (1.5 % at 25 °C, 6 % at 0 °C); a doubly charged ion's conductivity is less exact |
+| A room's air (Stage 65): no carbon dioxide unless a bench names `co2_ppm` | Water open to a bench's air reads 0.055 µS/cm, the ultra-pure, where distilled water open to the room's reads about 1 |
 | The weak acids' and indicators' activity (Stage 64): neutral solutes ideal (no λ); no Pitzer pair for K⁺ with hydrogen phthalate, for the indicators' ions or NH₄⁺ with acetate; no mixing terms (θ, ψ) | IUPAC's phosphate and carbonate standards within 0.03, KHP's 0.02 low; bromothymol blue's apparent pKa at I = 0.1 within 0.02 of the measured; no salting out of a neutral solute |
 | The indicators' ionisation has no heat (none read) and phenolphthalein does not fade in strong base (Stage 64) | Their colours do not move with temperature; phenolphthalein in 1 mol/kg NaOH stays pink, where a real one fades over minutes |
 | The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |

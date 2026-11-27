@@ -197,7 +197,7 @@ TEST_CASE("conductivity: pure water reads its own ions', 0.055 uS/cm at 25 C, an
 	CHECK_FALSE(conductivity(table(), dry, 298.15, kappa));
 }
 
-TEST_CASE("invariant K1: a solution's conductivity lies between nought and Kohlrausch's limit; it fires on one past it, below nought, or with no ion (Stage 65)") {
+TEST_CASE("invariant Q1: a solution's conductivity lies between nought and Kohlrausch's limit; it fires on one past it, below nought, or with no ion (Stage 65)") {
 	using namespace builtin;
 	// solutions of every kind the experiments make, at 0 to 80 C
 	for (const double kelvin : { 273.15, 298.15, 353.15 }) {
@@ -207,17 +207,17 @@ TEST_CASE("invariant K1: a solution's conductivity lies between nought and Kohlr
 			double kappa = 0.0, limit = 0.0;
 			REQUIRE(conductivity(table(), c, kelvin, kappa, &limit));
 			INFO(table().species(solute).id << " at " << kelvin << " K: " << kappa << " S/m, its limit " << limit);
-			CHECK(check_K1(table(), c, kappa, limit).empty());
+			CHECK(check_Q1(table(), c, kappa, limit).empty());
 		}
 	}
 	// corrupted readings
 	const CellState salt = solution(sodium_chloride_aq, 0.01, 298.15);
 	double kappa = 0.0, limit = 0.0;
 	REQUIRE(conductivity(table(), salt, 298.15, kappa, &limit));
-	CHECK_FALSE(check_K1(table(), salt, limit * 1.01, limit).empty());
-	CHECK_FALSE(check_K1(table(), salt, -kappa, limit).empty());
+	CHECK_FALSE(check_Q1(table(), salt, limit * 1.01, limit).empty());
+	CHECK_FALSE(check_Q1(table(), salt, -kappa, limit).empty());
 	CellState dry{ std::vector<int64_t>(static_cast<size_t>(table().species_count()), 0), 0, std::vector<int64_t>(static_cast<size_t>(table().species_count()), 0) };
 	testing::put_amount(table(), dry, glass, quanta(1.0));
-	CHECK(check_K1(table(), dry, 0.0, 0.0).empty());
-	CHECK_FALSE(check_K1(table(), dry, 1e-6, 1e-3).empty());
+	CHECK(check_Q1(table(), dry, 0.0, 0.0).empty());
+	CHECK_FALSE(check_Q1(table(), dry, 1e-6, 1e-3).empty());
 }

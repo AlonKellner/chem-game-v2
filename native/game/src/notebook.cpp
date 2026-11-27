@@ -40,6 +40,9 @@ std::optional<double> reading(const LabView &view, const Quantity &q, bool &inst
 	if (q.what == "ph") {
 		return v->read_ph;
 	}
+	if (q.what == "us_cm") { // (Stage 65)
+		return v->read_us_cm;
+	}
 	if (q.what == "liquid_ml" || q.what == "condensed_ml") {
 		return v->scale_ml ? std::nullopt : v->read_ml; // (a burette reads its scale, not its liquid)
 	}

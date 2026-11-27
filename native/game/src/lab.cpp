@@ -3616,6 +3616,9 @@ struct Lab::Impl {
 			if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 				v.ph = p;
 			}
+			if (double kappa = 0.0; item.kind == Kind::Vessel && chem::conductivity(table, cell, kelvin, kappa)) {
+				v.us_cm = kappa * 1e4; // (Stage 65: S/m to uS/cm)
+			}
 			if (item.kind == Kind::Vessel && (shaped || bubbling)) {
 				m.bubbles_into(item, kelvin, v);
 			}
@@ -3701,6 +3704,9 @@ struct Lab::Impl {
 				v.read_c = instruments::rounded(reads_c + t.accuracy * instruments::share(m.seed, item.id + ":thermometer"), t.resolution);
 				if (v.ph) {
 					v.read_ph = instruments::rounded(*v.ph + ph.accuracy * instruments::share(m.seed, item.id + ":ph"), ph.resolution);
+				}
+				if (v.us_cm) { // (Stage 65)
+					v.read_us_cm = instruments::conductivity_reading(instruments::conductivity_meter(), *v.us_cm, instruments::share(m.seed, item.id + ":conductivity"));
 				}
 				const instruments::Meter gauge = instruments::gauge(); // (Stage 54)
 				v.read_kpa = instruments::rounded(v.pressure_kpa + gauge.accuracy * instruments::share(m.seed, item.id + ":gauge"), gauge.resolution);
@@ -4106,7 +4112,22 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		impl->room = b.add_reservoir("room", room_kelvin);
 		impl->air = b.add_cell("air");
 		const double air_mol = number(room, "air_mol", 1000.0);
-		b.set_amount(impl->air, builtin::nitrogen, amount(0.79 * air_mol)).set_amount(impl->air, builtin::oxygen, amount(0.21 * air_mol));
+		// (Stage 65) the room's carbon dioxide, a share of its air by moles (`co2_ppm`; none unless a bench says)
+		const double co2 = number(room, "co2_ppm", 0.0) * 1e-6;
+		if (!(co2 >= 0.0 && co2 < 0.1)) {
+			why = "a room's co2_ppm is from 0 to 100000";
+			return nullptr;
+		}
+		// air of its nitrogen, oxygen and carbon dioxide (none: the two alone, as they always were)
+		const auto air_of = [&](CellId cell, double mol) {
+			if (co2 > 0.0) {
+				b.set_amount(cell, builtin::nitrogen, amount(0.79 * (1.0 - co2) * mol)).set_amount(cell, builtin::oxygen, amount(0.21 * (1.0 - co2) * mol));
+				b.set_amount(cell, builtin::carbon_dioxide, amount(co2 * mol));
+			} else {
+				b.set_amount(cell, builtin::nitrogen, amount(0.79 * mol)).set_amount(cell, builtin::oxygen, amount(0.21 * mol));
+			}
+		};
+		air_of(impl->air, air_mol);
 		b.set_temperature(impl->air, room_kelvin);
 		b.add_edge(impl->air, impl->room, PHASES_NONE, 1000.0);
 
@@ -4366,7 +4387,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				// open to the room: air fills what its contents leave
 				const double air = P_ATMOSPHERE * (volume - condensed) / (GAS_CONSTANT * room_kelvin);
 				if (air > 0.0) {
-					b.set_amount(item.cell, builtin::nitrogen, amount(0.79 * air)).set_amount(item.cell, builtin::oxygen, amount(0.21 * air));
+					air_of(item.cell, air);
 				}
 				item.mouth = b.add_edge(item.cell, impl->air, PHASES_GAS);
 			}
@@ -7020,6 +7041,9 @@ std::string Lab::report() const {
 		}
 		if (double p = 0.0; item.kind == Kind::Vessel && chem::ph(table, cell, kelvin, p)) {
 			j["ph"] = p; // Stage 43
+		}
+		if (double kappa = 0.0; item.kind == Kind::Vessel && chem::conductivity(table, cell, kelvin, kappa)) {
+			j["us_cm"] = kappa * 1e4; // Stage 65
 		}
 		j["gas_ml"] = fill.gas * 1e6;
 		j["condensed_ml"] = fill.condensed * 1e6;

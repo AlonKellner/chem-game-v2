@@ -792,7 +792,7 @@ int conductivity_study() {
 		double t = 0.0;
 		sim.world().temperature(cell, t);
 		const bool read = conductivity(table, end, t, kappa, &limit);
-		const bool clean = read && check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis && check_K1(table, end, kappa, limit).empty();
+		const bool clean = read && check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis && check_Q1(table, end, kappa, limit).empty();
 		double volume = 0.0, of = 0.0;
 		for (size_t k = 0; k < end.amount.size(); ++k) {
 			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(k) });

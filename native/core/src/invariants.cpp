@@ -322,7 +322,7 @@ Violations check_N1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
-Violations check_K1(const SpeciesTable &table, const CellState &cell, double kappa, double limit) {
+Violations check_Q1(const SpeciesTable &table, const CellState &cell, double kappa, double limit) {
 	Violations out;
 	bool ions = false;
 	for (size_t s = 0; s < cell.amount.size() && !ions; ++s) {
@@ -337,13 +337,13 @@ Violations check_K1(const SpeciesTable &table, const CellState &cell, double kap
 	}
 	char buffer[200];
 	if (!(kappa >= 0.0) || !(limit >= 0.0)) {
-		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m, its limit %g: less than nought, or not a number", kappa, limit);
+		std::snprintf(buffer, sizeof buffer, "Q1: a conductivity of %g S/m, its limit %g: less than nought, or not a number", kappa, limit);
 		out.push_back(buffer);
 	} else if (kappa > limit * (1.0 + 1e-12)) {
-		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m, past Kohlrausch's limit of %g", kappa, limit);
+		std::snprintf(buffer, sizeof buffer, "Q1: a conductivity of %g S/m, past Kohlrausch's limit of %g", kappa, limit);
 		out.push_back(buffer);
 	} else if (!ions && kappa != 0.0) {
-		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m in a cell with no ion", kappa);
+		std::snprintf(buffer, sizeof buffer, "Q1: a conductivity of %g S/m in a cell with no ion", kappa);
 		out.push_back(buffer);
 	}
 	return out;

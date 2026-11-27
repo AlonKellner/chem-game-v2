@@ -1857,6 +1857,9 @@ struct Ui::Impl {
 			if (v.ph) {
 				whats.emplace_back("ph");
 			}
+			if (v.us_cm) {
+				whats.emplace_back("us_cm"); // (Stage 65)
+			}
 			if (v.scale_ml) {
 				whats.emplace_back("scale_ml");
 			} else if (!view.instruments || v.read_ml) {
@@ -1870,7 +1873,7 @@ struct Ui::Impl {
 		return out;
 	}
 	static std::string record_name(const std::string &what) {
-		return what == "celsius" ? "+ T" : what == "ph" ? "+ pH" : what == "reads_g" ? "+ mass" : what == "kpa" ? "+ kPa" : what == "absorbance" ? "+ A" : "+ mL";
+		return what == "celsius" ? "+ T" : what == "ph" ? "+ pH" : what == "us_cm" ? "+ uS/cm" : what == "reads_g" ? "+ mass" : what == "kpa" ? "+ kPa" : what == "absorbance" ? "+ A" : "+ mL";
 	}
 
 	// ---- the debug panel (§13.6): the selected item from the inside
@@ -4054,7 +4057,7 @@ struct Ui::Impl {
 	Rect goal_pick(int i) const { return Rect{ EDITOR.x + 20, term_y(pick_row) + 32 + static_cast<float>(i) * 26, 250, 24 }; }
 	bool goal_species(int r) const {
 		const std::string &w = draft.terms[static_cast<size_t>(r)].quantity.what;
-		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml" || w == "ph");
+		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml" || w == "ph" || w == "us_cm");
 	}
 	void goal_edit_press(float x, float y) {
 		if (pick_row >= 0) {
@@ -7204,9 +7207,11 @@ struct Ui::Impl {
 					row("\"" + v.label + "\"", INK, 16);
 				}
 				if (measured) {
-					row((v.read_c ? text_of("thermometer %.1f C", *v.read_c) : std::string()) + (v.read_ph ? text_of(", pH meter %.2f", *v.read_ph) : std::string()));
+					row((v.read_c ? text_of("thermometer %.1f C", *v.read_c) : std::string()) + (v.read_ph ? text_of(", pH meter %.2f", *v.read_ph) : std::string()) +
+							(v.read_us_cm ? ", " + shown(Quantity{ v.id, "us_cm", "g" }, *v.read_us_cm) : std::string())); // (Stage 65: its conductivity meter's)
 				} else {
-					row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
+					row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()) +
+							(v.us_cm ? ", " + shown(Quantity{ v.id, "us_cm", "g" }, *v.us_cm) : std::string()));
 				}
 				if (v.layers.size() > 1 && measured) {
 					row(text_of("layered: %d layers", static_cast<int>(v.layers.size())), DIM, 15);
