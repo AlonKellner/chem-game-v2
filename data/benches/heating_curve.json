@@ -1,0 +1,80 @@
+{
+	"format": "chem-bench/2",
+	"note": "A heating curve and ice's heat of fusion (GAME_SPEC §8, §13.7, Stage 71; docs/CURRICULUM.md, experiment 26): a 250 mL beaker of 100 g of crushed ice from the freezer at -10 C and the lab's burner; a foam cup of 100 g of water at 40 C and a jar of 20 g of ice at 0 C, in two cubes. Heated and stirred, the ice warms to 0 C, holds there while it melts, the water warms to 100 C and holds there while it boils: the plateaus. The cubes into the warm water: what its fall in temperature gives up melts them and warms their water, the heat of fusion (IAPWS: 6.01 kJ/mol, 334 J/g).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "ice",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"celsius": -10,
+			"at": [
+				12,
+				7
+			],
+			"label": "crushed ice, from the freezer",
+			"contents": {
+				"ice": {
+					"g": 100,
+					"particles": 2000
+				}
+			}
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25
+		},
+		{
+			"id": "cup",
+			"kind": "vessel",
+			"glassware": "foam_cup",
+			"volume_ml": 237,
+			"wall": "polystyrene_foam",
+			"wall_g": 2.6,
+			"loss": 0.12,
+			"celsius": 40,
+			"at": [
+				20,
+				8
+			],
+			"label": "foam cup of warm water, with a lid and a thermometer",
+			"contents": {
+				"water": {
+					"g": 100
+				}
+			}
+		},
+		{
+			"id": "cubes",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"celsius": 0,
+			"at": [
+				25,
+				8
+			],
+			"label": "two ice cubes, 20 g",
+			"contents": {
+				"ice": {
+					"g": 20,
+					"particles": 2
+				}
+			}
+		}
+	]
+}

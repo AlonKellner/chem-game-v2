@@ -93,19 +93,60 @@ Other liquids (C9) and burning (C10), the rest of step I, are later stages.
 
 | Phase | Topic | Status |
 |---|---|---|
-| 71.1 | Measured first: ice's data (IAPWS, ICT, the growth, the supercooling, the optics, ice's conductivity); `chem_tool study ice` | |
-| 71.2 | The core: `ice`, `water_freezing`; heat-limited surface steps; the nucleation barrier; the gate tests | |
-| 71.3 | The column: a lighter solid floats; the lab's sediment and the picture's floating solid | |
-| 71.4 | Ice seen: its medium in the visible and the long wave | |
-| 71.5 | A test tube; a vessel in a vessel: stand, the volume integral, ring-to-layer contacts, save and digest | |
-| 71.6 | The screen: "stand it in", drawing one inside another | |
-| 71.7 | The experiments `heating_curve` and `freezing_point` | |
-| 71.8 | Sessions and goldens (with the user's approval); GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 71.1 | Measured first: ice's data (IAPWS, ICT, the growth, the supercooling, the optics, ice's conductivity); `chem_tool study ice` | Done: the model melts at 273.15227 K (IAPWS 273.152519), its heat of fusion 6006.84 J/mol (6006.8); CuSO₄'s lowering within 1.2 % of ICT to 0.8 mol/kg, NaCl's within 0.4 % to 0.1, 3 % at 1, 9 % at 4 (Pitzer's 25 °C parameters at 0 °C); a 0.3 g tube cooled at 4.3 K/min first freezes at −10.44 °C (Wilson and Haymet's −10.45) |
+| 71.2 | The core: `ice`, `water_freezing`; heat-limited surface steps; the nucleation barrier; a solid's grain as a mush; the gate tests | Done; the goldens re-recorded with the user's approval (their measurements identical to main's, line for line; the digest moves with the species added) |
+| 71.3 | The column: a lighter solid floats; a column's overflow | Done. The picture of a floating solid: Open |
+| 71.4 | Ice seen: its medium in the visible (0.9, calibrated) and the long wave (0.970 from Warren and Brandt's n + ik) | Done |
+| 71.5 | A test tube (ISO 4142); a vessel in a vessel: `stand`, the volume integral (`outside_below`, `World::reshape_column`), ring-to-layer contacts (`set_facings`), the bath held, saved and loaded; a bench vessel at its own temperature (`celsius`) | Done |
+| 71.6 | The screen: "stand it in", a standing tube drawn at its bath's scale on the nearer layer, picked, labelled, put back in place | Done |
+| 71.7 | The experiments `freezing_point` (curriculum 33) and `heating_curve` (curriculum 26) | Done |
+| 71.8 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Tests
 
-(to be written with each phase)
+`native/tests/test_ice.cpp` (Stage 71):
+- measured: water freezes at IAPWS's point with its heat of fusion, ice its entropy there (and its cp, density and
+  conductivity, Carnahan's 612/T);
+- measured: solutions freeze at the International Critical Tables' points (CuSO₄ and NaCl, 0.01 to 4 mol/kg);
+- measured: water supercools in a glass tube to Wilson and Haymet's median, colder as it cools faster (0.2 to 0.8 K
+  at eight times the rate);
+- a supercooled tube jumps back to its freezing point and holds there while it freezes, every invariant held (within
+  50 mK in 20 s; the plateau within 1 mK of it; a mush of over a thousand grains);
+- melting in water is limited by the heat the water carries to it, Nu 2 at rest and more stirred;
+- ice floats up a column through a denser solution to its topmost liquid layer, a denser solid still sinks.
+
+`native/tests/game/test_bath.cpp` (Stage 71): a test tube is ISO 4142's; a tube stood in a beaker raises its level by
+what it displaces (8.6 mL at 4.5 cm), the beaker held where it stands, taken out its own shape again; a brim-full
+beaker spills what a tube pushes over (16.6 g for 18.0 mL); heat crosses ring by layer (a 40 °C tube in 2 °C water:
+its floor 8.9 °C, its top ring 37.7 °C after 30 s; on the bench, in air, it cools far less); saved and loaded it goes
+on exactly; on the screen, "stand it in"; measured: ice's long-wave emissivity is Warren and Brandt's.
+
+`native/tests/game/test_experiments.cpp`: `freezing_point` and `heating_curve`, each strict with its own gestures, at
+a person's pace, and free. `freezing_point`: the bath to −23 °C, the water supercooled to −9.7 °C, all ice at 0 °C;
+the solution to −11.4 °C, then from −2.0 °C falling as its ice concentrates it. `heating_curve`: the cup from 40 °C
+to 20.0 °C, 334.6 J/g; the ice from −10 °C, flat at 0 °C, then at 100.1 °C.
+
+`datagen_refuses_barrier_with_order` (ctest); and each `datagen_refuses_*` now checks its own message: six of the
+nine fixtures had been refused since Stage 63 for a species their file holds (an ion without its ions), passing for
+the wrong reason; their copper ion given its ion.
 
 ## Open
 
-(to be found)
+- **A floating solid's picture.** The pass draws a vessel's solids as a sediment on its floor, a flat section and a
+  pile (`contents::lying`; the shader's and the reference tracer's pile): floating ice is drawn there too, white. A
+  solid that floats needs a pile under the surface in both tracers (§12).
+- **One vessel inside another** is drawn on the layer nearer the eye (§12.3): not seen through the bath's front wall
+  and liquid, and the bath's liquid not seen through it. Tracing a body inside another's liquid needs both tracers to
+  follow a ray into a neighbour on its own layer.
+- **A floating solid counted whole in its vessel**: a brim-full glass with ice spills its ice's whole volume's worth
+  (about 9 % more than the liquid it displaces); the ice cannot stand over the brim (V2).
+- **Sublimation and evaporation from ice** are not modelled: dry ice below 0 °C is stable in dry air.
+- **The salt's dihydrate** (hydrohalite) is not modelled: ice and salt meet at the model's −23 °C, not −21.1 °C.
+- **Pitzer's parameters at 0 °C** are their 25 °C values: sodium chloride's freezing points 3 % low at 1 mol/kg and 9 %
+  at 4.
+- **Dendrites**: ice grows into a supercooled liquid as a mush of grains of 100 µm (calibrated); a real dendrite's
+  tip runs at Shibkov's speed, which the model's equal spheres do not follow.
+- **A solution's freezing point** is read where its curve starts after the jump: its ice concentrates what is left, so
+  its line falls, as a real one does.
+- **The bench's `celsius`** sets a vessel's contents and glass; a jar of ice from the freezer warms in the room's air
+  as any vessel does (its cubes melt if left: the calorimetry is done first).

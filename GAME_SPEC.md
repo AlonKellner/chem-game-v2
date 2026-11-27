@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.69.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.71.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2973,6 +2973,14 @@ stand on.
     first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
     excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
     one crystal. Its report: the stirred beaker's crystals, predicted first.
+  - `freezing_point`, *freezing points* (Stage 71; experiment 33): a freezing mixture made of an ice bath and salt
+    (to −23 °C), then a test tube of water and one of 0.50 mol/kg sodium chloride stood in it (§6, a vessel in a
+    vessel) and logged: the water supercools to −9.7 °C, jumps back to 0 °C and holds while it freezes; the solution
+    jumps back to about −2 °C and falls as its ice concentrates it. A guess first; its report: the solution's
+    freezing point, and the cryoscopic constant from it (1.71 against an ideal 1.86).
+  - `heating_curve`, *a heating curve and the heat of fusion* (Stage 71; experiment 26): two ice cubes stirred into
+    warm water in a foam cup (40 to 20.0 °C: 334.6 J/g), then crushed ice from the freezer heated and stirred, logged:
+    flat at 0 °C while it melts, flat at 100 °C while it boils. A guess first; its report: the heat of fusion.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3327,6 +3335,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
+| Ice (Stage 71): its growth into a supercooled liquid a mush of 100 µm grains, not dendrites; a floating solid drawn as a sediment on the floor and counted whole in its vessel; no sublimation; no hydrohalite; Pitzer's 25 °C parameters at 0 °C; a vessel standing in another drawn on the layer nearer the eye | A tube's recalescence takes seconds where a dendrite's takes less; a brim-full glass with ice spills 9 % of the ice's volume more than it would; ice and salt meet at −23 °C, not −21.1; sodium chloride's freezing points 3 % low at 1 mol/kg, 9 % at 4 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off. Stage 66: a seed's fragments share its mass at once (a 2 mm seed and its first thousand 6 µm fragments are a thousand crystals of 0.2 mm), so a bred crop's area is overstated at first and the seed itself is not seen apart; the calibrated breeding rate takes it in |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
