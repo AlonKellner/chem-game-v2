@@ -1,5 +1,13 @@
 # GAME_SPEC version history
 
+## 0.73.0 (2026-11-27, Stage 73; signed off by the user: "Approved, merge and proceed")
+
+- §6, the wall in rings (Stage 73, `docs/TDD_73_SMOOTH_FLOOR.md`): an unstable horizontal plate's convection (a
+  floor heated from below, a base colder than the air under it) takes Lienhard's thick boundary layers' correction
+  (8.37b) at every Nusselt number, not only under 10, where it left a step down of 7 % (`walls::unstable_plate`,
+  one form for the floor and the disc). The floor's surface under its glass is one everywhere. The demo: the oxide
+  gone and the flask cool 0.1 s sooner, 0.2 mg more distillate; the sessions re-recorded with the user's approval.
+
 ## 0.72.0 (2026-11-27, Stage 72; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings (Stage 72, `docs/TDD_72_STEP_CHEAPER.md`): a floor's inside surface under half its glass found
