@@ -286,12 +286,31 @@ void Simulation::stratify(const Column &col) {
 		const Thermal &t = thermal(col.cells[i]);
 		return t.defined && t.temperature > 0.0 ? t.temperature : T0;
 	};
-	// what of a cell is of these phases (never its wall), with its enthalpy at its temperature
-	const auto move = [&](size_t from, size_t to, PhaseMask phases, double share) {
+	// (Stage 71) a layer's liquid's density at its temperature, kg/m^3 (0 with none), and a solid's own
+	const auto density_of = [&](size_t i) {
+		double rho = 0.0;
+		return liquid_density(table, state(i), volume_kelvin(i), rho) ? rho : 0.0;
+	};
+	const auto solid_density = [&](SpeciesId s) {
+		const SpeciesDef &d = table.species(s);
+		return d.molar_volume > 0.0 ? static_cast<double>(table.molar_mass_ug(s)) * 1e-9 / d.molar_volume : 0.0;
+	};
+	enum class Solids { All, Sinking, Floating };
+	// what of a cell is of these phases (never its wall), with its enthalpy at its temperature; of its solids (Stage
+	// 71) those that sink into the layer `to`'s liquid (any out of a layer with none), or those that float on it
+	const auto move = [&](size_t from, size_t to, PhaseMask phases, double share, Solids which = Solids::All) {
 		const CellState &c = state(from);
+		const double rho_to = which == Solids::All ? 0.0 : density_of(to);
+		const bool held_up = holds(table, c, Phase::Liquid);
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < c.amount.size(); ++s) {
 			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (d.phase == Phase::Solid && which != Solids::All) {
+				const bool lighter = solid_density(SpeciesId{ static_cast<int32_t>(s) }) < rho_to;
+				if (which == Solids::Sinking ? held_up && lighter : !lighter) {
+					continue;
+				}
+			}
 			if (c.amount[s] > 0 && !d.wall && (phases & phase_bit(d.phase)) != 0) {
 				const auto q = share >= 1.0 ? c.amount[s] : static_cast<int64_t>(static_cast<double>(c.amount[s]) * share);
 				if (q > 0) {
@@ -335,10 +354,15 @@ void Simulation::stratify(const Column &col) {
 			}
 		}
 	}
-	// solids sink to the lowest liquid
+	// solids sink to the lowest liquid; (Stage 71) one lighter than the liquid floats up to the topmost (ice on water)
 	for (size_t i = 0; i + 1 < n; ++i) {
 		if (holds(table, state(i), Phase::Solid) && liquid(i + 1)) {
-			move(i, i + 1, solids, 1.0);
+			move(i, i + 1, solids, 1.0, Solids::Sinking);
+		}
+	}
+	for (size_t i = n - 1; i >= 1; --i) {
+		if (holds(table, state(i), Phase::Solid) && liquid(i) && liquid(i - 1)) {
+			move(i, i - 1, solids, 1.0, Solids::Floating);
 		}
 	}
 	// layers merge where the lower is the lighter, or where two are alike and no steep step is beside them

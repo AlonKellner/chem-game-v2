@@ -427,7 +427,8 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
 - **Each step** (the column's process, after the drains and before settling):
   - gas in a layer rises to the layer over it, carrying its enthalpy;
   - the layers in use stay together under the top: one with no liquid over it rises into that place;
-  - solids sink to the lowest liquid;
+  - solids sink to the lowest liquid; a solid lighter than the liquid it is in (Stage 71: ice on water) floats up to
+    the topmost liquid instead (one with no liquid round it falls into the liquid under it);
   - two layers merge where the lower is the lighter (it overturns: convective adjustment), or where they are alike
     and no steep step is beside them (one is enough);
   - stirred, the layers mix as far as the turning pays (Stage 49): of the work the turning dissipates this step
@@ -493,6 +494,24 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
   solids that have one, and a bed with none conducts as its fluid.
 - **L1** (§18) holds a column together.
+- **Its overflow** (Stage 71): a column that holds more than its vessel (another stood in it, its liquids grown)
+  spills its excess from its topmost liquid down, past what L1 allows and no sooner.
+- **A vessel in a vessel** (Stage 71; `docs/TDD_71_ICE.md`; asked for by the user, 2026-11-27: "each ring interacts
+  with the layers it touches, heat transfer is by layer/ring, not full vessel to full vessel"; "the inner vessel
+  should change the volume integral of the outer vessel, such that each layer is displaced the correct amount,
+  increasing the level the correct amount"). The lab's `stand {item, in}` stands a vessel upright on another's
+  floor, where its outside fits within the other's inside at every height and its foot with the others' in its
+  floor; `place` takes it out. While it stands there:
+  - **the other's volume integral** is its inside's less the inner's outside, from its foot to its rim
+    (`glass::Vessel::outside_below`): the world's column reshaped (`World::reshape_column`: its whole volume and its
+    volume under each height), the lab's levels read through it. Each layer's heights, the level, the surface, the
+    overflow and what fits move by what the inner displaces at its height; a brim-full one spills it;
+  - **ring by layer**: each ring of the inner's wall has an edge to each cell of the other's column, its conductance
+    what of the ring's outside lies in that cell's heights: the liquid by the wall into water (Churchill and Chu,
+    the other's depth its length), the gas over it by the wall into air, in series with half its glass; its floor's
+    base the other's lowest cell. Its rings lose to the room only by what of them stands over the other's brim;
+  - the other holds where it stands (it cannot be moved, stowed or poured from) while one stands in it; saved and
+    loaded, the edges are the world's, found again.
 
 **Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
 a dish keeping its own carbon dioxide and steam). Gas moved only by bulk flow until Stage 50; now an open vessel's
@@ -610,6 +629,23 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
   depression are consequences, not rules.
 - **Melting and freezing, sublimation, supercritical fluids** use the same construction with the
   corresponding species.
+- **Ice** (Stage 71, `docs/TDD_71_ICE.md`): `ice`, H2O(s), from IAPWS R10-06 (melting at 101 325 Pa at
+  273.152519 K, its heat of fusion 6006.8 J/mol, its cp and density there; hf and s0 at 298.15 K fitted so the model
+  melts at IAPWS's point with water's own cp, its absolute entropy then IAPWS's). Melting and freezing are one
+  kinetic reaction, `water_freezing`, H2O(l) → H2O(s), the surface law (§7) at ice's surface:
+  - **heat, not attachment, sets its pace**: a surface reaction that carries no dissolved species (a pure liquid
+    freezing, a solid melting) is limited in series by the heat its change gives out or takes in, carried between
+    the surface and the liquid, `Nu k / d (T − T_eq) / |ΔH|` per m², `T − T_eq = A T / ΔH`, Nu Sano's form with the
+    Prandtl number (2 at rest, raised by the stirring's dissipation, Stage 57);
+  - **supercooling**: ice's first crystal by a nucleation barrier, `nucleation · (kg of water) · e^(−B / ln² S)` a
+    second (the classical form, `nucleation_barrier`), fitted to Wilson and Haymet's tubes (a median at −10.45 °C
+    cooled at 4.5 K/min) and Wilson's spread; once one is there it grows, the heat of freezing warms the liquid back
+    to its freezing point, and it holds there while the cold draws the heat away;
+  - **a mush**: a solid with a grain (`grain_um`) grows by the surface law as crystals no larger than it; ice's
+    100 µm, its dendrites' large area in a supercooled liquid (calibrated);
+  - **freezing-point depression** through the water's activity (Pitzer's, §10): copper sulfate's lowering within
+    1.2 % of the International Critical Tables to 0.8 mol/kg, sodium chloride's within 3 % to 1 mol/kg;
+  - ice floats (§6).
 
 - **The equilibrium law** (`data/reactions.json`, `"law": "equilibrium"`): each step, in each
   cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
@@ -641,7 +677,8 @@ brings.
 **Demo subset:** water liquid/vapour projection in the flask, the balloon and the condenser;
 condensate drips to the beaker.
 **Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium; solute
-activity is in it from Stage 19 (Pitzer's excess, §10). Kinetic phase changes and melting are *PLANNED*.
+activity is in it from Stage 19 (Pitzer's excess, §10). Stage 71: ice, melting and freezing as a kinetic phase
+change. Evaporation from a still surface and sublimation remain *PLANNED*.
 
 ## 9. Solutions and crystallization
 
@@ -1550,7 +1587,8 @@ of every ray through its area, and its colour is their average (a box filter).
     seen, through half a chord of its liquid: bent, absorbed and turned away by whatever is in
     front of it, as the wall's light is. Nothing is added to a pixel outside its history.
   - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
-    into a neighbour on its own layer; a vessel standing inside another (a bath) is not built.
+    into a neighbour on its own layer. A vessel standing inside another (Stage 71: a bath) is drawn on the layer
+    nearer the eye than the one it stands in: it is not seen through the other's front wall and liquid.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
 - **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If
@@ -2966,6 +3004,14 @@ stand on.
     first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
     excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
     one crystal. Its report: the stirred beaker's crystals, predicted first.
+  - `freezing_point`, *freezing points* (Stage 71; experiment 33): a freezing mixture made of an ice bath and salt
+    (to −23 °C), then a test tube of water and one of 0.50 mol/kg sodium chloride stood in it (§6, a vessel in a
+    vessel) and logged: the water supercools to −9.7 °C, jumps back to 0 °C and holds while it freezes; the solution
+    jumps back to about −2 °C and falls as its ice concentrates it. A guess first; its report: the solution's
+    freezing point, and the cryoscopic constant from it (1.71 against an ideal 1.86).
+  - `heating_curve`, *a heating curve and the heat of fusion* (Stage 71; experiment 26): two ice cubes stirred into
+    warm water in a foam cup (40 to 20.0 °C: 334.6 J/g), then crushed ice from the freezer heated and stirred, logged:
+    flat at 0 °C while it melts, flat at 100 °C while it boils. A guess first; its report: the heat of fusion.
   - Stage 65's, read by instruments, each with its report:
     - `standardise` (experiment 14): sodium hydroxide of about 0.1 M (drawn by the seed) against half a gram of KHP on
       the analytical balance, run in fast to 18 mL, then drop by drop to phenolphthalein's first lasting pink; at the
@@ -3342,6 +3388,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
+| Ice (Stage 71): its growth into a supercooled liquid a mush of 100 µm grains, not dendrites; a floating solid drawn as a sediment on the floor and counted whole in its vessel; no sublimation; no hydrohalite; Pitzer's 25 °C parameters at 0 °C; a vessel standing in another drawn on the layer nearer the eye | A tube's recalescence takes seconds where a dendrite's takes less; a brim-full glass with ice spills 9 % of the ice's volume more than it would; ice and salt meet at −23 °C, not −21.1; sodium chloride's freezing points 3 % low at 1 mol/kg, 9 % at 4 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off. Stage 66: a seed's fragments share its mass at once (a 2 mm seed and its first thousand 6 µm fragments are a thousand crystals of 0.2 mm), so a bred crop's area is overstated at first and the seed itself is not seen apart; the calibrated breeding rate takes it in |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |

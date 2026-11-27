@@ -217,6 +217,9 @@ struct Kinetics {
 	bool dissolves_by_transport = false;
 	double secondary = 0.0; // Surface (Stage 66): 1/s per (W/kg) per kg of the crystals
 	double secondary_order = 0.0;
+	// Surface (Stage 71): the primary nucleation's barrier, the classical form: where it is given, nucleation *
+	// (kg of solvent) * e^(-B / ln^2 S) a second in place of the power law (ice's supercooling)
+	double nucleation_barrier = 0.0;
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {

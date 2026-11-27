@@ -60,7 +60,7 @@ struct LayerView {
 struct ItemView {
 	std::string id;
 	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48), balance (Stage 50); a signal part: timer, monitor, alarm
-	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
+	std::string place; // cabinet, bench, on, under, outbox, trash, in (Stage 71: standing in a vessel); a signal part: bench, circuit, trash
 	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
@@ -118,6 +118,10 @@ struct ItemView {
 	double nominal_ml = 0.0; // its nominal capacity: its name, and how large it is drawn
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
+	// (Stage 71) a vessel standing in another: that one's id; a vessel with others standing in it: what they displace
+	// under its surface, mL (its level stands as its contents' and this together would in it alone)
+	std::string stands_in;
+	double displaced_ml = 0.0;
 	double liquid_ml = 0.0;
 	double solid_ml = 0.0; // its solids, not its wall: what rests on its floor (Stage 26: not what is condensed less what is liquid, which counts a solute's volume as solid)
 	std::vector<SubstanceView> contents;

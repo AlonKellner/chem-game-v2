@@ -2,6 +2,6 @@
 	{"id": "water", "formula": "H2O", "phase": "l"},
 	{"id": "hydrogen", "formula": "H2", "phase": "g"},
 	{"id": "oxygen", "formula": "O2", "phase": "g"},
-	{"id": "cupric", "formula": "Cu", "phase": "aq", "charge": 2},
+	{"id": "cupric", "formula": "Cu+2", "phase": "aq", "ions": {"Cu+2": 1}},
 	{"id": "copper", "formula": "Cu", "phase": "s"}
 ]}

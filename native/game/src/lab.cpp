@@ -90,7 +90,7 @@ constexpr PhaseMask HANDLED = static_cast<PhaseMask>(PHASES_LIQUID | phase_bit(P
 // a balance (Stage 50): an instrument under a vessel, as a burner is, with no cell and no edge
 enum class Kind { Vessel, Bag, Burner, Tray, Stopper, Viewer, Thermal, Balance, Spectro };
 // On: on a vessel's mouth. Under: a burner or a balance (Stage 50) under a vessel. Trash (Stage 34): put away, to be restored; what it holds stays in the world
-enum class Place { Cabinet, Bench, On, Under, Outbox, Trash };
+enum class Place { Cabinet, Bench, On, Under, Outbox, Trash, In }; // (Stage 71) In: standing in another vessel
 
 struct Item {
 	std::string id;
@@ -120,6 +120,10 @@ struct Item {
 	std::vector<int64_t> walls_were;
 	// its floor's cavities hold nuclei (Stage 53): it boiled and has not cooled under its boiling point since
 	bool floor_nucleating = false;
+	// (Stage 71) a vessel standing in another (GAME_SPEC §6, a vessel in a vessel): that one; and the edges between each
+	// of its rings and each cell of that one's column, set each step by what of the ring faces what of the cell
+	int stands_in = -1;
+	std::vector<Contact> facing;
 	EdgeId mouth; // a vessel's opening to the room's air, while open
 	double full = 0.0; // a burner's conductance with its valve fully open, W/K
 	EdgeId heats; // a burner: its edge to the vessel over it
@@ -252,7 +256,7 @@ bool from_bits(const json &j, double &v) {
 }
 
 const char *const KIND_NAME[] = { "vessel", "balloon", "burner", "tray", "stopper", "viewer", "thermal", "balance", "spectrophotometer" };
-const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash" };
+const char *const PLACE_NAME[] = { "cabinet", "bench", "on", "under", "outbox", "trash", "in" };
 
 // A wall's glass (Stage 53): whether it loses to the room by its own outside (its species' conductivity and emittance
 // known); the resistance of half a ring's glass to heat crossing it, m^2 K / W (none where its conductivity is not
@@ -299,9 +303,9 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount, uint6
 // stand over a burner. A bench may give its own ("size").
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h, const std::string &glassware = "") {
 	// tall glassware (Stage 52): a burette, a pipette, a cylinder, a volumetric flask stand on narrow, tall footprints
-	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask")) {
-		w = 2;
-		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : volume_ml > 50.0 ? 8 : 6;
+	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask" || glassware == "test_tube")) {
+		w = glassware == "test_tube" ? 1 : 2; // (Stage 71) a test tube: one square wide
+		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : glassware == "test_tube" ? 6 : volume_ml > 50.0 ? 8 : 6;
 		return;
 	}
 	if (kind == "viewer") {
@@ -1896,6 +1900,10 @@ struct Lab::Impl {
 			why = "\"" + x.id + "\" has \"" + items[static_cast<size_t>(x.holds >= 0 ? x.holds : x.drains_to)].id + "\" on it or under it: take it away first";
 			return false;
 		}
+		if (has_standing(thing) || x.stands_in >= 0) { // (Stage 71) a bath with a tube in it, or a tube in a bath
+			why = "\"" + x.id + "\" " + (x.stands_in >= 0 ? "stands in \"" + items[static_cast<size_t>(x.stands_in)].id + "\": take it out first" : "has a vessel standing in it: take that out first");
+			return false;
+		}
 		for (const Item &b : items) {
 			if (inverted && (b.kind == Kind::Burner || stands_under(b.kind)) && b.under == thing) { // a held pour lifts it a moment; upside down it would stand there
 				why = "\"" + x.id + "\" stands over \"" + b.id + "\": take it away first";
@@ -2421,6 +2429,79 @@ struct Lab::Impl {
 		}
 		return found->second;
 	}
+	// (Stage 71) What the vessels standing in `outer` displace of its inside under height y (cm over its base), cm^3:
+	// each one's outside under y less its foot, standing on the outer's floor
+	double displaced_cm3(int outer, double y) const {
+		const Item &o = items[static_cast<size_t>(outer)];
+		const glass::Vessel *g = glass::find(o.glassware, o.nominal_ml);
+		double v = 0.0;
+		for (const Item &i : items) {
+			const glass::Vessel *inner = i.stands_in == outer && !i.retired ? glass::find(i.glassware, i.nominal_ml) : nullptr;
+			if (g != nullptr && inner != nullptr && y > g->floor) {
+				v += inner->outside_below(std::min(y, g->height) - g->floor);
+			}
+		}
+		return v;
+	}
+	bool has_standing(int outer) const {
+		for (const Item &i : items) {
+			if (i.stands_in == outer && !i.retired) {
+				return true;
+			}
+		}
+		return false;
+	}
+	// a vessel's shape, less what stands in it (Stage 71)
+	Shape shape_with(int index, const glass::Vessel *g) const {
+		Shape shape = shape_of(g);
+		if (has_standing(index)) {
+			for (size_t k = 0; k < shape.volume.size(); ++k) {
+				shape.volume[k] = std::max(shape.volume[k] - displaced_cm3(index, static_cast<double>(k) * shape.rise), k > 0 ? shape.volume[k - 1] : 0.0);
+			}
+		}
+		return shape;
+	}
+	// (Stage 71) the world's column of `outer` reshaped to what stands in it: its inside's volume under each height
+	// over its floor, as the bench built it, less what the others displace there; what no longer fits spills
+	bool reshape_bath(int outer, std::string &why) {
+		const Item &o = items[static_cast<size_t>(outer)];
+		const glass::Vessel *g = glass::find(o.glassware, o.nominal_ml);
+		if (g == nullptr) {
+			why = "\"" + o.id + "\" is no glassware";
+			return false;
+		}
+		constexpr int POINTS = 64; // (as the bench built it: Stage 51)
+		const double rise_cm = (g->height - g->floor) / (POINTS - 1);
+		std::vector<double> shape(POINTS);
+		for (int k = 0; k < POINTS; ++k) {
+			const double y = g->floor + k * rise_cm;
+			shape[static_cast<size_t>(k)] = std::max((g->volume_below(y) - displaced_cm3(outer, y)) * 1e-6, k > 0 ? shape[static_cast<size_t>(k - 1)] : 0.0);
+		}
+		shape[0] = 0.0;
+		const double whole = (g->capacity() - displaced_cm3(outer, g->height)) * 1e-6;
+		if (world().reshape_column(o.cell, whole, std::move(shape)) != Refusal::None) {
+			why = "\"" + o.id + "\" cannot hold that";
+			return false;
+		}
+		return true;
+	}
+	// (Stage 71) a vessel taken out of the one it stood in: its rings face that one's column no more
+	void leave_bath(int inner) {
+		Item &i = items[static_cast<size_t>(inner)];
+		if (i.stands_in < 0) {
+			return;
+		}
+		const int outer = i.stands_in;
+		for (const Item::Contact &f : i.facing) {
+			world().disconnect(f.edge);
+		}
+		i.facing.clear();
+		i.stands_in = -1;
+		i.walls_were.clear();
+		items[static_cast<size_t>(outer)].walls_were.clear();
+		std::string ignored;
+		reshape_bath(outer, ignored);
+	}
 	// A vessel's wall as rings (GAME_SPEC §6, Stage 53): each step, the conductance between each ring and each cell of
 	// its column is what the ring touches of that cell (the height of the cell's liquid, or of the gas over the
 	// liquid, along the ring) times how fast heat crosses there: natural convection on a vertical wall into the
@@ -2436,7 +2517,8 @@ struct Lab::Impl {
 			if (g == nullptr) {
 				continue;
 			}
-			const Shape &shape = shape_of(g);
+			const Shape displaced = shape_with(static_cast<int>(&x - items.data()), g); // (Stage 71: less what stands in it)
+			const Shape &shape = displaced;
 			const std::vector<walls::Ring> &rings = shape.rings;
 			if (rings.size() != x.rings.size()) {
 				continue;
@@ -2615,6 +2697,130 @@ struct Lab::Impl {
 				now.back() = nucleating ? 1 : 0;
 				x.walls_were = std::move(now);
 			}
+		}
+	}
+	// (Stage 71, GAME_SPEC §6) A vessel standing in another: each of its rings faces each cell of the other's column by
+	// what of the ring's outside lies in that cell's height (the other's layers as what stands in it raises them), the
+	// liquid by Churchill and Chu's wall into water (the other's depth its length), the gas over it by the wall into
+	// air, in series with half its glass; its floor's base the other's lowest cell. Its rings lose to the room only by
+	// what of them stands over the other's brim. Ring by cell, never vessel by vessel.
+	void set_facings() {
+		for (size_t index = 0; index < items.size(); ++index) {
+			Item &x = items[index];
+			if (x.stands_in < 0 || x.retired || x.rings.empty()) {
+				continue;
+			}
+			const Item &o = items[static_cast<size_t>(x.stands_in)];
+			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml), *go = glass::find(o.glassware, o.nominal_ml);
+			if (g == nullptr || go == nullptr || world().meta(o.cell).frozen) {
+				continue;
+			}
+			const Shape &shape = shape_of(g);
+			const Shape outer = shape_with(x.stands_in, go);
+			if (shape.rings.size() != x.rings.size()) {
+				continue;
+			}
+			std::vector<CellId> column{ o.cell };
+			for (const CellId c : layers_of(o)) {
+				column.push_back(c);
+			}
+			if (x.facing.empty()) { // a lab loaded: its facing edges found from the world's
+				const std::span<const Edge> edges = world().edges();
+				for (size_t e = 0; e < edges.size(); ++e) {
+					const Edge &edge = edges[e];
+					if ((!edge.open && !edge.frozen) || edge.drain || edge.column || edge.phases != PHASES_NONE) {
+						continue;
+					}
+					for (size_t r = 0; r < x.rings.size(); ++r) {
+						if (edge.a == x.rings[r] && std::find(column.begin(), column.end(), edge.b) != column.end()) {
+							x.facing.push_back(Item::Contact{ r, edge.b, EdgeId{ static_cast<int32_t>(e) } });
+						}
+					}
+				}
+			}
+			for (const CellId c : column) { // a layer the other grew since: its edges
+				bool known = false;
+				for (const Item::Contact &f : x.facing) {
+					known = known || f.cell == c;
+				}
+				for (size_t r = 0; r < x.rings.size() && !known; ++r) {
+					EdgeId edge;
+					if (world().connect(x.rings[r], c, PHASES_NONE, &edge, 0.0) == Refusal::None) {
+						x.facing.push_back(Item::Contact{ r, c, edge });
+					}
+				}
+			}
+			// the other's cells' heights over its base, from the bottom, as set_walls finds them; its surface
+			std::map<int32_t, std::pair<double, double>> span;
+			std::map<int32_t, double> cell_k;
+			double below = 0.0;
+			CellId lowest = o.cell;
+			for (size_t k = column.size(); k-- > 0;) {
+				const Fill f = fill_of(table(), world().snapshot_cell(column[k]), kelvin(column[k]));
+				const double cm3 = f.defined ? f.condensed * 1e6 : 0.0;
+				span[column[k].index] = { outer.level(below), outer.level(below + cm3) };
+				if (cm3 > 0.0 && below == 0.0) {
+					lowest = column[k];
+				}
+				below += cm3;
+				double t = 0.0;
+				cell_k[column[k].index] = world().temperature(column[k], t) && t > 0.0 ? t : 0.0;
+			}
+			const double surface = outer.level(below), depth_m = std::max(surface - go->floor, 0.0) * 1e-2, dry_m = std::max(go->height - surface, 0.0) * 1e-2;
+			const bool wet = below > 0.0 && liquid_m3(o) > 0.0;
+			const SpeciesDef *wall = nullptr;
+			for (size_t s = 0; s < world().snapshot_cell(x.rings.front()).amount.size() && wall == nullptr; ++s) {
+				const SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+				wall = def.wall && world().snapshot_cell(x.rings.front()).amount[s] > 0 ? &def : nullptr;
+			}
+			const double foot = go->floor; // its base on the other's floor: its heights over the other's base
+			for (const Item::Contact &f : x.facing) {
+				const walls::Ring &r = shape.rings[f.ring];
+				double ring_k = 0.0;
+				world().temperature(x.rings[f.ring], ring_k);
+				const double half = wall != nullptr ? half_glass(r, *wall) : 0.0;
+				const auto across = [&](double area_m2, double h) { return area_m2 > 0.0 && h > 0.0 ? area_m2 / (half + 1.0 / h) : 0.0; };
+				const double k = cell_k.count(f.cell.index) != 0 ? cell_k[f.cell.index] : 0.0;
+				double conductance = 0.0;
+				if (ring_k > 0.0 && k > 0.0 && span.count(f.cell.index) != 0) {
+					const auto [from, to] = span[f.cell.index];
+					if (r.floor) {
+						if (f.cell == lowest) {
+							const double area = r.outside_cm2 * 1e-4, scale = std::max(2.0 * r.radius * 1e-2, 1e-3);
+							conductance = wet ? across(area, walls::into_water(scale, ring_k, k)) : across(area, walls::into_air(scale, ring_k, k));
+						}
+					} else {
+						const double rf = foot + r.from, rt = foot + r.to, per_cm = r.outside_cm2 * 1e-4 / std::max(r.to - r.from, 1e-9);
+						const double a = std::max(rf, from), b = std::min(rt, to);
+						if (b > a && wet) {
+							conductance += across((b - a) * per_cm, walls::into_water(std::max(depth_m, 1e-3), ring_k, k));
+						}
+						if (f.cell == o.cell) { // over the other's liquid, within its walls: its gas
+							const double dry_from = std::max(rf, surface), dry_to = std::min(rt, go->height);
+							if (dry_to > dry_from) {
+								conductance += across((dry_to - dry_from) * per_cm, walls::into_air(std::max(dry_m, 1e-3), ring_k, k));
+							}
+						}
+					}
+				}
+				if (world().edges()[static_cast<size_t>(f.edge.index)].conductance != conductance) {
+					world().set_conductance(f.edge, conductance);
+				}
+			}
+			// its own outside to the room: only what stands over the other's brim
+			const double room_k = world().meta(room).reservoir_temperature;
+			for (size_t k = 0; wall != nullptr && k < x.outside.size() && k < shape.rings.size(); ++k) {
+				const walls::Ring &r = shape.rings[k];
+				const double rf = foot + r.from, rt = foot + r.to;
+				const double share = r.floor ? 0.0 : std::clamp((rt - std::max(rf, go->height)) / std::max(rt - rf, 1e-9), 0.0, 1.0);
+				double ring_k = 0.0;
+				world().temperature(x.rings[k], ring_k);
+				const double conductance = share > 0.0 ? share * outside_of(r, *g, *wall, ring_k > 0.0 ? ring_k : room_k, room_k) : 0.0;
+				if (world().edges()[static_cast<size_t>(x.outside[k].index)].conductance != conductance) {
+					world().set_conductance(x.outside[k], conductance);
+				}
+			}
+			x.walls_were.clear(); // (its walls set again next step: what it faces moves with the other)
 		}
 	}
 	// a vessel's contacts found from the world's edges (a lab loaded: Stage 53), and its rings' edges to the room
@@ -3070,6 +3276,7 @@ struct Lab::Impl {
 		set_outlets();
 		set_exchanges();
 		set_walls();
+		set_facings(); // (Stage 71) what stands in another, ring by layer
 		const bool traceable = !(untraced && mid_step);
 		mid_step = false;
 		if (!check || !traceable) {
@@ -3490,7 +3697,7 @@ struct Lab::Impl {
 	// what stands under a vessel that keeps it where it is: a burner (a balance is left behind)
 	int fixed_under(int thing) const {
 		for (size_t i = 0; i < items.size(); ++i) {
-			if (items[i].under == thing && !stands_under(items[i].kind)) {
+			if ((items[i].under == thing && !stands_under(items[i].kind)) || items[i].stands_in == thing) { // (Stage 71: or stands in it)
 				return static_cast<int>(i);
 			}
 		}
@@ -3629,6 +3836,16 @@ struct Lab::Impl {
 			v.gas_ml = fill.gas * 1e6;
 			v.condensed_ml = fill.condensed * 1e6;
 			v.volume_ml = m.world().meta(item.cell).volume * 1e6;
+			// (Stage 71) what it stands in; what stands in it displaces under its surface (so its level is the higher)
+			if (item.stands_in >= 0) {
+				v.stands_in = m.items[static_cast<size_t>(item.stands_in)].id;
+			}
+			if (const int index = static_cast<int>(&item - m.items.data()); m.has_standing(index)) {
+				if (const glass::Vessel *g = glass::find(item.glassware, item.nominal_ml); g != nullptr) {
+					// (its condensed_ml is its whole column's, layered or not)
+					v.displaced_ml = m.displaced_cm3(index, m.shape_with(index, g).level(v.condensed_ml));
+				}
+			}
 			for (size_t s = 0; s < cell.amount.size(); ++s) {
 				if (cell.amount[s] == 0) {
 					continue;
@@ -4210,6 +4427,13 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					return nullptr;
 				}
 			}
+			// (Stage 71) a vessel brought at a temperature of its own (a jar of ice from the freezer): its contents and its
+			// glass at it, the room's otherwise
+			const double item_kelvin = kind == "vessel" && j.contains("celsius") ? j.at("celsius").get<double>() + 273.15 : room_kelvin;
+			if (!(item_kelvin > 0.0) || !(item_kelvin < 5000.0)) {
+				why = "item \"" + item.id + "\": its temperature is above absolute zero";
+				return nullptr;
+			}
 			if (kind == "burner") {
 				item.kind = Kind::Burner;
 				item.cell = b.add_reservoir(item.id, j.at("celsius").get<double>() + 273.15);
@@ -4329,7 +4553,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				const double loss = number(j, "loss", 0.5);
 				for (size_t k = 0; k < rings.size(); ++k) {
 					const CellId ring = b.add_cell(item.id + (k == 0 ? std::string(".floor") : ".ring" + std::to_string(k)));
-					b.set_amount(ring, wall, amount(wall_mol * rings[k].glass_cm3 / glass)).set_temperature(ring, room_kelvin);
+					b.set_amount(ring, wall, amount(wall_mol * rings[k].glass_cm3 / glass)).set_temperature(ring, item_kelvin);
 					item.outside.push_back(b.add_edge(ring, impl->room, PHASES_NONE, own ? outside_of(rings[k], *made, table.species(wall), room_kelvin, room_kelvin) : loss * rings[k].outside_cm2 / outside));
 					if (k > 0 && conductivity > 0.0) {
 						const double dz = 0.5 * ((rings[k].to - rings[k].from) + (rings[k - 1].to - rings[k - 1].from)) * 1e-2;
@@ -4390,7 +4614,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					}
 					const SpeciesDef &def = table.species(id);
 					if (def.phase == Phase::Liquid || def.phase == Phase::Solid) {
-						condensed += mol * molar_volume_at(table, def, room_kelvin); // at the room's temperature, as it is set (Stage 67)
+						condensed += mol * molar_volume_at(table, def, item_kelvin); // at its temperature, as it is set (Stage 67)
 					}
 				}
 				for (const auto &[index, quanta] : taken) {
@@ -4400,18 +4624,18 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					own = taken;
 				}
 				if (into != item.cell) {
-					b.set_temperature(into, room_kelvin);
+					b.set_temperature(into, item_kelvin);
 				}
 			}
 			if (item.kind == Kind::Vessel) {
 				// open to the room: air fills what its contents leave
-				const double air = P_ATMOSPHERE * (volume - condensed) / (GAS_CONSTANT * room_kelvin);
+				const double air = P_ATMOSPHERE * (volume - condensed) / (GAS_CONSTANT * item_kelvin);
 				if (air > 0.0) {
 					air_of(item.cell, air, &own);
 				}
 				item.mouth = b.add_edge(item.cell, impl->air, PHASES_GAS);
 			}
-			b.set_temperature(item.cell, room_kelvin);
+			b.set_temperature(item.cell, item_kelvin);
 			if (item.rings.empty()) { // (a vessel with rings loses heat through them: Stage 53)
 				b.add_edge(item.cell, impl->room, PHASES_NONE, number(j, "loss", 0.5));
 			}
@@ -4689,7 +4913,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" is broken: its glass burst";
 			return false;
 		}
-		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash && x.place != Place::Outbox) || x.holds >= 0) {
+		if (x.kind == Kind::Tray || (x.place != Place::Cabinet && x.place != Place::Bench && x.place != Place::Trash && x.place != Place::Outbox && x.place != Place::In) || x.holds >= 0) {
 			why = "\"" + x.id + "\" cannot be moved as it is: it is joined to something, or handed in";
 			return false;
 		}
@@ -4715,6 +4939,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		forget_trash(x.id); // carried out of the trash (Stage 34)
+		leave_bath(thing); // (Stage 71) lifted out of the vessel it stood in
 		const Item was = x;
 		x.place = Place::Bench;
 		x.col = col;
@@ -5615,6 +5840,74 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		items[static_cast<size_t>(spectro)].holder_c = celsius;
 		return true;
 	}
+	if (what == "stand") {
+		// (Stage 71, GAME_SPEC §6) a vessel stood in another, upright on its floor: what it displaces raises the other's
+		// layers and its level, and each of its rings faces each of the other's cells it overlaps
+		int inner = -1, outer = -1;
+		if (!item(c, "item", Kind::Vessel, inner, why) || !item(c, "in", Kind::Vessel, outer, why)) {
+			return false;
+		}
+		Item &i = items[static_cast<size_t>(inner)];
+		Item &o = items[static_cast<size_t>(outer)];
+		const glass::Vessel *gi = glass::find(i.glassware, i.nominal_ml), *go = glass::find(o.glassware, o.nominal_ml);
+		if (inner == outer || gi == nullptr || go == nullptr) {
+			why = "a vessel stands in another, each a piece of glassware";
+			return false;
+		}
+		if (!on_bench(i, why) || !on_bench(o, why)) {
+			return false;
+		}
+		if (i.place != Place::Bench || i.holds >= 0 || i.pours_into >= 0 || i.inverted || fixed_under(inner) >= 0 || i.drains_to >= 0 || outlet_of(i)) {
+			why = "\"" + i.id + "\" cannot be moved as it is: it is joined to something";
+			return false;
+		}
+		if (o.stands_in >= 0 || o.pours_into >= 0 || o.inverted || o.place == Place::On || o.burst) {
+			why = "\"" + o.id + "\" cannot take a vessel standing in it now";
+			return false;
+		}
+		// it fits: its outside within the other's inside at every height they share, and in its floor beside the others
+		for (double y = 0.0; y < gi->height && go->floor + y < go->height; y += 0.1) {
+			if (gi->radius_outside(y) > go->radius_inside(go->floor + y + 1e-6)) {
+				why = "\"" + i.id + "\" does not fit in \"" + o.id + "\"";
+				return false;
+			}
+		}
+		double across = gi->diameter * gi->diameter;
+		for (const Item &other : items) {
+			if (other.stands_in == outer && !other.retired) {
+				const glass::Vessel *g = glass::find(other.glassware, other.nominal_ml);
+				across += g != nullptr ? g->diameter * g->diameter : 0.0;
+			}
+		}
+		const double floor_d = 2.0 * go->radius_inside(go->floor + 1e-3);
+		if (across > 0.6 * floor_d * floor_d) { // (round feet pack a round floor to about this share)
+			why = "\"" + o.id + "\" has no room for \"" + i.id + "\" on its floor";
+			return false;
+		}
+		if (!boundary(why) || !take_off_drains(inner, why)) {
+			return false;
+		}
+		const Item was = i;
+		i.stands_in = outer;
+		i.place = Place::In;
+		i.walls_were.clear();
+		o.walls_were.clear();
+		leave_balances(inner, was);
+		// each of its rings with each cell of the other's column: an edge each, set each step (set_walls)
+		std::vector<CellId> column{ o.cell };
+		for (const CellId cell : layers_of(o)) {
+			column.push_back(cell);
+		}
+		for (size_t r = 0; r < i.rings.size(); ++r) {
+			for (const CellId cell : column) {
+				EdgeId edge;
+				if (world().connect(i.rings[r], cell, PHASES_NONE, &edge, 0.0) == Refusal::None) {
+					i.facing.push_back(Item::Contact{ r, cell, edge });
+				}
+			}
+		}
+		return reshape_bath(outer, why);
+	}
 	if (what == "blank") {
 		// (Stage 55) 100 % T through what stands in its well now, at the wavelength it is set to
 		int spectro = -1;
@@ -5826,6 +6119,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			if (why.empty()) {
 				why = "\"" + items[static_cast<size_t>(from)].id + "\" is in the trash";
 			}
+			return false;
+		}
+		if (has_standing(from) || items[static_cast<size_t>(from)].stands_in >= 0) { // (Stage 71) it cannot be tipped as it stands
+			why = "\"" + items[static_cast<size_t>(from)].id + "\" " + (items[static_cast<size_t>(from)].stands_in >= 0 ? "stands in a vessel" : "has a vessel standing in it") + ": take it out first";
 			return false;
 		}
 		if (sealed(items[static_cast<size_t>(from)]) || sealed(items[static_cast<size_t>(to)])) { // Stage 28
@@ -6697,7 +6994,7 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 			for (size_t s = 0; s < state.amount.size(); ++s) {
 				liquid += table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid ? static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * 0.018015 : 0.0;
 			}
-			const double born = k.nucleation * liquid * std::pow(s_ratio - 1.0, k.nucleation_order);
+			const double born = k.nucleation * liquid * chem::primary_nucleation(k, a / rt); // (Stage 71: or by its barrier)
 			return text_of("supersaturated (S = %.4f): no crystals yet, %.3g starting a second", s_ratio, born);
 		}
 		std::string growing = text_of("supersaturated (S = %.4f): growing on ", s_ratio) + text_of("%.0f crystals", static_cast<double>(state.particles[in]));
@@ -7456,6 +7753,9 @@ json Lab::Impl::save() const {
 		if (item.landed != 0) { // (Stage 47)
 			list.back()["landed"] = item.landed;
 		}
+		if (item.stands_in >= 0) { // (Stage 71) standing in a vessel: its facing edges are the world's
+			list.back()["stands_in"] = item.stands_in;
+		}
 		if (!item.rings.empty()) { // its wall's rings (Stage 53)
 			json rings = json::array();
 			for (const CellId r : item.rings) {
@@ -7679,7 +7979,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			Item item;
 			item.id = j.at("id").get<std::string>();
 			const int kind = j.at("kind").get<int>(), place = j.at("place").get<int>();
-			if (kind < 0 || kind > static_cast<int>(Kind::Spectro) || place < 0 || place > static_cast<int>(Place::Trash)) {
+			if (kind < 0 || kind > static_cast<int>(Kind::Spectro) || place < 0 || place > static_cast<int>(Place::In)) {
 				why = "the save names a kind of item or a place that there is not";
 				return nullptr;
 			}
@@ -7720,6 +8020,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 				return nullptr;
 			}
 			item.submitted = j.at("submitted").get<bool>();
+			item.stands_in = j.value("stands_in", -1); // (Stage 71)
 			item.retired = j.value("retired", false); // (Stage 61)
 			item.col = j.at("col").get<int>();
 			item.row = j.at("row").get<int>();

@@ -109,6 +109,18 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 // that transport sets the pace at any stirring (calibrated; docs/DATA_SOURCES.md, A crystal dissolving)
 constexpr double DETACHMENT = 1000.0;
 
+double primary_nucleation(const Kinetics &kinetics, double ln_s) {
+	if (!(ln_s > 0.0)) {
+		return 0.0;
+	}
+	if (kinetics.nucleation_barrier > 0.0) {
+		const double exponent = kinetics.nucleation_barrier / (ln_s * ln_s);
+		return exponent < 700.0 ? exp(-exponent) : 0.0;
+	}
+	const double excess = ln_s < 700.0 ? exp(ln_s) - 1.0 : 1e300; // S - 1
+	return pow(excess, kinetics.nucleation_order);
+}
+
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta) {
 	SurfaceSteps steps;
 	const Kinetics &kinetics = reaction.kinetics();
@@ -150,8 +162,30 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 		}
 	}
 	const double d = particle_diameter(table, cell, kinetics.in);
-	if (!table.has(carried) || !(d > 0.0)) {
+	if (!(d > 0.0)) {
 		return steps; // no particles yet (they nucleate)
+	}
+	if (!table.has(carried)) {
+		// (Stage 71) nothing dissolved to carry: a pure substance changing phase at its surface, limited by the heat its
+		// change carries between the surface and the liquid round it
+		double liquid = 0.0, dh = 0.0;
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			liquid += cell.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid ? 1.0 : 0.0;
+		}
+		for (const Term &t : reaction.terms()) {
+			const SpeciesDef &def = table.species(t.species);
+			dh += t.nu * (def.hf + def.cp * (temperature - T0));
+		}
+		const SolventPoint w = solvent_at(table, temperature);
+		if (!(liquid > 0.0) || !(dh * dh > 1.0) || !(w.k > 0.0) || !(w.nu > 0.0) || !(w.pr > 0.0)) {
+			return steps; // in no liquid (heat reaches it as fast as the cell's), or no heat to carry
+		}
+		const double nusselt = 2.0 + (dissipation > 0.0 ? 0.4 * pow(dissipation * d * d * d * d / (w.nu * w.nu * w.nu), 0.25) * cbrt(w.pr) : 0.0);
+		// J/mol of |A|: T - T_eq = A T / dH
+		steps.transport = nusselt * w.k / d * (a > 0.0 ? a : -a) * temperature / (dh * dh);
+		steps.transported = true;
+		steps.both = steps.surface > 0.0 && steps.transport > 0.0 ? steps.surface * steps.transport / (steps.surface + steps.transport) : 0.0;
+		return steps;
 	}
 	const int32_t nu_signed = reaction.nu(carried);
 	const double nu = nu_signed < 0 ? -nu_signed : nu_signed;
@@ -353,7 +387,7 @@ void Simulation::react() {
 					const double excess = a / rt < 700.0 ? exp(a / rt) - 1.0 : 1e300; // S - 1
 					// from the solution (primary), and (Stage 66) bred from the crystals there by the stirring (secondary:
 					// fragments its turning chips off them, each grown from one quantum)
-					const double primary = kinetics.nucleation > 0.0 ? kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * pow(excess, kinetics.nucleation_order) : 0.0;
+					const double primary = kinetics.nucleation > 0.0 ? kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * primary_nucleation(kinetics, a / rt) : 0.0;
 					const double bred = kinetics.secondary > 0.0 && dissipation > 0.0 && have > 0
 							? kinetics.secondary * dissipation * mol * static_cast<double>(table.molar_mass_ug(kinetics.in)) * 1e-9 * pow(excess, kinetics.secondary_order)
 							: 0.0;
@@ -398,6 +432,17 @@ void Simulation::react() {
 				const int64_t nuclei = born < size ? born : size;
 				if (nuclei > 0 && state.amount[in] > 0) {
 					world_.set_particles(cell, kinetics.in, grains + nuclei);
+				}
+				// (Stage 71) a solid with a grain grows as a mush of crystals no larger than it (ice's dendrites in a
+				// supercooled liquid): what it grows into is its grains
+				const SpeciesDef &solid = table.species(kinetics.in);
+				if (forward == (reaction.nu(kinetics.in) > 0) && solid.grain > 0.0 && solid.molar_volume > 0.0) {
+					const double volume = static_cast<double>(world_.amount(cell, kinetics.in).quanta) * MOL_PER_QUANTUM * solid.molar_volume;
+					const double needed = volume / (0.5235987755982988 * solid.grain * solid.grain * solid.grain);
+					const int64_t now = world_.particles(cell, kinetics.in);
+					if (needed > static_cast<double>(now) && needed < 1e15) {
+						world_.set_particles(cell, kinetics.in, static_cast<int64_t>(needed) + 1);
+					}
 				}
 			} else if (grains > 0) {
 				for (size_t t = 0; t < reaction.terms().size(); ++t) {
@@ -640,19 +685,13 @@ void Simulation::overflow() {
 	}
 	const SpeciesTable &table = world_.species();
 	bool spilled = false;
-	for (int32_t c = 0; c < world_.cell_count(); ++c) {
-		const CellId cell{ c };
-		const CellMeta &meta = world_.meta(cell);
-		if (!meta.rigid || meta.sealed || meta.frozen) {
-			continue; // a sealed cell lets nothing out (Stage 28); a frozen one does nothing (Stage 61)
-		}
+	// what of a cell's solution runs out to spill `excess` m^3 of its condensed volume (at `kelvin`): a share of the
+	// solution, what is dissolved in it as much as its liquid, of the solution's own volume (its solutes' volume with
+	// it), so that what runs out is the excess (Stage 27: of the liquid's alone, a solution spilled more than its
+	// excess, and left its vessel under-full); what it took, m^3
+	const auto spill_from = [&](CellId cell, double excess, double kelvin) {
 		const CellState &state = world_.snapshot_cell(cell);
-		const Thermal &at = thermal(cell);
-		const double kelvin = at.defined ? at.temperature : T0; // its liquids grown to its temperature (Stage 67)
 		const Fill fill = fill_of(table, state, kelvin);
-		if (!fill.defined || !(fill.condensed > meta.volume)) {
-			continue;
-		}
 		double liquid = 0.0, solids = 0.0; // m^3
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
@@ -660,15 +699,10 @@ void Simulation::overflow() {
 				(def.phase == Phase::Liquid ? liquid : solids) += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, kelvin);
 			}
 		}
-		if (!(liquid > 0.0)) {
-			continue; // solids alone: nothing can run out (V2 reports it)
+		if (!fill.defined || !(liquid > 0.0) || !(excess > 0.0)) {
+			return 0.0; // solids alone: nothing can run out (V2 reports it)
 		}
-		// a share of the solution, what is dissolved in it as much as its liquid: of the solution's own volume
-		// (its solutes' volume with it), so that what runs out is the excess (Stage 27: of the liquid's alone, a
-		// solution spilled more than its excess, and left its vessel under-full)
-		// (Stage 65) to a ten-billionth under its volume: a solution's solutes carried out leave its temperature a
-		// hundred-millionth of a kelvin other, and its liquid grown by it, past its volume by a part in 1e12
-		const double excess = fill.condensed - meta.volume * (1.0 - 1e-10), solution = std::max(fill.condensed - solids, liquid);
+		const double solution = std::max(fill.condensed - solids, liquid);
 		const double fraction = excess < solution ? excess / solution : 1.0;
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
@@ -692,11 +726,52 @@ void Simulation::overflow() {
 			}
 		}
 		if (edge.index < 0 && world_.connect(cell, spill, PHASES_LIQUID, &edge) != Refusal::None) {
-			continue;
+			return 0.0;
 		}
 		const Refusal refused = transfer(edge, cell, amounts, enthalpy_carried(table, amounts, thermal(cell).temperature));
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		spilled = true;
+		return fraction * solution;
+	};
+	for (int32_t c = 0; c < world_.cell_count(); ++c) {
+		const CellId cell{ c };
+		const CellMeta &meta = world_.meta(cell);
+		if (!meta.rigid || meta.sealed || meta.frozen) {
+			continue; // a sealed cell lets nothing out (Stage 28); a frozen one does nothing (Stage 61)
+		}
+		const Thermal &at = thermal(cell);
+		const double kelvin = at.defined ? at.temperature : T0; // its liquids grown to its temperature (Stage 67)
+		const Fill fill = fill_of(table, world_.snapshot_cell(cell), kelvin);
+		if (fill.defined && fill.condensed > meta.volume) {
+			// (Stage 65) to a ten-billionth under its volume: a solution's solutes carried out leave its temperature a
+			// hundred-millionth of a kelvin other, and its liquid grown by it, past its volume by a part in 1e12
+			spill_from(cell, fill.condensed - meta.volume * (1.0 - 1e-10), kelvin);
+		}
+	}
+	// (Stage 71) a column that holds more than its vessel (another stood in it, its liquids grown): its excess spills
+	// from its topmost liquid down, what runs over the brim
+	find_columns();
+	for (const Column &col : columns_) {
+		const CellMeta &top = world_.meta(col.top);
+		if (top.sealed || !(top.column_volume > 0.0)) {
+			continue;
+		}
+		const auto kelvin_of = [&](CellId c) {
+			const Thermal &t = thermal(c);
+			return t.defined && t.temperature > 0.0 ? t.temperature : T0;
+		};
+		double held = 0.0;
+		for (const CellId c : col.cells) {
+			const Fill f = fill_of(table, world_.snapshot_cell(c), kelvin_of(c));
+			held += f.defined ? f.condensed : 0.0;
+		}
+		double excess = held - top.column_volume;
+		if (!(excess > top.column_volume * 1e-9)) {
+			continue; // within what L1 allows: as it was
+		}
+		for (size_t i = 0; i < col.cells.size() && excess > 0.0; ++i) {
+			excess -= spill_from(col.cells[i], excess, kelvin_of(col.cells[i]));
+		}
 	}
 	// (Stage 51) what spilled meets what the spill cell holds after this step's settling: it is brought to its fast
 	// equilibria here, as every cell is at a step's end (P1)
