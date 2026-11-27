@@ -4,6 +4,11 @@
 #include "lab/signals.hpp"
 
 #include <doctest/doctest.h>
+#ifdef __APPLE__
+#include <libproc.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -496,7 +501,26 @@ TEST_CASE("signals: G1 and G2 fire on a corrupted state (Stage 13)") {
 	CHECK_FALSE(lab::check_G1(settings, [](const std::string &, const std::string &) { return std::optional<double>(0.4); }).empty());
 }
 
+// (Stage 74) the work a run does, as the instructions the process retired: the same on a fast core and a slow one,
+// under any load (the thread's own time, Stage 13 to 73, was a core's speed too: a gate's crowded machine moved the
+// thread to its efficiency cores, two to three times slower, and three gates in five failed); elsewhere, the thread's
+// own time
+static double work_done() {
+#ifdef __APPLE__
+	rusage_info_v4 r{};
+	if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, reinterpret_cast<rusage_info_t *>(&r)) == 0 && r.ri_instructions > 0) {
+		return static_cast<double>(r.ri_instructions);
+	}
+#endif
+	timespec t{};
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
+	return static_cast<double>(t.tv_sec) * 1e9 + static_cast<double>(t.tv_nsec);
+}
+
 TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
+	struct Cost {
+		double work = 0.0, ms = 0.0; // a frame's at 600x: 600 steps
+	};
 	const auto cost = [](bool with) {
 		auto l = bench();
 		must(*l, R"({"do": "pour", "from": "acid", "to": "flask", "ml": 60})");
@@ -510,29 +534,27 @@ TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 		}
 		l->set_checking(false);
 		std::string why;
-		// the thread's own time, not the clock's: the tests run side by side, and a moment waited for the CPU is
-		// not the monitors' (wall time, even the best of three, failed under the gate's load)
 		const auto thread_ms = [] {
 			timespec t{};
 			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
 			return static_cast<double>(t.tv_sec) * 1e3 + static_cast<double>(t.tv_nsec) * 1e-6;
 		};
-		const double start = thread_ms();
+		const double start = thread_ms(), done = work_done();
 		REQUIRE(l->advance(6000, why));
-		return (thread_ms() - start) / 10.0; // per 600 steps: one frame at 600x
+		return Cost{ (work_done() - done) / 10.0, (thread_ms() - start) / 10.0 };
 	};
 	cost(true); // warm
-	// the best of five each, taken in turn: the tests run side by side, and a moment's load is not the monitors' (Stage
-	// 68: of three, main's own build read 3.5 ms more under a gate's load in one run of four)
-	double without = 1e30, with = 1e30;
-	for (int k = 0; k < 5; ++k) {
-		without = std::min(without, cost(false));
-		with = std::min(with, cost(true));
+	Cost without{ 1e300, 1e300 }, with{ 1e300, 1e300 };
+	for (int k = 0; k < 3; ++k) {
+		const Cost a = cost(false), b = cost(true);
+		without = Cost{ std::min(without.work, a.work), std::min(without.ms, a.ms) };
+		with = Cost{ std::min(with.work, b.work), std::min(with.ms, b.ms) };
 	}
-	MESSAGE("a frame at 600x: " << without << " ms, with three monitors " << with << " ms");
-#ifndef CHEM_SANITIZED // a sanitizer's build is several times slower: its costs are reported, not bounded
-	CHECK(with - without < 3.0);
-#endif
+	MESSAGE("a frame at 600x: " << without.ms << " ms, with three monitors " << with.ms << " ms; their work " << 100.0 * (with.work / without.work - 1.0)
+					<< " % of the frame's");
+	// three monitors add under a tenth to a frame's work (Stage 74: 5.9 %; Stage 13's bound, 3 ms of a frame of 30, by
+	// the work and not the clock)
+	CHECK(with.work / without.work - 1.0 < 0.10);
 }
 
 TEST_CASE("signals: a circuit holds parts as they lie, and gives them back; what is in it signals as it would out of it (Stage 14)") {

@@ -1,5 +1,11 @@
 # GAME_SPEC version history
 
+## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; awaiting the user's sign-off)
+
+- The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process
+  retired, under a tenth of a frame's (5.9 %), not by 3 ms of the thread's CPU time, which a crowded machine's slower
+  cores pushed past its bound in three gates of five. WORKFLOW: a cost is held by the work, not the clock.
+
 ## 0.73.0 (2026-11-27, Stage 73; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings (Stage 73, `docs/TDD_73_SMOOTH_FLOOR.md`): an unstable horizontal plate's convection (a
