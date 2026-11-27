@@ -398,6 +398,34 @@ is sealed; the world keeps the mark as its edges change (V3).
 - **Nothing runs in or out but gas between cells sealed together:** a drain neither runs into nor
   out of a sealed cell (no gas could make way for the liquid), and a sealed cell does not overflow.
 
+**Pistons** *(Stage 79; `chem/world.hpp`'s `Piston`, `Simulation::move_pistons`; `docs/TDD_79_SYRINGE.md`; asked for by
+the user, 2026-11-27: "Holding the syringe handle should exert a force on it, the force of the player hand should be
+limited")*. A rigid cell, or a column's top (its whole), may have a plunger: a piston of an area `A` between two
+stops, its volume moved each step, first in the step, by the forces on it.
+
+- **Overdamped.** Its own mass stores nothing a step's friction does not take: it moves at the speed its forces give,
+  `c v = F + (P - P_atm) A - f sgn v` (outward positive; `c` its drag, `f` its friction, which holds it still while
+  the rest is within it), `P` its space's pressure after the step's move: implicit, so a stiff space (a liquid's) is
+  as stable as a soft one.
+- **The hand.** Held, it pulls the plunger toward a volume (where the player drags its handle), with what force that
+  takes, at most `F_most` (79.8 N: a thumb on a plunger, the lab's `instruments.json`); past it the plunger moves
+  only as its forces at `F_most` let it, or not at all. Let go, it is free: `F = 0`.
+- **Its space.** Every cell joined to a piston's by open edges that pass gas (or liquid, between two sealed cells) is
+  one space at one pressure for its pistons. An open space is at the room's; a sealed one's is the root of
+  `P = sum n_i R T_i / (its free volume after the moves)`, each piston's move rising with `P`. Its solids and liquids
+  are incompressible: the plungers stop where they would fill it, a billionth of its volume left to its gas.
+- **The energy.** The hand's work `F dx`, along the piston's edge from the lab's mains (Stage 32's reservoir of work),
+  is the only work: `E = U + P_atm V` holds the room's work on the plunger's back and the gas's on its face, and the
+  drag and friction are heat in the cell, so `F dx = (P_atm - P) dV + (c v + f) |dx|`. With `P` the pressure after
+  the move, the gas takes at least the reversible work of a compression and gives at most it on an expansion: its
+  entropy never falls (T2). A free plunger does no work; its cell's `E` stands.
+- **Liquid between joined spaces.** Two sealed spaces joined by an edge that passes liquid (a tube between two
+  syringes' nozzles): liquid runs from the one at the higher pressure into the other's top, from the lowest liquid
+  of its column, carrying its enthalpy, as much as leaves it at no lower a pressure than the other (a column pushed
+  past its liquids is at no pressure that holds: it gives what it must).
+- **Traced** (§18, W1): each piston within its stops, its hand within its most (none let go), the energy along its
+  edge its force over its move; a step's state before it read at its volume then (`StepTrace::volume_before`).
+
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
 it consumes gas as fast as it arrives (it draws its fill at most eight times a step). In reality
@@ -3221,6 +3249,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
+| W1 | A piston's work is its hand's alone (Stage 79; `chem/invariants.hpp`): each piston stands within its stops, its hand's force within its most (none when let go), and the energy along its work edge in the step is that force over its move, to a quantum. It fires on a hand past its most, a piston past its stops, a let-go hand with a force, and a quantum more along the edge than the work | exact | 79 |
 | Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |

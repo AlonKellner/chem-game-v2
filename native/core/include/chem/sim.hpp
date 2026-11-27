@@ -153,6 +153,8 @@ private:
 	void react();
 	void conduct_heat();
 	void do_work();
+	void move_pistons(); // (Stage 79) each piston moved by its forces, its space at one pressure
+	bool equalize_liquid(EdgeId edge); // (Stage 79) liquid between two sealed spaces, to one pressure
 	void drain_liquids();
 	void exchange_gases(); // (Stage 50) each gas down its mole fraction along an edge that exchanges it
 	void overflow();

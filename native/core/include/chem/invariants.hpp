@@ -146,6 +146,10 @@ Violations check_N1(const SpeciesTable &table, const StepTrace &trace);
 // conductivity() gives them, S/m, for the cell at T.
 Violations check_Q1(const SpeciesTable &table, const CellState &cell, double kappa, double limit);
 
+// W1 (Stage 79): a piston stands within its stops, its hand's force within its most (none let go), and the energy
+// along its work edge this step is the hand's work, its force over its move (to a quantum): no other work comes.
+Violations check_W1(const SpeciesTable &table, const StepTrace &trace);
+
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
 // `equilibria`: the reactions of the equilibrium law the simulation runs (P1).

@@ -480,6 +480,66 @@ Refusal World::reshape_column(CellId top, double whole, std::vector<double> volu
 	return Refusal::None;
 }
 
+Refusal World::set_piston(CellId cell, const Piston &piston) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	if (m.reservoir || m.layer || !m.rigid) {
+		return Refusal::BadValue;
+	}
+	if (piston.area == 0.0) {
+		m.piston = Piston{};
+		return Refusal::None;
+	}
+	const auto good = [](double v) { return v >= 0.0 && v - v == 0.0; };
+	const double now = piston_volume(cell);
+	if (!(piston.area > 0.0) || !good(piston.area) || !good(piston.friction) || !(piston.drag > 0.0) || !good(piston.drag) || !(piston.least > 0.0) ||
+			!good(piston.most) || piston.most < piston.least || now < piston.least * (1.0 - 1e-12) || now > piston.most * (1.0 + 1e-12) || !good(piston.hand_most) ||
+			!good(piston.target) || piston.work.index < 0 || static_cast<size_t>(piston.work.index) >= edges_.size()) {
+		return Refusal::BadValue;
+	}
+	const Edge &e = edges_[static_cast<size_t>(piston.work.index)];
+	if (!(e.a == cell || e.b == cell) || !meta_[static_cast<size_t>((e.a == cell ? e.b : e.a).index)].reservoir) {
+		return Refusal::BadValue;
+	}
+	m.piston = piston;
+	return Refusal::None;
+}
+
+double World::piston_volume(CellId cell) const {
+	const CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	return m.column_volume > 0.0 ? m.column_volume : m.volume;
+}
+
+void World::rest_pistons() {
+	for (CellMeta &m : meta_) {
+		m.piston.moved = 0.0;
+	}
+}
+
+Refusal World::move_piston(CellId cell, double volume, double force, double pressure) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	if (!(m.piston.area > 0.0) || !(volume > 0.0) || !(volume - volume == 0.0)) {
+		return Refusal::BadValue;
+	}
+	if (std::none_of(moved_volumes_.begin(), moved_volumes_.end(), [&](const auto &x) { return x.first == cell.index; })) {
+		moved_volumes_.emplace_back(cell.index, m.volume);
+	}
+	m.piston.force = force;
+	m.piston.pressure = pressure;
+	m.piston.moved = volume - piston_volume(cell);
+	if (m.column_volume > 0.0) {
+		std::vector<double> shape = m.column_shape;
+		return reshape_column(cell, volume, std::move(shape));
+	}
+	m.volume = volume;
+	return Refusal::None;
+}
+
 Refusal World::set_stirring(CellId cell, double watts) {
 	if (!known(cell)) {
 		return Refusal::UnknownCell;
@@ -1030,11 +1090,13 @@ void World::resume_step() {
 
 void World::skip_step() {
 	resumed_ = false;
+	moved_volumes_.clear();
 	ledger_.clear();
 	++step_;
 }
 
 void World::rebase() {
+	moved_volumes_.clear();
 	before_.cells = cells_;
 }
 
@@ -1053,6 +1115,17 @@ void World::close_step(StepTrace &trace) {
 	std::swap(trace.ledger, ledger_);
 	trace.edges = edges_;
 	trace.meta = meta_;
+	trace.volume_before.clear();
+	if (!moved_volumes_.empty()) {
+		trace.volume_before.resize(meta_.size());
+		for (size_t c = 0; c < meta_.size(); ++c) {
+			trace.volume_before[c] = meta_[c].volume;
+		}
+		for (const auto &[c, v] : moved_volumes_) {
+			trace.volume_before[static_cast<size_t>(c)] = v;
+		}
+		moved_volumes_.clear();
+	}
 	trace.thermal = thermal_;
 	trace.starved.clear();
 	trace.exchanged.clear();
