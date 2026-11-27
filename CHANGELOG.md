@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.82.0 (2026-11-27, Stage 82)
+
+- §9 (Stage 82, `docs/TDD_82_FLAMES.md`; `docs/CURRICULUM.md`, step E's third part): lithium's and strontium's ions
+  (NBS, OBIGT, the CRC), their chlorides' and nitrates' Pitzer pairs (Pitzer and Mayorga).
+- §12.5: **a flame's light**: NIST's atomic lines by Boltzmann's populations at the flame's temperature and the
+  monohydroxides' bands (Meyerriecks and Kosanke) at a calibrated share; each line's light on the two nanometres beside
+  it, its light and centre kept; added to the flame cone's glow, read by the pass, the truth and the spectral viewer.
+- §13: `flame_test`: a loop's drop of a solution in a lit burner's flame, fading in 3 s; on the screen, a vessel of a
+  solution carried onto a lit burner. The free lab's 0.1 M sodium, potassium, lithium and strontium chlorides and
+  copper(II) sulfate.
+- §20: the drop is the flame's display state, not matter.
+
 ## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 81, `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part): **complexes**, each a fast

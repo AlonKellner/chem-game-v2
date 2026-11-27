@@ -4,6 +4,7 @@
 #include "lab/flame.hpp"
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/ui.hpp"
 
 #include "chem/optics.hpp"
 
@@ -233,4 +234,33 @@ TEST_CASE("measured: a flame's lines are NIST's at the burner's temperature, its
 	}
 	CHECK(d2 / d1 == doctest::Approx(2.0).epsilon(0.02));
 	CHECK(k2 / k1 == doctest::Approx(2.0).epsilon(0.03));
+}
+
+TEST_CASE("flame: on the screen, a vessel of a solution carried onto a lit burner is a flame test (Stage 82)") {
+	std::string why;
+	auto ui = lab::Ui::open(BENCH, why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	const auto drop = [&](const std::string &what, const std::string &onto) {
+		float x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+		REQUIRE(ui->locate("item:" + what, x0, y0));
+		REQUIRE(ui->locate("item:" + onto, x1, y1));
+		ui->pointer(x0, y0, false);
+		ui->pointer(x0, y0, true);
+		ui->pointer(x0, y0, false);
+		ui->pointer(x1, y1, false);
+		ui->pointer(x1, y1, true);
+		ui->pointer(x1, y1, false);
+	};
+	const auto sodium = [&] { return load_of(item(ui->lab(), "burner"), "Na"); };
+	// the burner is in Supplies until it is set out; set out, unlit: nothing goes into its flame
+	ok(ui->lab(), R"({"do": "place", "item": "burner", "at": [20, 7]})");
+	drop("salt", "burner");
+	CHECK(sodium() == 0.0);
+	// lit: the drop's sodium in its flame, the vessel back where it stood
+	const auto at = item(ui->lab(), "salt");
+	ok(ui->lab(), R"({"do": "valve", "burner": "burner", "to": 1})");
+	drop("salt", "burner");
+	CHECK(sodium() > 1e-6);
+	CHECK(item(ui->lab(), "salt").col == at.col);
+	CHECK(item(ui->lab(), "salt").row == at.row);
 }

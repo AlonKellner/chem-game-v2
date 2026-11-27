@@ -3567,6 +3567,9 @@ struct Ui::Impl {
 				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
 			} else if (t.kind == "spectrophotometer" && v.kind == "vessel" && t.place == "bench") {
 				act({ { "do", "insert" }, { "spectrophotometer", t.id }, { "cuvette", v.id }, { "onto", true } }); // into its well (Stage 55)
+			} else if (t.kind == "burner" && v.kind == "vessel" && v.liquid_ml > 0.0) {
+				// (Stage 82) a vessel of a solution onto a burner: a loop dipped in it, held in the flame (a lit one's)
+				act({ { "do", "flame_test" }, { "burner", t.id }, { "from", v.id } });
 			} else if (t.kind != "vessel") {
 				message = "\"" + t.id + "\" takes nothing";
 			} else if (v.kind == "balloon" || v.kind == "stopper" || v.condenser) {

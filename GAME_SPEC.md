@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.81.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.82.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -892,6 +892,7 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
 - Stage 81 adds complexes (copper's and silver's ammines, zinc's and aluminium's hydroxo complexes, iron(III)'s
   thiocyanates, cobalt's tetrachloro, chromate and dichromate, EDTA's and its indicator's) and their colours; flame
   emission is a stage of its own (the user's split, 2026-11-27).
+- Stage 82 adds lithium's and strontium's ions and their chlorides and nitrates, for the flame tests (§12.5).
 
 ## 10. Property models
 
@@ -1900,6 +1901,32 @@ the spectrum, with another mapping into colour.
   scaled by the view, so any point of the room finds its bodies. A body can be hidden from a ray (a
   camera from its own frame).
 
+### 12.5 A flame's light (Stage 82)
+
+A flame shows what is in it: the flame test (curriculum experiment 10). Data: `data/flame.json`
+(`docs/DATA_SOURCES.md`, "Flame emission (Stage 82)").
+- **Atomic lines**: each element's neutral atom's lines in the visible (NIST's wavelengths, A_ki, g_k,
+  E_k). In a flame at T a line's light is in proportion to g_k A_ki exp(−hc E_k / kT) / λ over the
+  ground level's g (Boltzmann's populations; the partition function the ground level's g). Sodium's
+  D lines, potassium's red doublet, lithium's 670.8, calcium's 422.7, strontium's 460.7, barium's 553.5
+  and copper's 510.6 nm come out the strongest of their elements at the burner's 2200 K.
+- **Molecular bands**: the alkaline earths' and copper's flames are their monohydroxides' colours (CaOH,
+  SrOH, BaOH, CuOH; Meyerriecks and Kosanke's bands, Gaussians of 4 nm), carrying a calibrated share of
+  the element's light (0.8 to 0.95).
+- **Brightness**: an element's light per mole is its Boltzmann sum against sodium's at the lab burner's
+  temperature, times `per_mol` (calibrated: a fresh drop of 0.1 M outshines the flame's own blue). A
+  hotter flame is brighter by its Boltzmann factors.
+- **The flame test** (`flame_test`): a loop dipped in a vessel's solution carries a drop (0.02 mL) of it
+  into a lit burner's flame: the drop's share of each shown element's atoms joins the flame's load, which
+  fades by exp(−t / 3 s). The load is the burner's display state (saved; in the digest only when it holds
+  something), not matter: the drop is not taken from the vessel (`§20`). On the screen, a vessel holding
+  liquid carried onto a lit burner is a flame test.
+- **In the pass**: the load's light is added to the flame cone's glow (`GLOW_ROW`), each line's energy on
+  the two nanometres either side of it in proportion to its distance from each (its light and its centre
+  kept exactly), each band a Gaussian normalised over the nanometres; the pass, the truth and the spectral
+  viewer read it as they read any glow. The scene's key changes with the load, quantised to 5 % steps of
+  each element's amount, so a fading flame is traced again only as it changes by a step.
+
 ## 13. Lab layer and interaction
 
 The engine-free game layer (`native/game`, namespace `lab`): a bench of equipment over one closed
@@ -2123,6 +2150,7 @@ input to them, and a session script is a list of them.
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
+| `flame_test` | `burner`, `from` | (Stage 82, §12.5) a loop's drop of `from`'s liquid in the burner's flame: each shown element's atoms in the drop join the flame's load, fading in 3 s. Refused for a burner not lit and a vessel with no liquid |
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
 | `pour` | `from`, `to`, `ml` or `all`; `about` | moves liquid, with what is dissolved in it in proportion, and its enthalpy; with `about` (Stage 50), the hand's amount (Readings) |
 | `tip` | `from`, `to`, `species`, `g` or `all`; `about` | moves a solid, with its particles in proportion; with no `species` (Stage 50), the solids in proportion to their masses; with `about`, the hand's amount |
@@ -3528,6 +3556,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A heap of mixed powders has the mass-weighted mean of their reflectances | Real powders mix darker than that |
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
+| A flame test's drop is the burner's display state, not matter (Stage 82): its atoms' lines and their molecules' bands by a Boltzmann sum and calibrated shares, the partition function a ground level's g | The drop is not taken from the vessel (0.02 mL, under the hand's resolution); no self-absorption (a strong sodium flame's lines do not reverse); a chloride's own bands (CuCl's blue) and the continuum (potassium's lilac) are not modelled; a solid's grains on the loop are not taken (a solution only) |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
 | What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |
 | A solution's index is its liquids' by volume (water's; from Stage 78 a metal's own, complex); the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
