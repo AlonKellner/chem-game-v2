@@ -33,6 +33,10 @@ always run. `make gate-clear-cache` empties it.
   a commit pass; `make gates` takes only a merge-level pass, `make gate` either. A failure forgets the
   entry's key at both. So `make gates` run again after one entry failed runs that entry and what
   changed, not the hour. `GATE_CACHE=0` runs everything (and records what passed).
+- **Measured costs for every worktree** (Stage 70): each tree's measured costs (`CTestCostData.txt`) are folded into
+  its kind's shared file (`~/Library/Caches/chem-game-v2/costs/`) after each run, and a tree is given what others
+  measured that it has not before it runs: a new worktree's ctest starts the longest first, and the sanitizers'
+  limits leave out the same entries at its first gate.
 - **One cache for every worktree** (Stage 68): `~/Library/Caches/chem-game-v2/gate_cache.json`
   (`GATE_CACHE_FILE`), read and written under a lock. An entry is known by its tree's kind
   (`build-core`, `build-asan`) and name; the ASan tree's entries are cached the same way (`make asan-gate`).
@@ -96,13 +100,16 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   person's gestures keep their frames.
 - **The budget** (Stage 68): the summary names every release entry over `GATE_BUDGET_S` (60 s). A new long one
   takes one of the ways here: a fixture, parts, `sparse()`, coarse frames where only its end is held.
+- **A check once a step**: a test that holds each step's trace to every invariant itself leaves the simulation's own
+  checking off (`test_column.cpp`, Stage 70: each step was checked twice).
 - **A simulation several cases start from is played once** (Stage 68): a ctest fixture. `// ctest: fixture setup
   NAME` before the case that plays it, `// ctest: fixture NAME` before each that reads it (`chem_add_cases`;
   FIXTURES_SETUP and FIXTURES_REQUIRED): ctest runs the setup first, and runs it whenever a case that needs it
   runs (the result cache's subsets too). Its files are in the tree's `fixtures/NAME` (`tests/support/fixtures.hpp`).
   The demo's (`test_demo_record.cpp`): the session played once, unchecked, its golden digests, results and notices
-  held; at D2's cuts the lab's save and report (D2's eight windows load them and play on checked to the next cut:
-  together the gates' one checked play of the session, side by side); after every command the screen's scene (`tests/support/scene_file.hpp`, read back and held to what was
+  held; after every command the lab's save and report, and the windows D2 plays from them (`windows.json`: a wait of
+  more than 100,000 steps in two halves, a save between them; Stage 70), checked, together the gates' one checked
+  play of the session, eight entries side by side; after every command the screen's scene (`tests/support/scene_file.hpp`, read back and held to what was
   written). The O2 scan's twelve parts read the scenes and play nothing (each part played the whole session before:
   207 to 395 s a part, 33 to 69 s now). A fixture is worth it where what it saves is most of the play: D2 read its
   saves once with each cut playing to the end, nine tenths of the steps after them, and waited a whole play for

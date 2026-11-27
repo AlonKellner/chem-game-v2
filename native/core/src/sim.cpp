@@ -50,7 +50,7 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 		return 0;
 	}
 	double v_lo = 0.0, v_hi = 0.0;
-	value(0, v_lo);
+	// (Stage 70: the affinity at no extent is the caller's; it was asked here again, and the answer put aside unread)
 	// the usual case, a cell already at its equilibrium: one quantum is too many
 	bool ok_hi = value(1, v_hi);
 	if (!(ok_hi && v_hi >= 0.0)) {
