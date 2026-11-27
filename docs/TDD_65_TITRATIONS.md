@@ -94,9 +94,15 @@ conductivity** (this stage).
 | 65.4 | Experiments 16 and 17: two end points, a buffer | done |
 | 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | done |
 | 65.6 | Experiment 20: conductivity | done |
-| 65.7 | The goldens: the evidence and the user's approval | |
+| 65.7 | The goldens: the evidence and the user's approval | done |
 | 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
+- **The goldens** (approved by the user, 2026-11-27: "Approved, proceed"): the demo's first eight commands as they
+  were; the copper oxide dissolved 8.5 s later (its ions a little slower in the hot acid by Walden's exponents than by
+  Stokes and Einstein), the end 691 steps later; the crystals 10.0584 g in 1430 of 1805 um (10.0583 in 1405 of 1815);
+  the beaker's water 26.68 g (26.95), its air and its distillate holding the room's carbon dioxide (0.23 mg; 0.02 mg
+  dissolved). The pressure session's every command on its step, its warnings at their times; its totals the room's
+  carbon dioxide's. Conservation unchanged in both.
 - **The room's carbon dioxide on by default** (the user, 2026-11-27: "Let's make it on by default, but if specific
   experiments require it off - they may explicitly turn it off. The default should be on."): 420 ppm unless a bench's
   room names `co2_ppm` (0: none). Every bench's air holds it from this stage on; its goldens move with it.
