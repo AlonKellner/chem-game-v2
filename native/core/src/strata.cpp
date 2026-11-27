@@ -164,7 +164,7 @@ Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell,
 } // namespace
 
 double Simulation::column_kelvin(CellId cell) {
-	const Thermal &t = in_step_ ? thermal(cell) : kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), world_.meta(cell));
+	const Thermal &t = in_step_ ? thermal(cell) : kept_thermal(cell);
 	return t.defined && t.temperature > 0.0 ? t.temperature : T0;
 }
 

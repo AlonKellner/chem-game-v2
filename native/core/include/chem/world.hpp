@@ -310,6 +310,10 @@ public:
 	uint64_t topology_version() const { return topology_version_; }
 	// one cell's state, to read (the processes derive temperatures from it)
 	const CellState &snapshot_cell(CellId cell) const { return cells_[static_cast<size_t>(cell.index)]; }
+	// (Stage 75) A cell's revision: a number that changes whenever its state or its meta does, drawn from one counter
+	// for every world of the process, so the same number is the same state and meta in a world and in its copies.
+	// What is derived from a cell (its thermal state, its rest) is kept by it. Not state: not saved, not digested.
+	uint64_t revision(CellId cell) const { return revision_[static_cast<size_t>(cell.index)]; }
 	uint64_t step() const { return step_; }
 	// where what overflows goes, or an invalid id
 	CellId spill() const { return spill_; }
@@ -402,6 +406,9 @@ private:
 	std::vector<CellMeta> meta_;
 	bool thermal_ = false;
 	std::vector<CellState> cells_;
+	std::vector<uint64_t> revision_; // (Stage 75) each cell's: touch() on every write of its state or meta
+	void touch(size_t cell);
+	void touch_all();
 	std::vector<Edge> edges_;
 	bool resumed_ = false; // (Stage 69: resume_step)
 	bool stepping() const { return !ledger_.empty() || resumed_; }

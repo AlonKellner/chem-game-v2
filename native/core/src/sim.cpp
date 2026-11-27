@@ -754,27 +754,13 @@ bool Simulation::project(CellId cell) {
 	const CellState &state = world_.snapshot_cell(cell);
 	// (Stage 64) a cell as it was when it was last found at rest is at rest: what follows depends on nothing else
 	const auto c = static_cast<size_t>(cell.index);
-	const CellMeta &meta_now = world_.meta(cell);
 	if (rest_key_.size() <= c) {
 		rest_key_.resize(c + 1);
 	}
-	{
-		const ThermalKey &key = rest_key_[c];
-		if (key.known && key.energy == state.energy && key.volume == meta_now.volume && key.sealed == meta_now.sealed && key.rigid == meta_now.rigid &&
-				key.reservoir == meta_now.reservoir && key.amount == state.amount) {
-			return false;
-		}
+	if (rest_key_[c].same(world_, cell)) {
+		return false;
 	}
-	const auto at_rest = [&] {
-		ThermalKey &key = rest_key_[c];
-		key.known = true;
-		key.energy = state.energy;
-		key.amount = state.amount;
-		key.volume = meta_now.volume;
-		key.sealed = meta_now.sealed;
-		key.rigid = meta_now.rigid;
-		key.reservoir = meta_now.reservoir;
-	};
+	const auto at_rest = [&] { rest_key_[c].keep(world_, cell); };
 	bool changed = false;
 	// (Stage 53) a cell of nothing but wall (a vessel's ring of glass) has no equilibrium to be at
 	bool any = false;
@@ -1457,14 +1443,15 @@ void Simulation::settle_cells() {
 const Thermal &Simulation::thermal(CellId cell) {
 	const auto c = static_cast<size_t>(cell.index);
 	if (!thermal_valid_[c]) {
-		kept_thermal(c, world_.snapshot_cell(cell), world_.meta(cell));
+		kept_thermal(cell);
 		thermal_valid_[c] = 1;
 	}
 	return thermal_[c];
 }
 
 // (Stage 53) derived again only if what it is derived from changed since: the same value, exactly
-const Thermal &Simulation::kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const {
+const Thermal &Simulation::kept_thermal(CellId cell) const {
+	const auto c = static_cast<size_t>(cell.index);
 	if (thermal_key_.size() <= c) {
 		thermal_key_.resize(c + 1);
 	}
@@ -1472,18 +1459,40 @@ const Thermal &Simulation::kept_thermal(size_t c, const CellState &state, const 
 		thermal_.resize(c + 1);
 	}
 	ThermalKey &key = thermal_key_[c];
-	if (!(key.known && key.energy == state.energy && key.volume == meta.volume && key.sealed == meta.sealed && key.rigid == meta.rigid &&
-				key.reservoir == meta.reservoir && key.amount == state.amount)) {
-		thermal_[c] = thermal_state(world_.species(), state, &meta);
-		key.known = true;
-		key.energy = state.energy;
-		key.amount = state.amount;
-		key.volume = meta.volume;
-		key.sealed = meta.sealed;
-		key.rigid = meta.rigid;
-		key.reservoir = meta.reservoir;
+	if (!key.same(world_, cell)) {
+		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell), &world_.meta(cell));
+		key.keep(world_, cell);
 	}
 	return thermal_[c];
+}
+
+bool Simulation::ThermalKey::same(const World &world, CellId cell) const {
+	if (!known || revision != world.revision(cell)) {
+		return false;
+	}
+#if CHEM_ASSERT_ABORTS
+	const CellState &state = world.snapshot_cell(cell);
+	const CellMeta &meta = world.meta(cell);
+	CHEM_ASSERT(energy == state.energy && volume == meta.volume && sealed == meta.sealed && rigid == meta.rigid && reservoir == meta.reservoir &&
+						amount == state.amount,
+			"a cell changed under the same revision: a write to it drew none (World::touch)");
+#endif
+	return true;
+}
+
+void Simulation::ThermalKey::keep(const World &world, CellId cell) {
+	known = true;
+	revision = world.revision(cell);
+#if CHEM_ASSERT_ABORTS
+	const CellState &state = world.snapshot_cell(cell);
+	const CellMeta &meta = world.meta(cell);
+	energy = state.energy;
+	amount = state.amount;
+	volume = meta.volume;
+	sealed = meta.sealed;
+	rigid = meta.rigid;
+	reservoir = meta.reservoir;
+#endif
 }
 
 bool Simulation::temperature(CellId cell, double &kelvin) const {
@@ -1495,7 +1504,7 @@ bool Simulation::temperature(CellId cell, double &kelvin) const {
 		kelvin = meta.reservoir_temperature;
 		return true;
 	}
-	const Thermal &t = kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), meta);
+	const Thermal &t = kept_thermal(cell);
 	kelvin = t.temperature;
 	return t.defined;
 }

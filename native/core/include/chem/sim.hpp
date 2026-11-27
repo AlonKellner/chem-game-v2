@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chem/thermo.hpp"
+#include "chem/error.hpp"
 #include "chem/world.hpp"
 
 #include <optional>
@@ -140,7 +141,7 @@ public:
 private:
 	void begin_step();
 	const Thermal &thermal(CellId cell);
-	const Thermal &kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const;
+	const Thermal &kept_thermal(CellId cell) const;
 	double column_kelvin(CellId cell); // a column's layer's temperature, T0 where it has none (strata.cpp)
 	Refusal transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy);
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
@@ -198,13 +199,21 @@ private:
 	std::vector<uint8_t> thermal_valid_;
 	bool in_step_ = false; // (Stage 72) thermal_valid_ is this step's: between begin_step's sizing and the step's close
 	// what each cell's kept thermal state was derived from (Stage 53): the same state and meta give it again, so a
-	// cell at rest (a vessel's ring of glass) is not derived anew each step
+	// cell at rest (a vessel's ring of glass) is not derived anew each step. (Stage 75) By the cell's revision
+	// (World::revision): the same revision is the same state and meta. Where an assertion aborts (Debug, the
+	// sanitizers) the state and meta are kept too, and a revision that held while they changed (a write that drew none)
+	// aborts.
 	struct ThermalKey {
 		bool known = false;
+		uint64_t revision = 0;
+#if CHEM_ASSERT_ABORTS
 		int64_t energy = 0;
 		std::vector<int64_t> amount;
 		double volume = 0.0;
 		bool sealed = false, rigid = false, reservoir = false;
+#endif
+		bool same(const World &world, CellId cell) const;
+		void keep(const World &world, CellId cell);
 	};
 	mutable std::vector<ThermalKey> thermal_key_;
 	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly

@@ -219,3 +219,45 @@ TEST_CASE("world: a step resumed after a load refuses what a step in progress do
 	CHECK_FALSE(t.world.mid_step());
 	CHECK(t.world.disconnect(t.mouth) == Refusal::None);
 }
+
+// (Stage 75) a cell's revision moves with every write of its state or its meta, and only then: what is derived from a
+// cell is kept by it (the thermal state, its rest, a vessel's walls), so a write that drew none would keep a stale one
+TEST_CASE("world: a cell's revision moves with every write of it, and with nothing else (Stage 75)") {
+	Bench t = bench();
+	World &w = t.world;
+	const auto moves = [&](CellId c, const auto &write) {
+		const uint64_t before = w.revision(c);
+		write();
+		return w.revision(c) != before;
+	};
+	// every cell of a world built has its own
+	CHECK(w.revision(t.flask) != w.revision(t.balloon));
+	const SpeciesAmount gas[] = { { builtin::nitrogen, Amount{ 120 } } };
+	CHECK(moves(t.flask, [&] { REQUIRE(w.transfer(t.mouth, t.flask, gas, Energy{ 35 }) == Refusal::None); }));
+	CHECK(moves(t.balloon, [&] { REQUIRE(w.transfer(t.mouth, t.balloon, gas, Energy{ 0 }) == Refusal::None); }));
+	CHECK_FALSE(moves(t.room, [&] { REQUIRE(w.transfer(t.mouth, t.flask, gas, Energy{ 1 }) == Refusal::None); })); // not on it
+	CHECK_FALSE(moves(t.flask, [&] { REQUIRE(w.transfer(t.mouth, t.flask, {}, Energy{ 0 }) == Refusal::None); })); // nothing moved
+	const SpeciesAmount too_much[] = { { builtin::nitrogen, Amount{ 1000000 } } };
+	CHECK_FALSE(moves(t.flask, [&] { CHECK(w.transfer(t.mouth, t.flask, too_much, Energy{ 0 }) != Refusal::None); })); // refused
+	CHECK(moves(t.flask, [&] { REQUIRE(w.transform(t.flask, decomposition(), 10) == Refusal::None); }));
+	CHECK_FALSE(moves(t.flask, [&] { REQUIRE(w.transform(t.flask, decomposition(), 0) == Refusal::None); }));
+	CHECK(check_all(builtin_species(), w.close_step()).empty());
+	CHECK(moves(t.flask, [&] { REQUIRE(w.set_stirring(t.flask, 0.5) == Refusal::None); }));
+	CHECK_FALSE(moves(t.flask, [&] { REQUIRE(w.set_stirring(t.flask, 0.5) == Refusal::None); })); // as it was
+	CHECK(moves(t.flask, [&] { REQUIRE(w.set_landing(t.flask, 0.2) == Refusal::None); }));
+	CHECK(moves(t.flask, [&] { REQUIRE(w.set_mixing(t.flask, 0.3) == Refusal::None); }));
+	CHECK(moves(t.flask, [&] { REQUIRE(w.freeze(t.flask, true) == Refusal::None); }));
+	CHECK(moves(t.flask, [&] { REQUIRE(w.freeze(t.flask, false) == Refusal::None); }));
+	// a copy is the same cells under the same revisions; each then draws its own
+	World copy = w;
+	CHECK(copy.revision(t.flask) == w.revision(t.flask));
+	REQUIRE(copy.transfer(t.mouth, t.flask, gas, Energy{ 0 }) == Refusal::None);
+	REQUIRE(w.transfer(t.mouth, t.flask, gas, Energy{ 0 }) == Refusal::None);
+	CHECK(copy.revision(t.flask) != w.revision(t.flask));
+	// a cell added has one of its own
+	CHECK(check_all(builtin_species(), w.close_step()).empty());
+	Refusal why = Refusal::None;
+	const CellId added = w.add_cell("jar", CellMeta{}, &why);
+	REQUIRE(why == Refusal::None);
+	CHECK(w.revision(added) != w.revision(t.flask));
+}
