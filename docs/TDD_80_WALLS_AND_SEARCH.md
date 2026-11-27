@@ -13,7 +13,7 @@ shown every printed result old against new, "Re-record". GAME_SPEC 0.80.0.
 | 80.2 | A vessel's walls from what they read on a grid | Done |
 | 80.3 | An equilibrium's search seeded by a line | Done |
 | 80.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 80.5 | `make gates`; the user's sign-off | Open |
+| 80.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 80.1 Where a step goes
 
@@ -71,6 +71,14 @@ What the sessions print, main against Stage 80:
 
 Every other line is as it was. Every other test passes within its own tolerances (882 entries; only the two records
 and the 20 that read the demo record's fixture failed before the re-record). `make sessions APPROVED=1`.
+
+## 80.5 The gates
+
+Main took Stage 78 (mercury) meanwhile. Merged into the branch, it moved the digests and nothing printed. The
+sessions' printed results against main's were, line for line, the changes approved above, so the records were
+re-recorded on the merged physics. `make gates` passed every gate (436 s at a load of about 21). Its step cost line,
+against the count Stage 78's own merge gate took for main: `step cost: 1100947 instructions a step (demo), -10.5 %
+against main's at 2fe2bdd`, Stage 75's comparison at work across sessions.
 
 ## Open
 
