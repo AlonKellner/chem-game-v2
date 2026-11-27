@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 75 (2026-11-27; GAME_SPEC stays 0.76.0 (merged after Stages 71 and 76): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.77.0 (merged after Stages 71, 76 and 77): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
   digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
@@ -10,6 +10,15 @@
   what its layers hold.
 - The gates: `make gates` prints the step's cost in instructions against main's where the branch left it, warning
   past 10 % (`gate_cache.py stepcost`, `step_costs.json` in the shared cache).
+
+## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
+
+- §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a
+  fraction of a pixel a frame at the room's whole view) left its old shape behind, brighter, settled and never
+  corrected. A pixel read by its own rays whose rays moved (its beam traced again) kept, by the drift rule, the
+  corrections its old rays had found; it now starts again. Reproduced by `data/plays/ghost.json` on the GPU (a play's
+  picture held to the truth by the host, `LAB_SHOT_PARITY`) and on the CPU (`test_ghost.cpp`). Nested rays moved to a
+  stage of their own after Stage 78, by the user's choice.
 
 ## 0.76.0 (2026-11-27, Stage 76; signed off by the user: "Approved, merge and proceed")
 
