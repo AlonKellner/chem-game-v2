@@ -421,6 +421,11 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		if (comes.x < 0.5) {
 			out.x = comes.y;
 			out.y = comes.z;
+		} else if (comes.x < 1.5 && shader::scene_vec(8).w > 0.0) {
+			// (Stage 78) a face, ruled: where on it, put as the pass puts it
+			const shader::vec3 face = shader::room_face(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side);
+			out.x = optics_layout::FACE_X + face.x * optics_layout::FACE_STRIDE + face.y;
+			out.y = optics_layout::FACE_Y + face.z;
 		} else {
 			out.x = comes.x > 1.5 ? -100000.0 : 100000.0;
 			out.y = line.y;
@@ -442,6 +447,13 @@ double drawn_at(double x, double y) {
 	// beyond the screen's edges, the wall's plane as the room says. Stage 33: the truth read the darkness beside
 	// the bench at both, where the pass read the room.)
 	const OpticsScene &scene = *shader::current;
+	if (const shader::vec4 f = shader::scene_vec(8); x >= 0.5 * optics_layout::FACE_X && f.w > 0.0) {
+		// (Stage 78) a face of the room, ruled: on a line each way, or off them (the truth's own reading of its place)
+		const double k = std::floor((x - optics_layout::FACE_X) / optics_layout::FACE_STRIDE);
+		const double u = x - optics_layout::FACE_X - k * optics_layout::FACE_STRIDE, v = y - optics_layout::FACE_Y;
+		const auto on = [&](double a) { return a - std::floor(a / f.w) * f.w < f.z; };
+		return on(u) || on(v) ? f.y : f.x;
+	}
 	if (std::fabs(x) >= 5.0e4) {
 		return x < 0.0 ? scene.far_left : scene.far_right;
 	}

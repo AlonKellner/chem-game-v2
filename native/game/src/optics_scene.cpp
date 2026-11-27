@@ -291,6 +291,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(5, 1, room.pixel_y0);
 	put(5, 2, GRID_SQUARE * room.pixel);
 	put(4, 3, room.range);
+	put(8, 0, room.face_white); // (Stage 78) the faces' ruling
+	put(8, 1, room.face_ruled);
+	put(8, 2, room.face_line);
+	put(8, 3, room.face_pitch);
 	for (int k = 0; k < 2; ++k) { // (Stage 61) the screen's panels
 		for (int c = 0; c < 4; ++c) {
 			put(6 + k, c, room.panels[k][c]);

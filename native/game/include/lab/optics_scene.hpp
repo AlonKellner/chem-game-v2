@@ -35,7 +35,12 @@ inline constexpr int MAX_BODIES = 256;
 // square of the screen's grid is there (GRID_SQUARE at the view), 0.
 // The seventh and eighth (Stage 61): the screen's panels' rectangles (x, y, w, h, on the screen), where a pixel that
 // sees only the wall is left to the screen's own drawing (alpha 0), and behind glass the bench's ruling is drawn.
-inline constexpr int HEADER_VECS = 8; // (the sixth's w, Stage 61: where the wall behind glass begins in the wall's table)
+// The ninth (Stage 78): the room's faces' ruling (all but the wall's): their white, their lines' radiance, a line's
+// width and their pitch (pixels at the view; a pitch of 0: the faces plain, each its mean). A ray that comes to a
+// face off its black edge cells is put at FACE_X + face * FACE_STRIDE + u, FACE_Y + v (the face's own place, from
+// its corner: 0 the front, 1 and 2 the left and right, 3 and 4 the top and bottom).
+inline constexpr int HEADER_VECS = 9; // (the sixth's w, Stage 61: where the wall behind glass begins in the wall's table)
+inline constexpr double FACE_X = 131072.0, FACE_STRIDE = 65536.0, FACE_Y = 131072.0;
 inline constexpr int BODY_VECS = 8;
 // The room in squares (GAME_SPEC §12.3, Stage 22; Stage 46: the layout's, at the view, so the whole room is in them
 // at any view, on the screen or off it): each lists the bodies whose rectangles (and a pixel
@@ -306,6 +311,9 @@ struct OpticsRoom {
 	double wall_px = 284.0;
 	double gap_px = 120.0;
 	double front = 0.3; // the radiance of the room in front of the bench, which glass reflects
+	// (Stage 78) the room's faces ruled as the wall is: their white, their lines' radiance, a line's width and their
+	// pitch (pixels at the view); a pitch of 0: plain, each face its mean (`beyond`)
+	double face_white = 0.0, face_ruled = 0.0, face_line = 0.0, face_pitch = 0.0;
 	// The wall beyond the screen, on every side: an endless plane of this radiance (Stage 33). A ray bent past the
 	// screen's edge lands on it. Below 0 (a scene made by hand): the wall as it is at the screen's edge, as before.
 	double beyond = -1.0;

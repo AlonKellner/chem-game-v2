@@ -6783,6 +6783,12 @@ struct Ui::Impl {
 			const double ruled = lin(((WALL_GRID >> 24) & 0xff) / 255.0), sq = std::max(static_cast<double>(square()), 2.0); // (the layout's: its ruling is as much larger as its squares)
 			const double share = 2.0 / sq - 1.0 / (sq * sq);
 			room.beyond = WALL_RADIANCE - share * (WALL_RADIANCE - ruled);
+			// (Stage 78) and the faces ruled so, now that a mirror shows them: a line each way every square, its mean the
+			// same `beyond`
+			room.face_white = WALL_RADIANCE;
+			room.face_ruled = ruled;
+			room.face_pitch = sq * scale;
+			room.face_line = scale;
 			// The room is a cube twice the screen's width on a side, each face ruled in sixteen cells across, the
 			// cells along its twelve edges black (the user's word: endless white planes left a vessel all but
 			// unseen; rays bent far, as at a rim, come to the black cells). What glass reflects is the room as a
