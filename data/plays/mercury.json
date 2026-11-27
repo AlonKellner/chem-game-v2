@@ -1,4 +1,4 @@
-{"format": "chem-play/1", "note": "Stage 78: liquid mercury beside water and copper sulfate (the experiment mercury), settled, then 4x on the mercury; pictures (LAB_SHOTS) and the pass's cost.", "steps": [
+{"format": "chem-play/1", "note": "Stage 78: liquid mercury beside water and copper sulfate (the experiment mercury), settled, then 4x on the mercury, then the water picked up and held beside it (seen in the mercury); pictures (LAB_SHOTS) and the pass's cost.", "steps": [
 	{"to": "menu:experiments", "button": "click"},
 	{"to": "experiment:mercury", "button": "click"},
 	{"frames": 120, "mark": "settled", "shot": "mercury-bench"},
@@ -6,5 +6,9 @@
 	{"to": "item:mercury", "frames": 20},
 	{"frames": 12, "zoom": 1.12, "mark": "zoom"},
 	{"frames": 120, "mark": "rest", "shot": "mercury-4x"},
-	{"frames": 10, "mark": "rest"}
+	{"frames": 10, "mark": "rest"},
+	{"to": "item:water", "frames": 30, "button": "click"},
+	{"to": "item:mercury@-0.9,0.3", "frames": 60, "mark": "carry"},
+	{"frames": 120, "mark": "held", "shot": "mercury-held"},
+	{"frames": 10, "mark": "held"}
 ]}

@@ -42,7 +42,10 @@ materials." The plan approved: "I approve of your reflection plan" (2026-11-27).
 | 78.1 | Spec (§12.3, §18, §20); liquid mercury's n and k (datagen's `nk_table`, `extinction_index`); its gate | done |
 | 78.2 | Complex Fresnel in the core; a metal liquid in both tracers (`LIQUID_K_ROW`, each liquid's own index); mercury held to the closed form, O9 and the truth's pixels | done |
 | 78.3 | The room's faces ruled as the wall is, their edge cells with them (the user's choice: a mirror shows them); read exactly by both; O28 | done |
-| 78.4 | The mercury bench (300 g), its play; `make screenshots`, `make gates`; the user's eye and sign-off | |
+| 78.4 | The mercury bench (300 g), its play (a beaker held beside it); the GPU's pictures | done |
+| 78.5 | The user's report: held items and things beside the mercury unseen in it. A ray turned back toward the eye or sideways meets every body in three dimensions (a flat thing a box as deep as it is wide: the user's choice), in both tracers; a mirror's pixels follow every other body | done |
+| 78.6 | The user's report: the experiments' list, scrollable and searched | |
+| 78.7 | `make gates`; the user's eye and sign-off | |
 
 ## The split (the user's, 2026-11-27: "Split it off")
 
@@ -61,8 +64,17 @@ followed through. With it: the long-wave range by complex Fresnel (`effective_in
   where liquid mercury turns back more (its emissivity about 0.1): a thermal camera sees it a little too bright.
 - A vessel's liquid is one medium: mercury under water is drawn as their volume mean (the layers of one vessel bend
   as one, as before; GAME_SPEC §20).
-- A ray turned back toward the eye meets no body on a nearer layer, nor a neighbour on its own (as a ray bent
-  sideways did not, before).
+- Measured on the GPU (`make pass-cost PLAY=data/plays/mercury.json`, LAB_SHOT_PARITY): at 1x 59 pixels visibly off
+  the truth (the mercury's rim); at 4x, after 120 frames, about 450 on the mercury, coloured specks where a mirror's
+  rays part (the cube's own edges, a neighbour's outline), and the CPU's frames in double show the same: unsettled, not
+  the GPU's. After 600 frames the 4x picture has 1,301 visible in all, its worst (27) the copper sulfate beaker cut
+  by the screen's edge, as before this stage. A mirror settles in a few seconds at 4x.
+- One pixel on a water beaker's rim (1226, 433 at 4x) is black on the GPU and 0.55 in the truth and in the CPU's single
+  precision: a ray held in the rim's glass and turned back, chaotic, now sent by its exact way to a face's cell or an
+  edge's (before, every such ray showed the room's one mean, whichever way it went). The GPU's float32 sends it
+  elsewhere. Not followed further.
+- A ray turned back meets a body on a layer behind its own only as the room's boxes do (a ray heading away again after
+  it is not walked through the layers anew); four meetings at most.
 - Where the mirror's image crosses the cube's own edge (from one face to the next) a pixel's rays part, and such a
   pixel may stop asking for rays a little off (the open class of Stage 35's TDD): inside the black of the edge cells,
   so it does not show.
