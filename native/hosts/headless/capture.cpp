@@ -1,6 +1,7 @@
 // chem_tool capture (Stage 61; GAME_SPEC §13.1): the supplies' pictures built ahead, before the game runs. Each bench
 // given is opened on a screen, which captures every supply's picture it lacks (of it alone in its box, by the
-// renderer's own source on the CPU); what the file held is kept, what is new added, and the file written again.
+// renderer's own source on the CPU); what the file held is kept, what is new added, and the file written again (Stage 86:
+// as the screen gives them, this renderer's alone: a file of another renderer's is captured again whole).
 #include "chem_api.h"
 
 #include <cstdio>
@@ -40,9 +41,9 @@ int run_capture(int argc, char **argv) {
 		cg_ui_frame(ui, 1.0 / 60.0);
 		cg_ui_capture_pictures(ui);
 		if (cg_ui_pictures_changed(ui)) {
-			kept = cg_ui_pictures(ui);
 			std::printf("captured %s\n", argv[k]);
 		}
+		kept = cg_ui_pictures(ui);
 		cg_ui_close(ui);
 	}
 	if (kept.empty()) {

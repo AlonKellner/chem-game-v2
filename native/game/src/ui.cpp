@@ -13,6 +13,7 @@
 #include "lab/search.hpp"
 #include "lab/conditions.hpp"
 #include "lab/prism_demo.hpp"
+#include "lab/renderer_key.hpp"
 #include "lab/spectrometer.hpp"
 #include "lab/thermal.hpp"
 #include "lab/view.hpp"
@@ -816,11 +817,13 @@ struct Ui::Impl {
 		}
 	}
 	// ---- the supplies' pictures (Stage 61): what is drawn of a supply, as a key (FNV-1a: the same on every build of
-	// the same source, so a picture built ahead is found again); a box's pixels read from a scene; one captured alone
+	// the same source, so a picture built ahead is found again), and what it is rendered by (Stage 86: the renderer's
+	// files, RENDERER_KEY; what bodies a view composes here is "pictures", the key's version); a box's pixels read from
+	// a scene; one captured alone
 	OpticsRoom room_was, room_drawn; // (the wall behind glass, and as it is painted)
 	bool capture_ahead = false; // (a host's: supplies with no picture captured apart, one at a time)
 	static std::string picture_key(const ItemView &s) {
-		json j = { { "pictures", 3 }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
+		json j = { { "pictures", 3 }, { "renderer", RENDERER_KEY }, { "box", CAB_BOX }, { "kind", s.kind }, { "glassware", s.glassware }, { "ml", s.nominal_ml }, { "volume", s.volume_ml }, { "w", s.w },
 			{ "h", s.h }, { "label", s.label }, { "wall", s.wall_mm }, { "floor", s.floor_mm }, { "condenser", s.condenser } };
 		json held = json::array();
 		for (const SubstanceView &c : s.contents) {
@@ -7936,6 +7939,9 @@ bool Ui::add_pictures(std::string_view text, std::string &why) {
 			why = "the pictures are not \"chem-pictures/1\"";
 			return false;
 		}
+		if (j.value("renderer", "") != RENDERER_KEY) {
+			return true; // (Stage 86) another renderer's pictures (or a file older than the key): none is this one's
+		}
 		for (const json &p : j.at("pictures")) {
 			Picture pic;
 			pic.w = p.at("w").get<int>();
@@ -7964,7 +7970,7 @@ std::string Ui::pictures() {
 		list.push_back({ { "key", key }, { "w", p.w }, { "h", p.h }, { "rgb", to_base64(p.rgb) } });
 	}
 	impl_->pictures_new = false;
-	return json{ { "format", "chem-pictures/1" }, { "pictures", list } }.dump();
+	return json{ { "format", "chem-pictures/1" }, { "renderer", RENDERER_KEY }, { "pictures", list } }.dump();
 }
 
 bool Ui::pictures_changed() const {
