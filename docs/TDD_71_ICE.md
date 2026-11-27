@@ -100,7 +100,7 @@ Other liquids (C9) and burning (C10), the rest of step I, are later stages.
 | 71.5 | A test tube (ISO 4142); a vessel in a vessel: `stand`, the volume integral (`outside_below`, `World::reshape_column`), ring-to-layer contacts (`set_facings`), the bath held, saved and loaded; a bench vessel at its own temperature (`celsius`) | Done |
 | 71.6 | The screen: "stand it in", a standing tube drawn at its bath's scale on the nearer layer, picked, labelled, put back in place | Done |
 | 71.7 | The experiments `freezing_point` (curriculum 33) and `heating_curve` (curriculum 26) | Done |
-| 71.8 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (423 s, merge level, Stages 65, 70 and 72 merged in): core, 871 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens (re-recorded with the user's approval after each merge, their measurements identical to main's). Awaiting the user's sign-off |
+| 71.8 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (423 s, merge level, Stages 65, 70 and 72 merged in): core, 871 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens (re-recorded with the user's approval after each merge, their measurements identical to main's). Signed off by the user |
 
 ## Tests
 

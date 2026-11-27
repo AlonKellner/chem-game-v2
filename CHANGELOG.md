@@ -41,7 +41,7 @@
   their digests re-recorded with the user's approval. A cell's temperature read from the simulation's kept thermal
   state by the columns and the lab (the same value).
 
-## 0.71.0 (2026-11-27, Stage 71, merged after 0.72.0)
+## 0.71.0 (2026-11-27, Stage 71, merged after 0.72.0 and 0.73.1; signed off by the user: "Approved, merge and proceed")
 
 - §8, §9 (Stage 71, `docs/TDD_71_ICE.md`; the curriculum's step I, C8): **ice**, H2O(s), from IAPWS R10-06 (melting at
   273.152519 K, 6006.8 J/mol). `water_freezing` a surface law limited by the heat its change carries (a new general
