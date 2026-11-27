@@ -1,0 +1,38 @@
+# Eriochrome Black T, MgIn- (wine red, pH 10): its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 400-700 nm: J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and Lindstrom, Anal. Chem. 31, 414), Fig. 7 (printed p. 54; its red tail an upper bound: 5-10 % free dye), read from
+# the figure every 10 nm (+-0.02 absorbance, +-1 nm), epsilon = A / c with the dye's concentration from the thesis's
+# methods (4.908e-5 M, 1 cm: assumed, +-3 %); ionic strength 0.100 (KCl). Added here: 380 nm its 400 nm value held, nought at 780.
+nm,epsilon
+380,10200
+400,10200
+410,10000
+420,10100
+430,10300
+440,11500
+450,12300
+460,13400
+470,15300
+480,17500
+490,20200
+500,23300
+510,26700
+520,30300
+530,32100
+540,32500
+550,33000
+560,33200
+570,30200
+580,23600
+590,17600
+600,12300
+610,8900
+620,7300
+630,6500
+640,6100
+650,6000
+660,5800
+670,5600
+680,5100
+690,4500
+700,3900
+780,0

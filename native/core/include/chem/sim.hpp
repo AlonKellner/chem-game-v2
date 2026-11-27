@@ -183,6 +183,11 @@ private:
 	std::vector<Reaction> reactions_; // with a rate law
 	std::vector<Reaction> equilibria_; // of the equilibrium law
 	std::vector<int> seen_; // project()'s scratch: the cell's version at each equilibrium's last probe
+	// (Stage 81) each equilibrium's species it consumes forward and backward, as bits (a word every 64 species): one that
+	// lacks one of each, either way, cannot move, and is passed without a call; and project()'s scratch, the cell's
+	// species present
+	std::vector<uint64_t> needs_forward_, needs_backward_, present_;
+	size_t needs_words_ = 0;
 	std::vector<int32_t> depth_, parent_, parent_edge_; // settle()'s tree, kept to spare the allocations
 	std::vector<size_t> order_;
 	// the sealed cells (Stage 28), each group breadth first from its first cell; a group's root has parent -1

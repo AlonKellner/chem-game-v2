@@ -26,6 +26,17 @@ Simulation::Simulation(World world, std::vector<Reaction> reactions) :
 			equilibria_.push_back(std::move(r));
 		}
 	}
+	// (Stage 81) what each equilibrium consumes each way, as bits
+	needs_words_ = (static_cast<size_t>(world_.species().species_count()) + 63) / 64;
+	needs_forward_.assign(equilibria_.size() * needs_words_, 0);
+	needs_backward_.assign(equilibria_.size() * needs_words_, 0);
+	present_.assign(needs_words_, 0);
+	for (size_t e = 0; e < equilibria_.size(); ++e) {
+		for (const Term &t : equilibria_[e].terms()) {
+			const size_t i = static_cast<size_t>(t.species.index);
+			(t.nu < 0 ? needs_forward_ : needs_backward_)[e * needs_words_ + i / 64] |= uint64_t{ 1 } << (i % 64);
+		}
+	}
 }
 
 namespace {
@@ -908,8 +919,12 @@ bool Simulation::project(CellId cell) {
 	std::vector<uint64_t> after_joint;
 	bool joint = true;
 	// (Stage 65: 64, from 16: a solution's carbon dioxide trading with its gas through water's ionisation and the
-	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour)
-	for (int round = 0; round < 64; ++round) {
+	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour. Stage 81: 256:
+	// copper hydroxide dissolving in a little ammonia as its ammines, the solid project()'s alone and the ammines,
+	// ammonia's protonation and water's ionisation joint, takes 130 to 250 rounds to its balance; a cell that settles
+	// sooner stops sooner)
+	int present_version = -1; // (Stage 81) the version present_ was taken at
+	for (int round = 0; round < 256; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];
@@ -917,6 +932,23 @@ bool Simulation::project(CellId cell) {
 				continue; // nothing changed since it was probed, or since it moved
 			}
 			seen_[e] = version;
+			if (present_version != version) {
+				std::fill(present_.begin(), present_.end(), 0);
+				for (size_t i = 0; i < state.amount.size(); ++i) {
+					if (state.amount[i] > 0) {
+						present_[i / 64] |= uint64_t{ 1 } << (i % 64);
+					}
+				}
+				present_version = version;
+			}
+			bool can_forward = true, can_backward = true; // (Stage 81) all it consumes there, each way
+			for (size_t w = 0; w < needs_words_; ++w) {
+				can_forward = can_forward && (present_[w] & needs_forward_[e * needs_words_ + w]) == needs_forward_[e * needs_words_ + w];
+				can_backward = can_backward && (present_[w] & needs_backward_[e * needs_words_ + w]) == needs_backward_[e * needs_words_ + w];
+			}
+			if (!can_forward && !can_backward) {
+				continue; // none of what it would consume, either way
+			}
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}

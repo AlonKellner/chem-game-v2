@@ -1,0 +1,17 @@
+# Tetramminecopper(II), Cu(NH3)4 2+: its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 465-690 nm: J. Bjerrum, Kgl. Danske Vid. Selsk. Math.-fys. Medd. XI, Nr. 10 (1932), Table 14 (p. 26), the tetrammine's
+# molar extinctions, from 0.2 M CuCl2 in ammonia water, 15 C. Added here: nought at 380 nm (its 465 and 480 nm rows falling
+# toward the violet), and past 690 nm its 690 nm value held (the band runs on into the near infrared; not measured here).
+nm,epsilon
+380,0.0
+465,4.3
+480,7.8
+530,32.4
+546,40.3
+574,50.4
+600,51.6
+620,48.5
+640,43.6
+660,38.6
+690,31.3
+780,31.3

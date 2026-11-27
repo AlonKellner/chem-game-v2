@@ -1,5 +1,21 @@
 # GAME_SPEC version history
 
+## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 81, `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part): **complexes**, each a fast
+  equilibrium at its measured constant: copper's ammines (NBS's free energies), silver's (MINTEQ v4, NBS), zinc's and
+  aluminium's hydroxo complexes (MINTEQ v4), iron(III)'s thiocyanates (calibrated to Below, Connick and Coppel's and
+  Lister and Rivington's quotients), cobalt's tetrachloro (calibrated to Bjerrum, Halonin and Skibsted's α₄), chromate,
+  hydrogen chromate and dichromate (NBS); **EDTA** and its complexes (MINTEQ v4) and **Eriochrome Black T** (Lindstrom
+  1959, calibrated at 0.1 ionic strength). Each series step by step and each solid straight into its complex (a free
+  ion under one quantum); the fast equilibria's rounds 64 to 256; a table's dissolved particles 64 to 128; chromium.
+- §12: their colours, measured where open (Haupt's chromate, Bjerrum's tetrammine and CoCl₄²⁻, Ozutsumi's and Betts
+  and Dainton's FeSCN²⁺, Lindstrom's indicator) and calibrated where not (dichromate's visible band, the user's
+  choice; hydrogen chromate, the lower ammines, Fe(SCN)₂⁺, the indicator's red form).
+- §13: the free lab's reagents (potassium thiocyanate, chromate and dichromate; 6 M ammonia, concentrated hydrochloric
+  acid, 2 M sodium hydroxide; 0.0100 M EDTA, a pH 10 buffer and Eriochrome Black T).
+- Flame emission is a stage of its own (the user's split).
+
 ## Stage 84 (2026-11-27; GAME_SPEC stays 0.80.0: no behaviour of the game changes; signed off by the user)
 
 - The gates (`docs/TDD_84_GODOT_GATE.md`): the Godot step builds and runs only what needs the engine (the extension,

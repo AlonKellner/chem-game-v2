@@ -1,0 +1,12 @@
+# Dithiocyanatoiron(III), Fe(SCN)2+: its molar absorptivity, decadic, L/mol/cm (Stage 81), CALIBRATED in its shape: FeSCN 2+'s
+# (iron_thiocyanate.csv) moved 25 nm to the red and scaled to Ozutsumi et al. 1992's maximum, about 8800 near 485 nm (Fig. 2a
+# curve 2, read from the figure).
+nm,epsilon
+380,5280
+425,5280
+485,8800
+525,7431.1
+575,3715.6
+625,1368.9
+725,0
+780,0

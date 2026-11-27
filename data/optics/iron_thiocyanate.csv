@@ -1,0 +1,14 @@
+# Thiocyanatoiron(III), FeSCN 2+: its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# Shape: K. Ozutsumi, M. Kurihara, T. Miyazawa and T. Kawashima, Anal. Sci. 8, 521-526 (1992), Fig. 2a curve 1 (1 M NaClO4,
+# 0.1 M HClO4, 25 C; read from the figure, +-10-15 %): 400 nm 2700, 460 nm 4500 (its maximum), 500 nm 3800, 550 nm 1900, 600 nm
+# 700; scaled by 5000/4500 to Betts and Dainton's 5000 +- 50 at 460 nm (JACS 75, 5721 (1953), as Below, Connick and Coppel,
+# JACS 80, 2961 (1958) quote it). Added here: 380 nm its 400 nm value held, nought from 700 nm.
+nm,epsilon
+380,3000
+400,3000
+460,5000
+500,4222.2
+550,2111.1
+600,777.78
+700,0
+780,0

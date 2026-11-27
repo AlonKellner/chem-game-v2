@@ -1,0 +1,38 @@
+# Eriochrome Black T, CaIn- (red, pH 10): its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 400-700 nm: J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and Lindstrom, Anal. Chem. 31, 414), Fig. 7 (printed p. 54), read from
+# the figure every 10 nm (+-0.02 absorbance, +-1 nm), epsilon = A / c with the dye's concentration from the thesis's
+# methods (4.908e-5 M, 1 cm: assumed, +-3 %); ionic strength 0.100 (KCl). Added here: 380 nm its 400 nm value held, nought at 780.
+nm,epsilon
+380,9400
+400,9400
+410,9000
+420,9400
+430,10300
+440,11500
+450,13300
+460,14600
+470,15900
+480,17500
+490,19400
+500,21600
+510,24500
+520,27500
+530,28700
+540,29300
+550,29200
+560,28300
+570,24900
+580,20200
+590,14100
+600,9000
+610,5600
+620,3700
+630,2500
+640,1600
+650,1400
+660,1200
+670,1000
+680,900
+690,900
+700,800
+780,0

@@ -1,0 +1,10 @@
+{"format": "chem-play/1", "note": "Stage 81: the complexes' colours side by side (the experiment complexes), settled; pictures (LAB_SHOTS).", "steps": [
+	{"to": "menu:experiments", "button": "click"},
+	{"to": "experiment:complexes", "button": "click"},
+	{"frames": 150, "mark": "settled", "shot": "complexes-bench"},
+	{"frames": 10, "mark": "settled"},
+	{"to": "item:cobalt_pink", "frames": 20},
+	{"frames": 12, "zoom": 1.06, "mark": "zoom"},
+	{"frames": 240, "mark": "rest", "shot": "complexes-2x"},
+	{"frames": 10, "mark": "rest"}
+]}
