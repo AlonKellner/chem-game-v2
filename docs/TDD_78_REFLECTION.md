@@ -44,8 +44,8 @@ materials." The plan approved: "I approve of your reflection plan" (2026-11-27).
 | 78.3 | The room's faces ruled as the wall is, their edge cells with them (the user's choice: a mirror shows them); read exactly by both; O28 | done |
 | 78.4 | The mercury bench (300 g), its play (a beaker held beside it); the GPU's pictures | done |
 | 78.5 | The user's report: held items and things beside the mercury unseen in it. A ray turned back toward the eye or sideways meets every body in three dimensions (a flat thing a box as deep as it is wide: the user's choice), in both tracers; a mirror's pixels follow every other body | done |
-| 78.6 | The user's report: the experiments' list, scrollable and searched | |
-| 78.7 | `make gates`; the user's eye and sign-off | |
+| 78.6 | The user's report: the experiments' list, scrollable and searched | done |
+| 78.7 | `make gates`; the user's eye and sign-off ("Approved, merge and proceed", 2026-11-27) | done |
 
 ## The split (the user's, 2026-11-27: "Split it off")
 

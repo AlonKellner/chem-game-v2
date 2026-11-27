@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.78.0 (2026-11-27, Stage 78; awaiting the user's sign-off)
+## 0.78.0 (2026-11-27, Stage 78; signed off by the user: "Approved, merge and proceed")
 
 - §12.3 (Stage 78, `docs/TDD_78_REFLECTION.md`; the user's request for reflection simulated as refraction is):
   **each material's own index, complex where it is a metal**: datagen's measured n + ik tables (`nk_table`, read in
