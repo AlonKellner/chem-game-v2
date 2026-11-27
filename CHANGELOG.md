@@ -16,7 +16,13 @@
 - §18: O6 restated for a complex index; **O28** (a mirror shows the room's ruled faces where the truth's rays find
   them); O27 reserved for clear surfaces' branches, split off to their own stage (the user's choice), built so far on
   branch `reflection-branches-wip`.
-- §13: the experiment mercury (300 g of liquid mercury beside water and copper sulfate); a play of it.
+- §12.3 (the user's report: things held and beside the mercury unseen in it): **a ray turned back toward the eye or
+  sideways meets the room's things in three dimensions**, a vessel by its surfaces, a flat thing as a box as deep as
+  it is wide (the user's choice), in both tracers; a mirror's pixels follow every other body.
+- §13: the experiment mercury (300 g of liquid mercury beside water and copper sulfate); a play of it, a beaker held
+  beside it. §13.7 (the user's report: the experiments hard to navigate): **the experiments' list scrolled and
+  searched** (one column, the wheel and a bar, a search field matching titles, summaries and ids; plays reach a row
+  out of sight by `lab::scroll_to`).
 ## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 
 - §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a

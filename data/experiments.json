@@ -236,7 +236,7 @@
 		{
 			"id": "mercury",
 			"title": "Liquid mercury, beside water",
-			"summary": "A beaker of mercury beside water and a blue solution, to see how the renderer draws a metal: opaque, but without the mirror-like silver a real one has.",
+			"summary": "A beaker of liquid mercury beside water and a blue solution: a metal as its measured complex index, a curved mirror that shows the room's ruled faces, the beakers beside it and whatever is held near it.",
 			"bench": "benches/mercury.json",
 			"tutorial": null
 		},
