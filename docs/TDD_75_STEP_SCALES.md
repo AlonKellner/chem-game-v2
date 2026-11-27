@@ -15,7 +15,7 @@ more. No behaviour of the game changes: every golden and digest as it was; GAME_
 | 75.4 | Each cell's mixtures kept: a probe's setup, the activity model's range | Done |
 | 75.5 | The column's diffusion over what its layers hold; a probe's pairs past 64 | Done |
 | 75.6 | Smaller: the gas exchange, a surface reaction's solvent | Done |
-| 75.7 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 75.7 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 Dropped from the plan, found in its exploration: ui.9, tutorial.1 and tutorial.2 do not replay the demo session
 (another bench, other commands, the tutorial's monitor and rig, a person's slider): starting them from saves would

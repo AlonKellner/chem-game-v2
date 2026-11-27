@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 75 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; awaiting the user's sign-off)
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
   digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
