@@ -25,6 +25,19 @@
 		"sodium_carbonate_decahydrate": {"kind": "reflect", "base": 0.85, "bands": []},
 		"sodium_acetate": {"kind": "reflect", "base": 0.85, "bands": []},
 		"potassium_hydrogen_phthalate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"silver_chloride": {"kind": "reflect", "base": 0.85, "bands": []},
+		"barium_sulfate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"barium_carbonate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"calcium_carbonate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"gypsum": {"kind": "reflect", "base": 0.85, "bands": []},
+		"calcium_hydroxide": {"kind": "reflect", "base": 0.85, "bands": []},
+		"magnesium_hydroxide": {"kind": "reflect", "base": 0.85, "bands": []},
+		"zinc_hydroxide": {"kind": "reflect", "base": 0.85, "bands": []},
+		"aluminium_hydroxide": {"kind": "reflect", "base": 0.85, "bands": []},
+		"iron_ii_hydroxide": {"kind": "reflect", "base": 0.72, "bands": [{"centre_nm": 520, "width_nm": 90, "peak": 0.1}]},
+		"iron_iii_hydroxide": {"kind": "reflect", "base": 0.03, "bands": [{"centre_nm": 730, "width_nm": 130, "peak": 0.4}]},
+		"cobalt_hydroxide": {"kind": "reflect", "base": 0.22, "bands": [{"centre_nm": 670, "width_nm": 130, "peak": 0.5}, {"centre_nm": 420, "width_nm": 50, "peak": 0.22}]},
+		"silver_oxide": {"kind": "reflect", "base": 0.035, "bands": [{"centre_nm": 720, "width_nm": 200, "peak": 0.04}]},
 		"nickel_ion": {
 			"kind": "absorb",
 			"bands": [
@@ -45,6 +58,8 @@
 				}
 			]
 		},
+		"cobalt_ion": {"kind": "absorb", "bands": [{"centre_cm1": 19450, "fwhm_cm1": 2700, "peak": 4.0}, {"centre_cm1": 21600, "fwhm_cm1": 3500, "peak": 2.0}]},
+		"iron_hydroxo_ion": {"kind": "absorb", "bands": [{"centre_cm1": 33700, "fwhm_cm1": 8900, "peak": 2000}]},
 		"malachite": {
 			"kind": "reflect",
 			"table": "malachite.csv"

@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.76.0 (2026-11-27, Stage 76; signed off by the user: "Approved, merge and proceed")
+
+- §9, §10 (Stage 76, `docs/TDD_76_METALS.md`; `docs/CURRICULUM.md`, step E's first part: C1's metals, C3's
+  precipitates): **calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt**, nitrate, 23 salts, the
+  hydrolysis of iron(III) and aluminium (NIST 46.3), and **13 precipitates** at MINTEQ v4's solubility products, each
+  solid's S° set to it on NBS's enthalpy; Pitzer and Mayorga's and Harvie, Møller and Weare's pairs; gated on MINTEQ,
+  wateq4f's analytic solubilities from 10 to 80 °C and NIST SRM 2193b's saturated calcium hydroxide from 5 to 50 °C.
+  `chem_tool study precipitates`.
+- §12: cobalt(II)'s and FeOH²⁺'s absorption from measured spectra; the precipitates' colours.
+- §13: the free lab's new reagents (ten metal salts' solutions, limewater, chalk); the supplies' search counts a salt
+  only as a share of what a vessel holds.
+- §20: the precipitates' declared simplifications.
+
 ## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
 
 - §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):
