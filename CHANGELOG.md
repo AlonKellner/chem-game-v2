@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## 0.80.0 (2026-11-27, Stage 80; awaiting the user's sign-off)
+
+- §6, the wall in rings; §8, the fast equilibria (Stage 80, `docs/TDD_80_WALLS_AND_SEARCH.md`): a vessel's walls read
+  their temperatures, levels, water's activity and pressure on a grid (0.01 K, a micrometre, 1e-6, 0.01 Pa), each
+  ring's outside and contact worked out again only once that moved, a function of the state alone; an equilibrium's
+  search seeded by the line through no extent and one quantum. The demo 1.227 to 1.104 million instructions a step
+  (−10 %); the oxide gone 0.1 s later, the flask cool 0.2 s sooner, 0.12 mg more crystals; the sessions re-recorded
+  with the user's approval.
+
 ## Stage 75 (2026-11-27; GAME_SPEC stays 0.77.0 (merged after Stages 71, 76 and 77): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
