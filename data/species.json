@@ -76,6 +76,7 @@
 		{"id": "sodium_carbonate", "formula": "Na2CO3", "phase": "s", "density": 2.54, "thermo": {"hf_kj": -1130.68, "cp": 112.3, "s0": 126.5}},
 		{"id": "sodium_carbonate_decahydrate", "formula": "Na2CO3.10H2O", "phase": "s", "density": 1.46, "thermo": {"hf_kj": -4081.32, "cp": 550.32, "s0": 556.31}},
 		{"id": "sodium_acetate", "formula": "CH3COONa", "phase": "s", "density": 1.528, "thermo": {"hf_kj": -708.81, "cp": 79.9, "s0": 123.13}},
-		{"id": "potassium_hydrogen_phthalate", "formula": "KHC8H4O4", "phase": "s", "density": 1.644, "thermo": {"hf_kj": -1028.05, "cp": 211.14, "s0": 229.0}}
+		{"id": "potassium_hydrogen_phthalate", "formula": "KHC8H4O4", "phase": "s", "density": 1.644, "thermo": {"hf_kj": -1028.05, "cp": 211.14, "s0": 229.0}},
+		{"id": "ice", "formula": "H2O", "phase": "s", "density": 0.916721, "conductivity": 2.24, "grain_um": 100, "thermo": {"hf_kj": -292.7768, "cp": 37.773, "s0": 44.6665}}
 ]
 }

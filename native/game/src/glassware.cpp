@@ -676,6 +676,9 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.paper_herzberg_s = paper.at("herzberg_s").get<double>();
 		v.paper_height = paper.at("diameter_mm").get<double>() / 20.0 * std::cos(v.cone_half_angle); // a quarter-folded circle: its radius the cone's slant
 		v.tip_bore = 2.0 * (rs - std::min(t, 0.8 * rs));
+	} else if (kind == "test_tube") {
+		// (Stage 71) ISO 4142: a round floor, its corner the tube's own radius, a straight tube to a plain rim
+		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
 	} else if (kind == "cuvette") {
 		// a round cell (Stage 55): a flat floor, a straight tube to an open top; its inside across is its path
 		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };

@@ -295,9 +295,9 @@ double mol_of(const SpeciesTable &table, SpeciesId id, const json &amount, uint6
 // stand over a burner. A bench may give its own ("size").
 void default_size(const std::string &kind, double volume_ml, bool condenser, int &w, int &h, const std::string &glassware = "") {
 	// tall glassware (Stage 52): a burette, a pipette, a cylinder, a volumetric flask stand on narrow, tall footprints
-	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask")) {
-		w = 2;
-		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : volume_ml > 50.0 ? 8 : 6;
+	if (kind == "vessel" && (glassware == "burette" || glassware == "pipette" || glassware == "measuring_cylinder" || glassware == "volumetric_flask" || glassware == "test_tube")) {
+		w = glassware == "test_tube" ? 1 : 2; // (Stage 71) a test tube: one square wide
+		h = glassware == "burette" ? 12 : glassware == "pipette" ? 11 : glassware == "test_tube" ? 6 : volume_ml > 50.0 ? 8 : 6;
 		return;
 	}
 	if (kind == "viewer") {
@@ -6656,7 +6656,7 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 			for (size_t s = 0; s < state.amount.size(); ++s) {
 				liquid += table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid ? static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * 0.018015 : 0.0;
 			}
-			const double born = k.nucleation * liquid * std::pow(s_ratio - 1.0, k.nucleation_order);
+			const double born = k.nucleation * liquid * chem::primary_nucleation(k, a / rt); // (Stage 71: or by its barrier)
 			return text_of("supersaturated (S = %.4f): no crystals yet, %.3g starting a second", s_ratio, born);
 		}
 		std::string growing = text_of("supersaturated (S = %.4f): growing on ", s_ratio) + text_of("%.0f crystals", static_cast<double>(state.particles[in]));

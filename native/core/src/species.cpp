@@ -350,7 +350,7 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 			set_why(why, "reaction " + name + ": the driver of its rate is not one of its dissolved reactants");
 			return std::nullopt;
 		}
-		for (const double v : { kinetics.prefactor, kinetics.activation, kinetics.nucleation, kinetics.nucleation_order, kinetics.secondary, kinetics.secondary_order }) {
+		for (const double v : { kinetics.prefactor, kinetics.activation, kinetics.nucleation, kinetics.nucleation_order, kinetics.secondary, kinetics.secondary_order, kinetics.nucleation_barrier }) {
 			if (!(v >= 0.0) || !(v - v == 0.0)) {
 				set_why(why, "reaction " + name + ": a rate's numbers are not negative and are finite");
 				return std::nullopt;

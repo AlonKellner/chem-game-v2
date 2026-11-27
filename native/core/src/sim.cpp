@@ -109,6 +109,18 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 // that transport sets the pace at any stirring (calibrated; docs/DATA_SOURCES.md, A crystal dissolving)
 constexpr double DETACHMENT = 1000.0;
 
+double primary_nucleation(const Kinetics &kinetics, double ln_s) {
+	if (!(ln_s > 0.0)) {
+		return 0.0;
+	}
+	if (kinetics.nucleation_barrier > 0.0) {
+		const double exponent = kinetics.nucleation_barrier / (ln_s * ln_s);
+		return exponent < 700.0 ? exp(-exponent) : 0.0;
+	}
+	const double excess = ln_s < 700.0 ? exp(ln_s) - 1.0 : 1e300; // S - 1
+	return pow(excess, kinetics.nucleation_order);
+}
+
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta) {
 	SurfaceSteps steps;
 	const Kinetics &kinetics = reaction.kinetics();
@@ -140,8 +152,30 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 		}
 	}
 	const double d = particle_diameter(table, cell, kinetics.in);
-	if (!table.has(carried) || !(d > 0.0)) {
+	if (!(d > 0.0)) {
 		return steps; // no particles yet (they nucleate)
+	}
+	if (!table.has(carried)) {
+		// (Stage 71) nothing dissolved to carry: a pure substance changing phase at its surface, limited by the heat its
+		// change carries between the surface and the liquid round it
+		double liquid = 0.0, dh = 0.0;
+		for (size_t s = 0; s < cell.amount.size(); ++s) {
+			liquid += cell.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid ? 1.0 : 0.0;
+		}
+		for (const Term &t : reaction.terms()) {
+			const SpeciesDef &def = table.species(t.species);
+			dh += t.nu * (def.hf + def.cp * (temperature - T0));
+		}
+		const SolventPoint w = solvent_at(table, temperature);
+		if (!(liquid > 0.0) || !(dh * dh > 1.0) || !(w.k > 0.0) || !(w.nu > 0.0) || !(w.pr > 0.0)) {
+			return steps; // in no liquid (heat reaches it as fast as the cell's), or no heat to carry
+		}
+		const double nusselt = 2.0 + (dissipation > 0.0 ? 0.4 * pow(dissipation * d * d * d * d / (w.nu * w.nu * w.nu), 0.25) * cbrt(w.pr) : 0.0);
+		// J/mol of |A|: T - T_eq = A T / dH
+		steps.transport = nusselt * w.k / d * (a > 0.0 ? a : -a) * temperature / (dh * dh);
+		steps.transported = true;
+		steps.both = steps.surface > 0.0 && steps.transport > 0.0 ? steps.surface * steps.transport / (steps.surface + steps.transport) : 0.0;
+		return steps;
 	}
 	const int32_t nu_signed = reaction.nu(carried);
 	const double nu = nu_signed < 0 ? -nu_signed : nu_signed;
@@ -343,7 +377,7 @@ void Simulation::react() {
 					const double excess = a / rt < 700.0 ? exp(a / rt) - 1.0 : 1e300; // S - 1
 					// from the solution (primary), and (Stage 66) bred from the crystals there by the stirring (secondary:
 					// fragments its turning chips off them, each grown from one quantum)
-					const double primary = kinetics.nucleation > 0.0 ? kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * pow(excess, kinetics.nucleation_order) : 0.0;
+					const double primary = kinetics.nucleation > 0.0 ? kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * primary_nucleation(kinetics, a / rt) : 0.0;
 					const double bred = kinetics.secondary > 0.0 && dissipation > 0.0 && have > 0
 							? kinetics.secondary * dissipation * mol * static_cast<double>(table.molar_mass_ug(kinetics.in)) * 1e-9 * pow(excess, kinetics.secondary_order)
 							: 0.0;
@@ -388,6 +422,17 @@ void Simulation::react() {
 				const int64_t nuclei = born < size ? born : size;
 				if (nuclei > 0 && state.amount[in] > 0) {
 					world_.set_particles(cell, kinetics.in, grains + nuclei);
+				}
+				// (Stage 71) a solid with a grain grows as a mush of crystals no larger than it (ice's dendrites in a
+				// supercooled liquid): what it grows into is its grains
+				const SpeciesDef &solid = table.species(kinetics.in);
+				if (forward == (reaction.nu(kinetics.in) > 0) && solid.grain > 0.0 && solid.molar_volume > 0.0) {
+					const double volume = static_cast<double>(world_.amount(cell, kinetics.in).quanta) * MOL_PER_QUANTUM * solid.molar_volume;
+					const double needed = volume / (0.5235987755982988 * solid.grain * solid.grain * solid.grain);
+					const int64_t now = world_.particles(cell, kinetics.in);
+					if (needed > static_cast<double>(now) && needed < 1e15) {
+						world_.set_particles(cell, kinetics.in, static_cast<int64_t>(needed) + 1);
+					}
 				}
 			} else if (grains > 0) {
 				for (size_t t = 0; t < reaction.terms().size(); ++t) {
