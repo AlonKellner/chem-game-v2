@@ -54,6 +54,13 @@ std::string bench(const std::string &items) {
 	return R"({"format": "chem-bench/2", "room": {"celsius": 25, "air_mol": 1000}, "items": [)" + items + "]}";
 }
 
+std::string bench_file(const char *path) {
+	std::ifstream f(std::string(CHEM_REPO_ROOT) + "/" + path);
+	std::stringstream s;
+	s << f.rdbuf();
+	return s.str();
+}
+
 } // namespace
 
 TEST_CASE("glassware: a gas syringe's plunger runs over its nominal volume from fully in, its bore a 120 mm scale's (Stage 79)") {
@@ -163,6 +170,33 @@ TEST_CASE("syringe lab: two syringes of water joined by a tube: one pushed in, i
 	CHECK(two.liquid_ml > one.liquid_ml);
 }
 
+TEST_CASE("syringe lab: two syringes of water on a tube are one: pushing one in takes the force pulling it out does, and the other follows as far either way (Stage 79)") {
+	// (a liquid does not give: the pair is solved together each step, so neither way is held by a bubble's stiffness)
+	const auto run = [](int to, double &force, double &a, double &b) {
+		auto l = open(bench_file("data/benches/syringes.json"));
+		ok(*l, R"({"do": "wait", "seconds": 5})");
+		const double b0 = item(*l, "water_b").plunger_ml;
+		ok(*l, R"({"do": "plunger", "item": "water_a", "ml": )" + std::to_string(to) + "}");
+		std::string why;
+		REQUIRE(l->advance(1, why));
+		force = item(*l, "water_a").plunger_force_n;
+		ok(*l, R"({"do": "wait", "seconds": 2})");
+		a = item(*l, "water_a").plunger_ml;
+		b = item(*l, "water_b").plunger_ml - b0;
+	};
+	double push = 0, pull = 0, pushed = 0, pulled = 0, in = 0, out = 0;
+	run(30, push, pushed, in);
+	run(50, pull, pulled, out);
+	MESSAGE("in by 10 mL: " << push << " N, the other " << in << " mL; out by 10 mL: " << pull << " N, the other " << out << " mL");
+	CHECK(push < 0.0);
+	CHECK(pull > 0.0);
+	CHECK(-push == doctest::Approx(pull).epsilon(0.03));
+	CHECK(pushed == doctest::Approx(30.0).epsilon(1e-6));
+	CHECK(pulled == doctest::Approx(50.0).epsilon(1e-6));
+	CHECK(in == doctest::Approx(10.0).epsilon(0.02));
+	CHECK(-out == doctest::Approx(10.0).epsilon(0.02));
+}
+
 TEST_CASE("syringe lab: a free syringe on a flask's mouth takes the gas the flask gives: one space, sealed, at the room's pressure; detached, its nozzle open (Stage 79)") {
 	auto l = open(bench(syringe("s", 4, 0.0, false) + "," +
 						R"({"id": "flask", "at": [12, 4], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 120, "celsius": 25})"));
@@ -260,13 +294,6 @@ TEST_CASE("syringe lab: a plunger locked stays where the hand leaves it, held by
 }
 
 namespace {
-
-std::string bench_file(const char *path) {
-	std::ifstream f(std::string(CHEM_REPO_ROOT) + "/" + path);
-	std::stringstream s;
-	s << f.rdbuf();
-	return s.str();
-}
 
 // hands at random on a bench's syringes, several jerked every step (to an end or anywhere, let go, locked, capped, the
 // bench's own moves): instant reversals of the force on the plungers, every invariant held on every step

@@ -361,10 +361,9 @@ TEST_CASE("syringe: a tube holds back what crosses it: water pushed through a na
 	const double mu = solvent_viscosity(builtin_species(), state(sim.world(), one.cell).temperature);
 	const double across = state(sim.world(), one.cell).pressure - state(sim.world(), two.cell).pressure;
 	MESSAGE("across the tube: " << across / 1000.0 << " kPa, Poiseuille's " << mu * q / g / 1000.0 << " kPa");
-	// (each sub-step's flow driven by the difference at its start, the difference read at the step's end, after its last
-	// flow eased it: under Poiseuille's by what a sub-step's flow eases)
-	CHECK(across < mu * q / g);
-	CHECK(across > 0.8 * mu * q / g);
+	// (two vessels joined by liquid at their feet are solved together, the flow at the difference after the step: the
+	// difference read is the one that drove it)
+	CHECK(across == doctest::Approx(mu * q / g).epsilon(0.01));
 }
 
 TEST_CASE("measured: air's viscosity is the table's at its rows, within 1 % of Lemmon and Jacobsen's (Stage 79)") {

@@ -140,27 +140,35 @@ control feature on the handle" (physical controls for other things, a burner's, 
   hands jerked at random, three a step, to the ends or anywhere, let go, locked, capped, tubes joined and undone, on
   the setups, the baths and a flask (16 runs of 6,000 steps): every invariant held; kept as a test.
 
+- **The user (2026-11-27): "in the water dual syringe setup pushing a plunger is harder than pulling on it, and the
+  same is true for both syringes, which makes no sense ... pushing a syringe is almost equivalent pulling on the
+  other. Why?"** The sub-steps: each moved a plunger against its own bubble alone before the water crossed. A push
+  squeezed the pushed syringe's bubble (stiff: its pressure climbs fast), a pull let it expand (soft), so a push met
+  more resistance than a pull on the same pair, on either syringe. A hydraulic link (two vessels joined at their feet,
+  liquid on both sides) is now solved together for the step: the water crossing is the root of Poiseuille's flow at
+  both vessels' pressures after their pistons' moves, each by its own sealed model. In by 10 mL takes 32.9 N, out by
+  10 mL 32.6 N; the other syringe follows 9.999 mL either way (a test). A tube's pressure drop now reads Poiseuille's
+  to 0.01 % (it stood 17 % under it). The random hands then found T2 falling 2e-4 J/K: a syringe of water pushed
+  hard, its bubble squeezed past where its sealed model holds (2 µL at 10 MPa), was read as a room its energy could
+  not fill, below any pressure, and its plunger's root closed on that boundary. A state past the sealed model is now
+  placed by its gas's ideal pressure in its room: squeezed too small, above the pressure tried.
+
 ## Open
 
-- **A step's cost**: the four setups' twelve to forty-eight sub-steps take about 8 ms a step with every invariant
-  checked: a 1x clock holds, a fast one runs slow.
-- **A joined water pair's pace**: its vessels give each sub-step only by their bubbles (0.07 mL): about 100 mL/s at
-  the most, slower with smaller bubbles; a pair of pure liquid stands.
-- **A tube's pressure read at the step's end** stands under Poiseuille's by what a sub-step's flow eases it (about
-  17 % for the test's narrow tube).
+- **A step's cost**: the four setups' twelve sub-steps (forty-eight where a liquid crosses outside a hydraulic link)
+  take about 8 ms a step with every invariant checked: a 1x clock holds, a fast one runs slow.
+- **A pair of pure liquid stands**: with no gas in either syringe their sealed models have no state at any
+  pressure, and neither plunger moves. A liquid's compressibility is the general answer (below).
+- **A link through more than two vessels** (a syringe of water on two others) runs in sub-steps, each vessel against
+  its own bubble: there pushing is still stiffer than pulling.
 
-- **A syringe of water tubed to one of air** (by hand: two caps off and "tube to it"): joined as one space while both
-  hold liquid, the joint estimate can miss what a squeezed gas pocket over liquid takes, and the random-hands stress
-  finds the world's entropy falling by up to 1e-3 J/K there. Exact would be each cell's sealed model at the space's
-  pressure with the liquid's split (a nested root, too dear per step as written).
 - **A sealed syringe brim-full of a liquid, warmed**: its liquid grows past its volume (V2), as a sealed flask's would;
   the plunger yields only at the next step. A liquid's compressibility is the general answer (below).
 
 - A liquid is incompressible: a sealed syringe of water moves by its bubble alone, and with none its plunger stands
-  on the liquid (a billionth of its volume left to its gas). Water's compressibility (4.5e-10 /Pa) would give 0.005 mL
+  on the liquid (a ten-thousandth of its volume left to its gas). Water's compressibility (4.5e-10 /Pa) would give 0.005 mL
   at a hand's most.
-- Joined spaces are at one pressure: a tube's own resistance to flow (Poiseuille's) is not modelled, nor a liquid's
-  head between joined syringes.
+- A liquid's head between joined syringes (a few hundred pascals) is not modelled.
 - A syringe whose nozzle is open spills what its plunger pushes past its liquid (the overflow), and draws in air,
   never liquid: drawing a liquid into a syringe is to come.
 - The plunger and its handle are slabs of the pass, lit and opaque, drawn over the barrel; the tube a hanging bar.

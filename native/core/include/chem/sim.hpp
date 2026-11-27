@@ -74,6 +74,11 @@ double primary_nucleation(const Kinetics &kinetics, double ln_s);
 // as its ions, cooled 2.6 K at its first step as its bisulfate formed (Stage 63). The builder's other settings stand.
 std::optional<World> build_settled(World::Builder builder, std::span<const Reaction> reactions, std::string *why = nullptr);
 
+// (Stage 79) a piston's move in a step: its volume's change, m^3 outward, and the hand's force, N outward
+struct PistonMove {
+	double dv = 0.0, force = 0.0;
+};
+
 class Simulation {
 public:
 	// `reactions` are the ones that run on their own, in every cell, in this
@@ -155,6 +160,13 @@ private:
 	void do_work();
 	void move_pistons(); // (Stage 79) each piston moved by its forces, its space at one pressure
 	void move_piston_alone(CellId cell, double dt); // (Stage 79) one piston, its vessel alone, exactly
+	struct PistonPlan {
+		PistonMove mv;
+		double pressure = 0.0;
+		bool ok = false;
+	};
+	PistonPlan plan_piston(CellId cell, const CellState &state, double grown, double dt) const;
+	bool solve_hydraulic(EdgeId edge, double dt); // (Stage 79) two vessels joined by liquid, solved together
 	void run_join(EdgeId edge, double dt); // (Stage 79) a connection between two sealed vessels
 	void run_liquid(const std::vector<CellId> &cells, std::vector<double> takes, double pressure, const std::vector<size_t> &liquid_edges); // (Stage 79) a piston's space's liquid where its volumes ask
 	void run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges, bool down_only); // (Stage 79) a piston's space's gas to one pressure

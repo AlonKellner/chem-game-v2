@@ -415,10 +415,19 @@ stops, its volume moved each step, first in the step, by the forces on it.
   applied to all setups with tightly connected vessels"; "I prefer you would simulate each of the syringes
   independently, simulating the exchange of liquid/gas between them"; asked, the exchange "solved within step"; "Does
   the tube restrict the flow? It should": an ordinary 4 mm tube). Each vessel keeps its own contents, temperature and
-  pressure. A step's pistons and connections run in sub-steps (12; 48 where a liquid may cross, as its vessels give
-  only by their gas): in each, every piston moves alone (below), then every connection between two sealed vessels
-  (an open edge that passes gas or liquid) lets across what runs from the higher pressure to the lower, never past
-  the two being one, each vessel's own, exactly; the exchange is done within the step.
+  pressure. A step's pistons and connections run in sub-steps (12; 48 where a liquid may cross outside a hydraulic
+  link, below, as its vessels give only by their gas): in each, every piston moves alone (below), then every
+  connection between two sealed vessels (an open edge that passes gas or liquid) lets across what runs from the
+  higher pressure to the lower, never past the two being one, each vessel's own, exactly; the exchange is done within
+  the step.
+  - **A hydraulic link** (the user, 2026-11-27: "pushing a plunger is harder than pulling on it ... which makes no
+    sense since in that setup pushing a syringe is almost equivalent pulling on the other"): two vessels joined at
+    their feet, both holding liquid there, each in no other such link (two syringes of water on a tube), are solved
+    together for the whole step, before the sub-steps. The unknown is the liquid `x` that crosses; given `x`, each
+    vessel's piston moves alone by its own sealed model on what it then holds, and `x` is the root of
+    `x = G (P_a − P_b) dt / μ` at their pressures after (unrestricted, `P_a = P_b`). A liquid does not give, so a push
+    on one is the other's pull at once: in sub-steps each plunger would move only against its own bubble before the
+    water crossed, a bubble's compression stiff and its expansion soft, and pushing harder than pulling.
   - **Where a connection meets a vessel** (`Edge::foot`): at its foot (a syringe's nozzle) a vessel gives its lowest
     liquid while it holds one; at its top (a flask's neck) its gas. A tube joins two nozzles; a syringe on a vessel
     joins its nozzle to the vessel's top.
@@ -431,7 +440,9 @@ stops, its volume moved each step, first in the step, by the forces on it.
     its lower pressure and temperature), and only down the true pressure.
   - **A piston alone**: its vessel's pressure after the move by its own sealed model, the hand's work in it (a gas
     over a liquid squeezed small is stiffened by the liquid's own expansion, which no estimate sees); where the forces
-    would take it past what its energy pays for (more room than it can fill), no further than the last that holds.
+    would take it past what its energy pays for (more room than it can fill), no further than the last that holds. A
+    move past where the sealed model holds is on the side its gas's ideal pressure in its room says: a bubble squeezed
+    too small above the pressure tried, a room its energy cannot fill below.
   Each piece is the second law's: a move at the pressure after it, a run down the true pressure. Solids and liquids
   are incompressible: the plungers stop where they would leave a vessel's gas less than a ten-thousandth of its
   volume. Air between joined syringes gives as it compresses, so the far plunger, held by its friction, moves only
