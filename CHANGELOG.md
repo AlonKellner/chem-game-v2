@@ -1,5 +1,38 @@
 # GAME_SPEC version history
 
+## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
+
+- §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):
+  **a solution's conductivity**, each ion's Nernst–Einstein conductivity from its diffusion lowered by Debye, Hückel
+  and Onsager's atmosphere over one ion size (Robinson and Stokes; 4.2 Å, calibrated), water's dielectric constant by
+  temperature (Malmberg and Maryott); within 0.5 % of Shedlovsky's KCl and NaCl and Hamer and DeWane's HCl to
+  0.1 mol/L, of Jones and Bradshaw's KCl standards at 0, 18 and 25 °C, and within 2 % of MacInnes and Shedlovsky's
+  acetic acid. **Each ion's mobility with temperature** by Walden's rule with its own exponent (0.87; H⁺ 0.61), the
+  column's diffusion with it. Invariant Q1. `chem_tool study conductivity`.
+- §13: a conductivity meter (0.5 % of its reading, auto-ranging), a vessel's quantity `us_cm`; a room's
+  carbon dioxide, 420 ppm by default (a bench's `co2_ppm`, 0 for none); a report's expression takes log10, ln and sqrt, and a quantity with no value yet is
+  not one the bench lacks; the experiments' list in four columns.
+- §13.7: the experiments `standardise`, `vinegar`, `carbonate_curve`, `buffer`, `salts_ph`, `antacid` and
+  `conductivity` (curriculum 14 to 20).
+- §7, §9: a surface reaction's transport carries the scarcer of its dissolved species (a salt dissolving into an acid
+  that takes its ion away stopped after its first minute).
+- §12.3: a vessel's liquid surface row (FORM z) in its content tag and its changed zone (a kept corner's route went
+  stale where the surface moved under a level that stood: O13).
+- §20: conductivity's and a room's air's declared simplifications.
+## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+
+- The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process
+  retired, under a tenth of a frame's (5.9 %), not by 3 ms of the thread's CPU time, which a crowded machine's slower
+  cores pushed past its bound in three gates of five. WORKFLOW: a cost is held by the work, not the clock.
+
+## 0.73.0 (2026-11-27, Stage 73; signed off by the user: "Approved, merge and proceed")
+
+- §6, the wall in rings (Stage 73, `docs/TDD_73_SMOOTH_FLOOR.md`): an unstable horizontal plate's convection (a
+  floor heated from below, a base colder than the air under it) takes Lienhard's thick boundary layers' correction
+  (8.37b) at every Nusselt number, not only under 10, where it left a step down of 7 % (`walls::unstable_plate`,
+  one form for the floor and the disc). The floor's surface under its glass is one everywhere. The demo: the oxide
+  gone and the flask cool 0.1 s sooner, 0.2 mg more distillate; the sessions re-recorded with the user's approval.
+
 ## 0.72.0 (2026-11-27, Stage 72; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings (Stage 72, `docs/TDD_72_STEP_CHEAPER.md`): a floor's inside surface under half its glass found

@@ -14,7 +14,7 @@ namespace {
 
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
-			what == "fill" || what == "met" || what == "ph" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
+			what == "fill" || what == "met" || what == "ph" || what == "us_cm" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
 			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended";
 }
 
@@ -202,6 +202,9 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "ph") { // its liquid's (Stage 43): none without one
 		return v->ph;
 	}
+	if (q.what == "us_cm") { // its liquid's conductivity (Stage 65): none without one
+		return v->us_cm;
+	}
 	if (q.what == "mark_off_ml") { // (Stage 52) how its liquid stands to its mark: over it above 0, under it below
 		return v->mark_ml ? std::optional<double>(v->condensed_ml - *v->mark_ml) : std::nullopt;
 	}
@@ -269,6 +272,9 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		if (item.ph) {
 			out.push_back(Quantity{ item.id, "ph", "g" }); // Stage 43: while it holds a liquid
 		}
+		if (item.us_cm) {
+			out.push_back(Quantity{ item.id, "us_cm", "g" }); // Stage 65
+		}
 		if (item.liquid_ml > 0.0) {
 			out.push_back(Quantity{ item.id, "bubbles_cm", "g" }); // Stage 45
 		}
@@ -329,7 +335,7 @@ std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind k
 		}
 	}
 	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
-		static const char *const ORDER[] = { "celsius", "kpa", "ph", "bubbles_cm", "scale_ml", "mark_off_ml", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		static const char *const ORDER[] = { "celsius", "kpa", "ph", "us_cm", "bubbles_cm", "scale_ml", "mark_off_ml", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
 		std::vector<std::string> ordered;
 		for (const char *w : ORDER) {
 			if (std::find(out.begin(), out.end(), w) != out.end()) {
@@ -367,6 +373,9 @@ std::string unit(const Quantity &q) {
 	}
 	if (q.what == "nm") {
 		return "nm";
+	}
+	if (q.what == "us_cm") {
+		return "uS/cm";
 	}
 	if (q.what == "holder") {
 		return "C";
@@ -420,6 +429,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "pressure";
 	} else if (q.what == "ph") {
 		what = "pH";
+	} else if (q.what == "us_cm") {
+		what = "conductivity";
 	} else if (q.what == "bubbles_cm") {
 		what = "bubbles' height";
 	} else if (q.what == "valve") {
@@ -468,6 +479,10 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "ph") {
 		return fmt("pH %.2f", value);
+	}
+	if (q.what == "us_cm") { // (Stage 65) as a meter shows it: uS/cm below 2000, mS/cm from it
+		return value < 2000.0 ? fmt(value < 20.0 ? "%.2f uS/cm" : value < 200.0 ? "%.1f uS/cm" : "%.0f uS/cm", value)
+							  : fmt(value < 20000.0 ? "%.2f mS/cm" : value < 200000.0 ? "%.1f mS/cm" : "%.0f mS/cm", value * 1e-3);
 	}
 	if (q.what == "bubbles_cm") {
 		return fmt("%.2f cm", value);

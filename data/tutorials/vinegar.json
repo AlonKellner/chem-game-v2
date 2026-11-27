@@ -1,0 +1,152 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 15) on data/benches/vinegar.json: vinegar and a weak acid's curve. CH3COOH + OH- -> CH3COO- + H2O: the pH rises slowly through the buffer the acid and its salt make, then leaps at the end point (above 7: acetate is a base); at half the end point [HA] = [A-] and pH = pKa (Henderson and Hasselbalch).",
+	"title": "Experiment: vinegar and a weak acid's curve",
+	"bench": "../benches/vinegar.json",
+	"report": [
+		{
+			"label": "the end point",
+			"unit": "mL of base",
+			"truth": "(flask.acetic_acid_aq.mol + flask.acetate_ion.mol) / (base.sodium_hydroxide_aq.mol / base.condensed_ml)",
+			"tolerance": 0.4,
+			"why": "The truth is the base that held the flask's acetic acid's moles. Read from the plot, where the pH leaps, near pH 8.7: acetate, the acid's own base, is left at the end point."
+		},
+		{
+			"label": "the vinegar's acetic acid",
+			"unit": "mol/L",
+			"truth": "1000 * (vinegar.acetic_acid_aq.mol + vinegar.acetate_ion.mol) / vinegar.condensed_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"why": "c = 0.100 x V(end point) / 25.00 mL, times 10 for the dilution. The base's label is 0.100 M; it is 0.0997 (0.040 mol in 401 mL); each pipette delivers within 0.03 mL and the flask holds 250 mL within 0.15."
+		},
+		{
+			"label": "acetic acid's pKa",
+			"unit": "",
+			"truth": "4.76",
+			"tolerance": 0.15,
+			"why": "At half the end point half the acid is its salt, and Henderson and Hasselbalch's pH = pKa + log([A-]/[HA]) is pKa. Its thermodynamic value is 4.76; the pH read there is a little lower, about 4.68, because the ions' activity in a solution of their own strength is less than their concentration (the pH meter reads activity)."
+		}
+	],
+	"steps": [
+		{
+			"part": "Diluting",
+			"title": "25 mL of the vinegar",
+			"text": "Pick up the pipette and click the vinegar: it draws up to its mark.",
+			"why": "Vinegar is about 0.8 M: diluted tenfold it takes about 20 mL of a 0.1 M base for 25 mL of it, in the burette's range.",
+			"checks": [
+				{"text": "the pipette at its mark", "when": {"quantity": {"item": "pipette", "what": "mark_off_ml"}, "compare": "between", "values": [-0.002, 0.002]}}
+			],
+			"play": [{"drag": ["item:pipette", "item:vinegar"]}]
+		},
+		{
+			"title": "Into the volumetric flask",
+			"text": "Pick up the pipette again and click the volumetric flask: it stands in its neck and runs into it.",
+			"checks": [
+				{"text": "the pipette on the volumetric flask", "when": {"item": "pipette", "on": "dilute"}}
+			],
+			"play": [{"drag": ["item:pipette", "item:dilute"]}]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{"text": "the pipette empty", "wait": true, "when": {"quantity": {"item": "pipette", "what": "condensed_ml"}, "compare": "below", "value": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "To the mark",
+			"text": "Pick up the pipette and click a free square. Then pick up the water bottle, right-click the volumetric flask and click \"to the mark\".",
+			"checks": [
+				{"text": "made up to its mark", "when": {"quantity": {"item": "dilute", "what": "mark_off_ml"}, "compare": "between", "values": [-0.002, 0.002]}}
+			],
+			"play": [{"drag": ["item:pipette", "square:26,3"]}, {"drag": ["item:water", "item:dilute"]}, {"click": "panel:mark"}]
+		},
+		{
+			"title": "Mixed",
+			"text": "Right-click the volumetric flask and click \"stir\", then click 60x on the clock.",
+			"why": "Water poured on the vinegar lies over it: until it is mixed, what is drawn from the top is weaker than the whole.",
+			"checks": [
+				{"text": "the flask stirred", "when": {"item": "dilute", "stirred": true}}
+			],
+			"play": [{"click": "item:dilute"}, {"click": "stir:dilute"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "25 mL of the diluted",
+			"text": "Click 1x on the clock. Pick up the pipette and click the volumetric flask: it draws up to its mark. Then pick it up again and click the titration flask.",
+			"checks": [
+				{"text": "the pipette on the titration flask", "when": {"item": "pipette", "on": "flask"}}
+			],
+			"play": [{"click": "speed:1"}, {"drag": ["item:pipette", "item:dilute"]}, {"drag": ["item:pipette", "item:flask"]}]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{"text": "the pipette empty", "wait": true, "when": {"quantity": {"item": "pipette", "what": "condensed_ml"}, "compare": "below", "value": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "The pipette away",
+			"text": "Pick up the pipette and click a free square.",
+			"checks": [
+				{"text": "the pipette off the flask", "when": {"not": {"item": "pipette", "on": "flask"}}}
+			],
+			"play": [{"drag": ["item:pipette", "square:26,3"]}]
+		},
+		{
+			"part": "The burette",
+			"title": "Fill the burette",
+			"text": "Pick up the sodium hydroxide, right-click the burette, type 55 and click \"pour\". Then pick up the burette and click the titration flask.",
+			"checks": [
+				{"text": "the burette filled", "when": {"quantity": {"item": "burette", "what": "condensed_ml"}, "compare": "above", "value": 45}},
+				{"text": "the burette on the flask", "when": {"item": "burette", "on": "flask"}}
+			],
+			"play": [{"drag": ["item:base", "item:burette"]}, {"type": "55"}, {"click": "panel:pour"}, {"drag": ["item:burette", "item:flask"]}]
+		},
+		{
+			"part": "Logging",
+			"title": "Log the pH",
+			"text": "Right-click the titration flask, click \"+ pH\" under its readings, then open the notebook and click \"1 s\": it logs the pH every second.",
+			"checks": [
+				{"text": "the flask's pH logged", "when": {"item": "flask", "logging": "ph"}}
+			],
+			"play": [{"click": "item:flask"}, {"click": "record:flask:ph"}, {"click": "notebook"}, {"click": "notebook:log:1"}]
+		},
+		{
+			"title": "Log the burette",
+			"text": "Close the notebook, right-click the burette, click \"+ mL\", open the notebook again and click \"1 s\".",
+			"checks": [
+				{"text": "the burette's reading logged", "when": {"item": "burette", "logging": "scale_ml"}}
+			],
+			"play": [{"click": "notebook"}, {"click": "item:burette"}, {"click": "record:burette:scale_ml"}, {"click": "notebook"}, {"click": "notebook:log:1"}]
+		},
+		{
+			"part": "Titrating",
+			"title": "A slow stream",
+			"text": "Close the notebook, right-click the burette, drag its tap to about 15 % and click 60x.",
+			"checks": [
+				{"text": "the tap a little open", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "between", "values": [10, 20]}}
+			],
+			"play": [{"click": "notebook"}, {"click": "item:burette"}, {"click": "cap:burette@0.15"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Past the end point",
+			"text": "Watch the pH climb slowly through the buffer, then leap past 11.",
+			"why": "From the start to near the end the flask holds acetic acid and acetate together, a buffer: the pH moves slowly. When the acid is used up, the next drops of base meet nothing and the pH leaps.",
+			"checks": [
+				{"text": "the flask's pH past 11", "wait": true, "when": {"quantity": {"item": "flask", "what": "ph"}, "compare": "above", "value": 11}}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag the burette's tap shut. Open the notebook: x the burette's reading, y the pH. The end point is where the curve is steepest; the pKa is the pH at half of it.",
+			"checks": [
+				{"text": "the tap shut", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "below", "value": 1}}
+			],
+			"play": [{"click": "cap:burette@0"}]
+		}
+	]
+}

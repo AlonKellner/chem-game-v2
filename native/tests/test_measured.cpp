@@ -84,9 +84,12 @@ TEST_CASE("measured: water's viscosity, and the ions' diffusion as they move tog
 	const double cu = 7.33e-10, so4 = 1.07e-9, h = 9.31e-9;
 	CHECK(near(diffusion(t, builtin::copper_sulfate_aq, 298.15), 4.0 * cu * so4 / (2.0 * cu + 2.0 * so4), 1e-12));
 	CHECK(near(diffusion(t, builtin::sulfuric_acid_aq, 298.15), 3.0 * h * so4 / (1.0 * h + 2.0 * so4), 1e-12));
-	// Stokes-Einstein: as T / viscosity
+	// Stokes-Einstein: as T / viscosity; Stage 65: an ion's as T / viscosity^p, Walden's rule with its exponent (0.87,
+	// H+'s 0.61: test_conductivity.cpp holds them to the KCl standards and HCl's limiting conductance)
 	CHECK(diffusion(t, builtin::copper_sulfate_aq, 333.15) / diffusion(t, builtin::copper_sulfate_aq, 298.15) ==
-			doctest::Approx(333.15 / 298.15 * 0.88997 / 0.46613).epsilon(1e-9));
+			doctest::Approx(333.15 / 298.15 * std::pow(0.88997 / 0.46613, 0.87)).epsilon(1e-9));
+	CHECK(ion_diffusion(t, 0, 333.15) / ion_diffusion(t, 0, 298.15) == doctest::Approx(333.15 / 298.15 * std::pow(0.88997 / 0.46613, 0.61)).epsilon(1e-9));
+	CHECK(t.solution().ions[0].name == "H+1");
 	// what is not dissolved, or whose particles have no coefficient, has none: transport puts no limit on it
 	CHECK(diffusion(t, builtin::water, 298.15) == 0.0);
 	const SpeciesTable &neutral = testing::with_neutral_solute();

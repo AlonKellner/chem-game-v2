@@ -145,7 +145,19 @@ the wrong reason; their copper ion given its ion.
   - so the jar's image is kept in the GPU's own per-pixel state from when it was held there (the kept beams'
     records or the pixels' history images, `optics_compute.cpp`), and read again when the bath's content changes;
     the CPU's frames, which do not split the screen into the host's passes and rectangles, never show it.
-  The line is not yet found; it is the next renderer stage's first item (with the nested rays below), by the play.
+  - the user, further (2026-11-27): "a sort of triangular pattern which changes from brighter to transparent and back
+    to bright, repeating with lowering heights"; "it depends on the zoom level, when I zoom in a lot the ghost image
+    does not occur, but the farther I zoom out, the more extreme the ghost effect is"; "it feels like the pixels
+    settle on brighter values because something does not recalculate them properly, some of their bias is left
+    behind". Their later exports render cleanly on the CPU too (one pile, no triangles), and the CPU's frames held to
+    the area's truth while the stirred pile lowers (1,200 frames at 1x) never stray: the count apart is the wall
+    alone, the same at every check, none brighter;
+  - so what runs on the GPU and not in the CPU's frames: the host's pass for a view's change (`OPTICS_RESAMPLE_PASS`,
+    each pixel's state carried, its corrections with it), its passes over the rectangles that bend (`cg_optics`), and
+    its per-pixel records; the first hypothesis, a pixel's history carried across a view or a pass with its old
+    corrections (its bias), and what keeps it there as the pile moves under it.
+  The line is not yet found. By the user's choice it is the next renderer stage's first item, Stage 77 (with the nested
+  rays below), from the play.
 
 - **A floating solid's picture.** The pass draws a vessel's solids as a sediment on its floor, a flat section and a
   pile (`contents::lying`; the shader's and the reference tracer's pile): floating ice is drawn there too, white. A

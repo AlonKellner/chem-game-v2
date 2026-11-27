@@ -102,8 +102,25 @@ bool liquid_density(const SpeciesTable &table, const CellState &cell, double tem
 // (GAME_SPEC §7): its particles moving together, sum(nu) / sum(nu / D_i) over
 // them (Nernst-Hartley, for a cation and an anion), each D_i measured at 25 C
 // and scaled as T / viscosity(T). 0 when it is not dissolved or a particle of
-// it has no coefficient: not known.
+// it has no coefficient: not known. (Stage 65) Each D_i as T / viscosity(T)^p, Walden's rule with the ion's own
+// exponent (1, Stokes and Einstein, for a neutral solute).
 double diffusion(const SpeciesTable &table, SpeciesId species, double temperature);
+// One particle's (the table's solution's `ions`), m^2/s at T; 0 where it has none.
+double ion_diffusion(const SpeciesTable &table, size_t ion, double temperature);
+
+// A solution's conductivity (GAME_SPEC §10, Stage 65), S/m, at temperature T: sum c_i lambda_i over its ions, each
+// lambda_i Nernst and Einstein's z^2 F^2 D_i / (R T) lowered by Debye, Hückel and Onsager's relaxation and
+// electrophoresis over 1 + B a sqrt(I) (Robinson and Stokes), c_i per m^3 of the liquid and I its ionic strength in
+// mol/L; hydrogen and hydroxide ions at their exact balance with water, as the pH reads them. `limit`, if given:
+// Kohlrausch's, sum c_i lambda0_i, what no atmosphere lowers. false, and both left, where the cell holds no liquid or
+// the table no conductivity (no dielectric constant or no ions' size).
+bool conductivity(const SpeciesTable &table, const CellState &cell, double temperature, double &kappa, double *limit = nullptr);
+// The solvent's dielectric constant at T (Stage 65), read between the table's rows, held beyond its ends; 0: none.
+double solvent_dielectric(const SpeciesTable &table, double temperature);
+// Debye, Hückel and Onsager's constants for a 1:1 electrolyte at T (Stage 65): B1 (relaxation, (L/mol)^1/2), B2
+// (electrophoresis, S m^2/mol (L/mol)^1/2) and B (the ions' size term, 1/m (L/mol)^1/2); false without a dielectric
+// constant or a viscosity.
+bool onsager_constants(const SpeciesTable &table, double temperature, double &b1, double &b2, double &b);
 // (Stage 57) a cell's liquid's density from its liquid's own mass and volume, kg/m^3 (0 with no liquid); the power its
 // stirring dissipates for each kg of its liquid and what is dissolved in it, W/kg
 double liquid_density(const SpeciesTable &table, const CellState &cell);

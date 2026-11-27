@@ -188,7 +188,7 @@ Each step is a stage of its own, numbered when it is taken, by `docs/WORKFLOW.md
 | B2 | **Crystals that dissolve** (Stage 57) | C15 | 4, 45 |
 | C | **The calculator, the planner, the reference** (Stages 58 to 60, 62) | S2 S3 S4; filtering (T6) | 2 (by calculation: Stage 58), 3 (Stage 59), 8 (Stage 60), 50 (Stage 62) |
 | C2 | **Seeds** (Stage 66) | C16 | 35 |
-| D | **Acids, bases and buffers** (area 1) | C2; the cap of C1 and a first pack (Cl, K, acetate, ammonia, carbonate, phosphate); C12; heat of dilution (C11) | 14 to 20 |
+| D | **Acids, bases and buffers** (area 1; Stages 63 to 65) | C2; the cap of C1 and a first pack (Cl, K, acetate, ammonia, carbonate, phosphate); C12; heat of dilution (C11) | 14 to 20 (Stage 65; heat of dilution left to a later stage) |
 | E | **Salts, precipitates and complexes** (area 2) | C1 C3 C14; the rest of T6 | 10, 12, 42, 43, 44, 51, 52, 54 |
 | F | **Solution kinetics and redox** | C4 C5 | 11, 37, 38 to 41, 46, 47 |
 | G | **Gases** (areas 5, 6) | C7; T8 | 27, 28, 31 |

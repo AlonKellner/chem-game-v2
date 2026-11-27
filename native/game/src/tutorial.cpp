@@ -396,10 +396,12 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 		item.relative = j.value("relative", false);
 		item.why = j.value("why", std::string());
 		item.predict = j.value("predict", false);
-		// what it names must be on the bench; a zero it divides by now may not be zero at the end
+		// what it names must be on the bench; a zero it divides by now may not be zero at the end, nor (Stage 65) a
+		// quantity with no value yet have none, nor a function undefined now be so then
 		double now = 0.0;
 		std::string why_not;
-		if (!evaluate(item.truth, bench, now, why_not) && why_not != "a division by zero") {
+		if (!evaluate(item.truth, bench, now, why_not) && !(why_not == "a division by zero" || why_not.find("\" has none now") != std::string::npos ||
+																why_not.find(": not defined") != std::string::npos)) {
 			why = "the report's \"" + item.label + "\": " + why_not;
 			return nullptr;
 		}

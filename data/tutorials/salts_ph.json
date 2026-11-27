@@ -1,0 +1,111 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 18) on data/benches/salts_ph.json: salts' pH and an indicator's pKa by absorbance. A salt of a strong acid and a strong base is neutral; of a weak base's acid (NH4+) acidic; of a weak acid's base (acetate, carbonate) basic. An indicator is a weak acid whose two forms differ in colour: where both are present, Beer and Lambert's law gives their ratio, and the pH its pKa.",
+	"title": "Experiment: salts' pH and an indicator's pKa",
+	"bench": "../benches/salts_ph.json",
+	"report": [
+		{
+			"label": "ammonium chloride's pH",
+			"unit": "",
+			"truth": "nh4cl.ph",
+			"tolerance": 0.05,
+			"predict": true,
+			"why": "Ammonium, the acid of the weak base ammonia (pKa 9.25), gives up a little of its hydrogen: in 0.1 M, pH = (9.25 - log10 0.1) / 2 = 5.1."
+		},
+		{
+			"label": "sodium carbonate's pH",
+			"unit": "",
+			"truth": "carbonate.ph",
+			"tolerance": 0.05,
+			"why": "Carbonate, the base of the weak acid hydrogen carbonate (pKa 10.33), takes hydrogen ions from water: in 0.1 M, pOH = (14.00 - 10.33 - log10 0.1) / 2 = 2.3, pH 11.6."
+		},
+		{
+			"label": "bromothymol blue's pKa",
+			"unit": "",
+			"truth": "mid.ph + log10(mid.bromothymol_blue_ion.mol / mid.bromothymol_blue_dianion.mol)",
+			"tolerance": 0.05,
+			"why": "pKa = pH - log10([In2-] / [HIn-]), the ratio Beer and Lambert give: (A - A_acid) / (A_base - A) at 616 nm, where the blue form absorbs and the yellow hardly does. It is the apparent pKa at the buffer's ionic strength (about 0.1), 7.1, below the thermodynamic 7.5: the doubly charged blue form's activity is the lower."
+		}
+	],
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Ammonium chloride is the salt of hydrochloric acid and the weak base ammonia. What pH do you expect for its 0.1 M solution? Type it, then click \"predict\".",
+			"checks": [
+				{"text": "a prediction made", "when": {"predicted": 1}}
+			],
+			"play": [{"click": "predict:0"}, {"type": "7"}, {"click": "predict:make"}]
+		},
+		{
+			"part": "Salts",
+			"title": "Their pH",
+			"text": "Right-click each beaker in turn and click \"+ pH\" under its readings: sodium chloride, ammonium chloride, sodium acetate, sodium hydrogen carbonate, sodium carbonate.",
+			"why": "A salt's ions are each an acid or a base, or neither: chloride and sodium are neither (their acid and base are strong); ammonium is a weak acid; acetate, hydrogen carbonate and carbonate weak bases, each by how weak its acid is.",
+			"checks": [
+				{"text": "sodium chloride's pH", "when": {"item": "nacl", "recorded": "ph"}},
+				{"text": "ammonium chloride's", "when": {"item": "nh4cl", "recorded": "ph"}},
+				{"text": "sodium acetate's", "when": {"item": "acetate", "recorded": "ph"}},
+				{"text": "sodium hydrogen carbonate's", "when": {"item": "bicarbonate", "recorded": "ph"}},
+				{"text": "sodium carbonate's", "when": {"item": "carbonate", "recorded": "ph"}}
+			],
+			"play": [{"click": "item:nacl"}, {"click": "record:nacl:ph"}, {"click": "item:nh4cl"}, {"click": "record:nh4cl:ph"}, {"click": "item:acetate"}, {"click": "record:acetate:ph"},
+				{"click": "item:bicarbonate"}, {"click": "record:bicarbonate:ph"}, {"click": "item:carbonate"}, {"click": "record:carbonate:ph"}]
+		},
+		{
+			"part": "An indicator's pKa",
+			"title": "The spectrophotometer",
+			"text": "Pick up the spectrophotometer in Supplies and set it on the bench, at the right.",
+			"checks": [
+				{"text": "the spectrophotometer on the bench", "when": {"item": "spec", "place": "bench"}}
+			],
+			"play": [{"drag": ["item:spec", "square:18,11"]}]
+		},
+		{
+			"title": "616 nm",
+			"text": "Right-click the spectrophotometer and drag its wavelength to 616 nm, where the blue form absorbs most.",
+			"checks": [
+				{"text": "set to 616 nm", "when": {"quantity": {"item": "spec", "what": "nm"}, "compare": "between", "values": [615.5, 616.5]}}
+			],
+			"play": [{"click": "item:spec"}, {"click": "nm:spec@616"}]
+		},
+		{
+			"title": "The blank",
+			"text": "Pick up the cuvette of water and click the spectrophotometer; then right-click it and click \"blank\".",
+			"checks": [
+				{"text": "the water in its well", "when": {"item": "spec", "under": "blank"}},
+				{"text": "it reads 0.000", "when": {"quantity": {"item": "spec", "what": "absorbance"}, "compare": "between", "values": [-0.0005, 0.0005]}}
+			],
+			"play": [{"drag": ["item:blank", "item:spec"]}, {"click": "item:spec"}, {"click": "blank:spec"}]
+		},
+		{
+			"title": "All yellow",
+			"text": "Take the water out and set it back on the bench; put the cuvette of the indicator in acid in the well. Right-click the spectrophotometer and click \"+ A\".",
+			"checks": [
+				{"text": "the acid form in its well", "when": {"item": "spec", "under": "yellow"}},
+				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 1}}
+			],
+			"play": [{"drag": ["item:blank", "square:1,12"]}, {"drag": ["item:yellow", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
+		},
+		{
+			"title": "All blue",
+			"text": "Take it out and set it back; put the cuvette of the indicator in base in the well, and click \"+ A\".",
+			"checks": [
+				{"text": "the base form in its well", "when": {"item": "spec", "under": "blue"}},
+				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 2}}
+			],
+			"play": [{"drag": ["item:yellow", "square:4,12"]}, {"drag": ["item:blue", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
+		},
+		{
+			"title": "In the buffer",
+			"text": "Take it out and set it back; put the cuvette of the indicator in the phosphate buffer in the well, and click \"+ A\". Then right-click the cuvette and click \"+ pH\".",
+			"why": "Green: both forms. pKa = pH - log10((A - A_acid) / (A_base - A)).",
+			"checks": [
+				{"text": "the buffer in its well", "when": {"item": "spec", "under": "mid"}},
+				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 3}},
+				{"text": "its pH recorded", "when": {"item": "mid", "recorded": "ph"}}
+			],
+			"play": [{"drag": ["item:blue", "square:7,12"]}, {"drag": ["item:mid", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}, {"click": "item:mid"}, {"click": "record:mid:ph"}]
+		}
+	]
+}

@@ -410,6 +410,13 @@ the length A/P (Lloyd and Moran 1974).
   and where Nu < 10, Nu = 1.4 / ln(1 + 1.4/Nu). The text extracted from the PDF loses the fraction bars; read
   as these, each tends to the other's limit (1.4/ln(1 + 1.4/Nu) → Nu at large Nu), and the Prandtl factor
   divides, as in every Churchill–Usagi form.
+- (Stage 73, read again 2026-11-27: p. 436, "If Nu_L* ≲ 10, the b.l.s will be thick, and the result should be
+  corrected as follows", 8.37b; "These equations are recommended for 1 < Ra_L* < 10⁷.") The corrected form tends to
+  8.37a's as Nu + 0.7, not to Nu: 7 % more at 10, 2.5 % at Ra = 10⁷ (Nu about 30). Taken only under 10, it left
+  a step down of 7 % there, and a floor under half its glass two surfaces within it (Stage 72's test: 8 floors of
+  1,728). The game takes the correction at every Nusselt number (`walls::unstable_plate`, design: Lienhard's
+  "≲ 10" read as where it matters, not where it stops). The hand-over to 8.35 at Ra = 10⁷ steps up 2 to 6 %
+  (Lienhard gives no blend); a step up leaves the surface one.
 - Above: **eq. 8.35**, Nu = 0.14 Ra^⅓ (1 + 0.0107 Pr)/(1 + 0.01 Pr).
 - Against Lloyd and Moran's 0.54 Ra^¼ (measured by mass transfer, Sc 2200): within 10 % at water's Prandtl
   numbers. A 66 mm beaker floor at 4 K: Ra 1.3e6, h 650 W/m²K.
@@ -888,7 +895,7 @@ the liquid's surface, `sqrt(2 g h)`; a gentle pour runs down the wall and lands 
 | A powder bed's effective conductivity | Zehner and Schlünder's stagnant bed: k_e / k_f = 1 − √(1−ε) + 2√(1−ε)/(1−λB) [(1−λ)B/(1−λB)² ln(1/(λB)) − (B+1)/2 − (B−1)/(1−λB)], λ = k_f/k_s, B = C ((1−ε)/ε)^{10/9}, C = 1.40 for broken grains (`walls::bed_conductivity`) | Zehner and Schlünder (1970), as M. Kandula (NASA, "On the effective thermal conductivity of porous packed beds with uniform spherical particles") gives it, eqs. 9a–c and 10, pp. 6–7: C = 1.25 spheres, 1.40 broken particles, 2.5 cylinders; validated for conductivity ratios 8 to 1200 and solid fractions to about 0.8, below about 2000. The bed's porosity is the sediment's (1 − PACKING, 0.5, calibrated: above) | `measured: a powder bed conducts as Zehner and Schlünder's stagnant bed`: the form for twelve beds |
 | The grains' conductivities | malachite 3.59, the copper sulfate hydrates 1.32, anhydrous copper sulfate 5.91 W/(m K); copper oxide and hydroxide none | **Calibrated: searched and not found measured** (2026-11-25: malachite, tenorite, chalcanthite). Each is the nearest measured mineral as Robertson (USGS Open-File Report 88-441, 1988) tabulates it: calcite, a carbonate (8.58 CU, Horai 1971, p. 40); gypsum, a hydrated sulfate (3.15 CU, p. 30); anhydrite (14.12 CU, p. 30); 1 CU = 0.4184 W/(m K). A bed's grains are those of its solids that have one, weighted by volume; a bed with none conducts as its fluid. The bed's conductivity grows only as the logarithm of its grains' (about 1.6 times from a ratio of 100 to 1000) | the same test; and `walls: a powder on a flask's floor over a flame takes its heat through its bed` |
 
-| A floor's base, a disc facing down into the room's air | warmer than the air (stable): Nu_D = 0.82 Ra_D^{1/5} Pr^{0.034} (8.39); colder (unstable), over L* = A/P = D/4: Nu = 0.560 Ra^¼ / [1 + (0.492/Pr)^{9/16}]^{4/9} (8.37a), 1.4 / ln(1 + 1.4/Nu) where that is under 10 (8.37b), to Ra = 10⁷; 0.14 Ra^⅓ (1 + 0.0107 Pr)/(1 + 0.01 Pr) above (8.35) (`walls::under_disc`) | Kadambi and Drake (1959) and Raithby and Hollands, as Lienhard and Lienhard, §8.4, eqs. 8.35, 8.37a–b, 8.39, pp. 435–437 give them | `measured: a ring's loss to the room is its outside's convection and its radiation`: the forms at their own Ra and Pr |
+| A floor's base, a disc facing down into the room's air | warmer than the air (stable): Nu_D = 0.82 Ra_D^{1/5} Pr^{0.034} (8.39); colder (unstable), over L* = A/P = D/4: Nu = 0.560 Ra^¼ / [1 + (0.492/Pr)^{9/16}]^{4/9} (8.37a), 1.4 / ln(1 + 1.4/Nu) (8.37b; at every Nu from Stage 73), to Ra = 10⁷; 0.14 Ra^⅓ (1 + 0.0107 Pr)/(1 + 0.01 Pr) above (8.35) (`walls::under_disc`) | Kadambi and Drake (1959) and Raithby and Hollands, as Lienhard and Lienhard, §8.4, eqs. 8.35, 8.37a–b, 8.39, pp. 435–437 give them | `measured: a ring's loss to the room is its outside's convection and its radiation`: the forms at their own Ra and Pr |
 | Glass's total emittance | 0.94 to 260 °C, falling linearly to 0.74 at 540 °C, held beyond (`data/walls.json`, `emittance`) | Lienhard and Lienhard, Table 10.1, p. 546: glass, smooth, 0.94 at 40 °C; Pyrex 0.94–0.74 over 260–540 °C (its ends read as a line). Confidence: a handbook's typical values, ± 0.05 | the same test |
 | Radiation to the room | e σ (T_w² + T_r²)(T_w + T_r) per unit area: eq. 1.34 factored exactly as eq. 2.28, a small body in a large room's transfer factor its emittance (eqs. 1.35, 2.31; σ CODATA 2018) (`walls::radiation`) | Lienhard and Lienhard, §2.3, pp. 71–72 | the same test |
 
@@ -1250,3 +1257,52 @@ Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Rea
 | Ice grown into a supercooled liquid (`ice`'s `grain_um`) | a mush of crystals no larger than 100 µm | **calibrated**: dendrites fill a supercooled liquid with ice of a large area, so its freezing plateau stands near its freezing point (a 0.3 g tube within 3 mK while a −40 °C bath draws its heat); no open measured arm spacing found (solutions' spacing grows as the square root of the freezing time, Journal of Glaciology) | `ice: a supercooled tube jumps back to its freezing point and holds there while it freezes, every invariant held (Stage 71)` | low |
 | A test tube (`data/glassware.json`, `test_tube`) | 16 × 150 mm, 18 mL, 1.8 mm wall, a round floor | ISO 4142, a heavy-wall tube: PYREX 1624/12M (DWK's listing: "conforms to ISO 4142", 16 x 150 mm, 18 mL, 1.8 mm wall) | `glassware: a test tube is ISO 4142's, its round floor its own radius (Stage 71)` | medium (a maker's listing) |
 | Ice seen (`data/optics/media.json`, `ice`) | the visible: a diffuse reflectance of 0.9, flat; the long wave: a grey emissivity of 0.97 | Warren and Brandt, *J. Geophys. Res.* 113, D14220 (2008), "Optical constants of ice from the ultraviolet to the microwave: a revised compilation", its table (atmos.uw.edu/ice_optical_constants/IOP_2008_ASCIItable.dat; n 1.3110, k 2.29e-9 at 550 nm): over 8–14 µm the normal emissivity 1 − R from its 32 rows, 0.970 on average (0.94 to 0.99). The visible: Grenfell, Warren and Mullen, *J. Geophys. Res.* 99(D9), 18669 (1994): fine snow's albedo 0.96–0.98 across the UV and visible, nearly independent of grain size; crushed ice's set a little under it (**calibrated**). A clear piece in water is nearly invisible (n 1.31 against 1.33); the pass draws ice as a powder, white | (the optical tests' scenes) | medium (the long wave); calibrated (the visible) |
+
+## Conductivity (Stage 65)
+
+A solution's conductivity (GAME_SPEC §10), and each ion's mobility with temperature. Read 2026-11-27.
+
+- **Sources read**:
+  - MacInnes, *The Principles of Electrochemistry* (Reinhold 1939; archive.org's text of dli.ernet.474912). Its
+    Table 3-I is Jones and Bradshaw's KCl standards (1933, J. Am. Chem. Soc. 55, 1780): 71.1352, 7.41913 and
+    0.745263 g of KCl per 1000 g of solution in vacuum (1, 0.1 and 0.01 demal), 0.065176, 0.0071379 and 0.00077364
+    S/cm at 0 C; 0.09783, 0.0111667 and 0.0012205 at 18 C; 0.111342, 0.012856 and 0.00140877 at 25 C.
+  - Its Table 3-II is MacInnes and Shedlovsky's acetic acid at 25 C (1932, J. Am. Chem. Soc. 54, 1429): c × 10³
+    equivalents per litre, and Λ in S cm²/mol: 0.028014 and 210.38, 0.15321 and 112.05, 1.02831 and 48.146, 2.41400
+    and 32.217, 5.91153 and 20.962, 12.829 and 14.375, 50.000 and 7.358, 52.303 and 7.202.
+  - Its Table 18-II is Shedlovsky's KCl and NaCl at 25 C (1932, J. Am. Chem. Soc. 54, 1405), observed: at 0.0001,
+    0.0005, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1 and 0.12 mol/L, KCl 148.94, 147.81, 146.95, 143.55, 141.27, 138.34,
+    133.37, 128.96 and 127.69; NaCl 125.59, 124.50, 123.74, 120.65, 118.51, 115.76, 111.06, 106.74 and 105.48.
+  - Hamer and DeWane, *Electrolytic conductance and the conductances of the halogen acids in water*, NSRDS-NBS 33
+    (1970), from nvlpubs.nist.gov:
+    - Table 2, water's dielectric constant from 0 to 100 C (Malmberg and Maryott 1956).
+    - Table 3, B1 and B2 for 1–1 electrolytes: 0.2211 and 29.817 at 0 C, 0.2300 and 60.639 at 25, 0.2416 and 100.31
+      at 50, 0.2737 and 202.71 at 100.
+    - Table 11, HCl's Λ at 25 C: 424.5, 422.6, 421.2, 415.7, 411.9, 398.9, 391.1, 360.7 and 332.2 at 0.0001, 0.0005,
+      0.001, 0.005, 0.01, 0.05, 0.1, 0.5 and 1.0 mol/L; at 0.01 mol/L, 288.6, 350.3, 472.2 and 530.3 at 5, 15, 35 and
+      45 C.
+    - Table 12, HCl's Λ° at 0 to 45 C by 5: 265.03, 297.42, 329.78, 362.05, 394.16, 426.06, 457.65, 488.91, 519.75 and
+      550.12.
+- **The model**:
+  - Each ion's limiting molar conductivity is Nernst and Einstein's, `z² F² D / (R T)`, from its diffusion coefficient
+    (the same table's: Li and Gregory; Vanýsek). Its D alone gives 149.80 for KCl against Shedlovsky's 149.86, and
+    425.94 for HCl against 426.06.
+  - Each is lowered by Robinson and Stokes' extended Onsager form, per ion, `(B1 z² λ° + ½ B2 z²) √I / (1 + B a √I)`.
+    B1, B2 and B are their numerical forms in ε, η and T, and match NSRDS 33's Table 3 within 0.3 %.
+  - The ion size a, 4.2 Å, is **calibrated** to KCl, NaCl and HCl at 0.1 mol/L. All three then lie within 0.5 % to
+    0.1 mol/L.
+  - Past 0.1 mol/L the model reads HCl high: 2.5 % at 0.5 mol/L and 8 % at 1. The demal 1 KCl reads low: 1.5 % at
+    25 C, 2.7 % at 18 C and 5.9 % at 0 C. The solution's own viscosity and ion association are not modelled (declared).
+- **Walden's exponents** (`walden`): D ∝ T η^−p, both **calibrated** on the table's own viscosity (IAPWS 2008).
+  - The ions' p = 0.87, fitted to the 0.01 demal KCl standard at 0 and 18 C. All three standards up to 0.1 demal then
+    read within 0.5 % at 0, 18 and 25 C. Stokes and Einstein's p = 1 read them 9 % low at 0 C.
+  - H⁺'s p = 0.61, fitted to HCl's Λ° from 5 to 45 C with Cl⁻ at 0.87. That fit holds within 0.7 % from 5 to 45 C,
+    and is 1.8 % high at 0 C.
+  - K⁺ and Cl⁻ are taken alike, and every other ion as they are, OH⁻ included (its own temperature data not read). A
+    neutral solute keeps 1 (Wilke and Chang's form).
+- **A room's carbon dioxide** (`ROOM_CO2_PPM`, `lab.cpp`; a bench's `co2_ppm`): 420 ppm, of the order of today's
+  atmosphere (NOAA's global mean for 2023, 419.3 ppm), a design value, not a model's constant. Water open to it reads
+  0.80 µS/cm at 25 C (`lab: a vessel's liquid reads its conductivity`), as water at equilibrium with air does
+  (pH 5.6).
+- **Checks**: acetic acid's Λ is within 1.2 % of MacInnes and Shedlovsky's, its ionisation (Stage 64's pKa 4.76) and
+  its ions' conductivity together. Pure water reads 0.0549 µS/cm, ASTM D1193's Type I 0.0550 (18.2 MΩ cm).

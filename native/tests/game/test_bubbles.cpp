@@ -5,6 +5,7 @@
 #include "lab/colour.hpp"
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/walls.hpp"
 
 #include <doctest/doctest.h>
 
@@ -100,9 +101,12 @@ TEST_CASE("measured: a heated floor's natural convection is Raithby and Hollands
 	const Water w = water_at(62.0);
 	const double ra = 9.80665 * w.beta * 4.0 * length * length * length / (w.nu * w.alpha);
 	REQUIRE(ra < 1e7);
-	const double expected = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / w.pr, 9.0 / 16.0), 4.0 / 9.0) * w.k / length;
+	const double thin = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / w.pr, 9.0 / 16.0), 4.0 / 9.0);
+	// (Stage 73) with 8.37b's correction for its boundary layers' thickness, at every Nusselt number
+	const double expected = 1.4 / std::log(1.0 + 1.4 / thin) * w.k / length;
 	CHECK(near(convection(area, edge, floor_c, bulk_c), expected, 1e-9));
 	CHECK(near(expected, 0.54 * std::pow(ra, 0.25) * w.k / length, 0.1));
+	MESSAGE("Nu " << thin << " by 8.37a, " << expected * length / w.k << " corrected");
 	MESSAGE("Ra " << ra << ", h " << expected << " W/m2 K");
 	CHECK(convection(area, edge, 50.0, 60.0) == 0.0); // a floor cooler than the bulk takes nothing over it
 }
@@ -382,12 +386,11 @@ TEST_CASE("bubbles: a boiling beaker saved and loaded shows the bubbles it showe
 	CHECK(loaded->digest() == lab->digest());
 }
 
-// (Stage 72) the surface under half a floor's glass found by regula falsi: a root to 1e-9 K of what the surface passes
-// on less what crosses the glass, as the bisection it replaced found one, over floors cool and boiling, fresh and
-// nucleated, thin glass and thick, at the room's pressure and under a vacuum's, in water and in a solution. Where
-// the root is one, it is the bisection's; the floor's convection steps down where Lienhard's thick boundary layer's
-// form (8.37b, under a Nusselt number of 10) hands over to the thin one's (8.37a), and there two roots may stand
-// within its step, either of them the surface (the bisection's own was the one its halvings came to)
+// (Stage 72) the surface under half a floor's glass found by ITP: a root to 1e-9 K of what the surface passes on less
+// what crosses the glass, as the bisection it replaced found one, over floors cool and boiling, fresh and nucleated,
+// thin glass and thick, at the room's pressure and under a vacuum's, in water and in a solution; the bisection's.
+// (Until Stage 73 the floor's convection stepped down where 8.37b's correction was dropped, at a Nusselt number of
+// 10, and two roots stood within the step in 8 of these floors; now one everywhere.)
 TEST_CASE("bubbles: a floor's surface under its glass is a root to 1e-9 K, the bisection's where it is one (Stage 72)") {
 	const auto excess = [](const Floor &f, double middle_c, double resistance, double t) { return floor_flux(f, t) - (middle_c - t) / resistance; };
 	const auto bisection = [&](const Floor &f, double middle_c, double resistance) {
@@ -441,5 +444,37 @@ TEST_CASE("bubbles: a floor's surface under its glass is a root to 1e-9 K, the b
 		}
 	}
 	MESSAGE(cases << " floors, the surface at most " << worst << " K from the bisection's where the root is one; two roots in " << two);
-	CHECK(two < cases / 50);
+	CHECK(two == 0);
+}
+
+// (Stage 73) an unstable plate's Nusselt number rises with its Rayleigh number without a step down: 8.37b's
+// correction at every Nusselt number, so nothing gives way at 10 (7 % over 8.37a's own there, 2 to 3 % at Ra = 1e7);
+// up at Ra = 1e7, to eq. 8.35, by a few percent
+TEST_CASE("walls: an unstable plate's Nusselt number rises with Ra, continuous where 8.37b's correction once stopped (Stage 73)") {
+	for (const double pr : { 0.7, 3.0, 7.0 }) {
+		double last = 0.0, at_10 = 0.0, at_top = 0.0, worst_step = 0.0;
+		bool rises = true;
+		for (double ra = 1.0; ra < 1e9; ra *= 1.001) {
+			const double nu = lab::walls::unstable_plate(ra, pr);
+			rises = rises && nu > last;
+			if (ra < 1e7 && last > 0.0) {
+				worst_step = std::max(worst_step, nu / last - 1.0); // a step of 0.1 % in Ra: no jump
+			}
+			const double thin = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / pr, 9.0 / 16.0), 4.0 / 9.0);
+			if (at_10 == 0.0 && thin >= 10.0) {
+				at_10 = nu / thin; // where Lienhard's "Nu <~ 10" falls
+			}
+			if (ra < 1e7) {
+				at_top = nu / thin; // the thinnest layers 8.37a takes, Nu about 30: nearly its own
+			}
+			last = nu;
+		}
+		INFO("Pr " << pr);
+		CHECK(rises);
+		CHECK(worst_step < 1e-3);
+		CHECK(at_10 == doctest::Approx(1.07).epsilon(0.01));
+		CHECK(at_top > 1.0);
+		CHECK(at_top < 1.03);
+		MESSAGE("Pr " << pr << ": at Nu 10 " << at_10 << " of 8.37a's, at Ra 1e7 " << at_top);
+	}
 }

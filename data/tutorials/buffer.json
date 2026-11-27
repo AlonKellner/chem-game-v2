@@ -1,0 +1,141 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 17) on data/benches/buffer.json: a buffer made and its capacity. Henderson and Hasselbalch: pH = pKa + log10(n(A-) / n(HA)), 4.76 for acetic acid; a buffer holds its pH because an acid added turns its acetate into acetic acid, which is weak.",
+	"title": "Experiment: a buffer and its capacity",
+	"bench": "../benches/buffer.json",
+	"report": [
+		{
+			"label": "the buffer's pH",
+			"unit": "",
+			"truth": "buffer.ph",
+			"tolerance": 0.03,
+			"predict": true,
+			"why": "Henderson and Hasselbalch give 4.76 + log10(n(acetate) / n(acid)): the balance's reading over 82.03 g/mol, against the pipette's 25 mL of 0.40 M. The pH meter reads a little lower, about 4.65: it reads the hydrogen ion's activity, and in a solution of 0.1 M of ions their activity is about four fifths of their concentration."
+		},
+		{
+			"label": "the buffer's pH after the acid",
+			"unit": "",
+			"truth": "a.ph",
+			"tolerance": 0.03,
+			"why": "0.2 mmol of acid turns 0.2 mmol of the 2.5 mmol of acetate in 25 mL into acetic acid: log10(2.3 / 2.7) moves the pH by only 0.07."
+		},
+		{
+			"label": "the water's pH after the acid",
+			"unit": "",
+			"truth": "b.ph",
+			"tolerance": 0.03,
+			"why": "In water nothing takes the acid's hydrogen ions: 0.2 mmol in 27 mL is 0.0074 M, pH 2.1, from 7."
+		}
+	],
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "You will make 100 mL holding 10 mmol of acetic acid and 10 mmol of its salt, sodium acetate. What pH do you expect? Henderson and Hasselbalch: pH = pKa + log10(acetate / acid), acetic acid's pKa 4.76. Type it, then click \"predict\".",
+			"checks": [
+				{"text": "a prediction made", "when": {"predicted": 1}}
+			],
+			"play": [{"click": "predict:0"}, {"type": "4.76"}, {"click": "predict:make"}]
+		},
+		{
+			"part": "Making the buffer",
+			"title": "The flask on the balance",
+			"text": "Click the volumetric flask to pick it up, then click the balance. Then right-click the balance and click \"tare\".",
+			"checks": [
+				{"text": "the flask tared on the balance", "when": {"all": [{"item": "scale", "under": "buffer"}, {"quantity": {"item": "scale", "what": "reads_g"}, "compare": "between", "values": [-0.0002, 0.0002]}]}}
+			],
+			"play": [{"drag": ["item:buffer", "item:scale"]}, {"click": "item:scale"}, {"click": "tare:scale"}]
+		},
+		{
+			"title": "About 0.82 g of sodium acetate",
+			"text": "Pick up the sodium acetate, right-click the flask, type 0.82 and click \"tip 0.82 g of the solid\". Then right-click the balance and click \"+ mass\".",
+			"why": "Sodium acetate, CH3COONa, is 82.03 g/mol: 0.82 g is 10 mmol.",
+			"checks": [
+				{"text": "about 0.82 g in the flask", "when": {"item": "buffer", "species": "sodium_acetate", "above_g": 0.6}},
+				{"text": "its reading recorded", "when": {"item": "scale", "recorded": "reads_g"}}
+			],
+			"play": [{"drag": ["item:salt", "item:buffer"]}, {"type": "0.82"}, {"click": "panel:tip:solid"}, {"click": "item:scale"}, {"click": "record:scale:reads_g"}]
+		},
+		{
+			"title": "25 mL of the acid",
+			"text": "Pick up the pipette and click the acetic acid: it draws to its mark. Then pick it up again and click the volumetric flask.",
+			"why": "25 mL of 0.40 M acetic acid is 10 mmol.",
+			"checks": [
+				{"text": "the pipette on the flask", "when": {"item": "pipette", "on": "buffer"}}
+			],
+			"play": [{"drag": ["item:pipette", "item:acid"]}, {"drag": ["item:pipette", "item:buffer"]}]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{"text": "the pipette empty", "wait": true, "when": {"quantity": {"item": "pipette", "what": "condensed_ml"}, "compare": "below", "value": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "To the mark, and mixed",
+			"text": "Pick up the pipette and click a free square. Pick up the water bottle, right-click the flask and click \"to the mark\". Then right-click the flask, click \"stir\", and click 60x on the clock.",
+			"checks": [
+				{"text": "made up to its mark", "when": {"quantity": {"item": "buffer", "what": "mark_off_ml"}, "compare": "between", "values": [-0.05, 0.05]}},
+				{"text": "stirred", "when": {"item": "buffer", "stirred": true}}
+			],
+			"play": [{"drag": ["item:pipette", "square:1,0"]}, {"drag": ["item:water", "item:buffer"]}, {"click": "panel:mark"}, {"click": "item:buffer"}, {"click": "stir:buffer"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Until it is dissolved",
+			"text": "Watch the salt go.",
+			"checks": [
+				{"text": "no salt left", "wait": true, "when": {"item": "buffer", "species": "sodium_acetate", "below_g": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "Its pH",
+			"text": "Click 1x on the clock. Right-click the flask and click \"+ pH\": the buffer's pH, against what you predicted.",
+			"checks": [
+				{"text": "its pH recorded", "when": {"item": "buffer", "recorded": "ph"}}
+			],
+			"play": [{"click": "speed:1"}, {"click": "item:buffer"}, {"click": "record:buffer:ph"}]
+		},
+		{
+			"part": "Its capacity",
+			"title": "25 mL of it, and 25 mL of water",
+			"text": "Pick up the volumetric flask, right-click beaker A, type 25 and click \"pour\". Then pick up the water bottle, right-click beaker B, type 25 and click \"pour\".",
+			"checks": [
+				{"text": "the buffer in beaker A", "when": {"quantity": {"item": "a", "what": "liquid_ml"}, "compare": "above", "value": 15}},
+				{"text": "water in beaker B", "when": {"quantity": {"item": "b", "what": "liquid_ml"}, "compare": "above", "value": 15}}
+			],
+			"play": [{"drag": ["item:buffer", "item:a"]}, {"type": "25"}, {"click": "panel:pour"}, {"drag": ["item:water", "item:b"]}, {"type": "25"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "Their pH",
+			"text": "Right-click beaker A and click \"+ pH\"; then beaker B.",
+			"checks": [
+				{"text": "beaker A's pH recorded", "when": {"item": "a", "recorded": "ph"}},
+				{"text": "beaker B's pH recorded", "when": {"item": "b", "recorded": "ph"}}
+			],
+			"play": [{"click": "item:a"}, {"click": "record:a:ph"}, {"click": "item:b"}, {"click": "record:b:ph"}]
+		},
+		{
+			"title": "The same acid into each",
+			"text": "Pick up the hydrochloric acid, right-click beaker A, type 2 and click \"pour\"; then the same into beaker B. Stir each: right-click it and click \"stir\". Then click 60x.",
+			"why": "2 mL of 0.100 M is 0.2 mmol of hydrogen ions into each.",
+			"checks": [
+				{"text": "acid in beaker A", "when": {"item": "a", "species": "chloride_ion", "above_g": 0.004}},
+				{"text": "acid in beaker B", "when": {"item": "b", "species": "chloride_ion", "above_g": 0.004}},
+				{"text": "both stirred", "when": {"all": [{"item": "a", "stirred": true}, {"item": "b", "stirred": true}]}}
+			],
+			"play": [{"drag": ["item:hcl", "item:a"]}, {"type": "2"}, {"click": "panel:pour"}, {"drag": ["item:hcl", "item:b"]}, {"type": "2"}, {"click": "panel:pour"}, {"click": "item:a"}, {"click": "stir:a"}, {"click": "item:b"}, {"click": "stir:b"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Their pH again",
+			"text": "Click 1x. Right-click beaker A and click \"+ pH\"; then beaker B. The buffer barely moved; the water fell from 7 to about 2.",
+			"checks": [
+				{"text": "beaker A's pH recorded again", "when": {"item": "a", "recorded": "ph", "recorded_count": 2}},
+				{"text": "beaker B's pH recorded again", "when": {"item": "b", "recorded": "ph", "recorded_count": 2}}
+			],
+			"play": [{"click": "speed:1"}, {"click": "item:a"}, {"click": "record:a:ph"}, {"click": "item:b"}, {"click": "record:b:ph"}]
+		}
+	]
+}

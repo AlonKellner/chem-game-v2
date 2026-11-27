@@ -145,10 +145,20 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it; an
 	// ion with the reaction's other ions on its side, in their proportion (Stage 63: an electrolyte moves whole, at
 	// Nernst and Hartley's diffusion, sum nu / sum (nu / D))
+	// (Stage 65) without a driver, the dissolved species the solution has least of for its coefficient: the scarce ion's
+	// gradient is the transport's (a salt dissolving into a solution that takes one of its ions away, sodium hydrogen
+	// carbonate into an acid, its own ion a quantum beside a plentiful other); the first of equals, as before
 	SpeciesId carried = table.has(kinetics.driver) ? kinetics.driver : SpeciesId{};
-	for (const Term &t : reaction.terms()) {
-		if (!table.has(carried) && table.species(t.species).phase == Phase::Aqueous) {
-			carried = t.species;
+	if (!table.has(carried)) {
+		double least = HUGE_VAL;
+		for (const Term &t : reaction.terms()) {
+			if (table.species(t.species).phase == Phase::Aqueous) {
+				const double per = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]) / static_cast<double>(t.nu < 0 ? -t.nu : t.nu);
+				if (per < least) {
+					least = per;
+					carried = t.species;
+				}
+			}
 		}
 	}
 	const double d = particle_diameter(table, cell, kinetics.in);
@@ -699,10 +709,11 @@ void Simulation::overflow() {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
 			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
-				// rounded up: what is left fits
+				// rounded so that what is left fits: up, or (Stage 65) down for a solute whose apparent volume is below
+				// nought (an ion's on the ions' footing: OH-, the carbonates), whose quantum more taken leaves more room
 				const double share = static_cast<double>(state.amount[s]) * fraction;
 				auto out = static_cast<int64_t>(share);
-				out += static_cast<double>(out) < share ? 1 : 0;
+				out += static_cast<double>(out) < share && !(molar_volume_at(table, def, kelvin) < 0.0) ? 1 : 0;
 				amounts.push_back(SpeciesAmount{ id, Amount{ out < state.amount[s] ? out : state.amount[s] } });
 			}
 		}
@@ -732,7 +743,9 @@ void Simulation::overflow() {
 		const double kelvin = at.defined ? at.temperature : T0; // its liquids grown to its temperature (Stage 67)
 		const Fill fill = fill_of(table, world_.snapshot_cell(cell), kelvin);
 		if (fill.defined && fill.condensed > meta.volume) {
-			spill_from(cell, fill.condensed - meta.volume, kelvin);
+			// (Stage 65) to a ten-billionth under its volume: a solution's solutes carried out leave its temperature a
+			// hundred-millionth of a kelvin other, and its liquid grown by it, past its volume by a part in 1e12
+			spill_from(cell, fill.condensed - meta.volume * (1.0 - 1e-10), kelvin);
 		}
 	}
 	// (Stage 71) a column that holds more than its vessel (another stood in it, its liquids grown): its excess spills
@@ -867,7 +880,14 @@ bool Simulation::project(CellId cell) {
 	// the first round)
 	seen_.assign(equilibria_.size(), -1); // the cell's version at each one's last probe
 	int version = 0;
-	for (int round = 0; round < 16; ++round) {
+	// (Stage 65) the cell's state after each round's joint solve: one met again is a cycle, the joint solve's balance
+	// not the reactions' own (it holds traces a quantum would overshoot, at affinities they cannot run down), and the
+	// rounds left are the reactions' own alone, which settle to their quanta
+	std::vector<uint64_t> after_joint;
+	bool joint = true;
+	// (Stage 65: 64, from 16: a solution's carbon dioxide trading with its gas through water's ionisation and the
+	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour)
+	for (int round = 0; round < 64; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];
@@ -921,8 +941,18 @@ bool Simulation::project(CellId cell) {
 		// (Stage 63) equilibria that share a species, taken in turn, close on their joint balance slowly (copper's
 		// hydrolysis, the bisulfate and water's ionisation trading hydrogen ions): once each has what it needs, they
 		// are solved together, and the round after finishes each to its quantum
-		if (solve_together(cell)) {
+		if (joint && solve_together(cell)) {
 			++version;
+			uint64_t h = 1469598103934665603ull;
+			for (const int64_t q : state.amount) {
+				h = (h ^ static_cast<uint64_t>(q)) * 1099511628211ull;
+			}
+			h = (h ^ static_cast<uint64_t>(state.energy)) * 1099511628211ull;
+			if (std::find(after_joint.begin(), after_joint.end(), h) != after_joint.end()) {
+				joint = false;
+			} else {
+				after_joint.push_back(h);
+			}
 		}
 	}
 	if (!changed) {

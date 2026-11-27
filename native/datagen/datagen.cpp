@@ -446,6 +446,39 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				solution.viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("mpa_s").get<double>() / 1000.0 });
 			}
 		}
+		// (Stage 65) Walden's exponents: `default` for every ion (a neutral solute keeps Stokes and Einstein's 1), or an
+		// ion's own
+		if (solutions_json.contains("walden")) {
+			const json &w = solutions_json.at("walden");
+			for (chem::IonDef &ion : solution.ions) {
+				if (ion.charge != 0 && w.contains("default")) {
+					ion.walden = w.at("default").get<double>();
+				}
+			}
+			for (const auto &[name, value] : w.items()) {
+				if (name == "note" || name == "default" || name.rfind("source", 0) == 0) {
+					continue;
+				}
+				bool found = false;
+				for (chem::IonDef &ion : solution.ions) {
+					if (ion.name == name) {
+						ion.walden = value.get<double>();
+						found = true;
+					}
+				}
+				if (!found) {
+					fail(solutions_file, "a Walden exponent names ion " + name + ", which no species is made of");
+				}
+			}
+		}
+		// (Stage 65) a solution's conductivity: the ions' size and the solvent's dielectric constant
+		if (solutions_json.contains("conductivity")) {
+			const json &c = solutions_json.at("conductivity");
+			solution.ion_size = c.at("ion_size_angstrom").get<double>() * 1e-10;
+			for (const json &v : c.at("dielectric")) {
+				solution.dielectric.push_back(chem::DielectricPoint{ v.at("celsius").get<double>() + 273.15, v.at("epsilon").get<double>() });
+			}
+		}
 		// water's own ionisation (GAME_SPEC §9, Stage 43)
 		if (solutions_json.contains("water_ionisation")) {
 			const json &w = solutions_json.at("water_ionisation");
@@ -653,12 +686,21 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	}
 	cpp << "};\n\n// the solution model (GAME_SPEC §10): data/solutions.json\nconstexpr IonDef IONS[] = {\n";
 	for (const chem::IonDef &ion : solution.ions) {
-		char diffusion[40];
-		std::snprintf(diffusion, sizeof diffusion, "%.17g", ion.diffusion);
+		char diffusion[80];
+		std::snprintf(diffusion, sizeof diffusion, "%.17g, %.17g", ion.diffusion, ion.walden);
 		cpp << "\t{ " << quoted(std::string(ion.name)) << ", " << ion.charge << ", " << diffusion << " },\n";
 	}
 	if (ions.empty()) {
-		cpp << "\t{ \"none\", 0, 0.0 },\n";
+		cpp << "\t{ \"none\", 0, 0.0, 1.0 },\n";
+	}
+	cpp << "};\n\nconstexpr DielectricPoint DIELECTRIC[] = {\n";
+	for (const chem::DielectricPoint &d : solution.dielectric) {
+		char point[80];
+		std::snprintf(point, sizeof point, "\t{ %.17g, %.17g },\n", d.kelvin, d.epsilon);
+		cpp << point;
+	}
+	if (solution.dielectric.empty()) {
+		cpp << "\t{},\n";
 	}
 	cpp << "};\n\nconstexpr ViscosityPoint VISCOSITY[] = {\n";
 	for (const chem::ViscosityPoint &v : solution.viscosity) {
@@ -695,8 +737,10 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	char model[240];
 	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g, IONISATION_H = %.17g, IONISATION_G = %.17g, IONISATION_CP = %.17g;\n", solution.a_phi,
 			solution.b, solution.ionisation_h, solution.ionisation_g, solution.ionisation_cp);
-	cpp << "};\n" << model << density_text << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
-		<< ";\n";
+	char ion_size[80];
+	std::snprintf(ion_size, sizeof ion_size, "constexpr double ION_SIZE = %.17g;\n", solution.ion_size);
+	cpp << "};\n" << model << density_text << ion_size << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
+		<< ", DIELECTRIC_COUNT = " << solution.dielectric.size() << ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
 		cpp << "\t{ " << quoted(row.id) << ", { { ";
@@ -726,7 +770,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\t\tstd::string why;\n"
 		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT),\n"
 		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP,\n"
-		<< "\t\t\t\tstd::vector<SolventPoint>(SOLVENT, SOLVENT + SOLVENT_COUNT), DENSITY, DENSITY_B, DENSITY_LOW, DENSITY_HIGH };\n"
+		<< "\t\t\t\tstd::vector<SolventPoint>(SOLVENT, SOLVENT + SOLVENT_COUNT), DENSITY, DENSITY_B, DENSITY_LOW, DENSITY_HIGH,\n"
+		<< "\t\t\t\tstd::vector<DielectricPoint>(DIELECTRIC, DIELECTRIC + DIELECTRIC_COUNT), ION_SIZE };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"

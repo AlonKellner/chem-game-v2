@@ -100,6 +100,11 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   person's gestures keep their frames.
 - **The budget** (Stage 68): the summary names every release entry over `GATE_BUDGET_S` (60 s). A new long one
   takes one of the ways here: a fixture, parts, `sparse()`, coarse frames where only its end is held.
+- **A cost is held by the work, not the clock** (Stage 74): a test that bounds what something costs compares the
+  instructions the process retired (`proc_pid_rusage`, `ri_instructions`; `test_signals.cpp`'s `work_done`), as a
+  share of the run it adds to. On a gate's crowded machine a thread moves between the performance cores and the
+  efficiency cores, two to three times slower, so even its own CPU time swings by more than a small bound (signals.12
+  failed three gates in five at a load of 20 to 50); the instructions moved by 0.1 % under the same load.
 - **A check once a step**: a test that holds each step's trace to every invariant itself leaves the simulation's own
   checking off (`test_column.cpp`, Stage 70: each step was checked twice).
 - **A simulation several cases start from is played once** (Stage 68): a ctest fixture. `// ctest: fixture setup

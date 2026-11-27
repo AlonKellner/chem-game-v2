@@ -1,0 +1,384 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 20) on data/benches/conductivity.json: electrolytes' conductivity and a conductometric titration. A solution conducts by its ions, each as many as there are and as fast as it moves (Kohlrausch): a strong electrolyte is all ions, a weak one a few in a hundred, water hardly any. In a titration of a strong acid by a strong base, sodium ions take the place of hydrogen ions, which move five times as fast: the conductivity falls to the end point, then rises with the hydroxide left over.",
+	"title": "Experiment: conductivity and a conductometric titration",
+	"bench": "../benches/conductivity.json",
+	"report": [
+		{
+			"label": "how many times hydrochloric acid conducts acetic acid",
+			"unit": "times",
+			"truth": "strong.us_cm / weak.us_cm",
+			"tolerance": 0.03,
+			"relative": true,
+			"predict": true,
+			"why": "Both are 0.01 M, but hydrochloric acid is all ions and acetic acid about 4 % (its pKa 4.76): their conductivities stand about 25 to 1, the hydrogen ion carrying most of each."
+		},
+		{
+			"label": "the end point",
+			"unit": "mL of base",
+			"truth": "flask.chloride_ion.mol / (base.sodium_hydroxide_aq.mol / base.condensed_ml)",
+			"tolerance": 0.4,
+			"why": "Where the falling line and the rising one cross: before it each drop of base takes away a hydrogen ion (349.6 S cm2/mol) and leaves a sodium (50.1), after it each adds sodium and hydroxide (198.0). The truth is the base that held the flask's chloride's moles, the acid's."
+		},
+		{
+			"label": "the acid's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * acid.chloride_ion.mol / acid.condensed_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"why": "c = 0.100 x V(end point) / 25.00 mL. The base's label is 0.100 M: it is 0.0997."
+		}
+	],
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Hydrochloric acid and acetic acid, both 0.01 M: how many times better do you think the first conducts? Type your guess, then click \"predict\".",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "Electrolytes",
+			"title": "Their conductivity",
+			"text": "Right-click each beaker in turn and click \"+ uS/cm\" under its readings: the hydrochloric acid, the sodium chloride, the acetic acid, the water.",
+			"why": "A strong electrolyte, a weak one, and none: pure water's own ions make 0.06 uS/cm; this water has taken up the carbon dioxide of the room's air (420 ppm), whose carbonic acid adds most of a microsiemens.",
+			"checks": [
+				{
+					"text": "the hydrochloric acid's",
+					"when": {
+						"item": "strong",
+						"recorded": "us_cm"
+					}
+				},
+				{
+					"text": "the sodium chloride's",
+					"when": {
+						"item": "salt",
+						"recorded": "us_cm"
+					}
+				},
+				{
+					"text": "the acetic acid's",
+					"when": {
+						"item": "weak",
+						"recorded": "us_cm"
+					}
+				},
+				{
+					"text": "the water's",
+					"when": {
+						"item": "pure",
+						"recorded": "us_cm"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:strong"
+				},
+				{
+					"click": "record:strong:us_cm"
+				},
+				{
+					"click": "item:salt"
+				},
+				{
+					"click": "record:salt:us_cm"
+				},
+				{
+					"click": "item:weak"
+				},
+				{
+					"click": "record:weak:us_cm"
+				},
+				{
+					"click": "item:pure"
+				},
+				{
+					"click": "record:pure:us_cm"
+				}
+			]
+		},
+		{
+			"part": "A conductometric titration",
+			"title": "25 mL of the acid",
+			"text": "Pick up the pipette and click the hydrochloric acid of unknown strength: it draws to its mark. Then pick it up again and click the flask.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:acid"
+					]
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Water to it",
+			"text": "Pick up the pipette and click its own place. Pick up the water bottle, right-click the flask, type 175 and click \"pour\".",
+			"why": "Twelve millilitres of base into 25 mL of acid would dilute it by half, bending both lines; in 200 mL it dilutes it by a twentieth, and the arms stand straight.",
+			"checks": [
+				{
+					"text": "water in the flask",
+					"when": {
+						"quantity": {
+							"item": "flask",
+							"what": "liquid_ml"
+						},
+						"compare": "above",
+						"value": 150
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:4,3"
+					]
+				},
+				{
+					"drag": [
+						"item:water",
+						"item:flask"
+					]
+				},
+				{
+					"type": "175"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Fill the burette",
+			"text": "Pick up the sodium hydroxide, right-click the burette, type 55 and click \"pour\". Then pick up the burette and click the flask.",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				},
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:burette"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:burette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"part": "Logging",
+			"title": "Log the conductivity",
+			"text": "Right-click the flask, click \"+ uS/cm\", then open the notebook and click \"1 s\".",
+			"checks": [
+				{
+					"text": "the flask's conductivity logged",
+					"when": {
+						"item": "flask",
+						"logging": "us_cm"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:flask"
+				},
+				{
+					"click": "record:flask:us_cm"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				}
+			]
+		},
+		{
+			"title": "Log the burette",
+			"text": "Close the notebook, right-click the burette, click \"+ mL\", open the notebook again and click \"1 s\".",
+			"checks": [
+				{
+					"text": "the burette's reading logged",
+					"when": {
+						"item": "burette",
+						"logging": "scale_ml"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				}
+			]
+		},
+		{
+			"part": "Titrating",
+			"title": "A slow stream",
+			"text": "Close the notebook, right-click the burette, drag its tap to about 15 % and click 60x.",
+			"checks": [
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							10,
+							20
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@0.15"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Well past the end point",
+			"text": "Watch the conductivity fall, then rise again; wait until the burette reads 22 mL.",
+			"checks": [
+				{
+					"text": "22 mL run in",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "scale_ml"
+						},
+						"compare": "above",
+						"value": 22
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag the burette's tap shut. Open the notebook: x the burette's reading, y the conductivity. Fit a line to each arm away from the bottom; they cross at the end point.",
+			"why": "Near the end point the curve rounds off (the water's own ions, and the dilution): the end point is where the straight arms meet, not the lowest reading.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				}
+			]
+		}
+	]
+}
