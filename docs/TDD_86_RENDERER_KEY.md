@@ -12,7 +12,7 @@ code, so a change to the renderer kept the pictures already captured until their
 | 86.1 | The renderer's key: a hash of the files a picture is rendered by, made at build time | Done |
 | 86.2 | In each picture's key, and in each file: another renderer's pictures taken as none | Done |
 | 86.3 | `make pictures` end to end: a renderer's change captures every picture again, the old left behind | Done |
-| 86.4 | `make gates`; the user's sign-off | open |
+| 86.4 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 86.1 The renderer's key
 
@@ -58,11 +58,23 @@ what is given is the screen's renderer's alone).
 
 ## 86.3 End to end
 
-<!-- filled in from the run -->
+`make pictures` in a new worktree on Stage 81's supplies (45 pictures), a load of 14 to 21 from other sessions' tests:
+
+| Run | Time | The file |
+|---|---|---|
+| Cold | 111 s | renderer `bc1b0141…`, 45 pictures |
+| Again, nothing changed | 1 s | the same |
+| A line added to `optics_trace.cpp`, rebuilt | 114 s | renderer `9061d440…`, 45 (the old 45 left behind) |
+| The line taken out, rebuilt | 240 s (the load at 21) | renderer `bc1b0141…`, 45 |
+| Again, nothing changed | 1 s | the same |
+
+The key comes back with the files: the same files, the same key, in any worktree (the names are the repository's).
 
 ## 86.4 The gates
 
-<!-- filled in from the run -->
+`make gates`: every gate passed, in 1,222 s of wall at a load of 14 to 21 from other sessions' tests (each entry two to
+three times its time on a quiet machine). The Godot suite: 13 passing. The step's cost: 1,222,435 instructions a step on
+the demo, no count yet for main's at bcb342b (the step is not this stage's: the renderer's key reaches no process).
 
 ## Open
 
