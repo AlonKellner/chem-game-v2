@@ -11,7 +11,7 @@ possible, native first, thin godot wrapper". No behaviour of the game changes; G
 | 84.1 | Measured: where the step's time goes | Done |
 | 84.2 | The gate builds and runs only what needs the engine | Done |
 | 84.3 | The suite captures no picture; `make native` captures them side by side | Done |
-| 84.4 | `make gates`; the user's sign-off | Open |
+| 84.4 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 84.1 Where the time went
 
@@ -47,6 +47,11 @@ what the file holds and writes a file of its own (`build/pictures`), and `tools/
 key, sorted as `chem_tool capture` writes them. Cold: 90 s against 148 s serial, at a load of 16 to 22; the same 36
 pictures, the file byte for byte the serial capture's. One bench (the free lab, with most supplies) is most of it.
 Again with every picture kept: 0 s.
+
+## 84.4 The gates
+
+`make gates`: every gate passed. The Godot suite ran (the host changed): 13 passing in 3 s, and the whole Godot step
+5 s. The native entries came from the cache: their binaries are main's, byte for byte.
 
 ## Open
 
