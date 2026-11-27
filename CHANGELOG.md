@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74)
+## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
 
 - §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):
   **a solution's conductivity**, each ion's Nernst–Einstein conductivity from its diffusion lowered by Debye, Hückel
