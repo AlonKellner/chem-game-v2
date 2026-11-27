@@ -16,6 +16,14 @@
   acid, 2 M sodium hydroxide; 0.0100 M EDTA, a pH 10 buffer and Eriochrome Black T).
 - Flame emission is a stage of its own (the user's split).
 
+## Stage 86 (2026-11-27; GAME_SPEC stays 0.81.0: no behaviour of the game changes; signed off by the user)
+
+- The supplies' pictures (`docs/TDD_86_RENDERER_KEY.md`): each picture's key holds the renderer's, a hash made at
+  build time of the 49 files a picture is rendered by (`RENDERER_KEY`: the per-pixel source, the optics' sources,
+  colour, contents, glassware, the core's optics and math, `data/optics/` and the tables made of it), and each file says
+  which renderer made it: another renderer's is taken as none, so a change to the renderer captures every picture again
+  and leaves none of the old behind (ctest `renderer_key_moves`).
+
 ## Stage 84 (2026-11-27; GAME_SPEC stays 0.80.0: no behaviour of the game changes; signed off by the user)
 
 - The gates (`docs/TDD_84_GODOT_GATE.md`): the Godot step builds and runs only what needs the engine (the extension,

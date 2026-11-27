@@ -332,7 +332,7 @@ CG_API void cg_ui_set_strict(cg_ui *ui, int32_t strict);
 /* The supplies' pictures (GAME_SPEC §13.1, Stage 61): a host gives back those it kept ("chem-pictures/1"); takes
  * every one the screen has (borrowed until the next call on this screen), and whether one was captured since it last
  * took them; chooses whether a supply with none has its own captured apart (off as opened); and (a build's tool)
- * has every one the bench lacks captured, waiting. */
+ * has every one the bench lacks captured, waiting. (Stage 86) A file of another renderer's pictures is taken as none. */
 CG_API cg_status cg_ui_add_pictures(cg_ui *ui, const char *pictures_json);
 CG_API const char *cg_ui_pictures(cg_ui *ui);
 CG_API int32_t cg_ui_pictures_changed(const cg_ui *ui);
