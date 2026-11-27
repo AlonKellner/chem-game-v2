@@ -3,6 +3,7 @@
 #include "lab/glassware.hpp"
 
 #include <array>
+#include <functional>
 #include <cstdint>
 #include <vector>
 
@@ -83,11 +84,21 @@ struct Landing {
 // z = wall; `index` is each medium's refractive index. At each surface it refracts by vector Snell,
 // losing what Fresnel reflects; where it cannot pass it is turned back, all of it.
 // (Stage 46) `absorb`: each medium's absorption per cm (none: nothing absorbs).
+// (Stage 78) A reflection as a branch: at each clear surface the ray is turned back where `back` says, given the
+// count of clear surfaces the ray has met (over all its bodies: `events`) and the surface's reflectance R; its weight
+// times R or T where `weigh` (the truth's sum over every branch), else as it was (a pass ray's roulette: O27). Nothing
+// is turned away as the room: every share is a branch.
+struct Branching {
+	std::function<bool(int, double)> back;
+	bool weigh = true;
+	int events = 0;
+	std::vector<double> reflectance; // each clear surface's R, in the order met
+};
 // (Stage 78) `extinction`: each medium's k, the imaginary part of its index (none: every medium clear). A ray that
 // comes to a medium with k (a metal) is turned back by its complex Fresnel reflectance and the rest is absorbed within
 // the metal's skin: it never goes in.
 Landing trace(const Shape &shape, Vec3 origin, Vec3 direction, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside = nullptr,
-		const std::array<double, MAX_MEDIA> *absorb = nullptr, const std::array<double, MAX_MEDIA> *extinction = nullptr);
+		const std::array<double, MAX_MEDIA> *absorb = nullptr, const std::array<double, MAX_MEDIA> *extinction = nullptr, Branching *branching = nullptr);
 // The meetings a ray is allowed in one shape (Stage 33). Straight through a vessel is four, through its
 // liquid's surface five, through a vortex and a floor more. Measured over the play (Stage 33): 2% of passages
 // take more than eight. On the GPU a group of pixels pays for its longest ray.

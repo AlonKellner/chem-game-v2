@@ -215,7 +215,28 @@ Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
 } // namespace
 
 Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside, const std::array<double, MAX_MEDIA> *absorb,
-		const std::array<double, MAX_MEDIA> *extinction) {
+		const std::array<double, MAX_MEDIA> *extinction, Branching *branching) {
+	// a clear surface's two shares (Stage 78): as before, what it turns away the room's; or a branch
+	const auto clear = [&](Landing &out, Vec3 &dir, const Vec3 &n, double cos_i, double eta, double cos_t, double squares, uint32_t mark) {
+		const double r = 0.5 * squares; // (rs^2 + rp^2: the turned share as it always was reckoned)
+		if (branching != nullptr) {
+			const int i = branching->events++;
+			branching->reflectance.push_back(r);
+			if (branching->back(i, r)) {
+				out.pass *= branching->weigh ? r : 1.0;
+				dir = Vec3{ dir.x + 2.0 * cos_i * n.x, dir.y + 2.0 * cos_i * n.y, dir.z + 2.0 * cos_i * n.z };
+				out.route = out.route * 31u + mark + 700u;
+				return true; // turned back: it stays where it is
+			}
+			out.pass *= branching->weigh ? 1.0 - r : 1.0;
+		} else {
+			out.turned += out.pass * 0.5 * squares;
+			out.pass *= 1.0 - 0.5 * squares;
+		}
+		const double k = eta * cos_i - cos_t;
+		dir = Vec3{ eta * dir.x + k * n.x, eta * dir.y + k * n.y, eta * dir.z + k * n.z };
+		return false;
+	};
 	// a metal's k (Stage 78): nought for a clear medium
 	const auto k_of = [&](int medium) { return extinction != nullptr && medium >= 0 && medium < MAX_MEDIA ? (*extinction)[static_cast<size_t>(medium)] : 0.0; };
 	// at a metal (Stage 78): turned back by its complex Fresnel reflectance (Born and Wolf), the rest absorbed in its skin
@@ -331,10 +352,9 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 				}
 				const double cos_t = std::sqrt(1.0 - sin2);
 				const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
-				out.turned += out.pass * 0.5 * (rs * rs + rp * rp);
-				out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
-				const double k = eta * cos_i - cos_t;
-				u = Vec3{ eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z };
+				if (clear(out, u, n, cos_i, eta, cos_t, rs * rs + rp * rp, static_cast<uint32_t>(2 * (100 + which)))) {
+					continue;
+				}
 				here = there;
 				out.route = out.route * 31u + static_cast<uint32_t>(2 * (100 + which));
 				continue;
@@ -395,10 +415,9 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 		}
 		const double cos_t = std::sqrt(1.0 - sin2);
 		const double rs = (n1 * cos_i - n2 * cos_t) / (n1 * cos_i + n2 * cos_t), rp = (n1 * cos_t - n2 * cos_i) / (n1 * cos_t + n2 * cos_i);
-		out.turned += out.pass * 0.5 * (rs * rs + rp * rp);
-		out.pass *= 1.0 - 0.5 * (rs * rs + rp * rp);
-		const double k = eta * cos_i - cos_t;
-		u = Vec3{ eta * u.x + k * n.x, eta * u.y + k * n.y, eta * u.z + k * n.z };
+		if (clear(out, u, n, cos_i, eta, cos_t, rs * rs + rp * rp, static_cast<uint32_t>(2 * (hit + 1)))) {
+			continue;
+		}
 		here = there;
 		out.route = out.route * 31u + static_cast<uint32_t>(2 * (hit + 1));
 	}

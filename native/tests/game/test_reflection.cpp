@@ -230,7 +230,7 @@ TEST_CASE("O28: a beaker of mercury in the room shows the room's ruled faces, wh
 		}
 		double shown[3], truth[3];
 		lab::OpticsFrames settle(px, py, 1, 1);
-		for (int f = 0; f < 200; ++f) {
+		for (int f = 0; f < 400; ++f) {
 			settle.frame(scene);
 		}
 		settle.colour(scene, px, py, shown);
@@ -249,4 +249,29 @@ TEST_CASE("O28: a beaker of mercury in the room shows the room's ruled faces, wh
 	// down its middle the mirror shows the front face's lines across: darker rows among lighter ones
 	CHECK(most - least > 0.05);
 	MESSAGE("mercury in the room: " << compared << " pixels, the worst " << worst << " on the eye metric; down its middle from " << least << " to " << most);
+}
+
+TEST_CASE("O27: a reflection is a branch, fairly drawn: the pass's seeded rays take the truth's branches through glass and water (Stage 78)") {
+	const ItemView item = beaker(150.0, false);
+	const OpticsScene scene = scene_of(item, true);
+	const int top = static_cast<int>(Y) - 2, foot = static_cast<int>(Y + height_px()) + 1;
+	CHECK(lab::check_O27(scene, static_cast<int>(X) - 2, top, static_cast<int>(X + W) + 2, foot, sparse() > 1 ? 9 : 5, 4) == "");
+	// its own test: a roulette run against T fires
+	CHECK(lab::check_O27(scene, static_cast<int>(X) - 2, top, static_cast<int>(X + W) + 2, foot, 9, 2, true).rfind("O27", 0) == 0);
+	// and a seeded ray does take a branch: of 64 seeds at a rim, where glass turns back much, some go another way than
+	// the beam's own ray (which takes none), and some its way
+	const double y = row_of(0.5 * level_cm(150.0));
+	double x = X;
+	while (x < X + W / 2 && lab::optics_ray(scene, x, y, 550.0).bent == 0) {
+		x += 0.25; // (to the glass's own edge: the beaker is narrower than its lip)
+	}
+	x += 0.5;
+	const lab::OpticsRay beam = lab::optics_ray(scene, x, y, 550.0);
+	REQUIRE(beam.bent >= 1);
+	int other = 0;
+	for (uint32_t k = 1; k <= 64; ++k) {
+		other += lab::optics_ray_seeded(scene, x, y, 550.0, k * 2654435761u | 1u).route[0] != beam.route[0] ? 1 : 0;
+	}
+	CHECK(other > 0);
+	CHECK(other < 64);
 }

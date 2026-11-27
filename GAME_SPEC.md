@@ -1801,25 +1801,28 @@ showed one radiance, the room's faces' mean, and every liquid bent as water.
   exact for light arriving from a clear medium; at a metal what is not reflected enters and is absorbed within its
   skin depth (tens of nanometres: the ray ends there, absorbed). Liquid mercury from air at normal incidence turns back
   about 0.78 of the light at every visible wavelength.
-- **A reflection is a branch.** At each surface a ray is either turned back or goes through, chosen by the surface's
-  reflectance `R` against a uniform drawn from the ray's own branch seed and the event's count, so a ray is a pure
-  function of where it starts, its wavelength and its seed (as a grating's way is), and the mean of a pixel's rays is
-  `T` of the light through and `R` of the light turned back, at every surface (Russian roulette). A ray turned back
-  is followed as any other: through the bodies it meets, back towards the eye if that is its way, and out to the
-  room's faces, including the cube's front face (behind the eye, ruled in cells as the others), so a reflection shows
-  an image (the room's cells, the wall, another body) and not a mean.
-  - **The beam stays what goes through** (Stage 33's kept beams and shared corners are untouched: their rays take no
-    branch); what its surfaces turn away is read at once as the room in the mirror direction of its middle ray (no
-    trace), a first estimate the pixel's rays then correct.
-  - **The corrections take branches**: each correction ray draws its own seed, so the pixel settles to the integral of
-    every path, reflected and refracted, as it settles to its footprint's.
-  - **A mirror's beam**: where a beam's first surface turns back much (`R` ≥ 0.2 at its middle ray: a metal, a grazing
-    rim) its rays mirrored there are traced as a beam of their own, weighted by `R`, so a mirror's image is sharp from
-    the first frames; it is traced while the pixel settles and not kept.
-- **The truth follows both branches** at every surface to eight events or a weight under 1e-4, summing them by `R` and
-  `T`: the integral itself, no draws; a pass ray with a given seed takes the branches the truth's weights do (`O27`).
+- **A metal turns back without a branch.** What goes into it is lost, so a ray that comes to a metal is always turned
+  back, carrying R of its light: a pure function of where it starts and its wavelength, so a beam that meets mercury
+  is its mirror image, kept and shared as any beam (Stage 33), sharp from the first frame.
+- **At a clear surface a reflection is a branch.** Both shares carry light there, so a ray is either turned back or
+  goes through, chosen by the surface's reflectance `R` against a uniform drawn from the ray's own branch seed and the
+  count of clear surfaces it has met (Russian roulette): its weight unchanged either way, the mean of a pixel's rays
+  `T` of the light through and `R` of the light turned back, at every surface. A ray is a pure function of where it
+  starts, its wavelength and its seed (as a grating's way is).
+  - **The beam takes no branch** (seed 0: Stage 33's kept beams and shared corners are untouched): what its surfaces
+    turn away is shown as the room's mean, a first estimate.
+  - **The corrections take branches**: each correction ray draws its seed from its place in the pixel and its
+    wavelength, which move with the frames, so the pixel settles to the integral of every path, reflected and
+    refracted. A ray turned back is followed as any other, through its body and out to the room's faces.
+- **The room's faces are ruled as the wall is** (the user's choice, 2026-11-27: a mirror shows them): each face but
+  the wall a white plane ruled a line each way every square of the bench, its edge cells black, read exactly (its
+  mean is the faces' mean of before, `beyond`). A ray that comes to a face is put at its own place on it.
+- **The truth follows both branches** at every clear surface, each by its weight (`R` where it is turned back, `T`
+  where it goes through), to eight turnings back or a weight under a thousandth: the integral itself, no draws, none
+  of its light the room's mean; a pass ray with a given seed takes the branches the same draws choose in the truth
+  (`O27`).
 - **A flat thing with a gloss** (a burner's metal, a balance's pan): a surface may name an index; it then turns back
-  `R` of the room in the mirror direction beside its diffuse share, `1 − R`.
+  `R` of the room in the mirror direction beside its diffuse share, `1 − R` (not yet built: TDD 78, open).
 
 ### 12.4 The long-wave range (Stage 46)
 

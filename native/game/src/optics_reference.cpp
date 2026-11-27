@@ -213,6 +213,10 @@ struct Exact {
 	bool solid = false; // it ended in the body's sediment (Stage 30)
 };
 
+// (Stage 78) the branches the truth's rays take now: none (every clear surface's turned share the room's, as the pass's
+// beam has it), or as exact_through enumerates them
+thread_local trace::Branching *branching_now = nullptr;
+
 // `line` through body `body`, whose axis stands at the depth z_axis, its core its liquid (0), the air over
 // it (1) or glass all through (2: a cylinder's floor; glassware's floor is in its shape); the line it leaves
 // on replaces `line`.
@@ -289,7 +293,7 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	// its liquid's k (Stage 78): a metal turns back what comes to it
 	const double k_in = liquid && !prism ? row_at(start + optics_layout::LIQUID_K_ROW * optics_layout::ROW, nm) : 0.0;
 	const std::array<double, trace::MAX_MEDIA> extinction{ 0.0, 0.0, k_in, 0.0 };
-	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb, &extinction);
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb, &extinction, branching_now);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
 		return out;
@@ -364,7 +368,11 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		for (int k = first; k <= last; ++k) {
 			if (bends(k) && in_rows(k, cross_y) && !(through_hand && panel(k))) {
 				Line trial = line;
+				// (Stage 78: tried for where it is met, which no branch changes; only the body met counts its clear surfaces)
+				trace::Branching *const taking = branching_now;
+				branching_now = nullptr;
 				const Exact e = exact_body(k, core_in(k, cross_y), nm, z, trial);
+				branching_now = taking;
 				if (e.met && e.meetings > 0 && e.entry < nearest) {
 					nearest = e.entry;
 					hit = k;
@@ -421,9 +429,8 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 		if (comes.x < 0.5) {
 			out.x = comes.y;
 			out.y = comes.z;
-		} else if (comes.x < 1.5 && shader::scene_vec(8).w > 0.0) {
-			// (Stage 78) a face, ruled: where on it, put as the pass puts it
-			const shader::vec3 face = shader::room_face(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side);
+		} else if (const shader::vec3 face = shader::scene_vec(8).w > 0.0 ? shader::room_face(shader::vec3(line.x, line.y, line.z), shader::vec3(line.ux, line.uy, line.uz), wall, side) : shader::vec3(-1.0, 0.0, 0.0); face.x >= 0.0) {
+			// (Stage 78) a face, ruled, its edge cells with it: where on it, put as the pass puts it
 			out.x = optics_layout::FACE_X + face.x * optics_layout::FACE_STRIDE + face.y;
 			out.y = optics_layout::FACE_Y + face.z;
 		} else {
@@ -452,7 +459,9 @@ double drawn_at(double x, double y) {
 		const double k = std::floor((x - optics_layout::FACE_X) / optics_layout::FACE_STRIDE);
 		const double u = x - optics_layout::FACE_X - k * optics_layout::FACE_STRIDE, v = y - optics_layout::FACE_Y;
 		const auto on = [&](double a) { return a - std::floor(a / f.w) * f.w < f.z; };
-		return on(u) || on(v) ? f.y : f.x;
+		const double side = shader::scene_vec(3).z, cell = shader::scene_vec(3).w;
+		const auto edge = [&](double a) { return a < cell || a > side - cell; };
+		return edge(u) || edge(v) ? scene.far_left : on(u) || on(v) ? f.y : f.x; // (the black of the edge cells: the table's far left)
 	}
 	if (std::fabs(x) >= 5.0e4) {
 		return x < 0.0 ? scene.far_left : scene.far_right;
@@ -579,13 +588,34 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 	if (q.layers == 0 || (q.refractor < 0 && !q.ways)) {
 		return shader::along(q, nm, 1.0, 0.0, 0.0, false, size > 1.0e-3 ? drawn_over(p.x - half, p.x + half, p.y - half, p.y + half) : drawn_at(p.x, p.y));
 	}
-	const double room = shader::room_front();
+	// (Stage 78) every branch the ray's clear surfaces make, each by its weight (R where it is turned back, T where it
+	// goes through), to eight turnings back or a weight under a thousandth: none of its light is the room's mean
+	const double room = 0.0;
 	// (through a grating: every way the ray goes on in, each by its share)
 	double total = 0.0;
 	int ways = 1;
+	struct Branch {
+		uint64_t bits;
+		int from, turns;
+		double weight;
+	};
 	for (int way = 0; way < ways; ++way) {
+	std::vector<Branch> todo{ Branch{ 0, 0, 0, 1.0 } };
+	while (!todo.empty()) {
+		const Branch branch = todo.back();
+		todo.pop_back();
+		trace::Branching taken;
+		taken.back = [&](int i, double) { return i < 64 && ((branch.bits >> i) & 1u) != 0; };
+		branching_now = &taken;
 		const ExactRay ray = exact_ray(p.x, p.y, nm, way);
+		branching_now = nullptr;
 		ways = way == 0 ? ray.ways : ways;
+		for (int i = branch.from; i < std::min(taken.events, 64); ++i) {
+			const double w = branch.weight * taken.reflectance[static_cast<size_t>(i)];
+			if (w >= 1.0e-3 && branch.turns < 8) {
+				todo.push_back(Branch{ branch.bits | (uint64_t{ 1 } << i), i + 1, branch.turns + 1, w });
+			}
+		}
 		double a = 1.0, b = 0.0;
 		for (const Met &m : ray.met) {
 			shader::Layer l = shader::layer_at(m.body, shader::vec2(m.cross, m.cross_y), size, size);
@@ -611,6 +641,7 @@ double exact_through(const shader::vec2 &p, double size, double nm) {
 			a *= does.x;
 		}
 		total += (ways > 1 ? shader::way_share(way) : 1.0) * (a * drawn_at(ray.x, ray.y) + b);
+	}
 	}
 	return total;
 }
@@ -1009,6 +1040,87 @@ OpticsRay optics_exact_ray(const OpticsScene &scene, double x, double y, double 
 		}
 	}
 	return out;
+}
+
+OpticsRay optics_ray_seeded(const OpticsScene &scene, double x, double y, double nm, uint32_t seed) {
+	if (!shader::ready(scene) || scene.shapes.empty()) {
+		return OpticsRay{};
+	}
+	const shader::Use use(scene);
+	shader::ray_seed = seed;
+	OpticsRay out = optics_ray_way(scene, x, y, nm, 0);
+	shader::ray_seed = 0u;
+	return out;
+}
+
+OpticsRay optics_exact_ray_seeded(const OpticsScene &scene, double x, double y, double nm, uint32_t seed) {
+	if (!shader::ready(scene)) {
+		return OpticsRay{};
+	}
+	trace::Branching taken;
+	taken.weigh = false;
+	taken.back = [&](int i, double r) { return shader::branch_draw(seed, i) < r; };
+	branching_now = &taken;
+	OpticsRay out = optics_exact_ray(scene, x, y, nm);
+	branching_now = nullptr;
+	return out;
+}
+
+std::string check_O27(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int seeds, bool flip) {
+	if (!shader::ready(scene)) {
+		return "O27: the scene is not ready";
+	}
+	char buffer[320];
+	// the draws: as often under R as R says, for the seeds the corrections make (their place in the pixel, their
+	// wavelength), at the first clear surface and the fifth
+	for (const double r : { 0.04, 0.3, 0.8 }) {
+		for (const int event : { 0, 4 }) {
+			int under = 0;
+			for (int k = 0; k < 4096; ++k) {
+				const double sx = std::fmod(k * 0.7548776662466927, 1.0), sy = std::fmod(k * 0.5698402909980532, 1.0), nm = 380.0 + std::fmod(k * 0.381966, 1.0) * 400.0;
+				const uint32_t seed = ((static_cast<uint32_t>(sx * 65536.0) * 65536u + static_cast<uint32_t>(sy * 65536.0)) ^ (static_cast<uint32_t>(nm * 64.0) * 2654435761u)) | 1u;
+				const double draw = shader::branch_draw(seed, event);
+				under += (flip ? 1.0 - draw : draw) < (flip ? 1.0 - r : r) ? 1 : 0;
+			}
+			const double share = under / 4096.0, sigma = std::sqrt(r * (1.0 - r) / 4096.0);
+			if (std::fabs(share - r) > 4.0 * sigma) {
+				std::snprintf(buffer, sizeof buffer, "O27: of 4096 seeds %.4f fall under a reflectance of %.2f at clear surface %d (four standard errors: %.4f)", share, r, event, 4.0 * sigma);
+				return buffer;
+			}
+		}
+	}
+	// ray by ray: the same branches in both tracers
+	for (int y = y0; y < y1; y += step > 0 ? step : 1) {
+		for (int x = x0; x < x1; x += step > 0 ? step : 1) {
+			for (const double nm : { 420.0, 550.0, 680.0 }) {
+				for (int k = 0; k < seeds; ++k) {
+					const uint32_t seed = (static_cast<uint32_t>(k + 1) * 2654435761u) | 1u;
+					const OpticsRay mine = optics_ray_seeded(scene, x + 0.5, y + 0.5, nm, seed);
+					OpticsRay exact;
+					{
+						trace::Branching taken;
+						taken.weigh = false;
+						taken.back = [&](int i, double r) { return flip ? 1.0 - shader::branch_draw(seed, i) < 1.0 - r : shader::branch_draw(seed, i) < r; };
+						const shader::Use use(scene);
+						branching_now = &taken;
+						exact = optics_exact_ray(scene, x + 0.5, y + 0.5, nm);
+						branching_now = nullptr;
+					}
+					bool same = mine.lands == exact.lands && mine.bent == exact.bent && mine.route[0] == exact.route[0] && mine.route[1] == exact.route[1];
+					for (int b = 0; same && b < mine.bent; ++b) {
+						same = mine.body[b] == exact.body[b] && std::fabs(mine.pass[b] - exact.pass[b]) < 1.0e-6;
+					}
+					same = same && std::fabs(mine.x - exact.x) < 1.0e-3 * std::max(1.0, std::fabs(mine.x) * 1.0e-5) && std::fabs(mine.y - exact.y) < 1.0e-3 * std::max(1.0, std::fabs(mine.y) * 1.0e-5);
+					if (!same) {
+						std::snprintf(buffer, sizeof buffer, "O27: at (%d, %d), %.0f nm, seed %u the pass's ray lands at (%.4f, %.4f) by route %u, the truth's with the same draws at (%.4f, %.4f) by route %u", x, y, nm, seed, mine.x, mine.y,
+								mine.route[0], exact.x, exact.y, exact.route[0]);
+						return buffer;
+					}
+				}
+			}
+		}
+	}
+	return "";
 }
 
 namespace {

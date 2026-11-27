@@ -490,6 +490,16 @@ using OpticsRayOf = OpticsRay (*)(const OpticsScene &scene, double x, double y, 
 // same place and meet the same bodies with the same passing and the same chords; rays the two send different
 // ways (a ray that grazes a surface) are few. "" when it holds.
 std::string check_O9(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, OpticsRayOf ray = nullptr);
+// (Stage 78) a ray with a branch seed, as a correction's is: by the pass's tracer, its roulette at each clear surface;
+// and by the truth's, taking the branches the same draws choose (its weight as the pass's: unchanged)
+OpticsRay optics_ray_seeded(const OpticsScene &scene, double x, double y, double nm, uint32_t seed);
+OpticsRay optics_exact_ray_seeded(const OpticsScene &scene, double x, double y, double nm, uint32_t seed);
+// O27 (GAME_SPEC §18, Stage 78): a reflection is a branch, fairly drawn. At the middle of every `step`th pixel of
+// [x0, x1) x [y0, y1), at three wavelengths and `seeds` seeds each, the pass's seeded ray and the truth's with the same
+// draws meet the same bodies, by the same routes, land at the same place and pass the same; and the draws themselves,
+// 4,096 seeds as the corrections make them, fall under a reflectance R as often as R does (four standard errors).
+// `flip`: the roulette run against T, not R (the check's own test: it must fire). "" when it holds.
+std::string check_O27(const OpticsScene &scene, int x0, int y0, int x1, int y1, int step, int seeds, bool flip = false);
 // The stretches of the spectrum a pixel is read in (places: 0 at 380 nm, 1 at 780 nm; a pair a stretch), as its
 // reading cut and halved it; and as it would be if stretches were never halved (O10's own test).
 std::vector<double> optics_stretches(const OpticsScene &scene, int x, int y);
