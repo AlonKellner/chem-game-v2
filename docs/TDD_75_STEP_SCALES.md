@@ -41,6 +41,11 @@ in a busy moment up to 2 %):
 The whole demo, `/usr/bin/time -l`, main against the branch back to back at a load of 33: instructions 9.37e11 to
 7.40e11 (−21 %), cycles 2.68e11 to 2.25e11 (−16 %).
 
+On main's physics after Stages 65, 71 and 76 (merged into the branch; more species, more pairs), the whole demo
+back to back, main against the branch: instructions 1.336e12 to 1.006e12 (−25 %), cycles 3.18e11 to 2.42e11 and
+3.20e11 to 2.67e11 (−24 % and −17 %, at a load of 15 to 25). The merged branch's step: 1,226,172 instructions, main's
+first count for the step cost's comparisons. The gain grew with the table, as the stage meant it to.
+
 ## 75.1 The step's cost at every merge gate
 
 `chem_tool bench` prints `step cost: N instructions a step` (the process's retired instructions over the command
@@ -49,7 +54,7 @@ ctest (about a minute of one core): the count is kept in `~/Library/Caches/chem-
 binary's content and the data, with what it was built from (the `native`, `data` and `bench` trees, so a commit of
 documents alone, a sign-off, keeps it) when that has no edits; it is printed against the count for what main built
 from where the branch left it (on main, its first parent's), with a `!!` line past `GATE_STEPCOST_WARN` (10 %). It
-never fails. Main's first count is this stage's last (893,368), taken by the branch's own gate.
+never fails. Main's first count is the merged branch's (1,226,172 on Stage 76's physics), taken by its own gate.
 
 ## 75.2 A cell's revision
 
