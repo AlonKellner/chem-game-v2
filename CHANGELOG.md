@@ -16,7 +16,7 @@
   acid, 2 M sodium hydroxide; 0.0100 M EDTA, a pH 10 buffer and Eriochrome Black T).
 - Flame emission is a stage of its own (the user's split).
 
-## Stage 86 (2026-11-27; GAME_SPEC stays 0.81.0: no behaviour of the game changes; awaiting the user's sign-off)
+## Stage 86 (2026-11-27; GAME_SPEC stays 0.81.0: no behaviour of the game changes; signed off by the user)
 
 - The supplies' pictures (`docs/TDD_86_RENDERER_KEY.md`): each picture's key holds the renderer's, a hash made at
   build time of the 49 files a picture is rendered by (`RENDERER_KEY`: the per-pixel source, the optics' sources,

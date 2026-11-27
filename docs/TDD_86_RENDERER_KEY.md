@@ -12,7 +12,7 @@ code, so a change to the renderer kept the pictures already captured until their
 | 86.1 | The renderer's key: a hash of the files a picture is rendered by, made at build time | Done |
 | 86.2 | In each picture's key, and in each file: another renderer's pictures taken as none | Done |
 | 86.3 | `make pictures` end to end: a renderer's change captures every picture again, the old left behind | Done |
-| 86.4 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 86.4 | `make gates`; the user's sign-off | Done (signed off 2026-11-27) |
 
 ## 86.1 The renderer's key
 
