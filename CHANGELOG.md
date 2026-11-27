@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.80.0 (2026-11-27, Stage 80, merged after 0.78.0; awaiting the user's sign-off)
+## 0.80.0 (2026-11-27, Stage 80, merged after 0.78.0; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings; §8, the fast equilibria (Stage 80, `docs/TDD_80_WALLS_AND_SEARCH.md`): a vessel's walls read
   their temperatures, levels, water's activity and pressure on a grid (0.01 K, a micrometre, 1e-6, 0.01 Pa), each

@@ -13,7 +13,7 @@ shown every printed result old against new, "Re-record". GAME_SPEC 0.80.0.
 | 80.2 | A vessel's walls from what they read on a grid | Done |
 | 80.3 | An equilibrium's search seeded by a line | Done |
 | 80.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 80.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 80.5 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 ## 80.1 Where a step goes
 
