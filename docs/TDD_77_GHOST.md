@@ -44,8 +44,9 @@ each material's complex index), and the nested rays a stage of their own after i
 
 - A pixel read by its own rays whose beam was traced again (its rays moved) starts its history again; the drift rule
   keeps only a history whose rays go as they went (`rays_moved = both && !beam_held`).
-- Held: `native/tests/game/test_ghost.cpp`, the play on the CPU, every pixel the bath covers within the eye metric's
-  8 of the truth of its area once paused and settled (0 of 9,072; without the fix 41, the worst 10.9). On the GPU the
+- Held: `native/tests/game/test_ghost.cpp`, the play on the CPU, every pixel of the band its pile's cone moves through
+  (whole pixels: a sample, each pixel with corners of its own, does not show it) within the eye metric's 8 of the
+  truth of its area once paused and settled (0 of 2,880; without the fix 39, the worst 10.2). On the GPU the
   same play's settled picture: no chevron, O4's visible pixels 70 → 23 (none in the bath).
 
 ## 2. Nested rays
@@ -57,7 +58,7 @@ Moved to a stage of its own after Stage 78 (the user's choice): the request abov
 | Phase | Topic | Status |
 |---|---|---|
 | 77.1 | The ghost: reproduced (the play, on the GPU and the CPU), its cause, the fix, its test | Done |
-| 77.2 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 77.2 | GAME_SPEC 0.77.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (522 s, merge level, Stage 76 merged in): core, 881 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens unchanged. The test then narrowed to the cone's band (423 s to about 30 s). Awaiting the user's sign-off |
 
 ## Open
 

@@ -50,10 +50,12 @@ TEST_CASE("ghost: salt poured by hand into a bath stirred, its pile lowering slo
 		if (!frames && ui->experiment() == "freezing_point") {
 			float bx = 0, by = 0;
 			REQUIRE(ui->locate("item:bath", bx, by));
-			x0 = static_cast<int>(bx) - 42; // the bath's inside, as the host draws it: the frames as the GPU's
-			y0 = static_cast<int>(by) - 54;
-			w = 84;
-			h = 108;
+			// the band of the bath its pile's cone moves through, whole pixels as the screen's (a sample, each pixel
+			// with corners of its own, does not show it)
+			x0 = static_cast<int>(bx) - 30;
+			y0 = static_cast<int>(by) - 56;
+			w = 60;
+			h = 48;
 			frames = std::make_unique<lab::OpticsFrames>(x0, y0, w, h, 16.0, 1, true);
 		}
 		if (frames) {
@@ -70,18 +72,19 @@ TEST_CASE("ghost: salt poured by hand into a bath stirred, its pile lowering slo
 	double worst = 0.0;
 	for (int j = 0; j < h; ++j) {
 		for (int i = 0; i < w; ++i) {
-			if (lab::optics_cover(scene, x0 + i, y0 + j) < lab::OPTICS_PARITY_COVER) {
+			const int x = x0 + i, y = y0 + j;
+			if (lab::optics_cover(scene, x, y) < lab::OPTICS_PARITY_COVER) {
 				continue; // (the wall beside its rounded corners: the host draws it from its table, as O4 leaves it)
 			}
 			double a[3], t[3];
-			frames->colour(scene, x0 + i, y0 + j, a);
-			lab::optics_area_truth(scene, x0 + i, y0 + j, 3, t);
+			frames->colour(scene, x, y, a);
+			lab::optics_area_truth(scene, x, y, 3, t);
 			const double e = eye_between(a, t);
 			apart += e > 8.0 ? 1 : 0;
 			if (e > worst) {
 				worst = e;
-				wx = x0 + i;
-				wy = y0 + j;
+				wx = x;
+				wy = y;
 			}
 		}
 	}
