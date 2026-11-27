@@ -1,0 +1,22 @@
+# Hydrogen chromate, HCrO4-: its molar absorptivity, decadic, L/mol/cm (Stage 81), CALIBRATED: chromate's (chromate.csv)
+# times 1576 / 2715, the two ions' ratio at 350 nm (HCrO4-: R. W. Burke and R. Mavrodineanu, NBS SP 260-54 (1977), Table 6;
+# CrO4 2-: Haupt 1952). No open source gives it in the visible.
+nm,epsilon
+380,2627.2
+385,2323.1
+390,1958.5
+395,1498.8
+400,1115.7
+404.7,812.67
+410,561.9
+420,350.61
+430,236.84
+435.8,185.75
+440,153.83
+450,92.877
+460,49.921
+470,24.961
+480,11.029
+490,3.4829
+500,0
+780,0

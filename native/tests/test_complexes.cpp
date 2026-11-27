@@ -4,6 +4,7 @@
 // acid and on warming, chromate turning to dichromate in acid. docs/DATA_SOURCES.md, "Complexes (Stage 81)".
 #include "tables.hpp"
 #include "chem/builtin_ids.hpp"
+#include "chem/optics.hpp"
 #include "chem/thermo.hpp"
 
 #include <doctest/doctest.h>
@@ -147,4 +148,48 @@ TEST_CASE("complexes: iron(III) thiocyanate at Below, Connick and Coppel's quoti
 	MESSAGE("chromium as dichromate: in water " << 2.0 * mol_of(yellow, dichromate_ion) / 0.05 << ", in acid " << 2.0 * mol_of(orange, dichromate_ion) / 0.05);
 	CHECK(2.0 * mol_of(yellow, dichromate_ion) < 0.01 * 0.05);
 	CHECK(2.0 * mol_of(orange, dichromate_ion) > 0.6 * 0.05);
+}
+
+TEST_CASE("measured: the complexes' absorption is their sources' (Stage 81)") {
+	using namespace builtin;
+	const auto at = [](SpeciesId s, int nm) { return optics::spectrum(s)[static_cast<size_t>(nm - 380)]; };
+	// chromate: Haupt 1952, Table 1 (a_M)
+	CHECK(at(chromate_ion, 380) == doctest::Approx(4526.0).epsilon(1e-9));
+	CHECK(at(chromate_ion, 400) == doctest::Approx(1922.0).epsilon(1e-9));
+	CHECK(at(chromate_ion, 450) == doctest::Approx(160.0).epsilon(1e-9));
+	// the tetrammine: Bjerrum 1932, Table 14; its maximum near 600 nm
+	CHECK(at(copper_ammine_4, 600) == doctest::Approx(51.6).epsilon(1e-9));
+	CHECK(at(copper_ammine_4, 546) == doctest::Approx(40.3).epsilon(1e-9));
+	// CoCl4 2-: Bjerrum, Halonin and Skibsted 1975, Table 1 (LiCl)
+	CHECK(at(cobalt_tetrachloro, 690) == doctest::Approx(600.0).epsilon(1e-9));
+	CHECK(at(cobalt_tetrachloro, 610) == doctest::Approx(279.0).epsilon(1e-9));
+	// FeSCN2+: Betts and Dainton's 5000 at 460 nm, Ozutsumi et al.'s shape
+	CHECK(at(iron_thiocyanate, 460) == doctest::Approx(5000.0).epsilon(1e-9));
+	// colourless: the ammines of silver, the hydroxo complexes, thiocyanate
+	for (const SpeciesId s : { silver_diammine, zinc_tetrahydroxo, aluminium_tetrahydroxo, thiocyanate_ion }) {
+		CHECK(at(s, 550) == 0.0);
+	}
+	// the colours they make: chromate yellow (absorbs the blue, passes the red), dichromate orange (absorbs further into
+	// the green), the tetrammine deep blue (absorbs the red and yellow), FeSCN2+ red (absorbs the blue-green)
+	CHECK(at(chromate_ion, 420) > 10.0 * at(chromate_ion, 550));
+	CHECK(at(dichromate_ion, 480) > 5.0 * at(chromate_ion, 480));
+	CHECK(at(copper_ammine_4, 600) > 5.0 * at(copper_ammine_4, 470));
+	CHECK(at(iron_thiocyanate, 470) > 5.0 * at(iron_thiocyanate, 650));
+}
+
+TEST_CASE("measured: chromate's, the chromates' and thiocyanate's heat capacities and volumes are OBIGT's on the model's footing (Stage 81)") {
+	using namespace builtin;
+	// OBIGT (CHNOSZ inorganic_aq.csv; Shock, Sassani, Willis and Sverjensky 1997), cal and cm3, then Cp - 216.35 z, V - 16.74 z
+	struct Row {
+		SpeciesId s;
+		double cp_cal, v, z;
+	};
+	for (const Row &r : { Row{ chromate_ion, -62.6, 19.8, -2 }, Row{ hydrogen_chromate_ion, 1.5, 44.9, -1 }, Row{ dichromate_ion, -29.1, 72.7, -2 }, Row{ thiocyanate_ion, -9.6, 35.7, -1 } }) {
+		const SpeciesDef &d = builtin_species().species(r.s);
+		CAPTURE(d.id);
+		CHECK(d.cp == doctest::Approx(r.cp_cal * 4.184 - 216.35 * r.z).epsilon(1e-4));
+		CHECK(d.molar_volume * 1e6 == doctest::Approx(r.v - 16.74 * r.z).epsilon(1e-4));
+	}
+	// and SCN-'s against NBS's own Cp, -40.2 J (p. 2-92), on the same footing
+	CHECK(builtin_species().species(thiocyanate_ion).cp == doctest::Approx(-40.2 + 216.35).epsilon(1e-3));
 }

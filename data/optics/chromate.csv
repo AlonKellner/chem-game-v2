@@ -1,0 +1,23 @@
+# Chromate ion, CrO4 2-: its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 380-490 nm: G. W. Haupt, J. Res. NBS 48(6), 414-423 (1952), RP2331, Table 1 (p. 418), column 11, the molar absorbancy index a_M:
+# 0.0400 g/L K2CrO4 in 0.05 N KOH (dichromate suppressed), 25 C, 1 cm, against water. At 500 nm its absorbance reads .000:
+# nought there and (added here) to 780 nm.
+nm,epsilon
+380,4526
+385,4002
+390,3374
+395,2582
+400,1922
+404.7,1400
+410,968
+420,604
+430,408
+435.8,320
+440,265
+450,160
+460,86
+470,43
+480,19
+490,6
+500,0
+780,0

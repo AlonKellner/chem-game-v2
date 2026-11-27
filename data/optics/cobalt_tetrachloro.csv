@@ -1,0 +1,16 @@
+# Tetrachlorocobaltate(II), CoCl4 2-: its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 610-690 nm: J. Bjerrum, A. S. Halonin and L. H. Skibsted, Acta Chem. Scand. A 29 (1975) 326-332, Table 1 (p. 328), the
+# limiting epsilon_4 in 13.36 M LiCl, 25.0 C (table). 590 and 705 nm: their Fig. 1 (figure, about +-15 %). Added here: nought
+# below 560 nm and from 740 nm (not measured).
+nm,epsilon
+380,0
+560,0
+590,85
+610,279
+624,380
+641,372
+662,550
+690,600
+705,100
+740,0
+780,0
