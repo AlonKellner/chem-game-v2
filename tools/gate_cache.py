@@ -29,6 +29,13 @@ written under a lock, so gates in several worktrees share what passed.
       runs COMMAND unless it passed with the same inputs. A PATH is a repo
       directory or file (tracked content via git, edits and untracked files by
       content) or file:GLOB (untracked build products, by content).
+  gate_cache.py stepcost BINARY SESSION
+      (Stage 75) the simulation's step cost: `BINARY bench SESSION`'s instructions
+      a step, kept in step_costs.json beside the cache by the binary's content and
+      the data (an unchanged binary is not run again), with the source tree it was
+      built from when that tree is clean. Printed against the count for the tree
+      where this branch left main (main's own: its first parent's), with a `!!`
+      line above GATE_STEPCOST_WARN percent (10). It fails only if the bench does.
   gate_cache.py clear
 """
 import glob
@@ -367,6 +374,94 @@ def step(name, inputs, command, use_cache):
     return status
 
 
+STEP_COSTS = os.path.join(os.path.dirname(CACHE), "step_costs.json")  # (Stage 75)
+
+
+def git_or_empty(*args):
+    try:
+        return git(*args)
+    except (subprocess.CalledProcessError, OSError):
+        return ""
+
+
+def clean_tree():
+    """The source tree's hash when what the game is built from has no edits, else None."""
+    if git_or_empty("status", "--porcelain", "--", "native", "data", "bench").strip():
+        return None
+    return git_or_empty("rev-parse", "HEAD^{tree}").strip() or None
+
+
+def main_base():
+    """The tree where this branch left main: the merge base's, or on main itself, its first parent's."""
+    head = git_or_empty("rev-parse", "HEAD").strip()
+    for branch in ("main", "origin/main"):
+        base = git_or_empty("merge-base", "HEAD", branch).strip()
+        if base:
+            if base == head:
+                base = git_or_empty("rev-parse", "HEAD^1").strip()
+            return base, git_or_empty("rev-parse", base + "^{tree}").strip()
+    return "", ""
+
+
+def store(key, value):
+    import fcntl
+    os.makedirs(os.path.dirname(STEP_COSTS), exist_ok=True)
+    with open(CACHE + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            with open(STEP_COSTS) as f:
+                costs = json.load(f)
+        except (OSError, ValueError):
+            costs = {}
+        costs[key] = value
+        tmp = f"{STEP_COSTS}.{os.getpid()}.tmp"
+        with open(tmp, "w") as f:
+            json.dump(costs, f, indent=0, sort_keys=True)
+        os.replace(tmp, STEP_COSTS)
+
+
+def stepcost(binary, session, use_cache):
+    key = hashlib.sha256(json.dumps([sha_binary(binary), fingerprint(DATA), os.path.normpath(session)]).encode()).hexdigest()
+    def read():
+        try:
+            with open(STEP_COSTS) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+    known = read().get(key) if use_cache else None
+    if known is None:
+        out = subprocess.run([binary, "bench", session], capture_output=True, text=True)
+        if out.returncode != 0:
+            print(out.stdout + out.stderr, flush=True)
+            return out.returncode
+        m = re.search(r"step cost: ([0-9.]+) (.+) a step", out.stdout)
+        if not m:
+            print("gate_cache: the bench printed no step cost", flush=True)
+            return 1
+        known = {"cost": float(m.group(1)), "unit": m.group(2), "session": os.path.normpath(session), "tree": clean_tree()}
+        store(key, known)
+    elif known.get("tree") is None and clean_tree():
+        known["tree"] = clean_tree()  # measured on edits since committed: the same binary, now a tree's
+        store(key, known)
+    name = os.path.splitext(os.path.basename(session))[0]
+    line = f"step cost: {known['cost']:.0f} {known['unit']} a step ({name})"
+    base, tree = main_base()
+    against = None
+    for v in read().values():
+        if tree and v.get("tree") == tree and v.get("session") == known["session"] and v.get("unit") == known["unit"]:
+            against = v["cost"]
+    if against:
+        change = 100.0 * (known["cost"] / against - 1.0)
+        line += f", {change:+.1f} % against main's at {base[:7]}"
+        print(line, flush=True)
+        warn = float(os.environ.get("GATE_STEPCOST_WARN", "10"))
+        if change > warn:
+            print(f"!! the step costs {change:+.1f} % more than main's at {base[:7]} ({name}): more than {warn:g} %", flush=True)
+    else:
+        print(line + (f"; none known for main's at {base[:7]} (a gate there gives one)" if base else ""), flush=True)
+    return 0
+
+
 def main(argv):
     use_cache = os.environ.get("GATE_CACHE", "1") != "0"
     if not argv:
@@ -394,6 +489,8 @@ def main(argv):
                 print(f"unknown option {args[0]}")
                 return 2
         return ctest(argv[1], jobs, regex, use_cache, limits)
+    if argv[0] == "stepcost" and len(argv) == 3:
+        return stepcost(argv[1], argv[2], use_cache)
     if argv[0] == "step" and "--" in argv and len(argv) >= 4 and argv[2] == "--inputs":
         sep = argv.index("--")
         return step(argv[1], argv[3:sep], argv[sep + 1:], use_cache)
