@@ -132,12 +132,22 @@ control feature on the handle" (physical controls for other things, a burner's, 
   alone, exactly (each piece the second law's), and gas leaving a vessel in parcels at its state of the moment (one
   transfer of most of a vessel's gas at its first state took more energy than it had: what stayed had no temperature).
 
+- **The tube, and violent hands (2026-11-27)**: "Does the tube restrict the flow? It should" (an ordinary 4 mm tube);
+  "by jerking syringes around I managed to break invariants again ... try more violent instant direction changes".
+  Each piece of the step's exchange was made exact or safe on its own: a step's pistons and connections in sub-steps,
+  each piston alone by its sealed model, each connection down the true pressure only, a tube by Hagen–Poiseuille,
+  each connection's ends at a vessel's foot or top (the acid of a flask had run up a syringe's nozzle). A stress of
+  hands jerked at random, three a step, to the ends or anywhere, let go, locked, capped, tubes joined and undone, on
+  the setups, the baths and a flask (16 runs of 6,000 steps): every invariant held; kept as a test.
+
 ## Open
 
-- **Rare corners the random-hands stress still finds** (five seeds of 8,000 steps on the setups, five of 6,000 with
-  tubes joined and undone at random; the baths and a flask run clean): a sealed syringe of water pushed hard against
-  its liquid, or drained into a vacuum under its lock, ending a hair over-full (V2) or without a temperature (T3), and
-  steps whose entropy falls by up to 4e-4 J/K (T2). The kept test (`syringe lab: hands at random ...`) runs clean.
+- **A step's cost**: the four setups' twelve to forty-eight sub-steps take about 8 ms a step with every invariant
+  checked: a 1x clock holds, a fast one runs slow.
+- **A joined water pair's pace**: its vessels give each sub-step only by their bubbles (0.07 mL): about 100 mL/s at
+  the most, slower with smaller bubbles; a pair of pure liquid stands.
+- **A tube's pressure read at the step's end** stands under Poiseuille's by what a sub-step's flow eases it (about
+  17 % for the test's narrow tube).
 
 - **A syringe of water tubed to one of air** (by hand: two caps off and "tube to it"): joined as one space while both
   hold liquid, the joint estimate can miss what a squeezed gas pocket over liquid takes, and the random-hands stress

@@ -88,6 +88,7 @@ struct Vessel {
 	// (`plunger_most`); the plunger's friction, N, and drag, N s/m; its length and its handle's width, cm; what its lock
 	// holds it with, N
 	bool syringe = false;
+	double nozzle_bore = 0.0, nozzle_length = 0.0; // (Stage 79) its nozzle's bore and length, cm
 	double plunger_least = 0.0, plunger_most = 0.0, plunger_friction = 0.0, plunger_drag = 0.0, plunger_length = 0.0, handle = 0.0, clamp = 0.0;
 	double plunger_area() const; // the bore's, cm^2
 	double plunger_y(double cm3) const; // its face's height holding cm3 under it (from fully in, the dead volume)
@@ -98,6 +99,11 @@ struct Vessel {
 };
 // the widest mouth a balloon's or a condenser's fitting seals, cm (data/glassware.json: seals_mm)
 double seals();
+// (Stage 79) the tubing that joins two syringes' nozzles: its bore and length, cm (data/glassware.json: tubing)
+double tubing_bore();
+double tubing_length();
+// a bore's flow over a length, Poiseuille's pi r^4 / (8 L), m^3 (cm in); pieces in series: 1 / sum of 1 / each
+double poiseuille(double bore_cm, double length_cm);
 // how far over the room's a vessel made as no glassware holds, Pa (data/glassware.json: burst_kpa)
 double burst_default();
 

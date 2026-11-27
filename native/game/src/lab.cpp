@@ -6596,6 +6596,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		EdgeId tubing;
 		world().connect(x.cell, y.cell, PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), &tubing);
+		// (Stage 79) what it lets through: the tube and the two nozzles in series
+		const glass::Vessel *gx = syringe_of(x), *gy = syringe_of(y);
+		const double through = 1.0 / (1.0 / glass::poiseuille(glass::tubing_bore(), glass::tubing_length()) + 1.0 / glass::poiseuille(gx->nozzle_bore, gx->nozzle_length) +
+											1.0 / glass::poiseuille(gy->nozzle_bore, gy->nozzle_length));
+		world().set_flow(tubing, through, 3); // (nozzle to nozzle: each one's foot)
 		if (world().disconnect(x.mouth) != Refusal::None) {
 			world().disconnect(tubing);
 			why = "\"" + x.id + "\" is not at the room's pressure yet";
@@ -6699,7 +6704,8 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				return false;
 			}
 			EdgeId joint;
-			world().connect(x.cell, v.cell, PHASES_GAS, &joint);
+			world().connect(x.cell, v.cell, PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), &joint);
+			world().set_flow(joint, glass::poiseuille(syringe_of(x)->nozzle_bore, syringe_of(x)->nozzle_length), 1); // (Stage 79: its nozzle's, at its foot, in the vessel's neck)
 			if (world().disconnect(v.mouth) != Refusal::None) {
 				world().disconnect(joint);
 				why = "\"" + v.id + "\" is not at the room's pressure yet";
@@ -7768,6 +7774,10 @@ std::string Lab::digest() const {
 		if (e.exchange > 0.0) { // gas exchanged at a mouth (Stage 50)
 			hash.update_double(e.exchange);
 		}
+		if (e.flow > 0.0) { // a tube's flow (Stage 79)
+			hash.update_double(e.flow);
+			hash.update_u64(e.foot);
+		}
 	}
 	for (const Item &x : m.items) { // a liquid's turning, and what it holds up (Stage 32)
 		if (x.swirl > 0.0 || x.suspended > 0.0) {
@@ -8002,6 +8012,10 @@ json Lab::Impl::save() const {
 		}
 		if (e.power != 0.0) {
 			edges.back()["power"] = bits(e.power);
+		}
+		if (e.flow > 0.0) { // (Stage 79) a tube's
+			edges.back()["flow"] = bits(e.flow);
+			edges.back()["foot"] = e.foot;
 		}
 		if (e.exchange > 0.0) { // (Stage 50)
 			edges.back()["exchange"] = bits(e.exchange);
@@ -8247,9 +8261,10 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.drain = e.at("drain").get<bool>();
 			edge.column = e.value("column", false);
 			edge.frozen = e.value("frozen", false); // (Stage 61)
+			edge.foot = static_cast<uint8_t>(e.value("foot", 0) & 3); // (Stage 79)
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
 					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power)) ||
-					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange))) {
+					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange)) || (e.contains("flow") && !from_bits(e.at("flow"), edge.flow))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
 			}

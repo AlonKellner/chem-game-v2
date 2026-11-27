@@ -561,8 +561,9 @@ double particle_diameter(const SpeciesTable &table, const CellState &cell, Speci
 	return cbrt(each * 6.0 / 3.14159265358979323846);
 }
 
-double solvent_viscosity(const SpeciesTable &table, double temperature) {
-	const std::vector<ViscosityPoint> &points = table.solution().viscosity;
+namespace {
+
+double viscosity_at(const std::vector<ViscosityPoint> &points, double temperature) {
 	if (points.empty()) {
 		return 0.0;
 	}
@@ -577,6 +578,16 @@ double solvent_viscosity(const SpeciesTable &table, double temperature) {
 		}
 	}
 	return points.back().pascal_seconds;
+}
+
+} // namespace
+
+double solvent_viscosity(const SpeciesTable &table, double temperature) {
+	return viscosity_at(table.solution().viscosity, temperature);
+}
+
+double gas_viscosity(const SpeciesTable &table, double temperature) {
+	return viscosity_at(table.solution().gas_viscosity, temperature);
 }
 
 SolventPoint solvent_at(const SpeciesTable &table, double temperature) {

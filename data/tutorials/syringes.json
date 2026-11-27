@@ -110,17 +110,16 @@
 			"part": "Two syringes of water, joined",
 			"title": "Push one",
 			"text": "The two syringes of water in the middle are joined nozzle to nozzle by a tube. Drag the left one's handle down to 20 mL and let go.",
-			"why": "The water cannot be squeezed, so what leaves one syringe must go into the other: its plunger is pushed out as far as yours goes in. This is how hydraulics work: brakes, lifts, diggers.",
 			"checks": [
 				{
-					"text": "the other pushed out past 55 mL",
+					"text": "your plunger pushed in past 35 mL",
 					"when": {
 						"quantity": {
-							"item": "water_b",
+							"item": "water_a",
 							"what": "plunger_ml"
 						},
-						"compare": "above",
-						"value": 55
+						"compare": "below",
+						"value": 35
 					}
 				}
 			],
@@ -134,20 +133,37 @@
 			]
 		},
 		{
-			"part": "Two syringes of air, joined",
-			"title": "Push one",
-			"text": "Now the two syringes of air on the right, joined the same way. Drag the left one's handle down to 20 mL and let go.",
-			"why": "The air carries the push too, but it gives first: the pressure must rise before it moves the other plunger, so the other follows a moment behind yours, and does not end exactly where yours left off.",
+			"title": "It follows",
+			"text": "Watch the other syringe of water as yours goes in.",
+			"why": "The water cannot be squeezed, so what leaves one syringe must go into the other: its plunger is pushed out as far as yours goes in. This is how hydraulics work: brakes, lifts, diggers.",
 			"checks": [
 				{
-					"text": "the other pushed out past 70 mL",
+					"text": "the other pushed out past 55 mL",
 					"when": {
 						"quantity": {
-							"item": "air_b",
+							"item": "water_b",
 							"what": "plunger_ml"
 						},
 						"compare": "above",
-						"value": 70
+						"value": 55
+					}
+				}
+			]
+		},
+		{
+			"part": "Two syringes of air, joined",
+			"title": "Push one",
+			"text": "Now the two syringes of air on the right, joined the same way. Drag the left one's handle down to 20 mL and let go.",
+			"checks": [
+				{
+					"text": "your plunger pushed in past 40 mL",
+					"when": {
+						"quantity": {
+							"item": "air_a",
+							"what": "plunger_ml"
+						},
+						"compare": "below",
+						"value": 40
 					}
 				}
 			],
@@ -157,6 +173,24 @@
 						"plunger:air_a",
 						"plunger:air_a@20"
 					]
+				}
+			]
+		},
+		{
+			"title": "It follows",
+			"text": "Watch the other syringe of air.",
+			"why": "The air carries the push too, but it gives first: the pressure must rise before it moves the other plunger, so the other follows a moment behind yours, and does not end exactly where yours left off.",
+			"checks": [
+				{
+					"text": "the other pushed out past 60 mL",
+					"when": {
+						"quantity": {
+							"item": "air_b",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 60
+					}
 				}
 			]
 		},
@@ -173,7 +207,7 @@
 							"what": "plunger_ml"
 						},
 						"compare": "above",
-						"value": 70
+						"value": 60
 					}
 				}
 			]

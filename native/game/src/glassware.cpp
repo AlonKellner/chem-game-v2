@@ -422,6 +422,19 @@ double Vessel::head_inverted(double cm3) const {
 	return 0.5 * (lo + hi);
 }
 
+double tubing_bore() {
+	return table().at("tubing").at("bore_mm").get<double>() / 10.0;
+}
+
+double tubing_length() {
+	return table().at("tubing").at("length_mm").get<double>() / 10.0;
+}
+
+double poiseuille(double bore_cm, double length_cm) {
+	const double r = 0.5 * bore_cm * 1e-2, l = length_cm * 1e-2;
+	return l > 0.0 ? pi * r * r * r * r / (8.0 * l) : 0.0;
+}
+
 double seals() {
 	return table().at("seals_mm").get<double>() / 10.0;
 }
@@ -696,6 +709,8 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		c = { { { 0.0, 0.0 }, 0.0, v.floor }, { { rn, 0.0 }, 0.0, std::min(t, 0.6 * rn) }, { { rn, nozzle }, 0.05, std::min(t, 0.6 * rn) }, { { R, nozzle + cone }, 0.05, t },
 			{ { R, H }, 0.0, t } };
 		v.syringe = true;
+		v.nozzle_bore = mm("nozzle_bore_mm");
+		v.nozzle_length = nozzle;
 		const nlohmann::json &plunger = k->at("plunger");
 		v.plunger_friction = plunger.at("friction_n").get<double>();
 		v.plunger_drag = plunger.at("drag_n_s_m").get<double>();

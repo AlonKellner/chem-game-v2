@@ -75,6 +75,14 @@ struct Edge {
 	// the length it diffuses along, m (the integral of dz / A(z) inverted); 0: none. Each gas crosses down its
 	// mole fraction's difference at its own diffusion in air.
 	double exchange = 0.0;
+	// (Stage 79, GAME_SPEC §6) A tube's flow: what it lets through, Poiseuille's pi r^4 / (8 L) over its pieces in
+	// series, m^3; 0: none held back (what crosses it runs to one pressure at once, as before). Between sealed vessels
+	// a liquid runs through it at G dP / viscosity, a gas at G (P_a^2 - P_b^2) / (2 viscosity R T) mol a second.
+	double flow = 0.0;
+	// (Stage 79) where it meets each end's vessel: at its foot (bit 1: a's, bit 2: b's), where a vessel gives its liquid
+	// while it holds one; else at its top, where it gives its gas (a syringe's nozzle in a flask's neck: its foot, the
+	// flask's top)
+	uint8_t foot = 0;
 	// Closed by a freeze of one of its ends (GAME_SPEC §4, Stage 61): it opens again as it was when both ends thaw.
 	bool frozen = false;
 };
@@ -108,9 +116,10 @@ struct Piston {
 	double hand_most = 0.0; // N
 	double hand_speed = 0.0; // m/s: the fastest a hand moves it (0: as fast as its force takes it)
 	EdgeId work;
-	// the last step's, kept for what is read of it (not state the step reads): the hand's force outward (N), the
-	// pressure the plunger stood at (Pa), how far it moved (m^3, outward; W1)
-	double force = 0.0, pressure = 0.0, moved = 0.0;
+	// the last step's, kept for what is read of it (not state the step reads): the hand's force outward (N) and the
+	// pressure the plunger stood at (Pa) as its last move left them; how far it moved (m^3, outward), how far it went
+	// either way (m^3) and the hand's work along its edge (J) over the step's moves (W1)
+	double force = 0.0, pressure = 0.0, moved = 0.0, travel = 0.0, worked = 0.0;
 	bool operator==(const Piston &) const = default;
 };
 
@@ -392,6 +401,8 @@ public:
 	Refusal set_power(EdgeId edge, double power);
 	// an edge's gas exchange by diffusion, m (Stage 50: area over length; 0: none); between steps
 	Refusal set_exchange(EdgeId edge, double exchange);
+	// (Stage 79) a tube's flow (Edge::flow), between steps; refused for a value not finite and at least 0
+	Refusal set_flow(EdgeId edge, double flow, uint8_t foot = 0);
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
 	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)
@@ -414,11 +425,9 @@ public:
 	// A piston's volume now: its cell's, a column's whole
 	double piston_volume(CellId cell) const;
 	// The step's own act (Simulation::move_pistons): the cell's volume (a column's whole) moved, within a step only.
-	Refusal move_piston(CellId cell, double volume, double force, double pressure);
+	Refusal move_piston(CellId cell, double volume, double force, double pressure, double work);
 	// (Stage 79) what a step left of its pistons' last move, between steps: none moved since (W1)
 	void rest_pistons();
-	// (Stage 79) more work done by a piston's hand this step, J: its force, over its move, the more by it (W1)
-	void add_piston_work(CellId cell, double joule);
 	// A solid's particle count: not conserved, so not a primitive. The
 	// primitives keep it at least one where the solid is and zero where it is
 	// not; this sets how many. Refused (BadValue) for a species that is not a

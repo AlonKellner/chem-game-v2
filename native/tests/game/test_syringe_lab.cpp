@@ -268,8 +268,8 @@ std::string bench_file(const char *path) {
 	return s.str();
 }
 
-// hands at random on a bench's syringes every few steps (a hand toward a volume, let go, a lock, a cap, the bench's own
-// moves), every invariant held on every step
+// hands at random on a bench's syringes, several jerked every step (to an end or anywhere, let go, locked, capped, the
+// bench's own moves): instant reversals of the force on the plungers, every invariant held on every step
 void random_hands(const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
 	std::string why;
 	auto l = lab::Lab::open(bench_file(bench), why);
@@ -278,13 +278,14 @@ void random_hands(const char *bench, const std::vector<std::string> &ids, const 
 	std::mt19937 rng(seed);
 	std::vector<std::string> done;
 	for (int i = 0; i < steps; ++i) {
-		if (i % 3 == 0) {
+		for (int h = 0; h < 3; ++h) {
 			const std::string &id = ids[rng() % ids.size()];
-			const unsigned r = rng() % 12;
+			const unsigned r = rng() % 16;
 			std::string c = r == 0   ? R"({"do":"plunger","free":true,"item":")" + id + "\"}"
 					: r == 1		 ? std::string(R"({"do":"plunger","lock":)") + (rng() % 2 ? "true" : "false") + R"(,"item":")" + id + "\"}"
 					: r == 2		 ? std::string(R"({"do":"cap","to":)") + (rng() % 2 ? "1" : "0") + R"(,"item":")" + id + "\"}"
 					: r == 3 && !moves.empty() ? moves[rng() % moves.size()]
+					: r < 10				   ? R"({"do":"plunger","item":")" + id + "\",\"ml\":" + (rng() % 2 ? "0" : "100") + "}"
 											   : R"({"do":"plunger","item":")" + id + "\",\"ml\":" + std::to_string(rng() % 101) + "}";
 			std::string ignored;
 			if (l->command(c, ignored)) {
@@ -302,10 +303,15 @@ void random_hands(const char *bench, const std::vector<std::string> &ids, const 
 
 } // namespace
 
-TEST_CASE("syringe lab: hands at random on the four setups, the baths and a flask, as fast as a person and faster: every invariant on every step (Stage 79)") {
-	random_hands("data/benches/syringes.json", { "water", "air", "water_a", "water_b", "air_a", "air_b" }, {}, 11, 4000);
+TEST_CASE("syringe lab: hands jerked at random on the four setups, with tubes joined and undone, the baths and a flask: every invariant on every step (Stage 79)") {
+	const std::vector<std::string> six = { "water", "air", "water_a", "water_b", "air_a", "air_b" };
+	random_hands("data/benches/syringes.json", six, {}, 11, 1500);
+	random_hands("data/benches/syringes.json", six,
+			{ R"({"do":"untube","item":"water_a"})", R"({"do":"untube","item":"air_a"})", R"({"do":"tube","item":"water_a","to":"water_b"})", R"({"do":"tube","item":"air_a","to":"air_b"})",
+					R"({"do":"tube","item":"water","to":"air"})", R"({"do":"untube","item":"water"})", R"({"do":"tube","item":"water_b","to":"air_a"})", R"({"do":"untube","item":"water_b"})" },
+			12, 1500);
 	random_hands("data/benches/charles.json", { "s" },
-			{ R"({"do":"stand","item":"s","in":"cold"})", R"({"do":"stand","item":"s","in":"hot"})", R"({"do":"place","item":"s","at":[6,6]})" }, 12, 3000);
+			{ R"({"do":"stand","item":"s","in":"cold"})", R"({"do":"stand","item":"s","in":"hot"})", R"({"do":"place","item":"s","at":[6,6]})" }, 13, 1500);
 	random_hands("data/benches/molar_volume.json", { "s" },
-			{ R"({"do":"attach","item":"s","to":"flask"})", R"({"do":"detach","item":"s"})", R"({"do":"tip","from":"jar","to":"flask","species":"malachite","all":true})" }, 13, 3000);
+			{ R"({"do":"attach","item":"s","to":"flask"})", R"({"do":"detach","item":"s"})", R"({"do":"tip","from":"jar","to":"flask","species":"malachite","all":true})" }, 14, 1500);
 }

@@ -513,21 +513,16 @@ double World::piston_volume(CellId cell) const {
 	return m.column_volume > 0.0 ? m.column_volume : m.volume;
 }
 
-void World::add_piston_work(CellId cell, double joule) {
-	Piston &p = meta_[static_cast<size_t>(cell.index)].piston;
-	if (p.moved != 0.0 && p.area > 0.0) {
-		p.force += joule * p.area / p.moved;
-	}
-}
-
 void World::rest_pistons() {
 	for (CellMeta &m : meta_) {
 		m.piston.moved = 0.0;
+		m.piston.travel = 0.0;
+		m.piston.worked = 0.0;
 		m.piston.force = 0.0; // (a step that moves none: no hand did work)
 	}
 }
 
-Refusal World::move_piston(CellId cell, double volume, double force, double pressure) {
+Refusal World::move_piston(CellId cell, double volume, double force, double pressure, double work) {
 	if (!known(cell)) {
 		return Refusal::UnknownCell;
 	}
@@ -540,7 +535,9 @@ Refusal World::move_piston(CellId cell, double volume, double force, double pres
 	}
 	m.piston.force = force;
 	m.piston.pressure = pressure;
-	m.piston.moved = volume - piston_volume(cell);
+	m.piston.moved += volume - piston_volume(cell);
+	m.piston.travel += std::abs(volume - piston_volume(cell));
+	m.piston.worked += work;
 	if (m.column_volume > 0.0) {
 		std::vector<double> shape = m.column_shape;
 		return reshape_column(cell, volume, std::move(shape));
@@ -1081,6 +1078,21 @@ Refusal World::set_exchange(EdgeId edge, double exchange) {
 		return Refusal::BadValue;
 	}
 	edges_[static_cast<size_t>(edge.index)].exchange = exchange;
+	return Refusal::None;
+}
+
+Refusal World::set_flow(EdgeId edge, double flow, uint8_t foot) {
+	if (stepping()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	if (!(flow >= 0.0) || !(flow - flow == 0.0)) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].flow = flow;
+	edges_[static_cast<size_t>(edge.index)].foot = foot & 3u;
 	return Refusal::None;
 }
 

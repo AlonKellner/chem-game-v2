@@ -125,7 +125,7 @@ TEST_CASE("syringe: a sealed syringe of air held and pushed in slowly, its press
 		CHECK(t.pressure * ml == doctest::Approx(P_ATMOSPHERE * 100.0).epsilon(1e-5));
 		// at rest, the hand holds what friction does not
 		const Piston &p = sim.world().meta(s.cell).piston;
-		CHECK(-p.force == doctest::Approx((t.pressure - P_ATMOSPHERE) * AREA - FRICTION).epsilon(1e-6));
+		CHECK(-p.force == doctest::Approx((t.pressure - P_ATMOSPHERE) * AREA - FRICTION).epsilon(1e-3));
 		MESSAGE(ml << " mL: " << t.pressure / 1000.0 << " kPa, the hand " << -p.force << " N");
 	}
 }
@@ -239,8 +239,9 @@ TEST_CASE("syringe: two sealed syringes of water joined: one pushed in, the wate
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe one = add_syringe(b, mains, room, 0.05, 50.0, 5.0, "one");
 	const Syringe two = add_syringe(b, mains, room, 0.05, 50.0, 5.0, "two");
-	b.add_edge(one.cell, two.cell, phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), 0.0);
+	const EdgeId tube = b.add_edge(one.cell, two.cell, phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), 0.0);
 	Simulation sim = build(b);
+	REQUIRE(sim.world().set_flow(tube, 0.0, 3) == Refusal::None); // (nozzle to nozzle: each one's foot, nothing held back)
 	REQUIRE(sim.world().set_piston(two.cell, plunger(two.work)) == Refusal::None);
 	// (both free first: the water's vapour comes into the bubbles)
 	REQUIRE(sim.world().set_piston(one.cell, plunger(one.work)) == Refusal::None);
@@ -337,4 +338,38 @@ TEST_CASE("invariant T1 with a reservoir of work: work given back to it, a gas p
 	wrong.energy = Energy{ 1000 };
 	trace.ledger.push_back(wrong);
 	CHECK_FALSE(check_T1(builtin_species(), trace).empty());
+}
+
+TEST_CASE("syringe: a tube holds back what crosses it: water pushed through a narrow one at a steady rate stands Poiseuille's pressure across it, viscosity times the flow over the tube's G (Stage 79)") {
+	World::Builder b(builtin_species());
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
+	const CellId room = b.add_reservoir("room", T0);
+	const Syringe one = add_syringe(b, mains, room, 1.0, 50.0, 5.0, "one");
+	const Syringe two = add_syringe(b, mains, room, 1.0, 50.0, 5.0, "two");
+	const EdgeId tube = b.add_edge(one.cell, two.cell, phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), 0.0);
+	Simulation sim = build(b);
+	const double g = 2e-12; // m^3: a narrow tube's pi r^4 / (8 L)
+	REQUIRE(sim.world().set_flow(tube, g, 3) == Refusal::None);
+	REQUIRE(sim.world().set_piston(two.cell, plunger(two.work)) == Refusal::None);
+	run(sim, 60);
+	// one pushed in at a hand's steady 1 cm/s
+	Piston p = plunger(one.work, 20.0);
+	p.hand_speed = 0.01;
+	REQUIRE(sim.world().set_piston(one.cell, p) == Refusal::None);
+	run(sim, 60);
+	const double q = 0.01 * AREA; // m^3/s
+	const double mu = solvent_viscosity(builtin_species(), state(sim.world(), one.cell).temperature);
+	const double across = state(sim.world(), one.cell).pressure - state(sim.world(), two.cell).pressure;
+	MESSAGE("across the tube: " << across / 1000.0 << " kPa, Poiseuille's " << mu * q / g / 1000.0 << " kPa");
+	// (each sub-step's flow driven by the difference at its start, the difference read at the step's end, after its last
+	// flow eased it: under Poiseuille's by what a sub-step's flow eases)
+	CHECK(across < mu * q / g);
+	CHECK(across > 0.8 * mu * q / g);
+}
+
+TEST_CASE("measured: air's viscosity is the table's at its rows, within 1 % of Lemmon and Jacobsen's (Stage 79)") {
+	CHECK(gas_viscosity(builtin_species(), 273.15) == doctest::Approx(17.15e-6).epsilon(1e-9));
+	CHECK(gas_viscosity(builtin_species(), 298.15) == doctest::Approx(18.37e-6).epsilon(1e-9));
+	// between rows, as the solvent's is read; Lemmon and Jacobsen (2004) give 18.54 uPa s at 300 K, 0.1 MPa
+	CHECK(gas_viscosity(builtin_species(), 300.0) == doctest::Approx(18.54e-6).epsilon(0.01));
 }

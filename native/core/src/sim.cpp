@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstdint>
 #include <utility>
 #include <vector>
@@ -599,6 +601,8 @@ struct PistonMove {
 // (Stage 79) the least room a sealed space's plungers leave its gas, a share of its volume: what its liquid may grow
 // into as it warms within a step (a ten-thousandth: 0.4 K of water) and its vapour stands in
 constexpr double PISTON_CLEARANCE = 1e-4;
+// (Stage 79) the sub-steps a step's pistons and connections run in: each vessel its own, the exchange within the step
+constexpr int PISTON_SUBSTEPS = 12;
 
 PistonMove piston_move(const Piston &p, double volume, double pressure, double dt) {
 	const double push = (pressure - P_ATMOSPHERE) * p.area; // the gas's and the room's, outward
@@ -637,458 +641,314 @@ PistonMove piston_move(const Piston &p, double volume, double pressure, double d
 
 void Simulation::move_pistons() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
-	bool any = false;
-	for (size_t c = 0; c < cells && !any; ++c) {
-		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
-		any = m.piston.area > 0.0;
-	}
-	if (!any) {
-		return;
-	}
-	world_.rest_pistons(); // (W1: each one's move this step, none until it moves)
-	solved_pressure_.assign(cells, 0.0);
 	const std::span<const Edge> edges = world_.edges();
-	find_columns();
-	// each cell's space: its column's top, its own; sealed cells joined by open edges that pass gas or liquid are one
-	// space at one pressure (tightly joined vessels: a syringe on a flask, two syringes on a tube, two flasks on a
-	// pipe), their gas and liquid shared out within the step so that each stands at it Gas joins none:
-	// each piston feels its own cell's pressure, and the gas between cells sealed together runs to one pressure as they
-	// settle (a joint gas pushed in one cell would be squeezed there alone first, its work less than that takes)
-	std::vector<int32_t> head(cells);
+	std::vector<CellId> pistons;
 	for (size_t c = 0; c < cells; ++c) {
-		head[c] = static_cast<int32_t>(c);
-	}
-	for (const Column &col : columns_) {
-		for (const CellId c : col.cells) {
-			head[static_cast<size_t>(c.index)] = col.top.index;
+		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
+		if (m.piston.area > 0.0 && !m.frozen) {
+			pistons.push_back(CellId{ static_cast<int32_t>(c) });
 		}
 	}
-	std::vector<int32_t> root(cells);
-	for (size_t c = 0; c < cells; ++c) {
-		root[c] = static_cast<int32_t>(c);
-	}
-	const auto find = [&](int32_t c) {
-		while (root[static_cast<size_t>(c)] != c) {
-			root[static_cast<size_t>(c)] = root[static_cast<size_t>(root[static_cast<size_t>(c)])];
-			c = root[static_cast<size_t>(c)];
-		}
-		return c;
-	};
-	std::vector<size_t> liquid_edges, gas_edges;
-	const SpeciesTable &table = world_.species();
-	const auto column_holds_liquid = [&](CellId top) {
-		const auto liquid_in = [&](CellId c) {
-			const CellState &x = world_.snapshot_cell(c);
-			for (size_t s = 0; s < x.amount.size(); ++s) {
-				const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
-				if (x.amount[s] > 0 && !d.wall && d.phase == Phase::Liquid) {
-					return true;
-				}
-			}
-			return false;
-		};
-		for (const Column &col : columns_) {
-			if (col.top == top) {
-				return std::any_of(col.cells.begin(), col.cells.end(), liquid_in);
-			}
-		}
-		return liquid_in(top);
-	};
+	// the connections between sealed vessels: open edges that pass gas or liquid between two sealed vessels' own cells
+	// (not a column's, not a drain); a tube that holds back its flow (Edge::flow) lets through what it allows
+	std::vector<size_t> joins;
+	bool held_back = false, stiff = false; // (stiff: liquid may cross one: its vessels give only by their bubbles)
 	for (size_t i = 0; i < edges.size(); ++i) {
 		const Edge &e = edges[i];
 		if (!e.open || e.drain || e.column || (e.phases & (PHASES_GAS | phase_bit(Phase::Liquid))) == 0) {
 			continue;
 		}
 		const CellMeta &ma = world_.meta(e.a), &mb = world_.meta(e.b);
-		if (ma.reservoir || mb.reservoir || ma.frozen || mb.frozen) {
+		if (ma.reservoir || mb.reservoir || ma.frozen || mb.frozen || !ma.rigid || !mb.rigid || !ma.sealed || !mb.sealed || ma.layer || mb.layer) {
 			continue;
 		}
-		if (!(ma.rigid && mb.rigid && ma.sealed && mb.sealed && !ma.layer && !mb.layer)) {
-			continue; // (an open one is at the room's pressure: its settling)
+		joins.push_back(i);
+		held_back = held_back || e.flow > 0.0;
+		stiff = stiff || ((e.phases & phase_bit(Phase::Liquid)) != 0 && e.foot != 0);
+	}
+	if (pistons.empty() && joins.empty()) {
+		return;
+	}
+	world_.rest_pistons(); // (W1: each one's moves this step, none until it moves)
+	find_columns();
+	// in sub-steps, each its pistons alone, exactly, then what its connections let through: each vessel its own, the
+	// exchange between them within the step (GAME_SPEC §6, Pistons)
+	// (a liquid crossing between vessels moves each sub-step only as far as their gas gives: more of them)
+	const int substeps = pistons.empty() && !held_back ? 1 : stiff ? 4 * PISTON_SUBSTEPS : PISTON_SUBSTEPS;
+	const double dt = step_seconds_ / substeps;
+	for (int k = 0; k < substeps; ++k) {
+		for (const CellId c : pistons) {
+			move_piston_alone(c, dt);
 		}
-		const int32_t a = find(head[static_cast<size_t>(e.a.index)]), b = find(head[static_cast<size_t>(e.b.index)]);
-		root[static_cast<size_t>(a)] = b;
-		// liquid runs where both columns hold liquid at the edge; elsewhere gas does
-		if ((e.phases & phase_bit(Phase::Liquid)) != 0 && column_holds_liquid(e.a) && column_holds_liquid(e.b)) {
-			liquid_edges.push_back(i);
-		} else if ((e.phases & PHASES_GAS) != 0) {
-			gas_edges.push_back(i);
+		for (const size_t i : joins) {
+			run_join(EdgeId{ static_cast<int32_t>(i) }, dt);
 		}
 	}
-	// the spaces with pistons, each with its sealed cells' gas (n R T) and free volume now (each at its temperature: a
-	// cell whose liquids have grown past its volume has none sealed, its own open), and its pistons
-	std::vector<int32_t> space(cells, -1);
-	struct Space {
-		bool open = false, known = true;
-		double gas = 0.0, free = 0.0, volume = 0.0; // J, m^3, m^3
-		std::vector<CellId> pistons;
-		// its sealed cells (more than one: joined by liquid), each one's gas (n R T, J) and free volume (m^3) now
-		std::vector<CellId> cells;
-		std::vector<double> cell_gas, cell_free, cell_mol, cell_kelvin;
-	};
-	std::vector<Space> spaces;
-	for (size_t c = 0; c < cells; ++c) {
-		const CellMeta &m = world_.meta(CellId{ static_cast<int32_t>(c) });
-		if (m.piston.area > 0.0 && !m.frozen) {
-			const auto r = static_cast<size_t>(find(static_cast<int32_t>(c)));
-			if (space[r] < 0) {
-				space[r] = static_cast<int32_t>(spaces.size());
-				spaces.emplace_back();
-				spaces.back().open = !m.sealed;
-			}
-			spaces[static_cast<size_t>(space[r])].pistons.push_back(CellId{ static_cast<int32_t>(c) });
-		}
-	}
-	for (size_t c = 0; c < cells; ++c) {
-		const CellId cell{ static_cast<int32_t>(c) };
-		const auto r = static_cast<size_t>(find(static_cast<int32_t>(c)));
-		const CellMeta &m = world_.meta(cell);
-		if (space[r] < 0 || !m.rigid || !m.sealed || m.reservoir) {
-			continue;
-		}
-		Space &sp = spaces[static_cast<size_t>(space[r])];
+}
+
+// (Stage 79) One piston moved for `dt` by the forces on it, its vessel alone (GAME_SPEC §6, Pistons): open, at the room's
+// pressure; sealed, at the root of P = its own pressure after the move, its hand's work in it, by its sealed model
+// (exactly: a gas over a liquid squeezed small is stiffened by the liquid's own expansion, which no estimate sees). Its
+// hand's work along its edge from the mains, F dx = (P_atm - P) dV + (c v + f) |dx|, P the pressure after: at least the
+// reversible work of a compression, at most what an expansion gives (T2).
+void Simulation::move_piston_alone(CellId cell, double dt) {
+	const SpeciesTable &table = world_.species();
+	const CellMeta &m = world_.meta(cell);
+	const Piston &p = m.piston;
+	const double volume = world_.piston_volume(cell);
+	PistonMove mv;
+	double pressure = P_ATMOSPHERE;
+	if (!m.sealed) {
+		mv = piston_move(p, volume, P_ATMOSPHERE, dt);
+	} else {
 		const CellState &state = world_.snapshot_cell(cell);
-		if (std::all_of(state.amount.begin(), state.amount.end(), [](int64_t a) { return a == 0; })) {
-			sp.free += m.volume; // (empty: a vacuum, all of it room)
-			sp.volume += m.volume;
-			sp.cells.push_back(cell);
-			sp.cell_gas.push_back(0.0);
-			sp.cell_free.push_back(m.volume);
-			sp.cell_mol.push_back(0.0);
-			sp.cell_kelvin.push_back(T0);
-			continue;
-		}
-		const Thermal &sealed = thermal(cell);
-		const Thermal open = sealed.defined ? sealed : thermal_state(table, state);
-		const Fill fill = open.defined ? fill_of(table, state, open.temperature) : Fill{};
-		sp.known = sp.known && open.defined && fill.defined;
-		if (!sp.known) {
-			continue;
-		}
-		double mol = 0.0;
-		for (size_t s = 0; s < state.amount.size(); ++s) {
-			if (state.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
-				mol += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
+		bool defined = false; // (the probe of the last gap: a state its sealed model has)
+		const auto gap = [&](double pr) {
+			defined = false;
+			mv = piston_move(p, volume, pr, dt);
+			CellMeta meta = m;
+			meta.volume += mv.dv;
+			if (!(meta.volume > 0.0)) {
+				return -std::numeric_limits<double>::infinity();
 			}
-		}
-		sp.gas += mol * GAS_CONSTANT * open.temperature;
-		sp.free += m.volume - fill.condensed;
-		sp.volume += m.volume;
-		sp.cells.push_back(cell);
-		sp.cell_gas.push_back(mol * GAS_CONSTANT * open.temperature);
-		sp.cell_free.push_back(m.volume - fill.condensed);
-		sp.cell_mol.push_back(mol);
-		sp.cell_kelvin.push_back(open.temperature);
-	}
-	const double dt = step_seconds_;
-	// a space solved and moved: its pistons, its liquid (joined by liquid), the hand paying what the estimate missed
-	const auto solve = [&](const Space &sp, int32_t me) {
-		const auto moves = [&](double pressure, std::vector<PistonMove> &out) {
-			out.clear();
-			double dv = 0.0;
-			for (const CellId c : sp.pistons) {
-				out.push_back(piston_move(world_.meta(c).piston, world_.piston_volume(c), pressure, dt));
-				dv += out.back().dv;
+			CellState probe = state;
+			probe.energy += std::llround(mv.force * mv.dv / p.area / JOULE_PER_QUANTUM);
+			if (std::all_of(probe.amount.begin(), probe.amount.end(), [](int64_t a) { return a == 0; })) {
+				defined = true;
+				return pr; // (empty: a vacuum)
 			}
-			return dv;
-		};
-		// its own connections: those whose cells are its
-		const auto its = [&](const std::vector<size_t> &list) {
-			std::vector<size_t> mine;
-			for (const size_t i : list) {
-				if (me >= 0 && space[static_cast<size_t>(find(head[static_cast<size_t>(edges[i].a.index)]))] == me) {
-					mine.push_back(i);
-				}
+			const Thermal t = thermal_state(table, probe, &meta);
+			if (t.defined) {
+				defined = t.free_volume > meta.volume * PISTON_CLEARANCE;
+				return defined ? pr - t.pressure : -std::numeric_limits<double>::infinity();
 			}
-			return mine;
-		};
-		const std::vector<size_t> its_gas = its(gas_edges), its_liquid = its(liquid_edges);
-		std::vector<PistonMove> out;
-		double pressure = P_ATMOSPHERE;
-		// its cells, their columns' layers with them: the entropy they hold before the step's move (what it must not lose)
-		std::vector<CellId> held;
-		for (const CellId c : sp.cells) {
-			held.push_back(c);
-			for (const Column &col : columns_) {
-				if (col.top == c) {
-					held.insert(held.end(), col.cells.begin() + 1, col.cells.end());
-				}
-			}
-		}
-		double magnitude = 0.0;
-		const auto entropy_held = [&](double &hottest) {
-			double s = 0.0;
-			for (const CellId c : held) {
-				const CellState &x = world_.snapshot_cell(c);
-				if (std::all_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a == 0; })) {
-					continue;
-				}
-				const Thermal t = thermal_state(table, x, &world_.meta(c));
-				if (!t.defined || !(t.temperature > 0.0)) {
-					return std::numeric_limits<double>::quiet_NaN();
-				}
-				hottest = std::max(hottest, t.temperature);
-				const double each = entropy(table, x, t.temperature, &world_.meta(c));
-				s += each;
-				magnitude += std::fabs(each);
-			}
-			return s;
-		};
-		double hottest = 0.0;
-		const double before = sp.open ? 0.0 : entropy_held(hottest);
-		if (!sp.open) {
-			if (!sp.known) {
-				return;
-			}
-			// g(P) = P - the gas's pressure after the moves at P: rising with P, below 0 at P = 0
-			// (a clearance of a millionth of its volume, a tenth of a microlitre in a syringe: what its gas has at the least,
-			// so that its pressure is one, and a quantum of its vapour moves it by a hundredth of a pascal, not by 2 %)
-			// one cell alone: its own pressure after the move, its hand's work in it, exactly (its sealed model: a gas
-			// over a liquid squeezed small is stiffened by the liquid's own expansion, which no estimate of its gas
-			// alone sees); joined by liquid, its gas's
-			const bool alone = sp.cells.size() == 1;
-			const auto gap = [&](double p) {
-				const double dv = moves(p, out);
-				const double free = sp.free + dv;
-				if (!(free > sp.volume * PISTON_CLEARANCE)) {
-					return -std::numeric_limits<double>::infinity();
-				}
-				if (!alone && !its_liquid.empty()) {
-					return p - sp.gas / free; // (joined by liquid: its gas, n R T, in all the room left)
-				}
-				if (!alone) {
-					// joined by gas: each cell's at its own temperature in the room its volume leaves, all its gas kept,
-					// sum n R / sum (V_i / T_i): each cell's share of it at that one pressure
-					double rooms = 0.0, mol = 0.0;
-					for (size_t i = 0; i < sp.cells.size(); ++i) {
-						double dv_i = 0.0;
-						for (size_t k = 0; k < sp.pistons.size(); ++k) {
-							dv_i += sp.pistons[k] == sp.cells[i] ? out[k].dv : 0.0;
-						}
-						rooms += std::max(sp.cell_free[i] + dv_i, 0.0) / sp.cell_kelvin[i];
-						mol += sp.cell_mol[i];
-					}
-					return rooms > 0.0 ? p - mol * GAS_CONSTANT / rooms : -std::numeric_limits<double>::infinity();
-				}
-				const CellId cell = sp.cells.front();
-				CellMeta meta = world_.meta(cell);
-				meta.volume += dv;
-				CellState probe = world_.snapshot_cell(cell);
-				double joule = 0.0;
-				for (size_t k = 0; k < sp.pistons.size(); ++k) {
-					joule += out[k].force * out[k].dv / world_.meta(sp.pistons[k]).piston.area;
-				}
-				probe.energy += std::llround(joule / JOULE_PER_QUANTUM);
-				const Thermal t = thermal_state(table, probe, &meta);
-				if (t.defined) {
-					return t.free_volume > meta.volume * PISTON_CLEARANCE ? p - t.pressure : -std::numeric_limits<double>::infinity();
-				}
-				// none: with room for its gas, a probe moved past where it can be (too little energy for the room the room's
-				// pressure would ask): below any pressure that holds; without, above
-				const Thermal open = thermal_state(table, probe);
-				const Fill fill = open.defined ? fill_of(table, probe, open.temperature) : Fill{};
-				return fill.defined && fill.condensed < meta.volume * (1.0 - PISTON_CLEARANCE) ? p : -std::numeric_limits<double>::infinity();
-			};
-			double lo = 0.0, hi = 2.0 * P_ATMOSPHERE;
-			while (!(gap(hi) >= 0.0) && hi < 1e13) {
-				lo = hi;
-				hi *= 2.0;
-			}
-			if (!(gap(hi) >= 0.0)) {
-				return; // no pressure holds them: as they are
-			}
-			for (int i = 0; i < 100 && hi - lo > hi * 1e-15; ++i) {
-				const double middle = 0.5 * (lo + hi);
-				(gap(middle) >= 0.0 ? hi : lo) = middle;
-			}
-			pressure = hi;
-		}
-		moves(pressure, out);
-		for (const CellId c : sp.cells) {
-			solved_pressure_[static_cast<size_t>(c.index)] = pressure;
-		}
-		const auto moved_in = [&](size_t i) { // what its pistons move a cell's volume by this step
-			double dv = 0.0;
-			for (size_t k = 0; k < sp.pistons.size(); ++k) {
-				dv += sp.pistons[k] == sp.cells[i] ? out[k].dv : 0.0;
-			}
-			return dv;
-		};
-		for (size_t k = 0; k < sp.pistons.size(); ++k) {
-			const CellId c = sp.pistons[k];
-			const Piston &p = world_.meta(c).piston;
-			const double joule = out[k].force * out[k].dv / p.area;
-			const int64_t whole = std::llround(joule / JOULE_PER_QUANTUM);
-			if (whole != 0) {
-				const Edge &e = edges[static_cast<size_t>(p.work.index)];
-				const Refusal refused = transfer(p.work, e.a == c ? e.b : e.a, {}, Energy{ whole });
-				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
-			}
-			const Refusal moved = world_.move_piston(c, world_.piston_volume(c) + out[k].dv, out[k].force, pressure);
-			CHEM_ASSERT(moved == Refusal::None, refusal_text(moved));
-			thermal_valid_[static_cast<size_t>(c.index)] = 0; // (its volume moved: derived again)
-		}
-		if (!sp.open && sp.cells.size() > 1 && !its_liquid.empty()) {
-			// joined by liquid: each cell's gas at the space's pressure takes g / P, and its liquid fills the rest of its
-			// volume as its pistons left it; what one has over that runs to those short of it
-			std::vector<double> takes(sp.cells.size(), 0.0);
-			for (size_t i = 0; i < sp.cells.size(); ++i) {
-				// (its gas at least the clearance's room: its liquid's to grow into)
-				const double volume = world_.meta(sp.cells[i]).volume;
-				takes[i] = moved_in(i) + sp.cell_free[i] - std::max(pressure > 0.0 ? sp.cell_gas[i] / pressure : 0.0, volume * PISTON_CLEARANCE);
-			}
-			run_liquid(sp.cells, takes, pressure, its_liquid);
-		}
-		// the second law (T2): the pressure a hand pushes against is the space's as the step estimates it; what the
-		// space then holds is its own. Where it holds less entropy than before, the push took more work than the
-		// estimate gave: the hand does that too (T times the shortfall, along its own edge), its force what it then is
-		if (!sp.open && before == before) {
-			const double after = entropy_held(hottest);
-			if (after == after && after < before - (1e-10 + 2e-16 * magnitude)) { // (past what rounding holds: T2's own)
-				size_t k = sp.pistons.size(); // (a hand that moved its plunger furthest pays: a free one has none)
-				for (size_t j = 0; j < sp.pistons.size(); ++j) {
-					if (out[j].dv != 0.0 && world_.meta(sp.pistons[j]).piston.held && (k == sp.pistons.size() || std::fabs(out[j].dv) > std::fabs(out[k].dv))) {
-						k = j;
-					}
-				}
-				if (k < sp.pistons.size()) {
-					const CellId c = sp.pistons[k];
-					const Piston &p = world_.meta(c).piston;
-					// (no more than a hand can: its force within its most over its move)
-					const double room = (std::copysign(p.hand_most, p.force) - p.force) * p.moved / p.area;
-					const double wanted = (before - after) * hottest * (1.0 + 1e-6);
-					const int64_t more = std::llround(std::min(wanted, std::max(room, 0.0)) / JOULE_PER_QUANTUM);
-					const Edge &e = edges[static_cast<size_t>(p.work.index)];
-					const Refusal refused = more > 0 ? transfer(p.work, e.a == c ? e.b : e.a, {}, Energy{ more }) : Refusal::BadValue;
-					if (refused == Refusal::None) {
-						world_.add_piston_work(c, static_cast<double>(more) * JOULE_PER_QUANTUM);
-						thermal_valid_[static_cast<size_t>(c.index)] = 0;
-					}
-				}
-			}
-		}
-	};
-	// a cell its own space now (as each piston of a space joined by gas is moved, its gas shared first)
-	const auto alone_now = [&](CellId cell) {
-		Space one;
-		const CellMeta &m = world_.meta(cell);
-		one.open = !m.sealed;
-		one.pistons.push_back(cell);
-		const CellState &state = world_.snapshot_cell(cell);
-		one.cells.push_back(cell);
-		one.volume = m.volume;
-		if (std::all_of(state.amount.begin(), state.amount.end(), [](int64_t a) { return a == 0; })) {
-			one.free = m.volume;
-			one.cell_gas.push_back(0.0);
-			one.cell_free.push_back(m.volume);
-			one.cell_mol.push_back(0.0);
-			one.cell_kelvin.push_back(T0);
-			return one;
-		}
-		const Thermal sealed = thermal_state(table, state, &m);
-		const Thermal open = sealed.defined ? sealed : thermal_state(table, state);
-		const Fill fill = open.defined ? fill_of(table, state, open.temperature) : Fill{};
-		one.known = open.defined && fill.defined;
-		double mol = 0.0;
-		for (size_t s = 0; s < state.amount.size(); ++s) {
-			mol += state.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas ? static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM : 0.0;
-		}
-		const double kelvin = open.defined ? open.temperature : T0;
-		one.gas = mol * GAS_CONSTANT * kelvin;
-		one.free = fill.defined ? m.volume - fill.condensed : 0.0;
-		one.cell_gas.push_back(one.gas);
-		one.cell_free.push_back(one.free);
-		one.cell_mol.push_back(mol);
-		one.cell_kelvin.push_back(kelvin);
-		return one;
-	};
-	for (const Space &sp : spaces) {
-		const auto me = static_cast<int32_t>(&sp - spaces.data());
-		std::vector<size_t> its_gas, its_liquid;
-		for (const size_t i : gas_edges) {
-			if (space[static_cast<size_t>(find(head[static_cast<size_t>(edges[i].a.index)]))] == me) {
-				its_gas.push_back(i);
-			}
-		}
-		for (const size_t i : liquid_edges) {
-			if (space[static_cast<size_t>(find(head[static_cast<size_t>(edges[i].a.index)]))] == me) {
-				its_liquid.push_back(i);
-			}
-		}
-		if (sp.open || sp.cells.size() < 2 || its_gas.empty() || !its_liquid.empty() || !sp.known) {
-			solve(sp, me);
-			continue;
-		}
-		// joined by gas (GAME_SPEC §6, Pistons): the one pressure their plungers will come to, estimated (each cell's gas
-		// at its own temperature in the room its volume will leave, all of it kept: sum n R / sum (V_i / T_i)); their
-		// gas shared out first at it, from where there is more than stands at it to where there is less (what a
-		// giver keeps expands as it would leaving; a taker fills); then each piston moved alone, exactly, on the gas
-		// its cell now holds: each piece the second law's
-		std::vector<PistonMove> out;
-		const auto at = [&](double p) {
-			out.clear();
-			std::vector<double> dv(sp.cells.size(), 0.0);
-			for (const CellId c : sp.pistons) {
-				out.push_back(piston_move(world_.meta(c).piston, world_.piston_volume(c), p, dt));
-				for (size_t i = 0; i < sp.cells.size(); ++i) {
-					dv[i] += sp.cells[i] == c ? out.back().dv : 0.0;
-				}
-			}
-			return dv;
-		};
-		const auto rooms_at = [&](double p, std::vector<double> &room) {
-			const std::vector<double> dv = at(p);
-			double rooms = 0.0;
-			room.assign(sp.cells.size(), 0.0);
-			for (size_t i = 0; i < sp.cells.size(); ++i) {
-				room[i] = std::max(sp.cell_free[i] + dv[i], 0.0) / sp.cell_kelvin[i];
-				rooms += room[i];
-			}
-			return rooms;
-		};
-		double mol = 0.0;
-		for (const double n : sp.cell_mol) {
-			mol += n;
-		}
-		std::vector<double> room;
-		const auto gap = [&](double p) {
-			const double rooms = rooms_at(p, room);
-			return rooms > 0.0 ? p - mol * GAS_CONSTANT / rooms : -std::numeric_limits<double>::infinity();
+			// none: with room for its gas, moved past where it can be (too little energy for the room the room's pressure
+			// would ask): below any pressure that holds; without, above
+			const Thermal open = thermal_state(table, probe);
+			const Fill fill = open.defined ? fill_of(table, probe, open.temperature) : Fill{};
+			return fill.defined && fill.condensed < meta.volume * (1.0 - PISTON_CLEARANCE) ? pr : -std::numeric_limits<double>::infinity();
 		};
 		double lo = 0.0, hi = 2.0 * P_ATMOSPHERE;
 		while (!(gap(hi) >= 0.0) && hi < 1e13) {
 			lo = hi;
 			hi *= 2.0;
 		}
-		if (gap(hi) >= 0.0) {
-			for (int i = 0; i < 100 && hi - lo > hi * 1e-15; ++i) {
-				const double middle = 0.5 * (lo + hi);
-				(gap(middle) >= 0.0 ? hi : lo) = middle;
-			}
-			const double rooms = rooms_at(hi, room);
-			std::vector<double> over(sp.cells.size(), 0.0);
-			for (size_t i = 0; i < sp.cells.size(); ++i) {
-				over[i] = rooms > 0.0 ? sp.cell_mol[i] - mol * room[i] / rooms : 0.0;
-			}
-			run_gas(sp.cells, over, its_gas);
+		if (!(gap(hi) >= 0.0)) {
+			return; // no pressure holds it: as it is
 		}
-		for (const CellId c : sp.pistons) {
-			thermal_valid_[static_cast<size_t>(c.index)] = 0;
-			solve(alone_now(c), -1);
+		for (int i = 0; i < 64 && hi - lo > hi * 1e-13; ++i) {
+			const double middle = 0.5 * (lo + hi);
+			(gap(middle) >= 0.0 ? hi : lo) = middle;
+		}
+		pressure = hi;
+		gap(pressure);
+		if (!defined) {
+			// past where its sealed model holds it (more room than its energy pays for: the forces would take it further
+			// than it can go): no further than the last that holds
+			pressure = lo;
+			gap(pressure);
+			if (!defined) {
+				return;
+			}
 		}
 	}
-	// liquid between sealed spaces not moved as one: to one pressure, round by round
-	for (int round = 0; round < 16; ++round) {
-		bool ran = false;
-		for (const size_t i : liquid_edges) {
-			const Edge &e = edges[i];
-			const int32_t ra = find(head[static_cast<size_t>(e.a.index)]), rb = find(head[static_cast<size_t>(e.b.index)]);
-			if (ra != rb || space[static_cast<size_t>(ra)] < 0) {
-				ran = equalize_liquid(EdgeId{ static_cast<int32_t>(i) }) || ran;
+	if (mv.dv == 0.0) {
+		const Refusal held = world_.move_piston(cell, volume, mv.force, pressure, 0.0); // (still: what holds it there)
+		CHEM_ASSERT(held == Refusal::None, refusal_text(held));
+		return;
+	}
+	const double joule = mv.force * mv.dv / p.area;
+	const int64_t whole = std::llround(joule / JOULE_PER_QUANTUM);
+	if (whole != 0) {
+		const Edge &e = world_.edges()[static_cast<size_t>(p.work.index)];
+		const Refusal refused = transfer(p.work, e.a == cell ? e.b : e.a, {}, Energy{ whole });
+		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		if (refused != Refusal::None) {
+			return;
+		}
+	}
+	const Refusal moved = world_.move_piston(cell, volume + mv.dv, mv.force, pressure, static_cast<double>(whole) * JOULE_PER_QUANTUM);
+	CHEM_ASSERT(moved == Refusal::None, refusal_text(moved));
+	thermal_valid_[static_cast<size_t>(cell.index)] = 0; // (its volume moved: derived again)
+}
+
+// (Stage 79) A connection between two sealed vessels for `dt` (GAME_SPEC §6): what runs is the giver's lowest liquid if
+// it holds one there (else its gas), from the higher pressure to the lower, never past the two being one (each vessel's
+// own, exactly); through a tube that holds back its flow, no more than it lets through at their difference (a liquid's
+// G dP / viscosity, a gas's G (P_a^2 - P_b^2) / (2 viscosity R T)). A liquid carries its enthalpy and the flow work of
+// the giver's pressure (its gas pushing it out), the taker gaining what the tube dissipates; a gas its own enthalpy.
+void Simulation::run_join(EdgeId edge, double dt) {
+	const SpeciesTable &table = world_.species();
+	const Edge e = world_.edges()[static_cast<size_t>(edge.index)];
+	constexpr double NONE = std::numeric_limits<double>::infinity();
+	const auto holds_liquid = [&](const CellState &c) {
+		for (size_t s = 0; s < c.amount.size(); ++s) {
+			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (c.amount[s] > 0 && !d.wall && d.phase == Phase::Liquid) {
+				return true;
 			}
 		}
-		if (!ran) {
-			break;
+		return false;
+	};
+	// a vessel's own pressure holding `state`, its own cell's volume grown by `grown` (its layers gave that): empty, a
+	// vacuum; with no state, none that holds where it has no room and a vacuum where it has
+	const auto pressure_of = [&](CellId top, const CellState &state, double grown) {
+		CellMeta meta = world_.meta(top);
+		meta.volume += grown;
+		if (!(meta.volume > 0.0)) {
+			return NONE;
+		}
+		if (std::all_of(state.amount.begin(), state.amount.end(), [](int64_t a) { return a == 0; })) {
+			return 0.0;
+		}
+		const Thermal t = thermal_state(table, state, &meta);
+		return t.defined && t.free_volume > meta.volume * PISTON_CLEARANCE ? t.pressure : NONE; // (none: no room, or none that holds)
+	};
+	const auto kelvin_of = [&](CellId c) {
+		const CellState &x = world_.snapshot_cell(c);
+		const Thermal sealed = thermal_state(table, x, &world_.meta(c));
+		const Thermal t = sealed.defined ? sealed : thermal_state(table, x);
+		return t.defined && t.temperature > 0.0 ? t.temperature : T0;
+	};
+	for (int round = 0; round < 8; ++round) { // (a liquid in several layers: a layer a round)
+		const double pa = pressure_of(e.a, world_.snapshot_cell(e.a), 0.0), pb = pressure_of(e.b, world_.snapshot_cell(e.b), 0.0);
+		if (!(pa != pb) || (pa == NONE && pb == NONE)) {
+			return;
+		}
+		const bool out = pa > pb;
+		const CellId giver_top = out ? e.a : e.b, taker = out ? e.b : e.a;
+		const double p_giver = out ? pa : pb, p_taker = out ? pb : pa;
+		// its lowest liquid, and the column's edges up from it to its top
+		CellId giver = giver_top;
+		std::vector<std::pair<EdgeId, CellId>> up;
+		for (const Column &col : columns_) {
+			if (col.top == giver_top) {
+				for (size_t i = col.cells.size(); i-- > 1;) {
+					if (holds_liquid(world_.snapshot_cell(col.cells[i]))) {
+						giver = col.cells[i];
+						for (size_t k = i; k-- > 0;) {
+							up.emplace_back(col.up[k], col.cells[k + 1]);
+						}
+						break;
+					}
+				}
+			}
+		}
+		// (through its foot its liquid, while it holds one; through its top its gas)
+		const bool at_foot = (e.foot & (giver_top == e.a ? 1u : 2u)) != 0;
+		const bool liquid = at_foot && holds_liquid(world_.snapshot_cell(giver)) && (e.phases & phase_bit(Phase::Liquid)) != 0;
+		if (!liquid) {
+			if ((e.phases & PHASES_GAS) == 0) {
+				return;
+			}
+			// its gas: as much as the tube lets through, in parcels down the true pressure only (run_gas)
+			const CellState &x = world_.snapshot_cell(giver_top);
+			double mol = 0.0;
+			for (size_t s = 0; s < x.amount.size(); ++s) {
+				mol += x.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas ? static_cast<double>(x.amount[s]) * MOL_PER_QUANTUM : 0.0;
+			}
+			double most = mol;
+			if (e.flow > 0.0) {
+				const double kelvin = 0.5 * (kelvin_of(giver_top) + kelvin_of(taker));
+				const double mu = gas_viscosity(table, kelvin);
+				const double pg = std::min(p_giver, 1e9);
+				most = mu > 0.0 ? std::min(mol, e.flow * (pg * pg - p_taker * p_taker) / (2.0 * mu * GAS_CONSTANT * kelvin) * dt) : 0.0;
+			}
+			if (most > 0.0) {
+				run_gas({ giver_top, taker }, { most, -most }, { static_cast<size_t>(edge.index) }, true);
+			}
+			return;
+		}
+		const CellState gives = world_.snapshot_cell(giver), top_gives = world_.snapshot_cell(giver_top), takes = world_.snapshot_cell(taker);
+		const double kelvin = kelvin_of(giver);
+		const Fill was = fill_of(table, gives, kelvin);
+		if (!was.defined) {
+			return;
+		}
+		const double flow_pressure = p_giver < NONE ? p_giver : p_taker; // (the giver's own: what pushes it out)
+		std::vector<SpeciesAmount> amounts;
+		double volume = 0.0;
+		const auto share = [&](double f) {
+			amounts.clear();
+			for (size_t s = 0; s < gives.amount.size(); ++s) {
+				const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
+				if (gives.amount[s] > 0 && !d.wall && (d.phase == Phase::Liquid || d.phase == Phase::Aqueous)) {
+					const auto n = f >= 1.0 ? gives.amount[s] : static_cast<int64_t>(static_cast<double>(gives.amount[s]) * f);
+					if (n > 0) {
+						amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ n } });
+					}
+				}
+			}
+			neutral_part(table, amounts);
+			CellState g = gives;
+			for (const SpeciesAmount &a : amounts) {
+				g.amount[static_cast<size_t>(a.species.index)] -= a.amount.quanta;
+			}
+			const Fill now = fill_of(table, g, kelvin);
+			volume = now.defined ? was.condensed - now.condensed : 0.0;
+		};
+		const auto carried = [&]() {
+			return Energy{ enthalpy_carried(table, amounts, kelvin).quanta + std::llround((flow_pressure - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) };
+		};
+		// the giver's pressure less the taker's, had the share f run: falling with f
+		const auto gap = [&](double f) {
+			share(f);
+			const Energy en = carried();
+			CellState g = giver == giver_top ? gives : top_gives, t = takes;
+			for (const SpeciesAmount &a : amounts) {
+				if (giver == giver_top) {
+					g.amount[static_cast<size_t>(a.species.index)] -= a.amount.quanta;
+				}
+				t.amount[static_cast<size_t>(a.species.index)] += a.amount.quanta;
+			}
+			if (giver == giver_top) {
+				g.energy -= en.quanta;
+			} else {
+				g.energy -= en.quanta - enthalpy_carried(table, amounts, kelvin).quanta; // (its top pays the flow work)
+			}
+			t.energy += en.quanta;
+			const double pg = pressure_of(giver_top, g, giver == giver_top ? 0.0 : volume), pt = pressure_of(taker, t, 0.0);
+			if (pt == NONE) {
+				return -1.0;
+			}
+			return pg == NONE ? 1.0 : pg - pt;
+		};
+		double lo = 0.0, hi = 1.0;
+		if (gap(hi) >= 0.0) {
+			lo = hi;
+		} else {
+			for (int i = 0; i < 50; ++i) {
+				const double middle = 0.5 * (lo + hi);
+				(gap(middle) >= 0.0 ? lo : hi) = middle;
+			}
+		}
+		// through a tube: no more than it lets through at their difference now
+		if (e.flow > 0.0 && lo > 0.0) {
+			share(1.0);
+			const double all = volume;
+			const double mu = solvent_viscosity(table, kelvin);
+			const double through = mu > 0.0 ? e.flow * (std::min(p_giver, 1e9) - p_taker) / mu * dt : 0.0;
+			lo = all > 0.0 ? std::min(lo, through / all) : 0.0;
+		}
+		share(lo);
+		if (amounts.empty()) {
+			return;
+		}
+		const Energy energy = carried();
+		const Energy enthalpy = enthalpy_carried(table, amounts, kelvin);
+		for (const auto &[hop, from] : up) {
+			const Refusal refused = transfer(hop, from, amounts, enthalpy);
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			if (refused != Refusal::None) {
+				return;
+			}
+		}
+		const Refusal refused = transfer(edge, giver_top, amounts, energy);
+		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		thermal_valid_[static_cast<size_t>(giver_top.index)] = 0;
+		thermal_valid_[static_cast<size_t>(taker.index)] = 0;
+		if (refused != Refusal::None || lo < 1.0) {
+			return; // (stopped by the pressures or the tube, not by the layer's end)
 		}
 	}
 }
@@ -1096,7 +956,7 @@ void Simulation::move_pistons() {
 // (Stage 79) Gas shared out between the sealed cells of a space its pistons moved: `over[i]` mol out of cell i (below
 // 0: into it), along the gas edges among them, at the giver's composition and temperature, carrying its enthalpy (an
 // ideal gas's carries its own flow work) (GAME_SPEC §6, Pistons).
-void Simulation::run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges) {
+void Simulation::run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges, bool down_only) {
 	const SpeciesTable &table = world_.species();
 	const std::span<const Edge> edges = world_.edges();
 	const auto index_of = [&](CellId c) {
@@ -1125,13 +985,25 @@ void Simulation::run_gas(const std::vector<CellId> &cells, std::vector<double> o
 			// in parcels of at most a twentieth of what it holds, each at its state as it is then: a vessel emptied
 			// gives its later gas at its lower pressure and temperature (what stays expands as it would, pushing the
 			// rest out), not all of it at its first state
-			for (int parcel = 0; parcel < 400; ++parcel) {
+			for (int parcel = 0; parcel < 64; ++parcel) {
 				const CellState &x = world_.snapshot_cell(from);
+				double level = std::numeric_limits<double>::infinity(); // mol: at most half of what would level them (down_only)
+				if (down_only) {
+					// (gas runs down its true pressure only: each parcel from the higher to the lower as they then are, no more
+					// than half of what an ideal gas's reckoning says would bring them level, so none overshoots)
+					const Thermal pg = thermal_state(table, x, &world_.meta(from)), pt = thermal_state(table, world_.snapshot_cell(to), &world_.meta(to));
+					if (pg.defined && pt.defined && !(pg.pressure > pt.pressure)) {
+						break;
+					}
+					if (pg.defined && pt.defined && pg.free_volume > 0.0 && pt.free_volume > 0.0) {
+						level = 0.5 * (pg.pressure - pt.pressure) / (GAS_CONSTANT * (pg.temperature / pg.free_volume + pt.temperature / pt.free_volume));
+					}
+				}
 				double mol = 0.0;
 				for (size_t s = 0; s < x.amount.size(); ++s) {
 					mol += x.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas ? static_cast<double>(x.amount[s]) * MOL_PER_QUANTUM : 0.0;
 				}
-				const double moving = std::min({ over[static_cast<size_t>(giver)], -over[static_cast<size_t>(taker)], mol, 0.05 * mol + 1e-9 });
+				const double moving = std::min({ over[static_cast<size_t>(giver)], -over[static_cast<size_t>(taker)], mol, 0.05 * mol + 1e-9, level });
 				if (!(mol > 0.0) || !(moving > 0.0)) {
 					break;
 				}
@@ -1287,163 +1159,6 @@ void Simulation::run_liquid(const std::vector<CellId> &cells, std::vector<double
 			break;
 		}
 	}
-}
-
-// (Stage 79) Two sealed spaces joined by a liquid edge between their tops (a tube between two syringes' nozzles):
-// liquid runs from the one at the higher pressure into the other's top, from the lowest liquid of its column (up its
-// layers to its top, and along), as much as leaves the giver at no lower a pressure than the taker (a bisection on the
-// share of that liquid). Each side's pressure as the pistons' solve has it: its gas at the liquid's temperature in the
-// room its solids and liquids leave (none: a vacuum; no room: none that holds, and it gives what it must). What runs
-// carries its enthalpy from where it lay, and its top adds the flow work of the pressure it is pushed at over the
-// room's, (P - P_atm) V, the work of the gas over it that pushes it out (the space's from its pistons' solve where the
-// giver has no room of its own). true when any ran.
-bool Simulation::equalize_liquid(EdgeId edge) {
-	const SpeciesTable &table = world_.species();
-	const Edge e = world_.edges()[static_cast<size_t>(edge.index)];
-	const CellMeta &ma = world_.meta(e.a), &mb = world_.meta(e.b);
-	if (!ma.rigid || !mb.rigid || ma.layer || mb.layer || !ma.sealed || !mb.sealed) {
-		return false;
-	}
-	constexpr double NONE = std::numeric_limits<double>::infinity();
-	const auto holds = [&](const CellState &c) {
-		for (size_t s = 0; s < c.amount.size(); ++s) {
-			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(s) });
-			if (c.amount[s] > 0 && !d.wall && d.phase == Phase::Liquid) {
-				return true;
-			}
-		}
-		return false;
-	};
-	// a top's pressure holding `state` at `kelvin`, its volume grown by `grown` m^3 (its layers gave that)
-	const auto pressure_of = [&](CellId top, const CellState &state, double grown, double kelvin) {
-		const double volume = world_.meta(top).volume + grown;
-		const Fill fill = fill_of(table, state, kelvin);
-		const double free = fill.defined ? volume - fill.condensed : 0.0;
-		if (!(free > volume * PISTON_CLEARANCE)) {
-			return NONE; // (its pistons' clearance)
-		}
-		double mol = 0.0;
-		for (size_t s = 0; s < state.amount.size(); ++s) {
-			if (state.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
-				mol += static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM;
-			}
-		}
-		return mol * GAS_CONSTANT * kelvin / free;
-	};
-	// the side that gives: the one whose lowest liquid has the higher pressure over it; its lowest liquid's temperature
-	const auto lowest = [&](CellId top, std::vector<std::pair<EdgeId, CellId>> *up) {
-		for (const Column &col : columns_) {
-			if (col.top == top) {
-				for (size_t i = col.cells.size(); i-- > 1;) {
-					if (holds(world_.snapshot_cell(col.cells[i]))) {
-						if (up != nullptr) {
-							for (size_t k = i; k-- > 0;) {
-								up->emplace_back(col.up[k], col.cells[k + 1]);
-							}
-						}
-						return col.cells[i];
-					}
-				}
-			}
-		}
-		return top;
-	};
-	const auto kelvin_of = [&](CellId c) {
-		const CellState &x = world_.snapshot_cell(c);
-		const Thermal sealed = thermal_state(table, x, &world_.meta(c));
-		const Thermal t = sealed.defined ? sealed : thermal_state(table, x);
-		return t.defined && t.temperature > 0.0 ? t.temperature : T0;
-	};
-	const double ka = kelvin_of(lowest(e.a, nullptr)), kb = kelvin_of(lowest(e.b, nullptr));
-	const double pa = pressure_of(e.a, world_.snapshot_cell(e.a), 0.0, ka), pb = pressure_of(e.b, world_.snapshot_cell(e.b), 0.0, kb);
-	if (pa == pb) {
-		return false;
-	}
-	const bool out = pa > pb;
-	const CellId giver_top = out ? e.a : e.b, taker = out ? e.b : e.a;
-	double pushed = out ? pa : pb;
-	if (pushed == NONE) {
-		const auto at = static_cast<size_t>(giver_top.index);
-		pushed = at < solved_pressure_.size() && solved_pressure_[at] > 0.0 ? solved_pressure_[at] : P_ATMOSPHERE;
-	}
-	std::vector<std::pair<EdgeId, CellId>> up; // each hop up its column: its edge, the cell it leaves
-	const CellId giver = lowest(giver_top, &up);
-	const CellState &gives = world_.snapshot_cell(giver);
-	if (!holds(gives)) {
-		return false;
-	}
-	const double kelvin = out ? ka : kb;
-	const CellState top_gives = world_.snapshot_cell(giver_top), takes = world_.snapshot_cell(taker);
-	const Fill was = fill_of(table, gives, kelvin);
-	if (!was.defined) {
-		return false;
-	}
-	std::vector<SpeciesAmount> amounts;
-	const auto share = [&](double f) {
-		amounts.clear();
-		for (size_t s = 0; s < gives.amount.size(); ++s) {
-			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
-			if (gives.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
-				const auto n = f >= 1.0 ? gives.amount[s] : static_cast<int64_t>(static_cast<double>(gives.amount[s]) * f);
-				if (n > 0) {
-					amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ n } });
-				}
-			}
-		}
-		neutral_part(table, amounts);
-	};
-	// the share's volume where it lay, and its flow work
-	const auto left = [&]() {
-		CellState g = gives;
-		for (const SpeciesAmount &x : amounts) {
-			g.amount[static_cast<size_t>(x.species.index)] -= x.amount.quanta;
-		}
-		const Fill now = fill_of(table, g, kelvin);
-		return now.defined ? was.condensed - now.condensed : 0.0;
-	};
-	const auto flow = [&](double volume) { return Energy{ std::llround((pushed - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) }; };
-	// the giver's pressure less the taker's, had the share f run
-	const auto gap = [&](double f) {
-		share(f);
-		const double volume = left();
-		CellState g = giver == giver_top ? gives : top_gives, t = takes;
-		for (const SpeciesAmount &x : amounts) {
-			if (giver == giver_top) {
-				g.amount[static_cast<size_t>(x.species.index)] -= x.amount.quanta;
-			}
-			t.amount[static_cast<size_t>(x.species.index)] += x.amount.quanta;
-		}
-		const double p_g = pressure_of(giver_top, g, giver == giver_top ? 0.0 : volume, kelvin);
-		const double p_t = pressure_of(taker, t, 0.0, kelvin);
-		if (p_t == NONE) {
-			return -1.0; // the taker full: no more
-		}
-		return p_g == NONE ? 1.0 : p_g - p_t;
-	};
-	double lo = 0.0, hi = 1.0;
-	if (gap(hi) >= 0.0) {
-		lo = hi;
-	} else {
-		for (int i = 0; i < 60; ++i) {
-			const double middle = 0.5 * (lo + hi);
-			(gap(middle) >= 0.0 ? lo : hi) = middle;
-		}
-	}
-	share(lo);
-	if (amounts.empty()) {
-		return false;
-	}
-	const Energy enthalpy = enthalpy_carried(table, amounts, kelvin);
-	for (const auto &[hop, from] : up) {
-		const Refusal refused = transfer(hop, from, amounts, enthalpy);
-		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
-		if (refused != Refusal::None) {
-			return false;
-		}
-	}
-	const Refusal refused = transfer(edge, giver_top, amounts, Energy{ enthalpy.quanta + flow(left()).quanta });
-	CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
-	return refused == Refusal::None;
 }
 
 // Liquids run down the drains (GAME_SPEC §6): all of the upper cell's liquid,
@@ -2297,7 +2012,8 @@ void Simulation::build_tree() {
 			const size_t at = sealed_order_[head];
 			for (size_t i = 0; i < edges.size(); ++i) {
 				const Edge &e = edges[i];
-				if (!e.open || (e.phases & PHASES_GAS) == 0 || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
+				// (Stage 79: a tube that holds back its flow runs its own, in the pistons' process: not at once here)
+				if (!e.open || (e.phases & PHASES_GAS) == 0 || e.flow > 0.0 || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
 					continue;
 				}
 				const auto other = static_cast<size_t>(static_cast<size_t>(e.a.index) == at ? e.b.index : e.a.index);

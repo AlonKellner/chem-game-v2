@@ -550,7 +550,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 			const auto to = static_cast<size_t>(entry.to.index);
 			// (Stage 79: gas shared within a space a piston moved this step runs as the push runs, not by the pressures a
 			// replay of the step's ledger reads at this entry: T2 holds it)
-			const bool pushed_space = trace.meta[from].piston.moved != 0.0 || trace.meta[to].piston.moved != 0.0;
+			const bool pushed_space = trace.meta[from].piston.travel != 0.0 || trace.meta[to].piston.travel != 0.0;
 			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed && pushed_space) {
 				// (as the push runs)
 			} else if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
@@ -984,9 +984,10 @@ Violations check_W1(const SpeciesTable &, const StepTrace &trace) {
 			out.push_back(words("W1: step %lld: cell %lld's piston stands at %.9g m^3, past its stops (%.9g to %.9g)", static_cast<long long>(trace.step),
 					static_cast<long long>(c), volume, p.least, p.most));
 		}
-		if (std::fabs(p.force) > p.hand_most * (1.0 + 1e-12) || (!p.held && p.force != 0.0)) {
-			out.push_back(words("W1: step %lld: cell %lld's hand pushes with %.9g N, more than it can (%.9g N%s)", static_cast<long long>(trace.step),
-					static_cast<long long>(c), p.force, p.hand_most, p.held ? "" : ", let go"));
+		if (std::fabs(p.force) > p.hand_most * (1.0 + 1e-12) || (!p.held && (p.force != 0.0 || p.worked != 0.0)) ||
+				std::fabs(p.worked) > p.hand_most * p.travel / p.area * (1.0 + 1e-9) + 1e-7) { // (its work in whole quanta, a move at a time)
+			out.push_back(words("W1: step %lld: cell %lld's hand pushes with %.9g N (%.9g J over %.9g m^3), more than it can (%.9g N%s)", static_cast<long long>(trace.step),
+					static_cast<long long>(c), p.force, p.worked, p.travel, p.hand_most, p.held ? "" : ", let go"));
 		}
 		int64_t along = 0;
 		for (const LedgerEntry &e : trace.ledger) {
@@ -994,8 +995,8 @@ Violations check_W1(const SpeciesTable &, const StepTrace &trace) {
 				along += e.to.index == static_cast<int32_t>(c) ? e.energy.quanta : -e.energy.quanta;
 			}
 		}
-		const double work = p.force * p.moved / p.area / JOULE_PER_QUANTUM;
-		if (std::fabs(static_cast<double>(along) - work) > 1.0) {
+		const double work = p.worked / JOULE_PER_QUANTUM;
+		if (std::fabs(static_cast<double>(along) - work) > 0.5) {
 			out.push_back(words("W1: step %lld: cell %lld's piston took %lld quanta along its work edge, the hand's work %.6g", static_cast<long long>(trace.step),
 					static_cast<long long>(c), static_cast<long long>(along), work));
 		}

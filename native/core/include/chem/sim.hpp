@@ -154,9 +154,10 @@ private:
 	void conduct_heat();
 	void do_work();
 	void move_pistons(); // (Stage 79) each piston moved by its forces, its space at one pressure
-	bool equalize_liquid(EdgeId edge); // (Stage 79) liquid between two sealed spaces, to one pressure
+	void move_piston_alone(CellId cell, double dt); // (Stage 79) one piston, its vessel alone, exactly
+	void run_join(EdgeId edge, double dt); // (Stage 79) a connection between two sealed vessels
 	void run_liquid(const std::vector<CellId> &cells, std::vector<double> takes, double pressure, const std::vector<size_t> &liquid_edges); // (Stage 79) a piston's space's liquid where its volumes ask
-	void run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges); // (Stage 79) a piston's space's gas to one pressure
+	void run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges, bool down_only); // (Stage 79) a piston's space's gas to one pressure
 	void drain_liquids();
 	void exchange_gases(); // (Stage 50) each gas down its mole fraction along an edge that exchanges it
 	void overflow();
