@@ -1,0 +1,1 @@
+{"format": "chem-reactions/1", "reactions": [{"id": "water_forming", "equation": "2 H2(g) + O2(g) -> 2 H2O(l)", "kinetics": {"law": "surface", "in": "H2O(l)", "prefactor": 1, "activation_kj": 0, "secondary": 1e9}}]}

@@ -164,6 +164,13 @@
 			"tutorial": "tutorials/quota.json"
 		},
 		{
+			"id": "seed",
+			"title": "Supersaturation and a seed",
+			"summary": "Two beakers of the same clear, supersaturated copper sulfate solution and a seed crystal for each: left still the seed only grows; stirred, it breeds a shower of crystals and the excess comes out in minutes. A guess first.",
+			"bench": "benches/seed.json",
+			"tutorial": "tutorials/seed.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

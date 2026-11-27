@@ -665,6 +665,12 @@ crystals. The count is state, saved with the rest, but not a conserved quantity:
 - **nucleation** adds particles where the surface law makes a solid from a supersaturated
   solution: `k_n · (kg of solvent) · (S − 1)^p` per second, `S = e^(A/RT)` the supersaturation.
   Each nucleus begins as one quantum of the solid (a crystal of about 6 µm);
+- **secondary nucleation** (Stage 66, `docs/TDD_66_SEEDS.md`): where the solid grows and the cell is stirred, the
+  crystals there breed, fragments the turning chips off them growing as crystals of their own:
+  `k_s · ε · (kg of the crystals) · (S − 1)^b` more a second, ε the stirring's dissipation per kg of the liquid
+  (§6, Stage 49), each fragment one quantum. A seed in a still solution only grows; stirred, it sets a solution's
+  excess out in minutes, in a shower of small crystals, and a cooled liquor's first crystal is followed by a crash.
+  Calibrated (`docs/DATA_SOURCES.md`, Seeds): linear in ε and in the crystals' mass, b the measured nucleation order;
 - the mean size is derived: the solid's volume shared equally among its particles, as spheres.
 
 Growth and nucleation compete for the same supersaturation, so slow cooling gives fewer, larger
@@ -2900,6 +2906,11 @@ stand on.
     dissolved in 20 mL of the acid, boiled down to about 7 mL, cooled until the crop has grown past 2.5 g, filtered
     and handed in: 2.50 g, 59.5 % of the copper, short of the quota (the liquor keeps the rest; a crop harvested later
     is larger). Its report: the crystals' mass, predicted first, and the share of the copper that crystallized.
+  - `seed`, *supersaturation and a seed* (Stage 66; experiment 35): two beakers of the same clear solution, 0.0656 mol
+    of copper sulfate in 50 g of water (1.06 times its solubility at 20 °C), and a 10 mg seed crystal for each. A guess
+    first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
+    excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
+    one crystal. Its report: the stirred beaker's crystals, predicted first.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3250,12 +3261,12 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
-| Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off |
+| Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off. Stage 66: a seed's fragments share its mass at once (a 2 mm seed and its first thousand 6 µm fragments are a thousand crystals of 0.2 mm), so a bred crop's area is overstated at first and the seed itself is not seen apart; the calibrated breeding rate takes it in |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
 | Tipping is instantaneous; a pour's stream falls straight, with no splash; a held pour's tilt is the player's, not its liquid's | A stream lands where it falls; the rate is not the lip's flow, but the vessel's calibrated pouring rate by its tilt |
 | The bench opens out of equilibrium | The acid's water wets the air above it and the condenser cools to its coolant in the first seconds |
-| Kinetic parameters measured, some second-hand or extrapolated (Stage 23) | Malachite: Koga's main step, first order. The oxide's rate is second-hand (one table citing Majima), its activation energy the middle of the four acids' range, 52–86 kJ/mol; its order is in the acid's concentration, Majima's in the hydrogen ion's activity. Growth: Tanimoto's surface step from 20 to 40 °C, used at every temperature, and for the other hydrates too. Nucleation: fitted to Sheng's induction times as one nucleus each, at supersaturations under 1.09, extrapolated far beyond them; a lower bound, since a nucleus must grow to be seen (`docs/DATA_SOURCES.md`) |
+| Kinetic parameters measured, some second-hand or extrapolated (Stage 23) | Malachite: Koga's main step, first order. The oxide's rate is second-hand (one table citing Majima), its activation energy the middle of the four acids' range, 52–86 kJ/mol; its order is in the acid's concentration, Majima's in the hydrogen ion's activity. Growth: Tanimoto's surface step from 20 to 40 °C, used at every temperature, and for the other hydrates too. Nucleation: fitted to Sheng's induction times as one nucleus each, at supersaturations under 1.09, extrapolated far beyond them; a lower bound, since a nucleus must grow to be seen (`docs/DATA_SOURCES.md`). Secondary nucleation (Stage 66) calibrated, not measured: its form the textbook's, its order Lyall's, its rate a seed's minutes |
 | Transport is diffusion to a sphere, `Sh = 2`, times the stirring | No convection from settling crystals or a warm flask; ions diffuse as at infinite dilution |
 | A reverse reaction's rate is proportional to the same reactant as the forward one | Malachite reforms from CuO, CO₂ and steam only where some malachite is left; fully decomposed, it never does |
 | Processes applied in sequence | A time shift of about one step |
