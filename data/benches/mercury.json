@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "Liquid mercury beside water (a look at how the renderer draws a metal): 100 g of mercury (7.4 mL) in a 50 mL beaker, beside a 50 mL beaker of water and one of copper sulfate (0.4 mol/kg). The renderer gives every liquid water's refractive index and has no complex index n + ik in the visible, so the mercury is drawn opaque but not silver: its mirror-like surface, which turns back about three quarters of the light, is what is missing. Mercury here has no vapour, and liquids mix ideally (it is not to be poured into water).",
+	"note": "Liquid mercury beside water (a look at how the renderer draws a metal, Stage 78): 100 g of mercury (7.4 mL) in a 50 mL beaker, beside a 50 mL beaker of water and one of copper sulfate (0.4 mol/kg). Mercury is its measured complex index n + ik (Inagaki, Arakawa and Williams 1981): what comes to it is turned back by Fresnel's reflectance, about 0.78 at every visible wavelength, and none goes in, so it shows the room as a curved mirror does. Mercury here has no vapour, and liquids mix ideally (it is not to be poured into water).",
 	"grid": [
 		28,
 		15

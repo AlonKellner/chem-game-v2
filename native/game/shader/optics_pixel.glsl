@@ -40,10 +40,11 @@ const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
-const int ROWS_PER_SET = 9;
+const int ROWS_PER_SET = 10;
 const int BUBBLE_ROW = 6; // what a vessel's bubbles turn back, their albedo (Stage 45)
 const int BANDS_ROW = 7; // a layered vessel's bands (Stage 47)
-const int TEMPS_ROW = 8; // a vessel's temperatures by height, its wall's and its contents' (Stage 53)
+const int LIQUID_K_ROW = 8; // its liquid's k: a metal's (Stage 78)
+const int TEMPS_ROW = 9; // a vessel's temperatures by height, its wall's and its contents' (Stage 53)
 const int TEMPS_CONTENTS = 49; // where its contents' begin in that row (after its wall's, at most 24 points)
 const int TEMPS_HOTTEST = 399; // its hottest
 const int LIGHT_ENTRIES = 4097;
@@ -1646,7 +1647,41 @@ float trace_index(int medium, float n_glass, float n_core) {
 // is one thing, of the index n_core)
 // (`alpha_glass`, `alpha_core`: the glass's absorption per cm, and the core's where the core is glass, a prism's;
 // Stage 46)
-Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block, float alpha_glass, float alpha_core) {
+// Fresnel's unpolarised reflectance onto a metal (Stage 78; Born and Wolf §13.2): from a clear medium of index n1 onto
+// one of n2 + i k2, the light arriving at cos_i; complex arithmetic by hand, a vec2 a number (the truth's is the core's
+// chem::optics::fresnel_reflectance, written apart)
+vec2 cx_mul(vec2 a, vec2 b) {
+	return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+vec2 cx_div(vec2 a, vec2 b) {
+	float d = b.x * b.x + b.y * b.y;
+	return vec2((a.x * b.x + a.y * b.y) / d, (a.y * b.x - a.x * b.y) / d);
+}
+vec2 cx_root(vec2 a) {
+	float m = sqrt(a.x * a.x + a.y * a.y);
+	float re = sqrt(max(0.0, 0.5 * (m + a.x)));
+	float im = sqrt(max(0.0, 0.5 * (m - a.x)));
+	return vec2(re, a.y < 0.0 ? -im : im);
+}
+float metal_reflectance(float n1, float n2, float k2, float cos_i) {
+	vec2 a = vec2(n1, 0.0);
+	vec2 b = vec2(n2, k2);
+	vec2 ci = vec2(cos_i, 0.0);
+	vec2 ratio = cx_div(a, b);
+	vec2 r2 = cx_mul(ratio, ratio);
+	vec2 ct = cx_root(vec2(1.0 - r2.x * (1.0 - cos_i * cos_i), -r2.y * (1.0 - cos_i * cos_i)));
+	vec2 a_ci = cx_mul(a, ci);
+	vec2 b_ct = cx_mul(b, ct);
+	vec2 b_ci = cx_mul(b, ci);
+	vec2 a_ct = cx_mul(a, ct);
+	vec2 rs = cx_div(vec2(a_ci.x - b_ct.x, a_ci.y - b_ct.y), vec2(a_ci.x + b_ct.x, a_ci.y + b_ct.y));
+	vec2 rp = cx_div(vec2(b_ci.x - a_ct.x, b_ci.y - a_ct.y), vec2(b_ci.x + a_ct.x, b_ci.y + a_ct.y));
+	return min(1.0, 0.5 * (rs.x * rs.x + rs.y * rs.y + rp.x * rp.x + rp.y * rp.y));
+}
+
+// (`k_core`, Stage 78: the core's k, a metal's; nought for a clear core. A ray that comes to a core with k is turned
+// back by metal_reflectance and the rest absorbed in its skin: it never goes in)
+Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block, float alpha_glass, float alpha_core, float k_core) {
 	Traced r;
 	vec3 o = from;
 	vec3 u = heading;
@@ -1793,6 +1828,15 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 				float c1 = trace_index(here, n_glass, n_core);
 				float c2 = trace_index(beyond, n_glass, n_core);
 				float ccos_i = -dot3(cn, u);
+				if (beyond == 2 && k_core > 0.0) {
+					// onto a metal (Stage 78): turned back by its reflectance, the rest absorbed
+					float cr = metal_reflectance(c1, c2, k_core, ccos_i);
+					r.absorbed = r.absorbed + r.pass * (1.0 - cr);
+					r.pass = r.pass * cr;
+					u = vec3(u.x + 2.0 * ccos_i * cn.x, u.y + 2.0 * ccos_i * cn.y, u.z + 2.0 * ccos_i * cn.z);
+					r.route = r.route * uint(31) + uint(2 * (100 + which)) + uint(600);
+					continue;
+				}
 				float ceta = c1 / c2;
 				float csin2 = ceta * ceta * (1.0 - ccos_i * ccos_i);
 				if (csin2 >= 1.0) {
@@ -1883,6 +1927,15 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		float n1 = trace_index(here, n_glass, n_core);
 		float n2 = trace_index(there, n_glass, n_core);
 		float cos_i = -dot3(n, u);
+		if (there == 2 && k_core > 0.0) {
+			// onto a metal (Stage 78): turned back by its reflectance, the rest absorbed
+			float mr = metal_reflectance(n1, n2, k_core, cos_i);
+			r.absorbed = r.absorbed + r.pass * (1.0 - mr);
+			r.pass = r.pass * mr;
+			u = vec3(u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z);
+			r.route = r.route * uint(31) + uint(2 * (hit + 1)) + uint(600);
+			continue;
+		}
 		float eta = n1 / n2;
 		float sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
@@ -1974,6 +2027,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	float n_glass = row_at(start + 4 * ROW, nm);
 	float n_in = core == 0 || lies ? row_at(start + 3 * ROW, nm) : (core == 2 ? n_glass : 1.0);
 	float alpha = row_at(start + 2 * ROW, nm); // its glass's absorption per cm (Stage 46)
+	float k_in = (core == 0 || lies) && !prism ? row_at(start + LIQUID_K_ROW * ROW, nm) : 0.0; // its liquid's k (Stage 78)
 	// The body's frame: cm from its axis, y up from its foot. Turned (Stage 30; upside down is half a turn), the
 	// line is turned back about the pivot first, and the line it leaves on turned forward again.
 	float c = turned ? turn.z : 1.0;
@@ -1989,7 +2043,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	float back = reach - dot3(vec3(-p.x, rect.w * 0.5 * cm - p.y, -p.z), u);
 	vec3 o = vec3(p.x - back * u.x, p.y - back * u.y, p.z - back * u.z);
 	trace_level = vec2(sn / cm, -c / cm);
-	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1, alpha, prism || core == 2 ? alpha : 0.0);
+	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1, alpha, prism || core == 2 ? alpha : 0.0, k_in);
 	if (l.meetings == 0) {
 		return e;
 	}

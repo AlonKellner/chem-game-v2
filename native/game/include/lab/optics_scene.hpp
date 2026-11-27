@@ -88,8 +88,10 @@ inline constexpr int LWIR_ROW = 301;
 // its contents' layers, their count (0: one temperature, the body's) and for each from the bottom its middle's
 // level in its frame (cm, as its bands') and its temperature; at TEMPS_HOTTEST the hottest of them all, then a
 // signature of them (what a pixel's history follows, in place of the body's one temperature).
-inline constexpr int ROWS_PER_SET = 9;
-inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6, BANDS_ROW = 7, TEMPS_ROW = 8;
+// And (Stage 78) its liquid's k, the imaginary part of its index (LIQUID_K_ROW: a metal's; nought for a clear liquid):
+// a ray that comes to a liquid with k is turned back by its complex Fresnel reflectance and never goes in.
+inline constexpr int ROWS_PER_SET = 10;
+inline constexpr int LIQUID_ROW = 0, SOLID_ROW = 1, WALL_ROW = 2, LIQUID_INDEX_ROW = 3, WALL_INDEX_ROW = 4, GLOW_ROW = 5, BUBBLE_ROW = 6, BANDS_ROW = 7, LIQUID_K_ROW = 8, TEMPS_ROW = 9;
 inline constexpr int TEMPS_CONTENTS = 49, TEMPS_HOTTEST = 399, MAX_RINGS = 24;
 inline constexpr int MAX_BANDS = 133; // (1 + 3 a band in a row of 401)
 // narrow lines of the liquids: centre (nm), full width at half maximum (nm), optical depth per centimetre at the peak, unused
@@ -505,7 +507,7 @@ struct OpticsPassage {
 	int meetings = 0;
 	bool left = true, solid = false;
 };
-OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single);
+OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single, double k_core = 0.0);
 // O15, the pass's rays in single precision are its rays in double (GAME_SPEC §18, Stage 33): over every body of
 // the scene that bends, rays across it straight in and aslant; fewer than one in two hundred go another way
 // in single precision, and of the rest all but one in a hundred leave within a thousandth of a centimetre and

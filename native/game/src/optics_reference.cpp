@@ -286,7 +286,10 @@ Exact exact_body(int body, int core, double nm, double z_axis, Line &line) {
 	// cylinder's floor
 	const double alpha = row_at(start + 2 * optics_layout::ROW, nm);
 	const std::array<double, trace::MAX_MEDIA> absorb{ 0.0, alpha, prism || core == 2 ? alpha : 0.0, 0.0 };
-	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb);
+	// its liquid's k (Stage 78): a metal turns back what comes to it
+	const double k_in = liquid && !prism ? row_at(start + optics_layout::LIQUID_K_ROW * optics_layout::ROW, nm) : 0.0;
+	const std::array<double, trace::MAX_MEDIA> extinction{ 0.0, 0.0, k_in, 0.0 };
+	const trace::Landing l = trace::trace(*shape, o, u, 1.0e9, index, lies ? &inside : nullptr, &absorb, &extinction);
 	out.meetings = l.meetings;
 	if (l.meetings == 0) {
 		return out;
@@ -1212,11 +1215,11 @@ std::string check_O10(const OpticsScene &scene, int x0, int y0, int x1, int y1, 
 	return "";
 }
 
-OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core);
+OpticsPassage optics_passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, double k_core);
 
-OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single) {
+OpticsPassage optics_passage(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core, bool single, double k_core) {
 	if (single) {
-		return optics_passage_single(scene, body, from, heading, n_glass, n_core);
+		return optics_passage_single(scene, body, from, heading, n_glass, n_core, k_core);
 	}
 	OpticsPassage out;
 	if (!shader::ready(scene) || body < 0 || body >= optics_layout::MAX_BODIES || scene.shapes_exact.size() < static_cast<size_t>(optics_layout::MAX_BODIES) * optics_layout::SHAPE_BLOCK * 4) {
@@ -1229,7 +1232,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 	if (s < 0) {
 		return out;
 	}
-	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0);
+	const shader::Traced t = shader::trace_shape(s, shader::vec3(from[0], from[1], from[2]), shader::vec3(heading[0], heading[1], heading[2]), n_glass, n_core, head.z > 0.5 ? block : -1, 0.0, 0.0, k_core);
 	out.at[0] = t.at.x;
 	out.at[1] = t.at.y;
 	out.at[2] = t.at.z;
@@ -1248,7 +1251,7 @@ OpticsPassage optics_passage(const OpticsScene &scene, int body, const double fr
 
 namespace {
 OpticsPassage passage_single(const OpticsScene &scene, int body, const double from[3], const double heading[3], double n_glass, double n_core) {
-	return optics_passage_single(scene, body, from, heading, n_glass, n_core);
+	return optics_passage_single(scene, body, from, heading, n_glass, n_core, 0.0);
 }
 } // namespace
 

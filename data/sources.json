@@ -4,7 +4,6 @@
 	"entries": [
 		{"data": ["species.json/species/mercury/thermo/*"], "measured": "NIST-JANAF (janaf.nist.gov, Hg-001: Hg(cr,l) at 298.15 K): Cp 27.978, S 76.028 J/mol K, its formation enthalpy nought, an element in its standard state", "doc": ["Mercury (a look at metals)", "JANAF"], "tests": ["sources: molar masses are IUPAC's atomic weights, and molar volumes the cited densities (Stage 23)"]},
 		{"data": ["species.json/species/mercury/density"], "measured": "the CRC Handbook's 13.534 g/cm3 at 25 C (PubChem)", "doc": ["Mercury (a look at metals)"], "tests": ["sources: molar masses are IUPAC's atomic weights, and molar volumes the cited densities (Stage 23)"]},
-		{"data": ["optics/media.json/media/mercury/**"], "calibrated": "the renderer has no metal: a liquid takes water's refractive index in the visible, so mercury is given an absorption that makes it opaque (10,000 L/mol/cm over the visible, at its 67.5 mol/L), and its silver is what the pass lacks: a liquid's own complex index n + ik and its Fresnel reflectance", "doc": ["Mercury (a look at metals)", "no metal"]},
 		{"data": ["benches/mercury.json/**"], "design": "a look at a liquid metal: 100 g of mercury in a 50 mL beaker beside a 50 mL beaker of water and one of 0.4 mol/kg copper sulfate, for the renderer's sake"},
 		{"data": ["species.json/species/{calcium_ion,magnesium_ion,barium_ion,silver_ion,iron_ii_ion,iron_iii_ion,iron_hydroxo_ion,zinc_ion,aluminium_ion,cobalt_ion,nitrate_ion}/thermo/{hf_kj,s0}"], "measured": "the NBS tables (Wagman et al. 1982), the ao rows (Stage 76): Ca2+ 2-267, Mg2+ 2-260, Ba2+ 2-282, Ag+ 2-160, Fe2+, Fe3+ and FeOH2+ 2-177, Zn2+ 2-138, Al3+ 2-127, Co2+ 2-170, NO3- 2-64", "doc": ["Metals and precipitates (Stage 76)", "NBS"], "tests": ["measured: iron(III)'s and aluminium's hydrolysis are NIST 46.3's, as MINTEQ v4 has them (Stage 76)", "measured: each precipitate's solubility product is MINTEQ v4's at 25 C, and its heat near MINTEQ's (Stage 76)"]},
 		{"data": ["species.json/species/{calcium_ion,magnesium_ion,barium_ion,silver_ion,iron_ii_ion,iron_iii_ion,iron_hydroxo_ion,zinc_ion,aluminium_ion,aluminium_hydroxo_ion,cobalt_ion,nitrate_ion}/thermo/cp", "species.json/species/{calcium_ion,magnesium_ion,barium_ion,silver_ion,iron_ii_ion,iron_iii_ion,iron_hydroxo_ion,zinc_ion,aluminium_ion,aluminium_hydroxo_ion,cobalt_ion,nitrate_ion}/volume_cm3"], "measured": "OBIGT (CHNOSZ inst/extdata/OBIGT/inorganic_aq.csv: Shock and Helgeson 1988; Shock, Sassani et al. 1997; Akinfiev and Zotov 2001; Akinfiev and Tagirov 2014; Tagirov and Schott 2001), Cp in cal x 4.184 and V at 25 C, shifted to the model's footing by the charge: Cp - 216.35 z, V - 16.74 z (Stage 64's)", "doc": ["Metals and precipitates (Stage 76)", "OBIGT"], "tests": ["measured: a saturated calcium hydroxide solution reads NIST SRM 2193b's certified pH from 5 to 50 C (Stage 76)"]},
@@ -193,6 +192,12 @@
 			"tests": ["refraction: the indices of water and of laboratory glass, as measured"]
 		},
 		{
+			"data": ["optics/media.json/indices/mercury/**"],
+			"measured": "Inagaki, Arakawa and Williams, Phys. Rev. B 23, 5246 (1981): liquid mercury's n and k by ellipsometry at room temperature, the source's rows from 344.4 to 885.6 nm (refractiveindex.info's transcription); checked against Smith and Stromberg 1966's at 546.1 nm",
+			"doc": ["Liquid mercury's complex index (Stage 78)"],
+			"tests": ["measured: liquid mercury's index is Inagaki's and turns back Smith and Stromberg's share"]
+		},
+		{
 			"data": ["optics/media.json/materials/n_sf11/**"],
 			"measured": "SCHOTT's Sellmeier coefficients for N-SF11",
 			"doc": ["N-SF11"],
@@ -345,7 +350,7 @@
 			"design": "the experiments (Stage 41, GAME_SPEC §13.7): their steps' thresholds, read off each experiment played through (native/tests/game/test_experiments.cpp)"
 		},
 		{
-			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**", "plays/layers.json/**", "plays/prism.json/**", "plays/volumetric.json/**", "plays/beer.json/**", "plays/rates.json/**", "plays/calculator.json/**", "plays/filter.json/**", "plays/ghost.json/**"],
+			"data": ["plays/cost.json/**", "plays/viewer.json/**", "plays/boiling.json/**", "plays/thermal.json/**", "plays/layers.json/**", "plays/prism.json/**", "plays/volumetric.json/**", "plays/beer.json/**", "plays/rates.json/**", "plays/calculator.json/**", "plays/filter.json/**", "plays/ghost.json/**", "plays/mercury.json/**"],
 			"design": "a play (Stage 33): the gestures whose frames are timed and counted, in frames of a 120 Hz display; the spectral viewer's and the view's (Stage 42), with the bench it sets out"
 		},
 		{"data": ["species.json/species/copper_hydroxide/thermo/*"], "measured": "Puigdomenech and Taxen 2000 (SKB TR-00-13), Table 2: its Gibbs energy, entropy and heat capacity; the enthalpy with CODATA's elements", "doc": ["Precipitation and gas (Stage 44)", "SKB TR-00-13"], "tests": ["sources: every species' thermodynamic row is the one cited", "measured: the tables' solubility constants of copper hydroxide and copper oxide are the evaluated ones"]},
