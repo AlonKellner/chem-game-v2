@@ -1,5 +1,16 @@
 # GAME_SPEC version history
 
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; awaiting the user's sign-off)
+
+- The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
+  digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
+  a cell's rest and a vessel's walls kept by them, a cell's sums over its matter and its mixtures kept while only
+  energy moves (conduction), each hit held to the full state where assertions abort. The joint solve's mixtures once
+  an iteration; a probe's setup and the activity model's range from the kept mixtures; the column's diffusion over
+  what its layers hold.
+- The gates: `make gates` prints the step's cost in instructions against main's where the branch left it, warning
+  past 10 % (`gate_cache.py stepcost`, `step_costs.json` in the shared cache).
+
 ## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process
