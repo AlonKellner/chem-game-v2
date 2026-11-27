@@ -107,13 +107,9 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 		REQUIRE(ui->locate("item:flask", fx, fy));
 		scenes.push_back(json{ { "step", l.step() }, { "changed", index == 0 || now != last }, { "flask", { fx, fy } } });
 		last = now;
-		// and at D2's cuts (test_lab.cpp) the lab saved and its report, where its windows start
-		for (const int cut : { 0, 4, 9, 12, 17, 18, 19, 20 }) {
-			if (index == cut) {
-				fixtures::write("demo", std::to_string(index) + ".json", l.save());
-				fixtures::write("demo", std::to_string(index) + ".report.json", l.report());
-			}
-		}
+		// and the lab saved and its report, where D2's windows start (test_lab.cpp: every command, Stage 69)
+		fixtures::write("demo", std::to_string(index) + ".json", l.save());
+		fixtures::write("demo", std::to_string(index) + ".report.json", l.report());
 		const std::string written = scene_file::write(scene);
 		fixtures::write("demo", std::to_string(index) + ".scene", written);
 		lab::OpticsScene back;

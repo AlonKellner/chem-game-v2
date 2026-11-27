@@ -321,7 +321,8 @@ void Simulation::react() {
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
 				// mol/m^2/s of the solid: at its surface and by transport, in series (GAME_SPEC §7), as they are at the step's start
-				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, dissipation_per_kg(table, state, world_.meta(cell).stirring), &world_.meta(cell)).both * per;
+				const double dissipation = dissipation_per_kg(table, state, world_.meta(cell).stirring); // W/kg of its liquid
+				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, dissipation, &world_.meta(cell)).both * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
 				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
 				const double g = 4.835975862049409 * cbrt(static_cast<double>(state.particles[in])) * cbrt(solid.molar_volume * solid.molar_volume) * flux;
@@ -332,7 +333,7 @@ void Simulation::react() {
 				const double change = after * after * after - mol;
 				wanted = (change < 0.0 ? -change : change) / MOL_PER_QUANTUM / per;
 				// nucleation: where this direction makes the solid from a supersaturated solution
-				if (!consumed && kinetics.nucleation > 0.0 && nu == 1) {
+				if (!consumed && (kinetics.nucleation > 0.0 || kinetics.secondary > 0.0) && nu == 1) {
 					double liquid = 0.0; // quanta of solvent
 					for (size_t s = 0; s < state.amount.size(); ++s) {
 						if (state.amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Liquid) {
@@ -340,7 +341,13 @@ void Simulation::react() {
 						}
 					}
 					const double excess = a / rt < 700.0 ? exp(a / rt) - 1.0 : 1e300; // S - 1
-					const double nuclei = kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * pow(excess, kinetics.nucleation_order) * step_seconds_ + nucleation_remainder;
+					// from the solution (primary), and (Stage 66) bred from the crystals there by the stirring (secondary:
+					// fragments its turning chips off them, each grown from one quantum)
+					const double primary = kinetics.nucleation > 0.0 ? kinetics.nucleation * liquid * MOL_PER_QUANTUM * 0.018015 * pow(excess, kinetics.nucleation_order) : 0.0;
+					const double bred = kinetics.secondary > 0.0 && dissipation > 0.0 && have > 0
+							? kinetics.secondary * dissipation * mol * static_cast<double>(table.molar_mass_ug(kinetics.in)) * 1e-9 * pow(excess, kinetics.secondary_order)
+							: 0.0;
+					const double nuclei = (primary + bred) * step_seconds_ + nucleation_remainder;
 					born = nuclei < 1e15 ? static_cast<int64_t>(nuclei) : 1000000000000000;
 					nucleation_remainder = nuclei < 1e15 ? nuclei - static_cast<double>(born) : 0.0;
 				} else {
@@ -1569,6 +1576,18 @@ void Simulation::advance() {
 	}
 	world_.skip_step();
 	traced_ = false;
+}
+
+void Simulation::restore_flows(StepFlows flows) {
+	const size_t edges = world_.edges().size() * PROCESSES, cells = static_cast<size_t>(world_.cell_count());
+	const size_t reactions = reactions_.size() + equilibria_.size();
+	// (as the step left them: a command since may have added an edge or a cell, which no flow of that step crossed)
+	if (flows.reactions != reactions || flows.energy.size() > edges || flows.grams.size() != flows.energy.size() || flows.energy.size() % PROCESSES != 0 ||
+			flows.extent.size() > cells * reactions || (reactions > 0 && flows.extent.size() % reactions != 0)) {
+		flows_ = StepFlows{};
+		return;
+	}
+	flows_ = std::move(flows);
 }
 
 StepTrace Simulation::step() {

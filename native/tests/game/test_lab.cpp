@@ -482,12 +482,12 @@ TEST_CASE("lab: a vessel filled past its brim overflows into the tray (Stage 8)"
 // ctest: parts 8
 // ctest: fixture demo
 TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not saved (Stage 8)") {
-	// D2. The demo, saved after each of several commands, in the middle of each stage: the loaded lab is the saved
-	// one, saved again it is the same text, and it reproduces the golden record to the next cut (the last to its
-	// end), every invariant held at every step. (Stage 68: the saves from the fixture `demo`, test_demo_record.cpp;
-	// the windows together check every step of the session after its first command, the gates' one checked play of
-	// it, a cut an entry, the long cooling and its wait (commands 19 and 20) in windows of their own. A save after
-	// command 1, the malachite just tipped in, does not continue so: the open issue in docs/TDD_68_GATES_FAST.md.)
+	// D2. The demo, saved after every command: the loaded lab is the saved one, saved again it is the same text, and
+	// it plays the next command into the golden record's next digest, every invariant held at every step. (Stage 68:
+	// the saves from the fixture `demo`, test_demo_record.cpp; the windows together check every step of the session
+	// after its first command, the gates' one checked play of it, dealt among eight entries. Stage 69: every command,
+	// not six; a save after command 1, the malachite just tipped in, its step in progress, did not continue so: its
+	// world set its walls' contacts a step before the saved one could, World::resume_step.)
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::vector<json> golden;
 	{
@@ -502,10 +502,15 @@ TEST_CASE("lab: a saved lab, loaded, continues exactly as the one that was not s
 		plain.erase("note");
 		return plain.dump();
 	};
-	const std::vector<size_t> cuts{ 0, 4, 9, 12, 17, 18, 19, 20 };
+	std::vector<size_t> cuts;
+	for (size_t i = 0; i < golden.size(); ++i) {
+		cuts.push_back(i);
+	}
+	// (as ctest runs it, eight entries: the commands dealt among them, the two long ones, 19 and 20, apart; under the
+	// sanitizers the first alone)
 	for (size_t k = 0; k < cuts.size(); ++k) {
 		if (static_cast<int>(k % static_cast<size_t>(part().count)) != part().index) {
-			continue; // (as ctest runs it, a cut an entry; under the sanitizers the first alone)
+			continue;
 		}
 		const size_t cut = cuts[k];
 		CAPTURE(cut);

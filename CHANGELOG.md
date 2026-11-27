@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.67.1 (2026-11-26, Stage 64, merged after Stage 67)
+## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69 and 66)
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
   pack, C2): **weak acids, bases, indicators and the salts experiments 14 to 20 weigh**. New elements Cl, K, P, Br (32
@@ -18,6 +18,26 @@
 - §13: a bench opens at its fast equilibria at the temperatures it states (`build_settled`); the free lab's reagents
   (hydrochloric acid, sodium hydroxide, vinegar, ammonia, the three indicators, six salts).
 - §20: the declared simplifications of the weak acids, the indicators and the salts.
+
+## 0.69.0 (2026-11-26, Stage 69; signed off by the user: "Approved, merge and proceed")
+
+- §13, Save and load; §18, D2 (Stage 69, `docs/TDD_69_SAVES.md`): a lab saved in a step a command moved matter in (a
+  tip, a pour) continues exactly as the saved one would have: its world refuses until the step closes what a step in
+  progress refuses (`World::resume_step`), as the saved one did; the demo's save after its command 1 did not. A
+  loaded lab reads as the saved one did: a save holds the last step's flows (not state), and a vessel finds its
+  contacts as it loads, so its boiling's bubbles show at once. D2 holds at every command of the demo. The goldens
+  unchanged.
+
+## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0, Stage 68 and 0.69.0; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 66, `docs/TDD_66_SEEDS.md`; the curriculum's C2, C16): **secondary nucleation**: where a surface law grows
+  its solid and the cell is stirred, the crystals breed, `secondary · ε · M · (S − 1)^secondary_order` fragments a
+  second (ε the stirring's W per kg of the liquid, M the crystals' kg), each one quantum; a still solution's seed only
+  grows. The copper sulfates 2e10 and 1.7, calibrated (no measured rate is open): linear in ε and M, the order Lyall's,
+  a stirred seed setting out a solution's excess 5 % over saturation half in a quarter of an hour. `chem_tool study
+  seed`; the generator refuses a rate without its order; the debug panel says what the stirring breeds. §13.7: the
+  experiment `seed` (curriculum 35). §20: equal spheres share a seed's mass with its fragments; the secondary rate
+  calibrated. No golden moved.
 
 ## Stage 68 (2026-11-26; GAME_SPEC stays 0.67.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed to fix the open bugs")
 

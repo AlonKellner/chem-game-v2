@@ -1,0 +1,94 @@
+{
+	"format": "chem-bench/2",
+	"note": "Supersaturation and a seed (GAME_SPEC §9, §13.7, Stage 66; docs/CURRICULUM.md, experiment 35): two beakers of the same clear copper sulfate solution, 0.0656 mol in 50 g of water (1.31 mol/kg, 1.06 times the model's solubility at the room's 20 C, 1.2375 mol/kg: saturated near 23 C and cooled undisturbed), and two jars each of one blue crystal of the pentahydrate, 10 mg. Left alone the solutions stay clear for days (Sheng's primary nucleation). A seed in the still beaker only grows; in the stirred one the stirrer chips fragments off it, each a crystal of its own, and the excess, about 1 g, comes out in minutes (chem_tool study seed; docs/DATA_SOURCES.md, Seeds).",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "still",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"at": [
+				8,
+				7
+			],
+			"label": "copper sulfate solution, 1.31 mol/kg",
+			"contents": {
+				"water": {
+					"g": 50
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.06559
+				}
+			}
+		},
+		{
+			"id": "stirred",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"at": [
+				18,
+				7
+			],
+			"label": "copper sulfate solution, 1.31 mol/kg",
+			"contents": {
+				"water": {
+					"g": 50
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.06559
+				}
+			}
+		},
+		{
+			"id": "seed1",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"at": [
+				4,
+				8
+			],
+			"label": "a seed: one blue crystal, 10 mg",
+			"contents": {
+				"copper_sulfate_pentahydrate": {
+					"g": 0.010,
+					"particles": 1
+				}
+			}
+		},
+		{
+			"id": "seed2",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 30,
+			"at": [
+				14,
+				8
+			],
+			"label": "a seed: one blue crystal, 10 mg",
+			"contents": {
+				"copper_sulfate_pentahydrate": {
+					"g": 0.010,
+					"particles": 1
+				}
+			}
+		}
+	]
+}

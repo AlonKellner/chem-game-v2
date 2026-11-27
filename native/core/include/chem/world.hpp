@@ -301,7 +301,11 @@ public:
 	std::span<const Edge> edges() const { return edges_; }
 	Snapshot snapshot() const { return Snapshot{ cells_ }; }
 	// true when a primitive has been applied since the last step closed
-	bool mid_step() const { return !ledger_.empty(); }
+	bool mid_step() const { return stepping(); }
+	// A step in progress since before the world was saved (Stage 69): its primitives were applied, their ledger was
+	// not kept. Until the step closes the world refuses what it refuses mid-step, as the world that was saved did
+	// (a loaded lab continues exactly as it would have, D2).
+	void resume_step();
 	// changes whenever an edge is added, opened or closed (what is cached per topology is keyed on it)
 	uint64_t topology_version() const { return topology_version_; }
 	// one cell's state, to read (the processes derive temperatures from it)
@@ -399,6 +403,8 @@ private:
 	bool thermal_ = false;
 	std::vector<CellState> cells_;
 	std::vector<Edge> edges_;
+	bool resumed_ = false; // (Stage 69: resume_step)
+	bool stepping() const { return !ledger_.empty() || resumed_; }
 	std::vector<LedgerEntry> ledger_;
 	Snapshot before_;
 	uint64_t step_ = 0;

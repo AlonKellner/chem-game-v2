@@ -126,6 +126,11 @@ public:
 
 	// The last step's flows (GAME_SPEC §13.6), empty before the first step.
 	const StepFlows &flows() const { return flows_; }
+	// Puts back the last step's flows of a saved simulation (Stage 69): what was derived from them (a vessel's
+	// boiling's bubbles, a reaction's rate) reads as it did before the save. Not state: the next step makes them
+	// anew. Taken only where they fit the world's edges and cells (as many, or fewer: a command since may have added
+	// some) and its reactions; else none, as before a step.
+	void restore_flows(StepFlows flows);
 
 private:
 	void begin_step();
