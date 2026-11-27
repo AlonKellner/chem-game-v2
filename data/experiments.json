@@ -234,6 +234,13 @@
 			"tutorial": "tutorials/conductivity.json"
 		},
 		{
+			"id": "mercury",
+			"title": "Liquid mercury, beside water",
+			"summary": "A beaker of mercury beside water and a blue solution, to see how the renderer draws a metal: opaque, but without the mirror-like silver a real one has.",
+			"bench": "benches/mercury.json",
+			"tutorial": null
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

@@ -58,6 +58,7 @@
 				}
 			]
 		},
+		"mercury": {"kind": "absorb", "bands": [{"centre_cm1": 20000, "fwhm_cm1": 400000, "peak": 10000}]},
 		"cobalt_ion": {"kind": "absorb", "bands": [{"centre_cm1": 19450, "fwhm_cm1": 2700, "peak": 4.0}, {"centre_cm1": 21600, "fwhm_cm1": 3500, "peak": 2.0}]},
 		"iron_hydroxo_ion": {"kind": "absorb", "bands": [{"centre_cm1": 33700, "fwhm_cm1": 8900, "peak": 2000}]},
 		"malachite": {

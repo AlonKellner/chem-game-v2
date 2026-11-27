@@ -1369,3 +1369,15 @@ Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, t
     Chem. 10, 51, reports to 400 nm, behind a paywall). Iron(III)'s yellow is this tail.
   - Fe³⁺'s own absorption, under about 100 past 330 nm, and iron(II)'s, at 960 nm, are left out: neither colours a
     solution in the visible.
+
+## Mercury (a look at metals)
+
+A liquid metal for the renderer's sake (the user's request, 2026-11-27: "an experiment which involves a vessel with
+liquid mercury ... to see the coloration and reflection of the metallic look"). Read 2026-11-27.
+
+- **Its weight**: CIAAW's abridged 200.59. **Its thermodynamics**: NIST-JANAF's Hg-001 at 298.15 K, Cp 27.978 and S°
+  76.028 J/mol·K, ΔfH° nought. **Its density**: the CRC Handbook's 13.534 g/cm³ at 25 C (PubChem).
+- **Its look**: there is no metal in the renderer. Every liquid takes water's refractive index in the visible, and a
+  complex index n + ik enters the pass only in the long-wave range. So mercury is given an absorption that makes it
+  opaque, 10,000 L/mol/cm over the visible at its 67.5 mol/L, **calibrated** to opacity. Its silver, a surface that
+  turns back about three quarters of the light, is what the pass lacks.
