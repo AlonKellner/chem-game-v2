@@ -173,6 +173,9 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// its concentration in the solvent, mol/m^3
 	double solvent = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] == 0) {
+			continue; // (Stage 75: it adds nothing, and its volume at T is two of Kell's evaluations)
+		}
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 		solvent += def.phase == Phase::Liquid ? static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, temperature) : 0.0; // at T (Stage 67)
 	}
@@ -722,9 +725,12 @@ void Simulation::exchange_gases() {
 		}
 		const double c = P_ATMOSPHERE / (GAS_CONSTANT * t), inverse = 1.0 / na + 1.0 / nb;
 		for (size_t s = 0; s < a.amount.size(); ++s) {
+			if (a.amount[s] == 0 && b.amount[s] == 0) {
+				continue; // (Stage 75: before its diffusion, a power, is worked out)
+			}
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const double d = gas_diffusion(table, id, t);
-			if (!(d > 0.0) || (a.amount[s] == 0 && b.amount[s] == 0)) {
+			if (!(d > 0.0)) {
 				continue;
 			}
 			const double xa = static_cast<double>(a.amount[s]) * MOL_PER_QUANTUM / na, xb = static_cast<double>(b.amount[s]) * MOL_PER_QUANTUM / nb;
