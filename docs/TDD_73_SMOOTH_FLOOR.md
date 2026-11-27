@@ -12,7 +12,7 @@ merge, the user, 2026-11-27: "Very well, go ahead". GAME_SPEC 0.73.0.
 | 73.2 | One unstable plate's form, the correction at every Nusselt number | Done |
 | 73.3 | Tests: continuous and rising; one surface everywhere | Done |
 | 73.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 73.5 | `make gates`; the user's sign-off | Open |
+| 73.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 73.1 The source
 
@@ -56,7 +56,16 @@ What the sessions print, Stage 72 against 73:
 
 Every other test passes, the experiments' results within their own tolerances. `make sessions APPROVED=1`.
 
+## 73.5 The gates
+
+`make gates`, at a load of 18 to 52 (other worktrees' gates): every entry passed but `lab_tests.signals.12`, a
+monitor's cost a frame held to 3 ms of its thread's time, which also failed at two of Stage 72's runs under load
+and passes alone. Run again from the result cache (11 entries), every gate passed.
+
 ## Open
+
+- `signals.12` fails under a heavy load (three gates of the last five, the machine at 20 to 50); a cost held by
+  CPU time still feels a crowded machine.
 
 - The hand-over at Ra = 10⁷ (8.37 to 8.35) steps up by 2 to 6 %; a blend would want Raithby and Hollands' own
   method, which was not read.
