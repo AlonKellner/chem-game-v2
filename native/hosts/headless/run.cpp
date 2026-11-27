@@ -180,8 +180,10 @@ int run_session(int argc, char **argv, bool bench) {
 		if (record_path.empty() && check_path.empty()) {
 			return status;
 		}
-		// (Stage 64) unchecked, its digests are the checked run's (D1): a record made or compared in a fraction of the time
-	} else if (status == 0) {
+		// (Stage 64) unchecked, its digests and results are the checked run's (D1): a record made or compared, and what
+		// was measured, in a fraction of the time
+	}
+	if (status == 0) {
 		print_results(report, start);
 		if (!report.at("conserved").at("unchanged").get<bool>()) {
 			status = 1;
