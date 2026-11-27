@@ -29,7 +29,7 @@
 //                            what it showed (3, linear); or what the room showed at 1x when last seen whole (4,
 //                            linear); x and y clamped to the screen (below: a view's change)
 
-const int HEADER_VECS = 8;
+const int HEADER_VECS = 9;
 const int BODY_VECS = 8;
 const int MAX_BODIES = 256;
 const float GRID_SQUARE = 40.0;
@@ -40,10 +40,11 @@ const int GRID_VECS = 4; // a square's vec4s: its count, then its bodies
 const int GRID_BASE = HEADER_VECS + MAX_BODIES * BODY_VECS;
 const int ROW = 401;
 const int LWIR_ROW = 301; // a row's long-wave segment (Stage 46): at 20 nm from 8000 nm, after every set's visible rows
-const int ROWS_PER_SET = 9;
+const int ROWS_PER_SET = 10;
 const int BUBBLE_ROW = 6; // what a vessel's bubbles turn back, their albedo (Stage 45)
 const int BANDS_ROW = 7; // a layered vessel's bands (Stage 47)
-const int TEMPS_ROW = 8; // a vessel's temperatures by height, its wall's and its contents' (Stage 53)
+const int LIQUID_K_ROW = 8; // its liquid's k: a metal's (Stage 78)
+const int TEMPS_ROW = 9; // a vessel's temperatures by height, its wall's and its contents' (Stage 53)
 const int TEMPS_CONTENTS = 49; // where its contents' begin in that row (after its wall's, at most 24 points)
 const int TEMPS_HOTTEST = 399; // its hottest
 const int LIGHT_ENTRIES = 4097;
@@ -691,6 +692,124 @@ float liquid_at(int body, int rows, float nm, float y) {
 	return depth;
 }
 
+// ---- the room's faces, ruled as the wall is (GAME_SPEC §12.3, Stage 78)
+//
+// A ray that comes to a face of the room's cube off its black edge cells (the front, the sides, the top and the
+// bottom: a mirror shows them) is put at FACE_X + face * FACE_STRIDE + u, FACE_Y + v: the face's own place, from its
+// corner (lab/optics_scene.hpp). The header's ninth vec4 says how each is ruled: its white, its lines' radiance, a
+// line's width and the pitch (0: plain, each face its mean as the wall's table has it, far off to the right). Read
+// exactly, as the wall's table is: a row's lines across by how much of it they cover (its profile, below 0), and the
+// lines down the row in closed form.
+const float FACE_X = 131072.0;
+const float FACE_STRIDE = 65536.0;
+const float FACE_Y = 131072.0;
+
+bool faces_ruled() {
+	return scene_vec(8).w > 0.0;
+}
+
+// how much of the way from 0 to a, along one way of a face, its lines cover
+float face_lines(float a) {
+	vec4 f = scene_vec(8);
+	float n = floor(a / f.w);
+	return n * f.z + clamp(a - n * f.w, 0.0, f.z);
+}
+
+// the black of the cube's edge cells (the wall's table, far off to the left)
+float face_edge() {
+	int m = int(wall_of(0).x);
+	return wall_of(WALL_BREAK_BASE + m + int(wall_of(WALL_ROW_BASE).x) * (m + 1)).x; // (a row's first cell, far left)
+}
+
+// A face's row from y0 to y1 (the face's place, as put): its profile, below -1: how much of it lies in the black
+// cells along the face's edges (b, of 64) and how much of the rest its lines across cover (a, of 64), as
+// -2 - (a + 65 b)
+int face_profile(float y0, float y1) {
+	vec4 f = scene_vec(8);
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
+	float v0 = min(y0, y1) - FACE_Y;
+	float v1 = max(y0, y1) - FACE_Y;
+	float m0 = clamp(v0, cell, side - cell);
+	float m1 = clamp(v1, cell, side - cell);
+	float b = 0.0;
+	float a = 0.0;
+	if (v1 - v0 > 1.0e-5) {
+		b = 1.0 - (m1 - m0) / (v1 - v0);
+		a = m1 - m0 > 1.0e-5 ? (face_lines(m1) - face_lines(m0)) / (m1 - m0) : 0.0;
+	} else {
+		b = v0 < cell || v0 > side - cell ? 1.0 : 0.0;
+		a = v0 - floor(v0 / f.w) * f.w < f.z ? 1.0 : 0.0;
+	}
+	return -2 - (int(floor(a * 64.0 + 0.5)) + 65 * int(floor(b * 64.0 + 0.5)));
+}
+
+// where along its face a place is put (u), and where its face begins
+float face_origin(float x) {
+	return FACE_X + floor((x - FACE_X) / FACE_STRIDE) * FACE_STRIDE;
+}
+
+// the integral along a face's row (its lines across covering `across` of it) from u0 to u1, u1 at least u0: the
+// black cells at each end of it, its lines down it between
+float face_integral(float across, float u0, float u1) {
+	vec4 f = scene_vec(8);
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
+	float lit = mix(f.x, f.y, across);
+	float m0 = clamp(u0, cell, side - cell);
+	float m1 = clamp(u1, cell, side - cell);
+	float middle = lit * (m1 - m0) + (f.y - lit) * (face_lines(m1) - face_lines(m0));
+	return middle + face_edge() * ((u1 - u0) - (m1 - m0));
+}
+
+// the mean along a face's row of profile `profile` from a to b
+float face_span(int profile, float a, float b) {
+	vec4 f = scene_vec(8);
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
+	int k = -2 - profile;
+	float across = float(k - 65 * (k / 65)) / 64.0;
+	float edged = float(k / 65) / 64.0;
+	float lo = min(a, b);
+	float hi = max(a, b);
+	float origin = face_origin(lo);
+	float u0 = lo - origin;
+	float u1 = hi - origin;
+	float mean = 0.0;
+	if (u1 - u0 < 1.0e-5) {
+		bool edge = u0 < cell || u0 > side - cell;
+		bool on = u0 - floor(u0 / f.w) * f.w < f.z;
+		mean = edge ? face_edge() : (on ? f.y : mix(f.x, f.y, across));
+	} else {
+		mean = face_integral(across, u0, u1) / (u1 - u0);
+	}
+	return mix(mean, face_edge(), edged);
+}
+
+// swept_wall on a face: its footprint's two ends move from a0 and a to b0 and b; the mean over the sweep of what
+// lies between them, at eight places along it (each read exactly)
+float face_swept(int profile, float a0, float a, float b0, float b) {
+	float w0 = a - a0;
+	float w1 = b - b0;
+	if (w0 * w1 < 0.0) {
+		return 0.5 * (face_span(profile, a0, a) + face_span(profile, b0, b));
+	}
+	if (abs(w0 + w1) < 2.0e-4) {
+		return face_span(profile, 0.5 * (a0 + a), 0.5 * (b0 + b));
+	}
+	float sum = 0.0;
+	float widths = 0.0;
+	for (int i = 0; i < 8; i++) {
+		float t = (float(i) + 0.5) / 8.0;
+		float lo = mix(a0, b0, t);
+		float hi = mix(a, b, t);
+		float w = abs(hi - lo);
+		sum = sum + w * face_span(profile, lo, hi);
+		widths = widths + w;
+	}
+	return widths > 0.0 ? sum / widths : face_span(profile, 0.5 * (a0 + b0), 0.5 * (a + b));
+}
+
 // ---- the wall behind the bodies (GAME_SPEC §12.3): a table, read exactly
 
 
@@ -712,6 +831,9 @@ struct WallAt {
 // the profile of the row a place is on: a row of the screen, the row over it or the row under it (a ray that
 // lands beyond the screen reads the wall as it is just past the screen's edge, Stage 30)
 int wall_profile(float y) {
+	if (y >= 0.5 * FACE_Y) {
+		return face_profile(floor(y), floor(y) + 1.0); // (Stage 78) a face's row
+	}
 	return int(wall_of(WALL_ROW_BASE + clamp(int(floor(y)), -1, WALL_ROWS)).x);
 }
 
@@ -766,6 +888,9 @@ float wall_between(WallAt r, WallAt w) {
 float wall_span(int profile, float a, float b) {
 	if (band_range == 1) {
 		return 1.0; // the long-wave room is one black body (Stage 46): the wall is its light, wherever it is read
+	}
+	if (profile <= -2) {
+		return face_span(profile, a, b); // (Stage 78)
 	}
 	float lo = min(a, b);
 	float hi = max(a, b);
@@ -1213,6 +1338,9 @@ float swept_wall(int profile, float a0, float a, float b0, float b) {
 	if (band_range == 1) {
 		return 1.0;
 	}
+	if (profile <= -2) {
+		return face_swept(profile, a0, a, b0, b); // (Stage 78)
+	}
 	float w0 = a - a0;
 	float w1 = b - b0;
 	if (w0 * w1 < 0.0) {
@@ -1646,7 +1774,41 @@ float trace_index(int medium, float n_glass, float n_core) {
 // is one thing, of the index n_core)
 // (`alpha_glass`, `alpha_core`: the glass's absorption per cm, and the core's where the core is glass, a prism's;
 // Stage 46)
-Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block, float alpha_glass, float alpha_core) {
+// Fresnel's unpolarised reflectance onto a metal (Stage 78; Born and Wolf §13.2): from a clear medium of index n1 onto
+// one of n2 + i k2, the light arriving at cos_i; complex arithmetic by hand, a vec2 a number (the truth's is the core's
+// chem::optics::fresnel_reflectance, written apart)
+vec2 cx_mul(vec2 a, vec2 b) {
+	return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+vec2 cx_div(vec2 a, vec2 b) {
+	float d = b.x * b.x + b.y * b.y;
+	return vec2((a.x * b.x + a.y * b.y) / d, (a.y * b.x - a.x * b.y) / d);
+}
+vec2 cx_root(vec2 a) {
+	float m = sqrt(a.x * a.x + a.y * a.y);
+	float re = sqrt(max(0.0, 0.5 * (m + a.x)));
+	float im = sqrt(max(0.0, 0.5 * (m - a.x)));
+	return vec2(re, a.y < 0.0 ? -im : im);
+}
+float metal_reflectance(float n1, float n2, float k2, float cos_i) {
+	vec2 a = vec2(n1, 0.0);
+	vec2 b = vec2(n2, k2);
+	vec2 ci = vec2(cos_i, 0.0);
+	vec2 ratio = cx_div(a, b);
+	vec2 r2 = cx_mul(ratio, ratio);
+	vec2 ct = cx_root(vec2(1.0 - r2.x * (1.0 - cos_i * cos_i), -r2.y * (1.0 - cos_i * cos_i)));
+	vec2 a_ci = cx_mul(a, ci);
+	vec2 b_ct = cx_mul(b, ct);
+	vec2 b_ci = cx_mul(b, ci);
+	vec2 a_ct = cx_mul(a, ct);
+	vec2 rs = cx_div(vec2(a_ci.x - b_ct.x, a_ci.y - b_ct.y), vec2(a_ci.x + b_ct.x, a_ci.y + b_ct.y));
+	vec2 rp = cx_div(vec2(b_ci.x - a_ct.x, b_ci.y - a_ct.y), vec2(b_ci.x + a_ct.x, b_ci.y + a_ct.y));
+	return min(1.0, 0.5 * (rs.x * rs.x + rs.y * rs.y + rp.x * rp.x + rp.y * rp.y));
+}
+
+// (`k_core`, Stage 78: the core's k, a metal's; nought for a clear core. A ray that comes to a core with k is turned
+// back by metal_reflectance and the rest absorbed in its skin: it never goes in)
+Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, int block, float alpha_glass, float alpha_core, float k_core) {
 	Traced r;
 	vec3 o = from;
 	vec3 u = heading;
@@ -1793,6 +1955,15 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 				float c1 = trace_index(here, n_glass, n_core);
 				float c2 = trace_index(beyond, n_glass, n_core);
 				float ccos_i = -dot3(cn, u);
+				if (beyond == 2 && k_core > 0.0) {
+					// onto a metal (Stage 78): turned back by its reflectance, the rest absorbed
+					float cr = metal_reflectance(c1, c2, k_core, ccos_i);
+					r.absorbed = r.absorbed + r.pass * (1.0 - cr);
+					r.pass = r.pass * cr;
+					u = vec3(u.x + 2.0 * ccos_i * cn.x, u.y + 2.0 * ccos_i * cn.y, u.z + 2.0 * ccos_i * cn.z);
+					r.route = r.route * uint(31) + uint(2 * (100 + which)) + uint(600);
+					continue;
+				}
 				float ceta = c1 / c2;
 				float csin2 = ceta * ceta * (1.0 - ccos_i * ccos_i);
 				if (csin2 >= 1.0) {
@@ -1883,6 +2054,15 @@ Traced trace_shape(int s, vec3 from, vec3 heading, float n_glass, float n_core, 
 		float n1 = trace_index(here, n_glass, n_core);
 		float n2 = trace_index(there, n_glass, n_core);
 		float cos_i = -dot3(n, u);
+		if (there == 2 && k_core > 0.0) {
+			// onto a metal (Stage 78): turned back by its reflectance, the rest absorbed
+			float mr = metal_reflectance(n1, n2, k_core, cos_i);
+			r.absorbed = r.absorbed + r.pass * (1.0 - mr);
+			r.pass = r.pass * mr;
+			u = vec3(u.x + 2.0 * cos_i * n.x, u.y + 2.0 * cos_i * n.y, u.z + 2.0 * cos_i * n.z);
+			r.route = r.route * uint(31) + uint(2 * (hit + 1)) + uint(600);
+			continue;
+		}
 		float eta = n1 / n2;
 		float sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
@@ -1974,6 +2154,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	float n_glass = row_at(start + 4 * ROW, nm);
 	float n_in = core == 0 || lies ? row_at(start + 3 * ROW, nm) : (core == 2 ? n_glass : 1.0);
 	float alpha = row_at(start + 2 * ROW, nm); // its glass's absorption per cm (Stage 46)
+	float k_in = (core == 0 || lies) && !prism ? row_at(start + LIQUID_K_ROW * ROW, nm) : 0.0; // its liquid's k (Stage 78)
 	// The body's frame: cm from its axis, y up from its foot. Turned (Stage 30; upside down is half a turn), the
 	// line is turned back about the pivot first, and the line it leaves on turned forward again.
 	float c = turned ? turn.z : 1.0;
@@ -1989,7 +2170,7 @@ BodyMet trace_body(int body, int core, float nm, float z_axis, vec3 lp, vec3 lu)
 	float back = reach - dot3(vec3(-p.x, rect.w * 0.5 * cm - p.y, -p.z), u);
 	vec3 o = vec3(p.x - back * u.x, p.y - back * u.y, p.z - back * u.z);
 	trace_level = vec2(sn / cm, -c / cm);
-	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1, alpha, prism || core == 2 ? alpha : 0.0);
+	Traced l = trace_shape(s, o, u, n_glass, prism ? n_glass : n_in, lies ? block : -1, alpha, prism || core == 2 ? alpha : 0.0, k_in);
 	if (l.meetings == 0) {
 		return e;
 	}
@@ -2134,6 +2315,79 @@ vec3 room_exit(vec3 p, vec3 u, float wall, float side, float cell) {
 	return vec3(1.0, 0.0, 0.0);
 }
 
+// (Stage 78) which face a ray from p along u comes to: 0 the front, 1 and 2 the left and right, 3 and 4 the top and
+// bottom, -1 the wall; and where on it (pixels from its corner), as room_exit finds it
+vec3 room_face(vec3 p, vec3 u, float wall, float side) {
+	float half_side = 0.5 * side;
+	vec4 middle = scene_vec(4);
+	vec3 lo = vec3(middle.x - half_side, middle.y - half_side, wall - side);
+	vec3 hi = vec3(middle.x + half_side, middle.y + half_side, wall);
+	float tx = abs(u.x) > 1.0e-9 ? ((u.x > 0.0 ? hi.x : lo.x) - p.x) / u.x : 1.0e30;
+	float ty = abs(u.y) > 1.0e-9 ? ((u.y > 0.0 ? hi.y : lo.y) - p.y) / u.y : 1.0e30;
+	float tz = abs(u.z) > 1.0e-9 ? ((u.z > 0.0 ? hi.z : lo.z) - p.z) / u.z : 1.0e30;
+	float t = max(min(tx, min(ty, tz)), 0.0);
+	vec3 h = vec3(p.x + t * u.x, p.y + t * u.y, p.z + t * u.z);
+	if (tz <= tx && tz <= ty) {
+		// the front; or the wall (-1), whose edge cells are the table's
+		return vec3(u.z > 0.0 ? -1.0 : 0.0, clamp(h.x - lo.x, 0.0, side), clamp(h.y - lo.y, 0.0, side));
+	}
+	if (tx <= ty) {
+		return vec3(u.x < 0.0 ? 1.0 : 2.0, clamp(h.z - lo.z, 0.0, side), clamp(h.y - lo.y, 0.0, side));
+	}
+	return vec3(u.y < 0.0 ? 3.0 : 4.0, clamp(h.x - lo.x, 0.0, side), clamp(h.z - lo.z, 0.0, side));
+}
+
+// (Stage 78) Where a line from p along u enters body k's box, and the place of its picture met there: a flat thing
+// is a box as deep as it is wide about its layer's plane (z_layer), its picture on its front and back as drawn, on its
+// sides with its width laid along its depth, on its top and bottom its edge row; a body that bends is boxed loosely
+// round its shape (`bends`: a test before its own tracing, no place). x: how far along the line (-1: it misses).
+vec3 box_meet(int k, vec3 p, vec3 u, float z_layer, bool bends) {
+	vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
+	float grow = bends ? 0.5 * max(rect.z, rect.w) + 2.0 : 0.0;
+	float d = bends ? 0.5 * max(rect.z, rect.w) + 2.0 : 0.5 * rect.z;
+	vec3 lo = vec3(rect.x - grow, rect.y - grow, z_layer - d);
+	vec3 hi = vec3(rect.x + rect.z + grow, rect.y + rect.w + grow, z_layer + d);
+	float t0 = -1.0e30;
+	float t1 = 1.0e30;
+	int axis = -1;
+	for (int i = 0; i < 3; i++) {
+		float o = i == 0 ? p.x : (i == 1 ? p.y : p.z);
+		float v = i == 0 ? u.x : (i == 1 ? u.y : u.z);
+		float a = i == 0 ? lo.x : (i == 1 ? lo.y : lo.z);
+		float b = i == 0 ? hi.x : (i == 1 ? hi.y : hi.z);
+		if (abs(v) < 1.0e-12) {
+			if (o < a || o > b) {
+				return vec3(-1.0, 0.0, 0.0);
+			}
+			continue;
+		}
+		float ta = (a - o) / v;
+		float tb = (b - o) / v;
+		float near = min(ta, tb);
+		float far = max(ta, tb);
+		if (near > t0) {
+			t0 = near;
+			axis = i;
+		}
+		t1 = min(t1, far);
+	}
+	if (!(t0 <= t1) || !(t1 > 0.0)) {
+		return vec3(-1.0, 0.0, 0.0);
+	}
+	if (bends || t0 < 0.0) {
+		return vec3(max(t0, 0.0), 0.0, 0.0);
+	}
+	vec3 h = ray_point(p, u, t0);
+	float x = clamp(h.x, rect.x + 1.0e-3, rect.x + rect.z - 1.0e-3);
+	float y = clamp(h.y, rect.y + 1.0e-3, rect.y + rect.w - 1.0e-3);
+	if (axis == 0) {
+		x = rect.x + clamp((h.z - lo.z) / max(2.0 * d, 1.0e-6), 1.0e-4, 1.0 - 1.0e-4) * rect.z; // a side: its width along its depth
+	} else if (axis == 1) {
+		y = u.y > 0.0 ? rect.y + 1.0e-3 : rect.y + rect.w - 1.0e-3; // its top or its bottom: the edge row
+	}
+	return vec3(t0, x, y);
+}
+
 RayMet ray_met(vec2 p, float nm) {
 #ifdef OPTICS_RAY_HOOK
 	OPTICS_RAY_HOOK();
@@ -2167,6 +2421,9 @@ RayMet ray_met(vec2 p, float nm) {
 	// met it): from there on the panels are not in its way (it sees the room's wall, wherever it goes, as over the
 	// bench)
 	bool through_hand = hand_over(p);
+	// (Stage 78) whether the ray left a body turned back toward the eye or sideways, and which
+	bool turned_back = false;
+	int left_k = -1;
 	for (int guard = 0; guard < 16; guard++) {
 		if (last < 0 || !lands) {
 			break;
@@ -2272,19 +2529,87 @@ RayMet ray_met(vec2 p, float nm) {
 					lands = false;
 					r.x = 100000.0; // (one place for every ray that never reaches the wall: it shows the room in front)
 					r.y = lp.y;
+					turned_back = met.left && !met.solid;
+					left_k = k;
 					break;
 				}
 			}
 		}
 		last = first - 1;
 	}
+	if (turned_back && !cut_off) {
+		// (Stage 78) A ray turned back toward the eye or sideways (by a mirror, a rim) meets what is in its way in the
+		// room's three dimensions: the nearest of every body, a vessel by its own surfaces, a flat thing as a box as
+		// deep as it is wide that shows its picture on every side; four at most, then the room's faces.
+		for (int turn = 0; turn < 4; turn++) {
+			float best = 1.0e30;
+			int which = -1;
+			BodyMet e_best = trace_body(-1, 0, nm, 0.0, lp, lu);
+			vec2 where_best = vec2(0.0, 0.0);
+			for (int k = 0; k < MAX_BODIES; k++) {
+				if (k >= count) {
+					break;
+				}
+				if (k == left_k || hidden(k) || in_panel(k)) {
+					continue;
+				}
+				float zk = -scene_vec(HEADER_VECS + k * BODY_VECS + 5).y * gap;
+				vec3 hit = box_meet(k, lp, lu, zk, trace_bends(k));
+				if (!(hit.x > 1.0e-3) || !(hit.x < best)) {
+					continue;
+				}
+				if (trace_bends(k)) {
+					vec3 at = ray_point(lp, lu, hit.x);
+					BodyMet e = trace_body(k, trace_core(k, at.y), nm, zk, lp, lu);
+					float entry = e.entry;
+					if (e.met && entry > 1.0e-3 && entry < best) {
+						best = entry;
+						which = k;
+						e_best = e;
+						vec3 in_at = ray_point(lp, lu, entry);
+						where_best = vec2(in_at.x, in_at.y);
+					}
+				} else if (layer_at(k, vec2(hit.y, hit.z), 1.0e-3, 1.0e-3).cover > 0.5) {
+					best = hit.x;
+					which = k;
+					where_best = vec2(hit.y, hit.z);
+				}
+			}
+			if (which < 0) {
+				break;
+			}
+			bool bends = trace_bends(which);
+			h = route_mix(h, uint(which * 8 + 6));
+			h = route_mix(h, bends ? e_best.route : 3u);
+			if (r.count < 4) {
+				r = met_put(r, r.count, vec4(float(which), bends ? (e_best.solid ? 3.0 : 1.0) : 0.0, bends ? e_best.pass : 1.0, bends ? (e_best.solid ? 2.0 * e_best.chord : e_best.chord) : 0.0), where_best, bends ? e_best.absorbed : 0.0);
+				r.count = r.count + 1;
+			}
+			left_k = which;
+			if (bends) {
+				lp = e_best.at;
+				lu = e_best.toward;
+				if (!e_best.left || e_best.solid) {
+					break; // it ended in it
+				}
+			} else {
+				lp = ray_point(lp, lu, best + 1.0e-3); // (on through what the picture lets pass)
+			}
+		}
+	}
 	float side = scene_vec(3).z;
 	if (side > 0.0 && !cut_off) {
 		// in a room: to whichever face it comes to; the wall where it reaches it, else far off to one side
 		vec3 comes = room_exit(lp, lu, wall, side, scene_vec(3).w);
+		vec3 face = faces_ruled() ? room_face(lp, lu, wall, side) : vec3(-1.0, 0.0, 0.0);
 		if (comes.x < 0.5) {
 			r.x = comes.y;
 			r.y = comes.z;
+		} else if (face.x >= 0.0) {
+			// (Stage 78) a face, ruled, its edge cells with it: where on it
+			r.x = FACE_X + face.x * FACE_STRIDE + face.y;
+			r.y = FACE_Y + face.z;
+			h = route_mix(h, uint(face.x) + 50u);
 		} else {
 			r.x = comes.x > 1.5 ? -100000.0 : 100000.0;
 			r.y = lp.y;
@@ -2835,8 +3160,8 @@ float wall_one(float x_lo, float x_hi, float y_lo, float y_hi) {
 	if (band_range == 1) {
 		return 1.0;
 	}
-	if (!(y_hi - y_lo < 7.0)) {
-		return -1.0; // (or landing nowhere)
+	if (!(y_hi - y_lo < 7.0) || x_lo >= 0.5 * FACE_X) {
+		return -1.0; // (or landing nowhere; or on a face of the room, Stage 78: read as it is ruled)
 	}
 	int first = int(floor(y_lo));
 	int last = int(floor(y_hi));
@@ -2889,7 +3214,8 @@ float beam_wall(float top, float bottom, vec4 xa, vec4 xb, float taper) {
 		// point's end of a piece was counted for more than its share of the pixel, and a pixel's mean was not its
 		// rays' mean by a part in fifteen of such a line.)
 		float weight = taper > 0.5 ? 2.0 * (1.0 - f) : (taper < -0.5 ? 2.0 * f : 1.0);
-		sum = sum + (yb - ya) * weight * swept_wall(beam_profile(ym), mix(xa.x, xa.z, f), mix(xa.y, xa.w, f), mix(xb.x, xb.z, f), mix(xb.y, xb.w, f));
+		int piece = lo >= 0.5 * FACE_Y ? face_profile(ya, yb) : beam_profile(ym); // (a face's: the piece's own lines across, Stage 78)
+		sum = sum + (yb - ya) * weight * swept_wall(piece, mix(xa.x, xa.z, f), mix(xa.y, xa.w, f), mix(xb.x, xb.z, f), mix(xb.y, xb.w, f));
 	}
 	return sum / (hi - lo);
 }

@@ -291,6 +291,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	put(5, 1, room.pixel_y0);
 	put(5, 2, GRID_SQUARE * room.pixel);
 	put(4, 3, room.range);
+	put(8, 0, room.face_white); // (Stage 78) the faces' ruling
+	put(8, 1, room.face_ruled);
+	put(8, 2, room.face_line);
+	put(8, 3, room.face_pitch);
 	for (int k = 0; k < 2; ++k) { // (Stage 61) the screen's panels
 		for (int c = 0; c < 4; ++c) {
 			put(6 + k, c, room.panels[k][c]);
@@ -629,14 +633,35 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 		const double solid_ml = v.solid_ml; // its solids alone: a solute's volume is the solution's (Stage 26)
 		if (v.liquid_ml > 0.0 || !v.glassware.empty()) {
-			// a liquid's index is water's: the solutes' share is not modelled (GAME_SPEC §20); a glassware vessel's
-			// liquid core is water's even while empty (Stage 24): what lies in it says where its liquid is (Stage 30)
-			const Spectrum &n = chem::optics::refractive_index(chem::builtin_species().find("water"));
-			for (size_t i = 0; i < n.size(); ++i) {
-				liquid_index[i] = static_cast<float>(n[i]);
+			// a liquid's index is its liquids', by their volumes (Stage 78): water's for a solution, mercury's (n + ik)
+			// for mercury; the solutes' share is not modelled (GAME_SPEC §20); a glassware vessel's liquid core is
+			// water's even while empty (Stage 24): what lies in it says where its liquid is (Stage 30)
+			Spectrum n_sum{}, k_sum{};
+			double weight = 0.0;
+			for (const SubstanceView &s : v.contents) {
+				const chem::SpeciesId id = s.wall || s.phase != 'l' || !(s.ml > 0.0) ? chem::SpeciesId{ -1 } : chem::builtin_species().find(s.species);
+				if (id.index < 0 || chem::optics::refractive_index(id)[0] == 1.0) {
+					continue; // (none known: a liquid of no index is not weighed)
+				}
+				const Spectrum &n = chem::optics::refractive_index(id), &k = chem::optics::extinction_index(id);
+				for (size_t i = 0; i < n.size(); ++i) {
+					n_sum[i] += s.ml * n[i];
+					k_sum[i] += s.ml * k[i];
+				}
+				weight += s.ml;
 			}
+			const Spectrum &water_n = chem::optics::refractive_index(chem::builtin_species().find("water"));
+			float *liquid_k = &rows[static_cast<size_t>((set * ROWS_PER_SET + LIQUID_K_ROW) * ROW)];
+			for (size_t i = 0; i < water_n.size(); ++i) {
+				liquid_index[i] = static_cast<float>(weight > 0.0 ? n_sum[i] / weight : water_n[i]);
+				liquid_k[i] = static_cast<float>(weight > 0.0 ? k_sum[i] / weight : 0.0);
+			}
+			// in the long-wave water's; a metal, known only in the visible, its reddest measured index there (Stage 78,
+			// GAME_SPEC §20: liquid mercury turns back 0.78 at 780 nm, more in the long-wave)
+			const bool metal = liquid_k[water_n.size() - 1] > 0.0f;
 			for (int i = 0; i < LWIR_ROW; ++i) {
-				lw[LIQUID_INDEX_ROW * LWIR_ROW + i] = static_cast<float>(media.water_n[static_cast<size_t>(i)]);
+				lw[LIQUID_INDEX_ROW * LWIR_ROW + i] = metal ? liquid_index[water_n.size() - 1] : static_cast<float>(media.water_n[static_cast<size_t>(i)]);
+				lw[LIQUID_K_ROW * LWIR_ROW + i] = metal ? liquid_k[water_n.size() - 1] : 0.0f;
 			}
 		}
 
@@ -1123,17 +1148,27 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			scene.rectangle_bodies.push_back(b);
 		}
 	}
+	// (Stage 78) a body whose liquid is a metal: a mirror, whose rays may come to any other body in the room
+	const auto mirror = [&](int b) {
+		const size_t set = static_cast<size_t>(t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + SET) * 4]);
+		if ((set + 1) * static_cast<size_t>(ROWS_PER_SET * ROW) > rows.size()) {
+			return false;
+		}
+		const float *k = &rows[(set * ROWS_PER_SET + LIQUID_K_ROW) * ROW];
+		return k[0] > 0.0f || k[ROW / 2] > 0.0f || k[ROW - 1] > 0.0f;
+	};
 	// What stands behind each body, in its rows, on a layer further from the eye: a signature of it (where it
 	// stands, what it is and what it holds), which a pixel's history follows (GAME_SPEC §12.3): a pixel of a held
-	// vessel whose rays reach a body that has changed colour is read again
+	// vessel whose rays reach a body that has changed colour is read again (Stage 78: a mirror's, every other body)
 	for (int b = 0; b < count; ++b) {
+		const bool all = mirror(b);
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
 		const float layer = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4 + 1];
 		bool lower = false;
 		uint64_t h = 1469598103934665603ull;
 		for (int o = 0; o < count; ++o) {
 			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
-			if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+			if (all ? o != b : t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
 				lower = true;
 				h = fnv(other, 4 * sizeof(float), h);
 				h = fnv(&t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + FORM) * 4], 4 * sizeof(float), h);
@@ -1176,6 +1211,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const size_t set = static_cast<size_t>(t[at + SET * 4]);
 			if ((set + 1) * static_cast<size_t>(ROWS_PER_SET * ROW) <= rows.size()) {
 				h = fnv(&rows[(set * ROWS_PER_SET + 3) * ROW], 2 * ROW * sizeof(float), h); // its liquid's index and its glass's
+				h = fnv(&rows[(set * ROWS_PER_SET + LIQUID_K_ROW) * ROW], ROW * sizeof(float), h); // and its liquid's k (Stage 78)
 			}
 			h = fnv(lie + 2, (given ? 12 : 26) * sizeof(double), h);
 			const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)];
@@ -1266,9 +1302,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			bool lower = false;
 			uint64_t h = 1469598103934665603ull, now = h, was = h;
 			double low = 1.0e30, high = -1.0e30;
+			const bool all = mirror(b);
 			for (int o = 0; o < count; ++o) {
 				const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
-				if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+				if (all ? o != b : t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+					if (all) {
+						h = fnv(other, 4 * sizeof(float), h); // (a mirror's: where each stands, not only its shape)
+					}
 					lower = true;
 					h = fnv(&shape_tag[static_cast<size_t>(o)], sizeof(float), h);
 					now = fnv(&content_tag[static_cast<size_t>(o)], sizeof(float), now);

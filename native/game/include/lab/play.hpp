@@ -12,7 +12,8 @@
 //
 // "chem-play/1": {"format": "chem-play/1", "steps": [step, ...]}, a step:
 //   "to":     where the pointer goes, a named thing (Ui::locate: "item:acid", "square:4,8", "stir:flask") or
-//             [x, y]; without it the pointer stays
+//             [x, y]; without it the pointer stays. (Stage 78) A thing a list holds scrolled out of sight
+//             ("experiment:<id>") is scrolled to first, as a hand turns the wheel over the list (scroll_to)
 //   "frames": how many frames the step takes (1 without it); the pointer glides there evenly over them
 //   "button": what the button does on the step's last frame: "click", "right" (a click of the right button),
 //             "down" (pressed, and held through the steps after), "up" (let go); without it, as it was
@@ -23,6 +24,13 @@
 //   "shot":   (Stage 42) a name for a picture of the screen a host takes after the step's last frame
 //   "type":   (Stage 58) text typed on the step's last frame, after its button, a key a character
 namespace lab {
+
+// (Stage 78) A named thing a scrolled list holds out of sight (the experiments' list: "experiment:<id>", GAME_SPEC
+// §13.7): the wheel turned over the list ("experiments:scroll") a notch at a time, towards its end until the bar stops,
+// then towards its start, until the thing is on the screen. true when it is (at once when it already was); false when
+// the list does not hold it in sight anywhere (closed, or left by its search). Only the screen's own gestures: what a
+// player's hand does to find a row.
+bool scroll_to(Ui &ui, std::string_view what);
 
 class Play {
 public:

@@ -1,6 +1,8 @@
 // The tracer (GAME_SPEC §12.3, Stage 20).
 #include "lab/optics_trace.hpp"
 
+#include "chem/optics.hpp"
+
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -212,7 +214,19 @@ Vec3 inside_normal(const Inside &in, int which, const Vec3 &p) {
 
 } // namespace
 
-Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside, const std::array<double, MAX_MEDIA> *absorb) {
+Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<double, MAX_MEDIA> &index, const Inside *inside, const std::array<double, MAX_MEDIA> *absorb,
+		const std::array<double, MAX_MEDIA> *extinction) {
+	// a metal's k (Stage 78): nought for a clear medium
+	const auto k_of = [&](int medium) { return extinction != nullptr && medium >= 0 && medium < MAX_MEDIA ? (*extinction)[static_cast<size_t>(medium)] : 0.0; };
+	// at a metal (Stage 78): turned back by its complex Fresnel reflectance (Born and Wolf), the rest absorbed in its skin
+	const auto mirror = [&](Landing &out, Vec3 &dir, const Vec3 &n, double n1, int there, uint32_t mark) {
+		const double cos_i = -dot(n, dir);
+		const double r = chem::optics::fresnel_reflectance(n1, 0.0, index[static_cast<size_t>(there)], k_of(there), cos_i);
+		out.absorbed += out.pass * (1.0 - r);
+		out.pass *= r;
+		dir = Vec3{ dir.x + 2.0 * cos_i * n.x, dir.y + 2.0 * cos_i * n.y, dir.z + 2.0 * cos_i * n.z };
+		out.route = out.route * 31u + mark;
+	};
 	// what a medium takes in over a stretch of the way (Stage 46)
 	const auto take = [&](Landing &out, int medium, double cm) {
 		if (absorb != nullptr && medium >= 0 && medium < MAX_MEDIA) {
@@ -302,6 +316,10 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 					n = Vec3{ -n.x, -n.y, -n.z };
 				}
 				const double n1 = index[static_cast<size_t>(here)], n2 = index[static_cast<size_t>(there)];
+				if (k_of(there) > 0.0) {
+					mirror(out, u, n, n1, there, static_cast<uint32_t>(2 * (100 + which)) + 600u);
+					continue;
+				}
 				const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 				if (sin2 >= 1.0) {
 					if (++turned > TURNS_MOST) {
@@ -361,6 +379,10 @@ Landing trace(const Shape &shape, Vec3 o, Vec3 u, double wall, const std::array<
 			n = Vec3{ -n.x, -n.y, -n.z }; // against the ray
 		}
 		const double n1 = index[static_cast<size_t>(here)], n2 = index[static_cast<size_t>(there)];
+		if (k_of(there) > 0.0) {
+			mirror(out, u, n, n1, there, static_cast<uint32_t>(2 * (hit + 1)) + 600u);
+			continue;
+		}
 		const double cos_i = -dot(n, u), eta = n1 / n2, sin2 = eta * eta * (1.0 - cos_i * cos_i);
 		if (sin2 >= 1.0) {
 			// turned back, all of it

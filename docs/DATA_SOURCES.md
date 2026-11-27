@@ -1369,3 +1369,39 @@ Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, t
     Chem. 10, 51, reports to 400 nm, behind a paywall). Iron(III)'s yellow is this tail.
   - Fe³⁺'s own absorption, under about 100 past 330 nm, and iron(II)'s, at 960 nm, are left out: neither colours a
     solution in the visible.
+
+## Mercury (a look at metals)
+
+A liquid metal for the renderer's sake (the user's request, 2026-11-27: "an experiment which involves a vessel with
+liquid mercury ... to see the coloration and reflection of the metallic look"). Read 2026-11-27.
+
+- **Its weight**: CIAAW's abridged 200.59. **Its thermodynamics**: NIST-JANAF's Hg-001 at 298.15 K, Cp 27.978 and S°
+  76.028 J/mol·K, ΔfH° nought. **Its density**: the CRC Handbook's 13.534 g/cm³ at 25 C (PubChem).
+- **Its look**: until Stage 78 there was no metal in the renderer, and mercury was given an absorption that made it
+  opaque (10,000 L/mol/cm, calibrated). From Stage 78 it is its measured complex index (below): a mirror.
+
+### Liquid mercury's complex index (Stage 78)
+
+Read 2026-11-27, for traced reflection (`docs/TDD_78_REFLECTION.md`).
+
+- **Source**: T. Inagaki, E. T. Arakawa and M. W. Williams, "Optical properties of liquid mercury", Phys. Rev. B 23,
+  5246 (1981), DOI 10.1103/PhysRevB.23.5246 (OSTI 6208778). Spectroscopic ellipsometry of liquid mercury at room
+  temperature, the surface renewed by overflow, under vacuum, cyclohexane and quartz alike (no surface layer: the bulk
+  liquid's), combined with the earlier ellipsometry it lists; tabulated as the dielectric function at round photon
+  energies 0.2 eV apart.
+- **What was read**: the table's n and k from 1.4 to 3.6 eV (885.6 to 344.4 nm, twelve rows: the visible and one row
+  past each end), as transcribed by the refractiveindex.info database (`database/data/main/Hg/nk/Inagaki.yml`, git
+  blob 39e1461d, fetched 2026-11-27); the paper itself was not open to us. Their ε = n² − k², 2nk come out round
+  (−17.50 + 12.19i at 2.4 eV), as a table of ε converted would.
+- **How it is used** (`data/optics/media.json` `indices.mercury.nk_table`): read between the rows linearly in ε against
+  the photon's energy, n + ik its root, at each nanometre from 380 to 780. Normal reflectance from air 0.773 at 387 nm
+  rising to 0.783 at 775 nm.
+- **The check**: L. E. Smith and R. R. Stromberg, J. Opt. Soc. Am. 56, 1539 (1966), a separate ellipsometry at the
+  green line, 546.1 nm: ε = −18.46 + 13.50i (n 1.485, k 4.546; quoted by Arakawa, Inagaki and Williams, ORNL
+  CONF-790857-1, 1979, read through OSTI 6018359), a normal reflectance of 0.7787; Inagaki's at 546.1 nm gives 0.7792.
+  n and k differ by 4 % and 2 %: a reflectance hardly tells them apart. Tuminello, Arakawa, Inagaki and Parks (J.
+  Chem. Phys. 95, 4790, 1991) measured the normal reflectance directly at 24 °C and state it agrees with these
+  constants; their numbers were not open to us.
+- **Gate**: `measured: liquid mercury's index is Inagaki's and turns back Smith and Stromberg's share`.
+- **Confidence**: high for the reflectance (0.78 ± 0.01); medium for n and k apart (a few percent); the transcription
+  not yet compared with the printed table.
