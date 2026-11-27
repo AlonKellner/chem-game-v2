@@ -77,6 +77,14 @@ godot::String ChemLab::get_experiments_path() const {
 	return experiments_path_;
 }
 
+void ChemLab::set_capture_pictures(bool on) {
+	capture_pictures_ = on;
+}
+
+bool ChemLab::get_capture_pictures() const {
+	return capture_pictures_;
+}
+
 void ChemLab::set_progress_path(const godot::String &path) {
 	progress_path_ = path;
 }
@@ -203,7 +211,7 @@ void ChemLab::_ready() {
 			godot::UtilityFunctions::push_warning("ChemLab: the pictures ", path, ": ", godot::String::utf8(cg_last_error()));
 		}
 	}
-	cg_ui_set_capture_ahead(ui_, 1);
+	cg_ui_set_capture_ahead(ui_, capture_pictures_ ? 1 : 0);
 	if (!tutorial_path_.is_empty()) {
 		const godot::String tutorial = godot::FileAccess::get_file_as_string(tutorial_path_);
 		if (tutorial.is_empty() || cg_ui_tutor(ui_, tutorial.utf8().get_data()) != CG_OK) {
@@ -637,6 +645,9 @@ void ChemLab::_bind_methods() {
 	godot::ClassDB::bind_method(godot::D_METHOD("set_experiments_path", "path"), &ChemLab::set_experiments_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_experiments_path"), &ChemLab::get_experiments_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "experiments_path", godot::PROPERTY_HINT_FILE, "*.json"), "set_experiments_path", "get_experiments_path");
+	godot::ClassDB::bind_method(godot::D_METHOD("set_capture_pictures", "on"), &ChemLab::set_capture_pictures);
+	godot::ClassDB::bind_method(godot::D_METHOD("get_capture_pictures"), &ChemLab::get_capture_pictures);
+	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::BOOL, "capture_pictures"), "set_capture_pictures", "get_capture_pictures");
 	godot::ClassDB::bind_method(godot::D_METHOD("set_progress_path", "path"), &ChemLab::set_progress_path);
 	godot::ClassDB::bind_method(godot::D_METHOD("get_progress_path"), &ChemLab::get_progress_path);
 	ADD_PROPERTY(godot::PropertyInfo(godot::Variant::STRING, "progress_path"), "set_progress_path", "get_progress_path");
