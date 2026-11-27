@@ -1027,3 +1027,49 @@ TEST_CASE("experiment quota: followed with its own gestures, free, it completes 
 	pupil::follow_through(p, 7200);
 	completed(p);
 }
+
+namespace {
+
+// a solid's crystals in an item, as the lab's view counts them
+int64_t crystals_in(Pupil &p, const std::string &item, const std::string &species) {
+	for (const lab::ItemView &v : p.ui->lab().view().items) {
+		if (v.id == item) {
+			for (const lab::SubstanceView &s : v.contents) {
+				if (s.species == species) {
+					return s.particles;
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+} // namespace
+
+TEST_CASE("experiment seed: followed with its own gestures, strict, the stirred seed breeds and sets the excess out, the still one only grows (Stage 66)") {
+	Pupil p("data/benches/seed.json", "data/tutorials/seed.json");
+	CHECK(pupil::follow_through(p, 3600) > 5);
+	completed(p);
+	const double still = p.grams("still", "copper_sulfate_pentahydrate"), stirred = p.grams("stirred", "copper_sulfate_pentahydrate");
+	MESSAGE("still: " << still * 1e3 << " mg in " << crystals_in(p, "still", "copper_sulfate_pentahydrate") << "; stirred: " << stirred << " g in "
+					  << crystals_in(p, "stirred", "copper_sulfate_pentahydrate"));
+	CHECK(crystals_in(p, "still", "copper_sulfate_pentahydrate") == 1);
+	CHECK(still < 0.02);
+	CHECK(crystals_in(p, "stirred", "copper_sulfate_pentahydrate") > 100000);
+	CHECK(stirred == doctest::Approx(1.05).epsilon(0.03)); // the excess at 20 C, its waters with it, on the seed
+	report(p, { stirred });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 0.1"));
+}
+
+TEST_CASE("experiment seed: played as a person plays it, strict, it completes (Stage 66)") {
+	Pupil p("data/benches/seed.json", "data/tutorials/seed.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment seed: followed with its own gestures, free, it completes (Stage 66)") {
+	Pupil p("data/benches/seed.json", "data/tutorials/seed.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

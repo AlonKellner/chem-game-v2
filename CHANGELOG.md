@@ -16,6 +16,17 @@
   contacts as it loads, so its boiling's bubbles show at once. D2 holds at every command of the demo. The goldens
   unchanged.
 
+## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0, Stage 68 and 0.69.0; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 66, `docs/TDD_66_SEEDS.md`; the curriculum's C2, C16): **secondary nucleation**: where a surface law grows
+  its solid and the cell is stirred, the crystals breed, `secondary · ε · M · (S − 1)^secondary_order` fragments a
+  second (ε the stirring's W per kg of the liquid, M the crystals' kg), each one quantum; a still solution's seed only
+  grows. The copper sulfates 2e10 and 1.7, calibrated (no measured rate is open): linear in ε and M, the order Lyall's,
+  a stirred seed setting out a solution's excess 5 % over saturation half in a quarter of an hour. `chem_tool study
+  seed`; the generator refuses a rate without its order; the debug panel says what the stirring breeds. §13.7: the
+  experiment `seed` (curriculum 35). §20: equal spheres share a seed's mass with its fragments; the secondary rate
+  calibrated. No golden moved.
+
 ## Stage 68 (2026-11-26; GAME_SPEC stays 0.67.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed to fix the open bugs")
 
 - The gates (`docs/TDD_68_GATES_FAST.md`, `docs/WORKFLOW.md`): `make gates` 2,579 s to 1,307 s, then (68.9, the user's

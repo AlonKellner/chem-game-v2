@@ -171,7 +171,10 @@ struct Term {
 // whose molality (its concentration, not its activity) the surface rate goes with; it is what transport
 // brings, or else the reaction's dissolved species (chem/sim.hpp). Where `in` is a product, new
 // particles form in a supersaturated solution, nucleation * (kg of solvent) *
-// (S - 1)^nucleation_order per second, S = e^(A/RT); each begins as one quantum.
+// (S - 1)^nucleation_order per second, S = e^(A/RT); each begins as one quantum. Where the
+// cell is stirred, its crystals breed (Stage 66, secondary nucleation): secondary * (the
+// stirring's W per kg of liquid) * (kg of the crystals) * (S - 1)^secondary_order new particles
+// per second, fragments of one quantum each.
 struct Kinetics {
 	enum class Law : uint8_t { None, FirstOrder, Equilibrium, Surface };
 	Law law = Law::None;
@@ -185,6 +188,8 @@ struct Kinetics {
 	// Surface (Stage 57): its solid dissolves into its solution at transport's pace, its surface's step a thousand
 	// times its growth's (a crystal gives up its ions; only its growth builds a lattice)
 	bool dissolves_by_transport = false;
+	double secondary = 0.0; // Surface (Stage 66): 1/s per (W/kg) per kg of the crystals
+	double secondary_order = 0.0;
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {
