@@ -20,6 +20,7 @@ bool near(double a, double b, double rel) {
 // IUPAC's abridged standard atomic weights (CIAAW), g/mol
 constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990, NI = 58.693;
 constexpr double CL = 35.45, K = 39.098, P = 30.974, BR = 79.904; // (Stage 64)
+constexpr double CA = 40.078, MG = 24.305, BA = 137.33, AG = 107.87, FE = 55.845, ZN = 65.38, AL = 26.982, CO = 58.933; // (Stage 76)
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -115,6 +116,21 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::potassium_hydrogen_phthalate, K + 8 * C + 5 * H + 4 * O, 1.644 }, // COD 1511782 (Riley et al. 2013), 296 K
 		{ builtin::phosphoric_acid_aq, 3 * H + P + 4 * O, 0.0 },
 		{ builtin::bromothymol_blue_ion, 27 * C + 27 * H + 2 * BR + 5 * O + S, 0.0 },
+		// (Stage 76) the CRC Handbook's densities (PubChem; Ag2O, Zn(OH)2 and Co(OH)2 as Wikipedia gives the CRC's), calcite's its
+		// specific gravity
+		{ builtin::silver_chloride, AG + CL, 5.56 },
+		{ builtin::silver_oxide, 2 * AG + O, 7.14 },
+		{ builtin::barium_sulfate, BA + S + 4 * O, 4.49 },
+		{ builtin::barium_carbonate, BA + C + 3 * O, 4.43 },
+		{ builtin::calcium_carbonate, CA + C + 3 * O, 2.71 },
+		{ builtin::gypsum, CA + S + 4 * O + 2 * (2 * H + O), 2.32 },
+		{ builtin::calcium_hydroxide, CA + 2 * (O + H), 2.24 },
+		{ builtin::magnesium_hydroxide, MG + 2 * (O + H), 2.36 },
+		{ builtin::iron_ii_hydroxide, FE + 2 * (O + H), 3.4 },
+		{ builtin::iron_iii_hydroxide, FE + 3 * (O + H), 3.65 },
+		{ builtin::zinc_hydroxide, ZN + 2 * (O + H), 3.053 },
+		{ builtin::aluminium_hydroxide, AL + 3 * (O + H), 2.42 },
+		{ builtin::cobalt_hydroxide, CO + 2 * (O + H), 3.597 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -204,5 +220,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 20);
+	CHECK(retired == 43); // (Stage 76: 23 more, the new metals' salts)
 }

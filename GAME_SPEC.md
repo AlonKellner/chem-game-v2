@@ -818,6 +818,24 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
 - **A bench opens at its fast equilibria** at the temperatures it states (a bench's acid formerly cooled 2.6 K on its
   first step, as its bisulfate formed).
 
+
+**Metals, their salts and precipitates** (Stage 76; `docs/TDD_76_METALS.md`; `docs/CURRICULUM.md`, step E's first part).
+- **The elements** calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt; **their ions** Ca²⁺, Mg²⁺,
+  Ba²⁺, Ag⁺, Fe²⁺, Fe³⁺, Zn²⁺, Al³⁺, Co²⁺, and nitrate; NBS's ΔfH° and S°, OBIGT's Cp° and V° on the ions' footing.
+- **Hydrolysis**: Fe³⁺ and Al³⁺ each give up a hydrogen ion to the water (FeOH²⁺, AlOH²⁺, NIST 46.3's constants), a fast
+  equilibrium: 0.1 mol/kg iron(III) chloride reads pH 2.2, aluminium chloride 3.4.
+- **Precipitates**, each a fast equilibrium at MINTEQ v4's solubility product, its solid as fine grains: silver
+  chloride and silver oxide, barium sulfate and carbonate, calcium carbonate (calcite), gypsum, the hydroxides of
+  calcium, magnesium, iron(II), iron(III) (ferrihydrite), zinc (ε), aluminium (amorphous) and cobalt (pink). Each
+  solid's S° is the one that gives its measured solubility product on NBS's enthalpy. A hydroxide comes out of a base
+  and an acid dissolves it; a carbonate dissolves into an acid as hydrogen carbonate and carbon dioxide.
+- Saturated calcium hydroxide reads NIST SRM 2193b's certified pH within 0.05 from 5 to 35 °C, and is less soluble as
+  it warms.
+- **Colours**: cobalt(II) pink (Ballhausen and Jørgensen's spectrum), iron(III) yellow by FeOH²⁺'s charge-transfer
+  band's tail (Byrne and Kester's, King's); the white precipitates a white powder's, iron(III) hydroxide's rust brown,
+  cobalt hydroxide's pink and silver oxide's dark brown calibrated to how each looks.
+- The activity model's pairs: Pitzer and Mayorga 1973's chlorides and nitrates, Harvie, Møller and Weare's calcium
+  and magnesium with sulfate, hydroxide and hydrogen carbonate.
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -838,6 +856,7 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
   together, electroneutrality, a column's diffusion at no current.
 - Stage 64 adds the weak acids and bases, the gases' dissolving, the indicators and the salts experiments 14 to 20
   weigh; the masters a retired unit is read back by; a bench opened at its fast equilibria.
+- Stage 76 adds eight metals, their salts, their hydrolysis and thirteen precipitates.
 
 ## 10. Property models
 
@@ -3379,6 +3398,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
 | Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. (Stage 64: its heat capacity NBS's at infinite dilution, −293.8 J/K mol, no longer the pure liquid's; water's ionisation −223.8, pKw from the tables 12.31 at 100 °C against IAPWS's 12.25, its heat capacity held constant) |
+| Metals and precipitates (Stage 76): a precipitate forms and dissolves at once (a fast equilibrium), as one form (the fresh precipitate's, not its aged one), its grains of one size; no complex (zincate and aluminate in a strong base, silver's and copper's with ammonia: step E's next stage); silver chloride does not grey in light; FeOH²⁺'s absorption past 390 nm its band's tail, not measured; iron(III) hydroxide's heat capacity Kopp's; the activity model's pairs 25 °C's | Calcite's and gypsum's solubility products within 0.08 of wateq4f's to 50 °C, 0.16 at 80; saturated calcium hydroxide 0.07 low in pH at 50 °C; zinc and aluminium hydroxides do not redissolve in excess base |
 | Conductivity (Stage 65): one ion size for every ion; the per-ion Onsager form exact only for a 1:1 electrolyte's pair; no ion association; no viscosity of the solution itself; Walden's exponent one for all ions but H⁺, from KCl and HCl (OH⁻ and the rest assumed as K⁺ and Cl⁻); a meter reads at the solution's temperature, uncompensated | Within 0.5 % of the measured to 0.1 mol/L; past it HCl reads high (2.5 % at 0.5 mol/L, 8 % at 1) and 1 M KCl low (1.5 % at 25 °C, 6 % at 0 °C); a doubly charged ion's conductivity is less exact |
 | The weak acids' and indicators' activity (Stage 64): neutral solutes ideal (no λ); no Pitzer pair for K⁺ with hydrogen phthalate, for the indicators' ions or NH₄⁺ with acetate; no mixing terms (θ, ψ) | IUPAC's phosphate and carbonate standards within 0.03, KHP's 0.02 low; bromothymol blue's apparent pKa at I = 0.1 within 0.02 of the measured; no salting out of a neutral solute |
 | The indicators' ionisation has no heat (none read) and phenolphthalein does not fade in strong base (Stage 64) | Their colours do not move with temperature; phenolphthalein in 1 mol/kg NaOH stays pink, where a real one fades over minutes |

@@ -211,16 +211,19 @@ std::vector<std::string> found(const lab::LabView &v, const std::string &query) 
 TEST_CASE("search: a query's words, in any order and case, each start a keyword of what it is, holds, is made of or is like (Stage 61)") {
 	auto l = bench();
 	const lab::LabView v = l->view();
-	// (Stage 64: and the free lab's reagents, the indicators and the salts in 50 mL beakers)
+	// (Stage 64: and the free lab's reagents, the indicators and the salts in 50 mL beakers; Stage 76: the metals' salts,
+	// limewater and chalk)
 	CHECK(found(v, "") == std::vector<std::string>{ "flask", "stopper", "balloon", "condenser", "beaker", "waste", "jar", "acid", "burner", "viewer", "camera", "scale",
-			"hydrochloric", "hydroxide", "vinegar", "ammonia", "phenolphthalein", "bromothymol", "methyl_red", "khp", "soda", "bicarbonate", "salt", "acetate", "ammonium" });
-	CHECK(found(v, "BEAKER") == std::vector<std::string>{ "beaker", "waste", "jar", "phenolphthalein", "bromothymol", "methyl_red", "khp", "soda", "bicarbonate", "salt",
-			"acetate", "ammonium" }); // (the waste and the jar are beakers)
+			"hydrochloric", "hydroxide", "vinegar", "ammonia", "phenolphthalein", "bromothymol", "methyl_red", "khp", "soda", "bicarbonate", "silver_nitrate", "barium_chloride", "calcium_chloride", "magnesium_sulfate", "iron_iii_chloride", "iron_ii_sulfate", "zinc_sulfate", "aluminium_chloride", "cobalt_chloride", "limewater", "chalk", "salt",
+			"acetate", "ammonium" });
+	CHECK(found(v, "BEAKER") == std::vector<std::string>{ "beaker", "waste", "jar", "phenolphthalein", "bromothymol", "methyl_red", "khp", "soda", "bicarbonate", "chalk",
+			"salt", "acetate", "ammonium" }); // (the waste and the jar are beakers)
 	CHECK(found(v, "conical") == std::vector<std::string>{ "flask" });
 	CHECK(found(v, "250 beaker") == std::vector<std::string>{ "beaker", "waste" });
 	CHECK(found(v, "malach") == std::vector<std::string>{ "jar" });
-	CHECK(found(v, "sulfuric") == std::vector<std::string>{ "acid" });
-	CHECK(found(v, "solution") == std::vector<std::string>{ "acid", "hydrochloric", "hydroxide", "vinegar", "ammonia", "phenolphthalein", "bromothymol", "methyl_red" });
+	CHECK(found(v, "sulfuric") == std::vector<std::string>{ "acid" }); // (Stage 76: not a sulfate's trace of bisulfate)
+	CHECK(found(v, "solution") == std::vector<std::string>{ "acid", "hydrochloric", "hydroxide", "vinegar", "ammonia", "phenolphthalein", "bromothymol", "methyl_red",
+			"silver_nitrate", "barium_chloride", "calcium_chloride", "magnesium_sulfate", "iron_iii_chloride", "iron_ii_sulfate", "zinc_sulfate", "aluminium_chloride", "cobalt_chloride", "limewater" });
 	CHECK(found(v, "latex") == std::vector<std::string>{ "stopper", "balloon" });
 	CHECK(found(v, "empty glass") == std::vector<std::string>{ "flask", "condenser", "beaker", "waste" });
 	CHECK(found(v, "camera") == std::vector<std::string>{ "camera" });
