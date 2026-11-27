@@ -2337,6 +2337,57 @@ vec3 room_face(vec3 p, vec3 u, float wall, float side) {
 	return vec3(u.y < 0.0 ? 3.0 : 4.0, clamp(h.x - lo.x, 0.0, side), clamp(h.z - lo.z, 0.0, side));
 }
 
+// (Stage 78) Where a line from p along u enters body k's box, and the place of its picture met there: a flat thing
+// is a box as deep as it is wide about its layer's plane (z_layer), its picture on its front and back as drawn, on its
+// sides with its width laid along its depth, on its top and bottom its edge row; a body that bends is boxed loosely
+// round its shape (`bends`: a test before its own tracing, no place). x: how far along the line (-1: it misses).
+vec3 box_meet(int k, vec3 p, vec3 u, float z_layer, bool bends) {
+	vec4 rect = scene_vec(HEADER_VECS + k * BODY_VECS);
+	float grow = bends ? 0.5 * max(rect.z, rect.w) + 2.0 : 0.0;
+	float d = bends ? 0.5 * max(rect.z, rect.w) + 2.0 : 0.5 * rect.z;
+	vec3 lo = vec3(rect.x - grow, rect.y - grow, z_layer - d);
+	vec3 hi = vec3(rect.x + rect.z + grow, rect.y + rect.w + grow, z_layer + d);
+	float t0 = -1.0e30;
+	float t1 = 1.0e30;
+	int axis = -1;
+	for (int i = 0; i < 3; i++) {
+		float o = i == 0 ? p.x : (i == 1 ? p.y : p.z);
+		float v = i == 0 ? u.x : (i == 1 ? u.y : u.z);
+		float a = i == 0 ? lo.x : (i == 1 ? lo.y : lo.z);
+		float b = i == 0 ? hi.x : (i == 1 ? hi.y : hi.z);
+		if (abs(v) < 1.0e-12) {
+			if (o < a || o > b) {
+				return vec3(-1.0, 0.0, 0.0);
+			}
+			continue;
+		}
+		float ta = (a - o) / v;
+		float tb = (b - o) / v;
+		float near = min(ta, tb);
+		float far = max(ta, tb);
+		if (near > t0) {
+			t0 = near;
+			axis = i;
+		}
+		t1 = min(t1, far);
+	}
+	if (!(t0 <= t1) || !(t1 > 0.0)) {
+		return vec3(-1.0, 0.0, 0.0);
+	}
+	if (bends || t0 < 0.0) {
+		return vec3(max(t0, 0.0), 0.0, 0.0);
+	}
+	vec3 h = ray_point(p, u, t0);
+	float x = clamp(h.x, rect.x + 1.0e-3, rect.x + rect.z - 1.0e-3);
+	float y = clamp(h.y, rect.y + 1.0e-3, rect.y + rect.w - 1.0e-3);
+	if (axis == 0) {
+		x = rect.x + clamp((h.z - lo.z) / max(2.0 * d, 1.0e-6), 1.0e-4, 1.0 - 1.0e-4) * rect.z; // a side: its width along its depth
+	} else if (axis == 1) {
+		y = u.y > 0.0 ? rect.y + 1.0e-3 : rect.y + rect.w - 1.0e-3; // its top or its bottom: the edge row
+	}
+	return vec3(t0, x, y);
+}
+
 RayMet ray_met(vec2 p, float nm) {
 #ifdef OPTICS_RAY_HOOK
 	OPTICS_RAY_HOOK();
@@ -2370,6 +2421,9 @@ RayMet ray_met(vec2 p, float nm) {
 	// met it): from there on the panels are not in its way (it sees the room's wall, wherever it goes, as over the
 	// bench)
 	bool through_hand = hand_over(p);
+	// (Stage 78) whether the ray left a body turned back toward the eye or sideways, and which
+	bool turned_back = false;
+	int left_k = -1;
 	for (int guard = 0; guard < 16; guard++) {
 		if (last < 0 || !lands) {
 			break;
@@ -2475,11 +2529,73 @@ RayMet ray_met(vec2 p, float nm) {
 					lands = false;
 					r.x = 100000.0; // (one place for every ray that never reaches the wall: it shows the room in front)
 					r.y = lp.y;
+					turned_back = met.left && !met.solid;
+					left_k = k;
 					break;
 				}
 			}
 		}
 		last = first - 1;
+	}
+	if (turned_back && !cut_off) {
+		// (Stage 78) A ray turned back toward the eye or sideways (by a mirror, a rim) meets what is in its way in the
+		// room's three dimensions: the nearest of every body, a vessel by its own surfaces, a flat thing as a box as
+		// deep as it is wide that shows its picture on every side; four at most, then the room's faces.
+		for (int turn = 0; turn < 4; turn++) {
+			float best = 1.0e30;
+			int which = -1;
+			BodyMet e_best = trace_body(-1, 0, nm, 0.0, lp, lu);
+			vec2 where_best = vec2(0.0, 0.0);
+			for (int k = 0; k < MAX_BODIES; k++) {
+				if (k >= count) {
+					break;
+				}
+				if (k == left_k || hidden(k) || in_panel(k)) {
+					continue;
+				}
+				float zk = -scene_vec(HEADER_VECS + k * BODY_VECS + 5).y * gap;
+				vec3 hit = box_meet(k, lp, lu, zk, trace_bends(k));
+				if (!(hit.x > 1.0e-3) || !(hit.x < best)) {
+					continue;
+				}
+				if (trace_bends(k)) {
+					vec3 at = ray_point(lp, lu, hit.x);
+					BodyMet e = trace_body(k, trace_core(k, at.y), nm, zk, lp, lu);
+					float entry = e.entry;
+					if (e.met && entry > 1.0e-3 && entry < best) {
+						best = entry;
+						which = k;
+						e_best = e;
+						vec3 in_at = ray_point(lp, lu, entry);
+						where_best = vec2(in_at.x, in_at.y);
+					}
+				} else if (layer_at(k, vec2(hit.y, hit.z), 1.0e-3, 1.0e-3).cover > 0.5) {
+					best = hit.x;
+					which = k;
+					where_best = vec2(hit.y, hit.z);
+				}
+			}
+			if (which < 0) {
+				break;
+			}
+			bool bends = trace_bends(which);
+			h = route_mix(h, uint(which * 8 + 6));
+			h = route_mix(h, bends ? e_best.route : 3u);
+			if (r.count < 4) {
+				r = met_put(r, r.count, vec4(float(which), bends ? (e_best.solid ? 3.0 : 1.0) : 0.0, bends ? e_best.pass : 1.0, bends ? (e_best.solid ? 2.0 * e_best.chord : e_best.chord) : 0.0), where_best, bends ? e_best.absorbed : 0.0);
+				r.count = r.count + 1;
+			}
+			left_k = which;
+			if (bends) {
+				lp = e_best.at;
+				lu = e_best.toward;
+				if (!e_best.left || e_best.solid) {
+					break; // it ended in it
+				}
+			} else {
+				lp = ray_point(lp, lu, best + 1.0e-3); // (on through what the picture lets pass)
+			}
+		}
 	}
 	float side = scene_vec(3).z;
 	if (side > 0.0 && !cut_off) {

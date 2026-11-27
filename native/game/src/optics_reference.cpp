@@ -350,6 +350,9 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 	// (Stage 61) whether the ray has met something in hand: from there on the panels are not in its way, as the
 	// pass's own (ray_met)
 	bool through_hand = shader::hand_over(shader::vec2(x, y)); // (its pixel within what is in hand's outline)
+	// (Stage 78) whether the ray left a body turned back toward the eye or sideways, and which
+	bool turned_back = false;
+	int left_k = -1;
 	const auto panel = [&](int body) { return (static_cast<int>(vec_of(body, 3).w) & shader::PANEL_BIT) != 0; };
 	for (int last = count - 1; last >= 0 && lands;) {
 		const double layer = vec_of(last, 5).y, z = -layer * gap;
@@ -386,6 +389,8 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 					lands = false;
 					out.x = 100000.0;
 					out.y = line.y;
+					turned_back = e.out && !e.solid;
+					left_k = k;
 					break;
 				}
 			} else if (!bends(k)) {
@@ -414,6 +419,90 @@ ExactRay exact_ray(double x, double y, double nm, int way = 0) {
 			}
 		}
 		last = first - 1;
+	}
+	if (turned_back && !cut_off) {
+		// (Stage 78) turned back toward the eye or sideways: the nearest body in the room's three dimensions, a vessel by
+		// its own surfaces, a flat thing as a box as deep as it is wide showing its picture on every side; four at most
+		for (int turn = 0; turn < 4; ++turn) {
+			double best = 1e30;
+			int which = -1;
+			Exact e_best;
+			Line line_best = line;
+			double where_x = 0.0, where_y = 0.0;
+			for (int k = 0; k < count; ++k) {
+				if (k == left_k || shader::hidden(k) || panel(k)) {
+					continue;
+				}
+				const double zk = -static_cast<double>(vec_of(k, 5).y) * gap;
+				const shader::vec4 rect = vec_of(k, 0);
+				// the box: a flat thing's as deep as it is wide; a vessel's loosely round it
+				const bool bent = bends(k);
+				const double grow = bent ? 0.5 * std::max(static_cast<double>(rect.z), static_cast<double>(rect.w)) + 2.0 : 0.0;
+				const double d = bent ? grow : 0.5 * rect.z;
+				const double lo[3] = { rect.x - grow, rect.y - grow, zk - d }, hi[3] = { static_cast<double>(rect.x) + rect.z + grow, static_cast<double>(rect.y) + rect.w + grow, zk + d };
+				const double o[3] = { line.x, line.y, line.z }, v[3] = { line.ux, line.uy, line.uz };
+				double t0 = -1e300, t1 = 1e300;
+				int axis = -1;
+				bool misses = false;
+				for (int i = 0; i < 3; ++i) {
+					if (std::fabs(v[i]) < 1e-12) {
+						misses = misses || o[i] < lo[i] || o[i] > hi[i];
+						continue;
+					}
+					const double ta = (lo[i] - o[i]) / v[i], tb = (hi[i] - o[i]) / v[i];
+					if (std::min(ta, tb) > t0) {
+						t0 = std::min(ta, tb);
+						axis = i;
+					}
+					t1 = std::min(t1, std::max(ta, tb));
+				}
+				if (misses || !(t0 <= t1) || !(t1 > 0.0) || !(std::max(t0, 0.0) > 1e-3 || bent) || !(std::max(t0, 0.0) < best)) {
+					continue;
+				}
+				if (bent) {
+					Line trial = line;
+					const Exact e = exact_body(k, core_in(k, line.y + std::max(t0, 0.0) * line.uy), nm, zk, trial);
+					if (e.met && e.meetings > 0 && e.entry > 1e-3 && e.entry < best) {
+						best = e.entry;
+						which = k;
+						e_best = e;
+						line_best = trial;
+						where_x = line.x + e.entry * line.ux;
+						where_y = line.y + e.entry * line.uy;
+					}
+					continue;
+				}
+				const double hx = line.x + t0 * line.ux, hy = line.y + t0 * line.uy, hz = line.z + t0 * line.uz;
+				double px = std::clamp(hx, rect.x + 1e-3, static_cast<double>(rect.x) + rect.z - 1e-3), py = std::clamp(hy, rect.y + 1e-3, static_cast<double>(rect.y) + rect.w - 1e-3);
+				if (axis == 0) {
+					px = rect.x + std::clamp((hz - lo[2]) / std::max(2.0 * d, 1e-6), 1e-4, 1.0 - 1e-4) * rect.z; // a side: its width along its depth
+				} else if (axis == 1) {
+					py = line.uy > 0.0 ? rect.y + 1e-3 : static_cast<double>(rect.y) + rect.w - 1e-3; // its top or its bottom
+				}
+				if (shader::layer_at(k, shader::vec2(px, py), 1.0e-3, 1.0e-3).cover > 0.5) {
+					best = t0;
+					which = k;
+					where_x = px;
+					where_y = py;
+				}
+			}
+			if (which < 0) {
+				break;
+			}
+			left_k = which;
+			if (bends(which)) {
+				out.met.push_back(Met{ which, where_x, where_y, true, e_best.pass, e_best.chord, e_best.route, core_in(which, where_y), e_best.solid, e_best.absorbed });
+				line = line_best;
+				if (!e_best.out || e_best.solid) {
+					break;
+				}
+			} else {
+				out.met.push_back(Met{ which, where_x, where_y, false, 1.0, 0.0, 0u, 0 });
+				line.x += (best + 1e-3) * line.ux;
+				line.y += (best + 1e-3) * line.uy;
+				line.z += (best + 1e-3) * line.uz;
+			}
+		}
 	}
 	if (const double side = shader::scene_vec(3).z; side > 0.0 && !cut_off) {
 		// in a room (Stage 33): to whichever face it comes to, as the pass's own ray does

@@ -1148,17 +1148,27 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			scene.rectangle_bodies.push_back(b);
 		}
 	}
+	// (Stage 78) a body whose liquid is a metal: a mirror, whose rays may come to any other body in the room
+	const auto mirror = [&](int b) {
+		const size_t set = static_cast<size_t>(t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + SET) * 4]);
+		if ((set + 1) * static_cast<size_t>(ROWS_PER_SET * ROW) > rows.size()) {
+			return false;
+		}
+		const float *k = &rows[(set * ROWS_PER_SET + LIQUID_K_ROW) * ROW];
+		return k[0] > 0.0f || k[ROW / 2] > 0.0f || k[ROW - 1] > 0.0f;
+	};
 	// What stands behind each body, in its rows, on a layer further from the eye: a signature of it (where it
 	// stands, what it is and what it holds), which a pixel's history follows (GAME_SPEC §12.3): a pixel of a held
-	// vessel whose rays reach a body that has changed colour is read again
+	// vessel whose rays reach a body that has changed colour is read again (Stage 78: a mirror's, every other body)
 	for (int b = 0; b < count; ++b) {
+		const bool all = mirror(b);
 		const float *rect = &t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + RECT) * 4];
 		const float layer = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + REFRACT) * 4 + 1];
 		bool lower = false;
 		uint64_t h = 1469598103934665603ull;
 		for (int o = 0; o < count; ++o) {
 			const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
-			if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+			if (all ? o != b : t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
 				lower = true;
 				h = fnv(other, 4 * sizeof(float), h);
 				h = fnv(&t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + FORM) * 4], 4 * sizeof(float), h);
@@ -1292,9 +1302,13 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			bool lower = false;
 			uint64_t h = 1469598103934665603ull, now = h, was = h;
 			double low = 1.0e30, high = -1.0e30;
+			const bool all = mirror(b);
 			for (int o = 0; o < count; ++o) {
 				const float *other = &t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + RECT) * 4];
-				if (t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+				if (all ? o != b : t[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + REFRACT) * 4 + 1] < layer && other[1] < rect[1] + rect[3] + 1.0f && other[1] + other[3] + 1.0f > rect[1]) {
+					if (all) {
+						h = fnv(other, 4 * sizeof(float), h); // (a mirror's: where each stands, not only its shape)
+					}
 					lower = true;
 					h = fnv(&shape_tag[static_cast<size_t>(o)], sizeof(float), h);
 					now = fnv(&content_tag[static_cast<size_t>(o)], sizeof(float), now);

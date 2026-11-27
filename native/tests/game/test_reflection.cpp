@@ -169,6 +169,7 @@ TEST_CASE("reflection: what a beaker of mercury shows is what the truth's rays b
 	for (int d = 1; d < static_cast<int>(W) - 1; d += 4 * sparse()) {
 		places.push_back({ static_cast<int>(X) + d, middle }); // across the mercury, rim to rim
 	}
+	places.push_back({ static_cast<int>(X + W / 2), middle }); // (and its middle, however sparsely)
 	for (int d = -6; d <= 10; d += 2 * sparse()) {
 		places.push_back({ static_cast<int>(X + W / 2), level + d }); // down through its surface
 	}
@@ -202,7 +203,7 @@ TEST_CASE("reflection: what a beaker of mercury shows is what the truth's rays b
 		}
 		++compared;
 	}
-	CHECK(compared > 10);
+	CHECK(compared > 30 / sparse());
 	// the middle of the mercury: the room in front, turned back by glass and mercury, neutral grey (no colour of its own)
 	CHECK(grey > 0.15);
 	MESSAGE("mercury: " << compared << " pixels, the worst " << worst << " on the eye metric; its middle " << grey);
@@ -240,14 +241,69 @@ TEST_CASE("O28: a beaker of mercury in the room shows the room's ruled faces, wh
 		CAPTURE(py);
 		CHECK(e < lab::EYE_VISIBLE);
 		worst = std::max(worst, e);
-		if (px == static_cast<int>(X + W / 2)) {
-			least = std::min(least, truth[1]);
-			most = std::max(most, truth[1]);
-		}
 		++compared;
+	}
+	// down its middle, every row (the truth's alone): the front face's lines across, darker rows among lighter ones
+	for (int y = top + 8; y < foot - 4; ++y) {
+		double truth[3];
+		lab::optics_area_truth(scene, static_cast<int>(X + W / 2), y, 4, truth);
+		least = std::min(least, truth[1]);
+		most = std::max(most, truth[1]);
 	}
 	// down its middle the mirror shows the front face's lines across: darker rows among lighter ones
 	CHECK(most - least > 0.05);
 	MESSAGE("mercury in the room: " << compared << " pixels, the worst " << worst << " on the eye metric; down its middle from " << least << " to " << most);
 }
 
+
+TEST_CASE("reflection: a thing beside a beaker of mercury and one in hand are seen in it, as the truth's rays see them (Stage 78)") {
+	const ItemView item = beaker(150.0, true);
+	const int middle = static_cast<int>(row_of(0.5 * level_cm(150.0)));
+	// a red part's face standing beside it on the bench (a box as deep as it is wide), and a held one nearer the eye
+	lab::OpticsBody beside;
+	beside.shape = lab::OpticsBody::Slab;
+	beside.x = X + W + 12.0f;
+	beside.y = 150.0f;
+	beside.w = 60.0f;
+	beside.h = 200.0f;
+	beside.surface = "alarm_face";
+	beside.id = 7;
+	lab::OpticsBody held = beside;
+	held.x = X - 260.0f;
+	held.w = 240.0f;
+	held.y = 100.0f;
+	held.h = 300.0f;
+	held.layer = 1;
+	held.id = 8;
+	const lab::OpticsBody vessel{ &item, X, Y, W, height_px() };
+	OpticsScene alone, with;
+	lab::optics_compose(alone, cube_room(), { vessel });
+	lab::optics_compose(with, cube_room(), { vessel, beside, held });
+	REQUIRE(lab::check_O1(with) == "");
+	// ray by ray, the pass's walk is the truth's
+	CHECK(lab::check_O9(with, static_cast<int>(X) - 2, middle - 20, static_cast<int>(X + W) + 2, middle + 20, sparse() > 1 ? 3 : 1) == "");
+	// across the mercury: where the mirror shows them, the picture changes, and what is shown is the truth
+	int changed = 0, compared = 0;
+	double worst = 0.0;
+	for (int px = static_cast<int>(X) + 1; px < static_cast<int>(X + W) - 1; px += sparse()) {
+		if (lab::optics_cover(with, px, middle) <= 0.0) {
+			continue;
+		}
+		double before[3], after[3], shown[3];
+		lab::optics_area_truth(alone, px, middle, 8, before);
+		lab::optics_area_truth(with, px, middle, 8, after);
+		changed += eye(before, after) > 2.0 ? 1 : 0;
+		lab::OpticsFrames settle(px, middle, 1, 1);
+		for (int f = 0; f < 400; ++f) {
+			settle.frame(with);
+		}
+		settle.colour(with, px, middle, shown);
+		const double e = eye(shown, after);
+		CAPTURE(px);
+		CHECK(e < lab::EYE_VISIBLE);
+		worst = std::max(worst, e);
+		++compared;
+	}
+	CHECK(changed >= 2);
+	MESSAGE("mercury beside a part and under a held one: " << changed << " of " << compared << " pixels show them, the worst " << worst << " on the eye metric");
+}
