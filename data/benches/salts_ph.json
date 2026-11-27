@@ -1,10 +1,10 @@
 {
 	"format": "chem-bench/2",
-	"note": "Salts' pH and an indicator's pKa (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 18): five beakers of 0.1 mol/kg salts (sodium chloride, ammonium chloride, sodium acetate, sodium hydrogen carbonate, sodium carbonate), and four cuvettes: water, and bromothymol blue (2.1e-5 M) in 0.01 M hydrochloric acid, in 0.01 M sodium hydroxide and in a phosphate buffer near its pKa (0.025 mol/kg of each phosphate); a spectrophotometer in Supplies. Read by instruments: each salt's pH; the indicator's absorbance at 616 nm in its acid form (yellow), its base form (blue) and the buffer, and the buffer's pH: pKa = pH - log10((A - A_acid) / (A_base - A)).",
+	"note": "Salts' pH and an indicator's pKa (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 18): five beakers of 0.1 mol/kg salts (sodium chloride, ammonium chloride, sodium acetate, sodium hydrogen carbonate, sodium carbonate), and four cuvettes: water, and bromothymol blue (2.1e-5 M) in 0.01 M hydrochloric acid, in 0.01 M sodium hydroxide and in a phosphate buffer near its pKa (0.025 mol/kg of each phosphate); a spectrophotometer in Supplies. The room's air holds no carbon dioxide (co2_ppm 0): the salts' own pH is the lesson, and a lab measuring it makes them up in freshly boiled water and keeps the air out; open to today's air, 0.1 M sodium chloride reads 5.7, as carbonic acid makes it. Read by instruments: each salt's pH; the indicator's absorbance at 616 nm in its acid form (yellow), its base form (blue) and the buffer, and the buffer's pH: pKa = pH - log10((A - A_acid) / (A_base - A)).",
 	"readings": "instruments",
 	"seed": 18,
 	"grid": [28, 15],
-	"room": {"celsius": 20, "air_mol": 1000},
+	"room": {"celsius": 20, "air_mol": 1000, "co2_ppm": 0},
 	"items": [
 		{"id": "spec", "kind": "spectrophotometer", "nm": 600},
 		{"id": "nacl", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [1, 1], "label": "sodium chloride, 0.1 M",

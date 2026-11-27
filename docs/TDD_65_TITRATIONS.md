@@ -97,6 +97,30 @@ conductivity** (this stage).
 | 65.7 | The goldens: the evidence and the user's approval | |
 | 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
+- **The room's carbon dioxide on by default** (the user, 2026-11-27: "Let's make it on by default, but if specific
+  experiments require it off - they may explicitly turn it off. The default should be on."): 420 ppm unless a bench's
+  room names `co2_ppm` (0: none). Every bench's air holds it from this stage on; its goldens move with it.
+
+- **What the room's carbon dioxide brought out**, each fixed:
+  - *A settle that crawled.* A gentle pour laid a solution under-saturated in CO2 (its bottle's water had drawn its
+    own air down) on a column of copper and nickel sulfate: its gas's balance trades with the bisulfate's, copper's
+    hydrolysis and water's ionisation through H+, the traces (OH-, CO3 2-) reach()'s alone, a few quanta a round, and
+    sixteen rounds left it 66 J/mol off (P1). Some thirty close it: the rounds are at most 64.
+  - *A settle that cycled.* In a carbonate at pH 10 the joint solve's balance is not the reactions' own: it holds
+    neutralisation and carbonic acid at their traces, a quantum past which they cannot run down 4 kJ/mol, and put
+    back the 1110 quanta the round before had moved bicarbonate's deprotonation, round after round (P1 at 0.1 J/mol).
+    A state met again after a joint solve is a cycle: the rounds left are the reactions' own alone, which settle to
+    their quanta.
+  - *An overflow a part in 1e12 over.* What runs out of a full vessel carries its solutes, whose enthalpy leaves the
+    rest 1.4e-8 K warmer and grown past its volume (V2); it runs out to a ten-billionth under, and a solute whose
+    apparent volume is below nought (OH-, the carbonates) is rounded down, not up.
+  - *A vessel's own gas overwritten by its air.* A bench's carbon dioxide in a vessel (the balance's "gas" beaker)
+    was replaced by the air the loader fills its room with; the air is added to it. The supplies' search counts the
+    room's trace of carbon dioxide as air (an empty flask is empty).
+  - *Real, kept.* Water's carbonic acid takes some micrograms more of a sediment of copper oxide (`pour.4`, to a part
+    in 1e5); the balance's closed form has the air's 28.86 g/mol. Salts' pH (experiment 18) is measured with the air
+    kept out (`co2_ppm` 0: open to it, 0.1 M sodium chloride reads 5.7).
+
 ## Open
 
 - Heat of dilution (C11), in step D's scope in the curriculum, is left to a later stage: the activity model's

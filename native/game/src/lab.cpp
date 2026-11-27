@@ -39,6 +39,10 @@ std::string build_name() {
 	return std::string("chem-game-v2 ") + chem::SPEC_VERSION;
 }
 
+// (Stage 65) a room's carbon dioxide unless its bench says: of the order of today's atmosphere (NOAA's global mean for
+// 2023, 419.3 ppm), docs/DATA_SOURCES.md
+constexpr double ROOM_CO2_PPM = 420.0;
+
 namespace {
 
 // (Stage 68) Lab::stamp's: one count for the process
@@ -4112,19 +4116,31 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		impl->room = b.add_reservoir("room", room_kelvin);
 		impl->air = b.add_cell("air");
 		const double air_mol = number(room, "air_mol", 1000.0);
-		// (Stage 65) the room's carbon dioxide, a share of its air by moles (`co2_ppm`; none unless a bench says)
-		const double co2 = number(room, "co2_ppm", 0.0) * 1e-6;
+		// (Stage 65) the room's carbon dioxide, a share of its air by moles (`co2_ppm`): today's atmosphere's unless a
+		// bench says otherwise (0: none)
+		const double co2 = number(room, "co2_ppm", ROOM_CO2_PPM) * 1e-6;
 		if (!(co2 >= 0.0 && co2 < 0.1)) {
 			why = "a room's co2_ppm is from 0 to 100000";
 			return nullptr;
 		}
-		// air of its nitrogen, oxygen and carbon dioxide (none: the two alone, as they always were)
-		const auto air_of = [&](CellId cell, double mol) {
+		// air of its nitrogen, oxygen and carbon dioxide (none: the two alone, as they always were), added to what the
+		// cell holds of each already (`held`: a bench's own carbon dioxide in a vessel, its quanta by species)
+		const auto air_of = [&](CellId cell, double mol, const std::map<int32_t, int64_t> *held = nullptr) {
+			const auto with = [&](SpeciesId s, double air_mol) {
+				int64_t base = 0;
+				if (held != nullptr) {
+					const auto found = held->find(s.index);
+					base = found == held->end() ? 0 : found->second;
+				}
+				b.set_amount(cell, s, Amount{ base + amount(air_mol).quanta });
+			};
 			if (co2 > 0.0) {
-				b.set_amount(cell, builtin::nitrogen, amount(0.79 * (1.0 - co2) * mol)).set_amount(cell, builtin::oxygen, amount(0.21 * (1.0 - co2) * mol));
-				b.set_amount(cell, builtin::carbon_dioxide, amount(co2 * mol));
+				with(builtin::nitrogen, 0.79 * (1.0 - co2) * mol);
+				with(builtin::oxygen, 0.21 * (1.0 - co2) * mol);
+				with(builtin::carbon_dioxide, co2 * mol);
 			} else {
-				b.set_amount(cell, builtin::nitrogen, amount(0.79 * mol)).set_amount(cell, builtin::oxygen, amount(0.21 * mol));
+				with(builtin::nitrogen, 0.79 * mol);
+				with(builtin::oxygen, 0.21 * mol);
 			}
 		};
 		air_of(impl->air, air_mol);
@@ -4351,6 +4367,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			} else if (j.contains("contents")) {
 				holds.push_back({ item.cell, &j.at("contents") });
 			}
+			std::map<int32_t, int64_t> own; // what its own cell holds, by species: its air is added to it (Stage 65)
 			for (const auto &[into, what] : holds) {
 				std::map<int32_t, int64_t> taken; // (Stage 63) each species' quanta, a retired formula unit's as its ions (exact)
 				for (const auto &[name, spec] : what->items()) {
@@ -4379,6 +4396,9 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				for (const auto &[index, quanta] : taken) {
 					b.set_amount(into, SpeciesId{ index }, Amount{ quanta });
 				}
+				if (into == item.cell) {
+					own = taken;
+				}
 				if (into != item.cell) {
 					b.set_temperature(into, room_kelvin);
 				}
@@ -4387,7 +4407,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				// open to the room: air fills what its contents leave
 				const double air = P_ATMOSPHERE * (volume - condensed) / (GAS_CONSTANT * room_kelvin);
 				if (air > 0.0) {
-					air_of(item.cell, air);
+					air_of(item.cell, air, &own);
 				}
 				item.mouth = b.add_edge(item.cell, impl->air, PHASES_GAS);
 			}

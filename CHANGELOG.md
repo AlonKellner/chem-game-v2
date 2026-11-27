@@ -9,8 +9,8 @@
   0.1 mol/L, of Jones and Bradshaw's KCl standards at 0, 18 and 25 °C, and within 2 % of MacInnes and Shedlovsky's
   acetic acid. **Each ion's mobility with temperature** by Walden's rule with its own exponent (0.87; H⁺ 0.61), the
   column's diffusion with it. Invariant Q1. `chem_tool study conductivity`.
-- §13: a conductivity meter (0.5 % of its reading, auto-ranging), a vessel's quantity `us_cm`; a room's optional
-  carbon dioxide (`co2_ppm`); a report's expression takes log10, ln and sqrt, and a quantity with no value yet is
+- §13: a conductivity meter (0.5 % of its reading, auto-ranging), a vessel's quantity `us_cm`; a room's
+  carbon dioxide, 420 ppm by default (a bench's `co2_ppm`, 0 for none); a report's expression takes log10, ln and sqrt, and a quantity with no value yet is
   not one the bench lacks; the experiments' list in four columns.
 - §13.7: the experiments `standardise`, `vinegar`, `carbonate_curve`, `buffer`, `salts_ph`, `antacid` and
   `conductivity` (curriculum 14 to 20).

@@ -666,17 +666,20 @@ void Simulation::overflow() {
 		// a share of the solution, what is dissolved in it as much as its liquid: of the solution's own volume
 		// (its solutes' volume with it), so that what runs out is the excess (Stage 27: of the liquid's alone, a
 		// solution spilled more than its excess, and left its vessel under-full)
-		const double excess = fill.condensed - meta.volume, solution = std::max(fill.condensed - solids, liquid);
+		// (Stage 65) to a ten-billionth under its volume: a solution's solutes carried out leave its temperature a
+		// hundred-millionth of a kelvin other, and its liquid grown by it, past its volume by a part in 1e12
+		const double excess = fill.condensed - meta.volume * (1.0 - 1e-10), solution = std::max(fill.condensed - solids, liquid);
 		const double fraction = excess < solution ? excess / solution : 1.0;
 		std::vector<SpeciesAmount> amounts;
 		for (size_t s = 0; s < state.amount.size(); ++s) {
 			const SpeciesId id{ static_cast<int32_t>(s) };
 			const SpeciesDef &def = table.species(id);
 			if (state.amount[s] > 0 && !def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
-				// rounded up: what is left fits
+				// rounded so that what is left fits: up, or (Stage 65) down for a solute whose apparent volume is below
+				// nought (an ion's on the ions' footing: OH-, the carbonates), whose quantum more taken leaves more room
 				const double share = static_cast<double>(state.amount[s]) * fraction;
 				auto out = static_cast<int64_t>(share);
-				out += static_cast<double>(out) < share ? 1 : 0;
+				out += static_cast<double>(out) < share && !(molar_volume_at(table, def, kelvin) < 0.0) ? 1 : 0;
 				amounts.push_back(SpeciesAmount{ id, Amount{ out < state.amount[s] ? out : state.amount[s] } });
 			}
 		}
@@ -802,7 +805,14 @@ bool Simulation::project(CellId cell) {
 	// the first round)
 	seen_.assign(equilibria_.size(), -1); // the cell's version at each one's last probe
 	int version = 0;
-	for (int round = 0; round < 16; ++round) {
+	// (Stage 65) the cell's state after each round's joint solve: one met again is a cycle, the joint solve's balance
+	// not the reactions' own (it holds traces a quantum would overshoot, at affinities they cannot run down), and the
+	// rounds left are the reactions' own alone, which settle to their quanta
+	std::vector<uint64_t> after_joint;
+	bool joint = true;
+	// (Stage 65: 64, from 16: a solution's carbon dioxide trading with its gas through water's ionisation and the
+	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour)
+	for (int round = 0; round < 64; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];
@@ -856,8 +866,18 @@ bool Simulation::project(CellId cell) {
 		// (Stage 63) equilibria that share a species, taken in turn, close on their joint balance slowly (copper's
 		// hydrolysis, the bisulfate and water's ionisation trading hydrogen ions): once each has what it needs, they
 		// are solved together, and the round after finishes each to its quantum
-		if (solve_together(cell)) {
+		if (joint && solve_together(cell)) {
 			++version;
+			uint64_t h = 1469598103934665603ull;
+			for (const int64_t q : state.amount) {
+				h = (h ^ static_cast<uint64_t>(q)) * 1099511628211ull;
+			}
+			h = (h ^ static_cast<uint64_t>(state.energy)) * 1099511628211ull;
+			if (std::find(after_joint.begin(), after_joint.end(), h) != after_joint.end()) {
+				joint = false;
+			} else {
+				after_joint.push_back(h);
+			}
 		}
 	}
 	if (!changed) {

@@ -61,14 +61,15 @@ lab::ItemView item(const lab::LabView &v, const std::string &id) {
 }
 
 // the closed form: what a vessel weighs on a balance, from its view alone (its glass at ISO 3585's 2.23 g/cm^3,
-// what it holds by its own volume) and the room's air from its composition (79 % N2, 21 % O2) at 1 atm and 20 C
+// what it holds by its own volume) and the room's air from its composition (79 % N2, 21 % O2; Stage 65: and 420 ppm of
+// CO2) at 1 atm and 20 C
 double closed_form(const lab::ItemView &v) {
 	double g = 0.0, cm3 = 0.0;
 	for (const lab::SubstanceView &s : v.contents) {
 		g += s.g;
 		cm3 += s.wall ? s.g / 2.23 : s.ml;
 	}
-	const double molar = 0.79 * 28.0134 + 0.21 * 31.9988, air = 101325.0 * molar * 1e-3 / (8.314462618 * 293.15);
+	const double co2 = 420e-6, molar = (1.0 - co2) * (0.79 * 28.0134 + 0.21 * 31.9988) + co2 * 44.0095, air = 101325.0 * molar * 1e-3 / (8.314462618 * 293.15);
 	return (g - air * 1e-3 * cm3) / (1.0 - air / 8000.0);
 }
 
@@ -76,7 +77,7 @@ double closed_form(const lab::ItemView &v) {
 
 TEST_CASE("lab: a balance reads its load's conventional mass (Stage 50)") {
 	auto l = open(bench());
-	CHECK(std::fabs(l->view().air_kg_m3 - 1.1994) < 0.0005); // the room's air: nitrogen and oxygen, no argon (28.85 g/mol)
+	CHECK(std::fabs(l->view().air_kg_m3 - 1.1997) < 0.0005); // the room's air: nitrogen and oxygen, no argon (28.85 g/mol; Stage 65: its CO2, 28.86)
 	lab::ItemView s = item(l->view(), "scale");
 	CHECK(s.kind == "balance");
 	CHECK(s.w == 4);

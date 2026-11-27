@@ -1278,5 +1278,9 @@ A solution's conductivity (GAME_SPEC §10), and each ion's mobility with tempera
     and is 1.8 % high at 0 C.
   - K⁺ and Cl⁻ are taken alike, and every other ion as they are, OH⁻ included (its own temperature data not read). A
     neutral solute keeps 1 (Wilke and Chang's form).
+- **A room's carbon dioxide** (`ROOM_CO2_PPM`, `lab.cpp`; a bench's `co2_ppm`): 420 ppm, of the order of today's
+  atmosphere (NOAA's global mean for 2023, 419.3 ppm), a design value, not a model's constant. Water open to it reads
+  0.80 µS/cm at 25 C (`lab: a vessel's liquid reads its conductivity`), as water at equilibrium with air does
+  (pH 5.6).
 - **Checks**: acetic acid's Λ is within 1.2 % of MacInnes and Shedlovsky's, its ionisation (Stage 64's pKa 4.76) and
   its ions' conductivity together. Pure water reads 0.0549 µS/cm, ASTM D1193's Type I 0.0550 (18.2 MΩ cm).

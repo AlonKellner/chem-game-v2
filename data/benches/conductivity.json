@@ -4,7 +4,7 @@
 	"readings": "instruments",
 	"seed": 20,
 	"grid": [28, 15],
-	"room": {"celsius": 20, "air_mol": 1000, "co2_ppm": 420},
+	"room": {"celsius": 20, "air_mol": 1000},
 	"items": [
 		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
 		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 3], "label": "25 mL pipette"},

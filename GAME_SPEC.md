@@ -856,8 +856,10 @@ ions, no state of its own: `κ = Σ c_i λ_i` over its ions, `c_i` per litre of 
   0.12 mol/L; HCl within 0.5 % of Hamer and DeWane's to 0.1 mol/L, its limiting conductance within 1 % from 5 to
   45 °C; the KCl standards within 1 % at 0, 18 and 25 °C to 0.1 demal; acetic acid within 2 % of MacInnes and
   Shedlovsky's. Invariant Q1.
-- **A room's carbon dioxide** (Stage 65): a bench's room may name `co2_ppm`, a share of its air, which every vessel's
-  air takes at the bench's opening; none unless a bench says. Water under 420 ppm reads 0.8 µS/cm.
+- **A room's carbon dioxide** (Stage 65; asked for by the user, 2026-11-27: "on by default, ... specific experiments ...
+  may explicitly turn it off"): 420 ppm of its air, today's atmosphere's, which every vessel's air takes at the
+  bench's opening; a bench's room may name another `co2_ppm`, 0 for none. Water open to it reads 0.8 µS/cm, as
+  distilled water does; a base open to it takes it up.
 
 **Demo subset:**
 - Electrolytes by the equations above, with the parameters of 25 °C at every temperature:
@@ -3329,7 +3331,6 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
 | Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. (Stage 64: its heat capacity NBS's at infinite dilution, −293.8 J/K mol, no longer the pure liquid's; water's ionisation −223.8, pKw from the tables 12.31 at 100 °C against IAPWS's 12.25, its heat capacity held constant) |
 | Conductivity (Stage 65): one ion size for every ion; the per-ion Onsager form exact only for a 1:1 electrolyte's pair; no ion association; no viscosity of the solution itself; Walden's exponent one for all ions but H⁺, from KCl and HCl (OH⁻ and the rest assumed as K⁺ and Cl⁻); a meter reads at the solution's temperature, uncompensated | Within 0.5 % of the measured to 0.1 mol/L; past it HCl reads high (2.5 % at 0.5 mol/L, 8 % at 1) and 1 M KCl low (1.5 % at 25 °C, 6 % at 0 °C); a doubly charged ion's conductivity is less exact |
-| A room's air (Stage 65): no carbon dioxide unless a bench names `co2_ppm` | Water open to a bench's air reads 0.055 µS/cm, the ultra-pure, where distilled water open to the room's reads about 1 |
 | The weak acids' and indicators' activity (Stage 64): neutral solutes ideal (no λ); no Pitzer pair for K⁺ with hydrogen phthalate, for the indicators' ions or NH₄⁺ with acetate; no mixing terms (θ, ψ) | IUPAC's phosphate and carbonate standards within 0.03, KHP's 0.02 low; bromothymol blue's apparent pKa at I = 0.1 within 0.02 of the measured; no salting out of a neutral solute |
 | The indicators' ionisation has no heat (none read) and phenolphthalein does not fade in strong base (Stage 64) | Their colours do not move with temperature; phenolphthalein in 1 mol/kg NaOH stays pink, where a real one fades over minutes |
 | The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |

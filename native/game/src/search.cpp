@@ -61,12 +61,16 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 		out.push_back(ml + "ml");
 	}
 	bool holds = false;
+	double gas = 0.0; // (Stage 65) its gas, mol: the room's carbon dioxide in it is its air's, a trace
+	for (const SubstanceView &s : v.contents) {
+		gas += !s.wall && s.phase == 'g' ? s.mol : 0.0;
+	}
 	for (const SubstanceView &s : v.contents) {
 		if (s.wall) {
 			add_name(out, s.species); // what it is made of
 			continue;
 		}
-		const bool air = s.phase == 'g' && (s.species == "nitrogen" || s.species == "oxygen");
+		const bool air = s.phase == 'g' && (s.species == "nitrogen" || s.species == "oxygen" || (s.species == "carbon_dioxide" && s.mol <= 1e-3 * gas));
 		holds = holds || !air;
 		add_name(out, s.species);
 		add_name(out, s.formula);

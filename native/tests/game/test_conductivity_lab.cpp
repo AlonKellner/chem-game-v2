@@ -12,8 +12,8 @@
 
 namespace {
 
-// a 25 C room (its air's carbon dioxide `co2_ppm`): a beaker of 0.01 mol/kg KCl, one of water open to the room's air,
-// one dry; `extra` the bench's fields
+// a 25 C room (its air's carbon dioxide `co2_ppm`; 0 none, the default 420): a beaker of 0.01 mol/kg KCl, one of water
+// open to the room's air, one dry; `extra` the bench's fields
 std::string bench(const std::string &extra = "", double co2_ppm = 0.0) {
 	return R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 25, "air_mol": 1000, "co2_ppm": )" + std::to_string(co2_ppm) + R"(},)" + extra + R"(
 		"items": [
@@ -62,6 +62,10 @@ TEST_CASE("lab: a vessel's liquid reads its conductivity, by instruments its met
 	CHECK(*water.us_cm == doctest::Approx(0.0549).epsilon(0.02));
 	// open to air of 420 ppm, its carbonic acid adds most of a microsiemens (distilled water reads about 1 uS/cm)
 	auto aired = open(bench("", 420.0));
+	// a bench that names none has today's air
+	const std::string unsaid = std::string(R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 25, "air_mol": 1000},)") + R"("items": [
+			{"id": "water", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [10, 7], "contents": {"water": {"g": 100}}}]})";
+	CHECK(*item(open(unsaid)->view(), "water").us_cm == doctest::Approx(*item(aired->view(), "water").us_cm).epsilon(1e-6));
 	const double distilled = *item(aired->view(), "water").us_cm;
 	MESSAGE("water under 420 ppm of CO2: " << distilled << " uS/cm");
 	CHECK(distilled > 0.4);
