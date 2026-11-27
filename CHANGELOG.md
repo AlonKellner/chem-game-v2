@@ -1,5 +1,22 @@
 # GAME_SPEC version history
 
+## 0.78.0 (2026-11-27, Stage 78; awaiting the user's sign-off)
+
+- §12.3 (Stage 78, `docs/TDD_78_REFLECTION.md`; the user's request for reflection simulated as refraction is):
+  **each material's own index, complex where it is a metal**: datagen's measured n + ik tables (`nk_table`, read in
+  the dielectric function against the photon's energy), `chem::optics::extinction_index`; **liquid mercury** as
+  Inagaki, Arakawa and Williams 1981 measured it (checked against Smith and Stromberg 1966 at 546.1 nm; normal
+  reflectance 0.773 to 0.783); a vessel's liquid takes its liquids' index by volume (a row of k a set:
+  `ROWS_PER_SET` 10); **Fresnel with a complex index** (`chem::optics::fresnel_reflectance`; the shader's own
+  `metal_reflectance`): a metal turns back R of what comes to it and takes in the rest, in both tracers, without a
+  branch, so its mirror image is in the kept beam.
+- §12.3: **the room's faces ruled as the wall is** (the user's choice: a mirror shows them), their edge cells with
+  them: a ray that comes to a face is put at its own place on it (the header's ninth vector: the ruling), read exactly
+  by the pass and by the truth; their mean the faces' mean of before.
+- §18: O6 restated for a complex index; **O28** (a mirror shows the room's ruled faces where the truth's rays find
+  them); O27 reserved for clear surfaces' branches, split off to their own stage (the user's choice), built so far on
+  branch `reflection-branches-wip`.
+- §13: the experiment mercury (300 g of liquid mercury beside water and copper sulfate); a play of it.
 ## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 
 - §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a
