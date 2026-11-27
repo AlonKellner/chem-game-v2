@@ -793,7 +793,8 @@ CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell) {
 	CellMixtures out;
 	out.gas = mix.gas;
 	out.liquid = mix.liquid;
-	out.particles = mix.particles;
+	// the table's particles; the rest of the array none (a Mix fills only as many as the table has: Stage 64)
+	std::copy_n(mix.particles.begin(), table.solution().ions.size(), out.particles.begin());
 	return out;
 }
 
