@@ -171,6 +171,13 @@
 			"tutorial": "tutorials/seed.json"
 		},
 		{
+			"id": "standardise",
+			"title": "Standardising a base",
+			"summary": "Sodium hydroxide of about 0.1 M, made roughly, titrated against half a gram of KHP weighed on the analytical balance: run in from the burette to phenolphthalein's first lasting pink. Its concentration from the mass and the volume.",
+			"bench": "benches/standardise.json",
+			"tutorial": "tutorials/standardise.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

@@ -1073,3 +1073,40 @@ TEST_CASE("experiment seed: followed with its own gestures, free, it completes (
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment standardise: followed with its own gestures, strict, the KHP weighed and the base run in to the pink give the base's concentration (Stage 65)") {
+	Pupil p("data/benches/standardise.json", "data/tutorials/standardise.json");
+	CHECK(pupil::follow_through(p, 3600) > 10);
+	completed(p);
+	// what a student works out: the balance's reading over 204.22 g/mol, in the base the burette's readings ran in
+	const lab::LabView v = p.ui->lab().view();
+	double mass = 0.0, first = 0.0, last = 0.0;
+	int burette = 0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.what == "reads_g") {
+			mass = e.value;
+		}
+		if (e.quantity.what == "scale_ml") {
+			(burette++ == 0 ? first : last) = e.value;
+		}
+	}
+	const double found = mass / 204.22 / ((last - first) * 1e-3), truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE(mass << " g of KHP, " << last - first << " mL of base: " << found << " mol/L against " << truth);
+	CHECK(found == doctest::Approx(truth).epsilon(0.01));
+	report(p, { found });
+	CHECK(p.drawn("yours is within it"));
+	report(p, { truth * 1.05 });
+	CHECK(p.drawn("yours is off by"));
+}
+
+TEST_CASE("experiment standardise: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/standardise.json", "data/tutorials/standardise.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment standardise: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/standardise.json", "data/tutorials/standardise.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
