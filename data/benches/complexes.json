@@ -72,10 +72,10 @@
 					"g": 30.0
 				},
 				"iron_iii_nitrate_aq": {
-					"mol": 6e-05
+					"mol": 6e-06
 				},
 				"potassium_thiocyanate_aq": {
-					"mol": 0.0003
+					"mol": 3e-05
 				},
 				"nitric_acid_aq": {
 					"mol": 0.003
@@ -192,7 +192,7 @@
 					"mol": 0.006
 				},
 				"eriochrome_black_t_aq": {
-					"mol": 1.5e-06
+					"mol": 5e-07
 				}
 			}
 		},
@@ -219,7 +219,7 @@
 					"mol": 0.006
 				},
 				"eriochrome_black_t_aq": {
-					"mol": 1.5e-06
+					"mol": 5e-07
 				},
 				"magnesium_sulfate_aq": {
 					"mol": 0.0003
