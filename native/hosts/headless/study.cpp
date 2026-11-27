@@ -8,6 +8,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -753,6 +754,142 @@ int precipitation() {
 	return status;
 }
 
+// Stage 65 (GAME_SPEC §10, curriculum 20): a solution's conductivity. KCl and HCl at 25 C against Onsager's limiting
+// law and what Shedlovsky and Hamer and DeWane measured; acetic acid against Ostwald's dilution law (its K from the
+// conductivity alone, as MacInnes and Shedlovsky read theirs); then a conductometric titration, 50 mL of 0.01 M HCl
+// and 0.1 M NaOH added, settled in a step each: its two lines, falling then rising, crossing at the equivalence.
+int conductivity_study() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	std::vector<Reaction> equilibria;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.kinetics().law == Kinetics::Law::Equilibrium) {
+			equilibria.push_back(r);
+		}
+	}
+	int status = 0;
+	// water and what is put in it, settled at T in one step: its conductivity, its limit, and `solute`'s molar
+	// concentration; true where every invariant holds
+	const auto settle = [&](const std::vector<std::pair<SpeciesId, double>> &put, double water, double kelvin, double &kappa, double &limit, double &molar,
+								SpeciesId solute) {
+		World::Builder b(table);
+		const CellId cell = b.add_cell("beaker");
+		b.set_amount(cell, builtin::water, amount_from_mol(water, ok));
+		for (const auto &[s, mol] : put) {
+			b.set_amount(cell, s, amount_from_mol(mol, ok));
+		}
+		b.set_temperature(cell, kelvin);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			std::exit(1);
+		}
+		Simulation sim(std::move(*world), shipped());
+		const Totals genesis = totals(table, sim.world().snapshot());
+		const StepTrace trace = sim.step();
+		const CellState &end = sim.world().snapshot_cell(cell);
+		double t = 0.0;
+		sim.world().temperature(cell, t);
+		const bool read = conductivity(table, end, t, kappa, &limit);
+		const bool clean = read && check_all(table, trace, equilibria).empty() && totals(table, sim.world().snapshot()) == genesis && check_Q1(table, end, kappa, limit).empty();
+		double volume = 0.0, of = 0.0;
+		for (size_t k = 0; k < end.amount.size(); ++k) {
+			const SpeciesDef &d = table.species(SpeciesId{ static_cast<int32_t>(k) });
+			if (end.amount[k] > 0 && !d.wall && (d.phase == Phase::Liquid || d.phase == Phase::Aqueous)) {
+				volume += static_cast<double>(end.amount[k]) * MOL_PER_QUANTUM * molar_volume_at(table, d, t);
+			}
+		}
+		for (const auto &[s, mol] : put) {
+			of += s == solute ? mol : 0.0;
+		}
+		molar = of / volume * 1e-3;
+		return clean;
+	};
+	double b1 = 0.0, b2 = 0.0, bk = 0.0;
+	onsager_constants(table, 298.15, b1, b2, bk);
+	std::printf("Debye, Huckel and Onsager at 25 C: B1 %.4f, B2 %.3f S cm2/mol (NSRDS-NBS 33: 0.2300, 60.639); the ions' size %.1f A\n\n", b1, b2 * 1e4,
+			table.solution().ion_size * 1e10);
+	std::printf("%-6s %10s %12s %12s %12s %9s %10s\n", "", "c mol/L", "model", "Onsager", "measured", "error", "invariants");
+	struct Row {
+		const char *name;
+		SpeciesId solute;
+		double c, measured;
+	};
+	// the water's own conductivity, subtracted as the measurers subtracted their solvent's
+	double water_kappa = 0.0, water_limit = 0.0, water_molar = 0.0;
+	settle({}, 1.0 / 0.018015, 298.15, water_kappa, water_limit, water_molar, builtin::water);
+	std::printf("(the water's own, %.4f uS/cm, subtracted as the measurers subtracted their solvent's)\n", water_kappa * 1e4);
+	for (const Row &row : { Row{ "KCl", builtin::potassium_chloride_aq, 0.0001, 148.94 }, Row{ "KCl", builtin::potassium_chloride_aq, 0.001, 146.95 },
+				 Row{ "KCl", builtin::potassium_chloride_aq, 0.01, 141.27 }, Row{ "KCl", builtin::potassium_chloride_aq, 0.1, 128.96 },
+				 Row{ "HCl", builtin::hydrochloric_acid_aq, 0.0001, 424.5 }, Row{ "HCl", builtin::hydrochloric_acid_aq, 0.001, 421.2 },
+				 Row{ "HCl", builtin::hydrochloric_acid_aq, 0.01, 411.9 }, Row{ "HCl", builtin::hydrochloric_acid_aq, 0.1, 391.1 } }) {
+		double kappa = 0.0, limit = 0.0, molar = 0.0;
+		// mol per kg of water for about `c` per litre (the solution's own volume read back)
+		const bool clean = settle({ { row.solute, row.c } }, 1.0 / 0.018015, 298.15, kappa, limit, molar, row.solute);
+		const double model = (kappa - water_kappa) / (molar * 1e3) * 1e4, l0 = (limit - water_limit) / (molar * 1e3) * 1e4;
+		const double onsager = l0 - (b1 * l0 + b2 * 1e4) * std::sqrt(molar);
+		const double error = model / row.measured - 1.0;
+		std::printf("%-6s %10.6f %12.3f %12.3f %12.3f %8.2f%% %10s\n", row.name, molar, model, onsager, row.measured, 100.0 * error, clean ? "hold" : "BROKEN");
+		// (the measured at its nominal c, the model at its own, a few parts in a thousand apart: within half a percent)
+		status |= clean && std::abs(error) < 0.005 ? 0 : 1;
+		// the limiting law is the dilute limit
+		status |= row.c > 0.0002 || std::abs(model / onsager - 1.0) < 0.001 ? 0 : 1;
+	}
+	// acetic acid: Ostwald's dilution law read from the conductivity alone, with MacInnes and Shedlovsky's own Lambda0
+	std::printf("\nacetic acid at 25 C: alpha = Lambda / 390.71, K = alpha^2 c / (1 - alpha) (MacInnes and Shedlovsky: K from 1.760e-5 to 1.811e-5)\n");
+	std::printf("%10s %12s %12s %12s %10s\n", "c mol/L", "Lambda", "measured", "K", "invariants");
+	for (const auto &[c, measured] : { std::pair{ 1.02831e-3, 48.146 }, std::pair{ 12.829e-3, 14.375 }, std::pair{ 52.303e-3, 7.202 } }) {
+		double kappa = 0.0, limit = 0.0, molar = 0.0;
+		const bool clean = settle({ { builtin::acetic_acid_aq, c } }, 1.0 / 0.018015, 298.15, kappa, limit, molar, builtin::acetic_acid_aq);
+		const double model = (kappa - water_kappa) / (molar * 1e3) * 1e4;
+		const double alpha = model / 390.71, k = alpha * alpha * molar / (1.0 - alpha);
+		std::printf("%10.6f %12.3f %12.3f %12.3e %10s\n", molar, model, measured, k, clean ? "hold" : "BROKEN");
+		status |= clean && std::abs(model / measured - 1.0) < 0.02 && k > 1.6e-5 && k < 1.95e-5 ? 0 : 1;
+	}
+	// a conductometric titration: 50 mL of 0.01 M HCl (0.0005 mol in 50 g of water), 0.1 M NaOH (0.0001 mol in 0.996 g
+	// of water a mL)
+	std::printf("\n50 mL of 0.01 M HCl, 0.1 M NaOH added, 25 C: the end point 5.00 mL\n");
+	std::printf("%8s %14s %14s %10s\n", "base mL", "kappa uS/cm", "x (50+v)/50", "invariants");
+	std::vector<std::pair<double, double>> curve;
+	for (int tenth = 0; tenth <= 100; tenth += 5) {
+		const double ml = tenth * 0.1, base = 1e-4 * ml;
+		double kappa = 0.0, limit = 0.0, molar = 0.0;
+		std::vector<std::pair<SpeciesId, double>> put{ { builtin::hydrochloric_acid_aq, 0.0005 } };
+		if (base > 0.0) {
+			put.emplace_back(builtin::sodium_hydroxide_aq, base);
+		}
+		const bool clean = settle(put, (50.0 + 0.996 * ml) / 18.015, 298.15, kappa, limit, molar, builtin::hydrochloric_acid_aq);
+		// read as a student corrects it for the base's dilution, times (50 + v) / 50
+		curve.emplace_back(ml, kappa * 1e4 * (50.0 + ml) / 50.0);
+		std::printf("%8.1f %14.1f %14.1f %10s\n", ml, kappa * 1e4, kappa * 1e4 * (50.0 + ml) / 50.0, clean ? "hold" : "BROKEN");
+		status |= clean ? 0 : 1;
+	}
+	// the two lines, each fitted to the points well away from the end (to 3 mL, and from 7), and where they cross
+	const auto fit = [&](double from, double to, double &slope, double &at) {
+		double n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+		for (const auto &[x, y] : curve) {
+			if (x >= from && x <= to) {
+				n += 1;
+				sx += x;
+				sy += y;
+				sxx += x * x;
+				sxy += x * y;
+			}
+		}
+		slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+		at = (sy - slope * sx) / n;
+	};
+	double s1 = 0, a1 = 0, s2 = 0, a2 = 0;
+	fit(0.0, 3.0, s1, a1);
+	fit(7.0, 10.0, s2, a2);
+	const double end = (a2 - a1) / (s1 - s2);
+	std::printf("\nthe falling line %.1f uS/cm a mL, the rising %.1f; they cross at %.3f mL (the equivalence 5.000)\n", s1, s2, end);
+	status |= s1 < 0.0 && s2 > 0.0 && std::abs(end - 5.0) < 0.1 ? 0 : 1;
+	std::printf("\n%s\n", status == 0 ? "the model within half a percent of what was measured to 0.1 mol/L, Onsager's law its dilute limit, Ostwald's K the acid's; the titration's lines cross at its equivalence" : "A CONDUCTIVITY FAILED");
+	return status;
+}
+
 } // namespace
 
 // Stage 66 (curriculum 35): a seed in a supersaturated solution. 100 g of water held at 25 C with copper sulfate 5 %
@@ -882,9 +1019,12 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "precipitation") == 0) {
 		return precipitation();
 	}
+	if (std::strcmp(name, "conductivity") == 0) {
+		return conductivity_study();
+	}
 	if (std::strcmp(name, "seed") == 0) {
 		return seed();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, spectrum, frames, tilt, vortex)\n", name);
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

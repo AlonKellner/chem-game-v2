@@ -1857,6 +1857,9 @@ struct Ui::Impl {
 			if (v.ph) {
 				whats.emplace_back("ph");
 			}
+			if (v.us_cm) {
+				whats.emplace_back("us_cm"); // (Stage 65)
+			}
 			if (v.scale_ml) {
 				whats.emplace_back("scale_ml");
 			} else if (!view.instruments || v.read_ml) {
@@ -1870,7 +1873,7 @@ struct Ui::Impl {
 		return out;
 	}
 	static std::string record_name(const std::string &what) {
-		return what == "celsius" ? "+ T" : what == "ph" ? "+ pH" : what == "reads_g" ? "+ mass" : what == "kpa" ? "+ kPa" : what == "absorbance" ? "+ A" : "+ mL";
+		return what == "celsius" ? "+ T" : what == "ph" ? "+ pH" : what == "us_cm" ? "+ uS/cm" : what == "reads_g" ? "+ mass" : what == "kpa" ? "+ kPa" : what == "absorbance" ? "+ A" : "+ mL";
 	}
 
 	// ---- the debug panel (§13.6): the selected item from the inside
@@ -2086,11 +2089,11 @@ struct Ui::Impl {
 	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
 	static constexpr float MENU_ROW = 92;
 	// in one column, a column more past each eight (Stage 47: eleven in one ran off the screen; Stage 54: nineteen in
-	// two), at most three
-	int menu_columns() const { return std::min(3, static_cast<int>((catalogue.size() + 7) / 8)); }
+	// two), at most four (Stage 65: thirty-two in three ran off it)
+	int menu_columns() const { return std::min(4, static_cast<int>((catalogue.size() + 7) / 8)); }
 	int menu_rows() const { return (static_cast<int>(catalogue.size()) + menu_columns() - 1) / menu_columns(); }
 	Rect menu_rect() const {
-		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : 1800.0f;
+		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : menu_columns() == 3 ? 1800.0f : 1880.0f;
 		return Rect{ menu_columns() == 1 ? 480.0f : (1920 - w) / 2, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
 	}
 	Rect menu_row(int k) const {
@@ -2204,7 +2207,7 @@ struct Ui::Impl {
 				text(row.x + row.w - 64, row.y + 28, "next", GUIDE, 16);
 			}
 			float y = row.y + 52;
-			for (const std::string &l : wrapped(e.summary, menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
+			for (const std::string &l : wrapped(e.summary, menu_columns() == 4 ? 50 : menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
 				text(row.x + 12, y, l, DIM, 14);
 				y += 18;
 				if (y > row.y + row.h - 4) {
@@ -4054,7 +4057,7 @@ struct Ui::Impl {
 	Rect goal_pick(int i) const { return Rect{ EDITOR.x + 20, term_y(pick_row) + 32 + static_cast<float>(i) * 26, 250, 24 }; }
 	bool goal_species(int r) const {
 		const std::string &w = draft.terms[static_cast<size_t>(r)].quantity.what;
-		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml" || w == "ph");
+		return !(w == "celsius" || w == "liquid_ml" || w == "gas_ml" || w == "ph" || w == "us_cm");
 	}
 	void goal_edit_press(float x, float y) {
 		if (pick_row >= 0) {
@@ -7204,9 +7207,11 @@ struct Ui::Impl {
 					row("\"" + v.label + "\"", INK, 16);
 				}
 				if (measured) {
-					row((v.read_c ? text_of("thermometer %.1f C", *v.read_c) : std::string()) + (v.read_ph ? text_of(", pH meter %.2f", *v.read_ph) : std::string()));
+					row((v.read_c ? text_of("thermometer %.1f C", *v.read_c) : std::string()) + (v.read_ph ? text_of(", pH meter %.2f", *v.read_ph) : std::string()) +
+							(v.read_us_cm ? ", " + shown(Quantity{ v.id, "us_cm", "g" }, *v.read_us_cm) : std::string())); // (Stage 65: its conductivity meter's)
 				} else {
-					row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()));
+					row(text_of("%.2f C", v.celsius) + (v.kind == "vessel" ? text_of(", %.1f kPa", v.pressure_kpa) : std::string()) + (v.ph ? text_of(", pH %.2f", *v.ph) : std::string()) +
+							(v.us_cm ? ", " + shown(Quantity{ v.id, "us_cm", "g" }, *v.us_cm) : std::string()));
 				}
 				if (v.layers.size() > 1 && measured) {
 					row(text_of("layered: %d layers", static_cast<int>(v.layers.size())), DIM, 15);

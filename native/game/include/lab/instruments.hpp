@@ -31,6 +31,16 @@ const std::vector<Balance> &balances(); // in data/instruments.json's order; the
 const Balance *balance(std::string_view name); // null if there is none of that name
 Meter thermometer(); // °C
 Meter ph_meter();
+// (Stage 65) a conductivity meter: its accuracy, a share of its reading, and its ranges (uS/cm), each its top and its
+// resolution, by rising top
+struct ConductivityMeter {
+	double accuracy = 0.005;
+	std::vector<std::pair<double, double>> ranges;
+};
+ConductivityMeter conductivity_meter();
+// what it reads of a truth (uS/cm), its offset drawn as `share`: the truth times 1 + accuracy x share, to the
+// resolution of the first range whose top is above it (the last range's past them all); `resolution` the one used
+double conductivity_reading(const ConductivityMeter &meter, double truth_us_cm, double share, double *resolution = nullptr);
 Meter gauge(); // a pressure gauge, kPa (Stage 54)
 double hand(); // how far a hand misses an amount aimed at, a share (0.10)
 double reference_density(); // the reference weights', kg/m^3 (OIML D 28: 8000)

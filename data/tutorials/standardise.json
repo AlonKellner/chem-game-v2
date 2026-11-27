@@ -1,0 +1,140 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 14) on data/benches/standardise.json: sodium hydroxide standardised against KHP. KHP + NaOH -> KNaP + H2O, one to one: the base's concentration = m(KHP) / (204.22 g/mol x V(base)).",
+	"title": "Experiment: standardising a base",
+	"bench": "../benches/standardise.json",
+	"report": [
+		{
+			"label": "the base's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * base.sodium_hydroxide_aq.mol / base.condensed_ml",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "c = m / (M V): the balance's reading of the KHP over 204.22 g/mol, in the base the burette ran in (its two readings' difference). The label said about 0.1 M: sodium hydroxide takes up water and carbon dioxide from the air, so its solution is made roughly and standardised. The balance reads within 0.2 mg, the burette within 0.05 mL, and the last drop past the end point is the titration's own error."
+		}
+	],
+	"steps": [
+		{
+			"part": "Weighing",
+			"title": "The flask on the balance",
+			"text": "Click the titration flask to pick it up, then click the balance. Then right-click the balance and click \"tare\".",
+			"why": "A primary standard is weighed: KHP is pure, dry, not hygroscopic, and heavy for the one hydrogen it gives up (204.22 g/mol), so half a gram of it is weighed to 0.04 %.",
+			"checks": [
+				{"text": "the flask tared on the balance", "when": {"all": [{"item": "scale", "under": "flask"}, {"quantity": {"item": "scale", "what": "reads_g"}, "compare": "between", "values": [-0.0002, 0.0002]}]}}
+			],
+			"play": [{"drag": ["item:flask", "item:scale"]}, {"click": "item:scale"}, {"click": "tare:scale"}]
+		},
+		{
+			"title": "About half a gram of KHP",
+			"text": "Pick up the KHP, then right-click the flask. Type 0.5, then click \"tip 0.5 g of the solid\".",
+			"checks": [
+				{"text": "about 0.5 g in the flask", "when": {"item": "flask", "species": "potassium_hydrogen_phthalate", "above_g": 0.4}}
+			],
+			"play": [{"drag": ["item:khp", "item:flask"]}, {"type": "0.5"}, {"click": "panel:tip:solid"}]
+		},
+		{
+			"title": "What the balance says",
+			"text": "Right-click the balance and click \"+ mass\": the KHP you took, to 0.1 mg.",
+			"checks": [
+				{"text": "its reading recorded", "when": {"item": "scale", "recorded": "reads_g"}}
+			],
+			"play": [{"click": "item:scale"}, {"click": "record:scale:reads_g"}]
+		},
+		{
+			"part": "Dissolving",
+			"title": "Water, stirred",
+			"text": "Pick up the water bottle, right-click the flask, type 50 and click \"pour\". Then right-click the flask, click \"stir\", and click 60x on the clock.",
+			"why": "The water's volume does not matter: the moles of KHP are what the base meets.",
+			"checks": [
+				{"text": "water in the flask, stirred", "when": {"all": [{"item": "flask", "above_g": 0, "species": "water"}, {"item": "flask", "stirred": true}]}}
+			],
+			"play": [{"drag": ["item:water", "item:flask"]}, {"type": "50"}, {"click": "panel:pour"}, {"click": "item:flask"}, {"click": "stir:flask"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "Until it is dissolved",
+			"text": "Watch the white crystals go.",
+			"checks": [
+				{"text": "no crystals left", "wait": true, "when": {"item": "flask", "species": "potassium_hydrogen_phthalate", "below_g": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "Three drops of phenolphthalein",
+			"text": "Pick up the phenolphthalein, right-click the flask, type 0.15 and click \"pour\".",
+			"why": "Phenolphthalein is colourless below pH 8 and pink above 9: past the end point the first drop of base turns the whole flask pink. The end point of a weak acid's titration with a strong base is near pH 9, in its range.",
+			"checks": [
+				{"text": "the indicator in the flask", "when": {"item": "flask", "species": "phenolphthalein_aq", "above_g": 0.00003}}
+			],
+			"play": [{"drag": ["item:phenolphthalein", "item:flask"]}, {"type": "0.15"}, {"click": "panel:pour"}]
+		},
+		{
+			"part": "The burette",
+			"title": "Fill the burette",
+			"text": "Pick up the sodium hydroxide, right-click the burette, type 55 and click \"pour\".",
+			"checks": [
+				{"text": "the burette filled", "when": {"quantity": {"item": "burette", "what": "condensed_ml"}, "compare": "above", "value": 45}}
+			],
+			"play": [{"drag": ["item:base", "item:burette"]}, {"type": "55"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "Its first reading",
+			"text": "Right-click the burette and click \"+ mL\": it reads down from its zero line.",
+			"checks": [
+				{"text": "the burette's reading recorded", "when": {"item": "burette", "recorded": "scale_ml"}}
+			],
+			"play": [{"click": "item:burette"}, {"click": "record:burette:scale_ml"}]
+		},
+		{
+			"title": "The burette over the flask",
+			"text": "Pick up the burette and click the flask: its tip stands in the flask's neck.",
+			"checks": [
+				{"text": "the burette on the flask", "when": {"item": "burette", "on": "flask"}}
+			],
+			"play": [{"drag": ["item:burette", "item:flask"]}]
+		},
+		{
+			"part": "Titrating",
+			"title": "Most of it, fast",
+			"text": "Right-click the burette and drag its tap to about 30 %.",
+			"why": "Half a gram of KHP takes about 25 mL of a 0.1 M base: the first 18 mL can run in fast.",
+			"checks": [
+				{"text": "the tap open", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "between", "values": [20, 40]}}
+			],
+			"play": [{"click": "item:burette"}, {"click": "cap:burette@0.3"}]
+		},
+		{
+			"title": "To 18 mL",
+			"text": "Watch the burette until it reads 18 mL.",
+			"checks": [
+				{"text": "18 mL run in", "wait": true, "when": {"quantity": {"item": "burette", "what": "scale_ml"}, "compare": "above", "value": 18}}
+			],
+			"play": null
+		},
+		{
+			"title": "Then drop by drop",
+			"text": "Drag the burette's tap nearly shut, to about 4 %.",
+			"why": "Near the end point a drop is what matters: the last drop past it is the titration's error.",
+			"checks": [
+				{"text": "the tap nearly shut", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "between", "values": [2, 6]}}
+			],
+			"play": [{"click": "cap:burette@0.04"}]
+		},
+		{
+			"title": "The first lasting pink",
+			"text": "Watch the flask until it turns pink and stays pink.",
+			"checks": [
+				{"text": "the flask pink", "wait": true, "when": {"item": "flask", "species": "phenolphthalein_dianion", "above_g": 0.00002}}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it, and read it",
+			"text": "Drag the burette's tap shut, then right-click the burette and click \"+ mL\". The base run in is the two readings' difference.",
+			"checks": [
+				{"text": "the tap shut", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "below", "value": 1}},
+				{"text": "its last reading recorded", "when": {"item": "burette", "recorded": "scale_ml", "recorded_count": 2}}
+			],
+			"play": [{"click": "cap:burette@0"}, {"click": "item:burette"}, {"click": "record:burette:scale_ml"}]
+		}
+	]
+}

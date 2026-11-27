@@ -223,8 +223,9 @@ TEST_CASE("pour: by hand, a liquid is decanted off its sediment, which runs once
 		REQUIRE(l->advance(60 * 10, why));
 		CHECK(liquid(*l, "beaker") > 40.0);
 		CHECK(grams(*l, "beaker", "copper_oxide") == 0.0);
-		// (Stage 63: to a part in ten million: pure water's own hydrogen ions take a few nanomoles of the oxide)
-		CHECK(grams(*l, "muddy", "copper_oxide") == doctest::Approx(oxide).epsilon(1e-7));
+		// (Stage 63: to a part in ten million: pure water's own hydrogen ions take a few nanomoles of the oxide; Stage 65:
+		// to a part in a hundred thousand, the carbonic acid of the room's carbon dioxide taking some micrograms more)
+		CHECK(grams(*l, "muddy", "copper_oxide") == doctest::Approx(oxide).epsilon(1e-5));
 		// to its full tilt: the oxide too, all of it
 		ok(*l, pour_at("muddy", 1.0));
 		REQUIRE(l->advance(60 * 30, why));

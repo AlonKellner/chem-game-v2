@@ -1,0 +1,20 @@
+{
+	"format": "chem-bench/2",
+	"note": "Sodium hydroxide standardised against KHP (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 14): an analytical balance, a 250 mL conical flask, potassium hydrogen phthalate (KHP, a primary standard: 204.22 g/mol, one acidic hydrogen), water, phenolphthalein, a 50 mL burette and a bottle of sodium hydroxide of about 0.1 M (0.036 to 0.044 mol in 400 g of water, drawn by the seed). Read by instruments: about 0.5 g of KHP weighed into the tared flask, dissolved, three drops of phenolphthalein, the base run in fast to 18 mL and then slowly to the first lasting pink: c = m / (204.22 g/mol x V).",
+	"readings": "instruments",
+	"seed": 14,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "scale", "kind": "balance", "model": "analytical", "at": [22, 12]},
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [4, 7], "label": "titration flask"},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [8, 7], "label": "sodium hydroxide, about 0.1 M",
+			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": [0.036, 0.044]}}},
+		{"id": "khp", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [12, 8], "label": "potassium hydrogen phthalate (KHP), dried",
+			"contents": {"potassium_hydrogen_phthalate": {"g": 20, "particles": 2000000}}},
+		{"id": "water", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [15, 7], "label": "water", "contents": {"water": {"g": 450}}},
+		{"id": "phenolphthalein", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [19, 8], "label": "phenolphthalein, 0.05 %",
+			"contents": {"water": {"g": 25.0}, "phenolphthalein_aq": {"g": 0.0125}}}
+	]
+}

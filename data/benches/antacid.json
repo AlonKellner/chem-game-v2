@@ -1,0 +1,23 @@
+{
+	"format": "chem-bench/2",
+	"note": "An antacid by back titration (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 19): an analytical balance, an antacid tablet (sodium hydrogen carbonate, 0.25 to 0.35 g, drawn by the seed), a 25 mL pipette, hydrochloric acid of 0.200 M (0.08 mol in 400 g of water), a 250 mL conical flask, potassium hydroxide of 0.100 M (0.04 mol in 400 g of water), a 50 mL burette and phenolphthalein. Read by instruments: the tablet weighed into the tared flask, 25 mL of the acid pipetted onto it (5.00 mmol, more than it can take), boiled until its carbon dioxide has gone (a burner in Supplies) and cooled; the acid left over titrated with the base to phenolphthalein's pink. What the tablet neutralised = 5.00 mmol less the base's moles.",
+	"readings": "instruments",
+	"seed": 19,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "scale", "kind": "balance", "model": "analytical", "at": [24, 12]},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25},
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 3], "label": "25 mL pipette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [7, 7], "label": "flask"},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [11, 7], "label": "hydrochloric acid, 0.200 M",
+			"contents": {"water": {"g": 400}, "hydrochloric_acid_aq": {"mol": 0.08}}},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [15, 7], "label": "potassium hydroxide, 0.100 M",
+			"contents": {"water": {"g": 400}, "potassium_hydroxide_aq": {"mol": 0.04}}},
+		{"id": "phenolphthalein", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [19, 8], "label": "phenolphthalein, 0.05 %",
+			"contents": {"water": {"g": 25.0}, "phenolphthalein_aq": {"g": 0.0125}}},
+		{"id": "tablet", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [21, 1], "label": "an antacid tablet",
+			"contents": {"sodium_bicarbonate": {"g": [0.25, 0.35], "particles": 1}}}
+	]
+}

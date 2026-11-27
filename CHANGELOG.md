@@ -1,5 +1,24 @@
 # GAME_SPEC version history
 
+## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
+
+- §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):
+  **a solution's conductivity**, each ion's Nernst–Einstein conductivity from its diffusion lowered by Debye, Hückel
+  and Onsager's atmosphere over one ion size (Robinson and Stokes; 4.2 Å, calibrated), water's dielectric constant by
+  temperature (Malmberg and Maryott); within 0.5 % of Shedlovsky's KCl and NaCl and Hamer and DeWane's HCl to
+  0.1 mol/L, of Jones and Bradshaw's KCl standards at 0, 18 and 25 °C, and within 2 % of MacInnes and Shedlovsky's
+  acetic acid. **Each ion's mobility with temperature** by Walden's rule with its own exponent (0.87; H⁺ 0.61), the
+  column's diffusion with it. Invariant Q1. `chem_tool study conductivity`.
+- §13: a conductivity meter (0.5 % of its reading, auto-ranging), a vessel's quantity `us_cm`; a room's
+  carbon dioxide, 420 ppm by default (a bench's `co2_ppm`, 0 for none); a report's expression takes log10, ln and sqrt, and a quantity with no value yet is
+  not one the bench lacks; the experiments' list in four columns.
+- §13.7: the experiments `standardise`, `vinegar`, `carbonate_curve`, `buffer`, `salts_ph`, `antacid` and
+  `conductivity` (curriculum 14 to 20).
+- §7, §9: a surface reaction's transport carries the scarcer of its dissolved species (a salt dissolving into an acid
+  that takes its ion away stopped after its first minute).
+- §12.3: a vessel's liquid surface row (FORM z) in its content tag and its changed zone (a kept corner's route went
+  stale where the surface moved under a level that stood: O13).
+- §20: conductivity's and a room's air's declared simplifications.
 ## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process

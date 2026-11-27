@@ -1,0 +1,19 @@
+{
+	"format": "chem-bench/2",
+	"note": "Vinegar and a weak acid's curve (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 15): a 25 mL pipette, a 250 mL volumetric flask, a 250 mL conical flask, a 50 mL burette, sodium hydroxide of 0.100 M (0.04 mol in 400 g of water), a vinegar of unknown strength (0.17 to 0.25 mol of acetic acid in 237.5 g of water, drawn by the seed) and water. Read by instruments: 25 mL of the vinegar diluted to 250 mL and mixed; 25 mL of that titrated, the pH and the burette's reading logged each second. The end point is the steepest point; at half of it the acid and its base are equal and the pH is the acid's pKa.",
+	"readings": "instruments",
+	"seed": 15,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 3], "label": "25 mL pipette"},
+		{"id": "dilute", "kind": "vessel", "glassware": "volumetric_flask", "volume_ml": 250, "wall": "glass", "wall_g": 110, "at": [7, 6], "label": "250 mL volumetric flask"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [10, 7], "label": "titration flask"},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [14, 7], "label": "sodium hydroxide, 0.100 M",
+			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.04}}},
+		{"id": "vinegar", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [18, 7], "label": "vinegar",
+			"contents": {"water": {"g": 237.5}, "acetic_acid_aq": {"mol": [0.17, 0.25]}}},
+		{"id": "water", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [22, 7], "label": "water", "contents": {"water": {"g": 450}}}
+	]
+}
