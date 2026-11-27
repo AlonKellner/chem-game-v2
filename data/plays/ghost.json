@@ -11,8 +11,14 @@
 	{"button": "up", "frames": 120, "mark": "back upright"},
 	{"to": "square:8,9", "frames": 40, "button": "click"},
 	{"frames": 60, "mark": "poured", "shot": "ghost-1-poured"},
-	{"to": "item:bath", "frames": 20, "button": "right"},
-	{"to": "stir:bath", "frames": 20, "button": "click"},
+	{"do": {"do": "stir", "vessel": "bath", "on": true}, "frames": 20},
 	{"frames": 300, "mark": "stirring", "shot": "ghost-2-stirred"},
-	{"frames": 300, "mark": "stirring on", "shot": "ghost-3-stirred-more"}
+	{"frames": 300, "mark": "stirring on", "shot": "ghost-3-stirred-more"},
+	{"to": "pause", "button": "click"},
+	{"frames": 240, "mark": "paused", "shot": "ghost-4-paused-settled"},
+	{"frames": 4},
+	{"to": "item:bath", "frames": 10, "button": "right"},
+	{"to": "debug", "frames": 10, "button": "click"},
+	{"to": "debug:export", "frames": 10, "button": "click"},
+	{"frames": 10}
 ]}

@@ -4255,10 +4255,16 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		// changes colour at every step (a reaction) starts again only the histories of pixels whose rays part (a
 		// rim shows more of the wall as its liquid darkens: that is found again), not every pixel of its vessel.
 		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && eye(lab_of(prox), lab_of(prox + d)) < 1.0;
+		// (Stage 77) A pixel read by its own rays whose beam was traced again, its rays having moved (what lies in its
+		// vessel changed on rows they pass: a pile's surface sweeping slowly across it), starts again: what its
+		// corrections found was found along the rays it had, and kept by the drift rule (a small change of its
+		// estimate, a frame at a time) they stood over its new estimate, its history settled, and nothing asked
+		// for more: a slowly lowered pile left its old shape behind (the user's ghost, docs/TDD_77_GHOST.md).
+		bool rays_moved = both && !beam_held;
 		if (s.key.z == q.key.z && points > 0.0) {
 			float moved = eye(lab_of(prox), lab_of(now));
 			drift = drift + moved;
-			keep = drift <= DRIFT_MOST || plain;
+			keep = (drift <= DRIFT_MOST && !rays_moved) || plain;
 			if (keep && plain) {
 				float was = 0.2126 * prox.x + 0.7152 * prox.y + 0.0722 * prox.z;
 				float is = 0.2126 * now.x + 0.7152 * now.y + 0.0722 * now.z;
