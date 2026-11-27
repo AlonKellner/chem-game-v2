@@ -1291,3 +1291,49 @@ A solution's conductivity (GAME_SPEC §10), and each ion's mobility with tempera
   (pH 5.6).
 - **Checks**: acetic acid's Λ is within 1.2 % of MacInnes and Shedlovsky's, its ionisation (Stage 64's pKa 4.76) and
   its ions' conductivity together. Pure water reads 0.0549 µS/cm, ASTM D1193's Type I 0.0550 (18.2 MΩ cm).
+
+## Metals and precipitates (Stage 76)
+
+Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, their salts and their precipitates
+(GAME_SPEC §9). Read 2026-11-27.
+
+- **Atomic weights**: CIAAW's abridged table (ciaaw.org): Ca 40.078, Mg 24.305, Ba 137.33, Ag 107.87, Fe 55.845, Zn
+  65.38, Al 26.982, Co 58.933.
+- **The ions' ΔfH° and S°: the NBS tables** (Wagman et al. 1982; the scan Stage 64 read, printed page 2-N its PDF
+  page N + 8), the ao rows: Ca²⁺ −542.83 / −53.1 (2-267), Mg²⁺ −466.85 / −138.1 (2-260), Ba²⁺ −537.64 / 9.6 (2-282),
+  Ag⁺ 105.579 / 72.68 (2-160), Fe²⁺ −89.1 / −137.7, Fe³⁺ −48.5 / −315.9, FeOH²⁺ −290.8 / −142. (2-177), Zn²⁺
+  −153.89 / −112.1 (2-138), Al³⁺ −531. / −321.7 (2-127), Co²⁺ −58.2 / −113. (2-170), NO₃⁻ −205.0 / 146.4 (2-64).
+  **AlOH²⁺**: NBS prints its ΔfG° alone (−694.1); its ΔfH° −769.02 and S° −187.06 are **calibrated** to MINTEQ v4's
+  hydrolysis, Al³⁺ + H₂O = AlOH²⁺ + H⁺, log K −4.997 and 47.81 kJ (NIST 46.3), on the model's Al³⁺ and water (NBS's
+  ΔfG° −694.1 against the −693.6 that implies).
+- **The ions' Cp° and V°: OBIGT** (inorganic_aq.csv; Shock and Helgeson 1988; Shock, Sassani et al. 1997; Akinfiev and
+  Zotov 2001 for Ag⁺; Akinfiev and Tagirov 2014 for Zn²⁺; Tagirov and Schott 2001 for Al³⁺ and AlOH²⁺), in cal × 4.184,
+  shifted by the charge as Stage 64's: Cp − 216.35 z, V − 16.74 z.
+- **The precipitates**: ΔfH° NBS's (AgCl −127.068, Ag₂O −31.05, BaSO₄ −1473.2, BaCO₃ −1216.3, calcite −1206.92, gypsum
+  −2022.63, Ca(OH)₂ −986.09, Mg(OH)₂ −924.54; Fe(OH)₂ −569.0 and Fe(OH)₃ −823.0 as NBS's "precipitated"; Zn(OH)₂ ε
+  −643.25, the one form NBS gives whole; Al(OH)₃ amorphous −1276.; Co(OH)₂ pink precipitated −539.7). Each **S° is
+  calibrated** so that the solubility product is MINTEQ v4's, as minteq.v4.dat's PHASES write it (AgCl −9.75, Ag₂O
+  12.574 with 2 H⁺, BaSO₄ −9.98, BaCO₃ −8.57, calcite −8.48, gypsum −4.61, Ca(OH)₂ 22.804, Mg(OH)₂ (brucite) 16.844,
+  Fe(OH)₂ 13.564, Fe(OH)₃ (ferrihydrite) 3.191, Zn(OH)₂ (ε) 11.534, Al(OH)₃ (am) 10.8, Co(OH)₂ 13.094): within
+  3.3 J/K of NBS's own entropies but iron(II) hydroxide's (50.29 against 88.: MINTEQ's fresh precipitate is more
+  soluble than NBS's), and every reaction's heat within 6 kJ of MINTEQ's but iron(III) hydroxide's (−83.0 against
+  −73.4: NBS's precipitate against the ferrihydrite MINTEQ's K is of).
+- **The precipitates' Cp°**: NBS's where it prints one (AgCl 50.79, Ag₂O 65.86, BaSO₄ 101.75, BaCO₃ 85.35, calcite
+  81.88, gypsum 186.02, Ca(OH)₂ 87.49, Mg(OH)₂ 77.03, Zn(OH)₂ ε 72.4); OBIGT's for Fe(OH)₂ (21.3 cal), the amorphous
+  Al(OH)₃ (gibbsite's 91.7 J, assumed alike) and Co(OH)₂ (its Maier–Kelley coefficients at 298.15 K, 90.0 J);
+  Fe(OH)₃'s none read, **Kopp's** rule from Fe(OH)₂'s, 3/2 of it, 133.7. With them calcite's, gypsum's, barite's
+  and witherite's log K follow wateq4f.dat's analytic expressions within 0.07 to 50 C, 0.16 at 80 C.
+- **Densities**: the CRC Handbook's (PubChem: AgCl 5.56, BaSO₄ 4.49, BaCO₃ 4.43, gypsum 2.32, Ca(OH)₂ 2.24, Mg(OH)₂
+  2.36, Fe(OH)₂ 3.4, Fe(OH)₃ 3.65, Al(OH)₃ 2.42; Wikipedia's infoboxes for Ag₂O 7.14, Zn(OH)₂ 3.053, Co(OH)₂ 3.597);
+  calcite's specific gravity 2.71.
+- **The activity model**: Pitzer and Mayorga 1973 as pytzer transcribes it (Table I: AgNO₃, NaNO₃, KNO₃; Table VI,
+  (4/3)β and (2^(5/2)/3)Cφ unscaled: the chlorides and nitrates of Mg, Ca, Ba, Fe(II), Co, Zn; Table VIII, (3/2)β
+  and (3^(3/2)/2)Cφ unscaled: AlCl₃); Harvie, Møller and Weare 1984 for Ca²⁺ and Mg²⁺ with SO₄²⁻ and HCO₃⁻ and Ca²⁺
+  with OH⁻.
+- **Diffusion**: PHREEQC v3 phreeqc.dat's -dw for Ca²⁺ 0.792, Mg²⁺ 0.705, Ba²⁺ 0.848, Fe²⁺ 0.719, Al³⁺ 0.559, NO₃⁻
+  1.9, Zn²⁺ 0.715 (×10⁻⁹ m²/s); the CRC Handbook's (Vanýsek) for Ag⁺ 1.648, Fe³⁺ 0.604, Co²⁺ 0.732, as aqion.de's
+  table gives them; FeOH²⁺ and AlOH²⁺ their aquo ions' (none read).
+- **Gates**: a saturated calcium hydroxide against NIST SRM 2193b's certificate (23 December 2024), pH(S) 13.218,
+  12.815, 12.453, 12.129 and 11.709 at 5, 15, 25, 35 and 50 C: within 0.05 to 35 C, 0.07 low at 50 C (the activity
+  model's parameters 25 C's); its calcium 0.0198 mol/kg at 25 C. Silver chloride in water 1.34e-5 mol/kg, in
+  0.01 mol/kg NaCl 2.2e-8.
