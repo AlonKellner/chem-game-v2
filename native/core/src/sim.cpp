@@ -1457,27 +1457,47 @@ void Simulation::settle_cells() {
 const Thermal &Simulation::thermal(CellId cell) {
 	const auto c = static_cast<size_t>(cell.index);
 	if (!thermal_valid_[c]) {
-		const CellState &state = world_.snapshot_cell(cell);
-		const CellMeta &meta = world_.meta(cell);
-		if (thermal_key_.size() <= c) {
-			thermal_key_.resize(c + 1);
-		}
-		ThermalKey &key = thermal_key_[c];
-		// (Stage 53) derived again only if what it is derived from changed since: the same value, exactly
-		if (!(key.known && key.energy == state.energy && key.volume == meta.volume && key.sealed == meta.sealed && key.rigid == meta.rigid &&
-					key.reservoir == meta.reservoir && key.amount == state.amount)) {
-			thermal_[c] = thermal_state(world_.species(), state, &meta);
-			key.known = true;
-			key.energy = state.energy;
-			key.amount = state.amount;
-			key.volume = meta.volume;
-			key.sealed = meta.sealed;
-			key.rigid = meta.rigid;
-			key.reservoir = meta.reservoir;
-		}
+		kept_thermal(c, world_.snapshot_cell(cell), world_.meta(cell));
 		thermal_valid_[c] = 1;
 	}
 	return thermal_[c];
+}
+
+// (Stage 53) derived again only if what it is derived from changed since: the same value, exactly
+const Thermal &Simulation::kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const {
+	if (thermal_key_.size() <= c) {
+		thermal_key_.resize(c + 1);
+	}
+	if (thermal_.size() <= c) {
+		thermal_.resize(c + 1);
+	}
+	ThermalKey &key = thermal_key_[c];
+	if (!(key.known && key.energy == state.energy && key.volume == meta.volume && key.sealed == meta.sealed && key.rigid == meta.rigid &&
+				key.reservoir == meta.reservoir && key.amount == state.amount)) {
+		thermal_[c] = thermal_state(world_.species(), state, &meta);
+		key.known = true;
+		key.energy = state.energy;
+		key.amount = state.amount;
+		key.volume = meta.volume;
+		key.sealed = meta.sealed;
+		key.rigid = meta.rigid;
+		key.reservoir = meta.reservoir;
+	}
+	return thermal_[c];
+}
+
+bool Simulation::temperature(CellId cell, double &kelvin) const {
+	if (cell.index < 0 || cell.index >= world_.cell_count()) {
+		return false;
+	}
+	const CellMeta &meta = world_.meta(cell);
+	if (meta.reservoir) {
+		kelvin = meta.reservoir_temperature;
+		return true;
+	}
+	const Thermal &t = kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), meta);
+	kelvin = t.temperature;
+	return t.defined;
 }
 
 Refusal Simulation::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy) {
@@ -1533,10 +1553,12 @@ int64_t Simulation::tally(size_t reaction, CellId cell) const {
 
 // what was derived before the step may be stale: a host may have changed the world between steps
 void Simulation::begin_step() {
+	in_step_ = false;
 	grow_columns(); // (Stage 47: before anything is sized by the cells)
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	thermal_.resize(cells);
 	thermal_valid_.assign(cells, 0);
+	in_step_ = true;
 	flows_.reactions = reactions_.size() + equilibria_.size();
 	flows_.energy.assign(world_.edges().size() * PROCESSES, 0);
 	flows_.grams.assign(world_.edges().size() * PROCESSES, 0.0);
@@ -1576,6 +1598,7 @@ void Simulation::advance() {
 	}
 	world_.skip_step();
 	traced_ = false;
+	in_step_ = false;
 }
 
 void Simulation::restore_flows(StepFlows flows) {
@@ -1621,6 +1644,7 @@ void Simulation::step(StepTrace &trace) {
 		overflow();
 	}
 	world_.close_step(trace);
+	in_step_ = false;
 	if (world_.thermal()) {
 		trace.starved = starved_;
 		trace.exchanged = exchanged_;

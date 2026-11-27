@@ -1,5 +1,13 @@
 # GAME_SPEC version history
 
+## 0.72.0 (2026-11-27, Stage 72; signed off by the user: "Approved, merge and proceed")
+
+- §6, the wall in rings (Stage 72, `docs/TDD_72_STEP_CHEAPER.md`): a floor's inside surface under half its glass found
+  by ITP to the bisection's bracket of 1e-9 K, not by the bisection (9 evaluations a step where it took 26); where
+  the floor's convection steps down two such surfaces may stand. Every printed result of both sessions as it was;
+  their digests re-recorded with the user's approval. A cell's temperature read from the simulation's kept thermal
+  state by the columns and the lab (the same value).
+
 ## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
