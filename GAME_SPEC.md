@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.78.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.81.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -848,14 +848,20 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
   **Silver and ammonia**: AgNH₃⁺, Ag(NH₃)₂⁺ (MINTEQ v4): silver chloride dissolves in ammonia.
 - **Hydroxo complexes**: Zn(OH)₃⁻, Zn(OH)₄²⁻, Al(OH)₄⁻ (MINTEQ v4): zinc and aluminium hydroxides redissolve in excess
   base.
-- **Thiocyanate** SCN⁻ (NBS) and iron(III)'s FeSCN²⁺, Fe(SCN)₂⁺: blood red (Ozutsumi et al. 1992's constants and
-  spectra, the first constant at zero ionic strength from Below, Connick and Coppel 1958's by Davies's equation).
-- **Cobalt and chloride**: CoCl⁺, CoCl₂, CoCl₃⁻, CoCl₄²⁻ (ThermoChimie's): in strong hydrochloric acid cobalt turns from
-  pink to blue (Bjerrum, Halonin and Skibsted 1975's CoCl₄²⁻).
+- **Thiocyanate** SCN⁻ (NBS) and iron(III)'s FeSCN²⁺, Fe(SCN)₂⁺: blood red (their constants calibrated in the model's
+  activities to Below, Connick and Coppel 1958's and Lister and Rivington's measured quotients; Ozutsumi et al.
+  1992's spectra, Betts and Dainton's 5000 at 460 nm).
+- **Cobalt and chloride**: CoCl₄²⁻: in strong hydrochloric acid cobalt turns from pink to blue, and bluer as it warms
+  (its constant calibrated to Bjerrum, Halonin and Skibsted 1975's α₄ at 8.23 M HCl; their spectrum).
 - **Chromium(VI)**: CrO₄²⁻ yellow (Haupt 1952, NBS), HCrO₄⁻ and Cr₂O₇²⁻ orange as acid turns chromate to dichromate
   (MINTEQ v4, NBS SP 260-54); dichromate's visible band calibrated to its look (no open source measures it).
 - **EDTA** (Y⁴⁻ and its acids) and its complexes with calcium, magnesium, copper, zinc and iron (MINTEQ v4, NIST 46),
-  and Eriochrome Black T, the indicator a titration of water's hardness turns from wine red to blue.
+  and Eriochrome Black T (Lindstrom 1959's constants and spectra), the indicator a titration of water's hardness
+  turns from wine red to blue.
+- **Each series step by step, each solid straight into its complex**: amounts are quanta of 10⁻¹² mol, and a free ion
+  under a precipitate or a complex is far under one, so a complex formed from the free ion alone never takes the
+  solid: copper hydroxide dissolves into the tetrammine, silver chloride and oxide into the diammine, zinc's and
+  aluminium's hydroxides into their hydroxo complexes directly.
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -878,7 +884,8 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
   weigh; the masters a retired unit is read back by; a bench opened at its fast equilibria.
 - Stage 76 adds eight metals, their salts, their hydrolysis and thirteen precipitates.
 - Stage 81 adds complexes (copper's and silver's ammines, zinc's and aluminium's hydroxo complexes, iron(III)'s
-  thiocyanates, cobalt's chlorides, chromate and dichromate, EDTA's) and their colours, and flame emission (§12).
+  thiocyanates, cobalt's tetrachloro, chromate and dichromate, EDTA's and its indicator's) and their colours; flame
+  emission is a stage of its own (the user's split, 2026-11-27).
 
 ## 10. Property models
 

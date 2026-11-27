@@ -26,9 +26,12 @@ visible). Stage numbers: 80 is another session's (a vessel's walls on a grid), s
 | 81.2 | Their colours; gated | done |
 | 81.3 | FeSCN²⁺'s and CoCl₄²⁻'s constants calibrated in the model's activities (Below et al.'s Q₁ 146 at 0.40, Lister and Rivington's Q₂ 15.5 at 0.5, Bjerrum et al.'s α₄ 0.496 at 8.23 M HCl) | done |
 | 81.4 | EDTA (MINTEQ v4's constants) and Eriochrome Black T (Lindstrom 1959's, calibrated at 0.1 ionic strength; his spectra); a hardness titration turns the dye from wine red to blue; the table's particles 64 to 128 | done |
-| 81.5 | Flame emission: lithium and strontium, the NIST lines and the flame's bands | |
-| 81.6 | The lab: reagents, the calculator's formulas, `chem_tool study complexes` | |
-| 81.7 | Documents, `make gates`, the user's sign-off | |
+| 81.5 | The free lab's reagents; the registries counted anew; the goldens re-recorded (digests only), approved | done |
+| 81.6 | Documents, `make gates`, the user's sign-off | |
+
+Flame emission (lithium and strontium, the NIST lines weighted by the flame's temperature, the flame's bands, emission
+lines in the pass, the truth and the viewer) is a stage of its own: the user's split, 2026-11-27 ("Close 81, flame
+next"), after the complexes were done.
 
 ## Open
 

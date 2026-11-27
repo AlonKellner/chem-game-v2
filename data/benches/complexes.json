@@ -1,0 +1,230 @@
+{
+	"format": "chem-bench/2",
+	"note": "The complexes' colours side by side (Stage 81): copper's tetrammine beside copper sulfate, iron(III) thiocyanate, cobalt chloride pink and in strong hydrochloric acid blue, chromate and dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium. A look at the colours, no tutorial.",
+	"grid": [
+		30,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "tetrammine",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				2,
+				7
+			],
+			"label": "copper sulfate in ammonia",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.0015
+				},
+				"ammonia_aq": {
+					"mol": 0.03
+				}
+			}
+		},
+		{
+			"id": "copper",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				5,
+				7
+			],
+			"label": "copper sulfate",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.0015
+				}
+			}
+		},
+		{
+			"id": "thiocyanate",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				8,
+				7
+			],
+			"label": "iron(III) and thiocyanate",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"iron_iii_nitrate_aq": {
+					"mol": 6e-05
+				},
+				"potassium_thiocyanate_aq": {
+					"mol": 0.0003
+				},
+				"nitric_acid_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "cobalt_pink",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				11,
+				7
+			],
+			"label": "cobalt chloride",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"cobalt_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "cobalt_blue",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				14,
+				7
+			],
+			"label": "cobalt chloride in strong hydrochloric acid",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"cobalt_chloride_aq": {
+					"mol": 0.003
+				},
+				"hydrochloric_acid_aq": {
+					"mol": 0.4
+				}
+			}
+		},
+		{
+			"id": "chromate",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				17,
+				7
+			],
+			"label": "potassium chromate",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"potassium_chromate_aq": {
+					"mol": 0.0015
+				}
+			}
+		},
+		{
+			"id": "dichromate",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				20,
+				7
+			],
+			"label": "potassium dichromate",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"potassium_dichromate_aq": {
+					"mol": 0.0015
+				}
+			}
+		},
+		{
+			"id": "ebt_blue",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				23,
+				7
+			],
+			"label": "Eriochrome Black T, pH 10",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"ammonia_aq": {
+					"mol": 0.03
+				},
+				"ammonium_chloride_aq": {
+					"mol": 0.006
+				},
+				"eriochrome_black_t_aq": {
+					"mol": 1.5e-06
+				}
+			}
+		},
+		{
+			"id": "ebt_red",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				26,
+				7
+			],
+			"label": "Eriochrome Black T with magnesium, pH 10",
+			"contents": {
+				"water": {
+					"g": 30.0
+				},
+				"ammonia_aq": {
+					"mol": 0.03
+				},
+				"ammonium_chloride_aq": {
+					"mol": 0.006
+				},
+				"eriochrome_black_t_aq": {
+					"mol": 1.5e-06
+				},
+				"magnesium_sulfate_aq": {
+					"mol": 0.0003
+				}
+			}
+		}
+	]
+}
