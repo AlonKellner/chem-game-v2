@@ -1258,6 +1258,16 @@ Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Rea
 | A test tube (`data/glassware.json`, `test_tube`) | 16 × 150 mm, 18 mL, 1.8 mm wall, a round floor | ISO 4142, a heavy-wall tube: PYREX 1624/12M (DWK's listing: "conforms to ISO 4142", 16 x 150 mm, 18 mL, 1.8 mm wall) | `glassware: a test tube is ISO 4142's, its round floor its own radius (Stage 71)` | medium (a maker's listing) |
 | Ice seen (`data/optics/media.json`, `ice`) | the visible: a diffuse reflectance of 0.9, flat; the long wave: a grey emissivity of 0.97 | Warren and Brandt, *J. Geophys. Res.* 113, D14220 (2008), "Optical constants of ice from the ultraviolet to the microwave: a revised compilation", its table (atmos.uw.edu/ice_optical_constants/IOP_2008_ASCIItable.dat; n 1.3110, k 2.29e-9 at 550 nm): over 8–14 µm the normal emissivity 1 − R from its 32 rows, 0.970 on average (0.94 to 0.99). The visible: Grenfell, Warren and Mullen, *J. Geophys. Res.* 99(D9), 18669 (1994): fine snow's albedo 0.96–0.98 across the UV and visible, nearly independent of grain size; crushed ice's set a little under it (**calibrated**). A clear piece in water is nearly invisible (n 1.31 against 1.33); the pass draws ice as a powder, white | (the optical tests' scenes) | medium (the long wave); calibrated (the visible) |
 
+## The gas syringe (Stage 79)
+
+`docs/TDD_79_SYRINGE.md`; GAME_SPEC §6 (Pistons), §13. Fetched 2026-11-27.
+
+| Value | Used | Source and fit | Gate | Confidence |
+|---|---|---|---|---|
+| A hand's most on a plunger (`instruments.json`, `hand_force_n`) | 79.8 N, pushing or pulling | Astin, *Finger Force Capability* (MS thesis, Virginia Tech, 1999), as Vo et al. give it (*J. Med. Eng.* 2016, "The Biomechanics and Optimization of the Needle-Syringe System for Injecting Triamcinolone Acetonide into Keloids"), quoted in US 11007299 B2: "An injection is conventionally performed with the thumb pushing on the plunger while the ipsilateral index and middle fingers are used to stabilize the syringe flanks. In this position, the average maximum force that can be generated is 79.8 N (males: 95.4 N, females: 64.1 N)". Sheikhzadeh et al. (*Appl. Ergon.* 43, 368, 2012), as the same patent gives them: 45–77 N across two syringes. A pull is taken as the push (none found) | `syringe lab: a hand pushes with at most its force: held toward nothing, the capped syringe stops where its air holds the hand (Stage 79)`: its force 79.8 N at rest | medium (a secondary quotation; the person varies) |
+| A gas syringe (`glassware.json`, `gas_syringe`) | 100 mL over a 120 mm scale (a bore of 32.6 mm), 37 mm across, a 10 mm nozzle at its foot | **design**: glass gas syringes of 100 mL are sold 40 mm across (outside) and about 220 mm long (scienceequip.com.au's listing); no bore published | (the geometry's own test) | design |
+| Its plunger's friction and drag | 1 N; 70 N s/m | **design**: a ground-glass plunger moves under a light touch; a free one on 100 mL of air settles in about 0.1 s | (the four setups' tests) | design |
+
 ## Conductivity (Stage 65)
 
 A solution's conductivity (GAME_SPEC §10), and each ion's mobility with temperature. Read 2026-11-27.

@@ -1,0 +1,192 @@
+// The gas syringe (GAME_SPEC §13, Stage 79): a graduated glass barrel whose plunger is a piston (chem/world.hpp), held
+// by a hand toward a volume on its scale with at most a hand's force, or free; its nozzle capped, on a vessel's mouth,
+// or joined to another syringe's by a tube; read by its scale and its pressure; saved and loaded, it goes on as it was.
+#include "lab/glassware.hpp"
+#include "lab/instruments.hpp"
+#include "lab/lab.hpp"
+
+#include <doctest/doctest.h>
+
+#include <cmath>
+#include <memory>
+#include <string>
+
+namespace {
+
+std::unique_ptr<lab::Lab> open(const std::string &bench) {
+	std::string why;
+	auto l = lab::Lab::open(bench, why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	return l;
+}
+
+void ok(lab::Lab &l, const std::string &c) {
+	std::string why;
+	REQUIRE_MESSAGE(l.command(c, why), c << ": " << why);
+}
+
+void no(lab::Lab &l, const std::string &c) {
+	std::string why;
+	CHECK_MESSAGE(!l.command(c, why), c);
+}
+
+lab::ItemView item(lab::Lab &l, const std::string &id) {
+	for (const lab::ItemView &v : l.view().items) {
+		if (v.id == id) {
+			return v;
+		}
+	}
+	FAIL("no " << id);
+	return lab::ItemView{};
+}
+
+std::string syringe(const std::string &id, int col, double ml, bool capped, const std::string &contents = "") {
+	return R"({"id": ")" + id + R"(", "at": [)" + std::to_string(col) + R"(, 4], "kind": "vessel", "volume_ml": 100, "wall": "glass", "glassware": "gas_syringe", "wall_g": 60, "plunger_ml": )" +
+		   std::to_string(ml) + (capped ? R"(, "capped": true)" : "") + (contents.empty() ? "" : R"(, "contents": )" + contents) + "}";
+}
+
+std::string bench(const std::string &items) {
+	return R"({"format": "chem-bench/2", "room": {"celsius": 25, "air_mol": 1000}, "items": [)" + items + "]}";
+}
+
+} // namespace
+
+TEST_CASE("glassware: a gas syringe's plunger runs over its nominal volume from fully in, its bore a 120 mm scale's (Stage 79)") {
+	const lab::glass::Vessel *g = lab::glass::find("gas_syringe", 100.0);
+	REQUIRE(g != nullptr);
+	CHECK(g->syringe);
+	CHECK(g->plunger_area() == doctest::Approx(100.0 / 12.0).epsilon(1e-6));
+	CHECK(g->volume_below(g->plunger_most) - g->volume_below(g->plunger_least) == doctest::Approx(100.0).epsilon(1e-6));
+	CHECK(g->plunger_most - g->plunger_least == doctest::Approx(12.0).epsilon(1e-4));
+	CHECK(g->plunger_most < g->height);
+	MESSAGE("dead volume " << g->volume_below(g->plunger_least) << " mL, fully in at " << g->plunger_least << " cm");
+	CHECK(g->volume_below(g->plunger_least) < 1.0);
+}
+
+TEST_CASE("syringe lab: a capped syringe of air held and pushed in: its pressure times its volume stands (Boyle); let go, it springs back to about where it was (Stage 79)") {
+	auto l = open(bench(syringe("s", 4, 100.0, true)));
+	const lab::ItemView start = item(*l, "s");
+	CHECK(start.syringe);
+	CHECK(start.sealed);
+	CHECK(start.plunger_ml == doctest::Approx(100.0).epsilon(1e-9));
+	const lab::glass::Vessel *g = lab::glass::find("gas_syringe", 100.0);
+	const double dead = g->volume_below(g->plunger_least);
+	ok(*l, R"({"do": "plunger", "item": "s", "ml": 60})");
+	ok(*l, R"({"do": "wait", "seconds": 60})");
+	const lab::ItemView pushed = item(*l, "s");
+	CHECK(pushed.plunger_held);
+	CHECK(pushed.plunger_ml == doctest::Approx(60.0).epsilon(1e-6));
+	CHECK(pushed.read_ml.has_value());
+	CHECK(*pushed.read_ml == doctest::Approx(60.0));
+	// its gas's volume is its scale's and the dead volume under it
+	CHECK(pushed.pressure_kpa * (60.0 + dead) == doctest::Approx(start.pressure_kpa * (100.0 + dead)).epsilon(1e-3));
+	CHECK(pushed.plunger_force_n < 0.0);
+	MESSAGE("60 mL: " << pushed.pressure_kpa << " kPa, the hand " << -pushed.plunger_force_n << " N");
+	ok(*l, R"({"do": "plunger", "item": "s", "free": true})");
+	ok(*l, R"({"do": "wait", "seconds": 30})");
+	const lab::ItemView back = item(*l, "s");
+	CHECK_FALSE(back.plunger_held);
+	CHECK(back.plunger_force_n == 0.0);
+	CHECK(back.plunger_ml > 97.0);
+	CHECK(back.plunger_ml <= 100.0);
+	MESSAGE("let go: " << back.plunger_ml << " mL");
+}
+
+TEST_CASE("syringe lab: a hand pushes with at most its force: held toward nothing, the capped syringe stops where its air holds the hand (Stage 79)") {
+	auto l = open(bench(syringe("s", 4, 100.0, true)));
+	ok(*l, R"({"do": "plunger", "item": "s", "ml": 0})");
+	ok(*l, R"({"do": "wait", "seconds": 60})");
+	const lab::ItemView v = item(*l, "s");
+	CHECK(lab::instruments::hand_force() == 79.8); // a thumb's average maximum on a plunger (Astin 1999, by Vo et al. 2016)
+	CHECK(-v.plunger_force_n == doctest::Approx(lab::instruments::hand_force()));
+	CHECK(v.plunger_ml > 45.0);
+	CHECK(v.plunger_ml < 60.0);
+	MESSAGE("the hand's most: " << v.plunger_ml << " mL at " << v.pressure_kpa << " kPa");
+}
+
+TEST_CASE("syringe lab: an open syringe's plunger moves as the hand takes it, its air in and out at the room's pressure; capped, uncapped, refused where it is no syringe (Stage 79)") {
+	auto l = open(bench(syringe("s", 4, 20.0, false) + "," +
+						R"({"id": "beaker", "at": [12, 4], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80})"));
+	CHECK_FALSE(item(*l, "s").sealed);
+	ok(*l, R"({"do": "plunger", "item": "s", "ml": 80})");
+	ok(*l, R"({"do": "wait", "seconds": 10})");
+	CHECK(item(*l, "s").plunger_ml == doctest::Approx(80.0).epsilon(1e-6));
+	CHECK(item(*l, "s").pressure_kpa == doctest::Approx(101.325).epsilon(1e-6));
+	ok(*l, R"({"do": "cap", "item": "s", "to": 0})");
+	CHECK(item(*l, "s").sealed);
+	ok(*l, R"({"do": "cap", "item": "s", "to": 1})");
+	CHECK_FALSE(item(*l, "s").sealed);
+	no(*l, R"({"do": "plunger", "item": "beaker", "ml": 10})");
+	no(*l, R"({"do": "plunger", "item": "s", "ml": 120})");
+	no(*l, R"({"do": "tube", "item": "s", "to": "s"})");
+	no(*l, R"({"do": "tube", "item": "s", "to": "beaker"})");
+}
+
+TEST_CASE("syringe lab: two syringes of air joined by a tube: one pushed in, the other moves out with it, a little short; untubed, each its own (Stage 79)") {
+	auto l = open(bench(syringe("one", 4, 50.0, false) + "," + syringe("two", 10, 50.0, false)));
+	ok(*l, R"({"do": "tube", "item": "one", "to": "two"})");
+	CHECK(item(*l, "one").sealed);
+	CHECK(item(*l, "one").tube >= 0);
+	ok(*l, R"({"do": "plunger", "item": "one", "ml": 20})");
+	ok(*l, R"({"do": "wait", "seconds": 20})");
+	const double one = item(*l, "one").plunger_ml, two = item(*l, "two").plunger_ml;
+	MESSAGE("one at " << one << " mL, two at " << two << " mL");
+	CHECK(one == doctest::Approx(20.0).epsilon(1e-6));
+	// together they hold their air as it was, within what friction lets their pressure stand off the room's (each
+	// plunger holds 1 N on its bore: about 1.2 %; the push's heat first moved the other out, and friction holds it)
+	const lab::glass::Vessel *g = lab::glass::find("gas_syringe", 100.0);
+	const double band = 1.0 / (g->plunger_area() * 1e-4) / 101325.0;
+	CHECK(std::fabs(one + two - 100.0) <= (100.0 + 2.0 * g->volume_below(g->plunger_least)) * band * 1.05);
+	CHECK(two > 75.0);
+	ok(*l, R"({"do": "untube", "item": "two"})");
+	CHECK_FALSE(item(*l, "one").sealed);
+	CHECK(item(*l, "one").tube == -1);
+}
+
+TEST_CASE("syringe lab: two syringes of water joined by a tube: one pushed in, its water runs into the other, which moves out as far (Stage 79)") {
+	const std::string water = R"({"water": {"g": 49.5}})";
+	auto l = open(bench(syringe("one", 4, 50.0, false, water) + "," + syringe("two", 10, 50.0, false, water)));
+	ok(*l, R"({"do": "tube", "item": "one", "to": "two"})");
+	ok(*l, R"({"do": "wait", "seconds": 5})");
+	const double one0 = item(*l, "one").plunger_ml, two0 = item(*l, "two").plunger_ml;
+	ok(*l, R"({"do": "plunger", "item": "one", "ml": 30})");
+	ok(*l, R"({"do": "wait", "seconds": 10})");
+	const lab::ItemView one = item(*l, "one"), two = item(*l, "two");
+	MESSAGE("one " << one0 << " -> " << one.plunger_ml << " mL, two " << two0 << " -> " << two.plunger_ml << " mL; water in two " << two.liquid_ml << " mL");
+	CHECK(one.plunger_ml == doctest::Approx(30.0).epsilon(1e-6));
+	CHECK(two.plunger_ml - two0 == doctest::Approx(one0 - one.plunger_ml).epsilon(0.02));
+	CHECK(two.liquid_ml > one.liquid_ml);
+}
+
+TEST_CASE("syringe lab: a free syringe on a flask's mouth takes the gas the flask gives: one space, sealed, at the room's pressure; detached, its nozzle open (Stage 79)") {
+	auto l = open(bench(syringe("s", 4, 0.0, false) + "," +
+						R"({"id": "flask", "at": [12, 4], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 120, "celsius": 25})"));
+	ok(*l, R"({"do": "attach", "item": "s", "to": "flask"})");
+	CHECK(item(*l, "s").place == "on");
+	CHECK(item(*l, "flask").sealed);
+	no(*l, R"({"do": "cap", "item": "s", "to": 0})");
+	// the flask warmed: its air expands into the syringe
+	ok(*l, R"({"do": "wait", "seconds": 5})");
+	const double before = item(*l, "s").plunger_ml;
+	ok(*l, R"({"do": "detach", "item": "s"})");
+	CHECK_FALSE(item(*l, "flask").sealed);
+	CHECK_FALSE(item(*l, "s").sealed);
+	CHECK(before >= 0.0);
+}
+
+TEST_CASE("syringe lab: saved and loaded, a held syringe goes on as it was, digest for digest (Stage 79)") {
+	auto l = open(bench(syringe("one", 4, 50.0, false) + "," + syringe("two", 10, 50.0, false) + "," + syringe("s", 16, 80.0, true)));
+	ok(*l, R"({"do": "tube", "item": "one", "to": "two"})");
+	ok(*l, R"({"do": "plunger", "item": "one", "ml": 30})");
+	ok(*l, R"({"do": "plunger", "item": "s", "ml": 60})");
+	ok(*l, R"({"do": "wait", "seconds": 0.5})");
+	std::string why;
+	auto copy = lab::Lab::load(l->save(), why);
+	REQUIRE_MESSAGE(copy != nullptr, why);
+	CHECK(copy->digest() == l->digest());
+	ok(*l, R"({"do": "wait", "seconds": 2})");
+	ok(*copy, R"({"do": "wait", "seconds": 2})");
+	CHECK(copy->digest() == l->digest());
+	CHECK(item(*copy, "two").plunger_ml == doctest::Approx(item(*l, "two").plunger_ml).epsilon(1e-12));
+	CHECK(item(*copy, "s").plunger_held);
+}
