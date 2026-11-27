@@ -49,8 +49,8 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 	if (most <= 0) {
 		return 0;
 	}
+	// (the caller read the affinity at 0: its sign is the direction; Stage 64, not read again)
 	double v_lo = 0.0, v_hi = 0.0;
-	value(0, v_lo);
 	// the usual case, a cell already at its equilibrium: one quantum is too many
 	bool ok_hi = value(1, v_hi);
 	if (!(ok_hi && v_hi >= 0.0)) {

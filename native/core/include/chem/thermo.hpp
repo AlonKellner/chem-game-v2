@@ -156,6 +156,13 @@ private:
 	double gas_ = 0.0, gas_step_ = 0.0; // quanta of gas
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
 	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
+	// (Stage 64) the particles it has or the reaction touches, ascending, and the solution's pairs among them: at() reads
+	// these alone (more pairs than fit: every pair)
+	std::array<uint8_t, MAX_PARTICLES> ions_{};
+	size_t ion_count_ = 0;
+	std::array<uint16_t, 64> pairs_{};
+	size_t pair_count_ = 0;
+	bool all_pairs_ = false;
 	const SpeciesTable *table_ = nullptr; // its solution model
 	// sealed (Stage 28; Stage 67, its solids and liquids growing with temperature): its energy (J), its sum of n_i Hf_i
 	// (J) and of n_i Cp_i (J/K), its gas (mol), its volume, and its solids' and its liquids' (at 25 C) volumes (m^3);

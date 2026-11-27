@@ -95,7 +95,7 @@ void print_results(const json &report, const json &start) {
 //          --record FILE   writes one line per command: its index, the step it ended on, the state's digest
 //          --check FILE    compares with a recorded file instead
 //          --quiet         no per-command lines
-// bench: plays it with the checks off and times it.
+// bench: plays it with the checks off and times it; with --record or --check, the same digests (D1), unchecked (Stage 64).
 int run_session(int argc, char **argv, bool bench) {
 	std::string session_path, record_path, check_path;
 	bool quiet = false;
@@ -177,9 +177,11 @@ int run_session(int argc, char **argv, bool bench) {
 		std::printf("%lld steps (%.0f s of simulated time) in %.3f s: %.2f us a step, %.0f times real time\n", static_cast<long long>(steps), static_cast<double>(steps) / 60.0, wall,
 				wall / static_cast<double>(steps) * 1e6, static_cast<double>(steps) / 60.0 / wall);
 		std::printf("at 600 steps a frame (ten simulated seconds a frame): %.2f ms a frame\n", wall / static_cast<double>(steps) * 600.0 * 1e3);
-		return status;
-	}
-	if (status == 0) {
+		if (record_path.empty() && check_path.empty()) {
+			return status;
+		}
+		// (Stage 64) unchecked, its digests are the checked run's (D1): a record made or compared in a fraction of the time
+	} else if (status == 0) {
 		print_results(report, start);
 		if (!report.at("conserved").at("unchanged").get<bool>()) {
 			status = 1;
