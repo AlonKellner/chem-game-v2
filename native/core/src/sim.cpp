@@ -1480,6 +1480,18 @@ void Simulation::advance() {
 	traced_ = false;
 }
 
+void Simulation::restore_flows(StepFlows flows) {
+	const size_t edges = world_.edges().size() * PROCESSES, cells = static_cast<size_t>(world_.cell_count());
+	const size_t reactions = reactions_.size() + equilibria_.size();
+	// (as the step left them: a command since may have added an edge or a cell, which no flow of that step crossed)
+	if (flows.reactions != reactions || flows.energy.size() > edges || flows.grams.size() != flows.energy.size() || flows.energy.size() % PROCESSES != 0 ||
+			flows.extent.size() > cells * reactions || (reactions > 0 && flows.extent.size() % reactions != 0)) {
+		flows_ = StepFlows{};
+		return;
+	}
+	flows_ = std::move(flows);
+}
+
 StepTrace Simulation::step() {
 	StepTrace trace;
 	step(trace);

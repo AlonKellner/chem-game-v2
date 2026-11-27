@@ -1,6 +1,15 @@
 # GAME_SPEC version history
 
-## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0 and Stage 68; signed off by the user: "Approved, merge and proceed")
+## 0.69.0 (2026-11-26, Stage 69; signed off by the user: "Approved, merge and proceed")
+
+- §13, Save and load; §18, D2 (Stage 69, `docs/TDD_69_SAVES.md`): a lab saved in a step a command moved matter in (a
+  tip, a pour) continues exactly as the saved one would have: its world refuses until the step closes what a step in
+  progress refuses (`World::resume_step`), as the saved one did; the demo's save after its command 1 did not. A
+  loaded lab reads as the saved one did: a save holds the last step's flows (not state), and a vessel finds its
+  contacts as it loads, so its boiling's bubbles show at once. D2 holds at every command of the demo. The goldens
+  unchanged.
+
+## 0.66.0 (2026-11-26, Stage 66, merged after 0.67.0, Stage 68 and 0.69.0; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 66, `docs/TDD_66_SEEDS.md`; the curriculum's C2, C16): **secondary nucleation**: where a surface law grows
   its solid and the cell is stirred, the crystals breed, `secondary · ε · M · (S − 1)^secondary_order` fragments a

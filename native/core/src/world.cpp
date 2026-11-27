@@ -482,7 +482,7 @@ Refusal World::set_landing(CellId cell, double speed) {
 }
 
 Refusal World::set_mixing(CellId cell, double mixing) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (!known(cell)) {
@@ -767,7 +767,7 @@ CellId World::add_cell(const std::string &name, const CellMeta &meta, Refusal *w
 		}
 		return CellId{};
 	};
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return refuse(Refusal::MidStep);
 	}
 	if (meta.layer || meta.retired || meta.frozen || (meta.rigid && !(meta.volume > 0.0))) {
@@ -787,7 +787,7 @@ CellId World::add_cell(const std::string &name, const CellMeta &meta, Refusal *w
 }
 
 Refusal World::supply(CellId cell, const CellState &state) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (!known(cell)) {
@@ -827,7 +827,7 @@ Refusal World::supply(CellId cell, const CellState &state) {
 }
 
 Refusal World::retire(CellId cell, CellState *left) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (!known(cell)) {
@@ -860,7 +860,7 @@ Refusal World::retire(CellId cell, CellState *left) {
 }
 
 Refusal World::freeze(CellId cell, bool on) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (!known(cell)) {
@@ -908,7 +908,7 @@ Refusal World::connect_drain(CellId from, CellId to, EdgeId *made) {
 }
 
 Refusal World::set_drain(EdgeId edge, double rate, double carried, double solids_rate) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open || !edges_[static_cast<size_t>(edge.index)].drain) {
@@ -923,7 +923,7 @@ Refusal World::set_drain(EdgeId edge, double rate, double carried, double solids
 }
 
 Refusal World::disconnect(EdgeId edge) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
@@ -953,7 +953,7 @@ Refusal World::disconnect(EdgeId edge) {
 }
 
 Refusal World::set_conductance(EdgeId edge, double conductance) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
@@ -967,7 +967,7 @@ Refusal World::set_conductance(EdgeId edge, double conductance) {
 }
 
 Refusal World::set_power(EdgeId edge, double power) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
@@ -981,7 +981,7 @@ Refusal World::set_power(EdgeId edge, double power) {
 }
 
 Refusal World::set_exchange(EdgeId edge, double exchange) {
-	if (!ledger_.empty()) {
+	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
@@ -1003,7 +1003,12 @@ void World::refresh_sealed() {
 	}
 }
 
+void World::resume_step() {
+	resumed_ = true;
+}
+
 void World::skip_step() {
+	resumed_ = false;
 	ledger_.clear();
 	++step_;
 }
@@ -1019,6 +1024,7 @@ StepTrace World::close_step() {
 }
 
 void World::close_step(StepTrace &trace) {
+	resumed_ = false;
 	trace.step = step_;
 	// the step's start into the trace, and the trace's old start back as the buffer the next start is copied into
 	std::swap(trace.before, before_);

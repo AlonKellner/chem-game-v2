@@ -338,3 +338,46 @@ TEST_CASE("bubbles: a floor starts boiling past its onset and goes on down to it
 	CHECK(on.boiling_w >= b.boiling_w);
 	MESSAGE("boiling point " << b.saturation_floor_c << " C, onset " << b.onset_c << " C; between, " << still << " W fresh, " << boiling << " W nucleated");
 }
+
+// (Stage 69) a lab saved while a vessel boils, loaded: its first view is the saved one's, its bubbles as they were
+// (they are read from the last step's flows, which a save did not hold: until its first step a loaded lab showed none)
+TEST_CASE("bubbles: a boiling beaker saved and loaded shows the bubbles it showed (Stage 69)") {
+	std::string why;
+	const char *bench = R"({"format": "chem-bench/2", "grid": [28, 15], "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "at": [10, 7],
+			"contents": {"water": {"g": 150}}},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+	auto lab = lab::Lab::open(bench, why);
+	REQUIRE_MESSAGE(lab != nullptr, why);
+	REQUIRE_MESSAGE(lab->command(R"({"do": "heat", "burner": "burner", "vessel": "beaker"})", why), why);
+	REQUIRE_MESSAGE(lab->command(R"({"do": "valve", "burner": "burner", "to": 1})", why), why);
+	const auto beaker = [](const lab::Lab &l) {
+		for (const lab::ItemView &v : l.view().items) {
+			if (v.id == "beaker") {
+				return v;
+			}
+		}
+		FAIL("no beaker");
+		return lab::ItemView{};
+	};
+	for (int s = 0; s < 1200 && !beaker(*lab).bubbles_surface; ++s) {
+		REQUIRE_MESSAGE(lab->command(R"({"do": "wait", "seconds": 1})", why), why);
+	}
+	const lab::ItemView was = beaker(*lab);
+	REQUIRE(was.boiling);
+	REQUIRE(was.bubble_extinction > 0.0);
+	const std::string saved = lab->save();
+	const auto loaded = lab::Lab::load(saved, why);
+	REQUIRE_MESSAGE(loaded != nullptr, why);
+	const lab::ItemView now = beaker(*loaded);
+	CHECK(now.boiling == was.boiling);
+	CHECK(now.bubbles_surface == was.bubbles_surface);
+	CHECK(now.bubbles_cm == was.bubbles_cm);
+	CHECK(now.bubble_mm == was.bubble_mm);
+	CHECK(now.bubble_extinction == was.bubble_extinction);
+	CHECK(now.bubble_exponent == was.bubble_exponent);
+	CHECK(now.gas_extinction == was.gas_extinction);
+	CHECK(now.floor_c == was.floor_c);
+	CHECK(loaded->save() == saved); // and saved again, the same text
+	CHECK(loaded->digest() == lab->digest());
+}
