@@ -294,7 +294,7 @@ void Simulation::react() {
 				nucleation_remainder = 0.0;
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell), mixtures(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				remainder = 0.0;
@@ -789,10 +789,10 @@ bool Simulation::project(CellId cell) {
 			if (feasible_extent(state, reaction.terms(), true) == 0 && feasible_extent(state, reaction.terms(), false) == 0) {
 				continue; // none of what it would consume, either way
 			}
-			if (stands(table, state, reaction.terms())) {
+			if (stands(table, mixtures(cell), reaction.terms())) {
 				continue; // (Stage 63) past the activity model's range: among dissolved species alone, it stands
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell));
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &world_.meta(cell), mixtures(cell));
 			double a = 0.0;
 			if (!probe.at(0.0, a) || a == 0.0 || a != a) {
 				continue;
@@ -869,7 +869,7 @@ bool Simulation::solve_together(CellId cell) {
 			ok = ok && held > 0 && (def.phase != Phase::Gas || !world_.meta(cell).sealed);
 			dissolved = dissolved || def.phase == Phase::Aqueous;
 		}
-		if (ok && dissolved && !stands(table, state, equilibria_[e].terms())) {
+		if (ok && dissolved && !stands(table, mixtures(cell), equilibria_[e].terms())) {
 			which[k++] = e;
 		}
 	}
@@ -1065,7 +1065,7 @@ bool Simulation::solve_together(CellId cell) {
 			if (feasible_extent(state, reaction.terms(), forward) < (forward ? go[r] : -go[r])) {
 				continue;
 			}
-			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &meta);
+			const AffinityProbe probe(table, state, reaction.terms(), thermal(cell), &meta, mixtures(cell));
 			double now = 0.0;
 			if (!probe.at(0.0, now) || now == 0.0 || now != now || (now > 0.0) != forward) {
 				continue;
@@ -1488,6 +1488,27 @@ const Thermal &Simulation::kept_thermal(CellId cell) const {
 		key.keep(world_, cell);
 	}
 	return thermal_[c];
+}
+
+const CellMixtures &Simulation::mixtures(CellId cell) {
+	const auto c = static_cast<size_t>(cell.index);
+	if (mixtures_.size() <= c) {
+		mixtures_.resize(c + 1);
+	}
+	KeptMixtures &kept = mixtures_[c];
+	if (!kept.known || kept.revision != world_.matter_revision(cell)) {
+		kept.mixtures = cell_mixtures(world_.species(), world_.snapshot_cell(cell));
+		kept.revision = world_.matter_revision(cell);
+		kept.known = true;
+	}
+#if CHEM_ASSERT_ABORTS
+	{
+		const CellMixtures now = cell_mixtures(world_.species(), world_.snapshot_cell(cell));
+		CHEM_ASSERT(now.gas == kept.mixtures.gas && now.liquid == kept.mixtures.liquid && now.particles == kept.mixtures.particles,
+				"a cell's matter changed under the same matter revision (World::touch)");
+	}
+#endif
+	return kept.mixtures;
 }
 
 bool Simulation::ThermalKey::same(const World &world, CellId cell) const {

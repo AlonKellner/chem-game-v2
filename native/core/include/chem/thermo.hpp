@@ -42,6 +42,15 @@ struct Thermal {
 	double free_volume = 0.0; // m^3: a sealed cell's V_free
 };
 
+// (Stage 75) What a cell's mixtures hold, in quanta (GAME_SPEC §4.6): its gas, its liquid (the solvent) and each
+// particle dissolved in it, each summed over its species in order. Of its matter alone, so kept while only energy
+// moves (World::matter_revision); what is read from them is what is read from the cell.
+struct CellMixtures {
+	double gas = 0.0, liquid = 0.0;
+	std::array<double, MAX_PARTICLES> particles{};
+};
+CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell);
+
 // `meta` is the cell's (null: open). A reservoir's is not asked for.
 Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta = nullptr);
 // (Stage 75) What a cell's thermal state takes of its matter alone: sum of n_i Hf_i and of n_i Cp_i (J, J/K), each
@@ -139,6 +148,8 @@ public:
 	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta = nullptr);
 	// the same, given the cell's thermal state (as thermal_state() gives it)
 	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta = nullptr);
+	// (Stage 75) the same, the cell's mixtures given (cell_mixtures: kept by its matter revision)
+	AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta, const CellMixtures &mixtures);
 	// false when the cell has no temperature or a species named has no thermodynamic data
 	bool defined() const { return defined_; }
 	// the cell's temperature before any of the reaction, K
@@ -207,6 +218,7 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 
 // The solution's ionic strength, I = 1/2 sum m_j z_j^2 over its particles, mol/kg (0 with no liquid).
 double ionic_strength(const SpeciesTable &table, const CellState &cell);
+double ionic_strength(const SpeciesTable &table, const CellMixtures &mixtures);
 // (Stage 63) The activity model's range: Pitzer's fits hold to about 6 mol/kg of a salt; past an ionic strength of
 // MOST_IONIC_STRENGTH (a 2:2 salt at 5 mol/kg, a 1:1 at 20) the game cannot say how a solution's ions share
 // themselves, and a fast equilibrium among dissolved species alone (every species dissolved, or the solvent: water's
@@ -215,6 +227,7 @@ double ionic_strength(const SpeciesTable &table, const CellState &cell);
 inline constexpr double MOST_IONIC_STRENGTH = 20.0;
 bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
+bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms);
 
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.

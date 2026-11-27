@@ -788,8 +788,20 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 	return true;
 }
 
-double ionic_strength(const SpeciesTable &table, const CellState &cell) {
+CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell) {
 	const Mix mix = mix_of(table, cell, false);
+	CellMixtures out;
+	out.gas = mix.gas;
+	out.liquid = mix.liquid;
+	out.particles = mix.particles;
+	return out;
+}
+
+double ionic_strength(const SpeciesTable &table, const CellState &cell) {
+	return ionic_strength(table, cell_mixtures(table, cell));
+}
+
+double ionic_strength(const SpeciesTable &table, const CellMixtures &mix) {
 	if (!(mix.liquid > 0.0)) {
 		return 0.0;
 	}
@@ -816,6 +828,10 @@ bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms) {
 
 bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms) {
 	return among_dissolved(table, terms) && ionic_strength(table, cell) > MOST_IONIC_STRENGTH;
+}
+
+bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms) {
+	return among_dissolved(table, terms) && ionic_strength(table, mixtures) > MOST_IONIC_STRENGTH;
 }
 
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
@@ -926,7 +942,10 @@ void affinities(const SpeciesTable &table, const CellState &cell, std::span<cons
 AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta) :
 		AffinityProbe(table, cell, terms, thermal_state(table, cell, meta), meta) {}
 
-AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta) {
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta) :
+		AffinityProbe(table, cell, terms, thermal, meta, cell_mixtures(table, cell)) {}
+
+AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta, const CellMixtures &mix) {
 	if (!thermal.defined || !(thermal.temperature > 0.0) || terms.size() > parts_.size()) {
 		return;
 	}
@@ -960,7 +979,7 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 			}
 		}
 	}
-	const Mix mix = mix_of(table, cell, false); // the amounts: at() works out the excess at each extent
+	// the amounts (mix_of's without the excess, given: Stage 75): at() works out the excess at each extent
 	gas_ = mix.gas;
 	liquid_ = mix.liquid;
 	const SolutionDef &solution = table.solution();

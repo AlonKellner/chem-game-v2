@@ -224,6 +224,14 @@ private:
 		MatterSums sums;
 	};
 	mutable std::vector<KeptSums> sums_;
+	// (Stage 75) each cell's mixtures (cell_mixtures), by its matter revision: its probes and its range read them
+	struct KeptMixtures {
+		bool known = false;
+		uint64_t revision = 0;
+		CellMixtures mixtures;
+	};
+	std::vector<KeptMixtures> mixtures_;
+	const CellMixtures &mixtures(CellId cell);
 	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly
 	std::vector<ThermalKey> rest_key_;
 	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)
