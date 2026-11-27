@@ -42,7 +42,7 @@ struct ElementDef {
 // dissolved species, and a neutral particle for each dissolved species that
 // names none.
 inline constexpr int MAX_IONS = 3; // per species
-inline constexpr int MAX_PARTICLES = 64; // per table (Stage 64: 16 until the weak acids and the indicators)
+inline constexpr int MAX_PARTICLES = 128; // per table (Stage 64: 16 until the weak acids and the indicators; Stage 81: 64 until the complexes, EDTA and its indicator)
 
 struct IonCount {
 	int32_t ion = -1;

@@ -1461,3 +1461,23 @@ measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each com
   L/mol/cm, 3600 cm⁻¹ wide, **calibrated** to a dichromate's orange. No open source gives dichromate (or HCrO₄⁻) in
   the visible: Tong and King 1953, Davies and Prue 1955 and Fournier-Salaün 2007 were not reached (the user's choice,
   2026-11-27: "Calibrate to its look").
+
+**EDTA and Eriochrome Black T** (gate: `measured: EDTA's constants are MINTEQ v4's, Eriochrome Black T's Lindstrom's at
+0.1 ionic strength`):
+- **EDTA** (Y⁴⁻, C₁₀H₁₂N₂O₈⁴⁻): MINTEQ v4 (NIST 46.2), cumulative from Y⁴⁻: HY³⁻ 10.948 (ΔH −23.43 kJ, line 7224),
+  H₂Y²⁻ 17.221 (−41.00, 7232), H₃Y⁻ 20.34 (−35.56, 7240), H₄Y 22.5 (−34.31, 7248); CaY²⁻ 12.42 (−25.52, 7664), MgY²⁻
+  10.57 (13.81, 7648), CuY²⁻ 20.5 (−34.73, 7408), ZnY²⁻ 18.0 (−19.25, 7352), FeY⁻ 27.7 (−11.30, 7552). Y⁴⁻'s own
+  enthalpy, entropy and heat capacity are **design** (nought): no table gives them, and every reaction it is in is
+  among its own forms and complexes, where they cancel. CuY²⁻'s pale blue is not modelled (no spectrum found).
+- **Eriochrome Black T** (In³⁻, C₂₀H₁₀N₃O₇S³⁻): J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and
+  Lindstrom, Anal. Chem. 31, 414), Table 6 (thesis p. 81), at 0.100 ionic strength (KCl): pKa₃ 11.50 (Schwarzenbach
+  and Biedermann's 11.55 beside it), pKa₂ 6.91 (theirs 6.3 at 0.008, 6.9 at 0.08: salt and aggregation dependent);
+  the conditional constants at pH 8 and 10 give log K MgIn⁻ 7.13 to 7.26 and CaIn⁻ 5.23 (Schwarzenbach's 7.0 and
+  5.40). **Calibrated** in the model's own activities to Lindstrom's at 0.100: 11.50, 6.91 (mixed: the pH meter's
+  hydrogen ion activity), 7.26 (from pH 10, the titration's), 5.23; heats unknown, nought. In³⁻'s own values design,
+  as Y⁴⁻'s.
+- **Its colours**: Lindstrom's Figs. 6 and 7 read every 10 nm, 400 to 700 nm (±0.02 absorbance, ±1 nm), ε from the
+  dye concentrations of his methods (4.969e-5 and 4.908e-5 M, 1 cm: assumed, ±3 %): HIn²⁻ blue, its maximum 33,100 at
+  610 nm (his table's 32,300 at 615); In³⁻ orange, 20,900 at 500 nm; MgIn⁻ wine red, 33,200 at 560 nm (its red tail
+  an upper bound: 5–10 % free dye); CaIn⁻ red, 29,300 at 540 nm. H₂In⁻'s, red, not found (his pH 3.91 curve shows no
+  band, the dye aggregated): **calibrated**, MgIn⁻'s.

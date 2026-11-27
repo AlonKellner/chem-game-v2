@@ -145,6 +145,23 @@
 		{"id": "dichromate_ion", "formula": "Cr2O7-2", "phase": "aq", "ions": {"Cr2O7-2": 1}, "basis": {"CrO4-2": 2, "H+1": 2}, "volume_cm3": 106.18, "thermo": {"hf_kj": -1490.3, "cp": 310.946, "s0": 261.9}},
 		{"id": "potassium_thiocyanate_aq", "retired": true, "formula": "KSCN", "phase": "aq", "ions": {"K+1": 1, "SCN-1": 1}, "volume_cm3": 44.76, "thermo": {"hf_kj": -175.94, "cp": -31.886, "s0": 246.8}},
 		{"id": "potassium_chromate_aq", "retired": true, "formula": "K2CrO4", "phase": "aq", "ions": {"K+1": 2, "CrO4-2": 1}, "volume_cm3": 37.92, "thermo": {"hf_kj": -1385.91, "cp": -245.358, "s0": 255.21}},
-		{"id": "potassium_dichromate_aq", "retired": true, "formula": "K2Cr2O7", "phase": "aq", "ions": {"K+1": 2, "Cr2O7-2": 1}, "volume_cm3": 90.82, "thermo": {"hf_kj": -1995.06, "cp": -105.194, "s0": 466.9}}
+		{"id": "potassium_dichromate_aq", "retired": true, "formula": "K2Cr2O7", "phase": "aq", "ions": {"K+1": 2, "Cr2O7-2": 1}, "volume_cm3": 90.82, "thermo": {"hf_kj": -1995.06, "cp": -105.194, "s0": 466.9}},
+		{"id": "edta_ion", "formula": "C10H12N2O8-4", "phase": "aq", "ions": {"C10H12N2O8-4": 1}, "thermo": {"hf_kj": 0.0, "cp": 0.0, "s0": 0.0}},
+		{"id": "edta_h1", "formula": "C10H13N2O8-3", "phase": "aq", "ions": {"C10H13N2O8-3": 1}, "basis": {"C10H12N2O8-4": 1, "H+1": 1}, "thermo": {"hf_kj": -23.43, "cp": -216.35, "s0": 131.011}},
+		{"id": "edta_h2", "formula": "C10H14N2O8-2", "phase": "aq", "ions": {"C10H14N2O8-2": 1}, "basis": {"C10H12N2O8-4": 1, "H+1": 2}, "thermo": {"hf_kj": -41.003, "cp": -432.7, "s0": 192.166}},
+		{"id": "edta_h3", "formula": "C10H15N2O8-1", "phase": "aq", "ions": {"C10H15N2O8-1": 1}, "basis": {"C10H12N2O8-4": 1, "H+1": 3}, "thermo": {"hf_kj": -35.564, "cp": -649.05, "s0": 270.122}},
+		{"id": "edta_h4", "formula": "C10H16N2O8", "phase": "aq", "basis": {"C10H12N2O8-4": 1, "H+1": 4}, "thermo": {"hf_kj": -34.309, "cp": -865.4, "s0": 315.685}},
+		{"id": "calcium_edta", "formula": "CaC10H12N2O8-2", "phase": "aq", "ions": {"CaC10H12N2O8-2": 1}, "basis": {"Ca+2": 1, "C10H12N2O8-4": 1}, "thermo": {"hf_kj": -568.352, "cp": -464.206, "s0": 99.075}},
+		{"id": "magnesium_edta", "formula": "MgC10H12N2O8-2", "phase": "aq", "ions": {"MgC10H12N2O8-2": 1}, "basis": {"Mg+2": 1, "C10H12N2O8-4": 1}, "thermo": {"hf_kj": -453.043, "cp": -455.043, "s0": 110.57}},
+		{"id": "copper_edta", "formula": "CuC10H12N2O8-2", "phase": "aq", "ions": {"CuC10H12N2O8-2": 1}, "basis": {"Cu+2": 1, "C10H12N2O8-4": 1}, "thermo": {"hf_kj": 38.553, "cp": 72.91, "s0": 204.372}},
+		{"id": "zinc_edta", "formula": "ZnC10H12N2O8-2", "phase": "aq", "ions": {"ZnC10H12N2O8-2": 1}, "basis": {"Zn+2": 1, "C10H12N2O8-4": 1}, "thermo": {"hf_kj": -173.136, "cp": -456.13, "s0": 167.953}},
+		{"id": "iron_iii_edta", "formula": "FeC10H12N2O8-1", "phase": "aq", "ions": {"FeC10H12N2O8-1": 1}, "basis": {"Fe+3": 1, "C10H12N2O8-4": 1}, "thermo": {"hf_kj": -59.797, "cp": -726.872, "s0": 176.52}},
+		{"id": "ebt_ion", "formula": "C20H10N3O7S-3", "phase": "aq", "ions": {"C20H10N3O7S-3": 1}, "thermo": {"hf_kj": 0.0, "cp": 0.0, "s0": 0.0}},
+		{"id": "ebt_h1", "formula": "C20H11N3O7S-2", "phase": "aq", "ions": {"C20H11N3O7S-2": 1}, "basis": {"C20H10N3O7S-3": 1, "H+1": 1}, "thermo": {"hf_kj": 0.0, "cp": -216.35, "s0": 232.963}},
+		{"id": "ebt_h2", "formula": "C20H12N3O7S-1", "phase": "aq", "ions": {"C20H12N3O7S-1": 1}, "basis": {"C20H10N3O7S-3": 1, "H+1": 2}, "thermo": {"hf_kj": 0.0, "cp": -432.7, "s0": 372.833}},
+		{"id": "magnesium_ebt", "formula": "MgC20H10N3O7S-1", "phase": "aq", "ions": {"MgC20H10N3O7S-1": 1}, "basis": {"Mg+2": 1, "C20H10N3O7S-3": 1}, "thermo": {"hf_kj": -466.85, "cp": -455.043, "s0": 27.556}},
+		{"id": "calcium_ebt", "formula": "CaC20H10N3O7S-1", "phase": "aq", "ions": {"CaC20H10N3O7S-1": 1}, "basis": {"Ca+2": 1, "C20H10N3O7S-3": 1}, "thermo": {"hf_kj": -542.83, "cp": -464.206, "s0": 73.835}},
+		{"id": "disodium_edta_aq", "retired": true, "formula": "Na2C10H14N2O8", "phase": "aq", "ions": {"Na+1": 2, "C10H14N2O8-2": 1}, "thermo": {"hf_kj": -521.243, "cp": -772.6, "s0": 310.166}, "volume_cm3": -35.7},
+		{"id": "eriochrome_black_t_aq", "retired": true, "formula": "NaC20H12N3O7S", "phase": "aq", "ions": {"Na+1": 1, "C20H12N3O7S-1": 1}, "thermo": {"hf_kj": -240.12, "cp": -602.65, "s0": 431.833}, "volume_cm3": -17.85}
 	]
 }

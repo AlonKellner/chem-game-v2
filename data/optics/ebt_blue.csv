@@ -1,0 +1,38 @@
+# Eriochrome Black T, HIn 2- (blue, pH 10): its molar absorptivity, decadic, L/mol/cm (Stage 81).
+# 400-700 nm: J. Lindstrom, Iowa State PhD thesis 1959 (under H. Diehl; Diehl and Lindstrom, Anal. Chem. 31, 414), Fig. 6 (printed p. 52), read from
+# the figure every 10 nm (+-0.02 absorbance, +-1 nm), epsilon = A / c with the dye's concentration from the thesis's
+# methods (4.969e-5 M, 1 cm: assumed, +-3 %); ionic strength 0.100 (KCl). Added here: 380 nm its 400 nm value held, nought at 780.
+nm,epsilon
+380,6400
+400,6400
+410,6200
+420,6300
+430,6600
+440,7000
+450,7100
+460,6700
+470,6400
+480,6500
+490,6900
+500,7400
+510,8400
+520,9900
+530,11800
+540,14100
+550,16900
+560,19700
+570,22800
+580,25900
+590,28800
+600,31400
+610,33100
+620,32300
+630,30200
+640,28100
+650,26400
+660,25200
+670,23900
+680,21300
+690,17700
+700,13300
+780,0

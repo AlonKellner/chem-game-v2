@@ -59,6 +59,11 @@
 			]
 		},
 		"cobalt_ion": {"kind": "absorb", "bands": [{"centre_cm1": 19450, "fwhm_cm1": 2700, "peak": 4.0}, {"centre_cm1": 21600, "fwhm_cm1": 3500, "peak": 2.0}]},
+		"ebt_h1": {"kind": "absorb", "table": "ebt_blue.csv", "units": "L/mol/cm"},
+		"ebt_ion": {"kind": "absorb", "table": "ebt_orange.csv", "units": "L/mol/cm"},
+		"ebt_h2": {"kind": "absorb", "table": "ebt_red.csv", "units": "L/mol/cm"},
+		"magnesium_ebt": {"kind": "absorb", "table": "ebt_magnesium.csv", "units": "L/mol/cm"},
+		"calcium_ebt": {"kind": "absorb", "table": "ebt_calcium.csv", "units": "L/mol/cm"},
 		"chromate_ion": {"kind": "absorb", "table": "chromate.csv", "units": "L/mol/cm"},
 		"hydrogen_chromate_ion": {"kind": "absorb", "table": "hydrogen_chromate.csv", "units": "L/mol/cm"},
 		"dichromate_ion": {"kind": "absorb", "bands": [{"centre_cm1": 28571, "fwhm_cm1": 6000, "peak": 3576}, {"centre_cm1": 22727, "fwhm_cm1": 3600, "peak": 250}]},

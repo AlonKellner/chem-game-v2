@@ -10,6 +10,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <tuple>
 #include <string>
 #include <vector>
 
@@ -195,6 +196,12 @@ TEST_CASE("measured: the complexes' absorption is their sources' (Stage 81)") {
 	CHECK(at(cobalt_tetrachloro, 610) == doctest::Approx(279.0).epsilon(1e-9));
 	// FeSCN2+: Betts and Dainton's 5000 at 460 nm, Ozutsumi et al.'s shape
 	CHECK(at(iron_thiocyanate, 460) == doctest::Approx(5000.0).epsilon(1e-9));
+	// Eriochrome Black T: Lindstrom 1959's figures (HIn2- 33,100 at 610 nm; MgIn- 33,200 at 560; CaIn- 29,300 at 540;
+	// In3- 20,900 at 500)
+	CHECK(at(ebt_h1, 610) == doctest::Approx(33100.0).epsilon(1e-9));
+	CHECK(at(magnesium_ebt, 560) == doctest::Approx(33200.0).epsilon(1e-9));
+	CHECK(at(calcium_ebt, 540) == doctest::Approx(29300.0).epsilon(1e-9));
+	CHECK(at(ebt_ion, 500) == doctest::Approx(20900.0).epsilon(1e-9));
 	// colourless: the ammines of silver, the hydroxo complexes, thiocyanate
 	for (const SpeciesId s : { silver_diammine, zinc_tetrahydroxo, aluminium_tetrahydroxo, thiocyanate_ion }) {
 		CHECK(at(s, 550) == 0.0);
@@ -222,4 +229,52 @@ TEST_CASE("measured: chromate's, the chromates' and thiocyanate's heat capacitie
 	}
 	// and SCN-'s against NBS's own Cp, -40.2 J (p. 2-92), on the same footing
 	CHECK(builtin_species().species(thiocyanate_ion).cp == doctest::Approx(-40.2 + 216.35).epsilon(1e-3));
+}
+
+TEST_CASE("measured: EDTA's constants are MINTEQ v4's, Eriochrome Black T's Lindstrom's at 0.1 ionic strength; a hardness titration turns the dye from wine red to blue at its end point (Stage 81)") {
+	using namespace builtin;
+	// EDTA: MINTEQ v4 (NIST 46.2), cumulative from Y4- (lines 7224 to 7248, 7664, 7648, 7408, 7352, 7552)
+	const std::vector<std::tuple<const char *, std::vector<std::pair<SpeciesId, int>>, double>> rows{
+		{ "HY3-", { { edta_ion, -1 }, { hydrogen_ion, -1 }, { edta_h1, 1 } }, 10.948 },
+		{ "H2Y2-", { { edta_ion, -1 }, { hydrogen_ion, -2 }, { edta_h2, 1 } }, 17.221 },
+		{ "H3Y-", { { edta_ion, -1 }, { hydrogen_ion, -3 }, { edta_h3, 1 } }, 20.34 },
+		{ "H4Y", { { edta_ion, -1 }, { hydrogen_ion, -4 }, { edta_h4, 1 } }, 22.5 },
+		{ "CaY2-", { { calcium_ion, -1 }, { edta_ion, -1 }, { calcium_edta, 1 } }, 12.42 },
+		{ "MgY2-", { { magnesium_ion, -1 }, { edta_ion, -1 }, { magnesium_edta, 1 } }, 10.57 },
+		{ "CuY2-", { { copper_ion, -1 }, { edta_ion, -1 }, { copper_edta, 1 } }, 20.5 },
+		{ "ZnY2-", { { zinc_ion, -1 }, { edta_ion, -1 }, { zinc_edta, 1 } }, 18.0 },
+		{ "FeY-", { { iron_iii_ion, -1 }, { edta_ion, -1 }, { iron_iii_edta, 1 } }, 27.7 },
+	};
+	for (const auto &[name, terms, target] : rows) {
+		INFO(name);
+		CHECK(log_k(terms, T0) == doctest::Approx(target).epsilon(1e-4));
+	}
+	const auto ph_of = [](const CellState &e) {
+		double p = 0.0;
+		ph(builtin_species(), e, T0, p);
+		return p;
+	};
+	// Eriochrome Black T in 0.1 ionic strength (KCl), as Lindstrom 1959 measured it: pKa3 11.50, pKa2 6.91 (mixed: the pH
+	// meter's activity of hydrogen ions, the dye's forms by concentration), log K MgIn- 7.26 and CaIn- 5.23
+	{
+		const CellState e = testing::settled(Cell().put(potassium_chloride_aq, 0.097).put(eriochrome_black_t_aq, 0.0001).put(sodium_hydroxide_aq, 0.003).state, T0);
+		CHECK(ph_of(e) + std::log10(mol_of(e, ebt_h1) / mol_of(e, ebt_ion)) == doctest::Approx(11.50).epsilon(0.002));
+	}
+	{
+		const CellState e = testing::settled(Cell().put(potassium_chloride_aq, 0.1).put(eriochrome_black_t_aq, 0.0001).put(sodium_hydroxide_aq, 0.00005).state, T0);
+		CHECK(ph_of(e) + std::log10(mol_of(e, ebt_h2) / mol_of(e, ebt_h1)) == doctest::Approx(6.91).epsilon(0.002));
+	}
+	for (const auto &[metal, free, complex, target] : { std::tuple{ magnesium_chloride_aq, magnesium_ion, magnesium_ebt, 7.26 }, std::tuple{ calcium_chloride_aq, calcium_ion, calcium_ebt, 5.23 } }) {
+		const CellState e = testing::settled(Cell().put(potassium_chloride_aq, 0.085).put(ammonia_aq, 0.02).put(ammonium_chloride_aq, 0.004).put(eriochrome_black_t_aq, 0.00005).put(metal, 0.0002).state, T0);
+		CHECK(std::log10(mol_of(e, complex) / (mol_of(e, free) * mol_of(e, ebt_ion))) == doctest::Approx(target).epsilon(0.002));
+	}
+	// a hardness titration at pH 10: 2 mmol calcium and 0.5 mmol magnesium with the dye; short of the EDTA they take the
+	// dye is mostly wine red MgIn-, past it mostly blue HIn2-
+	const auto titrated = [&](double edta) {
+		return testing::settled(Cell().put(ammonia_aq, 0.1).put(ammonium_chloride_aq, 0.02).put(calcium_chloride_aq, 0.002).put(magnesium_chloride_aq, 0.0005).put(eriochrome_black_t_aq, 0.00002).put(disodium_edta_aq, edta).state, T0);
+	};
+	const CellState before = titrated(0.9 * 0.0025), after = titrated(1.1 * 0.0025);
+	MESSAGE("the dye before the end point: MgIn- " << mol_of(before, magnesium_ebt) << ", HIn2- " << mol_of(before, ebt_h1) << "; after: MgIn- " << mol_of(after, magnesium_ebt) << ", HIn2- " << mol_of(after, ebt_h1));
+	CHECK(mol_of(before, magnesium_ebt) > mol_of(before, ebt_h1));
+	CHECK(mol_of(after, ebt_h1) > 5.0 * mol_of(after, magnesium_ebt));
 }
