@@ -95,7 +95,7 @@ conductivity** (this stage).
 | 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | done |
 | 65.6 | Experiment 20: conductivity | done |
 | 65.7 | The goldens: the evidence and the user's approval | done |
-| 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates` (477 s, at the merge level), the user's sign-off | gates passed; sign-off to come |
 
 - **The goldens** (approved by the user, 2026-11-27: "Approved, proceed"): the demo's first eight commands as they
   were; the copper oxide dissolved 8.5 s later (its ions a little slower in the hot acid by Walden's exponents than by
