@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.73.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.76.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -427,7 +427,8 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
 - **Each step** (the column's process, after the drains and before settling):
   - gas in a layer rises to the layer over it, carrying its enthalpy;
   - the layers in use stay together under the top: one with no liquid over it rises into that place;
-  - solids sink to the lowest liquid;
+  - solids sink to the lowest liquid; a solid lighter than the liquid it is in (Stage 71: ice on water) floats up to
+    the topmost liquid instead (one with no liquid round it falls into the liquid under it);
   - two layers merge where the lower is the lighter (it overturns: convective adjustment), or where they are alike
     and no steep step is beside them (one is enough);
   - stirred, the layers mix as far as the turning pays (Stage 49): of the work the turning dissipates this step
@@ -493,6 +494,24 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
   solids that have one, and a bed with none conducts as its fluid.
 - **L1** (§18) holds a column together.
+- **Its overflow** (Stage 71): a column that holds more than its vessel (another stood in it, its liquids grown)
+  spills its excess from its topmost liquid down, past what L1 allows and no sooner.
+- **A vessel in a vessel** (Stage 71; `docs/TDD_71_ICE.md`; asked for by the user, 2026-11-27: "each ring interacts
+  with the layers it touches, heat transfer is by layer/ring, not full vessel to full vessel"; "the inner vessel
+  should change the volume integral of the outer vessel, such that each layer is displaced the correct amount,
+  increasing the level the correct amount"). The lab's `stand {item, in}` stands a vessel upright on another's
+  floor, where its outside fits within the other's inside at every height and its foot with the others' in its
+  floor; `place` takes it out. While it stands there:
+  - **the other's volume integral** is its inside's less the inner's outside, from its foot to its rim
+    (`glass::Vessel::outside_below`): the world's column reshaped (`World::reshape_column`: its whole volume and its
+    volume under each height), the lab's levels read through it. Each layer's heights, the level, the surface, the
+    overflow and what fits move by what the inner displaces at its height; a brim-full one spills it;
+  - **ring by layer**: each ring of the inner's wall has an edge to each cell of the other's column, its conductance
+    what of the ring's outside lies in that cell's heights: the liquid by the wall into water (Churchill and Chu,
+    the other's depth its length), the gas over it by the wall into air, in series with half its glass; its floor's
+    base the other's lowest cell. Its rings lose to the room only by what of them stands over the other's brim;
+  - the other holds where it stands (it cannot be moved, stowed or poured from) while one stands in it; saved and
+    loaded, the edges are the world's, found again.
 
 **Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
 a dish keeping its own carbon dioxide and steam). Gas moved only by bulk flow until Stage 50; now an open vessel's
@@ -610,6 +629,23 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
   depression are consequences, not rules.
 - **Melting and freezing, sublimation, supercritical fluids** use the same construction with the
   corresponding species.
+- **Ice** (Stage 71, `docs/TDD_71_ICE.md`): `ice`, H2O(s), from IAPWS R10-06 (melting at 101 325 Pa at
+  273.152519 K, its heat of fusion 6006.8 J/mol, its cp and density there; hf and s0 at 298.15 K fitted so the model
+  melts at IAPWS's point with water's own cp, its absolute entropy then IAPWS's). Melting and freezing are one
+  kinetic reaction, `water_freezing`, H2O(l) → H2O(s), the surface law (§7) at ice's surface:
+  - **heat, not attachment, sets its pace**: a surface reaction that carries no dissolved species (a pure liquid
+    freezing, a solid melting) is limited in series by the heat its change gives out or takes in, carried between
+    the surface and the liquid, `Nu k / d (T − T_eq) / |ΔH|` per m², `T − T_eq = A T / ΔH`, Nu Sano's form with the
+    Prandtl number (2 at rest, raised by the stirring's dissipation, Stage 57);
+  - **supercooling**: ice's first crystal by a nucleation barrier, `nucleation · (kg of water) · e^(−B / ln² S)` a
+    second (the classical form, `nucleation_barrier`), fitted to Wilson and Haymet's tubes (a median at −10.45 °C
+    cooled at 4.5 K/min) and Wilson's spread; once one is there it grows, the heat of freezing warms the liquid back
+    to its freezing point, and it holds there while the cold draws the heat away;
+  - **a mush**: a solid with a grain (`grain_um`) grows by the surface law as crystals no larger than it; ice's
+    100 µm, its dendrites' large area in a supercooled liquid (calibrated);
+  - **freezing-point depression** through the water's activity (Pitzer's, §10): copper sulfate's lowering within
+    1.2 % of the International Critical Tables to 0.8 mol/kg, sodium chloride's within 3 % to 1 mol/kg;
+  - ice floats (§6).
 
 - **The equilibrium law** (`data/reactions.json`, `"law": "equilibrium"`): each step, in each
   cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
@@ -641,7 +677,8 @@ brings.
 **Demo subset:** water liquid/vapour projection in the flask, the balloon and the condenser;
 condensate drips to the beaker.
 **Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium; solute
-activity is in it from Stage 19 (Pitzer's excess, §10). Kinetic phase changes and melting are *PLANNED*.
+activity is in it from Stage 19 (Pitzer's excess, §10). Stage 71: ice, melting and freezing as a kinetic phase
+change. Evaporation from a still surface and sublimation remain *PLANNED*.
 
 ## 9. Solutions and crystallization
 
@@ -781,6 +818,24 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
 - **A bench opens at its fast equilibria** at the temperatures it states (a bench's acid formerly cooled 2.6 K on its
   first step, as its bisulfate formed).
 
+
+**Metals, their salts and precipitates** (Stage 76; `docs/TDD_76_METALS.md`; `docs/CURRICULUM.md`, step E's first part).
+- **The elements** calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt; **their ions** Ca²⁺, Mg²⁺,
+  Ba²⁺, Ag⁺, Fe²⁺, Fe³⁺, Zn²⁺, Al³⁺, Co²⁺, and nitrate; NBS's ΔfH° and S°, OBIGT's Cp° and V° on the ions' footing.
+- **Hydrolysis**: Fe³⁺ and Al³⁺ each give up a hydrogen ion to the water (FeOH²⁺, AlOH²⁺, NIST 46.3's constants), a fast
+  equilibrium: 0.1 mol/kg iron(III) chloride reads pH 2.2, aluminium chloride 3.4.
+- **Precipitates**, each a fast equilibrium at MINTEQ v4's solubility product, its solid as fine grains: silver
+  chloride and silver oxide, barium sulfate and carbonate, calcium carbonate (calcite), gypsum, the hydroxides of
+  calcium, magnesium, iron(II), iron(III) (ferrihydrite), zinc (ε), aluminium (amorphous) and cobalt (pink). Each
+  solid's S° is the one that gives its measured solubility product on NBS's enthalpy. A hydroxide comes out of a base
+  and an acid dissolves it; a carbonate dissolves into an acid as hydrogen carbonate and carbon dioxide.
+- Saturated calcium hydroxide reads NIST SRM 2193b's certified pH within 0.05 from 5 to 35 °C, and is less soluble as
+  it warms.
+- **Colours**: cobalt(II) pink (Ballhausen and Jørgensen's spectrum), iron(III) yellow by FeOH²⁺'s charge-transfer
+  band's tail (Byrne and Kester's, King's); the white precipitates a white powder's, iron(III) hydroxide's rust brown,
+  cobalt hydroxide's pink and silver oxide's dark brown calibrated to how each looks.
+- The activity model's pairs: Pitzer and Mayorga 1973's chlorides and nitrates, Harvie, Møller and Weare's calcium
+  and magnesium with sulfate, hydroxide and hydrogen carbonate.
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -801,6 +856,7 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
   together, electroneutrality, a column's diffusion at no current.
 - Stage 64 adds the weak acids and bases, the gases' dissolving, the indicators and the salts experiments 14 to 20
   weigh; the masters a retired unit is read back by; a bench opened at its fast equilibria.
+- Stage 76 adds eight metals, their salts, their hydrolysis and thirteen precipitates.
 
 ## 10. Property models
 
@@ -837,6 +893,29 @@ The parameters do not depend on temperature, so neither does `G_ex / T`. That me
   energy as in §4.2.
 - The excess is all entropy, `S_ex = −G_ex / T`. That is the `−R ln γ` of each species in §4.6's
   sum.
+
+**Conductivity** (Stage 65; `docs/TDD_65_TITRATIONS.md`; `chem/thermo.hpp`, `conductivity`). A solution's, read from its
+ions, no state of its own: `κ = Σ c_i λ_i` over its ions, `c_i` per litre of the liquid at its temperature.
+- Each ion's limiting molar conductivity is Nernst and Einstein's from its diffusion coefficient, `λ°_i = z_i² F² D_i /
+  (R T)`: Kohlrausch's independent migration, one mobility for diffusion and conductance.
+- Its atmosphere lowers it, Debye, Hückel and Onsager's relaxation and electrophoresis over an ion size (Robinson and
+  Stokes): `λ_i = λ°_i − (B1 z_i² λ°_i + ½ B2 z_i²) √I / (1 + B a √I)`, I the ionic strength in mol/L,
+  `B1 = 8.2046·10⁵ / (εT)^1.5`, `B2 = 82.487 / (η (εT)^0.5)`, `B = 50.29 / (εT)^0.5` Å⁻¹, water's dielectric constant ε
+  by temperature (Malmberg and Maryott) and its viscosity η the table's; one size, a = 4.2 Å. Exact for a 1:1
+  electrolyte's pair in the limiting law; for an ion of higher charge the per-ion form is an approximation.
+- The hydrogen and hydroxide ions are taken at their exact balance with water, as the pH is: pure water reads
+  0.055 µS/cm.
+- **An ion's mobility with temperature** is Walden's rule with an exponent of its own, `D ∝ T η^−p`: 0.87 for the
+  ions, 0.61 for H⁺, whose protons hop (Grotthuss); 1, Stokes and Einstein, for a neutral solute. The column's
+  diffusion and the transport to a grain move with it (§6, §9).
+- Held to (`native/tests/test_conductivity.cpp`): KCl and NaCl within 0.5 % of Shedlovsky's from 0.0001 to
+  0.12 mol/L; HCl within 0.5 % of Hamer and DeWane's to 0.1 mol/L, its limiting conductance within 1 % from 5 to
+  45 °C; the KCl standards within 1 % at 0, 18 and 25 °C to 0.1 demal; acetic acid within 2 % of MacInnes and
+  Shedlovsky's. Invariant Q1.
+- **A room's carbon dioxide** (Stage 65; asked for by the user, 2026-11-27: "on by default, ... specific experiments ...
+  may explicitly turn it off"): 420 ppm of its air, today's atmosphere's, which every vessel's air takes at the
+  bench's opening; a bench's room may name another `co2_ppm`, 0 for none. Water open to it reads 0.8 µS/cm, as
+  distilled water does; a base open to it takes it up.
 
 **Demo subset:**
 - Electrolytes by the equations above, with the parameters of 25 °C at every temperature:
@@ -1527,7 +1606,8 @@ of every ray through its area, and its colour is their average (a box filter).
     seen, through half a chord of its liquid: bent, absorbed and turned away by whatever is in
     front of it, as the wall's light is. Nothing is added to a pixel outside its history.
   - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
-    into a neighbour on its own layer; a vessel standing inside another (a bath) is not built.
+    into a neighbour on its own layer. A vessel standing inside another (Stage 71: a bath) is drawn on the layer
+    nearer the eye than the one it stands in: it is not seen through the other's front wall and liquid.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
 - **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If
@@ -1809,7 +1889,9 @@ drawer). Items:
 **Readings** (Stage 50). A bench's `readings` is `truth` (the default) or `instruments`, and its `seed` an
 integer (0 without one). By instruments:
 - each vessel has a **thermometer** (0.1 °C, ±0.2 °C) and, while it holds a liquid, a **pH meter** (0.01,
-  ±0.02); a reading is the truth plus its instrument's offset, drawn once from the seed within its
+  ±0.02) and (Stage 65) a **conductivity meter** (±0.5 % of its reading, auto-ranging: 0.01 µS/cm below 20, 0.1 to
+  200, 1 to 2000, then 0.01, 0.1 and 1 mS/cm; the solution's conductivity at its own temperature, not compensated to
+  25 °C); a reading is the truth plus its instrument's offset, drawn once from the seed within its
   accuracy, rounded to its resolution;
 - its liquid's volume is read by its **marks** (`data/glassware.json`: a size's spacing of marks, and the
   marks' error, ±5 % on a beaker or a flask, ±10 % on a bottle): the truth scaled by a share drawn once
@@ -2210,7 +2292,8 @@ catalogue's order, with a tutorial, "next". `Ui::progress`, `set_progress` (`che
 [ids]}`; an id the catalogue has not is kept); the C API's `cg_ui_progress`, `cg_ui_set_progress`; the Godot host
 keeps it in `progress_path` (`user://progress.json`), written whenever it changes.
 
-**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's and its pH meter's readings and
+**By instruments** (Stage 50) a vessel's readout shows its label, its thermometer's, its pH meter's and (Stage 65) its
+conductivity meter's readings and
 what its marks read of its liquid, never what it holds; the pour menu's slider speaks in its marks' terms, its tip
 buttons are one, "the solid", and what the menu pours or tips is a hand's (`about`).
 
@@ -2940,6 +3023,34 @@ stand on.
     first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
     excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
     one crystal. Its report: the stirred beaker's crystals, predicted first.
+  - `freezing_point`, *freezing points* (Stage 71; experiment 33): a freezing mixture made of an ice bath and salt
+    (to −23 °C), then a test tube of water and one of 0.50 mol/kg sodium chloride stood in it (§6, a vessel in a
+    vessel) and logged: the water supercools to −9.7 °C, jumps back to 0 °C and holds while it freezes; the solution
+    jumps back to about −2 °C and falls as its ice concentrates it. A guess first; its report: the solution's
+    freezing point, and the cryoscopic constant from it (1.71 against an ideal 1.86).
+  - `heating_curve`, *a heating curve and the heat of fusion* (Stage 71; experiment 26): two ice cubes stirred into
+    warm water in a foam cup (40 to 20.0 °C: 334.6 J/g), then crushed ice from the freezer heated and stirred, logged:
+    flat at 0 °C while it melts, flat at 100 °C while it boils. A guess first; its report: the heat of fusion.
+  - Stage 65's, read by instruments, each with its report:
+    - `standardise` (experiment 14): sodium hydroxide of about 0.1 M (drawn by the seed) against half a gram of KHP on
+      the analytical balance, run in fast to 18 mL, then drop by drop to phenolphthalein's first lasting pink; at the
+      bench's seed 0.1001 mol/L found against 0.1003.
+    - `vinegar` (experiment 15): a vinegar of unknown strength diluted tenfold in a volumetric flask and stirred, 25 mL
+      titrated with the pH and the burette logged; the end point (17.66 mL against 17.68), its strength (0.706 mol/L)
+      and acetic acid's pKa at half the end point (4.69, the thermodynamic 4.76 less its activity's share).
+    - `carbonate_curve` (experiment 16): sodium carbonate against hydrochloric acid, phenolphthalein then methyl red,
+      the curve's two steps, the second twice the first (13.85 and 27.68 mL against 13.82 and 27.65).
+    - `buffer` (experiment 17): an acetate buffer of 10 mmol of each, weighed and made up; its pH (4.67) against
+      Henderson and Hasselbalch's (4.76), a guess first; the same acid into it (down 0.07) and into water (to 2.16).
+    - `salts_ph` (experiment 18): five salts' pH (NaCl 7.08, NH4Cl 5.32, sodium acetate 8.85, NaHCO3 8.41, Na2CO3
+      11.43), a guess first; bromothymol blue's apparent pKa from its absorbance at 616 nm in acid, base and a phosphate
+      buffer (7.08 against 7.10).
+    - `antacid` (experiment 19): a tablet of sodium hydrogen carbonate given 5 mmol of acid, boiled until its carbon
+      dioxide is gone, the rest titrated back with potassium hydroxide; 3.63 mmol found against 3.59, 12.0 mmol a gram.
+    - `conductivity` (experiment 20): strong, weak and no electrolytes on the conductivity meter (HCl 3,804, NaCl 1,067,
+      acetic acid 148, water under the room's 420 ppm of CO2 0.9 uS/cm), a guess first; then a conductometric
+      titration, the acid diluted with 175 mL of water, its falling and rising lines crossing at 11.62 mL against
+      11.81.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3107,6 +3218,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
+| Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |
 | C6 | Every amount is non-negative | exact | 1 |
@@ -3168,7 +3280,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | G3 | A controller's level is within 0 and 1, and 0 while its inputs do not let it or it is untuned; its signal is its level above 0 | exact | 26 |
 | G4 | A control following a controller by PWM is on, over each whole period, for the steps the level at the period's start gives (its share of the period, rounded to a whole step) | exact | 26 |
 | E1 | A gas exchanged at an open mouth moves only down its mole fraction's difference (Stage 50; `chem/invariants.hpp`): along an open edge that exchanges gas and joins the two cells, no further than to equal fractions; every other gas transfer still bulk flow (T1). It fires on a gas moved against its fraction, a move a thousand times what equalises, and an exchange along an edge that does not exchange | exact | 50 |
-| I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer and pH meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
+| I1 | A reading is its truth within its stated error (Stage 50; `lab/instruments.hpp`): every vessel's thermometer, pH meter and (Stage 65) conductivity meter within its accuracy and half its resolution of the truth; its marks within their error of the liquid's volume and half a mark; every balance's display within its linearity and half its readability of its load's conventional mass less its tare. It fires on an offset drawn past its accuracy, and on a reading rounded to the wrong resolution | the instrument's error | 50 |
 | S1 | No NaN or infinity in any output | exact | 2 |
 
 Full-model additions (§6): mechanical equilibrium at rest, booked work equals `∫P dV`.
@@ -3283,6 +3395,8 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
 | Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. (Stage 64: its heat capacity NBS's at infinite dilution, −293.8 J/K mol, no longer the pure liquid's; water's ionisation −223.8, pKw from the tables 12.31 at 100 °C against IAPWS's 12.25, its heat capacity held constant) |
+| Metals and precipitates (Stage 76): a precipitate forms and dissolves at once (a fast equilibrium), as one form (the fresh precipitate's, not its aged one), its grains of one size; no complex (zincate and aluminate in a strong base, silver's and copper's with ammonia: step E's next stage); silver chloride does not grey in light; FeOH²⁺'s absorption past 390 nm its band's tail, not measured; iron(III) hydroxide's heat capacity Kopp's; the activity model's pairs 25 °C's | Calcite's and gypsum's solubility products within 0.08 of wateq4f's to 50 °C, 0.16 at 80; saturated calcium hydroxide 0.07 low in pH at 50 °C; zinc and aluminium hydroxides do not redissolve in excess base |
+| Conductivity (Stage 65): one ion size for every ion; the per-ion Onsager form exact only for a 1:1 electrolyte's pair; no ion association; no viscosity of the solution itself; Walden's exponent one for all ions but H⁺, from KCl and HCl (OH⁻ and the rest assumed as K⁺ and Cl⁻); a meter reads at the solution's temperature, uncompensated | Within 0.5 % of the measured to 0.1 mol/L; past it HCl reads high (2.5 % at 0.5 mol/L, 8 % at 1) and 1 M KCl low (1.5 % at 25 °C, 6 % at 0 °C); a doubly charged ion's conductivity is less exact |
 | The weak acids' and indicators' activity (Stage 64): neutral solutes ideal (no λ); no Pitzer pair for K⁺ with hydrogen phthalate, for the indicators' ions or NH₄⁺ with acetate; no mixing terms (θ, ψ) | IUPAC's phosphate and carbonate standards within 0.03, KHP's 0.02 low; bromothymol blue's apparent pKa at I = 0.1 within 0.02 of the measured; no salting out of a neutral solute |
 | The indicators' ionisation has no heat (none read) and phenolphthalein does not fade in strong base (Stage 64) | Their colours do not move with temperature; phenolphthalein in 1 mol/kg NaOH stays pink, where a real one fades over minutes |
 | The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |
@@ -3294,6 +3408,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
+| Ice (Stage 71): its growth into a supercooled liquid a mush of 100 µm grains, not dendrites; a floating solid drawn as a sediment on the floor and counted whole in its vessel; no sublimation; no hydrohalite; Pitzer's 25 °C parameters at 0 °C; a vessel standing in another drawn on the layer nearer the eye | A tube's recalescence takes seconds where a dendrite's takes less; a brim-full glass with ice spills 9 % of the ice's volume more than it would; ice and salt meet at −23 °C, not −21.1; sodium chloride's freezing points 3 % low at 1 mol/kg, 9 % at 4 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off. Stage 66: a seed's fragments share its mass at once (a 2 mm seed and its first thousand 6 µm fragments are a thousand crystals of 0.2 mm), so a bred crop's area is overstated at first and the seed itself is not seen apart; the calibrated breeding rate takes it in |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |

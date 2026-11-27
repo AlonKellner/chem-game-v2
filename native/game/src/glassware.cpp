@@ -334,6 +334,18 @@ double Vessel::volume_below(double y) const {
 	return v;
 }
 
+double Vessel::outside_below(double y) const {
+	double v = 0.0;
+	for (const Piece &p : outside) {
+		const double y0 = std::min(p.a.y, p.b.y), y1 = std::max(p.a.y, p.b.y);
+		if (y1 - y0 < 1e-15 || y0 >= y) {
+			continue;
+		}
+		v += swept(p, y1 <= y ? 1.0 : s_at(p, y));
+	}
+	return v;
+}
+
 double Vessel::capacity() const {
 	return volume_below(height);
 }
@@ -676,6 +688,9 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.paper_herzberg_s = paper.at("herzberg_s").get<double>();
 		v.paper_height = paper.at("diameter_mm").get<double>() / 20.0 * std::cos(v.cone_half_angle); // a quarter-folded circle: its radius the cone's slant
 		v.tip_bore = 2.0 * (rs - std::min(t, 0.8 * rs));
+	} else if (kind == "test_tube") {
+		// (Stage 71) ISO 4142: a round floor, its corner the tube's own radius, a straight tube to a plain rim
+		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
 	} else if (kind == "cuvette") {
 		// a round cell (Stage 55): a flat floor, a straight tube to an open top; its inside across is its path
 		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };

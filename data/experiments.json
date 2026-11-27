@@ -171,6 +171,69 @@
 			"tutorial": "tutorials/seed.json"
 		},
 		{
+			"id": "freezing_point",
+			"title": "Freezing points",
+			"summary": "A freezing mixture of ice and salt, then a tube of water and a tube of salt solution stood in it, their temperatures logged: each supercools, jumps back as it freezes and holds; the solution lower. Its freezing point and the cryoscopic constant. A guess first.",
+			"bench": "benches/freezing_point.json",
+			"tutorial": "tutorials/freezing_point.json"
+		},
+		{
+			"id": "heating_curve",
+			"title": "A heating curve and the heat of fusion",
+			"summary": "Two ice cubes into warm water in a foam cup: what the water gives up melts them, the heat of fusion. Then crushed ice from the freezer heated and stirred, its temperature logged: flat at 0 C while it melts, flat at 100 C while it boils. A guess first.",
+			"bench": "benches/heating_curve.json",
+			"tutorial": "tutorials/heating_curve.json"
+		},
+		{
+			"id": "standardise",
+			"title": "Standardising a base",
+			"summary": "Sodium hydroxide of about 0.1 M, made roughly, titrated against half a gram of KHP weighed on the analytical balance: run in from the burette to phenolphthalein's first lasting pink. Its concentration from the mass and the volume.",
+			"bench": "benches/standardise.json",
+			"tutorial": "tutorials/standardise.json"
+		},
+		{
+			"id": "vinegar",
+			"title": "Vinegar and a weak acid's curve",
+			"summary": "A vinegar of unknown strength diluted tenfold in a volumetric flask, 25 mL of it titrated with 0.100 M sodium hydroxide while the notebook logs the pH: a slow rise through the buffer, a leap at the end point, and at half of it the acid's pKa.",
+			"bench": "benches/vinegar.json",
+			"tutorial": "tutorials/vinegar.json"
+		},
+		{
+			"id": "carbonate_curve",
+			"title": "A carbonate's two end points",
+			"summary": "Sodium carbonate of unknown strength titrated with 0.100 M hydrochloric acid while the notebook logs the pH: two steps, phenolphthalein's pink going at the first and methyl red turning red at the second, twice as far. The carbonate's concentration from either.",
+			"bench": "benches/carbonate_curve.json",
+			"tutorial": "tutorials/carbonate_curve.json"
+		},
+		{
+			"id": "buffer",
+			"title": "A buffer and its capacity",
+			"summary": "An acetate buffer made from 10 mmol of acetic acid and 10 mmol of sodium acetate weighed on the analytical balance, its pH against Henderson and Hasselbalch's; then the same acid into it and into water: the buffer holds, the water's pH falls by four. A guess first.",
+			"bench": "benches/buffer.json",
+			"tutorial": "tutorials/buffer.json"
+		},
+		{
+			"id": "salts_ph",
+			"title": "Salts' pH and an indicator's pKa",
+			"summary": "Five salts' solutions on the pH meter: neutral, acidic and basic as their ions are acids or bases. Then bromothymol blue on the spectrophotometer, all yellow in acid, all blue in base and green in a buffer: its pKa from the buffer's pH and its absorbance. A guess first.",
+			"bench": "benches/salts_ph.json",
+			"tutorial": "tutorials/salts_ph.json"
+		},
+		{
+			"id": "antacid",
+			"title": "An antacid by back titration",
+			"summary": "An antacid tablet weighed, given more hydrochloric acid than it can take and swirled until its carbon dioxide has gone; the acid left over titrated with potassium hydroxide to phenolphthalein's pink. What the tablet neutralised, and what a gram of it does.",
+			"bench": "benches/antacid.json",
+			"tutorial": "tutorials/antacid.json"
+		},
+		{
+			"id": "conductivity",
+			"title": "Conductivity and a conductometric titration",
+			"summary": "Hydrochloric acid, salt, acetic acid and water on the conductivity meter: strong, weak and no electrolytes. Then an acid titrated while the notebook logs its conductivity: it falls to the end point and rises past it, two lines crossing. A guess first.",
+			"bench": "benches/conductivity.json",
+			"tutorial": "tutorials/conductivity.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

@@ -339,10 +339,26 @@ if(CHEM_BUILD_TESTS)
 
     # Data that breaks a conservation law does not build: chem_datagen refuses
     # each of these (tests/data/bad_*), so the custom command above would fail.
-    foreach(bad unbalanced_element unbalanced_charge unknown_species bad_formula driver_order_alone unknown_diffusion written_not_the_reaction secondary_alone)
+    # (Stage 71) each refused for its own reason: the generator's message is checked, so a fixture that fails earlier
+    # (a species file a later stage's rules refuse) does not pass for the wrong one
+    set(DATAGEN_REFUSALS
+        "unbalanced_element=does not balance in every element"
+        "unbalanced_charge=does not balance in every element and in charge"
+        "unknown_species=is not in species.json"
+        "bad_formula=unexpected"
+        "driver_order_alone=a driver's order is positive"
+        "unknown_diffusion=which no species is made of"
+        "written_not_the_reaction=is not the reaction in formula units"
+        "secondary_alone=secondary nucleation has its rate and its order"
+        "barrier_with_order=a nucleation barrier takes the place of a nucleation order")
+    foreach(refusal ${DATAGEN_REFUSALS})
+        string(FIND "${refusal}" "=" at)
+        string(SUBSTRING "${refusal}" 0 ${at} bad)
+        math(EXPR from "${at} + 1")
+        string(SUBSTRING "${refusal}" ${from} -1 says)
         add_test(NAME datagen_refuses_${bad}
             COMMAND chem_datagen ${CMAKE_SOURCE_DIR}/tests/data/bad_${bad} ${CMAKE_CURRENT_BINARY_DIR}/datagen_refused/${bad})
-        set_tests_properties(datagen_refuses_${bad} PROPERTIES WILL_FAIL TRUE)
+        set_tests_properties(datagen_refuses_${bad} PROPERTIES PASS_REGULAR_EXPRESSION "${says}")
     endforeach()
 
     # the C API: a C11 host compiles against chem_api.h and links the shared library
@@ -371,6 +387,8 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME chem_tool_study_solution_heat COMMAND chem_tool study solution_heat)
     add_test(NAME chem_tool_study_neutralisation COMMAND chem_tool study neutralisation)
     add_test(NAME chem_tool_study_precipitation COMMAND chem_tool study precipitation)
+    add_test(NAME chem_tool_study_conductivity COMMAND chem_tool study conductivity)
+    add_test(NAME chem_tool_study_precipitates COMMAND chem_tool study precipitates)
     add_test(NAME chem_tool_study_spectrum COMMAND chem_tool study spectrum)
     add_test(NAME chem_tool_study_tilt COMMAND chem_tool study tilt)
     add_test(NAME chem_tool_study_vortex COMMAND chem_tool study vortex)

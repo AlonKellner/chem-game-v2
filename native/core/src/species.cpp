@@ -153,6 +153,10 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "ion " + std::string(solution.ions[i].name) + " has a diffusion coefficient that is negative or not finite");
 			return std::nullopt;
 		}
+		if (!(solution.ions[i].walden > 0.0 && solution.ions[i].walden <= 2.0)) { // Stage 65
+			set_why(why, "ion " + std::string(solution.ions[i].name) + " has a Walden exponent outside (0, 2]");
+			return std::nullopt;
+		}
 		for (size_t j = 0; j < i; ++j) {
 			if (solution.ions[j].name == solution.ions[i].name) {
 				set_why(why, "ion " + std::string(solution.ions[i].name) + " is listed twice");
@@ -166,6 +170,18 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			set_why(why, "the solvent's viscosity is a table of positive values at rising temperatures");
 			return std::nullopt;
 		}
+	}
+	// (Stage 65) the solvent's dielectric constant, and the ions' size
+	for (size_t i = 0; i < solution.dielectric.size(); ++i) {
+		const DielectricPoint &d = solution.dielectric[i];
+		if (!(d.kelvin > 0.0) || !finite(d.kelvin) || !(d.epsilon > 1.0) || !finite(d.epsilon) || (i > 0 && !(d.kelvin > solution.dielectric[i - 1].kelvin))) {
+			set_why(why, "the solvent's dielectric constant is a table of values above 1 at rising temperatures");
+			return std::nullopt;
+		}
+	}
+	if (!(solution.ion_size >= 0.0 && solution.ion_size < 1e-8)) {
+		set_why(why, "the ions' size is a length from 0 to 100 Angstrom");
+		return std::nullopt;
 	}
 	// the solvent's density (Stage 67): none, or finite with a range, positive at both its ends and between
 	if (std::any_of(solution.density.begin(), solution.density.end(), [](double c) { return c != 0.0; })) {
@@ -350,7 +366,7 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 			set_why(why, "reaction " + name + ": the driver of its rate is not one of its dissolved reactants");
 			return std::nullopt;
 		}
-		for (const double v : { kinetics.prefactor, kinetics.activation, kinetics.nucleation, kinetics.nucleation_order, kinetics.secondary, kinetics.secondary_order }) {
+		for (const double v : { kinetics.prefactor, kinetics.activation, kinetics.nucleation, kinetics.nucleation_order, kinetics.secondary, kinetics.secondary_order, kinetics.nucleation_barrier }) {
 			if (!(v >= 0.0) || !(v - v == 0.0)) {
 				set_why(why, "reaction " + name + ": a rate's numbers are not negative and are finite");
 				return std::nullopt;

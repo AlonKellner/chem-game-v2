@@ -470,6 +470,28 @@ Refusal World::resize_column_top(CellId top, double volume) {
 	return Refusal::None;
 }
 
+Refusal World::reshape_column(CellId top, double whole, std::vector<double> volumes) {
+	if (!known(top)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(top.index)];
+	if (!m.rigid || !(m.column_volume > 0.0) || !(whole > 0.0) || !(whole - whole == 0.0) || volumes.size() != m.column_shape.size()) {
+		return Refusal::BadValue;
+	}
+	for (size_t k = 0; k < volumes.size(); ++k) {
+		if (!(volumes[k] - volumes[k] == 0.0) || (k == 0 ? volumes[k] != 0.0 : volumes[k] < volumes[k - 1])) {
+			return Refusal::BadValue;
+		}
+	}
+	// its top shrinks or grows by what the whole does, never to nothing (a sliver: what does not fit spills)
+	const double top_volume = m.volume + (whole - m.column_volume);
+	m.volume = top_volume > whole * 1e-9 ? top_volume : whole * 1e-9;
+	m.column_volume = whole;
+	m.column_shape = std::move(volumes);
+	touch(static_cast<size_t>(top.index)); // (Stage 75: its meta changed)
+	return Refusal::None;
+}
+
 Refusal World::set_stirring(CellId cell, double watts) {
 	if (!known(cell)) {
 		return Refusal::UnknownCell;

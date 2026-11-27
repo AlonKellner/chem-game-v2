@@ -379,6 +379,11 @@ public:
 	// simulation's own act within a step, as the column moves liquid between
 	// them (no more than the vessel's whole volume, more than nothing).
 	Refusal resize_column_top(CellId top, double volume);
+	// (Stage 71) A column's vessel reshaped between steps (another standing in it: GAME_SPEC §6, a vessel in a vessel):
+	// its whole inside's volume and its volume under each height (its rise as built), as less the other displaces; its
+	// top the size its layers leave it, or none, the next step's overflow spilling what no longer fits. Refused
+	// (BadValue) for a cell that is not a column's top, a shape not its own length, or volumes not rising from 0.
+	Refusal reshape_column(CellId top, double whole, std::vector<double> volumes);
 	// A solid's particle count: not conserved, so not a primitive. The
 	// primitives keep it at least one where the solid is and zero where it is
 	// not; this sets how many. Refused (BadValue) for a species that is not a

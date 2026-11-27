@@ -137,6 +137,17 @@
 			"pour_ml_s": 3,
 			"cap_bore_mm": 4,
 			"burst_kpa": 150
+		},
+		{
+			"name": "test_tube",
+			"standard": "ISO 4142, a heavy-wall tube (PYREX 1624/12M: 16 x 150 mm, 18 mL, 1.8 mm wall)",
+			"sizes": [
+				{"ml": 18, "diameter_mm": 16, "height_mm": 150, "wall_mm": 1.8, "corner": 0.5}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 4,
+			"cap_bore_mm": 4,
+			"burst_kpa": 200
 		}
 	]
 }

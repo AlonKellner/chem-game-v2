@@ -664,7 +664,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// liquid, not on the floor.
 				double *lie = &lies[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS) * SHAPE_BLOCK * 4];
 				const double sediment = (1.0 - (v.liquid_ml > 0.0 ? std::min(std::max(v.suspended, 0.0), 1.0) : 0.0)) * v.solid_ml;
-				const contents::Lying l = contents::lying(*made, lie[3], std::max(v.condensed_ml - sediment, 0.0), sediment, body.vortex, body.side);
+				// (Stage 71) what stands in it displaces its liquid: the level the beaker alone would have with that more
+				const contents::Lying l = contents::lying(*made, lie[3], std::max(v.condensed_ml - sediment, 0.0) + v.displaced_ml, sediment, body.vortex, body.side);
 				// Drawn to a sixty-fourth of a pixel (Stage 33): what lies in a vessel moves by less at every step of
 				// the lab (a vortex nearing its size, a liquid losing vapour), and a pixel's rays are followed again
 				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
@@ -683,7 +684,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					for (const LayerView &layer : v.layers) {
 						layered_ml += layer.liquid_ml;
 					}
-					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0), scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
+					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0) + v.displaced_ml, scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
 					double below = 0.0, under = -1e9; // the layers' liquid under the band, and its bottom level
 					for (size_t k = 0; k < bands; ++k) {
 						const LayerView &layer = v.layers[v.layers.size() - 1 - k]; // (the view lists them from the top)
@@ -1180,7 +1181,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)];
 			h = fnv(&made, sizeof made, h);
 			shape_tag[static_cast<size_t>(b)] = tag(h);
-			content_tag[static_cast<size_t>(b)] = given ? tag(fnv(lie + 14, 14 * sizeof(double))) : 0.0f;
+			// (Stage 65: and its liquid's surface row, FORM z, which says where a ray is in its liquid's core; it
+			// follows the vessel's condensed volume, not what lies in it, so a level that stands while the volume
+			// moves left a kept ray's route as it was)
+			content_tag[static_cast<size_t>(b)] = given ? tag(fnv(&t[at + FORM * 4 + 2], sizeof(float), fnv(lie + 14, 14 * sizeof(double)))) : 0.0f;
 			for (int o = 0; o < count_was; ++o) {
 				if (scene.table[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + IDS) * 4] == t[at + IDS * 4]) {
 					before[static_cast<size_t>(b)] = o;
@@ -1229,9 +1233,21 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					high = std::max(high, std::max(was[19] > 0.5 ? was[22] + std::abs(was[23]) : -1.0e300, lie[19] > 0.5 ? lie[22] + std::abs(lie[23]) : -1.0e300));
 				}
 			}
+			// (Stage 65) the rows between its liquid's surface row as it was and as it is
+			const double form_was = scene.table[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + FORM) * 4 + 2];
+			const double form_now = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4 + 2];
+			double rows_lo = 1.0e30, rows_hi = -1.0e30;
+			if (form_was != form_now) {
+				rows_lo = std::min(form_was, form_now) - 0.02;
+				rows_hi = std::max(form_was, form_now) + 0.02;
+			}
+			if (high < low) {
+				zone_lo[static_cast<size_t>(b)] = rows_lo;
+				zone_hi[static_cast<size_t>(b)] = rows_hi;
+			}
 			if (high >= low) {
-				zone_lo[static_cast<size_t>(b)] = std::max(origin - high / std::max(cm, 1.0e-12) - 0.02, -1.0e30);
-				zone_hi[static_cast<size_t>(b)] = std::min(origin - low / std::max(cm, 1.0e-12) + 0.02, 1.0e30);
+				zone_lo[static_cast<size_t>(b)] = std::min(std::max(origin - high / std::max(cm, 1.0e-12) - 0.02, -1.0e30), rows_lo);
+				zone_hi[static_cast<size_t>(b)] = std::max(std::min(origin - low / std::max(cm, 1.0e-12) + 0.02, 1.0e30), rows_hi);
 			}
 		}
 		for (int b = 0; b < count; ++b) {

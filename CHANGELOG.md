@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 75 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.76.0 (merged after Stages 71 and 76): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
   digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
@@ -11,6 +11,38 @@
 - The gates: `make gates` prints the step's cost in instructions against main's where the branch left it, warning
   past 10 % (`gate_cache.py stepcost`, `step_costs.json` in the shared cache).
 
+## 0.76.0 (2026-11-27, Stage 76; signed off by the user: "Approved, merge and proceed")
+
+- §9, §10 (Stage 76, `docs/TDD_76_METALS.md`; `docs/CURRICULUM.md`, step E's first part: C1's metals, C3's
+  precipitates): **calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt**, nitrate, 23 salts, the
+  hydrolysis of iron(III) and aluminium (NIST 46.3), and **13 precipitates** at MINTEQ v4's solubility products, each
+  solid's S° set to it on NBS's enthalpy; Pitzer and Mayorga's and Harvie, Møller and Weare's pairs; gated on MINTEQ,
+  wateq4f's analytic solubilities from 10 to 80 °C and NIST SRM 2193b's saturated calcium hydroxide from 5 to 50 °C.
+  `chem_tool study precipitates`.
+- §12: cobalt(II)'s and FeOH²⁺'s absorption from measured spectra; the precipitates' colours.
+- §13: the free lab's new reagents (ten metal salts' solutions, limewater, chalk); the supplies' search counts a salt
+  only as a share of what a vessel holds.
+- §20: the precipitates' declared simplifications.
+
+## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
+
+- §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):
+  **a solution's conductivity**, each ion's Nernst–Einstein conductivity from its diffusion lowered by Debye, Hückel
+  and Onsager's atmosphere over one ion size (Robinson and Stokes; 4.2 Å, calibrated), water's dielectric constant by
+  temperature (Malmberg and Maryott); within 0.5 % of Shedlovsky's KCl and NaCl and Hamer and DeWane's HCl to
+  0.1 mol/L, of Jones and Bradshaw's KCl standards at 0, 18 and 25 °C, and within 2 % of MacInnes and Shedlovsky's
+  acetic acid. **Each ion's mobility with temperature** by Walden's rule with its own exponent (0.87; H⁺ 0.61), the
+  column's diffusion with it. Invariant Q1. `chem_tool study conductivity`.
+- §13: a conductivity meter (0.5 % of its reading, auto-ranging), a vessel's quantity `us_cm`; a room's
+  carbon dioxide, 420 ppm by default (a bench's `co2_ppm`, 0 for none); a report's expression takes log10, ln and sqrt, and a quantity with no value yet is
+  not one the bench lacks; the experiments' list in four columns.
+- §13.7: the experiments `standardise`, `vinegar`, `carbonate_curve`, `buffer`, `salts_ph`, `antacid` and
+  `conductivity` (curriculum 14 to 20).
+- §7, §9: a surface reaction's transport carries the scarcer of its dissolved species (a salt dissolving into an acid
+  that takes its ion away stopped after its first minute).
+- §12.3: a vessel's liquid surface row (FORM z) in its content tag and its changed zone (a kept corner's route went
+  stale where the surface moved under a level that stood: O13).
+- §20: conductivity's and a room's air's declared simplifications.
 ## Stage 74 (2026-11-27; GAME_SPEC stays 0.73.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_74_COST_BY_WORK.md`): signals.12 holds three monitors' cost by the instructions the process
@@ -32,6 +64,20 @@
   the floor's convection steps down two such surfaces may stand. Every printed result of both sessions as it was;
   their digests re-recorded with the user's approval. A cell's temperature read from the simulation's kept thermal
   state by the columns and the lab (the same value).
+
+## 0.71.0 (2026-11-27, Stage 71, merged after 0.72.0 and 0.73.1; signed off by the user: "Approved, merge and proceed")
+
+- §8, §9 (Stage 71, `docs/TDD_71_ICE.md`; the curriculum's step I, C8): **ice**, H2O(s), from IAPWS R10-06 (melting at
+  273.152519 K, 6006.8 J/mol). `water_freezing` a surface law limited by the heat its change carries (a new general
+  step: a surface reaction that carries no dissolved species, Nu k / d (T − T_eq) / |ΔH|, Sano's form with Pr);
+  **supercooling** by a nucleation barrier, e^(−B / ln² S) (`nucleation_barrier`), fitted to Wilson and Haymet's
+  tubes; a solid with a grain grows as a mush; freezing-point depression through the water's activity, held to the
+  International Critical Tables. §6: a lighter solid floats up a column; a column spills what no longer fits; **a
+  vessel in a vessel** (`stand`): the other's volume integral less what stands in it (`World::reshape_column`), ring
+  by layer contacts, as asked for by the user; a test tube (ISO 4142); a bench vessel at its own temperature. §12:
+  ice's media (its long wave from Warren and Brandt's n + ik). §13.7: the experiments `freezing_point` and
+  `heating_curve`. The generator's refusals each checked by their message (six had passed for the wrong reason).
+  The goldens re-recorded with the user's approval (their measurements identical).
 
 ## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70; signed off by the user: "Approved, merge and proceed")
 

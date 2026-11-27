@@ -1,0 +1,26 @@
+{
+	"format": "chem-bench/2",
+	"note": "Electrolytes' conductivity and a conductometric titration (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 20): four beakers at 0.01 mol/kg (hydrochloric acid, sodium chloride, acetic acid) and of water, in a room whose air holds 420 ppm of carbon dioxide (NOAA's global mean, 2023); a 25 mL pipette, a 250 mL conical flask, a 50 mL burette, sodium hydroxide of 0.100 M (0.04 mol in 400 g of water) and hydrochloric acid of unknown strength (0.018 to 0.024 mol in 400 g of water, drawn by the seed). Read by instruments: each beaker's conductivity; then 25 mL of the acid, with about 175 mL of water so that the base dilutes it little, titrated while the notebook logs the flask's conductivity and the burette's reading: the conductivity falls as sodium ions take the place of hydrogen ions, which move five times as fast, then rises with the hydroxide past the end point. The two lines cross at the end point.",
+	"readings": "instruments",
+	"seed": 20,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 3], "label": "25 mL pipette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [7, 7], "label": "titration flask"},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [11, 7], "label": "hydrochloric acid, unknown",
+			"contents": {"water": {"g": 400}, "hydrochloric_acid_aq": {"mol": [0.018, 0.024]}}},
+		{"id": "base", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [15, 7], "label": "sodium hydroxide, 0.100 M",
+			"contents": {"water": {"g": 400}, "sodium_hydroxide_aq": {"mol": 0.04}}},
+		{"id": "strong", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [19, 1], "label": "hydrochloric acid, 0.01 M",
+			"contents": {"water": {"g": 25}, "hydrochloric_acid_aq": {"mol": 0.00025}}},
+		{"id": "salt", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [21, 1], "label": "sodium chloride, 0.01 M",
+			"contents": {"water": {"g": 25}, "sodium_chloride_aq": {"mol": 0.00025}}},
+		{"id": "weak", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [23, 1], "label": "acetic acid, 0.01 M",
+			"contents": {"water": {"g": 25}, "acetic_acid_aq": {"mol": 0.00025}}},
+		{"id": "water", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [19, 8], "label": "water", "contents": {"water": {"g": 450}}},
+		{"id": "pure", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [25, 1], "label": "water",
+			"contents": {"water": {"g": 25}}}
+	]
+}

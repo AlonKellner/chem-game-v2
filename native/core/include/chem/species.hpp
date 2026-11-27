@@ -61,6 +61,16 @@ struct IonDef {
 	std::string_view name; // "SO4-2"; a neutral particle: its species' id
 	int32_t charge = 0;
 	double diffusion = 0.0; // its diffusion coefficient in water at 25 C, m^2/s; 0: not known (GAME_SPEC §7)
+	// (Stage 65) Walden's rule with an exponent of its own: D goes as T / viscosity^walden from 25 C (1: Stokes and
+	// Einstein; H+'s protons hop, Grotthuss, and follow the viscosity less)
+	double walden = 1.0;
+};
+
+// The solvent's dielectric constant at one temperature (Stage 65, GAME_SPEC §10: what sets the ions' atmosphere in
+// a solution's conductivity).
+struct DielectricPoint {
+	double kelvin = 0.0;
+	double epsilon = 0.0;
 };
 
 // The solvent's viscosity at one temperature (GAME_SPEC §7): what scales the
@@ -102,6 +112,10 @@ struct SolutionDef {
 	// from `low` to `high` C, beyond them its value and slope at the end; all zero: none known (nothing expands)
 	std::array<double, 6> density{};
 	double density_b = 0.0, density_low = 0.0, density_high = 0.0;
+	// (Stage 65) the solvent's dielectric constant by rising temperature, and the ions' size in a solution's
+	// conductivity (m): empty or 0, no conductivity
+	std::vector<DielectricPoint> dielectric;
+	double ion_size = 0.0;
 };
 
 struct SpeciesDef {
@@ -203,6 +217,9 @@ struct Kinetics {
 	bool dissolves_by_transport = false;
 	double secondary = 0.0; // Surface (Stage 66): 1/s per (W/kg) per kg of the crystals
 	double secondary_order = 0.0;
+	// Surface (Stage 71): the primary nucleation's barrier, the classical form: where it is given, nucleation *
+	// (kg of solvent) * e^(-B / ln^2 S) a second in place of the power law (ice's supercooling)
+	double nucleation_barrier = 0.0;
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {

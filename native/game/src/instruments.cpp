@@ -17,6 +17,7 @@ using json = nlohmann::json;
 struct Data {
 	std::vector<Balance> balances;
 	Meter thermometer, ph, gauge;
+	ConductivityMeter conductivity; // (Stage 65)
 	double hand = 0.1, reference = 8000.0;
 	std::vector<std::pair<std::string, double>> walls;
 };
@@ -31,6 +32,11 @@ const Data &data() {
 		}
 		o.thermometer = Meter{ j.at("thermometer").at("resolution_c").get<double>(), j.at("thermometer").at("accuracy_c").get<double>(), j.at("thermometer").value("time_constant_s", 0.0) };
 		o.ph = Meter{ j.at("ph_meter").at("resolution").get<double>(), j.at("ph_meter").at("accuracy").get<double>() };
+		const json &c = j.at("conductivity_meter");
+		o.conductivity.accuracy = c.at("accuracy").get<double>();
+		for (const json &r : c.at("ranges_us_cm")) {
+			o.conductivity.ranges.emplace_back(r.at(0).get<double>(), r.at(1).get<double>());
+		}
 		o.gauge = Meter{ j.at("gauge").at("resolution_kpa").get<double>(), j.at("gauge").at("accuracy_kpa").get<double>() };
 		o.hand = j.at("hand").get<double>();
 		for (const auto &[name, density] : j.at("walls_g_cm3").items()) {
@@ -62,6 +68,25 @@ Meter thermometer() {
 
 Meter ph_meter() {
 	return data().ph;
+}
+
+ConductivityMeter conductivity_meter() {
+	return data().conductivity;
+}
+
+double conductivity_reading(const ConductivityMeter &meter, double truth_us_cm, double share, double *resolution) {
+	const double offset = truth_us_cm * (1.0 + meter.accuracy * share);
+	double step = meter.ranges.empty() ? 0.01 : meter.ranges.back().second;
+	for (const auto &[top, r] : meter.ranges) {
+		if (std::abs(offset) < top) {
+			step = r;
+			break;
+		}
+	}
+	if (resolution != nullptr) {
+		*resolution = step;
+	}
+	return rounded(offset, step);
 }
 
 Meter gauge() {

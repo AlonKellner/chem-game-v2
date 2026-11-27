@@ -1,0 +1,28 @@
+{
+	"format": "chem-bench/2",
+	"note": "Salts' pH and an indicator's pKa (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 18): five beakers of 0.1 mol/kg salts (sodium chloride, ammonium chloride, sodium acetate, sodium hydrogen carbonate, sodium carbonate), and four cuvettes: water, and bromothymol blue (2.1e-5 M) in 0.01 M hydrochloric acid, in 0.01 M sodium hydroxide and in a phosphate buffer near its pKa (0.025 mol/kg of each phosphate); a spectrophotometer in Supplies. The room's air holds no carbon dioxide (co2_ppm 0): the salts' own pH is the lesson, and a lab measuring it makes them up in freshly boiled water and keeps the air out; open to today's air, 0.1 M sodium chloride reads 5.7, as carbonic acid makes it. Read by instruments: each salt's pH; the indicator's absorbance at 616 nm in its acid form (yellow), its base form (blue) and the buffer, and the buffer's pH: pKa = pH - log10((A - A_acid) / (A_base - A)).",
+	"readings": "instruments",
+	"seed": 18,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000, "co2_ppm": 0},
+	"items": [
+		{"id": "spec", "kind": "spectrophotometer", "nm": 600},
+		{"id": "nacl", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [1, 1], "label": "sodium chloride, 0.1 M",
+			"contents": {"water": {"g": 25}, "sodium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "nh4cl", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [4, 1], "label": "ammonium chloride, 0.1 M",
+			"contents": {"water": {"g": 25}, "ammonium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "acetate", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [7, 1], "label": "sodium acetate, 0.1 M",
+			"contents": {"water": {"g": 25}, "sodium_acetate_aq": {"mol": 0.0025}}},
+		{"id": "bicarbonate", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [10, 1], "label": "sodium hydrogen carbonate, 0.1 M",
+			"contents": {"water": {"g": 25}, "sodium_bicarbonate_aq": {"mol": 0.0025}}},
+		{"id": "carbonate", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [13, 1], "label": "sodium carbonate, 0.1 M",
+			"contents": {"water": {"g": 25}, "sodium_carbonate_aq": {"mol": 0.0025}}},
+		{"id": "blank", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [1, 8], "label": "blank: water", "contents": {"water": {"g": 3.5}}},
+		{"id": "yellow", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [4, 8], "label": "bromothymol blue in 0.01 M acid",
+			"contents": {"water": {"g": 3.5}, "hydrochloric_acid_aq": {"mol": 3.5e-5}, "sodium_bromothymol_blue_aq": {"mol": 7.4e-8}}},
+		{"id": "blue", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [7, 8], "label": "bromothymol blue in 0.01 M base",
+			"contents": {"water": {"g": 3.5}, "sodium_hydroxide_aq": {"mol": 3.5e-5}, "sodium_bromothymol_blue_aq": {"mol": 7.4e-8}}},
+		{"id": "mid", "kind": "vessel", "glassware": "cuvette", "volume_ml": 5, "wall": "glass", "wall_g": 4, "at": [10, 8], "label": "bromothymol blue in a phosphate buffer",
+			"contents": {"water": {"g": 3.5}, "potassium_dihydrogen_phosphate_aq": {"mol": 8.75e-5}, "disodium_hydrogen_phosphate_aq": {"mol": 8.75e-5}, "sodium_bromothymol_blue_aq": {"mol": 7.4e-8}}}
+	]
+}

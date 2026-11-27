@@ -8,6 +8,7 @@
 	],
 	"thermometer": {"resolution_c": 0.1, "accuracy_c": 0.2, "time_constant_s": 4.3},
 	"ph_meter": {"resolution": 0.01, "accuracy": 0.02},
+	"conductivity_meter": {"note": "(Stage 65) a conductivity meter with its cell: its reading the solution's conductivity at its own temperature (no compensation to 25 C), uS/cm, within its accuracy (a share of the reading), to its range's resolution: the first range whose top is above the reading (uS/cm, resolution)", "accuracy": 0.005, "ranges_us_cm": [[20, 0.01], [200, 0.1], [2000, 1], [20000, 10], [200000, 100], [2000000, 1000]]},
 	"gauge": {"resolution_kpa": 0.1, "accuracy_kpa": 0.5},
 	"spectrophotometer": {"range_nm": [380, 780], "band_nm": 4, "stray_light": 0.001, "wavelength_accuracy_nm": 2, "resolution": 0.001, "most": 3.0, "lamp_k": 2900, "beam_mm": 15, "holder": {"range_c": [20, 80], "gain_w_k": 5, "most_w": 10}},
 	"hand": 0.10,

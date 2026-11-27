@@ -139,7 +139,7 @@ bool CondReader::cond(const json &j, Cond &c) {
 			ok = v.is_string() || fail("\"place\" is not a place");
 			if (ok) {
 				c.place = v.get<std::string>();
-				ok = *c.place == "cabinet" || *c.place == "bench" || *c.place == "on" || *c.place == "under" || *c.place == "outbox" || fail("no place \"" + *c.place + "\"");
+				ok = *c.place == "cabinet" || *c.place == "bench" || *c.place == "on" || *c.place == "under" || *c.place == "outbox" || *c.place == "in" || fail("no place \"" + *c.place + "\"");
 			}
 		} else if (key == "on" || key == "under" || key == "drains_to") {
 			std::string id;

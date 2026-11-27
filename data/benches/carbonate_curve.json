@@ -1,0 +1,21 @@
+{
+	"format": "chem-bench/2",
+	"note": "A carbonate's two end points (GAME_SPEC §13, Stage 65; docs/CURRICULUM.md, experiment 16): a 25 mL pipette, a 250 mL conical flask, a 50 mL burette, hydrochloric acid of 0.100 M (0.04 mol in 400 g of water), sodium carbonate of unknown strength (0.016 to 0.024 mol in 400 g of water, drawn by the seed), phenolphthalein and methyl red. Read by instruments: 25 mL of the carbonate titrated, the pH and the burette's reading logged each second. CO3 2- + H+ -> HCO3- (the first end point, near pH 8.3: phenolphthalein's pink goes), then HCO3- + H+ -> CO2 + H2O (the second, near pH 4: methyl red turns red); the second is twice the first.",
+	"readings": "instruments",
+	"seed": 16,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [1, 2], "label": "50 mL burette"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [4, 3], "label": "25 mL pipette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [7, 7], "label": "titration flask"},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [11, 7], "label": "hydrochloric acid, 0.100 M",
+			"contents": {"water": {"g": 400}, "hydrochloric_acid_aq": {"mol": 0.04}}},
+		{"id": "carbonate", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [15, 7], "label": "sodium carbonate, unknown",
+			"contents": {"water": {"g": 400}, "sodium_carbonate_aq": {"mol": [0.016, 0.024]}}},
+		{"id": "phenolphthalein", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [19, 8], "label": "phenolphthalein, 0.05 %",
+			"contents": {"water": {"g": 25.0}, "phenolphthalein_aq": {"g": 0.0125}}},
+		{"id": "methyl_red", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [22, 8], "label": "methyl red, 0.05 %",
+			"contents": {"water": {"g": 25.0}, "methyl_red_aq": {"g": 0.0125}}}
+	]
+}

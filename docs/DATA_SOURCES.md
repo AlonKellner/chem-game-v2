@@ -1242,3 +1242,130 @@ Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Rea
   saturates at Hendrixson's 0.558 and 0.710 mol/kg (25 and 35 C): KHP's heat of solution then 28.1 kJ/mol. 0.05 mol/kg
   KHP reads pH 3.987 against IUPAC's primary standard 4.005 (`measured: phthalic acid's constants`), K⁺ with hydrogen
   phthalate given no Pitzer pair.
+
+## Ice (Stage 71)
+
+`docs/TDD_71_ICE.md`; GAME_SPEC §8, §9. Fetched 2026-11-27.
+
+| Value | Used | Source and fit | Gate | Confidence |
+|---|---|---|---|---|
+| Ice Ih at its melting point (`species.json`, `ice`) | density 0.916721 g/cm³; cp 37.773 J/(mol K); hf −292.7768 kJ/mol and s0 44.6665 J/(mol K) at 298.15 K | IAPWS R10-06(2009), *Revised Release on the Equation of State 2006 for H2O Ice Ih* (Feistel and Wagner, *J. Phys. Chem. Ref. Data* 35, 1021, 2006), Tables 5 and 6: melting at 101 325 Pa at 273.152519 K; there ice's h −333 354.87 J/kg, s −1220.7693 J/(kg K) (the liquid's at the triple point 0), cp 2096.71 J/(kg K), ρ 916.721 kg/m³. With the liquid's (NIST WebBook, IAPWS-95, at 273.16 K and 0.101325 MPa) the heat of fusion is 333.427 kJ/kg, 6006.8 J/mol (M 18.0153). hf and s0 are fitted so that with water's own constant cp (75.375) the model melts at IAPWS's point with its heat: its ice then has IAPWS's absolute entropy at the melting point, 41.36 J/(mol K) (Pauling's residual entropy in), a check, not a fit | `measured: water freezes at IAPWS's point with its heat of fusion, ice its entropy there (Stage 71)`: 273.15227 K, 6006.84 J/mol | high |
+| Ice's thermal conductivity | 2.24 W/(m K) | Carnahan, Wolfenbarger, Jordan and Hesse, *Earth Planet. Sci. Lett.* 563, 116886 (2021; arXiv 2011.12502): "the model k = 612/T fits the data well over temperatures ranging from 30 to 273 K", experimental accuracy about 10 % (Slack 1980's best estimate) | (a powder bed's, Stage 53) | medium |
+| Solutions' freezing points | none: through the water's activity (Pitzer's, §10) | International Critical Tables IV (1928), Hall and Sherrill, "Freezing-point lowerings of aqueous solutions": CuSO₄ p. 256 (Δt/N 2.703 at 0.01 mol/kg to 1.690 at 0.8; the eutectic with the pentahydrate 0.846 mol/kg, −1.43 °C), NaCl p. 258 (3.604 at 0.01 to 3.785 at 4.0; the eutectic with the dihydrate 5.20 mol/kg, −21.12 °C). The model's: CuSO₄ within 1.2 % to 0.8 mol/kg; NaCl within 0.4 % to 0.1, 3 % at 1, 6 % at 2, 9 % at 4 (Pitzer's 25 °C parameters at 0 °C) | `measured: solutions freeze at the International Critical Tables' points (Stage 71)` | high (the tables); the model's NaCl low past 1 mol/kg |
+| Water's supercooling: ice's first crystal (`water_freezing`'s nucleation and its barrier) | 1.0588e13 per kg of water per second × e^(−0.23724 / ln² S), S = e^(A/RT) | Wilson and Haymet, *Condens. Matter Phys.* 19, 23602 (2016; arXiv 1603.07126), Table 1: 300 µL of water in borosilicate tubes cooled at 4.5 K/min, at least 300 freezing cycles each, median freezing temperature −9.9, −10.8, −9.4, −9.6, −12.0, −11.0 °C over six tubes (mean −10.45), stirring at 600 or 2000 rpm no matter. The width: one sample's 10–90 % spread of 0.7 K (Wilson, *Supercooling of water*, InTech) is 4.41 per K in a rate e^(b ΔT); Vali (*Atmos. Chem. Phys.* 8, 5017, 2008): 0.4 K colder at six times the rate, alike. Fit: the barrier from the slope 4.41 per K at −10.45 °C on the model's own ln S, the rate from one nucleus in 0.3 g by −10.45 °C at 4.5 K/min. A student's tube in air reaches about −5 °C (Tan et al., *Am. J. Phys.* 84, 293, 2016): a less clean one | `measured: water supercools in a glass tube to Wilson and Haymet's median, colder as it cools faster (Stage 71)`: −10.44 °C at 4.3 K/min | medium: set by the container and the water, scattered (−5 to −16 °C across studies) |
+| Ice's growth and melting (`water_freezing`'s prefactor) | at its surface 1e5 mol/m²/s, Ea 0, in series with the heat its change carries: Nu k / d (T − T_eq) / ΔH, Nu Sano's form with the Prandtl number (2 at rest) | **calibrated**: ice's own attachment is fast (cm/s per kelvin) and set large enough that heat sets the pace. Checks: an 18 mm ice ball in turbulent water melts at h = 5380 W/(m² K) (Machicoane, Bonaventure and Volk, *Phys. Fluids* 25, 125101, 2013); dendrites grow into supercooled water at 0.33–1.2 mm/s at 2 K (Shibkov's data as Grivet et al., *PRL* 128, 254501, 2022, fit them: 4.83e-5 ΔT^2.78 m/s; Lindenmeyer and Chalmers 1966: 0.228 ΔT^2.39 mm/s) | `ice: melting in water is limited by the heat the water carries to it, Nu 2 at rest and more stirred (Stage 71)` | medium |
+| Ice grown into a supercooled liquid (`ice`'s `grain_um`) | a mush of crystals no larger than 100 µm | **calibrated**: dendrites fill a supercooled liquid with ice of a large area, so its freezing plateau stands near its freezing point (a 0.3 g tube within 3 mK while a −40 °C bath draws its heat); no open measured arm spacing found (solutions' spacing grows as the square root of the freezing time, Journal of Glaciology) | `ice: a supercooled tube jumps back to its freezing point and holds there while it freezes, every invariant held (Stage 71)` | low |
+| A test tube (`data/glassware.json`, `test_tube`) | 16 × 150 mm, 18 mL, 1.8 mm wall, a round floor | ISO 4142, a heavy-wall tube: PYREX 1624/12M (DWK's listing: "conforms to ISO 4142", 16 x 150 mm, 18 mL, 1.8 mm wall) | `glassware: a test tube is ISO 4142's, its round floor its own radius (Stage 71)` | medium (a maker's listing) |
+| Ice seen (`data/optics/media.json`, `ice`) | the visible: a diffuse reflectance of 0.9, flat; the long wave: a grey emissivity of 0.97 | Warren and Brandt, *J. Geophys. Res.* 113, D14220 (2008), "Optical constants of ice from the ultraviolet to the microwave: a revised compilation", its table (atmos.uw.edu/ice_optical_constants/IOP_2008_ASCIItable.dat; n 1.3110, k 2.29e-9 at 550 nm): over 8–14 µm the normal emissivity 1 − R from its 32 rows, 0.970 on average (0.94 to 0.99). The visible: Grenfell, Warren and Mullen, *J. Geophys. Res.* 99(D9), 18669 (1994): fine snow's albedo 0.96–0.98 across the UV and visible, nearly independent of grain size; crushed ice's set a little under it (**calibrated**). A clear piece in water is nearly invisible (n 1.31 against 1.33); the pass draws ice as a powder, white | (the optical tests' scenes) | medium (the long wave); calibrated (the visible) |
+
+## Conductivity (Stage 65)
+
+A solution's conductivity (GAME_SPEC §10), and each ion's mobility with temperature. Read 2026-11-27.
+
+- **Sources read**:
+  - MacInnes, *The Principles of Electrochemistry* (Reinhold 1939; archive.org's text of dli.ernet.474912). Its
+    Table 3-I is Jones and Bradshaw's KCl standards (1933, J. Am. Chem. Soc. 55, 1780): 71.1352, 7.41913 and
+    0.745263 g of KCl per 1000 g of solution in vacuum (1, 0.1 and 0.01 demal), 0.065176, 0.0071379 and 0.00077364
+    S/cm at 0 C; 0.09783, 0.0111667 and 0.0012205 at 18 C; 0.111342, 0.012856 and 0.00140877 at 25 C.
+  - Its Table 3-II is MacInnes and Shedlovsky's acetic acid at 25 C (1932, J. Am. Chem. Soc. 54, 1429): c × 10³
+    equivalents per litre, and Λ in S cm²/mol: 0.028014 and 210.38, 0.15321 and 112.05, 1.02831 and 48.146, 2.41400
+    and 32.217, 5.91153 and 20.962, 12.829 and 14.375, 50.000 and 7.358, 52.303 and 7.202.
+  - Its Table 18-II is Shedlovsky's KCl and NaCl at 25 C (1932, J. Am. Chem. Soc. 54, 1405), observed: at 0.0001,
+    0.0005, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1 and 0.12 mol/L, KCl 148.94, 147.81, 146.95, 143.55, 141.27, 138.34,
+    133.37, 128.96 and 127.69; NaCl 125.59, 124.50, 123.74, 120.65, 118.51, 115.76, 111.06, 106.74 and 105.48.
+  - Hamer and DeWane, *Electrolytic conductance and the conductances of the halogen acids in water*, NSRDS-NBS 33
+    (1970), from nvlpubs.nist.gov:
+    - Table 2, water's dielectric constant from 0 to 100 C (Malmberg and Maryott 1956).
+    - Table 3, B1 and B2 for 1–1 electrolytes: 0.2211 and 29.817 at 0 C, 0.2300 and 60.639 at 25, 0.2416 and 100.31
+      at 50, 0.2737 and 202.71 at 100.
+    - Table 11, HCl's Λ at 25 C: 424.5, 422.6, 421.2, 415.7, 411.9, 398.9, 391.1, 360.7 and 332.2 at 0.0001, 0.0005,
+      0.001, 0.005, 0.01, 0.05, 0.1, 0.5 and 1.0 mol/L; at 0.01 mol/L, 288.6, 350.3, 472.2 and 530.3 at 5, 15, 35 and
+      45 C.
+    - Table 12, HCl's Λ° at 0 to 45 C by 5: 265.03, 297.42, 329.78, 362.05, 394.16, 426.06, 457.65, 488.91, 519.75 and
+      550.12.
+- **The model**:
+  - Each ion's limiting molar conductivity is Nernst and Einstein's, `z² F² D / (R T)`, from its diffusion coefficient
+    (the same table's: Li and Gregory; Vanýsek). Its D alone gives 149.80 for KCl against Shedlovsky's 149.86, and
+    425.94 for HCl against 426.06.
+  - Each is lowered by Robinson and Stokes' extended Onsager form, per ion, `(B1 z² λ° + ½ B2 z²) √I / (1 + B a √I)`.
+    B1, B2 and B are their numerical forms in ε, η and T, and match NSRDS 33's Table 3 within 0.3 %.
+  - The ion size a, 4.2 Å, is **calibrated** to KCl, NaCl and HCl at 0.1 mol/L. All three then lie within 0.5 % to
+    0.1 mol/L.
+  - Past 0.1 mol/L the model reads HCl high: 2.5 % at 0.5 mol/L and 8 % at 1. The demal 1 KCl reads low: 1.5 % at
+    25 C, 2.7 % at 18 C and 5.9 % at 0 C. The solution's own viscosity and ion association are not modelled (declared).
+- **Walden's exponents** (`walden`): D ∝ T η^−p, both **calibrated** on the table's own viscosity (IAPWS 2008).
+  - The ions' p = 0.87, fitted to the 0.01 demal KCl standard at 0 and 18 C. All three standards up to 0.1 demal then
+    read within 0.5 % at 0, 18 and 25 C. Stokes and Einstein's p = 1 read them 9 % low at 0 C.
+  - H⁺'s p = 0.61, fitted to HCl's Λ° from 5 to 45 C with Cl⁻ at 0.87. That fit holds within 0.7 % from 5 to 45 C,
+    and is 1.8 % high at 0 C.
+  - K⁺ and Cl⁻ are taken alike, and every other ion as they are, OH⁻ included (its own temperature data not read). A
+    neutral solute keeps 1 (Wilke and Chang's form).
+- **A room's carbon dioxide** (`ROOM_CO2_PPM`, `lab.cpp`; a bench's `co2_ppm`): 420 ppm, of the order of today's
+  atmosphere (NOAA's global mean for 2023, 419.3 ppm), a design value, not a model's constant. Water open to it reads
+  0.80 µS/cm at 25 C (`lab: a vessel's liquid reads its conductivity`), as water at equilibrium with air does
+  (pH 5.6).
+- **Checks**: acetic acid's Λ is within 1.2 % of MacInnes and Shedlovsky's, its ionisation (Stage 64's pKa 4.76) and
+  its ions' conductivity together. Pure water reads 0.0549 µS/cm, ASTM D1193's Type I 0.0550 (18.2 MΩ cm).
+
+## Metals and precipitates (Stage 76)
+
+Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, their salts and their precipitates
+(GAME_SPEC §9). Read 2026-11-27.
+
+- **Atomic weights**: CIAAW's abridged table (ciaaw.org): Ca 40.078, Mg 24.305, Ba 137.33, Ag 107.87, Fe 55.845, Zn
+  65.38, Al 26.982, Co 58.933.
+- **The ions' ΔfH° and S°: the NBS tables** (Wagman et al. 1982; the scan Stage 64 read, printed page 2-N its PDF
+  page N + 8), the ao rows: Ca²⁺ −542.83 / −53.1 (2-267), Mg²⁺ −466.85 / −138.1 (2-260), Ba²⁺ −537.64 / 9.6 (2-282),
+  Ag⁺ 105.579 / 72.68 (2-160), Fe²⁺ −89.1 / −137.7, Fe³⁺ −48.5 / −315.9, FeOH²⁺ −290.8 / −142. (2-177), Zn²⁺
+  −153.89 / −112.1 (2-138), Al³⁺ −531. / −321.7 (2-127), Co²⁺ −58.2 / −113. (2-170), NO₃⁻ −205.0 / 146.4 (2-64).
+  **AlOH²⁺**: NBS prints its ΔfG° alone (−694.1); its ΔfH° −769.02 and S° −187.06 are **calibrated** to MINTEQ v4's
+  hydrolysis, Al³⁺ + H₂O = AlOH²⁺ + H⁺, log K −4.997 and 47.81 kJ (NIST 46.3), on the model's Al³⁺ and water (NBS's
+  ΔfG° −694.1 against the −693.6 that implies).
+- **The ions' Cp° and V°: OBIGT** (inorganic_aq.csv; Shock and Helgeson 1988; Shock, Sassani et al. 1997; Akinfiev and
+  Zotov 2001 for Ag⁺; Akinfiev and Tagirov 2014 for Zn²⁺; Tagirov and Schott 2001 for Al³⁺ and AlOH²⁺), in cal × 4.184,
+  shifted by the charge as Stage 64's: Cp − 216.35 z, V − 16.74 z.
+- **The precipitates**: ΔfH° NBS's (AgCl −127.068, Ag₂O −31.05, BaSO₄ −1473.2, BaCO₃ −1216.3, calcite −1206.92, gypsum
+  −2022.63, Ca(OH)₂ −986.09, Mg(OH)₂ −924.54; Fe(OH)₂ −569.0 and Fe(OH)₃ −823.0 as NBS's "precipitated"; Zn(OH)₂ ε
+  −643.25, the one form NBS gives whole; Al(OH)₃ amorphous −1276.; Co(OH)₂ pink precipitated −539.7). Each **S° is
+  calibrated** so that the solubility product is MINTEQ v4's, as minteq.v4.dat's PHASES write it (AgCl −9.75, Ag₂O
+  12.574 with 2 H⁺, BaSO₄ −9.98, BaCO₃ −8.57, calcite −8.48, gypsum −4.61, Ca(OH)₂ 22.804, Mg(OH)₂ (brucite) 16.844,
+  Fe(OH)₂ 13.564, Fe(OH)₃ (ferrihydrite) 3.191, Zn(OH)₂ (ε) 11.534, Al(OH)₃ (am) 10.8, Co(OH)₂ 13.094): within
+  3.3 J/K of NBS's own entropies but iron(II) hydroxide's (50.29 against 88.: MINTEQ's fresh precipitate is more
+  soluble than NBS's), and every reaction's heat within 6 kJ of MINTEQ's but iron(III) hydroxide's (−83.0 against
+  −73.4: NBS's precipitate against the ferrihydrite MINTEQ's K is of).
+- **The precipitates' Cp°**: NBS's where it prints one (AgCl 50.79, Ag₂O 65.86, BaSO₄ 101.75, BaCO₃ 85.35, calcite
+  81.88, gypsum 186.02, Ca(OH)₂ 87.49, Mg(OH)₂ 77.03, Zn(OH)₂ ε 72.4); OBIGT's for Fe(OH)₂ (21.3 cal), the amorphous
+  Al(OH)₃ (gibbsite's 91.7 J, assumed alike) and Co(OH)₂ (its Maier–Kelley coefficients at 298.15 K, 90.0 J);
+  Fe(OH)₃'s none read, **Kopp's** rule from Fe(OH)₂'s, 3/2 of it, 133.7. With them calcite's, gypsum's, barite's
+  and witherite's log K follow wateq4f.dat's analytic expressions within 0.07 to 50 C, 0.16 at 80 C.
+- **Densities**: the CRC Handbook's (PubChem: AgCl 5.56, BaSO₄ 4.49, BaCO₃ 4.43, gypsum 2.32, Ca(OH)₂ 2.24, Mg(OH)₂
+  2.36, Fe(OH)₂ 3.4, Fe(OH)₃ 3.65, Al(OH)₃ 2.42; Wikipedia's infoboxes for Ag₂O 7.14, Zn(OH)₂ 3.053, Co(OH)₂ 3.597);
+  calcite's specific gravity 2.71.
+- **The activity model**: Pitzer and Mayorga 1973 as pytzer transcribes it (Table I: AgNO₃, NaNO₃, KNO₃; Table VI,
+  (4/3)β and (2^(5/2)/3)Cφ unscaled: the chlorides and nitrates of Mg, Ca, Ba, Fe(II), Co, Zn; Table VIII, (3/2)β
+  and (3^(3/2)/2)Cφ unscaled: AlCl₃); Harvie, Møller and Weare 1984 for Ca²⁺ and Mg²⁺ with SO₄²⁻ and HCO₃⁻ and Ca²⁺
+  with OH⁻.
+- **Diffusion**: PHREEQC v3 phreeqc.dat's -dw for Ca²⁺ 0.792, Mg²⁺ 0.705, Ba²⁺ 0.848, Fe²⁺ 0.719, Al³⁺ 0.559, NO₃⁻
+  1.9, Zn²⁺ 0.715 (×10⁻⁹ m²/s); the CRC Handbook's (Vanýsek) for Ag⁺ 1.648, Fe³⁺ 0.604, Co²⁺ 0.732, as aqion.de's
+  table gives them; FeOH²⁺ and AlOH²⁺ their aquo ions' (none read).
+- **Gates**: a saturated calcium hydroxide against NIST SRM 2193b's certificate (23 December 2024), pH(S) 13.218,
+  12.815, 12.453, 12.129 and 11.709 at 5, 15, 25, 35 and 50 C: within 0.05 to 35 C, 0.07 low at 50 C (the activity
+  model's parameters 25 C's); its calcium 0.0198 mol/kg at 25 C. Silver chloride in water 1.34e-5 mol/kg, in
+  0.01 mol/kg NaCl 2.2e-8.
+- **The precipitates' colours** (`data/optics/media.json`): the white ones a white powder's reflectance, 0.85 (as
+  Stage 64's salts); iron(II) hydroxide's greenish white, iron(III) hydroxide's rust brown (sRGB about 139, 79, 45
+  under D65), cobalt hydroxide's rose pink (221, 170, 166) and silver oxide's dark brown (75, 65, 57) searched and not
+  found measured, each a reflectance shape **calibrated** to the colour it is described as.
+- **The ions' colours** (`data/optics/media.json`, Gaussians in wavenumber):
+  - *Cobalt(II)*: Ballhausen and Jørgensen 1955 (Acta Chem. Scand. 9, 397, Fig. 2; the scan through the Wayback
+    Machine): [Co(H₂O)₆]²⁺ in 2 M NH₄NO₃ at 25 C, its maximum at 512 nm (the text) with ε 4.8, a shoulder at 470 to
+    480 nm (3.3 to 3.7), read from the figure every 10 nm from 400 to 600 nm (±0.15). Two bands, 19,450 cm⁻¹ (2,700
+    wide, 4.0) and 21,600 (3,500, 2.0), give it within 0.25.
+  - *FeOH²⁺*: Byrne and Kester 1978 as Elrod 1979 (M.S. thesis, University of Rhode Island, Table 10) quotes it, 1986
+    at 290 nm and 2024 at 300; King 1988 (Ph.D. dissertation, URI, Table 1, as ratios to the 272 nm isosbestic
+    point's 1457: 2008 at 300, 1898 at 310, 1378 at 330), his Fig. 1 separated into its two species to 385 nm (755 at
+    350, 300 at 380), all in 0.68 m NaClO₄ at 25 C. One band at 33,700 cm⁻¹ (8,900 wide, 2,000) gives it within 5 %;
+    its tail past 390 nm (141 at 400, 20 at 450) is the band's, **not measured** (Byrne and Kester 1981, J. Solution
+    Chem. 10, 51, reports to 400 nm, behind a paywall). Iron(III)'s yellow is this tail.
+  - Fe³⁺'s own absorption, under about 100 past 330 nm, and iron(II)'s, at 960 nm, are left out: neither colours a
+    solution in the visible.

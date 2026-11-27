@@ -60,7 +60,7 @@ struct LayerView {
 struct ItemView {
 	std::string id;
 	std::string kind; // vessel, balloon, burner, tray, stopper, viewer (Stage 42), thermal (Stage 48), balance (Stage 50); a signal part: timer, monitor, alarm
-	std::string place; // cabinet, bench, on, under, outbox, trash; a signal part: bench, circuit, trash
+	std::string place; // cabinet, bench, on, under, outbox, trash, in (Stage 71: standing in a vessel); a signal part: bench, circuit, trash
 	int col = -1, row = -1; // on the bench: its footprint's top-left square; in the trash: the square it goes back to (none: the cabinet)
 	int w = 1, h = 1; // its footprint, in squares
 	int on = -1; // index of the vessel whose mouth it is on
@@ -98,6 +98,8 @@ struct ItemView {
 	double celsius = 0.0;
 	// its liquid's pH (GAME_SPEC §9, Stage 43): -log10 a(H+); none without a liquid
 	std::optional<double> ph;
+	// its liquid's conductivity (GAME_SPEC §10, Stage 65), uS/cm at its temperature; none without a liquid
+	std::optional<double> us_cm;
 	// boiling's bubbles (GAME_SPEC §11, Stage 45), derived from the last step, not state: its floor's boundary
 	// layer's temperature, and the boiling point there; bubbles of steam leaving it, and whether they reach the
 	// surface; how high bubbles reach over the floor, cm (the liquid's depth where they reach the surface; a
@@ -116,6 +118,10 @@ struct ItemView {
 	double nominal_ml = 0.0; // its nominal capacity: its name, and how large it is drawn
 	double gas_ml = 0.0;
 	double condensed_ml = 0.0;
+	// (Stage 71) a vessel standing in another: that one's id; a vessel with others standing in it: what they displace
+	// under its surface, mL (its level stands as its contents' and this together would in it alone)
+	std::string stands_in;
+	double displaced_ml = 0.0;
 	double liquid_ml = 0.0;
 	double solid_ml = 0.0; // its solids, not its wall: what rests on its floor (Stage 26: not what is condensed less what is liquid, which counts a solute's volume as solid)
 	std::vector<SubstanceView> contents;
@@ -138,6 +144,7 @@ struct ItemView {
 	// offset, to its resolution
 	std::string label;
 	std::optional<double> read_c, read_ph, read_ml, read_kpa; // (read_kpa: its gauge, Stage 54)
+	std::optional<double> read_us_cm; // its conductivity meter's (Stage 65)
 	double marks_ml = 0.0;
 	// volumetric glass (Stage 52): its class A tolerance and its scale's divisions, mL; a mark's true volume (a pipette's,
 	// a volumetric flask's); a burette's reading down from its zero line, the truth (`read_ml` the instrument's)

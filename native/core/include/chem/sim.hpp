@@ -61,7 +61,13 @@ double fountain_reach(double momentum, double buoyancy);
 
 // (Stage 57) `dissipation`: the power stirring dissipates in the cell's liquid, W/kg: transport to a grain is Sano,
 // Yamaguchi and Adachi's (1974), Sh = 2 + 0.4 (eps d^4 / nu^3)^(1/4) Sc^(1/3), 2 at rest
+// (Stage 71) A surface reaction that carries no dissolved species (a pure liquid freezing, a solid melting) is
+// limited instead by the heat its change gives out or takes in, carried between its surface and the liquid:
+// Nu k / d (T - T_eq) / |dH| per m^2, T - T_eq = A T / dH, Nu as Sano's with Pr for Sc (2 at rest).
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta = nullptr);
+// Primary nucleation per kg of solvent per second over `nucleation` (GAME_SPEC §9): (S - 1)^order, or (Stage 71) where
+// the kinetics give a barrier, e^(-B / ln^2 S); `ln_s` = A / RT, 0 where it is not supersaturated
+double primary_nucleation(const Kinetics &kinetics, double ln_s);
 
 // (Stage 64) The world a builder states, each cell at its fast equilibria at its stated temperature: built, settled
 // (`Simulation::equilibrate`), its settled amounts set again in the builder at the same temperatures, until settling

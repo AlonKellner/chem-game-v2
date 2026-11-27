@@ -40,6 +40,9 @@ std::optional<double> reading(const LabView &view, const Quantity &q, bool &inst
 	if (q.what == "ph") {
 		return v->read_ph;
 	}
+	if (q.what == "us_cm") { // (Stage 65)
+		return v->read_us_cm;
+	}
 	if (q.what == "liquid_ml" || q.what == "condensed_ml") {
 		return v->scale_ml ? std::nullopt : v->read_ml; // (a burette reads its scale, not its liquid)
 	}
@@ -109,7 +112,7 @@ const char *transform_name(AxisTransform t, bool celsius) {
 namespace {
 
 // a recursive descent over: expression = term {(+|-) term}; term = factor {(*|/) factor}; factor = number | name |
-// ( expression ) | - factor
+// ( expression ) | - factor | function ( expression ) (Stage 65: log10, ln, sqrt)
 struct Parser {
 	std::string_view s;
 	size_t at = 0;
@@ -208,6 +211,19 @@ struct Parser {
 		const std::string name(s.substr(at, end - at));
 		at = end;
 		const size_t dot = name.find('.');
+		// (Stage 65) a function of a parenthesised expression: log10, ln, sqrt
+		space();
+		if (dot == std::string::npos && at < s.size() && s[at] == '(' && (name == "log10" || name == "ln" || name == "sqrt")) {
+			if (!factor(v)) {
+				return false;
+			}
+			if (name == "sqrt" ? !(v >= 0.0) : !(v > 0.0)) {
+				why = name + " of " + std::to_string(v) + ": not defined";
+				return false;
+			}
+			v = name == "log10" ? std::log10(v) : name == "ln" ? std::log(v) : std::sqrt(v);
+			return true;
+		}
 		if (dot == std::string::npos) {
 			why = "\"" + name + "\" is not item.what";
 			return false;
@@ -220,7 +236,10 @@ struct Parser {
 		q.measure = second == std::string::npos ? "g" : rest.substr(second + 1);
 		const std::optional<double> got = measure(view, q);
 		if (!got) {
-			why = "\"" + name + "\" is not there";
+			// (Stage 65) an item on the bench whose quantity has no value yet (a vessel's pH before it holds a liquid)
+			// is not one the bench lacks
+			std::string invalid;
+			why = find_item(view, q.item) != nullptr && valid(q, invalid) ? "\"" + name + "\" has none now" : "\"" + name + "\" is not there";
 			return false;
 		}
 		v = *got;

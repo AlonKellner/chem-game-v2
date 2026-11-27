@@ -1,0 +1,130 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 65; docs/CURRICULUM.md, experiment 16) on data/benches/carbonate_curve.json: a carbonate's two end points. Carbonate is a base that takes two hydrogen ions, one at a time: CO3 2- + H+ -> HCO3- (pKa 10.33), HCO3- + H+ -> H2CO3 -> CO2 + H2O (pKa 6.35). Each takes as much acid, so the second end point is twice the first, and the carbonate's moles are the acid's at the first.",
+	"title": "Experiment: a carbonate's two end points",
+	"bench": "../benches/carbonate_curve.json",
+	"report": [
+		{
+			"label": "the first end point",
+			"unit": "mL of acid",
+			"truth": "(flask.sodium_ion.mol / 2) / (acid.hydrochloric_acid_aq.mol / acid.condensed_ml)",
+			"tolerance": 0.4,
+			"why": "The truth is the acid that held the flask's carbonate's moles (half its sodium's, which never leaves). Read from the plot, the first, gentler step near pH 8.3, where phenolphthalein's pink goes: there the carbonate has all become hydrogen carbonate."
+		},
+		{
+			"label": "the second end point",
+			"unit": "mL of acid",
+			"truth": "flask.sodium_ion.mol / (acid.hydrochloric_acid_aq.mol / acid.condensed_ml)",
+			"tolerance": 0.5,
+			"why": "Twice the first: each hydrogen carbonate takes one more hydrogen ion and leaves as carbon dioxide. Read near pH 4, where methyl red turns red; the carbon dioxide that stays dissolved holds the curve a little lower and blurs the step, so it is read with less certainty."
+		},
+		{
+			"label": "the carbonate's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * (carbonate.sodium_ion.mol / 2) / carbonate.condensed_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"why": "c = 0.100 x V(first end point) / 25.00 mL, or half the second's. The acid's label is 0.100 M: it is 0.0998 (0.040 mol in 401 mL)."
+		}
+	],
+	"steps": [
+		{
+			"part": "Setting up",
+			"title": "25 mL of the carbonate",
+			"text": "Pick up the pipette and click the sodium carbonate: it draws to its mark. Then pick it up again and click the flask.",
+			"checks": [
+				{"text": "the pipette on the flask", "when": {"item": "pipette", "on": "flask"}}
+			],
+			"play": [{"drag": ["item:pipette", "item:carbonate"]}, {"drag": ["item:pipette", "item:flask"]}]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{"text": "the pipette empty", "wait": true, "when": {"quantity": {"item": "pipette", "what": "condensed_ml"}, "compare": "below", "value": 0.0005}}
+			],
+			"play": null
+		},
+		{
+			"title": "Phenolphthalein",
+			"text": "Pick up the pipette and click a free square. Then pick up the phenolphthalein, right-click the flask, type 0.15 and click \"pour\": the carbonate turns it pink.",
+			"why": "Sodium carbonate's solution is strongly basic, near pH 11.5: its carbonate takes hydrogen ions from water.",
+			"checks": [
+				{"text": "the indicator in the flask", "when": {"item": "flask", "species": "phenolphthalein_dianion", "above_g": 0.00003}}
+			],
+			"play": [{"drag": ["item:pipette", "square:26,3"]}, {"drag": ["item:phenolphthalein", "item:flask"]}, {"type": "0.15"}, {"click": "panel:pour"}]
+		},
+		{
+			"title": "Fill the burette",
+			"text": "Pick up the hydrochloric acid, right-click the burette, type 55 and click \"pour\". Then pick up the burette and click the flask.",
+			"checks": [
+				{"text": "the burette filled", "when": {"quantity": {"item": "burette", "what": "condensed_ml"}, "compare": "above", "value": 45}},
+				{"text": "the burette on the flask", "when": {"item": "burette", "on": "flask"}}
+			],
+			"play": [{"drag": ["item:acid", "item:burette"]}, {"type": "55"}, {"click": "panel:pour"}, {"drag": ["item:burette", "item:flask"]}]
+		},
+		{
+			"part": "Logging",
+			"title": "Log the pH",
+			"text": "Right-click the flask, click \"+ pH\" under its readings, then open the notebook and click \"1 s\".",
+			"checks": [
+				{"text": "the flask's pH logged", "when": {"item": "flask", "logging": "ph"}}
+			],
+			"play": [{"click": "item:flask"}, {"click": "record:flask:ph"}, {"click": "notebook"}, {"click": "notebook:log:1"}]
+		},
+		{
+			"title": "Log the burette",
+			"text": "Close the notebook, right-click the burette, click \"+ mL\", open the notebook again and click \"1 s\".",
+			"checks": [
+				{"text": "the burette's reading logged", "when": {"item": "burette", "logging": "scale_ml"}}
+			],
+			"play": [{"click": "notebook"}, {"click": "item:burette"}, {"click": "record:burette:scale_ml"}, {"click": "notebook"}, {"click": "notebook:log:1"}]
+		},
+		{
+			"part": "The first end point",
+			"title": "A slow stream",
+			"text": "Close the notebook, right-click the burette, drag its tap to about 15 % and click 60x.",
+			"checks": [
+				{"text": "the tap a little open", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "between", "values": [10, 20]}}
+			],
+			"play": [{"click": "notebook"}, {"click": "item:burette"}, {"click": "cap:burette@0.15"}, {"click": "speed:60"}]
+		},
+		{
+			"title": "The pink goes",
+			"text": "Watch the flask until its pink has gone, near pH 8.",
+			"why": "There every carbonate has taken one hydrogen ion: the flask holds hydrogen carbonate, a weak base and a weak acid at once, near pH 8.3.",
+			"checks": [
+				{"text": "the flask's pH below 8", "wait": true, "when": {"quantity": {"item": "flask", "what": "ph"}, "compare": "below", "value": 8}}
+			],
+			"play": null
+		},
+		{
+			"title": "Methyl red",
+			"text": "Drag the burette's tap shut. Pick up the methyl red, right-click the flask, type 0.15 and click \"pour\": yellow, above pH 6. Then drag the tap open to about 15 % again.",
+			"why": "Methyl red changes from yellow to red near pH 5, in the second end point's step.",
+			"checks": [
+				{"text": "methyl red in the flask", "when": {"item": "flask", "species": "methyl_red_ion", "above_g": 0.00003}},
+				{"text": "the tap a little open", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "between", "values": [10, 20]}}
+			],
+			"play": [{"click": "cap:burette@0"}, {"drag": ["item:methyl_red", "item:flask"]}, {"type": "0.15"}, {"click": "panel:pour"}, {"click": "item:burette"}, {"click": "cap:burette@0.15"}]
+		},
+		{
+			"part": "The second end point",
+			"title": "Past it",
+			"text": "Watch the flask turn red and its pH fall past 3.5.",
+			"why": "Each hydrogen carbonate takes a second hydrogen ion and becomes carbonic acid, carbon dioxide and water: some of it leaves the flask as a gas.",
+			"checks": [
+				{"text": "the flask's pH below 3.5", "wait": true, "when": {"quantity": {"item": "flask", "what": "ph"}, "compare": "below", "value": 3.5}}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag the burette's tap shut. Open the notebook: the curve has two steps, the second twice as far along as the first.",
+			"checks": [
+				{"text": "the tap shut", "when": {"quantity": {"item": "burette", "what": "tap"}, "compare": "below", "value": 1}}
+			],
+			"play": [{"click": "cap:burette@0"}]
+		}
+	]
+}

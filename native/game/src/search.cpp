@@ -61,12 +61,16 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 		out.push_back(ml + "ml");
 	}
 	bool holds = false;
+	double gas = 0.0; // (Stage 65) its gas, mol: the room's carbon dioxide in it is its air's, a trace
+	for (const SubstanceView &s : v.contents) {
+		gas += !s.wall && s.phase == 'g' ? s.mol : 0.0;
+	}
 	for (const SubstanceView &s : v.contents) {
 		if (s.wall) {
 			add_name(out, s.species); // what it is made of
 			continue;
 		}
-		const bool air = s.phase == 'g' && (s.species == "nitrogen" || s.species == "oxygen");
+		const bool air = s.phase == 'g' && (s.species == "nitrogen" || s.species == "oxygen" || (s.species == "carbon_dioxide" && s.mol <= 1e-3 * gas));
 		holds = holds || !air;
 		add_name(out, s.species);
 		add_name(out, s.formula);
@@ -75,11 +79,25 @@ std::vector<std::string> keywords(const ItemView &v, std::string_view goal) {
 			out.push_back("solution");
 		}
 	}
-	// (Stage 63) what its dissolved ions make: a retired formula unit's name and formula (sulfuric acid, copper sulfate)
+	// (Stage 63) what its dissolved ions make: a retired formula unit's name and formula (sulfuric acid, copper sulfate);
+	// (Stage 76) of them those that are a share of it, a hundredth of the most it holds of one at least (a sulfate
+	// whose metal gives up a hydrogen ion holds a trace of bisulfate, which is no sulfuric acid)
 	const chem::SpeciesTable &table = chem::builtin_species();
+	std::vector<std::pair<int, double>> units;
+	double most = 0.0;
 	for (int k = 0; k < table.species_count(); ++k) {
 		const chem::SpeciesDef &d = table.species(chem::SpeciesId{ k });
-		if (d.retired && mol_of(v.contents, std::string(d.id)) > 1e-9) {
+		if (d.retired) {
+			const double mol = mol_of(v.contents, std::string(d.id));
+			if (mol > 1e-9) {
+				units.emplace_back(k, mol);
+				most = std::max(most, mol);
+			}
+		}
+	}
+	for (const auto &[k, mol] : units) {
+		if (mol >= 0.01 * most) {
+			const chem::SpeciesDef &d = table.species(chem::SpeciesId{ k });
 			add_name(out, std::string(d.id));
 			add_name(out, std::string(d.formula));
 		}

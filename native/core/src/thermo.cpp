@@ -674,13 +674,12 @@ double diffusion(const SpeciesTable &table, SpeciesId species, double temperatur
 	if (def.phase != Phase::Aqueous || !(temperature > 0.0)) {
 		return 0.0;
 	}
-	const SolutionDef &solution = table.solution();
 	double count = 0.0, resistance = 0.0;
 	for (const IonCount &ion : def.ions) {
 		if (ion.count <= 0) {
 			break;
 		}
-		const double d = solution.ions[static_cast<size_t>(ion.ion)].diffusion;
+		const double d = ion_diffusion(table, static_cast<size_t>(ion.ion), temperature);
 		if (!(d > 0.0)) {
 			return 0.0;
 		}
@@ -690,10 +689,22 @@ double diffusion(const SpeciesTable &table, SpeciesId species, double temperatur
 	if (!(count > 0.0)) {
 		return 0.0;
 	}
-	// Stokes-Einstein: D goes as T / viscosity, from its value at 25 C
+	return count / resistance;
+}
+
+double ion_diffusion(const SpeciesTable &table, size_t ion, double temperature) {
+	const IonDef &def = table.solution().ions[ion];
+	if (!(def.diffusion > 0.0) || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	// Stokes and Einstein, D as T / viscosity from its value at 25 C; Stage 65: Walden's rule with the ion's own
+	// exponent, T / viscosity^p (1: Stokes and Einstein)
 	const double at = solvent_viscosity(table, temperature), at25 = solvent_viscosity(table, 298.15);
-	const double scale = at > 0.0 && at25 > 0.0 ? temperature / 298.15 * at25 / at : 1.0;
-	return count / resistance * scale;
+	if (!(at > 0.0 && at25 > 0.0)) {
+		return def.diffusion;
+	}
+	const double ratio = at25 / at;
+	return def.diffusion * temperature / 298.15 * (def.walden == 1.0 ? ratio : exp(def.walden * log(ratio)));
 }
 
 bool dry_solute(const SpeciesTable &table, const CellState &cell) {
@@ -754,9 +765,17 @@ double water_ionisation(const SpeciesTable &table, double temperature) {
 	return exp(-g / (GAS_CONSTANT * temperature));
 }
 
-bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &out) {
+namespace {
+
+// The free hydrogen and hydroxide ions (Stages 43 and 63): their molalities at their exact balance with water, from
+// their difference d = m_H - m_OH, which the ionisation leaves unchanged; false without Kw or a liquid
+struct WaterIons {
+	int h = -1, oh = -1; // their particles, or -1
+	double d = 0.0, m_h = 0.0, m_oh = 0.0, gamma_h = 1.0;
+};
+
+bool water_ions(const SpeciesTable &table, const Mix &mix, double temperature, WaterIons &w) {
 	const double kw = water_ionisation(table, temperature);
-	const Mix mix = mix_of(table, cell);
 	if (!(kw > 0.0) || !(mix.liquid > 0.0)) {
 		return false;
 	}
@@ -769,22 +788,138 @@ bool ph(const SpeciesTable &table, const CellState &cell, double temperature, do
 		}
 		return -1;
 	};
-	const int h = index_of("H+1"), oh = index_of("OH-1");
+	w.h = index_of("H+1");
+	w.oh = index_of("OH-1");
 	const auto molal = [&](int j) { return j >= 0 ? mix.particles[static_cast<size_t>(j)] / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0; };
 	const auto gamma = [&](int j) { return j >= 0 ? exp(mix.ln_gamma[static_cast<size_t>(j)]) : 1.0; };
 	// the solvent's activity: the liquid is water, ln a = -dissolved / liquid + its excess (as log_activity has it)
 	const double water = exp(-mix.dissolved / mix.liquid + mix.solvent_excess);
-	const double k = kw * water / (gamma(h) * gamma(oh));
-	const double d = molal(h) - molal(oh);
-	// beyond the activity model's range (Pitzer and Mayorga's fits hold to 6 mol/kg) a solution has no pH the game
-	// can read: a base or an acid boiled nearly dry, with no solid for it to come out as (Stage 44)
-	if (d > PH_MOST_EXCESS || d < -PH_MOST_EXCESS) {
+	w.gamma_h = gamma(w.h);
+	const double k = kw * water / (w.gamma_h * gamma(w.oh));
+	w.d = molal(w.h) - molal(w.oh);
+	// without the difference of near equals: m_H = d/2 + sqrt(d^2/4 + k), m_OH = m_H - d
+	const double root = std::sqrt(0.25 * w.d * w.d + k);
+	w.m_h = w.d >= 0.0 ? 0.5 * w.d + root : k / (root - 0.5 * w.d);
+	w.m_oh = w.d >= 0.0 ? k / (root + 0.5 * w.d) : root - 0.5 * w.d;
+	return true;
+}
+
+} // namespace
+
+bool ph(const SpeciesTable &table, const CellState &cell, double temperature, double &out) {
+	const Mix mix = mix_of(table, cell);
+	WaterIons w;
+	if (!water_ions(table, mix, temperature, w)) {
 		return false;
 	}
-	// the free hydrogen ions, without the difference of near equals: m_H = d/2 + sqrt(d^2/4 + k)
-	const double root = std::sqrt(0.25 * d * d + k);
-	const double m_h = d >= 0.0 ? 0.5 * d + root : k / (root - 0.5 * d);
-	out = -log(gamma(h) * m_h) / log(10.0);
+	// beyond the activity model's range (Pitzer and Mayorga's fits hold to 6 mol/kg) a solution has no pH the game
+	// can read: a base or an acid boiled nearly dry, with no solid for it to come out as (Stage 44)
+	if (w.d > PH_MOST_EXCESS || w.d < -PH_MOST_EXCESS) {
+		return false;
+	}
+	out = -log(w.gamma_h * w.m_h) / log(10.0);
+	return true;
+}
+
+double solvent_dielectric(const SpeciesTable &table, double temperature) {
+	const std::vector<DielectricPoint> &points = table.solution().dielectric;
+	if (points.empty()) {
+		return 0.0;
+	}
+	if (!(temperature > points.front().kelvin)) {
+		return points.front().epsilon;
+	}
+	for (size_t i = 1; i < points.size(); ++i) {
+		if (temperature <= points[i].kelvin) {
+			const DielectricPoint &a = points[i - 1], &b = points[i];
+			return a.epsilon + (b.epsilon - a.epsilon) * (temperature - a.kelvin) / (b.kelvin - a.kelvin);
+		}
+	}
+	return points.back().epsilon;
+}
+
+bool onsager_constants(const SpeciesTable &table, double temperature, double &b1, double &b2, double &b) {
+	const double epsilon = solvent_dielectric(table, temperature), eta = solvent_viscosity(table, temperature);
+	if (!(epsilon > 0.0) || !(eta > 0.0) || !(temperature > 0.0)) {
+		return false;
+	}
+	// (Stage 65) Robinson and Stokes' numerical forms (from CODATA's constants of their day; NSRDS-NBS 33, Table 3,
+	// agrees to its last digit): B1 = 8.2046e5 / (eps T)^1.5, B2 = 82.487 / (eta[P] (eps T)^0.5) S cm^2/mol,
+	// B = 50.29 / (eps T)^0.5 per Angstrom, each with (L/mol)^1/2
+	const double et = epsilon * temperature, root = std::sqrt(et);
+	b1 = 8.2046e5 / (et * root);
+	b2 = 82.487 / (eta * 10.0 * root) * 1e-4;
+	b = 50.29 / root * 1e10;
+	return true;
+}
+
+bool conductivity(const SpeciesTable &table, const CellState &cell, double temperature, double &kappa, double *limit) {
+	const SolutionDef &solution = table.solution();
+	double b1 = 0.0, b2 = 0.0, b = 0.0;
+	if (!(solution.ion_size > 0.0) || !onsager_constants(table, temperature, b1, b2, b)) {
+		return false;
+	}
+	const Mix mix = mix_of(table, cell);
+	if (!(mix.liquid > 0.0)) {
+		return false;
+	}
+	// the liquid's volume, m^3: its liquids' and what is dissolved in them, at T (Stage 67)
+	double volume = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] <= 0) {
+			continue;
+		}
+		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		if (!def.wall && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+			volume += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar_volume_at(table, def, temperature);
+		}
+	}
+	if (!(volume > 0.0)) {
+		return false;
+	}
+	// each ion's concentration, mol/m^3; the hydrogen and hydroxide ions' at their exact balance with water
+	WaterIons w;
+	const bool balanced = water_ions(table, mix, temperature, w);
+	const double per_quantum = MOL_PER_QUANTUM / volume, liquid_kg = mix.liquid * MOL_PER_QUANTUM / SOLVENT_MOL_PER_UNIT;
+	const auto concentration = [&](size_t j) {
+		if (balanced && static_cast<int>(j) == w.h) {
+			return w.m_h * liquid_kg / volume;
+		}
+		if (balanced && static_cast<int>(j) == w.oh) {
+			return w.m_oh * liquid_kg / volume;
+		}
+		return mix.particles[j] * per_quantum;
+	};
+	double ionic = 0.0; // mol/L
+	for (size_t j = 0; j < solution.ions.size(); ++j) {
+		const double z = static_cast<double>(solution.ions[j].charge);
+		if (z != 0.0) {
+			ionic += 0.5 * concentration(j) * z * z * 1e-3;
+		}
+	}
+	const double root = std::sqrt(ionic), x = root / (1.0 + b * solution.ion_size * root);
+	constexpr double FARADAY = 96485.33212; // C/mol (CODATA 2018)
+	double sum = 0.0, kohlrausch = 0.0;
+	for (size_t j = 0; j < solution.ions.size(); ++j) {
+		const double z = static_cast<double>(solution.ions[j].charge);
+		if (z == 0.0) {
+			continue;
+		}
+		const double c = concentration(j);
+		if (!(c > 0.0)) {
+			continue;
+		}
+		// Nernst and Einstein, S m^2/mol; its atmosphere's relaxation and electrophoresis (exact for a 1:1
+		// electrolyte's pair, z^2 for an ion of higher charge an approximation)
+		const double lambda0 = z * z * FARADAY * FARADAY * ion_diffusion(table, j, temperature) / (GAS_CONSTANT * temperature);
+		const double lambda = lambda0 * (1.0 - b1 * z * z * x) - 0.5 * b2 * z * z * x;
+		sum += c * (lambda > 0.0 ? lambda : 0.0);
+		kohlrausch += c * lambda0;
+	}
+	kappa = sum;
+	if (limit != nullptr) {
+		*limit = kohlrausch;
+	}
 	return true;
 }
 
