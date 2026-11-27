@@ -1266,3 +1266,47 @@ TEST_CASE("experiment buffer: followed with its own gestures, free, it completes
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment salts_ph: followed with its own gestures, strict, the salts acid, neutral and basic, and bromothymol blue's pKa from its absorbance (Stage 65)") {
+	Pupil p("data/benches/salts_ph.json", "data/tutorials/salts_ph.json");
+	CHECK(pupil::follow_through(p, 3600) > 7);
+	completed(p);
+	const double nacl = truth_of(p, "nacl.ph"), nh4cl = truth_of(p, "nh4cl.ph"), acetate = truth_of(p, "acetate.ph"), bicarbonate = truth_of(p, "bicarbonate.ph"),
+				 carbonate = truth_of(p, "carbonate.ph");
+	MESSAGE("pH: NaCl " << nacl << ", NH4Cl " << nh4cl << ", sodium acetate " << acetate << ", NaHCO3 " << bicarbonate << ", Na2CO3 " << carbonate);
+	CHECK(nacl == doctest::Approx(7.0).epsilon(0.03));
+	CHECK(nh4cl < 5.4);
+	CHECK(acetate > 8.5);
+	CHECK(bicarbonate > 7.8);
+	CHECK(carbonate > 11.2);
+	// the pKa a student works out from the notebook: three absorbances, the buffer's pH
+	const lab::LabView v = p.ui->lab().view();
+	std::vector<double> a;
+	double ph = 0.0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.what == "absorbance") {
+			a.push_back(e.value);
+		}
+		if (e.quantity.item == "mid" && e.quantity.what == "ph") {
+			ph = e.value;
+		}
+	}
+	REQUIRE(a.size() == 3);
+	const double pka = ph - std::log10((a[2] - a[0]) / (a[1] - a[2])), truth = truth_of(p, p.ui->tutorial()->report()[2].truth);
+	MESSAGE("A acid " << a[0] << ", base " << a[1] << ", buffer " << a[2] << " at pH " << ph << ": pKa " << pka << " (truth " << truth << ")");
+	CHECK(std::abs(pka - truth) < 0.05);
+	report(p, { nh4cl, carbonate, pka });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment salts_ph: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/salts_ph.json", "data/tutorials/salts_ph.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment salts_ph: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/salts_ph.json", "data/tutorials/salts_ph.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
