@@ -13,7 +13,7 @@ evidence (every printed result as it was) was in hand. GAME_SPEC 0.72.0.
 | 72.2 | A cell's temperature from the simulation's kept thermal state, bit for bit | Done |
 | 72.3 | The floor's surface by ITP to the bisection's 1e-9 K | Done |
 | 72.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 72.5 | `make gates`; the user's sign-off | Open |
+| 72.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 72.1 Where a step's time goes
 
@@ -83,6 +83,14 @@ The cost, `/usr/bin/time -l` on the demo's bench, back to back:
 | Stage 64's physics (main), before / after | 9.58e11 / 9.32e11 (-2.8 %) | 2.72e11 / 2.63e11 (-3 %; at a load of 16 to 23) |
 
 The floor is a smaller part of Stage 64's heavier step (75 species: its probes and Pitzer's pairs grew).
+
+## 72.5 The gates
+
+`make gates` on Stage 64's physics passed every gate in 473 s, at a load of 23 to 31 (other worktrees' gates on the
+machine; the Godot step alone 290 s). The release ctest summed 5,515 s, against 2,556 s on Stage 70's physics on a
+quieter machine. Its longest entries: `chem_tests.column.2` 324 s, the demo record 256 s, ui.9 225 s, trash.2 161 s,
+controller.4 160 s, D2's windows (lab.14) 119 to 153 s. A quiet machine's measure of Stage 64's gate is still to be
+taken.
 
 ## Open
 
