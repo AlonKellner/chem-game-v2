@@ -11,7 +11,7 @@ possible, native first, thin godot wrapper". No behaviour of the game changes; G
 | 84.1 | Measured: where the step's time goes | Done |
 | 84.2 | The gate builds and runs only what needs the engine | Done |
 | 84.3 | The suite captures no picture; `make native` captures them side by side | Done |
-| 84.4 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 84.4 | `make gates`; the user's sign-off | Done (signed off 2026-11-27) |
 
 ## 84.1 Where the time went
 
