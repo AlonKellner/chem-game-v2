@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 70 (2026-11-27; GAME_SPEC stays 0.69.0: no behaviour of the game changes; awaiting the user's sign-off)
+## Stage 70 (2026-11-27; GAME_SPEC stays 0.69.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_70_GATES_AGAIN.md`): `make gates` 262 s uncached on the physics of Stages 63 and 67 (335 to 596
   s before it): the column's tests check each step once (not twice), D2's windows as the demo's fixture lists them (a

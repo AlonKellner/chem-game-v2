@@ -13,7 +13,7 @@ No behaviour of the game changes: every golden and digest as it was; GAME_SPEC s
 | 70.2 | D2's windows as the demo's fixture lists them, a long wait in two halves | Done |
 | 70.3 | ctest's measured costs shared by every worktree | Done |
 | 70.4 | A probe's dead evaluation | Done |
-| 70.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 70.5 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 ## 70.1 Each step checked once
 
