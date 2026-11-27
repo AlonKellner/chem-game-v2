@@ -100,7 +100,7 @@ Other liquids (C9) and burning (C10), the rest of step I, are later stages.
 | 71.5 | A test tube (ISO 4142); a vessel in a vessel: `stand`, the volume integral (`outside_below`, `World::reshape_column`), ring-to-layer contacts (`set_facings`), the bath held, saved and loaded; a bench vessel at its own temperature (`celsius`) | Done |
 | 71.6 | The screen: "stand it in", a standing tube drawn at its bath's scale on the nearer layer, picked, labelled, put back in place | Done |
 | 71.7 | The experiments `freezing_point` (curriculum 33) and `heating_curve` (curriculum 26) | Done |
-| 71.8 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (712 s, merge level): core, 834 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens. Awaiting the user's sign-off |
+| 71.8 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (423 s, merge level, Stages 65, 70 and 72 merged in): core, 871 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens (re-recorded with the user's approval after each merge, their measurements identical to main's). Awaiting the user's sign-off |
 
 ## Tests
 
@@ -152,10 +152,18 @@ the wrong reason; their copper ion given its ion.
     behind". Their later exports render cleanly on the CPU too (one pile, no triangles), and the CPU's frames held to
     the area's truth while the stirred pile lowers (1,200 frames at 1x) never stray: the count apart is the wall
     alone, the same at every check, none brighter;
-  - so what runs on the GPU and not in the CPU's frames: the host's pass for a view's change (`OPTICS_RESAMPLE_PASS`,
-    each pixel's state carried, its corrections with it), its passes over the rectangles that bend (`cg_optics`), and
-    its per-pixel records; the first hypothesis, a pixel's history carried across a view or a pass with its old
-    corrections (its bias), and what keeps it there as the pile moves under it.
+  - the user, again: the zoom does not cause it; the zoom sets how fast the pile moves on the screen. Zoomed out, its
+    whole fall is a couple of dozen pixels over many seconds, a fraction of a pixel a frame, and the ghost is
+    strongest; zoomed in, each frame's change spans many pixels, and it does not appear;
+  - the CPU's run above was at the most zoomed-out view, its pile moving as slowly (about 20 px in 20 s), and showed
+    none: so not the shader's drift rule as the CPU's frames run it (`step_pixel`: a pixel whose estimate moved by
+    under DRIFT_MOST, summed, keeps its corrections and some of its points), but what the GPU host does apart: its
+    pass over the whole screen without the tracing (`OPTICS_SCREEN_PASS`: a pixel's estimate from a proxy batch, not
+    its beam) and the passes that trace over the rectangles of the bodies that bend (`OPTICS_CORNER_PASS`,
+    `OPTICS_BEAM_PASS`, `cg_optics`). First hypothesis: on the GPU a pixel's small move is measured by the screen
+    pass's estimate, so each step is too small to start its history again, and its corrections from where the pile
+    was stay (the user: "some of their bias is left behind"), until their sum passes DRIFT_MOST and it starts again
+    (the user: "from brighter to transparent and back to bright, repeating with lowering heights").
   The line is not yet found. By the user's choice it is the next renderer stage's first item, Stage 77 (with the nested
   rays below), from the play.
 
