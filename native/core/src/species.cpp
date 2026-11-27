@@ -78,7 +78,7 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			return std::nullopt;
 		}
 		// (Stage 63: an ion's apparent molar volume, by the convention of H+'s at nought, may be negative)
-		if (!(s.molar_volume >= 0.0 || (s.charge != 0 && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
+		if (!(s.molar_volume >= 0.0 || ((s.charge != 0 || s.retired) && s.phase == Phase::Aqueous)) || !(s.molar_volume - s.molar_volume == 0.0)) {
 			set_why(why, "species " + name + " has a molar volume that is negative or not finite");
 			return std::nullopt;
 		}
@@ -89,6 +89,54 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			}
 		}
 		table.molar_mass_.push_back(mass);
+	}
+	// (Stage 64) each basis: masters that are dissolved, not retired and their own masters, summing to the species'
+	// charge and to its atoms but for whole waters
+	int hydrogen = -1, oxygen = -1;
+	for (size_t e = 0; e < elements.size(); ++e) {
+		hydrogen = elements[e].symbol == std::string_view("H") ? static_cast<int>(e) : hydrogen;
+		oxygen = elements[e].symbol == std::string_view("O") ? static_cast<int>(e) : oxygen;
+	}
+	for (const SpeciesDef &s : species) {
+		if (s.basis[0].count == 0) {
+			continue;
+		}
+		const std::string name(s.id);
+		if (s.phase != Phase::Aqueous || s.retired) {
+			set_why(why, "species " + name + " has a basis, and only a dissolved species that is not retired has one");
+			return std::nullopt;
+		}
+		std::array<int64_t, MAX_ELEMENTS> rest{};
+		int64_t charge = s.charge;
+		for (size_t e = 0; e < rest.size(); ++e) {
+			rest[e] = s.atoms[e];
+		}
+		for (const BasisCount &b : s.basis) {
+			if (b.count == 0) {
+				break;
+			}
+			if (b.species < 0 || static_cast<size_t>(b.species) >= species.size()) {
+				set_why(why, "species " + name + ": its basis names a species out of range");
+				return std::nullopt;
+			}
+			const SpeciesDef &m = species[static_cast<size_t>(b.species)];
+			if (m.phase != Phase::Aqueous || m.retired || m.basis[0].count != 0) {
+				set_why(why, "species " + name + ": its basis names " + std::string(m.id) + ", which is not a master (dissolved, not retired, with no basis)");
+				return std::nullopt;
+			}
+			for (size_t e = 0; e < rest.size(); ++e) {
+				rest[e] -= static_cast<int64_t>(b.count) * m.atoms[e];
+			}
+			charge -= static_cast<int64_t>(b.count) * m.charge;
+		}
+		bool water = charge == 0 && oxygen >= 0 && hydrogen >= 0 && rest[static_cast<size_t>(hydrogen)] == 2 * rest[static_cast<size_t>(oxygen)];
+		for (size_t e = 0; e < rest.size(); ++e) {
+			water = water && (static_cast<int>(e) == hydrogen || static_cast<int>(e) == oxygen || rest[e] == 0);
+		}
+		if (!water && !(charge == 0 && std::all_of(rest.begin(), rest.end(), [](int64_t v) { return v == 0; }))) {
+			set_why(why, "species " + name + ": its basis does not sum to its charge and its atoms but for whole waters");
+			return std::nullopt;
+		}
 	}
 	// the solution model (GAME_SPEC §4.6, §10)
 	const auto finite = [](double v) { return v - v == 0.0; };
@@ -328,69 +376,42 @@ double formula_units(const SpeciesTable &table, std::span<const std::pair<Specie
 	if (!table.has(unit) || !table.species(unit).retired) {
 		return 0.0;
 	}
-	// each element's master ion: dissolved, charged, one atom of it, no hydrogen, nothing else but oxygen
-	const int elements = table.element_count();
-	int hydrogen = -1, oxygen = -1;
-	for (int e = 0; e < elements; ++e) {
-		hydrogen = table.element(e).symbol == std::string_view("H") ? e : hydrogen;
-		oxygen = table.element(e).symbol == std::string_view("O") ? e : oxygen;
-	}
-	std::vector<int> master_charge(static_cast<size_t>(elements), 0);
-	std::vector<int> master_of(static_cast<size_t>(table.species_count()), -1); // the element a species is the master of
-	for (int k = 0; k < table.species_count(); ++k) {
-		const SpeciesDef &d = table.species(SpeciesId{ k });
-		if (d.phase != Phase::Aqueous || d.charge == 0 || d.retired) {
-			continue;
+	// a species as its masters: its basis, or itself; a retired unit, its ions' (Stage 64)
+	const auto basis_of = [&](SpeciesId s, auto &&add) {
+		const SpeciesDef &d = table.species(s);
+		if (d.basis[0].count == 0) {
+			add(s.index, 1.0);
+			return;
 		}
-		int only = -1, others = 0;
-		for (int e = 0; e < elements; ++e) {
-			if (d.atoms[static_cast<size_t>(e)] == 0 || e == oxygen) {
-				continue;
+		for (const BasisCount &b : d.basis) {
+			if (b.count == 0) {
+				break;
 			}
-			if (e == hydrogen) {
-				others += 2; // holds hydrogen: not a master
-			} else if (d.atoms[static_cast<size_t>(e)] == 1 && only < 0) {
-				only = e;
-			} else {
-				++others;
-			}
+			add(b.species, static_cast<double>(b.count));
 		}
-		if (only >= 0 && others == 0 && master_charge[static_cast<size_t>(only)] == 0) {
-			master_charge[static_cast<size_t>(only)] = d.charge;
-			master_of[static_cast<size_t>(k)] = only;
-		}
-	}
-	// what the matter holds: each element's atoms, and the hydrogen ions by charge
-	std::vector<double> held(static_cast<size_t>(elements), 0.0);
-	double protons = 0.0;
+	};
+	// what the matter holds of each master
+	std::vector<double> held(static_cast<size_t>(table.species_count()), 0.0);
 	for (const auto &[s, mol] : dissolved) {
 		if (!table.has(s) || table.species(s).phase != Phase::Aqueous) {
 			continue;
 		}
-		const SpeciesDef &d = table.species(s);
-		double charge = d.charge;
-		for (int e = 0; e < elements; ++e) {
-			held[static_cast<size_t>(e)] += mol * d.atoms[static_cast<size_t>(e)];
-			if (e != hydrogen && e != oxygen) {
-				charge -= static_cast<double>(d.atoms[static_cast<size_t>(e)]) * master_charge[static_cast<size_t>(e)];
-			}
+		for (const auto &[part, count] : table.as_species(s)) {
+			basis_of(part, [&, m = mol](int32_t master, double n) { held[static_cast<size_t>(master)] += m * static_cast<double>(count) * n; });
 		}
-		protons += mol * charge;
+	}
+	// the unit's own masters, and the fewest units they make
+	std::vector<double> needs(static_cast<size_t>(table.species_count()), 0.0);
+	for (const auto &[part, count] : table.as_species(unit)) {
+		basis_of(part, [&](int32_t master, double n) { needs[static_cast<size_t>(master)] += static_cast<double>(count) * n; });
 	}
 	double fewest = 0.0;
 	bool any = false;
-	for (const auto &[ion, count] : table.as_species(unit)) {
-		const int e = master_of[static_cast<size_t>(ion.index)];
-		double whole = 0.0;
-		if (e >= 0) {
-			whole = held[static_cast<size_t>(e)] / static_cast<double>(count);
-		} else {
-			const SpeciesDef &d = table.species(ion);
-			if (d.charge == 0) {
-				continue;
-			}
-			whole = protons / static_cast<double>(d.charge) / static_cast<double>(count); // H+: its own; OH-: minus
+	for (size_t m = 0; m < needs.size(); ++m) {
+		if (needs[m] == 0.0) {
+			continue;
 		}
+		const double whole = held[m] / needs[m]; // a master given up (OH-'s hydrogen ion): the missing over the given
 		fewest = !any || whole < fewest ? whole : fewest;
 		any = true;
 	}

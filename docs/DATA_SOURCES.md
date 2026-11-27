@@ -9,7 +9,8 @@ weights of `data/elements.json`.
 Commission on Isotopic Abundances and Atomic Weights), "Abridged Standard Atomic Weights 2024"
 (ciaaw.org/abridged-atomic-weights.htm, after the "Atomic Weights 2021" report; read 2026-11-21):
 H 1.0080, C 12.011, N 14.007, O 15.999, Si 28.085, S 32.06, Cu 63.546 g/mol, every one as printed;
-Na 22.990 (Stage 43, the same table).
+Na 22.990 (Stage 43, the same table); Cl 35.45, K 39.098, P 30.974, Br 79.904 (Stage 64, the same table, read
+2026-11-26).
 Check: each molar mass the build derives is these summed by the formula (water 18.015, the
 pentahydrate 249.677): `sources: molar masses are IUPAC's atomic weights`.
 
@@ -1087,3 +1088,150 @@ through the model's settled acid (0.1 mol/kg: 0.1266 mol/kg H⁺ at 25 °C, 0.11
 0.8: 0.9742): Majima's half order between 0.2 and 0.8 M becomes 0.5027 in H⁺, his 69 kJ/mol 70.22 with the
 bisulfate's shift with temperature, the prefactor 1.6937e8; Nicol's 0.65 between 0.1 and 0.2 M becomes 0.6812, his
 53.6 kJ/mol 55.372, the prefactor 5.186e7. Each gate holds the model to the source's law in the acid.
+
+## Weak acids and bases (Stage 64)
+
+Chloride, potassium, ammonium and ammonia, acetate and acetic acid, carbonate, hydrogen carbonate and dissolved CO2,
+the phosphates and phosphoric acid; ammonia gas (GAME_SPEC §9, §10). Read 2026-11-26.
+
+**Formation enthalpies and entropies: the NBS tables** (Wagman et al. 1982, J. Phys. Chem. Ref. Data 11 Suppl. 2,
+srd.nist.gov/JPCRD/jpcrdS2Vol11.pdf, a scan read page by page), the ao rows, the convention H+ = 0: one table with
+Stage 63's Na+, OH- and SO4 2-.
+
+| Species | NBS page | ΔfH° kJ/mol | S° J/mol·K | Cp° (OBIGT) J/mol·K | V° (OBIGT) cm³/mol |
+|---|---|---|---|---|---|
+| Cl⁻ | 2-47 | −167.159 | 56.5 | −123.18 | 17.79 |
+| K⁺ | 2-328 | −252.38 | 102.5 | 8.28 | 9.06 |
+| NH₄⁺ | 2-65 | −132.51 | 113.4 | 65.86 | 18.13 |
+| NH₃(aq) | 2-64 | −80.29 | 111.3 | 65.40 | 24.43 |
+| NH₃(g) | 2-64 | −46.11 | 192.45 | 35.06 (NBS) | — |
+| CH₃COO⁻ | 2-93 | −486.01 | 86.6 | 25.94 | 40.5 |
+| CH₃COOH(aq) | 2-93 | −485.76 | 178.7 | 169.70 | 52.01 |
+| CO₃²⁻ | 2-83 | −677.14 | −56.9 | −290.8 | −5.02 |
+| HCO₃⁻ | 2-83 | −691.99 | 91.2 | −35.40 | 24.6 |
+| CO₂(aq) | 2-83 | −413.80 | 117.6 | 216.98 | 33.5 |
+| PO₄³⁻ | 2-73 | −1277.4 | **−220.35** (see below) | −521.33 | −30.6 |
+| HPO₄²⁻ | 2-73 | −1292.14 | −33.5 | −243.93 | 5.4 |
+| H₂PO₄⁻ | 2-73 | −1296.29 | 90.4 | −29.29 | 31.3 |
+| H₃PO₄(aq) | 2-74 | −1288.34 | 158.2 | 98.74 | 48.1 |
+
+- **PO₄³⁻'s entropy** is the one NBS's own ΔfG and ΔfH of PO₄³⁻ and HPO₄²⁻ imply, −220.35: its printed −222.
+  (a row whose G-H-S constraint NBS relaxed) put pKa3 at 12.43 against the databases' 12.32 to 12.38.
+- **Heat capacities and volumes: OBIGT** (the CHNOSZ package's database, github.com/cran/CHNOSZ,
+  `inst/extdata/OBIGT/inorganic_aq.csv` and `organic_aq.csv`): Cp and V at 25 C and 1 bar as tabulated, from Shock
+  and Helgeson 1988 (the ions), Shock, Helgeson and Sverjensky 1989 (NH₃, H₃PO₄), Shock et al. 1997 (PO₄³⁻), Shock
+  1995 (acetate and acetic acid) and Plyasunov and Shock 2001 (CO₂); NBS prints none for most. Each value was
+  checked against its row's HKF parameters (volumes to 0.01 cm³; Cp but for NH₃, CO₂ and NH₄⁺, whose tabulated
+  values are kept). An ion's is shifted to the model's footing by its charge z: **Cp − 216.35 z, V − 16.74 z**.
+- **The footing, 216.35 J/K a unit of charge.** Stage 63's ions are NBS's heat capacities less 216.35 z (Na⁺ −169.95
+  against NBS's 46.4, OH⁻ 67.85 against −148.5), the sulfuric acid's stand-in carried through the split; H⁺ was left
+  at nought, so every neutral salt had NBS's heat capacity but every reaction making H⁺ 216.35 J/K too much (water's
+  ionisation −7.5 against −223.8). Stage 64 puts H⁺ on the same footing, **−216.35**, and moves the bisulfate's (to
+  161.75, keeping pitzer.dat's 239.2 for its reaction) and CuOH⁺'s (to 364.635, keeping its reaction's nought) with
+  it: water's ionisation then has NBS's −223.8, sulfuric acid's unit −293.8 against NBS's −293. The volumes keep H⁺
+  at nought (the acid's apparent volume, 35.7 cm³/mol at its working strength, is right as it is), so an acid's
+  volume is off by 16.74 cm³ a hydrogen ion at infinite dilution: a declared simplification.
+
+**The constants that follow, against their sources at 25 C** (`measured: ammonia's, carbonic acid's and the gases'
+constants are PHREEQC's from 0 to 60 C`, `measured: acetic acid's and phosphoric acid's constants are MINTEQ's`):
+
+| Reaction | The tables | Source |
+|---|---|---|
+| CH₃COOH ⇌ CH₃COO⁻ + H⁺ | pKa 4.767 | minteq.v4.dat 4.757 (NIST 46.4) |
+| NH₄⁺ ⇌ NH₃ + H⁺ | pKa 9.258 | phreeqc.dat 9.252, its analytic within 0.02 from 0 to 60 C |
+| CO₂ + H₂O ⇌ HCO₃⁻ + H⁺ | pKa1 6.371 | phreeqc.dat 6.352 (within 0.05 to 60 C) |
+| HCO₃⁻ ⇌ CO₃²⁻ + H⁺ | pKa2 10.337 | phreeqc.dat 10.329 (within 0.02 to 60 C) |
+| H₃PO₄ ⇌ H₂PO₄⁻ + H⁺ | pKa1 2.149 | minteq.v4.dat 2.148 |
+| H₂PO₄⁻ ⇌ HPO₄²⁻ + H⁺ | pKa2 7.199 | minteq.v4.dat 7.198 |
+| HPO₄²⁻ ⇌ PO₄³⁻ + H⁺ | pKa3 12.342 | minteq.v4.dat 12.375, phreeqc.dat 12.346 |
+| CO₂(g) ⇌ CO₂(aq) | log K −1.469 | phreeqc.dat −1.468 (within 0.02 to 60 C) |
+| NH₃(g) ⇌ NH₃(aq) | log K 1.749 | phreeqc.dat 1.7966, wateq4f.dat 1.77, NBS's own 1.761 |
+
+**Ammonia's diffusion in air**: Tang, Cox and Kalberer 2014 (Atmos. Chem. Phys. 14, 9233), Table 2, NH₃ in air
+176 ± 10 Torr cm²/s at 296 K, that is 0.2316 cm²/s at 1 atm; carried to 298.15 K by the power 1.78 fitted to
+Weissman 1964's NH₃–N₂ rows at 293 to 523 K (their Table 3): **0.2346 cm²/s, exponent 1.78**.
+
+**The ions' diffusion**: the CRC Handbook's "Ionic conductivity and diffusion at infinite dilution" (Vanýsek, pp.
+5-77 to 5-79): Cl⁻ 2.032, K⁺ 1.957, NH₄⁺ 1.957, acetate 1.089, HCO₃⁻ 1.185, CO₃²⁻ 0.923, H₂PO₄⁻ 0.959, HPO₄²⁻ 0.759,
+PO₄³⁻ 0.824 (10⁻⁹ m²/s; its Na⁺, H⁺, OH⁻ and SO₄²⁻ agree with Li and Gregory's to the printed digit). Dissolved CO₂
+1.92 and NH₃ 2.28, PHREEQC v3's phreeqc.dat `-dw`.
+
+**The activity model**: Pitzer and Mayorga 1973 (read from the LBL preprint of J. Phys. Chem. 77, 2300, through the
+Wayback Machine; pytzer's transcription of the published paper agrees): Table I HCl (0.1775, 0.2945, Cφ 0.0008),
+NaCl (0.0765, 0.2664, 0.00127), KCl (0.04835, 0.2122, −0.00084), NH₄Cl (0.0522, 0.1918, −0.00301), KOH, NaH₂PO₄,
+KH₂PO₄; Table II the acetates; Table VI K₂SO4, (NH₄)₂SO₄, Na₂HPO₄, K₂HPO₄, CuCl₂, NiCl₂ (their (4/3)β and
+(2^(5/2)/3)Cφ unscaled); Table VIII Na₃PO₄ and K₃PO₄ ((3/2)β, (3^(3/2)/2)Cφ unscaled). The carbonates are Harvie,
+Møller and Weare 1984's (Na⁺–CO₃²⁻ 0.0399, 1.389, 0.0044 and K⁺–CO₃²⁻ as pitzer.dat has them; Na⁺–HCO₃⁻ 0.0277,
+0.0411 and K⁺–HCO₃⁻ 0.0296, −0.013, −0.008 as pytzer transcribes them: pitzer.dat's newer refits, Appelo 2015, were
+not taken), K⁺–HSO₄⁻ pitzer.dat's. Gates: Hamer and Wu 1972 (J. Phys. Chem. Ref. Data 1, 1047, Tables 4, 16 and 28)
+for HCl, NaCl and KCl within 2 % to 3, 6 and 4 mol/kg (`measured: hydrochloric acid's, sodium chloride's and
+potassium chloride's mean activity coefficients are Hamer and Wu's`), and IUPAC's primary pH standards (Buck et al.
+2002, Pure Appl. Chem. 74, 2169, Table 2): 0.025 mol/kg KH₂PO₄ + 0.025 Na₂HPO₄ reads 6.863 (6.865), 0.025 NaHCO₃ +
+0.025 Na₂CO₃ 9.987 (10.012), within 0.04 at 10 and 40 C (`measured: the IUPAC primary pH standards`).
+
+## Salts (Stage 64)
+
+The crystals experiments 14 to 20 weigh: sodium chloride, potassium chloride, ammonium chloride, sodium hydrogen
+carbonate, sodium carbonate and its decahydrate (the solid in contact with its saturated solution at 25 C), anhydrous
+sodium acetate, and potassium hydrogen phthalate (KHP). Read 2026-11-26.
+
+| Crystal | NBS page | ΔfH° kJ/mol | S° (the model's) | Cp° | density g/cm³ |
+|---|---|---|---|---|---|
+| NaCl | 2-301 | −411.153 | 72.31 (NBS 72.13) | 50.50 | 2.17 |
+| KCl | 2-330 | −436.747 | 83.31 (82.59) | 51.30 | 1.988 |
+| NH₄Cl | 2-68 | −314.43 | 94.70 (94.6) | 84.1 | 1.519 |
+| NaHCO₃ | 2-314 | −950.81 | **95.33** (101.7) | 87.61 | 2.20 |
+| Na₂CO₃ | 2-313 | −1130.68 | **126.50** (134.98) | 112.30 | 2.54 |
+| Na₂CO₃·10H₂O | 2-314 | −4081.32 | 556.31 (562.7) | 550.32 | 1.46 (Merck) |
+| CH₃COONa | 2-315 | −708.81 | 123.13 (123.0) | 79.9 | 1.528 |
+| KHC₈H₄O₄ (KHP) | Kong et al. 2010 | −1028.05 | 229 (derived) | 211.14 | 1.644 (COD 1511782) |
+
+- **Each crystal's entropy is the one NBS's own Gibbs energies imply** through its dissolution, S° = S°(its ions in
+  water) − (ΔsolH − ΔsolG)/T, ΔsolG and ΔsolH from NBS's printed ΔfG and ΔfH of the crystal and of its "ai" row: NBS
+  relaxed the G-H-S constraint of the carbonates, and NaHCO₃'s printed S° made its solubility half the measured.
+  For the chlorides and the acetate the two agree within 0.7 J/K mol.
+- **KHP**: Kong, Di, Xu, Yang and Tan 2010 (J. Chem. Eng. Data 55, 2185; NIST ThermoML): ΔfH −1028.05 ± 0.61
+  kJ/mol, and Cp 211.14 J/K mol at 298.15 K between their points. Its S°, 229 ± 10 J/K mol, is their heat capacities
+  integrated (182.90 from 78.7 to 298.15 K, trapezoids) and a Debye curve fitted to their 78.7 to 100 K points below
+  (46): a derived value; only its difference from phthalate's anchor enters, and that is fitted to the solubility.
+- **Solubilities, the gates** (`measured: each salt saturates its solution at its measured solubility`), the
+  saturation index at the measured molality: NaCl 6.157 mol/kg at 25 C and 6.490 at 80 (IUPAC-NIST Solubility Data
+  Series 47, the evaluators' values), +0.007 and +0.076 (Pitzer's 25 C parameters held); KCl 4.769 and 6.139 at 60
+  (SDS 47), −0.045 and −0.052; NH₄Cl 7.393 (SDS 47), −0.10, past Pitzer and Mayorga's 6 mol/kg; NaHCO₃ 1.2207 (Zhou
+  et al. 2017, ThermoML) and 1.720 at 50 C (Seidell 1919: Dibbits, Fedotieff), +0.004 and +0.003; the decahydrate
+  2.79 at 25 C and 1.179 at 10 (Wells and McAdam 1907, Seidell 1919), +0.011 and +0.077; KHP 0.558 at 25 C and 0.710
+  at 35 (Hendrixson 1920, Seidell 1940), nought by the calibration below. Anhydrous Na₂CO₃ dissolves past the
+  decahydrate's saturation, as it does.
+- **Their growth** is copper sulfate's pentahydrate's (Stage 23), a stand-in: no rate read. Each dissolves at
+  transport's pace (Stage 57), which is what an experiment weighs it for.
+- Not modelled: sodium acetate's trihydrate (no heat capacity read), the phosphates' hydrates, KHP's own Pitzer pair
+  with K⁺ (none exists in the sources read).
+
+## Indicators (Stage 64)
+
+Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Read 2026-11-26.
+
+- **Phenolphthalein** (C₂₀H₁₄O₄): Tamura, Abe, Ito and Maeda 1996 (Anal. Sci. 12, 927, J-STAGE): the colourless
+  lactone H₂PP and HPP⁻, pK1 9.05, the red dianion PP²⁻, pK2 9.50 (25 ± 2 C, 0.2 M phosphate buffers). Its fading to
+  the colourless carbinol in strong base (Tam and Chau 1992: k1 0.43 per M per s; Tamura's own is fifty times slower)
+  is not modelled. Its dianion's spectrum is **read from published plots**: Tamura's Fig. 1, the pH 11.5 curve, traced
+  (552.8 nm, 3.71 × 10⁴ L/mol/cm, its second band near 376 nm), the wavelengths moved +2.8 nm to the paper's stated peak.
+- **Bromothymol blue** (C₂₇H₂₈Br₂O₅S): the yellow monoanion and the blue dianion (Shimada and Hasegawa 2017,
+  Spectrochim. Acta A 185, 104), the thermodynamic pKa 7.5; Schill's 7.12 at an ionic strength of 0.1 (quoted by
+  Avdeef 2023) is the gate on the activity model, which gives 7.10 there. Spectra: Hoang et al. 2026 (J. Sci. Tech.,
+  Le Quy Don Tech. Univ., Fig. 2(d)), traced every 5 nm and scaled to the 49th IChO's (2017) 16,600 at 430 nm and
+  38,000 at 620 nm. The red form below pH 1 is left out (its spectrum unread).
+- **Methyl red** (C₁₅H₁₅N₃O₂): the red zwitterion HMR and the yellow MR⁻, pKa 4.82 at 25 C (Ramette, Dratz and Kelly
+  1962, from IUPAC's digitised pKa dataset; Tobey 1958 measured 5.02 at 27.2 C). Spectra: Tobey's Fig. 2, his plotted
+  points over 2.97 × 10⁻⁵ M (his recipe): HMR 520 nm, 4.42 × 10⁴; MR⁻ 425 nm, 1.84 × 10⁴ (Merck's specification agrees;
+  the IChO's 21,500 for the red form, half, is not taken). H₂MR⁺ below pH 2.5 is left out.
+- **Their thermodynamics**: each fully deprotonated form anchored at nought (no reaction makes or breaks the dye), the
+  others by the acid's constant with no heat of ionisation: none was read, so their colours do not move with
+  temperature. Their diffusion, 3.8 to 4.5 × 10⁻¹⁰ m²/s, is the mean of the Wilke–Chang and Hayduk–Minhas correlations
+  (no measurement read); acetic acid's 1.35 × 10⁻⁹ and phosphoric acid's 1.25 × 10⁻⁹ likewise.
+- **Phthalic acid**: Hamer, Pinching and Acree 1945 (J. Res. NBS 35, 539): pK1 2.9496 at 25 C, ΔH −2.665 kJ/mol, ΔS
+  −65.4, ΔCp −90.0; Hamer and Acree 1945 (J. Res. NBS 35, 381): pK2 5.4083, ΔH −2.074, ΔS −110.5, ΔCp −293.3 (minteq.v4.dat
+  agrees to 0.001). Its anchor, phthalate's ΔfH −749.62 kJ/mol and S° 89.23 J/K mol, is **calibrated** so that KHP
+  saturates at Hendrixson's 0.558 and 0.710 mol/kg (25 and 35 C): KHP's heat of solution then 28.1 kJ/mol. 0.05 mol/kg
+  KHP reads pH 3.987 against IUPAC's primary standard 4.005 (`measured: phthalic acid's constants`), K⁺ with hydrogen
+  phthalate given no Pitzer pair.

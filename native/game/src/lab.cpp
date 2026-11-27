@@ -4410,7 +4410,8 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		why = "an amount on the bench does not fit the integer range";
 		return nullptr;
 	}
-	std::optional<World> world = b.build(&why);
+	// (Stage 64) every vessel at its fast equilibria at the temperature the bench states (its acid's bisulfate formed)
+	std::optional<World> world = build_settled(b, builtin_reactions(), &why);
 	if (!world) {
 		why = "the bench cannot be built: " + why;
 		return nullptr;

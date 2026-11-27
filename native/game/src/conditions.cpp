@@ -798,14 +798,24 @@ bool holds(const Cond &c, const CondContext &x) {
 				listed = listed || name == s.species;
 				water = water || name == "water";
 			}
-			// (Stage 63) where water may be, so may its own ions: what is dissolved of hydrogen and oxygen alone
+			// (Stage 63) where water may be, so may its own ions: what is dissolved of hydrogen and oxygen alone; (Stage 64)
+			// and what a listed substance is in water (carbon dioxide dissolved, and the hydrogen carbonate it makes): a
+			// dissolved species whose every element but hydrogen and oxygen is a listed substance's
 			if (!listed && water && s.phase == 'a') {
 				const chem::SpeciesTable &table = chem::builtin_species();
 				const chem::SpeciesId id = table.find(s.species);
 				bool own = table.has(id);
 				for (int e = 0; own && e < table.element_count(); ++e) {
 					const std::string_view symbol = table.element(e).symbol;
-					own = table.species(id).atoms[static_cast<size_t>(e)] == 0 || symbol == "H" || symbol == "O";
+					if (table.species(id).atoms[static_cast<size_t>(e)] == 0 || symbol == "H" || symbol == "O") {
+						continue;
+					}
+					bool given = false;
+					for (const std::string &name : *c.holds_only) {
+						const chem::SpeciesId other = table.find(name);
+						given = given || (table.has(other) && table.species(other).atoms[static_cast<size_t>(e)] > 0);
+					}
+					own = given;
 				}
 				listed = own;
 			}

@@ -19,7 +19,7 @@ int usage() {
 						 "  tables     the built-in species and reactions\n"
 						 "  run SESSION [--record FILE | --check FILE] [--quiet]\n"
 						 "             a session script played through the C API, every invariant checked\n"
-						 "  bench SESSION   the same with the checks off, timed\n"
+						 "  bench SESSION [--record FILE | --check FILE]   the same with the checks off, timed (its digests the same)\n"
 						 "  capture PICTURES BENCH...   the supplies' pictures built ahead (Stage 61), kept in PICTURES\n"
 						 "  study cooling         a flask cooling in a room, against Newton's law\n"
 						 "  study decomposition   malachite in a flask over a flame\n"

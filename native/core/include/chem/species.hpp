@@ -14,8 +14,8 @@
 namespace chem {
 
 // The elements a table may hold. A fixed bound keeps element vectors plain
-// arrays; raise it when the game needs more.
-inline constexpr int MAX_ELEMENTS = 16;
+// arrays; raise it when the game needs more (Stage 64: 32, for the salts to come).
+inline constexpr int MAX_ELEMENTS = 32;
 // The species one reaction may name.
 inline constexpr int MAX_TERMS = 8;
 
@@ -42,10 +42,18 @@ struct ElementDef {
 // dissolved species, and a neutral particle for each dissolved species that
 // names none.
 inline constexpr int MAX_IONS = 3; // per species
-inline constexpr int MAX_PARTICLES = 16; // per table
+inline constexpr int MAX_PARTICLES = 64; // per table (Stage 64: 16 until the weak acids and the indicators)
 
 struct IonCount {
 	int32_t ion = -1;
+	int32_t count = 0;
+};
+
+// (Stage 64) one master species of a dissolved species' basis, and how many of it (negative: given up, as OH-
+// gives up a hydrogen ion)
+inline constexpr int MAX_BASIS = 4; // per species
+struct BasisCount {
+	int32_t species = -1;
 	int32_t count = 0;
 };
 
@@ -135,6 +143,11 @@ struct SpeciesDef {
 	// (Stage 63) a dissolved formula unit whose ions are species of their own: no reaction names it, and an amount of
 	// it (a bench's, an old save's) is taken as its ions
 	bool retired = false;
+	// (Stage 64) A dissolved species as its masters (GAME_SPEC §4.6): each a species index with its count, H+'s
+	// among them, water making up the rest (HCO3-: CO3 2- 1, H+ 1; NH3: NH4+ 1, H+ -1); a count of 0 ends the list.
+	// None: a master of its own (H+, Na+, CO3 2-, acetate). A retired unit's is its ions'. What `formula_units`
+	// reads matter by.
+	std::array<BasisCount, MAX_BASIS> basis{};
 };
 
 struct SpeciesId {
@@ -323,11 +336,11 @@ private:
 };
 
 // (Stage 63) How many of a retired formula unit some dissolved matter makes (each species' moles): by the balance
-// of each element and of protons. Every element but H and O has its master ion, the dissolved species of that one
-// atom with oxygen alone (Cu2+, SO4 2-, Na+); a species holds its masters by its atoms, and hydrogen ions by its
-// charge less theirs (HSO4- one, OH- and CuOH+ minus one). An ion of the unit is a master, counted by its element,
-// or hydrogen's or hydroxide's, counted by the hydrogen ions held (an acid in a base holds none); the unit is the
-// fewest over its ions by their counts, never below nought. 0 for a species that is not retired.
+// of each master (Stage 64: each dissolved species' basis; Cu2+, SO4 2-, Na+, acetate, CO3 2-, and H+ for the
+// protons). A species holds its masters by its basis (HSO4-: a sulfate and a hydrogen ion; OH- and CuOH+ minus a
+// hydrogen ion). The unit is the fewest over the masters of its own basis by their counts: a master it holds by
+// the held amount, hydrogen ions it gives up by the hydrogen ions missing (an acid in a base holds none, a base in
+// an acid none); never below nought. 0 for a species that is not retired.
 double formula_units(const SpeciesTable &table, std::span<const std::pair<SpeciesId, double>> dissolved, SpeciesId unit);
 
 // A formula as it is written for a reader (Stage 63): an ion's charge after it, its size before its sign and

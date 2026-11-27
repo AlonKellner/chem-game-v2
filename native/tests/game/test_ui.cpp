@@ -585,10 +585,11 @@ TEST_CASE("ui: the three stages of the demo, played with the pointer alone (Stag
 	CHECK(p.grams("beaker", "water") > 28.0);
 	for (const lab::SubstanceView &s : p.item("beaker").contents) {
 		// (Stage 50: with a trace of the carbon dioxide the room's air took up, as the open beaker's gas exchanges with it;
-		// Stage 63: and water's own ions)
+		// Stage 63: and water's own ions; Stage 64: and that carbon dioxide dissolved, by Henry's law, a weak acid)
+		INFO(s.species << " " << s.g << " g");
 		CHECK((s.species == "water" || s.species == "steam" || s.species == "nitrogen" || s.species == "oxygen" || s.species == "glass" ||
 				s.species == "hydrogen_ion" || s.species == "hydroxide_ion" ||
-				(s.species == "carbon_dioxide" && s.g < 1e-3)));
+				((s.species == "carbon_dioxide" || s.species == "carbon_dioxide_aq" || s.species == "bicarbonate_ion" || s.species == "carbonate_ion") && s.g < 1e-3)));
 	}
 	const double crystals = p.grams("flask", "copper_sulfate_pentahydrate");
 	CHECK(crystals > 8.0);

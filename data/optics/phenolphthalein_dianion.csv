@@ -1,0 +1,46 @@
+# Phenolphthalein's red dianion (PP2-) in water: its molar absorption coefficient, decadic, L/mol/cm.
+# Read from Tamura, Abe, Ito and Maeda, Anal. Sci. 12, 927 (1996), Fig. 1, the outermost curve (pH 11.5, 1e-5 M,
+# 1 cm, 25 C), traced from a 400 dpi render: absorbance / 1e-5 M; the wavelengths moved +2.8 nm, the trace's peak
+# (550 nm) to the paper's stated 552.8 nm; its second band near 376 nm from the same curve. Beyond the curve's end
+# (617.8 nm) nought by 627.8 nm (Stage 64; docs/DATA_SOURCES.md, Indicators).
+380,6200
+384.8,5800
+390.8,4700
+396.8,3300
+402.8,1800
+407.8,1270
+412.8,810
+422.8,460
+432.8,690
+442.8,1210
+452.8,1780
+462.8,2700
+472.8,3910
+482.8,5580
+492.8,7830
+502.8,10930
+507.8,12890
+512.8,14790
+517.8,17090
+522.8,19620
+527.8,22270
+532.8,25600
+537.8,29630
+542.8,33950
+547.8,36480
+552.8,37110
+557.8,35500
+562.8,31700
+567.8,25780
+572.8,19740
+577.8,14150
+582.8,9610
+587.8,6270
+592.8,3970
+597.8,2470
+602.8,1550
+607.8,980
+612.8,630
+617.8,460
+625,0
+780,0
