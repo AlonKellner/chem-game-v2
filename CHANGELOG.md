@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70)
+## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
   pack, C2): **weak acids, bases, indicators and the salts experiments 14 to 20 weigh**. New elements Cl, K, P, Br (32

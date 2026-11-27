@@ -83,7 +83,7 @@ core in ions (Stage 63), then **new elements, weak acids and bases and indicator
 | 64.5 | The indicators: their equilibria and spectra | done |
 | 64.6 | The lab: benches, supplies, readings, the calculator | done |
 | 64.7 | The goldens: the evidence and the user's approval | done |
-| 64.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | done |
+| 64.8 | This document, GAME_SPEC, CHANGELOG, `make gates` (450 s, at the merge level), the user's sign-off | done |
 
 ## The goldens (approved by the user, 2026-11-27: "Approved, merge and proceed")
 
