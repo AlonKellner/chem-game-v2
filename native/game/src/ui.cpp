@@ -7557,7 +7557,10 @@ Ui::~Ui() = default;
 
 std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 	auto impl = std::make_unique<Impl>();
-	impl->lab = Lab::open(bench_json, why);
+	// (Stage 71) a lab's save (the debug panel's export) opens as it was saved; a bench, at its start
+	const nlohmann::json head = nlohmann::json::parse(bench_json, nullptr, false);
+	const bool saved = head.is_object() && head.value("format", "") == "chem-save/1";
+	impl->lab = saved ? Lab::load(std::string(bench_json), why) : Lab::open(bench_json, why);
 	if (!impl->lab) {
 		return nullptr;
 	}

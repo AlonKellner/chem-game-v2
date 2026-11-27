@@ -132,6 +132,21 @@ the wrong reason; their copper ion given its ion.
 
 ## Open
 
+- **A ghost on the GPU after a pour by hand** (the user, 2026-11-27: stirring the ice bath after pouring salt into it by
+  hand, "the rendering leaves a strange ghost image of the pile, not settling to the expected background"; "the ghost
+  image is in the target vessel after I pour"). Found so far:
+  - the lab is right: the user's exports (the debug panel's, loaded by `Ui::open`, which now opens a save) rebuild on
+    the CPU, where the renderer's frames and the truth's own tracer both draw the lowered pile and nothing else;
+  - the GPU alone shows it: `data/plays/ghost.json` (the experiment chosen, its tutorial free, the jar carried over
+    the bath and poured by hand, set down, the bath stirred; `LAB_SHOTS=... make pass-cost PLAY=data/plays/ghost.json`)
+    draws the bath cleanly once the jar is set down (`docs/stage71/ghost-1-poured.png`), and once it is stirred an
+    outline of the 50 mL jar, where it was held, stands inside the bath and stays (`docs/stage71/ghost-2-stirred.png`,
+    the same five seconds later);
+  - so the jar's image is kept in the GPU's own per-pixel state from when it was held there (the kept beams'
+    records or the pixels' history images, `optics_compute.cpp`), and read again when the bath's content changes;
+    the CPU's frames, which do not split the screen into the host's passes and rectangles, never show it.
+  The line is not yet found; it is the next renderer stage's first item (with the nested rays below), by the play.
+
 - **A floating solid's picture.** The pass draws a vessel's solids as a sediment on its floor, a flat section and a
   pile (`contents::lying`; the shader's and the reference tracer's pile): floating ice is drawn there too, white. A
   solid that floats needs a pile under the surface in both tracers (§12).

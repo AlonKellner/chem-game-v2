@@ -211,3 +211,18 @@ TEST_CASE("bath: on the screen, a tube carried over a beaker stands in it by the
 	CHECK(nx < bx);
 	CHECK(nx > bx - 60.0f);
 }
+
+TEST_CASE("ui: the screen opens a lab's save (the debug panel's export) as it was saved (Stage 71)") {
+	auto l = open(bench(150.0, 5.0, 30.0));
+	ok(*l, R"({"do": "stand", "item": "tube", "in": "beaker"})");
+	ok(*l, R"({"do": "wait", "seconds": 5})");
+	std::string why;
+	auto ui = lab::Ui::open(l->save(), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	CHECK(ui->lab().digest() == l->digest());
+	lab::ItemView tube{};
+	for (const lab::ItemView &v : ui->lab().view().items) {
+		tube = v.id == "tube" ? v : tube;
+	}
+	CHECK(tube.stands_in == "beaker");
+}
