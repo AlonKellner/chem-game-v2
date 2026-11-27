@@ -1,0 +1,384 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §8, §13.7, Stage 71; docs/CURRICULUM.md, experiment 26) on data/benches/heating_curve.json: ice's heat of fusion by a calorimeter (two ice cubes into warm water in a foam cup), then a heating curve (crushed ice from the freezer heated and stirred, its temperature logged): the plateau at 0 C while it melts, the rise, the plateau at 100 C while it boils.",
+	"title": "Experiment: a heating curve and the heat of fusion",
+	"bench": "../benches/heating_curve.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Melting ice takes heat without warming it. How many joules do you think it takes to melt one gram of ice? (Warming a gram of water by one degree takes 4.18 J.) Type your guess, then click \"predict\".",
+			"why": "Heat that goes into melting pulls the ice's molecules out of their crystal; it does not make them move faster, so the temperature does not change while it happens. That heat is the heat of fusion.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "100"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "The heat of fusion",
+			"title": "Log the cup's temperature",
+			"text": "Right-click the foam cup, click \"+ T\", open the notebook and click \"5 s\".",
+			"why": "The cup holds 100 g of water at 40 C. Foam lets little heat through, so what the water gives up goes into whatever is put in it.",
+			"checks": [
+				{
+					"text": "the cup's temperature logged",
+					"when": {
+						"item": "cup",
+						"logging": "celsius"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:cup"
+				},
+				{
+					"click": "record:cup:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"title": "The ice into the cup",
+			"text": "Close the notebook. Pick up the jar of ice cubes, then right-click the cup. In the menu that opens, click \"tip in\".",
+			"why": "The jar holds two ice cubes, 20 g, at 0 C.",
+			"checks": [
+				{
+					"text": "the cubes in the cup",
+					"when": {
+						"item": "cubes",
+						"species": "ice",
+						"below_g": 0.01
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"drag": [
+						"item:cubes",
+						"item:cup"
+					]
+				},
+				{
+					"click": "panel:tip:ice"
+				}
+			]
+		},
+		{
+			"title": "Stir the cup",
+			"text": "Choose the cup, then \"stir\".",
+			"why": "Stirred, the warm water keeps reaching the ice and it melts in a minute or two: little heat leaks in or out of the cup meanwhile.",
+			"checks": [
+				{
+					"text": "the cup is stirred",
+					"when": {
+						"item": "cup",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:cup"
+				},
+				{
+					"click": "stir:cup"
+				}
+			]
+		},
+		{
+			"title": "Until they are gone",
+			"text": "Watch the cup's temperature fall as the ice melts.",
+			"why": "The warm water gives up its heat: first to melt the ice, then to warm the ice's water up to its own temperature. 100 g of water falling by a degree gives up 418 J.",
+			"checks": [
+				{
+					"text": "no ice left in the cup",
+					"when": {
+						"all": [
+							{
+								"item": "cup",
+								"species": "ice",
+								"below_g": 0.001
+							},
+							{
+								"item": "cup",
+								"below_c": 24
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"part": "A heating curve",
+			"title": "Log the ice's temperature",
+			"text": "Right-click the beaker of crushed ice, click \"+ T\", open the notebook and click \"5 s\".",
+			"why": "The beaker holds 100 g of crushed ice from the freezer, at -10 C.",
+			"checks": [
+				{
+					"text": "the ice's temperature logged",
+					"when": {
+						"item": "ice",
+						"logging": "celsius"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:ice"
+				},
+				{
+					"click": "record:ice:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"title": "The burner under it",
+			"text": "Close the notebook. Drag the burner from Supplies onto the beaker of ice.",
+			"checks": [
+				{
+					"text": "the burner is under the ice",
+					"when": {
+						"item": "burner",
+						"under": "ice"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"drag": [
+						"item:burner",
+						"item:ice"
+					]
+				}
+			]
+		},
+		{
+			"title": "A gentle flame",
+			"text": "Choose the burner and open its valve halfway.",
+			"checks": [
+				{
+					"text": "the valve about half open",
+					"when": {
+						"all": [
+							{
+								"item": "burner",
+								"valve_at_least": 0.3
+							},
+							{
+								"item": "burner",
+								"valve_at_most": 0.7
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.5"
+				}
+			]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"10x\" at the top, and open the notebook to watch the curve.",
+			"checks": [
+				{
+					"text": "time runs at least 10 times faster",
+					"when": {
+						"speed_at_least": 10
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:10"
+				}
+			]
+		},
+		{
+			"part": "Watch",
+			"title": "Ice warming",
+			"text": "The ice warms toward 0 C.",
+			"checks": [
+				{
+					"text": "the ice at its melting point, some melted",
+					"when": {
+						"item": "ice",
+						"species": "water",
+						"above_g": 5
+					}
+				}
+			]
+		},
+		{
+			"title": "Stir it",
+			"text": "Now some of it is water: choose the beaker, then \"stir\".",
+			"why": "Stirred, the beaker is one temperature throughout: the curve is the whole beaker's.",
+			"checks": [
+				{
+					"text": "the ice is stirred",
+					"when": {
+						"item": "ice",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:ice"
+				},
+				{
+					"click": "stir:ice"
+				}
+			]
+		},
+		{
+			"title": "The first plateau",
+			"text": "While it melts the line is flat at 0 C, though the burner never stops.",
+			"why": "Every joule the flame gives goes into melting, none into warming, until the last of the ice is gone: the line stands still at the melting point.",
+			"checks": [
+				{
+					"text": "all of it melted",
+					"when": {
+						"item": "ice",
+						"species": "ice",
+						"below_g": 0.001
+					}
+				}
+			]
+		},
+		{
+			"title": "The rise, and the second plateau",
+			"text": "Now the water warms, steadily, to 100 C, and boils.",
+			"why": "Boiling holds it at 100 C as melting held it at 0 C: the flame's heat goes into turning water to steam. That plateau is far longer than the first: boiling a gram of water takes about seven times what melting a gram of ice does.",
+			"checks": [
+				{
+					"text": "boiling, some boiled away",
+					"when": {
+						"all": [
+							{
+								"item": "ice",
+								"above_c": 99
+							},
+							{
+								"item": "ice",
+								"species": "water",
+								"below_g": 90
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"title": "The burner off",
+			"text": "Choose the burner and shut its valve, before it boils dry.",
+			"checks": [
+				{
+					"text": "the burner is off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		}
+	],
+	"fails": [
+		{
+			"text": "The beaker boiled dry: its glass is far hotter than any plateau now. Press reset to start again.",
+			"when": {
+				"item": "ice",
+				"above_c": 120
+			}
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the cup",
+			"quantity": {
+				"item": "cup",
+				"what": "celsius"
+			},
+			"show": [
+				"start",
+				"least"
+			]
+		},
+		{
+			"label": "the ice's beaker",
+			"quantity": {
+				"item": "ice",
+				"what": "celsius"
+			},
+			"show": [
+				"start",
+				"most"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the heat to melt a gram of ice",
+			"unit": "J/g",
+			"truth": "334",
+			"ideal": 334,
+			"tolerance": 0.12,
+			"relative": true,
+			"predict": true,
+			"why": "From the notebook: the cup fell from its start to its least. The water gave up 100 g x 4.18 J/g K x that fall; of it, the ice's own 20 g took 20 g x 4.18 J/g K x the cup's last temperature to warm from 0 C; the rest melted the 20 g. IAPWS: 333.4 J/g at 0 C. A little heat reaches the cup through its foam."
+		}
+	]
+}

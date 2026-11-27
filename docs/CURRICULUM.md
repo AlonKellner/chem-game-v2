@@ -193,7 +193,7 @@ Each step is a stage of its own, numbered when it is taken, by `docs/WORKFLOW.md
 | F | **Solution kinetics and redox** | C4 C5 | 11, 37, 38 to 41, 46, 47 |
 | G | **Gases** (areas 5, 6) | C7; T8 | 27, 28, 31 |
 | H | **Electrochemistry** | C6; T9 | 48, 49 |
-| I | **Ice, other liquids, burning** (area 4) | C8 C9 C10; the rest of T7 | 9, 21 (a metal), 25, 26, 29, 33 |
+| I | **Ice, other liquids, burning** (area 4; Stage 71: ice, C8, experiments 26 and 33) | C8 C9 C10; the rest of T7 | 9, 21 (a metal), 25, 26, 29, 33 |
 | J | **Two liquids and a first organic** (area 9, on Stage 47) | C13; T10 | 53 |
 
 Steps A to C need no new chemistry and complete about twenty experiments; from D on, each step adds a unit

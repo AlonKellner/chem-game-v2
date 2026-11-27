@@ -51,6 +51,9 @@ struct Vessel {
 	Chain outside, inside;
 	double capacity() const; // the inside's volume to the brim, cm^3
 	double volume_below(double y) const; // the inside's volume under height y, cm^3
+	// (Stage 71) the volume its outside encloses under height y over its base, cm^3: what it displaces standing in a
+	// liquid to that depth (its glass and its inside both)
+	double outside_below(double y) const;
 	double level(double cm3) const; // the height where the inside below holds cm3 (the brim if more)
 	double radius_outside(double y) const; // 0 outside [0, height]
 	double radius_inside(double y) const; // 0 outside [floor, height]

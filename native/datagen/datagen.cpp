@@ -569,6 +569,10 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				row.kinetics.nucleation_order = k.value("nucleation_order", 0.0);
 				row.kinetics.secondary = k.value("secondary", 0.0); // (Stage 66) crystals bred by stirring
 				row.kinetics.secondary_order = k.value("secondary_order", 0.0);
+				row.kinetics.nucleation_barrier = k.value("nucleation_barrier", 0.0); // (Stage 71) the classical form
+				if (k.contains("nucleation_barrier") && (k.contains("nucleation_order") || !k.contains("nucleation"))) {
+					fail(reactions_file, "reaction " + row.id + ": a nucleation barrier takes the place of a nucleation order, beside a nucleation rate");
+				}
 				if (k.contains("secondary") != k.contains("secondary_order")) {
 					fail(reactions_file, "reaction " + row.id + ": secondary nucleation has its rate and its order, or neither");
 				}
@@ -743,14 +747,14 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		for (size_t i = 0; i < row.terms.size(); ++i) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
-		char kinetics[480];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g }",
+		char kinetics[560];
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g, %.17g }",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
 						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
 						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
 				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
 				row.kinetics.nucleation_order, row.kinetics.driver_order, row.kinetics.dissolves_by_transport ? "true" : "false", row.kinetics.secondary,
-				row.kinetics.secondary_order);
+				row.kinetics.secondary_order, row.kinetics.nucleation_barrier);
 		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
 	}
 	cpp << "};\n\n"

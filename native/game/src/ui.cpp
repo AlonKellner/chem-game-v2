@@ -2307,6 +2307,8 @@ struct Ui::Impl {
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
 	static constexpr float TALL_MOST = 400; // the tallest glassware is drawn (Stage 52: a burette over a flask, under the top bar)
+	// (Stage 71) glassware's one scale, pixels a centimetre: the 250 mL beaker as wide as it was drawn before (90 px)
+	static constexpr float GLASS_PX_PER_CM = 11.75f;
 	// a balance (Stage 50): its case, the pan on it, and its display in the case's front; a vessel on it stands on the pan
 	static constexpr float BALANCE_W = 150, BALANCE_H = 44, BALANCE_PAN = 8;
 	static Rect balance_case(const Rect &r) { return Rect{ r.x, r.y + BALANCE_PAN, r.w, r.h - BALANCE_PAN }; }
@@ -2360,10 +2362,11 @@ struct Ui::Impl {
 			w = 44;
 			h = 120;
 		} else if (const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml)) {
-			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
-			// (a cuvette, Stage 55: narrow, as it stands in a spectrophotometer's well)
-			w = v.glassware == "cuvette" ? 30.0f : static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
-			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
+			// glassware (GAME_SPEC §12.3, Stage 24): its standard's shape; (Stage 71, asked for by the user: "vessel sizes
+			// should never change once rendered, they are orthogonally projected to the screen") all of it at one scale,
+			// its real size: a tube stands inside a beaker as it is
+			w = static_cast<float>(2.0 * made->widest()) * GLASS_PX_PER_CM;
+			h = static_cast<float>(made->height) * GLASS_PX_PER_CM;
 			if (h > TALL_MOST) { // tall glassware (Stage 52): no taller than fits over a flask, in its own proportions
 				w *= TALL_MOST / h;
 				h = TALL_MOST;
@@ -2747,6 +2750,24 @@ struct Ui::Impl {
 			const Rect holder = rect(v.on);
 			return Rect{ holder.cx() - w / 2, holder.y - h - 4, w, h };
 		}
+		if (v.place == "in" && !v.stands_in.empty()) {
+			// (Stage 71) standing in another vessel, upright on its inside floor: the first a little left of its middle,
+			// the second right of it, a third at it (its middle free to drop another on while two stand there)
+			int before = 0;
+			for (int k = 0; k < index; ++k) {
+				before += view.items[static_cast<size_t>(k)].stands_in == v.stands_in ? 1 : 0;
+			}
+			for (size_t k = 0; k < view.items.size(); ++k) {
+				if (view.items[k].id == v.stands_in) {
+					const Rect outer = rect(static_cast<int>(k));
+					const ItemView &o = view.items[k];
+					const glass::Vessel *g = o.glassware.empty() ? nullptr : glass::find(o.glassware, o.nominal_ml);
+					const float floor_px = g != nullptr ? static_cast<float>(g->floor / g->height) * outer.h : 0.0f;
+					const float share = before == 0 ? 0.28f : before == 1 ? 0.72f : 0.5f;
+					return Rect{ outer.x + outer.w * share - w / 2, outer.y + outer.h - floor_px - h, w, h };
+				}
+			}
+		}
 		if (v.inverted && v.pours_into >= 0) {
 			// upside down over what it pours into, its mouth a little above that one's (Stage 27), held by a stand
 			const Rect below = rect(v.pours_into);
@@ -2801,7 +2822,7 @@ struct Ui::Impl {
 	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			const std::string &place = view.items[static_cast<size_t>(i)].place;
-			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "circuit") ||
+			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "in" && place != "circuit") ||
 					!visible(i)) {
 				continue;
 			}
@@ -2909,6 +2930,16 @@ struct Ui::Impl {
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
 	// into a volumetric flask: up to its mark (Stage 52), beside the pours
 	static Rect mark_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 168, 120, 34 }; }
+	// (Stage 71) stood in it, upright on its floor: a tube in a bath, under the mark's place
+	static Rect stand_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 210, 120, 34 }; }
+	// a vessel that could stand in the other: glassware both, the other the larger
+	bool could_stand() const {
+		if (!panel || from < 0 || to < 0) {
+			return false;
+		}
+		const ItemView &a = view.items[static_cast<size_t>(from)], &b = view.items[static_cast<size_t>(to)];
+		return a.kind == "vessel" && b.kind == "vessel" && !a.glassware.empty() && !b.glassware.empty() && b.nominal_ml > a.nominal_ml;
+	}
 	// the solids of the vessel being emptied, each with its button; by instruments (Stage 50) one button for them all,
 	// "solid", which names none of them
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
@@ -2978,7 +3009,7 @@ struct Ui::Impl {
 			return; // still in hand
 		}
 		const std::string &place = at >= 0 ? view.items[static_cast<size_t>(at)].place : std::string();
-		const bool stays = place == "bench" || place == "on" || place == "under" || (place == "outbox" && fresh_dropped_in_storage);
+		const bool stays = place == "bench" || place == "on" || place == "under" || place == "in" || (place == "outbox" && fresh_dropped_in_storage);
 		if (!stays) {
 			const std::string refused = message;
 			std::string no;
@@ -3303,8 +3334,8 @@ struct Ui::Impl {
 		const int target = item_at(x, y, index, true);
 		// first it comes off what it is joined to
 		const bool was_on = v.place == "on", was_under = v.place == "under";
-		if (target >= 0 && (target == v.on || target == v.under)) {
-			return; // put back where it was
+		if (target >= 0 && (target == v.on || target == v.under || (!v.stands_in.empty() && view.items[static_cast<size_t>(target)].id == v.stands_in))) {
+			return; // put back where it was (Stage 71: in the vessel it stands in)
 		}
 		if (!guided_drop(index, target, x, y)) {
 			return; // back where it was
@@ -3576,6 +3607,13 @@ struct Ui::Impl {
 				}
 				return;
 			}
+			if (could_stand() && stand_button().has(x, y)) {
+				if (allowed_click("panel:stand") && act({ { "do", "stand" }, { "item", id(from) }, { "in", id(to) } })) {
+					panel = false;
+					put_back(); // it stands in the other now
+				}
+				return;
+			}
 			if (invert_button().has(x, y) && (!guided() || asks_click("panel:invert"))) {
 				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
 					panel = false;
@@ -3717,7 +3755,10 @@ struct Ui::Impl {
 				return; // let go and pressed again before it was back in the hand: it tilts again
 			}
 			const int target = item_at(x, y, drag, true);
-			if (pours_into(drag, target)) {
+			// (Stage 71) over its own place in the vessel it stands in: put down there, not poured into it
+			const ItemView &held = view.items[static_cast<size_t>(drag)];
+			const bool own = target >= 0 && !held.stands_in.empty() && view.items[static_cast<size_t>(target)].id == held.stands_in && own_place(drag, x, y);
+			if (!own && pours_into(drag, target)) {
 				if (mods & Ui::ModRight) {
 					if (guided() && !guided_drop(drag, target, x, y)) {
 						return;
@@ -5632,10 +5673,12 @@ struct Ui::Impl {
 		}
 		// on the bench a name is a label the screen writes over the pass: only for what is chosen (Stage 22). The
 		// cabinet and the outbox are the screen's own panels, and name what they hold
-		if ((v.place == "on" || v.place == "under" || v.place == "bench") && !chosen(index)) {
+		if ((v.place == "on" || v.place == "under" || v.place == "bench" || v.place == "in") && !chosen(index)) {
 			return;
 		}
-		if (v.place == "on") {
+		if (v.place == "in") { // (Stage 71) standing in a vessel: beside its top
+			text(r.x + r.w + 6, r.y + 16, label, WALL_INK, 14);
+		} else if (v.place == "on") {
 			text(r.x, r.y - 8, label, WALL_INK, 15);
 		} else if (v.place == "under") {
 			const Rect c = rect(index);
@@ -6219,6 +6262,9 @@ struct Ui::Impl {
 				buttons.push_back(pour_button());
 				buttons.push_back(gentle_button());
 				buttons.push_back(cancel_button());
+				if (could_stand()) {
+					buttons.push_back(stand_button()); // (Stage 71)
+				}
 				for (const auto &[species, b] : tip_buttons()) {
 					buttons.push_back(b);
 				}
@@ -6394,7 +6440,7 @@ struct Ui::Impl {
 				thing(who, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
 			} else if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
-				body.layer = in_hand ? 1 : 0;
+				body.layer = in_hand || v.place == "in" ? 1 : 0; // (Stage 71: standing in a vessel, drawn before it: Open)
 				body.named = i >= supply_base ? supply_name(v.id) : nullptr; // (Stage 61: a supply's box is not its first copy)
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
@@ -7503,6 +7549,9 @@ struct Ui::Impl {
 		if (has_mark(view.items[static_cast<size_t>(to)]) && !has_mark(source) && source.liquid_ml > 0.0) {
 			button(mark_button(), "to the mark");
 		}
+		if (could_stand()) {
+			button(stand_button(), "stand it in");
+		}
 		button(cancel_button(), "cancel");
 	}
 };
@@ -7513,7 +7562,10 @@ Ui::~Ui() = default;
 
 std::unique_ptr<Ui> Ui::open(std::string_view bench_json, std::string &why) {
 	auto impl = std::make_unique<Impl>();
-	impl->lab = Lab::open(bench_json, why);
+	// (Stage 71) a lab's save (the debug panel's export) opens as it was saved; a bench, at its start
+	const nlohmann::json head = nlohmann::json::parse(bench_json, nullptr, false);
+	const bool saved = head.is_object() && head.value("format", "") == "chem-save/1";
+	impl->lab = saved ? Lab::load(std::string(bench_json), why) : Lab::open(bench_json, why);
 	if (!impl->lab) {
 		return nullptr;
 	}
@@ -8544,6 +8596,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:mark") { // (Stage 52)
 		return m.panel && centre(Impl::mark_button());
+	}
+	if (what == "panel:stand") { // (Stage 71)
+		return m.could_stand() && centre(Impl::stand_button());
 	}
 	if (what == "panel:amount") { // (Stage 50)
 		return m.panel && centre(Impl::amount_field());

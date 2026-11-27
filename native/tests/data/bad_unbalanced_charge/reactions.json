@@ -1,1 +1,1 @@
-{"format": "chem-reactions/1", "reactions": [{"id": "copper_plating", "equation": "Cu(aq) -> Cu(s)"}]}
+{"format": "chem-reactions/1", "reactions": [{"id": "copper_plating", "equation": "Cu+2(aq) -> Cu(s)"}]}

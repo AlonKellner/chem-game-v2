@@ -171,6 +171,20 @@
 			"tutorial": "tutorials/seed.json"
 		},
 		{
+			"id": "freezing_point",
+			"title": "Freezing points",
+			"summary": "A freezing mixture of ice and salt, then a tube of water and a tube of salt solution stood in it, their temperatures logged: each supercools, jumps back as it freezes and holds; the solution lower. Its freezing point and the cryoscopic constant. A guess first.",
+			"bench": "benches/freezing_point.json",
+			"tutorial": "tutorials/freezing_point.json"
+		},
+		{
+			"id": "heating_curve",
+			"title": "A heating curve and the heat of fusion",
+			"summary": "Two ice cubes into warm water in a foam cup: what the water gives up melts them, the heat of fusion. Then crushed ice from the freezer heated and stirred, its temperature logged: flat at 0 C while it melts, flat at 100 C while it boils. A guess first.",
+			"bench": "benches/heating_curve.json",
+			"tutorial": "tutorials/heating_curve.json"
+		},
+		{
 			"id": "standardise",
 			"title": "Standardising a base",
 			"summary": "Sodium hydroxide of about 0.1 M, made roughly, titrated against half a gram of KHP weighed on the analytical balance: run in from the burette to phenolphthalein's first lasting pink. Its concentration from the mass and the volume.",

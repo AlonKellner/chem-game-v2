@@ -1050,6 +1050,93 @@ int seed() {
 	return 0;
 }
 
+// Stage 71 (GAME_SPEC §8, §9): ice. The model's freezing point of water and its heat of fusion against IAPWS R10-06;
+// solutions' freezing points against the International Critical Tables; water's supercooling, ln S along a cooling,
+// and a tube of 0.3 g cooled at about 4.5 K/min against Wilson and Haymet's median (-10.45 C).
+int ice_study() {
+	bool ok = false;
+	const SpeciesTable &table = builtin_species();
+	const Reaction &freeze = builtin_reactions()[static_cast<size_t>(builtin::reaction::water_freezing)];
+	const auto affinity_in = [&](double water_mol, SpeciesId salt, double salt_mol, double kelvin) {
+		CellState state;
+		state.amount.assign(static_cast<size_t>(table.species_count()), 0);
+		state.particles.assign(static_cast<size_t>(table.species_count()), 0);
+		state.amount[static_cast<size_t>(builtin::water.index)] = amount_from_mol(water_mol, ok).quanta;
+		if (salt_mol > 0.0) {
+			put_amount(table, state, salt, amount_from_mol(salt_mol, ok).quanta);
+		}
+		bool defined = false;
+		return affinity(table, state, freeze.terms(), kelvin, defined);
+	};
+	const auto freezing_point = [&](SpeciesId salt, double molality) { // where ice and the solution's water are one
+		double lo = 230.0, hi = 274.0;
+		for (int i = 0; i < 60; ++i) {
+			const double mid = 0.5 * (lo + hi);
+			(affinity_in(1000.0 / 18.015, salt, molality, mid) > 0.0 ? lo : hi) = mid;
+		}
+		return 0.5 * (lo + hi);
+	};
+	const double tm = freezing_point(builtin::water, 0.0);
+	const SpeciesDef &w = table.species(builtin::water), &i = table.species(builtin::ice);
+	const double dh = (w.hf - i.hf) + (w.cp - i.cp) * (tm - T0);
+	std::printf("water freezes at %.6f K (IAPWS 273.152519 K), its heat of fusion there %.2f J/mol (IAPWS 6006.8)\n", tm, dh);
+	std::printf("\nfreezing points (International Critical Tables IV, Hall and Sherrill: their lowering, K):\n%10s %12s %12s %12s\n", "salt", "mol/kg", "model K", "ICT K");
+	const struct { const char *name; SpeciesId salt; double m, ict; } rows[] = {
+		{ "CuSO4", builtin::copper_sulfate_aq, 0.01, 0.0270 }, { "CuSO4", builtin::copper_sulfate_aq, 0.05, 0.1133 }, { "CuSO4", builtin::copper_sulfate_aq, 0.10, 0.2085 },
+		{ "CuSO4", builtin::copper_sulfate_aq, 0.20, 0.3824 }, { "CuSO4", builtin::copper_sulfate_aq, 0.50, 0.861 }, { "CuSO4", builtin::copper_sulfate_aq, 0.80, 1.352 },
+		{ "NaCl", builtin::sodium_chloride_aq, 0.01, 0.0360 }, { "NaCl", builtin::sodium_chloride_aq, 0.10, 0.348 }, { "NaCl", builtin::sodium_chloride_aq, 0.40, 1.352 },
+		{ "NaCl", builtin::sodium_chloride_aq, 1.0, 3.37 }, { "NaCl", builtin::sodium_chloride_aq, 2.0, 6.90 }, { "NaCl", builtin::sodium_chloride_aq, 4.0, 15.14 },
+	};
+	for (const auto &r : rows) {
+		std::printf("%10s %12.3f %12.4f %12.4f\n", r.name, r.m, tm - freezing_point(r.salt, r.m), r.ict);
+	}
+	std::printf("\nsupercooled water: ln S = A / RT of freezing\n%10s %12s\n", "below K", "ln S");
+	for (double below = 1.0; below <= 20.0; below += 1.0) {
+		std::printf("%10.1f %12.6f\n", below, affinity_in(1.0, builtin::water, 0.0, tm - below) / (GAS_CONSTANT * (tm - below)));
+	}
+	// a tube: 0.3 g of water in 1 g of glass, cooled through 0.005 W/K from a -40 C bath
+	for (const double conductance : { 0.005 }) {
+		World::Builder b(table);
+		const CellId tube = b.add_rigid_cell("tube", 2e-6);
+		const CellId bath = b.add_reservoir("bath", 233.15);
+		b.add_edge(tube, bath, PHASES_NONE, conductance);
+		b.set_amount(tube, builtin::water, amount_from_mol(0.3 / 18.015, ok)).set_amount(tube, builtin::glass, amount_from_mol(1.0 / 60.083, ok));
+		const double n = P_ATMOSPHERE * (2e-6 - 0.3e-6) / (GAS_CONSTANT * 293.15);
+		b.set_amount(tube, builtin::nitrogen, amount_from_mol(n, ok));
+		b.set_temperature(tube, 278.15);
+		std::string why;
+		auto world = b.build(&why);
+		if (!world) {
+			std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+			return 1;
+		}
+		Simulation sim(std::move(*world), shipped());
+		sim.set_checking(false);
+		double last = 278.15, first_ice = 0.0, lowest = 1e9, rate = 0.0;
+		std::printf("\na tube of 0.3 g of water cooled through %.3f W/K from a -40 C bath\n%8s %10s %10s %10s\n", conductance, "time s", "C", "K/min", "ice g");
+		for (int step = 0; step <= 60 * 1200; ++step) {
+			double t = 0.0;
+			sim.world().temperature(tube, t);
+			const double ice = sim.world().amount(tube, builtin::ice).mol() * 18.015;
+			lowest = std::min(lowest, t);
+			if (step % 60 == 0) {
+				rate = (last - t) * 60.0;
+				last = t;
+				if (step % 600 == 0 || (ice > 0.0 && first_ice == 0.0)) {
+					std::printf("%8.0f %10.3f %10.3f %10.4f\n", step * STEP_SECONDS, t - 273.15, rate, ice);
+				}
+			}
+			if (ice > 0.0 && first_ice == 0.0) {
+				first_ice = t;
+				std::printf("first ice at %.3f C (Wilson and Haymet's median -10.45 C), cooling at %.2f K/min\n", t - 273.15, rate);
+			}
+			sim.step();
+		}
+		std::printf("lowest %.3f C\n", lowest - 273.15);
+	}
+	return 0;
+}
+
 int spectrum_study(); // spectrum.cpp
 int frames_study(); // frames.cpp
 int tilt_study(); // lying.cpp
@@ -1108,6 +1195,9 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "seed") == 0) {
 		return seed();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, precipitates, spectrum, frames, tilt, vortex)\n", name);
+	if (std::strcmp(name, "ice") == 0) {
+		return ice_study();
+	}
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, precipitates, ice, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }

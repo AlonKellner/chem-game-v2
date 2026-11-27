@@ -118,6 +118,10 @@
 				}
 			]
 		},
+		"ice": {
+			"kind": "reflect",
+			"base": 0.9
+		},
 		"latex": {
 			"kind": "transmit",
 			"base": 0.04,
@@ -485,7 +489,8 @@
 			"copper_sulfate_pentahydrate": 0.9,
 			"copper_sulfate_trihydrate": 0.9,
 			"copper_sulfate_monohydrate": 0.9,
-			"copper_hydroxide": 0.9
+			"copper_hydroxide": 0.9,
+			"ice": 0.97
 		},
 		"transmittance": {
 			"latex": 0.3,

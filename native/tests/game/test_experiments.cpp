@@ -160,9 +160,9 @@ TEST_CASE("experiments: the catalogue's list on the screen opens each bench and 
 	// a press beside the list closes it and does nothing else
 	p.click("menu:experiments");
 	const std::string before = p.ui->lab().digest();
-	p.ui->pointer(300, 1000, false);
-	p.ui->pointer(300, 1000, true);
-	p.ui->pointer(300, 1000, false);
+	p.ui->pointer(30, 1000, false); // (Stage 71: left of the list, which its rows now reach under at its middle)
+	p.ui->pointer(30, 1000, true);
+	p.ui->pointer(30, 1000, false);
 	CHECK_FALSE(p.ui->locate("experiment:demo", x, y));
 	CHECK(p.ui->lab().digest() == before);
 	REQUIRE(p.ui->choose("rate", why));
@@ -1409,6 +1409,75 @@ TEST_CASE("experiment conductivity: played as a person plays it, strict, it comp
 
 TEST_CASE("experiment conductivity: followed with its own gestures, free, it completes (Stage 65)") {
 	Pupil p("data/benches/conductivity.json", "data/tutorials/conductivity.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment freezing_point: followed with its own gestures, strict, the water supercools and holds at 0 C, the solution lower (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json");
+	CHECK(pupil::follow_through(p, 3600) > 10);
+	completed(p);
+	double water_least = 1e9, solution_least = 1e9;
+	for (const lab::ItemView &v : p.ui->lab().view().items) {
+		(void)v;
+	}
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		(void)e;
+	}
+	water_least = std::min(water_least, p.item("water").celsius);
+	solution_least = std::min(solution_least, p.item("solution").celsius);
+	MESSAGE("bath " << p.item("bath").celsius << " C; the water " << p.item("water").celsius << " C, " << p.grams("water", "ice") << " g of ice; the solution "
+					<< p.item("solution").celsius << " C, " << p.grams("solution", "ice") << " g of ice");
+	CHECK(p.item("bath").celsius < -15.0);
+	CHECK(p.grams("water", "ice") > 9.9);
+	CHECK(p.grams("solution", "ice") > 1.0);
+	report(p, { -1.7, 1.7 });
+	CHECK(p.drawn("you predicted -1"));
+}
+
+TEST_CASE("experiment freezing_point: played as a person plays it, strict, it completes (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment freezing_point: followed with its own gestures, free, it completes (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment heating_curve: followed with its own gestures, strict, the cubes melt in the cup and the ice holds at 0 C, then the water at 100 C (Stage 71)") {
+	Pupil p("data/benches/heating_curve.json", "data/tutorials/heating_curve.json");
+	CHECK(pupil::follow_through(p, 3600) > 10);
+	completed(p);
+	// the calorimeter: what the cup's water gave up melted 20 g of ice and warmed its water to the cup's
+	double start = 0.0, least = 1e9;
+	bool first = true;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.quantity.item == "cup" && e.quantity.what == "celsius") {
+			start = first ? e.value : start;
+			first = false;
+			least = std::min(least, e.value);
+		}
+	}
+	const double fusion = (100.0 * 4.184 * (start - least) - 20.0 * 4.184 * least) / 20.0;
+	MESSAGE("the cup from " << start << " C to " << least << " C: " << fusion << " J/g; its water " << p.grams("cup", "water") << " g, ice " << p.grams("cup", "ice") << " g; the lab's time "
+							 << p.ui->lab().step() / 60.0 << " s");
+	CHECK(fusion == doctest::Approx(333.4).epsilon(0.08));
+	report(p, { fusion });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 100"));
+}
+
+TEST_CASE("experiment heating_curve: played as a person plays it, strict, it completes (Stage 71)") {
+	Pupil p("data/benches/heating_curve.json", "data/tutorials/heating_curve.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment heating_curve: followed with its own gestures, free, it completes (Stage 71)") {
+	Pupil p("data/benches/heating_curve.json", "data/tutorials/heating_curve.json", false);
 	pupil::follow_through(p, 3600);
 	completed(p);
 }

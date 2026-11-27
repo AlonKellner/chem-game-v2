@@ -54,6 +54,7 @@ struct DrawList {
 
 class Ui {
 public:
+	// a bench, or (Stage 71) a lab's save (chem-save/1, the debug panel's export) as it was saved
 	static std::unique_ptr<Ui> open(std::string_view bench_json, std::string &why);
 	~Ui();
 

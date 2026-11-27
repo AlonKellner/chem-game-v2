@@ -85,7 +85,7 @@
 				{"text": "the acid form in its well", "when": {"item": "spec", "under": "yellow"}},
 				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 1}}
 			],
-			"play": [{"drag": ["item:blank", "square:1,8"]}, {"drag": ["item:yellow", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
+			"play": [{"drag": ["item:blank", "square:1,12"]}, {"drag": ["item:yellow", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
 		},
 		{
 			"title": "All blue",
@@ -94,7 +94,7 @@
 				{"text": "the base form in its well", "when": {"item": "spec", "under": "blue"}},
 				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 2}}
 			],
-			"play": [{"drag": ["item:yellow", "square:4,8"]}, {"drag": ["item:blue", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
+			"play": [{"drag": ["item:yellow", "square:4,12"]}, {"drag": ["item:blue", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}]
 		},
 		{
 			"title": "In the buffer",
@@ -105,7 +105,7 @@
 				{"text": "its absorbance recorded", "when": {"item": "spec", "recorded": "absorbance", "recorded_count": 3}},
 				{"text": "its pH recorded", "when": {"item": "mid", "recorded": "ph"}}
 			],
-			"play": [{"drag": ["item:blue", "square:7,8"]}, {"drag": ["item:mid", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}, {"click": "item:mid"}, {"click": "record:mid:ph"}]
+			"play": [{"drag": ["item:blue", "square:7,12"]}, {"drag": ["item:mid", "item:spec"]}, {"click": "item:spec"}, {"click": "record:spec:absorbance"}, {"click": "item:mid"}, {"click": "record:mid:ph"}]
 		}
 	]
 }

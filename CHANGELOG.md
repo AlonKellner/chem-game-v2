@@ -54,6 +54,20 @@
   their digests re-recorded with the user's approval. A cell's temperature read from the simulation's kept thermal
   state by the columns and the lab (the same value).
 
+## 0.71.0 (2026-11-27, Stage 71, merged after 0.72.0 and 0.73.1; signed off by the user: "Approved, merge and proceed")
+
+- §8, §9 (Stage 71, `docs/TDD_71_ICE.md`; the curriculum's step I, C8): **ice**, H2O(s), from IAPWS R10-06 (melting at
+  273.152519 K, 6006.8 J/mol). `water_freezing` a surface law limited by the heat its change carries (a new general
+  step: a surface reaction that carries no dissolved species, Nu k / d (T − T_eq) / |ΔH|, Sano's form with Pr);
+  **supercooling** by a nucleation barrier, e^(−B / ln² S) (`nucleation_barrier`), fitted to Wilson and Haymet's
+  tubes; a solid with a grain grows as a mush; freezing-point depression through the water's activity, held to the
+  International Critical Tables. §6: a lighter solid floats up a column; a column spills what no longer fits; **a
+  vessel in a vessel** (`stand`): the other's volume integral less what stands in it (`World::reshape_column`), ring
+  by layer contacts, as asked for by the user; a test tube (ISO 4142); a bench vessel at its own temperature. §12:
+  ice's media (its long wave from Warren and Brandt's n + ik). §13.7: the experiments `freezing_point` and
+  `heating_curve`. The generator's refusals each checked by their message (six had passed for the wrong reason).
+  The goldens re-recorded with the user's approval (their measurements identical).
+
 ## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first

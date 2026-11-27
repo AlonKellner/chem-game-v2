@@ -54,6 +54,8 @@ rest of T6.
 
 - Both sessions' every command on its recorded step and every printed result as it was; their digests moved with the
   state's 48 more species (each new element at nought quanta).
+- Main merged in (Stage 71: ice), its species and reactions before this stage's: re-recorded again, every command's
+  result as main's line for line, only the digests moved.
 
 ## Open
 

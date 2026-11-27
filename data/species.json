@@ -77,6 +77,7 @@
 		{"id": "sodium_carbonate_decahydrate", "formula": "Na2CO3.10H2O", "phase": "s", "density": 1.46, "thermo": {"hf_kj": -4081.32, "cp": 550.32, "s0": 556.31}},
 		{"id": "sodium_acetate", "formula": "CH3COONa", "phase": "s", "density": 1.528, "thermo": {"hf_kj": -708.81, "cp": 79.9, "s0": 123.13}},
 		{"id": "potassium_hydrogen_phthalate", "formula": "KHC8H4O4", "phase": "s", "density": 1.644, "thermo": {"hf_kj": -1028.05, "cp": 211.14, "s0": 229.0}},
+		{"id": "ice", "formula": "H2O", "phase": "s", "density": 0.916721, "conductivity": 2.24, "grain_um": 100, "thermo": {"hf_kj": -292.7768, "cp": 37.773, "s0": 44.6665}},
 		{"id": "calcium_ion", "formula": "Ca+2", "phase": "aq", "ions": {"Ca+2": 1}, "volume_cm3": -51.54, "thermo": {"hf_kj": -542.83, "cp": -464.206, "s0": -53.1}},
 		{"id": "magnesium_ion", "formula": "Mg+2", "phase": "aq", "ions": {"Mg+2": 1}, "volume_cm3": -55.03, "thermo": {"hf_kj": -466.85, "cp": -455.043, "s0": -138.1}},
 		{"id": "barium_ion", "formula": "Ba+2", "phase": "aq", "ions": {"Ba+2": 1}, "volume_cm3": -46.08, "thermo": {"hf_kj": -537.64, "cp": -484.163, "s0": 9.6}},

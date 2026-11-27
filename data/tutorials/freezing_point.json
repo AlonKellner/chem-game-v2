@@ -1,0 +1,373 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §8, §13.7, Stage 71; docs/CURRICULUM.md, experiment 33) on data/benches/freezing_point.json: a freezing mixture made of ice and salt, then a tube of water and a tube of salt solution stood in it, their temperatures logged: each supercools, jumps back to its freezing point as its first crystal grows, and holds there, the water at 0 C, the solution near -1.7 C and falling as its ice concentrates it. Freezing-point depression and the cryoscopic constant.",
+	"title": "Experiment: freezing points",
+	"bench": "../benches/freezing_point.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "One tube holds pure water, the other water with 0.50 mol/kg of sodium chloride dissolved. Water freezes at 0 C. At what temperature do you think the salt solution freezes? Type your guess in C, then click \"predict\".",
+			"why": "Dissolved particles get in the way of water molecules joining the ice: the solution must be colder before it freezes. How much colder depends on how many particles are dissolved, not on what they are.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "-1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "A freezing mixture",
+			"title": "Salt on the ice",
+			"text": "Pick up the jar of salt, then right-click the ice bath. In the menu that opens, click \"tip in\".",
+			"why": "The bath is crushed ice with a little of its meltwater, at 0 C: ice and water together stay at 0 C.",
+			"checks": [
+				{
+					"text": "all the salt in the ice bath",
+					"when": {
+						"item": "salt",
+						"species": "sodium_chloride",
+						"below_g": 0.01
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:salt",
+						"item:bath"
+					]
+				},
+				{
+					"click": "panel:tip:sodium_chloride"
+				}
+			]
+		},
+		{
+			"title": "Stir it",
+			"text": "Right-click the ice bath to choose it, then \"stir\" in the column on the right.",
+			"checks": [
+				{
+					"text": "the bath is stirred",
+					"when": {
+						"item": "bath",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:bath"
+				},
+				{
+					"click": "stir:bath"
+				}
+			]
+		},
+		{
+			"title": "Speed up time",
+			"text": "Click \"10x\" at the top.",
+			"checks": [
+				{
+					"text": "time runs at least 10 times faster",
+					"when": {
+						"speed_at_least": 10
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:10"
+				}
+			]
+		},
+		{
+			"title": "Colder than ice",
+			"text": "Watch the bath's temperature fall.",
+			"why": "The salt dissolves into the meltwater, and salt water freezes far below 0 C: the ice now melts into it. Melting takes heat, and the only heat near is the bath's own, so the bath cools as it melts, to about -20 C: a freezing mixture.",
+			"checks": [
+				{
+					"text": "the bath below -15 C",
+					"when": {
+						"item": "bath",
+						"below_c": -15
+					}
+				}
+			]
+		},
+		{
+			"title": "Stand it in the bath",
+			"text": "Pick up the tube of water, then right-click the bath. In the menu, click \"stand it in\".",
+			"why": "The tube stands on the bath's floor: the bath's liquid rises round it by what it displaces, and the cold reaches the water through the tube's glass, ring by ring of it, as deep as the bath's liquid reaches.",
+			"checks": [
+				{
+					"text": "the water stands in the bath",
+					"when": {
+						"item": "water",
+						"place": "in"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:bath"
+					]
+				},
+				{
+					"click": "panel:stand"
+				}
+			],
+			"part": "The tubes"
+		},
+		{
+			"title": "Stand it in the bath too",
+			"text": "Pick up the tube of solution, then right-click the bath, and \"stand it in\".",
+			"checks": [
+				{
+					"text": "the solution stands in the bath",
+					"when": {
+						"item": "solution",
+						"place": "in"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:solution",
+						"item:bath"
+					]
+				},
+				{
+					"click": "panel:stand"
+				}
+			]
+		},
+		{
+			"title": "Log the water's temperature",
+			"text": "Right-click the tube of water, click \"+ T\", open the notebook and click \"5 s\": the notebook records its temperature every 5 seconds.",
+			"checks": [
+				{
+					"text": "the water's temperature logged",
+					"when": {
+						"item": "water",
+						"logging": "celsius"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:water"
+				},
+				{
+					"click": "record:water:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"title": "Log the solution's temperature",
+			"text": "Close the notebook, right-click the tube of solution, click \"+ T\", open the notebook again and click \"5 s\".",
+			"checks": [
+				{
+					"text": "the solution's temperature logged",
+					"when": {
+						"item": "solution",
+						"logging": "celsius"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:solution"
+				},
+				{
+					"click": "record:solution:celsius"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				}
+			]
+		},
+		{
+			"title": "Faster",
+			"text": "Click \"60x\" at the top, and keep the notebook open to watch the two curves.",
+			"checks": [
+				{
+					"text": "time runs at least 60 times faster",
+					"when": {
+						"speed_at_least": 60
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"part": "Watch",
+			"title": "Below its freezing point, still liquid",
+			"text": "Watch the water: it passes 0 C and keeps cooling, with no ice in it.",
+			"why": "Ice must start somewhere: a first crystal, which forms only rarely until the water is several degrees too cold. Until then the water is supercooled.",
+			"checks": [
+				{
+					"text": "the water below -3 C, still liquid",
+					"when": {
+						"all": [
+							{
+								"item": "water",
+								"below_c": -3
+							},
+							{
+								"item": "water",
+								"species": "ice",
+								"below_g": 0.001
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"title": "The jump back",
+			"text": "Watch for the moment it freezes.",
+			"why": "Once a crystal starts it grows fast, and freezing gives out heat: the water warms back to its freezing point in seconds, then holds there while the bath draws that heat away, until all of it is ice. That flat line is the freezing point: 0 C.",
+			"checks": [
+				{
+					"text": "ice in the water, and the water back near 0 C",
+					"when": {
+						"all": [
+							{
+								"item": "water",
+								"species": "ice",
+								"above_g": 1
+							},
+							{
+								"item": "water",
+								"above_c": -0.5
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"title": "The solution freezes lower",
+			"text": "Now watch the solution's curve.",
+			"why": "It too supercools and jumps back, but to below 0 C, and its line is not flat: the ice that forms is pure water, so what is left grows saltier and freezes colder still. Its freezing point is where its line starts after the jump, read back to the moment ice first appeared.",
+			"checks": [
+				{
+					"text": "ice in the solution",
+					"when": {
+						"item": "solution",
+						"species": "ice",
+						"above_g": 1
+					}
+				}
+			]
+		},
+		{
+			"title": "Frozen",
+			"text": "Wait until the water is all ice.",
+			"checks": [
+				{
+					"text": "the water all ice",
+					"when": {
+						"item": "water",
+						"species": "ice",
+						"above_g": 9.9
+					}
+				}
+			]
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the bath",
+			"quantity": {
+				"item": "bath",
+				"what": "celsius"
+			},
+			"show": [
+				"least"
+			]
+		},
+		{
+			"label": "the water",
+			"quantity": {
+				"item": "water",
+				"what": "celsius"
+			},
+			"show": [
+				"least",
+				"now"
+			]
+		},
+		{
+			"label": "the solution",
+			"quantity": {
+				"item": "solution",
+				"what": "celsius"
+			},
+			"show": [
+				"least",
+				"now"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the solution's freezing point",
+			"unit": "C",
+			"truth": "-1.71",
+			"ideal": -1.67,
+			"tolerance": 0.4,
+			"predict": true,
+			"why": "Read in the notebook where the solution's line starts after its jump, back to the moment its ice appeared: about -1.7 C. The International Critical Tables give -1.67 C at 0.50 mol/kg; the model's water activity, -1.71 C."
+		},
+		{
+			"label": "the cryoscopic constant from it",
+			"unit": "K kg/mol",
+			"truth": "1.71",
+			"ideal": 1.86,
+			"tolerance": 0.25,
+			"why": "The lowering over the molality of the particles: sodium chloride is two in water, Na+ and Cl-, so 1.71 K over 2 x 0.50 mol/kg. Water's own constant is 1.86 K kg/mol for an ideal solution; the ions' attraction makes a real salt solution act as a little fewer particles."
+		}
+	]
+}
