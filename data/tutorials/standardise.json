@@ -7,7 +7,7 @@
 		{
 			"label": "the base's concentration",
 			"unit": "mol/L",
-			"truth": "1000 * base.sodium_hydroxide_aq.mol / base.liquid_ml",
+			"truth": "1000 * base.sodium_hydroxide_aq.mol / base.condensed_ml",
 			"tolerance": 0.01,
 			"relative": true,
 			"why": "c = m / (M V): the balance's reading of the KHP over 204.22 g/mol, in the base the burette ran in (its two readings' difference). The label said about 0.1 M: sodium hydroxide takes up water and carbon dioxide from the air, so its solution is made roughly and standardised. The balance reads within 0.2 mg, the burette within 0.05 mL, and the last drop past the end point is the titration's own error."
