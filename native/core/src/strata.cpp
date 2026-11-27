@@ -78,11 +78,6 @@ double solution_m3(const SpeciesTable &table, const CellState &c, double kelvin)
 }
 
 // a cell's temperature for its volume: its own, or 25 C where it has none (an empty layer)
-double kelvin_of(const SpeciesTable &table, const World &world, CellId cell) {
-	const Thermal t = thermal_state(table, world.snapshot_cell(cell), &world.meta(cell));
-	return t.defined && t.temperature > 0.0 ? t.temperature : T0;
-}
-
 // each dissolved species' share of its solution's mass
 std::vector<double> fractions(const SpeciesTable &table, const CellState &c) {
 	std::vector<double> w(c.amount.size(), 0.0);
@@ -148,13 +143,15 @@ struct Levels {
 	double thick(size_t i) const { return top[i] - bottom[i]; }
 };
 
-Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell, const std::vector<CellId> &cells) {
+// (Stage 72) each cell's temperature from the simulation's kept thermal state, `kelvin(cell)`: T0 where it has none
+template <typename Kelvin>
+Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell, const std::vector<CellId> &cells, Kelvin kelvin) {
 	const CellMeta &m = world.meta(top_cell);
 	const size_t n = cells.size();
 	Levels out{ std::vector<double>(n), std::vector<double>(n), std::vector<double>(n), std::vector<double>(n) };
 	double below = 0.0;
 	for (size_t k = n; k-- > 0;) {
-		const double v = solution_m3(table, world.snapshot_cell(cells[k]), kelvin_of(table, world, cells[k]));
+		const double v = solution_m3(table, world.snapshot_cell(cells[k]), kelvin(cells[k]));
 		out.bottom[k] = height_of(m, below);
 		out.middle[k] = height_of(m, below + 0.5 * v);
 		out.top[k] = height_of(m, below + v);
@@ -165,6 +162,11 @@ Levels levels_of(const SpeciesTable &table, const World &world, CellId top_cell,
 }
 
 } // namespace
+
+double Simulation::column_kelvin(CellId cell) {
+	const Thermal &t = in_step_ ? thermal(cell) : kept_thermal(static_cast<size_t>(cell.index), world_.snapshot_cell(cell), world_.meta(cell));
+	return t.defined && t.temperature > 0.0 ? t.temperature : T0;
+}
 
 double jet_entrains(double flux, double speed) {
 	return flux > 0.0 && speed > 0.0 ? JET_ENTRAINMENT * 0.8862269254527580 * std::sqrt(flux * speed) : 0.0; // 0.32 Q0 / d0 = 0.32 sqrt(pi / 4) sqrt(M)
@@ -221,7 +223,7 @@ void Simulation::grow_columns() {
 			continue; // a spare one there
 		}
 		const double area = world_.meta(col.top).column_area;
-		const Levels at = levels_of(table, world_, col.top, col.cells);
+		const Levels at = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 		for (size_t i = 0; i + 1 < n && area > 0.0; ++i) {
 			const CellState &u = world_.snapshot_cell(col.cells[i]), &l = world_.snapshot_cell(col.cells[i + 1]);
 			const Thermal tu = thermal_state(table, u, &world_.meta(col.cells[i])), tl = thermal_state(table, l);
@@ -247,7 +249,7 @@ void Simulation::configure_columns() {
 	const SpeciesTable &table = world_.species();
 	for (const Column &col : columns_) {
 		const double area = world_.meta(col.top).column_area;
-		const Levels at = levels_of(table, world_, col.top, col.cells);
+		const Levels at = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 		for (size_t i = 0; i + 1 < col.cells.size(); ++i) {
 			const CellState &upper = world_.snapshot_cell(col.cells[i]), &lower = world_.snapshot_cell(col.cells[i + 1]);
 			double g = 0.0;
@@ -397,7 +399,7 @@ void Simulation::stratify(const Column &col) {
 				break;
 			}
 			const double whole = vu * vl / (vu + vl); // the volume exchanged that makes them one
-			const Levels at = levels_of(table, world_, col.top, col.cells);
+			const Levels at = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 			const double per_m3 = GRAVITY * (down > up ? down - up : 0.0) * (at.middle[i] - at.middle[i + 1]); // J a m^3 exchanged
 			const double pays = per_m3 > 0.0 ? budget / per_m3 : whole;
 			if (pays >= whole) {
@@ -457,7 +459,7 @@ void Simulation::stratify(const Column &col) {
 			const double jet_density = landed_kg_[top_at] / landed_m3_[top_at];
 			double top_density = 0.0;
 			const bool top_known = liquid_density(table, state(0), kelvin(0), top_density);
-			const Levels at = levels_of(table, world_, col.top, col.cells);
+			const Levels at = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 			double flux = q + per_metre * (top_known ? at.thick(0) : 0.0);
 			const double mixture = (q * jet_density + (flux - q) * top_density) / flux;
 			double reach = -1.0; // how far it plunges, once it meets a denser layer (m)
@@ -534,7 +536,7 @@ void Simulation::stratify(const Column &col) {
 		if (!(vu > 0.0) || !(vl > 0.0)) {
 			continue;
 		}
-		const Levels at = levels_of(table, world_, col.top, col.cells);
+		const Levels at = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 		const double dz = at.middle[i] - at.middle[i + 1], across = at.across[i], t = 0.5 * (kelvin(i) + kelvin(i + 1));
 		if (!(dz > 0.0)) {
 			continue;
@@ -655,7 +657,7 @@ void Simulation::stratify(const Column &col) {
 	if (empty(state(n - 1)) && area > 0.0) {
 		size_t at = n, thick = n;
 		double steepest = SPLIT_ABOVE;
-		const Levels levels = levels_of(table, world_, col.top, col.cells);
+		const Levels levels = levels_of(table, world_, col.top, col.cells, [this](CellId c) { return column_kelvin(c); });
 		for (size_t i = 0; i + 1 < n; ++i) {
 			if (liquid(i) && liquid(i + 1)) {
 				const double c = contrast(table, state(i), kelvin(i), state(i + 1), kelvin(i + 1));

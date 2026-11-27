@@ -132,9 +132,16 @@ public:
 	// some) and its reactions; else none, as before a step.
 	void restore_flows(StepFlows flows);
 
+	// A cell's temperature as World::temperature gives it (a reservoir's own, else its thermal state's), the same
+	// value, from the thermal state the simulation keeps (Stage 72): derived again only when the cell's state or its
+	// meta changed since, so the lab's walls and views read what the step derived
+	bool temperature(CellId cell, double &kelvin) const;
+
 private:
 	void begin_step();
 	const Thermal &thermal(CellId cell);
+	const Thermal &kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const;
+	double column_kelvin(CellId cell); // a column's layer's temperature, T0 where it has none (strata.cpp)
 	Refusal transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy);
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
 	void react();
@@ -187,8 +194,9 @@ private:
 	Process process_ = Process::Reaction; // what the primitives are applied for now
 	std::vector<uint8_t> starved_;
 	std::vector<Exchanged> exchanged_; // the step's (Stage 50)
-	std::vector<Thermal> thermal_; // per cell, while thermal_valid_
+	mutable std::vector<Thermal> thermal_; // per cell, while thermal_valid_ (or its key holds: Stage 72)
 	std::vector<uint8_t> thermal_valid_;
+	bool in_step_ = false; // (Stage 72) thermal_valid_ is this step's: between begin_step's sizing and the step's close
 	// what each cell's kept thermal state was derived from (Stage 53): the same state and meta give it again, so a
 	// cell at rest (a vessel's ring of glass) is not derived anew each step
 	struct ThermalKey {
@@ -198,7 +206,7 @@ private:
 		double volume = 0.0;
 		bool sealed = false, rigid = false, reservoir = false;
 	};
-	std::vector<ThermalKey> thermal_key_;
+	mutable std::vector<ThermalKey> thermal_key_;
 	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly
 	std::vector<ThermalKey> rest_key_;
 	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)

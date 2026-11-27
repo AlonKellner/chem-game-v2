@@ -211,13 +211,52 @@ Through floor_through(const Floor &f, double middle_c, double resistance) {
 		return out;
 	}
 	// through half the glass in series: the surface where what crosses the glass is what the surface passes on (the
-	// one between the bulk and the middle: the flux grows with the surface's temperature, what crosses falls)
+	// one between the bulk and the middle: the flux grows with the surface's temperature, what crosses falls), to a
+	// bracket of 1e-9 K, as the bisection it replaced (Stage 72). By ITP (Oliveira and Takahashi 2020, ACM TOMS 47(1)
+	// 5): regula falsi's point, truncated towards the middle and projected into a ball about it that shrinks as a
+	// bisection's would, so it takes never more than one step past the bisection's count (where the root is the
+	// onset, the flux's step where boiling starts) and a few where the flux is smooth; k1 0.2 / width, k2 2, n0 1.
+	const auto excess = [&](double t_c) { return flux(t_c) - (middle_c - t_c) / resistance; }; // rises through 0
+	constexpr double HALF_TOLERANCE = 0.5e-9;
 	double lo = f.bulk_c, hi = middle_c;
-	for (int k = 0; k < 60 && hi - lo > 1e-9; ++k) {
-		const double mid = 0.5 * (lo + hi);
-		(flux(mid) > (middle_c - mid) / resistance ? hi : lo) = mid;
+	double e_lo = excess(lo), e_hi = excess(hi);
+	double surface = 0.5 * (lo + hi);
+	if (!(e_lo < 0.0)) {
+		surface = lo;
+	} else if (!(e_hi > 0.0)) {
+		surface = hi;
+	} else {
+		int most = 0; // the bisection's count, and one
+		for (double w = hi - lo; w > 2.0 * HALF_TOLERANCE && most < 2000; w *= 0.5) {
+			++most;
+		}
+		++most;
+		const double k1 = 0.2 / (hi - lo);
+		for (int j = 0; hi - lo > 2.0 * HALF_TOLERANCE && j < most + 2; ++j) {
+			const double width = hi - lo, middle = 0.5 * (lo + hi);
+			const double falsi = (e_hi * lo - e_lo * hi) / (e_hi - e_lo);
+			const double toward = middle >= falsi ? 1.0 : -1.0;
+			const double delta = k1 * width * width;
+			const double truncated = delta <= std::fabs(middle - falsi) ? falsi + toward * delta : middle;
+			const double ball = std::ldexp(HALF_TOLERANCE, most - j) - 0.5 * width;
+			double t = std::fabs(truncated - middle) <= ball ? truncated : middle - toward * ball;
+			if (!(t > lo && t < hi)) {
+				t = middle;
+			}
+			const double e = excess(t);
+			if (e > 0.0) {
+				hi = t;
+				e_hi = e;
+			} else if (e < 0.0) {
+				lo = t;
+				e_lo = e;
+			} else {
+				lo = hi = t; // exactly on it
+			}
+		}
+		surface = 0.5 * (lo + hi);
 	}
-	out.surface_c = 0.5 * (lo + hi);
+	out.surface_c = surface;
 	out.heat_w = (middle_c - out.surface_c) / resistance;
 	return out;
 }
