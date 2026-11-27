@@ -664,7 +664,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				// liquid, not on the floor.
 				double *lie = &lies[static_cast<size_t>((at - HEADER_VECS) / BODY_VECS) * SHAPE_BLOCK * 4];
 				const double sediment = (1.0 - (v.liquid_ml > 0.0 ? std::min(std::max(v.suspended, 0.0), 1.0) : 0.0)) * v.solid_ml;
-				const contents::Lying l = contents::lying(*made, lie[3], std::max(v.condensed_ml - sediment, 0.0), sediment, body.vortex, body.side);
+				// (Stage 71) what stands in it displaces its liquid: the level the beaker alone would have with that more
+				const contents::Lying l = contents::lying(*made, lie[3], std::max(v.condensed_ml - sediment, 0.0) + v.displaced_ml, sediment, body.vortex, body.side);
 				// Drawn to a sixty-fourth of a pixel (Stage 33): what lies in a vessel moves by less at every step of
 				// the lab (a vortex nearing its size, a liquid losing vapour), and a pixel's rays are followed again
 				// whenever what it looks through has moved at all. Nothing a sixty-fourth of a pixel can show is lost.
@@ -683,7 +684,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					for (const LayerView &layer : v.layers) {
 						layered_ml += layer.liquid_ml;
 					}
-					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0), scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
+					const double liquid_cm3 = std::max(v.condensed_ml - sediment, 0.0) + v.displaced_ml, scale = layered_ml > 0.0 ? liquid_cm3 / layered_ml : 0.0;
 					double below = 0.0, under = -1e9; // the layers' liquid under the band, and its bottom level
 					for (size_t k = 0; k < bands; ++k) {
 						const LayerView &layer = v.layers[v.layers.size() - 1 - k]; // (the view lists them from the top)

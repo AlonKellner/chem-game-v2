@@ -427,7 +427,8 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
 - **Each step** (the column's process, after the drains and before settling):
   - gas in a layer rises to the layer over it, carrying its enthalpy;
   - the layers in use stay together under the top: one with no liquid over it rises into that place;
-  - solids sink to the lowest liquid;
+  - solids sink to the lowest liquid; a solid lighter than the liquid it is in (Stage 71: ice on water) floats up to
+    the topmost liquid instead (one with no liquid round it falls into the liquid under it);
   - two layers merge where the lower is the lighter (it overturns: convective adjustment), or where they are alike
     and no steep step is beside them (one is enough);
   - stirred, the layers mix as far as the turning pays (Stage 49): of the work the turning dissipates this step
@@ -488,6 +489,24 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
   solids that have one, and a bed with none conducts as its fluid.
 - **L1** (§18) holds a column together.
+- **Its overflow** (Stage 71): a column that holds more than its vessel (another stood in it, its liquids grown)
+  spills its excess from its topmost liquid down, past what L1 allows and no sooner.
+- **A vessel in a vessel** (Stage 71; `docs/TDD_71_ICE.md`; asked for by the user, 2026-11-27: "each ring interacts
+  with the layers it touches, heat transfer is by layer/ring, not full vessel to full vessel"; "the inner vessel
+  should change the volume integral of the outer vessel, such that each layer is displaced the correct amount,
+  increasing the level the correct amount"). The lab's `stand {item, in}` stands a vessel upright on another's
+  floor, where its outside fits within the other's inside at every height and its foot with the others' in its
+  floor; `place` takes it out. While it stands there:
+  - **the other's volume integral** is its inside's less the inner's outside, from its foot to its rim
+    (`glass::Vessel::outside_below`): the world's column reshaped (`World::reshape_column`: its whole volume and its
+    volume under each height), the lab's levels read through it. Each layer's heights, the level, the surface, the
+    overflow and what fits move by what the inner displaces at its height; a brim-full one spills it;
+  - **ring by layer**: each ring of the inner's wall has an edge to each cell of the other's column, its conductance
+    what of the ring's outside lies in that cell's heights: the liquid by the wall into water (Churchill and Chu,
+    the other's depth its length), the gas over it by the wall into air, in series with half its glass; its floor's
+    base the other's lowest cell. Its rings lose to the room only by what of them stands over the other's brim;
+  - the other holds where it stands (it cannot be moved, stowed or poured from) while one stands in it; saved and
+    loaded, the edges are the world's, found again.
 
 **Gas exchanged at an open mouth** (Stage 50; asked for by the user, 2026-11-25, as the weighing experiments showed
 a dish keeping its own carbon dioxide and steam). Gas moved only by bulk flow until Stage 50; now an open vessel's
@@ -605,6 +624,23 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
   depression are consequences, not rules.
 - **Melting and freezing, sublimation, supercritical fluids** use the same construction with the
   corresponding species.
+- **Ice** (Stage 71, `docs/TDD_71_ICE.md`): `ice`, H2O(s), from IAPWS R10-06 (melting at 101 325 Pa at
+  273.152519 K, its heat of fusion 6006.8 J/mol, its cp and density there; hf and s0 at 298.15 K fitted so the model
+  melts at IAPWS's point with water's own cp, its absolute entropy then IAPWS's). Melting and freezing are one
+  kinetic reaction, `water_freezing`, H2O(l) → H2O(s), the surface law (§7) at ice's surface:
+  - **heat, not attachment, sets its pace**: a surface reaction that carries no dissolved species (a pure liquid
+    freezing, a solid melting) is limited in series by the heat its change gives out or takes in, carried between
+    the surface and the liquid, `Nu k / d (T − T_eq) / |ΔH|` per m², `T − T_eq = A T / ΔH`, Nu Sano's form with the
+    Prandtl number (2 at rest, raised by the stirring's dissipation, Stage 57);
+  - **supercooling**: ice's first crystal by a nucleation barrier, `nucleation · (kg of water) · e^(−B / ln² S)` a
+    second (the classical form, `nucleation_barrier`), fitted to Wilson and Haymet's tubes (a median at −10.45 °C
+    cooled at 4.5 K/min) and Wilson's spread; once one is there it grows, the heat of freezing warms the liquid back
+    to its freezing point, and it holds there while the cold draws the heat away;
+  - **a mush**: a solid with a grain (`grain_um`) grows by the surface law as crystals no larger than it; ice's
+    100 µm, its dendrites' large area in a supercooled liquid (calibrated);
+  - **freezing-point depression** through the water's activity (Pitzer's, §10): copper sulfate's lowering within
+    1.2 % of the International Critical Tables to 0.8 mol/kg, sodium chloride's within 3 % to 1 mol/kg;
+  - ice floats (§6).
 
 - **The equilibrium law** (`data/reactions.json`, `"law": "equilibrium"`): each step, in each
   cell, the reaction is taken to the last quantum before its affinity would change sign, or to the
@@ -636,7 +672,8 @@ brings.
 **Demo subset:** water liquid/vapour projection in the flask, the balloon and the condenser;
 condensate drips to the beaker.
 **Status:** Stage 5 implements the equilibrium law and water's liquid/vapour equilibrium; solute
-activity is in it from Stage 19 (Pitzer's excess, §10). Kinetic phase changes and melting are *PLANNED*.
+activity is in it from Stage 19 (Pitzer's excess, §10). Stage 71: ice, melting and freezing as a kinetic phase
+change. Evaporation from a still surface and sublimation remain *PLANNED*.
 
 ## 9. Solutions and crystallization
 
@@ -1522,7 +1559,8 @@ of every ray through its area, and its colour is their average (a box filter).
     seen, through half a chord of its liquid: bent, absorbed and turned away by whatever is in
     front of it, as the wall's light is. Nothing is added to a pixel outside its history.
   - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
-    into a neighbour on its own layer; a vessel standing inside another (a bath) is not built.
+    into a neighbour on its own layer. A vessel standing inside another (Stage 71: a bath) is drawn on the layer
+    nearer the eye than the one it stands in: it is not seen through the other's front wall and liquid.
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
 - **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If

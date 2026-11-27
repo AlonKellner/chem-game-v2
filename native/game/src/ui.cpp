@@ -2744,6 +2744,18 @@ struct Ui::Impl {
 			const Rect holder = rect(v.on);
 			return Rect{ holder.cx() - w / 2, holder.y - h - 4, w, h };
 		}
+		if (v.place == "in" && !v.stands_in.empty()) {
+			// (Stage 71) standing in another vessel, upright on its inside floor, at its middle
+			for (size_t k = 0; k < view.items.size(); ++k) {
+				if (view.items[k].id == v.stands_in) {
+					const Rect outer = rect(static_cast<int>(k));
+					const ItemView &o = view.items[k];
+					const glass::Vessel *g = o.glassware.empty() ? nullptr : glass::find(o.glassware, o.nominal_ml);
+					const float floor_px = g != nullptr ? static_cast<float>(g->floor / g->height) * outer.h : 0.0f;
+					return Rect{ outer.cx() - w / 2, outer.y + outer.h - floor_px - h, w, h };
+				}
+			}
+		}
 		if (v.inverted && v.pours_into >= 0) {
 			// upside down over what it pours into, its mouth a little above that one's (Stage 27), held by a stand
 			const Rect below = rect(v.pours_into);
@@ -2906,6 +2918,16 @@ struct Ui::Impl {
 	static Rect invert_button() { return Rect{ PANEL.x + 30, PANEL.y + PANEL.h - 50, 240, 36 }; }
 	// into a volumetric flask: up to its mark (Stage 52), beside the pours
 	static Rect mark_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 168, 120, 34 }; }
+	// (Stage 71) stood in it, upright on its floor: a tube in a bath, under the mark's place
+	static Rect stand_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 210, 120, 34 }; }
+	// a vessel that could stand in the other: glassware both, the other the larger
+	bool could_stand() const {
+		if (!panel || from < 0 || to < 0) {
+			return false;
+		}
+		const ItemView &a = view.items[static_cast<size_t>(from)], &b = view.items[static_cast<size_t>(to)];
+		return a.kind == "vessel" && b.kind == "vessel" && !a.glassware.empty() && !b.glassware.empty() && b.nominal_ml > a.nominal_ml;
+	}
 	// the solids of the vessel being emptied, each with its button; by instruments (Stage 50) one button for them all,
 	// "solid", which names none of them
 	std::vector<std::pair<std::string, Rect>> tip_buttons() const {
@@ -3570,6 +3592,13 @@ struct Ui::Impl {
 				if (allowed_click("panel:mark") && act({ { "do", "fill" }, { "item", id(to) }, { "from", id(from) } })) {
 					panel = false;
 					put_back();
+				}
+				return;
+			}
+			if (could_stand() && stand_button().has(x, y)) {
+				if (allowed_click("panel:stand") && act({ { "do", "stand" }, { "item", id(from) }, { "in", id(to) } })) {
+					panel = false;
+					put_back(); // it stands in the other now
 				}
 				return;
 			}
@@ -6216,6 +6245,9 @@ struct Ui::Impl {
 				buttons.push_back(pour_button());
 				buttons.push_back(gentle_button());
 				buttons.push_back(cancel_button());
+				if (could_stand()) {
+					buttons.push_back(stand_button()); // (Stage 71)
+				}
 				for (const auto &[species, b] : tip_buttons()) {
 					buttons.push_back(b);
 				}
@@ -6391,7 +6423,7 @@ struct Ui::Impl {
 				thing(who, "body", OpticsBody::Slab, r, 4.0f, "rubber", nullptr, in_hand);
 			} else if (v.kind == "vessel" || v.kind == "balloon") {
 				OpticsBody body{ &v, r.x, r.y, r.w, r.h };
-				body.layer = in_hand ? 1 : 0;
+				body.layer = in_hand || v.place == "in" ? 1 : 0; // (Stage 71: standing in a vessel, drawn before it: Open)
 				body.named = i >= supply_base ? supply_name(v.id) : nullptr; // (Stage 61: a supply's box is not its first copy)
 				body.flipped = v.inverted && v.pours_into >= 0; // upside down (Stage 27)
 				if (turned(i, r, body.angle, body.pivot_x, body.pivot_y)) { // pouring by hand: about its lip (Stage 31)
@@ -7498,6 +7530,9 @@ struct Ui::Impl {
 		if (has_mark(view.items[static_cast<size_t>(to)]) && !has_mark(source) && source.liquid_ml > 0.0) {
 			button(mark_button(), "to the mark");
 		}
+		if (could_stand()) {
+			button(stand_button(), "stand it in");
+		}
 		button(cancel_button(), "cancel");
 	}
 };
@@ -8539,6 +8574,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:mark") { // (Stage 52)
 		return m.panel && centre(Impl::mark_button());
+	}
+	if (what == "panel:stand") { // (Stage 71)
+		return m.could_stand() && centre(Impl::stand_button());
 	}
 	if (what == "panel:amount") { // (Stage 50)
 		return m.panel && centre(Impl::amount_field());

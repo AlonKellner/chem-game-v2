@@ -334,6 +334,18 @@ double Vessel::volume_below(double y) const {
 	return v;
 }
 
+double Vessel::outside_below(double y) const {
+	double v = 0.0;
+	for (const Piece &p : outside) {
+		const double y0 = std::min(p.a.y, p.b.y), y1 = std::max(p.a.y, p.b.y);
+		if (y1 - y0 < 1e-15 || y0 >= y) {
+			continue;
+		}
+		v += swept(p, y1 <= y ? 1.0 : s_at(p, y));
+	}
+	return v;
+}
+
 double Vessel::capacity() const {
 	return volume_below(height);
 }
