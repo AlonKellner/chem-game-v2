@@ -2934,7 +2934,7 @@ stand on.
 - **The catalogue** (`data/experiments.json`, `chem-experiments/1`): each experiment's id, title,
   a summary, its bench and its tutorial (`null` for none), as paths from the catalogue's folder; or a scene of
   the optics alone (Stage 47: `"scene": "prism"`, the prism and the grating), which the screen shows in place
-  of the lab, the list over it, the wheel turning the prism. Past eight the list has two columns. A
+  of the lab, the list over it, the wheel turning the prism (the list's rows while it is open). A
   host reads it and hands the screen its text with a reader of the paths (`Ui::experiments`,
   `cg_ui_experiments`); every experiment is opened then, and a catalogue with one that cannot be
   is refused whole.
@@ -2943,6 +2943,22 @@ stand on.
   tutorial in place of what is open; reset then starts that one again. The list is the player's
   under a tutorial too, strict or free, like the clock; with something in hand, a press is where it
   goes, not the list's. The one shown is the entry whose bench and tutorial are what is open.
+- **Scrolling and search** *(Stage 78; asked for by the user, 2026-11-27: "The amount of experiments is
+  getting quite difficult to navigate. Please make it a scrollable list with search bar functionality.")*
+  The list is one column of rows (each its title, its summary, done or next; over the rows, how many with
+  steps are done and the next by name, wherever the list is scrolled), ten in sight, scrolled a whole row at
+  a time as Supplies' cabinet is: by the wheel or a trackpad's two fingers anywhere while it is open (not the
+  room's view), or by its bar held and dragged. A row out of sight is not drawn and takes no press, so
+  nothing spills past the panel. It opens with the entry shown in sight. A search field heads it and takes the
+  keys while the list is open: each word typed must start one of an entry's words (its id's, title's and
+  summary's, and its `keywords` if the catalogue gives any: `lab/search.hpp`, Supplies' and Storage's
+  matching), the rows filtered at each key and the list back at its top; with none left it says *no
+  experiments match*. Enter opens the first row left; Escape clears the query, or with none closes the list;
+  closed, the query is let go. On the screen (`Ui::locate`): `experiments:search`, `experiments:scroll` (where
+  the wheel turns it), `experiments:bar` and `experiments:bar@<0..1>`; `experiment:<id>` only for a row left
+  and in sight. A play or a pupil that names a row out of sight scrolls to it first as a hand does, the wheel
+  turned over the list until it is in sight (`lab::scroll_to`), so a play written for the short list still
+  reaches every row (`data/plays/experiments.json`: the list at a person's pace).
 - **The experiments** (each played through the screen to its end, strict, strict at a person's
   pace, and free: `native/tests/game/test_experiments.cpp`):
   - `vacuum`, *boiling under a vacuum* (§6): steam drives a flask's air out; stoppered at once and
