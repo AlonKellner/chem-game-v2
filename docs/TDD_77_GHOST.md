@@ -58,7 +58,7 @@ Moved to a stage of its own after Stage 78 (the user's choice): the request abov
 | Phase | Topic | Status |
 |---|---|---|
 | 77.1 | The ghost: reproduced (the play, on the GPU and the CPU), its cause, the fix, its test | Done |
-| 77.2 | GAME_SPEC 0.77.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (522 s, merge level, Stage 76 merged in): core, 881 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens unchanged. The test then narrowed to the cone's band (423 s to about 30 s). Awaiting the user's sign-off |
+| 77.2 | GAME_SPEC 0.77.0, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed (522 s, merge level, Stage 76 merged in): core, 881 ctest entries, ASan+UBSan, the Godot suite (13 of 13), the goldens unchanged. The test then narrowed to the cone's band (423 s to about 30 s). Signed off by the user |
 
 ## Open
 

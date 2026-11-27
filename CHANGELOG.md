@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.77.0 (2026-11-27, Stage 77)
+## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 
 - §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a
   fraction of a pixel a frame at the room's whole view) left its old shape behind, brighter, settled and never
