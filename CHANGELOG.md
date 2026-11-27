@@ -1,5 +1,12 @@
 # GAME_SPEC version history
 
+## Stage 84 (2026-11-27; GAME_SPEC stays 0.80.0: no behaviour of the game changes; signed off by the user)
+
+- The gates (`docs/TDD_84_GODOT_GATE.md`): the Godot step builds and runs only what needs the engine (the extension,
+  the import, the GUT suite: `make native PICTURES=0`), and the suite captures no supply's picture
+  (`ChemLab.capture_pictures` off): a new worktree's step about 20 s, from about 200 s. `make native` captures the
+  pictures bench by bench side by side, merged by key (`tools/merge_pictures.py`).
+
 ## 0.80.0 (2026-11-27, Stage 80, merged after 0.78.0; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings; §8, the fast equilibria (Stage 80, `docs/TDD_80_WALLS_AND_SEARCH.md`): a vessel's walls read
