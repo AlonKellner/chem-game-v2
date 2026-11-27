@@ -15,7 +15,7 @@ more. No behaviour of the game changes: every golden and digest as it was; GAME_
 | 75.4 | Each cell's mixtures kept: a probe's setup, the activity model's range | Done |
 | 75.5 | The column's diffusion over what its layers hold; a probe's pairs past 64 | Done |
 | 75.6 | Smaller: the gas exchange, a surface reaction's solvent | Done |
-| 75.7 | `make gates`; the user's sign-off | Open |
+| 75.7 | `make gates`; the user's sign-off | gates passed; sign-off open |
 
 Dropped from the plan, found in its exploration: ui.9, tutorial.1 and tutorial.2 do not replay the demo session
 (another bench, other commands, the tutorial's monitor and rig, a person's slider): starting them from saves would
@@ -46,9 +46,10 @@ The whole demo, `/usr/bin/time -l`, main against the branch back to back at a lo
 `chem_tool bench` prints `step cost: N instructions a step` (the process's retired instructions over the command
 loop, `lab/work.hpp`, shared with Stage 74's test). `make gates` runs `gate_cache.py stepcost` on the demo beside
 ctest (about a minute of one core): the count is kept in `~/Library/Caches/chem-game-v2/step_costs.json` by the
-binary's content and the data, with its source tree when clean; it is printed against the count for the tree where
-the branch left main (on main, its first parent's), with a `!!` line past `GATE_STEPCOST_WARN` (10 %). It never fails.
-Until a gate has run on a tree with the measure (this stage's merge), main's count is not known and it says so.
+binary's content and the data, with what it was built from (the `native`, `data` and `bench` trees, so a commit of
+documents alone, a sign-off, keeps it) when that has no edits; it is printed against the count for what main built
+from where the branch left it (on main, its first parent's), with a `!!` line past `GATE_STEPCOST_WARN` (10 %). It
+never fails. Main's first count is this stage's last (893,368), taken by the branch's own gate.
 
 ## 75.2 A cell's revision
 
@@ -91,6 +92,14 @@ to a fresh count: a write that drew no revision aborts there. The sanitizer gate
   leaves the matter revision.
 - Every digest as it was after each commit (`make sessions-check`, the demo record's fixture, D2); the conservation
   sweeps and `check_all`'s equivalence unchanged.
+
+## 75.7 The gates
+
+`make gates`: the sanitizers first failed every entry that read a cell's kept mixtures. The guard compared the whole
+particle array, and a `Mix` fills only as many particles as the table has (Stage 64), so the rest held whatever was
+in memory. Nothing reads them; the kept mixtures now hold the table's particles alone and zeros past them. Then
+every gate passed (603 s at a load of 45 to 48: not a measure of the gate), 653 entries under the sanitizers with
+every guard on.
 
 ## Open
 

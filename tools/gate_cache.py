@@ -32,9 +32,10 @@ written under a lock, so gates in several worktrees share what passed.
   gate_cache.py stepcost BINARY SESSION
       (Stage 75) the simulation's step cost: `BINARY bench SESSION`'s instructions
       a step, kept in step_costs.json beside the cache by the binary's content and
-      the data (an unchanged binary is not run again), with the source tree it was
-      built from when that tree is clean. Printed against the count for the tree
-      where this branch left main (main's own: its first parent's), with a `!!`
+      the data (an unchanged binary is not run again), with what it was built from
+      (native, data, bench) when that has no edits. Printed against the count for
+      what main built from where this branch left it (main's own: its first
+      parent's; a commit of documents alone changes neither), with a `!!`
       line above GATE_STEPCOST_WARN percent (10). It fails only if the bench does.
   gate_cache.py clear
 """
@@ -384,11 +385,20 @@ def git_or_empty(*args):
         return ""
 
 
+BUILT_FROM = ("native", "data", "bench")  # what the game and its sessions are made of: a document's commit is not
+
+
+def built_from(commit):
+    """The trees the game is built from at a commit, as one hash (a commit that changes only documents keeps it)."""
+    trees = [git_or_empty("rev-parse", f"{commit}:{path}").strip() for path in BUILT_FROM]
+    return hashlib.sha256(" ".join(trees).encode()).hexdigest() if all(trees) else ""
+
+
 def clean_tree():
-    """The source tree's hash when what the game is built from has no edits, else None."""
-    if git_or_empty("status", "--porcelain", "--", "native", "data", "bench").strip():
+    """What HEAD builds from when it has no edits there, else None."""
+    if git_or_empty("status", "--porcelain", "--", *BUILT_FROM).strip():
         return None
-    return git_or_empty("rev-parse", "HEAD^{tree}").strip() or None
+    return built_from("HEAD") or None
 
 
 def main_base():
@@ -399,7 +409,7 @@ def main_base():
         if base:
             if base == head:
                 base = git_or_empty("rev-parse", "HEAD^1").strip()
-            return base, git_or_empty("rev-parse", base + "^{tree}").strip()
+            return base, built_from(base)
     return "", ""
 
 
