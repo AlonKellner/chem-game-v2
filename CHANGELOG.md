@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.72.0 (2026-11-27, Stage 72; awaiting the user's sign-off)
+## 0.72.0 (2026-11-27, Stage 72; signed off by the user: "Approved, merge and proceed")
 
 - §6, the wall in rings (Stage 72, `docs/TDD_72_STEP_CHEAPER.md`): a floor's inside surface under half its glass found
   by ITP to the bisection's bracket of 1e-9 K, not by the bisection (9 evaluations a step where it took 26); where

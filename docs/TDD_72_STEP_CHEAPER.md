@@ -13,7 +13,7 @@ evidence (every printed result as it was) was in hand. GAME_SPEC 0.72.0.
 | 72.2 | A cell's temperature from the simulation's kept thermal state, bit for bit | Done |
 | 72.3 | The floor's surface by ITP to the bisection's 1e-9 K | Done |
 | 72.4 | The goldens re-recorded (with the user's approval), the evidence | Done |
-| 72.5 | `make gates`; the user's sign-off | gates passed; sign-off open |
+| 72.5 | `make gates`; the user's sign-off | signed off by the user, 2026-11-27: "Approved, merge and proceed" |
 
 ## 72.1 Where a step's time goes
 
