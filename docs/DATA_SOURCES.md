@@ -1497,3 +1497,26 @@ OBIGT's, their salts' pairs Pitzer and Mayorga's`.
 - **Pitzer pairs**: Pitzer and Mayorga 1973 (as pytzer and pitzer.dat transcribe it): LiCl Table I β⁽⁰⁾ 0.1494, β⁽¹⁾
   0.3074, C^φ 0.00359 (to 6 m); LiNO₃ 0.1420, 0.2780, −0.00551 (to 6 m); SrCl₂ Table VI unscaled 0.28575, 1.66725,
   −0.0013046 (to 4 m); Sr(NO₃)₂ 0.134625, 1.380, −0.019925 (to 2 m).
+
+## Flame emission (Stage 82)
+
+`data/flame.json` (`docs/TDD_82_FLAMES.md`). Read 2026-11-27. Gate: `measured: a flame's lines are NIST's at the
+burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
+- **Atomic lines**: the NIST Atomic Spectra Database v5 (Kramida, Ralchenko, Reader and the NIST ASD Team), lines
+  query 380 to 780 nm, air wavelengths, the neutral atom (I), E1 transitions with a transition probability: each line's
+  λ, A_ki, g_k and E_k, for Na, K, Li, Ca, Sr, Ba and Cu (six to nine lines each, the strongest at flame temperatures).
+  A line's light in a flame at T is in proportion to g_k A_ki exp(−hc E_k / kT) / λ over the ground level's g (NIST's
+  levels: 2S1/2 for the alkalis and copper, 1S0 for the alkaline earths), the partition function taken as its ground
+  level's g: at 2200 K the excited levels hold under 1 % of an atom's population but barium's (its 5d ³D levels at
+  9034 cm⁻¹, 4 %), and the partition function is common to an element's lines, so it moves no line's share within an
+  element, only an element's brightness against another's, by at most 4 %. At the lab
+  burner's 2200 K the strongest lines are sodium's D lines (588.995, 589.592), potassium's 766.49 and 769.90, lithium's
+  670.78, calcium's 422.67, strontium's 460.73, barium's 553.55, copper's 510.55 nm: the lines of the flame tests.
+- **Molecular bands**: Meyerriecks and Kosanke, "Color values and spectra of the principal emitters in colored flames",
+  J. Pyrotechnics 18 (2003), Table 2: CaOH, SrOH, BaOH and CuOH, each band's peak and relative intensity (salt
+  solutions in a propane flame); the peaks CaOH 625, SrOH 682, BaOH 513, CuOH 546 nm. Each band drawn as a Gaussian of
+  4 nm FWHM (their spectra's widths).
+- **Calibrated** (not measured, to how a flame test looks): the light of a mole in the flame (`per_mol`: a fresh drop
+  of 0.1 M, about 2 µmol, outshines the burner's own blue, as a sodium flame does), the bands' share of an alkaline
+  earth's and copper's light (Ca 0.9, Sr 0.85, Ba 0.8, Cu 0.95: their flames are their monohydroxides' colours, Gaydon's
+  and Meyerriecks and Kosanke's), a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).

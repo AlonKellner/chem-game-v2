@@ -288,6 +288,9 @@ struct OpticsBody {
 	// the rays it is hidden from (bits; Stage 46: a sensor's own body from its frame)
 	uint32_t hidden = 0;
 	const OpticsRelay *relay = nullptr; // a sensor display's (Stage 46)
+	// (Stage 82) a flame's: the light its metals add at each nanometre from 380, a multiple of the room's light per pixel of
+	// path (lab/flame.hpp); none: its own alone
+	const std::array<double, 401> *glow_add = nullptr;
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;

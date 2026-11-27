@@ -1,4 +1,6 @@
 #include "lab/ui.hpp"
+
+#include "lab/flame.hpp"
 #include "lab/contents.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
@@ -290,6 +292,7 @@ struct Ui::Impl {
 	std::map<std::string, ViewerState> viewers;
 	std::map<std::string, Picture> balances; // each balance's display as it last showed (Stage 50)
 	std::map<std::string, Picture> spectro_shows; // each spectrophotometer's two displays, "<id>:a" and "<id>:nm" (Stage 55)
+	std::map<std::string, std::array<double, 401>> flame_glows; // (Stage 82) each lit burner's metals' light, by its id
 	// a thermal camera's (Stage 48): its search, what it last read, the span it shows, what its screen is given
 	struct CameraState {
 		ThermalSearch search;
@@ -6674,6 +6677,17 @@ struct Ui::Impl {
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 					bodies[k].kelvin = v.celsius + 273.15; // its flame's temperature (Stage 46)
+					if (!v.flame_load.empty()) {
+						// (Stage 82) the metals in it: their light, from their amounts to 5 % (a flame's pixels keep their history
+						// while what fades in it moves by less)
+						std::vector<std::pair<std::string, double>> load;
+						for (const auto &[el, mol] : v.flame_load) {
+							load.emplace_back(el, std::exp(std::round(std::log(mol) / 0.05) * 0.05));
+						}
+						std::array<double, 401> &g = flame_glows[v.id];
+						g = flame::glow(load, v.celsius + 273.15);
+						bodies[k].glow_add = &g;
+					}
 				}
 			} else if (is_part_kind(v.kind) && (v.place == "bench" || (v.place == "trash" && i == trash_top()))) {
 				const bool circuit = v.kind == "circuit";

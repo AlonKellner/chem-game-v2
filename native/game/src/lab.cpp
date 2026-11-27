@@ -2,6 +2,7 @@
 #include "lab/bubbles.hpp"
 #include "lab/contents.hpp"
 #include "lab/control.hpp"
+#include "lab/flame.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
 #include "lab/notebook.hpp"
@@ -139,6 +140,8 @@ struct Item {
 	EdgeId heats; // a burner: its edge to the vessel over it
 	int under = -1; // a burner: that vessel
 	double valve = 0.0;
+	// (Stage 82) a burner: the metals in its flame (an element's symbol and its mol), each fading (lab/flame.hpp)
+	std::vector<std::pair<std::string, double>> flame_load;
 	int on = -1; // a bag or a condenser: the vessel whose mouth it is on
 	EdgeId joint; // its edge to that vessel
 	int holds = -1; // a vessel: what is on its mouth
@@ -2362,6 +2365,17 @@ struct Lab::Impl {
 		mid_step = true; // (moved before the step: a trace begun after it cannot start where the last one ended)
 	}
 	// By instruments, each vessel's thermometer follows it a step (Stage 52): first order, its probe's time constant
+	// (Stage 82) what is in each flame fades, by its 1/e time, a step at a time; a trace under a picomole is gone
+	void fade_flames() {
+		const double keep = std::exp(-STEP_SECONDS / flame::fade_s());
+		for (Item &item : items) {
+			for (auto &[el, mol] : item.flame_load) {
+				mol *= keep;
+			}
+			std::erase_if(item.flame_load, [](const auto &e) { return !(e.second > 1e-12); });
+		}
+	}
+
 	void follow_thermometers() {
 		if (!instruments) {
 			return;
@@ -3354,6 +3368,7 @@ struct Lab::Impl {
 			}
 		}
 		follow_thermometers();
+		fade_flames(); // (Stage 82)
 		follow_loggers();
 		relieve_pressure(); // its ledger empty: a burst takes its edges off (Stage 28)
 		if (!trials.empty()) {
@@ -3830,6 +3845,7 @@ struct Lab::Impl {
 			v.gives_way_kpa = (m.gives_way(item) + P_ATMOSPHERE) / 1000.0;
 		}
 		v.valve = item.valve;
+		v.flame_load = item.flame_load; // (Stage 82)
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
 		v.floor_mm = item.floor_mm;
@@ -6000,6 +6016,52 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		scale.tare = gross_g(scale);
 		return true;
 	}
+	if (what == "flame_test") {
+		// (Stage 82) a loop dipped in a vessel's solution and held in a lit burner's flame: what the drop carries of each
+		// metal the flame shows goes into the flame, and fades there. The drop is too small to count: the vessel keeps it
+		int burner = -1, from = -1;
+		if (!item(c, "burner", Kind::Burner, burner, why) || !item(c, "from", Kind::Vessel, from, why)) {
+			return false;
+		}
+		Item &flame = items[static_cast<size_t>(burner)];
+		if (!(flame.valve > 0.0)) {
+			why = "the burner " + flame.id + " is not lit";
+			return false;
+		}
+		const CellId cell = items[static_cast<size_t>(from)].cell;
+		const double litres = liquid_m3(cell) * 1000.0;
+		if (!(litres > 1e-7)) {
+			why = items[static_cast<size_t>(from)].id + " holds no liquid to dip a loop in";
+			return false;
+		}
+		const double share = flame::drop_ml() * 1e-3 / litres;
+		const CellState &state = world().snapshot_cell(cell);
+		const SpeciesTable &t = table();
+		bool any = false;
+		for (size_t s = 0; s < state.amount.size(); ++s) {
+			const SpeciesDef &def = t.species(SpeciesId{ static_cast<int32_t>(s) });
+			if (state.amount[s] <= 0 || def.phase != Phase::Aqueous) {
+				continue;
+			}
+			for (int e = 0; e < t.element_count(); ++e) {
+				const std::string symbol(t.element(e).symbol);
+				if (def.atoms[static_cast<size_t>(e)] > 0 && flame::shows(symbol)) {
+					const double mol = share * static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.atoms[static_cast<size_t>(e)];
+					auto at = std::find_if(flame.flame_load.begin(), flame.flame_load.end(), [&](const auto &x) { return x.first == symbol; });
+					if (at == flame.flame_load.end()) {
+						flame.flame_load.emplace_back(symbol, mol);
+					} else {
+						at->second += mol;
+					}
+					any = true;
+				}
+			}
+		}
+		std::sort(flame.flame_load.begin(), flame.flame_load.end());
+		record(flame.id, "flame_test", 1.0, "player");
+		note(Notice::Event, flame.id, any ? "the flame takes the colour of what " + items[static_cast<size_t>(from)].id + " holds" : "the flame keeps its own colour: nothing in " + items[static_cast<size_t>(from)].id + " colours a flame");
+		return true;
+	}
 	if (what == "valve") {
 		int burner = -1;
 		if (!item(c, "burner", Kind::Burner, burner, why)) {
@@ -7504,6 +7566,12 @@ std::string Lab::digest() const {
 	if (m.seed != 0) { // what a hand misses by is drawn from it (Stage 50): a bench without one digests as before
 		hash.update_u64(m.seed);
 	}
+	for (const Item &item : m.items) { // (Stage 82) what is in a flame: a lab with none digests as before
+		for (const auto &[el, mol] : item.flame_load) {
+			hash.update(el.data(), el.size());
+			hash.update_double(mol);
+		}
+	}
 	for (int32_t c = 0; c < world.cell_count(); ++c) {
 		const CellState &cell = world.snapshot_cell(CellId{ c });
 		for (const int64_t v : cell.amount) {
@@ -7804,6 +7872,13 @@ json Lab::Impl::save() const {
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
 		if (item.kind == Kind::Stopper) { // a lab without a stopper or a cap on saves as before (Stage 28)
 			list.back()["hold_n"] = bits(item.hold_n);
+		}
+		if (!item.flame_load.empty()) { // (Stage 82) a flame with nothing in it saves as before
+			json load = json::array();
+			for (const auto &[el, mol] : item.flame_load) {
+				load.push_back({ el, bits(mol) });
+			}
+			list.back()["flame_load"] = load;
 		}
 		if (item.retired) { // (Stage 61)
 			list.back()["retired"] = true;
@@ -8150,6 +8225,16 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			if (j.contains("hold_n") && !from_bits(j.at("hold_n"), item.hold_n)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
+			}
+			if (j.contains("flame_load")) { // (Stage 82)
+				for (const json &e : j.at("flame_load")) {
+					double mol = 0.0;
+					if (!e.is_array() || e.size() != 2 || !e.at(0).is_string() || !from_bits(e.at(1), mol)) {
+						why = "the save holds a flame's load that is not one";
+						return nullptr;
+					}
+					item.flame_load.emplace_back(e.at(0).get<std::string>(), mol);
+				}
 			}
 			if ((j.contains("nominal_ml") && !from_bits(j.at("nominal_ml"), item.nominal_ml)) || !from_bits(j.at("full"), item.full) || !from_bits(j.at("valve"), item.valve) || !from_bits(j.at("capacity"), item.capacity)
 					|| (j.contains("wall_mm") && !from_bits(j.at("wall_mm"), item.wall_mm)) || (j.contains("floor_mm") && !from_bits(j.at("floor_mm"), item.floor_mm))) {

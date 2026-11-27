@@ -95,6 +95,7 @@ struct ItemView {
 	double gives_way_kpa = 0.0;
 	double hold_n = 0.0;
 	double valve = 0.0; // a burner
+	std::vector<std::pair<std::string, double>> flame_load; // (Stage 82) a burner: the metals in its flame (symbol, mol)
 	double celsius = 0.0;
 	// its liquid's pH (GAME_SPEC §9, Stage 43): -log10 a(H+); none without a liquid
 	std::optional<double> ph;

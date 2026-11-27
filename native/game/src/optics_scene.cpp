@@ -349,7 +349,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const bool screen = body.shape == OpticsBody::Screen && body.image != nullptr && body.image_w > 0 && body.image_h > 0;
 			const bool sensor = body.shape == OpticsBody::Sensor && body.relay != nullptr;
 			const std::string made = screen ? "screen|" + std::to_string(screens.size()) + "|" + (body.surface ? body.surface : "")
-											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
+											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength) +
+						  (body.glow_add != nullptr ? "|" + std::to_string(fnv(body.glow_add->data(), body.glow_add->size() * sizeof(double))) : std::string()); // (Stage 82: a flame's metals' light)
 			auto found = shared.find(made);
 			if (found == shared.end()) {
 				const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
@@ -387,6 +388,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				for (int i = 0; i < ROW && (a != nullptr || b != nullptr) && !screen; ++i) {
 					const double from = a ? (*a)[static_cast<size_t>(i)] : 0.0, to = b ? (*b)[static_cast<size_t>(i)] : from;
 					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward));
+				}
+				// (Stage 82) and what the metals in a flame add, each nanometre's light (lab/flame.hpp)
+				for (int i = 0; i < ROW && body.glow_add != nullptr && !screen; ++i) {
+					base[GLOW_ROW * ROW + i] += static_cast<float>((*body.glow_add)[static_cast<size_t>(i)]);
 				}
 				found = shared.emplace(made, set).first;
 			}
