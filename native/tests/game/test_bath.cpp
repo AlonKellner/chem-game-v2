@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <fstream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -204,8 +205,9 @@ TEST_CASE("bath: on the screen, a tube carried over a beaker stands in it by the
 	}
 	CHECK(tube.place == "in");
 	CHECK(tube.stands_in == "beaker");
-	// drawn within the beaker's width, its foot near the beaker's
+	// drawn within the beaker's width (left of its middle: the first to stand in it), at the beaker's own scale
 	float nx = 0, ny = 0;
 	REQUIRE(ui->locate("item:tube", nx, ny));
-	CHECK(std::fabs(nx - bx) < 5.0f);
+	CHECK(nx < bx);
+	CHECK(nx > bx - 60.0f);
 }

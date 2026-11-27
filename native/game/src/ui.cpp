@@ -2745,14 +2745,27 @@ struct Ui::Impl {
 			return Rect{ holder.cx() - w / 2, holder.y - h - 4, w, h };
 		}
 		if (v.place == "in" && !v.stands_in.empty()) {
-			// (Stage 71) standing in another vessel, upright on its inside floor, at its middle
+			// (Stage 71) standing in another vessel, upright on its inside floor: the first a little left of its middle,
+			// the second right of it, a third at it (its middle free to drop another on while two stand there)
+			int before = 0;
+			for (int k = 0; k < index; ++k) {
+				before += view.items[static_cast<size_t>(k)].stands_in == v.stands_in ? 1 : 0;
+			}
 			for (size_t k = 0; k < view.items.size(); ++k) {
 				if (view.items[k].id == v.stands_in) {
 					const Rect outer = rect(static_cast<int>(k));
 					const ItemView &o = view.items[k];
 					const glass::Vessel *g = o.glassware.empty() ? nullptr : glass::find(o.glassware, o.nominal_ml);
 					const float floor_px = g != nullptr ? static_cast<float>(g->floor / g->height) * outer.h : 0.0f;
-					return Rect{ outer.cx() - w / 2, outer.y + outer.h - floor_px - h, w, h };
+					const float share = before == 0 ? 0.28f : before == 1 ? 0.72f : 0.5f;
+					// at the other's own scale: its real size in the other's pixels a centimetre
+					const glass::Vessel *mine = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
+					if (g != nullptr && mine != nullptr) {
+						const float per_cm = outer.h / static_cast<float>(g->height);
+						w = static_cast<float>(mine->widest()) * per_cm;
+						h = static_cast<float>(mine->height) * per_cm;
+					}
+					return Rect{ outer.x + outer.w * share - w / 2, outer.y + outer.h - floor_px - h, w, h };
 				}
 			}
 		}
@@ -2810,7 +2823,7 @@ struct Ui::Impl {
 	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			const std::string &place = view.items[static_cast<size_t>(i)].place;
-			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "circuit") ||
+			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "in" && place != "circuit") ||
 					!visible(i)) {
 				continue;
 			}
@@ -2997,7 +3010,7 @@ struct Ui::Impl {
 			return; // still in hand
 		}
 		const std::string &place = at >= 0 ? view.items[static_cast<size_t>(at)].place : std::string();
-		const bool stays = place == "bench" || place == "on" || place == "under" || (place == "outbox" && fresh_dropped_in_storage);
+		const bool stays = place == "bench" || place == "on" || place == "under" || place == "in" || (place == "outbox" && fresh_dropped_in_storage);
 		if (!stays) {
 			const std::string refused = message;
 			std::string no;
@@ -3322,8 +3335,8 @@ struct Ui::Impl {
 		const int target = item_at(x, y, index, true);
 		// first it comes off what it is joined to
 		const bool was_on = v.place == "on", was_under = v.place == "under";
-		if (target >= 0 && (target == v.on || target == v.under)) {
-			return; // put back where it was
+		if (target >= 0 && (target == v.on || target == v.under || (!v.stands_in.empty() && view.items[static_cast<size_t>(target)].id == v.stands_in))) {
+			return; // put back where it was (Stage 71: in the vessel it stands in)
 		}
 		if (!guided_drop(index, target, x, y)) {
 			return; // back where it was
@@ -3743,7 +3756,10 @@ struct Ui::Impl {
 				return; // let go and pressed again before it was back in the hand: it tilts again
 			}
 			const int target = item_at(x, y, drag, true);
-			if (pours_into(drag, target)) {
+			// (Stage 71) over its own place in the vessel it stands in: put down there, not poured into it
+			const ItemView &held = view.items[static_cast<size_t>(drag)];
+			const bool own = target >= 0 && !held.stands_in.empty() && view.items[static_cast<size_t>(target)].id == held.stands_in && own_place(drag, x, y);
+			if (!own && pours_into(drag, target)) {
 				if (mods & Ui::ModRight) {
 					if (guided() && !guided_drop(drag, target, x, y)) {
 						return;
@@ -5658,10 +5674,12 @@ struct Ui::Impl {
 		}
 		// on the bench a name is a label the screen writes over the pass: only for what is chosen (Stage 22). The
 		// cabinet and the outbox are the screen's own panels, and name what they hold
-		if ((v.place == "on" || v.place == "under" || v.place == "bench") && !chosen(index)) {
+		if ((v.place == "on" || v.place == "under" || v.place == "bench" || v.place == "in") && !chosen(index)) {
 			return;
 		}
-		if (v.place == "on") {
+		if (v.place == "in") { // (Stage 71) standing in a vessel: beside its top
+			text(r.x + r.w + 6, r.y + 16, label, WALL_INK, 14);
+		} else if (v.place == "on") {
 			text(r.x, r.y - 8, label, WALL_INK, 15);
 		} else if (v.place == "under") {
 			const Rect c = rect(index);

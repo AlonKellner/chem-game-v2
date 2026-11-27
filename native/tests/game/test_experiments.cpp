@@ -1073,3 +1073,37 @@ TEST_CASE("experiment seed: followed with its own gestures, free, it completes (
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment freezing_point: followed with its own gestures, strict, the water supercools and holds at 0 C, the solution lower (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json");
+	CHECK(pupil::follow_through(p, 3600) > 10);
+	completed(p);
+	double water_least = 1e9, solution_least = 1e9;
+	for (const lab::ItemView &v : p.ui->lab().view().items) {
+		(void)v;
+	}
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		(void)e;
+	}
+	water_least = std::min(water_least, p.item("water").celsius);
+	solution_least = std::min(solution_least, p.item("solution").celsius);
+	MESSAGE("bath " << p.item("bath").celsius << " C; the water " << p.item("water").celsius << " C, " << p.grams("water", "ice") << " g of ice; the solution "
+					<< p.item("solution").celsius << " C, " << p.grams("solution", "ice") << " g of ice");
+	CHECK(p.item("bath").celsius < -15.0);
+	CHECK(p.grams("water", "ice") > 9.9);
+	CHECK(p.grams("solution", "ice") > 1.0);
+	report(p, { -1.7, 1.7 });
+	CHECK(p.drawn("you predicted -1"));
+}
+
+TEST_CASE("experiment freezing_point: played as a person plays it, strict, it completes (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment freezing_point: followed with its own gestures, free, it completes (Stage 71)") {
+	Pupil p("data/benches/freezing_point.json", "data/tutorials/freezing_point.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

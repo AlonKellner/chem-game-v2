@@ -1,6 +1,6 @@
 {
 	"format": "chem-bench/2",
-	"note": "Freezing points (GAME_SPEC §8, §13.7, Stage 71; docs/CURRICULUM.md, experiment 33): a 250 mL beaker of 120 g of crushed ice from the freezer at -5 C, a jar of 40 g of sodium chloride, a test tube of 10 g of water and one of 10 g of water with 0.50 mol/kg of sodium chloride (0.292 g), both at the room's 20 C. Salt stirred into the ice melts it into brine that holds less water free, and the melting draws its heat from the bath: a freezing mixture, about -15 C. A tube stood in it cools, supercools below its freezing point until a first crystal starts, warms back to the freezing point and holds there while it freezes: 0 C for the water, about -1.7 C for the solution (the International Critical Tables' -1.67 C at 0.5 mol/kg).",
+	"note": "Freezing points (GAME_SPEC §8, §13.7, Stage 71; docs/CURRICULUM.md, experiment 33): a 250 mL beaker of 110 g of crushed ice and 15 g of its meltwater at 0 C, a jar of 40 g of sodium chloride, a test tube of 10 g of water and one of 10 g of water with 0.50 mol/kg of sodium chloride (0.292 g), both at the room's 20 C. Salt stirred into the ice melts it into brine that holds less water free, and the melting draws its heat from the bath: a freezing mixture, about -20 C (the model's ice and salt together at -23 C: the salt's dihydrate is not modelled, which sets the real one at -21.1 C). A tube stood in it cools, supercools below its freezing point until a first crystal starts, warms back to the freezing point and holds there while it freezes: 0 C for the water, about -1.7 C for the solution (the International Critical Tables' -1.67 C at 0.5 mol/kg).",
 	"grid": [
 		28,
 		15
@@ -17,16 +17,19 @@
 			"volume_ml": 250,
 			"wall": "glass",
 			"wall_g": 80,
-			"celsius": -5,
+			"celsius": 0,
 			"at": [
 				12,
 				7
 			],
-			"label": "crushed ice, from the freezer",
+			"label": "an ice bath: crushed ice and its meltwater",
 			"contents": {
 				"ice": {
-					"g": 120,
+					"g": 110,
 					"particles": 2000
+				},
+				"water": {
+					"g": 15
 				}
 			}
 		},
