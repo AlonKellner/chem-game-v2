@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.81.0 (2026-11-27, Stage 81; awaiting the user's sign-off)
+## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 81, `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part): **complexes**, each a fast
   equilibrium at its measured constant: copper's ammines (NBS's free energies), silver's (MINTEQ v4, NBS), zinc's and
