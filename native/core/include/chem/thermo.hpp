@@ -228,5 +228,9 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 // is false when a species it names has no thermodynamic data, or is dissolved
 // in a cell with no liquid.
 double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta = nullptr);
+// (Stage 75) several reactions' affinities in one cell at one temperature, each the value affinity() gives it: the
+// cell's mixtures and the solution's excess worked out once for them all
+void affinities(const SpeciesTable &table, const CellState &cell, std::span<const std::span<const Term>> reactions, double temperature, const CellMeta *meta, std::span<double> a,
+		std::span<bool> defined);
 
 } // namespace chem

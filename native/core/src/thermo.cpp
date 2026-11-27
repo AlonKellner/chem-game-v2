@@ -807,7 +807,7 @@ bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Te
 }
 
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
-	const Mix mix = mix_of(table, cell);
+	const Mix mix = mix_of(table, cell, false); // (Stage 75: the liquid's amount alone; the excess was worked out unread)
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;
 }
 
@@ -851,13 +851,12 @@ double combine(double standard, double mixing, double temperature, bool made_abs
 
 } // namespace
 
-double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta) {
+namespace {
+
+// a reaction's affinity in a cell whose mixtures are `mix` (affinity's, and Stage 75's affinities')
+double affinity_in(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta, const Mix &mix) {
 	defined = false;
 	const double ln_t = log(temperature / T0);
-	Mix mix = mix_of(table, cell);
-	if (is_sealed(meta)) {
-		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
-	}
 	double standard = 0.0; // -sum of nu_i (h_i - T s_i) at unit activity
 	double mixing = 0.0; // sum of nu_i ln a_i
 	bool made_absent = false;
@@ -886,6 +885,30 @@ double affinity(const SpeciesTable &table, const CellState &cell, std::span<cons
 	}
 	defined = true;
 	return combine(standard, mixing, temperature, made_absent, consumed_absent);
+}
+
+Mix mix_at(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta) {
+	Mix mix = mix_of(table, cell);
+	if (is_sealed(meta)) {
+		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
+	}
+	return mix;
+}
+
+} // namespace
+
+double affinity(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, double temperature, bool &defined, const CellMeta *meta) {
+	return affinity_in(table, cell, terms, temperature, defined, meta, mix_at(table, cell, temperature, meta));
+}
+
+void affinities(const SpeciesTable &table, const CellState &cell, std::span<const std::span<const Term>> reactions, double temperature, const CellMeta *meta, std::span<double> a,
+		std::span<bool> defined) {
+	const Mix mix = mix_at(table, cell, temperature, meta);
+	for (size_t r = 0; r < reactions.size() && r < a.size() && r < defined.size(); ++r) {
+		bool d = false;
+		a[r] = affinity_in(table, cell, reactions[r], temperature, d, meta, mix);
+		defined[r] = d;
+	}
 }
 
 AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const CellMeta *meta) :

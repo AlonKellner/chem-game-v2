@@ -900,10 +900,17 @@ bool Simulation::solve_together(CellId cell) {
 				on[n++] = r;
 			}
 		}
+		// (Stage 75) here's mixtures once for the n of them
+		std::array<std::span<const Term>, MOST> terms_of{};
+		std::array<double, MOST> found{};
+		std::array<bool, MOST> defined_of{};
 		for (size_t i = 0; i < n; ++i) {
-			bool defined = false;
-			a[on[i]] = affinity(table, here, equilibria_[which[on[i]]].terms(), t, defined, &meta);
-			if (!defined || a[on[i]] != a[on[i]] || a[on[i]] == HUGE_VAL || a[on[i]] == -HUGE_VAL) {
+			terms_of[i] = equilibria_[which[on[i]]].terms();
+		}
+		affinities(table, here, std::span<const std::span<const Term>>(terms_of.data(), n), t, &meta, std::span<double>(found.data(), n), std::span<bool>(defined_of.data(), n));
+		for (size_t i = 0; i < n; ++i) {
+			a[on[i]] = found[i];
+			if (!defined_of[i] || a[on[i]] != a[on[i]] || a[on[i]] == HUGE_VAL || a[on[i]] == -HUGE_VAL) {
 				return false;
 			}
 		}
