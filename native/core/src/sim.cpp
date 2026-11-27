@@ -36,7 +36,10 @@ namespace {
 // extent, so this is the last quantum before the reaction's own equilibrium.
 // A secant step from the two ends, a bisection every third: a few
 // evaluations when the equilibrium is near, never more than a bisection's.
-int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
+// (Stage 80) `at_none`: the affinity at no extent, the caller's (in the direction, > 0), or 0 where it has none. With
+// it the line through no extent and one quantum says where the affinity crosses zero; that quantum and the next are
+// asked first (a shift of a few quanta, the usual case, in two evaluations), and the search goes on from them.
+int64_t reach(const AffinityProbe &probe, bool forward, int64_t most, double at_none = 0.0) {
 	const auto value = [&](int64_t extent, double &v) {
 		double a = 0.0;
 		if (!probe.at(static_cast<double>(forward ? extent : -extent), a)) {
@@ -61,11 +64,38 @@ int64_t reach(const AffinityProbe &probe, bool forward, int64_t most) {
 	}
 	int64_t lo = 1;
 	v_lo = v_hi;
-	ok_hi = value(most, v_hi);
-	if (ok_hi && v_hi >= 0.0) {
-		return most;
-	}
 	int64_t hi = most;
+	bool bracketed = false; // (hi's value asked, and under 0 or undefined)
+	if (at_none > 0.0 && finite(at_none) && finite(v_lo) && at_none > v_lo) {
+		const double cross = at_none / (at_none - v_lo); // where the line crosses zero, in quanta
+		if (cross < static_cast<double>(most - 1)) {
+			const int64_t c = std::max<int64_t>(1, static_cast<int64_t>(cross));
+			double v_c = v_lo;
+			const bool ok_c = c == 1 || value(c, v_c);
+			if (ok_c && v_c >= 0.0) {
+				lo = c;
+				v_lo = v_c;
+				double v_next = 0.0;
+				const bool ok_next = value(c + 1, v_next);
+				if (!(ok_next && v_next >= 0.0)) {
+					return c; // the last quantum before it passes zero
+				}
+				lo = c + 1;
+				v_lo = v_next;
+			} else {
+				hi = c;
+				v_hi = v_c;
+				ok_hi = ok_c;
+				bracketed = true;
+			}
+		}
+	}
+	if (!bracketed) {
+		ok_hi = value(most, v_hi);
+		if (ok_hi && v_hi >= 0.0) {
+			return most;
+		}
+	}
 	for (int i = 0; hi - lo > 1; ++i) {
 		int64_t middle = lo + (hi - lo) / 2;
 		if (ok_hi && finite(v_lo) && finite(v_hi) && i % 3 != 2) {
@@ -902,7 +932,7 @@ bool Simulation::project(CellId cell) {
 				continue;
 			}
 			const bool forward = a > 0.0;
-			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward));
+			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward), forward ? a : -a);
 			if (size != 0) {
 				// a solid that appears out of the solution comes as its grains (a precipitate, Stage 44), not one lump
 				std::array<SpeciesId, MAX_TERMS> appears{};

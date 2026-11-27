@@ -16,6 +16,15 @@
   acid, 2 M sodium hydroxide; 0.0100 M EDTA, a pH 10 buffer and Eriochrome Black T).
 - Flame emission is a stage of its own (the user's split).
 
+## 0.80.0 (2026-11-27, Stage 80, merged after 0.78.0; signed off by the user: "Approved, merge and proceed")
+
+- §6, the wall in rings; §8, the fast equilibria (Stage 80, `docs/TDD_80_WALLS_AND_SEARCH.md`): a vessel's walls read
+  their temperatures, levels, water's activity and pressure on a grid (0.01 K, a micrometre, 1e-6, 0.01 Pa), each
+  ring's outside and contact worked out again only once that moved, a function of the state alone; an equilibrium's
+  search seeded by the line through no extent and one quantum. The demo 1.227 to 1.104 million instructions a step
+  (−10 %); the oxide gone 0.1 s later, the flask cool 0.2 s sooner, 0.12 mg more crystals; the sessions re-recorded
+  with the user's approval.
+
 ## 0.78.0 (2026-11-27, Stage 78; signed off by the user: "Approved, merge and proceed")
 
 - §12.3 (Stage 78, `docs/TDD_78_REFLECTION.md`; the user's request for reflection simulated as refraction is):
