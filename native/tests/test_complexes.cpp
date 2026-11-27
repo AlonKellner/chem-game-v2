@@ -80,12 +80,15 @@ TEST_CASE("measured: each complex's constant is its source's at 25 C (Stage 81)"
 		{ "Zn(OH)3-", { { zinc_ion, -1 }, { water, -3 }, { zinc_trihydroxo, 1 }, { hydrogen_ion, 3 } }, -28.091, 0.001, NAN },
 		{ "Zn(OH)4 2-", { { zinc_ion, -1 }, { water, -4 }, { zinc_tetrahydroxo, 1 }, { hydrogen_ion, 4 } }, -40.488, 0.001, NAN },
 		{ "Al(OH)4-", { { aluminium_ion, -1 }, { water, -4 }, { aluminium_tetrahydroxo, 1 }, { hydrogen_ion, 4 } }, -22.688, 0.001, 173.24 },
-		// iron(III) thiocyanate: Below, Connick and Coppel 1958's Q1 = 146 at 0.40 ionic strength, by Davies's equation
-		// to nought (2.981); Ozutsumi et al. 1992's second step likewise (1.637)
-		{ "FeSCN 2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -1 }, { iron_thiocyanate, 1 } }, 2.981, 0.001, -6.694 },
-		{ "Fe(SCN)2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -2 }, { iron_dithiocyanate, 1 } }, 4.619, 0.001, -11.0 },
-		// cobalt chlorides: ThermoChimie's (sit.dat 2953, 2965, 2971)
-		{ "CoCl4 2-", { { cobalt_ion, -1 }, { chloride_ion, -4 }, { cobalt_tetrachloro, 1 } }, -2.09, 0.001, 22.57 },
+		// iron(III) thiocyanate: calibrated in the model's own activities to Below, Connick and Coppel 1958's Q1 = 146 at
+		// 0.40 ionic strength (3.5085; by Davies's equation the constant at nought would be 2.981) and Lister and
+		// Rivington's Q2 = 15.5 at 0.5 (the next test holds them); their heats Below et al.'s and Ozutsumi et al.'s
+		{ "FeSCN 2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -1 }, { iron_thiocyanate, 1 } }, 3.5085, 0.001, -6.694 },
+		{ "Fe(SCN)2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -2 }, { iron_dithiocyanate, 1 } }, 5.6655, 0.001, -11.0 },
+		// cobalt's tetrachloro: calibrated in the model's own activities to Bjerrum, Halonin and Skibsted 1975's alpha4
+		// = 0.496 in 8.23 M HCl (ThermoChimie's -2.09 at nought, sit.dat 2971, with the model's activities that far
+		// past Pitzer's range, put all of it blue); its heat ThermoChimie's
+		{ "CoCl4 2-", { { cobalt_ion, -1 }, { chloride_ion, -4 }, { cobalt_tetrachloro, 1 } }, -13.256, 0.001, 22.57 },
 		// chromium(VI): NBS's rows (p. 2-197) against MINTEQ v4's constants (lines 4984, 5000; NIST 46.4)
 		{ "HCrO4-", { { chromate_ion, -1 }, { hydrogen_ion, -1 }, { hydrogen_chromate_ion, 1 } }, 6.51, 0.05, 2.0 },
 		{ "Cr2O7 2-", { { chromate_ion, -2 }, { hydrogen_ion, -2 }, { dichromate_ion, 1 }, { water, 1 } }, 14.56, 0.06, -15.0 },
@@ -125,24 +128,51 @@ TEST_CASE("complexes: ammonia turns copper deep blue and dissolves silver chlori
 	}
 }
 
-TEST_CASE("complexes: iron(III) thiocyanate at Below, Connick and Coppel's quotient; cobalt blue in strong hydrochloric acid and warm; dichromate in acid (Stage 81)") {
+TEST_CASE("measured: iron(III) thiocyanate at Below, Connick and Coppel's and Lister and Rivington's quotients; cobalt blue at Bjerrum's chloride, and warm; dichromate in acid (Stage 81)") {
 	using namespace builtin;
-	// Below et al.'s solutions: 0.4 ionic strength, acid enough that iron(III) does not hydrolyse; their quotient 146
-	// (perchlorate's; here nitrate's, Pitzer's coefficients in place of Davies's: within a factor of 1.6)
-	const CellState red = testing::settled(Cell().put(iron_iii_nitrate_aq, 0.001).put(potassium_thiocyanate_aq, 0.001).put(nitric_acid_aq, 0.1).put(sodium_nitrate_aq, 0.29).state, T0);
-	const double q = mol_of(red, iron_thiocyanate) / (mol_of(red, iron_iii_ion) * mol_of(red, thiocyanate_ion));
-	MESSAGE("FeSCN2+ quotient at 0.4 ionic strength: " << q << " (Below et al.: 146)");
-	CHECK(q > 146.0 / 1.6);
-	CHECK(q < 146.0 * 1.6);
-	// cobalt: in water pink (no tetrachloro); in 10 mol/kg hydrochloric acid a good share blue, more when warm
+	const auto litres = [](const CellState &e) { return fill_of(builtin_species(), e, T0).condensed * 1000.0; };
+	// Below et al.'s solutions: iron(III) in excess, 0.1 M acid, the ionic strength by sodium (perchlorate's there,
+	// nitrate's here): Q1 = 146 at 0.40, a molar quotient; at 1.00 they measured 123, where the model's iron(III), with
+	// no pair of its own in Pitzer's model, gives about 45 (declared)
+	{
+		const double fe = 0.002, scn = 0.0001, h = 0.1, na = 0.40 - 6.0 * fe - h - scn;
+		const CellState e = testing::settled(Cell().put(iron_iii_nitrate_aq, fe).put(potassium_thiocyanate_aq, scn).put(nitric_acid_aq, h).put(sodium_nitrate_aq, na).state, T0);
+		const double L = litres(e), q = (mol_of(e, iron_thiocyanate) / L) / ((mol_of(e, iron_iii_ion) / L) * (mol_of(e, thiocyanate_ion) / L));
+		MESSAGE("FeSCN2+ quotient at 0.40 ionic strength: " << q << " (Below et al.: 146)");
+		CHECK(q == doctest::Approx(146.0).epsilon(0.02));
+	}
+	// Lister and Rivington (Below et al.'s Table I): Q2 = 15.5 at 0.5
+	{
+		const double fe = 0.0001, scn = 0.05, h = 0.1, na = 0.5 - 0.0006 - h - scn;
+		const CellState e = testing::settled(Cell().put(iron_iii_nitrate_aq, fe).put(potassium_thiocyanate_aq, scn).put(nitric_acid_aq, h).put(sodium_nitrate_aq, na).state, T0);
+		const double L = litres(e), q2 = (mol_of(e, iron_dithiocyanate) / L) / ((mol_of(e, iron_thiocyanate) / L) * (mol_of(e, thiocyanate_ion) / L));
+		MESSAGE("Fe(SCN)2+ step quotient at 0.5: " << q2 << " (Lister and Rivington: 15.5)");
+		CHECK(q2 == doctest::Approx(15.5).epsilon(0.02));
+	}
+	// cobalt: Bjerrum, Halonin and Skibsted's alpha4 against HCl molarity (Table 1): 0.166 at 7.12 M, 0.496 at 8.23 M,
+	// 0.765 at 9.17 M; the model's held at 8.23 M, steeper about it (declared), and in water none of it
+	double last = 0.0;
+	for (const auto &[molar, alpha] : { std::pair{ 7.12, 0.166 }, std::pair{ 8.23, 0.496 }, std::pair{ 9.17, 0.765 } }) {
+		double lo = 1.0, hi = 20.0, m = 0.0;
+		for (int k = 0; k < 40; ++k) {
+			m = 0.5 * (lo + hi);
+			(m / litres(Cell().put(hydrochloric_acid_aq, m).state) < molar ? lo : hi) = m;
+		}
+		const CellState e = testing::settled(Cell().put(hydrochloric_acid_aq, m).put(cobalt_chloride_aq, 0.0004).state, T0);
+		const double a = mol_of(e, cobalt_tetrachloro) / (mol_of(e, cobalt_tetrachloro) + mol_of(e, cobalt_ion));
+		MESSAGE("cobalt as CoCl4 2- in " << molar << " M HCl: " << a << " (Bjerrum et al.: " << alpha << ")");
+		CHECK(a > last);
+		if (molar == 8.23) {
+			CHECK(a == doctest::Approx(alpha).epsilon(0.03));
+			// warmer, bluer (its formation takes in heat: 22.57 kJ)
+			const CellState warm = testing::settled(Cell().put(hydrochloric_acid_aq, m).put(cobalt_chloride_aq, 0.0004).state, T0 + 40.0);
+			CHECK(mol_of(warm, cobalt_tetrachloro) > 1.4 * mol_of(e, cobalt_tetrachloro)); // (0.50 to 0.74 of it, 40 K warmer)
+		}
+		last = a;
+	}
 	const CellState pink = testing::settled(Cell().put(cobalt_chloride_aq, 0.01).state, T0);
-	const CellState acid = testing::settled(Cell().put(cobalt_chloride_aq, 0.01).put(hydrochloric_acid_aq, 10.0).state, T0);
-	const CellState warm = testing::settled(Cell().put(cobalt_chloride_aq, 0.01).put(hydrochloric_acid_aq, 10.0).state, T0 + 50.0);
-	MESSAGE("cobalt as CoCl4 2-: in water " << mol_of(pink, cobalt_tetrachloro) << ", in 10 m HCl " << mol_of(acid, cobalt_tetrachloro) << ", warm " << mol_of(warm, cobalt_tetrachloro));
-	CHECK(mol_of(pink, cobalt_tetrachloro) < 1e-8);
-	CHECK(mol_of(acid, cobalt_tetrachloro) > 0.0005);
-	CHECK(mol_of(warm, cobalt_tetrachloro) > mol_of(acid, cobalt_tetrachloro));
-	// chromate: in water yellow chromate; with acid to pH ~1 most of the chromium as dichromate
+	CHECK(mol_of(pink, cobalt_tetrachloro) < 1e-9);
+	// chromate: in water yellow chromate; with acid most of the chromium as dichromate
 	const CellState yellow = testing::settled(Cell().put(potassium_chromate_aq, 0.05).state, T0);
 	const CellState orange = testing::settled(Cell().put(potassium_chromate_aq, 0.05).put(nitric_acid_aq, 0.2).state, T0);
 	MESSAGE("chromium as dichromate: in water " << 2.0 * mol_of(yellow, dichromate_ion) / 0.05 << ", in acid " << 2.0 * mol_of(orange, dichromate_ion) / 0.05);

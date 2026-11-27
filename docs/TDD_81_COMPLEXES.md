@@ -24,7 +24,7 @@ visible). Stage numbers: 80 is another session's (a vessel's walls on a grid), s
 |---|---|---|
 | 81.1 | The complexes: chromium, thiocyanate, the ammines, the hydroxo complexes, iron(III)'s thiocyanates, cobalt's tetrachloro, chromate and dichromate; their constants gated | done |
 | 81.2 | Their colours; gated | done |
-| 81.3 | FeSCN²⁺'s and CoCl₄²⁻'s constants in the model's activities (measured quotients, data being read) | |
+| 81.3 | FeSCN²⁺'s and CoCl₄²⁻'s constants calibrated in the model's activities (Below et al.'s Q₁ 146 at 0.40, Lister and Rivington's Q₂ 15.5 at 0.5, Bjerrum et al.'s α₄ 0.496 at 8.23 M HCl) | done |
 | 81.4 | EDTA and Eriochrome Black T (data being gathered) | |
 | 81.5 | Flame emission: lithium and strontium, the NIST lines and the flame's bands | |
 | 81.6 | The lab: reagents, the calculator's formulas, `chem_tool study complexes` | |
@@ -32,8 +32,11 @@ visible). Stage numbers: 80 is another session's (a vessel's walls on a grid), s
 
 ## Open
 
-- Debye and Hückel alone for a complex within Pitzer's model takes a highly charged ion's activity too low (no pair
-  of its own): FeSCN²⁺'s quotient at 0.4 ionic strength 43 against Below et al.'s 146 with the zero-ionic-strength
-  constant (81.3 calibrates it).
+- Debye and Hückel alone for an ion with no pair of its own in Pitzer's model takes a highly charged ion's activity
+  too low and falling too fast: FeSCN²⁺'s constant is calibrated to Below et al.'s 146 at 0.40, but at 1.00 the
+  model gives about 45 against their 123. A pair for iron(III) with nitrate (none found open) would mend it.
+- CoCl₄²⁻'s constant is calibrated to Bjerrum et al.'s α₄ at 8.23 M HCl; about it the model's rise is three times
+  steeper (0.0085 at 7.12 M against 0.166, 0.986 at 9.17 M against 0.765): its chloride's activity that far past
+  Pitzer's range.
 - CoCl⁺, CoCl₂ and CoCl₃⁻ are left out (with Pitzer and Mayorga's CoCl₂ pair, fitted as wholly dissociated, the four
   did not settle in strong hydrochloric acid); Zn(OH)₂(aq) and Al(OH)₃(aq), neutral and minor, likewise.
