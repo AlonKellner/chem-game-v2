@@ -4,6 +4,7 @@
 // docs/DATA_SOURCES.md, "Metals and precipitates (Stage 76)".
 #include "tables.hpp"
 #include "chem/builtin_ids.hpp"
+#include "chem/optics.hpp"
 #include "chem/thermo.hpp"
 
 #include <doctest/doctest.h>
@@ -194,4 +195,20 @@ TEST_CASE("solubility: silver chloride and barium sulfate dissolve to their solu
 	// mixed, silver nitrate and sodium chloride: the precipitate takes nearly all of the silver
 	const CellState mixed = testing::settled(Cell().put(silver_nitrate_aq, 0.01).put(sodium_chloride_aq, 0.01).state, T0);
 	CHECK(mol_of(mixed, silver_chloride) == doctest::Approx(0.01).epsilon(0.002));
+}
+
+TEST_CASE("measured: cobalt(II)'s and FeOH2+'s absorption are their sources' (Stage 76)") {
+	// Ballhausen and Jorgensen 1955, Fig. 2: [Co(H2O)6]2+ 4.8 at 512 nm, 3.3 at 470, 2.2 at 550, 0.65 at 420 (read from
+	// the figure); FeOH2+ (Byrne and Kester 1978; King 1988): 380 nm 300 (the visible's first row of the pass), its tail
+	// past it the band's. The model's decadic molar absorptivity at 1 nm from 380
+	const optics::Spectrum &co = optics::spectrum(builtin::cobalt_ion);
+	const optics::Spectrum &fe = optics::spectrum(builtin::iron_hydroxo_ion);
+	const auto at = [](const optics::Spectrum &s, int nm) { return s[static_cast<size_t>(nm - 380)]; };
+	CHECK(at(co, 512) == doctest::Approx(4.8).epsilon(0.03));
+	CHECK(std::abs(at(co, 470) - 3.3) < 0.3);
+	CHECK(std::abs(at(co, 550) - 2.2) < 0.3);
+	CHECK(std::abs(at(co, 420) - 0.65) < 0.3);
+	CHECK(at(fe, 380) == doctest::Approx(300.0).epsilon(0.05));
+	CHECK(at(fe, 450) < at(fe, 400) / 4.0); // yellow: it absorbs the violet and blue, not the green
+	CHECK(at(fe, 550) < 1.0);
 }

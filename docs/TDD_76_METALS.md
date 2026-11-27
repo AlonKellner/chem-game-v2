@@ -46,8 +46,8 @@ rest of T6.
 |---|---|---|
 | 76.1 | The elements, the ions, the retired units; the activity model | done |
 | 76.2 | The precipitates at their solubility products; hydrolysis | done |
-| 76.3 | The colours | |
-| 76.4 | The lab: supplies, the calculator's formulas, `chem_tool study precipitates` | |
+| 76.3 | The colours | done |
+| 76.4 | The lab: supplies, the calculator's formulas, `chem_tool study precipitates` | done |
 | 76.5 | The goldens, the documents, `make gates`, the user's sign-off | |
 
 ## Open

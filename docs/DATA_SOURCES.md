@@ -1341,3 +1341,16 @@ Calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt, nitrate, t
   Stage 64's salts); iron(II) hydroxide's greenish white, iron(III) hydroxide's rust brown (sRGB about 139, 79, 45
   under D65), cobalt hydroxide's rose pink (221, 170, 166) and silver oxide's dark brown (75, 65, 57) searched and not
   found measured, each a reflectance shape **calibrated** to the colour it is described as.
+- **The ions' colours** (`data/optics/media.json`, Gaussians in wavenumber):
+  - *Cobalt(II)*: Ballhausen and Jørgensen 1955 (Acta Chem. Scand. 9, 397, Fig. 2; the scan through the Wayback
+    Machine): [Co(H₂O)₆]²⁺ in 2 M NH₄NO₃ at 25 C, its maximum at 512 nm (the text) with ε 4.8, a shoulder at 470 to
+    480 nm (3.3 to 3.7), read from the figure every 10 nm from 400 to 600 nm (±0.15). Two bands, 19,450 cm⁻¹ (2,700
+    wide, 4.0) and 21,600 (3,500, 2.0), give it within 0.25.
+  - *FeOH²⁺*: Byrne and Kester 1978 as Elrod 1979 (M.S. thesis, University of Rhode Island, Table 10) quotes it, 1986
+    at 290 nm and 2024 at 300; King 1988 (Ph.D. dissertation, URI, Table 1, as ratios to the 272 nm isosbestic
+    point's 1457: 2008 at 300, 1898 at 310, 1378 at 330), his Fig. 1 separated into its two species to 385 nm (755 at
+    350, 300 at 380), all in 0.68 m NaClO₄ at 25 C. One band at 33,700 cm⁻¹ (8,900 wide, 2,000) gives it within 5 %;
+    its tail past 390 nm (141 at 400, 20 at 450) is the band's, **not measured** (Byrne and Kester 1981, J. Solution
+    Chem. 10, 51, reports to 400 nm, behind a paywall). Iron(III)'s yellow is this tail.
+  - Fe³⁺'s own absorption, under about 100 past 330 nm, and iron(II)'s, at 960 nm, are left out: neither colours a
+    solution in the visible.
