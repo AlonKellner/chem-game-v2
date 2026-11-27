@@ -66,6 +66,5 @@ and passes alone. Run again from the result cache (11 entries), every gate passe
 
 - `signals.12` fails under a heavy load (three gates of the last five, the machine at 20 to 50); a cost held by
   CPU time still feels a crowded machine.
-
 - The hand-over at Ra = 10⁷ (8.37 to 8.35) steps up by 2 to 6 %; a blend would want Raithby and Hollands' own
   method, which was not read.
