@@ -1481,3 +1481,19 @@ measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each com
   610 nm (his table's 32,300 at 615); In³⁻ orange, 20,900 at 500 nm; MgIn⁻ wine red, 33,200 at 560 nm (its red tail
   an upper bound: 5–10 % free dye); CaIn⁻ red, 29,300 at 540 nm. H₂In⁻'s, red, not found (his pH 3.91 curve shows no
   band, the dye aggregated): **calibrated**, MgIn⁻'s.
+
+## Lithium and strontium (Stage 82)
+
+For flame tests (`docs/TDD_82_FLAMES.md`). Read 2026-11-27. Gate: `measured: lithium's and strontium's ions are NBS's and
+OBIGT's, their salts' pairs Pitzer and Mayorga's`.
+- **Elements**: CIAAW's abridged weights, Li 6.94, Sr 87.62.
+- **Ions**: NBS 1982, the ao rows: Li⁺ p. 2-290, ΔfH° −278.49, ΔfG° −293.31, S° 13.4 (Cp° 68.6); Sr²⁺ p. 2-276, −545.80,
+  −559.48, −32.6 (no Cp°). Cp° and V° from OBIGT (`inorganic_aq.csv` lines 2 and 9, Shock and Helgeson 1988): Li⁺ 14.2
+  cal, −0.87 cm³; Sr²⁺ −10.05 cal, −17.41 cm³; on the model's footing (Cp − 216.35 z, V − 16.74 z). NBS's and OBIGT's
+  Li⁺ Cp° differ (68.6 against 59.41 J), and Sr²⁺'s ΔfG° by 4.4 kJ: NBS's enthalpy and entropy, OBIGT's Cp° and V°,
+  as for Stage 76's ions.
+- **Diffusion at 25 C**: the CRC Handbook (Vanýsek): Li⁺ 1.029e-9, Sr²⁺ 0.791e-9 m²/s (their conductances' Nernst–
+  Einstein values; PHREEQC's −dw 1.03e-9 and 0.794e-9).
+- **Pitzer pairs**: Pitzer and Mayorga 1973 (as pytzer and pitzer.dat transcribe it): LiCl Table I β⁽⁰⁾ 0.1494, β⁽¹⁾
+  0.3074, C^φ 0.00359 (to 6 m); LiNO₃ 0.1420, 0.2780, −0.00551 (to 6 m); SrCl₂ Table VI unscaled 0.28575, 1.66725,
+  −0.0013046 (to 4 m); Sr(NO₃)₂ 0.134625, 1.380, −0.019925 (to 2 m).
