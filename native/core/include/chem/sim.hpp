@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chem/thermo.hpp"
+#include "chem/error.hpp"
 #include "chem/world.hpp"
 
 #include <optional>
@@ -146,7 +147,7 @@ public:
 private:
 	void begin_step();
 	const Thermal &thermal(CellId cell);
-	const Thermal &kept_thermal(size_t c, const CellState &state, const CellMeta &meta) const;
+	const Thermal &kept_thermal(CellId cell) const;
 	double column_kelvin(CellId cell); // a column's layer's temperature, T0 where it has none (strata.cpp)
 	Refusal transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount> amounts, Energy energy);
 	Refusal transform(CellId cell, const Reaction &reaction, int64_t extent);
@@ -204,15 +205,39 @@ private:
 	std::vector<uint8_t> thermal_valid_;
 	bool in_step_ = false; // (Stage 72) thermal_valid_ is this step's: between begin_step's sizing and the step's close
 	// what each cell's kept thermal state was derived from (Stage 53): the same state and meta give it again, so a
-	// cell at rest (a vessel's ring of glass) is not derived anew each step
+	// cell at rest (a vessel's ring of glass) is not derived anew each step. (Stage 75) By the cell's revision
+	// (World::revision): the same revision is the same state and meta. Where an assertion aborts (Debug, the
+	// sanitizers) the state and meta are kept too, and a revision that held while they changed (a write that drew none)
+	// aborts.
 	struct ThermalKey {
 		bool known = false;
+		uint64_t revision = 0;
+#if CHEM_ASSERT_ABORTS
 		int64_t energy = 0;
 		std::vector<int64_t> amount;
 		double volume = 0.0;
 		bool sealed = false, rigid = false, reservoir = false;
+#endif
+		bool same(const World &world, CellId cell) const;
+		void keep(const World &world, CellId cell);
 	};
 	mutable std::vector<ThermalKey> thermal_key_;
+	// (Stage 75) each cell's sums over its matter (matter_sums), by its matter revision: a cell that only took or gave
+	// energy (conduction) has its temperature from them, the same value
+	struct KeptSums {
+		bool known = false;
+		uint64_t revision = 0;
+		MatterSums sums;
+	};
+	mutable std::vector<KeptSums> sums_;
+	// (Stage 75) each cell's mixtures (cell_mixtures), by its matter revision: its probes and its range read them
+	struct KeptMixtures {
+		bool known = false;
+		uint64_t revision = 0;
+		CellMixtures mixtures;
+	};
+	std::vector<KeptMixtures> mixtures_;
+	const CellMixtures &mixtures(CellId cell);
 	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly
 	std::vector<ThermalKey> rest_key_;
 	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)

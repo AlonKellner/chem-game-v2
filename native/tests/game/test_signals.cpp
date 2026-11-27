@@ -4,11 +4,7 @@
 #include "lab/signals.hpp"
 
 #include <doctest/doctest.h>
-#ifdef __APPLE__
-#include <libproc.h>
-#include <sys/resource.h>
-#include <unistd.h>
-#endif
+#include "lab/work.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -501,21 +497,7 @@ TEST_CASE("signals: G1 and G2 fire on a corrupted state (Stage 13)") {
 	CHECK_FALSE(lab::check_G1(settings, [](const std::string &, const std::string &) { return std::optional<double>(0.4); }).empty());
 }
 
-// (Stage 74) the work a run does, as the instructions the process retired: the same on a fast core and a slow one,
-// under any load (the thread's own time, Stage 13 to 73, was a core's speed too: a gate's crowded machine moved the
-// thread to its efficiency cores, two to three times slower, and three gates in five failed); elsewhere, the thread's
-// own time
-static double work_done() {
-#ifdef __APPLE__
-	rusage_info_v4 r{};
-	if (proc_pid_rusage(getpid(), RUSAGE_INFO_V4, reinterpret_cast<rusage_info_t *>(&r)) == 0 && r.ri_instructions > 0) {
-		return static_cast<double>(r.ri_instructions);
-	}
-#endif
-	timespec t{};
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &t);
-	return static_cast<double>(t.tv_sec) * 1e9 + static_cast<double>(t.tv_nsec);
-}
+using lab::work_done; // (Stage 74; lab/work.hpp from Stage 75)
 
 TEST_CASE("signals: three monitors cost little at 600x (Stage 13)") {
 	struct Cost {

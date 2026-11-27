@@ -100,6 +100,13 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
   person's gestures keep their frames.
 - **The budget** (Stage 68): the summary names every release entry over `GATE_BUDGET_S` (60 s). A new long one
   takes one of the ways here: a fixture, parts, `sparse()`, coarse frames where only its end is held.
+- **The step's cost at every merge gate** (Stage 75): `make gates` plays the demo once unchecked beside ctest
+  (`chem_tool bench`, about a minute of one core) and prints its instructions a step, against main's where the branch
+  left it: `step cost: N instructions a step (demo), +X % against main's at <sha>`, and a `!!` line past
+  `GATE_STEPCOST_WARN` percent (10). It never fails the gate. The counts are kept in
+  `~/Library/Caches/chem-game-v2/step_costs.json` by the binary's content and the data, with the source tree when
+  it was clean, so an unchanged binary is not played again and a branch's last merge gate gives main its count.
+  `make gate` takes it with `GATE_STEPCOST=1`.
 - **A cost is held by the work, not the clock** (Stage 74): a test that bounds what something costs compares the
   instructions the process retired (`proc_pid_rusage`, `ri_instructions`; `test_signals.cpp`'s `work_done`), as a
   share of the run it adds to. On a gate's crowded machine a thread moves between the performance cores and the

@@ -23,6 +23,18 @@
   beside it. §13.7 (the user's report: the experiments hard to navigate): **the experiments' list scrolled and
   searched** (one column, the wheel and a bar, a search field matching titles, summaries and ids; plays reach a row
   out of sight by `lab::scroll_to`).
+
+## Stage 75 (2026-11-27; GAME_SPEC stays 0.77.0 (merged after Stages 71, 76 and 77): no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+
+- The step (`docs/TDD_75_STEP_SCALES.md`): 1.136 to 0.894 million instructions a step on the demo (−21 %), every
+  digest as it was. A cell's revision and matter revision (`World::revision`, `matter_revision`): the thermal state,
+  a cell's rest and a vessel's walls kept by them, a cell's sums over its matter and its mixtures kept while only
+  energy moves (conduction), each hit held to the full state where assertions abort. The joint solve's mixtures once
+  an iteration; a probe's setup and the activity model's range from the kept mixtures; the column's diffusion over
+  what its layers hold.
+- The gates: `make gates` prints the step's cost in instructions against main's where the branch left it, warning
+  past 10 % (`gate_cache.py stepcost`, `step_costs.json` in the shared cache).
+
 ## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 
 - §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a
