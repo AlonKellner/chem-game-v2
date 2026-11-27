@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.76.0 (2026-11-27, Stage 76)
+## 0.76.0 (2026-11-27, Stage 76; signed off by the user: "Approved, merge and proceed")
 
 - §9, §10 (Stage 76, `docs/TDD_76_METALS.md`; `docs/CURRICULUM.md`, step E's first part: C1's metals, C3's
   precipitates): **calcium, magnesium, barium, silver, iron, zinc, aluminium and cobalt**, nitrate, 23 salts, the

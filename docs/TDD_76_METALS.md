@@ -48,6 +48,15 @@ rest of T6.
 | 76.2 | The precipitates at their solubility products; hydrolysis | done |
 | 76.3 | The colours | done |
 | 76.4 | The lab: supplies, the calculator's formulas, `chem_tool study precipitates` | done |
-| 76.5 | The goldens, the documents, `make gates`, the user's sign-off | |
+| 76.5 | The goldens, the documents, `make gates`, the user's sign-off | done |
+
+## The goldens (approved by the user, 2026-11-27: "Approved, merge and proceed")
+
+- Both sessions' every command on its recorded step and every printed result as it was; their digests moved with the
+  state's 48 more species (each new element at nought quanta).
 
 ## Open
+
+- A precipitate forms and dissolves at once, and as one form; zinc's and aluminium's hydroxides do not yet redissolve in
+  excess base (their complexes: step E's next stage).
+- FeOH2+'s absorption past 390 nm, iron(III)'s yellow, is its band's tail: Byrne and Kester 1981 (to 400 nm) unread.
