@@ -82,8 +82,20 @@ core in ions (Stage 63), then **new elements, weak acids and bases and indicator
 | 64.4 | Phthalate and KHP | done |
 | 64.5 | The indicators: their equilibria and spectra | done |
 | 64.6 | The lab: benches, supplies, readings, the calculator | done |
-| 64.7 | The goldens: the evidence and the user's approval | in progress |
-| 64.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 64.7 | The goldens: the evidence and the user's approval | done |
+| 64.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | done |
+
+## The goldens (approved by the user, 2026-11-27: "Approved, merge and proceed")
+
+- **demo**: the first eight commands end on the same steps; then the flask cools below 30 C 5 steps sooner, the copper
+  oxide dissolves 14.7 s sooner, and the flask reaches 21 C 87 s sooner (825,296 steps to 820,081). Crystals
+  10.0619 g in 1,383 of 1,825 um to 10.0583 g in 1,405 of 1,815 um; the balloon's CO2(g) 0.8585 g to 0.8582 g, its
+  condensed water holding 0.33 mg of CO2(aq) and a trace of HCO3-; the beaker's water 26.756 g to 26.953 g, with
+  traces of CO2(aq) and HCO3- (the record's check takes carbon species under 1 mg). Conservation unchanged, no
+  warning. The cause: H+'s heat capacity on the ions' footing (the warm acid's equilibria and the solution's heat
+  capacity), Henry's law, and the bench opening settled.
+- **pressure**: the same warnings and dangers at the same times; one step shorter (115,442 to 115,441); the start's
+  energy 31 J other (the bench opens settled, its water holding the air's CO2).
 
 ## Open
 
