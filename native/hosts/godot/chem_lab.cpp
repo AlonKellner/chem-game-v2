@@ -284,12 +284,26 @@ void ChemLab::_process(double delta) {
 			if (image.is_valid()) {
 				image->save_png(dir.path_join(shot_ + ".png"));
 				godot::UtilityFunctions::print("play: ", shot_, ".png");
+				// (Stage 77) with LAB_SHOT_PARITY, the picture was taken without what the screen draws flat: the GPU's
+				// pass held to the truth's (O4), as the screenshots' are
+				if (!flat_visible_) {
+					image->convert(godot::Image::FORMAT_RGBA8);
+					const godot::PackedInt32Array parity = optics_parity(image->get_data());
+					if (parity.size() == 5) {
+						godot::UtilityFunctions::print("play: O4 ", shot_, ": ", parity[0], " pixels in bodies, the largest difference ", parity[1], " on the eye metric (at ", parity[3], ", ",
+								parity[4], "), ", parity[2], " visible");
+					}
+					set_flat_visible(true);
+				}
 			}
 		}
 		const char *shot = cg_ui_play_shot(ui_);
 		if (shot != nullptr && shot[0] != '\0') {
 			shot_ = godot::String::utf8(shot);
 			shot_wait_ = 3;
+			if (godot::OS::get_singleton()->has_environment("LAB_SHOT_PARITY")) {
+				set_flat_visible(false); // (painted without it for the two frames before the picture)
+			}
 		}
 		keep_export();
 		if (compute_.ready()) {

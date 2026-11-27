@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## 0.77.0 (2026-11-27, Stage 77)
+
+- §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a
+  fraction of a pixel a frame at the room's whole view) left its old shape behind, brighter, settled and never
+  corrected. A pixel read by its own rays whose rays moved (its beam traced again) kept, by the drift rule, the
+  corrections its old rays had found; it now starts again. Reproduced by `data/plays/ghost.json` on the GPU (a play's
+  picture held to the truth by the host, `LAB_SHOT_PARITY`) and on the CPU (`test_ghost.cpp`). Nested rays moved to a
+  stage of their own after Stage 78, by the user's choice.
+
 ## 0.73.1 (2026-11-27, Stage 65, merged after Stages 72, 73 and 74; signed off by the user: "Approved, merge and proceed")
 
 - §10 (Stage 65, `docs/TDD_65_TITRATIONS.md`; `docs/CURRICULUM.md`, step D's third part: experiments 14 to 20, C12):

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.73.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.77.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1190,7 +1190,10 @@ For each light:
    the pixel and the fixed estimate has moved by at most 4 on the eye metric since the history
    began, the history is kept, aged by how far the estimate moved (half its weight per unit);
    otherwise it starts again. A body moved by a pixel, a reaction a step further on, keep their
-   history; a jump, a pour, a body arriving or leaving start it again. A spectral line in a light
+   history; a jump, a pour, a body arriving or leaving start it again. (Stage 77) A pixel read by its own
+   rays whose rays moved (its beam traced again: what lies in its vessel changed on rows they pass) starts
+   again too: what its corrections found was found along the rays it had (a pile lowered slowly, a
+   fraction of a pixel a frame, left its old shape behind, `docs/TDD_77_GHOST.md`). A spectral line in a light
    is just a share of its energy (one line with 30% of the energy owns 30% of the bands, however
    narrow it is), so nothing is special-cased and nothing is lost.
 5. **The budget: points by need.** A pixel's points are shared among its lights by their
