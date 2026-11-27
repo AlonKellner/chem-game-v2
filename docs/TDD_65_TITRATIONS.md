@@ -63,6 +63,14 @@ conductivity** (this stage).
     hydrochloric acid with sodium hydroxide, its two lines' crossing the end point.
 - **`chem_tool study conductivity`**: the model against its closed forms (Onsager's limiting law; Ostwald's dilution
   law for acetic acid) and the measured tables, printed.
+- **A salt dissolving into what takes its ion away** (experiment 19's tablet). Its surface reaction's transport limit
+  found its gap by Newton's steps in the logarithm of its first dissolved species (Na+), its fellow (HCO3-) following:
+  in an acid that turns each hydrogen carbonate to carbon dioxide at once, the fellow stood at a quantum beside
+  0.2 mmol of sodium, the affinity's slope in ln n(Na+) a hundred million times its own, and eight steps moved the gap
+  by nothing: the tablet stopped dissolving after its first minute, in an acid far from done with it. The species
+  carried is now the dissolved one the solution has least of for its coefficient, the scarce ion whose gradient the
+  transport is (the first of equals, as before): in water, or where the two come in their proportion, the same; the
+  tablet dissolves in the acid in two minutes, as in water.
 - **A renderer fault the exponents exposed** (O13, `lab_tests.kept.1`): with the cost play's flask stirred fast, 44 to
   90 pixels over its shoulder read otherwise with corners shared than with each pixel's own. A corner kept while its
   shape key and its content tag held had a route other than its fresh trace's: its ray's core (`trace_core`: in the
@@ -81,8 +89,8 @@ conductivity** (this stage).
 | 65.2 | The lab: the conductivity meter, the quantity, the notebook, the screen | done |
 | 65.3 | Experiments 14 and 15: KHP, vinegar | done |
 | 65.4 | Experiments 16 and 17: two end points, a buffer | done |
-| 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | |
-| 65.6 | Experiment 20: conductivity | |
+| 65.5 | Experiments 18 and 19: salts' pH and an indicator's pKa, an antacid | done |
+| 65.6 | Experiment 20: conductivity | done |
 | 65.7 | The goldens: the evidence and the user's approval | |
 | 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
@@ -94,3 +102,5 @@ conductivity** (this stage).
   and the pH there stands higher. Phenolphthalein's colour goes about 0.9 mL past the equivalence (near pH 8.3); the
   curve's step is where it should be (13.85 mL against 13.82), and the second end point is unaffected. It goes when a
   surface exchanges at a rate (a gas's evolution from a solution, GAME_SPEC §6).
+- **The experiments' list holds 32** (Stage 65 brought it there): a fourth column past 24, eight rows of 92 px, each
+  summary cut to what its row holds. Past 32 it runs off the screen again: it wants a scroll, or pages.

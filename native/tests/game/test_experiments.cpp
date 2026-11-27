@@ -1310,3 +1310,105 @@ TEST_CASE("experiment salts_ph: followed with its own gestures, free, it complet
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment antacid: followed with its own gestures, strict, the acid given less the acid left gives what the tablet neutralised (Stage 65)") {
+	Pupil p("data/benches/antacid.json", "data/tutorials/antacid.json");
+	CHECK(pupil::follow_through(p, 3600) > 9);
+	completed(p);
+	const lab::LabView v = p.ui->lab().view();
+	double mass = 0.0, first = 0.0, last = 0.0;
+	int burette = 0;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.what == "reads_g") {
+			mass = e.value;
+		}
+		if (e.quantity.what == "scale_ml") {
+			(burette++ == 0 ? first : last) = e.value;
+		}
+	}
+	const double neutralised = 0.200 * 25.0 - 0.0998 * (last - first), truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE("a tablet of " << mass << " g, " << last - first << " mL of base: " << neutralised << " mmol neutralised (truth " << truth << "), " << neutralised / mass << " mmol/g");
+	CHECK(std::abs(neutralised / truth - 1.0) < 0.02);
+	CHECK(neutralised / mass == doctest::Approx(11.90).epsilon(0.02));
+	report(p, { neutralised, neutralised / mass });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment antacid: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/antacid.json", "data/tutorials/antacid.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment antacid: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/antacid.json", "data/tutorials/antacid.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment conductivity: followed with its own gestures, strict, strong, weak and no electrolytes, and the titration's two lines crossing at its end point (Stage 65)") {
+	Pupil p("data/benches/conductivity.json", "data/tutorials/conductivity.json");
+	CHECK(pupil::follow_through(p, 3600) > 8);
+	completed(p);
+	const double strong = truth_of(p, "strong.us_cm"), salt = truth_of(p, "salt.us_cm"), weak = truth_of(p, "weak.us_cm"), pure = truth_of(p, "pure.us_cm");
+	MESSAGE("uS/cm at 0.01 mol/kg: HCl " << strong << ", NaCl " << salt << ", acetic acid " << weak << "; water under the room's air " << pure);
+	CHECK(strong / weak > 15.0);
+	CHECK(strong / salt > 2.5);
+	CHECK(pure < 2.0);
+	CHECK(pure > 0.3);
+	// the logged curve: (mL, uS/cm); a line fitted to each arm away from the bottom, where they cross
+	const lab::LabView v = p.ui->lab().view();
+	std::vector<std::pair<double, double>> curve;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.item != "flask" || e.quantity.what != "us_cm") {
+			continue;
+		}
+		for (const lab::NoteEntry &f : v.notebook) {
+			if (f.quantity.what == "scale_ml" && f.step == e.step) {
+				curve.emplace_back(f.value, e.value);
+			}
+		}
+	}
+	REQUIRE(curve.size() > 20);
+	const double start = curve.front().first;
+	size_t low = 0;
+	for (size_t k = 0; k < curve.size(); ++k) {
+		low = curve[k].second < curve[low].second ? k : low;
+	}
+	const double bottom = curve[low].first - start;
+	std::vector<double> x1, y1, x2, y2;
+	for (const auto &[x, y] : curve) {
+		const double ml = x - start;
+		if (ml < 0.7 * bottom) {
+			x1.push_back(ml);
+			y1.push_back(y);
+		} else if (ml > 1.3 * bottom) {
+			x2.push_back(ml);
+			y2.push_back(y);
+		}
+	}
+	const lab::LineFit falling = lab::fit_line(x1, y1), rising = lab::fit_line(x2, y2);
+	const double end = (rising.intercept - falling.intercept) / (falling.slope - rising.slope);
+	const double truth = truth_of(p, p.ui->tutorial()->report()[1].truth), c_truth = truth_of(p, p.ui->tutorial()->report()[2].truth);
+	MESSAGE("the falling line " << falling.slope << " uS/cm a mL, the rising " << rising.slope << ": they cross at " << end << " mL (truth " << truth << ")");
+	CHECK(falling.slope < 0.0);
+	CHECK(rising.slope > 0.0);
+	CHECK(std::abs(end - truth) < 0.4);
+	const double c = 0.0997 * end / 25.0;
+	CHECK(std::abs(c / c_truth - 1.0) < 0.03);
+	report(p, { strong / weak, end, c });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 1"));
+}
+
+TEST_CASE("experiment conductivity: played as a person plays it, strict, it completes (Stage 65)") {
+	Pupil p("data/benches/conductivity.json", "data/tutorials/conductivity.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment conductivity: followed with its own gestures, free, it completes (Stage 65)") {
+	Pupil p("data/benches/conductivity.json", "data/tutorials/conductivity.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

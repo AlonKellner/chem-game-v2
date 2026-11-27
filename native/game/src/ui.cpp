@@ -2089,11 +2089,11 @@ struct Ui::Impl {
 	static Rect menu_button() { return Rect{ 10, 14, 240, 36 }; }
 	static constexpr float MENU_ROW = 92;
 	// in one column, a column more past each eight (Stage 47: eleven in one ran off the screen; Stage 54: nineteen in
-	// two), at most three
-	int menu_columns() const { return std::min(3, static_cast<int>((catalogue.size() + 7) / 8)); }
+	// two), at most four (Stage 65: thirty-two in three ran off it)
+	int menu_columns() const { return std::min(4, static_cast<int>((catalogue.size() + 7) / 8)); }
 	int menu_rows() const { return (static_cast<int>(catalogue.size()) + menu_columns() - 1) / menu_columns(); }
 	Rect menu_rect() const {
-		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : 1800.0f;
+		const float w = menu_columns() == 1 ? 760.0f : menu_columns() == 2 ? 1440.0f : menu_columns() == 3 ? 1800.0f : 1880.0f;
 		return Rect{ menu_columns() == 1 ? 480.0f : (1920 - w) / 2, 100, w, 70 + MENU_ROW * static_cast<float>(menu_rows()) };
 	}
 	Rect menu_row(int k) const {
@@ -2207,7 +2207,7 @@ struct Ui::Impl {
 				text(row.x + row.w - 64, row.y + 28, "next", GUIDE, 16);
 			}
 			float y = row.y + 52;
-			for (const std::string &l : wrapped(e.summary, menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
+			for (const std::string &l : wrapped(e.summary, menu_columns() == 4 ? 50 : menu_columns() == 3 ? 68 : menu_columns() == 2 ? 84 : 88)) {
 				text(row.x + 12, y, l, DIM, 14);
 				y += 18;
 				if (y > row.y + row.h - 4) {

@@ -206,6 +206,20 @@
 			"tutorial": "tutorials/salts_ph.json"
 		},
 		{
+			"id": "antacid",
+			"title": "An antacid by back titration",
+			"summary": "An antacid tablet weighed, given more hydrochloric acid than it can take and swirled until its carbon dioxide has gone; the acid left over titrated with potassium hydroxide to phenolphthalein's pink. What the tablet neutralised, and what a gram of it does.",
+			"bench": "benches/antacid.json",
+			"tutorial": "tutorials/antacid.json"
+		},
+		{
+			"id": "conductivity",
+			"title": "Conductivity and a conductometric titration",
+			"summary": "Hydrochloric acid, salt, acetic acid and water on the conductivity meter: strong, weak and no electrolytes. Then an acid titrated while the notebook logs its conductivity: it falls to the end point and rises past it, two lines crossing. A guess first.",
+			"bench": "benches/conductivity.json",
+			"tutorial": "tutorials/conductivity.json"
+		},
+		{
 			"id": "layers",
 			"title": "Two liquids, layered",
 			"summary": "A gradient: green nickel sulfate over denser blue copper sulfate. Speed the clock up to watch their boundary blur as each diffuses into the other; stir to mix them; a burner under it heats the lower layer. Beside it a beaker of the blue and a bottle of the green: pour the green slowly onto the blue and it lies on top; pour it fast and it mixes in.",

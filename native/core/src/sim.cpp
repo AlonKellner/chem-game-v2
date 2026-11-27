@@ -133,10 +133,20 @@ SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, con
 	// by transport: the driver, or else the reaction's dissolved species, carried to the surface or away from it; an
 	// ion with the reaction's other ions on its side, in their proportion (Stage 63: an electrolyte moves whole, at
 	// Nernst and Hartley's diffusion, sum nu / sum (nu / D))
+	// (Stage 65) without a driver, the dissolved species the solution has least of for its coefficient: the scarce ion's
+	// gradient is the transport's (a salt dissolving into a solution that takes one of its ions away, sodium hydrogen
+	// carbonate into an acid, its own ion a quantum beside a plentiful other); the first of equals, as before
 	SpeciesId carried = table.has(kinetics.driver) ? kinetics.driver : SpeciesId{};
-	for (const Term &t : reaction.terms()) {
-		if (!table.has(carried) && table.species(t.species).phase == Phase::Aqueous) {
-			carried = t.species;
+	if (!table.has(carried)) {
+		double least = HUGE_VAL;
+		for (const Term &t : reaction.terms()) {
+			if (table.species(t.species).phase == Phase::Aqueous) {
+				const double per = static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]) / static_cast<double>(t.nu < 0 ? -t.nu : t.nu);
+				if (per < least) {
+					least = per;
+					carried = t.species;
+				}
+			}
 		}
 	}
 	const double d = particle_diameter(table, cell, kinetics.in);
