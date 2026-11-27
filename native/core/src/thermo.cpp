@@ -1000,11 +1000,16 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 			listed[j] = true;
 		}
 	}
-	all_pairs_ = solution.pairs.size() > pairs_.size();
+	// (Stage 75) every pair only when its own pairs overflow the list, not when the table's would: a table past 64
+	// pairs keeps its probes sparse
 	for (size_t k = 0; k < solution.pairs.size() && !all_pairs_; ++k) {
 		const PairDef &p = solution.pairs[k];
 		if (listed[static_cast<size_t>(p.cation)] && listed[static_cast<size_t>(p.anion)]) {
-			pairs_[pair_count_++] = static_cast<uint16_t>(k);
+			if (pair_count_ == pairs_.size()) {
+				all_pairs_ = true;
+			} else {
+				pairs_[pair_count_++] = static_cast<uint16_t>(k);
+			}
 		}
 	}
 	table_ = &table;
