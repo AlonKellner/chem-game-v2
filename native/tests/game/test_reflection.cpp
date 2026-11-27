@@ -230,7 +230,7 @@ TEST_CASE("O28: a beaker of mercury in the room shows the room's ruled faces, wh
 		}
 		double shown[3], truth[3];
 		lab::OpticsFrames settle(px, py, 1, 1);
-		for (int f = 0; f < 200; ++f) {
+		for (int f = 0; f < 400; ++f) {
 			settle.frame(scene);
 		}
 		settle.colour(scene, px, py, shown);
@@ -250,3 +250,4 @@ TEST_CASE("O28: a beaker of mercury in the room shows the room's ruled faces, wh
 	CHECK(most - least > 0.05);
 	MESSAGE("mercury in the room: " << compared << " pixels, the worst " << worst << " on the eye metric; down its middle from " << least << " to " << most);
 }
+

@@ -129,7 +129,7 @@ int main(void) {
 	}
 	/* Stage 35: a pixel's own rays are traced in the pass, over the rectangle of each body that bends: the cup's, a
 	 * little more than its rectangle (the scene's body 0: x, y, w, h) */
-	const float *cup = optics.table + 4 * 8; /* (after the header's eight vec4s, Stage 61) */
+	const float *cup = optics.table + 4 * 9; /* (after the header's nine vec4s, Stage 78) */
 	if (optics.rectangle_count != 1 || optics.rectangles == NULL || optics.rectangles[0] > cup[0] || optics.rectangles[1] > cup[1] || optics.rectangles[2] < cup[0] + cup[2] || optics.rectangles[3] < cup[1] + cup[3]) {
 		fprintf(stderr, "the optical pass's scene does not name the cup's rectangle for the pass over what bends\n");
 		return 1;

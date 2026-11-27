@@ -41,12 +41,19 @@ materials." The plan approved: "I approve of your reflection plan" (2026-11-27).
 |---|---|---|
 | 78.1 | Spec (§12.3, §18, §20); liquid mercury's n and k (datagen's `nk_table`, `extinction_index`); its gate | done |
 | 78.2 | Complex Fresnel in the core; a metal liquid in both tracers (`LIQUID_K_ROW`, each liquid's own index); mercury held to the closed form, O9 and the truth's pixels | done |
-| 78.3 | The truth: both branches at a clear surface; O6, O7, O21, O22 restated; O27 | |
-| 78.4 | The pass: the branch seed and roulette in the corrections; the beam's turned share in the mirror direction | |
-| 78.5 | The mirror's beam (R ≥ 0.2) where it is needed; cost on the GPU (`make pass-cost`) | |
-| 78.6 | The long-wave range by complex Fresnel (`effective_index` retired); flat things' gloss | |
-| 78.7 | Scenes: the mercury bench, glass and water; `make screenshots` (O4); the user's eye; O28 | |
-| 78.8 | Documents, `make gates`, the user's sign-off | |
+| 78.3 | The room's faces ruled as the wall is, their edge cells with them (the user's choice: a mirror shows them); read exactly by both; O28 | done |
+| 78.4 | The mercury bench (300 g), its play; `make screenshots`, `make gates`; the user's eye and sign-off | |
+
+## The split (the user's, 2026-11-27: "Split it off")
+
+Clear surfaces as branches (glass's and water's own reflections traced) were built in both tracers, held ray by ray
+(O27 passed), and broke about twenty optics tests: the kept beam shows what glass turns away as the room's mean while
+the truth now traced it, so every first reading drifted from the truth (O8's thin lines, the turned vessels), and the
+truth's sum over branches made several tests time out; a sensor's display (O25) read 0.36 against 1.01. That work is
+kept on branch `reflection-branches-wip` for its own stage, which needs: the kept beam carrying a mirrored reading of
+the room (its record on the GPU grows), a cheaper truth (fewer, heavier branches), and the long-wave's sensor path
+followed through. With it: the long-wave range by complex Fresnel (`effective_index` retired) and flat things' gloss
+(a burner's metal).
 
 ## Open
 
@@ -56,3 +63,6 @@ materials." The plan approved: "I approve of your reflection plan" (2026-11-27).
   as one, as before; GAME_SPEC §20).
 - A ray turned back toward the eye meets no body on a nearer layer, nor a neighbour on its own (as a ray bent
   sideways did not, before).
+- Where the mirror's image crosses the cube's own edge (from one face to the next) a pixel's rays part, and such a
+  pixel may stop asking for rays a little off (the open class of Stage 35's TDD): inside the black of the edge cells,
+  so it does not show.

@@ -715,14 +715,33 @@ float face_lines(float a) {
 	return n * f.z + clamp(a - n * f.w, 0.0, f.z);
 }
 
-// a face's row from y0 to y1 (the face's place, as put): its profile, -2 less 64 times how much of it the lines
-// across cover
+// the black of the cube's edge cells (the wall's table, far off to the left)
+float face_edge() {
+	int m = int(wall_of(0).x);
+	return wall_of(WALL_BREAK_BASE + m + int(wall_of(WALL_ROW_BASE).x) * (m + 1)).x; // (a row's first cell, far left)
+}
+
+// A face's row from y0 to y1 (the face's place, as put): its profile, below -1: how much of it lies in the black
+// cells along the face's edges (b, of 64) and how much of the rest its lines across cover (a, of 64), as
+// -2 - (a + 65 b)
 int face_profile(float y0, float y1) {
 	vec4 f = scene_vec(8);
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
 	float v0 = min(y0, y1) - FACE_Y;
 	float v1 = max(y0, y1) - FACE_Y;
-	float c = v1 - v0 > 1.0e-5 ? (face_lines(v1) - face_lines(v0)) / (v1 - v0) : (v0 - floor(v0 / f.w) * f.w < f.z ? 1.0 : 0.0);
-	return -2 - int(floor(c * 64.0 + 0.5));
+	float m0 = clamp(v0, cell, side - cell);
+	float m1 = clamp(v1, cell, side - cell);
+	float b = 0.0;
+	float a = 0.0;
+	if (v1 - v0 > 1.0e-5) {
+		b = 1.0 - (m1 - m0) / (v1 - v0);
+		a = m1 - m0 > 1.0e-5 ? (face_lines(m1) - face_lines(m0)) / (m1 - m0) : 0.0;
+	} else {
+		b = v0 < cell || v0 > side - cell ? 1.0 : 0.0;
+		a = v0 - floor(v0 / f.w) * f.w < f.z ? 1.0 : 0.0;
+	}
+	return -2 - (int(floor(a * 64.0 + 0.5)) + 65 * int(floor(b * 64.0 + 0.5)));
 }
 
 // where along its face a place is put (u), and where its face begins
@@ -730,46 +749,46 @@ float face_origin(float x) {
 	return FACE_X + floor((x - FACE_X) / FACE_STRIDE) * FACE_STRIDE;
 }
 
+// the integral along a face's row (its lines across covering `across` of it) from u0 to u1, u1 at least u0: the
+// black cells at each end of it, its lines down it between
+float face_integral(float across, float u0, float u1) {
+	vec4 f = scene_vec(8);
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
+	float lit = mix(f.x, f.y, across);
+	float m0 = clamp(u0, cell, side - cell);
+	float m1 = clamp(u1, cell, side - cell);
+	float middle = lit * (m1 - m0) + (f.y - lit) * (face_lines(m1) - face_lines(m0));
+	return middle + face_edge() * ((u1 - u0) - (m1 - m0));
+}
+
 // the mean along a face's row of profile `profile` from a to b
 float face_span(int profile, float a, float b) {
 	vec4 f = scene_vec(8);
-	float across = float(-2 - profile) / 64.0;
+	float side = scene_vec(3).z;
+	float cell = scene_vec(3).w;
+	int k = -2 - profile;
+	float across = float(k - 65 * (k / 65)) / 64.0;
+	float edged = float(k / 65) / 64.0;
 	float lo = min(a, b);
 	float hi = max(a, b);
 	float origin = face_origin(lo);
 	float u0 = lo - origin;
 	float u1 = hi - origin;
-	float down = u1 - u0 < 1.0e-5 ? (u0 - floor(u0 / f.w) * f.w < f.z ? 1.0 : 0.0) : (face_lines(u1) - face_lines(u0)) / (u1 - u0);
-	return mix(f.x, f.y, across + down - across * down);
-}
-
-// the integral of face_lines from 0 to a (a at least 0)
-float face_lines_sum(float a) {
-	vec4 f = scene_vec(8);
-	float n = floor(a / f.w);
-	float r = a - n * f.w;
-	float w = f.z;
-	return f.w * w * n * (n - 1.0) * 0.5 + n * (w * f.w - 0.5 * w * w) + n * w * r + (r < w ? 0.5 * r * r : 0.5 * w * w + w * (r - w));
-}
-
-// the mean, as a place moves evenly from a to b along a face's row, of the row's integral to it from `origin` (whole
-// pitches before them both): the row's light is A off the lines down it and the lines' on them
-float face_swept_one(float across, float origin, float a, float b) {
-	vec4 f = scene_vec(8);
-	float lit = mix(f.x, f.y, across);
-	float ua = a - origin;
-	float ub = b - origin;
-	if (abs(ub - ua) < 1.0e-5) {
-		return lit * ua + (f.y - lit) * face_lines(ua);
+	float mean = 0.0;
+	if (u1 - u0 < 1.0e-5) {
+		bool edge = u0 < cell || u0 > side - cell;
+		bool on = u0 - floor(u0 / f.w) * f.w < f.z;
+		mean = edge ? face_edge() : (on ? f.y : mix(f.x, f.y, across));
+	} else {
+		mean = face_integral(across, u0, u1) / (u1 - u0);
 	}
-	float g_a = 0.5 * lit * ua * ua + (f.y - lit) * face_lines_sum(ua);
-	float g_b = 0.5 * lit * ub * ub + (f.y - lit) * face_lines_sum(ub);
-	return (g_b - g_a) / (ub - ua);
+	return mix(mean, face_edge(), edged);
 }
 
-// swept_wall on a face: its footprint's two ends move from a0 and a to b0 and b
+// swept_wall on a face: its footprint's two ends move from a0 and a to b0 and b; the mean over the sweep of what
+// lies between them, at eight places along it (each read exactly)
 float face_swept(int profile, float a0, float a, float b0, float b) {
-	vec4 f = scene_vec(8);
 	float w0 = a - a0;
 	float w1 = b - b0;
 	if (w0 * w1 < 0.0) {
@@ -778,11 +797,17 @@ float face_swept(int profile, float a0, float a, float b0, float b) {
 	if (abs(w0 + w1) < 2.0e-4) {
 		return face_span(profile, 0.5 * (a0 + a), 0.5 * (b0 + b));
 	}
-	float across = float(-2 - profile) / 64.0;
-	float least = min(min(a0, a), min(b0, b));
-	float face = face_origin(least);
-	float origin = face + floor((least - face) / f.w) * f.w; // (whole pitches: the integrals stay small)
-	return (face_swept_one(across, origin, a, b) - face_swept_one(across, origin, a0, b0)) / (0.5 * (w0 + w1));
+	float sum = 0.0;
+	float widths = 0.0;
+	for (int i = 0; i < 8; i++) {
+		float t = (float(i) + 0.5) / 8.0;
+		float lo = mix(a0, b0, t);
+		float hi = mix(a, b, t);
+		float w = abs(hi - lo);
+		sum = sum + w * face_span(profile, lo, hi);
+		widths = widths + w;
+	}
+	return widths > 0.0 ? sum / widths : face_span(profile, 0.5 * (a0 + b0), 0.5 * (a + b));
 }
 
 // ---- the wall behind the bodies (GAME_SPEC §12.3): a table, read exactly
@@ -2290,8 +2315,8 @@ vec3 room_exit(vec3 p, vec3 u, float wall, float side, float cell) {
 	return vec3(1.0, 0.0, 0.0);
 }
 
-// (Stage 78) which face a ray from p along u comes to, off the wall: 0 the front, 1 and 2 the left and right, 3 and 4
-// the top and bottom; and where on it (pixels from its corner), as room_exit finds it
+// (Stage 78) which face a ray from p along u comes to: 0 the front, 1 and 2 the left and right, 3 and 4 the top and
+// bottom, -1 the wall; and where on it (pixels from its corner), as room_exit finds it
 vec3 room_face(vec3 p, vec3 u, float wall, float side) {
 	float half_side = 0.5 * side;
 	vec4 middle = scene_vec(4);
@@ -2303,7 +2328,8 @@ vec3 room_face(vec3 p, vec3 u, float wall, float side) {
 	float t = max(min(tx, min(ty, tz)), 0.0);
 	vec3 h = vec3(p.x + t * u.x, p.y + t * u.y, p.z + t * u.z);
 	if (tz <= tx && tz <= ty) {
-		return vec3(0.0, clamp(h.x - lo.x, 0.0, side), clamp(h.y - lo.y, 0.0, side));
+		// the front; or the wall (-1), whose edge cells are the table's
+		return vec3(u.z > 0.0 ? -1.0 : 0.0, clamp(h.x - lo.x, 0.0, side), clamp(h.y - lo.y, 0.0, side));
 	}
 	if (tx <= ty) {
 		return vec3(u.x < 0.0 ? 1.0 : 2.0, clamp(h.z - lo.z, 0.0, side), clamp(h.y - lo.y, 0.0, side));
@@ -2459,12 +2485,12 @@ RayMet ray_met(vec2 p, float nm) {
 	if (side > 0.0 && !cut_off) {
 		// in a room: to whichever face it comes to; the wall where it reaches it, else far off to one side
 		vec3 comes = room_exit(lp, lu, wall, side, scene_vec(3).w);
+		vec3 face = faces_ruled() ? room_face(lp, lu, wall, side) : vec3(-1.0, 0.0, 0.0);
 		if (comes.x < 0.5) {
 			r.x = comes.y;
 			r.y = comes.z;
-		} else if (comes.x < 1.5 && faces_ruled()) {
-			// (Stage 78) a face, ruled: where on it
-			vec3 face = room_face(lp, lu, wall, side);
+		} else if (face.x >= 0.0) {
+			// (Stage 78) a face, ruled, its edge cells with it: where on it
 			r.x = FACE_X + face.x * FACE_STRIDE + face.y;
 			r.y = FACE_Y + face.z;
 			h = route_mix(h, uint(face.x) + 50u);
