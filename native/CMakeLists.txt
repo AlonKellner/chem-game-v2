@@ -148,8 +148,32 @@ add_custom_command(
     COMMAND chem_glassgen "${CHEM_GLASSWARE_BUILT}"
     DEPENDS chem_glassgen "${CHEM_DATA_DIR}/glassware.json"
     COMMENT "Making every shape of the glassware table (data/glassware.json)")
+# The renderer's key (Stage 86): a hash of the files a supply's picture is rendered by, in each picture's key, so the
+# pictures built ahead are captured again once the renderer changes (ui.cpp's own part, what bodies a view composes,
+# is the key's version, "pictures"). A new file of the optics is taken in by its name.
+file(GLOB CHEM_RENDERER_FILES CONFIGURE_DEPENDS RELATIVE "${CMAKE_SOURCE_DIR}/.."
+    "${CMAKE_SOURCE_DIR}/game/shader/*" "${CMAKE_SOURCE_DIR}/game/src/optics_*" "${CMAKE_SOURCE_DIR}/game/include/lab/optics_*"
+    "${CMAKE_SOURCE_DIR}/game/src/colour.cpp" "${CMAKE_SOURCE_DIR}/game/include/lab/colour.hpp"
+    "${CMAKE_SOURCE_DIR}/game/src/contents.cpp" "${CMAKE_SOURCE_DIR}/game/include/lab/contents.hpp"
+    "${CMAKE_SOURCE_DIR}/game/src/glassware.cpp" "${CMAKE_SOURCE_DIR}/game/include/lab/glassware.hpp"
+    "${CMAKE_SOURCE_DIR}/core/src/optics.cpp" "${CMAKE_SOURCE_DIR}/core/include/chem/optics.hpp"
+    "${CMAKE_SOURCE_DIR}/core/src/math.cpp" "${CMAKE_SOURCE_DIR}/core/include/chem/math.hpp"
+    "${CHEM_DATA_DIR}/optics/*")
+list(SORT CHEM_RENDERER_FILES)
+set(CHEM_RENDERER_NAMES ${CHEM_RENDERER_FILES} "generated/builtin_optics.cpp" "generated/glassware_built.inc")
+list(TRANSFORM CHEM_RENDERER_FILES PREPEND "${CMAKE_SOURCE_DIR}/../")
+list(APPEND CHEM_RENDERER_FILES "${CHEM_GEN_DIR}/builtin_optics.cpp" "${CHEM_GLASSWARE_BUILT}")
+set(CHEM_RENDERER_KEY "${CHEM_GEN_DIR}/lab_include/lab/renderer_key.hpp")
+string(REPLACE ";" "\\;" CHEM_RENDERER_NAMES_ARG "${CHEM_RENDERER_NAMES}")
+string(REPLACE ";" "\\;" CHEM_RENDERER_FILES_ARG "${CHEM_RENDERER_FILES}")
+add_custom_command(
+    OUTPUT "${CHEM_RENDERER_KEY}"
+    COMMAND ${CMAKE_COMMAND} "-DOUT=${CHEM_RENDERER_KEY}" "-DNAMES=${CHEM_RENDERER_NAMES_ARG}" "-DFILES=${CHEM_RENDERER_FILES_ARG}"
+            -P "${CMAKE_SOURCE_DIR}/cmake/renderer_key.cmake"
+    DEPENDS ${CHEM_RENDERER_FILES} "${CMAKE_SOURCE_DIR}/cmake/renderer_key.cmake"
+    COMMENT "The renderer's key (the files a supply's picture is rendered by)")
 file(GLOB CHEM_LAB_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
-add_library(chem_lab STATIC ${CHEM_LAB_SOURCES} "${CHEM_GLASSWARE_BUILT}")
+add_library(chem_lab STATIC ${CHEM_LAB_SOURCES} "${CHEM_GLASSWARE_BUILT}" "${CHEM_RENDERER_KEY}")
 target_include_directories(chem_lab PUBLIC game/include "${CHEM_GEN_DIR}/lab_include")
 target_include_directories(chem_lab SYSTEM PUBLIC extern)
 target_link_libraries(chem_lab PUBLIC chem_core)
@@ -404,6 +428,10 @@ if(CHEM_BUILD_TESTS)
     add_test(NAME core_no_libm
         COMMAND "${CMAKE_COMMAND}" -DCHEM_LAYER_DIR=${CMAKE_SOURCE_DIR}/core
                 -P ${CMAKE_SOURCE_DIR}/tools/check_no_libm.cmake)
+    # the renderer's key is its files' names and contents, nothing else (Stage 86)
+    add_test(NAME renderer_key_moves
+        COMMAND "${CMAKE_COMMAND}" -DSCRIPT=${CMAKE_SOURCE_DIR}/cmake/renderer_key.cmake
+                -DWORK=${CMAKE_CURRENT_BINARY_DIR}/renderer_key_test -P ${CMAKE_SOURCE_DIR}/tools/check_renderer_key.cmake)
     # the Godot adapter knows the game through chem_api.h alone
     add_test(NAME godot_adapter_includes
         COMMAND "${CMAKE_COMMAND}" -DCHEM_ADAPTER_DIR=${CMAKE_SOURCE_DIR}/hosts/godot

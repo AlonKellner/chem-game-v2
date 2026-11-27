@@ -4,6 +4,7 @@
 #include "lab/lab.hpp"
 #include "lab/search.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/renderer_key.hpp"
 #include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
@@ -304,6 +305,57 @@ TEST_CASE("pictures: a supply's box is its picture, captured once of it alone, p
 	CHECK_FALSE(again->pictures_changed());
 	again->frame(1.0 / 60.0);
 	CHECK(lab::optics_body(again->optics(), "supply:beaker") < 0);
+}
+
+TEST_CASE("pictures: a picture's key holds the renderer's, a hash of every file it is rendered by, so a picture built by another renderer is captured again (Stage 86)") {
+	// (the hash itself, a function of the files' names and contents alone: ctest renderer_key_moves)
+	const std::string key = lab::RENDERER_KEY;
+	CHECK(key.size() == 16);
+	CHECK(key.find_first_not_of("0123456789abcdef") == std::string::npos);
+	// the per-pixel source, the tracers, the scene, colour, what lies in a vessel, the glassware, the core's optics and
+	// math, every file of data/optics and the two tables made of them
+	size_t optics_data = 0;
+	for (const char *f : { "bromothymol_blue_blue.csv", "cie_1931_2deg.csv", "d65.csv", "media.json", "water.csv" }) {
+		optics_data += read(std::string("data/optics/") + f).empty() ? 0 : 1;
+	}
+	CHECK(optics_data == 5);
+	CHECK(lab::RENDERER_FILES >= 30);
+	// the pictures a screen gives say whose they are; given back, they are this renderer's
+	std::string why;
+	auto ui = lab::Ui::open(ONE_SUPPLY, why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	ui->frame(1.0 / 60.0);
+	ui->capture_pictures();
+	const std::string kept = ui->pictures();
+	const std::string said = std::string("\"renderer\":\"") + lab::RENDERER_KEY + "\"";
+	REQUIRE(kept.find(said) != std::string::npos);
+	auto again = lab::Ui::open(ONE_SUPPLY, why);
+	REQUIRE(again != nullptr);
+	REQUIRE_MESSAGE(again->add_pictures(kept, why), why);
+	again->capture_pictures();
+	CHECK_FALSE(again->pictures_changed());
+	// another renderer's (or a file from before the key, which says none) are taken as none: each captured again, and
+	// what the screen gives is its own renderer's alone
+	for (const std::string &other : { std::string("\"renderer\":\"0123456789abcdef\""), std::string() }) {
+		std::string theirs = kept;
+		const size_t at = theirs.find(said);
+		if (other.empty()) { // (the last of the file's keys, as they are sorted: gone with the comma before it)
+			REQUIRE(theirs[at - 1] == ',');
+			theirs.erase(at - 1, said.size() + 1);
+		} else {
+			theirs.replace(at, said.size(), other);
+		}
+		auto fresh = lab::Ui::open(ONE_SUPPLY, why);
+		REQUIRE(fresh != nullptr);
+		REQUIRE_MESSAGE(fresh->add_pictures(theirs, why), why);
+		fresh->frame(1.0 / 60.0);
+		CHECK(lab::optics_body(fresh->optics(), "supply:beaker") >= 0); // (drawn live by the pass: no picture of its own)
+		fresh->capture_pictures();
+		CHECK(fresh->pictures_changed());
+		const std::string given = fresh->pictures();
+		CHECK(given.find(said) != std::string::npos);
+		CHECK(given.find("0123456789abcdef") == std::string::npos);
+	}
 }
 
 namespace {

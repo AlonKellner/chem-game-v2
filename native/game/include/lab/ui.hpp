@@ -107,7 +107,9 @@ public:
 	// keeps what is new (`pictures`, a "chem-pictures/1" text of every one there is; `pictures_changed` while one
 	// was captured since it was last taken). A box with no picture yet is drawn by the pass until its own is
 	// captured, apart, a supply at a time. `capture_pictures` captures every one this bench lacks, waiting (a build's
-	// tool, a test).
+	// tool, a test). (Stage 86) A picture's key holds the renderer's (RENDERER_KEY, a hash of the files it is rendered
+	// by), and a file says which renderer made it: one of another renderer's is taken as none, and `pictures` gives
+	// this one's alone, so a change to the renderer captures every picture again and leaves none of the old behind.
 	bool add_pictures(std::string_view text, std::string &why);
 	std::string pictures();
 	bool pictures_changed() const;
