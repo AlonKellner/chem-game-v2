@@ -1,5 +1,7 @@
 #include "chem/thermo.hpp"
 
+#include <algorithm>
+
 #include "chem/math.hpp"
 
 #include <cmath>
@@ -215,11 +217,23 @@ constexpr double SOLVENT_MOL_PER_UNIT = 1.0 / 0.018015;
 // With them, the excess of the solution (GAME_SPEC §10): each particle's
 // ln gamma, and the solvent's share of it.
 struct Mix {
+	// (Stage 64) the table's own particles only are set and read: n of them zeroed, not the whole bound's
+	explicit Mix(size_t n) {
+		std::fill_n(particles.begin(), n, 0.0);
+		std::fill_n(ln_gamma.begin(), n, 0.0);
+	}
+	// (Stage 64) the listed particles only: no other is read
+	explicit Mix(const uint8_t *ions, size_t count) {
+		for (size_t k = 0; k < count; ++k) {
+			particles[ions[k]] = 0.0;
+			ln_gamma[ions[k]] = 0.0;
+		}
+	}
 	double gas = 0.0;
 	double liquid = 0.0;
-	std::array<double, MAX_PARTICLES> particles{};
+	std::array<double, MAX_PARTICLES> particles;
 	double dissolved = 0.0; // the particles' sum
-	std::array<double, MAX_PARTICLES> ln_gamma{};
+	std::array<double, MAX_PARTICLES> ln_gamma;
 	double solvent_excess = 0.0; // the excess part of ln a of the solvent
 	double pressure_ratio = P_ATMOSPHERE / P_STANDARD; // the cell's pressure over the standard's (Stage 28: a sealed cell's own)
 };
@@ -240,11 +254,23 @@ void pitzer_g(double x, double &g, double &h) {
 // Pitzer's excess (GAME_SPEC §10): F = G_ex / (w R T) per kg of water, as a
 // function of the molalities, and its derivatives ln gamma_j = dF/dm_j. The
 // solvent's share follows: w d(wF)/dw = F - sum m_j F_j, per kg.
-void excess_of(const SolutionDef &model, Mix &mix) {
-	const size_t n = model.ions.size();
-	std::array<double, MAX_PARTICLES> m{};
+// (Stage 64) `subset`: only the particles listed (ascending), which hold every one the mixture has, and only the pairs
+// listed (in the table's order), which hold every pair of them: the same sums in the same order, less the terms that are
+// nought, so the same values bit for bit for the particles listed; another's ln gamma is left as it was
+struct Subset {
+	const uint8_t *ions = nullptr;
+	size_t ion_count = 0;
+	const uint16_t *pairs = nullptr;
+	size_t pair_count = 0;
+};
+
+void excess_of(const SolutionDef &model, Mix &mix, const Subset *subset = nullptr) {
+	const size_t n = subset ? subset->ion_count : model.ions.size();
+	const auto ion = [&](size_t k) { return subset ? static_cast<size_t>(subset->ions[k]) : k; };
+	std::array<double, MAX_PARTICLES> m; // (Stage 64: the table's own particles only are set and read)
 	double ionic = 0.0, z_sum = 0.0;
-	for (size_t j = 0; j < n; ++j) {
+	for (size_t k = 0; k < n; ++k) {
+		const size_t j = ion(k);
 		m[j] = mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT;
 		const double z = static_cast<double>(model.ions[j].charge);
 		ionic += 0.5 * m[j] * z * z;
@@ -257,7 +283,10 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 	const double lnp = log(1.0 + model.b * s);
 	double f = -model.a_phi * 4.0 * ionic / model.b * lnp;
 	const double f_ionic = -model.a_phi * (4.0 / model.b * lnp + 2.0 * s / (1.0 + model.b * s)); // df/dI
-	std::array<double, MAX_PARTICLES> d{};
+	std::array<double, MAX_PARTICLES> d;
+	for (size_t k = 0; k < n; ++k) {
+		d[ion(k)] = 0.0;
+	}
 	double d_ionic = f_ionic; // dF/dI
 	double d_z = 0.0; // dF/dZ
 	// g and h of each exponent once: pairs share them (alpha2 is 12 for most)
@@ -279,7 +308,9 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 			known[kept++] = Known{ alpha, g, h };
 		}
 	};
-	for (const PairDef &p : model.pairs) {
+	const size_t pair_count = subset ? subset->pair_count : model.pairs.size();
+	for (size_t k = 0; k < pair_count; ++k) {
+		const PairDef &p = model.pairs[subset ? static_cast<size_t>(subset->pairs[k]) : k];
 		const auto c = static_cast<size_t>(p.cation), a = static_cast<size_t>(p.anion);
 		const double mm = m[c] * m[a];
 		if (!(mm > 0.0)) {
@@ -301,7 +332,8 @@ void excess_of(const SolutionDef &model, Mix &mix) {
 		d_z += mm * c_ca;
 	}
 	double weighted = 0.0;
-	for (size_t j = 0; j < n; ++j) {
+	for (size_t k = 0; k < n; ++k) {
+		const size_t j = ion(k);
 		const double z = static_cast<double>(model.ions[j].charge);
 		mix.ln_gamma[j] = d[j] + d_ionic * 0.5 * z * z + d_z * (z < 0.0 ? -z : z);
 		weighted += m[j] * mix.ln_gamma[j];
@@ -322,15 +354,15 @@ void add_particles(const SpeciesDef &def, double quanta, Mix &mix) {
 }
 
 // the excess, once the mixture's amounts are known
-void complete(const SpeciesTable &table, Mix &mix) {
+void complete(const SpeciesTable &table, Mix &mix, const Subset *subset = nullptr) {
 	if (mix.liquid > 0.0 && mix.dissolved > 0.0) {
-		excess_of(table.solution(), mix);
+		excess_of(table.solution(), mix, subset);
 	}
 }
 
 // The cell's mixtures; with `excess`, the solution's excess too (GAME_SPEC §10)
 Mix mix_of(const SpeciesTable &table, const CellState &cell, bool excess = true) {
-	Mix mix;
+	Mix mix(table.solution().ions.size());
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		if (cell.amount[s] <= 0) {
 			continue;
@@ -896,7 +928,31 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 	const Mix mix = mix_of(table, cell, false); // the amounts: at() works out the excess at each extent
 	gas_ = mix.gas;
 	liquid_ = mix.liquid;
-	particles_ = mix.particles;
+	const SolutionDef &solution = table.solution();
+	std::copy_n(mix.particles.begin(), solution.ions.size(), particles_.begin());
+	// (Stage 64) the particles the cell has or the reaction makes or uses, and the pairs among them: at() reads no other
+	std::array<bool, MAX_PARTICLES> listed{};
+	for (size_t i = 0; i < count_; ++i) {
+		for (const IonCount &ion : parts_[i].def->ions) {
+			if (ion.count <= 0) {
+				break;
+			}
+			listed[static_cast<size_t>(ion.ion)] = true;
+		}
+	}
+	for (size_t j = 0; j < solution.ions.size(); ++j) {
+		if (listed[j] || particles_[j] != 0.0 || particles_step_[j] != 0.0) {
+			ions_[ion_count_++] = static_cast<uint8_t>(j);
+			listed[j] = true;
+		}
+	}
+	all_pairs_ = solution.pairs.size() > pairs_.size();
+	for (size_t k = 0; k < solution.pairs.size() && !all_pairs_; ++k) {
+		const PairDef &p = solution.pairs[k];
+		if (listed[static_cast<size_t>(p.cation)] && listed[static_cast<size_t>(p.anion)]) {
+			pairs_[pair_count_++] = static_cast<uint16_t>(k);
+		}
+	}
 	table_ = &table;
 	temperature_ = thermal.temperature;
 	capacity_ = thermal.heat_capacity;
@@ -949,14 +1005,30 @@ bool AffinityProbe::at(double extent, double &a) const {
 		}
 	}
 	const auto clamp = [](double v) { return v > 0.0 ? v : 0.0; };
-	Mix mix;
+	// (Stage 64) the listed particles alone: every other is nought before and after, and adds nought
+	Mix mix(ions_.data(), ion_count_);
 	mix.gas = clamp(gas_ + extent * gas_step_);
 	mix.liquid = clamp(liquid_ + extent * liquid_step_);
-	for (size_t j = 0; j < particles_.size(); ++j) {
+	for (size_t k = 0; k < ion_count_; ++k) {
+		const size_t j = ions_[k];
 		mix.particles[j] = clamp(particles_[j] + extent * particles_step_[j]);
 		mix.dissolved += mix.particles[j];
 	}
-	complete(*table_, mix);
+	const Subset subset{ ions_.data(), ion_count_, all_pairs_ ? nullptr : pairs_.data(), pair_count_ };
+	if (all_pairs_) {
+		// (more pairs than a probe lists: every pair, each of an absent particle adding nought; their m read as nought)
+		Mix full(table_->solution().ions.size());
+		full.gas = mix.gas;
+		full.liquid = mix.liquid;
+		full.dissolved = mix.dissolved;
+		for (size_t k = 0; k < ion_count_; ++k) {
+			full.particles[ions_[k]] = mix.particles[ions_[k]];
+		}
+		mix = full;
+		complete(*table_, mix);
+	} else {
+		complete(*table_, mix, &subset);
+	}
 	mix.pressure_ratio = ratio;
 	const double ln_t = log(temperature / T0);
 	double standard = 0.0;

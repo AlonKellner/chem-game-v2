@@ -62,7 +62,7 @@ TEST_CASE("notebook: a fitted line, an axis's transform and a report's expressio
 	REQUIRE(evaluate("(1 + 2) * -3 / 2", v, x, why));
 	CHECK(x == -4.5);
 	REQUIRE_MESSAGE(evaluate("beaker.sulfuric_acid_aq.mol / (beaker.water / 1000)", v, x, why), why);
-	CHECK(x == doctest::Approx(0.25).epsilon(1e-6)); // mol per kg of its water
+	CHECK(x == doctest::Approx(0.25).epsilon(1e-4)); // mol per kg of its water (Stage 64: a few mg of it already vapour)
 	REQUIRE(evaluate("beaker.celsius + 273.15", v, x, why));
 	CHECK(x == doctest::Approx(293.15).epsilon(1e-6));
 	CHECK_FALSE(evaluate("kettle.celsius", v, x, why));

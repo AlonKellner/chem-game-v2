@@ -1,0 +1,20 @@
+# Methyl red's red acid form (HMR, the zwitterion) in water: its molar absorption coefficient, decadic, L/mol/cm.
+# Read from Tobey, J. Chem. Educ. 35, 514 (1958), Fig. 2, the plotted points (1 cm, about 27 C, pH about 2), each absorbance over
+# 2.97e-5 M (his recipe: 1 g in 500 ml, 4 ml to 100 ml, 10 ml to 100 ml). Merck's specification agrees. Between his points
+# linear; beyond his last, nought by 620 nm (Stage 64; docs/DATA_SOURCES.md, Indicators).
+380,1610.8
+400,1380
+425,3840
+450,10940
+476,24300
+500,38850
+510,42620
+520,44200
+529,42920
+539,39890
+549,35240
+559,26090
+575,10940
+600,1040
+620,0
+780,0

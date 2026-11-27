@@ -118,9 +118,14 @@ TEST_CASE("lab: a vessel's hot air reads light, its carbon dioxide heavy (Stage 
 	must(*l, R"({"do": "unweigh", "balance": "scale"})");
 	must(*l, R"({"do": "weigh", "balance": "scale", "vessel": "gas"})");
 	const double co2 = item(l->view(), "scale").gross_g;
-	// 0.004 mol of CO2 for its volume of air: 0.004 (44.01 - 28.96) g, near 0.06 g
-	CHECK(co2 - air_only > 0.055);
-	CHECK(co2 - air_only < 0.065);
+	// its CO2 for as much of the air: n (44.01 - 28.96) g (Stage 64: the bench opens exactly full, so of the 0.004 mol it
+	// states what a 250 mL beaker holds with its air, 0.0031 mol, near 0.047 g)
+	double co2_mol = 0.0;
+	for (const lab::SubstanceView &sub : item(l->view(), "gas").contents) {
+		co2_mol += sub.species == "carbon_dioxide" ? sub.mol : 0.0;
+	}
+	CHECK(co2_mol > 0.003);
+	CHECK(co2 - air_only == doctest::Approx(co2_mol * (44.01 - 28.96)).epsilon(0.1));
 	// the dry beaker heated, then weighed hot: its air is thinner, so it reads less than cold
 	must(*l, R"({"do": "unweigh", "balance": "scale"})");
 	must(*l, R"({"do": "heat", "burner": "flame", "vessel": "dry"})");

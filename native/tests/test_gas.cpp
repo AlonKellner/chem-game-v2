@@ -197,9 +197,15 @@ TEST_CASE("gas: malachite over a flame fills a balloon with its gases and the fl
 	}
 	CHECK(sim.world().amount(flask, builtin::malachite).mol() < 1e-4);
 	// every mole made is in the flask or the balloon, as gas or as the water
-	// that condensed in the cool balloon: the air, and two per mole decomposed
+	// that condensed in the cool balloon: the air, and two per mole decomposed (Stage 64: and the carbon dioxide
+	// dissolved in that water, by Henry's law)
 	const double made = 2.0 * (decomposes - sim.world().amount(flask, builtin::malachite).mol());
-	const double condensed = sim.world().amount(flask, builtin::water).mol() + sim.world().amount(balloon, builtin::water).mol();
+	double condensed = 0.0;
+	for (const CellId c : { flask, balloon }) {
+		// (a hydrogen carbonate and its hydrogen ion are the carbon dioxide and the water they were made of)
+		condensed += sim.world().amount(c, builtin::water).mol() + sim.world().amount(c, builtin::carbon_dioxide_aq).mol() +
+				2.0 * sim.world().amount(c, builtin::bicarbonate_ion).mol() + 2.0 * sim.world().amount(c, builtin::carbonate_ion).mol();
+	}
 	CHECK(gas_mol(sim.world(), flask) + gas_mol(sim.world(), balloon) + condensed == doctest::Approx(air + made).epsilon(1e-9));
 	CHECK(sim.world().amount(balloon, builtin::water).mol() > 0.5 * decomposes); // most of the steam condensed there
 	CHECK(volume(sim.world(), flask) == doctest::Approx(FLASK).epsilon(1e-9));

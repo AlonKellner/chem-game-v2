@@ -752,6 +752,29 @@ void Simulation::exchange_gases() {
 bool Simulation::project(CellId cell) {
 	const SpeciesTable &table = world_.species();
 	const CellState &state = world_.snapshot_cell(cell);
+	// (Stage 64) a cell as it was when it was last found at rest is at rest: what follows depends on nothing else
+	const auto c = static_cast<size_t>(cell.index);
+	const CellMeta &meta_now = world_.meta(cell);
+	if (rest_key_.size() <= c) {
+		rest_key_.resize(c + 1);
+	}
+	{
+		const ThermalKey &key = rest_key_[c];
+		if (key.known && key.energy == state.energy && key.volume == meta_now.volume && key.sealed == meta_now.sealed && key.rigid == meta_now.rigid &&
+				key.reservoir == meta_now.reservoir && key.amount == state.amount) {
+			return false;
+		}
+	}
+	const auto at_rest = [&] {
+		ThermalKey &key = rest_key_[c];
+		key.known = true;
+		key.energy = state.energy;
+		key.amount = state.amount;
+		key.volume = meta_now.volume;
+		key.sealed = meta_now.sealed;
+		key.rigid = meta_now.rigid;
+		key.reservoir = meta_now.reservoir;
+	};
 	bool changed = false;
 	// (Stage 53) a cell of nothing but wall (a vessel's ring of glass) has no equilibrium to be at
 	bool any = false;
@@ -759,6 +782,7 @@ bool Simulation::project(CellId cell) {
 		any = state.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall;
 	}
 	if (!any) {
+		at_rest();
 		return false;
 	}
 	// several equilibria that share a species are taken in turn until none
@@ -826,11 +850,14 @@ bool Simulation::project(CellId cell) {
 			++version;
 		}
 	}
+	if (!changed) {
+		at_rest();
+	}
 	return changed;
 }
 
 // The solution's fast equilibria together (Stage 63, GAME_SPEC §8): each of the equilibrium law whose species are
-// all there (what is dissolved, FEW_QUANTA or more), dissolved or the solvent (a solid's or a gas's is project()'s alone: it may run out), at the cell's
+// all there (Stage 64: a trace too), dissolved, the solvent or a gas in a cell at the room's pressure (Stage 64; a solid's is project()'s alone: it may run out), at the cell's
 // temperature:
 // a quasi-Newton step on their extents from the affinities themselves (Pitzer's and all), the slope the ideal
 // solution's, A_r' = -RT sum_i nu_ri nu_si / n_i, damped so no amount dissolved falls below a tenth of what it was
@@ -848,9 +875,12 @@ bool Simulation::solve_together(CellId cell) {
 		bool ok = true, dissolved = false;
 		for (const Term &t : equilibria_[e].terms()) {
 			const SpeciesDef &def = table.species(t.species);
-			// a dissolved species of a few quanta is at the limit of its rounding: reach() alone
+			// (Stage 64) a dissolved trace is taken in too (H+ of a few hundred quanta in a carbonate at pH 10, which the
+			// carbonic acid's balance draws through water's ionisation: alone, a round moved only those few hundred)
+			// (Stage 64) and a gas the cell holds, in a cell at the room's pressure (a bubble's CO2 and its water's vapour
+			// trade with the solution together; a sealed cell's pressure is its own: project()'s)
 			const int64_t held = state.amount[static_cast<size_t>(t.species.index)];
-			ok = ok && def.phase != Phase::Gas && held > 0 && (def.phase != Phase::Aqueous || held >= FEW_QUANTA);
+			ok = ok && held > 0 && (def.phase != Phase::Gas || !world_.meta(cell).sealed);
 			dissolved = dissolved || def.phase == Phase::Aqueous;
 		}
 		if (ok && dissolved && !stands(table, state, equilibria_[e].terms())) {
@@ -891,17 +921,33 @@ bool Simulation::solve_together(CellId cell) {
 				return false;
 			}
 		}
-		// the ideal solution's slope, J/mol per quantum (a solid's activity is one: it adds nothing)
+		// the ideal solution's slope, J/mol per quantum (a solid's activity is one: it adds nothing); a gas's, its
+		// fraction's of the cell's gas, ln y = ln n - ln N (Stage 64)
+		double gas_total = 0.0;
+		for (size_t s = 0; s < x.size(); ++s) {
+			if (table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas) {
+				gas_total += x[s];
+			}
+		}
 		bool within = true;
 		for (size_t i = 0; i < n; ++i) {
 			const Reaction &ri = equilibria_[which[on[i]]];
 			for (size_t j = 0; j < n; ++j) {
-				double sum = 0.0;
+				const Reaction &rj = equilibria_[which[on[j]]];
+				double sum = 0.0, gas_i = 0.0, gas_j = 0.0;
 				for (const Term &tr : ri.terms()) {
-					if (table.species(tr.species).phase != Phase::Aqueous) {
+					const Phase phase = table.species(tr.species).phase;
+					if (phase != Phase::Aqueous && phase != Phase::Gas) {
 						continue;
 					}
-					sum += static_cast<double>(tr.nu) * static_cast<double>(equilibria_[which[on[j]]].nu(tr.species)) / x[static_cast<size_t>(tr.species.index)];
+					sum += static_cast<double>(tr.nu) * static_cast<double>(rj.nu(tr.species)) / x[static_cast<size_t>(tr.species.index)];
+					gas_i += phase == Phase::Gas ? static_cast<double>(tr.nu) : 0.0;
+				}
+				for (const Term &tr : rj.terms()) {
+					gas_j += table.species(tr.species).phase == Phase::Gas ? static_cast<double>(tr.nu) : 0.0;
+				}
+				if (gas_total > 0.0) {
+					sum -= gas_i * gas_j / gas_total;
 				}
 				m[i][j] = -rt * sum;
 			}
@@ -989,7 +1035,9 @@ bool Simulation::solve_together(CellId cell) {
 		// a solid used up, or a dissolved species down to a few quanta (the limit of its rounding): its reactions leave
 		// the system, reach()'s alone
 		for (size_t q = 0; q < x.size(); ++q) {
-			const bool gone = q == used_up || (x[q] < static_cast<double>(FEW_QUANTA) && table.species(SpeciesId{ static_cast<int32_t>(q) }).phase == Phase::Aqueous);
+			const Phase phase = table.species(SpeciesId{ static_cast<int32_t>(q) }).phase;
+			const bool gone = q == used_up || (x[q] < static_cast<double>(FEW_QUANTA) && x[q] < 0.5 * static_cast<double>(state.amount[q]) &&
+					(phase == Phase::Aqueous || phase == Phase::Gas));
 			if (!gone) {
 				continue;
 			}
@@ -1159,6 +1207,56 @@ bool Simulation::fill(CellId cell, CellId up, EdgeId edge, bool may_draw) {
 // settled after its children, and nothing a
 // parent does afterwards changes a child, so one sweep leaves every cell at
 // equilibrium and full.
+void Simulation::equilibrate() {
+	begin_step();
+	if (world_.thermal()) {
+		process_ = Process::Settle;
+		settle();
+	}
+}
+
+std::optional<World> build_settled(World::Builder builder, std::span<const Reaction> reactions, std::string *why) {
+	std::optional<World> world = builder.build(why);
+	for (int round = 0; world && world->thermal() && round < 16; ++round) {
+		// the builder's own cells: settling grows a column's layers (empty), which the builder does not have
+		const int cells = world->cell_count();
+		Simulation sim(*world, std::vector<Reaction>(reactions.begin(), reactions.end()));
+		sim.set_checking(false);
+		sim.equilibrate();
+		const World &settled = sim.world();
+		bool moved = false;
+		for (int c = 0; c < cells; ++c) {
+			const CellId cell{ c };
+			double before = 0.0, after = 0.0;
+			if (world->temperature(cell, before) && settled.temperature(cell, after) && std::abs(after - before) > 1e-6) {
+				moved = true;
+			}
+			// and nothing moved at all: a cell made exactly full (its gas drawn or expelled) is not yet the world returned
+			moved = moved || world->snapshot_cell(cell).amount != settled.snapshot_cell(cell).amount;
+		}
+		if (!moved) {
+			break;
+		}
+		const SpeciesTable &table = settled.species();
+		for (int c = 0; c < cells; ++c) {
+			const CellId cell{ c };
+			const CellState &state = settled.snapshot_cell(cell);
+			for (int k = 0; k < table.species_count(); ++k) {
+				const SpeciesId s{ k };
+				if (table.species(s).retired) {
+					continue;
+				}
+				builder.set_amount(cell, s, Amount{ state.amount[static_cast<size_t>(k)] });
+				if (table.species(s).phase == Phase::Solid && !table.species(s).wall) {
+					builder.set_particles(cell, s, state.particles[static_cast<size_t>(k)]);
+				}
+			}
+		}
+		world = builder.build(why);
+	}
+	return world;
+}
+
 void Simulation::settle() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	starved_.assign(cells, 0);

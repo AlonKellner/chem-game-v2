@@ -12,6 +12,19 @@
 			"table": "copper_sulfate_aq.csv",
 			"units": "L/mol/cm"
 		},
+		"phenolphthalein_dianion": {"kind": "absorb", "table": "phenolphthalein_dianion.csv", "units": "L/mol/cm"},
+		"bromothymol_blue_ion": {"kind": "absorb", "table": "bromothymol_blue_yellow.csv", "units": "L/mol/cm"},
+		"bromothymol_blue_dianion": {"kind": "absorb", "table": "bromothymol_blue_blue.csv", "units": "L/mol/cm"},
+		"methyl_red_aq": {"kind": "absorb", "table": "methyl_red_acid.csv", "units": "L/mol/cm"},
+		"methyl_red_ion": {"kind": "absorb", "table": "methyl_red_base.csv", "units": "L/mol/cm"},
+		"sodium_chloride": {"kind": "reflect", "base": 0.85, "bands": []},
+		"potassium_chloride": {"kind": "reflect", "base": 0.85, "bands": []},
+		"ammonium_chloride": {"kind": "reflect", "base": 0.85, "bands": []},
+		"sodium_bicarbonate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"sodium_carbonate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"sodium_carbonate_decahydrate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"sodium_acetate": {"kind": "reflect", "base": 0.85, "bands": []},
+		"potassium_hydrogen_phthalate": {"kind": "reflect", "base": 0.85, "bands": []},
 		"nickel_ion": {
 			"kind": "absorb",
 			"bands": [

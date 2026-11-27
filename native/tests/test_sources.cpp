@@ -19,6 +19,7 @@ bool near(double a, double b, double rel) {
 
 // IUPAC's abridged standard atomic weights (CIAAW), g/mol
 constexpr double H = 1.008, C = 12.011, N = 14.007, O = 15.999, SI = 28.085, S = 32.06, CU = 63.546, NA = 22.990, NI = 58.693;
+constexpr double CL = 35.45, K = 39.098, P = 30.974, BR = 79.904; // (Stage 64)
 
 double grams_per_mol(SpeciesId s) {
 	return static_cast<double>(builtin_species().molar_mass_ug(s)) / 1e6;
@@ -53,7 +54,9 @@ TEST_CASE("sources: every species' thermodynamic row is the one cited (NIST, COD
 		{ builtin::copper_sulfate_pentahydrate, -2279.7, 300.4, 280.0 }, // Atkins (NBS 1982 rounded)
 		{ builtin::copper_sulfate_trihydrate, -1684.31, 221.3, 205.0 }, // NBS 1982, p. 2-156
 		{ builtin::copper_sulfate_monohydrate, -1085.83, 146.0, 134.0 },
-		{ builtin::sulfuric_acid_aq, -909.27, 20.1, 138.9 }, // Atkins's SO4 2-(aq); Cp a stand-in
+		// Atkins's SO4 2-(aq); Cp its ions' sum (Stage 64: H+ on the ions' footing; NBS's -293, where it was the pure
+		// liquid acid's 138.9, a stand-in)
+		{ builtin::sulfuric_acid_aq, -909.27, 20.1, -293.8 },
 		{ builtin::copper_sulfate_aq, -835.990, -51.520, 211.81 }, // fitted to the CRC's solubility (Stage 19)
 		{ builtin::latex, 0.0, 0.0, 130.1 }, // NETZSCH's 1.91 J/g/K
 		{ builtin::sodium_hydroxide_aq, -470.114, 48.1, -102.1 }, // NBS 1982, p. 2-299, NaOH "ai" (Stage 43)
@@ -101,6 +104,17 @@ TEST_CASE("sources: molar masses are IUPAC's atomic weights, and molar volumes t
 		{ builtin::sodium_sulfate_aq, 2 * NA + S + 4 * O, 0.0 },
 		{ builtin::nickel_sulfate_aq, NI + S + 4 * O, 0.0 }, // Stage 47
 		{ builtin::copper_hydroxide, CU + 2 * O + 2 * H, 3.93 }, // spertiniite, measured: Handbook of Mineralogy (Stage 44)
+		// (Stage 64) the CRC Handbook's densities (PubChem), the decahydrate's the Merck Index's, KHP's its crystal's cell
+		{ builtin::sodium_chloride, NA + CL, 2.17 },
+		{ builtin::potassium_chloride, K + CL, 1.988 },
+		{ builtin::ammonium_chloride, N + 4 * H + CL, 1.519 },
+		{ builtin::sodium_bicarbonate, NA + H + C + 3 * O, 2.20 },
+		{ builtin::sodium_carbonate, 2 * NA + C + 3 * O, 2.54 },
+		{ builtin::sodium_carbonate_decahydrate, 2 * NA + C + 3 * O + 10 * (2 * H + O), 1.46 },
+		{ builtin::sodium_acetate, 2 * C + 3 * H + 2 * O + NA, 1.528 },
+		{ builtin::potassium_hydrogen_phthalate, K + 8 * C + 5 * H + 4 * O, 1.644 }, // COD 1511782 (Riley et al. 2013), 296 K
+		{ builtin::phosphoric_acid_aq, 3 * H + P + 4 * O, 0.0 },
+		{ builtin::bromothymol_blue_ion, 27 * C + 27 * H + 2 * BR + 5 * O + S, 0.0 },
 	};
 	for (const auto &row : rows) {
 		const SpeciesDef &d = builtin_species().species(row.id);
@@ -160,12 +174,14 @@ TEST_CASE("sources: malachite's activation energy lies in Seguin's range, and th
 TEST_CASE("sources: each ion's data is its formula units' split exactly, the hydrogen ion's at nought (Stage 63)") {
 	// the ions' formation enthalpies, entropies, heat capacities and apparent molar volumes are the retired formula
 	// units' (each cited above) split by the convention that H+(aq) has none: so every solution keeps its energy,
-	// its entropy, its volume and so its solubility (docs/TDD_63_IONS.md)
+	// its entropy, its volume and so its solubility (docs/TDD_63_IONS.md). (Stage 64) But for its heat capacity:
+	// -216.35 J/K mol, the shift every ion's has from NBS's (216.35 a unit of charge), so water's ionisation keeps
+	// NBS's -223.8; and every retired unit's row is its ions' sum
 	const SpeciesTable &t = builtin_species();
 	const SpeciesDef &h = t.species(builtin::hydrogen_ion);
 	CHECK(h.hf == 0.0);
 	CHECK(h.s0 == 0.0);
-	CHECK(h.cp == 0.0);
+	CHECK(h.cp == -216.35);
 	CHECK(h.molar_volume == 0.0);
 	int retired = 0;
 	for (int k = 0; k < t.species_count(); ++k) {
@@ -188,5 +204,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 5);
+	CHECK(retired == 20);
 }

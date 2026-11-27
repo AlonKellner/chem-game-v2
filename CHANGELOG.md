@@ -1,5 +1,23 @@
 # GAME_SPEC version history
 
+## 0.69.1 (2026-11-27, Stage 64, merged after Stages 67, 68, 69, 66 and 70; signed off by the user: "Approved, merge and proceed")
+
+- §9, §10 (Stage 64, `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D's second part: C1's cap and first
+  pack, C2): **weak acids, bases, indicators and the salts experiments 14 to 20 weigh**. New elements Cl, K, P, Br (32
+  at most; 64 particles). Chloride, potassium, ammonium and ammonia, acetate and acetic acid, carbonate, hydrogen
+  carbonate and dissolved CO₂, the phosphates, phthalate; NBS's ΔfH and S°, OBIGT's heat capacities and volumes;
+  each weak acid a fast equilibrium at its measured constant (PHREEQC's, MINTEQ's, Hamer and Acree's), gated with
+  IUPAC's pH standards. CO₂ and NH₃ between gas and solution by Henry's law, with bubbles past saturation. The
+  indicators phenolphthalein, bromothymol blue and methyl red at their measured constants and spectra. NaCl, KCl,
+  NH₄Cl, NaHCO₃, Na₂CO₃ and its decahydrate, sodium acetate and KHP at their measured solubilities (each crystal's S°
+  the one NBS's own ΔfG implies; phthalate's anchor calibrated to KHP's). Pitzer and Mayorga's and Harvie, Møller and
+  Weare's pairs. H⁺'s heat capacity on the ions' footing (water's ionisation −223.8 J/K mol).
+- §4.6: a dissolved species' masters (`basis`), by which a retired unit is read back.
+- §8: the joint solve takes a dissolved trace and a bubble's gases; a cell found at rest is left at rest while it is
+  unchanged.
+- §13: a bench opens at its fast equilibria at the temperatures it states (`build_settled`); the free lab's reagents
+  (hydrochloric acid, sodium hydroxide, vinegar, ammonia, the three indicators, six salts).
+- §20: the declared simplifications of the weak acids, the indicators and the salts.
 ## Stage 70 (2026-11-27; GAME_SPEC stays 0.69.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The gates (`docs/TDD_70_GATES_AGAIN.md`): `make gates` 262 s uncached on the physics of Stages 63 and 67 (335 to 596

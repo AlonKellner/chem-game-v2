@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.69.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.69.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -751,8 +751,30 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
   3 H₂O(l), written Cu₂CO₃(OH)₂(s) + 2 H₂SO₄(aq) → 2 CuSO₄(aq) + CO₂(g) + 3 H₂O(l).
 - The pH is read only within the activity model's range: past 6 mol/kg left over of an acid or a base (one
   boiled nearly dry), a solution has none.
-- *(PLANNED)* Weak acids and bases, indicators (Stage 64), a salt that comes out of solution
-  (`docs/EXPERIMENTS_ROADMAP.md`, area 1; `docs/CURRICULUM.md`, step D).
+
+**Weak acids, bases, indicators and salts** (Stage 64; `docs/TDD_64_WEAK_ACIDS.md`; `docs/CURRICULUM.md`, step D).
+- **The species**: chloride, potassium, ammonium and ammonia, acetate and acetic acid, carbonate, hydrogen carbonate
+  and dissolved CO₂, the phosphates and phosphoric acid, phthalate (KHP's), ammonia gas; the indicators
+  phenolphthalein, bromothymol blue and methyl red; the salts NaCl, KCl, NH₄Cl, NaHCO₃, Na₂CO₃ and its decahydrate,
+  anhydrous sodium acetate and KHP; retired units for the acids, bases and salts a bench or a calculation names.
+- **A dissolved species states its masters** (`basis`: HCO₃⁻ is CO₃²⁻ and H⁺, NH₃ is NH₄⁺ less H⁺), whole waters
+  making up the rest; a retired unit is read back by them (acetate's carbon is not carbonate's).
+- **Each weak acid and base is a fast equilibrium** at its measured constant, written with whichever of H⁺ and OH⁻ is
+  plentiful near its pKa: acetic acid 4.76, ammonium 9.25, carbonic acid 6.35 and 10.33, phosphoric acid 2.15, 7.20
+  and 12.34, phthalic acid 2.95 and 5.41. Buffers follow (0.025 mol/kg of each phosphate reads 6.863 against IUPAC's
+  6.865; carbonate 9.987 against 10.012; 0.05 mol/kg KHP 3.987 against 4.005), and the salts' pH (sodium acetate
+  basic, ammonium chloride acid).
+- **Gases dissolve by Henry's law**: CO₂ and NH₃ between a solution and the gas over it, a fast equilibrium; a layer
+  with no gas makes a bubble only when what is dissolved exceeds what 1 atm of it holds.
+- **The indicators** are weak acids whose forms absorb as measured (their spectra read from published plots):
+  phenolphthalein colourless to pH 8, pink above 9.5; bromothymol blue yellow, green near 7, blue; methyl red red to
+  yellow about 5. Each is a trace beside what it reads, and in pure water a trace of it is itself the acid.
+- **A salt dissolves at transport's pace and saturates its solution at its measured solubility** (NaCl 6.16 mol/kg,
+  KCl 4.77, NaHCO₃ 1.22, the decahydrate 2.79, KHP 0.558 at 25 C).
+- **H⁺'s heat capacity** is on the ions' footing (−216.35 J/K mol, the shift every ion's has from NBS's): water's
+  ionisation then has its measured −223.8, and each acid's constant moves with temperature by its own.
+- **A bench opens at its fast equilibria** at the temperatures it states (a bench's acid formerly cooled 2.6 K on its
+  first step, as its bisulfate formed).
 
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
@@ -772,6 +794,8 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
   dissolving in acid and its turning to oxide, and malachite dissolving in acid.
 - Stage 63 makes dissolved matter its ions: the bisulfate, copper's hydrolysis, the fast equilibria solved
   together, electroneutrality, a column's diffusion at no current.
+- Stage 64 adds the weak acids and bases, the gases' dissolving, the indicators and the salts experiments 14 to 20
+  weigh; the masters a retired unit is read back by; a bench opened at its fast equilibria.
 
 ## 10. Property models
 
@@ -3253,7 +3277,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Activity coefficients are those of 25 °C at every temperature; CuSO₄(aq)'s `Hf`, `S°` and `Cp` are fitted to its solubility | The solubility is within 2.6% of the handbook from 0 to 100 °C in water alone. There is no heat of dilution. The dissolved salt's fitted heat capacity (+212 J/mol·K, where real ions have strongly negative ones) carries the temperature dependence of its activity: the demo's solution holds about 4% too much heat per kelvin |
 | The activity coefficients are extrapolated beyond their data: CuSO₄'s to 1.4 mol/kg, the acid's to 5 | In a solution boiled down past them only the trend is right; the lower hydrates crystallise there. CuSO₄'s C^φ is left out so that the water's activity falls at every strength |
 | Between the acid's and the salt's ions one term alone, copper's with the bisulfate (Stage 63: its β0 calibrated to one old measurement; no θ or ψ) | The acid lowers the salt's solubility to 0.54 of it at 15 °C with 1 mol/kg of acid, as that measurement (Holler and Peffer, on an unclear basis); elsewhere the trend only |
-| Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. Its heat capacity is the pure liquid's, the ions' split of the old formula units: water's ionisation has their heat capacity (−7.5 J/K·mol) where the measured is −224, so pKw from the tables is 12.05 at 100 °C against IAPWS's 12.25 (0.04 low at 60 °C), the share of hydrogen and hydroxide ions in a hot solution that much off; the pH reads the measured Kw |
+| Sulfuric acid by Pitzer, Roy and Silvester with its bisulfate at PHREEQC's constant (Stage 63); no vapour of its own | Its stoichiometric activity within 2% of Staples to 5 mol/kg. (Stage 64: its heat capacity NBS's at infinite dilution, −293.8 J/K mol, no longer the pure liquid's; water's ionisation −223.8, pKw from the tables 12.31 at 100 °C against IAPWS's 12.25, its heat capacity held constant) |
+| The weak acids' and indicators' activity (Stage 64): neutral solutes ideal (no λ); no Pitzer pair for K⁺ with hydrogen phthalate, for the indicators' ions or NH₄⁺ with acetate; no mixing terms (θ, ψ) | IUPAC's phosphate and carbonate standards within 0.03, KHP's 0.02 low; bromothymol blue's apparent pKa at I = 0.1 within 0.02 of the measured; no salting out of a neutral solute |
+| The indicators' ionisation has no heat (none read) and phenolphthalein does not fade in strong base (Stage 64) | Their colours do not move with temperature; phenolphthalein in 1 mol/kg NaOH stays pink, where a real one fades over minutes |
+| The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |
+| Ammonia and carbon dioxide at Henry's equilibrium with the gas in their cell (Stage 64) | An open vessel's headspace trades with the room at its mouth (Stage 50); what is dissolved meets the headspace at once, where a real surface takes minutes |
 | Copper's hydrolysis to CuOH⁺ alone (Stage 63); no dimer Cu₂(OH)₂²⁺, no basic copper sulfate | 0.5 mol/kg copper sulfate reads pH 4.8, a real one about 4. The dimer, at MINTEQ's constant with no interaction parameters, held most of the copper in a solution boiled down, so it is left out. Hot copper sulfate gives up a little hydroxide that turns to oxide (a few percent of the copper boiled down over 20 minutes), where a real one makes a pale basic sulfate |
 | Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water |
 | Copper hydroxide turns to oxide at the dry solid's rate, in water too (Stage 44) | In a strong base the real one dissolves as Cu(OH)₄²⁻ and comes back as the oxide in minutes; here a boiled suspension takes half an hour, as in water |

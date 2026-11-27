@@ -12,6 +12,7 @@
 #include "part.hpp"
 
 #include <fstream>
+#include <iomanip>
 #include <map>
 #include <sstream>
 #include <string>
@@ -104,7 +105,9 @@ TEST_CASE("lab: the demo's bench opens with every vessel full of the room's air 
 	CHECK(flask.at("gas_ml").get<double>() > 330.0);
 	CHECK(grams(item(report, "jar"), "malachite") == doctest::Approx(5.0).epsilon(1e-9));
 	CHECK(item(report, "balloon").at("gas_ml").get<double>() == 0.0);
-	CHECK(grams(item(report, "acid"), "water") == doctest::Approx(240.5).epsilon(1e-9));
+	// (Stage 64: the bench opens at its fast equilibria, a few milligrams of the acid's water already its vapour)
+	CHECK(grams(item(report, "acid"), "water") + grams(item(report, "acid"), "steam") == doctest::Approx(240.5).epsilon(2e-6)); // (0.27 mg of its vapour put out to the
+	// room as the bottle is made exactly full)
 	CHECK(report.at("conserved").at("unchanged").get<bool>());
 	// Left alone it is not quite at rest: the acid's water wets the air above
 	// it and the condenser cools to its coolant. Nothing is lost doing so.
@@ -118,6 +121,21 @@ TEST_CASE("lab: the demo's bench opens with every vessel full of the room's air 
 	CHECK(item(later, "condenser").at("celsius").get<double>() < 16.0);
 	CHECK(grams(item(later, "jar"), "malachite") == doctest::Approx(5.0).epsilon(1e-9));
 	CHECK(lab->digest() != before);
+}
+
+TEST_CASE("lab: a bench's vessels open at their fast equilibria at the temperature it states (Stage 64)") {
+	// the acid is set as its ions; the bench settles it at 20 C, its bisulfate formed, so its first steps do not cool it
+	// (Stage 63 left it to its first step, which took it to 17.44 C)
+	auto lab = demo_bench();
+	const json report = json::parse(lab->report());
+	CHECK(item(report, "acid").at("celsius").get<double>() == doctest::Approx(20.0).epsilon(1e-9));
+	CHECK(mol(item(report, "acid"), "hydrogen_sulfate_ion") > 0.15);
+	std::string why;
+	REQUIRE(lab->advance(10, why));
+	const json later = json::parse(lab->report());
+	MESSAGE("the acid after 10 steps: " << item(later, "acid").at("celsius").get<double>() << " C");
+	CHECK(std::abs(item(later, "acid").at("celsius").get<double>() - 20.0) < 0.01);
+	CHECK(mol(item(later, "acid"), "hydrogen_sulfate_ion") == doctest::Approx(mol(item(report, "acid"), "hydrogen_sulfate_ion")).epsilon(1e-3));
 }
 
 TEST_CASE("lab: a malformed bench is refused with a reason (Stage 7)") {
@@ -710,7 +728,11 @@ TEST_CASE("lab: a drain comes off when either of its vessels is moved away, stow
 TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its capacity, its wall and floor are its standard's (Stage 24)") {
 	// GAME_SPEC §12.3: the flask a conical flask (ISO 1773), the beakers and the jar low-form beakers (ISO 3819),
 	// the acid's a screw-neck bottle (ISO 4796-1); the condenser is made to no standard yet
-	const std::map<std::string, std::string> made_as = { { "flask", "conical_flask" }, { "beaker", "beaker" }, { "waste", "beaker" }, { "jar", "beaker" }, { "acid", "bottle" } };
+	const std::map<std::string, std::string> made_as = { { "flask", "conical_flask" }, { "beaker", "beaker" }, { "waste", "beaker" }, { "jar", "beaker" }, { "acid", "bottle" },
+		// (Stage 64) the free lab's reagents
+		{ "hydrochloric", "bottle" }, { "hydroxide", "bottle" }, { "vinegar", "bottle" }, { "ammonia", "bottle" }, { "phenolphthalein", "beaker" },
+		{ "bromothymol", "beaker" }, { "methyl_red", "beaker" }, { "khp", "beaker" }, { "soda", "beaker" }, { "bicarbonate", "beaker" },
+		{ "salt", "beaker" }, { "acetate", "beaker" }, { "ammonium", "beaker" } };
 	int vessels = 0;
 	for (const char *bench : { "data/benches/demo.json", "data/benches/lab.json" }) {
 		std::string why;
@@ -736,7 +758,7 @@ TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its
 			++vessels;
 		}
 	}
-	CHECK(vessels == 10);
+	CHECK(vessels == 23); // (Stage 64: and the free lab's thirteen reagents)
 	// glassware no standard makes, or a wall given beside it, is refused with the reason
 	std::string why;
 	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [
