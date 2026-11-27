@@ -1180,7 +1180,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const glass::Vessel *made = scene.vessels[static_cast<size_t>(b)];
 			h = fnv(&made, sizeof made, h);
 			shape_tag[static_cast<size_t>(b)] = tag(h);
-			content_tag[static_cast<size_t>(b)] = given ? tag(fnv(lie + 14, 14 * sizeof(double))) : 0.0f;
+			// (Stage 65: and its liquid's surface row, FORM z, which says where a ray is in its liquid's core; it
+			// follows the vessel's condensed volume, not what lies in it, so a level that stands while the volume
+			// moves left a kept ray's route as it was)
+			content_tag[static_cast<size_t>(b)] = given ? tag(fnv(&t[at + FORM * 4 + 2], sizeof(float), fnv(lie + 14, 14 * sizeof(double)))) : 0.0f;
 			for (int o = 0; o < count_was; ++o) {
 				if (scene.table[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + IDS) * 4] == t[at + IDS * 4]) {
 					before[static_cast<size_t>(b)] = o;
@@ -1229,9 +1232,21 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 					high = std::max(high, std::max(was[19] > 0.5 ? was[22] + std::abs(was[23]) : -1.0e300, lie[19] > 0.5 ? lie[22] + std::abs(lie[23]) : -1.0e300));
 				}
 			}
+			// (Stage 65) the rows between its liquid's surface row as it was and as it is
+			const double form_was = scene.table[static_cast<size_t>(HEADER_VECS + o * BODY_VECS + FORM) * 4 + 2];
+			const double form_now = t[static_cast<size_t>(HEADER_VECS + b * BODY_VECS + FORM) * 4 + 2];
+			double rows_lo = 1.0e30, rows_hi = -1.0e30;
+			if (form_was != form_now) {
+				rows_lo = std::min(form_was, form_now) - 0.02;
+				rows_hi = std::max(form_was, form_now) + 0.02;
+			}
+			if (high < low) {
+				zone_lo[static_cast<size_t>(b)] = rows_lo;
+				zone_hi[static_cast<size_t>(b)] = rows_hi;
+			}
 			if (high >= low) {
-				zone_lo[static_cast<size_t>(b)] = std::max(origin - high / std::max(cm, 1.0e-12) - 0.02, -1.0e30);
-				zone_hi[static_cast<size_t>(b)] = std::min(origin - low / std::max(cm, 1.0e-12) + 0.02, 1.0e30);
+				zone_lo[static_cast<size_t>(b)] = std::min(std::max(origin - high / std::max(cm, 1.0e-12) - 0.02, -1.0e30), rows_lo);
+				zone_hi[static_cast<size_t>(b)] = std::max(std::min(origin - low / std::max(cm, 1.0e-12) + 0.02, 1.0e30), rows_hi);
 			}
 		}
 		for (int b = 0; b < count; ++b) {

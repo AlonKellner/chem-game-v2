@@ -88,6 +88,24 @@
 			"tests": ["measured: water's viscosity, and the ions' diffusion"]
 		},
 		{
+			"data": ["solutions.json/walden/*"],
+			"calibrated": "no table of each ion's limiting conductivity by temperature read (the CRC's behind a login; MacInnes 1939's table a scan unread): Walden's rule with one exponent for the ions, fitted to Jones and Bradshaw's KCl standards at 0 and 18 C, and H+'s fitted to Hamer and DeWane's HCl limiting conductance from 0 to 45 C (NSRDS-NBS 33, Table 12), each on the table's own viscosity",
+			"doc": ["Conductivity (Stage 65)", "Walden's exponents"],
+			"tests": ["measured: HCl's limiting conductivity follows Hamer and DeWane's from 0 to 45 C, the protons by Walden's exponent of their own (Stage 65)", "measured: the KCl conductivity standards read Jones and Bradshaw's at 0, 18 and 25 C (Stage 65)", "measured: water's viscosity, and the ions' diffusion as they move together (Stage 23)"]
+		},
+		{
+			"data": ["solutions.json/conductivity/dielectric/#/*"],
+			"measured": "Malmberg and Maryott 1956, as Hamer and DeWane, NSRDS-NBS 33 (1970), Table 2, gives it: water's dielectric constant from 0 to 100 C",
+			"doc": ["Conductivity (Stage 65)", "NSRDS-NBS 33"],
+			"tests": ["measured: Debye, Hückel and Onsager's constants are NSRDS-NBS 33's from 0 to 100 C (Stage 65)"]
+		},
+		{
+			"data": ["solutions.json/conductivity/ion_size_angstrom"],
+			"calibrated": "one ion size for every ion in Robinson and Stokes' extended Onsager form, set so that KCl, NaCl (Shedlovsky 1932) and HCl (NSRDS-NBS 33, Table 11) read their measured molar conductivity at 0.1 mol/L, 25 C",
+			"doc": ["Conductivity (Stage 65)", "4.2 Å"],
+			"tests": ["measured: KCl's and NaCl's molar conductivity is Shedlovsky's from 0.0001 to 0.12 mol/L at 25 C (Stage 65)", "measured: HCl's molar conductivity is Hamer and DeWane's at 25 C, to 0.1 mol/L within half a percent (Stage 65)", "measured: acetic acid's molar conductivity is MacInnes and Shedlovsky's, its ionisation and its ions' together (Stage 65)"]
+		},
+		{
 			"data": ["reactions.json/reactions/malachite_decomposition/kinetics/*"],
 			"measured": "Aoki, Yamamoto and Koga 2021",
 			"doc": ["Aoki, Yamamoto and Koga", "Seguin"],

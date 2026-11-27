@@ -1235,3 +1235,48 @@ Phenolphthalein, bromothymol blue and methyl red, and phthalic acid (KHP's). Rea
   saturates at Hendrixson's 0.558 and 0.710 mol/kg (25 and 35 C): KHP's heat of solution then 28.1 kJ/mol. 0.05 mol/kg
   KHP reads pH 3.987 against IUPAC's primary standard 4.005 (`measured: phthalic acid's constants`), K⁺ with hydrogen
   phthalate given no Pitzer pair.
+
+## Conductivity (Stage 65)
+
+A solution's conductivity (GAME_SPEC §10), and each ion's mobility with temperature. Read 2026-11-27.
+
+- **Sources read**:
+  - MacInnes, *The Principles of Electrochemistry* (Reinhold 1939; archive.org's text of dli.ernet.474912). Its
+    Table 3-I is Jones and Bradshaw's KCl standards (1933, J. Am. Chem. Soc. 55, 1780): 71.1352, 7.41913 and
+    0.745263 g of KCl per 1000 g of solution in vacuum (1, 0.1 and 0.01 demal), 0.065176, 0.0071379 and 0.00077364
+    S/cm at 0 C; 0.09783, 0.0111667 and 0.0012205 at 18 C; 0.111342, 0.012856 and 0.00140877 at 25 C.
+  - Its Table 3-II is MacInnes and Shedlovsky's acetic acid at 25 C (1932, J. Am. Chem. Soc. 54, 1429): c × 10³
+    equivalents per litre, and Λ in S cm²/mol: 0.028014 and 210.38, 0.15321 and 112.05, 1.02831 and 48.146, 2.41400
+    and 32.217, 5.91153 and 20.962, 12.829 and 14.375, 50.000 and 7.358, 52.303 and 7.202.
+  - Its Table 18-II is Shedlovsky's KCl and NaCl at 25 C (1932, J. Am. Chem. Soc. 54, 1405), observed: at 0.0001,
+    0.0005, 0.001, 0.005, 0.01, 0.02, 0.05, 0.1 and 0.12 mol/L, KCl 148.94, 147.81, 146.95, 143.55, 141.27, 138.34,
+    133.37, 128.96 and 127.69; NaCl 125.59, 124.50, 123.74, 120.65, 118.51, 115.76, 111.06, 106.74 and 105.48.
+  - Hamer and DeWane, *Electrolytic conductance and the conductances of the halogen acids in water*, NSRDS-NBS 33
+    (1970), from nvlpubs.nist.gov:
+    - Table 2, water's dielectric constant from 0 to 100 C (Malmberg and Maryott 1956).
+    - Table 3, B1 and B2 for 1–1 electrolytes: 0.2211 and 29.817 at 0 C, 0.2300 and 60.639 at 25, 0.2416 and 100.31
+      at 50, 0.2737 and 202.71 at 100.
+    - Table 11, HCl's Λ at 25 C: 424.5, 422.6, 421.2, 415.7, 411.9, 398.9, 391.1, 360.7 and 332.2 at 0.0001, 0.0005,
+      0.001, 0.005, 0.01, 0.05, 0.1, 0.5 and 1.0 mol/L; at 0.01 mol/L, 288.6, 350.3, 472.2 and 530.3 at 5, 15, 35 and
+      45 C.
+    - Table 12, HCl's Λ° at 0 to 45 C by 5: 265.03, 297.42, 329.78, 362.05, 394.16, 426.06, 457.65, 488.91, 519.75 and
+      550.12.
+- **The model**:
+  - Each ion's limiting molar conductivity is Nernst and Einstein's, `z² F² D / (R T)`, from its diffusion coefficient
+    (the same table's: Li and Gregory; Vanýsek). Its D alone gives 149.80 for KCl against Shedlovsky's 149.86, and
+    425.94 for HCl against 426.06.
+  - Each is lowered by Robinson and Stokes' extended Onsager form, per ion, `(B1 z² λ° + ½ B2 z²) √I / (1 + B a √I)`.
+    B1, B2 and B are their numerical forms in ε, η and T, and match NSRDS 33's Table 3 within 0.3 %.
+  - The ion size a, 4.2 Å, is **calibrated** to KCl, NaCl and HCl at 0.1 mol/L. All three then lie within 0.5 % to
+    0.1 mol/L.
+  - Past 0.1 mol/L the model reads HCl high: 2.5 % at 0.5 mol/L and 8 % at 1. The demal 1 KCl reads low: 1.5 % at
+    25 C, 2.7 % at 18 C and 5.9 % at 0 C. The solution's own viscosity and ion association are not modelled (declared).
+- **Walden's exponents** (`walden`): D ∝ T η^−p, both **calibrated** on the table's own viscosity (IAPWS 2008).
+  - The ions' p = 0.87, fitted to the 0.01 demal KCl standard at 0 and 18 C. All three standards up to 0.1 demal then
+    read within 0.5 % at 0, 18 and 25 C. Stokes and Einstein's p = 1 read them 9 % low at 0 C.
+  - H⁺'s p = 0.61, fitted to HCl's Λ° from 5 to 45 C with Cl⁻ at 0.87. That fit holds within 0.7 % from 5 to 45 C,
+    and is 1.8 % high at 0 C.
+  - K⁺ and Cl⁻ are taken alike, and every other ion as they are, OH⁻ included (its own temperature data not read). A
+    neutral solute keeps 1 (Wilke and Chang's form).
+- **Checks**: acetic acid's Λ is within 1.2 % of MacInnes and Shedlovsky's, its ionisation (Stage 64's pKa 4.76) and
+  its ions' conductivity together. Pure water reads 0.0549 µS/cm, ASTM D1193's Type I 0.0550 (18.2 MΩ cm).

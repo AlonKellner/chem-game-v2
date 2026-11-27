@@ -322,6 +322,33 @@ Violations check_N1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_K1(const SpeciesTable &table, const CellState &cell, double kappa, double limit) {
+	Violations out;
+	bool ions = false;
+	for (size_t s = 0; s < cell.amount.size() && !ions; ++s) {
+		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+		if (cell.amount[s] > 0 && def.phase == Phase::Aqueous) {
+			for (const IonCount &ion : def.ions) {
+				ions = ions || (ion.count > 0 && table.solution().ions[static_cast<size_t>(ion.ion)].charge != 0);
+			}
+		}
+		// water's own ions are always there where there is water and its ionisation
+		ions = ions || (cell.amount[s] > 0 && def.phase == Phase::Liquid && table.solution().ionisation_g > 0.0);
+	}
+	char buffer[200];
+	if (!(kappa >= 0.0) || !(limit >= 0.0)) {
+		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m, its limit %g: less than nought, or not a number", kappa, limit);
+		out.push_back(buffer);
+	} else if (kappa > limit * (1.0 + 1e-12)) {
+		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m, past Kohlrausch's limit of %g", kappa, limit);
+		out.push_back(buffer);
+	} else if (!ions && kappa != 0.0) {
+		std::snprintf(buffer, sizeof buffer, "K1: a conductivity of %g S/m in a cell with no ion", kappa);
+		out.push_back(buffer);
+	}
+	return out;
+}
+
 Violations check_C5(const SpeciesTable &table, const StepTrace &trace) {
 	Violations out;
 	Snapshot &replay = replay_of(trace.before);
