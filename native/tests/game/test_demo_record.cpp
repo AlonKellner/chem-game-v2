@@ -74,6 +74,18 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 	// D4. bench/sessions/demo.jsonl: a digest of the whole state after every command
 	const json session = json::parse(read("data/sessions/demo.json"), nullptr, true, true);
 	std::istringstream golden(read("bench/sessions/demo.jsonl"));
+	std::vector<json> record;
+	{
+		std::istringstream lines(read("bench/sessions/demo.jsonl"));
+		std::string line;
+		while (std::getline(lines, line)) {
+			record.push_back(json::parse(line));
+		}
+	}
+	// D2's windows (test_lab.cpp, Stage 70): a loaded lab plays each from a save into the record's digest, every
+	// invariant checked; a long wait is played in two halves, a save between them, so that no window is a whole one
+	constexpr int64_t HALVED = 100000; // steps
+	json windows = json::array();
 	std::string why;
 	const std::unique_ptr<lab::Ui> ui = lab::Ui::open(read("data/benches/demo.json"), why);
 	REQUIRE_MESSAGE(ui != nullptr, why);
@@ -90,7 +102,33 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 	for (const json &command : session.at("script")) {
 		json plain = command;
 		plain.erase("note");
-		REQUIRE_MESSAGE(l.command(plain.dump(), why), "command " << index << ": " << why);
+		const int64_t from = index == 0 ? 0 : record[static_cast<size_t>(index - 1)].at("step").get<int64_t>();
+		const int64_t steps = record[static_cast<size_t>(index)].at("step").get<int64_t>() - from;
+		const std::string kind = plain.value("do", "");
+		std::string start = std::to_string(index - 1) + ".json";
+		json rest = plain;
+		if (index > 0 && steps > HALVED && (kind == "wait" || kind == "wait_until")) {
+			// half its steps first, as a wait of whole seconds; then the rest: a wait, what is left of it; a wait_until,
+			// itself (it stops where it did, its condition not met before; the record's digest after it holds that)
+			const int64_t half_s = steps / 120;
+			const json first{ { "do", "wait" }, { "seconds", half_s } };
+			REQUIRE_MESSAGE(l.command(first.dump(), why), "command " << index << "'s first half: " << why);
+			const std::string half = std::to_string(index) + ".half.json";
+			fixtures::write("demo", half, l.save());
+			fixtures::write("demo", std::to_string(index) + ".half.report.json", l.report());
+			windows.push_back(json{ { "from", start }, { "commands", json::array({ first }) }, { "step", l.step() }, { "digest", l.digest() } });
+			if (kind == "wait") {
+				rest["seconds"] = plain.at("seconds").get<double>() - static_cast<double>(half_s);
+			}
+			REQUIRE_MESSAGE(l.command(rest.dump(), why), "command " << index << "'s second half: " << why);
+			start = half;
+		} else {
+			REQUIRE_MESSAGE(l.command(plain.dump(), why), "command " << index << ": " << why);
+		}
+		if (index > 0) {
+			windows.push_back(json{ { "from", start }, { "commands", json::array({ rest }) }, { "step", record[static_cast<size_t>(index)].at("step") },
+					{ "digest", record[static_cast<size_t>(index)].at("digest") } });
+		}
 		std::string line;
 		REQUIRE(std::getline(golden, line));
 		const json recorded = json::parse(line);
@@ -120,6 +158,7 @@ TEST_CASE("demo: the session reproduces its golden record, its results are what 
 	std::string extra;
 	CHECK_FALSE(std::getline(golden, extra));
 	fixtures::write("demo", "scenes.json", scenes.dump());
+	fixtures::write("demo", "windows.json", windows.dump());
 
 	// GAME_SPEC §17: "done when"
 	const json report = json::parse(l.report());

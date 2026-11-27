@@ -193,6 +193,73 @@ def entry_of(build, name):
     return f"ctest:{os.path.basename(build)}:{name}"
 
 
+COSTS = os.path.join(os.path.dirname(CACHE), "costs")  # (Stage 68) ctest's measured costs, a tree's kind a file
+
+
+def tree_costs(build):
+    return os.path.join(build, "Testing", "Temporary", "CTestCostData.txt")
+
+
+def shared_costs(kind):
+    return os.path.join(COSTS, kind + ".txt")
+
+
+def read_cost_file(path):
+    """A CTestCostData.txt: its entries (name -> (runs, seconds)) and what follows its '---' (the last failures)."""
+    entries, tail = {}, ""
+    try:
+        text = open(path).read()
+    except OSError:
+        return entries, tail
+    head, sep, rest = text.partition("---")
+    for line in head.splitlines():
+        parts = line.split()
+        if len(parts) == 3:
+            try:
+                entries[parts[0]] = (int(parts[1]), float(parts[2]))
+            except ValueError:
+                pass
+    return entries, (sep + rest if sep else "")
+
+
+def write_cost_file(path, entries, tail):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = f"{path}.{os.getpid()}.tmp"
+    with open(tmp, "w") as f:
+        for name in sorted(entries):
+            runs, seconds = entries[name]
+            f.write(f"{name} {runs} {seconds:g}\n")
+        f.write(tail if tail else "---\n")
+    os.replace(tmp, path)
+
+
+def seed_costs(build):
+    """(Stage 70) A tree's costs, its own and, for what it has not measured, what other worktrees' trees of its kind
+    measured: a new worktree's ctest runs the longest first, and the gates' limits leave out the same entries."""
+    kind = os.path.basename(build)
+    own, tail = read_cost_file(tree_costs(build))
+    shared, _ = read_cost_file(shared_costs(kind))
+    missing = {k: v for k, v in shared.items() if k not in own}
+    if missing:
+        own.update(missing)
+        write_cost_file(tree_costs(build), own, tail)
+
+
+def share_costs(build):
+    """(Stage 70) A tree's measured costs into its kind's shared file, under the cache's lock."""
+    import fcntl
+    kind = os.path.basename(build)
+    own, _ = read_cost_file(tree_costs(build))
+    if not own:
+        return
+    os.makedirs(COSTS, exist_ok=True)
+    with open(CACHE + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        shared, tail = read_cost_file(shared_costs(kind))
+        shared.update(own)
+        write_cost_file(shared_costs(kind), shared, tail)
+
+
 def costs_of(path):
     """ctest's measured seconds an entry (Testing/Temporary/CTestCostData.txt: name, runs, seconds)."""
     out = {}
@@ -212,7 +279,16 @@ def ctest(build, jobs, regex, use_cache, limits=()):
     build = os.path.abspath(build)
     # (Stage 68) --limit FILE:S, as many as asked: no entry that took more than S seconds where FILE measured it
     # (ctest's CTestCostData.txt, a tree's); one no FILE has measured runs
-    measured = [(costs_of(f), most) for f, most in limits if most > 0]
+    seed_costs(build)
+    # a limit names a tree's costs by its file, or by its kind (build-core, build-asan): then this worktree's tree
+    # of that kind and every other worktree's (the shared file)
+    def costs_for(spec):
+        if os.path.sep in spec or spec.endswith(".txt"):
+            return costs_of(spec)
+        merged = costs_of(shared_costs(spec))
+        merged.update(costs_of(tree_costs(os.path.join(os.path.dirname(build), spec))))
+        return merged
+    measured = [(costs_for(f), most) for f, most in limits if most > 0]
     too_long = lambda name: any(m.get(name, 0.0) > most for m, most in measured)
     left = []
     listing = json.loads(subprocess.run(["ctest", "--test-dir", build, "--show-only=json-v1"], check=True,
@@ -253,7 +329,7 @@ def ctest(build, jobs, regex, use_cache, limits=()):
     print(f"gate_cache: {len(run)} ctest entries to run, {len(skipped)} unchanged since they passed"
           + (f" at the {LEVEL} level" if use_cache else " (cache off)") + f" ({os.path.basename(build)})"
           + (f"; {len(left)} left to the full gates, each over its limit ("
-             + ", ".join(f"{most:g} s in {os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(f))))}" for f, most in limits) + ")"
+             + ", ".join(f"{most:g} s in {f if os.path.sep not in f else os.path.basename(os.path.dirname(os.path.dirname(os.path.dirname(f))))}" for f, most in limits) + ")"
              if left else ""), flush=True)
     status = 0
     if run:
@@ -277,6 +353,7 @@ def ctest(build, jobs, regex, use_cache, limits=()):
                 if name in keys:
                     record(cache, entry_of(build, name), keys[name], name in ok)
         update(changes)
+        share_costs(build)
     return status
 
 
