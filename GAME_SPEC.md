@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.72.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.73.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -485,9 +485,9 @@ transfer"; "adjacent cells should have a gradient between them, not always a cri
   cavities keep their vapour), so a floor a flame holds between the two boils steadily. The floor's inside surface,
   half its glass under the middle the ring stands for, is where what crosses the glass is what the surface passes
   on: found to a bracket of 1e-9 K (Stage 72: by ITP, Oliveira and Takahashi 2020, never more steps than a
-  bisection's and one, a few where the flux is smooth; the onset is a step in it). Where the floor's convection steps
-  down, at Lienhard's hand-over from the thick boundary layer's form to the thin one's (a Nusselt number of 10), two
-  such surfaces may stand, and either is the floor's.
+  bisection's and one, a few where the flux is smooth; the onset is a step in it). The floor's convection takes
+  Lienhard's correction for thick boundary layers (8.37b) at every Nusselt number (Stage 73; it stopped at 10, a step
+  down there, and two such surfaces stood within it): it rises with the floor's temperature, the surface is one.
 - **A powder bed** (Stage 53): solids lying on a floor take its heat through their bed over half its thickness, at
   Zehner and Schlünder's stagnant conductivity (broken grains, C = 1.40; the porosity the sediment's), with the
   liquid over them as its fluid, or the gas. A grain's conductivity is its species'; a bed's grains are those of its
