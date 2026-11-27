@@ -2586,7 +2586,7 @@ struct Lab::Impl {
 			// each ring's and each cell's temperature, read once this step (0: none, an empty layer)
 			std::vector<double> ring_k(x.rings.size(), 0.0);
 			for (size_t k = 0; k < x.rings.size(); ++k) {
-				world().temperature(x.rings[k], ring_k[k]);
+				sim->temperature(x.rings[k], ring_k[k]);
 			}
 			std::map<int32_t, double> cell_temperature;
 			bool all_known = true; // (the world has no temperature before its first step: a setting then is not kept)
@@ -2595,7 +2595,7 @@ struct Lab::Impl {
 			}
 			for (const CellId c : column) {
 				double t = 0.0;
-				const bool known = world().temperature(c, t) && t > 0.0;
+				const bool known = sim->temperature(c, t) && t > 0.0;
 				cell_temperature[c.index] = known ? t : 0.0;
 				bool holds = false;
 				for (const int64_t a : world().snapshot_cell(c).amount) {
@@ -4028,7 +4028,7 @@ struct Lab::Impl {
 
 	double kelvin(CellId cell) const {
 		double t = 0.0;
-		world().temperature(cell, t);
+		sim->temperature(cell, t); // (Stage 72: as the world's, from the simulation's kept thermal state)
 		return t;
 	}
 

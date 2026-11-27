@@ -381,3 +381,65 @@ TEST_CASE("bubbles: a boiling beaker saved and loaded shows the bubbles it showe
 	CHECK(loaded->save() == saved); // and saved again, the same text
 	CHECK(loaded->digest() == lab->digest());
 }
+
+// (Stage 72) the surface under half a floor's glass found by regula falsi: a root to 1e-9 K of what the surface passes
+// on less what crosses the glass, as the bisection it replaced found one, over floors cool and boiling, fresh and
+// nucleated, thin glass and thick, at the room's pressure and under a vacuum's, in water and in a solution. Where
+// the root is one, it is the bisection's; the floor's convection steps down where Lienhard's thick boundary layer's
+// form (8.37b, under a Nusselt number of 10) hands over to the thin one's (8.37a), and there two roots may stand
+// within its step, either of them the surface (the bisection's own was the one its halvings came to)
+TEST_CASE("bubbles: a floor's surface under its glass is a root to 1e-9 K, the bisection's where it is one (Stage 72)") {
+	const auto excess = [](const Floor &f, double middle_c, double resistance, double t) { return floor_flux(f, t) - (middle_c - t) / resistance; };
+	const auto bisection = [&](const Floor &f, double middle_c, double resistance) {
+		double lo = f.bulk_c, hi = middle_c;
+		for (int k = 0; k < 60 && hi - lo > 1e-9; ++k) {
+			const double mid = 0.5 * (lo + hi);
+			(excess(f, middle_c, resistance, mid) > 0.0 ? hi : lo) = mid;
+		}
+		return 0.5 * (lo + hi);
+	};
+	// a sign change of the excess within 1e-9 K of it (an end of the range where it has none inside)
+	const auto root = [&](const Floor &f, double middle_c, double resistance, double t) {
+		const double below = std::max(t - 1e-9, f.bulk_c), above = std::min(t + 1e-9, middle_c);
+		return (below <= f.bulk_c || excess(f, middle_c, resistance, below) <= 0.0) && (above >= middle_c || excess(f, middle_c, resistance, above) >= 0.0);
+	};
+	double worst = 0.0;
+	int cases = 0, two = 0;
+	for (const double bulk : { 5.0, 20.0, 60.0, 90.0, 99.0, 99.9 }) {
+		for (const double over : { 1e-6, 0.01, 0.5, 3.0, 8.0, 15.0, 40.0, 120.0, 300.0 }) {
+			for (const double resistance : { 1e-3, 0.02, 0.3, 3.0 }) {
+				for (const double pressure : { 101325.0, 20000.0 }) {
+					for (const double activity : { 1.0, 0.9 }) {
+						for (const bool nucleating : { false, true }) {
+							Floor f = beaker(0.0, bulk, bulk > 50.0 ? 0.01 : 0.044);
+							f.pressure_pa = pressure;
+							f.water_activity = activity;
+							f.nucleating = nucleating;
+							const double middle = bulk + over;
+							const Through q = floor_through(f, middle, resistance);
+							const double want = bisection(f, middle, resistance);
+							INFO(bulk << " C, " << over << " K over, " << resistance << " K/W, " << pressure << " Pa, a " << activity << (nucleating ? ", nucleated" : ""));
+							CHECK(root(f, middle, resistance, q.surface_c));
+							CHECK(q.heat_w == doctest::Approx((middle - q.surface_c) / resistance).epsilon(1e-12));
+							// the bisection's, unless the excess changes sign between the two (a second root)
+							const double lo = std::min(q.surface_c, want), hi = std::max(q.surface_c, want);
+							bool between = false;
+							for (int k = 1; k < 64 && hi - lo > 2e-9 && !between; ++k) {
+								between = excess(f, middle, resistance, lo + (hi - lo) * k / 64.0) > 0.0;
+							}
+							if (between) {
+								++two;
+							} else {
+								CHECK(std::fabs(q.surface_c - want) <= 2e-9);
+								worst = std::max(worst, std::fabs(q.surface_c - want));
+							}
+							++cases;
+						}
+					}
+				}
+			}
+		}
+	}
+	MESSAGE(cases << " floors, the surface at most " << worst << " K from the bisection's where the root is one; two roots in " << two);
+	CHECK(two < cases / 50);
+}
