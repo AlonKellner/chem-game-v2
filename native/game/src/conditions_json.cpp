@@ -141,6 +141,10 @@ bool CondReader::cond(const json &j, Cond &c) {
 				c.place = v.get<std::string>();
 				ok = *c.place == "cabinet" || *c.place == "bench" || *c.place == "on" || *c.place == "under" || *c.place == "outbox" || *c.place == "in" || fail("no place \"" + *c.place + "\"");
 			}
+		} else if (key == "stands_in") { // (Stage 79)
+			std::string id;
+			ok = item(v, "stands_in", id);
+			c.stands_in = id;
 		} else if (key == "on" || key == "under" || key == "drains_to") {
 			std::string id;
 			ok = item(v, key.c_str(), id);
@@ -318,7 +322,7 @@ bool CondReader::cond(const json &j, Cond &c) {
 			return fail("a quantity names no \"item\"");
 		}
 	}
-	const bool per_item = c.place || c.on || c.under || c.drains_to || c.submitted || c.slot || c.stirred || c.burst || c.valve_at_least || c.valve_at_most || c.above_c || c.below_c ||
+	const bool per_item = c.place || c.on || c.under || c.drains_to || c.stands_in || c.submitted || c.slot || c.stirred || c.burst || c.valve_at_least || c.valve_at_most || c.above_c || c.below_c ||
 			c.liquid_above_ml || c.liquid_below_ml || !c.species.empty() || c.holds_only;
 	if (per_item && c.item.empty()) {
 		return fail("a condition on an item names no \"item\"");

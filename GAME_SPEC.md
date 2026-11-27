@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.77.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.79.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1968,6 +1968,24 @@ the calorimeter's).
 - Tall glassware stands on tall footprints (a burette 2 × 12, a pipette 2 × 11, a cylinder or a volumetric flask
   2 × 6 or 2 × 8).
 
+**A gas syringe** (Stage 79, `docs/TDD_79_SYRINGE.md`; asked for by the user, 2026-11-27): `gas_syringe`, a ground
+glass barrel of 100 mL over a 120 mm scale, its nozzle at its foot, its plunger a piston (§6, Pistons: 0.3 N of
+friction, 70 N s/m of drag; design). A bench sets where its plunger stands (`plunger_ml`) and whether its nozzle is
+capped (`capped`); its nozzle capped seals it (the cap control: `cap`, as a bottle's screw cap, while it is joined to
+nothing), put on a vessel's mouth (`attach`: their gas one space, neither open to the room) or joined to another
+syringe's by a tube (`tube`, `untube`: gas and liquid both pass). Its plunger is held by a hand toward a volume on its
+scale with at most a hand's force, 79.8 N (`plunger {item, ml}`), let go (`plunger {item, free}`), or locked where the
+hand leaves it, its lock's clamp holding it with up to 300 N (`plunger {item, lock}`). Read: its scale at its plunger
+(`plunger_ml`, by instruments to half a millilitre), its pressure (`kpa`; past next to no gas, the pressure its plunger
+stands at), the hand's force (`hand_n`), its lock (`locked`). On the screen its plunger is a rod of ground glass in its
+bore and its handle a bar across its top: **a physical control**, dragged along its barrel on the bench, the hand
+pulling the plunger toward the pointer while it is held, let go when the button is (not a slider in the readout:
+`plunger:<id>`, `plunger:<id>@<ml>`); while a hand works it a strict tutorial's clock runs. Its lock and its nozzle's
+cap are buttons in the readout; a syringe dropped on a vessel offers "on its mouth", on another syringe "tube to it";
+a tube hangs between two nozzles. Its gas faces its glass to its plunger's face, no higher (§6, the wall in rings). A
+bench may set itself out by commands before anyone acts (`setup`). A vessel standing in another is hit before it, and
+moves from one into another.
+
 **A filter funnel** (Stage 59, `docs/TDD_59_FILTERING.md`): `filter_funnel`, a 60° cone 75 mm across on a stem
 (ISO 4798's form) with a Whatman grade 1 paper folded in quarters; an outlet vessel with no stopcock, `attach`ed on a
 mouth it runs into it as it stands. Its paper drains by Darcy's law, every patch of the wetted cone in proportion to the
@@ -3059,6 +3077,18 @@ stand on.
     vessel) and logged: the water supercools to −9.7 °C, jumps back to 0 °C and holds while it freezes; the solution
     jumps back to about −2 °C and falls as its ice concentrates it. A guess first; its report: the solution's
     freezing point, and the cryoscopic constant from it (1.71 against an ideal 1.86).
+  - Stage 79's, with the gas syringe (`docs/TDD_79_SYRINGE.md`):
+    - `syringes` (asked for by the user): a sealed syringe of water (pushed at a hand's most it gives 0.09 mL, its
+      bubble's), one of air (pushed to 35 mL, let go it springs back to 59 of 60), two of water joined by a tube (one
+      pushed to 20 mL, the other out to 60, in step), two of air joined (the other out to about 80, behind while it
+      moves and a little off at rest).
+    - `boyle` (experiment 27): a capped syringe of 100 mL of air locked at 80 and 60 mL, each read once back at the
+      room's temperature: P V 10101 against 10132 kPa mL. A guess first.
+    - `charles` (experiment 27; asked for by the user: a cool bath and a hot bath): a capped syringe of 30 mL of air,
+      its plunger free, stood in ice water (28.1 mL at 1 °C) and then in hot water (35.1 mL at 70 °C): its line reaches
+      nothing at about −277 °C. A guess first.
+    - `molar_volume` (experiment 28): 0.50 g of malachite tipped into sulfuric acid, a free syringe put on the flask's
+      mouth: 53.4 mL of carbon dioxide, 23.6 L/mol against 24.1 (a little dissolves in the acid). A guess first.
   - `heating_curve`, *a heating curve and the heat of fusion* (Stage 71; experiment 26): two ice cubes stirred into
     warm water in a foam cup (40 to 20.0 °C: 334.6 J/g), then crushed ice from the freezer heated and stirred, logged:
     flat at 0 °C while it melts, flat at 100 °C while it boils. A guess first; its report: the heat of fusion.

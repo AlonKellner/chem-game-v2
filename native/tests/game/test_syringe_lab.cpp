@@ -4,6 +4,7 @@
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
 #include "lab/lab.hpp"
+#include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
 
@@ -128,15 +129,15 @@ TEST_CASE("syringe lab: two syringes of air joined by a tube: one pushed in, the
 	CHECK(item(*l, "one").sealed);
 	CHECK(item(*l, "one").tube >= 0);
 	ok(*l, R"({"do": "plunger", "item": "one", "ml": 20})");
-	ok(*l, R"({"do": "wait", "seconds": 20})");
+	ok(*l, R"({"do": "wait", "seconds": 90})"); // (the push's heat gone back to the room)
 	const double one = item(*l, "one").plunger_ml, two = item(*l, "two").plunger_ml;
 	MESSAGE("one at " << one << " mL, two at " << two << " mL");
 	CHECK(one == doctest::Approx(20.0).epsilon(1e-6));
 	// together they hold their air as it was, within what friction lets their pressure stand off the room's (each
 	// plunger holds 1 N on its bore: about 1.2 %; the push's heat first moved the other out, and friction holds it)
 	const lab::glass::Vessel *g = lab::glass::find("gas_syringe", 100.0);
-	const double band = 1.0 / (g->plunger_area() * 1e-4) / 101325.0;
-	CHECK(std::fabs(one + two - 100.0) <= (100.0 + 2.0 * g->volume_below(g->plunger_least)) * band * 1.05);
+	const double band = g->plunger_friction / (g->plunger_area() * 1e-4) / 101325.0;
+	CHECK(std::fabs(one + two - 100.0) <= (100.0 + 2.0 * g->volume_below(g->plunger_least)) * band * 1.2); // (at rest it stands at the band's edge)
 	CHECK(two > 75.0);
 	ok(*l, R"({"do": "untube", "item": "two"})");
 	CHECK_FALSE(item(*l, "one").sealed);
@@ -189,4 +190,67 @@ TEST_CASE("syringe lab: saved and loaded, a held syringe goes on as it was, dige
 	CHECK(copy->digest() == l->digest());
 	CHECK(item(*copy, "two").plunger_ml == doctest::Approx(item(*l, "two").plunger_ml).epsilon(1e-12));
 	CHECK(item(*copy, "s").plunger_held);
+}
+
+TEST_CASE("syringe ui: the plunger's handle is a control on the bench: held and dragged down at a person's pace, the hand pushes the plunger toward it; let go, it is free (Stage 79)") {
+	std::string why;
+	auto ui = lab::Ui::open(bench(syringe("s", 6, 80.0, true)), why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	const auto view = [&]() {
+		for (const lab::ItemView &v : ui->lab().view().items) {
+			if (v.id == "s") {
+				return v;
+			}
+		}
+		FAIL("no syringe");
+		return lab::ItemView{};
+	};
+	float hx = 0, hy = 0, tx = 0, ty = 0;
+	REQUIRE(ui->locate("plunger:s", hx, hy));
+	REQUIRE(ui->locate("plunger:s@50", tx, ty));
+	CHECK(ty > hy); // in is down
+	ui->pointer(hx, hy, false);
+	ui->pointer(hx, hy, true);
+	CHECK(view().plunger_held);
+	// down to 50 mL over a second and a half, then held there for two
+	for (int k = 1; k <= 90; ++k) {
+		ui->pointer(hx, hy + (ty - hy) * static_cast<float>(k) / 90.0f, true);
+		ui->frame(1.0 / 60.0);
+	}
+	for (int k = 0; k < 120; ++k) {
+		ui->frame(1.0 / 60.0);
+	}
+	const lab::ItemView held = view();
+	CHECK(held.plunger_held);
+	CHECK(held.plunger_ml == doctest::Approx(50.0).epsilon(0.02));
+	CHECK(held.pressure_kpa > 140.0);
+	ui->pointer(tx, ty, false);
+	for (int k = 0; k < 120; ++k) {
+		ui->frame(1.0 / 60.0);
+	}
+	const lab::ItemView let = view();
+	CHECK_FALSE(let.plunger_held);
+	CHECK(let.plunger_ml > 75.0);
+	MESSAGE("held at " << held.plunger_ml << " mL, " << held.pressure_kpa << " kPa; let go, back to " << let.plunger_ml << " mL");
+	// the drawing's bodies: its plunger and its handle among them
+	const lab::DrawList &d = ui->draw();
+	(void)d;
+}
+
+TEST_CASE("syringe lab: a plunger locked stays where the hand leaves it, held by its clamp; unlocked, it springs back (Stage 79)") {
+	auto l = open(bench(syringe("s", 4, 100.0, true)));
+	ok(*l, R"({"do": "plunger", "item": "s", "lock": true})");
+	ok(*l, R"({"do": "plunger", "item": "s", "ml": 70})");
+	ok(*l, R"({"do": "wait", "seconds": 10})");
+	ok(*l, R"({"do": "plunger", "item": "s", "free": true})");
+	ok(*l, R"({"do": "wait", "seconds": 20})");
+	const lab::ItemView locked = item(*l, "s");
+	CHECK(locked.plunger_locked);
+	CHECK_FALSE(locked.plunger_hand);
+	CHECK(locked.plunger_ml == doctest::Approx(70.0).epsilon(1e-3));
+	CHECK(locked.pressure_kpa > 140.0);
+	no(*l, R"({"do": "plunger", "item": "s", "lock": 1})");
+	ok(*l, R"({"do": "plunger", "item": "s", "lock": false})");
+	ok(*l, R"({"do": "wait", "seconds": 20})");
+	CHECK(item(*l, "s").plunger_ml > 97.0);
 }

@@ -160,7 +160,7 @@
 			"cap_bore_mm": 4,
 			"burst_kpa": 300,
 			"syringe": true,
-			"plunger": {"friction_n": 1.0, "drag_n_s_m": 70, "length_mm": 135, "handle_mm": 45}
+			"plunger": {"friction_n": 0.3, "drag_n_s_m": 70, "length_mm": 135, "handle_mm": 45, "clamp_n": 300}
 		}
 	]
 }

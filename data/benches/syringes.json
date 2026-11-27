@@ -1,0 +1,127 @@
+{
+	"format": "chem-bench/2",
+	"note": "Syringes (GAME_SPEC §6 Pistons, §13.7, Stage 79; asked for by the user, 2026-11-27): four setups of 100 mL glass gas syringes, each plunger a piston a hand holds with at most 79.8 N. A sealed syringe of water (50 mL, a bubble of 0.1 mL): pushed, it hardly moves, the liquid does not give. A sealed syringe of 60 mL of air: pushed, the air gives; let go, it springs back to about where it was, short by what friction holds. Two syringes of 40 mL of water joined nozzle to nozzle by a tube: one pushed, its water runs into the other, which moves out as far. Two of 50 mL of air joined: one pushed, the other moves out, a little short or past, as the air between gives and friction holds.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "water",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 50,
+			"at": [
+				2,
+				6
+			],
+			"capped": true,
+			"contents": {
+				"water": {
+					"g": 50.3
+				}
+			},
+			"label": "sealed: water"
+		},
+		{
+			"id": "air",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 60,
+			"at": [
+				6,
+				6
+			],
+			"capped": true,
+			"label": "sealed: air"
+		},
+		{
+			"id": "water_a",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 40,
+			"at": [
+				10,
+				6
+			],
+			"contents": {
+				"water": {
+					"g": 40.3
+				}
+			},
+			"label": "joined: water"
+		},
+		{
+			"id": "water_b",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 40,
+			"at": [
+				13,
+				6
+			],
+			"contents": {
+				"water": {
+					"g": 40.3
+				}
+			},
+			"label": "joined: water"
+		},
+		{
+			"id": "air_a",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 50,
+			"at": [
+				18,
+				6
+			],
+			"label": "joined: air"
+		},
+		{
+			"id": "air_b",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"plunger_ml": 50,
+			"at": [
+				21,
+				6
+			],
+			"label": "joined: air"
+		}
+	],
+	"setup": [
+		{
+			"do": "tube",
+			"item": "water_a",
+			"to": "water_b"
+		},
+		{
+			"do": "tube",
+			"item": "air_a",
+			"to": "air_b"
+		}
+	]
+}

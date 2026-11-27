@@ -701,6 +701,7 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.plunger_drag = plunger.at("drag_n_s_m").get<double>();
 		v.plunger_length = plunger.at("length_mm").get<double>() / 10.0;
 		v.handle = plunger.at("handle_mm").get<double>() / 10.0;
+		v.clamp = plunger.at("clamp_n").get<double>();
 	} else if (kind == "test_tube") {
 		// (Stage 71) ISO 4142: a round floor, its corner the tube's own radius, a straight tube to a plain rim
 		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };

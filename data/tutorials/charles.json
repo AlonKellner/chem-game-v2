@@ -1,0 +1,231 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §6 Pistons, §13.7, Stage 79; docs/CURRICULUM.md, experiment 27; asked for by the user, 2026-11-27) on data/benches/charles.json: a sealed syringe of air, its plunger free, stood in ice water and then in hot water: its air contracts and expands, the plunger following. The volume against the temperature is a line, which reaches nothing near -273 C: absolute zero.",
+	"title": "Experiment: Charles's law and absolute zero",
+	"bench": "../benches/charles.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "The syringe holds 30 mL of air at 20 C, its plunger free to move. What will it read in ice water at 0 C? Type your guess in mL, then click \"predict\".",
+			"why": "Free, the plunger moves until the air inside is at the room's pressure: the air takes as much room as its temperature asks.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "28"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "Cold",
+			"title": "Into the ice water",
+			"text": "Pick up the syringe, then right-click the beaker of ice water. In the menu, click \"stand it in\".",
+			"why": "The ice water reaches the air through the syringe's glass, all the way up to its plunger.",
+			"checks": [
+				{
+					"text": "the syringe in the ice water",
+					"when": {
+						"item": "s",
+						"stands_in": "cold"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s",
+						"item:cold"
+					]
+				},
+				{
+					"click": "panel:stand"
+				}
+			]
+		},
+		{
+			"title": "It contracts",
+			"text": "Watch the plunger as the air cools.",
+			"why": "Colder air pushes less on the plunger: the room pushes it in, until the air inside is at the room's pressure again, in less room.",
+			"checks": [
+				{
+					"text": "the air at 1 C",
+					"when": {
+						"item": "s",
+						"below_c": 1
+					}
+				}
+			]
+		},
+		{
+			"title": "Record it",
+			"text": "Right-click the syringe and click \"+ T\" and \"+ mL\".",
+			"checks": [
+				{
+					"text": "its temperature and volume recorded",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"recorded": "celsius",
+								"recorded_count": 1
+							},
+							{
+								"item": "s",
+								"recorded": "plunger_ml",
+								"recorded_count": 1
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:celsius"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		},
+		{
+			"part": "Hot",
+			"title": "Into the hot water",
+			"text": "Pick up the syringe, then right-click the beaker of hot water, and \"stand it in\".",
+			"checks": [
+				{
+					"text": "the syringe in the hot water",
+					"when": {
+						"item": "s",
+						"stands_in": "hot"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s",
+						"item:hot"
+					]
+				},
+				{
+					"click": "panel:stand"
+				}
+			]
+		},
+		{
+			"title": "It expands",
+			"text": "Watch the plunger rise as the air warms.",
+			"checks": [
+				{
+					"text": "the air near the hot water's temperature",
+					"when": {
+						"item": "s",
+						"above_c": 70
+					}
+				}
+			]
+		},
+		{
+			"title": "Record it again",
+			"text": "Record its temperature and its volume. Then, in the notebook, draw the line through the two points: where does it reach no volume at all?",
+			"why": "Every gas's line, at any pressure, reaches nothing at the same temperature, -273 C: absolute zero, the coldest anything can be (Kelvin's scale starts there). No gas gets there: it turns liquid first.",
+			"checks": [
+				{
+					"text": "its temperature and volume recorded",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"recorded": "celsius",
+								"recorded_count": 2
+							},
+							{
+								"item": "s",
+								"recorded": "plunger_ml",
+								"recorded_count": 2
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:celsius"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the air",
+			"quantity": {
+				"item": "s",
+				"what": "celsius"
+			},
+			"show": [
+				"least",
+				"most"
+			]
+		},
+		{
+			"label": "the plunger",
+			"quantity": {
+				"item": "s",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"least",
+				"most"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the volume at 0 C",
+			"unit": "mL",
+			"truth": "28.0",
+			"ideal": 27.9,
+			"tolerance": 0.6,
+			"predict": true,
+			"why": "30 mL x 273 K / 293 K is 27.95 mL; the plunger stops a little short, held by its friction."
+		},
+		{
+			"label": "absolute zero, from your line",
+			"unit": "C",
+			"truth": "-276",
+			"ideal": -273.15,
+			"tolerance": 15,
+			"why": "The line through the two readings, run back to no volume. The model's: about -276 C, the plunger's friction holding each reading a little short of the bath's own."
+		}
+	]
+}

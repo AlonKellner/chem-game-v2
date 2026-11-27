@@ -262,7 +262,7 @@ struct Ui::Impl {
 	}
 	// whether a name of the screen (Ui::locate) is of the room: what stands in it and its places, not a panel's
 	bool room_name(std::string_view what) const {
-		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:", "frame:", "lens:" };
+		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:", "frame:", "lens:", "plunger:" };
 		for (const char *prefix : ROOMS) {
 			const std::string_view p(prefix);
 			if (what.substr(0, p.size()) != p) {
@@ -344,6 +344,10 @@ struct Ui::Impl {
 	static constexpr int STREAM_LENGTHS = 8; // a stream is drawn in at most so many lengths, each its own width
 	static constexpr double STREAM_PI = 3.14159265358979323846;
 	int valve_drag = -1; // the burner whose valve is being turned
+	// (Stage 79) the syringe whose plunger's handle is held (a physical control on the bench: dragged along its barrel,
+	// the hand pulls the plunger toward the pointer), and how far the handle's middle stood from the pointer when held
+	int plunging = -1;
+	float plunge_dy = 0.0f;
 	bool slider_drag = false;
 	// the cabinet (Stage 48): its first row on the screen, and whether its scroll bar is held
 	int cabinet_from = 0;
@@ -1860,7 +1864,9 @@ struct Ui::Impl {
 			if (v.us_cm) {
 				whats.emplace_back("us_cm"); // (Stage 65)
 			}
-			if (v.scale_ml) {
+			if (v.syringe) {
+				whats.emplace_back("plunger_ml"); // (Stage 79)
+			} else if (v.scale_ml) {
 				whats.emplace_back("scale_ml");
 			} else if (!view.instruments || v.read_ml) {
 				whats.emplace_back("liquid_ml");
@@ -2128,6 +2134,7 @@ struct Ui::Impl {
 		panel = false;
 		pouring = false;
 		valve_drag = -1;
+		plunging = -1;
 		slider_drag = false;
 		hover = -1;
 		tutorial = std::move(t);
@@ -2224,7 +2231,8 @@ struct Ui::Impl {
 	bool running() const { return tutorial && tutorial->view().state == TutorialView::Running; }
 	bool guided() const { return running() && strict; }
 	// its clock stands while the step asks for a gesture; free, the clock is the player's
-	bool held() const { return guided() && !tutorial->waiting(); }
+	// (Stage 79: not while a hand works a physical control, a plunger's handle: what it does takes the lab's time)
+	bool held() const { return guided() && !tutorial->waiting() && plunging < 0; }
 	bool asks_click(const std::string &what) const {
 		for (const TutorialGesture &g : tutorial->gestures()) {
 			if (!g.drag && (g.what == what || (what.back() == '@' && g.what.rfind(what, 0) == 0))) {
@@ -2539,6 +2547,49 @@ struct Ui::Impl {
 		const Rect f = camera_frame(index);
 		return Rect{ f.x + f.w - 18, f.y - 12, 18, 12 };
 	}
+	// (Stage 79) a syringe's plunger on the screen: its face's height with `ml` on its scale, and its handle there (a
+	// thin bar over the plunger's rod, across the barrel); none for one not upright in the room, or in hand
+	float plunger_face(const Rect &r, const glass::Vessel &g, double ml) const {
+		const float px_cm = r.h / static_cast<float>(g.height);
+		return r.y + r.h - static_cast<float>(g.plunger_least + ml / g.plunger_area()) * px_cm;
+	}
+	Rect handle_of(const Rect &r, const glass::Vessel &g, double ml) const {
+		const float px_cm = r.h / static_cast<float>(g.height), w = static_cast<float>(g.handle) * px_cm;
+		const float top = plunger_face(r, g, ml) - static_cast<float>(g.plunger_length) * px_cm;
+		return Rect{ r.cx() - w / 2, top - HANDLE_H, w, HANDLE_H };
+	}
+	static constexpr float HANDLE_H = 7.0f;
+	bool plunger_handle(int index, double ml, Rect &h) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const glass::Vessel *g = glass_of(v);
+		if (g == nullptr || !g->syringe || v.inverted || v.pours_into >= 0 || hidden(index) || (v.place != "bench" && v.place != "on" && v.place != "in") ||
+				(index == drag && (carrying || moved))) {
+			return false;
+		}
+		h = handle_of(drawn(index), *g, ml);
+		return true;
+	}
+	// what its scale reads with its handle's middle at height y of the screen
+	double plunger_ml_at(int index, float y) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		const glass::Vessel *g = glass_of(v);
+		const Rect r = drawn(index);
+		const float px_cm = r.h / static_cast<float>(g->height);
+		const float face = y + HANDLE_H / 2 + static_cast<float>(g->plunger_length) * px_cm;
+		const double cm = (r.y + r.h - face) / px_cm;
+		return std::clamp((cm - g->plunger_least) * g->plunger_area(), 0.0, g->nominal_ml);
+	}
+	bool plunger_grab(int index, float x, float y) const {
+		Rect h;
+		return plunger_handle(index, view.items[static_cast<size_t>(index)].plunger_ml, h) && Rect{ h.x - 4, h.y - 6, h.w + 8, h.h + 12 }.has(x, y);
+	}
+	void plunge(float y) {
+		if (plunging < 0 || plunging >= static_cast<int>(view.items.size())) {
+			return;
+		}
+		const double ml = plunger_ml_at(plunging, y + plunge_dy);
+		act({ { "do", "plunger" }, { "item", id(plunging) }, { "ml", ml } });
+	}
 	bool frame_grab(int index, float x, float y) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		if (v.kind != "thermal" || v.place != "bench" || hidden(index)) {
@@ -2820,10 +2871,20 @@ struct Ui::Impl {
 	// the item under a point, the topmost; not the tray, not `except`; with
 	// `on_bench`, only what stands on the bench (what can be joined or poured into)
 	int item_at(float x, float y, int except = -1, bool on_bench = false) const {
+		// (Stage 79) what stands in another vessel first: it is drawn in front of it, whatever their order
+		for (const bool in_front : { true, false }) {
+			const int at = item_at(x, y, except, on_bench, in_front);
+			if (at >= 0) {
+				return at;
+			}
+		}
+		return -1;
+	}
+	int item_at(float x, float y, int except, bool on_bench, bool in_front) const {
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			const std::string &place = view.items[static_cast<size_t>(i)].place;
 			if (i == except || view.items[static_cast<size_t>(i)].kind == "tray" || (on_bench && place != "bench" && place != "on" && place != "under" && place != "in" && place != "circuit") ||
-					!visible(i)) {
+					!visible(i) || (place == "in") != in_front) {
 				continue;
 			}
 			if (!opened.empty() && view.items[static_cast<size_t>(i)].place != "circuit" && circuit_panel().has(x, y)) {
@@ -2908,10 +2969,20 @@ struct Ui::Impl {
 	bool screw_rect(int index, Rect &r) const {
 		const ItemView &v = view.items[static_cast<size_t>(index)];
 		const glass::Vessel *g = v.kind == "vessel" && !v.glassware.empty() ? glass::find(v.glassware, v.nominal_ml) : nullptr;
-		if (index != selected || g == nullptr || !g->screw_cap || v.burst || v.pours_into >= 0 || v.holds >= 0 || v.place != "bench" || draft.edit != Draft::None) {
+		const bool nozzle = g != nullptr && g->syringe && v.on < 0 && v.tube < 0 && (v.place == "bench" || v.place == "in"); // (Stage 79) a syringe's nozzle cap
+		if (index != selected || g == nullptr || !(g->screw_cap || nozzle) || v.burst || v.pours_into >= 0 || v.holds >= 0 || (v.place != "bench" && !nozzle) || draft.edit != Draft::None) {
 			return false;
 		}
 		r = Rect{ READOUT.x + 116, readout_top() + 90, 140, 30 };
+		return true;
+	}
+	// (Stage 79) a syringe's plunger lock, while it is in the room
+	bool lock_rect(int index, Rect &r) const {
+		const ItemView &v = view.items[static_cast<size_t>(index)];
+		if (index != selected || !v.syringe || (v.place != "bench" && v.place != "on" && v.place != "in") || draft.edit != Draft::None) {
+			return false;
+		}
+		r = Rect{ READOUT.x + 262, readout_top() + 90, 130, 30 };
 		return true;
 	}
 
@@ -2932,6 +3003,15 @@ struct Ui::Impl {
 	static Rect mark_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 168, 120, 34 }; }
 	// (Stage 71) stood in it, upright on its floor: a tube in a bath, under the mark's place
 	static Rect stand_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 210, 120, 34 }; }
+	// (Stage 79) a syringe over a vessel: its nozzle on the vessel's mouth, or tubed to another syringe's nozzle
+	static Rect join_button() { return Rect{ PANEL.x + PANEL.w - 150, PANEL.y + 250, 120, 34 }; }
+	bool could_join() const {
+		if (!panel || from < 0 || to < 0) {
+			return false;
+		}
+		const ItemView &a = view.items[static_cast<size_t>(from)], &b = view.items[static_cast<size_t>(to)];
+		return a.syringe && b.kind == "vessel" && !a.screwed && a.tube < 0 && a.on < 0 && (b.syringe ? b.tube < 0 && b.on < 0 && !b.screwed : b.holds < 0);
+	}
 	// a vessel that could stand in the other: glassware both, the other the larger
 	bool could_stand() const {
 		if (!panel || from < 0 || to < 0) {
@@ -3614,6 +3694,15 @@ struct Ui::Impl {
 				}
 				return;
 			}
+			if (could_join() && join_button().has(x, y)) {
+				const bool tube = view.items[static_cast<size_t>(to)].syringe;
+				if (allowed_click(tube ? "panel:tube" : "panel:attach") &&
+						act(tube ? json{ { "do", "tube" }, { "item", id(from) }, { "to", id(to) } } : json{ { "do", "attach" }, { "item", id(from) }, { "to", id(to) } })) {
+					panel = false;
+					put_back(); // on the other's mouth, or back where it was with its tube
+				}
+				return;
+			}
 			if (invert_button().has(x, y) && (!guided() || asks_click("panel:invert"))) {
 				if (allowed_click("panel:invert") && act({ { "do", "invert" }, { "item", id(from) }, { "over", id(to) } })) {
 					panel = false;
@@ -3737,6 +3826,13 @@ struct Ui::Impl {
 					return;
 				}
 				act({ { "do", "cap" }, { "item", id(i) }, { "to", view.items[static_cast<size_t>(i)].screwed ? 1.0 : 0.0 } });
+				return;
+			}
+			if (lock_rect(i, r) && r.has(x, y)) {
+				if (!allowed_click("lock:" + id(i))) {
+					return;
+				}
+				act({ { "do", "plunger" }, { "item", id(i) }, { "lock", !view.items[static_cast<size_t>(i)].plunger_locked } });
 				return;
 			}
 		}
@@ -4836,6 +4932,20 @@ struct Ui::Impl {
 	}
 	// a drag from the drawer, or from a part's port, begins
 	bool begin_signal_drag(float x, float y) {
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			if (plunger_grab(i, x, y)) { // (Stage 79) a syringe's plunger, by its handle: the hand holds it where it is
+				if (guided() && !asks_drag_from("plunger:" + id(i))) {
+					not_now();
+					return true;
+				}
+				Rect h;
+				plunger_handle(i, view.items[static_cast<size_t>(i)].plunger_ml, h);
+				plunging = i;
+				plunge_dy = h.cy() - y;
+				act({ { "do", "plunger" }, { "item", id(i) }, { "ml", view.items[static_cast<size_t>(i)].plunger_ml } });
+				return true;
+			}
+		}
 		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
 			if (frame_grab(i, x, y)) { // a thermal camera's frame, by its handle (Stage 48)
 				if (guided() && !asks_drag_from("frame:" + id(i))) {
@@ -6265,6 +6375,9 @@ struct Ui::Impl {
 				if (could_stand()) {
 					buttons.push_back(stand_button()); // (Stage 71)
 				}
+				if (could_join()) {
+					buttons.push_back(join_button()); // (Stage 79)
+				}
 				for (const auto &[species, b] : tip_buttons()) {
 					buttons.push_back(b);
 				}
@@ -6275,6 +6388,9 @@ struct Ui::Impl {
 					buttons.push_back(b);
 				}
 				if (screw_rect(i, b)) {
+					buttons.push_back(b);
+				}
+				if (lock_rect(i, b)) {
 					buttons.push_back(b);
 				}
 				for (const auto &[n, sb] : spectro_buttons(i)) {
@@ -6448,9 +6564,21 @@ struct Ui::Impl {
 				}
 				body.vortex = static_cast<float>(v.vortex); // a stirred liquid's (Stage 32)
 				bodies.push_back(body);
-				if (v.screwed) { // its screw cap on (Stage 28)
+				const glass::Vessel *made = glass_of(v);
+				if (v.screwed && made != nullptr && made->syringe) { // (Stage 79) a syringe's nozzle capped, at its foot
+					thing(who, "cap", OpticsBody::Slab, Rect{ r.cx() - 6, r.y + r.h - 4, 12, 9 }, 3.0f, "cap_plastic", nullptr, in_hand);
+				} else if (v.screwed) { // its screw cap on (Stage 28)
 					const float mouth = mouth_px(i) + 8;
 					thing(who, "cap", OpticsBody::Slab, Rect{ r.cx() - mouth / 2, r.y - 8, mouth, 12 }, 3.0f, "cap_plastic", nullptr, in_hand);
+				}
+				if (made != nullptr && made->syringe && !body.flipped && body.angle == 0.0f) {
+					// (Stage 79) its plunger: a rod of ground glass in its bore from the gas's top up out of the barrel, its
+					// handle across its top
+					const float px_cm = r.h / static_cast<float>(made->height);
+					const float face = plunger_face(r, *made, v.plunger_ml), bore = static_cast<float>(0.5 * made->diameter - made->wall) * 2.0f * px_cm;
+					const Rect handle = handle_of(r, *made, v.plunger_ml);
+					thing(who, "plunger", OpticsBody::Slab, Rect{ r.cx() - bore / 2 + 0.5f, handle.y + handle.h, bore - 1.0f, face - handle.y - handle.h }, 3.0f, "ground_glass", nullptr, in_hand);
+					thing(who, "handle", OpticsBody::Slab, handle, 3.0f, "ground_glass", nullptr, in_hand);
 				}
 				if (v.condenser) {
 					bar(who, "outlet", r.x + r.w, r.y + r.h - 10, r.x + r.w + 26, r.y + r.h + 14, 2.0f, "outlet_glass", in_hand);
@@ -6725,6 +6853,29 @@ struct Ui::Impl {
 				OpticsBody body{ &streams.back(), x - width / 2.0f, y0, width, y1 - y0 };
 				body.layer = i == drag && (moved || carrying) ? 1 : 0;
 				bodies.push_back(body);
+			}
+		}
+		// (Stage 79) a tube between two syringes' nozzles, hanging between them
+		for (size_t i = 0; i < view.items.size(); ++i) {
+			const ItemView &v = view.items[i];
+			if (v.tube <= static_cast<int>(i) || v.tube >= static_cast<int>(view.items.size()) || hidden(static_cast<int>(i)) || hidden(v.tube)) {
+				continue;
+			}
+			const Rect a = drawn(static_cast<int>(i)), b = drawn(v.tube);
+			const float x0 = a.cx(), y0 = a.y + a.h, x1 = b.cx(), y1 = b.y + b.h;
+			const float sag = 18.0f + 0.1f * std::fabs(x1 - x0);
+			constexpr int PIECES = 8;
+			for (int k = 0; k < PIECES; ++k) {
+				const auto at = [&](int n, float &x, float &y) {
+					const float t = static_cast<float>(n) / PIECES;
+					x = x0 + (x1 - x0) * t;
+					y = y0 + (y1 - y0) * t + 4.0f * sag * t * (1.0f - t);
+				};
+				float xa = 0, ya = 0, xb = 0, yb = 0;
+				at(k, xa, ya);
+				at(k + 1, xb, yb);
+				bar(v.id + "~" + view.items[static_cast<size_t>(v.tube)].id, k == 0 ? "tube" : "tube+", xa, ya, xb, yb, 4.0f, "rubber", false);
+				bodies.back().id ^= static_cast<size_t>(k) * 0x9e3779b97f4a7c15ull;
 			}
 		}
 		// the wires and the rigs between things on the bench
@@ -7137,6 +7288,13 @@ struct Ui::Impl {
 				button(control, v.screwed ? "cap on" : "cap off", v.screwed, 15);
 				y += 42;
 			}
+			if (Rect lock; lock_rect(showing, lock)) { // (Stage 79) in the row of its stirring and its cap
+				button(lock, v.plunger_locked ? "plunger locked" : "lock plunger", v.plunger_locked, 15);
+				Rect other;
+				if (!stir_rect(showing, other) && !screw_rect(showing, other)) {
+					y += 42;
+				}
+			}
 			for (const ControlSetting &c : view.controls) {
 				if (c.item == v.id) {
 					row(c.control + (c.control == "valve" ? text_of(" %.0f%%", 100.0 * c.value) : c.control == "cap" ? text_of(" %.0f%% open", 100.0 * c.value) : c.value > 0.5 ? " on" : " off") +
@@ -7273,6 +7431,10 @@ struct Ui::Impl {
 					row("broken: its glass burst", WARN, 15);
 				} else if (v.sealed) {
 					row(text_of("sealed: it gives way past %.0f kPa", v.gives_way_kpa), v.pressure_kpa > 0.8 * v.gives_way_kpa ? WARN : DIM, 15);
+				}
+				if (v.syringe) { // (Stage 79) its plunger: where it stands, held or free
+					const std::string at = measured && v.read_ml ? text_of("plunger at %.1f mL", *v.read_ml) : text_of("plunger at %.2f mL", v.plunger_ml);
+					row(at + (v.plunger_held ? text_of(", held: the hand %.0f N", std::fabs(v.plunger_force_n)) : std::string(", free")) + (v.tube >= 0 ? ", tubed" : ""), INK, 16);
 				}
 				// volumetric glass (Stage 52): a burette's reading from its zero line; a mark, and how the liquid stands to it
 				if (v.scale_ml) {
@@ -7552,6 +7714,9 @@ struct Ui::Impl {
 		if (could_stand()) {
 			button(stand_button(), "stand it in");
 		}
+		if (could_join()) {
+			button(join_button(), view.items[static_cast<size_t>(to)].syringe ? "tube to it" : "on its mouth");
+		}
 		button(cancel_button(), "cancel");
 	}
 };
@@ -7620,6 +7785,8 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 			m.slide(x);
 		} else if (m.valve_drag >= 0) {
 			m.turn(x);
+		} else if (m.plunging >= 0) {
+			m.plunge(y);
 		}
 	} else if (released) {
 		if (m.storage_scrolling) {
@@ -7628,6 +7795,11 @@ void Ui::pointer(float x, float y, bool down, int mods) {
 		}
 		if (m.cabinet_scrolling) {
 			m.cabinet_scrolling = false;
+		} else if (m.plunging >= 0) {
+			// (Stage 79) the handle let go: the plunger free
+			const int at = m.plunging;
+			m.plunging = -1;
+			m.act({ { "do", "plunger" }, { "item", m.id(at) }, { "free", true } });
 		} else if (m.framing >= 0 && !m.frame_in_hand) {
 			// a camera's frame (Stage 48): pressed and let go where it was, it is in hand, and the next press puts it
 			// down; pressed and moved, it goes where the button is let go
@@ -8453,6 +8625,22 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		y = c.cy();
 		return true;
 	}
+	if (after("plunger:", rest)) {
+		// (Stage 79) a syringe's plunger's handle: "plunger:<id>" where it is, "plunger:<id>@<ml>" where it would be at ml
+		const size_t at = rest.find('@');
+		const int i = index_of(rest.substr(0, at));
+		if (i < 0) {
+			return false;
+		}
+		const double ml = at == std::string_view::npos ? m.view.items[static_cast<size_t>(i)].plunger_ml : std::atof(std::string(rest.substr(at + 1)).c_str());
+		Rect h;
+		if (!m.plunger_handle(i, ml, h)) {
+			return false;
+		}
+		x = h.cx();
+		y = h.cy();
+		return true;
+	}
 	if (after("valve:", rest) || after("cap:", rest)) {
 		const size_t at = rest.find('@');
 		const int i = index_of(rest.substr(0, at));
@@ -8515,6 +8703,11 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		const int i = index_of(rest);
 		Rect r;
 		return i >= 0 && m.stir_rect(i, r) && centre(r);
+	}
+	if (after("lock:", rest)) {
+		const int i = index_of(rest);
+		Rect r;
+		return i >= 0 && m.lock_rect(i, r) && centre(r);
 	}
 	if (after("screw:", rest)) {
 		const int i = index_of(rest);
@@ -8596,6 +8789,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "panel:mark") { // (Stage 52)
 		return m.panel && centre(Impl::mark_button());
+	}
+	if (what == "panel:tube" || what == "panel:attach") { // (Stage 79)
+		return m.could_join() && (m.view.items[static_cast<size_t>(m.to)].syringe == (what == "panel:tube")) && centre(Impl::join_button());
 	}
 	if (what == "panel:stand") { // (Stage 71)
 		return m.could_stand() && centre(Impl::stand_button());

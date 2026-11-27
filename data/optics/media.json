@@ -331,6 +331,16 @@
 				}
 			]
 		},
+		"ground_glass": {
+			"base": 0.55,
+			"bands": [
+				{
+					"centre_nm": 470,
+					"width_nm": 120,
+					"peak": 0.05
+				}
+			]
+		},
 		"burner_metal": {
 			"base": 0.12
 		},
@@ -479,6 +489,7 @@
 			"probe_head": 0.95,
 			"probe_cable": 0.95,
 			"rubber": 0.95,
+			"ground_glass": 0.9,
 			"burner_metal": 0.8,
 			"outlet_glass": 0.85,
 			"lamp_glass": 0.85,

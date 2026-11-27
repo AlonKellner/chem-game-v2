@@ -44,8 +44,11 @@ control feature on the handle" (physical controls for other things, a burner's, 
 - **A gas syringe** (`data/glassware.json`, `gas_syringe`): a graduated glass barrel of 100 mL (a bore of 32.6 mm,
   a scale of 120 mm: design), its nozzle at its foot (attached on a flask's mouth as a balloon is, capped, or joined
   to another syringe's nozzle by a tube), its plunger at the top of what it holds, a piston of a ground glass's
-  friction and drag (design, from how a free plunger settles). Read: its volume (`ml`, by its scale), its pressure
-  (`kpa`).
+  friction (0.3 N) and drag (70 N s/m: a free plunger settles in about 0.1 s). Read: its scale (`plunger_ml`), its
+  pressure (`kpa`), the hand's force (`hand_n`), its lock (`locked`).
+- **Its lock** (found as the tutorials were written: a reading of Boyle's law is taken with the hand off the plunger,
+  which a free plunger would not allow): `plunger {item, lock}`, the plunger held where the hand leaves it by its
+  clamp, up to 300 N.
 - **The handle, a physical control**: the plunger's handle is dragged along the barrel's axis on the bench (no
   panel slider): while the pointer holds it the hand pulls the plunger toward the pointer, limited to its force; let
   go, the plunger is free. A command for scripts and tutorials: `plunger {item, ml}` (held toward a volume),
@@ -56,11 +59,12 @@ control feature on the handle" (physical controls for other things, a burner's, 
 ### Experiments (GAME_SPEC §13.7)
 - `syringes`: the four setups side by side: a sealed syringe of water, one of air, two of water joined, two of air
   joined; pushed and let go, each as it does.
-- `boyle` (curriculum 27): a syringe of 100 mL of air, its nozzle capped; held and pushed in, 100, 90, 80, 70, 60 mL
-  (the hand's most: about 52 mL), the pressure logged against the volume: P V constant.
-- `charles` (curriculum 27): a free syringe of 50 mL of air, capped, stood in a beaker of water (Stage 71's vessel in
-  a vessel) heated from 20 to 80 C: the volume against the temperature, its line extrapolated to nothing at about
-  -273 C.
+- `boyle` (curriculum 27): a syringe of 100 mL of air, its nozzle capped; locked, pushed to 80 and 60 mL (the hand's
+  most: about 52 mL), each read once back at the room's temperature: P V constant.
+- `charles` (curriculum 27; the user, 2026-11-27: "a cool bath and a hot bath, and we can submerge the syringe in one
+  or the other - and the air inside it expands or contracts, visually moving the plunger"): a free syringe of 30 mL of
+  air, capped, stood in ice water and then in hot water (Stage 71's vessel in a vessel): the volume against the
+  temperature, its line extrapolated to nothing at about -273 C.
 - `molar_volume` (curriculum 28): malachite in sulfuric acid in a flask with the free syringe on its mouth: the
   carbon dioxide it gives collected; its volume at the room's temperature and pressure over its moles: about 24
   L/mol.
@@ -69,16 +73,48 @@ control feature on the handle" (physical controls for other things, a burner's, 
 
 | Phase | Topic | Status |
 |---|---|---|
-| 79.1 | The core: a piston, the hand's force, joined spaces, liquid between joined columns; tests (T1, T2, V3; Boyle's limit, the hand's most, the four setups) | |
-| 79.2 | The lab: the gas syringe, its plunger, attached, capped and joined, saved | |
-| 79.3 | The screen: the handle a physical control (dragged), the plunger drawn | |
-| 79.4 | The experiments `syringes`, `boyle`, `charles`, `molar_volume` | |
+| 79.1 | The core: a piston, the hand's force, joined spaces, liquid between joined columns; tests (T1, T2, V3; Boyle's limit, the hand's most, the four setups) | Done |
+| 79.2 | The lab: the gas syringe, its plunger, attached, capped and joined, its lock, saved | Done |
+| 79.3 | The screen: the handle a physical control (dragged), the plunger drawn, the tube, the panel's join | Done |
+| 79.4 | The experiments `syringes`, `boyle`, `charles`, `molar_volume` | Done |
 | 79.5 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Tests
 
-(with each phase)
+- `native/tests/test_syringe.cpp` (the core): Boyle's law at a slow push (P V to 1e-5), the hand's most, a sealed
+  syringe of air springing back within its friction's band, a fast push at least the adiabat's temperature and at most
+  the hand's work's, a free plunger's energy standing, a sealed syringe of water standing on its liquid against the
+  hand both ways, two of air joined (the other short by what the air gives), two of water joined (the water moving
+  across), the refusals; W1 and its self-test on a corrupted trace. Every step under every invariant.
+- `native/tests/game/test_syringe_lab.cpp` (the lab and the screen): its glassware; Boyle's law and the spring back;
+  the hand's most (79.8 N, the source's); an open syringe, its cap, the refusals; two of air and two of water tubed;
+  one on a flask's mouth; saved and loaded, digest for digest; the lock; the handle dragged on the screen at a
+  person's pace.
+- `native/tests/game/test_experiments.cpp`: each of the four experiments followed with its own gestures (strict and
+  free) and at a person's pace; `syringes`' four setups, `boyle`'s P V, `charles`' contraction and expansion,
+  `molar_volume`'s 24 L/mol, each with its report.
+
+## Found
+
+- **A physical control needs the lab's time.** A strict tutorial holds its clock while a step waits for a gesture:
+  a plunger dragged then moved nowhere. The clock runs while a hand works a plunger (`Ui::held`); the tests' drag of
+  a plunger takes a second and a half, as a hand's does.
+- **A syringe's gas faced the glass to its brim**: in a cold bath its air settled at 8 C, the glass over its plunger
+  in the room's air. Its gas now faces its glass to its plunger's face (`set_walls`).
+- **Friction biases Charles's law**: a plunger held by 1 N on its bore stops 1.2 % short each way, absolute zero at
+  -305 C; ground gas syringes are made nearly frictionless, and 0.3 N puts it at -277 C.
+- **What stands in a vessel was hit after it** when it came earlier in the bench's list: the syringe in a bath could
+  not be chosen. What stands in a vessel is hit first.
 
 ## Open
 
-(to be found)
+- A liquid is incompressible: a sealed syringe of water moves by its bubble alone, and with none its plunger stands
+  on the liquid (a billionth of its volume left to its gas). Water's compressibility (4.5e-10 /Pa) would give 0.005 mL
+  at a hand's most.
+- Joined spaces are at one pressure: a tube's own resistance to flow (Poiseuille's) is not modelled, nor a liquid's
+  head between joined syringes.
+- A syringe whose nozzle is open spills what its plunger pushes past its liquid (the overflow), and draws in air,
+  never liquid: drawing a liquid into a syringe is to come.
+- The plunger and its handle are slabs of the pass, lit and opaque, drawn over the barrel; the tube a hanging bar.
+  Not yet traced as glass (Stage 78's traced reflection, and nested rays, after it).
+- The plunger's weight (tens of grams: 0.6 kPa on its bore) is not modelled.

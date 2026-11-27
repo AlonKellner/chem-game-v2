@@ -114,6 +114,7 @@ struct ItemView {
 	// plunger held by a hand toward `plunger_target_ml`, or free; the hand's force, N (outward); the syringe its nozzle
 	// is joined to by a tube (index)
 	bool syringe = false, plunger_held = false;
+	bool plunger_hand = false, plunger_locked = false; // a hand on it; its lock on (it holds where the hand leaves it)
 	double plunger_ml = 0.0, plunger_most_ml = 0.0, plunger_target_ml = 0.0, plunger_force_n = 0.0;
 	int tube = -1;
 	double volume_ml = 0.0; // a vessel's own

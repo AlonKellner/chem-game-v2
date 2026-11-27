@@ -85,9 +85,10 @@ struct Vessel {
 	// paper cone stands to, cm over the cone's apex (0: no paper)
 	double stem = 0.0, cone_half_angle = 0.0, paper_herzberg_s = 0.0, paper_height = 0.0;
 	// (Stage 79) a gas syringe's: its plunger's face from fully in (`plunger_least`, cm over its base) to its last mark
-	// (`plunger_most`); the plunger's friction, N, and drag, N s/m; its length and its handle's width, cm
+	// (`plunger_most`); the plunger's friction, N, and drag, N s/m; its length and its handle's width, cm; what its lock
+	// holds it with, N
 	bool syringe = false;
-	double plunger_least = 0.0, plunger_most = 0.0, plunger_friction = 0.0, plunger_drag = 0.0, plunger_length = 0.0, handle = 0.0;
+	double plunger_least = 0.0, plunger_most = 0.0, plunger_friction = 0.0, plunger_drag = 0.0, plunger_length = 0.0, handle = 0.0, clamp = 0.0;
 	double plunger_area() const; // the bore's, cm^2
 	double plunger_y(double cm3) const; // its face's height holding cm3 under it (from fully in, the dead volume)
 	static constexpr size_t PATHS = 256; // (Stage 52: a slender pipette's bore changes too fast for 64)

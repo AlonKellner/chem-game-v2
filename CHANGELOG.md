@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.79.0 (2026-11-27, Stage 79)
+
+- §6 (Stage 79, `docs/TDD_79_SYRINGE.md`; `docs/CURRICULUM.md`, step G's first part: experiments 27 and 28): **pistons**:
+  a rigid cell's (or a column's) volume moved each step by the forces on its plunger, overdamped (its gas's pressure
+  after the move against the room's, its friction and drag, a hand of at most 79.8 N toward a volume, a thumb's, Astin
+  1999), every cell joined to it one space at one pressure, liquid run between joined sealed columns; the hand's work
+  along an edge from the mains the only work (T2 by the pressure after the move); W1; a step's start read at its
+  volume then.
+- §13: **the gas syringe**, its plunger's handle a physical control dragged on the bench (asked for by the user), its
+  lock, its nozzle capped, on a vessel's mouth or tubed to another's; a bench's `setup`.
+- §13.7: the experiments `syringes` (the user's four setups), `boyle`, `charles` (the user's cool and hot baths),
+  `molar_volume`.
+
 ## 0.77.0 (2026-11-27, Stage 77; signed off by the user: "Approved, merge and proceed")
 
 - §12.2 (Stage 77, `docs/TDD_77_GHOST.md`): **the ghost** the user found: a pile lowered slowly in a stirred bath (a

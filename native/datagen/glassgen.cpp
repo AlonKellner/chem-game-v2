@@ -23,7 +23,7 @@ namespace {
 // (Vessel's size where this was written: a member added there is one to write here, then set its size)
 template <size_t N>
 struct VesselSize {
-	static_assert(N == 328, "lab::glass::Vessel has changed: write its new members in shape(), then set its size");
+	static_assert(N == 336, "lab::glass::Vessel has changed: write its new members in shape(), then set its size");
 };
 [[maybe_unused]] constexpr VesselSize<sizeof(Vessel)> vessel_size{};
 
@@ -79,6 +79,7 @@ std::string shape(const Vessel &v) {
 	d("plunger_drag", v.plunger_drag);
 	d("plunger_length", v.plunger_length);
 	d("handle", v.handle);
+	d("clamp", v.clamp);
 	o << "\t\tv.paths = {";
 	for (const double x : v.paths) {
 		o << hex(x) << ", ";

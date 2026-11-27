@@ -1,0 +1,235 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §6 Pistons, §13.7, Stage 79; asked for by the user, 2026-11-27) on data/benches/syringes.json: a syringe's plunger is pushed by the hand, held back by what is inside. A sealed syringe of water does not give; one of air gives and springs back; two of water joined move together; two of air joined move together, the air between giving a little.",
+	"title": "Experiment: syringes",
+	"bench": "../benches/syringes.json",
+	"steps": [
+		{
+			"part": "A sealed syringe of water",
+			"title": "Push the water",
+			"text": "Drag the handle of the left syringe, the one of water, down as far as you can, then let go.",
+			"why": "Dragging a handle pushes its plunger with your hand's force: as hard as it takes, up to what a hand can push, about 80 N.",
+			"checks": [
+				{
+					"text": "pushed as hard as a hand can",
+					"when": {
+						"quantity": {
+							"item": "water",
+							"what": "hand_n"
+						},
+						"compare": "above",
+						"value": 70
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:water",
+						"plunger:water@20"
+					]
+				}
+			]
+		},
+		{
+			"title": "It hardly moved",
+			"text": "Read where its plunger stands now: on the scale, as it was.",
+			"why": "A liquid's molecules already touch: pushing them closer takes far more force than a hand has. The plunger moved by the bubble of air in it, a tenth of a millilitre, and no more.",
+			"checks": [
+				{
+					"text": "its plunger back at 50 mL",
+					"when": {
+						"quantity": {
+							"item": "water",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 49.9
+					}
+				}
+			]
+		},
+		{
+			"part": "A sealed syringe of air",
+			"title": "Push the air",
+			"text": "Drag the handle of the second syringe, of air, down as far as it goes, and let go.",
+			"why": "A gas's molecules are far apart: it gives. As it is squeezed, more of them hit the plunger each second and the pressure rises, until it pushes back as hard as your hand does.",
+			"checks": [
+				{
+					"text": "the air squeezed under 45 mL",
+					"when": {
+						"quantity": {
+							"item": "air",
+							"what": "plunger_ml"
+						},
+						"compare": "below",
+						"value": 45
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:air",
+						"plunger:air@20"
+					]
+				}
+			]
+		},
+		{
+			"title": "It springs back",
+			"text": "Watch the plunger once you let go.",
+			"why": "Let go, the squeezed air pushes the plunger back out until it is at the room's pressure again: nearly where it started, a little short, held by the plunger's friction (and the air warmed a little by the push cools back).",
+			"checks": [
+				{
+					"text": "back near 60 mL",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "air",
+									"what": "plunger_ml"
+								},
+								"compare": "above",
+								"value": 58
+							},
+							{
+								"quantity": {
+									"item": "air",
+									"what": "hand_n"
+								},
+								"compare": "below",
+								"value": 0.5
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"part": "Two syringes of water, joined",
+			"title": "Push one",
+			"text": "The two syringes of water in the middle are joined nozzle to nozzle by a tube. Drag the left one's handle down to 20 mL and let go.",
+			"why": "The water cannot be squeezed, so what leaves one syringe must go into the other: its plunger is pushed out as far as yours goes in. This is how hydraulics work: brakes, lifts, diggers.",
+			"checks": [
+				{
+					"text": "the other pushed out past 55 mL",
+					"when": {
+						"quantity": {
+							"item": "water_b",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 55
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:water_a",
+						"plunger:water_a@20"
+					]
+				}
+			]
+		},
+		{
+			"part": "Two syringes of air, joined",
+			"title": "Push one",
+			"text": "Now the two syringes of air on the right, joined the same way. Drag the left one's handle down to 20 mL and let go.",
+			"why": "The air carries the push too, but it gives first: the pressure must rise before it moves the other plunger, so the other follows a moment behind yours, and does not end exactly where yours left off.",
+			"checks": [
+				{
+					"text": "the other pushed out past 70 mL",
+					"when": {
+						"quantity": {
+							"item": "air_b",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 70
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:air_a",
+						"plunger:air_a@20"
+					]
+				}
+			]
+		},
+		{
+			"title": "Not quite in step",
+			"text": "Compare the two: add the readings of the joined syringes of air.",
+			"why": "Together they hold the same air at nearly the room's pressure, so their volumes add up to about 100 mL; not exactly, as friction lets each stop a little early and the push warmed the air.",
+			"checks": [
+				{
+					"text": "the other at rest",
+					"when": {
+						"quantity": {
+							"item": "air_b",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 70
+					}
+				}
+			]
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the water",
+			"quantity": {
+				"item": "water",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"least",
+				"now"
+			]
+		},
+		{
+			"label": "the air",
+			"quantity": {
+				"item": "air",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"least",
+				"now"
+			]
+		},
+		{
+			"label": "the joined water",
+			"quantity": {
+				"item": "water_b",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"most"
+			]
+		},
+		{
+			"label": "the joined air",
+			"quantity": {
+				"item": "air_b",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"most",
+				"now"
+			]
+		}
+	]
+}

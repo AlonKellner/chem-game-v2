@@ -193,6 +193,10 @@ struct Item {
 	EdgeId plunges;
 	int tube = -1;
 	EdgeId tubing;
+	// its plunger: a hand on it (held toward `hand_m3`, its column's whole), or its lock on (holding it at `lock_m3`
+	// with its clamp's force while no hand is on it), or free
+	bool hand = false, locked = false;
+	double hand_m3 = 0.0, lock_m3 = 0.0;
 };
 
 // an instrument a vessel stands on, joined to nothing in the world (Stage 50: a balance; Stage 55: a spectrophotometer,
@@ -572,8 +576,7 @@ struct Lab::Impl {
 		to_storage(x);
 		items.push_back(std::move(x));
 		if (syringe_of(items.back()) != nullptr) { // (Stage 79) its plunger as the template's, its hand's edge the room's
-			const Piston &was = t.world().meta(t.items[static_cast<size_t>(ti)].cell).piston;
-			fit_piston(items.back(), was.held, was.target);
+			fit_piston(items.back());
 		}
 		++sup.copies;
 		last_taken = id;
@@ -2606,7 +2609,9 @@ struct Lab::Impl {
 				}
 				below += cm3;
 			}
-			const double surface = shape.level(below), depth_m = std::max(surface - g->floor, 0.0) * 1e-2, dry_m = std::max(g->height - surface, 0.0) * 1e-2;
+			// (Stage 79) a syringe's gas reaches its plunger's face, no higher: the glass over it touches the plunger
+			const double brim = g->syringe ? std::min(g->plunger_y(world().piston_volume(x.cell) * 1e6), g->height) : g->height;
+			const double surface = shape.level(below), depth_m = std::max(surface - g->floor, 0.0) * 1e-2, dry_m = std::max(brim - surface, 0.0) * 1e-2;
 			const bool wet = below > 0.0 && liquid_m3(x) > 0.0;
 			// each ring's and each cell's temperature, read once this step (0: none, an empty layer)
 			std::vector<double> ring_k(x.rings.size(), 0.0);
@@ -2704,8 +2709,8 @@ struct Lab::Impl {
 						if (b > a && wet) {
 							conductance += across((b - a) * per_cm, walls::into_water(depth_m, wall_k, cell_k));
 						}
-						if (c.cell == x.cell && r.to > surface) {
-							conductance += across((r.to - std::max(r.from, surface)) * per_cm, walls::into_air(std::max(dry_m, 1e-3), wall_k, cell_k));
+						if (c.cell == x.cell && std::min(r.to, brim) > surface) {
+							conductance += across((std::min(r.to, brim) - std::max(r.from, surface)) * per_cm, walls::into_air(std::max(dry_m, 1e-3), wall_k, cell_k));
 						}
 					}
 				}
@@ -3799,6 +3804,8 @@ struct Lab::Impl {
 			v.plunger_ml = m.plunger_ml(item);
 			v.plunger_most_ml = g->nominal_ml;
 			v.plunger_held = p.held;
+			v.plunger_locked = item.locked;
+			v.plunger_hand = item.hand;
 			v.plunger_target_ml = p.held ? p.target * 1e6 - dead : 0.0;
 			v.plunger_force_n = p.force;
 			v.tube = item.tube;
@@ -3972,7 +3979,6 @@ struct Lab::Impl {
 				if (g != nullptr && g->syringe) {
 					// (Stage 79) a syringe's scale at its plunger, read to half a division
 					v.graduation_ml = g->graduation_ml;
-					v.scale_ml = v.plunger_ml;
 					v.read_ml = instruments::rounded(v.plunger_ml, 0.5 * g->graduation_ml);
 				}
 				// volumetric glass (Stage 52): its class's tolerance; a mark's true volume; a burette's scale, read down from
@@ -4095,8 +4101,17 @@ struct Lab::Impl {
 		}
 		return t.defined ? t.pressure : P_ATMOSPHERE;
 	}
-	// (Stage 79) a syringe's plunger: its piston from its glassware, held toward `target` (m^3, its column's whole) or free
-	bool fit_piston(const Item &x, bool held, double target) {
+	// (Stage 79) a syringe's plunger: its piston from its glassware and what holds it: a hand toward where it is held, at
+	// a hand's most; else its lock, where it was locked, at its clamp's; else free
+	bool fit_piston(const Item &x) {
+		const glass::Vessel *g = syringe_of(x);
+		if (g == nullptr) {
+			return false;
+		}
+		const bool held = x.hand || x.locked;
+		return fit_piston(x, held, x.hand ? x.hand_m3 : x.lock_m3, x.hand ? instruments::hand_force() : g->clamp);
+	}
+	bool fit_piston(const Item &x, bool held, double target, double most) {
 		const glass::Vessel *g = syringe_of(x);
 		if (g == nullptr || x.plunges.index < 0) {
 			return false;
@@ -4109,7 +4124,7 @@ struct Lab::Impl {
 		p.most = g->volume_below(g->plunger_most) * 1e-6;
 		p.held = held;
 		p.target = held ? std::clamp(target, p.least, p.most) : 0.0;
-		p.hand_most = instruments::hand_force();
+		p.hand_most = most;
 		p.work = x.plunges;
 		const Piston &was = world().meta(x.cell).piston;
 		p.force = was.force;
@@ -4771,7 +4786,7 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 	impl->sim.emplace(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
 	impl->sim->set_checking(false); // the lab checks, and reports through its own status
 	for (Item &item : impl->items) {
-		if (syringe_of(item) != nullptr && !impl->fit_piston(item, false, 0.0)) { // (Stage 79) its plunger free
+		if (syringe_of(item) != nullptr && !impl->fit_piston(item)) { // (Stage 79) its plunger free
 			why = "item \"" + item.id + "\": its plunger cannot stand where it is";
 			return nullptr;
 		}
@@ -4828,7 +4843,24 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 		}
 	}
 	impl->detect(true); // what is there from the start is not news
-	return std::unique_ptr<Lab>(new Lab(std::move(impl)));
+	std::unique_ptr<Lab> made(new Lab(std::move(impl)));
+	// (Stage 79) how the bench is set out before anyone acts: commands, as a player's, between no steps (two syringes
+	// tubed, one on a flask)
+	if (bench.contains("setup")) {
+		if (!bench.at("setup").is_array()) {
+			why = "the bench's \"setup\" is a list of commands";
+			return nullptr;
+		}
+		for (const json &c : bench.at("setup")) {
+			std::string no;
+			if (!made->command(c.dump(), no)) {
+				why = "the bench's setup " + c.dump() + ": " + no;
+				return nullptr;
+			}
+		}
+		made->impl_->detect(true);
+	}
+	return made;
 }
 
 bool Lab::Impl::run(const json &c, std::string &why) {
@@ -5950,7 +5982,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!on_bench(i, why) || !on_bench(o, why)) {
 			return false;
 		}
-		if (i.place != Place::Bench || i.holds >= 0 || i.pours_into >= 0 || i.inverted || fixed_under(inner) >= 0 || i.drains_to >= 0 || outlet_of(i)) {
+		// (Stage 79) one standing in another vessel moves from that one into this
+		const bool moving = i.place == Place::In && i.stands_in >= 0 && i.stands_in != outer;
+		if ((i.place != Place::Bench && !moving) || i.holds >= 0 || i.pours_into >= 0 || i.inverted || fixed_under(inner) >= 0 || i.drains_to >= 0 || outlet_of(i)) {
 			why = "\"" + i.id + "\" cannot be moved as it is: it is joined to something";
 			return false;
 		}
@@ -5979,6 +6013,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		if (!boundary(why) || !take_off_drains(inner, why)) {
 			return false;
+		}
+		if (moving) {
+			leave_bath(inner);
 		}
 		const Item was = i;
 		i.stands_in = outer;
@@ -6471,10 +6508,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + x.id + "\" has no plunger: a gas syringe has";
 			return false;
 		}
-		const bool free = c.value("free", false);
+		const bool free = c.value("free", false), locking = c.contains("lock");
 		const double ml = number(c, "ml", std::numeric_limits<double>::quiet_NaN());
-		if (!free && !(ml >= 0.0 && ml <= g->nominal_ml)) {
-			why = "a plunger is held at \"ml\" on its scale, 0 to " + text_of("%.0f", g->nominal_ml) + ", or let go: {\"free\": true}";
+		if (locking && !c.at("lock").is_boolean()) {
+			why = "a plunger's lock is on or off: {\"lock\": true}";
+			return false;
+		}
+		if (!free && !locking && !(ml >= 0.0 && ml <= g->nominal_ml)) {
+			why = "a plunger is held at \"ml\" on its scale, 0 to " + text_of("%.0f", g->nominal_ml) + ", let go: {\"free\": true}, or locked: {\"lock\": true}";
 			return false;
 		}
 		if (x.place == Place::Cabinet || x.place == Place::Outbox || x.place == Place::Trash) {
@@ -6484,7 +6525,19 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (!boundary(why)) {
 			return false;
 		}
-		if (!fit_piston(x, !free, free ? 0.0 : (g->volume_below(g->plunger_least) + ml) * 1e-6)) {
+		const Item was = x;
+		if (locking) { // its lock on where it stands (a hand on it keeps moving it, and leaves it locked where it lets go)
+			x.locked = c.at("lock").get<bool>();
+			x.lock_m3 = world().piston_volume(x.cell);
+		} else if (free) { // the hand off: locked, it stays where it is
+			x.hand = false;
+			x.lock_m3 = world().piston_volume(x.cell);
+		} else {
+			x.hand = true;
+			x.hand_m3 = (g->volume_below(g->plunger_least) + ml) * 1e-6;
+		}
+		if (!fit_piston(x)) {
+			x = was;
 			why = "\"" + x.id + "\"'s plunger cannot be held so";
 			return false;
 		}
@@ -8024,6 +8077,7 @@ json Lab::Impl::save() const {
 		}
 		if (item.plunges.index >= 0) { // (Stage 79) a syringe's plunger, and its tube
 			list.back()["plunges"] = item.plunges.index;
+			list.back()["plunger"] = { item.hand, item.locked, bits(item.hand_m3), bits(item.lock_m3) };
 			if (item.tube >= 0) {
 				list.back()["tube"] = { item.tube, item.tubing.index };
 			}
@@ -8273,6 +8327,15 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			item.stirred = j.at("stirred").get<bool>();
 			item.stirs = EdgeId{ j.value("stirs", -1) };
 			item.plunges = EdgeId{ j.value("plunges", -1) }; // (Stage 79)
+			if (j.contains("plunger")) {
+				const json &pj = j.at("plunger");
+				if (!pj.is_array() || pj.size() != 4 || !from_bits(pj.at(2), item.hand_m3) || !from_bits(pj.at(3), item.lock_m3)) {
+					why = "the save holds a number that is not one";
+					return nullptr;
+				}
+				item.hand = pj.at(0).get<bool>();
+				item.locked = pj.at(1).get<bool>();
+			}
 			if (j.contains("tube")) {
 				item.tube = j.at("tube").at(0).get<int>();
 				item.tubing = EdgeId{ j.at("tube").at(1).get<int32_t>() };
