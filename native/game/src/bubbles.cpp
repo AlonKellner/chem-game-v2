@@ -2,6 +2,7 @@
 #include "lab/bubbles.hpp"
 
 #include "lab/boiling_data.hpp"
+#include "lab/walls.hpp"
 
 #include "chem/builtin_ids.hpp"
 #include "chem/optics.hpp"
@@ -112,15 +113,7 @@ double convection(double floor_m2, double perimeter_m, double floor_c, double bu
 	const Water w = water_at(0.5 * (floor_c + bulk_c));
 	const double length = floor_m2 / perimeter_m;
 	const double ra = G * w.beta * dt * length * length * length / (w.nu * w.alpha);
-	double nu = 0.0;
-	if (ra < 1e7) {
-		// eq. 8.37a, and 8.37b where the boundary layers are thick (Nu under 10)
-		const double nu_l = 0.560 * std::pow(std::max(ra, 0.0), 0.25) / std::pow(1.0 + std::pow(0.492 / w.pr, 9.0 / 16.0), 4.0 / 9.0);
-		nu = nu_l < 10.0 ? (nu_l > 0.0 ? 1.4 / std::log(1.0 + 1.4 / nu_l) : 0.0) : nu_l;
-	} else {
-		nu = 0.14 * std::cbrt(ra) * (1.0 + 0.0107 * w.pr) / (1.0 + 0.01 * w.pr); // eq. 8.35
-	}
-	return nu * w.k / length;
+	return walls::unstable_plate(ra, w.pr) * w.k / length; // (eqs. 8.37a-b, 8.35: Stage 73, the correction at every Nu)
 }
 
 double rohsenow(double superheat, const Water &liquid, double sigma, double h_fg, double rho_v, const Surface &surface) {

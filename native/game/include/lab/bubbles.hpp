@@ -42,8 +42,8 @@ struct Surface {
 // by name (data/boiling.json's surfaces); an unknown one is glass
 const Surface &surface(std::string_view name);
 
-// natural convection from a floor heated from below into the liquid over it (Lienhard eqs. 8.37a-b below
-// Ra = 1e7, Raithby and Hollands; eq. 8.35 above), the length A / P (Lloyd and Moran): W/m^2 K, the
+// natural convection from a floor heated from below into the liquid over it (walls::unstable_plate: Lienhard eqs.
+// 8.37a-b below Ra = 1e7, Raithby and Hollands; eq. 8.35 above), the length A / P (Lloyd and Moran): W/m^2 K, the
 // properties at the film's mean temperature. 0 where the floor is no warmer.
 double convection(double floor_m2, double perimeter_m, double floor_c, double bulk_c);
 

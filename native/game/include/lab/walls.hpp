@@ -49,6 +49,13 @@ Air air_at(double kelvin);
 double into_water(double height_m, double wall_k, double fluid_k);
 double into_air(double height_m, double wall_k, double fluid_k);
 
+// The Nusselt number of a horizontal plate whose boundary layer is unstable (a floor heated from below, a base
+// colder than the air under it), over L* = A/P, at a Rayleigh and a Prandtl number: Raithby and Hollands as Lienhard
+// gives them, eq. 8.37a below Ra = 1e7 with its thick boundary layers' correction (8.37b), eq. 8.35 above. (Stage 73)
+// The correction at every Nusselt number: Lienhard has it "if Nu <~ 10", where it matters; it tends to 8.37a's own as
+// the layers thin (0.7 more: 7 % at 10, 0.7 % at 100), and taken only under 10 it left a step down there
+double unstable_plate(double ra, double pr);
+
 // A horizontal disc's heat transfer coefficient into air facing down, W/m^2 K (a vessel's base, Stage 53), of a
 // diameter (m), at a temperature against the air's: warmer than the air its boundary layer is stable (Kadambi and
 // Drake, Lienhard eq. 8.39: Nu_D = 0.82 Ra_D^(1/5) Pr^0.034); colder, unstable (Raithby and Hollands over L* = A/P =

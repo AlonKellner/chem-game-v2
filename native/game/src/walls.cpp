@@ -175,12 +175,18 @@ double under_disc(double diameter_m, double wall_k, double air_k) {
 		return 0.82 * std::pow(ra, 0.2) * std::pow(a.pr, 0.034) * a.k / diameter_m;
 	}
 	const double l = 0.25 * diameter_m, ra = g * l * l * l; // colder, facing down: unstable, over L* = A/P
-	if (ra >= 1e7) {
-		return 0.14 * std::cbrt(ra) * (1.0 + 0.0107 * a.pr) / (1.0 + 0.01 * a.pr) * a.k / l; // (8.35)
+	return unstable_plate(ra, a.pr) * a.k / l;
+}
+
+double unstable_plate(double ra, double pr) {
+	if (!(ra > 0.0)) {
+		return 0.0;
 	}
-	const double nu = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / a.pr, 9.0 / 16.0), 4.0 / 9.0); // (8.37a)
-	const double corrected = nu > 10.0 ? nu : 1.4 / std::log(1.0 + 1.4 / std::max(nu, 1e-9)); // (8.37b: thick layers)
-	return corrected * a.k / l;
+	if (ra >= 1e7) {
+		return 0.14 * std::cbrt(ra) * (1.0 + 0.0107 * pr) / (1.0 + 0.01 * pr); // (8.35)
+	}
+	const double nu = 0.560 * std::pow(ra, 0.25) / std::pow(1.0 + std::pow(0.492 / pr, 9.0 / 16.0), 4.0 / 9.0); // (8.37a)
+	return 1.4 / std::log(1.0 + 1.4 / nu); // (8.37b: the boundary layers' thickness, at every Nu: Stage 73)
 }
 
 double emittance(std::string_view wall, double kelvin) {

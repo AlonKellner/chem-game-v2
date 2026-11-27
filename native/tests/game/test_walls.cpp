@@ -241,7 +241,7 @@ TEST_CASE("walls: a floor held near its boiling onset boils steadily, its bubble
 TEST_CASE("measured: a ring's loss to the room is its outside's convection and its radiation (Stage 53)") {
 	// Lienhard and Lienhard, A Heat Transfer Textbook, 6th ed. (v6.00, 2024): a disc facing down, warmer than the air
 	// (stable), Nu_D = 0.82 Ra_D^(1/5) Pr^0.034 (Kadambi and Drake, eq. 8.39); colder (unstable) over L* = A/P,
-	// Nu = 0.560 Ra^(1/4) / [1 + (0.492/Pr)^(9/16)]^(4/9) (8.37a), 1.4 / ln(1 + 1.4 / Nu) under 10 (8.37b), 0.14 Ra^(1/3)
+	// Nu = 0.560 Ra^(1/4) / [1 + (0.492/Pr)^(9/16)]^(4/9) (8.37a), 1.4 / ln(1 + 1.4 / Nu) (8.37b, at every Nu: Stage 73), 0.14 Ra^(1/3)
 	// (1 + 0.0107 Pr) / (1 + 0.01 Pr) from Ra = 1e7 (8.35). Table 10.1: glass, smooth, 0.94 at 40 C; Pyrex 0.94 to
 	// 0.74 over 260 to 540 C. Radiation of a small body in a large room, e sigma (Tw^2 + Tr^2)(Tw + Tr) (eqs. 1.34, 2.28)
 	const auto rayleigh = [](double length, double wall_k, double air_k) {
