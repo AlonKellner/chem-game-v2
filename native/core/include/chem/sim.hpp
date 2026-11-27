@@ -216,6 +216,14 @@ private:
 		void keep(const World &world, CellId cell);
 	};
 	mutable std::vector<ThermalKey> thermal_key_;
+	// (Stage 75) each cell's sums over its matter (matter_sums), by its matter revision: a cell that only took or gave
+	// energy (conduction) has its temperature from them, the same value
+	struct KeptSums {
+		bool known = false;
+		uint64_t revision = 0;
+		MatterSums sums;
+	};
+	mutable std::vector<KeptSums> sums_;
 	// (Stage 64) each cell's state when project() last found nothing to move: the same state is at rest again, exactly
 	std::vector<ThermalKey> rest_key_;
 	// each edge's 1 - exp(-G h / C) as last worked out, and for which G and C (Stage 53: the same again, exactly)

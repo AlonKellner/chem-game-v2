@@ -44,6 +44,15 @@ struct Thermal {
 
 // `meta` is the cell's (null: open). A reservoir's is not asked for.
 Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta = nullptr);
+// (Stage 75) What a cell's thermal state takes of its matter alone: sum of n_i Hf_i and of n_i Cp_i (J, J/K), each
+// species in order; `known` false when it holds a species without thermodynamic data. The same for any energy, so
+// kept while only energy moves (World::matter_revision); thermal_state from them is the value thermal_state gives.
+struct MatterSums {
+	bool known = true;
+	double formation = 0.0, capacity = 0.0;
+};
+MatterSums matter_sums(const SpeciesTable &table, const CellState &cell);
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta, const MatterSums &sums);
 
 // The enthalpy, in J, of these amounts at temperature T: sum of n_i (Hf_i + Cp_i (T - T0)).
 // `ok` is false when a species present has no thermodynamic data.

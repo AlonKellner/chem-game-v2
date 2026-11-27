@@ -240,6 +240,15 @@ TEST_CASE("world: a cell's revision moves with every write of it, and with nothi
 	const SpeciesAmount too_much[] = { { builtin::nitrogen, Amount{ 1000000 } } };
 	CHECK_FALSE(moves(t.flask, [&] { CHECK(w.transfer(t.mouth, t.flask, too_much, Energy{ 0 }) != Refusal::None); })); // refused
 	CHECK(moves(t.flask, [&] { REQUIRE(w.transform(t.flask, decomposition(), 10) == Refusal::None); }));
+	{ // an energy alone: the revision moves, the matter's does not; matter: both
+		const uint64_t matter = w.matter_revision(t.flask), room = w.matter_revision(t.room);
+		CHECK(moves(t.flask, [&] { REQUIRE(w.transfer(t.wall, t.flask, {}, Energy{ 7 }) == Refusal::None); }));
+		CHECK(w.matter_revision(t.flask) == matter);
+		CHECK(w.matter_revision(t.room) == room);
+		REQUIRE(w.transfer(t.mouth, t.flask, gas, Energy{ 0 }) == Refusal::None);
+		CHECK(w.matter_revision(t.flask) != matter);
+		CHECK(w.matter_revision(t.flask) == w.revision(t.flask));
+	}
 	CHECK_FALSE(moves(t.flask, [&] { REQUIRE(w.transform(t.flask, decomposition(), 0) == Refusal::None); }));
 	CHECK(check_all(builtin_species(), w.close_step()).empty());
 	CHECK(moves(t.flask, [&] { REQUIRE(w.set_stirring(t.flask, 0.5) == Refusal::None); }));

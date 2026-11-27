@@ -258,6 +258,7 @@ std::optional<World> World::Builder::build(std::string *why) const {
 	const auto species_count = static_cast<size_t>(table_->species_count());
 	world.cells_.assign(names_.size(), CellState{ std::vector<int64_t>(species_count, 0), 0, std::vector<int64_t>(species_count, 0) });
 	world.revision_.assign(names_.size(), 0);
+	world.matter_revision_.assign(names_.size(), 0);
 	world.touch_all();
 	for (const Edge &e : edges_) {
 		if (!known_cell(e.a) || !known_cell(e.b)) {
@@ -659,8 +660,14 @@ Refusal World::transfer(EdgeId edge, CellId from, std::span<const SpeciesAmount>
 	if (moved.empty() && energy.quanta == 0) {
 		return Refusal::None; // nothing to move, nothing to record
 	}
-	touch(static_cast<size_t>(from.index)); // (Stage 75: what moves, and only that, draws a revision)
-	touch(static_cast<size_t>(to.index));
+	// (Stage 75: what moves, and only that, draws a revision; an energy alone leaves what they hold as it was)
+	if (moved.empty()) {
+		touch_energy(static_cast<size_t>(from.index));
+		touch_energy(static_cast<size_t>(to.index));
+	} else {
+		touch(static_cast<size_t>(from.index));
+		touch(static_cast<size_t>(to.index));
+	}
 
 	for (const SpeciesAmount &m : moved) {
 		const auto s = static_cast<size_t>(m.species.index);
@@ -771,6 +778,7 @@ CellId World::add_layer_under(CellId lower, Refusal *why) {
 	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
 	cells_.push_back(none);
 	revision_.push_back(0);
+	matter_revision_.push_back(0);
 	touch(revision_.size() - 1);
 	before_.cells.push_back(none); // (the step's trace starts with it, empty)
 	const CellId made{ static_cast<int32_t>(cells_.size() - 1) };
@@ -803,6 +811,7 @@ CellId World::add_cell(const std::string &name, const CellMeta &meta, Refusal *w
 	const CellState none{ std::vector<int64_t>(species, 0), 0, std::vector<int64_t>(species, 0) };
 	cells_.push_back(none);
 	revision_.push_back(0);
+	matter_revision_.push_back(0);
 	touch(revision_.size() - 1);
 	before_.cells.push_back(none); // (the step's trace starts with it, empty: no total changes)
 	++topology_version_;
@@ -1045,6 +1054,13 @@ std::atomic<uint64_t> next_revision{ 1 };
 }
 
 void World::touch(size_t cell) {
+	if (cell < revision_.size()) {
+		revision_[cell] = next_revision.fetch_add(1, std::memory_order_relaxed);
+		matter_revision_[cell] = revision_[cell];
+	}
+}
+
+void World::touch_energy(size_t cell) {
 	if (cell < revision_.size()) {
 		revision_[cell] = next_revision.fetch_add(1, std::memory_order_relaxed);
 	}

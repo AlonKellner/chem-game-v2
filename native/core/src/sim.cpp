@@ -1467,7 +1467,24 @@ const Thermal &Simulation::kept_thermal(CellId cell) const {
 	}
 	ThermalKey &key = thermal_key_[c];
 	if (!key.same(world_, cell)) {
-		thermal_[c] = thermal_state(world_.species(), world_.snapshot_cell(cell), &world_.meta(cell));
+		if (sums_.size() <= c) {
+			sums_.resize(c + 1);
+		}
+		KeptSums &kept = sums_[c];
+		const CellState &state = world_.snapshot_cell(cell);
+		if (!kept.known || kept.revision != world_.matter_revision(cell)) {
+			kept.sums = matter_sums(world_.species(), state);
+			kept.revision = world_.matter_revision(cell);
+			kept.known = true;
+		}
+#if CHEM_ASSERT_ABORTS
+		{
+			const MatterSums now = matter_sums(world_.species(), state);
+			CHEM_ASSERT(now.known == kept.sums.known && now.formation == kept.sums.formation && now.capacity == kept.sums.capacity,
+					"a cell's matter changed under the same matter revision (World::touch)");
+		}
+#endif
+		thermal_[c] = thermal_state(world_.species(), state, &world_.meta(cell), kept.sums);
 		key.keep(world_, cell);
 	}
 	return thermal_[c];

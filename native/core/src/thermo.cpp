@@ -132,22 +132,34 @@ struct Sealed {
 
 } // namespace
 
-Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta) {
-	Thermal out;
-	double formation = 0.0;
-	double capacity = 0.0;
+MatterSums matter_sums(const SpeciesTable &table, const CellState &cell) {
+	MatterSums out;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
 		if (cell.amount[s] == 0) {
 			continue;
 		}
 		const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
 		if (!def.has_thermo) {
+			out.known = false;
 			return out;
 		}
 		const double mol = static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM;
-		formation += mol * def.hf;
-		capacity += mol * def.cp;
+		out.formation += mol * def.hf;
+		out.capacity += mol * def.cp;
 	}
+	return out;
+}
+
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta) {
+	return thermal_state(table, cell, meta, matter_sums(table, cell));
+}
+
+Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const CellMeta *meta, const MatterSums &sums) {
+	Thermal out;
+	if (!sums.known) {
+		return out;
+	}
+	const double formation = sums.formation, capacity = sums.capacity;
 	if (!(capacity > 0.0)) {
 		return out;
 	}
