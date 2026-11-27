@@ -33,6 +33,17 @@ Flame emission (lithium and strontium, the NIST lines weighted by the flame's te
 lines in the pass, the truth and the viewer) is a stage of its own: the user's split, 2026-11-27 ("Close 81, flame
 next"), after the complexes were done.
 
+## The step's cost
+
+`make gates`' step-cost line (the demo's instructions a step, against main's at e44c67f, 1.10 million): with the
+tables grown by a fifth (35 species, 33 equilibria, the particles' cap 64 to 128) **+18.7 %**. Where it went (sampled):
+the probe's per-particle arrays filled to the cap, its pass over every particle of the table, stands()'s ionic strength
+worked out for each reaction, feasible_extent for each of the 79 equilibria. Now: a probe sets the table's particles
+alone and takes the cell's from its mixtures' list (`CellMixtures::present`, with its ionic strength, once a matter
+change); an equilibrium that lacks something it consumes either way is passed on a bit mask before any call. **+10.8 %**
+(1.22 million), the rest the per-species passes (`fill_of`, `mix_of`, `matter_sums`) over a fifth more species; every
+result bit for bit as it was.
+
 ## Open
 
 - Debye and Hückel alone for an ion with no pair of its own in Pitzer's model takes a highly charged ion's activity

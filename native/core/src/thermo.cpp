@@ -929,7 +929,18 @@ CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell) {
 	out.gas = mix.gas;
 	out.liquid = mix.liquid;
 	// the table's particles; the rest of the array none (a Mix fills only as many as the table has: Stage 64)
-	std::copy_n(mix.particles.begin(), table.solution().ions.size(), out.particles.begin());
+	const std::vector<IonDef> &ions = table.solution().ions;
+	std::copy_n(mix.particles.begin(), ions.size(), out.particles.begin());
+	// (Stage 81) those it has, and its ionic strength
+	double ionic = 0.0;
+	for (size_t j = 0; j < ions.size(); ++j) {
+		if (out.particles[j] != 0.0) {
+			out.present[out.present_count++] = static_cast<uint8_t>(j);
+			const double z = static_cast<double>(ions[j].charge);
+			ionic += 0.5 * out.particles[j] / out.liquid * SOLVENT_MOL_PER_UNIT * z * z;
+		}
+	}
+	out.ionic = out.liquid > 0.0 ? ionic : 0.0;
 	return out;
 }
 
@@ -937,17 +948,8 @@ double ionic_strength(const SpeciesTable &table, const CellState &cell) {
 	return ionic_strength(table, cell_mixtures(table, cell));
 }
 
-double ionic_strength(const SpeciesTable &table, const CellMixtures &mix) {
-	if (!(mix.liquid > 0.0)) {
-		return 0.0;
-	}
-	double ionic = 0.0;
-	const std::vector<IonDef> &ions = table.solution().ions;
-	for (size_t j = 0; j < ions.size(); ++j) {
-		const double z = static_cast<double>(ions[j].charge);
-		ionic += 0.5 * mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT * z * z;
-	}
-	return ionic;
+double ionic_strength(const SpeciesTable &, const CellMixtures &mix) {
+	return mix.ionic; // (Stage 81: worked out once, by cell_mixtures)
 }
 
 bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms) {
@@ -1082,6 +1084,17 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 		AffinityProbe(table, cell, terms, thermal, meta, cell_mixtures(table, cell)) {}
 
 AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms, const Thermal &thermal, const CellMeta *meta, const CellMixtures &mix) {
+	// (Stage 81) the reaction's own particles nought before they are summed (the cell's others are set below)
+	for (const Term &t : terms) {
+		if (table.has(t.species)) {
+			for (const IonCount &ion : table.species(t.species).ions) {
+				if (ion.count <= 0) {
+					break;
+				}
+				particles_step_[static_cast<size_t>(ion.ion)] = 0.0;
+			}
+		}
+	}
 	if (!thermal.defined || !(thermal.temperature > 0.0) || terms.size() > parts_.size()) {
 		return;
 	}
@@ -1119,22 +1132,36 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 	gas_ = mix.gas;
 	liquid_ = mix.liquid;
 	const SolutionDef &solution = table.solution();
-	std::copy_n(mix.particles.begin(), solution.ions.size(), particles_.begin());
-	// (Stage 64) the particles the cell has or the reaction makes or uses, and the pairs among them: at() reads no other
+	// (Stage 64) the particles the cell has or the reaction makes or uses, and the pairs among them: at() reads no other.
+	// (Stage 81) the cell's from its mixtures' list, the reaction's beside them, merged in ascending order: not a pass
+	// over every particle of the table
 	std::array<bool, MAX_PARTICLES> listed{};
+	std::array<uint8_t, MAX_TERMS * MAX_IONS> own{};
+	size_t own_count = 0;
 	for (size_t i = 0; i < count_; ++i) {
 		for (const IonCount &ion : parts_[i].def->ions) {
 			if (ion.count <= 0) {
 				break;
 			}
-			listed[static_cast<size_t>(ion.ion)] = true;
+			if (!listed[static_cast<size_t>(ion.ion)]) {
+				listed[static_cast<size_t>(ion.ion)] = true;
+				own[own_count++] = static_cast<uint8_t>(ion.ion);
+			}
 		}
 	}
-	for (size_t j = 0; j < solution.ions.size(); ++j) {
-		if (listed[j] || particles_[j] != 0.0 || particles_step_[j] != 0.0) {
-			ions_[ion_count_++] = static_cast<uint8_t>(j);
-			listed[j] = true;
+	std::sort(own.begin(), own.begin() + static_cast<std::ptrdiff_t>(own_count));
+	size_t a = 0, b = 0;
+	while (a < mix.present_count || b < own_count) {
+		const size_t j = b >= own_count || (a < mix.present_count && mix.present[a] < own[b]) ? mix.present[a++] : own[b++];
+		if (ion_count_ > 0 && ions_[ion_count_ - 1] == j) {
+			continue; // (in both)
 		}
+		if (!listed[j]) {
+			particles_step_[j] = 0.0; // (the cell's alone: the reaction neither makes nor uses it)
+		}
+		particles_[j] = mix.particles[j];
+		ions_[ion_count_++] = static_cast<uint8_t>(j);
+		listed[j] = true;
 	}
 	// (Stage 75) every pair only when its own pairs overflow the list, not when the table's would: a table past 64
 	// pairs keeps its probes sparse

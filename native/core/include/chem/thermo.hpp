@@ -48,6 +48,11 @@ struct Thermal {
 struct CellMixtures {
 	double gas = 0.0, liquid = 0.0;
 	std::array<double, MAX_PARTICLES> particles{};
+	// (Stage 81) the particles it has, ascending, and its ionic strength: what a probe and stands() read, once a matter
+	// change, not once a reaction
+	std::array<uint8_t, MAX_PARTICLES> present{};
+	size_t present_count = 0;
+	double ionic = 0.0;
 };
 CellMixtures cell_mixtures(const SpeciesTable &table, const CellState &cell);
 
@@ -192,10 +197,12 @@ private:
 	// the cell's mixtures before, and what a quantum of extent adds to each
 	double gas_ = 0.0, gas_step_ = 0.0; // quanta of gas
 	double liquid_ = 0.0, liquid_step_ = 0.0; // quanta of liquid (the solvent)
-	std::array<double, MAX_PARTICLES> particles_{}, particles_step_{}; // quanta of each particle dissolved
+	// (Stage 81: only the table's own particles are set and read, as a Mix's: a probe is built tens of millions of times a
+	// play, and filling all MAX_PARTICLES of each cost a fifth of a step)
+	std::array<double, MAX_PARTICLES> particles_, particles_step_; // quanta of each particle dissolved
 	// (Stage 64) the particles it has or the reaction touches, ascending, and the solution's pairs among them: at() reads
 	// these alone (more pairs than fit: every pair)
-	std::array<uint8_t, MAX_PARTICLES> ions_{};
+	std::array<uint8_t, MAX_PARTICLES> ions_;
 	size_t ion_count_ = 0;
 	std::array<uint16_t, 64> pairs_{};
 	size_t pair_count_ = 0;
