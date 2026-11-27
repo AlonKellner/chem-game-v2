@@ -137,7 +137,12 @@ the wrong reason; their copper ion given its ion.
   solid that floats needs a pile under the surface in both tracers (§12).
 - **One vessel inside another** is drawn on the layer nearer the eye (§12.3): not seen through the bath's front wall
   and liquid, and the bath's liquid not seen through it. Tracing a body inside another's liquid needs both tracers to
-  follow a ray into a neighbour on its own layer.
+  follow a ray into a neighbour on its own layer. **The next stage, by the user's choice (2026-11-27)**: "when a
+  vessel is inside a vessel - rays should be rendered as entering the outer vessel, and then proceeding to hit any
+  surface along the way and reacting accordingly, including the inner vessel. For example, a ray may enter the outer
+  vessel, then enter the inner vessel, then exit the inner vessel, and then exit the outer vessel, and only then
+  reach a wall. It should be correctly simulated" — in the per-pixel source (GPU, and its CPU copies in float64 and
+  single precision) and in the truth's own tracer, held to each other (O4, O7).
 - **A floating solid counted whole in its vessel**: a brim-full glass with ice spills its ice's whole volume's worth
   (about 9 % more than the liquid it displaces); the ice cannot stand over the brim (V2).
 - **Sublimation and evaporation from ice** are not modelled: dry ice below 0 °C is stable in dry air.

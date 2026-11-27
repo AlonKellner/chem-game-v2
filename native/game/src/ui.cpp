@@ -2304,6 +2304,8 @@ struct Ui::Impl {
 	Rect foot(const ItemView &v) const { return Rect{ BENCH.x + static_cast<float>(v.col) * square(), BENCH.y + static_cast<float>(v.row) * square(), static_cast<float>(v.w) * square(), static_cast<float>(v.h) * square() }; }
 	static constexpr float STAND = 34; // a vessel's foot above its footprint's floor; with a burner under it, 34 + 94
 	static constexpr float TALL_MOST = 400; // the tallest glassware is drawn (Stage 52: a burette over a flask, under the top bar)
+	// (Stage 71) glassware's one scale, pixels a centimetre: the 250 mL beaker as wide as it was drawn before (90 px)
+	static constexpr float GLASS_PX_PER_CM = 11.75f;
 	// a balance (Stage 50): its case, the pan on it, and its display in the case's front; a vessel on it stands on the pan
 	static constexpr float BALANCE_W = 150, BALANCE_H = 44, BALANCE_PAN = 8;
 	static Rect balance_case(const Rect &r) { return Rect{ r.x, r.y + BALANCE_PAN, r.w, r.h - BALANCE_PAN }; }
@@ -2357,10 +2359,11 @@ struct Ui::Impl {
 			w = 44;
 			h = 120;
 		} else if (const glass::Vessel *made = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml)) {
-			// glassware (GAME_SPEC §12.3, Stage 24): as wide as its nominal capacity draws it, in its standard's proportions
-			// (a cuvette, Stage 55: narrow, as it stands in a spectrophotometer's well)
-			w = v.glassware == "cuvette" ? 30.0f : static_cast<float>(40.0 + 8.0 * std::cbrt(v.nominal_ml));
-			h = static_cast<float>(w * made->height / (2.0 * made->widest()));
+			// glassware (GAME_SPEC §12.3, Stage 24): its standard's shape; (Stage 71, asked for by the user: "vessel sizes
+			// should never change once rendered, they are orthogonally projected to the screen") all of it at one scale,
+			// its real size: a tube stands inside a beaker as it is
+			w = static_cast<float>(2.0 * made->widest()) * GLASS_PX_PER_CM;
+			h = static_cast<float>(made->height) * GLASS_PX_PER_CM;
 			if (h > TALL_MOST) { // tall glassware (Stage 52): no taller than fits over a flask, in its own proportions
 				w *= TALL_MOST / h;
 				h = TALL_MOST;
@@ -2758,13 +2761,6 @@ struct Ui::Impl {
 					const glass::Vessel *g = o.glassware.empty() ? nullptr : glass::find(o.glassware, o.nominal_ml);
 					const float floor_px = g != nullptr ? static_cast<float>(g->floor / g->height) * outer.h : 0.0f;
 					const float share = before == 0 ? 0.28f : before == 1 ? 0.72f : 0.5f;
-					// at the other's own scale: its real size in the other's pixels a centimetre
-					const glass::Vessel *mine = v.glassware.empty() ? nullptr : glass::find(v.glassware, v.nominal_ml);
-					if (g != nullptr && mine != nullptr) {
-						const float per_cm = outer.h / static_cast<float>(g->height);
-						w = static_cast<float>(mine->widest()) * per_cm;
-						h = static_cast<float>(mine->height) * per_cm;
-					}
 					return Rect{ outer.x + outer.w * share - w / 2, outer.y + outer.h - floor_px - h, w, h };
 				}
 			}
