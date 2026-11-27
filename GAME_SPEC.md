@@ -410,21 +410,42 @@ stops, its volume moved each step, first in the step, by the forces on it.
 - **The hand.** Held, it pulls the plunger toward a volume (where the player drags its handle), with what force that
   takes, at most `F_most` (79.8 N: a thumb on a plunger, the lab's `instruments.json`); past it the plunger moves
   only as its forces at `F_most` let it, or not at all. Let go, it is free: `F = 0`.
-- **Its space.** Every cell joined to a piston's by open edges that pass gas (or liquid, between two sealed cells) is
-  one space at one pressure for its pistons. An open space is at the room's; a sealed one's is the root of
-  `P = sum n_i R T_i / (its free volume after the moves)`, each piston's move rising with `P`. Its solids and liquids
-  are incompressible: the plungers stop where they would fill it, a billionth of its volume left to its gas.
+- **Tightly joined vessels** (the user, 2026-11-27: "I want to be able to connect the syringe to any vessel, sealing it
+  with the connection then allowing me to interact with the plunger all the while ... a principle which will be
+  applied to all setups with tightly connected vessels"; and, asked, the exchange "solved within step"). Each vessel
+  keeps its own contents, temperature and pressure; sealed vessels joined by open edges that pass gas or liquid (a
+  syringe on a flask, two syringes on a tube, two flasks on a pipe) exchange within the step until their pressures
+  are one, so that a push reaches through at once:
+  - joined by liquid (both holding it at the joint: it does not give): one root `P = sum n_i R T_i / (the free room
+    after the moves)`, each vessel's gas then `n_i R T_i / P` and its liquid run across to fill the rest of its volume;
+  - joined by gas: the one pressure their plungers will come to estimated (each vessel's gas at its own temperature
+    in the room its volume will leave, all kept: `sum n R / sum (V_i / T_i)`), the gas shared out first at it, from
+    where there is more than stands at it to where there is less, in parcels of a twentieth each at the giver's state
+    as it then is (a vessel emptied gives its later gas at its lower pressure and temperature); then each plunger moved
+    alone, exactly, on what its vessel then holds;
+  - a vessel alone: its pressure after the move by its own sealed model, the hand's work in it.
+  Each piston's move rises with `P`. Solids and liquids are incompressible: the plungers stop where they would leave a
+  vessel's gas less than a ten-thousandth of its volume (what its liquid may grow into as it warms in a step). Air
+  between joined syringes gives as it compresses, so the far plunger, held by its friction, moves only once the
+  pressure difference beats it; water does not give, so a push must beat both frictions to move anything.
+  Where a space then holds less entropy than before (the estimate short of what the push took), the hand pays the
+  difference, as far as its most allows.
+- **The hand's pace.** A hand moves a plunger at most 0.3 m/s (design: a person's pace), pushing only as hard as that
+  and what resists take.
 - **The energy.** The hand's work `F dx`, along the piston's edge from the lab's mains (Stage 32's reservoir of work),
   is the only work: `E = U + P_atm V` holds the room's work on the plunger's back and the gas's on its face, and the
   drag and friction are heat in the cell, so `F dx = (P_atm - P) dV + (c v + f) |dx|`. With `P` the pressure after
   the move, the gas takes at least the reversible work of a compression and gives at most it on an expansion: its
   entropy never falls (T2). A free plunger does no work; its cell's `E` stands.
-- **Liquid between joined spaces.** Two sealed spaces joined by an edge that passes liquid (a tube between two
-  syringes' nozzles): liquid runs from the one at the higher pressure into the other's top, from the lowest liquid
-  of its column, carrying its enthalpy, as much as leaves it at no lower a pressure than the other (a column pushed
-  past its liquids is at no pressure that holds: it gives what it must).
+- **Liquid between joined spaces.** Liquid run from one column to another (a tube between two syringes' nozzles)
+  leaves from the lowest liquid of its column, carrying its enthalpy, and its top adds the flow work of the pressure
+  it is pushed at over the room's, `(P - P_atm) V`: the work of the gas over it that pushes it out (a liquid's
+  enthalpy at `P` is its enthalpy at the room's and that). An empty cell is a vacuum, all of it room.
 - **Traced** (§18, W1): each piston within its stops, its hand within its most (none let go), the energy along its
-  edge its force over its move; a step's state before it read at its volume then (`StepTrace::volume_before`).
+  edge its force over its move; a step's state before it read at its volume then (`StepTrace::volume_before`). Work
+  to or from a reservoir of work (`WORK_KELVIN`, the lab's mains) is no heat, either way (T1); a sealed cell's room for
+  its gas is held at its own temperature (V3), and a sealed group still running gas after its rounds is brought to
+  each cell's equilibria (P1).
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in

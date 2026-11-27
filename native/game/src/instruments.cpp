@@ -18,7 +18,7 @@ struct Data {
 	std::vector<Balance> balances;
 	Meter thermometer, ph, gauge;
 	ConductivityMeter conductivity; // (Stage 65)
-	double hand = 0.1, reference = 8000.0, hand_force = 79.8;
+	double hand = 0.1, reference = 8000.0, hand_force = 79.8, hand_speed = 0.3;
 	std::vector<std::pair<std::string, double>> walls;
 };
 
@@ -40,6 +40,7 @@ const Data &data() {
 		o.gauge = Meter{ j.at("gauge").at("resolution_kpa").get<double>(), j.at("gauge").at("accuracy_kpa").get<double>() };
 		o.hand = j.at("hand").get<double>();
 		o.hand_force = j.at("hand_force_n").get<double>(); // (Stage 79)
+		o.hand_speed = j.at("hand_speed_m_s").get<double>();
 		for (const auto &[name, density] : j.at("walls_g_cm3").items()) {
 			o.walls.emplace_back(name, density.get<double>());
 		}
@@ -100,6 +101,10 @@ double hand() {
 
 double hand_force() {
 	return data().hand_force;
+}
+
+double hand_speed() {
+	return data().hand_speed;
 }
 
 double reference_density() {

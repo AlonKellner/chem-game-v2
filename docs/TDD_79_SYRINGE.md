@@ -106,7 +106,45 @@ control feature on the handle" (physical controls for other things, a burner's, 
 - **What stands in a vessel was hit after it** when it came earlier in the bench's list: the syringe in a bath could
   not be chosen. What stands in a vessel is hit first.
 
+- **The user's playtest (2026-11-27): "Pretty easily I reached an invariant failure: T1, step 449"**, in `syringes`:
+  a hand holding back a plunger the gas pushes out gives the mains work, and T1 took that for heat run into a hotter
+  reservoir (a stirrer's work only ever comes from it). Work to or from a reservoir of work is no heat (`WORK_KELVIN`,
+  T1). A stress of random hands on the four setups, the baths and a flask (`syringe lab: hands at random ...`, kept
+  as a test; six seeds of 8,000 steps on the setups one-off) then found, each fixed:
+  - liquid joined to an empty syringe ran nowhere (an empty cell has no temperature: it is a vacuum);
+  - a free plunger pushed in by the room squeezed its column's top before its liquid ran out (the liquid's flow work
+    is now paid by the gas over it, at its top);
+  - V3 read a sealed cell's room at 25 C: a syringe full of water at 20 C has room it would not at 25 C (V3 at the
+    cell's own temperature);
+  - joined air syringes solved as one space: the pushed one squeezed alone first, its work less than that takes (T2).
+    Only liquid joins spaces now; gas runs between cells sealed together as they settle;
+  - a lone syringe's gas over its liquid, squeezed small, is stiffened by the liquid's expansion, which the estimate
+    missed (T2): a lone piston's pressure is its sealed model's, exactly;
+  - a sealed group still running gas after its eight rounds left a cell off its equilibria (P1): each brought to them;
+  - a vapour pocket a billionth of the volume: one quantum of steam moved its pressure 2 % (the clearance a millionth);
+  - a hand at its most against nothing turned 80 N into drag heat in a few millilitres of air (112 C): the hand moves
+    at a person's pace (0.3 m/s), the drag 20 N s/m.
+
+- **The user, on the playtest's follow-up (2026-11-27)**: the joined air syringes' give must come from the air's
+  compressibility against the far plunger's friction, not from a step's delay; the mechanism general, for any tightly
+  joined vessels; a syringe connectable to any vessel; asked how a step computes the exchange, "solved within step".
+  Joined vessels are one space again (by gas or liquid), with the gas shared out first and each plunger then moved
+  alone, exactly (each piece the second law's), and gas leaving a vessel in parcels at its state of the moment (one
+  transfer of most of a vessel's gas at its first state took more energy than it had: what stayed had no temperature).
+
 ## Open
+
+- **Rare corners the random-hands stress still finds** (five seeds of 8,000 steps on the setups, five of 6,000 with
+  tubes joined and undone at random; the baths and a flask run clean): a sealed syringe of water pushed hard against
+  its liquid, or drained into a vacuum under its lock, ending a hair over-full (V2) or without a temperature (T3), and
+  steps whose entropy falls by up to 4e-4 J/K (T2). The kept test (`syringe lab: hands at random ...`) runs clean.
+
+- **A syringe of water tubed to one of air** (by hand: two caps off and "tube to it"): joined as one space while both
+  hold liquid, the joint estimate can miss what a squeezed gas pocket over liquid takes, and the random-hands stress
+  finds the world's entropy falling by up to 1e-3 J/K there. Exact would be each cell's sealed model at the space's
+  pressure with the liquid's split (a nested root, too dear per step as written).
+- **A sealed syringe brim-full of a liquid, warmed**: its liquid grows past its volume (V2), as a sealed flask's would;
+  the plunger yields only at the next step. A liquid's compressibility is the general answer (below).
 
 - A liquid is incompressible: a sealed syringe of water moves by its bubble alone, and with none its plunger stands
   on the liquid (a billionth of its volume left to its gas). Water's compressibility (4.5e-10 /Pa) would give 0.005 mL

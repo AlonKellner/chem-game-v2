@@ -9,8 +9,12 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <fstream>
 #include <memory>
+#include <random>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -253,4 +257,55 @@ TEST_CASE("syringe lab: a plunger locked stays where the hand leaves it, held by
 	ok(*l, R"({"do": "plunger", "item": "s", "lock": false})");
 	ok(*l, R"({"do": "wait", "seconds": 20})");
 	CHECK(item(*l, "s").plunger_ml > 97.0);
+}
+
+namespace {
+
+std::string bench_file(const char *path) {
+	std::ifstream f(std::string(CHEM_REPO_ROOT) + "/" + path);
+	std::stringstream s;
+	s << f.rdbuf();
+	return s.str();
+}
+
+// hands at random on a bench's syringes every few steps (a hand toward a volume, let go, a lock, a cap, the bench's own
+// moves), every invariant held on every step
+void random_hands(const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
+	std::string why;
+	auto l = lab::Lab::open(bench_file(bench), why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	l->set_checking(true);
+	std::mt19937 rng(seed);
+	std::vector<std::string> done;
+	for (int i = 0; i < steps; ++i) {
+		if (i % 3 == 0) {
+			const std::string &id = ids[rng() % ids.size()];
+			const unsigned r = rng() % 12;
+			std::string c = r == 0   ? R"({"do":"plunger","free":true,"item":")" + id + "\"}"
+					: r == 1		 ? std::string(R"({"do":"plunger","lock":)") + (rng() % 2 ? "true" : "false") + R"(,"item":")" + id + "\"}"
+					: r == 2		 ? std::string(R"({"do":"cap","to":)") + (rng() % 2 ? "1" : "0") + R"(,"item":")" + id + "\"}"
+					: r == 3 && !moves.empty() ? moves[rng() % moves.size()]
+											   : R"({"do":"plunger","item":")" + id + "\",\"ml\":" + std::to_string(rng() % 101) + "}";
+			std::string ignored;
+			if (l->command(c, ignored)) {
+				done.push_back(std::to_string(l->step()) + " " + c);
+			}
+		}
+		if (!l->advance(1, why) || l->failed()) {
+			for (size_t k = done.size() > 8 ? done.size() - 8 : 0; k < done.size(); ++k) {
+				MESSAGE(done[k]);
+			}
+			FAIL(bench << ", seed " << seed << ", step " << l->step() << ": " << why);
+		}
+	}
+}
+
+} // namespace
+
+TEST_CASE("syringe lab: hands at random on the four setups, the baths and a flask, as fast as a person and faster: every invariant on every step (Stage 79)") {
+	random_hands("data/benches/syringes.json", { "water", "air", "water_a", "water_b", "air_a", "air_b" }, {}, 11, 4000);
+	random_hands("data/benches/charles.json", { "s" },
+			{ R"({"do":"stand","item":"s","in":"cold"})", R"({"do":"stand","item":"s","in":"hot"})", R"({"do":"place","item":"s","at":[6,6]})" }, 12, 3000);
+	random_hands("data/benches/molar_volume.json", { "s" },
+			{ R"({"do":"attach","item":"s","to":"flask"})", R"({"do":"detach","item":"s"})", R"({"do":"tip","from":"jar","to":"flask","species":"malachite","all":true})" }, 13, 3000);
 }

@@ -90,6 +90,10 @@ struct Edge {
 // is exactly full at one atmosphere. Sealed, with none (Stage 28), it holds
 // what it holds, and its pressure follows (chem/thermo.hpp); cells sealed
 // together share one pressure.
+// (Stage 32, 79) A reservoir of work: so hot that what it gives or takes carries no entropy (the lab's mains). What
+// crosses an edge to it is work, not heat (T1 holds heat alone), either way.
+inline constexpr double WORK_KELVIN = 1.0e300;
+
 // (Stage 79, GAME_SPEC §6) A plunger in a rigid cell (or a column's top), overdamped: each step it moves at the speed
 // its forces give, c v = F + (P - P_atm) A - f sgn v, outward positive, P its space's pressure after the move; held
 // still while they are within its friction; between its stops. Its hand, held, pulls it toward `target`, with what
@@ -102,6 +106,7 @@ struct Piston {
 	bool held = false;
 	double target = 0.0; // m^3: where its hand pulls it, held
 	double hand_most = 0.0; // N
+	double hand_speed = 0.0; // m/s: the fastest a hand moves it (0: as fast as its force takes it)
 	EdgeId work;
 	// the last step's, kept for what is read of it (not state the step reads): the hand's force outward (N), the
 	// pressure the plunger stood at (Pa), how far it moved (m^3, outward; W1)
@@ -412,6 +417,8 @@ public:
 	Refusal move_piston(CellId cell, double volume, double force, double pressure);
 	// (Stage 79) what a step left of its pistons' last move, between steps: none moved since (W1)
 	void rest_pistons();
+	// (Stage 79) more work done by a piston's hand this step, J: its force, over its move, the more by it (W1)
+	void add_piston_work(CellId cell, double joule);
 	// A solid's particle count: not conserved, so not a primitive. The
 	// primitives keep it at least one where the solid is and zero where it is
 	// not; this sets how many. Refused (BadValue) for a species that is not a

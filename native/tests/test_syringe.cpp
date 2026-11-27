@@ -110,7 +110,7 @@ double ml_of(const Simulation &sim, const Syringe &s) {
 
 TEST_CASE("syringe: a sealed syringe of air held and pushed in slowly, its pressure times its volume stands (Boyle), the hand's force what the pressure over the room's takes on its area (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
 	Simulation sim = build(b);
@@ -132,7 +132,7 @@ TEST_CASE("syringe: a sealed syringe of air held and pushed in slowly, its press
 
 TEST_CASE("syringe: a hand pushes with at most its force: held toward 30 mL, the plunger stops where the air's pressure over the room's on its area is the hand's most, within its friction (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
 	Simulation sim = build(b);
@@ -149,7 +149,7 @@ TEST_CASE("syringe: a hand pushes with at most its force: held toward 30 mL, the
 
 TEST_CASE("syringe: a sealed syringe of air pushed in and let go springs back to about where it was, short of it by what its friction holds (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
 	Simulation sim = build(b);
@@ -168,7 +168,7 @@ TEST_CASE("syringe: a sealed syringe of air pushed in and let go springs back to
 
 TEST_CASE("syringe: a fast push heats the air as a compression does; a free plunger does no work: its cell's energy stands (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 0.0); // (no contact: adiabatic)
 	Simulation sim = build(b);
@@ -193,15 +193,16 @@ TEST_CASE("syringe: a fast push heats the air as a compression does; a free plun
 
 TEST_CASE("syringe: a sealed syringe of water hardly moves: its plunger stands on the liquid however the hand pushes, and the room holds it there against the hand's pull (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 0.0, 50.0, 5.0);
 	Simulation sim = build(b);
 	REQUIRE(sim.world().set_piston(s.cell, plunger(s.work)) == Refusal::None);
 	run(sim, 60 * 2);
-	// free, the room pushes it onto the water (its vapour, 3 kPa, holds nothing up)
+	// free, the room pushes it onto the water (its vapour, 3 kPa, holds nothing up), a ten-thousandth of its volume
+	// left to its gas (the clearance its water grows into as it warms)
 	const double rest = ml_of(sim, s);
-	CHECK(rest == doctest::Approx(50.0).epsilon(1e-6));
+	CHECK(rest == doctest::Approx(50.0).epsilon(2e-4));
 	hold(sim, s, 30.0);
 	run(sim, 60 * 5);
 	const double pushed = ml_of(sim, s);
@@ -216,7 +217,7 @@ TEST_CASE("syringe: a sealed syringe of water hardly moves: its plunger stands o
 
 TEST_CASE("syringe: two sealed syringes of air joined: one pushed in, the other moves out, behind it by what the air between gives to its friction (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe one = add_syringe(b, mains, room, 50.0, 0.0, 5.0, "one");
 	const Syringe two = add_syringe(b, mains, room, 50.0, 0.0, 5.0, "two");
@@ -234,7 +235,7 @@ TEST_CASE("syringe: two sealed syringes of air joined: one pushed in, the other 
 
 TEST_CASE("syringe: two sealed syringes of water joined: one pushed in, the water runs into the other, which moves out with it (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe one = add_syringe(b, mains, room, 0.05, 50.0, 5.0, "one");
 	const Syringe two = add_syringe(b, mains, room, 0.05, 50.0, 5.0, "two");
@@ -257,7 +258,7 @@ TEST_CASE("syringe: two sealed syringes of water joined: one pushed in, the wate
 
 TEST_CASE("syringe: a piston is refused on a cell that is not rigid, with no drag, with stops that do not hold it, or a work edge that is not from a reservoir (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
 	const CellId bag = b.add_cell("bag");
@@ -276,7 +277,7 @@ TEST_CASE("syringe: a piston is refused on a cell that is not rigid, with no dra
 
 TEST_CASE("invariant W1: a piston within its stops, its hand within its most, the work along its edge its force over its move; it fires on a trace corrupted in each (Stage 79)") {
 	World::Builder b(builtin_species());
-	const CellId mains = b.add_reservoir("mains", 1e300);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
 	const CellId room = b.add_reservoir("room", T0);
 	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
 	Simulation sim = build(b);
@@ -306,4 +307,34 @@ TEST_CASE("invariant W1: a piston within its stops, its hand within its most, th
 	}
 	REQUIRE(found);
 	CHECK_FALSE(check_W1(builtin_species(), more).empty());
+}
+
+TEST_CASE("invariant T1 with a reservoir of work: work given back to it, a gas pushing the hand, is no heat; heat into it from a colder cell still fires (Stage 79)") {
+	World::Builder b(builtin_species());
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
+	const CellId hot = b.add_reservoir("hot", 1e6);
+	const CellId room = b.add_reservoir("room", T0);
+	const Syringe s = add_syringe(b, mains, room, 100.0, 0.0, 5.0);
+	const EdgeId heat = b.add_edge(hot, s.cell, PHASES_NONE, 0.0); // (no heat runs: an edge for the corrupted entry below)
+	Simulation sim = build(b);
+	hold(sim, s, 60.0);
+	run(sim, 60 * 3);
+	sim.set_checking(false);
+	hold(sim, s, 60.5); // (the air pushes the plunger out against the hand, which holds it back: it gives the mains work)
+	StepTrace trace = sim.step();
+	CHECK(check_T1(builtin_species(), trace).empty());
+	bool given = false;
+	for (const LedgerEntry &e : trace.ledger) {
+		given = given || (e.edge == s.work && e.to == mains && e.energy.quanta > 0) || (e.edge == s.work && e.from == mains && e.energy.quanta < 0);
+	}
+	CHECK(given);
+	// heat from the cell into a hotter reservoir still fires
+	LedgerEntry wrong;
+	wrong.kind = LedgerEntry::Kind::Transfer;
+	wrong.edge = heat;
+	wrong.from = s.cell;
+	wrong.to = hot;
+	wrong.energy = Energy{ 1000 };
+	trace.ledger.push_back(wrong);
+	CHECK_FALSE(check_T1(builtin_species(), trace).empty());
 }

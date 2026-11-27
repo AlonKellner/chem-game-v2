@@ -13,5 +13,6 @@
 	"spectrophotometer": {"range_nm": [380, 780], "band_nm": 4, "stray_light": 0.001, "wavelength_accuracy_nm": 2, "resolution": 0.001, "most": 3.0, "lamp_k": 2900, "beam_mm": 15, "holder": {"range_c": [20, 80], "gain_w_k": 5, "most_w": 10}},
 	"hand": 0.10,
 	"hand_force_n": 79.8,
+	"hand_speed_m_s": 0.3,
 	"walls_g_cm3": {"glass": 2.23, "latex": 0.92, "polystyrene_foam": 0.05}
 }

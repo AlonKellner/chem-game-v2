@@ -44,6 +44,7 @@ double conductivity_reading(const ConductivityMeter &meter, double truth_us_cm, 
 Meter gauge(); // a pressure gauge, kPa (Stage 54)
 double hand(); // how far a hand misses an amount aimed at, a share (0.10)
 double hand_force(); // (Stage 79) the most a hand pushes or pulls a plunger with, N (a thumb's: 79.8)
+double hand_speed(); // (Stage 79) the fastest a hand moves a plunger, m/s
 double reference_density(); // the reference weights', kg/m^3 (OIML D 28: 8000)
 // a wall species' density, g/cm^3: the air its glass or its rubber displaces on a balance (0: none known)
 double wall_density(std::string_view species);

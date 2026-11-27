@@ -155,6 +155,8 @@ private:
 	void do_work();
 	void move_pistons(); // (Stage 79) each piston moved by its forces, its space at one pressure
 	bool equalize_liquid(EdgeId edge); // (Stage 79) liquid between two sealed spaces, to one pressure
+	void run_liquid(const std::vector<CellId> &cells, std::vector<double> takes, double pressure, const std::vector<size_t> &liquid_edges); // (Stage 79) a piston's space's liquid where its volumes ask
+	void run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges); // (Stage 79) a piston's space's gas to one pressure
 	void drain_liquids();
 	void exchange_gases(); // (Stage 50) each gas down its mole fraction along an edge that exchanges it
 	void overflow();
@@ -193,6 +195,7 @@ private:
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
 	std::vector<double> work_remainder_; // per edge; empty while no edge has done work
+	std::vector<double> solved_pressure_; // (Stage 79) per cell: its pistons' space's pressure this step (0: none)
 	// what drained into each cell this step (Stage 51): its liquid's volume, m^3, and mass, kg (a column's jet)
 	std::vector<double> landed_m3_, landed_kg_;
 	std::vector<double> reaction_remainder_;

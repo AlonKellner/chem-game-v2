@@ -524,7 +524,9 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 			continue; // C5 reports it
 		}
 		const auto from = static_cast<size_t>(entry.from.index);
-		if (transfer && entry.delta.empty() && entry.energy.quanta != 0) {
+		const auto of_work = [&](size_t c) { return trace.meta[c].reservoir && trace.meta[c].reservoir_temperature >= WORK_KELVIN; };
+		if (transfer && entry.delta.empty() && entry.energy.quanta != 0 && !of_work(from) && !of_work(static_cast<size_t>(entry.to.index))) {
+			// (Stage 79: work to or from a reservoir of work, a piston's hand's, is no heat: either way)
 			const auto to = static_cast<size_t>(entry.to.index);
 			double t_from = 0.0, t_to = 0.0;
 			if (temperature_of(table, trace, replay, from, t_from) && temperature_of(table, trace, replay, to, t_to)) {
@@ -546,7 +548,12 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				gas_only = gas_only && table.has(d.species) && table.species(d.species).phase == Phase::Gas;
 			}
 			const auto to = static_cast<size_t>(entry.to.index);
-			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
+			// (Stage 79: gas shared within a space a piston moved this step runs as the push runs, not by the pressures a
+			// replay of the step's ledger reads at this entry: T2 holds it)
+			const bool pushed_space = trace.meta[from].piston.moved != 0.0 || trace.meta[to].piston.moved != 0.0;
+			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed && pushed_space) {
+				// (as the push runs)
+			} else if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
 				// cells sealed together (Stage 28): from the higher pressure to the lower
 				const Thermal a = thermal_state(table, replay.cells[from], &trace.meta[from]), b = thermal_state(table, replay.cells[to], &trace.meta[to]);
 				if (a.defined && b.defined && !(a.pressure > b.pressure) && out.size() < MAX_MESSAGES) {
@@ -785,10 +792,11 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace) {
 		for (size_t s = 0; s < trace.after.cells[c].amount.size(); ++s) {
 			gas = gas || (trace.after.cells[c].amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas);
 		}
-		// no room for its gas: at 25 C, or (Stage 67, its liquids grown) at any temperature that holds its energy, when
-		// open it would have one
+		// no room for its gas: (Stage 67, its liquids grown) at any temperature that holds its energy, when open it would
+		// have one; in a world without temperatures, at 25 C (Stage 79: a world with them is held at its own, not at
+		// 25 C: a syringe full of water at 20 C has room its water would not leave at 25 C)
 		const Fill fill = fill_of(table, trace.after.cells[c], T0);
-		const bool roomless = fill.defined && (!(fill.condensed < meta.volume) ||
+		const bool roomless = fill.defined && ((!trace.thermal && !(fill.condensed < meta.volume)) ||
 				(trace.thermal && !thermal_state(table, trace.after.cells[c], &meta).defined && thermal_state(table, trace.after.cells[c]).defined));
 		if (gas && roomless) {
 			out.push_back(text("V3: step %lld: sealed cell %lld leaves its gas no room: its pressure is not defined", static_cast<long long>(trace.step), static_cast<long long>(c)));

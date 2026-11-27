@@ -495,12 +495,13 @@ Refusal World::set_piston(CellId cell, const Piston &piston) {
 	const auto good = [](double v) { return v >= 0.0 && v - v == 0.0; };
 	const double now = piston_volume(cell);
 	if (!(piston.area > 0.0) || !good(piston.area) || !good(piston.friction) || !(piston.drag > 0.0) || !good(piston.drag) || !(piston.least > 0.0) ||
-			!good(piston.most) || piston.most < piston.least || now < piston.least * (1.0 - 1e-12) || now > piston.most * (1.0 + 1e-12) || !good(piston.hand_most) ||
+			!good(piston.most) || piston.most < piston.least || now < piston.least * (1.0 - 1e-12) || now > piston.most * (1.0 + 1e-12) || !good(piston.hand_most) || !good(piston.hand_speed) ||
 			!good(piston.target) || piston.work.index < 0 || static_cast<size_t>(piston.work.index) >= edges_.size()) {
 		return Refusal::BadValue;
 	}
 	const Edge &e = edges_[static_cast<size_t>(piston.work.index)];
-	if (!(e.a == cell || e.b == cell) || !meta_[static_cast<size_t>((e.a == cell ? e.b : e.a).index)].reservoir) {
+	const CellMeta &source = meta_[static_cast<size_t>((e.a == cell ? e.b : e.a).index)];
+	if (!(e.a == cell || e.b == cell) || !source.reservoir || source.reservoir_temperature < WORK_KELVIN) {
 		return Refusal::BadValue;
 	}
 	m.piston = piston;
@@ -512,9 +513,17 @@ double World::piston_volume(CellId cell) const {
 	return m.column_volume > 0.0 ? m.column_volume : m.volume;
 }
 
+void World::add_piston_work(CellId cell, double joule) {
+	Piston &p = meta_[static_cast<size_t>(cell.index)].piston;
+	if (p.moved != 0.0 && p.area > 0.0) {
+		p.force += joule * p.area / p.moved;
+	}
+}
+
 void World::rest_pistons() {
 	for (CellMeta &m : meta_) {
 		m.piston.moved = 0.0;
+		m.piston.force = 0.0; // (a step that moves none: no hand did work)
 	}
 }
 

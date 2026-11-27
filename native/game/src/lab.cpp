@@ -70,7 +70,7 @@ constexpr double STIRRED_W_KG = 0.1; // a stirred beaker's dissipation, W/kg, fo
 constexpr double STIR_WATTS = 0.01, SWIRL_SECONDS = 1.5;
 // A source of work is a reservoir so hot that its energy carries no entropy (the limit of a heat reservoir as
 // its temperature grows without bound): what it gives is work, and the second law holds as it is checked (T1, T2).
-constexpr double WORK_KELVIN = 1.0e300;
+// (the mains: chem::WORK_KELVIN, a reservoir of work)
 constexpr double GENTLE_POUR = 2e-6; // m^3/s: a gentle pour's trickle down the wall (a design value)
 // a pouring lip, an outlet, a cap over the mouth it runs into, m (Stage 51: the screen's 10 pixels at its scale; a
 // design value)
@@ -4125,6 +4125,7 @@ struct Lab::Impl {
 		p.held = held;
 		p.target = held ? std::clamp(target, p.least, p.most) : 0.0;
 		p.hand_most = most;
+		p.hand_speed = x.hand ? instruments::hand_speed() : 0.0; // (a hand's pace; a lock holds where it stands)
 		p.work = x.plunges;
 		const Piston &was = world().meta(x.cell).piston;
 		p.force = was.force;
@@ -7978,7 +7979,7 @@ json Lab::Impl::save() const {
 		if (meta.piston.area > 0.0) { // (Stage 79) a piston: its make, its hand, and its last step's
 			const Piston &p = meta.piston;
 			cell["piston"] = { bits(p.area), bits(p.friction), bits(p.drag), bits(p.least), bits(p.most), p.held, bits(p.target), bits(p.hand_most), p.work.index,
-				bits(p.force), bits(p.pressure), bits(p.moved) };
+				bits(p.force), bits(p.pressure), bits(p.moved), bits(p.hand_speed) };
 		}
 		cell["amount"] = state.amount;
 		cell["energy"] = state.energy;
@@ -8515,7 +8516,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 		}
 		const json &pj = cell.at("piston");
 		Piston p;
-		bool read = pj.is_array() && pj.size() == 12;
+		bool read = pj.is_array() && pj.size() == 13 && from_bits(pj.at(12), p.hand_speed);
 		read = read && from_bits(pj.at(0), p.area) && from_bits(pj.at(1), p.friction) && from_bits(pj.at(2), p.drag) && from_bits(pj.at(3), p.least) && from_bits(pj.at(4), p.most) &&
 				from_bits(pj.at(6), p.target) && from_bits(pj.at(7), p.hand_most) && from_bits(pj.at(9), p.force) && from_bits(pj.at(10), p.pressure) && from_bits(pj.at(11), p.moved);
 		if (read) {
