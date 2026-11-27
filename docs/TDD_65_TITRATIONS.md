@@ -57,10 +57,13 @@ conductivity** (this stage).
     acid in it and in water.
   - 18 `salts_ph`: the pH of salts' solutions (NaCl, NH4Cl, sodium acetate, NaHCO3, Na2CO3); bromothymol blue's pKa by
     its absorbance at 616 nm in phosphate buffers.
-  - 19 `antacid`: an antacid tablet (sodium hydrogen carbonate in a binder) in excess standard acid, boiled to drive
-    out its CO2, the excess titrated back; what a gram neutralises.
-  - 20 `conductivity`: strong, weak and no electrolytes by the conductivity meter; a conductometric titration of
-    hydrochloric acid with sodium hydroxide, its two lines' crossing the end point.
+  - 19 `antacid`: an antacid tablet (sodium hydrogen carbonate; calcium and magnesium are step E's) in excess standard
+    acid, boiled on a burner to drive out its CO2 (in the flask's air too: Henry's equilibrium would give it back to
+    the base), cooled, the excess titrated back with potassium hydroxide (so the flask's sodium is the tablet's, the
+    report's truth); what a gram neutralises.
+  - 20 `conductivity`: strong, weak and no electrolytes by the conductivity meter, in a room of 420 ppm of CO2; a
+    conductometric titration of hydrochloric acid with sodium hydroxide, the acid diluted eightfold first so that the
+    base bends its arms little, its two lines' crossing the end point.
 - **`chem_tool study conductivity`**: the model against its closed forms (Onsager's limiting law; Ostwald's dilution
   law for acetic acid) and the measured tables, printed.
 - **A salt dissolving into what takes its ion away** (experiment 19's tablet). Its surface reaction's transport limit
@@ -95,6 +98,10 @@ conductivity** (this stage).
 | 65.8 | This document, GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
 
 ## Open
+
+- Heat of dilution (C11), in step D's scope in the curriculum, is left to a later stage: the activity model's
+  parameters have no temperature derivatives (GAME_SPEC §10).
+- The experiments' list wants a scroll past 32.
 
 - **A carbonate's first end point stands at pH 8.67, not 8.34** (experiment 16). The flask's dissolved CO2 is at
   Henry's equilibrium with the flask's air at every step (Stage 64's open item: a real surface exchanges at a finite

@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.72.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.72.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -2964,6 +2964,26 @@ stand on.
     first; one seed tipped into each, the right beaker stirred: its seed breeds (§9, secondary nucleation) and the
     excess comes out in minutes, 1.03 g in 1.2 million crystals of about 90 µm, while the still seed grows to 10.3 mg,
     one crystal. Its report: the stirred beaker's crystals, predicted first.
+  - Stage 65's, read by instruments, each with its report:
+    - `standardise` (experiment 14): sodium hydroxide of about 0.1 M (drawn by the seed) against half a gram of KHP on
+      the analytical balance, run in fast to 18 mL, then drop by drop to phenolphthalein's first lasting pink; at the
+      bench's seed 0.1001 mol/L found against 0.1003.
+    - `vinegar` (experiment 15): a vinegar of unknown strength diluted tenfold in a volumetric flask and stirred, 25 mL
+      titrated with the pH and the burette logged; the end point (17.66 mL against 17.68), its strength (0.706 mol/L)
+      and acetic acid's pKa at half the end point (4.69, the thermodynamic 4.76 less its activity's share).
+    - `carbonate_curve` (experiment 16): sodium carbonate against hydrochloric acid, phenolphthalein then methyl red,
+      the curve's two steps, the second twice the first (13.85 and 27.68 mL against 13.82 and 27.65).
+    - `buffer` (experiment 17): an acetate buffer of 10 mmol of each, weighed and made up; its pH (4.67) against
+      Henderson and Hasselbalch's (4.76), a guess first; the same acid into it (down 0.07) and into water (to 2.16).
+    - `salts_ph` (experiment 18): five salts' pH (NaCl 7.08, NH4Cl 5.32, sodium acetate 8.85, NaHCO3 8.41, Na2CO3
+      11.43), a guess first; bromothymol blue's apparent pKa from its absorbance at 616 nm in acid, base and a phosphate
+      buffer (7.08 against 7.10).
+    - `antacid` (experiment 19): a tablet of sodium hydrogen carbonate given 5 mmol of acid, boiled until its carbon
+      dioxide is gone, the rest titrated back with potassium hydroxide; 3.63 mmol found against 3.59, 12.0 mmol a gram.
+    - `conductivity` (experiment 20): strong, weak and no electrolytes on the conductivity meter (HCl 3,804, NaCl 1,067,
+      acetic acid 148, water under the room's 420 ppm of CO2 0.9 uS/cm), a guess first; then a conductometric
+      titration, the acid diluted with 175 mL of water, its falling and rising lines crossing at 11.62 mL against
+      11.81.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
