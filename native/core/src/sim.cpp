@@ -878,8 +878,11 @@ bool Simulation::project(CellId cell) {
 	std::vector<uint64_t> after_joint;
 	bool joint = true;
 	// (Stage 65: 64, from 16: a solution's carbon dioxide trading with its gas through water's ionisation and the
-	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour)
-	for (int round = 0; round < 64; ++round) {
+	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour. Stage 81: 256:
+	// copper hydroxide dissolving in a little ammonia as its ammines, the solid project()'s alone and the ammines,
+	// ammonia's protonation and water's ionisation joint, takes 130 to 250 rounds to its balance; a cell that settles
+	// sooner stops sooner)
+	for (int round = 0; round < 256; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];

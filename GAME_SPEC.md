@@ -836,6 +836,26 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
   cobalt hydroxide's pink and silver oxide's dark brown calibrated to how each looks.
 - The activity model's pairs: Pitzer and Mayorga 1973's chlorides and nitrates, Harvie, Møller and Weare's calcium
   and magnesium with sulfate, hydroxide and hydrogen carbonate.
+
+**Complexes and their colours** (Stage 81; `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part:
+experiments 12, 42, 43, 51, 52, 54). A complex is a dissolved species made of a metal ion and its ligands, formed and
+broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²⁺'s is).
+- **Its constant** is its measured one at zero ionic strength: its ΔfH° NBS's (Wagman et al. 1982) or its parts' plus
+  its measured reaction enthalpy, and its S° the one that gives the measured log K. Its Cp° and V° are its parts'
+  (the reaction's ΔCp and ΔV taken as nought where none is measured: its log K moves with temperature by its enthalpy
+  alone, van 't Hoff's). Its activity is Debye and Hückel's within Pitzer's (no pair of its own).
+- **Copper and ammonia**: Cu(NH₃)ₙ²⁺, n = 1 to 4, by NBS's free energies; deep blue (Bjerrum 1932's tetrammine).
+  **Silver and ammonia**: AgNH₃⁺, Ag(NH₃)₂⁺ (MINTEQ v4): silver chloride dissolves in ammonia.
+- **Hydroxo complexes**: Zn(OH)₃⁻, Zn(OH)₄²⁻, Al(OH)₄⁻ (MINTEQ v4): zinc and aluminium hydroxides redissolve in excess
+  base.
+- **Thiocyanate** SCN⁻ (NBS) and iron(III)'s FeSCN²⁺, Fe(SCN)₂⁺: blood red (Ozutsumi et al. 1992's constants and
+  spectra, the first constant at zero ionic strength from Below, Connick and Coppel 1958's by Davies's equation).
+- **Cobalt and chloride**: CoCl⁺, CoCl₂, CoCl₃⁻, CoCl₄²⁻ (ThermoChimie's): in strong hydrochloric acid cobalt turns from
+  pink to blue (Bjerrum, Halonin and Skibsted 1975's CoCl₄²⁻).
+- **Chromium(VI)**: CrO₄²⁻ yellow (Haupt 1952, NBS), HCrO₄⁻ and Cr₂O₇²⁻ orange as acid turns chromate to dichromate
+  (MINTEQ v4, NBS SP 260-54); dichromate's visible band calibrated to its look (no open source measures it).
+- **EDTA** (Y⁴⁻ and its acids) and its complexes with calcium, magnesium, copper, zinc and iron (MINTEQ v4, NIST 46),
+  and Eriochrome Black T, the indicator a titration of water's hardness turns from wine red to blue.
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -857,6 +877,8 @@ at PHREEQC's measured constant: 0.1 mol/kg of the acid holds 0.073 mol/kg of bis
 - Stage 64 adds the weak acids and bases, the gases' dissolving, the indicators and the salts experiments 14 to 20
   weigh; the masters a retired unit is read back by; a bench opened at its fast equilibria.
 - Stage 76 adds eight metals, their salts, their hydrolysis and thirteen precipitates.
+- Stage 81 adds complexes (copper's and silver's ammines, zinc's and aluminium's hydroxo complexes, iron(III)'s
+  thiocyanates, cobalt's chlorides, chromate and dichromate, EDTA's) and their colours, and flame emission (§12).
 
 ## 10. Property models
 

@@ -126,6 +126,25 @@
 		{"id": "zinc_hydroxide", "formula": "Zn(OH)2", "phase": "s", "density": 3.053, "grain_um": 0.3, "thermo": {"hf_kj": -643.25, "cp": 72.4, "s0": 83.02}},
 		{"id": "aluminium_hydroxide", "formula": "Al(OH)3", "phase": "s", "density": 2.42, "grain_um": 0.3, "thermo": {"hf_kj": -1276.0, "cp": 91.7, "s0": 58.68}},
 		{"id": "cobalt_hydroxide", "formula": "Co(OH)2", "phase": "s", "density": 3.597, "grain_um": 0.3, "thermo": {"hf_kj": -539.7, "cp": 90.0, "s0": 78.62}},
-		{"id": "mercury", "formula": "Hg", "phase": "l", "density": 13.534, "thermo": {"hf_kj": 0.0, "cp": 27.978, "s0": 76.028}}
+		{"id": "mercury", "formula": "Hg", "phase": "l", "density": 13.534, "thermo": {"hf_kj": 0.0, "cp": 27.978, "s0": 76.028}},
+		{"id": "copper_ammine_1", "formula": "CuNH3+2", "phase": "aq", "ions": {"CuNH3+2": 1}, "basis": {"Cu+2": 1, "NH4+1": 1, "H+1": -1}, "volume_cm3": -8.57, "thermo": {"hf_kj": -30.39, "cp": 138.31, "s0": 39.714}},
+		{"id": "copper_ammine_2", "formula": "Cu(NH3)2+2", "phase": "aq", "ions": {"Cu(NH3)2+2": 1}, "basis": {"Cu+2": 1, "NH4+1": 2, "H+1": -2}, "volume_cm3": 15.86, "thermo": {"hf_kj": -133.79, "cp": 203.71, "s0": 138.771}},
+		{"id": "copper_ammine_3", "formula": "Cu(NH3)3+2", "phase": "aq", "ions": {"Cu(NH3)3+2": 1}, "basis": {"Cu+2": 1, "NH4+1": 3, "H+1": -3}, "volume_cm3": 40.29, "thermo": {"hf_kj": -237.09, "cp": 269.11, "s0": 226.929}},
+		{"id": "copper_ammine_4", "formula": "Cu(NH3)4+2", "phase": "aq", "ions": {"Cu(NH3)4+2": 1}, "basis": {"Cu+2": 1, "NH4+1": 4, "H+1": -4}, "volume_cm3": 64.72, "thermo": {"hf_kj": -339.99, "cp": 334.51, "s0": 301.301}},
+		{"id": "silver_diammine", "formula": "Ag(NH3)2+1", "phase": "aq", "ions": {"Ag(NH3)2+1": 1}, "basis": {"Ag+1": 1, "NH4+1": 2, "H+1": -2}, "volume_cm3": 31.32, "thermo": {"hf_kj": -111.29, "cp": -52.496, "s0": 245.2}},
+		{"id": "silver_ammine", "formula": "AgNH3+1", "phase": "aq", "ions": {"AgNH3+1": 1}, "basis": {"Ag+1": 1, "NH4+1": 1, "H+1": -1}, "volume_cm3": 6.89, "thermo": {"hf_kj": -2.856, "cp": -117.896, "s0": 152.952}},
+		{"id": "zinc_trihydroxo", "formula": "Zn(OH)3-1", "phase": "aq", "ions": {"Zn(OH)3-1": 1}, "basis": {"Zn+2": 1, "H+1": -3}, "volume_cm3": -3.574, "thermo": {"hf_kj": -1011.38, "cp": 419.045, "s0": -440.045}},
+		{"id": "zinc_tetrahydroxo", "formula": "Zn(OH)4-2", "phase": "aq", "ions": {"Zn(OH)4-2": 1}, "basis": {"Zn+2": 1, "H+1": -4}, "volume_cm3": 14.494, "thermo": {"hf_kj": -1297.21, "cp": 710.77, "s0": -607.433}},
+		{"id": "aluminium_tetrahydroxo", "formula": "Al(OH)4-1", "phase": "aq", "ions": {"Al(OH)4-1": 1}, "basis": {"Al+3": 1, "H+1": -4}, "volume_cm3": -23.246, "thermo": {"hf_kj": -1501.08, "cp": 398.355, "s0": 104.794}},
+		{"id": "thiocyanate_ion", "formula": "SCN-1", "phase": "aq", "ions": {"SCN-1": 1}, "volume_cm3": 52.44, "thermo": {"hf_kj": 76.44, "cp": 176.184, "s0": 144.3}},
+		{"id": "iron_thiocyanate", "formula": "FeSCN+2", "phase": "aq", "ions": {"FeSCN+2": 1}, "basis": {"Fe+3": 1, "SCN-1": 1}, "volume_cm3": -34.78, "thermo": {"hf_kj": 21.246, "cp": -550.688, "s0": -136.978}},
+		{"id": "iron_dithiocyanate", "formula": "Fe(SCN)2+1", "phase": "aq", "ions": {"Fe(SCN)2+1": 1}, "basis": {"Fe+3": 1, "SCN-1": 2}, "volume_cm3": 17.66, "thermo": {"hf_kj": 93.38, "cp": -374.504, "s0": 24.226}},
+		{"id": "cobalt_tetrachloro", "formula": "CoCl4-2", "phase": "aq", "ions": {"CoCl4-2": 1}, "basis": {"Co+2": 1, "Cl-1": 4}, "volume_cm3": 79.14, "thermo": {"hf_kj": -704.266, "cp": -92.655, "s0": 148.688}},
+		{"id": "chromate_ion", "formula": "CrO4-2", "phase": "aq", "ions": {"CrO4-2": 1}, "volume_cm3": 53.28, "thermo": {"hf_kj": -881.15, "cp": 170.782, "s0": 50.21}},
+		{"id": "hydrogen_chromate_ion", "formula": "HCrO4-1", "phase": "aq", "ions": {"HCrO4-1": 1}, "basis": {"CrO4-2": 1, "H+1": 1}, "volume_cm3": 61.64, "thermo": {"hf_kj": -878.2, "cp": 222.626, "s0": 184.1}},
+		{"id": "dichromate_ion", "formula": "Cr2O7-2", "phase": "aq", "ions": {"Cr2O7-2": 1}, "basis": {"CrO4-2": 2, "H+1": 2}, "volume_cm3": 106.18, "thermo": {"hf_kj": -1490.3, "cp": 310.946, "s0": 261.9}},
+		{"id": "potassium_thiocyanate_aq", "retired": true, "formula": "KSCN", "phase": "aq", "ions": {"K+1": 1, "SCN-1": 1}, "volume_cm3": 44.76, "thermo": {"hf_kj": -175.94, "cp": -31.886, "s0": 246.8}},
+		{"id": "potassium_chromate_aq", "retired": true, "formula": "K2CrO4", "phase": "aq", "ions": {"K+1": 2, "CrO4-2": 1}, "volume_cm3": 37.92, "thermo": {"hf_kj": -1385.91, "cp": -245.358, "s0": 255.21}},
+		{"id": "potassium_dichromate_aq", "retired": true, "formula": "K2Cr2O7", "phase": "aq", "ions": {"K+1": 2, "Cr2O7-2": 1}, "volume_cm3": 90.82, "thermo": {"hf_kj": -1995.06, "cp": -105.194, "s0": 466.9}}
 	]
 }
