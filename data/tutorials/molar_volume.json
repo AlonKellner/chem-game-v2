@@ -1,0 +1,172 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §6 Pistons, §13.7, Stage 79; docs/CURRICULUM.md, experiment 28) on data/benches/molar_volume.json: 0.50 g of malachite in sulfuric acid gives 2.26 mmol of carbon dioxide, collected in a gas syringe on the flask's mouth: its volume over its moles is a gas's molar volume, about 24 L/mol at the room's temperature and pressure.",
+	"title": "Experiment: a gas's molar volume",
+	"bench": "../benches/molar_volume.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "0.50 g of malachite, Cu2CO3(OH)2 (221 g/mol), gives one carbon dioxide for each formula: 2.26 mmol. How many millilitres of gas will push the syringe out? Type your guess, then click \"predict\".",
+			"why": "A mole of any gas takes the same room at the same temperature and pressure (Avogadro).",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "54"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "The gas",
+			"title": "Malachite into the acid",
+			"text": "Pick up the jar of malachite, then right-click the flask. In the menu, click \"tip in\".",
+			"checks": [
+				{
+					"text": "the malachite in the flask",
+					"when": {
+						"item": "jar",
+						"species": "malachite",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:tip:malachite"
+				}
+			]
+		},
+		{
+			"title": "The syringe on its mouth",
+			"text": "Quickly: pick up the syringe, right-click the flask, and click \"on its mouth\".",
+			"why": "Its nozzle in the flask's bung: the gas the acid gives has nowhere to go but into the syringe, which it pushes out at the room's pressure.",
+			"checks": [
+				{
+					"text": "the syringe on the flask",
+					"when": {
+						"item": "s",
+						"place": "on"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:attach"
+				}
+			]
+		},
+		{
+			"title": "Collect it",
+			"text": "Watch the plunger move out as the malachite fizzes away. Speed up time if you like.",
+			"why": "The air in the flask is pushed into the syringe by the carbon dioxide made under it: the syringe reads what was made.",
+			"checks": [
+				{
+					"text": "the malachite gone",
+					"when": {
+						"item": "flask",
+						"species": "malachite",
+						"below_g": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "Read it",
+			"text": "Once the flask is back at the room's temperature, right-click the syringe and click \"+ mL\".",
+			"why": "The reaction warmed the flask a little: wait for it to cool, as the volume is read at the room's temperature.",
+			"checks": [
+				{
+					"text": "its volume recorded",
+					"when": {
+						"item": "s",
+						"recorded": "plunger_ml",
+						"recorded_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the gas collected",
+			"quantity": {
+				"item": "s",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"now"
+			]
+		},
+		{
+			"label": "the flask",
+			"quantity": {
+				"item": "flask",
+				"what": "celsius"
+			},
+			"show": [
+				"most",
+				"now"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the gas collected",
+			"unit": "mL",
+			"truth": "s.plunger_ml",
+			"ideal": 54.4,
+			"tolerance": 2,
+			"predict": true,
+			"why": "2.26 mmol x 24.06 L/mol at 20 C and 101.3 kPa is 54.4 mL; a little of the carbon dioxide dissolves in the acid instead."
+		},
+		{
+			"label": "the molar volume",
+			"unit": "L/mol",
+			"truth": "s.plunger_ml / 2.261",
+			"ideal": 24.06,
+			"tolerance": 1,
+			"why": "The volume over the moles: RT/P is 24.06 L/mol at 20 C and 101.3 kPa, the same for any gas."
+		}
+	]
+}

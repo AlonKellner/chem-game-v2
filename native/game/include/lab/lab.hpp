@@ -111,6 +111,13 @@ struct ItemView {
 	bool boiling = false, bubbles_surface = false;
 	double bubbles_cm = 0.0, bubble_mm = 0.0, depth_cm = 0.0;
 	double bubble_extinction = 0.0, bubble_exponent = 0.0, bubbles_end_cm = 0.0, gas_extinction = 0.0;
+	// (Stage 79) a gas syringe: what its scale reads (mL over its plunger fully in, the truth) and its last mark; its
+	// plunger held by a hand toward `plunger_target_ml`, or free; the hand's force, N (outward); the syringe its nozzle
+	// is joined to by a tube (index)
+	bool syringe = false, plunger_held = false;
+	bool plunger_hand = false, plunger_locked = false; // a hand on it; its lock on (it holds where the hand leaves it)
+	double plunger_ml = 0.0, plunger_most_ml = 0.0, plunger_target_ml = 0.0, plunger_force_n = 0.0;
+	int tube = -1;
 	double volume_ml = 0.0; // a vessel's own
 	double capacity_ml = 0.0; // a balloon's
 	double wall_mm = 0.0; // a vessel's wall, how thick: what is seen through it bends by it (§12.3)

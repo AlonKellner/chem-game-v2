@@ -492,6 +492,83 @@ Refusal World::reshape_column(CellId top, double whole, std::vector<double> volu
 	return Refusal::None;
 }
 
+Refusal World::set_piston(CellId cell, const Piston &piston) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	if (m.reservoir || m.layer || !m.rigid) {
+		return Refusal::BadValue;
+	}
+	if (piston.area == 0.0) {
+		if (!(m.piston == Piston{})) {
+			m.piston = Piston{};
+			touch(static_cast<size_t>(cell.index)); // (Stage 75: its meta changed)
+		}
+		return Refusal::None;
+	}
+	const auto good = [](double v) { return v >= 0.0 && v - v == 0.0; };
+	const double now = piston_volume(cell);
+	if (!(piston.area > 0.0) || !good(piston.area) || !good(piston.friction) || !(piston.drag > 0.0) || !good(piston.drag) || !(piston.least > 0.0) ||
+			!good(piston.most) || piston.most < piston.least || now < piston.least * (1.0 - 1e-12) || now > piston.most * (1.0 + 1e-12) || !good(piston.hand_most) || !good(piston.hand_speed) ||
+			!good(piston.target) || piston.work.index < 0 || static_cast<size_t>(piston.work.index) >= edges_.size()) {
+		return Refusal::BadValue;
+	}
+	const Edge &e = edges_[static_cast<size_t>(piston.work.index)];
+	const CellMeta &source = meta_[static_cast<size_t>((e.a == cell ? e.b : e.a).index)];
+	if (!(e.a == cell || e.b == cell) || !source.reservoir || source.reservoir_temperature < WORK_KELVIN) {
+		return Refusal::BadValue;
+	}
+	if (!(m.piston == piston)) {
+		m.piston = piston;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: its meta changed)
+	}
+	return Refusal::None;
+}
+
+double World::piston_volume(CellId cell) const {
+	const CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	return m.column_volume > 0.0 ? m.column_volume : m.volume;
+}
+
+// (its reckoning of a step, and move_piston's of a move, are no part of what is derived from a cell: they draw no
+// revision, Stage 75; a move's volume does)
+void World::rest_pistons() {
+	for (CellMeta &m : meta_) {
+		m.piston.moved = 0.0;
+		m.piston.travel = 0.0;
+		m.piston.worked = 0.0;
+		m.piston.force = 0.0; // (a step that moves none: no hand did work)
+	}
+}
+
+Refusal World::move_piston(CellId cell, double volume, double force, double pressure, double work) {
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(cell.index)];
+	if (!(m.piston.area > 0.0) || !(volume > 0.0) || !(volume - volume == 0.0)) {
+		return Refusal::BadValue;
+	}
+	if (std::none_of(moved_volumes_.begin(), moved_volumes_.end(), [&](const auto &x) { return x.first == cell.index; })) {
+		moved_volumes_.emplace_back(cell.index, m.volume);
+	}
+	m.piston.force = force;
+	m.piston.pressure = pressure;
+	m.piston.moved += volume - piston_volume(cell);
+	m.piston.travel += std::abs(volume - piston_volume(cell));
+	m.piston.worked += work;
+	if (m.column_volume > 0.0) {
+		std::vector<double> shape = m.column_shape;
+		return reshape_column(cell, volume, std::move(shape));
+	}
+	if (m.volume != volume) {
+		m.volume = volume;
+		touch(static_cast<size_t>(cell.index)); // (Stage 75: its volume moved)
+	}
+	return Refusal::None;
+}
+
 Refusal World::set_stirring(CellId cell, double watts) {
 	if (!known(cell)) {
 		return Refusal::UnknownCell;
@@ -1055,6 +1132,21 @@ Refusal World::set_exchange(EdgeId edge, double exchange) {
 	return Refusal::None;
 }
 
+Refusal World::set_flow(EdgeId edge, double flow, uint8_t foot) {
+	if (stepping()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	if (!(flow >= 0.0) || !(flow - flow == 0.0)) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].flow = flow;
+	edges_[static_cast<size_t>(edge.index)].foot = foot & 3u;
+	return Refusal::None;
+}
+
 void World::refresh_sealed() {
 	const std::vector<CellMeta> was = meta_;
 	for (CellMeta &m : meta_) {
@@ -1100,11 +1192,13 @@ void World::resume_step() {
 
 void World::skip_step() {
 	resumed_ = false;
+	moved_volumes_.clear();
 	ledger_.clear();
 	++step_;
 }
 
 void World::rebase() {
+	moved_volumes_.clear();
 	before_.cells = cells_;
 }
 
@@ -1123,6 +1217,17 @@ void World::close_step(StepTrace &trace) {
 	std::swap(trace.ledger, ledger_);
 	trace.edges = edges_;
 	trace.meta = meta_;
+	trace.volume_before.clear();
+	if (!moved_volumes_.empty()) {
+		trace.volume_before.resize(meta_.size());
+		for (size_t c = 0; c < meta_.size(); ++c) {
+			trace.volume_before[c] = meta_[c].volume;
+		}
+		for (const auto &[c, v] : moved_volumes_) {
+			trace.volume_before[static_cast<size_t>(c)] = v;
+		}
+		moved_volumes_.clear();
+	}
 	trace.thermal = thermal_;
 	trace.starved.clear();
 	trace.exchanged.clear();

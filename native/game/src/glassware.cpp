@@ -422,6 +422,19 @@ double Vessel::head_inverted(double cm3) const {
 	return 0.5 * (lo + hi);
 }
 
+double tubing_bore() {
+	return table().at("tubing").at("bore_mm").get<double>() / 10.0;
+}
+
+double tubing_length() {
+	return table().at("tubing").at("length_mm").get<double>() / 10.0;
+}
+
+double poiseuille(double bore_cm, double length_cm) {
+	const double r = 0.5 * bore_cm * 1e-2, l = length_cm * 1e-2;
+	return l > 0.0 ? pi * r * r * r * r / (8.0 * l) : 0.0;
+}
+
 double seals() {
 	return table().at("seals_mm").get<double>() / 10.0;
 }
@@ -520,7 +533,7 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	v.height = mm("height_mm");
 	// (Stage 52) a burette's and a cylinder's wall follow from their scales: the bore that holds the nominal volume
 	// over the scale's length, in the standard's outside diameter
-	if (kind == "burette") {
+	if (kind == "burette" || kind == "gas_syringe") {
 		v.wall = 0.5 * v.diameter - std::sqrt(nominal_ml / (pi * mm("scale_mm")));
 	} else if (kind == "measuring_cylinder") {
 		const double line = v.height - mm("top_mm"), floor_top = k->at("foot_height_mm").get<double>() / 10.0;
@@ -688,6 +701,22 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.paper_herzberg_s = paper.at("herzberg_s").get<double>();
 		v.paper_height = paper.at("diameter_mm").get<double>() / 20.0 * std::cos(v.cone_half_angle); // a quarter-folded circle: its radius the cone's slant
 		v.tip_bore = 2.0 * (rs - std::min(t, 0.8 * rs));
+	} else if (kind == "gas_syringe") {
+		// (Stage 79) a nozzle at its foot, a short cone to the barrel, the barrel of a uniform bore to its open top; its
+		// plunger's face from the cone's top (fully in) to its last mark, the nominal volume over it
+		const double rn = mm("nozzle_diameter_mm") / 2.0, nozzle = mm("nozzle_mm"), cone = mm("cone_mm");
+		v.floor = 0.05;
+		c = { { { 0.0, 0.0 }, 0.0, v.floor }, { { rn, 0.0 }, 0.0, std::min(t, 0.6 * rn) }, { { rn, nozzle }, 0.05, std::min(t, 0.6 * rn) }, { { R, nozzle + cone }, 0.05, t },
+			{ { R, H }, 0.0, t } };
+		v.syringe = true;
+		v.nozzle_bore = mm("nozzle_bore_mm");
+		v.nozzle_length = nozzle;
+		const nlohmann::json &plunger = k->at("plunger");
+		v.plunger_friction = plunger.at("friction_n").get<double>();
+		v.plunger_drag = plunger.at("drag_n_s_m").get<double>();
+		v.plunger_length = plunger.at("length_mm").get<double>() / 10.0;
+		v.handle = plunger.at("handle_mm").get<double>() / 10.0;
+		v.clamp = plunger.at("clamp_n").get<double>();
 	} else if (kind == "test_tube") {
 		// (Stage 71) ISO 4142: a round floor, its corner the tube's own radius, a straight tube to a plain rim
 		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
@@ -715,6 +744,16 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 	reach(in, H);
 	v.inside = below(rounded(in), H);
 	v.make_paths(); // (Stage 50)
+	if (v.syringe) {
+		// fully in where the bore is whole (the cone's top, its fillet past), its last mark the nominal volume over that
+		const double bore = 0.5 * v.diameter - v.wall;
+		double y = v.floor;
+		while (y < H && v.radius_inside(y) < bore * (1.0 - 1e-9)) {
+			y += 1e-4;
+		}
+		v.plunger_least = y;
+		v.plunger_most = v.level(v.volume_below(y) + nominal_ml);
+	}
 	if (v.outlet && v.delivery_s > 0.0) {
 		// the tip's bore (Stage 52): what drains from the zero line (a burette) or the brim's volume's mark (a pipette, its
 		// nominal volume) to empty in the delivery time, Torricelli's through a sharp-edged orifice
@@ -729,6 +768,15 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.tip_bore = 2.0 * std::sqrt(area / pi);
 	}
 	return v;
+}
+
+double Vessel::plunger_area() const {
+	const double bore = 0.5 * diameter - wall;
+	return pi * bore * bore;
+}
+
+double Vessel::plunger_y(double cm3) const {
+	return plunger_least + (cm3 - volume_below(plunger_least)) / plunger_area();
 }
 
 std::vector<Offer> offered() {

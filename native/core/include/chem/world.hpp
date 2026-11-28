@@ -75,6 +75,14 @@ struct Edge {
 	// the length it diffuses along, m (the integral of dz / A(z) inverted); 0: none. Each gas crosses down its
 	// mole fraction's difference at its own diffusion in air.
 	double exchange = 0.0;
+	// (Stage 79, GAME_SPEC §6) A tube's flow: what it lets through, Poiseuille's pi r^4 / (8 L) over its pieces in
+	// series, m^3; 0: none held back (what crosses it runs to one pressure at once, as before). Between sealed vessels
+	// a liquid runs through it at G dP / viscosity, a gas at G (P_a^2 - P_b^2) / (2 viscosity R T) mol a second.
+	double flow = 0.0;
+	// (Stage 79) where it meets each end's vessel: at its foot (bit 1: a's, bit 2: b's), where a vessel gives its liquid
+	// while it holds one; else at its top, where it gives its gas (a syringe's nozzle in a flask's neck: its foot, the
+	// flask's top)
+	uint8_t foot = 0;
 	// Closed by a freeze of one of its ends (GAME_SPEC §4, Stage 61): it opens again as it was when both ends thaw.
 	bool frozen = false;
 };
@@ -90,6 +98,31 @@ struct Edge {
 // is exactly full at one atmosphere. Sealed, with none (Stage 28), it holds
 // what it holds, and its pressure follows (chem/thermo.hpp); cells sealed
 // together share one pressure.
+// (Stage 32, 79) A reservoir of work: so hot that what it gives or takes carries no entropy (the lab's mains). What
+// crosses an edge to it is work, not heat (T1 holds heat alone), either way.
+inline constexpr double WORK_KELVIN = 1.0e300;
+
+// (Stage 79, GAME_SPEC §6) A plunger in a rigid cell (or a column's top), overdamped: each step it moves at the speed
+// its forces give, c v = F + (P - P_atm) A - f sgn v, outward positive, P its space's pressure after the move; held
+// still while they are within its friction; between its stops. Its hand, held, pulls it toward `target`, with what
+// force that takes up to `hand_most`; its work comes along `work`, an edge from a reservoir of work (the lab's mains).
+struct Piston {
+	double area = 0.0; // m^2: none while 0
+	double friction = 0.0; // N
+	double drag = 0.0; // N s/m (> 0)
+	double least = 0.0, most = 0.0; // m^3: the cell's (a column's whole) volume at its stops
+	bool held = false;
+	double target = 0.0; // m^3: where its hand pulls it, held
+	double hand_most = 0.0; // N
+	double hand_speed = 0.0; // m/s: the fastest a hand moves it (0: as fast as its force takes it)
+	EdgeId work;
+	// the last step's, kept for what is read of it (not state the step reads): the hand's force outward (N) and the
+	// pressure the plunger stood at (Pa) as its last move left them; how far it moved (m^3, outward), how far it went
+	// either way (m^3) and the hand's work along its edge (J) over the step's moves (W1)
+	double force = 0.0, pressure = 0.0, moved = 0.0, travel = 0.0, worked = 0.0;
+	bool operator==(const Piston &) const = default;
+};
+
 struct CellMeta {
 	bool reservoir = false;
 	double reservoir_temperature = 0.0; // K
@@ -129,6 +162,9 @@ struct CellMeta {
 	// the world (World::retire); it is empty and frozen for good.
 	bool frozen = false;
 	bool retired = false;
+	// (Stage 79, GAME_SPEC §6) A piston: a syringe's plunger, moving the cell's volume (a column's whole) by the forces
+	// on it, each step (Simulation::move_pistons). None while its area is 0.
+	Piston piston;
 	bool operator==(const CellMeta &) const = default;
 };
 
@@ -169,6 +205,9 @@ struct StepTrace {
 	std::vector<LedgerEntry> ledger;
 	std::vector<Edge> edges; // the topology during the step
 	std::vector<CellMeta> meta; // one per cell
+	// (Stage 79) each cell's volume at the step's start where a piston moved one in the step (none: as `meta`): its
+	// state before is read with it
+	std::vector<double> volume_before;
 	bool thermal = false; // the world has temperatures: the thermal invariants apply
 	// One per cell, set by the simulation: nonzero when a rigid cell was left
 	// under-full this step, because the cell it draws from held no more gas,
@@ -369,6 +408,8 @@ public:
 	Refusal set_power(EdgeId edge, double power);
 	// an edge's gas exchange by diffusion, m (Stage 50: area over length; 0: none); between steps
 	Refusal set_exchange(EdgeId edge, double exchange);
+	// (Stage 79) a tube's flow (Edge::flow), between steps; refused for a value not finite and at least 0
+	Refusal set_flow(EdgeId edge, double flow, uint8_t foot = 0);
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
 	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)
@@ -384,6 +425,16 @@ public:
 	// top the size its layers leave it, or none, the next step's overflow spilling what no longer fits. Refused
 	// (BadValue) for a cell that is not a column's top, a shape not its own length, or volumes not rising from 0.
 	Refusal reshape_column(CellId top, double whole, std::vector<double> volumes);
+	// (Stage 79, GAME_SPEC §6) A plunger in a rigid cell or a column's top (`Piston`), set between steps (its hand
+	// held or let go, its target). Refused (BadValue) for a cell that is neither, a piston with no drag, stops that do
+	// not hold its volume now, or a work edge that does not join it; an area of 0 takes it out.
+	Refusal set_piston(CellId cell, const Piston &piston);
+	// A piston's volume now: its cell's, a column's whole
+	double piston_volume(CellId cell) const;
+	// The step's own act (Simulation::move_pistons): the cell's volume (a column's whole) moved, within a step only.
+	Refusal move_piston(CellId cell, double volume, double force, double pressure, double work);
+	// (Stage 79) what a step left of its pistons' last move, between steps: none moved since (W1)
+	void rest_pistons();
 	// A solid's particle count: not conserved, so not a primitive. The
 	// primitives keep it at least one where the solid is and zero where it is
 	// not; this sets how many. Refused (BadValue) for a species that is not a
@@ -424,6 +475,7 @@ private:
 	bool stepping() const { return !ledger_.empty() || resumed_; }
 	std::vector<LedgerEntry> ledger_;
 	Snapshot before_;
+	std::vector<std::pair<int32_t, double>> moved_volumes_; // (Stage 79) the cells a piston moved this step, each one's volume at its start
 	uint64_t step_ = 0;
 	uint64_t topology_version_ = 0;
 	CellId spill_;
