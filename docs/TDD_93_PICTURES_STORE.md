@@ -13,7 +13,7 @@ user chose it. No behaviour of the game changes: GAME_SPEC stays 0.91.0.
 |---|---|---|
 | 93.1 | A bench's supplies and their keys; one supply captured alone (the screen, the C API, `chem_tool`) | Done |
 | 93.2 | The store and `tools/pictures.py`; `make pictures` building only `chem_tool` | Done |
-| 93.3 | Tests, docs, `make gates`; the user's sign-off | gates open |
+| 93.3 | Tests, docs, `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 93.1 What there was
 
@@ -58,6 +58,10 @@ same pictures (Stage 86: a picture's key holds the renderer's, so the same key i
 - **Cost** (`make pictures`, the real store, renderer `ac3b3170…`): cold, 68 s for the 50 at a load of about 30 (37 s
   at about 26 in a store of its own); again, 0.9 s, the `chem_tool` build's check included. Stage 84 measured 90 s cold
   at a load of 16 to 22, Stage 86 111 to 240 s; a tree on a renderer any tree has used: under a second.
+
+`make gates`: every gate passed (1,576 s of wall at a load of 30 to 100); the step's cost −0.2 % against main's (no
+change to the simulation). Under the sanitizers the screen's test takes 293 s and `pictures_store` 185 s (four and seven
+captures in the sanitized build): over the 20 s limit, so the gates' cache leaves them to `make gates-full`.
 
 ## Open
 
