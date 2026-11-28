@@ -12,7 +12,7 @@ GAME_SPEC 0.91.0.
 | 91.1 | Spec (§7, §9); the sources read and their rows verified | Done |
 | 91.2 | Manganese, iodine's forms, the sulfur oxyanions: data and gates | Done |
 | 91.3 | The experiments `iodine_clock` (38) and `redox_titration` (47) | Done |
-| 91.4 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | open |
+| 91.4 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 91.1 What there was
 
@@ -59,7 +59,13 @@ Each has the three tests of `test_experiments.cpp` (strict with its gestures, as
 
 Both sessions' digests move with the table (a new element and eleven species): every printed result unchanged against
 main's, line for line, but the conservation table's new manganese row (`Mn 0 -> 0 quanta of atoms`): at 15796da, and
-again after main's Stage 88 was merged in, at f7c0a09. Re-recorded with the user's approval.
+again after main's Stage 88 was merged in, at f7c0a09. Re-recorded with the user's approval. Main's Stage 85 (875355c, iron(III)'s Pitzer
+pairs) merged in after: the goldens reproduce, and the redox gates and both plays give the same numbers.
+
+`make gates` on the merged branch: every gate passed (1,408 s of wall at a load of 80 to 100 from other sessions' work).
+The step's cost on the demo: 1,340,858 instructions a step, +3.1 % against main's at 875355c: the table's eleven
+species and an element more (Stage 87's six gave +2.0 %); the four reactions are skipped while their species are
+absent.
 
 ## Open
 
