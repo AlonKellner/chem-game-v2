@@ -90,19 +90,24 @@ At no pressure with room to spare the node stands at none: a void (which boiling
 
 - **One node**: a bracket and regula falsi (Illinois'), as Stage 88's sizing, of which this is the general case.
 - **Several**: Newton on the pressures with the Jacobian by differences, each step kept only if it lowers the largest
-  residual (else halved); if it has not converged in its rounds, nested one-dimensional solves (exact, slow: two
-  nodes), or sweeps of them (more). Sweeps alone converge too slowly to be the method: two syringes on a tube are
-  coupled 20 to 10 000 times more strongly than either gives.
+  residual (else halved); what Newton leaves, each node closed inside the one before it (exact, slow: two or three
+  nodes), or sweeps of each one's own solve (more). Sweeps alone converge too slowly to be the method: two syringes
+  on a tube are coupled 20 to 10 000 times more strongly than either gives.
+- **The slopes are taken where the node stands** (see Found): over a billionth of its pressure, no further than a
+  quarter of the way to a neighbour's pressure, toward where its residual sends it.
+- **To 1e-10** of the volumes a residual is the difference of. Pressures not found are not applied.
 
 **Applied** by the primitives there already are: the hand's work along its edge and the plunger's move
-(`World::move_piston`), what crosses by `transfer` (up a giver's layers with its volume, Stage 88's `lift_volume`),
-then each column sized (`size_vessel`), which finds the pressure the solve found.
+(`World::move_piston`, which puts a sealed vessel's move in the ledger as a resize, so that a replay reads what ran
+before it at the volume it then had), what crosses by `transfer` (up a giver's layers with its volume, Stage 88's
+`lift_volume`), each marked a crossing; then each column sized (`size_vessel`), which finds the pressure the solve
+found.
 
-**In rounds with the fast equilibria** (in `settle`, before the open cells'): solve, apply, bring every cell of the
-group to its fast equilibria; if any moved, solve the step's totals again (a piston's whole move at the new end
-pressure, less what it has moved; a conduit's whole crossing by its law, less what it has passed that way), at most
-four rounds. The equilibria have the last word (P1); they move a pressure back toward where it was (a vapour
-condensing as it is squeezed), so the work booked at the solve's pressure stays on the second law's side.
+**Then the fast equilibria** (in `settle`, before the open cells'): every cell the closure touched is brought to
+them; where any moved, each vessel with a plunger is closed again, alone (its plunger's whole move at the pressure it
+now ends at, less what it has moved), at most four times. What crosses a conduit is found once in a step. The
+equilibria have the last word (P1); they move a pressure back toward where it was (a vapour condensing as it is
+squeezed), so the work booked at the solve's pressure stays on the second law's side.
 
 An open vessel's plunger still moves first in the step, at the room's pressure (what it displaces runs out by the
 step's own processes).
@@ -131,16 +136,90 @@ flask's air through its nozzle at the nozzle's pace).
 
 | Phase | Topic | Status |
 |---|---|---|
-| 89.1 | Spec (§6, §18) and data: Churchill, Shah, the end losses, the choked rate; the measured friction and discharge they are held to | Sources found and the law chosen against them (above) |
-| 89.2 | `chem/conduit.hpp`, pure: a conduit's drop for a rate and its rate for a drop, liquid and gas; closed forms and the measured gates | |
-| 89.3 | `Edge::flow` becomes `Edge::conduit`; the lab's nozzles and tubing give their geometry; save, load, digest | |
-| 89.4 | The closure: residuals, the solve, the apply, the rounds in `settle`; the sealing rule | |
-| 89.5 | A port that runs dry within a step | |
-| 89.6 | F1 and its self-test; T1's exemption removed | |
-| 89.7 | Stage 79's machinery removed; the lab, the four experiments and their tests measured again; a nozzle's size | |
-| 89.8 | Stage 28's `equalize`: sealed vessels joined without a conduit through the closure too, or left with reasons | |
-| 89.9 | `chem_tool study flow`; the step's cost; docs; `make gates`; the user's sign-off | |
+| 89.1 | Spec (§6, §18) and data: Churchill, Shah, the end losses, the choked rate; the measured friction and discharge they are held to | Done |
+| 89.2 | `chem/conduit.hpp`, pure: a conduit's drop for a rate and its rate for a drop, liquid and gas; closed forms and the measured gates | Done |
+| 89.3 | `Edge::flow` becomes `Edge::conduit`; the lab's nozzles and tubing give their geometry; save, load (a save from before reads its tube's pieces again from the glassware), digest | Done |
+| 89.4 | The closure: residuals, the solve, the apply, its rounds in `settle`; the sealing rule | Done |
+| 89.5 | A port that runs dry within a step | Done |
+| 89.6 | F1 and its self-test; T1's exemption removed | Done |
+| 89.7 | Stage 79's machinery removed; the lab, the experiments and their tests measured again; a nozzle's size | Done: the glassware's own 2 mm nozzle kept (20 mL/s of water through two and the tube at a thumb's push: a second for the tutorial's 20 mL); the `syringes` tutorial's water pair held until its plunger gets there |
+| 89.8 | Sealed vessels joined with no conduit (Stage 28's `equalize`) | Left as they are, with reasons (Open) |
+| 89.9 | The step's cost; docs; `make gates`; the user's sign-off | |
+
+## Tests
+
+- `native/tests/test_conduit.cpp` (7): Churchill's factor (64/Re, the transition's rise, Blasius, what a rate takes
+  rising throughout); Shah's drop (its two limits, never under Poiseuille's); a long thin tube Poiseuille's and 2.25
+  heads, a liquid and a gas; the rate at a drop the root of the drop at a rate over 18 decades, either way through,
+  and a nozzle onto a wide piece passing more nozzle first; a syringe's nozzle at a thumb's push (30 mL/s; 22.5 through
+  two and the tube; Poiseuille's 2900); a gas choked into a vacuum and into a tenth, never falling as the giver's
+  pressure rises; what is no conduit refused.
+- `native/tests/test_measured.cpp`: the two gates (above).
+- `native/tests/test_closure.cpp` (10): the conduit set, refused, and what it seals; a syringe open to the air only
+  through its nozzle, 95.7 kPa at the least pulled 60 mL in a quarter of a second, at the room's again at rest;
+  **two syringes of nothing but water** moved as one, 12.17 N in and out, the other 9.99995 and 9.99989 mL of 10;
+  **a hydraulic press**, the thumb's 79.8 N held by 314.2 N on four times the area, one pressure; three syringes in
+  a row, in and out with the same force; **air into a vessel at a third of its pressure**, choked at 0.7272 g/s (the
+  closed form 0.7272), the giver down to 5 C and the taker up to 53 C, the energy standing to the quantum, and at one
+  temperature again the entropy up by the two gases' `n R ln(P / P_f)` to 1e-5; **a port run dry within a step**
+  (2 mL of water through a foot, then the air); the step's length (four tenths of a second of a thumb's push: the
+  taker at 64.845, 64.844, 64.843 and 64.842 mL at four steps' length, one, a half and a quarter); **hands jerked at
+  random** on three syringes in a row, six fillings (water with a bubble, nothing but water, air, mixed), weak hands
+  and strong, a person's pace and none, 28 800 steps: every invariant on every step, no solve left short; F1's
+  self-test (ten corruptions).
+- `native/tests/test_syringe.cpp` (Stage 79's, on the closure): a sealed syringe of water now gives 2.1 μL of its
+  50 mL to a hand's whole push (195.9 kPa) and is let out to 6.8 kPa by its pull, no cavity; a long thin tube stands
+  its law's 388.6 Pa across it (Poiseuille's 373).
+- The lab's 13 syringe tests, the six experiments on gas syringes and the lab's random hands pass unchanged, but the
+  `syringes` tutorial played at a person's pace: see Found.
+
+## Found
+
+- **A long laminar tube came out 6 % over Poiseuille**: two equal terms joined by a 12-norm are 2^(1/12) of one. The
+  join is of what each picture of the entrance has over Poiseuille's drop, not of the drops.
+- **T1 read a cell's heat at the wrong volume.** With the plunger moving as the step settles, the heat that ran
+  earlier in the step was replayed at the volume after the move: 5 mK off in water under a thumb, enough to read a
+  flow as running from cold to hot. A sealed vessel's move is now in the ledger as a resize, replayed like a vessel's
+  sizing (Stage 88).
+- **A vessel comes to rest on a kink.** A plunger slowing approaches the edge of its friction without end, from the
+  moving side; two vessels levelling approach the pressure at which what crosses turns about. A slope taken over a
+  millionth of the pressure straddles the kink, and Newton's step with it lowers no residual. The first version
+  crawled, fell back to sweeps and applied what it had: T2 by 9e-9 J/K, two steps after a push ended. Now the slope
+  is taken where the node stands, the fallback is exact, and nothing short of the tolerance is applied.
+- **"The law less what has passed" has no one answer.** Crossing again in the step's later rounds, by a budget,
+  left stretches of pressure at which a conduit could pass nothing either way: a residual flat there, the nested
+  solve's inner answers not single. What crosses is found once in a step.
+- **A tolerance of the vessel's volume as it began** asked a syringe pulled from 0.5 mL to 120 mL in one step (a
+  strong hand at no pace: a stress's move) for more than a double holds. It is of the volumes the residual is the
+  difference of.
+- **A nested solve needs its inner solves tighter than their own tolerance** where the outer vessel is the stiffer
+  (a little water next to much air): what the inner leaves open, 3e-15 m^3 of 30 mL, is 40 times the outer's
+  tolerance through a coupling of 9e-9 m^3/Pa.
+- **A flick of the handle no longer moves the water.** Through two nozzles and the tube water runs at 20 mL/s at
+  most: a third of a second's drag left the plunger 6 mL in, and the tutorial waiting for 15. The tutorial now says
+  to hold the handle until the plunger gets there, and the test's pupil holds it as a person would.
+- **Cheaper than what it replaces**: the lab's 13 syringe tests take 22 s of processor on the closure, 64.5 s on
+  Stage 79's sub-steps.
 
 ## Open
 
-(as found)
+- **Sealed vessels joined with no conduit** (Stage 28: a plain edge between two sealed cells) still share one
+  pressure at once by `equalize`, gas run between them until they are level, after the closure. The plan had this
+  retired ("an unrestricted joint becomes a wide conduit"). Left, because: it is the wide conduit's limit, exact,
+  and no sub-step patch; no bench joins a plunger's vessel to another without a conduit (a syringe's nozzle is
+  always one); and a conduit wide enough to be no restriction asks pressures told to 1e-14 for the volumes to
+  close, at the edge of a double. What it costs: a plunger's vessel joined so (the core's tests only) is closed
+  alone and levelled after, a step behind. To do it: the group's vessels closed as one node at one pressure, the
+  gas between them found as `fill` finds an open cell's.
+- **A builder cannot set a temperature in a sealed cell far under the room's pressure** (below about 0.29 atm of a
+  diatomic gas): it first asks the cell's state at no energy, which has none there. Older than this stage; a save
+  sets the energy and is not held by it. The test of air let into an emptier vessel starts it at 0.3 atm.
+- **Newton leaves about one solve in a hundred to the nested one** under hands jerked at random (kinks still met
+  within a billionth of the pressure). Exact, but the product of the nodes' solves: three nodes cost three hundred
+  evaluations. An analytic Jacobian, each kink's side known, would end it.
+- **A gas near its choked rate**: the mean-density law is cut at the choked rate, not blended into it; and it has
+  no acceleration term. Not held to a measurement.
+- **Pieces in series** are each a fresh entrance: the tube after a nozzle is taken as developing again.
+- **A liquid's head** (`P + ρ g h` at a port: communicating vessels, a siphon, a manometer), a nozzle dipped into an
+  open vessel as a gesture, a balloon's tension law, a valve's and a frit's conduit, a gas mixture's own viscosity:
+  on the same mechanism, later.

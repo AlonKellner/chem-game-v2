@@ -2039,7 +2039,6 @@ void Simulation::begin_step() {
 	flows_.extent.assign(cells * flows_.reactions, 0);
 	landed_m3_.assign(cells, 0.0);
 	landed_kg_.assign(cells, 0.0);
-	passed_.assign(passed_.size(), 0.0); // (Stage 89: what each conduit has passed this step)
 	crossed_.clear();
 	process_ = Process::Reaction;
 	configure_columns();

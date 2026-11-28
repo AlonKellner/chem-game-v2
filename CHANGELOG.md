@@ -1,5 +1,38 @@
 # GAME_SPEC version history
 
+## 0.89.0 (2026-11-28, Stage 89, in progress)
+
+- §6 (Stage 89, `docs/TDD_89_FLOW.md`; the second of the two stages the user asked for after Stage 79; the user's
+  choice of flow law: the realistic one): **flow between vessels**. **A conduit** (`Edge::conduit`, replacing
+  Stage 79's one Poiseuille number): round pieces in series, each a bore and a length, its law from its geometry
+  alone (`chem/conduit.hpp`, `data/flow.json`): a mass rate's drop is Poiseuille's and, over it, each piece's
+  entrance, attached (Shah's developing flow) or separated (a contraction's loss and what Churchill's friction adds
+  once turbulent), joined as Churchill joins his regimes, and Borda and Carnot's expansion; one function of the rate
+  for a liquid and a gas, a gas never above its choked rate. Held to the Princeton Superpipe's friction (within
+  2.1 % of its fit) and to Lichtarowicz, Duggins and Markland's measured discharge of short tubes (within 0.03 in
+  `Cd`, creeping to turbulent). Water through a syringe's nozzle at a thumb's push: 30 mL/s, where Poiseuille's law
+  gave 2900. An edge with a conduit is no gas path: a vessel open to the room only through one is sealed from it.
+- **The closure** (`src/closure.cpp`): every sealed vessel with a plunger or a conduit, with those it is joined to,
+  at the pressure at which it is exactly full as the step ends: each conduit's crossing by its law at those
+  pressures (what stands at the giver's port, carrying its enthalpy at the giver's end state; a port run dry gives
+  what stands next), each plunger's move by its forces there, the room each vessel's contents then need. Solved
+  together (one vessel: regula falsi; several: Newton, an exact nested solve for what it leaves), applied by the
+  primitives there were, then the fast equilibria and each plunger's own vessel again. A sealed vessel's plunger
+  moves as the step settles (an open one's first, as before), its move a resize in the step's ledger.
+- Stage 79's sub-steps, its clearance off the liquid, its hydraulic link and its joins are gone, and with them
+  "pushing is harder than pulling", the pair of pure water that stood, and water thirty times too fast.
+- §18: **F1**, each crossing down the pressures it was solved at, within its conduit's law and the step, carrying
+  its amounts' enthalpy at the giver's state. T1's exemption for "gas in a space a piston moved" is gone: a crossing
+  is marked and F1's; an unmarked gas transfer between sealed cells is asked the replay's pressures as before.
+- The lab: a syringe's `tube` and its joint on a vessel give their pieces (the glassware's 2 mm nozzle, the 4 mm
+  tubing); saved, loaded (a save from before reads them again from the glassware) and digested. The `syringes`
+  tutorial: the water pair's handle held until its plunger gets there.
+- What it gives: two syringes of nothing but water move as one, pushed and pulled with the same force; a hand's
+  whole push squeezes 2 μL out of 50 mL of sealed water; a hydraulic press holds four times the thumb's force; air
+  let into an emptier vessel is choked, cools what gives and warms what takes, and the entropy rises by the two
+  gases' mixing; three times cheaper than the sub-steps on the lab's syringe tests.
+- No golden record moved (no session joins vessels by a conduit).
+
 ## 0.88.0 (2026-11-28, Stage 88; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 88, `docs/TDD_88_PRESSURE.md`; the first of the two stages the user asked for after Stage 79, "the proper

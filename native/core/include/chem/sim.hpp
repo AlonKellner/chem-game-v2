@@ -244,7 +244,6 @@ private:
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
 	std::vector<double> work_remainder_; // per edge; empty while no edge has done work
-	std::vector<double> solved_pressure_; // (Stage 79) per cell: its pistons' space's pressure this step (0: none)
 	// what drained into each cell this step (Stage 51): its liquid's volume, m^3, and mass, kg (a column's jet)
 	std::vector<double> landed_m3_, landed_kg_;
 	std::vector<double> reaction_remainder_;
@@ -255,7 +254,6 @@ private:
 	std::vector<uint8_t> starved_;
 	std::vector<Exchanged> exchanged_; // the step's (Stage 50)
 	std::vector<Crossed> crossed_; // the step's crossings (Stage 89)
-	std::vector<double> passed_; // (Stage 89) per edge and way (2 edge + (from b: 1)): kg crossed this step
 	mutable uint64_t closure_misses_ = 0, closure_nested_ = 0;
 	bool timeless_ = false; // settling with no time passing (`equilibrate`): the closure stands
 	mutable std::vector<Thermal> thermal_; // per cell, while thermal_valid_ (or its key holds: Stage 72)

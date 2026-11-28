@@ -12,6 +12,8 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <cstdint>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -422,6 +424,70 @@ TEST_CASE("closure: the step's length hardly changes what it finds: water pushed
 	CHECK(std::fabs(whole - half) < 0.01);
 	CHECK(std::fabs(half - quarter) < 0.01);
 	CHECK(std::fabs(coarse - whole) < 0.5); // (and a step four times as long is stable, and near)
+}
+
+TEST_CASE("closure: hands jerked at random on three syringes in a row, of water, of air and of both, weak hands and strong: every invariant on every step, no solve left short (Stage 89)") {
+	struct Fill {
+		double air, water;
+	};
+	struct Setup {
+		const char *name;
+		Fill one, two, three;
+	};
+	const Setup setups[] = { { "water, a bubble each", { 0.5, 50.0 }, { 0.5, 50.0 }, { 0.5, 50.0 } },
+		{ "nothing but water", { 0.0, 50.0 }, { 0.0, 50.0 }, { 0.0, 50.0 } },
+		{ "air", { 50.0, 0.0 }, { 50.0, 0.0 }, { 50.0, 0.0 } },
+		{ "water, air, water", { 0.0, 50.0 }, { 50.0, 0.0 }, { 0.0, 40.0 } },
+		{ "air over water, each", { 20.0, 30.0 }, { 5.0, 45.0 }, { 40.0, 10.0 } },
+		{ "air, water, a little of both", { 60.0, 0.0 }, { 0.0, 60.0 }, { 2.0, 2.0 } } };
+	const int count = static_cast<int>(std::size(setups)) * 2;
+	for (int k = 0; k < count; ++k) {
+		const Setup &setup = setups[static_cast<size_t>(k) / 2];
+		uint64_t seed = 0x9E3779B97F4A7C15ull * static_cast<uint64_t>(k + 1);
+		const auto random = [&]() { // a number in [0, 1)
+			seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+			return static_cast<double>(seed >> 11) / 9007199254740992.0;
+		};
+		const std::string name = setup.name;
+		CAPTURE(name);
+		CAPTURE(k);
+		World::Builder b(builtin_species());
+		const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
+		const CellId room = b.add_reservoir("room", T0);
+		const Syringe syringes[3] = { add_vessel(b, mains, room, setup.one.air, setup.one.water, 5.0, "one"), add_vessel(b, mains, room, setup.two.air, setup.two.water, 5.0, "two"),
+			add_vessel(b, mains, room, setup.three.air, setup.three.water, 5.0, "three") };
+		const EdgeId first = b.add_edge(syringes[0].cell, syringes[1].cell, FLUIDS, 0.0), second = b.add_edge(syringes[1].cell, syringes[2].cell, FLUIDS, 0.0);
+		Simulation sim = build(b);
+		// (the second syringe's two conduits: one at its foot, one at its top, so that it gives its water one way and
+		// its air the other)
+		REQUIRE(sim.world().set_conduit(first, nozzles_on_a_tube(), 3) == Refusal::None);
+		REQUIRE(sim.world().set_conduit(second, k % 2 == 0 ? nozzles_on_a_tube() : nozzle(), k % 2 == 0 ? 3 : 2) == Refusal::None);
+		for (const Syringe &s : syringes) {
+			REQUIRE(sim.world().set_piston(s.cell, plunger(s.work)) == Refusal::None);
+		}
+		sim.set_checking(false);
+		int until = 0;
+		for (int i = 0; i < 2400; ++i) {
+			if (i >= until) {
+				until = i + 5 + static_cast<int>(random() * 90.0);
+				for (const Syringe &s : syringes) {
+					const double choice = random();
+					Piston p = plunger(s.work, choice < 0.3 ? 0.0 : 0.6 + random() * 140.0);
+					p.hand_most = random() < 0.3 ? 600.0 : HAND; // (a strong hand now and then: two arms)
+					p.hand_speed = random() < 0.5 ? 0.3 : 0.0; // a person's pace, or as fast as its forces let it
+					p.most = 150.0 * ML;
+					if (sim.world().piston_volume(s.cell) <= p.most) {
+						REQUIRE(sim.world().set_piston(s.cell, p) == Refusal::None);
+					}
+				}
+			}
+			const StepTrace trace = sim.step();
+			const Violations v = check_all(sim.world().species(), trace, sim.equilibria());
+			REQUIRE_MESSAGE(v.empty(), "step " << i << ": " << v[0]);
+		}
+		MESSAGE(std::string(setup.name) << ", " << k % 2 << ": " << sim.closure_nested() << " of its solves by the nested one");
+		CHECK(sim.closure_misses() == 0);
+	}
 }
 
 TEST_CASE("invariant F1: a crossing down the pressures it was solved at, within its conduit's law and the step, carrying its amounts' enthalpy at the giver's state; it fires on a trace corrupted in each (Stage 89)") {

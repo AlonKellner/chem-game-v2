@@ -55,6 +55,7 @@ struct Node {
 	double in_enthalpy = 0.0, grown = 0.0, work = 0.0, residual = 0.0;
 	PistonMove mv;
 	bool at_least = false; // at the least pressure with room to spare: a void
+	bool tight = false; // closed as far as its pressure can be told (inside a nested solve), not to its tolerance
 };
 
 struct Link {
@@ -84,7 +85,7 @@ struct Closing {
 
 // What crosses the link from `giver` at the pressures set, for the evaluation: each share out of its part, its
 // enthalpy and its amounts into the taker's top. `record`: kept for the apply.
-static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, const std::vector<double> &passed, bool record);
+static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, bool record);
 
 } // namespace closure
 
@@ -137,50 +138,66 @@ bool Simulation::close_vessels() {
 		return false;
 	}
 	find_columns();
-	if (passed_.size() != 2 * edges.size()) {
-		passed_.assign(2 * edges.size(), 0.0);
-	}
+	// The step's crossings and moves, found together, once. Then every cell it touched to its fast equilibria; and
+	// where any moved (a vapour condensing as it is squeezed), each vessel with a plunger again, alone: its plunger's
+	// whole move at the pressure it now ends at, less what it has moved. What the equilibria leave across a conduit is
+	// the next step's to cross.
 	bool moved = false;
-	for (int round = 0; round < ROUNDS; ++round) {
-		bool applied = false;
-		std::vector<CellId> touched;
-		for (size_t root = 0; root < cells; ++root) {
-			if (group[root] != static_cast<int>(root)) {
-				continue;
-			}
-			std::vector<CellId> tops;
-			bool acts = false; // a plunger or a conduit in it
-			for (size_t c = root; c < cells; ++c) {
-				if (group[c] >= 0 && find(c) == root) {
-					tops.push_back(CellId{ static_cast<int32_t>(c) });
-					acts = acts || world_.meta(tops.back()).piston.area > 0.0;
-				}
-			}
-			std::vector<size_t> own;
-			for (const size_t i : conduits) {
-				const auto a = static_cast<size_t>(edges[i].a.index), b = static_cast<size_t>(edges[i].b.index);
-				if ((top_of(a) && find(a) == root) || (top_of(b) && find(b) == root)) {
-					own.push_back(i);
-				}
-			}
-			if (!acts && own.empty()) {
-				continue;
-			}
-			applied = close_group(tops, own, touched) || applied;
+	std::vector<CellId> touched;
+	for (size_t root = 0; root < cells; ++root) {
+		if (group[root] != static_cast<int>(root)) {
+			continue;
 		}
-		if (!applied) {
-			break;
+		std::vector<CellId> tops;
+		bool acts = false; // a plunger or a conduit in it
+		for (size_t c = root; c < cells; ++c) {
+			if (group[c] >= 0 && find(c) == root) {
+				tops.push_back(CellId{ static_cast<int32_t>(c) });
+				acts = acts || world_.meta(tops.back()).piston.area > 0.0;
+			}
 		}
-		moved = true;
-		// every cell the closure touched at its fast equilibria; where any moved, the step's totals again
+		std::vector<size_t> own;
+		for (const size_t i : conduits) {
+			const auto a = static_cast<size_t>(edges[i].a.index), b = static_cast<size_t>(edges[i].b.index);
+			if ((top_of(a) && find(a) == root) || (top_of(b) && find(b) == root)) {
+				own.push_back(i);
+			}
+		}
+		if (acts || !own.empty()) {
+			moved = close_group(tops, own, touched) || moved;
+		}
+	}
+	for (int round = 1; round < ROUNDS && !touched.empty(); ++round) {
 		bool settled = true;
+		std::vector<CellId> again;
 		for (const CellId c : touched) {
 			if (thermal(c).defined && project(c)) {
 				settled = false;
+				again.push_back(c);
 			}
 		}
 		if (settled) {
 			break;
+		}
+		moved = true;
+		touched.clear();
+		for (size_t c = 0; c < cells; ++c) {
+			const CellId top{ static_cast<int32_t>(c) };
+			if (top_of(c) && world_.meta(top).piston.area > 0.0) {
+				// (only where a cell of its vessel moved)
+				bool its = false;
+				for (const Column &col : columns_) {
+					if (col.top == top) {
+						for (const CellId cell : col.cells) {
+							its = its || std::find(again.begin(), again.end(), cell) != again.end();
+						}
+					}
+				}
+				its = its || std::find(again.begin(), again.end(), top) != again.end();
+				if (its) {
+					close_group({ top }, {}, touched);
+				}
+			}
 		}
 	}
 	return moved;
@@ -212,7 +229,7 @@ static bool size_part(const SpeciesTable &table, Node &node, size_t i) {
 	return true;
 }
 
-static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, const std::vector<double> &passed, bool record) {
+static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, bool record) {
 	const Link &link = g.links[l];
 	const int taker = giver == link.a ? link.b : link.a;
 	Node &from = g.nodes[static_cast<size_t>(giver)], &to = g.nodes[static_cast<size_t>(taker)];
@@ -248,8 +265,6 @@ static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, do
 		liquids(false);
 	}
 	double left = seconds;
-	const double already = passed[2 * link.edge + (back ? 1 : 0)]; // kg this way, in the step's earlier rounds
-	bool first = true;
 	for (size_t s = 0; s < count && left > 0.0; ++s) {
 		Part &part = from.parts[static_cast<size_t>(stands[s].part)];
 		const bool liquid = stands[s].liquid;
@@ -257,10 +272,6 @@ static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, do
 								   : gas_rate(link.conduit, from.pressure, to.pressure, part.kelvin, part.gas_molar, part.gas_gamma, part.gas_viscosity, back);
 		if (!(rate > 0.0)) {
 			break;
-		}
-		if (first) { // the step's whole crossing by its law, less what it has passed this way
-			left = std::max(seconds - already / rate, 0.0);
-			first = false;
 		}
 		double &there = liquid ? part.liquid_left : part.gas_left;
 		const double whole = liquid ? part.liquid_kg : part.gas_kg;
@@ -343,15 +354,19 @@ bool Simulation::evaluate(Closing &g, bool record) const {
 			}
 			const Node &other = g.nodes[static_cast<size_t>(link.a == i ? link.b : link.a)];
 			if (node.pressure > other.pressure) {
-				cross(table, g, l, i, step_seconds_, passed_, record);
+				cross(table, g, l, i, step_seconds_, record);
 			}
 		}
 		if (!node.fixed) {
-			double takes = 0.0;
+			double takes = 0.0, scale = std::fabs(node.whole + node.grown);
 			for (const Part &part : node.parts) {
 				takes += part.sized;
+				scale += std::fabs(part.sized);
 			}
 			node.residual = node.whole + node.grown - takes;
+			// (to 1e-10 of the volumes it is the difference of: a syringe pulled from next to nothing in a step is
+			// closed to what it comes to, not to what it began at)
+			node.tolerance = node.tight ? 0.0 : 0.5e-10 * scale + 1e-18;
 			node.at_least = node.pressure <= LEAST && node.residual > 0.0;
 		}
 	}
@@ -455,8 +470,13 @@ bool Simulation::close_nested(Closing &g, const std::vector<size_t> &free, size_
 	if (k + 1 == free.size()) {
 		return close_one(g, free[k]);
 	}
+	// (the later ones closed as far as their pressures can be told: closed to their own tolerances only, what they
+	// leave open is more than this one's where it is the stiffer, a little liquid next to much gas)
 	Node &node = g.nodes[free[k]];
-	return root_of(node, [&](double pressure, double &residual) {
+	for (size_t later = k + 1; later < free.size(); ++later) {
+		g.nodes[free[later]].tight = true;
+	}
+	const bool ok = root_of(node, [&](double pressure, double &residual) {
 		node.pressure = pressure;
 		if (!close_nested(g, free, k + 1)) {
 			return false;
@@ -464,6 +484,12 @@ bool Simulation::close_nested(Closing &g, const std::vector<size_t> &free, size_
 		residual = node.residual;
 		return true;
 	});
+	if (k == 0) {
+		for (const size_t i : free) {
+			g.nodes[i].tight = false;
+		}
+	}
+	return ok;
 }
 
 // The group's pressures. false where a state has no model, or where they were not found (a miss: nothing is then
@@ -485,7 +511,7 @@ bool Simulation::close_pressures(Closing &g) const {
 	if (!evaluate(g, false)) {
 		return false;
 	}
-	std::vector<double> jacobian(n * n), residual(n), step(n), kept(n), last(n, 0.0);
+	std::vector<double> jacobian(n * n), residual(n), step(n), kept(n);
 	for (int iteration = 0; iteration < 60 && merit(g) > 1.0; ++iteration) {
 		for (size_t r = 0; r < n; ++r) {
 			residual[r] = g.nodes[free[r]].residual;
@@ -493,15 +519,28 @@ bool Simulation::close_pressures(Closing &g) const {
 		}
 		const double before = merit(g);
 		// the Jacobian by differences, each toward where its residual sends its pressure (a residual above 0: down), over
-		// a tenth of its last step (a slope across a kink is no slope: the nearer it comes, the nearer it looks); a node
-		// standing at a void is held there
+		// a billionth of it: the slope where it stands, not across a kink (a plunger at rest stands a hair off the edge of
+		// its friction, and Newton's step with the slope there lowers every residual; with a slope across the edge it need
+		// lower none); a node standing at a void is held there
 		std::vector<uint8_t> held(n, 0);
 		for (size_t c = 0; c < n; ++c) {
 			held[c] = g.nodes[free[c]].at_least ? 1 : 0;
 		}
 		bool ok = true;
 		for (size_t c = 0; c < n && ok; ++c) {
-			double h = last[c] != 0.0 ? std::clamp(0.1 * std::fabs(last[c]), 1e-11 * kept[c], 1e-6 * kept[c]) : 1e-6 * kept[c];
+			// (and no further than a quarter of the way to a neighbour's pressure: where two meet, what crosses turns
+			// about, a gas one way and a liquid the other)
+			double h = 1e-9 * kept[c];
+			for (const Link &link : g.links) {
+				const int me = static_cast<int>(free[c]);
+				if (link.a == me || link.b == me) {
+					const double gap = std::fabs(g.nodes[static_cast<size_t>(link.a == me ? link.b : link.a)].pressure - kept[c]);
+					if (gap > 0.0) {
+						h = std::min(h, 0.25 * gap);
+					}
+				}
+			}
+			h = std::max(h, 1e-13 * kept[c]);
 			if (residual[c] > 0.0 && kept[c] - h >= LEAST) {
 				h = -h;
 			}
@@ -579,9 +618,6 @@ bool Simulation::close_pressures(Closing &g) const {
 				return false;
 			}
 			break;
-		}
-		for (size_t r = 0; r < n; ++r) {
-			last[r] = g.nodes[free[r]].pressure - kept[r];
 		}
 	}
 	// what Newton left: each node closed inside the one before it (two or three), or sweeps of each one's own solve
@@ -697,7 +733,7 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 			node.piston = m.piston.area > 0.0;
 			node.p = m.piston;
 			node.start = node.whole - m.piston.moved;
-			node.tolerance = 1e-11 * node.whole + 1e-18;
+			node.tolerance = 1e-10 * node.whole + 1e-18; // (an evaluation sets it to the volumes it then holds)
 			const Thermal &t = thermal(top);
 			node.pressure = t.defined && t.pressure > LEAST ? std::min(t.pressure, MOST) : LEAST;
 		}
@@ -819,7 +855,6 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 		for (const SpeciesAmount &a : amounts) {
 			kg += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(a.species)) * 1e-9;
 		}
-		passed_[2 * link.edge + (x.from == link.b ? 1 : 0)] += kg;
 		crossed_.push_back(Crossed{ EdgeId{ static_cast<int32_t>(link.edge) }, from.top, to.top, x.from_pa, x.to_pa, x.kelvin, kg, x.rate, x.seconds, carried.quanta, x.liquid,
 				x.liquid ? part.liquid_density : part.gas_molar, x.liquid ? part.liquid_viscosity : part.gas_viscosity, x.liquid ? 0.0 : part.gas_gamma, part.kelvin });
 		applied = true;
