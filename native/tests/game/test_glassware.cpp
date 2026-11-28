@@ -314,7 +314,9 @@ TEST_CASE("glassware: every shape made at build time is the one glass::make make
 						 { built->marks_ml, made.marks_ml }, { built->marks_error, made.marks_error }, { built->tolerance_ml, made.tolerance_ml },
 						 { built->graduation_ml, made.graduation_ml }, { built->delivery_s, made.delivery_s }, { built->tip_bore, made.tip_bore }, { built->zero, made.zero },
 						 { built->stem, made.stem }, { built->cone_half_angle, made.cone_half_angle }, { built->paper_herzberg_s, made.paper_herzberg_s },
-						 { built->paper_height, made.paper_height }, { built->capacity_cached, made.capacity_cached } }) {
+						 { built->paper_height, made.paper_height }, { built->capacity_cached, made.capacity_cached }, { built->frit_area, made.frit_area },
+						 { built->frit_ml_min_cm2_bar, made.frit_ml_min_cm2_bar }, { built->suction_bar, made.suction_bar }, { built->holds_ml, made.holds_ml },
+						 { built->cake_porosity, made.cake_porosity } }) {
 				CHECK(std::memcmp(&a, &b, sizeof a) == 0);
 			}
 			CHECK(built->screw_cap == made.screw_cap);

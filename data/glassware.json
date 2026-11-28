@@ -131,6 +131,20 @@
 			"outlet": true
 		},
 		{
+			"name": "filter_crucible",
+			"standard": "a sintered glass filter crucible, 30 mL, its frit of porosity P16 (ISO 4793: pores 10 to 16 um), on a suction flask (Stage 85)",
+			"sizes": [
+				{"ml": 30, "diameter_mm": 40, "height_mm": 50, "wall_mm": 1.6, "corner": 0.05}
+			],
+			"frit": {"ml_min_cm2_bar": 3.0, "suction_bar": 0.85, "holds_ml": 0.6},
+			"cake_porosity": 0.5,
+			"floor_per_wall": 2.0,
+			"pour_ml_s": 10,
+			"cap_bore_mm": 4,
+			"burst_kpa": 150,
+			"outlet": true
+		},
+		{
 			"name": "cuvette",
 			"standard": "a round cell for a spectrophotometer, 10 mm across inside (design)",
 			"sizes": [

@@ -60,8 +60,8 @@ void follow_to(Pupil &p, const std::string &title) {
 		for (const lab::TutorialGesture &g : p.ui->tutorial()->gestures()) {
 			p.play(g);
 		}
-		for (int f = 0; f < 600 && p.tutorial().step == at; ++f) {
-			p.ui->frame(1.0 / 60.0);
+		for (int f = 0; f < 36000 && p.tutorial().step == at; ++f) {
+			p.ui->frame(f < 600 ? 1.0 / 60.0 : 1.0); // (a step's gestures at a frame's pace, then its wait a second a frame)
 		}
 		REQUIRE_MESSAGE(p.tutorial().step != at, "stuck at " << p.tutorial().title);
 	}
@@ -370,3 +370,37 @@ TEST_CASE("experiment spectra: followed with its own gestures, free, it complete
 	pupil::follow_through(p, 120);
 	completed(p);
 }
+
+TEST_CASE("experiment gravimetric: followed with its own gestures, strict, the dried silver chloride weighed to constant mass gives the chloride's concentration (Stage 85)") {
+	Pupil p("data/benches/gravimetric.json", "data/tutorials/gravimetric.json");
+	CHECK(pupil::follow_through(p, 7200) > 20);
+	completed(p);
+	// what a student works out: the crucible's three weighings, empty, dried and dried again
+	std::vector<double> m;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.quantity.what == "reads_g") {
+			m.push_back(e.value);
+		}
+	}
+	REQUIRE(m.size() == 3);
+	MESSAGE("empty " << m[0] << " g, dried " << m[1] << " g, again " << m[2] << " g");
+	CHECK(std::abs(m[2] - m[1]) < 0.0003); // constant mass, within the balance's reading
+	const double found = (m[2] - m[0]) / 143.32 / 0.025000, truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE("[Cl-] " << found << " M against " << truth);
+	CHECK(std::abs(found / truth - 1.0) < 0.01);
+	report(p, { found });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment gravimetric: played as a person plays it, strict, it completes (Stage 85)") {
+	Pupil p("data/benches/gravimetric.json", "data/tutorials/gravimetric.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment gravimetric: followed with its own gestures, free, it completes (Stage 85)") {
+	Pupil p("data/benches/gravimetric.json", "data/tutorials/gravimetric.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+

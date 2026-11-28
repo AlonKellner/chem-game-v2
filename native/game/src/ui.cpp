@@ -3746,6 +3746,11 @@ struct Ui::Impl {
 				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
 			} else if (t.kind == "spectrophotometer" && v.kind == "vessel" && t.place == "bench") {
 				act({ { "do", "insert" }, { "spectrophotometer", t.id }, { "cuvette", v.id }, { "onto", true } }); // into its well (Stage 55)
+			} else if (t.kind == "burner" && t.oven && v.kind == "vessel") {
+				// (Stage 85) a vessel onto a drying oven: into it, warmed at its temperature
+				act({ { "do", "heat" }, { "burner", t.id }, { "vessel", v.id } });
+			} else if (t.kind == "burner" && !t.lamp.empty()) {
+				message = "\"" + t.id + "\" is a lamp: it takes nothing";
 			} else if (t.kind == "burner" && v.kind == "vessel" && v.liquid_ml > 0.0) {
 				// (Stage 82) a vessel of a solution onto a burner: a loop dipped in it, held in the flame (a lit one's)
 				act({ { "do", "flame_test" }, { "burner", t.id }, { "from", v.id } });
@@ -6903,6 +6908,9 @@ struct Ui::Impl {
 					bodies[k].image_h = shows.h;
 					bodies[k].image_hash = shows.hash;
 				}
+			} else if (v.kind == "burner" && v.oven) {
+				// (Stage 85) a drying oven: its box, no flame (what stands in it is drawn over it)
+				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 			} else if (v.kind == "burner" && !v.lamp.empty()) {
 				// (Stage 85) a discharge lamp: its base, and over it its tube of glowing gas, its lines at its power
 				const float base = std::max(8.0f, r.h * 0.2f);

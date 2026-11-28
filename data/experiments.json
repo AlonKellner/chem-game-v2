@@ -304,6 +304,13 @@
 			"tutorial": "tutorials/spectra.json"
 		},
 		{
+			"id": "gravimetric",
+			"title": "Chloride by weight",
+			"summary": "An unknown chloride solution's silver chloride, brought out by silver nitrate, filtered into a weighed crucible, washed, dried in the oven to constant mass and weighed: its chloride's concentration.",
+			"bench": "benches/gravimetric.json",
+			"tutorial": "tutorials/gravimetric.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

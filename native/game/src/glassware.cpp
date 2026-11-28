@@ -701,6 +701,18 @@ std::optional<Vessel> make(std::string_view kind, double nominal_ml, std::string
 		v.paper_herzberg_s = paper.at("herzberg_s").get<double>();
 		v.paper_height = paper.at("diameter_mm").get<double>() / 20.0 * std::cos(v.cone_half_angle); // a quarter-folded circle: its radius the cone's slant
 		v.tip_bore = 2.0 * (rs - std::min(t, 0.8 * rs));
+	} else if (kind == "filter_crucible") {
+		// (Stage 85) a sintered glass filter crucible: a flat floor of frit, a straight wall to a plain rim; on a suction
+		// flask, what it holds drawn through its frit
+		c = { { { 0.0, 0.0 }, 0.0, f }, { { R, 0.0 }, row->at("corner").get<double>() * v.diameter, t }, { { R, H }, 0.0, t } };
+		const nlohmann::json &frit = k->at("frit");
+		v.frit_area = pi * (R - t) * (R - t);
+		v.frit_ml_min_cm2_bar = frit.at("ml_min_cm2_bar").get<double>();
+		v.suction_bar = frit.at("suction_bar").get<double>();
+		v.holds_ml = frit.at("holds_ml").get<double>();
+		v.cake_porosity = k->at("cake_porosity").get<double>();
+		v.paper_herzberg_s = 1.0; // (a filter: what it keeps of its residue it keeps; its flow its frit's, below)
+		v.tip_bore = 0.4;
 	} else if (kind == "gas_syringe") {
 		// (Stage 79) a nozzle at its foot, a short cone to the barrel, the barrel of a uniform bore to its open top; its
 		// plunger's face from the cone's top (fully in) to its last mark, the nominal volume over it

@@ -1,0 +1,154 @@
+{
+	"format": "chem-bench/2",
+	"note": "Gravimetric chloride (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 10): 25.00 mL of an unknown chloride solution (0.10 to 0.14 M, drawn by the seed), silver chloride brought out by silver nitrate in excess, filtered into a weighed sintered glass crucible on a suction flask, washed, dried in an oven at 110 C to constant mass and weighed: [Cl-] = m(AgCl) / 143.32 g/mol / 25.00 mL. The crucible keeps its cake wet until it is dried.",
+	"readings": "instruments",
+	"seed": 10,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "scale",
+			"kind": "balance",
+			"model": "analytical",
+			"at": [
+				22,
+				12
+			]
+		},
+		{
+			"id": "sample",
+			"kind": "vessel",
+			"glassware": "bottle",
+			"volume_ml": 500,
+			"wall": "glass",
+			"wall_g": 300,
+			"at": [
+				0,
+				7
+			],
+			"label": "a chloride solution, unknown",
+			"contents": {
+				"water": {
+					"g": 250
+				},
+				"sodium_chloride_aq": {
+					"mol": [
+						0.025,
+						0.035
+					]
+				}
+			}
+		},
+		{
+			"id": "beaker",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 80,
+			"at": [
+				3,
+				7
+			],
+			"label": "precipitation beaker"
+		},
+		{
+			"id": "pipette",
+			"kind": "vessel",
+			"glassware": "pipette",
+			"volume_ml": 25,
+			"wall": "glass",
+			"wall_g": 20,
+			"at": [
+				6,
+				0
+			],
+			"label": "25 mL pipette"
+		},
+		{
+			"id": "silver",
+			"kind": "vessel",
+			"glassware": "bottle",
+			"volume_ml": 500,
+			"wall": "glass",
+			"wall_g": 300,
+			"at": [
+				8,
+				7
+			],
+			"label": "silver nitrate, 0.1 M, in 0.1 M nitric acid",
+			"contents": {
+				"water": {
+					"g": 250
+				},
+				"silver_nitrate_aq": {
+					"mol": 0.025
+				},
+				"nitric_acid_aq": {
+					"mol": 0.025
+				}
+			}
+		},
+		{
+			"id": "water",
+			"kind": "vessel",
+			"glassware": "bottle",
+			"volume_ml": 500,
+			"wall": "glass",
+			"wall_g": 300,
+			"at": [
+				11,
+				7
+			],
+			"label": "wash water",
+			"contents": {
+				"water": {
+					"g": 400
+				}
+			}
+		},
+		{
+			"id": "crucible",
+			"kind": "vessel",
+			"glassware": "filter_crucible",
+			"volume_ml": 30,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				14,
+				1
+			],
+			"label": "filter crucible, P16, dried"
+		},
+		{
+			"id": "flask",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				14,
+				8
+			],
+			"label": "suction flask"
+		},
+		{
+			"id": "oven",
+			"kind": "oven",
+			"celsius": 110,
+			"conductance": 0.3,
+			"at": [
+				18,
+				9
+			],
+			"label": "drying oven, 110 C"
+		}
+	]
+}

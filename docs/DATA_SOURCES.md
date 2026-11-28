@@ -1536,6 +1536,18 @@ burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
   Cu 0.5, its atoms barely excited at 2200 K, its green its CuOH's: their flames are their monohydroxides' colours,
   Gaydon's and Meyerriecks and Kosanke's), at another temperature by Boltzmann's factor for each band's photon, a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).
 
+## Filter crucible and drying oven (Stage 85)
+
+For experiment 10, chloride by weight (`docs/TDD_85_ANALYSIS.md`). **Design and calibrated**, not measured:
+- **The crucible**: a 30 mL sintered glass filter crucible, 40 mm across, 50 mm high, of the order makers list. Its frit
+  (porosity P16, pores 10–16 µm by ISO 4793's classes) passes 3 mL of water a minute through a cm² under a bar, the
+  order a maker's porosity-4 frit is given; on a suction flask, a water pump's 0.85 bar under it (suction is not
+  modelled as a pressure in the flask: the frit's flow is its law, Darcy's, under the pump's difference and the liquid's
+  own head). Drained, it holds 0.6 mL in its frit (3 mm of frit, a third of it pores) and its cake the water of its
+  pores, the cake half pores (a packed bed of fine grains, 0.4 to 0.6): a wet cake, which only drying takes.
+- **The oven**: a reservoir at 110 °C and 0.3 W/K to what stands in it (a crucible's convection in an oven's air): a wet
+  cake dries in about twenty minutes, the crucible near 86 °C while its water evaporates.
+
 ## Discharge lamps (Stage 85)
 
 `data/lamps.json` (`docs/TDD_85_ANALYSIS.md`). Read 2026-11-28. Gate: `measured: a discharge lamp's lines are NIST's, at

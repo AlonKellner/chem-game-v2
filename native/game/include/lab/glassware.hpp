@@ -84,6 +84,10 @@ struct Vessel {
 	// its paper's Herzberg time (s for 100 mL of water at 20 C through 10 cm2 under 10 cm of head) and the height its
 	// paper cone stands to, cm over the cone's apex (0: no paper)
 	double stem = 0.0, cone_half_angle = 0.0, paper_herzberg_s = 0.0, paper_height = 0.0;
+	// (Stage 85) a filter crucible's flat frit in its floor: its area, cm2; what it passes, mL of water at 20 C a minute
+	// through a cm2 under a bar; the suction under it, bar (a water pump's). A filter's: what its paper or frit holds
+	// wet when it has drained, mL, and its cake's porosity (the share of a residue's bulk its water fills when drained)
+	double frit_area = 0.0, frit_ml_min_cm2_bar = 0.0, suction_bar = 0.0, holds_ml = 0.0, cake_porosity = 0.0;
 	// (Stage 79) a gas syringe's: its plunger's face from fully in (`plunger_least`, cm over its base) to its last mark
 	// (`plunger_most`); the plunger's friction, N, and drag, N s/m; its length and its handle's width, cm; what its lock
 	// holds it with, N
