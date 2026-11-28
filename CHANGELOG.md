@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.88.1 (2026-11-28, Stage 85, merged after Stages 87 and 88)
+## 0.88.1 (2026-11-28, Stage 85, merged after Stages 87 and 88; signed off by the user: "Approved, merge and proceed")
 
 - §13.7 (Stage 85, `docs/TDD_85_ANALYSIS.md`; `docs/CURRICULUM.md`, step E's experiments): `gravimetric` (10), `qualitative`
   (12), `lechatelier` (42), `kc` (43, Benesi and Hildebrand's), `ksp` (44), `hardness` (52) and `spectra` (54);

@@ -39,7 +39,7 @@ The curriculum's step E, its experiments (`docs/CURRICULUM.md`: 10, 12, 42, 43, 
 | 85.4 | A filter crucible (sintered glass, in place of porcelain: what chloride is weighed in as silver chloride), its wet cake, a drying oven; experiment 10 (`gravimetric`, chloride) | done |
 | 85.5 | Experiment 12 (`qualitative`): twelve salts, their tests, a flame test holding every metal; `flame_umol` | done |
 | 85.6 | Discharge lamps (H, He, Hg, Ne), the viewer's lines, `probe_on`; experiment 54 (`spectra`) | done |
-| 85.7 | Documents, `make gates`, the user's sign-off | |
+| 85.7 | Documents, `make gates`, the user's sign-off ("Approved, merge and proceed", 2026-11-28) | done |
 
 ## Open
 
