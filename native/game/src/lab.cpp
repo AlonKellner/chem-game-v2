@@ -228,6 +228,25 @@ const glass::Vessel *syringe_of(const Item &x) {
 	return g != nullptr && g->syringe ? g : nullptr;
 }
 
+// (Stage 89) a syringe's nozzle and the tubing as a conduit's pieces (glassware's cm to the core's m)
+Piece nozzle_of(const glass::Vessel &g) {
+	return Piece{ g.nozzle_bore * 1e-2, g.nozzle_length * 1e-2 };
+}
+Conduit tubed(const glass::Vessel &from, const glass::Vessel &to) { // nozzle, tubing, nozzle
+	Conduit c;
+	c.pieces[0] = nozzle_of(from);
+	c.pieces[1] = Piece{ glass::tubing_bore() * 1e-2, glass::tubing_length() * 1e-2 };
+	c.pieces[2] = nozzle_of(to);
+	c.count = 3;
+	return c;
+}
+Conduit nozzle_alone(const glass::Vessel &g) {
+	Conduit c;
+	c.pieces[0] = nozzle_of(g);
+	c.count = 1;
+	return c;
+}
+
 // a vessel with an outlet at its foot (Stage 52: a burette, a pipette): its glassware, or null
 const glass::Vessel *outlet_of(const Item &x) {
 	const glass::Vessel *g = x.kind == Kind::Vessel && !x.glassware.empty() ? glass::find(x.glassware, x.nominal_ml) : nullptr;
@@ -6845,11 +6864,9 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		EdgeId tubing;
 		world().connect(x.cell, y.cell, PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), &tubing);
-		// (Stage 79) what it lets through: the tube and the two nozzles in series
-		const glass::Vessel *gx = syringe_of(x), *gy = syringe_of(y);
-		const double through = 1.0 / (1.0 / glass::poiseuille(glass::tubing_bore(), glass::tubing_length()) + 1.0 / glass::poiseuille(gx->nozzle_bore, gx->nozzle_length) +
-											1.0 / glass::poiseuille(gy->nozzle_bore, gy->nozzle_length));
-		world().set_flow(tubing, through, 3); // (nozzle to nozzle: each one's foot)
+		// (Stage 79, 89) what holds back what crosses: the two nozzles and the tube between them, nozzle to nozzle (each
+		// one's foot)
+		world().set_conduit(tubing, tubed(*syringe_of(x), *syringe_of(y)), 3);
 		if (world().disconnect(x.mouth) != Refusal::None) {
 			world().disconnect(tubing);
 			why = "\"" + x.id + "\" is not at the room's pressure yet";
@@ -6954,7 +6971,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			EdgeId joint;
 			world().connect(x.cell, v.cell, PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), &joint);
-			world().set_flow(joint, glass::poiseuille(syringe_of(x)->nozzle_bore, syringe_of(x)->nozzle_length), 1); // (Stage 79: its nozzle's, at its foot, in the vessel's neck)
+			world().set_conduit(joint, nozzle_alone(*syringe_of(x)), 1); // (Stage 79, 89: its nozzle, at its foot, in the vessel's neck)
 			if (world().disconnect(v.mouth) != Refusal::None) {
 				world().disconnect(joint);
 				why = "\"" + v.id + "\" is not at the room's pressure yet";
@@ -8047,8 +8064,11 @@ std::string Lab::digest() const {
 		if (e.exchange > 0.0) { // gas exchanged at a mouth (Stage 50)
 			hash.update_double(e.exchange);
 		}
-		if (e.flow > 0.0) { // a tube's flow (Stage 79)
-			hash.update_double(e.flow);
+		if (e.conduit.count > 0) { // a conduit's pieces (Stage 89; Stage 79's tube)
+			for (int k = 0; k < e.conduit.count; ++k) {
+				hash.update_double(e.conduit.pieces[static_cast<size_t>(k)].bore);
+				hash.update_double(e.conduit.pieces[static_cast<size_t>(k)].length);
+			}
 			hash.update_u64(e.foot);
 		}
 	}
@@ -8298,8 +8318,12 @@ json Lab::Impl::save() const {
 		if (e.power != 0.0) {
 			edges.back()["power"] = bits(e.power);
 		}
-		if (e.flow > 0.0) { // (Stage 79) a tube's
-			edges.back()["flow"] = bits(e.flow);
+		if (e.conduit.count > 0) { // (Stage 89) a conduit's pieces, each its bore and its length
+			json pieces = json::array();
+			for (int k = 0; k < e.conduit.count; ++k) {
+				pieces.push_back({ bits(e.conduit.pieces[static_cast<size_t>(k)].bore), bits(e.conduit.pieces[static_cast<size_t>(k)].length) });
+			}
+			edges.back()["conduit"] = std::move(pieces);
 			edges.back()["foot"] = e.foot;
 		}
 		if (e.exchange > 0.0) { // (Stage 50)
@@ -8570,9 +8594,34 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.foot = static_cast<uint8_t>(e.value("foot", 0) & 3); // (Stage 79)
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
 					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power)) ||
-					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange)) || (e.contains("flow") && !from_bits(e.at("flow"), edge.flow))) {
+					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange))) {
 				why = "the save holds a number that is not one";
 				return nullptr;
+			}
+			if (e.contains("conduit")) { // (Stage 89)
+				const json &pieces = e.at("conduit");
+				if (!pieces.is_array() || pieces.size() > static_cast<size_t>(MAX_PIECES)) {
+					why = "the save holds a conduit of too many pieces";
+					return nullptr;
+				}
+				for (const json &piece : pieces) {
+					Piece &made = edge.conduit.pieces[static_cast<size_t>(edge.conduit.count++)];
+					if (!from_bits(piece.at(0), made.bore) || !from_bits(piece.at(1), made.length)) {
+						why = "the save holds a number that is not one";
+						return nullptr;
+					}
+				}
+				if (!good(edge.conduit)) {
+					why = "the save holds a conduit that is none";
+					return nullptr;
+				}
+			} else if (e.contains("flow")) {
+				// a save from before Stage 89 kept a tube as Poiseuille's one number: its pieces again from the glassware (the
+				// one syringe there is: nozzle to nozzle on a tube where both ends are feet, else its nozzle alone)
+				const glass::Vessel *g = glass::find("gas_syringe", 100.0);
+				if (g != nullptr) {
+					edge.conduit = edge.foot == 3 ? tubed(*g, *g) : nozzle_alone(*g);
+				}
 			}
 			if (!from_bits(e.at("conductance"), edge.conductance)) {
 				why = "the save holds a number that is not one";

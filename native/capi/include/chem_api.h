@@ -341,6 +341,11 @@ CG_API const char *cg_ui_pictures(cg_ui *ui);
 CG_API int32_t cg_ui_pictures_changed(const cg_ui *ui);
 CG_API void cg_ui_set_capture_ahead(cg_ui *ui, int32_t on);
 CG_API void cg_ui_capture_pictures(cg_ui *ui);
+/* (Stage 93) A build's tool shares pictures by key: every supply of the bench with its picture's key
+ * ("chem-picture-keys/1": the renderer's key and each supply's id and key; borrowed until the next call on this
+ * screen), and one supply's picture captured alone, waiting (CG_ERR_INVALID_ARGUMENT for no supply of that id). */
+CG_API const char *cg_ui_picture_keys(cg_ui *ui);
+CG_API cg_status cg_ui_capture_picture(cg_ui *ui, const char *supply);
 
 /* The experiments (GAME_SPEC §13.7, Stage 41): a chem-experiments/1 catalogue (data/experiments.json), each
  * entry's bench and tutorial (null for none) inlined or a path, read by `read`: the file's text, borrowed

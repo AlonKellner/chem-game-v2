@@ -116,6 +116,11 @@ public:
 	std::string pictures();
 	bool pictures_changed() const;
 	void capture_pictures();
+	// (Stage 93) what a build's tool shares pictures by: every supply of this bench with its picture's key, as
+	// "chem-picture-keys/1" ({"renderer", "supplies": [{"id", "key"}]}, the supplies in their order), and one supply's
+	// picture captured alone, waiting (false: no supply of that id). Kept by key in a store any tree reads.
+	std::string picture_keys() const;
+	bool capture_picture(const std::string &supply);
 	// whether a supply with no picture has its own captured apart, a supply at a time (a host's choice: off as opened)
 	void set_capture_ahead(bool on);
 	// What a thermal camera on the bench last read (Stage 48): its hottest, coldest and centre (C) and where its hottest

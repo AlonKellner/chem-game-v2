@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.91.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.91.2 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -469,7 +469,9 @@ compressible, so that every state it can be in has one pressure.
 **Pistons** *(Stage 79; `chem/world.hpp`'s `Piston`, `Simulation::move_pistons`; `docs/TDD_79_SYRINGE.md`; asked for by
 the user, 2026-11-27: "Holding the syringe handle should exert a force on it, the force of the player hand should be
 limited")*. A rigid cell, or a column's top (its whole), may have a plunger: a piston of an area `A` between two
-stops, its volume moved each step, first in the step, by the forces on it.
+stops, its volume moved each step by the forces on it: a sealed vessel's with its pressure, as the step settles
+(Stage 89, Flow between vessels, below); an open one's first in the step, at the room's pressure (what it displaces
+runs out, or is drawn in, by the step's own processes).
 
 - **Overdamped.** Its own mass stores nothing a step's friction does not take: it moves at the speed its forces give,
   `c v = F + (P - P_atm) A - f sgn v` (outward positive; `c` its drag, `f` its friction, which holds it still while
@@ -483,40 +485,10 @@ stops, its volume moved each step, first in the step, by the forces on it.
   applied to all setups with tightly connected vessels"; "I prefer you would simulate each of the syringes
   independently, simulating the exchange of liquid/gas between them"; asked, the exchange "solved within step"; "Does
   the tube restrict the flow? It should": an ordinary 4 mm tube). Each vessel keeps its own contents, temperature and
-  pressure. A step's pistons and connections run in sub-steps (12; 48 where a liquid may cross outside a hydraulic
-  link, below, as its vessels give only by their gas): in each, every piston moves alone (below), then every
-  connection between two sealed vessels (an open edge that passes gas or liquid) lets across what runs from the
-  higher pressure to the lower, never past the two being one, each vessel's own, exactly; the exchange is done within
-  the step.
-  - **A hydraulic link** (the user, 2026-11-27: "pushing a plunger is harder than pulling on it ... which makes no
-    sense since in that setup pushing a syringe is almost equivalent pulling on the other"): two vessels joined at
-    their feet, both holding liquid there, each in no other such link (two syringes of water on a tube), are solved
-    together for the whole step, before the sub-steps. The unknown is the liquid `x` that crosses; given `x`, each
-    vessel's piston moves alone by its own sealed model on what it then holds, and `x` is the root of
-    `x = G (P_a − P_b) dt / μ` at their pressures after (unrestricted, `P_a = P_b`). A liquid does not give, so a push
-    on one is the other's pull at once: in sub-steps each plunger would move only against its own bubble before the
-    water crossed, a bubble's compression stiff and its expansion soft, and pushing harder than pulling.
-  - **Where a connection meets a vessel** (`Edge::foot`): at its foot (a syringe's nozzle) a vessel gives its lowest
-    liquid while it holds one; at its top (a flask's neck) its gas. A tube joins two nozzles; a syringe on a vessel
-    joins its nozzle to the vessel's top.
-  - **What a tube lets through** (`Edge::flow`, Hagen–Poiseuille's `G = π r⁴ / 8L` over its pieces in series: the
-    tubing, 4 mm by 30 cm, and the nozzles, 2 mm by 1 cm): a liquid `G ΔP / μ` (water's viscosity), a gas
-    `G (P_a² − P_b²) / (2 μ R T)` (air's, `solutions.json`); unrestricted, as far as levels the two.
-  - **What it carries**: a liquid its enthalpy at the giver's state (Stage 88, Liquids that give: the table's and
-    what the giver's pressure adds, `enthalpy_over`; until then the flow work `v p` alone), the taker gaining what the
-    tube dissipates; a gas its own enthalpy, in parcels of no more than
-    half what would level the two, each at the giver's state as it then is (a vessel emptied gives its later gas at
-    its lower pressure and temperature), and only down the true pressure.
-  - **A piston alone**: its vessel's pressure after the move by its own sealed model, the hand's work in it (a gas
-    over a liquid squeezed small is stiffened by the liquid's own expansion, which no estimate sees); where the forces
-    would take it past what its energy pays for (more room than it can fill), no further than the last that holds. A
-    move past where the sealed model holds is on the side its gas's ideal pressure in its room says: a bubble squeezed
-    too small above the pressure tried, a room its energy cannot fill below.
-  Each piece is the second law's: a move at the pressure after it, a run down the true pressure. Solids and liquids
-  are incompressible: the plungers stop where they would leave a vessel's gas less than a ten-thousandth of its
-  volume. Air between joined syringes gives as it compresses, so the far plunger, held by its friction, moves only
-  once the pressure difference beats it; water does not give, so a push must beat both frictions to move anything; a
-  tube holds back what crosses it, by its pressure drop.
+  pressure; what joins them holds back what crosses, and the step's moves and crossings are found together: Flow
+  between vessels, below. (Stage 79 ran each plunger alone and then each connection, in sub-steps, with Poiseuille's
+  law for the tube: a push was stiffer than a pull, a pair of pure water stood, and water ran thirty times too fast.
+  Stage 89 replaces it.)
 - **The hand's pace.** A hand moves a plunger at most 0.3 m/s (design: a person's pace), pushing only as hard as that
   and what resists take.
 - **The energy.** The hand's work `F dx`, along the piston's edge from the lab's mains (Stage 32's reservoir of work),
@@ -525,10 +497,103 @@ stops, its volume moved each step, first in the step, by the forces on it.
   the move, the gas takes at least the reversible work of a compression and gives at most it on an expansion: its
   entropy never falls (T2). A free plunger does no work; its cell's `E` stands.
 - **Traced** (§18, W1): each piston within its stops, its hand within its most (none let go), the energy along its
-  edge the hand's work over the step's moves, no more than its most over the way it went; a step's state before it read at its volume then (`StepTrace::volume_before`). Work
+  edge the hand's work over the step's moves, no more than its most over the way it went; a step's state before it read at its volume then (`StepTrace::volume_before`),
+  and a sealed vessel's plunger's move in the step's ledger (a resize, as a vessel's sizing: what ran before it is
+  replayed in the volume it then had, Stage 89). Work
   to or from a reservoir of work (`WORK_KELVIN`, the lab's mains) is no heat, either way (T1); a sealed cell's room for
   its gas is held at its own temperature (V3), and a sealed group still running gas after its rounds is brought to
   each cell's equilibria (P1).
+
+**Flow between vessels** *(Stage 89; `chem/conduit.hpp`, `src/closure.cpp`; `docs/TDD_89_FLOW.md`; the second of the
+two stages the user asked for, 2026-11-27: "the proper mechanisms required to solve connected vessel compression,
+liquid and gas transfer, and related phenomenon in a correct and consistent manner which will make realistic and
+theoretical sense"; the user's choice of flow law: the realistic one)*. This is the full design's "gas flow ...
+through a conductance, integrated implicitly", for sealed vessels, liquid and gas alike.
+
+- **A conduit** (`Edge::conduit`): what joins two vessels and holds back what crosses it: up to four round pieces in
+  series, each a bore and a length (a syringe's nozzle, 2 mm by 1 cm; the tubing, 4 mm by 30 cm; the glassware's own
+  numbers). An edge with one is no gas path: each end keeps its own pressure, and a vessel open to the room only
+  through one is sealed from the room (a syringe on an open flask draws the flask's air through its nozzle, at the
+  nozzle's pace). Where it meets each vessel (`Edge::foot`): at a foot it is given the vessel's lowest liquid while
+  there is one, layer by layer, then its gas; at a top its gas, or with none its liquid.
+- **Its law**, from its geometry alone (pure; every number a published correlation's, `data/flow.json`): a mass rate
+  `m` takes the drop `ρ ΔP = Σ m² / (2 A²) · [64 x⁺ + N12(a, b) + e]` over its pieces, `x⁺ = L / (D Re)`,
+  `Re = m D / (A μ)`:
+  - `64 x⁺` is Poiseuille's drop;
+  - over it, the piece's entrance, seen two ways: `a`, attached, what Shah's laminar developing flow has over
+    Poiseuille's (the boundary layer's `13.76 √x⁺` short, 1.25 velocity heads long); `b`, separated, a sharp
+    contraction's loss `0.5 (1 − A / A_before)` (from a vessel: 0.5) and what Churchill's friction factor (laminar,
+    transition and turbulent in one formula; a smooth wall) has over Poiseuille's, times `L / D`: nothing until the
+    flow is turbulent. `N12` is their 12-norm: whichever loses more, joined as Churchill joins his regimes;
+  - `e`, Borda and Carnot's expansion out of the piece, `(1 − A / A_after)²` (into a vessel: 1, its jet's energy).
+  The Reynolds number holds no density, so the right side is one function of `m` for a liquid and a gas. A liquid
+  takes its own density; a gas the density at the mean of the two pressures and the giver's temperature (the
+  isothermal pipe's `M (P₁² − P₂²) / (2 R T)`, without its acceleration term), and never more than the choked rate
+  through the narrowest section, `A P₁ √(γ M / (R T)) (2 / (γ + 1))^((γ + 1) / (2 (γ − 1)))`. The drop rises with the
+  rate everywhere, so the rate at a drop is one root.
+  Held to measurements (`docs/DATA_SOURCES.md`, each with a gate test): a smooth pipe's turbulent friction within
+  2.1 % of the fit of the Princeton Superpipe's data; a short sharp-edged tube's discharge within 0.03 in `Cd` of
+  Lichtarowicz, Duggins and Markland's correlation of the measurements, l/d 2 to 10, from creeping flow to
+  turbulent. Water through a syringe's nozzle at a thumb's 74 kPa: 30 mL/s (`Cd` 0.78), where Poiseuille's law gave
+  2900; through two nozzles and the tube, 22.5.
+- **The closure.** A **node** is a sealed vessel: a sealed rigid cell with the layers under it, at one pressure
+  (Stage 88); an **end** is any cell that is not sealed, at the room's pressure. Nodes joined by conduits are a
+  group; a sealed vessel with a plunger and no conduit is a group of one. The unknown is each node's pressure as the
+  step ends. Given the pressures, the nodes are taken from the highest down (what crosses runs down the pressures,
+  so the highest only gives):
+  - **each conduit's crossing** over the step, by its law at the two end pressures, of what stands at the giver's
+    port; a port that runs dry within the step gives what stands there next for the time that is left;
+  - **what crosses carries its enthalpy at the giver's end state**, `h(T_end, P_end)` (Stage 88): the giver's whole
+    content is brought to its end pressure and the share that leaves is pushed out at it. That is an expansion, or a
+    compression, against a constant outer pressure, which the second law allows at any step's length; what arrives
+    is throttled down to the taker's pressure;
+  - **each plunger's move**, by its forces at its node's end pressure (above), read as the step's whole move, the
+    hand's work `F dx` with it;
+  - **the room its contents then need** at that pressure: each of its cells, holding its energy with what came in
+    and the hand's work, takes the volume at which it stands at `P` (Stage 88's `at_pressure`), less what leaves.
+  A node's **residual** is the room its boundary gives less the room its contents need: rising with its own pressure
+  (the plunger gives way, the contents are squeezed, more leaves), falling with a neighbour's (more arrives). With
+  room to spare at next to no pressure the node stands there: a void, which its liquid's boiling then fills
+  (Stage 88). Because every piece is taken at the end pressures, a stiff vessel (a liquid's) is as stable as a soft
+  one, a push on one vessel is its neighbour's at once, and pushing takes what pulling does.
+  - **Solved**: one node, a bracket and regula falsi (Illinois'), which no kink troubles; several, Newton on the
+    pressures with the Jacobian by differences, a step kept only if it lowers the largest residual; what Newton
+    leaves (one solve in a hundred under hands jerked at random), each node closed inside the one before it (exact;
+    two or three nodes), or sweeps of each one's own solve. Sweeps alone are no method: two syringes on a tube are
+    coupled 20 to 10 000 times more strongly than either gives, a little water next to much air forty million times.
+    The residuals have kinks, and a vessel comes to rest on one: a plunger slowing stands a hair off the edge of its
+    friction; two vessels levelling stand a hair off where what crosses turns about (a gas one way, a liquid the
+    other). So each slope is taken where the node stands: over a billionth of its pressure, and no further than a
+    quarter of the way to a neighbour's, toward where its residual sends it (Newton's step with the slope there
+    lowers every residual; with a slope across a kink it need lower none). To 1e-10 of the volumes a residual is
+    the difference of (0.2 Pa in a vessel full of water); pressures not found are not applied, the next step's to
+    find: none in any test.
+  - **Applied** by the primitives there already are: the hand's work along its edge and the plunger's move, what
+    crosses by `transfer` (up a giver's layers with its volume, Stage 88), each marked a crossing in the ledger; then
+    each column sized (Stage 88), which finds the pressure the solve found.
+  - **Then the fast equilibria**, as the step settles, before the open cells: every cell the closure touched is
+    brought to them; where any moved (a vapour condensing as it is squeezed), each vessel with a plunger is closed
+    again, alone: its plunger's whole move at the pressure it now ends at, less what it has moved; and so on, at most
+    four times. What crosses a conduit is found once in a step, with the step's moves; what the equilibria then leave
+    across it is the next step's. (Crossing again within the step, "by the law less what has passed", left
+    pressures at which a conduit could pass nothing either way: residuals with flat stretches, no one answer.) The
+    equilibria have the last word (P1); they move a pressure back toward where it was, so the work booked at the
+    solve's pressure stays on the second law's side.
+- **Traced** (§18, F1): each crossing the closure made is in the step's trace with the pressures it was solved at,
+  the giver's temperature there, its mass and energy and what its conduit's law was asked: down the pressures,
+  within the law and the step, carrying its amounts' enthalpy at the giver's state; and each ledger entry marked a
+  crossing is one of them. A crossing runs down the pressures the step ends at, found with every other of its step,
+  not those a replay of the ledger reads at its entry: T1 asks an unmarked gas transfer between sealed cells the
+  replay's pressures, as before, and a crossing nothing (Stage 79's exemption of "gas in a space a piston moved" is
+  gone). T2, the world's entropy, is the arbiter of the whole.
+- **What it gives**: two syringes of nothing but water move as one, pushed and pulled with the same force (12 N at
+  1 cm/s: both frictions, both drags, the tube's drop); a hand's whole push squeezes 2 μL out of 50 mL of sealed
+  water, and its pull lets it out to 7 kPa without a cavity; a hydraulic press holds four times the thumb's force on
+  four times the area; air let into a vessel at a third of its pressure is choked at first, the giver cooling and
+  the taker warming, and the entropy risen is the two gases' `n R ln(P / P_f)`; a syringe's last water goes through
+  its foot and then its air, within one step. Three times cheaper than Stage 79's sub-steps on the syringe benches.
+- **Sealed vessels joined with no conduit** (Stage 28) still share one pressure at once, by gas run between them
+  until they are level.
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
@@ -538,8 +603,8 @@ at 1 atm (a sealed one has its own). A cell is never left over-full.
 
 Pouring and dripping are kinematic (no rate, no gravitational energy).
 **Status:** Stage 4 implements the demo subset for gas, Stage 5 the drains, Stage 7 pouring,
-Stage 8 overflow and the balloon's capacity (§13), Stage 28 sealed cells. Still to build: the
-balloon's tension law, gas flow at a finite conductance (valves, frits), hydrostatic head and
+Stage 8 overflow and the balloon's capacity (§13), Stage 28 sealed cells. Stage 89 gas and liquid flow at a finite conductance between sealed
+vessels (conduits). Still to build: the balloon's tension law, a valve's and a frit's conduit, hydrostatic head and
 gravitational energy, siphons, a vacuum pump.
 
 **The vertical dimension** (Stage 47; `chem/sim.hpp`, `src/strata.cpp`; `docs/TDD_47_COLUMN.md`; asked for by the
@@ -3622,6 +3687,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | W1 | A piston's work is its hand's alone (Stage 79; `chem/invariants.hpp`): each piston stands within its stops, its hand's force within its most (none when let go), and the energy along its work edge in the step is that force over its move, to a quantum. It fires on a hand past its most, a piston past its stops, a let-go hand with a force, and a quantum more along the edge than the work | exact | 79 |
 | W2 | Work between cells is a sealed vessel's own (Stage 88; `chem/invariants.hpp`): a ledger entry marked work moves energy alone, along a column's edge, to or from a layer that stands at its vessel's pressure | exact | 88 |
 | P2 | A sealed vessel is at one pressure (Stage 88; `chem/invariants.hpp`): as a step ends, each of its layers that holds anything stands at its top's pressure, within what the step's last equilibria moved after its last sizing (a hundredth of it, or 200 Pa) | 1 % or 200 Pa | 88 |
+| F1 | A crossing between vessels is the closure's (Stage 89; `chem/invariants.hpp`): each crossing of a conduit in the step's trace runs from the higher of the two pressures it was solved at to the lower, at no more than its conduit's law passes there (recomputed from the conduit's pieces), for no longer than the step, moving the phase that stood at its port and carrying those amounts' enthalpy at the giver's temperature and pressure, to a quantum; and each ledger entry marked a crossing is one of them | 1e-9 of the law, a quantum of energy | 89 |
 | Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |

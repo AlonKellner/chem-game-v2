@@ -670,6 +670,25 @@ void cg_ui_capture_pictures(cg_ui *ui) {
 	}
 }
 
+const char *cg_ui_picture_keys(cg_ui *ui) {
+	if (ui == nullptr) {
+		fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_picture_keys: null screen");
+		return nullptr;
+	}
+	ui->text = ui->ui->picture_keys();
+	return ui->text.c_str();
+}
+
+cg_status cg_ui_capture_picture(cg_ui *ui, const char *supply) {
+	if (ui == nullptr || supply == nullptr) {
+		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_capture_picture: null argument");
+	}
+	if (!ui->ui->capture_picture(supply)) {
+		return fail(CG_ERR_INVALID_ARGUMENT, (std::string("cg_ui_capture_picture: no supply ") + supply).c_str());
+	}
+	return CG_OK;
+}
+
 cg_status cg_ui_experiments(cg_ui *ui, const char *catalogue_json, cg_read_file read, void *user) {
 	if (ui == nullptr || catalogue_json == nullptr) {
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_experiments: null argument");

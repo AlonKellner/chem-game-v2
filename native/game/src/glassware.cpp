@@ -430,11 +430,6 @@ double tubing_length() {
 	return table().at("tubing").at("length_mm").get<double>() / 10.0;
 }
 
-double poiseuille(double bore_cm, double length_cm) {
-	const double r = 0.5 * bore_cm * 1e-2, l = length_cm * 1e-2;
-	return l > 0.0 ? pi * r * r * r * r / (8.0 * l) : 0.0;
-}
-
 double seals() {
 	return table().at("seals_mm").get<double>() / 10.0;
 }

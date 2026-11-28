@@ -8367,6 +8367,25 @@ void Ui::capture_pictures() {
 	}
 }
 
+std::string Ui::picture_keys() const {
+	json list = json::array();
+	for (const ItemView &s : impl_->view.supplies) {
+		list.push_back({ { "id", s.id }, { "key", Impl::picture_key(s) } });
+	}
+	return json{ { "format", "chem-picture-keys/1" }, { "renderer", RENDERER_KEY }, { "supplies", list } }.dump();
+}
+
+bool Ui::capture_picture(const std::string &supply) {
+	Impl &m = *impl_;
+	for (const ItemView &s : std::vector<ItemView>(m.view.supplies)) {
+		if (s.id == supply) {
+			m.capture_one(s.id, true);
+			return true;
+		}
+	}
+	return false;
+}
+
 void Ui::set_capture_ahead(bool on) {
 	impl_->capture_ahead = on;
 }

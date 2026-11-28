@@ -1,0 +1,25 @@
+{
+	"format": "chem-flow/1",
+	"note": "(Stage 89, GAME_SPEC §6, Flow between vessels) What a conduit's flow law is made of: every number a published correlation's own. docs/DATA_SOURCES.md, Flow between vessels.",
+	"churchill": {
+		"note": "Churchill 1977, the friction factor in every regime (Darcy's, of a round pipe): f = 8 ((8/Re)^12 + (A + B)^(-3/2))^(1/12), A = (2.457 ln(1 / ((7/Re)^0.9 + 0.27 e/D)))^16, B = (37530/Re)^16; a smooth wall here (e = 0)",
+		"laminar": 8,
+		"join": 12,
+		"log": 2.457,
+		"smooth": 7,
+		"smooth_power": 0.9,
+		"transition": 37530,
+		"power": 16
+	},
+	"shah": {
+		"note": "Shah 1978, the pressure drop of laminar flow developing from a uniform profile in a round tube: f_app Re = 3.44 / sqrt(x) + (1.25 / (4 x) + 16 - 3.44 / sqrt(x)) / (1 + 0.000212 / x^2), x = L / (D Re), f_app Fanning's: the drop over rho v^2 / 2 is 4 f_app Re x",
+		"entrance": 3.44,
+		"excess": 1.25,
+		"developed": 16,
+		"c": 0.000212
+	},
+	"contraction": {
+		"note": "a sharp-edged contraction's loss in velocity heads of the narrower section, 0.5 (1 - A_narrow / A_wide): from a vessel, 0.5",
+		"loss": 0.5
+	}
+}

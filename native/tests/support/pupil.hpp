@@ -7,6 +7,7 @@
 #include "lab/tutorial.hpp"
 #include "lab/ui.hpp"
 
+#include <cmath>
 #include <doctest/doctest.h>
 
 #include <cstdlib>
@@ -246,6 +247,20 @@ struct Pupil {
 		ui->pointer(x0, y0, true);
 		ui->frame(1.0 / 60.0);
 		move(x0, y0, x1, y1, true);
+		if (g.what.rfind("plunger:", 0) == 0) {
+			// (Stage 89) a hand on a plunger holds it until it gets there or stands: what crosses a nozzle takes its time
+			// (a third of a second moved 6 mL of water through two of them), and a person feels it still going
+			const std::string id = g.what.substr(8);
+			double before = item(id).plunger_ml;
+			for (int k = 0; k < 60; ++k) { // (ten seconds at the most)
+				frames(10);
+				const double now = item(id).plunger_ml;
+				if (std::fabs(now - before) < 0.02) {
+					break;
+				}
+				before = now;
+			}
+		}
 		ui->pointer(x1, y1, false);
 		ui->frame(1.0 / 60.0);
 	}
