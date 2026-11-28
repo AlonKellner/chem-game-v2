@@ -889,7 +889,14 @@ effect and catalysts.
 - **The activity model's range** (Stage 63). Past an ionic strength of 20 mol/kg (a 2:2 salt at 5 mol/kg, a 1:1
   at 20; Pitzer's fits hold to about 6 mol/kg of a salt) a fast equilibrium among dissolved species alone
   stands as it was: the game cannot say how such a solution's ions share themselves. A solution boiled
-  nearly dry keeps the traces its ions held; what crystallizes out of it still does.
+  nearly dry keeps the traces its ions held; what crystallizes out of it still does. (Stage 85) And no fast
+  equilibrium carries a solution there: its extent is bounded where the ionic strength reaches 20 (along an
+  extent the strength is K (A + B x) / (L + D x), so the bound is exact; `within_range`), and an equilibrium held
+  at that edge is as far as it may go (P1 reads the same bound). Water boils off a solution down to the edge and
+  no further, unless its salt crystallizes first; a funnel's first drop, a milligram drying in an empty beaker's
+  air, stays a solution. (Before: its ions were left with a quantum of water, where Pitzer's sums diverge, ln
+  gamma near -3.5e5, and its entropy was no function of its state: the next drop diluted it, and the world's
+  entropy fell.)
 
 **What follows without being written:** water under dry air evaporates until its partial
 pressure is the saturation pressure, and cools doing it. A flask of boiling water sits at the
@@ -1110,6 +1117,9 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
   thiocyanates, cobalt's tetrachloro, chromate and dichromate, EDTA's and its indicator's) and their colours; flame
   emission is a stage of its own (the user's split, 2026-11-27).
 - Stage 82 adds lithium's and strontium's ions and their chlorides and nitrates, for the flame tests (§12.5).
+- Stage 85 gives iron(III) its Pitzer pairs (with nitrate chromium(III) nitrate's, with chloride Millero and Pierrot's)
+  and FeSCN2+ one with nitrate, fitted with its constant to Below, Connick and Coppel's quotients at 0.40 and 1.00;
+  and bounds every fast equilibrium at the activity model's range (§8).
 
 ## 10. Property models
 
@@ -2149,6 +2159,17 @@ A flame shows what is in it: the flame test (curriculum experiment 10). Data: `d
   viewer read it as they read any glow. The scene's key changes with the load, quantised to 5 % steps of
   each element's amount, so a fading flame is traced again only as it changes by a step.
 
+### 12.6 Discharge lamps (Stage 85)
+
+A discharge lamp (a bench's `lamp`, its `gas`: H, He, Hg or Ne) is its gas's lines in the visible, NIST's at the relative
+intensities its sources observed (`data/lamps.json`; a lamp's lines against each other, no radiometric calibration),
+their light all together calibrated as bright as a fresh sodium flame's (§12.5). It is drawn as a tube of glowing gas (a
+cone as wide at every height, `OpticsBody::tube`) over its base; its lines are added to the tube's glow as a flame's
+are, each read every frame by its band cuts. It is a burner that heats nothing (at the room's temperature, no
+conductance), its valve its power (the readout's "power"). The spectral viewer's readout lists the lines it sees: each
+nanometre that stands over its neighbours and three times over the light three nanometres to either side, the
+brightest six (hydrogen's: 389, 397, 410, 434, 486, 656).
+
 ## 13. Lab layer and interaction
 
 The engine-free game layer (`native/game`, namespace `lab`): a bench of equipment over one closed
@@ -2166,6 +2187,15 @@ drawer). Items:
   `coolant` is a condenser.
 - **balloon:** an elastic cell with a wall, and a capacity.
 - **burner:** a reservoir at its flame's temperature, and its conductance with the valve open.
+- **lamp** (Stage 85, §12.6): a discharge lamp, a burner that heats nothing (at the room's temperature, no conductance),
+  its gas's lines its light, its valve its power. Refused as a vessel's heat and as a flame test's flame.
+- **oven** (Stage 85): a drying oven, a burner with no flame: a reservoir at its temperature (110 C) and its conductance
+  (0.3 W/K) to what stands in it. A vessel carried onto it goes in (`heat`); moved off it, the oven stays on its own
+  square; carried into it from a balance's pan, the balance stays on its own.
+- **A filter crucible** (Stage 85, glassware `filter_crucible`): a sintered glass crucible, its flat frit draining by
+  Darcy's law under a water pump's suction and its liquid's own head; drained, it keeps its frit's water and its
+  cake's pores' (a wet cake, its porosity 0.5), which only drying takes. Bulb pipettes of 5 and 10 mL (ISO 648, Stage
+  85) beside the 25. A pipette empty to its tolerance draws to its mark again.
 - **viewer** (Stage 42): the spectral viewer, an instrument with no cell and no edge: it holds no
   matter and changes nothing in the world (the world and its digest are the same with it and
   without it). Its screen shows the spectrum its probe reads (§12: the spectrum probe), always:
@@ -2390,7 +2420,7 @@ input to them, and a session script is a list of them.
 | `heat` | `burner`, `vessel` | puts the burner under the vessel, from the bench or straight from the cabinet (its valve as it is) |
 | `unheat` | `burner` | takes it away, to stand beside the vessel |
 | `valve` | `burner`, `to` (0 to 1) | sets the flame: the conductance to the vessel is `to` × the burner's |
-| `flame_test` | `burner`, `from` | (Stage 82, §12.5) a loop's drop of `from`'s liquid in the burner's flame: each shown element's atoms in the drop join the flame's load, fading in 3 s. Refused for a burner not lit and a vessel with no liquid |
+| `flame_test` | `burner`, `from` | (Stage 82, §12.5) a loop's drop of `from`'s liquid in the burner's flame: each shown element's atoms in the drop join the flame's load, fading in 3 s (Stage 85: every metal of its positive ions held, those with lines coloured; a burner's `flame_umol` reads them). Refused for a burner not lit, a lamp or an oven, and a vessel with no liquid |
 | `stir` | `vessel`, `on` | stirring: the vessel's mixing is 3 while on (§7) |
 | `pour` | `from`, `to`, `ml` or `all`; `about` | moves liquid, with what is dissolved in it in proportion, and its enthalpy; with `about` (Stage 50), the hand's amount (Readings) |
 | `tip` | `from`, `to`, `species`, `g` or `all`; `about` | moves a solid, with its particles in proportion; with no `species` (Stage 50), the solids in proportion to their masses; with `about`, the hand's amount |
@@ -2625,6 +2655,12 @@ panel has three tabs (`notebook:tab:<notebook|calculator|reference>`).
   it needs, the one the next step makes carried, the rest bought. `notebook:plan:goal` sets the target as a player's
   goal (§13.5) on the first free slot: its mass, at least, and its purity. `calculated` "plan" while it is worked out.
   The panel's close and erase stand at its right.
+
+**A report's choices** (Stage 85): an item of the report may be no number but choices (`choices`: each a label and a
+truth, an expression above zero where it holds; `single`: one only). The card shows them as chips (`report:<k>:<i>`);
+checked, it is right where the picks are exactly the choices that hold, and those that hold are outlined. A choice item
+is not asked as a prediction. **An unknown from a list** (`one_of` in place of `contents`): a vessel holds one of a list
+of contents, drawn once by the bench's seed.
 
 **Predictions** (Stage 55): while a tutorial runs and its report's predictions are not all made, and nothing is
 selected, the readout's place holds a field for each (`predict:<n>`) and "predict" (`predict:make`); a prediction made
@@ -3422,6 +3458,24 @@ stand on.
       acetic acid 148, water under the room's 420 ppm of CO2 0.9 uS/cm), a guess first; then a conductometric
       titration, the acid diluted with 175 mL of water, its falling and rising lines crossing at 11.62 mL against
       11.81.
+  - Step E (Stage 85, `docs/TDD_85_ANALYSIS.md`; experiment 51, alum and the copper–ammonia salt, moved after steps F
+    and I, the user's scope):
+    - `gravimetric` (experiment 10): an unknown chloride's silver chloride, filtered into a weighed sintered glass
+      crucible on a suction flask, washed twice, dried in the oven at 110 C to constant mass (two weighings agree within
+      the balance's 0.2 mg) and weighed; 0.10885 M found against 0.10884.
+    - `qualitative` (experiment 12): an unknown, one of twelve salts drawn by the seed; its anion by acidified silver
+      nitrate, acidified barium chloride and acid, its cation by sodium hydroxide and a flame test; both answers chosen.
+    - `lechatelier` (experiment 42): iron(III) thiocyanate with more of either reactant, chromate with acid, cobalt
+      chloride in 10 mol/kg hydrochloric acid warmed to 55 C (5 % of it turned blue), each against a tube left as it is;
+      which way each went, chosen, its truth read from the tubes.
+    - `kc` (experiment 43): FeSCN2+'s constant by Benesi and Hildebrand's double reciprocal, four mixtures in Below,
+      Connick and Coppel's medium (0.40 ionic strength, iron 1 to 5 mM in excess); 148 found against the quotient 142.
+    - `ksp` (experiment 44): calcium hydroxide over its solid in water and in 0.100 M calcium chloride, filtered and
+      titrated: [OH-] 0.0406 and 0.0309 M (0.0402 and 0.0292), Ksp from water, and the common ion's direction chosen.
+    - `hardness` (experiment 52): a hard water (its calcium and magnesium drawn by the seed) titrated with EDTA at pH 10
+      to Eriochrome Black T's blue; 320.7 mg/L as calcium carbonate against 319.6.
+    - `spectra` (experiment 54): four discharge lamps through the spectral viewer; hydrogen's Balmer lines listed
+      (389, 397, 410, 434, 486, 656 nm) and the Rydberg constant from two of them (1.0975e7 /m).
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3779,7 +3833,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |
 | Ammonia and carbon dioxide at Henry's equilibrium with the gas in their cell (Stage 64) | An open vessel's headspace trades with the room at its mouth (Stage 50); what is dissolved meets the headspace at once, where a real surface takes minutes |
 | Copper's hydrolysis to CuOH⁺ alone (Stage 63); no dimer Cu₂(OH)₂²⁺, no basic copper sulfate | 0.5 mol/kg copper sulfate reads pH 4.8, a real one about 4. The dimer, at MINTEQ's constant with no interaction parameters, held most of the copper in a solution boiled down, so it is left out. Hot copper sulfate gives up a little hydroxide that turns to oxide (a few percent of the copper boiled down over 20 minutes), where a real one makes a pale basic sulfate |
-| Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water |
+| Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63); no fast equilibrium takes a solution past it (Stage 85) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water; a very soluble salt with no solid in the tables (lithium chloride) is boiled down to a syrup at that strength and no drier, heating on with its water held |
 | Copper hydroxide turns to oxide at the dry solid's rate, in water too (Stage 44) | In a strong base the real one dissolves as Cu(OH)₄²⁻ and comes back as the oxide in minutes; here a boiled suspension takes half an hour, as in water |
 | A solution's pH only to 6 mol/kg of acid or base left over (Stage 44) | Beyond the activity model's fits a boiled-down base reads no pH, where a real one reads about 15 |
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
@@ -3813,6 +3867,10 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A flame test's drop is the burner's display state, not matter (Stage 82): its atoms' lines and their molecules' bands by a Boltzmann sum and calibrated shares, the partition function a ground level's g | The drop is not taken from the vessel (0.02 mL, under the hand's resolution); no self-absorption (a strong sodium flame's lines do not reverse); a chloride's own bands (CuCl's blue) and the continuum (potassium's lilac) are not modelled; a solid's grains on the loop are not taken (a solution only) |
+| A discharge lamp's lines are NIST's relative intensities, not a radiometric calibration; a lamp and a drying oven are burners (Stage 85) | A lamp's lines against each other as their sources saw them; no lamp lights the room (its light is seen where it is, as a flame's); an oven is a reservoir with a conductance to what stands in it, drawn as its shelf, not a box around it |
+| A filter crucible's suction is its frit's flow law, not a pressure in its flask; its wet cake's porosity one value (Stage 85) | The flask is not evacuated; the cake holds half its bulk of water, whatever its grains; a funnel's paper residue is still scraped dry as drained (Stage 59) |
+| No test-tube rack (Stage 85) | Test tubes stand on the bench's squares by themselves |
+| FeSCN2+'s pair with nitrate is calibrated to two quotients in perchlorate, nitrate in perchlorate's place (Stage 85) | Past an ionic strength of 1.0, and in a medium of iron(III) nitrate itself, the quotient is the model's alone: a textbook standard of 0.2 M iron(III) nitrate takes up 84 % of its thiocyanate, not about 95 % |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); light brighter than the display scaled down by its brightest channel (Stage 82); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a bright flame or a hot body is drawn at the display's brightest of its own colour, no brighter than a white wall |
 | What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |
 | A solution's index is its liquids' by volume (water's; from Stage 78 a metal's own, complex); the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |

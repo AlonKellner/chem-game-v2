@@ -3,6 +3,7 @@
 // fills a lit burner's flame and it fades; the picture shows a sodium flame yellow and the spectral viewer its D lines.
 #include "lab/colour.hpp"
 #include "lab/flame.hpp"
+#include "lab/lamps.hpp"
 #include "lab/lab.hpp"
 #include "lab/optics_scene.hpp"
 #include "lab/ui.hpp"
@@ -278,4 +279,48 @@ TEST_CASE("flame: on the screen, a vessel of a solution carried onto a lit burne
 	CHECK(sodium() > 1e-6);
 	CHECK(item(ui->lab(), "salt").col == at.col);
 	CHECK(item(ui->lab(), "salt").row == at.row);
+}
+
+TEST_CASE("measured: a discharge lamp's lines are NIST's, at the relative intensities its sources observed (Stage 85)") {
+	const auto strongest = [](const std::string &gas) {
+		std::array<double, 2> best{};
+		for (const auto &l : lab::lamps::lines(gas)) {
+			best = l[1] > best[1] ? l : best;
+		}
+		return best[0];
+	};
+	const auto intensity = [](const std::string &gas, double nm) {
+		for (const auto &l : lab::lamps::lines(gas)) {
+			if (std::abs(l[0] - nm) < 0.01) {
+				return l[1];
+			}
+		}
+		return 0.0;
+	};
+	// hydrogen's Balmer lines: H-alpha 656.279 the strongest, then H-beta 486.135, H-gamma 434.047, H-delta 410.173
+	CHECK(strongest("H") == doctest::Approx(656.279).epsilon(1e-6));
+	CHECK(intensity("H", 656.279) > intensity("H", 486.135));
+	CHECK(intensity("H", 486.135) > intensity("H", 434.047));
+	CHECK(intensity("H", 434.047) > intensity("H", 410.173));
+	// the Rydberg formula through them: 1/lambda = R (1/4 - 1/n^2), in air (n 1.000277 at 656 nm)
+	for (const auto &[n, nm] : { std::pair{ 3, 656.279 }, std::pair{ 4, 486.135 }, std::pair{ 5, 434.047 }, std::pair{ 6, 410.173 } }) {
+		CHECK(intensity("H", nm) > 0.0);
+		const double r = 1.0 / (nm * 1.000277e-9 * (0.25 - 1.0 / (n * n)));
+		CHECK(r == doctest::Approx(1.09678e7).epsilon(2e-4)); // hydrogen's own, R_H = R_inf / (1 + m_e / m_p)
+	}
+	// helium's yellow 587.56; mercury's violet, blue and green 404.66, 435.83, 546.07; neon's red 692.95
+	CHECK(intensity("He", 587.562) > 0.0);
+	CHECK(strongest("Hg") == doctest::Approx(404.656).epsilon(1e-5));
+	CHECK(intensity("Hg", 435.834) == intensity("Hg", 404.656));
+	CHECK(intensity("Hg", 546.075) > 0.0);
+	CHECK(strongest("Ne") == doctest::Approx(692.947).epsilon(1e-5));
+	// a lamp's glow keeps its light: all its lines' together, its model's (mercury's 118), at full power
+	const std::array<double, 401> g = lab::lamps::glow("Hg", 1.0);
+	const chem::optics::Spectrum &room = chem::optics::d65();
+	double light = 0.0;
+	for (size_t k = 0; k < 401; ++k) {
+		light += g[k] * room[k] / room[180];
+	}
+	CHECK(light == doctest::Approx(118.0).epsilon(1e-9));
+	CHECK(lab::lamps::glow("Hg", 0.5)[25] == doctest::Approx(0.5 * g[25]));
 }

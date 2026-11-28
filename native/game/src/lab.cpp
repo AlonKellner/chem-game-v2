@@ -3,6 +3,7 @@
 #include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/flame.hpp"
+#include "lab/lamps.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
 #include "lab/notebook.hpp"
@@ -142,6 +143,9 @@ struct Item {
 	double valve = 0.0;
 	// (Stage 82) a burner: the metals in its flame (an element's symbol and its mol), each fading (lab/flame.hpp)
 	std::vector<std::pair<std::string, double>> flame_load;
+	std::string lamp; // (Stage 85) a discharge lamp's gas: a burner that heats nothing, its valve its power (lab/lamps.hpp)
+	bool oven = false; // (Stage 85) a drying oven: a burner with no flame, at its own temperature (110 C), what stands in it warmed
+	int home_col = -1, home_row = -1; // (Stage 85) an oven's own square, while something stands in it
 	int on = -1; // a bag or a condenser: the vessel whose mouth it is on
 	EdgeId joint; // its edge to that vessel
 	int holds = -1; // a vessel: what is on its mouth
@@ -377,6 +381,12 @@ void default_size(const std::string &kind, double volume_ml, bool condenser, int
 		h = 3;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
+	} else if (kind == "oven") {
+		w = 4; // (Stage 85) a drying oven's shelf
+		h = 2;
+	} else if (kind == "lamp") {
+		w = 2; // (Stage 85) a discharge lamp: its tube upright on its base
+		h = 5;
 	} else if (kind == "stopper") {
 		w = h = 1;
 	} else if (kind == "balloon") {
@@ -2454,7 +2464,27 @@ struct Lab::Impl {
 			const Fill held = fill(x);
 			const double head_m = held.defined ? g->level(held.condensed * 1e6) / 100.0 : 0.0, bore_m = g->tip_bore / 100.0;
 			double rate = x.cap * ORIFICE_CD * (PI * bore_m * bore_m / 4.0) * std::sqrt(2.0 * GRAVITY * std::max(head_m, 0.0));
-			if (g->paper_herzberg_s > 0.0) {
+			if (g->frit_area > 0.0) {
+				// (Stage 85) a filter crucible on a suction flask: through its flat frit by Darcy's law, in proportion to the
+				// pressure across it, the suction's and its liquid's own head, as water's viscosity goes. Drained, its residue
+				// keeps the water of its pores (its cake's porosity) and its frit its own: a wet cake, which drying takes
+				const double kelvin_now = kelvin(x.cell);
+				const double over = head_m * 100.0 - g->floor; // cm of liquid over the frit
+				const double bar = g->suction_bar + std::max(over, 0.0) * 0.01 * 0.980665;
+				rate = over > 0.0 ? x.cap * g->frit_ml_min_cm2_bar / 60.0 * g->frit_area * bar * 1e-6 * chem::solvent_viscosity(table(), 293.15) / chem::solvent_viscosity(table(), kelvin_now) : 0.0;
+				double solid_m3 = 0.0;
+				const CellState &held_state = world().snapshot_cell(x.cell);
+				for (size_t s = 0; s < held_state.amount.size(); ++s) {
+					const chem::SpeciesDef &def = table().species(SpeciesId{ static_cast<int32_t>(s) });
+					if (def.phase == Phase::Solid && !def.wall && held_state.amount[s] > 0) {
+						solid_m3 += static_cast<double>(held_state.amount[s]) * MOL_PER_QUANTUM * def.molar_volume;
+					}
+				}
+				const double keep_m3 = g->holds_ml * 1e-6 + solid_m3 * g->cake_porosity / (1.0 - g->cake_porosity);
+				if (!(liquid_m3(x.cell) > keep_m3)) {
+					rate = 0.0;
+				}
+			} else if (g->paper_herzberg_s > 0.0) {
 				// (Stage 59) a filter funnel: through its paper by Darcy's law, every patch of the wetted cone passing water in
 				// proportion to the head over it, its stem's column hanging under it: Q = k 2 pi tan(a) / cos(a) (h^3 / 6 +
 				// L h^2 / 2), h the liquid's depth in the cone (no higher than its paper), L the stem; k from the paper's
@@ -3906,6 +3936,8 @@ struct Lab::Impl {
 		}
 		v.valve = item.valve;
 		v.flame_load = item.flame_load; // (Stage 82)
+		v.lamp = item.lamp; // (Stage 85)
+		v.oven = item.oven;
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
 		v.floor_mm = item.floor_mm;
@@ -4617,6 +4649,32 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 				why = "item \"" + item.id + "\": its temperature is above absolute zero";
 				return nullptr;
 			}
+			if (kind == "lamp") {
+				// (Stage 85) a discharge lamp: a burner that heats nothing (at the room's temperature, no conductance), its
+				// valve its power, its light its gas's lines (lab/lamps.hpp)
+				const std::string gas = j.value("gas", std::string());
+				if (!lamps::has(gas)) {
+					why = "item \"" + item.id + "\": a lamp's gas is one data/lamps.json has lines for (H, He, Hg, Ne)";
+					return nullptr;
+				}
+				item.kind = Kind::Burner;
+				item.lamp = gas;
+				item.cell = b.add_reservoir(item.id, room_kelvin);
+				item.full = 0.0;
+				item.valve = j.value("on", false) ? 1.0 : 0.0;
+				impl->items.push_back(item);
+				continue;
+			}
+			if (kind == "oven") {
+				// (Stage 85) a drying oven: a reservoir at its temperature and its conductance to what stands in it, no flame
+				item.kind = Kind::Burner;
+				item.oven = true;
+				item.cell = b.add_reservoir(item.id, j.value("celsius", 110.0) + 273.15);
+				item.full = j.value("conductance", 0.3);
+				item.valve = j.value("on", true) ? 1.0 : 0.0;
+				impl->items.push_back(item);
+				continue;
+			}
 			if (kind == "burner") {
 				item.kind = Kind::Burner;
 				item.cell = b.add_reservoir(item.id, j.at("celsius").get<double>() + 273.15);
@@ -4782,7 +4840,27 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					holds.push_back({ k == 0 ? item.cell : built[k - 1], &j.at("layers")[k] });
 				}
 			} else if (j.contains("contents")) {
+				if (j.contains("one_of")) {
+					why = "item \"" + item.id + "\": its contents, or one of a list (an unknown), not both";
+					return nullptr;
+				}
 				holds.push_back({ item.cell, &j.at("contents") });
+			} else if (j.contains("one_of")) {
+				// (Stage 85) an unknown drawn from a list: one of these contents, chosen once by the bench's seed
+				const json &list = j.at("one_of");
+				if (!list.is_array() || list.empty()) {
+					why = "item \"" + item.id + "\": \"one_of\" is a list of what it may hold";
+					return nullptr;
+				}
+				for (const json &c : list) {
+					if (!c.is_object()) {
+						why = "item \"" + item.id + "\": each of \"one_of\" is what it may hold, as \"contents\" is";
+						return nullptr;
+					}
+				}
+				const double u = 0.5 * (1.0 + instruments::share(impl->seed, item.id + ":one_of"));
+				const size_t pick = std::min(list.size() - 1, static_cast<size_t>(u * static_cast<double>(list.size())));
+				holds.push_back({ item.cell, &list.at(pick) });
 			}
 			std::map<int32_t, int64_t> own; // what its own cell holds, by species: its air is added to it (Stage 65)
 			for (const auto &[into, what] : holds) {
@@ -5139,8 +5217,14 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		if (const int fixed = fixed_under(thing); fixed >= 0) {
-			why = "\"" + x.id + "\" cannot be moved as it is: \"" + items[static_cast<size_t>(fixed)].id + "\" depends on where it stands";
-			return false;
+			if (!(items[static_cast<size_t>(fixed)].oven && items[static_cast<size_t>(fixed)].under == thing)) {
+				why = "\"" + x.id + "\" cannot be moved as it is: \"" + items[static_cast<size_t>(fixed)].id + "\" depends on where it stands";
+				return false;
+			}
+			// (Stage 85) out of a drying oven: the oven stays, the vessel taken out
+			if (!run(json{ { "do", "unheat" }, { "burner", items[static_cast<size_t>(fixed)].id } }, why)) {
+				return false;
+			}
 		}
 		if (!c.contains("at") || !c.at("at").is_array() || c.at("at").size() != 2) {
 			why = "a place is \"at\" [column, row]";
@@ -5879,6 +5963,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
+		if (!flame.lamp.empty()) {
+			why = "\"" + flame.id + "\" is a lamp: it heats nothing";
+			return false;
+		}
 		if (!on_bench(items[static_cast<size_t>(vessel)], why)) {
 			return false;
 		}
@@ -5886,8 +5974,25 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			why = "\"" + flame.id + "\" is already under \"" + items[static_cast<size_t>(flame.under)].id + "\"";
 			return false;
 		}
-		for (const Item &other : items) { // one thing under a vessel: a burner or a balance (Stage 50)
+		for (size_t o = 0; o < items.size(); ++o) { // one thing under a vessel: a burner or a balance (Stage 50)
+			const Item &other = items[o];
 			if (other.under == vessel) {
+				if (flame.oven && other.kind == Kind::Balance) {
+					// (Stage 85) into an oven from a balance's pan: the balance left on its own square
+					const int col = other.col, row = other.row;
+					if (!run(json{ { "do", "unweigh" }, { "balance", other.id } }, why)) {
+						return false;
+					}
+					Item &scale = items[o];
+					if (col >= 0 && scale.place == Place::Bench && (scale.col != col || scale.row != row)) {
+						const int was_col = scale.col, was_row = scale.row;
+						scale.col = scale.row = -1;
+						const int there = standing_in(col, row, scale.w, scale.h);
+						scale.col = there < 0 || there == vessel ? col : was_col;
+						scale.row = there < 0 || there == vessel ? row : was_row;
+					}
+					continue;
+				}
 				why = "\"" + items[static_cast<size_t>(vessel)].id + "\" stands over \"" + other.id + "\": take it away first";
 				return false;
 			}
@@ -5897,6 +6002,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		if (world().connect(over, flame.cell, PHASES_NONE, &flame.heats, flame.full * flame.valve) != Refusal::None) {
 			why = "the burner cannot go there";
 			return false;
+		}
+		if (flame.oven) { // (Stage 85) an oven keeps its own square, to stand on again
+			flame.home_col = flame.col;
+			flame.home_row = flame.row;
 		}
 		flame.under = vessel;
 		flame.place = Place::Under;
@@ -5918,9 +6027,18 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		world().disconnect(flame.heats);
 		// it goes back beside the vessel if there is room, else to the cabinet
 		const Item v = items[static_cast<size_t>(flame.under)];
+		const int taken_out = flame.under;
 		to_storage(flame);
 		flame.col = flame.row = -1;
-		set_beside(burner, v);
+		flame.under = -1; // (its square's own, below)
+		const int there = flame.oven && flame.home_col >= 0 ? standing_in(flame.home_col, flame.home_row, flame.w, flame.h) : -1;
+		if (flame.oven && flame.home_col >= 0 && on_grid(flame.home_col, flame.home_row, flame.w, flame.h) && (there < 0 || there == taken_out)) { // (the vessel taken out moves off it)
+			flame.place = Place::Bench; // (Stage 85) an oven back on its own square
+			flame.col = flame.home_col;
+			flame.row = flame.home_row;
+		} else {
+			set_beside(burner, v);
+		}
 		flame.under = -1;
 		flame.heats = EdgeId{};
 		return true;
@@ -6175,6 +6293,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
+		if (!flame.lamp.empty() || flame.oven) {
+			why = "\"" + flame.id + "\" has no flame: a flame test is made in a burner's";
+			return false;
+		}
 		if (!(flame.valve > 0.0)) {
 			why = "the burner " + flame.id + " is not lit";
 			return false;
@@ -6196,7 +6318,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			for (int e = 0; e < t.element_count(); ++e) {
 				const std::string symbol(t.element(e).symbol);
-				if (def.atoms[static_cast<size_t>(e)] > 0 && flame::shows(symbol)) {
+				// (Stage 85) each metal of its positive ions: every one held in the flame, those flame.json has lines for
+				// coloured (iron's flame keeps its own colour, and the flame test was still made)
+				const bool metal = def.charge > 0 && symbol != "H" && symbol != "C" && symbol != "N" && symbol != "O";
+				if (def.atoms[static_cast<size_t>(e)] > 0 && (metal || flame::shows(symbol))) {
 					const double mol = share * static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.atoms[static_cast<size_t>(e)];
 					auto at = std::find_if(flame.flame_load.begin(), flame.flame_load.end(), [&](const auto &x) { return x.first == symbol; });
 					if (at == flame.flame_load.end()) {
@@ -6204,7 +6329,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 					} else {
 						at->second += mol;
 					}
-					any = true;
+					any = any || flame::shows(symbol);
 				}
 			}
 		}
@@ -6818,7 +6943,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			x.drains_to = to;
 			v.holds = thing;
 			leave_balances(thing, was);
-			if (g->kind == "pipette" || g->kind == "filter_funnel") { // (no stopcock: it runs as it stands)
+			if (g->kind == "pipette" || g->kind == "filter_funnel" || g->kind == "filter_crucible") { // (no stopcock: it runs as it stands; Stage 85: a crucible on its suction flask)
 				x.cap = 1.0;
 				record(x.id, "cap", 1.0, "player");
 			}
@@ -7901,6 +8026,10 @@ std::string Lab::digest() const {
 		hash.update_u64(m.seed);
 	}
 	for (const Item &item : m.items) { // (Stage 82) what is in a flame: a lab with none digests as before
+		hash.update(item.lamp.data(), item.lamp.size()); // (Stage 85) a lamp's gas (a burner's: none)
+		if (item.oven) {
+			hash.update("oven", 4);
+		}
 		for (const auto &[el, mol] : item.flame_load) {
 			hash.update(el.data(), el.size());
 			hash.update_double(mol);
@@ -8244,6 +8373,12 @@ json Lab::Impl::save() const {
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
 		if (item.kind == Kind::Stopper) { // a lab without a stopper or a cap on saves as before (Stage 28)
 			list.back()["hold_n"] = bits(item.hold_n);
+		}
+		if (!item.lamp.empty()) { // (Stage 85)
+			list.back()["lamp"] = item.lamp;
+		}
+		if (item.oven) {
+			list.back()["oven"] = true;
 		}
 		if (!item.flame_load.empty()) { // (Stage 82) a flame with nothing in it saves as before
 			json load = json::array();
@@ -8652,6 +8787,14 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			if (j.contains("hold_n") && !from_bits(j.at("hold_n"), item.hold_n)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
+			}
+			item.oven = j.value("oven", false); // (Stage 85)
+			if (j.contains("lamp")) { // (Stage 85)
+				item.lamp = j.at("lamp").is_string() ? j.at("lamp").get<std::string>() : std::string();
+				if (!lamps::has(item.lamp)) {
+					why = "the save holds a lamp of no gas the tables have";
+					return nullptr;
+				}
 			}
 			if (j.contains("flame_load")) { // (Stage 82)
 				for (const json &e : j.at("flame_load")) {

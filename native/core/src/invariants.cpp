@@ -922,9 +922,15 @@ Violations check_P1(const SpeciesTable &table, const StepTrace &trace, std::span
 				continue;
 			}
 			const bool forward = a > 0.0;
-			const int64_t most = feasible_extent(cell, reaction.terms(), forward);
-			if (most <= 0) {
+			const int64_t feasible = feasible_extent(cell, reaction.terms(), forward);
+			if (feasible <= 0) {
 				continue; // nothing left to go that way: dry, or no vapour
+			}
+			// (Stage 85) no further than the activity model's range (thermo.hpp, within_range): held at its edge, within
+			// the slack of it, the equilibrium has gone as far as it may
+			const int64_t most = within_range(table, cell_mixtures(table, cell), reaction.terms(), forward, feasible);
+			if (most < feasible && most <= slack) {
+				continue;
 			}
 			// Gas moved after the equilibrium was taken is rounded to whole
 			// quanta, up to `slack` of each species: that shifts the log of a

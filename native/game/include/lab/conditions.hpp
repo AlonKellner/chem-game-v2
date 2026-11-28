@@ -100,6 +100,7 @@ struct RigPattern {
 struct Cond {
 	std::string item;
 	std::optional<std::string> place, on, under, drains_to, selected;
+	std::optional<std::string> probe_on; // (Stage 85) a spectral viewer's probe rests on this item
 	std::optional<std::string> stands_in; // (Stage 79) the vessel it stands in
 	// (Stage 54) the notebook: a quantity of the item (`what`) is logged, or has been recorded
 	std::optional<std::string> logging, recorded;

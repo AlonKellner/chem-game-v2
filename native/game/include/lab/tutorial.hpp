@@ -69,8 +69,17 @@ struct TutorialView {
 // A result the student reports at the end (GAME_SPEC §13.2, Stage 54): what it is and its unit; its truth, an expression
 // over the lab's quantities worked out when it is checked (lab/notebook.hpp's `evaluate`); the textbook's ideal, if
 // any; how close counts (absolute, or a share of the truth when `relative`); and why the three may differ.
+// (Stage 85) one of a report item's choices: its label, and its truth, an expression that is above zero where it holds
+// (an ion present, a shift's direction)
+struct TutorialChoice {
+	std::string label, truth;
+};
+
 struct TutorialReport {
 	std::string label, unit, truth;
+	// (Stage 85) an answer that is no number: the choices that hold, picked from these (one only where `single`)
+	std::vector<TutorialChoice> choices;
+	bool single = false;
 	std::optional<double> ideal;
 	double tolerance = 0.0;
 	bool relative = false;

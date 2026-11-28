@@ -83,6 +83,9 @@
 		{"cation": "Ca+2", "anion": "OH-1", "beta0": -0.1747, "beta1": -0.2303, "beta2": -5.72, "c_phi": 0, "alpha1": 2, "alpha2": 12, "source": "Harvie, Moller and Weare 1984 (pytzer bC_Ca_OH_HMW84)"},
 		{"cation": "Ca+2", "anion": "HCO3-1", "beta0": 0.4, "beta1": 2.977, "beta2": 0, "c_phi": 0, "alpha1": 2, "alpha2": 12, "source": "Harvie, Moller and Weare 1984 (pytzer bC_Ca_HCO3_HMW84)"},
 		{"cation": "Mg+2", "anion": "HCO3-1", "beta0": 0.329, "beta1": 0.6072, "beta2": 0, "c_phi": 0, "alpha1": 2, "alpha2": 12, "source": "Harvie, Moller and Weare 1984 (pytzer bC_Mg_HCO3_HMW84)"},
+		{"cation": "Fe+3", "anion": "NO3-1", "beta0": 0.7040, "beta1": 5.185, "beta2": 0, "c_phi": -0.0590, "alpha1": 2, "alpha2": 12, "source": "Pitzer and Mayorga 1973, Table VIII, Cr(NO3)3, unscaled (pytzer bC_Cr_NO3_PM73): iron(III) nitrate's own not measured, chromium(III)'s, its radius within 5 % (Stage 85)"},
+		{"cation": "Fe+3", "anion": "Cl-1", "beta0": 0.5382, "beta1": 6.3122, "beta2": 0, "c_phi": -0.0604, "alpha1": 2, "alpha2": 12, "source": "Millero and Pierrot 2007, Table 2, FeCl3: their fit to Rumyantsev et al. 2004's osmotic coefficients, 0.15 to 1.7 m (Stage 85)"},
+		{"cation": "FeSCN+2", "anion": "NO3-1", "beta0": 0.587, "beta1": 1.40925, "beta2": 0, "c_phi": -0.020142, "alpha1": 2, "alpha2": 12, "source": "Pitzer and Mayorga 1973, Table VI, Ca(NO3)2, unscaled (pytzer bC_Ca_NO3_PM73): FeSCN2+'s own not measured, a 2:1 nitrate's (Stage 85)"},
 		{"cation": "K+1", "anion": "I-1", "beta0": 0.0746, "beta1": 0.2517, "c_phi": -0.00414, "alpha1": 2, "source": "Pitzer and Mayorga 1973 (LBL preprint of J. Phys. Chem. 77, 2300), Table I (to 4.5 mol/kg)"},
 		{"cation": "Na+1", "anion": "I-1", "beta0": 0.1195, "beta1": 0.3439, "c_phi": 0.0018, "alpha1": 2, "source": "Pitzer and Mayorga 1973 (LBL preprint of J. Phys. Chem. 77, 2300), Table I (to 3.5 mol/kg)"}
 	],

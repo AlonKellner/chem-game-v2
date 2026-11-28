@@ -5,6 +5,7 @@
 #include "chem/math.hpp"
 
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <limits>
 
@@ -1324,6 +1325,49 @@ bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Te
 
 bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms) {
 	return among_dissolved(table, terms) && ionic_strength(table, mixtures) > MOST_IONIC_STRENGTH;
+}
+
+int64_t within_range(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms, bool forward, int64_t most) {
+	if (most <= 0 || mixtures.ionic > MOST_IONIC_STRENGTH) {
+		return most;
+	}
+	const std::vector<IonDef> &ions = table.solution().ions;
+	// sum of z^2 times each particle's quanta, and the liquid's quanta: now, and what a quantum of extent adds
+	double charges = 0.0, liquid = mixtures.liquid;
+	for (size_t k = 0; k < mixtures.present_count; ++k) {
+		const size_t j = mixtures.present[k];
+		const double z = static_cast<double>(ions[j].charge);
+		charges += mixtures.particles[j] * z * z;
+	}
+	double d_charges = 0.0, d_liquid = 0.0;
+	const double way = forward ? 1.0 : -1.0;
+	for (const Term &t : terms) {
+		const SpeciesDef &def = table.species(t.species);
+		if (def.wall) {
+			continue;
+		}
+		if (def.phase == Phase::Liquid) {
+			d_liquid += way * t.nu;
+		} else if (def.phase == Phase::Aqueous) {
+			for (const IonCount &ion : def.ions) {
+				if (ion.count <= 0) {
+					break;
+				}
+				const double z = static_cast<double>(ions[static_cast<size_t>(ion.ion)].charge);
+				d_charges += way * t.nu * static_cast<double>(ion.count) * z * z;
+			}
+		}
+	}
+	// 0.5 K (charges + x d_charges) <= MOST (liquid + x d_liquid): x c <= room
+	const double k = 0.5 * SOLVENT_MOL_PER_UNIT, c = k * d_charges - MOST_IONIC_STRENGTH * d_liquid, room = MOST_IONIC_STRENGTH * liquid - k * charges;
+	if (!(c > 0.0)) {
+		return most; // it never strengthens the solution
+	}
+	if (!(room > 0.0)) {
+		return 0;
+	}
+	const double x = room / c;
+	return x < static_cast<double>(most) ? static_cast<int64_t>(x) : most;
 }
 
 double rate_activity(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics) {
