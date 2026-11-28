@@ -457,8 +457,8 @@ TEST_CASE("invariants: a cell away from its phase equilibrium is detected: P1 (S
 	// dissociation and copper's hydrolysis (Stage 63), whose species the cell lacks; the weak acids and bases and
 	// the gases' dissolving, the indicators and phthalic acid (Stage 64); the metals' hydrolysis and precipitates (Stage 76);
 	// the complexes, EDTA's and its indicator's (Stage 81); triiodide, iodine with thiosulfate, permanganate with iron(II)
-	// (Stage 91)
-	REQUIRE(equilibria.size() == 82);
+	// (Stage 91); copper's hydroxo complexes and its hydroxide dissolving in base (Stage 92)
+	REQUIRE(equilibria.size() == 85);
 	CHECK(check_all(builtin_species(), honest, equilibria).empty());
 	const auto water = static_cast<size_t>(builtin::water.index);
 	const auto steam = static_cast<size_t>(builtin::steam.index);

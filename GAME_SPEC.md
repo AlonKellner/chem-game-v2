@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.91.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.92.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -802,6 +802,12 @@ gas also exchanges with the room's air by **diffusion** through its mouth.
     transport step, and nothing else (Stage 23; until then it multiplied every surface rate).
   - With this area the cube root of the amount moves linearly in time, so the step is exact: a
     solid that would dissolve many times over in a step is simply gone.
+  - **Bubbles stir** (Stage 92): the gas a cell's rated reactions made last step rises through its liquid, and its
+    buoyancy's power per kg of the liquid, g u (u the gas's volume flux at the room's pressure over the vessel's
+    cross-section: a bubble column's), adds to a stirrer's dissipation in the Sherwood number. Magnesium in still acid
+    stirs itself (Roald's unrotated bar within a third).
+  - **A solid a surface reaction makes** (Stage 92: copper put out on zinc) comes as grains no larger than its own
+    `grain_um`, as a precipitate does: a spongy deposit, not one lump.
 - **Solution law** (`"law": "solution"`, Stage 87): a reaction among dissolved species, in moles of the reaction per
   kg of the cell's solvent per second,
   `r = k(T) · Π m_j^{n_j} · (Π γ_j^{n_j} / γ‡) · f(A)`, `orders` its list of species `j` with their orders `n_j`
@@ -1109,6 +1115,20 @@ electrons; its equilibrium is its species' Gibbs energies, as the standard poten
   are colourless here. Starch's blue with iodine is not modelled: no constant or absorptivity for it is measured.
 - Only the reactions named react: permanganate does not oxidise iodide here, nor iron(III) iodide, nor persulfate
   thiosulfate or water; nothing decomposes permanganate or thiosulfate.
+
+**Metals and displacement** (Stage 92; `docs/TDD_92_METALS.md`; `docs/CURRICULUM.md`, step F's third part: experiments
+46, 11 and 28). Copper, zinc, magnesium, iron and silver as solids (NBS's rows), hydrogen as a gas.
+- **Displacement**: a metal in the solution of a less reactive one's ions dissolves as its own ions and puts the other
+  out (ten pairs among Mg > Zn > Fe > Cu > Ag), by the surface law, transport-controlled as measured (Sareyed-Dim's
+  cementation at the Levich rate): the rate is the ions' arrival, faster stirred. The reverse never runs (its affinity).
+- **Metals in acid**: magnesium transport-controlled (Roald 1950), zinc and iron at their measured corrosion rates in
+  1 M HCl (Abdallah et al., Diki et al.), copper and silver not at all.
+- **Copper hydroxide to oxide in base**: Cu(OH)₃⁻ and Cu(OH)₄²⁻ (MINTEQ v4), and black copper oxide growing from
+  Cu(OH)₄²⁻ (Cudennec and Lecerf's route) at a rate calibrated to a class's copper cycle: minutes hot in excess base,
+  months in water.
+- **Their look** (§12): each metal's diffuse colour is its normal-incidence reflectance by Fresnel from its measured
+  n + k, a deposit's fine grains darker (design); their long-wave emissivity polished metal's. No gloss: a solid is drawn
+  diffuse (true metal reflection at a solid's surface is open).
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -1138,6 +1158,8 @@ electrons; its equilibrium is its species' Gibbs energies, as the standard poten
   and FeSCN2+ one with nitrate, fitted with its constant to Below, Connick and Coppel's quotients at 0.40 and 1.00;
   and bounds every fast equilibrium at the activity model's range (§8).
 - Stage 91 adds redox in solution: manganese, iodine and the sulfur oxyanions, the iodine clock and two titrations.
+- Stage 92 adds the metals as solids, hydrogen, displacement, metals in acid, copper's hydroxo complexes and the base
+  route to copper oxide; bubbles stir; the activity series, the copper cycle and hydrogen's molar volume.
 
 ## 10. Property models
 

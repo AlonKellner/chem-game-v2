@@ -1837,3 +1837,93 @@ oxidises iodide at Jette and King's rate...`, `measured: triiodide's balance is 
 - **Starch with iodine**: not modelled. Its blue (about 615 nm for amylose, Pesek et al. 2022, Molecules 27, 8974) has no
   measured formation constant or absorptivity: "reliable extinction coefficients for the amylose-iodine-iodide complex are
   not known" (the same). The clock and the titration are read by triiodide's own colour.
+
+## Metals and displacement (Stage 92)
+
+The five metals as solids, hydrogen, displacement and metals in acid, copper's hydroxo complexes and the base route to
+copper oxide, and the metals' colours (`docs/TDD_92_METALS.md`; `docs/CURRICULUM.md`, step F's third part). Read
+2026-11-28. Gates (`native/tests/test_displacement.cpp`): `measured: the metals' and hydrogen's rows are NBS's...`,
+`measured: each metal reflects its measured n + k by Fresnel...`, `measured: copper is put out on zinc and iron as fast
+as transport brings it...`, `measured: magnesium dissolves in hydrochloric acid as fast as transport brings the
+acid...`, `measured: iron and zinc dissolve in 1 M hydrochloric acid...`, `measured: magnesium's own hydrogen stirs its
+acid as Roald measured...`, `measured: copper's hydroxo complexes are MINTEQ's...`.
+
+**The metals and hydrogen** (NBS 1982, read off the scan; the formation of each element nought):
+
+| Species | S° J/K | Cp° J/K | Density g/cm³ | Page |
+|---|---|---|---|---|
+| Cu(cr) | 33.150 | 24.435 | 8.960 | 2-154 |
+| Zn(cr) | 41.63 | 25.40 | 7.133 | 2-138 |
+| Mg(cr) | 32.68 | 24.89 | 1.740 | 2-260 |
+| Fe(cr) | 27.28 | 25.10 | 7.874 | 2-177 |
+| Ag(cr) | 42.55 | 25.351 | 10.50 | 2-160 |
+| H₂(g) | 130.684 | 28.824 | — | 2-38 |
+
+- JANAF (Chase 1998) agrees within 0.1 J/K. Densities: NIST's X-ray mass attenuation tables (Hubbell and Seltzer, Table
+  1), which call some of theirs nominal: medium.
+- A metal put out of its solution comes as grains of 20 µm (design: a displacement's spongy deposit; none measured).
+- **Hydrogen in air**: 0.779 cm²/s at 298.15 K, as T^1.75: Marrero and Mason 1972 (J. Phys. Chem. Ref. Data 1, 3),
+  Figure 39, pD = 3.64e-5 T^1.750 atm cm²/s, ±2 % (their Group II: by Blanc's law from H₂–N₂ and H₂–O₂, checked against
+  Ivakin and Suetin's closed tube); its H₂–N₂ 0.776 beside it. The oft-quoted 0.756 is the same at 20 C; Incropera's 0.41
+  (as Wikipedia's table gives it) matches nothing measured.
+- **Copper nitrate**: a retired formula unit, its ions' sum.
+
+**Displacement and magnesium in acid: transport-controlled** (the surface law, its surface far faster than transport,
+1000 mol/m²/s per mol/kg with no activation: transport decides, Sano's Sherwood and the ion's diffusion):
+
+| Quantity | Value | Source | Confidence |
+|---|---|---|---|
+| Cu²⁺ on iron | first order; k at the Levich rate within 10 % (300 to 750 rpm, 50 ppm, 25 C, Table 6); Ea 14.2 kJ/mol (3.4 kcal) | Sareyed-Dim 1971, Colorado School of Mines M.Sc. thesis T-1397 (open), read in the primary | high |
+| Cementation in general | first order, with √ω, Ea 3 to 5 kcal/mol (12.6 to 21 kJ/mol): Cu on Zn and Fe, Ag on Cu and Zn | Strickland and Lawson 1970–73 (Proc. Aust. IMM), as Sareyed-Dim's Appendix III and Agrawal and Kapoor 1982 (J. S. Afr. IMM 82, 106, open) give them | medium-high |
+| Mg in HCl | first order in HCl to about 0.1–0.5 N; k with rpm^0.71; Ea 4100 cal/mol (17.2 kJ/mol, Table VII, 25–45 C); k = 0.20 cm/min not rotated (Table V) | Roald 1950, Lehigh Ph.D. dissertation (open), read in the primary | high |
+
+- The model's: Ea 17.2 kJ/mol for copper on zinc and iron (the ions' diffusion and water's viscosity), 14.2 for
+  magnesium in acid (Roald's 17.2): each within the measured span.
+- **Not modelled**: a copper deposit speeding cementation 4–7 times once it covers the metal (Strickland and Lawson); a
+  ribbon's flat area (a piece is n equal spheres); natural convection at a grain (a still solution's transport is
+  diffusion's, Sherwood 2: the experiments shake their tubes).
+
+**The bubbles stir** (GAME_SPEC §7): the gas a cell's rated reactions make rises through its liquid, and its buoyancy's
+power per kg of the liquid is g u (a bubble column's), u the gas's volume flux at the room's pressure over the vessel's
+cross-section (its column's, else its liquid's volume to the 2/3); it adds to a stirrer's dissipation in Sano's
+Sherwood the next step. Checked against Roald's unrotated bar (an 11 mm bar, 10–15 cm² exposed, 4 L of acid): the model
+gives 0.264 cm/min at 0.1 mol/kg against his 0.20 (+32 %), still liquid alone 0.0076.
+
+**Iron and zinc in acid** (the user chose rates calibrated to class observation; measured corrosion rates were found):
+
+| Metal | Rate in 1 M HCl | Ea | Source |
+|---|---|---|---|
+| Iron (mild steel) | 451.06 µA/cm² at 298 K (Tafel, Table 4): 2.337e-5 mol/m²/s | 92.23 kJ/mol (weight loss 298–318 K, Table 3) | Diki, Coulibaly, Kassi and Trokourey 2021, J. Electrochem. Sci. Eng. 11, 97 (doi 10.5599/jese.952, open), aerated and unstirred |
+| Zinc (99.99 %) | 12.72 mm/year at 294 K (weight loss, Table 3): 4.40e-5 mol/m²/s | 16.484 kJ/mol (294–314 K, Table 4) | Abdallah, Al-Gorair et al. 2026, BMC Chemistry (doi 10.1186/s13065-026-01948-1, PMC13786569, open) |
+
+- First order in H⁺ (design: none measured). Each the blank of a corrosion-inhibitor study, one study each: medium-low.
+  Hauser 1984 (LBL-17461, a zinc disc at 1600 rpm, de-aerated) found 12 mA/cm², 15–20 times more: flow and impurity.
+  Kamel et al. 2025 (RSC Adv. 15, 8506; 99.2 % zinc) found 1.53 mg/cm²/h, near Abdallah's.
+- So in 1 M HCl magnesium (transport-limited) is far the fastest, zinc about twice iron, copper none: the series.
+
+**Copper's hydroxo complexes and the base route to copper oxide**:
+- Cu(OH)₃⁻ and Cu(OH)₄²⁻: MINTEQ v4 (minteq.v4.dat, PHREEQC's distribution, lines 854 and 862): log K −26.879 and
+  −39.98 from Cu²⁺ and water. MINTEQ gives no heat (its delta_h 0): the hydroxide's dissolving in base taken as nought
+  (design), so the complexes' solubility hardly moves with temperature (nought for the complex from the free ion would
+  carry water's ionisation heat and leave a thousand times less of it at 90 C than at 20 C; Stage 81's zinc hydroxo
+  complexes are written that way: Open). Cu(OH)₂ (s) 8.674 and tenorite (CuO) 7.644 beside them (lines 10959, 10963).
+- **The base route** (Cudennec and Lecerf 2003, Solid State Sci. 5, 1471, the abstract: the hydroxide dissolves as
+  Cu(OH)₄²⁻ and the oxide precipitates from it, "very fast" in base; no rate found): black copper oxide grows from
+  Cu(OH)₄²⁻ by the surface law, nucleating at 1e12 /kg/s per (S − 1), 3e9 mol/m²/s per mol/kg, Ea 60 kJ/mol, all
+  **calibrated** to a class's copper cycle (the user's choice): half black within two minutes at 90 C in 0.1 M excess
+  base, all of it in five; in water at 90 C (Fukuda's dry route alone, Stage 44) 4 % in five minutes; in base at 20 C
+  none.
+
+**Their colours** (the user's choice: diffuse, no gloss):
+- Each metal's reflectance at normal incidence by Fresnel, R = ((n − 1)² + k²)/((n + 1)² + k²), from its measured n + k
+  (refractiveindex.info, CC0, fetched 2026-11-28): copper and silver McPeak et al. 2015 (ACS Photonics 2, 326: template-
+  stripped films, 41 points in the visible), iron Johnson and Christy 1974 (Phys. Rev. B 9, 5056), magnesium Palm et al.
+  2018 (ACS Photonics 5, 4677: a 25 nm film), zinc Werner et al. 2009 (J. Phys. Chem. Ref. Data 38, 1013: from electron
+  energy-loss spectra; Querry 1987's visible values, n far above k, rejected). R: copper 0.51 at 400 nm to 0.98 at 780
+  (its red edge near 580), silver 0.97–0.99, iron 0.48–0.56, magnesium about 0.89, zinc about 0.86.
+- **A deposit darker** (design): grains under 100 µm reflect its Fresnel colour times copper 0.35, silver 0.2, zinc 0.3,
+  iron and magnesium 0.4, calibrated to how cemented copper and displaced silver look; no powder's reflectance measured
+  but iron powder's (USGS splib07, about 0.11 flat).
+- **Long wave**: emissivity 1 − R at 10 µm from each metal's long-wave n + k: copper 0.0082 (Ordal et al. 1985), silver
+  0.0082 (Yang et al. 2015), iron 0.0335 (Ordal et al. 1988), magnesium 0.0376 (Hagemann et al. 1975), zinc 0.0242
+  (Motulevich and Shubin 1969): polished metal.

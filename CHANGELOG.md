@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.92.0 (2026-11-28, Stage 92; awaiting the user's sign-off)
+
+- §7, §9, §12 (Stage 92, `docs/TDD_92_METALS.md`; `docs/CURRICULUM.md`, step F's third part: experiments 46, 11 and
+  28): **the metals** copper, zinc, magnesium, iron and silver as solids and **hydrogen** (NBS's rows; Marrero and
+  Mason's diffusion in air); **displacement**, ten pairs, transport-controlled as measured (Sareyed-Dim, Strickland and
+  Lawson); **metals in acid**: magnesium transport-controlled (Roald), zinc and iron at measured corrosion rates
+  (Abdallah et al., Diki et al.); **bubbles stir**: a cell's gas rising through its liquid adds g u to its dissipation;
+  a solid a surface reaction makes comes as its own grains; **copper's hydroxo complexes** (MINTEQ v4) and black copper
+  oxide growing from Cu(OH)₄²⁻ in hot base (calibrated, Cudennec and Lecerf's route); copper nitrate.
+- §12: each metal's diffuse colour from its measured n + k by Fresnel, a deposit darker; metals' long-wave emissivity.
+- §13.7: the experiments `activity_series`, `copper_cycle` (from copper nitrate) and `hydrogen_volume` (molar volume
+  and R).
+
 ## 0.91.1 (2026-11-28, Stage 89, merged after Stages 85, 91 and 93; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 89, `docs/TDD_89_FLOW.md`; the second of the two stages the user asked for after Stage 79; the user's
