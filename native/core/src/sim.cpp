@@ -428,8 +428,11 @@ void Simulation::react() {
 	const auto cells = static_cast<size_t>(world_.cell_count());
 	reaction_remainder_.resize(cells * reactions_.size(), 0.0);
 	nucleation_remainder_.resize(cells * reactions_.size(), 0.0);
+	bubbling_.resize(cells, 0.0);
+	std::vector<double> bubbles(cells, 0.0); // (Stage 92) what each cell's gas will stir it by next step, W/kg
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
+		double gas_made = 0.0; // (Stage 92) mol of gas the rated reactions make in it this step
 		if (world_.meta(cell).reservoir || world_.meta(cell).frozen) {
 			continue; // (Stage 61: a frozen cell takes part in nothing)
 		}
@@ -496,7 +499,8 @@ void Simulation::react() {
 				const bool consumed = forward == (nu < 0); // this direction uses the solid up
 				const SpeciesDef &solid = table.species(kinetics.in);
 				// mol/m^2/s of the solid: at its surface and by transport, in series (GAME_SPEC §7), as they are at the step's start
-				const double dissipation = dissipation_per_kg(table, state, world_.meta(cell).stirring); // W/kg of its liquid
+				// W/kg of its liquid: a stirrer's, and (Stage 92) the bubbles' the cell's reactions gave off last step
+				const double dissipation = dissipation_per_kg(table, state, world_.meta(cell).stirring) + bubbling_[c];
 				const double flux = surface_steps(table, state, reaction, probe.temperature(), a, dissipation, &world_.meta(cell)).both * per;
 				// N equal spheres of n mol: area = (36 pi)^(1/3) N^(1/3) (n v)^(2/3), so
 				// dn/dt = -+ g n^(2/3) and n^(1/3) moves linearly: exact over the step
@@ -559,6 +563,12 @@ void Simulation::react() {
 			}
 			const Refusal refused = transform(cell, reaction, forward ? size : -size);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			for (const Term &term : reaction.terms()) {
+				const int32_t made = forward ? term.nu : -term.nu;
+				if (made > 0 && table.species(term.species).phase == Phase::Gas) {
+					gas_made += static_cast<double>(made) * static_cast<double>(size) * MOL_PER_QUANTUM;
+				}
+			}
 			if (surface) {
 				const int64_t nuclei = born < size ? born : size;
 				if (nuclei > 0 && state.amount[in] > 0) {
@@ -600,7 +610,35 @@ void Simulation::react() {
 				}
 			}
 		}
+		// (Stage 92) the gas the cell's reactions made rises through its liquid as bubbles: their buoyancy's power per kg
+		// of the liquid is g u (a bubble column's), u the gas's volume flux at the room's pressure over the vessel's
+		// cross-section (its column's; else its liquid's volume to the 2/3); it stirs transport to a surface next step
+		if (gas_made > 0.0) {
+			const CellState &now = world_.snapshot_cell(cell);
+			double liquid_kg = 0.0;
+			for (size_t s = 0; s < now.amount.size(); ++s) {
+				const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+				if (now.amount[s] > 0 && (def.phase == Phase::Liquid || def.phase == Phase::Aqueous)) {
+					liquid_kg += static_cast<double>(now.amount[s]) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(SpeciesId{ static_cast<int32_t>(s) })) * 1e-9;
+				}
+			}
+			double area = 0.0;
+			for (const Column &col : columns_) {
+				if (std::find(col.cells.begin(), col.cells.end(), cell) != col.cells.end()) {
+					area = world_.meta(col.top).column_area;
+				}
+			}
+			if (!(area > 0.0) && liquid_kg > 0.0) {
+				area = cbrt(liquid_kg * 1e-3 * liquid_kg * 1e-3); // (a litre a kg)
+			}
+			double kelvin = 0.0;
+			if (liquid_kg > 0.0 && area > 0.0 && temperature(cell, kelvin)) {
+				const double flux = gas_made * GAS_CONSTANT * kelvin / P_ATMOSPHERE / step_seconds_; // m^3/s
+				bubbles[c] = 9.80665 * flux / area; // (standard gravity)
+			}
+		}
 	}
+	bubbling_ = std::move(bubbles);
 }
 
 // Heat conduction (GAME_SPEC §5). Each open edge with a conductance relaxes

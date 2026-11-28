@@ -187,7 +187,7 @@ TEST_CASE("measured: magnesium dissolves in hydrochloric acid as fast as transpo
 	CHECK(near(ea, 17.2e3, 0.25));
 }
 
-TEST_CASE("measured: iron dissolves in 1 M hydrochloric acid at Diki et al.'s corrosion rate, and faster warm at their activation energy (Stage 92)") {
+TEST_CASE("measured: iron and zinc dissolve in 1 M hydrochloric acid at Diki et al.'s and Abdallah et al.'s corrosion rates and activation energies (Stage 92)") {
 	using namespace builtin;
 	// Diki, Coulibaly, Kassi and Trokourey 2021 (J. Electrochem. Sci. Eng. 11, 97), Table 4: mild steel in 1 M HCl at
 	// 298 K, aerated and unstirred, the blank's corrosion current 451.06 uA/cm2: 451.06e-6 / 2F mol of iron a cm2 a
@@ -202,6 +202,20 @@ TEST_CASE("measured: iron dissolves in 1 M hydrochloric acid at Diki et al.'s co
 	MESSAGE("iron in 1 M HCl: " << surface(298.15) << " mol/m2/s (Diki et al. " << per_m2 << ")");
 	CHECK(near(surface(298.15), per_m2, 0.01));
 	CHECK(near(activation(surface(298.15), surface(318.15), 298.15, 318.15), 92.23e3, 0.01));
+	// zinc: Abdallah, Al-Gorair et al. 2026 (BMC Chemistry, doi 10.1186/s13065-026-01948-1), 99.99 % zinc in 1.0 M HCl,
+	// Table 3: the blank's weight loss 12.72 mm/year at 294 K (zinc 7.133 g/cm3, 65.38 g/mol); Table 4: Ea 16.484 kJ/mol
+	const Reaction &z = shipped(reaction::zinc_in_acid);
+	const auto zinc_surface = [&](double kelvin) {
+		Cell c;
+		c.put(hydrogen_ion, 1.0).put(chloride_ion, 1.0).put(zinc, 0.01, 10);
+		return steps_of(c, z, kelvin, 0.0).surface;
+	};
+	const double zinc_per_m2 = 12.72e-3 * 7133.0 / 0.06538 / (365.25 * 86400.0);
+	MESSAGE("zinc in 1 M HCl: " << zinc_surface(294.15) << " mol/m2/s (Abdallah et al. " << zinc_per_m2 << ")");
+	CHECK(near(zinc_surface(294.15), zinc_per_m2, 0.01));
+	CHECK(near(activation(zinc_surface(294.15), zinc_surface(314.15), 294.15, 314.15), 16.484e3, 0.01));
+	// so magnesium, at its transport limit, fizzes far faster than zinc, and zinc faster than iron
+	CHECK(zinc_surface(298.15) > surface(298.15));
 }
 
 TEST_CASE("metals: none displaces a more reactive one; zinc put in copper sulfate gives copper as fine grains, every invariant held (Stage 92)") {
@@ -244,4 +258,54 @@ TEST_CASE("metals: none displaces a more reactive one; zinc put in copper sulfat
 		CHECK(particle_diameter(builtin_species(), w.snapshot_cell(cell), copper) <= 20e-6 * 1.001);
 		CHECK(w.particles(cell, zinc) == 10);
 	});
+}
+
+TEST_CASE("measured: magnesium's own hydrogen stirs its acid as Roald measured in still acid, the bubbles' power g u (Stage 92)") {
+	using namespace builtin;
+	// Roald 1950: an 11 mm bar, 10 to 15 cm2 exposed, in 4 L of HCl at 25 C, not rotated: k = 0.20 cm/min (Table V,
+	// 0 rpm; the HCl's flux over its concentration), where still liquid would carry it some fifty times slower. Here a
+	// bar of the same volume and area (5.8 g as two equal grains, 12.5 cm2), 4 kg of 0.1 mol/kg HCl, no stirrer
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("beaker");
+	const CellId bath = b.add_reservoir("bath", 298.15);
+	b.add_edge(cell, bath, PHASES_NONE, 1e7);
+	bool ok = false;
+	b.set_amount(cell, water, amount_from_mol(4.0 * 55.508, ok));
+	b.set_amount(cell, hydrogen_ion, amount_from_mol(0.4, ok)).set_amount(cell, chloride_ion, amount_from_mol(0.4, ok));
+	b.set_amount(cell, magnesium, amount_from_mol(5.8 / 24.305, ok));
+	b.set_particles(cell, magnesium, 2);
+	b.set_temperature(cell, 298.15);
+	std::string why;
+	auto world = b.build(&why);
+	REQUIRE_MESSAGE(world.has_value(), why);
+	Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	StepTrace trace;
+	const auto mg = [&] { return static_cast<double>(sim.world().amount(cell, magnesium).quanta) * MOL_PER_QUANTUM; };
+	for (int step = 0; step < 600; ++step) { // ten seconds for the bubbles to start
+		sim.step(trace);
+	}
+	const double before = mg();
+	for (int step = 0; step < 1800; ++step) {
+		sim.step(trace);
+	}
+	const Violations v = check_all(builtin_species(), trace, sim.equilibria());
+	REQUIRE_MESSAGE(v.empty(), v.front());
+	const double rate = (before - mg()) / 30.0; // mol Mg/s
+	const CellState &state = sim.world().snapshot_cell(cell);
+	const double d = particle_diameter(builtin_species(), state, magnesium);
+	const double area = 2.0 * 3.141592653589793 * d * d;
+	const double acid = static_cast<double>(state.amount[static_cast<size_t>(hydrogen_ion.index)]) * MOL_PER_QUANTUM / 4.0e-3; // mol/m3
+	const double k = 2.0 * rate / area / acid; // the HCl's flux over its concentration, m/s
+	// still liquid alone: Sherwood 2
+	const SurfaceSteps still = surface_steps(builtin_species(), state, shipped(reaction::magnesium_in_acid), 298.15,
+			[&] {
+				bool defined = false;
+				return affinity(builtin_species(), state, shipped(reaction::magnesium_in_acid).terms(), 298.15, defined);
+			}(),
+			0.0);
+	const double k_still = 2.0 * still.both / acid;
+	MESSAGE("magnesium in still 0.1 M HCl: k " << k * 6000.0 << " cm/min (Roald 0.20), still liquid alone " << k_still * 6000.0);
+	CHECK(k > 0.5 * 0.20 / 6000.0);
+	CHECK(k < 2.0 * 0.20 / 6000.0);
+	CHECK(k > 10.0 * k_still);
 }
