@@ -144,7 +144,7 @@ flask's air through its nozzle at the nozzle's pace).
 | 89.6 | F1 and its self-test; T1's exemption removed | Done |
 | 89.7 | Stage 79's machinery removed; the lab, the experiments and their tests measured again; a nozzle's size | Done: the glassware's own 2 mm nozzle kept (20 mL/s of water through two and the tube at a thumb's push: a second for the tutorial's 20 mL); the `syringes` tutorial's water pair held until its plunger gets there |
 | 89.8 | Sealed vessels joined with no conduit (Stage 28's `equalize`) | Left as they are, with reasons (Open) |
-| 89.9 | The step's cost; docs; `make gates`; the user's sign-off | |
+| 89.9 | The step's cost; docs; `make gates`; the user's sign-off | `chem_tool study flow`; docs done; main's Stages 85 and 91 merged in (the spec 0.91.1); `make gates` passed (2026-11-28: core, ASan and UBSan, ctest's 1052 entries, the Godot suite, the goldens unchanged; the step's cost 1,344,641 instructions on the demo, +0.3 % against main's at ff5ac39); the user's sign-off to come |
 
 ## Tests
 
@@ -170,6 +170,10 @@ flask's air through its nozzle at the nozzle's pace).
 - `native/tests/test_syringe.cpp` (Stage 79's, on the closure): a sealed syringe of water now gives 2.1 μL of its
   50 mL to a hand's whole push (195.9 kPa) and is let out to 6.8 kPa by its pull, no cavity; a long thin tube stands
   its law's 388.6 Pa across it (Poiseuille's 373).
+- `chem_tool study flow` (a ctest entry): the law against the Princeton fit and the measured discharge, row by row;
+  what a syringe's nozzle and two on the tube let through from 10 Pa to 2 bar, water and air; two syringes of water
+  through a thumb's push, 24.73 mL/s crossing where the law at the pressures solved gives 24.74, 30.51 mL in and
+  30.51 out, every invariant on every step.
 - The lab's 13 syringe tests, the six experiments on gas syringes and the lab's random hands pass unchanged, but the
   `syringes` tutorial played at a person's pace: see Found.
 
