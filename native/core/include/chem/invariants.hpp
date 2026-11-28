@@ -155,6 +155,10 @@ Violations check_P2(const SpeciesTable &table, const StepTrace &trace);
 // (Stage 88) W2: work between cells (LedgerEntry::work) is energy alone along a sealed vessel's column, to or from a
 // layer that stands at its pressure
 Violations check_W2(const SpeciesTable &table, const StepTrace &trace);
+// (Stage 89) F1: each crossing of a conduit the closure made (StepTrace::crossed) runs from the higher of the two
+// pressures it was solved at to the lower, at no more than the conduit's law passes there, for no longer than the
+// step, and carries its amounts' enthalpy at the giver's state; and each ledger entry marked a crossing is one of them
+Violations check_F1(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.

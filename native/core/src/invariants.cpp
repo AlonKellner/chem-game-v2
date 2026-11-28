@@ -608,11 +608,10 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				gas_only = gas_only && table.has(d.species) && table.species(d.species).phase == Phase::Gas;
 			}
 			const auto to = static_cast<size_t>(entry.to.index);
-			// (Stage 79: gas shared within a space a piston moved this step runs as the push runs, not by the pressures a
-			// replay of the step's ledger reads at this entry: T2 holds it)
-			const bool pushed_space = trace.meta[from].piston.travel != 0.0 || trace.meta[to].piston.travel != 0.0;
-			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed && pushed_space) {
-				// (as the push runs)
+			// (Stage 89: a crossing the closure solved runs down the pressures the step ends at, found with every other
+			// crossing and every plunger's move of its step, not those a replay of the ledger reads at this entry: F1's)
+			if (entry.crossing) {
+				// (F1)
 			} else if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
 				// cells sealed together (Stage 28): from the higher pressure to the lower
 				const Thermal a = thermal_state(table, replay.cells[from], &trace.meta[from]), b = thermal_state(table, replay.cells[to], &trace.meta[to]);
@@ -1110,6 +1109,90 @@ Violations check_W2(const SpeciesTable &, const StepTrace &trace) {
 	return out;
 }
 
+Violations check_F1(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	const auto say = [&](const char *format, long long row, double x, double y) {
+		if (out.size() < MAX_MESSAGES) {
+			char buffer[240];
+			std::snprintf(buffer, sizeof buffer, format, static_cast<long long>(trace.step), row, x, y);
+			out.push_back(buffer);
+		}
+	};
+	// each ledger entry marked a crossing is one of the step's crossings, and each crossing has its entry
+	std::vector<uint8_t> matched(trace.ledger.size(), 0);
+	for (size_t r = 0; r < trace.crossed.size(); ++r) {
+		const Crossed &x = trace.crossed[r];
+		const auto row = static_cast<long long>(r);
+		if (x.edge.index < 0 || static_cast<size_t>(x.edge.index) >= trace.edges.size()) {
+			say("F1: step %lld: crossing %lld names no edge (%g, %g)", row, 0.0, 0.0);
+			continue;
+		}
+		const Edge &e = trace.edges[static_cast<size_t>(x.edge.index)];
+		const bool forward = x.from == e.a && x.to == e.b, back = x.from == e.b && x.to == e.a;
+		if (e.conduit.count <= 0 || (!forward && !back)) {
+			say("F1: step %lld: crossing %lld is along no conduit between its two cells (%g, %g)", row, 0.0, 0.0);
+			continue;
+		}
+		if (!(x.from_pa > x.to_pa)) {
+			say("F1: step %lld: crossing %lld runs from %.9g Pa to %.9g Pa: not down the pressure", row, x.from_pa, x.to_pa);
+		}
+		// no more than its law passes at those pressures in the time it ran, within the step
+		const double law = x.liquid ? liquid_rate(e.conduit, x.from_pa, x.to_pa, x.density, x.viscosity, back)
+									: gas_rate(e.conduit, x.from_pa, x.to_pa, x.read_kelvin, x.density, x.gamma, x.viscosity, back);
+		if (!(x.rate <= law * (1.0 + 1e-9))) {
+			say("F1: step %lld: crossing %lld runs at %.9g kg/s, its conduit's law %.9g", row, x.rate, law);
+		}
+		if (!(x.seconds >= 0.0) || !(x.seconds <= trace.seconds * (1.0 + 1e-9))) {
+			say("F1: step %lld: crossing %lld runs for %.9g s of a step of %.9g", row, x.seconds, trace.seconds);
+		}
+		if (!(x.kg >= 0.0) || !(x.kg <= x.rate * x.seconds * (1.0 + 1e-9) + 1e-18)) {
+			say("F1: step %lld: crossing %lld passes %.9g kg, its rate and time %.9g", row, x.kg, x.rate * x.seconds);
+		}
+		// its entry: those amounts, of the phase that stood at the port, carrying their enthalpy at the giver's state
+		bool found = false;
+		for (size_t i = 0; i < trace.ledger.size() && !found; ++i) {
+			const LedgerEntry &entry = trace.ledger[i];
+			if (matched[i] || !entry.crossing || entry.kind != LedgerEntry::Kind::Transfer || !(entry.edge == x.edge) || !(entry.from == x.from) || !(entry.to == x.to) ||
+					entry.energy.quanta != x.energy) {
+				continue;
+			}
+			matched[i] = 1;
+			found = true;
+			double kg = 0.0;
+			bool phase = true;
+			for (const SpeciesAmount &d : entry.delta) {
+				if (!table.has(d.species)) {
+					phase = false;
+					continue;
+				}
+				const Phase is = table.species(d.species).phase;
+				phase = phase && (x.liquid ? is == Phase::Liquid || is == Phase::Aqueous : is == Phase::Gas);
+				kg += static_cast<double>(d.amount.quanta) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(d.species)) * 1e-9;
+			}
+			if (!phase) {
+				say("F1: step %lld: crossing %lld moves what did not stand at its port (%g, %g)", row, 0.0, 0.0);
+				continue;
+			}
+			if (std::fabs(kg - x.kg) > 1e-12 * x.kg + 1e-21) {
+				say("F1: step %lld: crossing %lld says %.9g kg, its entry moves %.9g", row, x.kg, kg);
+			}
+			const double carried = held_at(table, content_of(table, entry.delta), x.kelvin, x.from_pa).enthalpy / JOULE_PER_QUANTUM;
+			if (std::fabs(carried - static_cast<double>(entry.energy.quanta)) > 0.5 + 1e-12 * std::fabs(carried)) {
+				say("F1: step %lld: crossing %lld carries %.12g quanta, its amounts' enthalpy at the giver's state %.12g", row, static_cast<double>(entry.energy.quanta), carried);
+			}
+		}
+		if (!found) {
+			say("F1: step %lld: crossing %lld has no entry in the step's ledger (%g, %g)", row, 0.0, 0.0);
+		}
+	}
+	for (size_t i = 0; i < trace.ledger.size(); ++i) {
+		if (trace.ledger[i].crossing && !matched[i]) {
+			say("F1: step %lld: entry %lld is marked a crossing, and is none of the step's (%g, %g)", static_cast<long long>(i), 0.0, 0.0);
+		}
+	}
+	return out;
+}
+
 Violations check_W1(const SpeciesTable &, const StepTrace &trace) {
 	Violations out;
 	if (trace.meta.size() != trace.after.cells.size()) {
@@ -1160,7 +1243,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2, check_F1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

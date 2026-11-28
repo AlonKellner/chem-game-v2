@@ -1387,6 +1387,73 @@ AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double 
 	return out;
 }
 
+Content content_of(const SpeciesTable &table, const CellState &cell) {
+	Content out;
+	const MatterSums sums = matter_sums(table, cell);
+	const Volumes volumes = volumes_of(table, cell);
+	out.known = sums.known && volumes.defined;
+	out.formation = sums.formation;
+	out.capacity = sums.capacity;
+	out.gas = gas_mol(table, cell);
+	out.fixed = volumes.fixed;
+	out.expanding = volumes.expanding;
+	return out;
+}
+
+Content content_of(const SpeciesTable &table, std::span<const SpeciesAmount> amounts) {
+	Content out;
+	for (const SpeciesAmount &a : amounts) {
+		const SpeciesDef &def = table.species(a.species);
+		const double mol = static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM;
+		if (mol == 0.0) {
+			continue;
+		}
+		if (!def.has_thermo) {
+			out.known = false;
+		}
+		out.formation += mol * def.hf;
+		out.capacity += mol * def.cp;
+		if (def.wall) {
+			continue;
+		}
+		if (def.phase == Phase::Gas) {
+			out.gas += mol;
+		} else if (def.phase == Phase::Aqueous) {
+			out.expanding += mol * def.molar_volume;
+		} else {
+			if (!(def.molar_volume > 0.0)) {
+				out.known = false;
+			}
+			(def.phase == Phase::Liquid ? out.expanding : out.fixed) += mol * def.molar_volume;
+		}
+	}
+	return out;
+}
+
+Held held_at(const SpeciesTable &table, const Content &content, double temperature, double pressure) {
+	const Pressed model{ content.formation, content.capacity, content.gas, content.fixed, content.expanding, pressure - P_ATMOSPHERE };
+	Pressed::State state;
+	model.at(table, temperature, state);
+	return Held{ state.enthalpy, state.volume };
+}
+
+AtPressure at_pressure(const SpeciesTable &table, const Content &content, double enthalpy, double pressure, double guess) {
+	AtPressure out;
+	if (!content.known || !(pressure > 0.0) || !(content.capacity > 0.0)) {
+		return out;
+	}
+	const Pressed model{ content.formation, content.capacity, content.gas, content.fixed, content.expanding, pressure - P_ATMOSPHERE };
+	Pressed::State state;
+	if (!model.solve(table, enthalpy, guess, state)) {
+		return out;
+	}
+	out.defined = true;
+	out.temperature = state.temperature;
+	out.volume = state.volume;
+	out.gas = model.gas * GAS_CONSTANT * state.temperature / pressure;
+	return out;
+}
+
 double volume_at(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double pressure) {
 	double fixed = 0.0, expanding = 0.0, gas = 0.0; // m^3 (the table's), mol
 	for (const SpeciesAmount &a : amounts) {

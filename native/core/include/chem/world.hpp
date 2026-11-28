@@ -1,6 +1,7 @@
 #pragma once
 
 #include "chem/quantity.hpp"
+#include "chem/conduit.hpp"
 #include "chem/species.hpp"
 
 #include <cstdint>
@@ -75,10 +76,11 @@ struct Edge {
 	// the length it diffuses along, m (the integral of dz / A(z) inverted); 0: none. Each gas crosses down its
 	// mole fraction's difference at its own diffusion in air.
 	double exchange = 0.0;
-	// (Stage 79, GAME_SPEC §6) A tube's flow: what it lets through, Poiseuille's pi r^4 / (8 L) over its pieces in
-	// series, m^3; 0: none held back (what crosses it runs to one pressure at once, as before). Between sealed vessels
-	// a liquid runs through it at G dP / viscosity, a gas at G (P_a^2 - P_b^2) / (2 viscosity R T) mol a second.
-	double flow = 0.0;
+	// (Stage 89, GAME_SPEC §6, Flow between vessels) What holds back what crosses it: round pieces in series from a to b
+	// (chem/conduit.hpp: a nozzle, a tube, a nozzle), its law from their geometry. With one, each end keeps its own
+	// pressure and it is no gas path (a vessel open to the room only through it is sealed from the room); with none,
+	// what crosses runs to one pressure at once, as before.
+	Conduit conduit{};
 	// (Stage 79) where it meets each end's vessel: at its foot (bit 1: a's, bit 2: b's), where a vessel gives its liquid
 	// while it holds one; else at its top, where it gives its gas (a syringe's nozzle in a flask's neck: its foot, the
 	// flask's top)
@@ -202,6 +204,9 @@ struct LedgerEntry {
 	// (Stage 88) Transfer: its energy is work, not heat: what a sealed vessel's cell gives the one over it as it grows
 	// against the vessel's pressure (World::work). No heat's direction is asked of it (T1); W2's.
 	bool work = false;
+	// (Stage 89) Transfer: a crossing between two vessels as the closure solved it, with the others of its step: down the
+	// pressures the step ends at, not those a replay of the ledger reads at this entry (T1); F1's.
+	bool crossing = false;
 	double volume = 0.0, over = 0.0, cushion = 0.0; // Resize: the cell's volume (m^3), its pressure over the room's (Pa) and its cushion (m^3) from here on
 };
 
@@ -213,6 +218,19 @@ struct Exchanged {
 	SpeciesId species;
 	double x_from = 0.0, x_to = 0.0, gas_from = 0.0, gas_to = 0.0;
 	int64_t moved = 0;
+};
+
+// One crossing of a conduit in a step (Stage 89), as the closure solved it: from the vessel at the higher pressure, the
+// two pressures and the giver's temperature as the round ended, the mass that crossed and the energy with it, and what
+// the conduit's law was asked: the rate it gave and the time it ran, a liquid's density or a gas's molar mass, its
+// viscosity, a gas's heat capacities' ratio and the temperature they were read at.
+struct Crossed {
+	EdgeId edge;
+	CellId from, to;
+	double from_pa = 0.0, to_pa = 0.0, kelvin = 0.0, kg = 0.0, rate = 0.0, seconds = 0.0;
+	int64_t energy = 0;
+	bool liquid = false;
+	double density = 0.0, viscosity = 0.0, gamma = 0.0, read_kelvin = 0.0; // (density: a gas's molar mass, kg/mol)
 };
 
 // One step as the invariants see it (chem/invariants.hpp).
@@ -237,6 +255,9 @@ struct StepTrace {
 	std::vector<uint8_t> starved;
 	// set by the simulation: every gas exchanged along an edge this step (Stage 50), for E1
 	std::vector<Exchanged> exchanged;
+	// set by the simulation: every crossing of a conduit this step (Stage 89), for F1; and the step's seconds
+	std::vector<Crossed> crossed;
+	double seconds = 0.0;
 };
 
 // Why a call changed nothing.
@@ -434,8 +455,12 @@ public:
 	Refusal set_power(EdgeId edge, double power);
 	// an edge's gas exchange by diffusion, m (Stage 50: area over length; 0: none); between steps
 	Refusal set_exchange(EdgeId edge, double exchange);
-	// (Stage 79) a tube's flow (Edge::flow), between steps; refused for a value not finite and at least 0
-	Refusal set_flow(EdgeId edge, double flow, uint8_t foot = 0);
+	// (Stage 89) an edge's conduit (Edge::conduit; none: a count of 0) and where it meets each end's vessel
+	// (Edge::foot), between steps; refused for a piece of no bore or no length (BadValue), and where it would seal a
+	// rigid cell that is not full at the room's pressure (WouldSeal, as `disconnect`)
+	Refusal set_conduit(EdgeId edge, const Conduit &conduit, uint8_t foot = 0);
+	// (Stage 89) the last transfer was a crossing the closure solved (LedgerEntry::crossing)
+	void mark_crossing();
 	// stirring: 1 at rest; between steps only
 	Refusal set_mixing(CellId cell, double mixing);
 	// what a stirrer's turning dissipates in a cell's liquid, W (Stage 49): at any time (a rate, as a drain's)
@@ -492,6 +517,7 @@ private:
 	bool known(CellId cell) const { return cell.index >= 0 && cell.index < cell_count(); }
 	void tend_particles(CellState &cell, SpeciesId species);
 	void refresh_sealed(); // each rigid cell's `sealed` from the edges (V3)
+	bool full_where_sealed(const std::vector<CellMeta> &was) const; // (a cell newly sealed is full at the room's pressure)
 
 	const SpeciesTable *table_ = nullptr;
 	std::vector<std::string> names_;

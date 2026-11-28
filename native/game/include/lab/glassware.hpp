@@ -102,8 +102,6 @@ double seals();
 // (Stage 79) the tubing that joins two syringes' nozzles: its bore and length, cm (data/glassware.json: tubing)
 double tubing_bore();
 double tubing_length();
-// a bore's flow over a length, Poiseuille's pi r^4 / (8 L), m^3 (cm in); pieces in series: 1 / sum of 1 / each
-double poiseuille(double bore_cm, double length_cm);
 // how far over the room's a vessel made as no glassware holds, Pa (data/glassware.json: burst_kpa)
 double burst_default();
 

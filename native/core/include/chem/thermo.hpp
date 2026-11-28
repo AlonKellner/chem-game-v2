@@ -291,6 +291,35 @@ struct AtPressure {
 	double temperature = 0.0, volume = 0.0, gas = 0.0; // K, m^3, and its gas's share of that volume
 };
 AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double energy, double volume, double pressure);
+// (Stage 89, GAME_SPEC §6, Flow between vessels) What a state at a pressure is made from, each sum linear in the
+// amounts: a cell's content, or a share of it (what crosses a conduit). A wall's material is in its heat capacity and
+// takes no room.
+struct Content {
+	bool known = true; // false: a species of it has no thermodynamic data, or no volume
+	double formation = 0.0, capacity = 0.0; // J at T0, J/K
+	double gas = 0.0; // mol
+	double fixed = 0.0, expanding = 0.0; // m^3 at the table's state: its solids', and its liquids' and solutes'
+	Content &add(const Content &other, double share = 1.0) {
+		known = known && other.known;
+		formation += share * other.formation;
+		capacity += share * other.capacity;
+		gas += share * other.gas;
+		fixed += share * other.fixed;
+		expanding += share * other.expanding;
+		return *this;
+	}
+};
+Content content_of(const SpeciesTable &table, const CellState &cell);
+Content content_of(const SpeciesTable &table, std::span<const SpeciesAmount> amounts);
+// A content at a temperature and a pressure: its enthalpy, J (what it carries crossing at that state: the table's and
+// what the pressure adds, `enthalpy_over`), and the volume it takes, m^3.
+struct Held {
+	double enthalpy = 0.0, volume = 0.0;
+};
+Held held_at(const SpeciesTable &table, const Content &content, double temperature, double pressure);
+// The temperature at which a content holds `enthalpy` J at a pressure, and the volume it takes there (`guess`: where to
+// begin, K; 0: from its heat capacity). Not defined without data, with nothing in it, or at no pressure.
+AtPressure at_pressure(const SpeciesTable &table, const Content &content, double enthalpy, double pressure, double guess = 0.0);
 // (Stage 88) The volume these amounts take at a temperature and a pressure, m^3: a solid's the table's, a liquid's or
 // a solute's grown with the temperature and squeezed by the pressure, a gas's n R T / P. What moves between a sealed
 // vessel's cells takes it with it.
