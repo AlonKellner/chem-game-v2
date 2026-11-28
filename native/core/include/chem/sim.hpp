@@ -65,6 +65,15 @@ double fountain_reach(double momentum, double buoyancy);
 // limited instead by the heat its change gives out or takes in, carried between its surface and the liquid:
 // Nu k / d (T - T_eq) / |dH| per m^2, T - T_eq = A T / dH, Nu as Sano's with Pr for Sc (2 at rest).
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta = nullptr);
+// (Stage 87, GAME_SPEC §7) A solution law's rate, mol per kg of the cell's solvent per second, without its affinity
+// factor: k(T) prod_j m_j^order_j times their activity factor (`rate_activity`, Brønsted and Bjerrum's), the molalities as
+// `molality` reads them; 0 with no liquid.
+double solution_rate(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, double temperature);
+// Its extent over a step of `seconds`, in quanta, in the direction `forward`: `factor` the affinity factor's size and
+// `nu` the size of `in`'s coefficient. Forward, exact in `in`'s molality with the other species held (order 1:
+// m e^(-nu k' t); order n: (m^(1-n) + (n-1) nu k' t)^(1/(1-n)), nought where that comes to nothing); backward, the
+// rate as it is at the step's start.
+double solution_extent(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, int32_t nu, double rt, double factor, bool forward, double seconds);
 // Primary nucleation per kg of solvent per second over `nucleation` (GAME_SPEC §9): (S - 1)^order, or (Stage 71) where
 // the kinetics give a barrier, e^(-B / ln^2 S); `ln_s` = A / RT, 0 where it is not supersaturated
 double primary_nucleation(const Kinetics &kinetics, double ln_s);
@@ -195,6 +204,16 @@ private:
 	void stratify(const Column &column);
 	std::vector<Column> columns_;
 	uint64_t columns_version_ = UINT64_MAX;
+	// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel sized: the one pressure at which its top holds what
+	// its layers leave, each cell at it with the work of its change of volume (World::work); true when anything moved.
+	// Each column's cells' revisions as it was last sized: one unchanged is sized already.
+	bool size_vessel(const Column &column);
+	void size_vessels();
+	Refusal work(EdgeId edge, CellId from, Energy energy); // World::work, with the step's flows
+	// (Stage 88) what was lifted out of a sealed vessel's layer into its top takes its volume with it: the layer's taken
+	// volume less by `m3`, the top's more
+	void lift_volume(CellId layer, CellId top, double m3);
+	std::vector<std::vector<uint64_t>> sized_;
 
 	World world_;
 	std::vector<Reaction> reactions_; // with a rate law

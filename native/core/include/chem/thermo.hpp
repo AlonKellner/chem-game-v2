@@ -110,6 +110,10 @@ SolventPoint solvent_at(const SpeciesTable &table, double temperature);
 // Stage 67 (GAME_SPEC §6): the solvent's density at T at one atmosphere, kg/m^3 (Kell's form, data/solutions.json's
 // density; beyond its range its value and slope at the end), and its first and second derivatives by T; 0 with none
 double solvent_density(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
+// Stage 88 (GAME_SPEC §6, Liquids that give): the solvent's isothermal compressibility at T at one atmosphere, 1/Pa
+// (Kell's form, data/solutions.json's compressibility; beyond its range its value and slope at the end), and its first
+// and second derivatives by T; 0 with none (a sealed cell's liquids then do not give)
+double compressibility(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
 // What a liquid's and a solute's volume at T is of the table's (at 25 C): rho(25 C) / rho(T), and its derivatives by
 // T (1/K, 1/K^2); 1 where the solvent's density is not known.
 double expansion(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
@@ -215,6 +219,9 @@ private:
 	// (J) and of n_i Cp_i (J/K), its gas (mol), its volume, and its solids' and its liquids' (at 25 C) volumes (m^3);
 	// what a quantum of extent adds to the last two
 	bool sealed_ = false;
+	// (Stage 88) a sealed vessel's layer, at its vessel's pressure over the room's: its enthalpy there stands
+	bool pressed_ = false;
+	double over_ = 0.0, cushion_ = 0.0, pressure_ = P_ATMOSPHERE; // its pressure as it was sized, its cushion, its pressure now
 	double energy_ = 0.0, formation_ = 0.0, cp_ = 0.0, gas_mol_ = 0.0, volume_ = 0.0, fixed_ = 0.0, expanding_ = 0.0;
 	double fixed_step_ = 0.0, expanding_step_ = 0.0;
 };
@@ -262,6 +269,11 @@ bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<c
 // K (A + B x) / (L + D x), so the bound is exact. A solution past the range already is left to `stands`: `most`.
 int64_t within_range(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms, bool forward, int64_t most);
 
+// (Stage 87, GAME_SPEC §7) A solution law's activity factor, as its ln: prod_j gamma_j^n_j over its ordered species,
+// over gamma of the activated complex (a particle of their charge, sum_j n_j z_j, with Debye and Hückel's part of the
+// activity model alone): Brønsted and Bjerrum's primary salt effect. 0 with no liquid or nothing dissolved.
+double rate_activity(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics);
+
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species);
@@ -269,6 +281,34 @@ double molality(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 // The enthalpy, in quanta, that these amounts carry at temperature T: what a
 // transfer of matter takes with it (GAME_SPEC §6).
 Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature);
+
+// (Stage 88, GAME_SPEC §6, Liquids that give) What a pressure `over` the room's adds to the enthalpy these amounts
+// carry at T, in J: what crosses carries its enthalpy at the giver's state. A solid's v_i p, a liquid's or a solute's
+// v_i (p - k p^2 / 2) - T (v_i' (p - k p^2 / 2) - v_i k' p^2 / 2) (its potential's, less T times its slope), a gas's
+// nothing. At the room's pressure, nought.
+double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double over);
+
+// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel's cell brought to a pressure, as the vessel is sized:
+// holding `energy` J (E = U + P_atm V) in `volume` m^3, it takes at `pressure` the volume V' with the work of getting
+// there, -(pressure - P_atm) (V' - volume), in it: the temperature that holds its enthalpy at that pressure,
+// energy + (pressure - P_atm) volume. Not defined without thermodynamic data or volumes, or at no pressure.
+struct AtPressure {
+	bool defined = false;
+	double temperature = 0.0, volume = 0.0, gas = 0.0; // K, m^3, and its gas's share of that volume
+};
+AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double energy, double volume, double pressure);
+// (Stage 88) The volume these amounts take at a temperature and a pressure, m^3: a solid's the table's, a liquid's or
+// a solute's grown with the temperature and squeezed by the pressure, a gas's n R T / P. What moves between a sealed
+// vessel's cells takes it with it.
+double volume_at(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double pressure);
+// (Stage 88) A sealed vessel's layer as it stands against its cushion (CellMeta::cushion): its temperature, its
+// pressure, the volume it takes, and the work it has done on its vessel since the vessel was last sized (J, over the
+// room's: what the vessel's sizing books between it and the top).
+struct LayerNow {
+	bool defined = false;
+	double temperature = 0.0, pressure = 0.0, volume = 0.0, work = 0.0;
+};
+LayerNow layer_now(const SpeciesTable &table, const CellState &cell, const CellMeta &meta);
 
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the

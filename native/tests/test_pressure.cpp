@@ -232,9 +232,14 @@ TEST_CASE("invariants: a cell's seal is checked against its edges, and room for 
 		CHECK(has(check_all(builtin_species(), t, sim.equilibria()), "V3"));
 	}
 	{
-		StepTrace t = clean; // no room for its gas
-		t.after.cells[1].amount[static_cast<size_t>(builtin::water.index)] = mol(FLASK / builtin_species().species(builtin::water).molar_volume).quanta;
+		StepTrace t = clean; // no room for its gas: filled with a solid, which does not give
+		t.after.cells[1].amount[static_cast<size_t>(builtin::copper_oxide.index)] = mol(FLASK / builtin_species().species(builtin::copper_oxide).molar_volume).quanta;
 		CHECK(has(check_all(builtin_species(), t, sim.equilibria()), "V3"));
+	}
+	{
+		StepTrace t = clean; // (Stage 88) filled with water it has a pressure, its water squeezed: no V3 (what it holds is other checks')
+		t.after.cells[1].amount[static_cast<size_t>(builtin::water.index)] = mol(FLASK / builtin_species().species(builtin::water).molar_volume).quanta;
+		CHECK_FALSE(has(check_all(builtin_species(), t, sim.equilibria()), "V3"));
 	}
 	{
 		StepTrace t = clean; // the gas run backwards, from the lower pressure into the higher: everything still conserved

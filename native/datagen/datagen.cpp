@@ -442,6 +442,20 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			solution.density_low = d.at("celsius")[0].get<double>();
 			solution.density_high = d.at("celsius")[1].get<double>();
 		}
+		// the solvent's compressibility by temperature (Stage 88): printed in 1/kPa, kept in 1/Pa
+		if (solutions_json.contains("compressibility")) {
+			const json &d = solutions_json.at("compressibility");
+			const json &n = d.at("numerator_per_kpa");
+			if (n.size() != solution.compressibility.size() || d.at("celsius").size() != 2) {
+				fail(solutions_file, "the solvent's compressibility is six numerator coefficients, b, and its range in C");
+			}
+			for (size_t i = 0; i < n.size(); ++i) {
+				solution.compressibility[i] = n[i].get<double>() * 1e-3;
+			}
+			solution.compressibility_b = d.at("b").get<double>();
+			solution.compressibility_low = d.at("celsius")[0].get<double>();
+			solution.compressibility_high = d.at("celsius")[1].get<double>();
+		}
 		if (solutions_json.contains("viscosity")) {
 			for (const json &v : solutions_json.at("viscosity")) {
 				solution.viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("mpa_s").get<double>() / 1000.0 });
@@ -593,8 +607,32 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 					}
 					row.kinetics.dissolves_by_transport = true;
 				}
+			} else if (law == "solution") { // (Stage 87) its rate in dissolved species' molalities, each to its order
+				row.kinetics.law = chem::Kinetics::Law::Solution;
+				row.kinetics.prefactor = k.at("prefactor").get<double>();
+				row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+				const json &orders = k.at("orders");
+				if (!orders.is_array() || orders.empty() || orders.size() > static_cast<size_t>(chem::MAX_ORDERS)) {
+					fail(reactions_file, "reaction " + row.id + ": a solution law's orders are a list of one to " + std::to_string(chem::MAX_ORDERS) + " species");
+				}
+				for (const json &o : orders) {
+					const auto found = by_key.find(o.at("species").get<std::string>());
+					if (found == by_key.end()) {
+						fail(reactions_file, "reaction " + row.id + ": an order names a species that is not in species.json");
+					}
+					const double order = o.at("order").get<double>();
+					row.kinetics.orders[static_cast<size_t>(row.kinetics.order_count++)] = chem::RateOrder{ chem::SpeciesId{ found->second }, order };
+					// a step is exact in the first reactant with an order
+					bool reactant = false;
+					for (const chem::Term &t : row.terms) {
+						reactant = reactant || (t.species.index == found->second && t.nu < 0);
+					}
+					if (reactant && order > 0.0 && row.kinetics.in.index < 0) {
+						row.kinetics.in = chem::SpeciesId{ found->second };
+					}
+				}
 			} else {
-				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
+				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface, solution or equilibrium");
 			}
 		}
 		if (r.contains("notice")) {
@@ -750,12 +788,17 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	std::snprintf(density_text, sizeof density_text, "constexpr std::array<double, 6> DENSITY{ %.17g, %.17g, %.17g, %.17g, %.17g, %.17g };\nconstexpr double DENSITY_B = %.17g, DENSITY_LOW = %.17g, DENSITY_HIGH = %.17g;\n",
 			solution.density[0], solution.density[1], solution.density[2], solution.density[3], solution.density[4], solution.density[5], solution.density_b, solution.density_low,
 			solution.density_high);
+	char compressibility_text[440];
+	std::snprintf(compressibility_text, sizeof compressibility_text,
+			"constexpr std::array<double, 6> COMPRESSIBILITY{ %.17g, %.17g, %.17g, %.17g, %.17g, %.17g };\nconstexpr double COMPRESSIBILITY_B = %.17g, COMPRESSIBILITY_LOW = %.17g, COMPRESSIBILITY_HIGH = %.17g;\n",
+			solution.compressibility[0], solution.compressibility[1], solution.compressibility[2], solution.compressibility[3], solution.compressibility[4], solution.compressibility[5],
+			solution.compressibility_b, solution.compressibility_low, solution.compressibility_high);
 	char model[240];
 	std::snprintf(model, sizeof model, "constexpr double A_PHI = %.17g, DEBYE_B = %.17g, IONISATION_H = %.17g, IONISATION_G = %.17g, IONISATION_CP = %.17g;\n", solution.a_phi,
 			solution.b, solution.ionisation_h, solution.ionisation_g, solution.ionisation_cp);
 	char ion_size[80];
 	std::snprintf(ion_size, sizeof ion_size, "constexpr double ION_SIZE = %.17g;\n", solution.ion_size);
-	cpp << "};\n" << model << density_text << ion_size << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
+	cpp << "};\n" << model << density_text << compressibility_text << ion_size << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
 		<< ", DIELECTRIC_COUNT = " << solution.dielectric.size() << ", GAS_VISCOSITY_COUNT = " << solution.gas_viscosity.size() << ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
@@ -764,14 +807,23 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
 		char kinetics[560];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g, %.17g }",
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g, %.17g, { {",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
 						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
-						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
+						: row.kinetics.law == chem::Kinetics::Law::Surface	   ? "Kinetics::Law::Surface"
+						: row.kinetics.law == chem::Kinetics::Law::Solution	   ? "Kinetics::Law::Solution"
+																			   : "Kinetics::Law::None",
 				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
 				row.kinetics.nucleation_order, row.kinetics.driver_order, row.kinetics.dissolves_by_transport ? "true" : "false", row.kinetics.secondary,
 				row.kinetics.secondary_order, row.kinetics.nucleation_barrier);
-		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
+		std::string orders; // (Stage 87) a solution law's
+		for (int32_t o = 0; o < row.kinetics.order_count; ++o) {
+			char one[96];
+			std::snprintf(one, sizeof one, "%s RateOrder{ SpeciesId{ %d }, %.17g }", o > 0 ? "," : "", row.kinetics.orders[static_cast<size_t>(o)].species.index,
+					row.kinetics.orders[static_cast<size_t>(o)].order);
+			orders += one;
+		}
+		cpp << " } }, " << row.terms.size() << kinetics << orders << " } }, " << row.kinetics.order_count << " } },\n";
 	}
 	cpp << "};\n\n"
 		<< "// The compiler's own proof, independent of the generator's: no build holds an\n"
@@ -788,7 +840,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP,\n"
 		<< "\t\t\t\tstd::vector<SolventPoint>(SOLVENT, SOLVENT + SOLVENT_COUNT), DENSITY, DENSITY_B, DENSITY_LOW, DENSITY_HIGH,\n"
 		<< "\t\t\t\tstd::vector<DielectricPoint>(DIELECTRIC, DIELECTRIC + DIELECTRIC_COUNT), ION_SIZE,\n"
-		<< "\t\t\t\tstd::vector<ViscosityPoint>(GAS_VISCOSITY, GAS_VISCOSITY + GAS_VISCOSITY_COUNT) };\n"
+		<< "\t\t\t\tstd::vector<ViscosityPoint>(GAS_VISCOSITY, GAS_VISCOSITY + GAS_VISCOSITY_COUNT), COMPRESSIBILITY, COMPRESSIBILITY_B,\n"
+		<< "\t\t\t\tCOMPRESSIBILITY_LOW, COMPRESSIBILITY_HIGH };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"

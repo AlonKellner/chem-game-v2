@@ -3,6 +3,8 @@
 #include "chem/thermo.hpp"
 
 #include <cstdio>
+#include <string>
+#include <cstdlib>
 
 namespace chem {
 
@@ -50,12 +52,18 @@ const CellMeta *meta_of(const StepTrace &trace, size_t cell) {
 // the cell's kind for a state of the trace: the step's start at its volume then (Stage 79: a piston moved it)
 const CellMeta *meta_of(const StepTrace &trace, const Snapshot &state, size_t cell) {
 	const CellMeta *meta = meta_of(trace, cell);
-	if (meta == nullptr || &state != &trace.before || cell >= trace.volume_before.size() || trace.volume_before[cell] == meta->volume) {
+	const bool over_moved = cell < trace.over_before.size() && cell < trace.cushion_before.size() && meta != nullptr &&
+			(trace.over_before[cell] != meta->over || trace.cushion_before[cell] != meta->cushion);
+	if (meta == nullptr || &state != &trace.before || cell >= trace.volume_before.size() || (trace.volume_before[cell] == meta->volume && !over_moved)) {
 		return meta;
 	}
 	thread_local CellMeta before;
 	before = *meta;
 	before.volume = trace.volume_before[cell];
+	if (cell < trace.over_before.size()) {
+		before.over = trace.over_before[cell]; // (Stage 88: a layer's pressure and its cushion as the step began)
+		before.cushion = cell < trace.cushion_before.size() ? trace.cushion_before[cell] : before.cushion;
+	}
 	return &before;
 }
 
@@ -375,6 +383,9 @@ Violations check_C5(const SpeciesTable &table, const StepTrace &trace) {
 			}
 			continue;
 		}
+		if (entry.kind == LedgerEntry::Kind::Resize) {
+			continue; // (Stage 88: no matter, no energy)
+		}
 		CellState &from = replay.cells[static_cast<size_t>(entry.from.index)];
 		for (const SpeciesAmount &d : entry.delta) {
 			if (d.species.index < 0 || static_cast<size_t>(d.species.index) >= species) {
@@ -517,19 +528,68 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 		return out;
 	}
 	Snapshot &replay = replay_of(trace.before);
+	// (Stage 88) a sealed vessel's cells as the replay comes to them: each one's volume and pressure over the room's from
+	// its last resize, from the step's start before its first
+	struct Sized {
+		size_t cell;
+		double volume, over, cushion;
+	};
+	std::vector<Sized> sized;
+	for (const LedgerEntry &entry : trace.ledger) {
+		if (entry.kind == LedgerEntry::Kind::Resize && cell_in(trace, entry.from)) {
+			const auto c = static_cast<size_t>(entry.from.index);
+			if (std::none_of(sized.begin(), sized.end(), [&](const Sized &x) { return x.cell == c; })) {
+				sized.push_back(Sized{ c, c < trace.volume_before.size() ? trace.volume_before[c] : trace.meta[c].volume, c < trace.over_before.size() ? trace.over_before[c] : trace.meta[c].over,
+						c < trace.cushion_before.size() ? trace.cushion_before[c] : trace.meta[c].cushion });
+			}
+		}
+	}
+	const auto meta_at = [&](size_t c) -> const CellMeta * {
+		for (const Sized &x : sized) {
+			if (x.cell == c) {
+				thread_local CellMeta then;
+				then = trace.meta[c];
+				then.volume = x.volume;
+				then.over = x.over;
+				then.cushion = x.cushion;
+				return &then;
+			}
+		}
+		return meta_of(trace, c);
+	};
 	for (size_t i = 0; i < trace.ledger.size(); ++i) {
 		const LedgerEntry &entry = trace.ledger[i];
 		const bool transfer = entry.kind == LedgerEntry::Kind::Transfer;
 		if (!cell_in(trace, entry.from) || (transfer && !cell_in(trace, entry.to))) {
 			continue; // C5 reports it
 		}
+		if (entry.kind == LedgerEntry::Kind::Resize) {
+			for (Sized &x : sized) {
+				if (x.cell == static_cast<size_t>(entry.from.index)) {
+					x.volume = entry.volume;
+					x.over = trace.meta[x.cell].layer ? entry.over : x.over;
+					x.cushion = trace.meta[x.cell].layer ? entry.cushion : x.cushion;
+				}
+			}
+			continue;
+		}
 		const auto from = static_cast<size_t>(entry.from.index);
 		const auto of_work = [&](size_t c) { return trace.meta[c].reservoir && trace.meta[c].reservoir_temperature >= WORK_KELVIN; };
-		if (transfer && entry.delta.empty() && entry.energy.quanta != 0 && !of_work(from) && !of_work(static_cast<size_t>(entry.to.index))) {
+		// (Stage 88: nor is the work between a sealed vessel's cells, World::work: W2's)
+		if (transfer && entry.delta.empty() && entry.energy.quanta != 0 && !entry.work && !of_work(from) && !of_work(static_cast<size_t>(entry.to.index))) {
 			// (Stage 79: work to or from a reservoir of work, a piston's hand's, is no heat: either way)
 			const auto to = static_cast<size_t>(entry.to.index);
 			double t_from = 0.0, t_to = 0.0;
-			if (temperature_of(table, trace, replay, from, t_from) && temperature_of(table, trace, replay, to, t_to)) {
+			// (Stage 88: a sealed vessel's cell at the volume and the pressure it had as the heat ran)
+			const auto kelvin_then = [&](size_t c, double &kelvin) {
+				if (std::none_of(sized.begin(), sized.end(), [&](const Sized &x) { return x.cell == c; })) {
+					return temperature_of(table, trace, replay, c, kelvin);
+				}
+				const Thermal t = thermal_state(table, replay.cells[c], meta_at(c));
+				kelvin = t.temperature;
+				return t.defined;
+			};
+			if (kelvin_then(from, t_from) && kelvin_then(to, t_to)) {
 				const double drive = t_from - t_to;
 				if ((entry.energy.quanta > 0 && drive < 0.0) || (entry.energy.quanta < 0 && drive > 0.0) || drive == 0.0) {
 					if (out.size() < MAX_MESSAGES) {
@@ -593,7 +653,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 			}
 			if (whole) {
 				// the same probe the step asked, so the same sign
-				const AffinityProbe probe(table, replay.cells[from], std::span<const Term>(terms.data(), count), meta_of(trace, from));
+				const AffinityProbe probe(table, replay.cells[from], std::span<const Term>(terms.data(), count), meta_at(from));
 				double a = 0.0;
 				if (probe.at(0.0, a) && !((entry.extent > 0 && a > 0.0) || (entry.extent < 0 && a < 0.0)) && out.size() < MAX_MESSAGES) {
 					char buffer[200];
@@ -778,6 +838,18 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace) {
 	for (const CellId cell : sealed_cells(trace.meta, trace.edges)) {
 		sealed[static_cast<size_t>(cell.index)] = 1;
 	}
+	// (Stage 88) a sealed vessel's layers stand at its pressure: marked so exactly when their column's top is sealed
+	std::vector<uint8_t> pressed(trace.meta.size(), 0);
+	for (const CellId cell : pressed_cells(trace.meta, trace.edges)) {
+		pressed[static_cast<size_t>(cell.index)] = 1;
+	}
+	for (size_t c = 0; c < trace.meta.size() && out.size() < MAX_MESSAGES; ++c) {
+		if (trace.meta[c].layer && trace.meta[c].pressed != (pressed[c] != 0)) {
+			out.push_back(text(trace.meta[c].pressed ? "V3: step %lld: layer %lld is marked at a sealed vessel's pressure, but its column's top is not sealed"
+													 : "V3: step %lld: layer %lld is not marked at its vessel's pressure, but its column's top is sealed",
+					static_cast<long long>(trace.step), static_cast<long long>(c)));
+		}
+	}
 	for (size_t c = 0; c < trace.meta.size() && out.size() < MAX_MESSAGES; ++c) {
 		const CellMeta &meta = trace.meta[c];
 		if (meta.sealed != (sealed[c] != 0)) {
@@ -815,7 +887,8 @@ Violations check_V2(const SpeciesTable &table, const StepTrace &trace) {
 		if (!meta.rigid) {
 			continue;
 		}
-		const Fill fill = fill_of(table, trace.after.cells[c], volume_kelvin(table, trace, c));
+		// (Stage 88) a sealed cell's liquids at its own pressure: squeezed, they fit; its solids alone can be too much
+		const Fill fill = fill_of(table, trace.after.cells[c], volume_kelvin(table, trace, c), meta.sealed ? &meta : nullptr);
 		if (fill.defined && fill.condensed > meta.volume * (1.0 + 1e-12)) {
 			char buffer[200];
 			std::snprintf(buffer, sizeof buffer, "V2: step %lld: rigid cell %lld of %.6g m^3 holds %.6g m^3 of solids and liquids", static_cast<long long>(trace.step),
@@ -975,6 +1048,74 @@ std::string words(const char *format, Args... args) {
 	return buffer;
 }
 
+// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel is at one pressure: each of its layers that holds
+// anything stands, as the step ends, at its top's pressure, within what the step's last equilibria moved after its
+// last sizing (a hundredth of it, or 200 Pa: a void just filled by its liquid's vapour, at a few kPa, closes by tens
+// of pascals a round).
+Violations check_P2(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal || trace.meta.size() != trace.after.cells.size()) {
+		return out;
+	}
+	const size_t n = trace.meta.size();
+	std::vector<int32_t> above(n, -1);
+	for (const Edge &e : trace.edges) {
+		if (e.open && e.column && cell_in(trace, e.a) && cell_in(trace, e.b)) {
+			above[static_cast<size_t>(e.a.index)] = e.b.index;
+		}
+	}
+	for (size_t c = 0; c < n && out.size() < MAX_MESSAGES; ++c) {
+		const CellMeta &meta = trace.meta[c];
+		const CellState &cell = trace.after.cells[c];
+		if (!meta.layer || !meta.pressed || meta.frozen || std::all_of(cell.amount.begin(), cell.amount.end(), [](int64_t a) { return a == 0; })) {
+			continue;
+		}
+		size_t top = c, hops = 0;
+		while (trace.meta[top].layer && above[top] >= 0 && hops++ < n) {
+			top = static_cast<size_t>(above[top]);
+		}
+		if (trace.meta[top].layer || !trace.meta[top].sealed) {
+			continue; // V3's
+		}
+		const Thermal t = thermal_state(table, trace.after.cells[top], &trace.meta[top]);
+		if (!t.defined) {
+			continue; // T3's
+		}
+		const Thermal own = thermal_state(table, cell, &meta);
+		if (!own.defined) {
+			continue; // T3's
+		}
+		const double mine = own.pressure; // (where it stands against its cushion now)
+		if (std::fabs(mine - t.pressure) > std::max(0.01 * t.pressure, 200.0)) {
+			char buffer[200];
+			std::snprintf(buffer, sizeof buffer, "P2: step %lld: layer %lld stands at %.9g Pa, its sealed vessel's top (cell %lld) at %.9g Pa", static_cast<long long>(trace.step),
+					static_cast<long long>(c), mine, static_cast<long long>(top), t.pressure);
+			out.push_back(buffer);
+		}
+	}
+	return out;
+}
+
+// (Stage 88, GAME_SPEC §6, Liquids that give) Work between cells is a sealed vessel's own: an entry marked work moves
+// energy alone, along a column's edge, from or to a layer that stands at its vessel's pressure.
+Violations check_W2(const SpeciesTable &, const StepTrace &trace) {
+	Violations out;
+	for (size_t i = 0; i < trace.ledger.size() && out.size() < MAX_MESSAGES; ++i) {
+		const LedgerEntry &entry = trace.ledger[i];
+		if (!entry.work) {
+			continue;
+		}
+		const bool on_edge = entry.kind == LedgerEntry::Kind::Transfer && entry.edge.index >= 0 && static_cast<size_t>(entry.edge.index) < trace.edges.size();
+		const Edge *e = on_edge ? &trace.edges[static_cast<size_t>(entry.edge.index)] : nullptr;
+		const bool layer = e != nullptr && e->column && cell_in(trace, e->a) && trace.meta[static_cast<size_t>(e->a.index)].pressed;
+		if (!layer || !entry.delta.empty()) {
+			out.push_back(text("W2: step %lld: entry %lld is marked work, but is not energy alone between two cells of a sealed vessel", static_cast<long long>(trace.step),
+					static_cast<long long>(i)));
+		}
+	}
+	return out;
+}
+
 Violations check_W1(const SpeciesTable &, const StepTrace &trace) {
 	Violations out;
 	if (trace.meta.size() != trace.after.cells.size()) {
@@ -1025,7 +1166,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

@@ -200,6 +200,23 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			return std::nullopt;
 		}
 	}
+	// the solvent's compressibility (Stage 88): none, or finite with a range, positive at both its ends and between
+	if (std::any_of(solution.compressibility.begin(), solution.compressibility.end(), [](double c) { return c != 0.0; })) {
+		bool good = std::all_of(solution.compressibility.begin(), solution.compressibility.end(), [&](double c) { return finite(c); }) && finite(solution.compressibility_b) &&
+				finite(solution.compressibility_low) && finite(solution.compressibility_high) && solution.compressibility_low < solution.compressibility_high;
+		for (int i = 0; good && i <= 100; ++i) {
+			const double t = solution.compressibility_low + (solution.compressibility_high - solution.compressibility_low) * i / 100.0;
+			double n = 0.0;
+			for (size_t k = solution.compressibility.size(); k-- > 0;) {
+				n = n * t + solution.compressibility[k];
+			}
+			good = 1.0 + solution.compressibility_b * t > 0.0 && n > 0.0;
+		}
+		if (!good) {
+			set_why(why, "the solvent's compressibility is finite and positive over its range, a range from low to high");
+			return std::nullopt;
+		}
+	}
 	const auto ion_count = static_cast<int32_t>(solution.ions.size());
 	for (SpeciesDef &s : species) {
 		const std::string name(s.id);
@@ -374,6 +391,44 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 		}
 		if (!(kinetics.prefactor > 0.0)) {
 			set_why(why, "reaction " + name + ": a prefactor is positive");
+			return std::nullopt;
+		}
+	}
+	if (kinetics.law == Kinetics::Law::Solution) { // (Stage 87) its rate in dissolved species' molalities
+		const bool finite = kinetics.prefactor - kinetics.prefactor == 0.0 && kinetics.activation - kinetics.activation == 0.0;
+		if (!finite || !(kinetics.prefactor > 0.0) || kinetics.activation < 0.0) {
+			set_why(why, "reaction " + name + ": a prefactor is positive, an activation energy is not negative, both are finite");
+			return std::nullopt;
+		}
+		if (kinetics.order_count < 1 || kinetics.order_count > MAX_ORDERS) {
+			set_why(why, "reaction " + name + ": a solution's rate goes with one to " + std::to_string(MAX_ORDERS) + " species");
+			return std::nullopt;
+		}
+		bool in_ordered = false;
+		for (int32_t i = 0; i < kinetics.order_count; ++i) {
+			const RateOrder &o = kinetics.orders[static_cast<size_t>(i)];
+			if (!table.has(o.species) || table.species(o.species).phase != Phase::Aqueous || table.species(o.species).retired) {
+				set_why(why, "reaction " + name + ": a species its rate goes with is not a dissolved one (a formula unit is its ions)");
+				return std::nullopt;
+			}
+			if (!(o.order >= 0.0) || !(o.order - o.order == 0.0)) {
+				set_why(why, "reaction " + name + ": an order is not negative and is finite");
+				return std::nullopt;
+			}
+			for (int32_t j = 0; j < i; ++j) {
+				if (kinetics.orders[static_cast<size_t>(j)].species == o.species) {
+					set_why(why, "reaction " + name + ": a species its rate goes with is named twice");
+					return std::nullopt;
+				}
+			}
+			in_ordered = in_ordered || (o.species == kinetics.in && o.order > 0.0);
+		}
+		bool is_reactant = false;
+		for (const Term &t : terms) {
+			is_reactant = is_reactant || (t.species == kinetics.in && t.nu < 0);
+		}
+		if (!is_reactant || !in_ordered) {
+			set_why(why, "reaction " + name + ": the species a step is exact in is not one of its reactants with an order");
 			return std::nullopt;
 		}
 	}

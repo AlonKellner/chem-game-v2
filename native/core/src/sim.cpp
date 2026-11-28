@@ -22,7 +22,7 @@ Simulation::Simulation(World world, std::vector<Reaction> reactions) :
 		if (r.table() != &world_.species()) {
 			continue;
 		}
-		if (r.kinetics().law == Kinetics::Law::FirstOrder || r.kinetics().law == Kinetics::Law::Surface) {
+		if (r.kinetics().law == Kinetics::Law::FirstOrder || r.kinetics().law == Kinetics::Law::Surface || r.kinetics().law == Kinetics::Law::Solution) {
 			reactions_.push_back(std::move(r));
 		} else if (r.kinetics().law == Kinetics::Law::Equilibrium) {
 			equilibria_.push_back(std::move(r));
@@ -162,6 +162,83 @@ double primary_nucleation(const Kinetics &kinetics, double ln_s) {
 	}
 	const double excess = ln_s < 700.0 ? exp(ln_s) - 1.0 : 1e300; // S - 1
 	return pow(excess, kinetics.nucleation_order);
+}
+
+namespace {
+
+// (Stage 87) the cell's liquid, quanta (what `molality` reads a species' amount against)
+double liquid_quanta(const SpeciesTable &table, const CellState &cell) {
+	double liquid = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] > 0) {
+			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			liquid += def.phase == Phase::Liquid && !def.wall ? static_cast<double>(cell.amount[s]) : 0.0;
+		}
+	}
+	return liquid;
+}
+
+constexpr double WATER_KG_PER_MOL = 0.018015; // (molality's own: a kg of solvent is 55.51 mol of its liquid)
+
+// k(T) times each species' molality to its order, but `skip`'s
+double solution_rate_without(const CellState &cell, const Kinetics &kinetics, double temperature, double liquid, SpeciesId skip) {
+	double rate = kinetics.prefactor * exp(-kinetics.activation / (GAS_CONSTANT * temperature));
+	for (int32_t o = 0; o < kinetics.order_count; ++o) {
+		const RateOrder &order = kinetics.orders[static_cast<size_t>(o)];
+		if (order.species == skip || order.order == 0.0) {
+			continue;
+		}
+		const double m = static_cast<double>(cell.amount[static_cast<size_t>(order.species.index)]) / (liquid * WATER_KG_PER_MOL);
+		rate *= order.order == 1.0 ? m : pow(m, order.order);
+	}
+	return rate;
+}
+
+double order_of(const Kinetics &kinetics, SpeciesId species) {
+	for (int32_t o = 0; o < kinetics.order_count; ++o) {
+		if (kinetics.orders[static_cast<size_t>(o)].species == species) {
+			return kinetics.orders[static_cast<size_t>(o)].order;
+		}
+	}
+	return 0.0;
+}
+
+} // namespace
+
+double solution_rate(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, double temperature) {
+	const double liquid = liquid_quanta(table, cell);
+	if (!(liquid > 0.0) || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	const double rest = solution_rate_without(cell, kinetics, temperature, liquid, kinetics.in) * exp(rate_activity(table, cell, kinetics));
+	const double n = order_of(kinetics, kinetics.in);
+	const double m = static_cast<double>(cell.amount[static_cast<size_t>(kinetics.in.index)]) / (liquid * WATER_KG_PER_MOL);
+	return rest * (n == 1.0 ? m : pow(m, n));
+}
+
+double solution_extent(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, int32_t nu, double rt, double factor, bool forward, double seconds) {
+	const double liquid = liquid_quanta(table, cell);
+	if (!(liquid > 0.0) || nu <= 0) {
+		return 0.0;
+	}
+	const double temperature = rt / GAS_CONSTANT;
+	const double per = liquid * WATER_KG_PER_MOL; // quanta of a species per mol/kg of it
+	const double m = static_cast<double>(cell.amount[static_cast<size_t>(kinetics.in.index)]) / per;
+	const double n = order_of(kinetics, kinetics.in);
+	// k', mol/kg/s per m^n: the activities as they are at the step's start (Brønsted and Bjerrum's salt effect)
+	const double held = solution_rate_without(cell, kinetics, temperature, liquid, kinetics.in) * exp(rate_activity(table, cell, kinetics)) * factor;
+	if (!forward) {
+		return held * (n == 1.0 ? m : pow(m, n)) * seconds * per;
+	}
+	const double decay = static_cast<double>(nu) * held * seconds;
+	double after = 0.0;
+	if (n == 1.0) {
+		after = m * exp(-decay);
+	} else {
+		const double base = pow(m, 1.0 - n) + (n - 1.0) * decay;
+		after = base > 0.0 ? pow(base, 1.0 / (1.0 - n)) : 0.0; // (an order under 1 runs out in a finite time)
+	}
+	return (m - after) / static_cast<double>(nu) * per;
 }
 
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta) {
@@ -378,8 +455,14 @@ void Simulation::react() {
 			double &nucleation_remainder = nucleation_remainder_[c * reactions_.size() + r];
 			const auto in = static_cast<size_t>(kinetics.in.index);
 			const int64_t have = state.amount[in];
+			// (Stage 87) a solution's rate is nought while a species it goes with is absent: no probe needed
+			bool unordered = false;
+			for (int32_t o = 0; o < kinetics.order_count; ++o) {
+				const RateOrder &order = kinetics.orders[static_cast<size_t>(o)];
+				unordered = unordered || (order.order > 0.0 && state.amount[static_cast<size_t>(order.species.index)] == 0);
+			}
 			// nothing of the solid, and nothing to nucleate it from: no probe needed
-			if (have == 0 && !(surface && kinetics.nucleation > 0.0 && feasible_extent(state, reaction.terms(), true) > 0)) {
+			if (unordered || (have == 0 && !(surface && kinetics.nucleation > 0.0 && feasible_extent(state, reaction.terms(), true) > 0))) {
 				remainder = 0.0;
 				nucleation_remainder = 0.0;
 				continue;
@@ -402,7 +485,9 @@ void Simulation::react() {
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
 			double wanted = 0.0; // quanta of extent, in the direction of the affinity
 			int64_t born = 0; // new particles, each one quantum of the solid
-			if (!surface) {
+			if (kinetics.law == Kinetics::Law::Solution) {
+				wanted = solution_extent(table, state, kinetics, -reaction.nu(kinetics.in), rt, factor, forward, step_seconds_);
+			} else if (!surface) {
 				const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
 				wanted = static_cast<double>(have) / static_cast<double>(-reaction.nu(kinetics.in)) * (1.0 - exp(-rate * factor * step_seconds_));
 			} else {
@@ -869,7 +954,8 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 		enthalpy = enthalpy_carried(table, amounts, giver.kelvin);
 		// the giver, at the flow work of its own pressure after (found again with it: twice)
 		CellState g = world_.snapshot_cell(giver.top), t = world_.snapshot_cell(taker.top);
-		const auto flow = [&](double p) { return std::llround((p - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM); };
+		// (Stage 88) what its pressure adds to the enthalpy the liquid carries: its enthalpy at the giver's state
+		const auto flow = [&](double p) { return std::llround(enthalpy_over(table, amounts, giver.kelvin, p - P_ATMOSPHERE) / JOULE_PER_QUANTUM); };
 		PistonPlan pg = plan_piston(giver.top, g, 0.0, dt);
 		for (int it = 0; it < 2; ++it) {
 			pushed = pg.ok ? pg.pressure : P_ATMOSPHERE;
@@ -881,8 +967,11 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 				}
 				probe.energy -= enthalpy.quanta + flow(pushed);
 			} else {
-				probe.energy -= flow(pushed); // (its top pays the flow work; its layers give the liquid)
-				grown = volume;
+				// (its layers give the liquid, at their pressure; its top takes the room it leaves as the vessel is sized,
+				// its gas's work on what stays, and what the liquid's enthalpy rose by between the two pressures)
+				const double low_pressure = thermal(giver.low).pressure, lifted_m3 = volume_at(table, amounts, giver.kelvin, low_pressure);
+				probe.energy -= flow(pushed) - flow(low_pressure) + std::llround((low_pressure - P_ATMOSPHERE) * lifted_m3 / JOULE_PER_QUANTUM);
+				grown = lifted_m3;
 			}
 			pg = plan_piston(giver.top, probe, grown, dt);
 		}
@@ -924,14 +1013,23 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 	if (!amounts.empty() && x != 0.0) {
 		const bool out = x > 0.0;
 		const Side &giver = out ? sa : sb, &taker = out ? sb : sa;
+		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
+		// (Stage 88) up its layers with its volume: its energy in that volume, its enthalpy at the layer's state less
+		// the layer's pressure (over the room's) times it
+		const double low_pressure = giver.low == giver.top ? P_ATMOSPHERE : thermal(giver.low).pressure, low_over = low_pressure - P_ATMOSPHERE;
+		const double lifted_m3 = giver.low == giver.top ? 0.0 : volume_at(table, amounts, giver.kelvin, low_pressure);
+		const Energy lifted{ enthalpy.quanta + std::llround((enthalpy_over(table, amounts, giver.kelvin, low_over) - low_over * lifted_m3) / JOULE_PER_QUANTUM) };
 		for (const auto &[hop, from] : giver.up) {
-			const Refusal refused = transfer(hop, from, amounts, enthalpy);
+			const Refusal refused = transfer(hop, from, amounts, lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return true;
 			}
 		}
-		const Energy carried{ enthalpy.quanta + std::llround((pushed - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) };
+		if (giver.low != giver.top) {
+			lift_volume(giver.low, giver.top, lifted_m3);
+		}
+		const Energy carried{ enthalpy.quanta + std::llround(enthalpy_over(table, amounts, giver.kelvin, pushed - P_ATMOSPHERE) / JOULE_PER_QUANTUM) };
 		const Refusal refused = transfer(edge, giver.top, amounts, carried);
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		thermal_valid_[static_cast<size_t>(giver.top.index)] = 0;
@@ -1188,7 +1286,8 @@ void Simulation::run_join(EdgeId edge, double dt) {
 			volume = now.defined ? was.condensed - now.condensed : 0.0;
 		};
 		const auto carried = [&]() {
-			return Energy{ enthalpy_carried(table, amounts, kelvin).quanta + std::llround((flow_pressure - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) };
+			// (Stage 88) its enthalpy at the giver's state: the table's and what its pressure adds
+			return Energy{ enthalpy_carried(table, amounts, kelvin).quanta + std::llround(enthalpy_over(table, amounts, kelvin, flow_pressure - P_ATMOSPHERE) / JOULE_PER_QUANTUM) };
 		};
 		// the giver's pressure less the taker's, had the share f run: falling with f
 		const auto gap = [&](double f) {
@@ -1236,12 +1335,20 @@ void Simulation::run_join(EdgeId edge, double dt) {
 		}
 		const Energy energy = carried();
 		const Energy enthalpy = enthalpy_carried(table, amounts, kelvin);
+		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
+		// (Stage 88) up its layers with its volume: its energy in that volume there
+		const double low_pressure = up.empty() ? P_ATMOSPHERE : thermal(up.front().second).pressure, low_over = low_pressure - P_ATMOSPHERE;
+		const double lifted_m3 = up.empty() ? 0.0 : volume_at(table, amounts, kelvin, low_pressure);
+		const Energy lifted{ enthalpy.quanta + std::llround((enthalpy_over(table, amounts, kelvin, low_over) - low_over * lifted_m3) / JOULE_PER_QUANTUM) };
 		for (const auto &[hop, from] : up) {
-			const Refusal refused = transfer(hop, from, amounts, enthalpy);
+			const Refusal refused = transfer(hop, from, amounts, lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return;
 			}
+		}
+		if (!up.empty()) {
+			lift_volume(up.front().second, giver_top, lifted_m3);
 		}
 		const Refusal refused = transfer(edge, giver_top, amounts, energy);
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
@@ -1648,8 +1755,51 @@ void Simulation::overflow() {
 		if (!(excess > top.column_volume * 1e-9)) {
 			continue; // within what L1 allows: as it was
 		}
+		excess += top.column_volume * 1e-10; // (Stage 88: to a ten-billionth under its volume, as a cell's own spill is: V2)
 		for (size_t i = 0; i < col.cells.size() && excess > 0.0; ++i) {
 			excess -= spill_from(col.cells[i], excess, kelvin_of(col.cells[i]));
+		}
+		// (Stage 88) what is left closes up: a spill that emptied a layer (a plunger pushed home on layered liquid)
+		// leaves none holding anything under an empty one (L1): each such layer moves up into the place, whole, with
+		// all its energy; and the top is the size its layers leave
+		const auto holds = [&](CellId c) {
+			const CellState &x = world_.snapshot_cell(c);
+			return std::any_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a != 0; });
+		};
+		for (size_t i = 1; i < col.cells.size(); ++i) {
+			if (holds(col.cells[i])) {
+				continue;
+			}
+			size_t j = i + 1;
+			while (j < col.cells.size() && !holds(col.cells[j])) {
+				++j;
+			}
+			if (j == col.cells.size()) {
+				break;
+			}
+			const CellState &x = world_.snapshot_cell(col.cells[j]);
+			std::vector<SpeciesAmount> amounts;
+			for (size_t s = 0; s < x.amount.size(); ++s) {
+				if (x.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall) {
+					amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ x.amount[s] } });
+				}
+			}
+			const Energy all{ x.energy };
+			for (size_t k = j; k > i; --k) {
+				const Refusal refused = transfer(col.up[k - 1], col.cells[k], amounts, all);
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+		}
+		double below = 0.0;
+		for (size_t i = 1; i < col.cells.size(); ++i) {
+			const Fill f = fill_of(table, world_.snapshot_cell(col.cells[i]), kelvin_of(col.cells[i]));
+			below += f.defined ? f.condensed : 0.0;
+		}
+		const double size = top.column_volume - below;
+		if (size > 0.0 && size != top.volume) {
+			const Refusal refused = world_.resize_column_top(col.top, size);
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			thermal_valid_[static_cast<size_t>(col.top.index)] = 0;
 		}
 	}
 	// (Stage 51) what spilled meets what the spill cell holds after this step's settling: it is brought to its fast
@@ -2269,11 +2419,36 @@ void Simulation::settle() {
 	}
 	settle_cells();
 	// a column's layers (Stage 47), on no gas path: each at its fast equilibria too (a layer that boils makes steam
-	// in it, which the column takes up at the next step)
+	// in it, which the column takes up at the next step). (Stage 88) A sealed vessel's stand at its pressure: theirs
+	// follow its sizing, below
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
-		if (world_.meta(cell).layer && !world_.meta(cell).frozen && thermal(cell).defined) {
+		if (world_.meta(cell).layer && !world_.meta(cell).pressed && !world_.meta(cell).frozen && thermal(cell).defined) {
 			project(cell);
+		}
+	}
+	// (Stage 88) a sealed vessel sized to what its top came to, then its cells at their equilibria at that pressure,
+	// in turn until neither moves (a layer that boils takes room, and its vessel's pressure rises on it): sized first,
+	// so that a layer's equilibria never run at a pressure its top has left (a void its top's vapour has since filled:
+	// at next to no pressure a layer's water would boil without end); the last word the equilibria's (P1), what the
+	// last sizing would still move the next step's
+	find_columns();
+	for (const Column &col : columns_) {
+		if (!world_.meta(col.top).sealed || world_.meta(col.top).frozen || col.cells.size() < 2) {
+			continue;
+		}
+		constexpr int ROUNDS = 4;
+		for (int round = 0; round < ROUNDS; ++round) {
+			if (!size_vessel(col) && round > 0) {
+				break;
+			}
+			bool moved = false;
+			for (const CellId cell : col.cells) {
+				moved = (thermal(cell).defined && project(cell)) || moved;
+			}
+			if (!moved) {
+				break;
+			}
 		}
 	}
 }
@@ -2332,8 +2507,10 @@ void Simulation::build_tree() {
 			const size_t at = sealed_order_[head];
 			for (size_t i = 0; i < edges.size(); ++i) {
 				const Edge &e = edges[i];
-				// (Stage 79: a tube that holds back its flow runs its own, in the pistons' process: not at once here)
-				if (!e.open || (e.phases & PHASES_GAS) == 0 || e.flow > 0.0 || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
+				// (Stage 79: a tube that holds back its flow runs its own, in the pistons' process: not at once here.
+				// Stage 88: nor is a column's edge a gas path here, as it is none from the open air: a sealed vessel's
+				// layers stand at its pressure, sized and settled with it)
+				if (!e.open || (e.phases & PHASES_GAS) == 0 || e.flow > 0.0 || e.column || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
 					continue;
 				}
 				const auto other = static_cast<size_t>(static_cast<size_t>(e.a.index) == at ? e.b.index : e.a.index);
@@ -2654,7 +2831,9 @@ void Simulation::advance() {
 	if (world_.thermal()) {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
+		size_vessels(); // (Stage 88: a sealed vessel at its one pressure before its plunger is moved: as it was built, or as a command left it)
 		move_pistons();
+		size_vessels(); // (and again where its plunger moved)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;
@@ -2704,7 +2883,9 @@ void Simulation::step(StepTrace &trace) {
 	if (world_.thermal()) {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
+		size_vessels(); // (Stage 88: a sealed vessel at its one pressure before its plunger is moved: as it was built, or as a command left it)
 		move_pistons();
+		size_vessels(); // (and again where its plunger moved)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;
