@@ -116,6 +116,9 @@ struct SolutionDef {
 	// conductivity (m): empty or 0, no conductivity
 	std::vector<DielectricPoint> dielectric;
 	double ion_size = 0.0;
+	// (Stage 79) a gas's viscosity (air's, at 1 atm) by rising temperature: what a tube's flow of gas goes as (GAME_SPEC
+	// §6, Pistons); empty: none known
+	std::vector<ViscosityPoint> gas_viscosity;
 };
 
 struct SpeciesDef {

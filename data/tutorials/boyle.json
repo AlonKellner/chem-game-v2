@@ -1,0 +1,374 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §6 Pistons, §13.7, Stage 79; docs/CURRICULUM.md, experiment 27) on data/benches/boyle.json: a sealed syringe of 100 mL of air pushed in and locked at 80 and 60 mL, its pressure and volume recorded at each: P V stands (Boyle's law).",
+	"title": "Experiment: Boyle's law",
+	"bench": "../benches/boyle.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "The syringe holds 100 mL of air at the room's pressure, 101 kPa, its nozzle capped. What will its pressure be, in kPa, squeezed to 60 mL? Type your guess, then click \"predict\".",
+			"why": "The same air in less room: its molecules hit each square centimetre of the walls more often.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "170"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "Lock and push",
+			"title": "Lock its plunger",
+			"text": "Right-click the syringe, then click \"lock plunger\" in the column on the right.",
+			"why": "Locked, the plunger stays where your hand leaves it: a clamp holds it there, so the readings can be taken with your hand off it.",
+			"checks": [
+				{
+					"text": "its plunger locked",
+					"when": {
+						"quantity": {
+							"item": "s",
+							"what": "locked"
+						},
+						"compare": "above",
+						"value": 0.5
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "lock:s"
+				}
+			]
+		},
+		{
+			"title": "At 100 mL",
+			"text": "Click \"+ kPa\" and \"+ mL\": the notebook records its pressure and where its plunger stands.",
+			"checks": [
+				{
+					"text": "its pressure and its volume recorded",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"recorded": "kpa",
+								"recorded_count": 1
+							},
+							{
+								"item": "s",
+								"recorded": "plunger_ml",
+								"recorded_count": 1
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:kpa"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		},
+		{
+			"title": "Push to 80 mL",
+			"text": "Drag its handle down to 80 mL on its scale and let go.",
+			"why": "Pushing takes force: the air pushes back on the plunger with its pressure over the room's on the plunger's area.",
+			"checks": [
+				{
+					"text": "its plunger at 80 mL, your hand off it",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "above",
+								"value": 78
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "below",
+								"value": 82
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "hand_n"
+								},
+								"compare": "below",
+								"value": 0.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:s",
+						"plunger:s@80"
+					]
+				}
+			]
+		},
+		{
+			"title": "Let it settle",
+			"text": "Wait for the air to come back to the room's temperature.",
+			"why": "Squeezing a gas warms it: work done on it is heat in it until its glass gives it to the room. Boyle's law is for the same temperature: read it once it is back at 20 C.",
+			"checks": [
+				{
+					"text": "the air back at the room's temperature",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"below_c": 20.2
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "above",
+								"value": 78
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "below",
+								"value": 82
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"title": "At 80 mL",
+			"text": "Record its pressure and its volume again.",
+			"checks": [
+				{
+					"text": "its pressure and its volume recorded",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"recorded": "kpa",
+								"recorded_count": 2
+							},
+							{
+								"item": "s",
+								"recorded": "plunger_ml",
+								"recorded_count": 2
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:kpa"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		},
+		{
+			"title": "Push to 60 mL",
+			"text": "Drag its handle down to 60 mL and let go.",
+			"why": "It is harder now: the air's pressure has risen, and so has the force it takes.",
+			"checks": [
+				{
+					"text": "its plunger at 60 mL, your hand off it",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "above",
+								"value": 58
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "below",
+								"value": 62
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "hand_n"
+								},
+								"compare": "below",
+								"value": 0.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"plunger:s",
+						"plunger:s@60"
+					]
+				}
+			]
+		},
+		{
+			"title": "Let it settle",
+			"text": "Wait for the air to come back to the room's temperature.",
+			"why": "Squeezing a gas warms it: work done on it is heat in it until its glass gives it to the room. Boyle's law is for the same temperature: read it once it is back at 20 C.",
+			"checks": [
+				{
+					"text": "the air back at the room's temperature",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"below_c": 20.2
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "above",
+								"value": 58
+							},
+							{
+								"quantity": {
+									"item": "s",
+									"what": "plunger_ml"
+								},
+								"compare": "below",
+								"value": 62
+							}
+						]
+					}
+				}
+			]
+		},
+		{
+			"title": "At 60 mL",
+			"text": "Record its pressure and its volume once more. Open the notebook and multiply each pressure by its volume.",
+			"checks": [
+				{
+					"text": "its pressure and its volume recorded",
+					"when": {
+						"all": [
+							{
+								"item": "s",
+								"recorded": "kpa",
+								"recorded_count": 3
+							},
+							{
+								"item": "s",
+								"recorded": "plunger_ml",
+								"recorded_count": 3
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:kpa"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			],
+			"why": "P V is the same each time: halve the room, double the pressure, at the same temperature (Boyle, 1662). The scale reads the air under it; the nozzle holds about half a millilitre more, which makes the products agree better still."
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the pressure",
+			"quantity": {
+				"item": "s",
+				"what": "kpa"
+			},
+			"show": [
+				"start",
+				"most"
+			]
+		},
+		{
+			"label": "the plunger",
+			"quantity": {
+				"item": "s",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"start",
+				"least"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the pressure at 60 mL",
+			"unit": "kPa",
+			"truth": "s.kpa",
+			"ideal": 168.9,
+			"tolerance": 3,
+			"predict": true,
+			"why": "101.3 kPa x 100 mL / 60 mL is 168.9 kPa; with the nozzle's half millilitre in both, 168.2 kPa."
+		},
+		{
+			"label": "P V at 60 mL",
+			"unit": "kPa mL",
+			"truth": "s.kpa * s.plunger_ml",
+			"ideal": 10132,
+			"tolerance": 150,
+			"why": "The same as at 100 mL: 101.3 kPa x 100 mL. A little under it by the nozzle's volume left out of the scale."
+		}
+	]
+}

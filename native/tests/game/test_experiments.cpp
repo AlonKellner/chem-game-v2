@@ -1482,3 +1482,92 @@ TEST_CASE("experiment heating_curve: followed with its own gestures, free, it co
 	pupil::follow_through(p, 3600);
 	completed(p);
 }
+
+TEST_CASE("experiment syringes: followed with its own gestures, strict, the water hardly moves, the air springs back, the joined syringes follow (Stage 79)") {
+	Pupil p("data/benches/syringes.json", "data/tutorials/syringes.json");
+	CHECK(pupil::follow_through(p, 1800) > 3);
+	completed(p);
+	MESSAGE("water " << p.item("water").plunger_ml << " mL, air " << p.item("air").plunger_ml << " mL; joined water " << p.item("water_a").plunger_ml << " + " << p.item("water_b").plunger_ml
+					 << " mL, joined air " << p.item("air_a").plunger_ml << " + " << p.item("air_b").plunger_ml << " mL");
+	CHECK(p.item("water").plunger_ml > 49.8);
+	CHECK(p.item("air").plunger_ml > 58.0);
+	CHECK(p.item("water_a").plunger_ml + p.item("water_b").plunger_ml == doctest::Approx(80.0).epsilon(0.002));
+	CHECK(p.item("air_a").plunger_ml + p.item("air_b").plunger_ml == doctest::Approx(100.0).epsilon(0.03));
+}
+
+TEST_CASE("experiment syringes: played as a person plays it, strict, it completes (Stage 79)") {
+	Pupil p("data/benches/syringes.json", "data/tutorials/syringes.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment syringes: followed with its own gestures, free, it completes (Stage 79)") {
+	Pupil p("data/benches/syringes.json", "data/tutorials/syringes.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment boyle: followed with its own gestures, strict, the pressure times the volume stands (Stage 79)") {
+	Pupil p("data/benches/boyle.json", "data/tutorials/boyle.json");
+	CHECK(pupil::follow_through(p, 1800) > 5);
+	completed(p);
+	const lab::ItemView s = p.item("s");
+	MESSAGE("60 mL: " << s.plunger_ml << " mL, " << s.pressure_kpa << " kPa, P V " << s.pressure_kpa * s.plunger_ml);
+	CHECK(s.pressure_kpa * (s.plunger_ml + 0.573) == doctest::Approx(101.325 * 100.573).epsilon(0.005));
+	report(p, { 168.5, 10100 });
+}
+
+TEST_CASE("experiment boyle: played as a person plays it, strict, it completes (Stage 79)") {
+	Pupil p("data/benches/boyle.json", "data/tutorials/boyle.json");
+	pupil::play_as_person(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment boyle: followed with its own gestures, free, it completes (Stage 79)") {
+	Pupil p("data/benches/boyle.json", "data/tutorials/boyle.json", false);
+	pupil::follow_through(p, 1800);
+	completed(p);
+}
+
+TEST_CASE("experiment charles: followed with its own gestures, strict, the air contracts in the ice water and expands in the hot (Stage 79)") {
+	Pupil p("data/benches/charles.json", "data/tutorials/charles.json");
+	CHECK(pupil::follow_through(p, 3600) > 5);
+	completed(p);
+	MESSAGE("now " << p.item("s").plunger_ml << " mL at " << p.item("s").celsius << " C");
+	CHECK(p.item("s").plunger_ml > 33.0);
+	report(p, { 28.0, -276 });
+}
+
+TEST_CASE("experiment charles: played as a person plays it, strict, it completes (Stage 79)") {
+	Pupil p("data/benches/charles.json", "data/tutorials/charles.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment charles: followed with its own gestures, free, it completes (Stage 79)") {
+	Pupil p("data/benches/charles.json", "data/tutorials/charles.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment molar_volume: followed with its own gestures, strict, the carbon dioxide pushes the syringe out by about 54 mL (Stage 79)") {
+	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
+	CHECK(pupil::follow_through(p, 3600) > 4);
+	completed(p);
+	const double ml = p.item("s").plunger_ml;
+	MESSAGE("collected " << ml << " mL: " << ml / 2.261 << " L/mol");
+	CHECK(ml / 2.261 == doctest::Approx(24.06).epsilon(0.04));
+	report(p, { ml, ml / 2.261 });
+}
+
+TEST_CASE("experiment molar_volume: played as a person plays it, strict, it completes (Stage 79)") {
+	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment molar_volume: followed with its own gestures, free, it completes (Stage 79)") {
+	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}

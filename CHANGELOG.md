@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.81.1 (2026-11-28, Stage 79, merged after Stages 78, 80, 81, 84 and 86; signed off by the user: "Approved, merge and proceed")
+
+- §6 (Stage 79, `docs/TDD_79_SYRINGE.md`; `docs/CURRICULUM.md`, step G's first part: experiments 27 and 28): **pistons**:
+  a rigid cell's (or a column's) volume moved each step by the forces on its plunger, overdamped (its gas's pressure
+  after the move against the room's, its friction and drag, a hand of at most 79.8 N toward a volume, a thumb's, Astin
+  1999); **tightly joined vessels**, each its own, the exchange between them within the step (sub-steps: each piston
+  alone by its sealed model, each connection down the true pressure, at a vessel's foot or top), a tube by
+  Hagen–Poiseuille (an ordinary 4 mm tube, air's viscosity measured), a hydraulic link (two vessels joined by liquid
+  at their feet) solved together, so a push on one is the other's pull; the hand's work along an edge from the mains
+  the only work (T2 by the pressure after the move); W1; a step's start read at its volume then.
+- §13: **the gas syringe**, its plunger's handle a physical control dragged on the bench (asked for by the user), its
+  lock, its nozzle capped, on a vessel's mouth or tubed to another's; a bench's `setup`.
+- §13.7: the experiments `syringes` (the user's four setups), `boyle`, `charles` (the user's cool and hot baths),
+  `molar_volume`.
 ## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 81, `docs/TDD_81_COMPLEXES.md`; `docs/CURRICULUM.md`, step E's second part): **complexes**, each a fast
