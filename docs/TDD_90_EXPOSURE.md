@@ -37,7 +37,8 @@ normal room, up to 8 with the room's lights dimmed), **pupil-like** (closing fas
 | 90.2 | The meter and the step on the GPU, the reshow, O4 at the exposure read back | done |
 | 90.3 | The room's lights: emitters against them, the top bar's control, the level to the host; tests | done |
 | 90.4 | A bright flame fading shown black in places (the user's report; Stage 82's): a history's change measured at the exposure and by the light's amount beyond the display | done |
-| 90.5 | Documents, `make gates`, the user's sign-off | |
+| 90.5 | The experiment `flames` (the user's request): its bench, tutorial and tests; a flame's load by element, the lights in a tutorial's checks, the probe in a flame | done |
+| 90.6 | Documents, `make gates`, the user's sign-off | |
 
 ## Measured
 
@@ -66,6 +67,28 @@ nothing changes. The test (`test_flame.cpp`, Stage 90): the burner's flame after
 thirtieth, four frames at each 5 % step, in double and in single precision; 179,307 dark pixel-frames with the old
 measure, none with this.
 
+## The experiment flames (90.5)
+
+The user asked for an extensive flames experiment to follow. `data/benches/flames.json`, `data/tutorials/flames.json`
+(32 steps in five parts): the burner shut down (soot's yellow) and wide open (its blue); the probe in the flame; sodium,
+lithium and potassium (the lights at 10 % for it), each line written in the notebook; calcium, strontium, barium and
+copper, each peak written; the flame let clear between tests (the clock runs only in those waits: a step that asks for
+a gesture holds it, and the flame with it); a mixture of sodium and potassium chlorides; two unknowns drawn by the
+seed; the report: three lines, a mole of sodium's photons (203.0 kJ), strontium against lithium, copper against barium,
+what the mixture holds, the unknowns. What the viewer lists, played (`test_flames.cpp`): sodium 589; lithium 671;
+potassium 766; calcium 423, 555, 625 (its peak), 645 and potassium's last trace at 766; strontium 461, 606, 649, 659,
+671, 682 (its peak); barium 488, 502, 513, 524, 554 (its peak: the atom's line, sharper than the bands), 745; copper
+505, 512, 524, 533, 546 (its peak), 605; the mixture 589 and 766.
+
+On the GPU (a play zoomed 6x on the burner): the plain flame pale blue, sodium orange-yellow, lithium and strontium
+crimson, calcium brick red, barium and copper two greens, the mixture sodium's. Potassium shows as the flame's own blue
+even in the dimmed room: the model gives it only its lines (766 and 770 nm, where the eye is nearly blind, and a weak
+violet pair at 404); a real flame's lilac is not reached by them alone here (a matter for the flame model: Open); the card says what is seen.
+
+New in the lab layer and the screen: a burner's `flame_umol` with an element for its measure (that element's load), a
+tutorial's `lights_at_most` and `lights_at_least` (the room's lights, read from the screen), the viewer's probe dropped
+in a lit burner's flame resting on the burner (`Ui::flame_at`), and the screen's name `flame:<burner>`.
+
 ## Open
 
 - **A neon tube at the dimmest lights**: its 158 lines in eleven stretches, each read at one point a frame; a stretch
@@ -74,3 +97,6 @@ measure, none with this.
   pass's 24, or a stretch's colour weighted at its point, would close it.
 - **A view moving** carries the picture as it was shown (at the exposure then): a change of exposure while it moves shows
   after it stops.
+- **Potassium's lilac**: the flame model gives potassium its lines alone, and a potassium flame shows as the burner's
+  blue, even with the room's lights at 10 %. What else a real one's lilac takes (its weak lines' share at the flame's
+  temperature, any continuum) is not in data/flame.json; a measured potassium flame spectrum would settle it.

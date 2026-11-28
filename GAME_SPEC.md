@@ -3445,6 +3445,13 @@ stand on.
       to Eriochrome Black T's blue; 320.7 mg/L as calcium carbonate against 319.6.
     - `spectra` (experiment 54): four discharge lamps through the spectral viewer; hydrogen's Balmer lines listed
       (389, 397, 410, 434, 486, 656 nm) and the Rydberg constant from two of them (1.0975e7 /m).
+    - `flames` (experiments 12 and C14; Stage 90, the user's request): the burner's flame shut and open, then seven
+      metals' flame tests by eye and through the spectral viewer, the flame cleared between them (sodium 589, lithium
+      671, potassium 766 nm, nearly hidden even with the room's lights at 10 %; calcium's, strontium's, barium's and
+      copper's monohydroxide bands, each peak noted), a sodium and potassium mixture (yellow, and 766 nm in the
+      viewer), two unknowns drawn by the seed, and a mole of sodium's photons, 203 kJ. The flame's load is checked
+      element by element (`flame_umol` with an element for its measure); a tutorial reads the room's lights
+      (`lights_at_most`, `lights_at_least`); the viewer's probe dropped in a lit flame rests on its burner.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and

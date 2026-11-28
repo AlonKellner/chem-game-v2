@@ -8,6 +8,9 @@
   O4 at the exposure read back.
 - §12.2: the room's lights (the top bar's "lights", 100 to 1 %): what emits light the brighter against them, the eye
   opening up to 8 times. A lamp's lines in eleven stretches, every line in one.
+- §13.7: the experiment `flames` (the user's request): seven metals' flame tests by eye and through the spectral viewer,
+  potassium in a dimmed room, a sodium and potassium mixture, two unknowns, a photon's energy; a flame's load checked
+  element by element, a tutorial reading the room's lights, the probe dropped in a lit flame resting on its burner.
 - §12.3: a bright flame fading no longer shows black pixels (Stage 82's): a pixel's history measures a change at the
   display's exposure and, beyond the display, by the light's amount.
 

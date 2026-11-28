@@ -175,6 +175,7 @@ are missing.
 | 52 | Water's hardness by EDTA | the hardness | C1 C3 | T3 |
 | 53 | Aspirin, an ester or a soap | the yield, the melting point | C9 C13 | T10 |
 | 54 | Atomic spectra through the viewer | the lines' wavelengths | C14 | the viewer |
+| 54b | Flame tests and their spectra (Stage 90, `flames`) | seven metals' lines and bands, a mixture, two unknowns, a photon's energy | C14 | the viewer, the room's lights |
 
 ## The order of work
 

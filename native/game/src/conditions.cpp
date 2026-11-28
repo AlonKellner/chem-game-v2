@@ -166,7 +166,10 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 		}
 		double all = 0.0;
 		for (const auto &[element, mol] : v->flame_load) {
-			all += mol * 1e6;
+			// (Stage 90) with an element for its measure ({"what": "flame_umol", "measure": "Na"}), that element's alone
+			if (q.measure == "g" || q.measure == element) {
+				all += mol * 1e6;
+			}
 		}
 		return all;
 	}
@@ -575,10 +578,20 @@ std::vector<std::string> goal_quantities() {
 }
 
 bool valid(const Quantity &q, std::string &why) {
+	const chem::SpeciesTable &table = chem::builtin_species();
+	if (q.what == "flame_umol" && q.measure != "g") {
+		// (Stage 90) one element of a flame's load, by its symbol
+		for (int e = 0; e < table.element_count(); ++e) {
+			if (q.measure == table.element(e).symbol) {
+				return true;
+			}
+		}
+		why = "a flame's load is measured whole, or as one element's by its symbol (\"Na\")";
+		return false;
+	}
 	if (fixed(q.what)) {
 		return true;
 	}
-	const chem::SpeciesTable &table = chem::builtin_species();
 	if (!table.has(table.find(q.what))) {
 		why = "no quantity or species \"" + q.what + "\"";
 		return false;
