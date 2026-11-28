@@ -52,7 +52,8 @@ const CellMeta *meta_of(const StepTrace &trace, size_t cell) {
 // the cell's kind for a state of the trace: the step's start at its volume then (Stage 79: a piston moved it)
 const CellMeta *meta_of(const StepTrace &trace, const Snapshot &state, size_t cell) {
 	const CellMeta *meta = meta_of(trace, cell);
-	const bool over_moved = cell < trace.over_before.size() && meta != nullptr && trace.over_before[cell] != meta->over;
+	const bool over_moved = cell < trace.over_before.size() && cell < trace.cushion_before.size() && meta != nullptr &&
+			(trace.over_before[cell] != meta->over || trace.cushion_before[cell] != meta->cushion);
 	if (meta == nullptr || &state != &trace.before || cell >= trace.volume_before.size() || (trace.volume_before[cell] == meta->volume && !over_moved)) {
 		return meta;
 	}
@@ -60,7 +61,8 @@ const CellMeta *meta_of(const StepTrace &trace, const Snapshot &state, size_t ce
 	before = *meta;
 	before.volume = trace.volume_before[cell];
 	if (cell < trace.over_before.size()) {
-		before.over = trace.over_before[cell]; // (Stage 88: a layer's pressure as the step began)
+		before.over = trace.over_before[cell]; // (Stage 88: a layer's pressure and its cushion as the step began)
+		before.cushion = cell < trace.cushion_before.size() ? trace.cushion_before[cell] : before.cushion;
 	}
 	return &before;
 }
@@ -530,14 +532,15 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 	// its last resize, from the step's start before its first
 	struct Sized {
 		size_t cell;
-		double volume, over;
+		double volume, over, cushion;
 	};
 	std::vector<Sized> sized;
 	for (const LedgerEntry &entry : trace.ledger) {
 		if (entry.kind == LedgerEntry::Kind::Resize && cell_in(trace, entry.from)) {
 			const auto c = static_cast<size_t>(entry.from.index);
 			if (std::none_of(sized.begin(), sized.end(), [&](const Sized &x) { return x.cell == c; })) {
-				sized.push_back(Sized{ c, c < trace.volume_before.size() ? trace.volume_before[c] : trace.meta[c].volume, c < trace.over_before.size() ? trace.over_before[c] : trace.meta[c].over });
+				sized.push_back(Sized{ c, c < trace.volume_before.size() ? trace.volume_before[c] : trace.meta[c].volume, c < trace.over_before.size() ? trace.over_before[c] : trace.meta[c].over,
+						c < trace.cushion_before.size() ? trace.cushion_before[c] : trace.meta[c].cushion });
 			}
 		}
 	}
@@ -548,6 +551,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				then = trace.meta[c];
 				then.volume = x.volume;
 				then.over = x.over;
+				then.cushion = x.cushion;
 				return &then;
 			}
 		}
@@ -564,6 +568,7 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				if (x.cell == static_cast<size_t>(entry.from.index)) {
 					x.volume = entry.volume;
 					x.over = trace.meta[x.cell].layer ? entry.over : x.over;
+					x.cushion = trace.meta[x.cell].layer ? entry.cushion : x.cushion;
 				}
 			}
 			continue;
@@ -1070,7 +1075,11 @@ Violations check_P2(const SpeciesTable &table, const StepTrace &trace) {
 		if (!t.defined) {
 			continue; // T3's
 		}
-		const double mine = P_ATMOSPHERE + meta.over;
+		const Thermal own = thermal_state(table, cell, &meta);
+		if (!own.defined) {
+			continue; // T3's
+		}
+		const double mine = own.pressure; // (where it stands against its cushion now)
 		if (std::fabs(mine - t.pressure) > std::max(0.01 * t.pressure, 200.0)) {
 			char buffer[200];
 			std::snprintf(buffer, sizeof buffer, "P2: step %lld: layer %lld stands at %.9g Pa, its sealed vessel's top (cell %lld) at %.9g Pa", static_cast<long long>(trace.step),

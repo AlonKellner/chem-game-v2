@@ -198,10 +198,11 @@ World::Builder &World::Builder::set_column(CellId top, double area, double whole
 	return *this;
 }
 
-World::Builder &World::Builder::set_layer_pressure(CellId layer, double over, double volume) {
-	if (layer.index >= 0 && static_cast<size_t>(layer.index) < meta_.size() && meta_[static_cast<size_t>(layer.index)].layer && volume >= 0.0 && P_ATMOSPHERE + over > 0.0) {
+World::Builder &World::Builder::set_layer_pressure(CellId layer, double over, double volume, double cushion) {
+	if (layer.index >= 0 && static_cast<size_t>(layer.index) < meta_.size() && meta_[static_cast<size_t>(layer.index)].layer && volume >= 0.0 && cushion >= 0.0 && P_ATMOSPHERE + over > 0.0) {
 		meta_[static_cast<size_t>(layer.index)].over = over;
 		meta_[static_cast<size_t>(layer.index)].volume = volume;
+		meta_[static_cast<size_t>(layer.index)].cushion = cushion;
 	}
 	return *this;
 }
@@ -1220,11 +1221,12 @@ void World::refresh_sealed() {
 			if (!meta_[c].pressed) {
 				meta_[c].over = 0.0;
 				meta_[c].volume = 0.0;
+				meta_[c].cushion = 0.0;
 			}
 		}
 	}
 	for (size_t c = 0; c < meta_.size() && c < revision_.size(); ++c) {
-		if (meta_[c].sealed != was[c].sealed || meta_[c].pressed != was[c].pressed || meta_[c].over != was[c].over || meta_[c].volume != was[c].volume) {
+		if (meta_[c].sealed != was[c].sealed || meta_[c].pressed != was[c].pressed || meta_[c].over != was[c].over || meta_[c].volume != was[c].volume || meta_[c].cushion != was[c].cushion) {
 			touch(c);
 		}
 	}
@@ -1233,26 +1235,28 @@ void World::refresh_sealed() {
 void World::note_before(CellId cell) {
 	if (std::none_of(moved_volumes_.begin(), moved_volumes_.end(), [&](const auto &x) { return x.first == cell.index; })) {
 		moved_volumes_.emplace_back(cell.index, meta_[static_cast<size_t>(cell.index)].volume);
-		moved_overs_.emplace_back(cell.index, meta_[static_cast<size_t>(cell.index)].over);
+		moved_overs_.emplace_back(cell.index, std::make_pair(meta_[static_cast<size_t>(cell.index)].over, meta_[static_cast<size_t>(cell.index)].cushion));
 	}
 }
 
-Refusal World::press_layer(CellId layer, double over, double volume) {
+Refusal World::press_layer(CellId layer, double over, double volume, double cushion) {
 	if (!known(layer)) {
 		return Refusal::UnknownCell;
 	}
 	CellMeta &m = meta_[static_cast<size_t>(layer.index)];
-	if (!m.layer || !m.pressed || !(volume >= 0.0) || !(volume - volume == 0.0) || !(P_ATMOSPHERE + over > 0.0) || !(over - over == 0.0)) {
+	if (!m.layer || !m.pressed || !(volume >= 0.0) || !(volume - volume == 0.0) || !(P_ATMOSPHERE + over > 0.0) || !(over - over == 0.0) || !(cushion >= 0.0) || !(cushion - cushion == 0.0)) {
 		return Refusal::BadValue;
 	}
-	if (m.over != over || m.volume != volume) {
+	if (m.over != over || m.volume != volume || m.cushion != cushion) {
 		note_before(layer); // (cleared as a step begins: what is noted between steps is not a step's)
 		m.over = over;
 		m.volume = volume;
+		m.cushion = cushion;
 		touch(static_cast<size_t>(layer.index));
 		LedgerEntry entry{ LedgerEntry::Kind::Resize, EdgeId{}, layer, CellId{}, {}, Energy{}, 0 };
 		entry.volume = volume;
 		entry.over = over;
+		entry.cushion = cushion;
 		ledger_.push_back(std::move(entry));
 	}
 	return Refusal::None;
@@ -1347,13 +1351,17 @@ void World::close_step(StepTrace &trace) {
 		moved_volumes_.clear();
 	}
 	trace.over_before.clear();
+	trace.cushion_before.clear();
 	if (!moved_overs_.empty()) {
 		trace.over_before.resize(meta_.size());
+		trace.cushion_before.resize(meta_.size());
 		for (size_t c = 0; c < meta_.size(); ++c) {
 			trace.over_before[c] = meta_[c].over;
+			trace.cushion_before[c] = meta_[c].cushion;
 		}
 		for (const auto &[c, v] : moved_overs_) {
-			trace.over_before[static_cast<size_t>(c)] = v;
+			trace.over_before[static_cast<size_t>(c)] = v.first;
+			trace.cushion_before[static_cast<size_t>(c)] = v.second;
 		}
 		moved_overs_.clear();
 	}

@@ -7911,10 +7911,11 @@ std::string Lab::digest() const {
 	}
 	for (int c = 0; c < world.cell_count(); ++c) { // (Stage 88) a sealed vessel's layers at its pressure: a lab with none digests as before
 		const CellMeta &meta = world.meta(CellId{ c });
-		if (meta.pressed && (meta.over != 0.0 || meta.volume != 0.0)) {
+		if (meta.pressed && (meta.over != 0.0 || meta.volume != 0.0 || meta.cushion != 0.0)) {
 			hash.update_u64(0x7072657373000000u | static_cast<uint64_t>(c));
 			hash.update_double(meta.over);
 			hash.update_double(meta.volume);
+			hash.update_double(meta.cushion);
 		}
 	}
 	for (const Item &x : m.items) { // a liquid's turning, and what it holds up (Stage 32)
@@ -8109,8 +8110,8 @@ json Lab::Impl::save() const {
 		cell["mixing"] = bits(meta.mixing);
 		if (meta.layer) { // (Stage 47)
 			cell["layer"] = true;
-			if (meta.pressed && (meta.over != 0.0 || meta.volume != 0.0)) { // (Stage 88) at its sealed vessel's pressure
-				cell["over"] = bits(meta.over);
+			if (meta.pressed && (meta.over != 0.0 || meta.volume != 0.0 || meta.cushion != 0.0)) { // (Stage 88) at its sealed vessel's pressure, against its cushion
+				cell["over"] = { bits(meta.over), bits(meta.cushion) };
 			}
 		}
 		if (meta.frozen || meta.retired) { // (Stage 61)
@@ -8355,12 +8356,12 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					: cell.value("layer", false)			  ? b.add_layer_cell(name)
 															  : b.add_cell(name);
 			if (cell.contains("over")) { // (Stage 88) a sealed vessel's layer, at its pressure, having taken its volume
-				double over = 0.0;
-				if (!from_bits(cell.at("over"), over)) {
+				double over = 0.0, cushion = 0.0;
+				if (!cell.at("over").is_array() || cell.at("over").size() != 2 || !from_bits(cell.at("over").at(0), over) || !from_bits(cell.at("over").at(1), cushion)) {
 					why = "the save holds a number that is not one";
 					return nullptr;
 				}
-				b.set_layer_pressure(id, over, volume);
+				b.set_layer_pressure(id, over, volume, cushion);
 			}
 			if (cell.contains("column")) { // a column's top (Stage 47)
 				double whole = 0.0, area = 0.0;

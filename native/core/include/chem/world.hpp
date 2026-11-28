@@ -159,8 +159,12 @@ struct CellMeta {
 	// seal (V3). `over`: that pressure over the room's, Pa, and its `volume`, what it had taken of its vessel when the
 	// vessel was last sized: the simulation's (Simulation::size_vessels). Its energy is E = U + P_atm V as a sealed
 	// cell's; at its pressure what stands is its enthalpy, E + over * volume.
+	// `cushion`: its share of the vessel's free volume (its gas's, or a void) as the vessel was last sized, m^3. Until
+	// the next sizing the layer feels it as it grows: grown by dV it stands at (P_atm + over) (c / (c - dV))^(5/3),
+	// stiffer than any gas's own compression either way, so its boiling takes no more room than its vessel has and the
+	// work it books is on the second law's side. 0: none set, at its pressure whatever it takes (as it is sealed).
 	bool pressed = false;
-	double over = 0.0;
+	double over = 0.0, cushion = 0.0;
 	double column_volume = 0.0, column_area = 0.0;
 	double column_rise = 0.0;
 	std::vector<double> column_shape;
@@ -198,7 +202,7 @@ struct LedgerEntry {
 	// (Stage 88) Transfer: its energy is work, not heat: what a sealed vessel's cell gives the one over it as it grows
 	// against the vessel's pressure (World::work). No heat's direction is asked of it (T1); W2's.
 	bool work = false;
-	double volume = 0.0, over = 0.0; // Resize: the cell's volume (m^3) and its pressure over the room's (Pa) from here on
+	double volume = 0.0, over = 0.0, cushion = 0.0; // Resize: the cell's volume (m^3), its pressure over the room's (Pa) and its cushion (m^3) from here on
 };
 
 // One gas's exchange along an edge in a step (Stage 50), as the simulation reckoned it: from the cell where its mole
@@ -224,7 +228,7 @@ struct StepTrace {
 	std::vector<double> volume_before;
 	// (Stage 88) and each cell's pressure over the room's at the step's start, where a sealed vessel was sized in the
 	// step (its layers' `over`; none: as `meta`)
-	std::vector<double> over_before;
+	std::vector<double> over_before, cushion_before;
 	bool thermal = false; // the world has temperatures: the thermal invariants apply
 	// One per cell, set by the simulation: nonzero when a rigid cell was left
 	// under-full this step, because the cell it draws from held no more gas,
@@ -285,7 +289,7 @@ public:
 		Builder &set_column(CellId top, double area, double whole = 0.0); // whole: the vessel's volume (0: its own now)
 		// (Stage 88) a sealed vessel's layer as it stood (a save's): its pressure over the room's and what it had taken
 		// of its vessel; kept only where its column's top is sealed
-		Builder &set_layer_pressure(CellId layer, double over, double volume);
+		Builder &set_layer_pressure(CellId layer, double over, double volume, double cushion);
 		// a column's shape (Stage 51): the inside's volume (m^3) at heights 0, rise, 2 rise, ... (m) over its floor
 		Builder &set_column_shape(CellId top, double rise, std::vector<double> volumes);
 		// an edge exactly as given: closed, a drain, any conductance (for a saved world)
@@ -445,7 +449,7 @@ public:
 	// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel's layer set at its vessel's pressure over the room's,
 	// having taken `volume` of it: the simulation's own act as it sizes the vessel (Simulation::size_vessels). Refused
 	// (BadValue) for a cell that is no pressed layer, a volume under 0 or a pressure at or under none.
-	Refusal press_layer(CellId layer, double over, double volume);
+	Refusal press_layer(CellId layer, double over, double volume, double cushion);
 	// (Stage 88) Work between two cells of one sealed vessel, along its column's edge: energy from `from` to the
 	// other end, recorded as work (LedgerEntry::work). Refused (BadValue) along any other edge.
 	Refusal work(EdgeId edge, CellId from, Energy energy);
@@ -505,7 +509,7 @@ private:
 	std::vector<LedgerEntry> ledger_;
 	Snapshot before_;
 	std::vector<std::pair<int32_t, double>> moved_volumes_; // (Stage 79) the cells a piston moved this step, each one's volume at its start
-	std::vector<std::pair<int32_t, double>> moved_overs_; // (Stage 88) and the layers a sizing moved, each one's pressure over the room's at its start
+	std::vector<std::pair<int32_t, std::pair<double, double>>> moved_overs_; // (Stage 88) and the layers a sizing moved, each one's pressure over the room's and its cushion at its start
 	void note_before(CellId cell); // a cell's volume and pressure as the step began, before its first move in it
 	uint64_t step_ = 0;
 	uint64_t topology_version_ = 0;

@@ -297,13 +297,14 @@ namespace {
 
 // hands at random on a bench's syringes, several jerked every step (to an end or anywhere, let go, locked, capped, the
 // bench's own moves): instant reversals of the force on the plungers, every invariant held on every step
-void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps);
+void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps, bool caps = true);
 
 void random_hands(const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
 	random_hands_on(bench_file(bench), bench, ids, moves, seed, steps);
 }
 
-void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
+// (`caps` false: its cap stays as the bench has it)
+void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps, bool caps) {
 	std::string why;
 	auto l = lab::Lab::open(json, why);
 	REQUIRE_MESSAGE(l != nullptr, why);
@@ -316,7 +317,7 @@ void random_hands_on(const std::string &json, const char *bench, const std::vect
 			const unsigned r = rng() % 16;
 			std::string c = r == 0   ? R"({"do":"plunger","free":true,"item":")" + id + "\"}"
 					: r == 1		 ? std::string(R"({"do":"plunger","lock":)") + (rng() % 2 ? "true" : "false") + R"(,"item":")" + id + "\"}"
-					: r == 2		 ? std::string(R"({"do":"cap","to":)") + (rng() % 2 ? "1" : "0") + R"(,"item":")" + id + "\"}"
+					: r == 2 && caps ? std::string(R"({"do":"cap","to":)") + (rng() % 2 ? "1" : "0") + R"(,"item":")" + id + "\"}"
 					: r == 3 && !moves.empty() ? moves[rng() % moves.size()]
 					: r < 10				   ? R"({"do":"plunger","item":")" + id + "\",\"ml\":" + (rng() % 2 ? "0" : "100") + "}"
 											   : R"({"do":"plunger","item":")" + id + "\",\"ml\":" + std::to_string(rng() % 101) + "}";
@@ -347,4 +348,17 @@ TEST_CASE("syringe lab: hands jerked at random on the four setups, with tubes jo
 			{ R"({"do":"stand","item":"s","in":"cold"})", R"({"do":"stand","item":"s","in":"hot"})", R"({"do":"place","item":"s","at":[6,6]})" }, 13, 1500);
 	random_hands("data/benches/molar_volume.json", { "s" },
 			{ R"({"do":"attach","item":"s","to":"flask"})", R"({"do":"detach","item":"s"})", R"({"do":"tip","from":"jar","to":"flask","species":"malachite","all":true})" }, 14, 1500);
+}
+
+TEST_CASE("syringe lab: hands jerked at random on a sealed syringe of two layered solutions under air, and on one brim-full of them: its layers at its pressure through every push and pull, every invariant on every step (Stage 88)") {
+	// green nickel sulfate solution over the denser blue copper sulfate (the layers bench's), in a capped syringe: with
+	// 30 mL of air over them, and with none
+	const auto layered = [](double plunger_ml) {
+		return R"({"format": "chem-bench/2", "room": {"celsius": 25, "air_mol": 1000}, "items": [{"id": "s", "at": [6, 4], "kind": "vessel", "volume_ml": 100, "wall": "glass",
+			"glassware": "gas_syringe", "wall_g": 60, "plunger_ml": )" +
+			   std::to_string(plunger_ml) + R"(, "capped": true, "layers": [{"water": {"g": 25.0}, "nickel_sulfate_aq": {"mol": 0.020}}, {"water": {"g": 25.0}, "copper_sulfate_aq": {"mol": 0.035}}]}]})";
+	};
+	// (its cap stays on: an open syringe of layered liquids pushed home is Stage 79's to finish, docs/TDD_88_PRESSURE.md)
+	random_hands_on(layered(80.0), "layered under air", { "s" }, {}, 21, 1200, false);
+	random_hands_on(layered(51.5), "layered, brim-full", { "s" }, {}, 22, 1200, false);
 }

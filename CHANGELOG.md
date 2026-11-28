@@ -13,7 +13,13 @@
   (`pressed`, `over`; `Simulation::size_vessels`), the work of each one's change of volume booked between it and
   the top as work (`World::work`, W2); a cell's resizing an entry of the step's ledger, replayed by T1. Water in a
   layer boils where its vessel's pressure says (it boiled at 100 °C whatever the pressure): a sealed flask in a bath
-  at 150 °C comes to 6 bar with its layers' water liquid at 149 °C.
+  at 150 °C comes to 6 bar with its layers' water liquid at 149 °C. A layer feels its vessel as it grows (its
+  **cushion**: its share of the vessel's free volume, a pressure law stiffer than any gas's own compression), so its
+  boiling takes no more room than its vessel has; what moves between a vessel's cells takes its volume with it; P2
+  (a sealed vessel at one pressure). A capped syringe of layered solutions, which failed T2 at its first step on
+  main, holds every invariant under hands jerked at random.
+- The column's diffusion trims what it moves to what is neutral before reckoning its energy (it carried the energy
+  of ions it did not move); a column that spills closes up (L1).
 - The `pressure` session re-recorded with the user's approval (2026-11-28): every printed result main's, line for
   line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved. Recorded again on
   Stage 82's tables after main was merged in: the same six of main's unchanged, the same twelve moved, the printed

@@ -46,7 +46,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.2 | The compressible sealed model: `Sealed`, `fill_of`, `entropy`, `affinity`, `AffinityProbe::at`, V2, V3 | Done |
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
 | 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
-| 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion (Open) | P2, W2 and their self-tests done; the cushion next |
+| 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion; what moves in a vessel with its volume; hands at random on sealed layered syringes | Done |
 | 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | |
 
 ## Tests
@@ -78,6 +78,12 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   - the same in a bath at 150 °C for ten minutes: 5.97 bar at 149.5 °C, its layers' water at up to 149.5 °C, 9.6 of
     its 11 mol still liquid in its layers and 0.006 mol as steam: a layer holds liquid past 100 °C where its
     vessel's pressure says it may.
+  - P2, W2 and V3's layer mark, each firing on a corrupted trace and none on a clean one.
+- `native/tests/game/test_pressure_lab.cpp`: a stoppered flask of two layered solutions warmed to 128 kPa, every
+  invariant on every step, saved and loaded digest for digest.
+- `native/tests/game/test_syringe_lab.cpp`: hands jerked at random (to an end or anywhere, let go, locked) on a
+  capped syringe of two layered solutions, under 30 mL of air and brim-full, 1,200 steps each, every invariant on
+  every step (twelve seeds of 2,500 steps one-off).
 - Stage 67's own (`test_expansion.cpp`: one potential as it is heated, the affinity the entropy's slope) pass on the
   new model unchanged.
 
@@ -94,6 +100,32 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   energy carried between two cells at one temperature leaves their entropy as it was to the first order, whatever
   the energy. What the exact enthalpy sets right is where the heat ends (the giver's and the taker's temperatures),
   and the entropy where they differ.
+- **A layer's boiling at its vessel's pressure had no limit but its own heat** (found by hands jerked at random on
+  a capped syringe of two layered solutions with no air: T2, the world's entropy down 1.5e-4 J/K in a step). A layer
+  a little over saturation in a vessel with a microlitre of vapour space made half a millimole of steam in a round
+  (a litre of it, at that pressure, in a 50 mL vessel); the next sizing found 76 bar, the steam condensed in the
+  warmer top, and heat had been carried from the colder layers to it. So wherever a vessel's gas space cannot take
+  what its layers would boil. A layer now feels its vessel as it grows: its **cushion**, its share of the vessel's
+  free volume as last sized, and the pressure `P0 (c / (c - dV))^(5/3)` grown by `dV`: stiffer than any gas's own
+  compression both ways, so the work it books is on the second law's side; a large cushion is a layer at a pressure,
+  a void is free until it is filled and then a wall, none is a rigid cell (which is what the plan first meant a
+  layer to be).
+- **With a cushion, what moves inside a vessel must take its volume with it**: a layer that gave half its liquid at
+  the volume it had taken stood, by its cushion, as if it had shrunk by half, and its pressure fell to a fifth. A
+  move between two of a vessel's cells now shifts the giver's taken volume to the taker and carries the energy in
+  that volume, `h - p v`.
+- **Stage 28's "cells sealed together" took a column's layers for members of the sealed group**, and ran their
+  equilibria and its gas levelling on them. A layer at a void's pressure flashed there (208 K). A column's edge is
+  no gas path between sealed cells; a sealed vessel is sized before its layers' equilibria run.
+- **A sealed bench vessel built with layers starts with its top the whole vessel's size** (its layers' volumes are
+  taken from it only as the column first runs): a plunger's first push acted on a top that looked five times
+  roomier than it was (1050 bar after it). A vessel is sized before its plunger is moved, too.
+- **On main a capped syringe of two layered solutions, left alone, fails T2 at its first step**: sealed layered
+  vessels were never right there (no bench has one). Here it runs two minutes clean.
+- **The column's diffusion carried the energy of ions it did not move** (Stages 47 and 63; found at the 2480th step
+  of one seed): what it asks to move is trimmed to what is neutral as it moves, and the energy of all of it went
+  with the part; where nothing of it was neutral, alone, as heat between two layers whichever was the warmer (T1).
+  Trimmed before its energy is reckoned.
 - **T1 replays a step's ledger against each cell's state as the entry ran**, and read every cell at its volume and
   pressure as the step ended. A layer's pressure now moves several times in a step: a fast equilibrium that ran at
   one pressure was judged at another (a transform "against an affinity of 0.07 J/mol" in the first step), and heat
@@ -110,19 +142,11 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 
 ## Open
 
-- **A layer's boiling at its vessel's pressure has no limit but its own heat** (found by hands jerked at random on a
-  capped syringe of two layered solutions with no air: T2, the world's entropy down 1.5e-4 J/K in a step). A layer
-  is at a pressure, and its equilibria are solved at that pressure: a layer a little over saturation in a vessel
-  with a microlitre of vapour space made half a millimole of steam in a round (a litre of it, at that pressure, in a
-  50 mL vessel); the next sizing found 76 bar, the steam condensed in the warmer top, and heat had been carried from
-  the colder layers to it. So wherever a vessel's gas space cannot take what its layers would boil: a stoppered
-  flask at its vapour pressure, too. **The fix, designed and next**: a layer feels its vessel's gas space as it
-  grows. Each layer holds its share of the vessel's free volume as it was last sized (its cushion `c`), and stands
-  at `P0 (c / (c - dV))^(5/3)` as it grows by `dV`: stiffer than any gas's own compression both ways, so the work it
-  books is on the second law's side; a large cushion is this stage's layer at a pressure, a void is free until it
-  is filled and then a wall, and none at all is a rigid cell. The stress is parked until then
-  (`syringe lab: hands jerked at random on a sealed syringe of two layered solutions`).
-
+- **An open syringe of layered liquids pushed home** (Stage 79's, with Stage 71's spill of a column; reached by no
+  bench: nothing yet puts layered liquid in a syringe): its plunger's first steps left a layer holding liquid under
+  emptied ones (L1; the same on main, at its 13th step). A column that spills now closes up (each layer under an
+  emptied one moves up into its place), which holds L1; six steps on its top stands a hair over-full (V2), a move
+  of the plunger too small to spill taken from the top's own volume. Stage 79's to finish, with the flow stage.
 - **A sealed vessel's layers boil by the room's pressure** (until 88.4; so since Stages 28 and 47): a layer is an
   open cell at 1 atm whatever its vessel's pressure, and boils at 100 °C in a flask at 2 atm. Benign so far (a hot
   layer rises, and the top boils where its pressure says); wrong for a pressure cooker.

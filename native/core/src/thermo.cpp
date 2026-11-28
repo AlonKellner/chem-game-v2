@@ -61,7 +61,7 @@ bool is_sealed(const CellMeta *meta) {
 
 // a sealed vessel's layer at a pressure off the room's (Stage 88); at the room's it is an open cell, to the bit
 bool is_pressed(const CellMeta *meta) {
-	return meta != nullptr && meta->pressed && meta->layer && !meta->reservoir && meta->over != 0.0;
+	return meta != nullptr && meta->pressed && meta->layer && !meta->reservoir && (meta->over != 0.0 || meta->cushion > 0.0);
 }
 
 // A sealed cell's energy by its temperature (GAME_SPEC §6, Stages 67 and 88). Its solids incompressible; its liquids
@@ -234,6 +234,142 @@ struct Pressed {
 	}
 };
 
+// (Stage 88) What a sealed vessel's layer feels of its vessel as it grows (CellMeta::cushion): having taken `taken`
+// m^3 at the pressure p0 when the vessel was last sized, with a cushion c of the vessel's free volume, it stands at
+// p0 (c / (c - dV))^g grown by dV, g = 5/3: stiffer than an ideal gas's own compression either way (its exponent the
+// largest a gas has), so that the work a layer books against it, the integral of that pressure, is at least what its
+// vessel's gas takes compressed and at most what it gives expanding. No cushion: at p0 whatever it takes.
+constexpr double CUSHION_POWER = 5.0 / 3.0;
+
+struct Cushion {
+	double p0 = P_ATMOSPHERE, taken = 0.0, cushion = 0.0; // Pa, m^3, m^3
+
+	explicit Cushion(const CellMeta &meta) : p0(P_ATMOSPHERE + meta.over), taken(meta.volume), cushion(meta.cushion) {}
+	bool none() const { return !(cushion > 0.0); }
+	// what it has grown by where it stands at `pressure`, and the work it has done on its vessel getting there, over the
+	// room's (J: E = U + P_atm V)
+	double grown(double pressure) const { return cushion * (1.0 - pow(p0 / pressure, 1.0 / CUSHION_POWER)); }
+	double work(double pressure) const {
+		return p0 * cushion / (CUSHION_POWER - 1.0) * (pow(pressure / p0, (CUSHION_POWER - 1.0) / CUSHION_POWER) - 1.0) - P_ATMOSPHERE * grown(pressure);
+	}
+};
+
+// The pressure at which `gap` (falling as the pressure rises; NaN: none) is nought, from `start`: bracketed by fours,
+// then regula falsi (Illinois') in the pressure's logarithm. false where it has no sign to find.
+template <typename Gap>
+bool pressure_root(Gap &&gap, double start, double &pressure) {
+	constexpr double LEAST = 1e-6, MOST = 1e10;
+	double lo = start, hi = start;
+	double f_lo = gap(lo), f_hi = f_lo;
+	if (f_lo != f_lo) {
+		return false;
+	}
+	if (f_lo > 0.0) {
+		while (f_hi > 0.0 && hi < MOST) {
+			lo = hi;
+			f_lo = f_hi;
+			hi *= 4.0;
+			f_hi = gap(hi);
+			if (f_hi != f_hi) {
+				return false;
+			}
+		}
+	} else if (f_lo < 0.0) {
+		while (f_lo < 0.0 && lo > LEAST) {
+			hi = lo;
+			f_hi = f_lo;
+			lo *= 0.25;
+			f_lo = gap(lo);
+			if (f_lo != f_lo) {
+				return false;
+			}
+		}
+	}
+	if (f_lo == 0.0 || !(f_lo > 0.0 && f_hi < 0.0)) {
+		pressure = f_hi == 0.0 || f_lo < 0.0 ? hi : lo; // (found, or none to find: the nearer end)
+		return f_lo == 0.0 || f_hi == 0.0;
+	}
+	int side = 0;
+	for (int i = 0; i < 200 && hi - lo > 1e-14 * hi; ++i) {
+		const double l_lo = log(lo), l_hi = log(hi);
+		double middle = exp((l_lo * f_hi - l_hi * f_lo) / (f_hi - f_lo));
+		if (!(middle > lo && middle < hi)) {
+			middle = 0.5 * (lo + hi);
+		}
+		const double f = gap(middle);
+		if (f != f) {
+			return false;
+		}
+		if (f == 0.0) {
+			lo = hi = middle;
+			break;
+		}
+		if (f > 0.0) {
+			lo = middle;
+			f_lo = f;
+			f_hi *= side == 1 ? 0.5 : 1.0;
+			side = 1;
+		} else {
+			hi = middle;
+			f_hi = f;
+			f_lo *= side == -1 ? 0.5 : 1.0;
+			side = -1;
+		}
+	}
+	pressure = hi;
+	return true;
+}
+
+// A sealed vessel's layer's state from the energy it holds (E = U + P_atm V, as its vessel was last sized), against
+// its cushion: the pressure at which the volume its contents take, at the temperature that holds their enthalpy there,
+// is what it had taken and has grown by; its enthalpy there its energy less the work it did growing and that
+// pressure's times its volume. `model.over` is not read.
+bool layer_state(const SpeciesTable &table, Pressed model, const Cushion &c, double energy, double guess, Pressed::State &out, double &pressure) {
+	if (c.none()) {
+		model.over = c.p0 - P_ATMOSPHERE;
+		pressure = c.p0;
+		return model.solve(table, energy + model.over * c.taken, guess, out);
+	}
+	const auto gap = [&](double p) {
+		model.over = p - P_ATMOSPHERE;
+		const double grown = c.grown(p);
+		if (!model.solve(table, energy - c.work(p) + model.over * (c.taken + grown), guess, out)) {
+			return std::numeric_limits<double>::quiet_NaN();
+		}
+		return out.volume - c.taken - grown;
+	};
+	if (!pressure_root(gap, c.p0, pressure)) {
+		return false;
+	}
+	return gap(pressure) == gap(pressure); // (its state there; false where it has none)
+}
+
+// its pressure at a temperature alone (its entropy's and its potentials'): where its contents' volume at that
+// temperature is what it had taken and has grown by
+bool layer_pressure(const SpeciesTable &table, Pressed model, const Cushion &c, double temperature, double &pressure) {
+	if (c.none()) {
+		pressure = c.p0;
+		return true;
+	}
+	Pressed::State at;
+	const auto gap = [&](double p) {
+		model.over = p - P_ATMOSPHERE;
+		model.at(table, temperature, at);
+		return at.volume - c.taken - c.grown(p);
+	};
+	return pressure_root(gap, c.p0, pressure);
+}
+
+// a sealed vessel's layer's pressure over the standard's at a temperature; INFINITE where it has none
+double pressed_ratio(const SpeciesTable &table, const CellState &cell, const CellMeta &meta, double temperature) {
+	const Volumes volumes = volumes_of(table, cell);
+	double pressure = 0.0;
+	if (!volumes.defined || !layer_pressure(table, Pressed{ 0.0, 0.0, gas_mol(table, cell), volumes.fixed, volumes.expanding, 0.0 }, Cushion(meta), temperature, pressure)) {
+		return std::numeric_limits<double>::infinity();
+	}
+	return pressure / P_STANDARD;
+}
+
 } // namespace
 
 MatterSums matter_sums(const SpeciesTable &table, const CellState &cell) {
@@ -292,12 +428,14 @@ Thermal thermal_state(const SpeciesTable &table, const CellState &cell, const Ce
 		}
 		const Pressed model{ formation, capacity, gas_mol(table, cell), volumes.fixed, volumes.expanding, meta->over };
 		Pressed::State at;
-		if (!model.solve(table, static_cast<double>(cell.energy) * JOULE_PER_QUANTUM + meta->over * meta->volume, 0.0, at)) {
+		double pressure = 0.0;
+		if (!layer_state(table, model, Cushion(*meta), static_cast<double>(cell.energy) * JOULE_PER_QUANTUM, 0.0, at, pressure)) {
 			return out;
 		}
-		out.heat_capacity = at.slope;
+		out.heat_capacity = at.slope; // (at its pressure: against its cushion a little less; a liquid's hardly differs)
 		out.temperature = at.temperature;
-		out.pressure = P_ATMOSPHERE + meta->over;
+		out.pressure = pressure;
+		out.free_volume = at.volume; // (a layer's: the volume it takes now)
 		out.defined = true;
 		return out;
 	}
@@ -597,8 +735,10 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 	} else if (is_pressed(meta)) {
 		// (Stage 88) a sealed vessel's layer, at its vessel's pressure: its liquids squeezed by it, its gas's volume there
 		const double k = volumes.expanding != 0.0 ? compressibility(table, temperature) : 0.0;
-		out.condensed -= (out.condensed - volumes.fixed) * k * meta->over;
-		out.gas = gas_mol(table, cell) * GAS_CONSTANT * temperature / (P_ATMOSPHERE + meta->over);
+		double pressure = P_ATMOSPHERE + meta->over;
+		layer_pressure(table, Pressed{ 0.0, 0.0, gas_mol(table, cell), volumes.fixed, volumes.expanding, 0.0 }, Cushion(*meta), temperature, pressure);
+		out.condensed -= (out.condensed - volumes.fixed) * k * (pressure - P_ATMOSPHERE);
+		out.gas = gas_mol(table, cell) * GAS_CONSTANT * temperature / pressure;
 	} else {
 		out.gas = gas_mol(table, cell) * GAS_CONSTANT * temperature / P_ATMOSPHERE;
 	}
@@ -699,11 +839,17 @@ bool energy_at(const SpeciesTable &table, const CellState &cell, const CellMeta 
 		// (Stage 88) its energy E = U + P_atm V: its enthalpy at its pressure less that pressure's times its volume there
 		const Volumes volumes = volumes_of(table, cell);
 		const MatterSums sums = matter_sums(table, cell);
-		const Pressed model{ sums.formation, sums.capacity, gas_mol(table, cell), volumes.fixed, volumes.expanding, meta->over };
+		Pressed model{ sums.formation, sums.capacity, gas_mol(table, cell), volumes.fixed, volumes.expanding, meta->over };
+		const Cushion c(*meta);
+		double pressure = c.p0;
+		if (!volumes.defined || !layer_pressure(table, model, c, temperature, pressure)) {
+			return false;
+		}
 		Pressed::State at;
+		model.over = pressure - P_ATMOSPHERE;
 		model.at(table, temperature, at);
-		joule = at.enthalpy - meta->over * at.volume;
-		return volumes.defined;
+		joule = at.enthalpy - model.over * at.volume + (c.none() ? 0.0 : c.work(pressure)); // (and the work it did growing there)
+		return true;
 	}
 	if (!ok || !is_sealed(meta)) {
 		return ok;
@@ -933,7 +1079,7 @@ double sealed_ratio(const SpeciesTable &table, const CellState &cell, const Cell
 // a sealed cell's pressure off the room's, Pa (0 open, or with no pressure): what its condensed species' potentials
 // rise by (Stages 67 and 88)
 double over_room(const CellMeta *meta, double ratio) {
-	return is_pressed(meta) ? meta->over : is_sealed(meta) && ratio < INFINITE ? ratio * P_STANDARD - P_ATMOSPHERE : 0.0;
+	return (is_sealed(meta) || is_pressed(meta)) && ratio < INFINITE ? ratio * P_STANDARD - P_ATMOSPHERE : 0.0;
 }
 
 // what a pressure `over` the room's adds to a condensed species' chemical potential, J/mol (Stage 88): a liquid's or a
@@ -956,7 +1102,7 @@ double activity(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 	if (is_sealed(meta)) {
 		mix.pressure_ratio = thermal_state(table, cell, meta).pressure / P_STANDARD;
 	} else if (is_pressed(meta)) {
-		mix.pressure_ratio = (P_ATMOSPHERE + meta->over) / P_STANDARD;
+		mix.pressure_ratio = thermal_state(table, cell, meta).pressure / P_STANDARD;
 	}
 	const Presence presence = log_activity(table.species(species), static_cast<double>(cell.amount[static_cast<size_t>(species.index)]), mix, ln);
 	return presence == Presence::Present ? exp(ln) : 0.0;
@@ -1204,6 +1350,51 @@ AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double 
 	out.defined = true;
 	out.temperature = state.temperature;
 	out.volume = state.volume;
+	out.gas = model.gas * GAS_CONSTANT * state.temperature / pressure;
+	return out;
+}
+
+double volume_at(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double pressure) {
+	double fixed = 0.0, expanding = 0.0, gas = 0.0; // m^3 (the table's), mol
+	for (const SpeciesAmount &a : amounts) {
+		const SpeciesDef &def = table.species(a.species);
+		if (def.wall) {
+			continue;
+		}
+		const double mol = static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM;
+		if (def.phase == Phase::Gas) {
+			gas += mol;
+		} else {
+			(def.phase == Phase::Solid ? fixed : expanding) += mol * def.molar_volume;
+		}
+	}
+	double volume = fixed;
+	if (expanding != 0.0) {
+		volume += expanding * expansion(table, temperature) * (1.0 - compressibility(table, temperature) * (pressure - P_ATMOSPHERE));
+	}
+	if (gas > 0.0 && pressure > 0.0) {
+		volume += gas * GAS_CONSTANT * temperature / pressure;
+	}
+	return volume;
+}
+
+LayerNow layer_now(const SpeciesTable &table, const CellState &cell, const CellMeta &meta) {
+	LayerNow out;
+	const MatterSums sums = matter_sums(table, cell);
+	const Volumes volumes = volumes_of(table, cell);
+	if (!sums.known || !volumes.defined || !(sums.capacity > 0.0)) {
+		return out;
+	}
+	const Cushion c(meta);
+	Pressed::State state;
+	if (!layer_state(table, Pressed{ sums.formation, sums.capacity, gas_mol(table, cell), volumes.fixed, volumes.expanding, meta.over }, c, static_cast<double>(cell.energy) * JOULE_PER_QUANTUM, 0.0,
+				state, out.pressure)) {
+		return out;
+	}
+	out.defined = true;
+	out.temperature = state.temperature;
+	out.volume = state.volume;
+	out.work = c.none() ? meta.over * (state.volume - c.taken) : c.work(out.pressure);
 	return out;
 }
 
@@ -1234,7 +1425,7 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 	if (is_sealed(meta)) {
 		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
 	} else if (is_pressed(meta)) {
-		mix.pressure_ratio = (P_ATMOSPHERE + meta->over) / P_STANDARD; // (Stage 88: a sealed vessel's layer, at its pressure)
+		mix.pressure_ratio = pressed_ratio(table, cell, *meta, temperature); // (Stage 88: a sealed vessel's layer, at its pressure)
 	}
 	double total = 0.0;
 	for (size_t s = 0; s < cell.amount.size(); ++s) {
@@ -1309,7 +1500,7 @@ Mix mix_at(const SpeciesTable &table, const CellState &cell, double temperature,
 	if (is_sealed(meta)) {
 		mix.pressure_ratio = sealed_ratio(table, cell, *meta, temperature, mix.gas);
 	} else if (is_pressed(meta)) {
-		mix.pressure_ratio = (P_ATMOSPHERE + meta->over) / P_STANDARD; // (Stage 88: a sealed vessel's layer, at its pressure)
+		mix.pressure_ratio = pressed_ratio(table, cell, *meta, temperature); // (Stage 88: a sealed vessel's layer, at its pressure)
 	}
 	return mix;
 }
@@ -1435,6 +1626,8 @@ AffinityProbe::AffinityProbe(const SpeciesTable &table, const CellState &cell, s
 	pressed_ = is_pressed(meta);
 	if (pressed_) {
 		over_ = meta->over;
+		cushion_ = meta->cushion;
+		pressure_ = thermal.pressure;
 	}
 	if (sealed_ || pressed_) {
 		const Volumes volumes = volumes_of(table, cell);
@@ -1474,20 +1667,25 @@ bool AffinityProbe::at(double extent, double &a) const {
 		ratio = state.pressure / P_STANDARD;
 		over = state.pressure - P_ATMOSPHERE;
 	} else if (pressed_) {
-		// (Stage 88) at its vessel's pressure and fixed enthalpy there (its energy and that pressure's times the volume it
-		// had taken stand): what the extent makes, at the temperature that holds it
-		ratio = (P_ATMOSPHERE + over_) / P_STANDARD;
-		over = over_;
+		// (Stage 88) a sealed vessel's layer: its energy stands, and what the extent makes stands against its cushion,
+		// at the pressure and the temperature that hold it
+		double pressure = pressure_;
 		if (extent != 0.0) {
 			const double gas = gas_mol_ + extent * gas_step_ * MOL_PER_QUANTUM;
 			const Pressed model{ formation_ + extent * formation_step_, cp_ + extent * capacity_step_, gas > 0.0 ? gas : 0.0, fixed_ + extent * fixed_step_,
 				expanding_ + extent * expanding_step_, over_ };
+			CellMeta meta;
+			meta.over = over_;
+			meta.volume = volume_;
+			meta.cushion = cushion_;
 			Pressed::State state;
-			if (!model.solve(*table_, energy_ + over_ * volume_, temperature_, state) || !(state.temperature > 0.0)) {
+			if (!layer_state(*table_, model, Cushion(meta), energy_, temperature_, state, pressure) || !(state.temperature > 0.0)) {
 				return false;
 			}
 			temperature = state.temperature;
 		}
+		ratio = pressure / P_STANDARD;
+		over = pressure - P_ATMOSPHERE;
 	} else if (extent != 0.0) {
 		const double capacity = capacity_ + extent * capacity_step_;
 		if (!(capacity > 0.0)) {

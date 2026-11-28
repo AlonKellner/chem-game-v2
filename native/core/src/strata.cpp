@@ -295,17 +295,37 @@ void Simulation::stratify(const Column &col) {
 		const SpeciesDef &d = table.species(s);
 		return d.molar_volume > 0.0 ? static_cast<double>(table.molar_mass_ug(s)) * 1e-9 / d.molar_volume : 0.0;
 	};
-	// (Stage 88) in a sealed vessel what moves between its cells carries its enthalpy at the giver's state: the table's
-	// and what the vessel's pressure adds (its top's own, a layer's the one it stands at)
+	// (Stage 88) in a sealed vessel what moves between two of its cells takes its volume with it: the giver's taken
+	// volume less by what the amounts take at its state, the taker's more; and with its volume it carries its energy
+	// E = U + P_atm V there: its enthalpy at the giver's state (the table's and what the pressure adds) less the
+	// pressure's (over the room's) times that volume. (Its enthalpy alone is what crosses between two vessels, whose
+	// volumes stand.)
 	const bool pressed = world_.meta(col.top).sealed;
+	double moved_m3 = 0.0; // what the last amounts asked of carried_from take, at their giver's state
 	// (at the temperature given: read where it was read before this stage, so an open vessel's is the same to the bit)
 	const auto carried_from = [&](size_t from, std::span<const SpeciesAmount> amounts, double at_kelvin) {
 		Energy energy = enthalpy_carried(table, amounts, at_kelvin);
+		moved_m3 = 0.0;
 		if (pressed) {
-			const double over = from == 0 ? thermal(col.top).pressure - P_ATMOSPHERE : world_.meta(col.cells[from]).over;
-			energy.quanta += std::llround(enthalpy_over(table, amounts, at_kelvin, over) / JOULE_PER_QUANTUM);
+			const double pressure = thermal(col.cells[from]).pressure, over = pressure - P_ATMOSPHERE; // (its top's own; a layer's where it stands)
+			moved_m3 = volume_at(table, amounts, at_kelvin, pressure);
+			energy.quanta += std::llround((enthalpy_over(table, amounts, at_kelvin, over) - over * moved_m3) / JOULE_PER_QUANTUM);
 		}
 		return energy;
+	};
+	const auto moved_with = [&](size_t from, size_t to, double m3) {
+		if (!pressed || !(m3 > 0.0) || from == to) {
+			return;
+		}
+		const auto takes = [&](size_t i, double dv) {
+			const CellMeta &m = world_.meta(col.cells[i]);
+			const Refusal moved = i == 0 ? world_.resize_column_top(col.top, std::clamp(m.volume + dv, 1e-9 * m.column_volume, m.column_volume))
+										 : world_.press_layer(col.cells[i], m.over, std::max(m.volume + dv, 0.0), m.cushion);
+			CHEM_ASSERT(moved == Refusal::None, refusal_text(moved));
+			thermal_valid_[static_cast<size_t>(col.cells[i].index)] = 0;
+		};
+		takes(from, -m3);
+		takes(to, m3);
 	};
 	enum class Solids { All, Sinking, Floating };
 	// what of a cell is of these phases (never its wall), with its enthalpy at its temperature; of its solids (Stage
@@ -345,16 +365,22 @@ void Simulation::stratify(const Column &col) {
 		}
 		const bool all = from > 0 && every;
 		const Energy energy = all ? Energy{ c.energy } : carried_from(from, amounts, kelvin(from));
+		const double part_m3 = all ? 0.0 : moved_m3;
 		const Refusal refused = transfer(edge, col.cells[from], amounts, energy);
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+		if (refused == Refusal::None) {
+			moved_with(from, to, part_m3);
+		}
 		// (Stage 88) all of a sealed vessel's layer goes with what it had taken of the vessel, too: its energy is its
 		// own in that volume
 		const double taken = world_.meta(col.cells[from]).volume;
 		if (all && pressed && refused == Refusal::None && taken != 0.0) {
 			const CellMeta &into = world_.meta(col.cells[to]);
-			Refusal moved = world_.press_layer(col.cells[from], world_.meta(col.cells[from]).over, 0.0);
+			const CellMeta &out_of = world_.meta(col.cells[from]);
+			Refusal moved = world_.press_layer(col.cells[from], out_of.over, 0.0, out_of.cushion);
 			if (moved == Refusal::None) {
-				moved = to == 0 ? world_.resize_column_top(col.top, std::min(into.volume + taken, into.column_volume)) : world_.press_layer(col.cells[to], into.over, into.volume + taken);
+				moved = to == 0 ? world_.resize_column_top(col.top, std::min(into.volume + taken, into.column_volume))
+								: world_.press_layer(col.cells[to], into.over, into.volume + taken, into.cushion);
 			}
 			CHEM_ASSERT(moved == Refusal::None, refusal_text(moved));
 			thermal_valid_[static_cast<size_t>(col.cells[from].index)] = 0;
@@ -479,12 +505,18 @@ void Simulation::stratify(const Column &col) {
 			};
 			const std::vector<SpeciesAmount> sinks = share_of(i, pays / vu), rises = share_of(i + 1, pays / vl);
 			if (!sinks.empty()) {
-				const Refusal refused = transfer(col.up[i], col.cells[i], sinks, carried_from(i, sinks, tu));
+				const Energy energy = carried_from(i, sinks, tu);
+				const double m3 = moved_m3;
+				const Refusal refused = transfer(col.up[i], col.cells[i], sinks, energy);
 				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+				moved_with(i, i + 1, m3);
 			}
 			if (!rises.empty()) {
-				const Refusal refused = transfer(col.up[i], col.cells[i + 1], rises, carried_from(i + 1, rises, tl));
+				const Energy energy = carried_from(i + 1, rises, tl);
+				const double m3 = moved_m3;
+				const Refusal refused = transfer(col.up[i], col.cells[i + 1], rises, energy);
 				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+				moved_with(i + 1, i, m3);
 			}
 			budget = 0.0;
 		}
@@ -548,10 +580,12 @@ void Simulation::stratify(const Column &col) {
 				}
 				if (!lifted.empty()) {
 					const Energy carried = carried_from(k, lifted, kelvin(k));
+					const double m3 = moved_m3;
 					for (size_t j2 = k; j2 >= 1; --j2) {
 						const Refusal refused = transfer(col.up[j2 - 1], col.cells[j2], lifted, carried);
 						CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 					}
+					moved_with(k, 0, m3);
 				}
 				flux += per_metre * length;
 				between_h += h;
@@ -699,13 +733,26 @@ void Simulation::stratify(const Column &col) {
 		};
 		carry(down_moves, upper);
 		carry(up_moves, lower);
+		// (Stage 88) what moves is what is neutral of them (a transfer moves ions only as neutral matter): trimmed here,
+		// so that the energy carried is what moves' own. Trimmed as it moved, the energy of all of it went with the
+		// part of it, and where nothing of it was neutral, alone: heat between two layers, whichever was the warmer (T1)
+		for (std::vector<SpeciesAmount> *moves : { &down_moves, &up_moves }) {
+			neutral_part(table, *moves);
+			std::erase_if(*moves, [](const SpeciesAmount &m) { return m.amount.quanta == 0; });
+		}
 		if (!down_moves.empty()) {
-			const Refusal refused = transfer(col.up[i], col.cells[i], down_moves, carried_from(i, down_moves, kelvin(i)));
+			const Energy energy = carried_from(i, down_moves, kelvin(i));
+			const double m3 = moved_m3;
+			const Refusal refused = transfer(col.up[i], col.cells[i], down_moves, energy);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			moved_with(i, i + 1, m3);
 		}
 		if (!up_moves.empty()) {
-			const Refusal refused = transfer(col.up[i], col.cells[i + 1], up_moves, carried_from(i + 1, up_moves, kelvin(i + 1)));
+			const Energy energy = carried_from(i + 1, up_moves, kelvin(i + 1));
+			const double m3 = moved_m3;
+			const Refusal refused = transfer(col.up[i], col.cells[i + 1], up_moves, energy);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			moved_with(i + 1, i, m3);
 		}
 	}
 	// a steep step and a spare layer: the thicker neighbour splits in two halves (one split a step); the steepest
@@ -772,6 +819,20 @@ Refusal Simulation::work(EdgeId edge, CellId from, Energy energy) {
 	return refused;
 }
 
+void Simulation::lift_volume(CellId layer, CellId top, double m3) {
+	const CellMeta &l = world_.meta(layer), &t = world_.meta(top);
+	if (!l.pressed || !(m3 > 0.0) || !(t.column_volume > 0.0)) {
+		return;
+	}
+	Refusal moved = world_.press_layer(layer, l.over, std::max(l.volume - m3, 0.0), l.cushion);
+	if (moved == Refusal::None) {
+		moved = world_.resize_column_top(top, std::min(t.volume + m3, t.column_volume));
+	}
+	CHEM_ASSERT(moved == Refusal::None, refusal_text(moved));
+	thermal_valid_[static_cast<size_t>(layer.index)] = 0;
+	thermal_valid_[static_cast<size_t>(top.index)] = 0;
+}
+
 void Simulation::size_vessels() {
 	find_columns();
 	for (const Column &col : columns_) {
@@ -811,7 +872,7 @@ bool Simulation::size_vessel(const Column &col) {
 	struct Part {
 		bool holds = false;
 		double energy = 0.0, volume = 0.0, pending = 0.0; // J (E = U + P_atm V, in its volume now), m^3, J
-		double sized = 0.0; // m^3, at the pressure found
+		double sized = 0.0, gas = 0.0; // m^3, at the pressure found: its volume, and its gas's share of it
 	};
 	std::vector<Part> parts(n);
 	double below = 0.0, pending = 0.0;
@@ -827,13 +888,14 @@ bool Simulation::size_vessel(const Column &col) {
 		if (!part.holds) {
 			continue; // (an empty layer takes none: it gave what it had taken with what it held)
 		}
-		const Thermal &t = thermal(c);
-		const Fill f = t.defined ? fill_of(table, x, t.temperature, &m) : Fill{};
-		if (!f.defined) {
+		// where it stands against its cushion: the volume it takes now, and the work it has done on its vessel getting
+		// there since it was last sized
+		const LayerNow now = layer_now(table, x, m);
+		if (!now.defined) {
 			return false;
 		}
-		part.volume = f.condensed + f.gas;
-		part.pending = -m.over * (part.volume - m.volume);
+		part.volume = now.volume;
+		part.pending = -now.work;
 		part.energy = static_cast<double>(x.energy) * JOULE_PER_QUANTUM + part.pending;
 		below += part.volume;
 		pending += part.pending;
@@ -860,6 +922,7 @@ bool Simulation::size_vessel(const Column &col) {
 				return -1.0;
 			}
 			part.sized = at.volume;
+			part.gas = at.gas;
 			sum += at.volume;
 		}
 		return sum;
@@ -951,11 +1014,20 @@ bool Simulation::size_vessel(const Column &col) {
 			moved = true;
 		}
 	}
+	// each layer's cushion: its share of the vessel's free volume, its top's gas's or a void's; never less than a
+	// billionth of its own volume (a vessel full of liquid: a layer of it next to rigid)
+	const double left_now = whole - layers;
+	const double free = std::max(left_now - (parts[0].holds ? parts[0].sized - parts[0].gas : 0.0), 0.0);
+	size_t holding = 0;
+	for (size_t i = 1; i < n; ++i) {
+		holding += parts[i].holds ? 1 : 0;
+	}
 	for (size_t i = 1; i < n; ++i) {
 		const CellMeta &m = world_.meta(col.cells[i]);
 		const double taken = parts[i].holds ? parts[i].sized : 0.0;
-		if (m.over != over || m.volume != taken) {
-			const Refusal refused = world_.press_layer(col.cells[i], over, taken);
+		const double cushion = parts[i].holds ? std::max(free / static_cast<double>(holding), 1e-9 * taken) : 0.0;
+		if (m.over != over || m.volume != taken || m.cushion != cushion) {
+			const Refusal refused = world_.press_layer(col.cells[i], over, taken, cushion);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			thermal_valid_[static_cast<size_t>(col.cells[i].index)] = 0;
 			moved = true;

@@ -884,8 +884,9 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 			} else {
 				// (its layers give the liquid, at their pressure; its top takes the room it leaves as the vessel is sized,
 				// its gas's work on what stays, and what the liquid's enthalpy rose by between the two pressures)
-				probe.energy -= flow(pushed) - flow(P_ATMOSPHERE + world_.meta(giver.low).over) + std::llround((pushed - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM);
-				grown = volume;
+				const double low_pressure = thermal(giver.low).pressure, lifted_m3 = volume_at(table, amounts, giver.kelvin, low_pressure);
+				probe.energy -= flow(pushed) - flow(low_pressure) + std::llround((low_pressure - P_ATMOSPHERE) * lifted_m3 / JOULE_PER_QUANTUM);
+				grown = lifted_m3;
 			}
 			pg = plan_piston(giver.top, probe, grown, dt);
 		}
@@ -928,13 +929,20 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 		const bool out = x > 0.0;
 		const Side &giver = out ? sa : sb, &taker = out ? sb : sa;
 		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
-		const Energy lifted{ enthalpy.quanta + std::llround(enthalpy_over(table, amounts, giver.kelvin, world_.meta(giver.low).over) / JOULE_PER_QUANTUM) };
+		// (Stage 88) up its layers with its volume: its energy in that volume, its enthalpy at the layer's state less
+		// the layer's pressure (over the room's) times it
+		const double low_pressure = giver.low == giver.top ? P_ATMOSPHERE : thermal(giver.low).pressure, low_over = low_pressure - P_ATMOSPHERE;
+		const double lifted_m3 = giver.low == giver.top ? 0.0 : volume_at(table, amounts, giver.kelvin, low_pressure);
+		const Energy lifted{ enthalpy.quanta + std::llround((enthalpy_over(table, amounts, giver.kelvin, low_over) - low_over * lifted_m3) / JOULE_PER_QUANTUM) };
 		for (const auto &[hop, from] : giver.up) {
-			const Refusal refused = transfer(hop, from, amounts, giver.low == giver.top ? enthalpy : lifted);
+			const Refusal refused = transfer(hop, from, amounts, lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return true;
 			}
+		}
+		if (giver.low != giver.top) {
+			lift_volume(giver.low, giver.top, lifted_m3);
 		}
 		const Energy carried{ enthalpy.quanta + std::llround(enthalpy_over(table, amounts, giver.kelvin, pushed - P_ATMOSPHERE) / JOULE_PER_QUANTUM) };
 		const Refusal refused = transfer(edge, giver.top, amounts, carried);
@@ -1243,13 +1251,19 @@ void Simulation::run_join(EdgeId edge, double dt) {
 		const Energy energy = carried();
 		const Energy enthalpy = enthalpy_carried(table, amounts, kelvin);
 		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
-		const Energy lifted{ enthalpy.quanta + (up.empty() ? 0 : std::llround(enthalpy_over(table, amounts, kelvin, world_.meta(up.front().second).over) / JOULE_PER_QUANTUM)) };
+		// (Stage 88) up its layers with its volume: its energy in that volume there
+		const double low_pressure = up.empty() ? P_ATMOSPHERE : thermal(up.front().second).pressure, low_over = low_pressure - P_ATMOSPHERE;
+		const double lifted_m3 = up.empty() ? 0.0 : volume_at(table, amounts, kelvin, low_pressure);
+		const Energy lifted{ enthalpy.quanta + std::llround((enthalpy_over(table, amounts, kelvin, low_over) - low_over * lifted_m3) / JOULE_PER_QUANTUM) };
 		for (const auto &[hop, from] : up) {
 			const Refusal refused = transfer(hop, from, amounts, lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return;
 			}
+		}
+		if (!up.empty()) {
+			lift_volume(up.front().second, giver_top, lifted_m3);
 		}
 		const Refusal refused = transfer(edge, giver_top, amounts, energy);
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
@@ -1656,8 +1670,51 @@ void Simulation::overflow() {
 		if (!(excess > top.column_volume * 1e-9)) {
 			continue; // within what L1 allows: as it was
 		}
+		excess += top.column_volume * 1e-10; // (Stage 88: to a ten-billionth under its volume, as a cell's own spill is: V2)
 		for (size_t i = 0; i < col.cells.size() && excess > 0.0; ++i) {
 			excess -= spill_from(col.cells[i], excess, kelvin_of(col.cells[i]));
+		}
+		// (Stage 88) what is left closes up: a spill that emptied a layer (a plunger pushed home on layered liquid)
+		// leaves none holding anything under an empty one (L1): each such layer moves up into the place, whole, with
+		// all its energy; and the top is the size its layers leave
+		const auto holds = [&](CellId c) {
+			const CellState &x = world_.snapshot_cell(c);
+			return std::any_of(x.amount.begin(), x.amount.end(), [](int64_t a) { return a != 0; });
+		};
+		for (size_t i = 1; i < col.cells.size(); ++i) {
+			if (holds(col.cells[i])) {
+				continue;
+			}
+			size_t j = i + 1;
+			while (j < col.cells.size() && !holds(col.cells[j])) {
+				++j;
+			}
+			if (j == col.cells.size()) {
+				break;
+			}
+			const CellState &x = world_.snapshot_cell(col.cells[j]);
+			std::vector<SpeciesAmount> amounts;
+			for (size_t s = 0; s < x.amount.size(); ++s) {
+				if (x.amount[s] > 0 && !table.species(SpeciesId{ static_cast<int32_t>(s) }).wall) {
+					amounts.push_back(SpeciesAmount{ SpeciesId{ static_cast<int32_t>(s) }, Amount{ x.amount[s] } });
+				}
+			}
+			const Energy all{ x.energy };
+			for (size_t k = j; k > i; --k) {
+				const Refusal refused = transfer(col.up[k - 1], col.cells[k], amounts, all);
+				CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			}
+		}
+		double below = 0.0;
+		for (size_t i = 1; i < col.cells.size(); ++i) {
+			const Fill f = fill_of(table, world_.snapshot_cell(col.cells[i]), kelvin_of(col.cells[i]));
+			below += f.defined ? f.condensed : 0.0;
+		}
+		const double size = top.column_volume - below;
+		if (size > 0.0 && size != top.volume) {
+			const Refusal refused = world_.resize_column_top(col.top, size);
+			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
+			thermal_valid_[static_cast<size_t>(col.top.index)] = 0;
 		}
 	}
 	// (Stage 51) what spilled meets what the spill cell holds after this step's settling: it is brought to its fast
@@ -2686,8 +2743,9 @@ void Simulation::advance() {
 	if (world_.thermal()) {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
+		size_vessels(); // (Stage 88: a sealed vessel at its one pressure before its plunger is moved: as it was built, or as a command left it)
 		move_pistons();
-		size_vessels(); // (Stage 88: a sealed vessel whose plunger moved, at its one pressure again)
+		size_vessels(); // (and again where its plunger moved)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;
@@ -2737,8 +2795,9 @@ void Simulation::step(StepTrace &trace) {
 	if (world_.thermal()) {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
+		size_vessels(); // (Stage 88: a sealed vessel at its one pressure before its plunger is moved: as it was built, or as a command left it)
 		move_pistons();
-		size_vessels(); // (Stage 88: a sealed vessel whose plunger moved, at its one pressure again)
+		size_vessels(); // (and again where its plunger moved)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;

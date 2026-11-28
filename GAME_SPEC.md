@@ -428,23 +428,38 @@ compressible, so that every state it can be in has one pressure.
   volume it needs there, as an open vessel's stand at the room's: a layer is at a pressure, not at a volume. (A layer
   held to a volume could not boil: full of liquid it has no room to give.)
   - **A layer's state**: marked `pressed` with its top's seal (the world's, V3); its pressure over the room's
-    (`over`) and the volume it had taken of its vessel when the vessel was last sized. Its energy is
-    `E = U + P_atm V` as a sealed cell's; what stands in it at its pressure is its enthalpy there, `E + over × volume`,
-    and that gives its temperature, by the same potential. Its fast equilibria run at that pressure: water boils in a
-    layer where the vessel's pressure says (from 120 °C at 2 atm, from 69 °C at 0.3 atm; until this stage a layer
-    boiled at 100 °C whatever its vessel's pressure). At the room's pressure it is an open cell, to the bit.
-  - **Sized** (`Simulation::size_vessels`: after the pistons, as the column's last act, and in settling in turn with
-    the cells' equilibria until neither moves, the equilibria's the last word): since it was last sized each layer has
-    grown or shrunk at the pressure it stood at, and that work, `-over (V_now - V_taken)`, is booked between it and
-    the top; then the one pressure at which the whole is full is found (each cell, holding its energy in its volume
+    (`over`), the volume it had taken of its vessel when the vessel was last sized, and its **cushion** `c`: its share
+    of the vessel's free volume then (its top's gas's, or a void's). Its energy is `E = U + P_atm V` as a sealed
+    cell's. Until the next sizing it feels its vessel as it grows: grown by `dV` it stands at
+    `(P_atm + over) (c / (c - dV))^(5/3)`, and its state is where the volume its contents take, at the temperature that
+    holds their enthalpy there, is what it had taken and has grown by; the same potential throughout. The law is
+    stiffer than any gas's own compression either way (5/3 the largest exponent a gas has, each layer's cushion its
+    share only), so the work a layer books against it is at least what its vessel's gas takes compressed and at most
+    what it gives expanding: the second law's side. A large cushion is a layer at a pressure; a void is free until it
+    is filled and then a wall; a vessel full of liquid leaves a billionth of the layer's own volume, next to rigid.
+    (At a pressure alone a layer's boiling had no limit but its own heat: in a vessel with a microlitre of vapour
+    space it made a litre of steam in a round, and heat ran from the colder layers to the warmer top.)
+    Its fast equilibria run so: water boils in a layer where the vessel's pressure says (from 120 °C at 2 atm, from
+    69 °C at 0.3 atm; until this stage a layer boiled at 100 °C whatever its vessel's pressure), and takes no more
+    room than its vessel has. Sealed at the room's pressure, before its vessel is first sized, it is an open cell to
+    the bit.
+  - **Sized** (`Simulation::size_vessels`: before and after the pistons, as the column's last act, and in settling,
+    where the vessel is sized to what its top came to before its layers' equilibria run, then in turn with them until
+    neither moves, the equilibria's the last word): since it was last sized each layer has grown or shrunk against
+    its cushion, and that work, the integral of the pressure it stood at, is booked between it and the top; then the
+    one pressure at which the whole is full is found (each cell, holding its energy in its volume
     now, takes at `P` the volume `V'` with the work `-(P - P_atm)(V' - V_now)` in it; the sum of `V'` falls with `P`),
     and each cell is set there. With no gas and more room than its liquids take, it is at next to no pressure, the
     void in its top.
   - **Work between its cells** is work, not heat: energy alone along the column's edges, marked so in the step's
     ledger (`World::work`; W2), what one cell gives the other takes. A cell's resizing is in the ledger too, so a
     replay of the step reads each cell at the volume and the pressure it had as each entry ran (T1).
-  - **What moves between its cells** (the column's turning, its gas rising, its solids sinking) carries its enthalpy
-    at the giver's state, as below; all of a layer goes with all its energy and what it had taken of the vessel.
+  - **What moves between its cells** (the column's turning, its gas rising, its solids sinking, its diffusion) takes
+    its volume with it: the giver's taken volume less by what the amounts take at its state, the taker's more; and
+    with its volume it carries its energy there, its enthalpy at the giver's state less the pressure's (over the
+    room's) times that volume. (Its enthalpy alone is what crosses between two vessels, whose volumes stand, below.)
+    All of a layer goes with all its energy and all it had taken. A layer's cells are not Stage 28's "cells sealed
+    together": a column's edge is no gas path between sealed cells, as it is none from the open air.
 - **What crosses carries its enthalpy at the giver's state**: `h_i(T, P)`, a gas's the table's, a solid's
   `h_i0 + v_i p`, a liquid's or a solute's `h_i0 + v_i (p - κ p²/2) - T (v_i' (p - κ p²/2) - v_i κ' p²/2)`: what the
   potential gives. A liquid leaving a pressurised cell takes the work that pushed it out (`v p`, less what its

@@ -221,7 +221,7 @@ private:
 	bool sealed_ = false;
 	// (Stage 88) a sealed vessel's layer, at its vessel's pressure over the room's: its enthalpy there stands
 	bool pressed_ = false;
-	double over_ = 0.0;
+	double over_ = 0.0, cushion_ = 0.0, pressure_ = P_ATMOSPHERE; // its pressure as it was sized, its cushion, its pressure now
 	double energy_ = 0.0, formation_ = 0.0, cp_ = 0.0, gas_mol_ = 0.0, volume_ = 0.0, fixed_ = 0.0, expanding_ = 0.0;
 	double fixed_step_ = 0.0, expanding_step_ = 0.0;
 };
@@ -283,9 +283,21 @@ double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> a
 // energy + (pressure - P_atm) volume. Not defined without thermodynamic data or volumes, or at no pressure.
 struct AtPressure {
 	bool defined = false;
-	double temperature = 0.0, volume = 0.0; // K, m^3
+	double temperature = 0.0, volume = 0.0, gas = 0.0; // K, m^3, and its gas's share of that volume
 };
 AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double energy, double volume, double pressure);
+// (Stage 88) The volume these amounts take at a temperature and a pressure, m^3: a solid's the table's, a liquid's or
+// a solute's grown with the temperature and squeezed by the pressure, a gas's n R T / P. What moves between a sealed
+// vessel's cells takes it with it.
+double volume_at(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double pressure);
+// (Stage 88) A sealed vessel's layer as it stands against its cushion (CellMeta::cushion): its temperature, its
+// pressure, the volume it takes, and the work it has done on its vessel since the vessel was last sized (J, over the
+// room's: what the vessel's sizing books between it and the top).
+struct LayerNow {
+	bool defined = false;
+	double temperature = 0.0, pressure = 0.0, volume = 0.0, work = 0.0;
+};
+LayerNow layer_now(const SpeciesTable &table, const CellState &cell, const CellMeta &meta);
 
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the
