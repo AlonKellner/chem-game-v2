@@ -1501,6 +1501,9 @@ void optics_truth(const OpticsScene &scene, int x, int y, double rgb[3]) {
 // range), its band signal's temperature's colour, as the pass shows it (linear sRGB)
 static void displayed(const OpticsScene &scene, double rgb[3]) {
 	if (!(scene.table.size() > 4 * 4 + 3 && scene.table[4 * 4 + 3] > 0.5f)) {
+		for (int k = 0; k < 3; ++k) {
+			rgb[k] *= scene.exposure; // (Stage 90) at the display's exposure, as the pass shows it
+		}
 		return;
 	}
 	const shader::Use use(scene);
@@ -1509,6 +1512,34 @@ static void displayed(const OpticsScene &scene, double rgb[3]) {
 	for (int k = 0; k < 3; ++k) {
 		rgb[k] = code[k] <= 0.04045 ? code[k] / 12.92 : std::pow((code[k] + 0.055) / 1.055, 2.4);
 	}
+}
+
+double optics_exposure_target(double brightest, double level) {
+	return shader::exposure_target(brightest, level);
+}
+
+double optics_exposure_step(double exposure, double target, double dt) {
+	return shader::exposure_step(exposure, target, dt);
+}
+
+double optics_meter(const std::vector<double> &linear_rgb, int w, int h) {
+	// each block's mean light, as the host's meter sums it (a pixel's luminance), the brightest
+	const int bx = shader::METER_X, by = shader::METER_Y;
+	std::vector<double> sum(static_cast<size_t>(bx * by), 0.0);
+	std::vector<int> count(static_cast<size_t>(bx * by), 0);
+	for (int y = 0; y < h; ++y) {
+		for (int x = 0; x < w; ++x) {
+			const size_t at = (static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)) * 3;
+			const size_t block = static_cast<size_t>(y * by / h * bx + x * bx / w);
+			sum[block] += shader::meter_luminance(shader::vec3(linear_rgb[at], linear_rgb[at + 1], linear_rgb[at + 2]));
+			++count[block];
+		}
+	}
+	double best = 0.0;
+	for (size_t k = 0; k < sum.size(); ++k) {
+		best = count[k] > 0 ? std::max(best, sum[k] / count[k]) : best;
+	}
+	return best;
 }
 
 void optics_pixel(const OpticsScene &scene, int x, int y, double rgba[4]) {

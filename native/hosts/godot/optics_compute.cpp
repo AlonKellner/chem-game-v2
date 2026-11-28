@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <chrono>
 #include <cstring>
 
 namespace chem_godot {
@@ -43,7 +44,11 @@ layout(set = 0, binding = 19, rgba32f) uniform restrict readonly image2D anchor_
 layout(set = 0, binding = 20, rgba8) uniform restrict readonly image2D anchor_seen;
 layout(set = 0, binding = 21, rgba8) uniform restrict readonly image2D whole_seen;
 layout(set = 0, binding = 22, std430) restrict buffer RelayBuffer { vec4 v[]; } relay_buffer;
-layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; int pad2; vec4 view_now; vec4 view_from; vec4 room; int mode; int pad3; int pad4; int pad5; } params;
+layout(push_constant, std430) uniform Params { int frame; int parity; float budget; float pixels; int left; int top; int right; int bottom; int kept; int stamp; float rays; float dt; vec4 view_now; vec4 view_from; vec4 room; int mode; float level; int pad4; int pad5; } params;
+// (Stage 90) the display's exposure: what it is, what the pixels are shown at, whether they are shown again this frame,
+// its target; and the meter's 16 x 9 blocks' summed light (a 256th of the room's white a unit)
+layout(set = 0, binding = 23, std430) restrict buffer ExposureBuffer { float e; float shown_e; uint reshow; float target; uint sums[144]; } exposure_buffer;
+float display_exposure() { return exposure_buffer.shown_e; }
 vec4 scene_vec(int i) { return scene_buffer.v[i]; }
 float row_value(int i) { return row_buffer.v[i]; }
 vec4 line_vec(int i) { return line_buffer.v[i]; }
@@ -89,7 +94,64 @@ layout(local_size_x = OPTICS_GROUP_X, local_size_y = OPTICS_GROUP_Y, local_size_
 // The pass over the whole screen (OPTICS_SCREEN_PASS) is compiled without the reading by a pixel's own rays, and
 // leaves the pixels that are read by it alone; the beams' pass (OPTICS_BEAM_PASS), over the rectangles where they
 // can be, takes those and no others.
-#if defined(OPTICS_RESAMPLE_PASS)
+#if defined(OPTICS_METER_PASS)
+// The meter (Stage 90): each pixel's light in linear terms (a body's history, the wall's own where none is), its
+// luminance summed over its group in shared memory and added once into its block's sum (16 x 9 blocks of 120 x 120)
+shared float meter_sum[OPTICS_GROUP_X * OPTICS_GROUP_Y];
+void main() {
+	ivec2 at = ivec2(gl_GlobalInvocationID.xy);
+	uint me = gl_LocalInvocationIndex;
+	float y = 0.0;
+	if (at.x < 1920 && at.y < 1080) {
+		vec2 p = vec2(float(at.x) + 0.5, float(at.y) + 0.5);
+		if (!in_panels(p)) {
+			vec4 k = imageLoad(key_image, at);
+			if (k == wall_key()) {
+				y = wall_span(wall_profile(p.y), p.x - 0.5, p.x + 0.5);
+			} else {
+				vec4 hst = imageLoad(hist_image, at), prx = imageLoad(prox_image, at);
+				y = meter_luminance(vec3(hst.x + prx.x, hst.y + prx.y, hst.z + prx.z));
+			}
+		}
+	}
+	meter_sum[me] = clamp(y, 0.0, 250.0);
+	barrier();
+	for (uint reach = uint(OPTICS_GROUP_X * OPTICS_GROUP_Y) / 2u; reach > 0u; reach /= 2u) {
+		if (me < reach) {
+			meter_sum[me] += meter_sum[me + reach];
+		}
+		barrier();
+	}
+	if (me == 0u) {
+		int bx = int(gl_WorkGroupID.x) * OPTICS_GROUP_X / 120, by = int(gl_WorkGroupID.y) * OPTICS_GROUP_Y / 120;
+		if (bx < METER_X && by < METER_Y) {
+			atomicAdd(exposure_buffer.sums[by * METER_X + bx], uint(meter_sum[0] * 256.0 + 0.5));
+		}
+	}
+}
+#elif defined(OPTICS_EXPOSE_PASS)
+// The exposure's step (Stage 90): the brightest block's mean light, the target it and the room's level ask, a step
+// toward it; the pixels shown again where it has moved by more than half a per cent; the sums cleared for the next frame
+void main() {
+	float brightest = 0.0;
+	for (int k = 0; k < METER_X * METER_Y; ++k) {
+		brightest = max(brightest, float(exposure_buffer.sums[k]) / (256.0 * 14400.0));
+		exposure_buffer.sums[k] = 0u;
+	}
+	float t = exposure_target(brightest, params.level);
+	float e = exposure_step(exposure_buffer.e > 0.0 ? exposure_buffer.e : 1.0, t, params.dt);
+	exposure_buffer.e = e;
+	exposure_buffer.target = t;
+	float shown = exposure_buffer.shown_e > 0.0 ? exposure_buffer.shown_e : 1.0;
+	if (abs(log(e / shown)) > 0.005) {
+		exposure_buffer.shown_e = e;
+		exposure_buffer.reshow = 1u;
+	} else {
+		exposure_buffer.shown_e = shown;
+		exposure_buffer.reshow = 0u;
+	}
+}
+#elif defined(OPTICS_RESAMPLE_PASS)
 // A view's change (Stage 42): what each pixel shows, carried from the anchor's pixels to the view now (mode 0, while
 // the view moves); and at rest (mode 1), its state too, its content key's shape parts no longer its
 void main() {
@@ -157,7 +219,7 @@ void main() {
 	}
 	if (bare) {
 		vec4 wall = wall_key();
-		if (imageLoad(key_image, at) != wall) {
+		if (imageLoad(key_image, at) != wall || exposure_buffer.reshow != 0u) { // (Stage 90: or shown again at a new exposure)
 			imageStore(shown_image, at, wall_shown(p, 1.0));
 			imageStore(key_image, at, wall);
 			imageStore(aux_image, at, vec4(0.0));
@@ -171,7 +233,7 @@ void main() {
 	if (done(q, s.key, s.aux)) {
 		// settled: what it shows stands, unless it was cleared while nothing covered it (a flame gone and lit
 		// again as it was, a vessel moved away and back): then it is shown again from its history
-		if (imageLoad(shown_image, at).w < 0.5) {
+		if (imageLoad(shown_image, at).w < 0.5 || exposure_buffer.reshow != 0u) { // (Stage 90: or at a new exposure)
 			s.hist = imageLoad(hist_image, at);
 			s.prox = imageLoad(prox_image, at);
 			relay_slot = q.relay >= 0 ? relay_slot_at(q.relay, p) : -1;
@@ -247,8 +309,9 @@ void OpticsCompute::release() {
 		return;
 	}
 	shown_texture_.unref();
-	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], shader_[0], shader_[1], shader_[2], shader_[3], corners_, kept_, relay_, scene_.rid, rows_.rid,
-				 lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, anchor_[0], anchor_[1], anchor_[2], anchor_[3], whole_, asked_, state_[0], state_[1], state_[2], state_[3], shown_ }) {
+	for (const godot::RID &rid : { uniforms_[0], uniforms_[1], uniforms_[2], uniforms_[3], uniforms_[4], uniforms_[5], pipeline_[0], pipeline_[1], pipeline_[2], pipeline_[3], pipeline_[4], pipeline_[5], shader_[0], shader_[1], shader_[2], shader_[3],
+				 shader_[4], shader_[5], corners_, kept_, relay_, scene_.rid, rows_.rid, lines_.rid, lights_.rid, wall_.rid, shapes_.rid, images_.rid, anchor_[0], anchor_[1], anchor_[2], anchor_[3], whole_, asked_, exposure_, state_[0],
+				 state_[1], state_[2], state_[3], shown_ }) {
 		if (rid.is_valid()) {
 			rd_->free_rid(rid);
 		}
@@ -294,15 +357,18 @@ bool OpticsCompute::open(const godot::String &pixel_source, godot::String &why) 
 						godot::String(pass == BEAMS ? "#define OPTICS_BEAM_PASS 1\n"
 										: pass == CORNERS ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_CORNER_PASS 1\n"
 										: pass == RESAMPLE ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_RESAMPLE_PASS 1\n"
+										: pass == METER	   ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_METER_PASS 1\n"
+										: pass == EXPOSE   ? "#define OPTICS_SCREEN_PASS 1\n#define OPTICS_EXPOSE_PASS 1\n"
 														   : "#define OPTICS_SCREEN_PASS 1\n") +
-						"#define OPTICS_GROUP_X " + godot::String::num_int64(GROUP_X) + "\n#define OPTICS_GROUP_Y " + godot::String::num_int64(GROUP_Y) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
+						"#define OPTICS_GROUP_X " + godot::String::num_int64(pass == METER ? 8 : pass == EXPOSE ? 1 : GROUP_X) + "\n#define OPTICS_GROUP_Y " +
+						godot::String::num_int64(pass == METER ? 8 : pass == EXPOSE ? 1 : GROUP_Y) + "\n" + pixel_source + godot::String(WRAPPER_TAIL));
 		const godot::Ref<godot::RDShaderSPIRV> spirv = rd->shader_compile_spirv_from_source(source);
 		if (spirv.is_null() || !spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE).is_empty()) {
 			why = "the optical pass does not compile: " + (spirv.is_null() ? godot::String("no SPIR-V") : spirv->get_stage_compile_error(RenderingDevice::SHADER_STAGE_COMPUTE));
 			release();
 			return false;
 		}
-		shader_[pass] = rd_->shader_create_from_spirv(spirv, pass == BEAMS ? "chem optical pass: the beams" : pass == CORNERS ? "chem optical pass: the corners" : pass == RESAMPLE ? "chem optical pass: a view's change" : "chem optical pass");
+		shader_[pass] = rd_->shader_create_from_spirv(spirv, pass == BEAMS ? "chem optical pass: the beams" : pass == CORNERS ? "chem optical pass: the corners" : pass == RESAMPLE ? "chem optical pass: a view's change" : pass == METER ? "chem optical pass: the meter" : pass == EXPOSE ? "chem optical pass: the exposure" : "chem optical pass");
 		if (!shader_[pass].is_valid()) {
 			why = "the optical pass's shader was not created";
 			release();
@@ -398,6 +464,18 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		zero.fill(0);
 		asked_ = rd_->storage_buffer_create(24, zero);
 	}
+	if (!exposure_.is_valid()) {
+		// (Stage 90) the exposure at 1, shown at 1, nothing to show again, the target 1; the sums nothing
+		godot::PackedByteArray start;
+		start.resize(4 * (4 + 144));
+		start.fill(0);
+		const float one = 1.0f;
+		std::memcpy(start.ptrw(), &one, 4);
+		std::memcpy(start.ptrw() + 4, &one, 4);
+		std::memcpy(start.ptrw() + 12, &one, 4);
+		exposure_ = rd_->storage_buffer_create(static_cast<uint32_t>(start.size()), start);
+	}
+	room_level_ = optics.room_level > 0.0f ? optics.room_level : 1.0f; // (Stage 90) the room's lights, for the exposure's bounds
 	// where the passes over the pixels read by their own rays run
 	rectangles_.assign(optics.rectangles, optics.rectangles + (optics.rectangles != nullptr && optics.rectangle_count > 0 ? 4 * optics.rectangle_count : 0));
 	if (!corners_.is_valid()) {
@@ -456,7 +534,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		rd_->buffer_clear(relay_, 0, static_cast<uint32_t>(relay_capacity_ * CG_OPTICS_RELAY_VECS * 16));
 		relay_pool_ = optics.relay_pool;
 	}
-	if (!uniforms_[0].is_valid() || !uniforms_[1].is_valid() || !uniforms_[2].is_valid() || !uniforms_[3].is_valid()) {
+	if (!uniforms_[0].is_valid() || !uniforms_[1].is_valid() || !uniforms_[2].is_valid() || !uniforms_[3].is_valid() || !uniforms_[METER].is_valid() || !uniforms_[EXPOSE].is_valid()) {
 		godot::TypedArray<godot::RDUniform> uniforms;
 		const auto add = [&](RenderingDevice::UniformType type, int binding, const godot::RID &id) {
 			godot::Ref<godot::RDUniform> u;
@@ -485,6 +563,7 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 14, corners_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 15, kept_);
 		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 22, relay_);
+		add(RenderingDevice::UNIFORM_TYPE_STORAGE_BUFFER, 23, exposure_); // (Stage 90)
 		for (int pass = 0; pass < PASSES; ++pass) {
 			if (uniforms_[pass].is_valid()) {
 				rd_->free_rid(uniforms_[pass]);
@@ -493,6 +572,18 @@ void OpticsCompute::upload(const cg_optics &optics) {
 		}
 	}
 	have_scene_ = true;
+}
+
+float OpticsCompute::exposure() const {
+	if (rd_ == nullptr || !exposure_.is_valid()) {
+		return 1.0f;
+	}
+	const godot::PackedByteArray bytes = rd_->buffer_get_data(exposure_, 4, 4);
+	float shown = 1.0f;
+	if (bytes.size() == 4) {
+		std::memcpy(&shown, bytes.ptr(), 4);
+	}
+	return shown > 0.0f ? shown : 1.0f;
 }
 
 void OpticsCompute::restart() {
@@ -515,9 +606,13 @@ void OpticsCompute::run(double budget, bool again) {
 		rd_->buffer_clear(asked_, static_cast<uint32_t>(4 * (5 - parity_)), 4);
 	}
 	stamp_ = stamp_ % 16000000 + 1; // (a float holds it exactly; 0 is no run)
+	// (Stage 90) the frame's seconds, for the exposure's step: none for a frame run again
+	const double now_s = static_cast<double>(std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()) * 1e-6;
+	const float dt = again || last_frame_s_ < 0.0 ? 0.0f : static_cast<float>(std::clamp(now_s - last_frame_s_, 0.0, 0.1));
+	last_frame_s_ = now_s;
 	const int64_t list = rd_->compute_list_begin();
 	const auto pass_over = [&](int pass, int32_t left, int32_t top, int32_t right, int32_t bottom, int32_t kept = -1) {
-		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, 0, { 1, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 0, 0, 0 }, 0, 0, 0, 0 };
+		const Params params{ frame_, parity_, static_cast<float>(budget), static_cast<float>(WIDTH * HEIGHT), left, top, right, bottom, kept, stamp_, ray_points_, dt, { 1, 0, 0, 0 }, { 1, 0, 0, 0 }, { 0, 0, 0, 0 }, 0, room_level_, 0, 0 };
 		godot::PackedByteArray push;
 		push.resize(sizeof params);
 		std::memcpy(push.ptrw(), &params, sizeof params);
@@ -527,7 +622,8 @@ void OpticsCompute::run(double budget, bool again) {
 		// groups two pixels wide and thirty-two tall: a vessel's pixels in one column are read in the same
 		// number of parts, and pixels run together wait for the one with most to do (measured: 8 x 8, 1.72 ms
 		// a pass where every history starts again; 2 x 32, 1.56)
-		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + GROUP_X - 1) / GROUP_X), static_cast<uint32_t>((bottom - top + GROUP_Y - 1) / GROUP_Y), 1);
+		const int gx = pass == METER ? 8 : pass == EXPOSE ? 1 : GROUP_X, gy = pass == METER ? 8 : pass == EXPOSE ? 1 : GROUP_Y;
+		rd_->compute_list_dispatch(list, static_cast<uint32_t>((right - left + gx - 1) / gx), static_cast<uint32_t>((bottom - top + gy - 1) / gy), 1);
 	};
 	// the whole screen, with nothing of the reading by a pixel's own rays: what a pass costs follows what its shader
 	// could do (measured, Stage 21: with the other readings in it, a settled pass 0.58 ms and a restarting one 2.15;
@@ -545,6 +641,11 @@ void OpticsCompute::run(double budget, bool again) {
 			pass_over(BEAMS, left, top, right, bottom, i / 4 < kept_base_.size() ? kept_base_[i / 4] : -1);
 		}
 	}
+	// (Stage 90) the meter over the whole screen, then the exposure's step, for the next frame's pixels
+	rd_->compute_list_add_barrier(list);
+	pass_over(METER, 0, 0, WIDTH, HEIGHT);
+	rd_->compute_list_add_barrier(list);
+	pass_over(EXPOSE, 0, 0, 1, 1);
 	rd_->compute_list_end();
 	parity_ = 1 - parity_;
 	++frame_;
@@ -571,7 +672,7 @@ void OpticsCompute::resample(const float now[4], const float from[4], const floa
 	if (rd_ == nullptr || !have_scene_ || !uniforms_[RESAMPLE].is_valid()) {
 		return;
 	}
-	Params params{ frame_, parity_, 0.0f, static_cast<float>(WIDTH * HEIGHT), 0, 0, WIDTH, HEIGHT, -1, stamp_, ray_points_, 0, {}, {}, {}, rest ? 1 : 0, 0, 0, 0 };
+	Params params{ frame_, parity_, 0.0f, static_cast<float>(WIDTH * HEIGHT), 0, 0, WIDTH, HEIGHT, -1, stamp_, ray_points_, 0.0f, {}, {}, {}, rest ? 1 : 0, room_level_, 0, 0 };
 	std::copy(now, now + 4, params.view_now);
 	std::copy(from, from + 4, params.view_from);
 	std::copy(room, room + 4, params.room);

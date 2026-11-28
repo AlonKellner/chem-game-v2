@@ -63,7 +63,7 @@ inline constexpr uint64_t MAGIC = 0x3265637332656863ull; // "chem2sce2" (Stage 6
 // (lab::OpticsScene's size where this was written: a member added there changes it, and this asks for it here)
 template <size_t N>
 struct SceneSize {
-	static_assert(N == 456, "lab::OpticsScene has changed: write and read its new members here, then set its size");
+	static_assert(N == 472, "lab::OpticsScene has changed: write and read its new members here, then set its size");
 };
 inline constexpr SceneSize<sizeof(lab::OpticsScene)> scene_size{};
 
@@ -73,11 +73,13 @@ inline std::string write(const lab::OpticsScene &s) {
 	using detail::put;
 	std::string out;
 	put(out, MAGIC);
+	put(out, s.exposure); // (Stage 90)
 	put(out, s.table);
 	put(out, s.rows);
 	put(out, s.lines);
 	put(out, s.lights);
 	put(out, s.lights_kelvin);
+	put(out, s.lights_level); // (Stage 90)
 	put(out, s.revision);
 	put(out, s.wall);
 	put(out, s.wall_revision);
@@ -117,11 +119,13 @@ inline bool read(const std::string &in, lab::OpticsScene &s) {
 	if (magic != MAGIC) {
 		return false;
 	}
+	r.get(s.exposure); // (Stage 90)
 	r.get(s.table);
 	r.get(s.rows);
 	r.get(s.lines);
 	r.get(s.lights);
 	r.get(s.lights_kelvin);
+	r.get(s.lights_level); // (Stage 90)
 	r.get(s.revision);
 	r.get(s.wall);
 	r.get(s.wall_revision);
