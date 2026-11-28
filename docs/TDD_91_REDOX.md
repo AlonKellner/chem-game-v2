@@ -11,7 +11,7 @@ GAME_SPEC 0.91.0.
 |---|---|---|
 | 91.1 | Spec (§7, §9); the sources read and their rows verified | Done |
 | 91.2 | Manganese, iodine's forms, the sulfur oxyanions: data and gates | Done |
-| 91.3 | The experiments `iodine_clock` (38) and `redox_titration` (47) | in progress |
+| 91.3 | The experiments `iodine_clock` (38) and `redox_titration` (47) | Done |
 | 91.4 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | open |
 
 ## 91.1 What there was
@@ -48,7 +48,18 @@ thiosulfate each to their end point and no further, a bench settled either side.
   first lasting pink; 25 mL of about 0.05 M iodine in potassium iodide with 0.100 M thiosulfate until its yellow is
   gone.
 
+Played (strict): the clocks A 131.7 s, B 261.5, C 264.2, D (35 C) 67.9; the orders 0.99 in iodide and 1.00 in
+persulfate; k 3.80e-3 /M/s at an ionic strength of about 0.11 (Jette and King's 2.08e-3 at 0.025: the salt effect); Ea
+50.6 kJ/mol (the source's 51.39: the cooler tube poured into D lowers its first seconds). The titrations: 24.56 mL of
+permanganate, 0.0982 M iron(II); 24.70 mL of thiosulfate, 0.0494 M iodine (the bottles' molalities in their volumes).
+
 Each has the three tests of `test_experiments.cpp` (strict with its gestures, as a person, free).
+
+## 91.4 The sessions and the gates
+
+Both sessions' digests move with the table (a new element and eleven species): every printed result unchanged against
+main's, line for line, but the conservation table's new manganese row (`Mn 0 -> 0 quanta of atoms`): at 15796da, and
+again after main's Stage 88 was merged in, at f7c0a09. Re-recorded with the user's approval.
 
 ## Open
 
