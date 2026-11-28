@@ -349,7 +349,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			const bool screen = body.shape == OpticsBody::Screen && body.image != nullptr && body.image_w > 0 && body.image_h > 0;
 			const bool sensor = body.shape == OpticsBody::Sensor && body.relay != nullptr;
 			const std::string made = screen ? "screen|" + std::to_string(screens.size()) + "|" + (body.surface ? body.surface : "")
-											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength);
+											: std::string(body.surface ? body.surface : "") + "|" + (body.light ? body.light : "") + "|" + (body.light_to ? body.light_to : "") + "|" + std::to_string(body.toward) + "|" + std::to_string(body.strength) +
+						  (body.glow_add != nullptr ? "|" + std::to_string(fnv(body.glow_add->data(), body.glow_add->size() * sizeof(double))) : std::string()); // (Stage 82: a flame's metals' light)
 			auto found = shared.find(made);
 			if (found == shared.end()) {
 				const int set = static_cast<int>(rows.size()) / (ROWS_PER_SET * ROW);
@@ -387,6 +388,10 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				for (int i = 0; i < ROW && (a != nullptr || b != nullptr) && !screen; ++i) {
 					const double from = a ? (*a)[static_cast<size_t>(i)] : 0.0, to = b ? (*b)[static_cast<size_t>(i)] : from;
 					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward));
+				}
+				// (Stage 82) and what the metals in a flame add, each nanometre's light (lab/flame.hpp)
+				for (int i = 0; i < ROW && body.glow_add != nullptr && !screen; ++i) {
+					base[GLOW_ROW * ROW + i] += static_cast<float>((*body.glow_add)[static_cast<size_t>(i)]);
 				}
 				found = shared.emplace(made, set).first;
 			}
@@ -442,6 +447,21 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				h_sig = fnv(&body.image_hash, sizeof body.image_hash, h_sig); // a new picture is a new colour
 			}
 			put(at + IDS, 1, tag(h_sig));
+			if (body.glow_spikes != nullptr && !body.glow_spikes->empty()) {
+				// (Stage 82) a flame's narrow lines, as lines of no depth: the pass cuts its bands about them (each its
+				// own point, every frame), and they absorb nothing
+				const int first = line_count;
+				for (const auto &[from, to] : *body.glow_spikes) {
+					if (line_count < MAX_LINES) {
+						const size_t o = static_cast<size_t>(line_count++) * 4;
+						lines[o] = static_cast<float>(0.5 * (from + to));
+						lines[o + 1] = static_cast<float>((to - from) / 3.0); // the cuts at 1.5 widths each side: [from, to]
+						lines[o + 2] = 0.0f;
+					}
+				}
+				put(at + IDS, 2, first);
+				put(at + IDS, 3, line_count - first);
+			}
 			continue;
 		}
 		const ItemView &v = *body.item;

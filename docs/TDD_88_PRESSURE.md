@@ -27,8 +27,14 @@ and a vessel's one pressure; Stage 89, a conduit's flow law and one implicit sol
   is a quadratic's one root that is not negative: gas over liquid, liquid alone, or nought with a void (which
   boiling fills: cavitation).
 - **Enthalpy at the giver's state**: what crosses carries `h(T, P)`.
-- **One pressure for a vessel**: a sealed vessel's layers are sealed cells at its pressure; the vessel's cells are
-  sized so their pressures agree, the volume passed between two of them work `(P - P_atm) dV` booked between them.
+- **One pressure for a vessel**: a sealed vessel's layers are cells at its pressure, each taking the volume it
+  needs there (isobaric, as an open vessel's layers are at the room's): a layer's energy and what it has taken of its
+  vessel's volume give its temperature at that pressure, its fast equilibria run at it (water boils in a layer where
+  the vessel's pressure says), and each step the vessel is sized: the pressure at which its top holds what its layers
+  leave, the work `(P - P_atm) dV` of each layer's change of volume booked between it and the top.
+  (As planned, layers were to be rigid sealed cells sized to the vessel's pressure. Read against the column's code,
+  that fails: a layer's boiling is solved at its volume, and a rigid layer full of liquid has no room to give, some
+  0.2 uL of steam a round. A layer is at a pressure, not at a volume.)
 
 Open cells are at `p = 0`: every new term nought, their states unchanged to the bit.
 
@@ -39,7 +45,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.1 | Spec (§6) and data: water's compressibility (Kell 1975), its row verified | Done |
 | 88.2 | The compressible sealed model: `Sealed`, `fill_of`, `entropy`, `affinity`, `AffinityProbe::at`, V2, V3 | Done |
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
-| 88.4 | A vessel's one pressure: sealed layers, the vessel sized to it, work between its cells | |
+| 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | |
 | 88.5 | Invariants: a vessel at one pressure, work between cells, the state function's self-test | |
 | 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | |
 
@@ -85,4 +91,8 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   the same way before use: against the paper's own stated value and its authors' independent fit.
 
 ## Open
+
+- **A sealed vessel's layers boil by the room's pressure** (until 88.4; so since Stages 28 and 47): a layer is an
+  open cell at 1 atm whatever its vessel's pressure, and boils at 100 °C in a flask at 2 atm. Benign so far (a hot
+  layer rises, and the top boils where its pressure says); wrong for a pressure cooker.
 

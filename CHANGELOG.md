@@ -10,7 +10,22 @@
   boiling fills (a cavity at the vapour pressure). Open cells unchanged to the bit. V2 at a sealed cell's own
   pressure; V3's roomless cell one filled with what does not give.
 - The `pressure` session re-recorded with the user's approval (2026-11-28): every printed result main's, line for
-  line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved.
+  line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved. Recorded again on
+  Stage 82's tables after main was merged in: the same six of main's unchanged, the same twelve moved, the printed
+  results the same but for lithium's and strontium's totals (nought).
+## 0.82.0 (2026-11-28, Stage 82; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 82, `docs/TDD_82_FLAMES.md`; `docs/CURRICULUM.md`, step E's third part): lithium's and strontium's ions
+  (NBS, OBIGT, the CRC), their chlorides' and nitrates' Pitzer pairs (Pitzer and Mayorga).
+- §12.5: **a flame's light**: NIST's atomic lines by Boltzmann's populations at the flame's temperature and the
+  monohydroxides' bands (Meyerriecks and Kosanke) at a calibrated share; each line's light on the two nanometres beside
+  it, its light and centre kept; added to the flame cone's glow, read by the pass, the truth and the spectral viewer.
+- §13: `flame_test`: a loop's drop of a solution in a lit burner's flame, fading in 3 s; on the screen, a vessel of a
+  solution carried onto a lit burner. The free lab's 0.1 M sodium, potassium, lithium and strontium chlorides and
+  copper(II) sulfate.
+- §12: light brighter than the display is scaled down by its brightest channel, keeping its hue (the user's choice:
+  until then it was drawn white); a flame's narrow lines cut the pass's bands, so a pixel reads each every frame.
+- §20: the drop is the flame's display state, not matter.
 
 ## 0.81.1 (2026-11-28, Stage 79, merged after Stages 78, 80, 81, 84 and 86; signed off by the user: "Approved, merge and proceed")
 
