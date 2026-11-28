@@ -735,7 +735,14 @@ step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
 - **The activity model's range** (Stage 63). Past an ionic strength of 20 mol/kg (a 2:2 salt at 5 mol/kg, a 1:1
   at 20; Pitzer's fits hold to about 6 mol/kg of a salt) a fast equilibrium among dissolved species alone
   stands as it was: the game cannot say how such a solution's ions share themselves. A solution boiled
-  nearly dry keeps the traces its ions held; what crystallizes out of it still does.
+  nearly dry keeps the traces its ions held; what crystallizes out of it still does. (Stage 85) And no fast
+  equilibrium carries a solution there: its extent is bounded where the ionic strength reaches 20 (along an
+  extent the strength is K (A + B x) / (L + D x), so the bound is exact; `within_range`), and an equilibrium held
+  at that edge is as far as it may go (P1 reads the same bound). Water boils off a solution down to the edge and
+  no further, unless its salt crystallizes first; a funnel's first drop, a milligram drying in an empty beaker's
+  air, stays a solution. (Before: its ions were left with a quantum of water, where Pitzer's sums diverge, ln
+  gamma near -3.5e5, and its entropy was no function of its state: the next drop diluted it, and the world's
+  entropy fell.)
 
 **What follows without being written:** water under dry air evaporates until its partial
 pressure is the saturation pressure, and cools doing it. A flask of boiling water sits at the
@@ -3622,7 +3629,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The salts grow at copper sulfate's pentahydrate's rate (Stage 64, a stand-in); sodium acetate's trihydrate and the phosphates' hydrates are not in the tables | A solution boiled down or cooled crystallises them at a rate no measurement gave; saturated sodium acetate comes out anhydrous |
 | Ammonia and carbon dioxide at Henry's equilibrium with the gas in their cell (Stage 64) | An open vessel's headspace trades with the room at its mouth (Stage 50); what is dissolved meets the headspace at once, where a real surface takes minutes |
 | Copper's hydrolysis to CuOH⁺ alone (Stage 63); no dimer Cu₂(OH)₂²⁺, no basic copper sulfate | 0.5 mol/kg copper sulfate reads pH 4.8, a real one about 4. The dimer, at MINTEQ's constant with no interaction parameters, held most of the copper in a solution boiled down, so it is left out. Hot copper sulfate gives up a little hydroxide that turns to oxide (a few percent of the copper boiled down over 20 minutes), where a real one makes a pale basic sulfate |
-| Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water |
+| Past an ionic strength of 20 mol/kg the equilibria among dissolved species alone stand (Stage 63); no fast equilibrium takes a solution past it (Stage 85) | A solution boiled nearly dry keeps the traces of ions it held there (a percent or two of a salt), dissolved in the last trace of its water; a very soluble salt with no solid in the tables (lithium chloride) is boiled down to a syrup at that strength and no drier, heating on with its water held |
 | Copper hydroxide turns to oxide at the dry solid's rate, in water too (Stage 44) | In a strong base the real one dissolves as Cu(OH)₄²⁻ and comes back as the oxide in minutes; here a boiled suspension takes half an hour, as in water |
 | A solution's pH only to 6 mol/kg of acid or base left over (Stage 44) | Beyond the activity model's fits a boiled-down base reads no pH, where a real one reads about 15 |
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |

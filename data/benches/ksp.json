@@ -1,0 +1,26 @@
+{
+	"format": "chem-bench/2",
+	"note": "The solubility product of calcium hydroxide, and a common ion (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 44): two bottles of calcium hydroxide over its excess solid, one in water and one in 0.100 M calcium chloride, each filtered through its own funnel; 25.00 mL of each filtrate pipetted into a flask and titrated with 0.0500 M hydrochloric acid to phenolphthalein's colourless. [OH-] = c V / 25.00 mL; in water [Ca2+] = [OH-] / 2, so Ksp = [OH-]^3 / 2; in the chloride, [Ca2+] = 0.100 M + [OH-] / 2. The room's carbon dioxide is left out: the filtrates stand covered (with watch glasses), as limewater in an open beaker takes it up within minutes as a film of calcium carbonate.",
+	"readings": "instruments",
+	"seed": 44,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000, "co2_ppm": 0},
+	"items": [
+		{"id": "lime", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [0, 7], "label": "calcium hydroxide in water, over its solid",
+			"contents": {"water": {"g": 250}, "calcium_hydroxide": {"g": 2.0, "particles": 1000000}}},
+		{"id": "lime_chloride", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [3, 7], "label": "calcium hydroxide in 0.100 M calcium chloride, over its solid",
+			"contents": {"water": {"g": 250}, "calcium_chloride_aq": {"mol": 0.025}, "calcium_hydroxide": {"g": 2.0, "particles": 1000000}}},
+		{"id": "funnel_a", "kind": "vessel", "glassware": "filter_funnel", "volume_ml": 100, "wall": "glass", "wall_g": 40, "at": [8, 0], "label": "filter funnel A"},
+		{"id": "filtrate_a", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [8, 7], "label": "filtrate A (in water)"},
+		{"id": "funnel_b", "kind": "vessel", "glassware": "filter_funnel", "volume_ml": 100, "wall": "glass", "wall_g": 40, "at": [12, 0], "label": "filter funnel B"},
+		{"id": "filtrate_b", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [12, 7], "label": "filtrate B (in calcium chloride)"},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [26, 0], "label": "25 mL pipette"},
+		{"id": "flask_a", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [16, 7], "label": "flask A"},
+		{"id": "flask_b", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [20, 7], "label": "flask B"},
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [24, 0], "label": "50 mL burette"},
+		{"id": "acid", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [0, 0], "label": "hydrochloric acid, 0.0500 M",
+			"contents": {"water": {"g": 399.0}, "hydrochloric_acid_aq": {"mol": 0.0200}}},
+		{"id": "phenolphthalein", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [4, 0], "label": "phenolphthalein, 0.05 %",
+			"contents": {"water": {"g": 25.0}, "phenolphthalein_aq": {"g": 0.0125}}}
+	]
+}

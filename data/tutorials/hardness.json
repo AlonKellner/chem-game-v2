@@ -1,0 +1,285 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 52) on data/benches/hardness.json: water's hardness by EDTA. At pH 10 EDTA takes calcium and magnesium one to one; Eriochrome Black T is wine red with magnesium and blue free, so the last of the magnesium taken turns it blue.",
+	"title": "Experiment: water's hardness by EDTA",
+	"bench": "../benches/hardness.json",
+	"report": [
+		{
+			"label": "its hardness, as calcium carbonate",
+			"unit": "mg/L",
+			"truth": "1000000 * 100.09 * (sample.calcium_ion.mol + sample.magnesium_ion.mol) / sample.condensed_ml",
+			"tolerance": 0.03,
+			"relative": true,
+			"why": "mg/L = c V M / 25.00 mL: 0.0100 M EDTA times the burette's difference times 100.09 g/mol, over the pipette's 25.00 mL. Hardness is counted as if all its calcium and magnesium were calcium carbonate: a water over 180 mg/L is very hard. The burette reads within 0.05 mL, about one per cent of the titre."
+		}
+	],
+	"steps": [
+		{
+			"part": "The sample",
+			"title": "25.00 mL of the water",
+			"text": "Pick up the pipette and click the sample: it draws to its mark. Then click the flask: it stands in the flask and drains.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:sample"
+					]
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Watch the pipette drain.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "The pipette away",
+			"text": "Pick up the pipette and click a free square.",
+			"checks": [
+				{
+					"text": "the pipette off the flask",
+					"when": {
+						"not": {
+							"item": "pipette",
+							"on": "flask"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:7,5"
+					]
+				}
+			]
+		},
+		{
+			"title": "The buffer",
+			"text": "Pick up the buffer, right-click the flask, type 2 and click \"pour\".",
+			"why": "EDTA holds magnesium only at a high pH, and the dye is blue only between 7 and 11: the buffer holds the flask at pH 10 while the titration frees hydrogen ions.",
+			"checks": [
+				{
+					"text": "the buffer in the flask",
+					"when": {
+						"item": "flask",
+						"species": "ammonium_ion",
+						"above_g": 0.002
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:buffer",
+						"item:flask"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "The indicator",
+			"text": "Pick up the Eriochrome Black T, right-click the flask, type 0.2 and click \"pour\". The flask turns wine red.",
+			"why": "The dye takes magnesium more tightly than calcium: wine red MgIn-. EDTA takes calcium first, then the free magnesium, then the magnesium from the dye, which turns blue.",
+			"checks": [
+				{
+					"text": "the dye in the flask, with magnesium",
+					"when": {
+						"item": "flask",
+						"species": "magnesium_ebt",
+						"above_g": 2e-05
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:eriochrome",
+						"item:flask"
+					]
+				},
+				{
+					"type": "0.2"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Titrating",
+			"title": "Fill the burette",
+			"text": "Pick up the EDTA, right-click the burette, type 55 and click \"pour\". Then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				},
+				{
+					"text": "its first reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:edta",
+						"item:burette"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		},
+		{
+			"title": "The burette over the flask, slowly",
+			"text": "Pick up the burette and click the flask. Then right-click the burette and drag its tap to about 3 %.",
+			"why": "The titre is a few millilitres: the whole of it runs in slowly, so the last drop past the change is small.",
+			"checks": [
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette",
+						"on": "flask"
+					}
+				},
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							2,
+							4
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burette",
+						"item:flask"
+					]
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@0.03"
+				}
+			]
+		},
+		{
+			"title": "Until it turns blue",
+			"text": "Watch the flask until the wine red turns to blue.",
+			"checks": [
+				{
+					"text": "the flask blue (a tenth of the dye still wine red)",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"species": "magnesium_ebt",
+						"below_g": 2e-05
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it, and read it",
+			"text": "Drag the tap shut, then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				},
+				{
+					"text": "its reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml",
+						"recorded_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		}
+	]
+}

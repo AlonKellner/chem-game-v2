@@ -262,6 +262,27 @@
 			"tutorial": "tutorials/molar_volume.json"
 		},
 		{
+			"id": "ksp",
+			"title": "The solubility product of calcium hydroxide",
+			"summary": "Calcium hydroxide over its solid in water and in 0.100 M calcium chloride, each filtered, 25 mL of each titrated with 0.0500 M hydrochloric acid to phenolphthalein's colourless: its solubility product, and how a common ion holds it back.",
+			"bench": "benches/ksp.json",
+			"tutorial": "tutorials/ksp.json"
+		},
+		{
+			"id": "hardness",
+			"title": "Water's hardness by EDTA",
+			"summary": "A sample of hard water, 25 mL pipetted, buffered at pH 10 with Eriochrome Black T, titrated with 0.0100 M EDTA from wine red to blue: its calcium and magnesium as milligrams of calcium carbonate a litre.",
+			"bench": "benches/hardness.json",
+			"tutorial": "tutorials/hardness.json"
+		},
+		{
+			"id": "lechatelier",
+			"title": "Le Chatelier's principle",
+			"summary": "Iron(III) thiocyanate with more of either reactant, chromate with acid, cobalt chloride in hydrochloric acid warmed: each tube against one left as it is, and which way each equilibrium went.",
+			"bench": "benches/lechatelier.json",
+			"tutorial": "tutorials/lechatelier.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

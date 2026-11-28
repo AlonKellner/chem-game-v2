@@ -13,6 +13,7 @@
 
 namespace {
 
+
 // a beaker of one of three salts, by the seed
 std::string unknown_bench(int seed) {
 	return R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "seed": )" + std::to_string(seed) + R"(, "items": [
@@ -139,4 +140,61 @@ TEST_CASE("analysis: a report's answer may be the choices that hold, picked on t
 	CHECK(!ui->tutor(R"({"format": "chem-tutorial/1", "steps": [{"title": "t", "text": "t", "checks": [{"text": "c", "when": {"item": "unknown", "place": "bench"}}]}],
 		"report": [{"label": "x", "predict": true, "choices": [{"label": "a", "truth": "1"}, {"label": "b", "truth": "0"}]}]})",
 			why));
+}
+
+
+TEST_CASE("analysis: a filter funnel's first drops into an empty beaker keep every invariant, whatever the solution (Stage 85)") {
+	// The funnel's first drip, a milligram, lands in the empty beaker's air and dries there: no fast equilibrium takes it
+	// past the activity model's range (thermo.hpp, within_range), so the ions it leaves are a solution still, and the next
+	// drops dilute it as any other (before: limewater's ions left with a quantum of water, ln gamma near -3.5e5, the
+	// world's entropy fell as the next drop came, T2)
+	const std::vector<std::string> contents = { R"("water": {"g": 250}, "calcium_hydroxide_aq": {"mol": 0.0005})", R"("water": {"g": 250}, "calcium_hydroxide_aq": {"mol": 0.002})",
+		R"("water": {"g": 250}, "calcium_hydroxide": {"g": 2.0, "particles": 1000000})", R"("water": {"g": 250}, "barium_chloride_aq": {"mol": 0.005}, "sodium_hydroxide_aq": {"mol": 0.01})",
+		R"("water": {"g": 250}, "copper_sulfate_aq": {"mol": 0.02})", R"("water": {"g": 250}, "silver_nitrate_aq": {"mol": 0.02})" };
+	for (const char *ppm : { "0", "420" }) {
+		for (const std::string &c : contents) {
+			const std::string bench = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000, "co2_ppm": )" + std::string(ppm) + R"(}, "items": [
+			{"id": "lime", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [0, 7], "contents": {)" + c + R"(}},
+			{"id": "funnel", "kind": "vessel", "glassware": "filter_funnel", "volume_ml": 100, "wall": "glass", "wall_g": 40, "at": [8, 0]},
+			{"id": "beaker", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [8, 7]}]})";
+			std::string why;
+			auto l = lab::Lab::open(bench, why);
+			REQUIRE_MESSAGE(l != nullptr, why);
+			REQUIRE_MESSAGE(l->command(R"({"do": "attach", "item": "funnel", "to": "beaker"})", why), why);
+			bool ok = l->command(R"({"do": "pour", "from": "lime", "to": "funnel", "ml": 60})", why);
+			for (int s = 0; s < 20 && ok; ++s) {
+				ok = l->command(R"({"do": "wait", "seconds": 1})", why);
+			}
+			CHECK_MESSAGE(ok, ppm << " ppm, " << c << ": " << why);
+		}
+	}
+}
+
+TEST_CASE("analysis: very soluble salts boiled down stop at the activity model's range, every invariant held (Stage 85)") {
+	// lithium chloride saturates past an ionic strength of 20 (about 20 mol/kg) and has no solid in the tables: boiled
+	// down, its water stops leaving at the range's edge, a syrup; sodium chloride's crystals come out first, and it dries.
+	// (Calcium chloride boiled down loses its temperature, T3, as it did before this stage: docs/TDD_85_ANALYSIS.md, Open)
+	for (const char *salt : { "lithium_chloride_aq", "sodium_chloride_aq" }) {
+		const std::string bench = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+			{"id": "beaker", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 30, "at": [6, 7], "contents": {"water": {"g": 10}, ")" +
+				std::string(salt) + R"(": {"mol": 0.01}}},
+			{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}]})";
+		std::string why;
+		auto l = lab::Lab::open(bench, why);
+		REQUIRE_MESSAGE(l != nullptr, why);
+		REQUIRE_MESSAGE(l->command(R"({"do": "heat", "burner": "burner", "vessel": "beaker"})", why), why);
+		REQUIRE_MESSAGE(l->command(R"({"do": "valve", "burner": "burner", "to": 1})", why), why);
+		bool ok = true;
+		for (int s = 0; s < 30 && ok; ++s) {
+			ok = l->command(R"({"do": "wait", "seconds": 20})", why);
+		}
+		CHECK_MESSAGE(ok, salt << ": " << why);
+		MESSAGE(salt << ": water left " << of(*l, "beaker.water") << " g, at " << of(*l, "beaker.celsius") << " C");
+		if (std::string(salt) == "lithium_chloride_aq") {
+			// 0.01 mol at an ionic strength of 20: 0.5 g of water held
+			CHECK(of(*l, "beaker.water") == doctest::Approx(0.01 / 20.0 * 1000.0).epsilon(0.02));
+		} else {
+			CHECK(of(*l, "beaker.water") < 1e-6);
+		}
+	}
 }

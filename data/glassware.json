@@ -67,6 +67,8 @@
 			"name": "pipette",
 			"standard": "ISO 648",
 			"sizes": [
+				{"ml": 5, "height_mm": 395, "diameter_mm": 12, "wall_mm": 1.0, "delivery_mm": 150, "delivery_diameter_mm": 6.5, "suction_diameter_mm": 5.5, "mark_over_bulb_mm": 50, "jet_diameter_mm": 3.0, "tolerance_ml": 0.015, "delivery_s": 22},
+				{"ml": 10, "height_mm": 435, "diameter_mm": 15, "wall_mm": 1.0, "delivery_mm": 165, "delivery_diameter_mm": 6.5, "suction_diameter_mm": 6.0, "mark_over_bulb_mm": 50, "jet_diameter_mm": 3.0, "tolerance_ml": 0.020, "delivery_s": 27},
 				{"ml": 25, "height_mm": 510, "diameter_mm": 22, "wall_mm": 1.0, "delivery_mm": 230, "delivery_diameter_mm": 7, "suction_diameter_mm": 6.5, "mark_over_bulb_mm": 50, "jet_diameter_mm": 3.0, "tolerance_ml": 0.03, "delivery_s": 35}
 			],
 			"floor_per_wall": 1.0,

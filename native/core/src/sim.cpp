@@ -1757,9 +1757,11 @@ bool Simulation::project(CellId cell) {
 	// carbonates, their traces reach()'s alone, takes some thirty rounds to its balance after a pour. Stage 81: 256:
 	// copper hydroxide dissolving in a little ammonia as its ammines, the solid project()'s alone and the ammines,
 	// ammonia's protonation and water's ionisation joint, takes 130 to 250 rounds to its balance; a cell that settles
-	// sooner stops sooner)
+	// sooner stops sooner. Stage 85: 1024: a hardness titration's flask at pH 10, EDTA dripping in, its hydrogen ion and
+	// free Y4- each a few hundred quanta among the ammonia buffer's, the carbonates', calcium's and magnesium's EDTA and
+	// the dye's equilibria, takes up to 380)
 	int present_version = -1; // (Stage 81) the version present_ was taken at
-	for (int round = 0; round < 256; ++round) {
+	for (int round = 0; round < 1024; ++round) {
 		bool moved = false;
 		for (size_t e = 0; e < equilibria_.size(); ++e) {
 			const Reaction &reaction = equilibria_[e];
@@ -1796,7 +1798,8 @@ bool Simulation::project(CellId cell) {
 				continue;
 			}
 			const bool forward = a > 0.0;
-			const int64_t size = reach(probe, forward, feasible_extent(state, reaction.terms(), forward), forward ? a : -a);
+			// (Stage 85) no further than the activity model's range: a solution it would take past it stands at its edge
+			const int64_t size = reach(probe, forward, within_range(table, mixtures(cell), reaction.terms(), forward, feasible_extent(state, reaction.terms(), forward)), forward ? a : -a);
 			if (size != 0) {
 				// a solid that appears out of the solution comes as its grains (a precipitate, Stage 44), not one lump
 				std::array<SpeciesId, MAX_TERMS> appears{};

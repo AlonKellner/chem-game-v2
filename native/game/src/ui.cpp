@@ -3733,8 +3733,10 @@ struct Ui::Impl {
 				}
 			} else if (has_outlet(v) && t.kind == "vessel" && !residue_only(v)) {
 				// (Stage 52) a pipette, empty, draws to its mark from what it is dipped into; full, or a burette, stands on
-				// the vessel, its tip in the mouth, and drains into it
-				if (v.glassware == "pipette" && !(v.condensed_ml > 1e-6)) {
+				// the vessel, its tip in the mouth, and drains into it. (Stage 85) Empty is no more than its tolerance: what
+				// stays in a drained tip, a few hundredths of a microlitre, is not a pipette to drain again
+				const glass::Vessel *made = v.glassware == "pipette" ? glass::find(v.glassware, v.nominal_ml) : nullptr;
+				if (made != nullptr && !(v.condensed_ml > made->tolerance_ml)) {
 					act({ { "do", "fill" }, { "item", v.id }, { "from", t.id } });
 				} else {
 					act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
