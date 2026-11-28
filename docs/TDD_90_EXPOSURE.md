@@ -36,7 +36,8 @@ normal room, up to 8 with the room's lights dimmed), **pupil-like** (closing fas
 | 90.1 | The exposure in the per-pixel source, the CPU's picture and truth at it, its tests | done |
 | 90.2 | The meter and the step on the GPU, the reshow, O4 at the exposure read back | done |
 | 90.3 | The room's lights: emitters against them, the top bar's control, the level to the host; tests | done |
-| 90.4 | Documents, `make gates`, the user's sign-off | |
+| 90.4 | A bright flame fading shown black in places (the user's report; Stage 82's): a history's change measured at the exposure and by the light's amount beyond the display | done |
+| 90.5 | Documents, `make gates`, the user's sign-off | |
 
 ## Measured
 
@@ -49,6 +50,21 @@ normal room, up to 8 with the room's lights dimmed), **pupil-like** (closing fas
   ms a frame against 7.74, carried 7.53 against 7.07, poured 10.88 against 10.08, at rest 12.51 against 11.48, stirred
   15.95 against 14.56, fast 13.03 against 12.22: the meter and the step, and the frames that show every pixel again,
   0.2 to 1.4 ms a frame (2 to 9 %).
+
+## A bright flame's black pixels (90.4)
+
+The user saw black pixels in a very bright flame. They were Stage 82's, not the exposure's: the same play on Stage 85's
+build showed them too. A pixel keeps what its history found (its corrections, over its fixed estimate) while its
+estimate moves by less than `DRIFT_MOST` on the eye metric, summed. The metric read each colour through `gamut`, which
+since Stage 82 shows a light brighter than the display at its brightest channel whatever its amount: a flame fading
+from 30 to 20 times the room's white was no change at all, and its pixels kept the corrections found at 30 (a sodium
+flame's are large: its lines are read by the band cuts) while their estimate fell, until the corrections outweighed it,
+red below nought, shown black. Now two of a pixel's colours are compared as they are shown (`apart`, the per-pixel
+source): at the display's exposure, and where either is brighter than the display both scaled by the brighter's
+brightest channel, so that light beyond the display is told apart by its amount. In the display's range at exposure 1
+nothing changes. The test (`test_flame.cpp`, Stage 90): the burner's flame after ten flame tests fading to a
+thirtieth, four frames at each 5 % step, in double and in single precision; 179,307 dark pixel-frames with the old
+measure, none with this.
 
 ## Open
 

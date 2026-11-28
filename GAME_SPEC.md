@@ -1441,7 +1441,9 @@ For each light:
    moving points. The history holds what the moving points add to the fixed estimate, so the
    pixel shows the fixed estimate now plus its history's average. If the same bodies still cover
    the pixel and the fixed estimate has moved by at most 4 on the eye metric since the history
-   began, the history is kept, aged by how far the estimate moved (half its weight per unit);
+   began (Stage 90: its colours as shown, at the display's exposure, and where one is brighter than
+   the display both scaled by the brighter's brightest channel: a light beyond the display told apart
+   by its amount, not by the one colour the display shows it as), the history is kept, aged by how far the estimate moved (half its weight per unit);
    otherwise it starts again. A body moved by a pixel, a reaction a step further on, keep their
    history; a jump, a pour, a body arriving or leaving start it again. (Stage 77) A pixel read by its own
    rays whose rays moved (its beam traced again: what lies in its vessel changed on rows they pass) starts

@@ -4507,6 +4507,19 @@ float eye(vec3 p, vec3 q) {
 	return sqrt(base * base + neutral * neutral);
 }
 
+// How far apart two of a pixel's colours (linear sRGB, multiples of the room's white) are to the eye (Stage 90): as
+// they are shown, at the display's exposure; and where either is brighter than the display, both scaled by the
+// brighter one's brightest channel, so that light beyond the display is still told apart by its amount. (The display
+// shows such a light at its brightest whatever its amount: a flame fading from 30 to 20 times the room's white was
+// no change at all to `gamut` alone, and its pixels kept the corrections their history found at 30 while their
+// estimate fell, until the corrections outweighed the light and showed it black: the user's black pixels in a
+// fading flame.)
+float apart(vec3 a, vec3 b) {
+	float e = display_exposure();
+	float m = max(1.0, e * max(max(max(a.x, a.y), max(a.z, b.x)), max(b.y, b.z)));
+	return eye(lab_of(a * (e / m)), lab_of(b * (e / m)));
+}
+
 // ---- one frame of the method
 
 // what a beam traced in a frame is counted as, of the rays' budget (points): a carried vessel's pixels take all
@@ -4587,7 +4600,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		// found is carried on in proportion to the light there is now, and it keeps its points. So a liquid that
 		// changes colour at every step (a reaction) starts again only the histories of pixels whose rays part (a
 		// rim shows more of the wall as its liquid darkens: that is found again), not every pixel of its vessel.
-		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && eye(lab_of(prox), lab_of(prox + d)) < 1.0;
+		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && apart(prox, prox + d) < 1.0;
 		// (Stage 77) A pixel read by its own rays whose beam was traced again, its rays having moved (what lies in its
 		// vessel changed on rows they pass: a pile's surface sweeping slowly across it), starts again: what its
 		// corrections found was found along the rays it had, and kept by the drift rule (a small change of its
@@ -4595,7 +4608,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		// for more: a slowly lowered pile left its old shape behind (the user's ghost, docs/TDD_77_GHOST.md).
 		bool rays_moved = both && !beam_held;
 		if (s.key.z == q.key.z && points > 0.0) {
-			float moved = eye(lab_of(prox), lab_of(now));
+			float moved = apart(prox, now);
 			drift = drift + moved;
 			keep = (drift <= DRIFT_MOST && !rays_moved) || plain;
 			if (keep && plain) {
@@ -4676,7 +4689,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 			took = float(corrections_taken);
 		}
 		if (points >= 1.0) {
-			float dev = eye(lab_of(prox + d), lab_of(est));
+			float dev = apart(prox + d, est);
 			float trial = dev * dev / (1.0 / took + 1.0 / points);
 			noise = frames >= 1.0 ? noise + (trial - noise) / min(frames + 1.0, 16.0) : trial;
 		}

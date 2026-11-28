@@ -8,6 +8,8 @@
   O4 at the exposure read back.
 - §12.2: the room's lights (the top bar's "lights", 100 to 1 %): what emits light the brighter against them, the eye
   opening up to 8 times. A lamp's lines in eleven stretches, every line in one.
+- §12.3: a bright flame fading no longer shows black pixels (Stage 82's): a pixel's history measures a change at the
+  display's exposure and, beyond the display, by the light's amount.
 
 ## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
 
