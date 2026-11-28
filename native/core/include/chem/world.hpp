@@ -250,6 +250,14 @@ struct Crossed {
 	int64_t energy = 0;
 	bool liquid = false;
 	double density = 0.0, viscosity = 0.0, gamma = 0.0, read_kelvin = 0.0; // (density: a gas's molar mass, kg/mol)
+	// (Stage 94) `from_pa` and `to_pa` are the two ports' pressures, the weight over each counted and the weight of
+	// what crosses over the rise between them taken off the giver's: what the law was asked. `at_pa`: the giver's own
+	// pressure, its enthalpy's. `give`: what the rate took off its own drive (the levels it moved). `fall`: from the
+	// giver's surface to the taker's, m, and `weight`, the quanta gravity gave the taker for it (Z1).
+	// `drive`: a liquid's, Pa: from_pa less to_pa, kept as it was reckoned (the two are the room's pressure apart from
+	// a difference that may be a millionth of a pascal).
+	double at_pa = 0.0, give = 0.0, fall = 0.0, drive = 0.0;
+	int64_t weight = 0;
 };
 
 // One step as the invariants see it (chem/invariants.hpp).

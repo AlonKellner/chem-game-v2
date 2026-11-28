@@ -238,7 +238,7 @@ TEST_CASE("closure: a syringe open to the air only through its nozzle draws air 
 		least = std::min(least, state(sim.world(), s.cell).pressure);
 		for (const Crossed &x : trace.crossed) {
 			CHECK(x.from == air); // into the syringe, from the air at the room's pressure
-			CHECK(x.from_pa == P_ATMOSPHERE);
+			CHECK(x.from_pa == doctest::Approx(P_ATMOSPHERE).epsilon(1e-12)); // (its port: no liquid over it)
 			CHECK_FALSE(x.liquid);
 		}
 	}

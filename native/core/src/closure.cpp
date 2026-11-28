@@ -37,8 +37,11 @@ struct Part { // a cell of a node: its top, or a layer under it
 	Content liquid, gas;
 	std::vector<SpeciesAmount> liquid_amounts, gas_amounts;
 	double liquid_kg = 0.0, gas_kg = 0.0, liquid_density = 0.0, liquid_viscosity = 0.0, gas_viscosity = 0.0, gas_molar = 0.0, gas_gamma = 0.0;
+	// (Stage 94) where its solids and liquids lie in its vessel, m over the floor, as the round begins
+	double bottom = 0.0, top = 0.0;
 	// an evaluation's
 	double t = T0, sized = 0.0, liquid_left = 0.0, gas_left = 0.0;
+	bool is_sized = false;
 };
 
 struct Node {
@@ -50,9 +53,14 @@ struct Node {
 	std::vector<EdgeId> up; // up[i]: from parts[i + 1] to parts[i]
 	double whole = 0.0, start = 0.0; // m^3: now, and as the step began
 	double pressure = P_ATMOSPHERE, tolerance = 0.0;
+	// (Stage 94) its heights, m: its floor over the bench's datum; with a shape (a column's), its liquid's surface and
+	// its brim over its floor and its cross-section at the surface, m^2. With none it has no heights and no head.
+	bool shaped = false, weighed = false; // (weighed: gravity's edge to it)
+	double height = 0.0, surface = 0.0, brim = 0.0, area = 0.0;
 	// an evaluation's
 	Content in;
 	double in_enthalpy = 0.0, grown = 0.0, work = 0.0, residual = 0.0;
+	bool done = false;
 	PistonMove mv;
 	bool at_least = false; // at the least pressure with room to spare: a void
 	bool tight = false; // closed as far as its pressure can be told (inside a nested solve), not to its tolerance
@@ -62,7 +70,9 @@ struct Link {
 	size_t edge = 0;
 	int a = -1, b = -1; // its ends' nodes
 	Conduit conduit;
-	bool foot_a = false, foot_b = false, liquid = false, gas = false, dissolved = false;
+	double port_a = PORT_TOP, port_b = PORT_TOP; // each end's port's height over its vessel's floor (Stage 94)
+	bool liquid = false, gas = false, dissolved = false;
+	bool heads = false; // both ends weighed: heights and heads count (else as Stage 89: a foot or a top, no weight)
 };
 
 struct Crossing {
@@ -70,6 +80,10 @@ struct Crossing {
 	int from = -1, to = -1, part = 0;
 	bool liquid = false;
 	double share = 0.0, kelvin = T0, from_pa = 0.0, to_pa = 0.0, rate = 0.0, seconds = 0.0;
+	// (Stage 94) the giver's own pressure (its enthalpy's), what the rate takes off its own drive, the fall from the
+	// giver's surface to the taker's, m, and the mass, kg; carried: its enthalpy is in the taker already
+	double at_pa = 0.0, give = 0.0, fall = 0.0, mass = 0.0, drive = 0.0;
+	bool carried = false;
 };
 
 static bool none(const Content &c) {
@@ -85,7 +99,7 @@ struct Closing {
 
 // What crosses the link from `giver` at the pressures set, for the evaluation: each share out of its part, its
 // enthalpy and its amounts into the taker's top. `record`: kept for the apply.
-static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, bool record);
+static void cross(Closing &g, size_t l, double seconds);
 
 } // namespace closure
 
@@ -104,7 +118,7 @@ bool Simulation::close_vessels() {
 		return !m.layer && !m.reservoir && !m.frozen;
 	};
 	std::vector<int> group(cells, -1); // each vessel's group: the least cell of those joined to it
-	std::vector<size_t> conduits;
+	std::vector<size_t> conduits, between_open;
 	const auto find = [&](size_t c) {
 		while (group[c] != static_cast<int>(c)) {
 			c = static_cast<size_t>(group[c]);
@@ -124,7 +138,14 @@ bool Simulation::close_vessels() {
 			continue;
 		}
 		const auto a = static_cast<size_t>(e.a.index), b = static_cast<size_t>(e.b.index);
-		if (!end_of(a) || !end_of(b) || (!top_of(a) && !top_of(b))) {
+		if (!end_of(a) || !end_of(b)) {
+			continue;
+		}
+		if (!top_of(a) && !top_of(b)) {
+			// (Stage 94) between two vessels open to the room: nothing to solve, each at the room's pressure, but their
+			// liquids' heads run what stands at its ports (communicating vessels, a siphon)
+			between_open.push_back(i);
+			any = true;
 			continue;
 		}
 		conduits.push_back(i);
@@ -166,6 +187,10 @@ bool Simulation::close_vessels() {
 		if (acts || !own.empty()) {
 			moved = close_group(tops, own, touched) || moved;
 		}
+	}
+	for (const size_t i : between_open) {
+		std::vector<CellId> unused; // (open cells are the open tree's to settle, after)
+		moved = close_group({}, { i }, unused) || moved;
 	}
 	for (int round = 1; round < ROUNDS && !touched.empty(); ++round) {
 		bool settled = true;
@@ -229,69 +254,196 @@ static bool size_part(const SpeciesTable &table, Node &node, size_t i) {
 	return true;
 }
 
-static void cross(const SpeciesTable &table, Closing &g, size_t l, int giver, double seconds, bool record) {
-	const Link &link = g.links[l];
-	const int taker = giver == link.a ? link.b : link.a;
-	Node &from = g.nodes[static_cast<size_t>(giver)], &to = g.nodes[static_cast<size_t>(taker)];
-	const bool back = giver == link.b, foot = back ? link.foot_b : link.foot_a;
-	// what stands at the port, in the order it gives it: at a foot its liquid from the lowest layer up, then its gas;
-	// at a top its gas, or with none its liquid from the top down
-	struct Stands {
-		int part;
-		bool liquid;
-	};
-	std::array<Stands, 64> stands{};
+constexpr double GRAVITY = 9.80665; // m/s^2, standard (as the column's)
+
+// (Stage 94) A port's height over its vessel's floor as it counts: the top is the brim; a vessel with no shape has
+// no heights.
+static double port_height(const Node &node, double port) {
+	return node.shaped ? std::min(port, node.brim) : 0.0;
+}
+
+// The weight of the liquid over a port, Pa: g times each layer's density over what of it lies above the port.
+static double head_at(const Node &node, double port) {
+	if (!node.shaped || !(port < node.surface)) {
+		return 0.0;
+	}
+	double head = 0.0;
+	for (const Part &part : node.parts) {
+		if (part.top > port && part.liquid_kg > 0.0) {
+			head += GRAVITY * part.liquid_density * (part.top - std::max(part.bottom, port));
+		}
+	}
+	return head;
+}
+
+// What stands at a node's port, in the order it gives it (Stage 89; by heights, Stage 94): `most`, the share of each
+// part's that may go.
+struct Stands {
+	int part = 0;
+	bool liquid = false;
+	double most = 1.0;
+};
+
+static size_t stands_at(const Node &node, double port, const Link &link, bool heads, std::array<Stands, 64> &stands) {
 	size_t count = 0;
-	const int n = static_cast<int>(from.parts.size());
-	const auto liquids = [&](bool upward) {
+	const int n = static_cast<int>(node.parts.size());
+	const bool has_gas = node.parts[0].gas_kg > 0.0;
+	const auto liquids = [&](bool upward, int from) {
 		for (int k = 0; k < n && count < stands.size(); ++k) {
 			const int i = upward ? n - 1 - k : k;
-			if (from.parts[static_cast<size_t>(i)].liquid_kg > 0.0) {
-				stands[count++] = Stands{ i, true };
+			if ((upward ? i <= from : i >= from) && node.parts[static_cast<size_t>(i)].liquid_kg > 0.0) {
+				stands[count++] = Stands{ i, true, 1.0 };
 			}
 		}
 	};
-	const bool has_gas = from.parts[0].gas_kg > 0.0;
-	if (foot) {
+	if (heads && node.shaped) {
+		if (port < node.surface) {
+			// under the surface: the layer the port lies in (what of it is over the port), then those over it as they
+			// come down to it, then the gas; what lies under the port stays
+			if (link.liquid) {
+				int at = -1;
+				for (int i = n - 1; i >= 0; --i) {
+					if (node.parts[static_cast<size_t>(i)].liquid_kg > 0.0 && node.parts[static_cast<size_t>(i)].top > port) {
+						at = i;
+						break;
+					}
+				}
+				if (at >= 0) {
+					const Part &part = node.parts[static_cast<size_t>(at)];
+					const double thick = part.top - part.bottom;
+					stands[count++] = Stands{ at, true, thick > 0.0 ? std::clamp((part.top - std::max(part.bottom, port)) / thick, 0.0, 1.0) : 1.0 };
+					liquids(true, at - 1);
+				}
+			}
+			if (link.gas && has_gas && count < stands.size()) {
+				stands[count++] = Stands{ 0, false, 1.0 };
+			}
+		} else if (link.gas && has_gas) {
+			stands[count++] = Stands{ 0, false, 1.0 };
+		} else if (link.liquid && !has_gas) {
+			liquids(false, 0);
+		}
+		return count;
+	}
+	// no heights (Stage 89): at a foot its liquid from the lowest layer up, then its gas; at a top its gas, or with
+	// none its liquid from the top down
+	if (port < PORT_TOP) {
 		if (link.liquid) {
-			liquids(true);
+			liquids(true, n - 1);
 		}
 		if (link.gas && has_gas && count < stands.size()) {
-			stands[count++] = Stands{ 0, false };
+			stands[count++] = Stands{ 0, false, 1.0 };
 		}
 	} else if (link.gas && has_gas) {
-		stands[count++] = Stands{ 0, false };
+		stands[count++] = Stands{ 0, false, 1.0 };
 	} else if (link.liquid && !has_gas) {
-		liquids(false);
+		liquids(false, 0);
 	}
+	return count;
+}
+
+// A link's crossings at the pressures set (the evaluation's first part: they need the pressures and the heads
+// alone). From the end whose port stands the higher in pressure, its weight over it counted, less the weight of
+// what crosses over the rise between the two ports; each parcel's rate the conduit's law's with what the crossing
+// itself takes off the head (it lowers the surface it leaves and raises the one it joins).
+static void cross(Closing &g, size_t l, double seconds) {
+	const Link &link = g.links[l];
+	Node &a = g.nodes[static_cast<size_t>(link.a)], &b = g.nodes[static_cast<size_t>(link.b)];
+	const bool heads = link.heads;
+	std::array<Stands, 64> stands_a{}, stands_b{};
+	const size_t count_a = stands_at(a, link.port_a, link, heads, stands_a), count_b = stands_at(b, link.port_b, link, heads, stands_b);
+	const double head_a = heads ? head_at(a, link.port_a) : 0.0, head_b = heads ? head_at(b, link.port_b) : 0.0;
+	const double rise = heads ? (b.height + port_height(b, link.port_b)) - (a.height + port_height(a, link.port_a)) : 0.0; // b's port over a's
+	// what drives a parcel of a density from one end to the other, Pa (a gas's weight left out)
+	const auto drive = [&](bool from_a, const Stands &what) {
+		const Node &from = from_a ? a : b, &to = from_a ? b : a;
+		const double density = what.liquid ? from.parts[static_cast<size_t>(what.part)].liquid_density : 0.0;
+		return (from.pressure + (what.liquid ? (from_a ? head_a : head_b) : 0.0)) - (to.pressure + (from_a ? head_b : head_a)) - density * GRAVITY * (from_a ? rise : -rise);
+	};
+	const double drive_a = count_a > 0 ? drive(true, stands_a[0]) : 0.0, drive_b = count_b > 0 ? drive(false, stands_b[0]) : 0.0;
+	if (!(drive_a > 0.0) && !(drive_b > 0.0)) {
+		return;
+	}
+	const bool from_a = drive_a >= drive_b;
+	const int giver = from_a ? link.a : link.b, taker = from_a ? link.b : link.a;
+	Node &from = from_a ? a : b, &to = from_a ? b : a;
+	const std::array<Stands, 64> &stands = from_a ? stands_a : stands_b;
+	const size_t count = from_a ? count_a : count_b;
+	const bool back = !from_a;
+	const double to_port = from_a ? link.port_b : link.port_a, to_head = from_a ? head_b : head_a;
+	const bool to_under = heads && to.shaped && to_port < to.surface; // the taker's port under its surface
 	double left = seconds;
-	for (size_t s = 0; s < count && left > 0.0; ++s) {
-		Part &part = from.parts[static_cast<size_t>(stands[s].part)];
-		const bool liquid = stands[s].liquid;
-		const double rate = liquid ? liquid_rate(link.conduit, from.pressure, to.pressure, part.liquid_density, part.liquid_viscosity, back)
-								   : gas_rate(link.conduit, from.pressure, to.pressure, part.kelvin, part.gas_molar, part.gas_gamma, part.gas_viscosity, back);
+	for (size_t k = 0; k < count && left > 0.0; ++k) {
+		Part &part = from.parts[static_cast<size_t>(stands[k].part)];
+		const bool liquid = stands[k].liquid;
+		const double push = drive(from_a, stands[k]);
+		if (!(push > 0.0)) {
+			break;
+		}
+		double give = 0.0;
+		if (liquid && heads) {
+			give = part.liquid_density * GRAVITY * seconds * ((from.shaped && from.area > 0.0 ? 1.0 / from.area : 0.0) + (to_under && to.area > 0.0 ? 1.0 / to.area : 0.0));
+		}
+		const double to_pa = to.pressure + to_head, from_pa = to_pa + push;
+		const double rate = liquid ? conduit_rate(link.conduit, part.liquid_density * push, part.liquid_viscosity, back, give)
+								   : gas_rate(link.conduit, from_pa, to_pa, part.kelvin, part.gas_molar, part.gas_gamma, part.gas_viscosity, back);
 		if (!(rate > 0.0)) {
 			break;
 		}
 		double &there = liquid ? part.liquid_left : part.gas_left;
 		const double whole = liquid ? part.liquid_kg : part.gas_kg;
-		const double mass = std::min(there, rate * left);
+		const double most = std::max(there - (1.0 - stands[k].most) * whole, 0.0); // (what of it lies over the port)
+		const double mass = std::min(most, rate * left);
 		if (!(mass > 0.0)) {
 			continue;
 		}
 		there -= mass;
 		left -= mass / rate;
-		const double share = mass / whole;
-		Content leaves;
-		leaves.add(liquid ? part.liquid : part.gas, share);
-		const Held held = held_at(table, leaves, part.t, from.pressure);
-		part.sized -= held.volume;
-		to.in.add(leaves);
-		to.in_enthalpy += held.enthalpy;
-		if (record) {
-			g.crossings.push_back(Crossing{ l, giver, taker, stands[s].part, liquid, share, part.t, from.pressure, to.pressure, rate, mass / rate });
+		Crossing x;
+		x.link = l;
+		x.from = giver;
+		x.to = taker;
+		x.part = stands[k].part;
+		x.liquid = liquid;
+		x.share = mass / whole;
+		x.from_pa = from_pa;
+		x.to_pa = to_pa;
+		x.at_pa = from.pressure;
+		x.rate = rate;
+		x.seconds = mass / rate;
+		x.give = give;
+		x.mass = mass;
+		x.drive = push;
+		if (liquid && heads && to.weighed) {
+			// from the giver's surface (with no shape, its floor) to the taker's
+			x.fall = (from.height + (from.shaped ? from.surface : 0.0)) - (to.height + (to.shaped ? to.surface : 0.0));
 		}
+		g.crossings.push_back(x);
 	}
+}
+
+// A crossing's parcel carried: out of its giver's part at the temperature that part stands at, into its taker's top
+// with its enthalpy at the giver's state and what gravity gives it falling.
+static void carry(const SpeciesTable &table, Closing &g, Crossing &x) {
+	Node &from = g.nodes[static_cast<size_t>(x.from)], &to = g.nodes[static_cast<size_t>(x.to)];
+	Part &part = from.parts[static_cast<size_t>(x.part)];
+	if (!x.carried) {
+		x.kelvin = part.is_sized ? part.t : part.kelvin; // (a giver not yet sized, in a ring of crossings: as it began)
+		Content leaves;
+		leaves.add(x.liquid ? part.liquid : part.gas, x.share);
+		const Held held = held_at(table, leaves, x.kelvin, x.at_pa);
+		to.in.add(leaves);
+		to.in_enthalpy += held.enthalpy + x.mass * GRAVITY * x.fall;
+		x.carried = true;
+	}
+}
+
+// its volume out of its giver's part, once that part is sized
+static void leave(const SpeciesTable &table, Closing &g, const Crossing &x) {
+	Part &part = g.nodes[static_cast<size_t>(x.from)].parts[static_cast<size_t>(x.part)];
+	Content leaves;
+	leaves.add(x.liquid ? part.liquid : part.gas, x.share);
+	part.sized -= held_at(table, leaves, x.kelvin, x.at_pa).volume;
 }
 
 // how far from closed: the largest residual over its tolerance (a void's, at the least pressure, is closed)
@@ -308,32 +460,55 @@ static double merit(const Closing &g) {
 } // namespace closure
 
 // Every node's residual at the pressures set. false where a state has no model.
-bool Simulation::evaluate(Closing &g, bool record) const {
+bool Simulation::evaluate(Closing &g, bool) const {
 	const SpeciesTable &table = world_.species();
 	const size_t n = g.nodes.size();
-	g.order.resize(n);
-	for (size_t i = 0; i < n; ++i) {
-		g.order[i] = static_cast<int>(i);
-		Node &node = g.nodes[i];
+	for (Node &node : g.nodes) {
 		node.in = Content{};
 		node.in_enthalpy = 0.0;
+		node.done = false;
 		for (Part &part : node.parts) {
 			part.liquid_left = part.liquid_kg;
 			part.gas_left = part.gas_kg;
+			part.is_sized = false;
+			part.t = part.kelvin;
+			part.sized = 0.0;
 		}
 	}
-	std::stable_sort(g.order.begin(), g.order.end(), [&](int x, int y) { return g.nodes[static_cast<size_t>(x)].pressure > g.nodes[static_cast<size_t>(y)].pressure; });
-	if (record) {
-		g.crossings.clear();
+	// what crosses each conduit: by the pressures and the heads alone
+	g.crossings.clear();
+	for (size_t l = 0; l < g.links.size(); ++l) {
+		cross(g, l, step_seconds_);
 	}
-	for (const int i : g.order) {
-		Node &node = g.nodes[static_cast<size_t>(i)];
-		if (node.fixed) {
-			for (Part &part : node.parts) {
-				part.t = part.kelvin;
-				part.sized = 0.0;
+	// then each node sized, a giver before its taker (what it gives is at the temperature it ends at): the nodes no
+	// unsized node gives to, in turn; in a ring of crossings, the first left as it stands (what a giver not yet sized
+	// gives, at the temperature it began at)
+	for (size_t placed = 0; placed < n; ++placed) {
+		int next = -1;
+		for (size_t i = 0; i < n && next < 0; ++i) {
+			if (g.nodes[i].done) {
+				continue;
 			}
-		} else {
+			bool waits = false;
+			for (const Crossing &x : g.crossings) {
+				waits = waits || (x.to == static_cast<int>(i) && !g.nodes[static_cast<size_t>(x.from)].done);
+			}
+			if (!waits) {
+				next = static_cast<int>(i);
+			}
+		}
+		for (size_t i = 0; i < n && next < 0; ++i) {
+			if (!g.nodes[i].done) {
+				next = static_cast<int>(i);
+			}
+		}
+		Node &node = g.nodes[static_cast<size_t>(next)];
+		for (Crossing &x : g.crossings) { // (what comes to it: all of it in before it is sized)
+			if (x.to == next) {
+				carry(table, g, x);
+			}
+		}
+		if (!node.fixed) {
 			node.mv = PistonMove{};
 			node.grown = node.work = 0.0;
 			if (node.piston) {
@@ -345,18 +520,20 @@ bool Simulation::evaluate(Closing &g, bool record) const {
 				if (!size_part(table, node, k)) {
 					return false;
 				}
+				node.parts[k].is_sized = true;
+			}
+		} else {
+			for (Part &part : node.parts) {
+				part.is_sized = true;
 			}
 		}
-		for (size_t l = 0; l < g.links.size(); ++l) {
-			const Link &link = g.links[l];
-			if (link.a != i && link.b != i) {
-				continue;
-			}
-			const Node &other = g.nodes[static_cast<size_t>(link.a == i ? link.b : link.a)];
-			if (node.pressure > other.pressure) {
-				cross(table, g, l, i, step_seconds_, record);
+		for (Crossing &x : g.crossings) { // (what leaves it: at the temperature it now stands at)
+			if (x.from == next) {
+				carry(table, g, x);
+				leave(table, g, x);
 			}
 		}
+		node.done = true;
 		if (!node.fixed) {
 			double takes = 0.0, scale = std::fabs(node.whole + node.grown);
 			for (const Part &part : node.parts) {
@@ -728,6 +905,26 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 			}
 			node.parts.push_back(std::move(part));
 		}
+		// (Stage 94) its heights: its floor's, and with a shape where its solids and liquids lie, from the floor up
+		node.height = m.height;
+		node.weighed = world_.gravity_edge(top).index >= 0;
+		node.shaped = m.column_volume > 0.0 && (m.column_area > 0.0 || m.column_shape.size() >= 2);
+		if (node.shaped) {
+			const double pressure = fixed || !thermal(top).defined || !(thermal(top).pressure > LEAST) ? P_ATMOSPHERE : thermal(top).pressure;
+			double below = 0.0;
+			for (size_t k = node.parts.size(); k-- > 0;) {
+				Part &part = node.parts[k];
+				Content condensed = part.content;
+				condensed.gas = 0.0;
+				const double m3 = none(condensed) ? 0.0 : held_at(table, condensed, part.kelvin, pressure).volume;
+				part.bottom = column_height(m, below);
+				part.top = column_height(m, below + m3);
+				below += m3;
+			}
+			node.surface = node.parts[0].top;
+			node.brim = column_height(m, m.column_volume);
+			node.area = column_area(m, node.surface);
+		}
 		if (!fixed) {
 			node.whole = world_.piston_volume(top);
 			node.piston = m.piston.area > 0.0;
@@ -748,8 +945,8 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 		Link link;
 		link.edge = i;
 		link.conduit = e.conduit;
-		link.foot_a = e.port_a < PORT_TOP;
-		link.foot_b = e.port_b < PORT_TOP;
+		link.port_a = e.port_a;
+		link.port_b = e.port_b;
 		link.liquid = (e.phases & phase_bit(Phase::Liquid)) != 0;
 		link.dissolved = (e.phases & phase_bit(Phase::Aqueous)) != 0;
 		link.gas = (e.phases & PHASES_GAS) != 0;
@@ -761,6 +958,7 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 		if (link.b < 0) {
 			link.b = add(e.b, true);
 		}
+		link.heads = g.nodes[static_cast<size_t>(link.a)].weighed && g.nodes[static_cast<size_t>(link.b)].weighed;
 		g.links.push_back(link);
 	}
 	for (const Node &node : g.nodes) {
@@ -827,11 +1025,11 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 			continue;
 		}
 		const Content leaves = content_of(table, amounts);
-		const Held held = held_at(table, leaves, x.kelvin, x.from_pa);
+		const Held held = held_at(table, leaves, x.kelvin, x.at_pa);
 		const Energy carried{ std::llround(held.enthalpy / JOULE_PER_QUANTUM) };
 		bool ok = true;
 		if (x.part > 0) {
-			const double over = world_.meta(part.id).pressed ? x.from_pa - P_ATMOSPHERE : 0.0;
+			const double over = world_.meta(part.id).pressed ? x.at_pa - P_ATMOSPHERE : 0.0;
 			const Energy lifted{ std::llround((held.enthalpy - over * held.volume) / JOULE_PER_QUANTUM) };
 			for (size_t k = static_cast<size_t>(x.part); k-- > 0 && ok;) {
 				const Refusal refused = transfer(from.up[k], from.parts[k + 1].id, amounts, lifted);
@@ -855,8 +1053,24 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 		for (const SpeciesAmount &a : amounts) {
 			kg += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * static_cast<double>(table.molar_mass_ug(a.species)) * 1e-9;
 		}
-		crossed_.push_back(Crossed{ EdgeId{ static_cast<int32_t>(link.edge) }, from.top, to.top, x.from_pa, x.to_pa, x.kelvin, kg, x.rate, x.seconds, carried.quanta, x.liquid,
-				x.liquid ? part.liquid_density : part.gas_molar, x.liquid ? part.liquid_viscosity : part.gas_viscosity, x.liquid ? 0.0 : part.gas_gamma, part.kelvin });
+		// (Stage 94) what gravity gives it falling from its giver's surface to its taker's, or takes lifting it
+		const int64_t weight = x.fall != 0.0 ? std::llround(kg * GRAVITY * x.fall / JOULE_PER_QUANTUM) : 0;
+		if (weight != 0) {
+			const EdgeId gravity = world_.gravity_edge(to.top);
+			const Process was = process_;
+			process_ = Process::Work;
+			const Refusal weighed = gravity.index >= 0 ? transfer(gravity, world_.gravity_cell(), {}, Energy{ weight }) : Refusal::UnknownEdge;
+			CHEM_ASSERT(weighed == Refusal::None, refusal_text(weighed));
+			process_ = was;
+		}
+		Crossed row{ EdgeId{ static_cast<int32_t>(link.edge) }, from.top, to.top, x.from_pa, x.to_pa, x.kelvin, kg, x.rate, x.seconds, carried.quanta, x.liquid,
+			x.liquid ? part.liquid_density : part.gas_molar, x.liquid ? part.liquid_viscosity : part.gas_viscosity, x.liquid ? 0.0 : part.gas_gamma, part.kelvin };
+		row.at_pa = x.at_pa;
+		row.give = x.give;
+		row.fall = x.fall;
+		row.drive = x.drive;
+		row.weight = weight;
+		crossed_.push_back(row);
 		applied = true;
 	}
 	// each vessel sized: the pressure found, its layers at it

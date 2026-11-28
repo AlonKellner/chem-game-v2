@@ -1139,11 +1139,12 @@ Violations check_F1(const SpeciesTable &table, const StepTrace &trace) {
 			say("F1: step %lld: crossing %lld is along no conduit between its two cells (%g, %g)", row, 0.0, 0.0);
 			continue;
 		}
-		if (!(x.from_pa > x.to_pa)) {
+		if (!(x.from_pa > x.to_pa) && !(x.liquid && x.drive > 0.0 && x.from_pa >= x.to_pa)) {
 			say("F1: step %lld: crossing %lld runs from %.9g Pa to %.9g Pa: not down the pressure", row, x.from_pa, x.to_pa);
 		}
 		// no more than its law passes at those pressures in the time it ran, within the step
-		const double law = x.liquid ? liquid_rate(e.conduit, x.from_pa, x.to_pa, x.density, x.viscosity, back)
+		// (a liquid's by its drive as it was reckoned: Stage 94)
+		const double law = x.liquid ? conduit_rate(e.conduit, x.density * (x.drive > 0.0 ? x.drive : x.from_pa - x.to_pa), x.viscosity, back, x.give)
 									: gas_rate(e.conduit, x.from_pa, x.to_pa, x.read_kelvin, x.density, x.gamma, x.viscosity, back);
 		if (!(x.rate <= law * (1.0 + 1e-9))) {
 			say("F1: step %lld: crossing %lld runs at %.9g kg/s, its conduit's law %.9g", row, x.rate, law);
@@ -1182,7 +1183,7 @@ Violations check_F1(const SpeciesTable &table, const StepTrace &trace) {
 			if (std::fabs(kg - x.kg) > 1e-12 * x.kg + 1e-21) {
 				say("F1: step %lld: crossing %lld says %.9g kg, its entry moves %.9g", row, x.kg, kg);
 			}
-			const double carried = held_at(table, content_of(table, entry.delta), x.kelvin, x.from_pa).enthalpy / JOULE_PER_QUANTUM;
+			const double carried = held_at(table, content_of(table, entry.delta), x.kelvin, x.at_pa).enthalpy / JOULE_PER_QUANTUM;
 			if (std::fabs(carried - static_cast<double>(entry.energy.quanta)) > 0.5 + 1e-12 * std::fabs(carried)) {
 				say("F1: step %lld: crossing %lld carries %.12g quanta, its amounts' enthalpy at the giver's state %.12g", row, static_cast<double>(entry.energy.quanta), carried);
 			}
@@ -1194,6 +1195,55 @@ Violations check_F1(const SpeciesTable &table, const StepTrace &trace) {
 	for (size_t i = 0; i < trace.ledger.size(); ++i) {
 		if (trace.ledger[i].crossing && !matched[i]) {
 			say("F1: step %lld: entry %lld is marked a crossing, and is none of the step's (%g, %g)", static_cast<long long>(i), 0.0, 0.0);
+		}
+	}
+	return out;
+}
+
+Violations check_Z1(const SpeciesTable &, const StepTrace &trace) {
+	Violations out;
+	if (trace.meta.size() != trace.after.cells.size()) {
+		return out;
+	}
+	constexpr double GRAVITY = 9.80665;
+	// what each cell took from gravity along its edge, against its crossings' weights
+	std::vector<int64_t> along(trace.meta.size(), 0), owed(trace.meta.size(), 0);
+	std::vector<int> rows(trace.meta.size(), 0);
+	bool any = false;
+	for (const LedgerEntry &entry : trace.ledger) {
+		if (entry.kind != LedgerEntry::Kind::Transfer || !cell_in(trace, entry.from) || !cell_in(trace, entry.to)) {
+			continue;
+		}
+		const auto from = static_cast<size_t>(entry.from.index), to = static_cast<size_t>(entry.to.index);
+		const bool gives = trace.meta[from].reservoir && trace.meta[from].gravity, takes = trace.meta[to].reservoir && trace.meta[to].gravity;
+		if (!gives && !takes) {
+			continue;
+		}
+		any = true;
+		if (!entry.delta.empty()) {
+			out.push_back(text("Z1: step %lld: matter moves along gravity's edge", static_cast<long long>(trace.step)));
+			continue;
+		}
+		along[gives ? to : from] += gives ? entry.energy.quanta : -entry.energy.quanta;
+	}
+	for (size_t r = 0; r < trace.crossed.size(); ++r) {
+		const Crossed &x = trace.crossed[r];
+		if (!cell_in(trace, x.to)) {
+			continue;
+		}
+		const double weight = x.kg * GRAVITY * x.fall / JOULE_PER_QUANTUM;
+		if (std::fabs(static_cast<double>(x.weight) - weight) > 0.5 + 1e-9 * std::fabs(weight) && out.size() < MAX_MESSAGES) {
+			out.push_back(words("Z1: step %lld: crossing %lld is given %.9g quanta by gravity, its mass times g times its fall %.9g", static_cast<long long>(trace.step),
+					static_cast<long long>(r), static_cast<double>(x.weight), weight));
+		}
+		owed[static_cast<size_t>(x.to.index)] += x.weight;
+		rows[static_cast<size_t>(x.to.index)] += x.weight != 0 ? 1 : 0;
+		any = any || x.weight != 0;
+	}
+	for (size_t c = 0; any && c < along.size() && out.size() < MAX_MESSAGES; ++c) {
+		if (along[c] != owed[c]) {
+			out.push_back(text("Z1: step %lld: a cell took %lld quanta from gravity, its crossings' falls come to %lld", static_cast<long long>(trace.step), static_cast<long long>(along[c]),
+					static_cast<long long>(owed[c])));
 		}
 	}
 	return out;
@@ -1249,7 +1299,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2, check_F1 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2, check_F1, check_Z1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

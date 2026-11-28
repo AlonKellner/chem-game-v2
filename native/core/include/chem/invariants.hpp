@@ -159,6 +159,10 @@ Violations check_W2(const SpeciesTable &table, const StepTrace &trace);
 // pressures it was solved at to the lower, at no more than the conduit's law passes there, for no longer than the
 // step, and carries its amounts' enthalpy at the giver's state; and each ledger entry marked a crossing is one of them
 Violations check_F1(const SpeciesTable &table, const StepTrace &trace);
+// (Stage 94) Z1: gravity's work is the weight's fall: what a cell takes from gravity's reservoir in a step is what
+// its crossings were given, each its mass times g times its fall from the giver's surface to the taker's (to a
+// quantum), and nothing but energy crosses gravity's edges
+Violations check_Z1(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.
