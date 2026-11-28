@@ -262,6 +262,20 @@
 			"tutorial": "tutorials/molar_volume.json"
 		},
 		{
+			"id": "crystal_violet",
+			"title": "Crystal violet: a first-order decay",
+			"summary": "Measured and written down: crystal violet fading in a thousandfold excess of hydroxide, read by two spectrophotometers at 590 nm; ln A falls in a straight line, its slope k', at 0.030 and 0.015 M hydroxide held at one ionic strength: the order in hydroxide, and k2. A guess first.",
+			"bench": "benches/crystal_violet.json",
+			"tutorial": "tutorials/crystal_violet.json"
+		},
+		{
+			"id": "peroxide",
+			"title": "Hydrogen peroxide and a catalyst",
+			"summary": "Measured and written down: hydrogen peroxide with potassium iodide, a catalyst given back as it works, its oxygen collected in gas syringes: the initial rate at two iodides gives the order in iodide, and without iodide none comes. A guess first.",
+			"bench": "benches/peroxide.json",
+			"tutorial": "tutorials/peroxide.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

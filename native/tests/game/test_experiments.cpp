@@ -1560,6 +1560,104 @@ TEST_CASE("experiment molar_volume: followed with its own gestures, strict, the 
 	report(p, { ml, ml / 2.261 });
 }
 
+namespace {
+
+// (Stage 87) a logged absorbance's first-order decay, as a student fits it: ln A against the time it was read, from
+// its first reading to its last over `least`
+double decay_of(const lab::LabView &v, const std::string &spec, double least) {
+	std::vector<double> t, ln_a;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.item == spec && e.quantity.what == "absorbance" && e.value > least) {
+			t.push_back(static_cast<double>(e.step) / 60.0);
+			ln_a.push_back(std::log(e.value));
+		}
+	}
+	REQUIRE(t.size() > 10);
+	const lab::LineFit f = lab::fit_line(t, ln_a);
+	REQUIRE(f.ok);
+	MESSAGE(spec << ": " << t.size() << " readings, k' " << -f.slope << " /s (R2 " << f.r2 << ")");
+	CHECK(f.r2 > 0.999);
+	return -f.slope;
+}
+
+} // namespace
+
+TEST_CASE("experiment crystal_violet: followed with its own gestures, strict, ln A falls straight, first order in hydroxide at one ionic strength (Stage 87)") {
+	Pupil p("data/benches/crystal_violet.json", "data/tutorials/crystal_violet.json");
+	CHECK(pupil::follow_through(p, 3600) > 6);
+	completed(p);
+	const double fast = decay_of(p.ui->lab().view(), "spec1", 0.15), slow = decay_of(p.ui->lab().view(), "spec2", 0.15);
+	const double order = std::log(fast / slow) / std::log(2.0), k2 = fast / 0.030;
+	MESSAGE("order in hydroxide " << order << ", k2 " << k2 << " /M/s");
+	CHECK(order == doctest::Approx(1.0).epsilon(0.05));
+	report(p, { fast, slow, order, k2 });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 1"));
+}
+
+TEST_CASE("experiment crystal_violet: played as a person plays it, strict, it completes (Stage 87)") {
+	Pupil p("data/benches/crystal_violet.json", "data/tutorials/crystal_violet.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment crystal_violet: followed with its own gestures, free, it completes (Stage 87)") {
+	Pupil p("data/benches/crystal_violet.json", "data/tutorials/crystal_violet.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+namespace {
+
+// (Stage 87) a logged syringe's initial rate, as a student fits it: its volume against time over the minute from when
+// its plunger first moves (ground to its barrel, it sticks until the gas's pressure frees it)
+double initial_rate(const lab::LabView &v, const std::string &syringe) {
+	std::vector<double> t, ml;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.item == syringe && e.quantity.what == "plunger_ml" && e.value > 0.0) {
+			const double s = static_cast<double>(e.step) / 60.0;
+			if (t.empty() || s - t.front() <= 60.0) {
+				t.push_back(s);
+				ml.push_back(e.value);
+			}
+		}
+	}
+	REQUIRE(t.size() > 6);
+	const lab::LineFit f = lab::fit_line(t, ml);
+	REQUIRE(f.ok);
+	MESSAGE(syringe << ": " << f.slope << " mL/s over its first minute (R2 " << f.r2 << ")");
+	return f.slope;
+}
+
+} // namespace
+
+TEST_CASE("experiment peroxide: followed with its own gestures, strict, the oxygen's initial rate first order in iodide, none without it (Stage 87)") {
+	Pupil p("data/benches/peroxide.json", "data/tutorials/peroxide.json");
+	CHECK(pupil::follow_through(p, 3600) > 6);
+	completed(p);
+	const lab::LabView &v = p.ui->lab().view();
+	const double one = initial_rate(v, "s1"), two = initial_rate(v, "s2");
+	const double order = std::log(one / two) / std::log(2.0);
+	MESSAGE("order in iodide " << order << "; the water's syringe " << p.item("s3").plunger_ml << " mL");
+	CHECK(order == doctest::Approx(1.0).epsilon(0.1));
+	CHECK(p.item("s3").plunger_ml < 1.0);
+	report(p, { one, two, order, p.item("s3").plunger_ml });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 1"));
+}
+
+TEST_CASE("experiment peroxide: played as a person plays it, strict, it completes (Stage 87)") {
+	Pupil p("data/benches/peroxide.json", "data/tutorials/peroxide.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment peroxide: followed with its own gestures, free, it completes (Stage 87)") {
+	Pupil p("data/benches/peroxide.json", "data/tutorials/peroxide.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
 TEST_CASE("experiment molar_volume: played as a person plays it, strict, it completes (Stage 79)") {
 	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
 	pupil::play_as_person(p, 3600);
