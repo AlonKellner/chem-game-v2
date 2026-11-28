@@ -68,7 +68,8 @@ std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const
 	std::vector<size_t> first(n + 1, 0), to;
 	const auto gas_path = [&](const Edge &e) {
 		// (a column's edge is no gas path: Stage 47)
-		return e.open && (e.phases & PHASES_GAS) != 0 && !e.column && static_cast<size_t>(e.a.index) < n && static_cast<size_t>(e.b.index) < n &&
+		// (nor one with a conduit: it holds back what crosses, each end at its own pressure: Stage 89)
+		return e.open && (e.phases & PHASES_GAS) != 0 && !e.column && e.conduit.count == 0 && static_cast<size_t>(e.a.index) < n && static_cast<size_t>(e.b.index) < n &&
 				e.a.index >= 0 && e.b.index >= 0;
 	};
 	for (const Edge &e : edges) {
@@ -599,15 +600,24 @@ Refusal World::move_piston(CellId cell, double volume, double force, double pres
 	m.piston.moved += volume - piston_volume(cell);
 	m.piston.travel += std::abs(volume - piston_volume(cell));
 	m.piston.worked += work;
+	const double was = m.volume;
+	Refusal refused = Refusal::None;
 	if (m.column_volume > 0.0) {
 		std::vector<double> shape = m.column_shape;
-		return reshape_column(cell, volume, std::move(shape));
-	}
-	if (m.volume != volume) {
+		refused = reshape_column(cell, volume, std::move(shape));
+	} else if (m.volume != volume) {
 		m.volume = volume;
 		touch(static_cast<size_t>(cell.index)); // (Stage 75: its volume moved)
 	}
-	return Refusal::None;
+	CellMeta &now = meta_[static_cast<size_t>(cell.index)];
+	if (refused == Refusal::None && now.sealed && now.volume != was) {
+		// (Stage 89) a sealed vessel's plunger moves as the step settles: its volume from here on is in the ledger, so a
+		// replay reads what ran before the move in the volume it then had (T1), as a vessel's sizing is (Stage 88)
+		LedgerEntry entry{ LedgerEntry::Kind::Resize, EdgeId{}, cell, CellId{}, {}, Energy{}, 0 };
+		entry.volume = now.volume;
+		ledger_.push_back(std::move(entry));
+	}
+	return refused;
 }
 
 Refusal World::set_stirring(CellId cell, double watts) {
@@ -1123,22 +1133,11 @@ Refusal World::disconnect(EdgeId edge) {
 	edges_[static_cast<size_t>(edge.index)].open = false;
 	const std::vector<CellMeta> was = meta_;
 	refresh_sealed();
-	// a cell is sealed at the room's pressure: full, as every open cell is at a step's end (a starved one is not)
-	for (size_t c = 0; c < meta_.size() && thermal_; ++c) {
-		if (!meta_[c].sealed || was[c].sealed) {
-			continue;
-		}
-		bool defined = false;
-		const double excess = gas_excess(*table_, was[c], cells_[c], defined);
-		double kelvin = 0.0;
-		temperature(CellId{ static_cast<int32_t>(c) }, kelvin);
-		const double tolerance = static_cast<double>(table_->species_count() + 1) * MOL_PER_QUANTUM * GAS_CONSTANT * kelvin / P_ATMOSPHERE + 1e-9 * meta_[c].volume;
-		if (defined && (excess > tolerance || excess < -tolerance)) {
-			edges_[static_cast<size_t>(edge.index)].open = true;
-			meta_ = was;
-			touch_all();
-			return Refusal::WouldSeal;
-		}
+	if (!full_where_sealed(was)) {
+		edges_[static_cast<size_t>(edge.index)].open = true;
+		meta_ = was;
+		touch_all();
+		return Refusal::WouldSeal;
 	}
 	++topology_version_;
 	return Refusal::None;
@@ -1186,19 +1185,59 @@ Refusal World::set_exchange(EdgeId edge, double exchange) {
 	return Refusal::None;
 }
 
-Refusal World::set_flow(EdgeId edge, double flow, uint8_t foot) {
+Refusal World::set_conduit(EdgeId edge, const Conduit &conduit, uint8_t foot) {
 	if (stepping()) {
 		return Refusal::MidStep;
 	}
 	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
 		return Refusal::UnknownEdge;
 	}
-	if (!(flow >= 0.0) || !(flow - flow == 0.0)) {
+	if (!good(conduit)) {
 		return Refusal::BadValue;
 	}
-	edges_[static_cast<size_t>(edge.index)].flow = flow;
-	edges_[static_cast<size_t>(edge.index)].foot = foot & 3u;
+	Edge &e = edges_[static_cast<size_t>(edge.index)];
+	const Conduit conduit_was = e.conduit;
+	const uint8_t foot_was = e.foot;
+	e.conduit = conduit;
+	e.foot = foot & 3u;
+	if ((conduit_was.count == 0) != (conduit.count == 0)) { // what is a gas path changed: the seals anew
+		const std::vector<CellMeta> was = meta_;
+		refresh_sealed();
+		if (!full_where_sealed(was)) {
+			e.conduit = conduit_was;
+			e.foot = foot_was;
+			meta_ = was;
+			touch_all();
+			return Refusal::WouldSeal;
+		}
+		++topology_version_;
+	}
 	return Refusal::None;
+}
+
+void World::mark_crossing() {
+	if (!ledger_.empty() && ledger_.back().kind == LedgerEntry::Kind::Transfer) {
+		ledger_.back().crossing = true;
+	}
+}
+
+// a cell newly sealed is sealed at the room's pressure: full, as every open cell is at a step's end (a starved one is
+// not). false where one is not.
+bool World::full_where_sealed(const std::vector<CellMeta> &was) const {
+	for (size_t c = 0; c < meta_.size() && thermal_; ++c) {
+		if (!meta_[c].sealed || was[c].sealed) {
+			continue;
+		}
+		bool defined = false;
+		const double excess = gas_excess(*table_, was[c], cells_[c], defined);
+		double kelvin = 0.0;
+		temperature(CellId{ static_cast<int32_t>(c) }, kelvin);
+		const double tolerance = static_cast<double>(table_->species_count() + 1) * MOL_PER_QUANTUM * GAS_CONSTANT * kelvin / P_ATMOSPHERE + 1e-9 * meta_[c].volume;
+		if (defined && (excess > tolerance || excess < -tolerance)) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void World::refresh_sealed() {

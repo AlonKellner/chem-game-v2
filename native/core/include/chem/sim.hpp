@@ -89,6 +89,14 @@ struct PistonMove {
 	double dv = 0.0, force = 0.0;
 };
 
+// (Stage 79, 89) A plunger's whole move in a step of `dt` with its space at `pressure` as the step ends, from the
+// volume it began at: at the speed its forces give, between its stops; and the hand's force with it.
+PistonMove piston_move(const Piston &p, double volume, double pressure, double dt);
+
+namespace closure {
+struct Closing; // (src/closure.cpp: a group of joined vessels as it is being closed)
+}
+
 class Simulation {
 public:
 	// `reactions` are the ones that run on their own, in every cell, in this
@@ -135,6 +143,10 @@ public:
 	const std::vector<Reaction> &equilibria() const { return equilibria_; }
 	// the reactions with a rate law, in the order the tally counts them
 	const std::vector<Reaction> &rated() const { return reactions_; }
+	// (Stage 89) how many times the closure did not bring a group's pressures within its tolerance (it then applies
+	// nothing that round): none is expected; the tests ask. Not state.
+	uint64_t closure_misses() const { return closure_misses_; }
+	uint64_t closure_nested() const { return closure_nested_; } // (and how often Newton left it to the nested solve)
 
 	// How far each reaction with a rate law ran in each cell since the tally was
 	// last cleared, in quanta of extent (forward positive): what has happened,
@@ -168,18 +180,17 @@ private:
 	void react();
 	void conduct_heat();
 	void do_work();
-	void move_pistons(); // (Stage 79) each piston moved by its forces, its space at one pressure
-	void move_piston_alone(CellId cell, double dt); // (Stage 79) one piston, its vessel alone, exactly
-	struct PistonPlan {
-		PistonMove mv;
-		double pressure = 0.0;
-		bool ok = false;
-	};
-	PistonPlan plan_piston(CellId cell, const CellState &state, double grown, double dt) const;
-	bool solve_hydraulic(EdgeId edge, double dt); // (Stage 79) two vessels joined by liquid, solved together
-	void run_join(EdgeId edge, double dt); // (Stage 79) a connection between two sealed vessels
-	void run_liquid(const std::vector<CellId> &cells, std::vector<double> takes, double pressure, const std::vector<size_t> &liquid_edges); // (Stage 79) a piston's space's liquid where its volumes ask
-	void run_gas(const std::vector<CellId> &cells, std::vector<double> over, const std::vector<size_t> &gas_edges, bool down_only); // (Stage 79) a piston's space's gas to one pressure
+	void move_open_pistons(); // (Stage 79) an open vessel's plunger, by its forces at the room's pressure
+	// (Stage 89, GAME_SPEC §6, Flow between vessels; src/closure.cpp) The closure: every sealed vessel with a plunger
+	// or a conduit, with those it is joined to, at the pressure at which it is exactly full as the step ends: each
+	// plunger's move and each conduit's crossing at those pressures, in rounds with the fast equilibria. true when
+	// anything moved.
+	bool close_vessels();
+	bool close_group(const std::vector<CellId> &tops, const std::vector<size_t> &conduits, std::vector<CellId> &touched);
+	bool close_pressures(closure::Closing &group) const;
+	bool close_one(closure::Closing &group, size_t node) const;
+	bool close_nested(closure::Closing &group, const std::vector<size_t> &free, size_t k) const;
+	bool evaluate(closure::Closing &group, bool record) const;
 	void drain_liquids();
 	void exchange_gases(); // (Stage 50) each gas down its mole fraction along an edge that exchanges it
 	void overflow();
@@ -233,7 +244,6 @@ private:
 	uint64_t tree_version_ = 0;
 	std::vector<double> heat_remainder_;
 	std::vector<double> work_remainder_; // per edge; empty while no edge has done work
-	std::vector<double> solved_pressure_; // (Stage 79) per cell: its pistons' space's pressure this step (0: none)
 	// what drained into each cell this step (Stage 51): its liquid's volume, m^3, and mass, kg (a column's jet)
 	std::vector<double> landed_m3_, landed_kg_;
 	std::vector<double> reaction_remainder_;
@@ -243,6 +253,9 @@ private:
 	Process process_ = Process::Reaction; // what the primitives are applied for now
 	std::vector<uint8_t> starved_;
 	std::vector<Exchanged> exchanged_; // the step's (Stage 50)
+	std::vector<Crossed> crossed_; // the step's crossings (Stage 89)
+	mutable uint64_t closure_misses_ = 0, closure_nested_ = 0;
+	bool timeless_ = false; // settling with no time passing (`equilibrate`): the closure stands
 	mutable std::vector<Thermal> thermal_; // per cell, while thermal_valid_ (or its key holds: Stage 72)
 	std::vector<uint8_t> thermal_valid_;
 	bool in_step_ = false; // (Stage 72) thermal_valid_ is this step's: between begin_step's sizing and the step's close

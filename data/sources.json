@@ -516,6 +516,24 @@
 		{"data": ["optics/media.json/surfaces/ground_glass/**", "optics/media.json/lwir/emissivity/ground_glass"], "design": "a gas syringe's plunger (Stage 79): ground glass, a light grey a little blue, as frosted glass looks; its long-wave emissivity glass's"},
 		{"data": ["instruments.json/hand_speed_m_s"], "design": "the fastest a hand moves a plunger (Stage 79): 0.3 m/s, a syringe pushed at a person's pace (a 100 mL stroke in about 0.4 s); a hand pushes only as hard as that pace and what resists take, up to its most"},
 		{"data": ["solutions.json/gas_viscosity/rows/#/*"], "measured": "air's dynamic viscosity at 1 atm (Stage 79): Engineering ToolBox's table, Air - Dynamic and Kinematic Viscosity (uPa s at -25, -15, 0, 25, 30, 60, 80 C: 15.88, 16.40, 17.15, 18.37, 18.60, 19.99, 20.88), within 1 % of Lemmon and Jacobsen (Int. J. Thermophys. 25, 21, 2004: 18.54 uPa s at 300 K)", "doc": ["The gas syringe (Stage 79)", "Lemmon and Jacobsen"], "tests": ["measured: air's viscosity is the table's at its rows, within 1 % of Lemmon and Jacobsen's (Stage 79)"]},
-		{"data": ["glassware.json/tubing/*"], "design": "the tube that joins two syringes' nozzles (Stage 79): ordinary silicone tubing of 4 mm bore, 30 cm long (the user's choice, 2026-11-27)"}
+		{"data": ["glassware.json/tubing/*"], "design": "the tube that joins two syringes' nozzles (Stage 79): ordinary silicone tubing of 4 mm bore, 30 cm long (the user's choice, 2026-11-27)"},
+		{
+			"data": ["flow.json/churchill/*"],
+			"measured": "Churchill 1977 (Chem. Eng. 84 (24), 91), the friction factor in every regime, a smooth wall; its form held to its laminar and turbulent limits and to McKeon, Zagarola and Smits 2005's fit of the Princeton Superpipe's measurements (within 1.4 % of them), as Joseph and Yang quote it",
+			"doc": ["Flow between vessels (Stage 89)", "Churchill 1977, the friction factor"],
+			"tests": ["measured: a smooth pipe's turbulent friction is the Princeton Superpipe's, within 2.5 % of McKeon, Zagarola and Smits's fit of it"]
+		},
+		{
+			"data": ["flow.json/shah/*"],
+			"measured": "Shah 1978 (J. Fluids Eng. 100, 177), laminar flow developing from a uniform profile in a round tube; its form held to its limits (Poiseuille's and 1.25 heads long, a boundary layer's short) and, in the conduit's law, to Lichtarowicz, Duggins and Markland 1965's correlation of measured discharge coefficients",
+			"doc": ["Flow between vessels (Stage 89)", "Shah 1978, a tube's entrance"],
+			"tests": ["measured: a short sharp-edged tube's discharge is Lichtarowicz, Duggins and Markland's, within 0.03 of their correlation of the measurements"]
+		},
+		{
+			"data": ["flow.json/contraction/*"],
+			"measured": "a sharp-edged contraction's loss, half a velocity head from a wide vessel (Weisbach's; Crane TP-410), held in the conduit's law to Lichtarowicz, Duggins and Markland 1965's measured discharge at high Reynolds number",
+			"doc": ["Flow between vessels (Stage 89)", "A sharp-edged contraction's loss"],
+			"tests": ["measured: a short sharp-edged tube's discharge is Lichtarowicz, Duggins and Markland's, within 0.03 of their correlation of the measurements"]
+		}
 	]
 }

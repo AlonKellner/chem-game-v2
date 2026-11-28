@@ -1,5 +1,6 @@
 // Measured kinetics (GAME_SPEC §7, Stage 23): each rate against its source, at the source's own
 // conditions; the transport step from measured diffusion and water's viscosity.
+#include "chem/conduit.hpp"
 #include "chem/builtin_ids.hpp"
 #include "tables.hpp"
 #include "chem/optics.hpp"
@@ -525,4 +526,53 @@ TEST_CASE("measured: liquid mercury's index is Inagaki's and turns back Smith an
 	CHECK(k546 == doctest::Approx(4.5459).epsilon(0.03));
 	// a clear dielectric has none
 	CHECK(optics::extinction_index(builtin::water)[170] == 0.0);
+}
+
+TEST_CASE("measured: a smooth pipe's turbulent friction is the Princeton Superpipe's, within 2.5 % of McKeon, Zagarola and Smits's fit of it (Stage 89)") {
+	// McKeon, Zagarola and Smits, J. Fluid Mech. 538 (2005) 429: 1 / sqrt(f) = 1.920 log10(Re sqrt(f)) - 0.475 -
+	// 7.04 / (Re sqrt(f))^0.55, "within 1.4 % of the Princeton data" (31e3 < Re < 35e6) and within 2.0 % of Blasius at
+	// 1e4 to 9e4; as Joseph and Yang quote it (eq. 3.2). Churchill's formula (data/flow.json) at a smooth wall
+	for (const double re : { 1e4, 3e4, 1e5, 3e5, 1e6, 1e7, 3.5e7 }) {
+		CAPTURE(re);
+		double f = 0.02;
+		for (int i = 0; i < 200; ++i) {
+			const double x = re * std::sqrt(f);
+			const double root = 1.920 * std::log10(x) - 0.475 - 7.04 / std::pow(x, 0.55);
+			f = 1.0 / (root * root);
+		}
+		CHECK(friction_factor(re) == doctest::Approx(f).epsilon(0.025));
+		CHECK(friction_factor(re) < f); // (Churchill's a little under it throughout: 1.2 to 2.1 %)
+	}
+}
+
+TEST_CASE("measured: a short sharp-edged tube's discharge is Lichtarowicz, Duggins and Markland's, within 0.03 of their correlation of the measurements (Stage 89)") {
+	// Lichtarowicz, Duggins and Markland, J. Mech. Eng. Sci. 7 (1965) 210: the discharge coefficient of a long orifice,
+	// Cd = Q / (A sqrt(2 dP / rho)), l/d from 2 to 10, Re_h = d sqrt(2 dP / rho) / nu from 10 to 2e4:
+	//   1 / Cd = 1 / Cdu + (20 / Re_h) (1 + 2.25 l/d) - 0.005 (l/d) / (1 + 7.5 log10(0.00015 Re_h)^2), Cdu = 0.827 - 0.0085 l/d
+	// "fits all but a few points to better than 0.02". The conduit's law for one piece between two vessels, no number
+	// of it fitted to this: within 0.03 everywhere, the worst where the flow turns turbulent (Re_h about 3000)
+	const double bore = 2e-3, density = 998.2, viscosity = 1.002e-3, area = 0.25 * 3.14159265358979323846 * bore * bore;
+	double worst = 0.0, worst_re = 0.0, worst_ld = 0.0;
+	for (const double ld : { 2.0, 3.0, 5.0, 7.0, 10.0 }) {
+		Conduit c;
+		c.pieces[0] = Piece{ bore, ld * bore };
+		c.count = 1;
+		for (const double re : { 10.0, 20.0, 30.0, 50.0, 100.0, 200.0, 300.0, 500.0, 1000.0, 1500.0, 2000.0, 3000.0, 4000.0, 5000.0, 7000.0, 10000.0, 20000.0 }) {
+			CAPTURE(ld);
+			CAPTURE(re);
+			const double ideal = re * viscosity / (density * bore); // sqrt(2 dP / rho), m/s
+			const double drop = 0.5 * density * ideal * ideal;
+			const double ours = liquid_rate(c, 101325.0 + drop, 101325.0, density, viscosity) / (density * area * ideal);
+			const double ultimate = 0.827 - 0.0085 * ld, dip = std::log10(0.00015 * re);
+			const double theirs = 1.0 / (1.0 / ultimate + 20.0 / re * (1.0 + 2.25 * ld) - 0.005 * ld / (1.0 + 7.5 * dip * dip));
+			CHECK(ours == doctest::Approx(theirs).epsilon(0.03 / theirs)); // (within 0.03 of it)
+			if (std::fabs(ours - theirs) > worst) {
+				worst = std::fabs(ours - theirs);
+				worst_re = re;
+				worst_ld = ld;
+			}
+		}
+	}
+	MESSAGE("the worst: " << worst << " at Re_h " << worst_re << ", l/d " << worst_ld);
+	CHECK(worst > 0.015); // (should the law come to fit it better, tighten the gate)
 }

@@ -109,17 +109,18 @@
 		{
 			"part": "Two syringes of water, joined",
 			"title": "Push one",
-			"text": "The two syringes of water in the middle are joined nozzle to nozzle by a tube. Drag the left one's handle down to 20 mL and let go.",
+			"text": "The two syringes of water in the middle are joined nozzle to nozzle by a tube. Drag the left one's handle down to 20 mL and hold it there until the plunger gets to it, then let go.",
+			"why": "The water has to run through two narrow nozzles and the tube: about 20 mL a second at all a hand can push, so the plunger comes after your hand.",
 			"checks": [
 				{
-					"text": "your plunger pushed in past 35 mL",
+					"text": "your plunger pushed in past 25 mL",
 					"when": {
 						"quantity": {
 							"item": "water_a",
 							"what": "plunger_ml"
 						},
 						"compare": "below",
-						"value": 35
+						"value": 25
 					}
 				}
 			],
