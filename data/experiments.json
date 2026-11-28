@@ -276,6 +276,20 @@
 			"tutorial": "tutorials/peroxide.json"
 		},
 		{
+			"id": "iodine_clock",
+			"title": "The iodine clock",
+			"summary": "Measured and written down: persulfate oxidising iodide, its iodine hidden by thiosulfate until all of it is spent, then triiodide's yellow all at once, read by two spectrophotometers: the clock times at half the iodide, half the persulfate and 10 C warmer give both orders, the rate constant and the activation energy. A guess first.",
+			"bench": "benches/iodine_clock.json",
+			"tutorial": "tutorials/iodine_clock.json"
+		},
+		{
+			"id": "redox_titration",
+			"title": "Redox titrations",
+			"summary": "Measured and written down: iron(II) titrated with potassium permanganate, its own purple the end point, and iodine titrated with sodium thiosulfate, its yellow vanishing at the end: each concentration from the volume run in and the equation. A guess first.",
+			"bench": "benches/redox_titration.json",
+			"tutorial": "tutorials/redox_titration.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

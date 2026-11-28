@@ -1,0 +1,628 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §8, §13.7, Stage 91; docs/CURRICULUM.md, experiment 47) on data/benches/redox_titration.json: two redox titrations, permanganate into iron(II) in acid (its own colour the end point) and thiosulfate into iodine (the triiodide's yellow vanishing).",
+	"title": "Experiment: redox titrations",
+	"bench": "../benches/redox_titration.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Permanganate, MnO4-, takes manganese from +7 to +2 in acid; iron(II) gives up one electron to become iron(III). How many iron(II) ions does one permanganate oxidise?",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: Permanganate",
+			"title": "Fill the burette with permanganate",
+			"text": "Pick up the permanganate, right-click burette1, type 55 and click \"pour\". Right-click burette1 and write down its reading.",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:permanganate",
+						"item:burette1"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette1"
+				}
+			]
+		},
+		{
+			"title": "25 mL of the iron(II) sulfate",
+			"text": "Pick up pipette1 and click the iron(II) sulfate: it draws up to its mark.",
+			"checks": [
+				{
+					"text": "the pipette at its mark",
+					"when": {
+						"quantity": {
+							"item": "pipette1",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette1",
+						"item:iron"
+					]
+				}
+			]
+		},
+		{
+			"title": "Into the flask",
+			"text": "Pick up pipette1 again and click flask1: it runs into it.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette1",
+						"on": "flask1"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette1",
+						"item:flask1"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette1",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The burette over the flask, stirred",
+			"text": "Set the pipette back where it stood. Pick up burette1 and click flask1; right-click flask1 and stir it, so each drop meets the whole of it.",
+			"checks": [
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette1",
+						"on": "flask1"
+					}
+				},
+				{
+					"text": "the flask stirred",
+					"when": {
+						"item": "flask1",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette1",
+						"square:4,3"
+					]
+				},
+				{
+					"drag": [
+						"item:burette1",
+						"item:flask1"
+					]
+				},
+				{
+					"click": "item:flask1"
+				},
+				{
+					"click": "stir:flask1"
+				}
+			]
+		},
+		{
+			"title": "Open the tap",
+			"text": "Right-click burette1, drag its tap fully open, and click 60x on the clock.",
+			"checks": [
+				{
+					"text": "the tap open",
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "tap"
+						},
+						"compare": "above",
+						"value": 90
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burette1"
+				},
+				{
+					"click": "cap:burette1@1"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Nearly there",
+			"text": "Each drop's purple vanishes as it meets the iron(II): MnO4- + 5 Fe2+ + 8 H+ -> Mn2+ + 5 Fe3+ + 4 H2O. Wait for 22 mL to run in.",
+			"checks": [
+				{
+					"text": "22 mL run in",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "scale_ml"
+						},
+						"compare": "above",
+						"value": 22
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag burette1's tap shut.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette1@0"
+				}
+			]
+		},
+		{
+			"title": "Drop by drop",
+			"text": "Open the tap a little, to about 5 %, and watch the flask.",
+			"checks": [
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							3,
+							10
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette1@0.05"
+				}
+			]
+		},
+		{
+			"title": "The end point",
+			"text": "Watch for the first drop whose purple stays: a pale pink that no longer fades.",
+			"why": "While iron(II) is left each drop of permanganate is used up at once and its purple vanishes; the first drop more stays. Permanganate is its own indicator.",
+			"checks": [
+				{
+					"text": "the end point",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask1",
+							"what": "permanganate_ion",
+							"measure": "mol"
+						},
+						"compare": "above",
+						"value": 5e-07
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it, read it",
+			"text": "Drag the tap shut and write down burette1's reading.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette1",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette1@0"
+				}
+			]
+		},
+		{
+			"part": "2: Iodometric",
+			"title": "Fill the burette with thiosulfate",
+			"text": "Pick up the thiosulfate, right-click burette2, type 55 and click \"pour\". Right-click burette2 and write down its reading.",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:thiosulfate",
+						"item:burette2"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette2"
+				}
+			]
+		},
+		{
+			"title": "25 mL of the iodine solution",
+			"text": "Pick up pipette2 and click the iodine solution: it draws up to its mark.",
+			"checks": [
+				{
+					"text": "the pipette at its mark",
+					"when": {
+						"quantity": {
+							"item": "pipette2",
+							"what": "mark_off_ml"
+						},
+						"compare": "between",
+						"values": [
+							-0.002,
+							0.002
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette2",
+						"item:iodine"
+					]
+				}
+			]
+		},
+		{
+			"title": "Into the flask",
+			"text": "Pick up pipette2 again and click flask2: it runs into it.",
+			"checks": [
+				{
+					"text": "the pipette on the flask",
+					"when": {
+						"item": "pipette2",
+						"on": "flask2"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette2",
+						"item:flask2"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Wait until the pipette has run out.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette2",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			]
+		},
+		{
+			"title": "The burette over the flask, stirred",
+			"text": "Set the pipette back where it stood. Pick up burette2 and click flask2; right-click flask2 and stir it, so each drop meets the whole of it.",
+			"checks": [
+				{
+					"text": "the burette on the flask",
+					"when": {
+						"item": "burette2",
+						"on": "flask2"
+					}
+				},
+				{
+					"text": "the flask stirred",
+					"when": {
+						"item": "flask2",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette2",
+						"square:24,3"
+					]
+				},
+				{
+					"drag": [
+						"item:burette2",
+						"item:flask2"
+					]
+				},
+				{
+					"click": "item:flask2"
+				},
+				{
+					"click": "stir:flask2"
+				}
+			]
+		},
+		{
+			"title": "Open the tap",
+			"text": "Right-click burette2, drag its tap fully open, and click 60x on the clock.",
+			"checks": [
+				{
+					"text": "the tap open",
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "tap"
+						},
+						"compare": "above",
+						"value": 90
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burette2"
+				},
+				{
+					"click": "cap:burette2@1"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Nearly there",
+			"text": "The iodine's brown fades to yellow as thiosulfate takes it: I2 + 2 S2O3 2- -> 2 I- + S4O6 2-. Wait for 22 mL to run in.",
+			"checks": [
+				{
+					"text": "22 mL run in",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "scale_ml"
+						},
+						"compare": "above",
+						"value": 22
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it",
+			"text": "Drag burette2's tap shut.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette2@0"
+				}
+			]
+		},
+		{
+			"title": "Drop by drop",
+			"text": "Open the tap a little, to about 5 %, and watch the flask.",
+			"checks": [
+				{
+					"text": "the tap a little open",
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							3,
+							10
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette2@0.05"
+				}
+			]
+		},
+		{
+			"title": "The end point",
+			"text": "Watch the yellow fade: at the end point the last of it goes, and the flask is colourless.",
+			"why": "Triiodide's own yellow is the indicator here (starch, which turns it deep blue near the end, is not in this lab). Each drop of thiosulfate takes iodine back to iodide; the last yellow goes with the last iodine.",
+			"checks": [
+				{
+					"text": "the end point",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask2",
+							"what": "triiodide_ion",
+							"measure": "mol"
+						},
+						"compare": "below",
+						"value": 1e-08
+					}
+				}
+			]
+		},
+		{
+			"title": "Shut it, read it",
+			"text": "Drag the tap shut and write down burette2's reading.",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette2",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette2@0"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "iron(II) per permanganate",
+			"unit": "",
+			"truth": "5",
+			"tolerance": 0.02,
+			"predict": true,
+			"why": "Manganese goes from +7 to +2, five electrons; each iron(II) gives one."
+		},
+		{
+			"label": "the permanganate run in",
+			"unit": "mL",
+			"truth": "24.56",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "burette1's reading at the end less its reading at the start."
+		},
+		{
+			"label": "the iron(II) solution's concentration",
+			"unit": "M",
+			"truth": "0.0982",
+			"tolerance": 0.015,
+			"relative": true,
+			"why": "5 x 0.0200 x V / 25.00: five iron(II) for each permanganate."
+		},
+		{
+			"label": "the thiosulfate run in",
+			"unit": "mL",
+			"truth": "24.70",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "burette2's reading at the end less its reading at the start."
+		},
+		{
+			"label": "the iodine solution's concentration",
+			"unit": "M",
+			"truth": "0.0494",
+			"tolerance": 0.015,
+			"relative": true,
+			"why": "0.100 x V / (2 x 25.00): two thiosulfates for each iodine."
+		}
+	]
+}

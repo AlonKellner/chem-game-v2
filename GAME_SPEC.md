@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.87.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.91.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -695,7 +695,7 @@ acid, with transport in series.
 **Status:** Stage 3 implements the first-order law and the malachite decomposition, Stage 6 the
 surface law, stirring and the oxide's dissolution. Stage 23: transport in series with the surface
 step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`). Stage 87: the solution law, its salt
-effect and catalysts.
+effect and catalysts. Stage 91: persulfate oxidising iodide (the iodine clock).
 
 ## 8. Phase change
 
@@ -951,6 +951,23 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
   under a precipitate or a complex is far under one, so a complex formed from the free ion alone never takes the
   solid: copper hydroxide dissolves into the tetrammine, silver chloride and oxide into the diammine, zinc's and
   aluminium's hydroxides into their hydroxo complexes directly.
+
+**Redox in solution** (Stage 91; `docs/TDD_91_REDOX.md`; `docs/CURRICULUM.md`, step F's second part: experiments 38
+and 47). An electron transfer is a reaction like any other, balanced in its atoms and its charge, written without
+electrons; its equilibrium is its species' Gibbs energies, as the standard potentials are.
+- **Fast**, a fast equilibrium (§8): iodine with iodide, I₂ + I⁻ ⇌ I₃⁻ (Palmer, Ramette and Mesmer 1984's 698);
+  iodine with thiosulfate, I₂ + 2 S₂O₃²⁻ → 2 I⁻ + S₄O₆²⁻ (at 10⁹ /M/s, Scheper and Margerum); permanganate with
+  iron(II) in acid, MnO₄⁻ + 5 Fe²⁺ + 8 H⁺ → Mn²⁺ + 5 Fe³⁺ + 4 H₂O (log K 62.8, as E° 1.51 and 0.771 V give). Each lies so
+  far to one side that what it takes runs out: a titration's end point.
+- **Slow**, the solution law (§7): persulfate oxidising iodide, S₂O₈²⁻ + 2 I⁻ → 2 SO₄²⁻ + I₂, first order in each, its k
+  Jette and King 1929's at their ionic strength, faster with salt (two ions of like charge), Ea 51.4 kJ/mol. With
+  thiosulfate present its iodine is taken back at once: none shows until the thiosulfate is spent, the iodine clock,
+  its time t = [S₂O₃²⁻]₀ / 2k[S₂O₈²⁻][I⁻].
+- **Colours**: permanganate's purple (McBeath et al. 2020's measured spectrum, 3270 at 525 nm), triiodide's and
+  iodine's yellow-brown (Pursell and Pursell 2016's). Manganese(II), iron(II), thiosulfate, tetrathionate and persulfate
+  are colourless here. Starch's blue with iodine is not modelled: no constant or absorptivity for it is measured.
+- Only the reactions named react: permanganate does not oxidise iodide here, nor iron(III) iodide, nor persulfate
+  thiosulfate or water; nothing decomposes permanganate or thiosulfate.
 **Demo subset:**
 - CuSO₄ and H₂SO₄ as electrolytes of their ions (§4.6, §10). CuSO₄(aq)'s `Hf`, `S°` and `Cp` are
   fitted to the solubility curve.
@@ -976,6 +993,7 @@ broken as a fast equilibrium with them (its basis: what it is made of, as FeOH²
   thiocyanates, cobalt's tetrachloro, chromate and dichromate, EDTA's and its indicator's) and their colours; flame
   emission is a stage of its own (the user's split, 2026-11-27).
 - Stage 82 adds lithium's and strontium's ions and their chlorides and nitrates, for the flame tests (§12.5).
+- Stage 91 adds redox in solution: manganese, iodine and the sulfur oxyanions, the iodine clock and two titrations.
 
 ## 10. Property models
 
