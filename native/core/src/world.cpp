@@ -1253,9 +1253,6 @@ Refusal World::set_ports(EdgeId edge, double a, double b) {
 }
 
 Refusal World::set_height(CellId cell, double metres) {
-	if (stepping()) {
-		return Refusal::MidStep;
-	}
 	if (!known(cell)) {
 		return Refusal::UnknownCell;
 	}

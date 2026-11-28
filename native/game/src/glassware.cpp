@@ -422,6 +422,10 @@ double Vessel::head_inverted(double cm3) const {
 	return 0.5 * (lo + hi);
 }
 
+double square_cm() {
+	return table().at("square_mm").get<double>() / 10.0;
+}
+
 double tubing_bore() {
 	return table().at("tubing").at("bore_mm").get<double>() / 10.0;
 }

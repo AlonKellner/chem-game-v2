@@ -1351,7 +1351,7 @@ struct Lab::Impl {
 					}
 					x.mouth = EdgeId{};
 				} else {
-					world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+					open_mouth(x);
 				}
 				x.screwed = shut;
 			}
@@ -2592,12 +2592,74 @@ struct Lab::Impl {
 		return true;
 	}
 	// (Stage 71) a vessel taken out of the one it stood in: its rings face that one's column no more
+	// (Stage 94, GAME_SPEC §6, heads) Every vessel's height: its cell's floor over the bench's lowest row, m. On the
+	// bench, its rectangle's foot; standing in a vessel, that vessel's floor; on a vessel's mouth, that vessel's brim.
+	void set_heights() {
+		const double square = glass::square_cm() * 0.01;
+		std::vector<double> height(items.size(), 0.0);
+		for (int pass = 0; pass < 3; ++pass) { // (what stands in or on another, after it)
+			for (size_t k = 0; k < items.size(); ++k) {
+				const Item &x = items[k];
+				if (x.place == Place::Bench) {
+					height[k] = static_cast<double>(rows - (x.row + x.h)) * square;
+				} else if (x.place == Place::In && x.stands_in >= 0) {
+					height[k] = height[static_cast<size_t>(x.stands_in)];
+				} else if (x.place == Place::On && x.on >= 0) {
+					const Item &under = items[static_cast<size_t>(x.on)];
+					const glass::Vessel *g = under.glassware.empty() ? nullptr : glass::find(under.glassware, under.nominal_ml);
+					height[k] = height[static_cast<size_t>(x.on)] + (g != nullptr ? (g->height - g->floor) * 0.01 : 0.0);
+				}
+			}
+		}
+		for (size_t k = 0; k < items.size(); ++k) {
+			const Item &x = items[k];
+			if (x.retired || x.cell.index < 0 || !holds_matter(x)) {
+				continue;
+			}
+			if (world().meta(x.cell).height != height[k]) {
+				world().set_height(x.cell, height[k]);
+			}
+		}
+	}
+	// (Stage 94) A vessel's mouth opened: to the room's air; a syringe's that stands in another vessel, into what that
+	// vessel holds at its floor (its nozzle, a conduit: pulled, it draws the liquid up)
+	void open_mouth(Item &x) {
+		const glass::Vessel *g = syringe_of(x);
+		if (g != nullptr && x.stands_in >= 0 && x.place == Place::In) {
+			const Item &o = items[static_cast<size_t>(x.stands_in)];
+			EdgeId dip;
+			if (world().connect(x.cell, o.cell, PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), &dip) == Refusal::None) {
+				if (world().set_conduit(dip, nozzle_alone(*g), 3) == Refusal::None) { // (its foot, on the other's floor)
+					x.mouth = dip;
+					return;
+				}
+				world().disconnect(dip);
+			}
+		}
+		world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+	}
+	// (its open nozzle is in a vessel's liquid, not the air)
+	bool dipped(const Item &x) const {
+		if (x.mouth.index < 0 || syringe_of(x) == nullptr) {
+			return false;
+		}
+		const Edge &e = sim->world().edges()[static_cast<size_t>(x.mouth.index)];
+		return e.open && e.conduit.count > 0;
+	}
+
 	void leave_bath(int inner) {
 		Item &i = items[static_cast<size_t>(inner)];
 		if (i.stands_in < 0) {
 			return;
 		}
 		const int outer = i.stands_in;
+		if (dipped(i)) { // (Stage 94) its nozzle out of the liquid: open to the room again
+			world().disconnect(i.mouth);
+			i.mouth = EdgeId{};
+			i.stands_in = -1;
+			open_mouth(i);
+			i.stands_in = outer;
+		}
 		for (const Item::Contact &f : i.facing) {
 			world().disconnect(f.edge);
 		}
@@ -3002,7 +3064,8 @@ struct Lab::Impl {
 	// the length inverted from the integral of dz / A(z). Set at a step boundary, again only when it has changed.
 	void set_exchanges() {
 		for (Item &x : items) {
-			if (x.kind != Kind::Vessel || x.burst || x.mouth.index < 0 || x.glassware.empty() || !world().edges()[static_cast<size_t>(x.mouth.index)].open) {
+			if (x.kind != Kind::Vessel || x.burst || x.mouth.index < 0 || x.glassware.empty() || !world().edges()[static_cast<size_t>(x.mouth.index)].open ||
+					world().edges()[static_cast<size_t>(x.mouth.index)].conduit.count > 0) { // (Stage 94: a nozzle in a liquid exchanges no air)
 				continue;
 			}
 			const glass::Vessel *g = glass::find(x.glassware, x.nominal_ml);
@@ -3418,6 +3481,7 @@ struct Lab::Impl {
 		// unchecked steps, with a pour already applied in this one, it cannot:
 		// this step runs unchecked and the next is checked.
 		// (Stage 47: after the pours are set, for a pour that lands as a layer moves the liquid there first)
+		set_heights(); // (Stage 94: where everything stands now)
 		set_stirring();
 		set_holders(); // (Stage 56)
 		follow_columns(); // (Stage 49: before the pours' rates are set, a drain it moves among them)
@@ -6252,6 +6316,11 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 				}
 			}
 		}
+		// (Stage 94) a syringe's open nozzle is in the vessel's liquid now, not the room's air
+		if (syringe_of(i) != nullptr && i.mouth.index >= 0 && !dipped(i) && world().disconnect(i.mouth) == Refusal::None) {
+			i.mouth = EdgeId{};
+			open_mouth(i);
+		}
 		return reshape_bath(outer, why);
 	}
 	if (what == "blank") {
@@ -6835,7 +6904,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			Item &y = items[static_cast<size_t>(x.tube)];
 			world().disconnect(x.tubing);
 			for (Item *z : { &x, &y }) {
-				world().connect(z->cell, air, PHASES_GAS, &z->mouth);
+				open_mouth(*z);
 				z->tube = -1;
 				z->tubing = EdgeId{};
 			}
@@ -6874,7 +6943,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		}
 		x.mouth = EdgeId{};
 		if (world().disconnect(y.mouth) != Refusal::None) {
-			world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+			open_mouth(x);
 			world().disconnect(tubing);
 			why = "\"" + y.id + "\" is not at the room's pressure yet";
 			return false;
@@ -7089,7 +7158,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 		x.on = -1;
 		x.joint = EdgeId{};
 		if (syringe_of(x) != nullptr) { // (Stage 79) its nozzle open to the room again
-			world().connect(x.cell, air, PHASES_GAS, &x.mouth);
+			open_mouth(x);
 		}
 		// it is set down beside the vessel if there is room, else in the cabinet
 		to_storage(x);

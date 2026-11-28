@@ -55,36 +55,61 @@ cannot make a new worktree; the branch was started there from `origin/main` at `
 
 ### In the lab
 
-- **A square has a side** (cm): one number in `data/`, read by the lab and by the screen (which had it as two).
-- Every vessel's cell gets its height from where its item stands; a syringe's joint and tube give their ports'
-  heights (its nozzle at its foot; a flask's neck at its top).
-- **`dip {item, in}`** / `undip`: a syringe held with its nozzle under an open vessel's liquid: a conduit from the
-  syringe's foot to the vessel at a depth, the vessel left open. Pulling draws the liquid, pushing gives it back.
-  (An end at the room's pressure, with its head.)
+- **A square has a side** (`data/glassware.json`, `square_mm`: 34.04 mm, what the screen's 40 px a square at
+  11.75 px a centimetre already made it; `glass::square_cm`).
+- Every vessel's cell gets its height each step from where its item stands (`set_heights`): on the bench its
+  rectangle's foot, in a vessel that vessel's floor, on a vessel's mouth that vessel's brim.
+- **A syringe stood in a vessel** (`stand`, Stage 71) has its open nozzle in what the vessel holds, not in the
+  room's air (`open_mouth`: a conduit of its nozzle, its foot on the other's floor): pulled, it draws the liquid
+  up; pushed, it gives it back; lifted out, its nozzle is in the air again. No new gesture. (The plan had a
+  `dip` command; standing it in the vessel is the same thing, with the displacement and the walls' contacts Stage 71
+  already gives.)
 
 ## Phases
 
 | Phase | Topic | Status |
 |---|---|---|
-| 94.1 | Spec (§6, §18), this document | |
-| 94.2 | Ports and heights in the world; `conduit_rate`'s `give`; the column's heights shared with the closure | |
-| 94.3 | Heads in the closure: what stands at a port, the drive, the order by crossings | |
-| 94.4 | Gravity's reservoir and its work; Z1 and its self-test | |
-| 94.5 | The lab: the square's side, heights, ports, `dip`; save, load, digest | |
-| 94.6 | Tests under hands at random; docs; `make gates`; the user's sign-off | |
+| 94.1 | Spec (§6, §18), this document | Done |
+| 94.2 | Ports and heights in the world; `conduit_rate`'s `give`; the column's heights shared with the closure | Done |
+| 94.3 | Heads in the closure: what stands at a port, the drive, the order by crossings; vessels open to the room | Done |
+| 94.4 | Gravity's reservoir and its work; Z1 and its self-test | Done |
+| 94.5 | The lab: the square's side, heights, a syringe stood in a vessel; save, load, digest | Done |
+| 94.6 | Docs; `make gates`; the user's sign-off | |
 
-## Tests (planned)
+## Tests
 
-- Two open vessels joined at their feet level: by `ρ g Δh` through the conduit's law, never past level, at a step
-  and at four steps' length; three in a row.
-- The hydrostatic paradox: a wide vessel and a narrow one, the same depth, the same port pressure.
-- A port above the heel: a vessel drains to its port's height and then gives its gas.
-- A tall open column into a closed flask: the flask's gas comes to `P_atm + ρ g Δh`, and the world's entropy does
-  not fall on any step (it does, by `v ΔP / T`, with gravity's work left out: the self-test of why it is there).
-- A syringe draws water up from an open beaker: the hand's force includes the lift; let go, it runs back.
-- Z1 fires on a gravity entry with no crossing, and on one of the wrong size.
-- Stage 89's tests unchanged where nothing has a height (every port at a foot or a top, every cell at height 0).
+- `native/tests/test_heads.cpp` (6): two open vessels joined at their feet, 18 cm apart, level to 0.4 um at
+  16.40 cm (what they hold over both areas), never past level, at a step and at four steps' length; three in a row,
+  one on a 6 cm block, at 15.333, 15.333 and 15.333 cm over the bench; a port 4 cm up, the other half a metre
+  below: drained to 4.00 cm and no further; a 1 m open column into a closed flask: its air at 110.79 kPa,
+  `P_atm + rho g dh` to 2e-4, gravity having given 0.056 J (its reservoir's account to the quantum), every invariant
+  on each of 14 400 steps; a syringe 10 cm over a beaker, its nozzle a centimetre over the beaker's floor: 39.15 mL
+  of a 40 mL pull, its air at 100.35 kPa, the room's less the 10 cm of water it holds up; Z1's self-test (five
+  corruptions).
+- `test_closure.cpp`: a conduit's ports, a cell's height, gravity's reservoir made once with an edge to each end,
+  a column's heights by its shape. `test_conduit.cpp`: the law with a give.
+- `native/tests/game/test_syringe_lab.cpp` (2): a syringe stood in a beaker of 150 mL draws 54.8 mL of a 55 mL
+  pull (its air at 100.9 kPa), gives it back, goes on after a save and a load, and on the bench again is open to
+  the room; two syringes of water on a tube stay as they are side by side, and nine squares apart the upper runs
+  down into the lower.
+- Stage 89's tests, the lab's syringe tests and the gas-syringe experiments unchanged.
+
+## Found
+
+- **F1 could not ask the law again from two pressures.** A liquid's drive is the difference of two port pressures
+  a hundred kilopascals each and, near level, a ten-thousandth of a pascal apart: recomputed from the row's two
+  numbers it was 1e-7 off, and the rate looked over its law. The row keeps the drive as it was reckoned.
+- **A vessel not yet full at the room's pressure cannot be sealed by a conduit** (as by a stopper): a test's flask
+  built a thousandth short of air was refused until a step had filled it.
+- **Two vessels open to the room** joined by a conduit were skipped by Stage 89 (no pressure to solve): with heads
+  they are the communicating vessels, and are run.
 
 ## Open
 
-(as found)
+- **The heel's share is by height, not by volume**: in a vessel that narrows, what of the port's layer lies over the
+  port is taken as its share of the layer's height.
+- **Two conduits on one vessel** see each other's effect on its level a step late (each is met with its own).
+- **A conduit holds what its giver gives**: its own contents, with their weight along its own path, are Stage 95.
+- **Pours and drains** (a burette's tip, a held pour) stay the lab's own kinematic rules, with no work of gravity's.
+- **Heights in the picture**: an item's height is its rectangle's foot; the glass's own floor is a wall's thickness
+  higher.

@@ -1,5 +1,26 @@
 # GAME_SPEC version history
 
+## 0.94.0 (2026-11-28, Stage 94, in progress)
+
+- §6 (Stage 94, `docs/TDD_94_HEADS.md`; the first stage of the plan the user approved on 2026-11-28: tubing as a
+  vessel, then physical measuring devices): **heights and heads**. A cell has a height over the bench's datum and a
+  conduit's port a height over its vessel's floor (Stage 79's "foot" and "top" were the two ends of it); what stands
+  at a port is what the column holds at that height (a heel stays under it); a port's pressure is its vessel's and
+  the weight of the liquid over it; a crossing is driven by the two ports' pressures less the weight of what
+  crosses over the rise between them, and is met with what it does to the levels it runs between, so it never passes
+  level at any step's length. Vessels open to the room joined by a conduit run by their heads.
+- **Gravity's work** on what falls or is lifted crosses from a reservoir of work the world makes with its first
+  conduit (a world with none is as it was): without it a column filling a closed flask would lower the world's
+  entropy.
+- §18: **Z1**, what a cell takes from gravity is its crossings' weights. F1 asks the law with the drive and the give
+  a crossing was met with.
+- The lab: a square has a side (34.04 mm, what the screen's scale made it); every vessel's height from where it
+  stands; a syringe stood in a vessel (`stand`) has its nozzle in the vessel's liquid: pulled, it draws it up.
+- What it gives: two open vessels level to 0.4 μm; a 1 m column fills a closed flask to `P_atm + ρ g Δh`; a syringe
+  over a beaker draws its water, its air under the room's by what it holds up; two joined syringes of water at
+  different heights run down.
+- No golden record moved (no session has a conduit).
+
 ## 0.91.1 (2026-11-28, Stage 89, merged after Stages 85, 91 and 93; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 89, `docs/TDD_89_FLOW.md`; the second of the two stages the user asked for after Stage 79; the user's

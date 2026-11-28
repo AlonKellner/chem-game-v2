@@ -105,6 +105,9 @@ struct Vessel {
 double seals();
 // (Stage 79) the tubing that joins two syringes' nozzles: its bore and length, cm (data/glassware.json: tubing)
 double tubing_bore();
+// (Stage 94) the side of one of the bench's squares, cm (data/glassware.json: square_mm): a vessel's height on the
+// bench is its row's
+double square_cm();
 double tubing_length();
 // how far over the room's a vessel made as no glassware holds, Pa (data/glassware.json: burst_kpa)
 double burst_default();

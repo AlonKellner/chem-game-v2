@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.91.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.94.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -594,6 +594,52 @@ through a conductance, integrated implicitly", for sealed vessels, liquid and ga
   its foot and then its air, within one step. Three times cheaper than Stage 79's sub-steps on the syringe benches.
 - **Sealed vessels joined with no conduit** (Stage 28) still share one pressure at once, by gas run between them
   until they are level.
+
+**Heights and heads** *(Stage 94; `docs/TDD_94_HEADS.md`; the first stage of the plan the user approved on
+2026-11-28 for tubing as a vessel: "The weight of the tube contents and their orientation should affect the pressure
+at the ends, so situations like siphoning will work as expected")*. The full design's `P = P_gas + ρ g h`, at a
+conduit's ports.
+
+- **Heights.** A cell's floor has a height over the bench's datum (`CellMeta::height`); a conduit's port a height
+  over its vessel's floor (`Edge::port_a`, `port_b`; at `PORT_TOP`, the vessel's brim). Stage 79's "foot" and "top"
+  were the two ends of this. The lab's square has a side in centimetres (`data/glassware.json`, `square_cm`: what
+  the picture's scale already made it), and every vessel its height from where it stands.
+- **What stands at a port** is what the column holds at that height: the layer the port lies in (what of it is
+  over the port), then the layers above as they come down to it, then the gas once the surface is at the port. What
+  lies under a port stays: a dip tube leaves a heel. A port over the surface gives the gas (or, with none, the
+  liquid: a vessel full to its top). A cell with no shape has no heights and no head: a port at 0 gives its liquid
+  first, any other its gas, as in Stage 89.
+- **A port's pressure** is its vessel's and the weight of the liquid over it, `P + g Σ ρ_k Δh_k` up its layers to
+  the surface (the heights by the column's shape, as the step's solve begins).
+- **What drives a crossing**: the two ports' pressures, less the weight of what crosses over the rise from the
+  giver's port to the taker's, `(P_g + head_g) − (P_t + head_t) − ρ g ΔZ`. A gas's own weight is left out; a gas
+  blown in under a liquid meets the liquid's head. With heads the giver may be the vessel at the lower pressure, so
+  the solve finds every conduit's crossing first (they need the pressures and the heads alone) and then sizes the
+  vessels in the crossings' order, a giver before its taker. The conduit holds what its giver gives (until a tube is
+  a vessel of its own, Stage 95).
+- **Never past level.** A crossing lowers the surface it leaves and raises the one it joins, by its mass over each
+  one's area there, and that is in the law it is met with: the rate is the root of
+  `G(m) + ρ g dt (1/A_g + 1/A_t) m = ρ ΔΦ` (`conduit_rate`'s `give`). So two vessels come level without swinging
+  at any step's length. Each conduit counts its own effect on the levels; two on one vessel see each other's a
+  step late.
+- **Vessels open to the room** joined by a conduit are in it too (nothing to solve, each at the room's pressure,
+  but their heads run what stands at their ports): communicating vessels.
+- **Gravity's work is in the ledger.** A liquid that falls from its giver's surface to its taker's gives up
+  `m g (Z_g − Z_t)`; pushed up, it takes it. It crosses from a reservoir of work named `gravity` (at the mains'
+  temperature, so it is no heat: T1), which the world makes when its first conduit is set, with an edge to each of
+  the conduit's ends: a world with no conduit is as it was, cell for cell. Without it a column filling a closed
+  flask would squeeze the flask's air with nothing to pay for it, and the world's entropy would fall by `v ΔP / T`
+  (T2). Pours and drains stay kinematic, as before.
+- **Traced** (§18, Z1): what a cell takes from gravity in a step is its crossings' weights, each its mass times `g`
+  times its fall (in the crossing's row); F1 asks the law with the drive and the give the crossing was met with,
+  and its enthalpy at the giver's own pressure.
+- **In the lab**: a syringe stood in an open vessel (`stand`, Stage 71) has its nozzle in the vessel's liquid, not
+  the room's air: pulled, it draws the liquid up; pushed, it gives it back.
+- **What it gives**: two open vessels joined at their feet level to 0.4 μm, the wide and the narrow at one height,
+  at a step and at four steps' length alike; three in a row, one on a block of 6 cm, to one height over the bench;
+  a vessel with its port 4 cm up drains to 4.00 cm and stops; a 1 m column of water fills a closed flask until its
+  air stands at `P_atm + ρ g Δh` (110.79 kPa), gravity having given 0.056 J and the entropy never falling; a
+  syringe held 10 cm over a beaker draws 39.1 mL of a 40 mL pull, its air 0.98 kPa under the room's.
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
@@ -3665,6 +3711,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | W2 | Work between cells is a sealed vessel's own (Stage 88; `chem/invariants.hpp`): a ledger entry marked work moves energy alone, along a column's edge, to or from a layer that stands at its vessel's pressure | exact | 88 |
 | P2 | A sealed vessel is at one pressure (Stage 88; `chem/invariants.hpp`): as a step ends, each of its layers that holds anything stands at its top's pressure, within what the step's last equilibria moved after its last sizing (a hundredth of it, or 200 Pa) | 1 % or 200 Pa | 88 |
 | F1 | A crossing between vessels is the closure's (Stage 89; `chem/invariants.hpp`): each crossing of a conduit in the step's trace runs from the higher of the two pressures it was solved at to the lower, at no more than its conduit's law passes there (recomputed from the conduit's pieces), for no longer than the step, moving the phase that stood at its port and carrying those amounts' enthalpy at the giver's temperature and pressure, to a quantum; and each ledger entry marked a crossing is one of them | 1e-9 of the law, a quantum of energy | 89 |
+| Z1 | Gravity's work is the weight's fall (Stage 94; `chem/invariants.hpp`): what a cell takes along its edge from gravity's reservoir in a step is the sum of what its crossings were given, each its mass times `g` times the fall from its giver's surface to its taker's, to a quantum; and nothing but energy crosses gravity's edges | exact (half a quantum a crossing) | 94 |
 | Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |

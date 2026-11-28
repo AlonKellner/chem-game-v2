@@ -491,7 +491,8 @@ public:
 	Refusal set_conduit(EdgeId edge, const Conduit &conduit, uint8_t foot = 0);
 	// (Stage 94) where an edge's conduit meets each end's vessel, m over that vessel's floor (Edge::port_a, port_b:
 	// at least 0, or PORT_TOP), between steps; set_conduit's `foot` bits are 0 for a set bit and PORT_TOP for a clear
-	// one. And a cell's floor's height over the bench's datum, m (CellMeta::height), at any time between steps.
+	// one. And a cell's floor's height over the bench's datum, m (CellMeta::height), at any time (no state: where a
+	// thing stands).
 	Refusal set_ports(EdgeId edge, double a, double b);
 	Refusal set_height(CellId cell, double metres);
 	// (Stage 94) gravity's reservoir (none: an invalid id) and its edge to a cell (none: an invalid id)

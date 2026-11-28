@@ -362,3 +362,73 @@ TEST_CASE("syringe lab: hands jerked at random on a sealed syringe of two layere
 	random_hands_on(layered(80.0), "layered under air", { "s" }, {}, 21, 1200, false);
 	random_hands_on(layered(51.5), "layered, brim-full", { "s" }, {}, 22, 1200, false);
 }
+
+TEST_CASE("syringe lab: a syringe stood in a beaker of water has its nozzle in the water: pulled, it draws the water up; pushed, it gives it back; set on the bench again, its nozzle is in the air (Stage 94)") {
+	auto l = open(bench(syringe("s", 2, 5, false) +
+						R"(, {"id": "beaker", "at": [8, 4], "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 100, "contents": {"water": {"g": 150}}})"));
+	l->set_checking(true);
+	ok(*l, R"({"do":"wait","seconds":1})");
+	CHECK_FALSE(item(*l, "s").sealed); // on the bench, open to the room
+	const double water = item(*l, "beaker").liquid_ml;
+	ok(*l, R"({"do":"stand","item":"s","in":"beaker"})");
+	ok(*l, R"({"do":"wait","seconds":1})");
+	CHECK(item(*l, "s").sealed); // sealed from the room by the water its nozzle stands in
+	CHECK_FALSE(item(*l, "beaker").sealed);
+	ok(*l, R"({"do":"plunger","item":"s","ml":60})");
+	ok(*l, R"({"do":"wait","seconds":15})");
+	const double drawn = item(*l, "s").liquid_ml;
+	MESSAGE("pulled from 5 to 60 mL: " << drawn << " mL of water drawn up, " << item(*l, "beaker").liquid_ml << " mL left of " << water << "; its air at " << item(*l, "s").pressure_kpa << " kPa");
+	CHECK(item(*l, "s").plunger_ml == doctest::Approx(60.0).epsilon(1e-6));
+	CHECK(drawn > 53.0); // the 55 mL pulled, less what its 5 mL of air grows holding the water up
+	CHECK(drawn < 55.0);
+	CHECK(drawn + item(*l, "beaker").liquid_ml == doctest::Approx(water).epsilon(2e-3));
+	CHECK(item(*l, "s").pressure_kpa < 101.3); // under the room's by the water it holds up
+	CHECK(item(*l, "s").pressure_kpa > 99.5);
+	ok(*l, R"({"do":"plunger","item":"s","ml":5})");
+	ok(*l, R"({"do":"wait","seconds":15})");
+	CHECK(item(*l, "s").liquid_ml < 0.5); // given back
+	CHECK(item(*l, "beaker").liquid_ml == doctest::Approx(water).epsilon(3e-3));
+	// saved with its nozzle in the water and loaded, it goes on as it was
+	const std::string saved = l->save();
+	std::string why;
+	auto again = lab::Lab::load(saved, why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	CHECK(again->digest() == l->digest());
+	ok(*again, R"({"do":"plunger","item":"s","ml":30})");
+	ok(*again, R"({"do":"wait","seconds":10})");
+	CHECK(item(*again, "s").liquid_ml > 23.0);
+	// lifted out and set on the bench: its nozzle in the air, what it holds its own
+	ok(*l, R"({"do":"plunger","item":"s","free":true})");
+	ok(*l, R"({"do":"place","item":"s","at":[2,4]})");
+	ok(*l, R"({"do":"wait","seconds":1})");
+	CHECK_FALSE(item(*l, "s").sealed);
+}
+
+TEST_CASE("syringe lab: two syringes of water on a tube, one nine squares over the other: the water's weight is more than both plungers' friction holds, and it runs down to the lower one (Stage 94)") {
+	const auto water = [](const char *id, int col, int row) {
+		return std::string(R"({"id": ")") + id + R"(", "at": [)" + std::to_string(col) + ", " + std::to_string(row) +
+			   R"(], "kind": "vessel", "volume_ml": 100, "wall": "glass", "glassware": "gas_syringe", "wall_g": 60, "plunger_ml": 50, "contents": {"water": {"g": 50.3}}})";
+	};
+	// side by side they stand as they are: no weight between them
+	{
+		auto l = open(bench(water("a", 2, 4) + ", " + water("b", 6, 4)));
+		l->set_checking(true);
+		ok(*l, R"({"do":"tube","item":"a","to":"b"})");
+		ok(*l, R"({"do":"wait","seconds":20})");
+		CHECK(item(*l, "a").plunger_ml == doctest::Approx(50.0).epsilon(2e-3));
+		CHECK(item(*l, "b").plunger_ml == doctest::Approx(50.0).epsilon(2e-3));
+	}
+	// one high over the other: 9 squares of 3.4 cm, 3 kPa of water, against 2.4 kPa of friction
+	auto l = open(R"({"format": "chem-bench/2", "grid": [28, 24], "room": {"celsius": 25, "air_mol": 1000}, "items": [)" + water("high", 2, 0) + ", " + water("low", 6, 9) + "]}");
+	l->set_checking(true);
+	CHECK(lab::glass::square_cm() == doctest::Approx(40.0 / 11.75).epsilon(1e-12)); // the screen's square over its scale
+	ok(*l, R"({"do":"tube","item":"high","to":"low"})");
+	ok(*l, R"({"do":"wait","seconds":60})");
+	const double high = item(*l, "high").plunger_ml, low = item(*l, "low").plunger_ml;
+	MESSAGE("after a minute: the high one at " << high << " mL, the low one at " << low << " mL");
+	CHECK(high < 47.0); // it ran down
+	CHECK(low > 53.0);
+	CHECK(high + low == doctest::Approx(100.0).epsilon(2e-3)); // what one gave the other took
+	ok(*l, R"({"do":"wait","seconds":30})");
+	CHECK(item(*l, "high").plunger_ml == doctest::Approx(high).epsilon(5e-3)); // and stands, where the frictions hold what is left
+}
