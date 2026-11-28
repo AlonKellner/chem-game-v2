@@ -247,6 +247,20 @@ World::Builder &World::Builder::set_boundary(CellId cell, bool frozen, bool reti
 	return *this;
 }
 
+World::Builder &World::Builder::set_gravity(CellId cell) {
+	if (cell.index >= 0 && static_cast<size_t>(cell.index) < meta_.size() && meta_[static_cast<size_t>(cell.index)].reservoir) {
+		meta_[static_cast<size_t>(cell.index)].gravity = true;
+	}
+	return *this;
+}
+
+World::Builder &World::Builder::set_height(CellId cell, double metres) {
+	if (cell.index >= 0 && static_cast<size_t>(cell.index) < meta_.size() && metres - metres == 0.0) {
+		meta_[static_cast<size_t>(cell.index)].height = metres;
+	}
+	return *this;
+}
+
 World::Builder &World::Builder::set_step(uint64_t step) {
 	step_ = step;
 	return *this;
@@ -1195,24 +1209,128 @@ Refusal World::set_conduit(EdgeId edge, const Conduit &conduit, uint8_t foot) {
 	if (!good(conduit)) {
 		return Refusal::BadValue;
 	}
-	Edge &e = edges_[static_cast<size_t>(edge.index)];
-	const Conduit conduit_was = e.conduit;
-	const uint8_t foot_was = e.foot;
-	e.conduit = conduit;
-	e.foot = foot & 3u;
+	const auto at = static_cast<size_t>(edge.index);
+	const Conduit conduit_was = edges_[at].conduit;
+	const double a_was = edges_[at].port_a, b_was = edges_[at].port_b;
+	edges_[at].conduit = conduit;
+	edges_[at].port_a = (foot & 1u) != 0 ? 0.0 : PORT_TOP;
+	edges_[at].port_b = (foot & 2u) != 0 ? 0.0 : PORT_TOP;
 	if ((conduit_was.count == 0) != (conduit.count == 0)) { // what is a gas path changed: the seals anew
 		const std::vector<CellMeta> was = meta_;
 		refresh_sealed();
 		if (!full_where_sealed(was)) {
-			e.conduit = conduit_was;
-			e.foot = foot_was;
+			edges_[at].conduit = conduit_was;
+			edges_[at].port_a = a_was;
+			edges_[at].port_b = b_was;
 			meta_ = was;
 			touch_all();
 			return Refusal::WouldSeal;
 		}
 		++topology_version_;
 	}
+	if (conduit.count > 0) { // (Stage 94) what crosses it may fall or be lifted: gravity's edges to its two ends
+		const CellId a = edges_[at].a, b = edges_[at].b;
+		weigh(a);
+		weigh(b);
+	}
 	return Refusal::None;
+}
+
+Refusal World::set_ports(EdgeId edge, double a, double b) {
+	if (stepping()) {
+		return Refusal::MidStep;
+	}
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size() || !edges_[static_cast<size_t>(edge.index)].open) {
+		return Refusal::UnknownEdge;
+	}
+	const auto good_port = [](double h) { return h >= 0.0; }; // (a height, or PORT_TOP; not NaN)
+	if (!good_port(a) || !good_port(b)) {
+		return Refusal::BadValue;
+	}
+	edges_[static_cast<size_t>(edge.index)].port_a = a;
+	edges_[static_cast<size_t>(edge.index)].port_b = b;
+	return Refusal::None;
+}
+
+Refusal World::set_height(CellId cell, double metres) {
+	if (stepping()) {
+		return Refusal::MidStep;
+	}
+	if (!known(cell)) {
+		return Refusal::UnknownCell;
+	}
+	if (!(metres - metres == 0.0)) {
+		return Refusal::BadValue;
+	}
+	meta_[static_cast<size_t>(cell.index)].height = metres; // (nothing is derived from it: no revision)
+	return Refusal::None;
+}
+
+CellId World::gravity_cell() const {
+	for (size_t c = 0; c < meta_.size(); ++c) {
+		if (meta_[c].reservoir && meta_[c].gravity) {
+			return CellId{ static_cast<int32_t>(c) };
+		}
+	}
+	return CellId{};
+}
+
+EdgeId World::gravity_edge(CellId cell) const {
+	const CellId gravity = gravity_cell();
+	if (gravity.index < 0) {
+		return EdgeId{};
+	}
+	for (size_t i = 0; i < edges_.size(); ++i) {
+		const Edge &e = edges_[i];
+		if (e.open && ((e.a == gravity && e.b == cell) || (e.b == gravity && e.a == cell))) {
+			return EdgeId{ static_cast<int32_t>(i) };
+		}
+	}
+	return EdgeId{};
+}
+
+void World::weigh(CellId cell) {
+	if (!known(cell) || meta_[static_cast<size_t>(cell.index)].reservoir) {
+		return;
+	}
+	CellId gravity = gravity_cell();
+	if (gravity.index < 0) {
+		CellMeta meta;
+		meta.reservoir = true;
+		meta.reservoir_temperature = WORK_KELVIN;
+		meta.gravity = true;
+		gravity = add_cell("gravity", meta);
+		if (gravity.index < 0) {
+			return;
+		}
+	}
+	if (gravity_edge(cell).index < 0) {
+		connect(gravity, cell, PHASES_NONE);
+	}
+}
+
+// (Stage 94: a column's heights, from strata.cpp, for the closure's heads too)
+double column_height(const CellMeta &m, double volume) {
+	const std::vector<double> &v = m.column_shape;
+	if (v.size() < 2 || !(m.column_rise > 0.0)) {
+		return m.column_area > 0.0 ? volume / m.column_area : 0.0;
+	}
+	if (!(volume > v.front())) {
+		return 0.0;
+	}
+	const size_t k = std::min<size_t>(static_cast<size_t>(std::upper_bound(v.begin(), v.end(), volume) - v.begin()), v.size() - 1) - 1;
+	const double span = v[k + 1] - v[k];
+	return (static_cast<double>(k) + (span > 0.0 ? (volume - v[k]) / span : 0.0)) * m.column_rise;
+}
+
+double column_area(const CellMeta &m, double height) {
+	const std::vector<double> &v = m.column_shape;
+	if (v.size() < 2 || !(m.column_rise > 0.0)) {
+		return m.column_area;
+	}
+	const auto k = static_cast<size_t>(std::clamp(height / m.column_rise, 0.0, static_cast<double>(v.size() - 2)));
+	const double a = (v[k + 1] - v[k]) / m.column_rise;
+	return a > 0.0 ? a : m.column_area;
 }
 
 void World::mark_crossing() {

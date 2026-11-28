@@ -53,11 +53,13 @@ double entrance_excess(double x);
 double conduit_drive(const Conduit &conduit, double rate, double viscosity, bool back = false);
 
 // The rate (kg/s) that rho dP = `drive` pushes through it: the root of the above. 0 at no drive, and with no conduit
-// or no viscosity (nothing to say how fast).
-double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool back = false);
+// or no viscosity (nothing to say how fast). (Stage 94) `give`: what a rate takes off its own drive, kg/m^3 Pa per
+// kg/s (a liquid's crossing lowers the surface it leaves and raises the one it joins: rho g dt (1/A_from + 1/A_to)
+// over a step): the root of conduit_drive(m) + give m = drive, so a crossing never passes the level it runs to.
+double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool back = false, double give = 0.0);
 
 // A liquid's rate (kg/s) from a vessel at `from` Pa into one at `to` (0 unless from > to): at its density.
-double liquid_rate(const Conduit &conduit, double from, double to, double density, double viscosity, bool back = false);
+double liquid_rate(const Conduit &conduit, double from, double to, double density, double viscosity, bool back = false, double give = 0.0);
 
 // A gas's rate (kg/s) from `from` Pa into `to`: at the density of the mean pressure at the giver's temperature,
 // rho = M (from + to) / (2 R T) (the isothermal pipe's M (from^2 - to^2) / (2 R T), less its acceleration), and never

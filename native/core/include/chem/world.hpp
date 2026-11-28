@@ -5,6 +5,7 @@
 #include "chem/species.hpp"
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -42,6 +43,9 @@ struct Snapshot {
 	std::vector<CellState> cells;
 	bool operator==(const Snapshot &) const = default;
 };
+
+// (Stage 94) a conduit's port at its vessel's top
+inline constexpr double PORT_TOP = std::numeric_limits<double>::infinity();
 
 // A connection between two cells: what may pass, and how well it conducts heat.
 struct Edge {
@@ -81,13 +85,21 @@ struct Edge {
 	// pressure and it is no gas path (a vessel open to the room only through it is sealed from the room); with none,
 	// what crosses runs to one pressure at once, as before.
 	Conduit conduit{};
-	// (Stage 79) where it meets each end's vessel: at its foot (bit 1: a's, bit 2: b's), where a vessel gives its liquid
-	// while it holds one; else at its top, where it gives its gas (a syringe's nozzle in a flask's neck: its foot, the
-	// flask's top)
-	uint8_t foot = 0;
+	// (Stage 94, GAME_SPEC §6) where it meets each end's vessel: its port's height over that vessel's floor, m. At
+	// PORT_TOP it meets it at its top, where a vessel gives its gas (a flask's neck); at 0, at its foot (a syringe's
+	// nozzle). What stands at a port is what the vessel's column holds at that height, and the port's pressure is the
+	// vessel's and the weight of the liquid over it. (Stage 79's two bits, foot or top, were these two heights.)
+	double port_a = PORT_TOP, port_b = PORT_TOP;
 	// Closed by a freeze of one of its ends (GAME_SPEC §4, Stage 61): it opens again as it was when both ends thaw.
 	bool frozen = false;
 };
+
+// (Stage 94) A column's heights (Stage 51): the height over its floor under which its inside holds a volume, and its
+// cross-section at a height. By its shape (the inside's volume at heights a rise apart) where it has one; past its
+// last point, as its last segment; a cylinder of its area where it has none (0 where it has no area either).
+struct CellMeta;
+double column_height(const CellMeta &meta, double volume);
+double column_area(const CellMeta &meta, double height);
 
 // What a cell is, beside its state. A reservoir is an energy account at a
 // fixed temperature (GAME_SPEC §4.2): it holds no matter, and its energy is
@@ -175,6 +187,13 @@ struct CellMeta {
 	// the world (World::retire); it is empty and frozen for good.
 	bool frozen = false;
 	bool retired = false;
+	// (Stage 94, GAME_SPEC §6, heads) Its floor's height over the bench's datum, m (World::set_height): what a
+	// liquid's fall between two vessels is reckoned from. Not derived from; no state.
+	double height = 0.0;
+	// (Stage 94) The reservoir of gravity's work (one a world, made when its first conduit is set; at WORK_KELVIN,
+	// so what crosses to it is no heat): what a liquid gives up falling from one vessel's surface to another's, and
+	// takes pushed up, crosses its edges (Z1).
+	bool gravity = false;
 	// (Stage 79, GAME_SPEC §6) A piston: a syringe's plunger, moving the cell's volume (a column's whole) by the forces
 	// on it, each step (Simulation::move_pistons). None while its area is 0.
 	Piston piston;
@@ -321,6 +340,9 @@ public:
 		Builder &set_mixing(CellId cell, double mixing);
 		// a cell frozen, or retired (Stage 61: a save's)
 		Builder &set_boundary(CellId cell, bool frozen, bool retired);
+		// (Stage 94) a reservoir marked gravity's (a saved world's), and a cell's floor's height, m
+		Builder &set_gravity(CellId cell);
+		Builder &set_height(CellId cell, double metres);
 		// the step the world resumes at (a saved world)
 		Builder &set_step(uint64_t step);
 		// a retired formula unit (Stage 63: `SpeciesDef::retired`) is set as its ions, each adding its share
@@ -459,6 +481,14 @@ public:
 	// (Edge::foot), between steps; refused for a piece of no bore or no length (BadValue), and where it would seal a
 	// rigid cell that is not full at the room's pressure (WouldSeal, as `disconnect`)
 	Refusal set_conduit(EdgeId edge, const Conduit &conduit, uint8_t foot = 0);
+	// (Stage 94) where an edge's conduit meets each end's vessel, m over that vessel's floor (Edge::port_a, port_b:
+	// at least 0, or PORT_TOP), between steps; set_conduit's `foot` bits are 0 for a set bit and PORT_TOP for a clear
+	// one. And a cell's floor's height over the bench's datum, m (CellMeta::height), at any time between steps.
+	Refusal set_ports(EdgeId edge, double a, double b);
+	Refusal set_height(CellId cell, double metres);
+	// (Stage 94) gravity's reservoir (none: an invalid id) and its edge to a cell (none: an invalid id)
+	CellId gravity_cell() const;
+	EdgeId gravity_edge(CellId cell) const;
 	// (Stage 89) the last transfer was a crossing the closure solved (LedgerEntry::crossing)
 	void mark_crossing();
 	// stirring: 1 at rest; between steps only
@@ -518,6 +548,7 @@ private:
 	void tend_particles(CellState &cell, SpeciesId species);
 	void refresh_sealed(); // each rigid cell's `sealed` from the edges (V3)
 	bool full_where_sealed(const std::vector<CellMeta> &was) const; // (a cell newly sealed is full at the room's pressure)
+	void weigh(CellId cell); // (Stage 94) gravity's reservoir made if there is none, and its edge to the cell
 
 	const SpeciesTable *table_ = nullptr;
 	std::vector<std::string> names_;

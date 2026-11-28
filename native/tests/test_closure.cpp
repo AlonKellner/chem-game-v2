@@ -157,12 +157,65 @@ TEST_CASE("closure: a conduit is set on an open edge, refused where it is none; 
 	REQUIRE(world.set_conduit(mouth, nozzle(), 1) == Refusal::None);
 	CHECK(world.meta(s.cell).sealed); // its nozzle holds back what crosses: at its own pressure
 	CHECK(world.edges()[static_cast<size_t>(mouth.index)].conduit == nozzle());
-	CHECK(world.edges()[static_cast<size_t>(mouth.index)].foot == 1);
+	CHECK(world.edges()[static_cast<size_t>(mouth.index)].port_a == 0.0); // at the syringe's foot
+	CHECK(world.edges()[static_cast<size_t>(mouth.index)].port_b == PORT_TOP); // at the air's top
 	CHECK(world.topology_version() != version);
 	REQUIRE(world.set_conduit(mouth, Conduit{}) == Refusal::None);
 	CHECK_FALSE(world.meta(s.cell).sealed); // none: open again
 	REQUIRE(world.disconnect(mouth) == Refusal::None);
 	CHECK(world.set_conduit(mouth, nozzle(), 1) == Refusal::UnknownEdge); // (not on a closed edge)
+}
+
+TEST_CASE("heads: a conduit's ports are heights over each vessel's floor, a cell has a height, and the first conduit set makes gravity's reservoir with an edge to each of its ends (Stage 94)") {
+	World::Builder b(builtin_species());
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
+	const CellId room = b.add_reservoir("room", T0);
+	const Syringe one = add_vessel(b, mains, room, 20.0, 30.0, 5.0, "one");
+	const Syringe two = add_vessel(b, mains, room, 20.0, 30.0, 5.0, "two");
+	const EdgeId tube = b.add_edge(one.cell, two.cell, FLUIDS, 0.0);
+	Simulation sim = build(b);
+	World &world = sim.world();
+	CHECK(world.gravity_cell().index < 0); // none until something may fall
+	const int cells = world.cell_count();
+	REQUIRE(world.set_conduit(tube, nozzle(), 1) == Refusal::None);
+	const Edge &e = world.edges()[static_cast<size_t>(tube.index)];
+	CHECK(e.port_a == 0.0);
+	CHECK(e.port_b == PORT_TOP);
+	const CellId gravity = world.gravity_cell();
+	REQUIRE(gravity.index == cells); // one reservoir more, after every cell there was
+	CHECK(world.meta(gravity).reservoir);
+	CHECK(world.meta(gravity).reservoir_temperature == WORK_KELVIN); // what crosses to it is work, not heat
+	CHECK(world.gravity_edge(one.cell).index >= 0);
+	CHECK(world.gravity_edge(two.cell).index >= 0);
+	CHECK(world.gravity_edge(room).index < 0);
+	CHECK(world.meta(one.cell).sealed); // (gravity's edge is no gas path)
+	// set again: no second reservoir, no second edge
+	const size_t edges = world.edges().size();
+	REQUIRE(world.set_conduit(tube, nozzles_on_a_tube(), 3) == Refusal::None);
+	CHECK(world.cell_count() == cells + 1);
+	CHECK(world.edges().size() == edges);
+	// ports: a height at least 0, or the top
+	REQUIRE(world.set_ports(tube, 0.02, PORT_TOP) == Refusal::None);
+	CHECK(world.edges()[static_cast<size_t>(tube.index)].port_a == 0.02);
+	CHECK(world.set_ports(tube, -0.01, 0.0) == Refusal::BadValue);
+	CHECK(world.set_ports(tube, std::nan(""), 0.0) == Refusal::BadValue);
+	CHECK(world.set_ports(EdgeId{ 9999 }, 0.0, 0.0) == Refusal::UnknownEdge);
+	REQUIRE(world.set_height(two.cell, 0.25) == Refusal::None);
+	CHECK(world.meta(two.cell).height == 0.25);
+	CHECK(world.set_height(CellId{ 9999 }, 0.0) == Refusal::UnknownCell);
+	CHECK(world.set_height(one.cell, std::nan("")) == Refusal::BadValue);
+	// a column's heights by its shape, and as a cylinder where it has none
+	CellMeta cylinder;
+	cylinder.column_area = 0.002;
+	CHECK(column_height(cylinder, 1e-4) == doctest::Approx(0.05));
+	CHECK(column_area(cylinder, 0.03) == 0.002);
+	CellMeta cone; // a volume of 0, 1, 4, 9 units at each centimetre: widening
+	cone.column_area = 1e-4;
+	cone.column_rise = 0.01;
+	cone.column_shape = { 0.0, 1e-6, 4e-6, 9e-6 };
+	CHECK(column_height(cone, 2.5e-6) == doctest::Approx(0.015));
+	CHECK(column_area(cone, 0.025) == doctest::Approx(5e-4));
+	CHECK(column_height(CellMeta{}, 1.0) == 0.0); // no shape, no area: no height
 }
 
 TEST_CASE("closure: a syringe open to the air only through its nozzle draws air through it at the nozzle's pace: under the room's pressure while it is pulled, at it again at rest (Stage 89)") {

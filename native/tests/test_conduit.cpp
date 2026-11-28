@@ -176,6 +176,31 @@ TEST_CASE("conduit: a gas blown down through a nozzle is choked at the speed of 
 	CHECK(gas_rate(nozzle, 1e5, 2e5, kelvin, AIR, AIR_GAMMA, AIR_MU) == 0.0);
 }
 
+TEST_CASE("conduit: a rate met with what it takes off its own drive: the root of the drop and the give together, less than without, and never more than the drive over the give (Stage 94)") {
+	// (a liquid's crossing lowers the surface it leaves and raises the one it joins: the head it runs down falls with
+	// the mass crossed, so over a step the rate answers to the head it ends with)
+	const Conduit c = nozzles_on_a_tube();
+	for (const double drive : { 1e3, 1e5, 1e7, 5e7 }) {
+		const double plain = conduit_rate(c, drive, WATER_MU);
+		double before = plain;
+		for (const double give : { 1e3, 1e6, 1e8, 1e10, 1e13 }) {
+			CAPTURE(drive);
+			CAPTURE(give);
+			const double rate = conduit_rate(c, drive, WATER_MU, false, give);
+			REQUIRE(rate > 0.0);
+			CHECK(conduit_drive(c, rate, WATER_MU) + give * rate == doctest::Approx(drive).epsilon(1e-10));
+			CHECK(rate < before);
+			CHECK(rate <= drive / give);
+			before = rate;
+		}
+		// where the give is all there is, the crossing is what levels the two: drive over give
+		CHECK(conduit_rate(c, drive, WATER_MU, false, 1e13) == doctest::Approx(drive / 1e13).epsilon(1e-3));
+		CHECK(conduit_rate(c, drive, WATER_MU, false, 0.0) == plain);
+	}
+	CHECK(conduit_rate(c, 1e5, WATER_MU, false, -1.0) == 0.0);
+	CHECK(liquid_rate(c, 2e5, 1e5, WATER, WATER_MU, false, 1e6) < liquid_rate(c, 2e5, 1e5, WATER, WATER_MU));
+}
+
 TEST_CASE("conduit: what is no conduit is refused: a piece of no bore or no length, too many pieces (Stage 89)") {
 	CHECK(good(Conduit{}));
 	CHECK(good(nozzles_on_a_tube()));

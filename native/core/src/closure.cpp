@@ -748,8 +748,8 @@ bool Simulation::close_group(const std::vector<CellId> &tops, const std::vector<
 		Link link;
 		link.edge = i;
 		link.conduit = e.conduit;
-		link.foot_a = (e.foot & 1u) != 0;
-		link.foot_b = (e.foot & 2u) != 0;
+		link.foot_a = e.port_a < PORT_TOP;
+		link.foot_b = e.port_b < PORT_TOP;
 		link.liquid = (e.phases & phase_bit(Phase::Liquid)) != 0;
 		link.dissolved = (e.phases & phase_bit(Phase::Aqueous)) != 0;
 		link.gas = (e.phases & PHASES_GAS) != 0;

@@ -8069,7 +8069,8 @@ std::string Lab::digest() const {
 				hash.update_double(e.conduit.pieces[static_cast<size_t>(k)].bore);
 				hash.update_double(e.conduit.pieces[static_cast<size_t>(k)].length);
 			}
-			hash.update_u64(e.foot);
+			hash.update_double(e.port_a); // (Stage 94: its ports' heights; Stage 79's foot bits were 0 and the top)
+			hash.update_double(e.port_b);
 		}
 	}
 	for (int c = 0; c < world.cell_count(); ++c) { // (Stage 88) a sealed vessel's layers at its pressure: a lab with none digests as before
@@ -8267,6 +8268,9 @@ json Lab::Impl::save() const {
 		json cell;
 		cell["name"] = w.cell_name(id);
 		cell["reservoir"] = meta.reservoir;
+		if (meta.gravity) { // (Stage 94) gravity's reservoir
+			cell["gravity"] = true;
+		}
 		cell["reservoir_temperature"] = bits(meta.reservoir_temperature);
 		cell["rigid"] = meta.rigid;
 		cell["volume"] = bits(meta.volume);
@@ -8324,7 +8328,7 @@ json Lab::Impl::save() const {
 				pieces.push_back({ bits(e.conduit.pieces[static_cast<size_t>(k)].bore), bits(e.conduit.pieces[static_cast<size_t>(k)].length) });
 			}
 			edges.back()["conduit"] = std::move(pieces);
-			edges.back()["foot"] = e.foot;
+			edges.back()["ports"] = { bits(e.port_a), bits(e.port_b) }; // (Stage 94)
 		}
 		if (e.exchange > 0.0) { // (Stage 50)
 			edges.back()["exchange"] = bits(e.exchange);
@@ -8528,6 +8532,9 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 					: cell.at("rigid").get<bool>()			  ? b.add_rigid_cell(name, volume)
 					: cell.value("layer", false)			  ? b.add_layer_cell(name)
 															  : b.add_cell(name);
+			if (cell.value("gravity", false)) { // (Stage 94)
+				b.set_gravity(id);
+			}
 			if (cell.contains("over")) { // (Stage 88) a sealed vessel's layer, at its pressure, having taken its volume
 				double over = 0.0, cushion = 0.0;
 				if (!cell.at("over").is_array() || cell.at("over").size() != 2 || !from_bits(cell.at("over").at(0), over) || !from_bits(cell.at("over").at(1), cushion)) {
@@ -8591,7 +8598,13 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			edge.drain = e.at("drain").get<bool>();
 			edge.column = e.value("column", false);
 			edge.frozen = e.value("frozen", false); // (Stage 61)
-			edge.foot = static_cast<uint8_t>(e.value("foot", 0) & 3); // (Stage 79)
+			const int foot = e.value("foot", 0) & 3; // (Stage 79's bits: a save from before Stage 94)
+			edge.port_a = (foot & 1) != 0 ? 0.0 : PORT_TOP;
+			edge.port_b = (foot & 2) != 0 ? 0.0 : PORT_TOP;
+			if (e.contains("ports") && (!from_bits(e.at("ports").at(0), edge.port_a) || !from_bits(e.at("ports").at(1), edge.port_b) || !(edge.port_a >= 0.0) || !(edge.port_b >= 0.0))) {
+				why = "the save holds a port's height that is none";
+				return nullptr;
+			}
 			if ((e.contains("rate") && !from_bits(e.at("rate"), edge.rate)) || (e.contains("carried") && !from_bits(e.at("carried"), edge.carried)) ||
 					(e.contains("solids_rate") && !from_bits(e.at("solids_rate"), edge.solids_rate)) || (e.contains("power") && !from_bits(e.at("power"), edge.power)) ||
 					(e.contains("exchange") && !from_bits(e.at("exchange"), edge.exchange))) {
@@ -8620,7 +8633,7 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 				// one syringe there is: nozzle to nozzle on a tube where both ends are feet, else its nozzle alone)
 				const glass::Vessel *g = glass::find("gas_syringe", 100.0);
 				if (g != nullptr) {
-					edge.conduit = edge.foot == 3 ? tubed(*g, *g) : nozzle_alone(*g);
+					edge.conduit = foot == 3 ? tubed(*g, *g) : nozzle_alone(*g);
 				}
 			}
 			if (!from_bits(e.at("conductance"), edge.conductance)) {

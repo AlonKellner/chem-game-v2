@@ -112,17 +112,18 @@ double conduit_drive(const Conduit &conduit, double rate, double viscosity, bool
 	return sum;
 }
 
-double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool back) {
-	if (conduit.count <= 0 || !(drive > 0.0) || !(viscosity > 0.0) || drive - drive != 0.0) {
+double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool back, double give) {
+	if (conduit.count <= 0 || !(drive > 0.0) || !(viscosity > 0.0) || drive - drive != 0.0 || !(give >= 0.0)) {
 		return 0.0;
 	}
+	const auto takes = [&](double rate) { return conduit_drive(conduit, rate, viscosity, back) + give * rate; };
 	// no more than Poiseuille's through every piece (the law's least drop at a rate: 32 m L mu / (A D^2) a piece)
 	double poiseuille = 0.0;
 	for (int i = 0; i < conduit.count; ++i) {
 		const Piece &p = conduit.pieces[static_cast<size_t>(i)];
 		poiseuille += 32.0 * p.length * viscosity / (area(p) * p.bore * p.bore);
 	}
-	double hi = drive / poiseuille, f_hi = conduit_drive(conduit, hi, viscosity, back) - drive;
+	double hi = drive / (poiseuille + give), f_hi = takes(hi) - drive;
 	if (!(f_hi > 0.0)) {
 		return hi;
 	}
@@ -131,7 +132,7 @@ double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool
 		hi = lo;
 		f_hi = f_lo;
 		lo *= 0.25;
-		f_lo = conduit_drive(conduit, lo, viscosity, back) - drive;
+		f_lo = takes(lo) - drive;
 	}
 	if (f_lo > 0.0) {
 		return 0.0;
@@ -143,7 +144,7 @@ double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool
 		if (!(middle > lo && middle < hi)) {
 			middle = 0.5 * (lo + hi);
 		}
-		const double f = conduit_drive(conduit, middle, viscosity, back) - drive;
+		const double f = takes(middle) - drive;
 		if (f == 0.0) {
 			return middle;
 		}
@@ -162,11 +163,11 @@ double conduit_rate(const Conduit &conduit, double drive, double viscosity, bool
 	return lo; // (from below: never more than the law passes)
 }
 
-double liquid_rate(const Conduit &conduit, double from, double to, double density, double viscosity, bool back) {
+double liquid_rate(const Conduit &conduit, double from, double to, double density, double viscosity, bool back, double give) {
 	if (!(from > to) || !(density > 0.0)) {
 		return 0.0;
 	}
-	return conduit_rate(conduit, density * (from - to), viscosity, back);
+	return conduit_rate(conduit, density * (from - to), viscosity, back, give);
 }
 
 double gas_rate(const Conduit &conduit, double from, double to, double kelvin, double molar_mass, double gamma, double viscosity, bool back) {

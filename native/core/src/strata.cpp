@@ -110,30 +110,13 @@ double contrast(const SpeciesTable &table, const CellState &a, double ta, const 
 	return std::max(out, dissolved / FRACTION_UNIT);
 }
 
-// A column's heights (Stage 51): the height over its floor under which its inside holds a volume, and its
-// cross-section at a height. By its shape (the inside's volume at heights a rise apart) where it has one; past its
-// last point, as its last segment; a cylinder of its area where it has none.
+// A column's heights (Stage 51; the world's since Stage 94, world.hpp: the closure's heads read them too)
 double height_of(const CellMeta &m, double volume) {
-	const std::vector<double> &v = m.column_shape;
-	if (v.size() < 2 || !(m.column_rise > 0.0)) {
-		return m.column_area > 0.0 ? volume / m.column_area : 0.0;
-	}
-	if (!(volume > v.front())) {
-		return 0.0;
-	}
-	const size_t k = std::min<size_t>(static_cast<size_t>(std::upper_bound(v.begin(), v.end(), volume) - v.begin()), v.size() - 1) - 1;
-	const double span = v[k + 1] - v[k];
-	return (static_cast<double>(k) + (span > 0.0 ? (volume - v[k]) / span : 0.0)) * m.column_rise;
+	return column_height(m, volume);
 }
 
 double area_at(const CellMeta &m, double height) {
-	const std::vector<double> &v = m.column_shape;
-	if (v.size() < 2 || !(m.column_rise > 0.0)) {
-		return m.column_area;
-	}
-	const auto k = static_cast<size_t>(std::clamp(height / m.column_rise, 0.0, static_cast<double>(v.size() - 2)));
-	const double a = (v[k + 1] - v[k]) / m.column_rise;
-	return a > 0.0 ? a : m.column_area;
+	return column_area(m, height);
 }
 
 // Each cell of a column, from the top (0) down: the heights over the floor of its liquid's bottom, middle (by
