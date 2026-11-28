@@ -77,7 +77,7 @@ control feature on the handle" (physical controls for other things, a burner's, 
 | 79.2 | The lab: the gas syringe, its plunger, attached, capped and joined, its lock, saved | Done |
 | 79.3 | The screen: the handle a physical control (dragged), the plunger drawn, the tube, the panel's join | Done |
 | 79.4 | The experiments `syringes`, `boyle`, `charles`, `molar_volume` | Done |
-| 79.5 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | |
+| 79.5 | GAME_SPEC, CHANGELOG, `make gates`, the user's sign-off | `make gates` passed on main's Stages 78, 80, 81, 84 and 86 merged in (2026-11-28: core, ASan and UBSan, ctest, the Godot suite, the goldens unchanged; the step's cost 1,230,487 instructions, +0.7 % against main's at 063e048); the user's sign-off to come |
 
 ## Tests
 
