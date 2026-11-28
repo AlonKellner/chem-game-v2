@@ -1045,6 +1045,39 @@ sealed cell's temperature is the root of its energy, which holds the slope).
 times ρ(25 °C)/ρ(T); a solute's apparent molar volume is scaled as the solvent's, as Stage 47's buoyancy already
 did (its own expansion differs; not modelled). Solids keep the table's (about 1e-5/K, not modelled).
 
+## Liquids that give (Stage 88)
+
+What a sealed cell's liquids give to its pressure (GAME_SPEC §6): water's isothermal compressibility at one
+atmosphere, `data/solutions.json`'s `compressibility`, read 2026-11-28.
+
+**Kell 1975, the compressibility**: the density's own paper (above). Its equation for the isothermal
+compressibility of air-free water, as reprinted by F. E. Jones and G. L. Harris, "ITS-90 Density of Water
+Formulation for Volumetric Standards Calibration", *J. Res. Natl. Inst. Stand. Technol.* **97** (1992) 335–340,
+**eq. 2**, read from the page (https://nvlpubs.nist.gov/nistpubs/jres/097/jresv97n3p335_a1b.pdf, a scan, its page
+rendered and read by eye): κ_T = (50.88496e-8 + 6.163813e-9 t + 1.459187e-11 t² + 20.08438e-14 t³ − 58.47727e-17 t⁴
++ 410.4110e-20 t⁵) / (1 + 19.67348e-3 t) kPa⁻¹, t in °C (IPTS-68), stated there for 0 to 100 °C. The data keeps the
+printed coefficients and unit; the build makes them 1/Pa.
+
+The same page misprints the density's `b` (16.897850e-3 for Kell's 16.879850e-3, which the measured densities
+hold: Stage 67), so the compressibility's coefficients are not taken on the print alone. Held to:
+- the paper's own statement, "approximately 46.5 parts per million (ppm)/atmosphere at 20 °C": the equation gives
+  46.500;
+- its authors' independent fit of Kell's compressibilities on ITS-90 (eq. 7, 5 to 40 °C, a quartic,
+  50.83101e-8 − 3.68293e-9 t + 7.263725e-11 t² − 6.597702e-13 t³ + 2.87767e-15 t⁴ kPa⁻¹, its stated residual
+  4.6e-5 of the value): the two agree within 1.3e-4 at 5, 10, 20, 25, 30 and 40 °C;
+- its least value, 4.415e-10 /Pa near 46.5 °C, as water's compressibility is known to have.
+Kell's abstract puts the error of his compressibilities at 0.3e-6 /bar at 4 °C, more at 100 °C (as a search's
+summary quotes it; the abstract itself was not reached). Beyond 0–100 °C the game extends it by its value and slope
+at the end, as the density's.
+
+**Confidence: high** over 5–40 °C (to 2e-4); good to 100 °C (the print and the least value alone hold it there).
+The test: `measured: water's compressibility is Kell's, at Jones and Harris's value and within their fit (Stage 88)`.
+
+**How it is used** (code, `chem::compressibility`): a sealed cell's liquids' and solutes' volume at its pressure
+is theirs at the room's times `1 − κ(T) (P − P_atm)`; a solute's apparent volume gives as the solvent does (its own
+differs; not modelled), a solid not at all (about 1e-11 /Pa, a fiftieth of water's; not modelled). With it a sealed
+cell full of liquid has a pressure: warmed, it rises by α/κ (4.5 bar a kelvin at 20 °C).
+
 ## Ions as species (Stage 63)
 
 Dissolved matter as its ions (GAME_SPEC §9, §10): hydrogen, hydroxide, copper, sulfate, bisulfate, sodium, nickel

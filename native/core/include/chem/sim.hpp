@@ -204,6 +204,16 @@ private:
 	void stratify(const Column &column);
 	std::vector<Column> columns_;
 	uint64_t columns_version_ = UINT64_MAX;
+	// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel sized: the one pressure at which its top holds what
+	// its layers leave, each cell at it with the work of its change of volume (World::work); true when anything moved.
+	// Each column's cells' revisions as it was last sized: one unchanged is sized already.
+	bool size_vessel(const Column &column);
+	void size_vessels();
+	Refusal work(EdgeId edge, CellId from, Energy energy); // World::work, with the step's flows
+	// (Stage 88) what was lifted out of a sealed vessel's layer into its top takes its volume with it: the layer's taken
+	// volume less by `m3`, the top's more
+	void lift_volume(CellId layer, CellId top, double m3);
+	std::vector<std::vector<uint64_t>> sized_;
 
 	World world_;
 	std::vector<Reaction> reactions_; // with a rate law

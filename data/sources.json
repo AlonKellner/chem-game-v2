@@ -120,6 +120,12 @@
 			"tests": ["measured: water's density is Kell's, within Lienhard's rows"]
 		},
 		{
+			"data": ["solutions.json/compressibility/*", "solutions.json/compressibility/numerator_per_kpa/#", "solutions.json/compressibility/celsius/#"],
+			"measured": "Kell 1975 (J. Chem. Eng. Data 20, 97), the isothermal compressibility of air-free water at 1 atm, 0 to 100 C, as Jones and Harris reprint it (J. Res. NIST 97 (1992) 335, eq. 2, read from the page); held to that paper's stated 46.5 ppm per atmosphere at 20 C and to its authors' own fit of Kell's values (eq. 7, 5 to 40 C)",
+			"doc": ["Liquids that give (Stage 88)", "Kell 1975, the compressibility"],
+			"tests": ["measured: water's compressibility is Kell's, at Jones and Harris's value and within their fit"]
+		},
+		{
 			"data": ["solutions.json/water_ionisation/*"],
 			"measured": "NBS 1982's OH-(aq) and H2O(l); held to IAPWS R11-24's pKw from 0 to 100 C",
 			"doc": ["Acids and bases (Stage 43)", "IAPWS R11-24"],
