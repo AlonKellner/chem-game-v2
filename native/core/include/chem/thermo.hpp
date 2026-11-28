@@ -253,6 +253,11 @@ bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms);
 
+// (Stage 87, GAME_SPEC §7) A solution law's activity factor, as its ln: prod_j gamma_j^n_j over its ordered species,
+// over gamma of the activated complex (a particle of their charge, sum_j n_j z_j, with Debye and Hückel's part of the
+// activity model alone): Brønsted and Bjerrum's primary salt effect. 0 with no liquid or nothing dissolved.
+double rate_activity(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics);
+
 // A dissolved species' molality: its amount per 55.51 mol of the cell's
 // liquid (per kg of water). 0 when the cell has no liquid.
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species);

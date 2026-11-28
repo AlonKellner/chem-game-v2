@@ -374,7 +374,8 @@ if(CHEM_BUILD_TESTS)
         "unknown_diffusion=which no species is made of"
         "written_not_the_reaction=is not the reaction in formula units"
         "secondary_alone=secondary nucleation has its rate and its order"
-        "barrier_with_order=a nucleation barrier takes the place of a nucleation order")
+        "barrier_with_order=a nucleation barrier takes the place of a nucleation order"
+        "solution_order_not_dissolved=a species its rate goes with is not a dissolved one")
     foreach(refusal ${DATAGEN_REFUSALS})
         string(FIND "${refusal}" "=" at)
         string(SUBSTRING "${refusal}" 0 ${at} bad)

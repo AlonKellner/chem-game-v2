@@ -20,7 +20,7 @@ Simulation::Simulation(World world, std::vector<Reaction> reactions) :
 		if (r.table() != &world_.species()) {
 			continue;
 		}
-		if (r.kinetics().law == Kinetics::Law::FirstOrder || r.kinetics().law == Kinetics::Law::Surface) {
+		if (r.kinetics().law == Kinetics::Law::FirstOrder || r.kinetics().law == Kinetics::Law::Surface || r.kinetics().law == Kinetics::Law::Solution) {
 			reactions_.push_back(std::move(r));
 		} else if (r.kinetics().law == Kinetics::Law::Equilibrium) {
 			equilibria_.push_back(std::move(r));
@@ -160,6 +160,83 @@ double primary_nucleation(const Kinetics &kinetics, double ln_s) {
 	}
 	const double excess = ln_s < 700.0 ? exp(ln_s) - 1.0 : 1e300; // S - 1
 	return pow(excess, kinetics.nucleation_order);
+}
+
+namespace {
+
+// (Stage 87) the cell's liquid, quanta (what `molality` reads a species' amount against)
+double liquid_quanta(const SpeciesTable &table, const CellState &cell) {
+	double liquid = 0.0;
+	for (size_t s = 0; s < cell.amount.size(); ++s) {
+		if (cell.amount[s] > 0) {
+			const SpeciesDef &def = table.species(SpeciesId{ static_cast<int32_t>(s) });
+			liquid += def.phase == Phase::Liquid && !def.wall ? static_cast<double>(cell.amount[s]) : 0.0;
+		}
+	}
+	return liquid;
+}
+
+constexpr double WATER_KG_PER_MOL = 0.018015; // (molality's own: a kg of solvent is 55.51 mol of its liquid)
+
+// k(T) times each species' molality to its order, but `skip`'s
+double solution_rate_without(const CellState &cell, const Kinetics &kinetics, double temperature, double liquid, SpeciesId skip) {
+	double rate = kinetics.prefactor * exp(-kinetics.activation / (GAS_CONSTANT * temperature));
+	for (int32_t o = 0; o < kinetics.order_count; ++o) {
+		const RateOrder &order = kinetics.orders[static_cast<size_t>(o)];
+		if (order.species == skip || order.order == 0.0) {
+			continue;
+		}
+		const double m = static_cast<double>(cell.amount[static_cast<size_t>(order.species.index)]) / (liquid * WATER_KG_PER_MOL);
+		rate *= order.order == 1.0 ? m : pow(m, order.order);
+	}
+	return rate;
+}
+
+double order_of(const Kinetics &kinetics, SpeciesId species) {
+	for (int32_t o = 0; o < kinetics.order_count; ++o) {
+		if (kinetics.orders[static_cast<size_t>(o)].species == species) {
+			return kinetics.orders[static_cast<size_t>(o)].order;
+		}
+	}
+	return 0.0;
+}
+
+} // namespace
+
+double solution_rate(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, double temperature) {
+	const double liquid = liquid_quanta(table, cell);
+	if (!(liquid > 0.0) || !(temperature > 0.0)) {
+		return 0.0;
+	}
+	const double rest = solution_rate_without(cell, kinetics, temperature, liquid, kinetics.in) * exp(rate_activity(table, cell, kinetics));
+	const double n = order_of(kinetics, kinetics.in);
+	const double m = static_cast<double>(cell.amount[static_cast<size_t>(kinetics.in.index)]) / (liquid * WATER_KG_PER_MOL);
+	return rest * (n == 1.0 ? m : pow(m, n));
+}
+
+double solution_extent(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics, int32_t nu, double rt, double factor, bool forward, double seconds) {
+	const double liquid = liquid_quanta(table, cell);
+	if (!(liquid > 0.0) || nu <= 0) {
+		return 0.0;
+	}
+	const double temperature = rt / GAS_CONSTANT;
+	const double per = liquid * WATER_KG_PER_MOL; // quanta of a species per mol/kg of it
+	const double m = static_cast<double>(cell.amount[static_cast<size_t>(kinetics.in.index)]) / per;
+	const double n = order_of(kinetics, kinetics.in);
+	// k', mol/kg/s per m^n: the activities as they are at the step's start (Brønsted and Bjerrum's salt effect)
+	const double held = solution_rate_without(cell, kinetics, temperature, liquid, kinetics.in) * exp(rate_activity(table, cell, kinetics)) * factor;
+	if (!forward) {
+		return held * (n == 1.0 ? m : pow(m, n)) * seconds * per;
+	}
+	const double decay = static_cast<double>(nu) * held * seconds;
+	double after = 0.0;
+	if (n == 1.0) {
+		after = m * exp(-decay);
+	} else {
+		const double base = pow(m, 1.0 - n) + (n - 1.0) * decay;
+		after = base > 0.0 ? pow(base, 1.0 / (1.0 - n)) : 0.0; // (an order under 1 runs out in a finite time)
+	}
+	return (m - after) / static_cast<double>(nu) * per;
 }
 
 SurfaceSteps surface_steps(const SpeciesTable &table, const CellState &cell, const Reaction &reaction, double temperature, double a, double dissipation, const CellMeta *meta) {
@@ -376,8 +453,14 @@ void Simulation::react() {
 			double &nucleation_remainder = nucleation_remainder_[c * reactions_.size() + r];
 			const auto in = static_cast<size_t>(kinetics.in.index);
 			const int64_t have = state.amount[in];
+			// (Stage 87) a solution's rate is nought while a species it goes with is absent: no probe needed
+			bool unordered = false;
+			for (int32_t o = 0; o < kinetics.order_count; ++o) {
+				const RateOrder &order = kinetics.orders[static_cast<size_t>(o)];
+				unordered = unordered || (order.order > 0.0 && state.amount[static_cast<size_t>(order.species.index)] == 0);
+			}
 			// nothing of the solid, and nothing to nucleate it from: no probe needed
-			if (have == 0 && !(surface && kinetics.nucleation > 0.0 && feasible_extent(state, reaction.terms(), true) > 0)) {
+			if (unordered || (have == 0 && !(surface && kinetics.nucleation > 0.0 && feasible_extent(state, reaction.terms(), true) > 0))) {
 				remainder = 0.0;
 				nucleation_remainder = 0.0;
 				continue;
@@ -400,7 +483,9 @@ void Simulation::react() {
 			const double factor = 1.0 - exp(forward ? -a / rt : a / rt); // |f|
 			double wanted = 0.0; // quanta of extent, in the direction of the affinity
 			int64_t born = 0; // new particles, each one quantum of the solid
-			if (!surface) {
+			if (kinetics.law == Kinetics::Law::Solution) {
+				wanted = solution_extent(table, state, kinetics, -reaction.nu(kinetics.in), rt, factor, forward, step_seconds_);
+			} else if (!surface) {
 				const double rate = kinetics.prefactor * exp(-kinetics.activation / rt);
 				wanted = static_cast<double>(have) / static_cast<double>(-reaction.nu(kinetics.in)) * (1.0 - exp(-rate * factor * step_seconds_));
 			} else {

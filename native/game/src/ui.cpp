@@ -78,6 +78,23 @@ std::string text_of(const char *format, double a = 0, double b = 0) {
 	return buffer;
 }
 
+// (Stage 87) a solution law's orders as the reference lists them: ", order 1 in CV+, 1 in OH-; catalysed by I-"
+std::string orders_of(const chem::SpeciesTable &table, const chem::Reaction &r) {
+	const chem::Kinetics &k = r.kinetics();
+	std::string says, catalysts;
+	for (int32_t o = 0; o < k.order_count; ++o) {
+		const chem::RateOrder &order = k.orders[static_cast<size_t>(o)];
+		const std::string name = chem::written(table.species(order.species).formula);
+		says += text_of(o == 0 ? ", order %.2g in " : ", %.2g in ", order.order) + name;
+		bool in_it = false;
+		for (const chem::Term &t : r.terms()) {
+			in_it = in_it || t.species == order.species;
+		}
+		catalysts += in_it ? std::string() : (catalysts.empty() ? "" : ", ") + name;
+	}
+	return catalysts.empty() ? says : says + "; catalysed by " + catalysts;
+}
+
 // words wrapped at about `width` characters
 std::vector<std::string> wrapped(const std::string &s, size_t width) {
 	std::vector<std::string> lines;
@@ -1281,6 +1298,7 @@ struct Ui::Impl {
 				const chem::Kinetics &k = r.kinetics();
 				const std::string law = k.law == chem::Kinetics::Law::FirstOrder ? text_of("first order, Ea %.1f kJ/mol", k.activation / 1000.0)
 						: k.law == chem::Kinetics::Law::Surface											   ? text_of("at a surface, Ea %.1f kJ/mol", k.activation / 1000.0) + (table.has(k.driver) ? text_of(", order %.2g in ", k.driver_order) + chem::written(table.species(k.driver).formula) : std::string())
+						: k.law == chem::Kinetics::Law::Solution ? text_of("in solution, Ea %.1f kJ/mol", k.activation / 1000.0) + orders_of(table, r) // (Stage 87)
 						: k.law == chem::Kinetics::Law::Equilibrium										   ? std::string("fast: always at its equilibrium")
 																										   : std::string("runs when it is brought about");
 				text(x0 + 16, y, law, DIM, 12);
