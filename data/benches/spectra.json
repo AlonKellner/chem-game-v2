@@ -1,0 +1,62 @@
+{
+	"format": "chem-bench/2",
+	"note": "Atomic spectra through the spectral viewer (GAME_SPEC §12.5, §13.7, Stage 85; docs/CURRICULUM.md, experiment 54): four discharge lamps (hydrogen, helium, mercury, neon), each its gas's lines (NIST's), and the spectral viewer. Hydrogen's visible lines are Balmer's: 1/lambda = R (1/4 - 1/n^2), n = 3, 4, 5, 6; two of them give the Rydberg constant.",
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "viewer",
+			"kind": "viewer",
+			"at": [
+				1,
+				1
+			]
+		},
+		{
+			"id": "lamp_h",
+			"kind": "lamp",
+			"gas": "H",
+			"at": [
+				12,
+				3
+			],
+			"label": "hydrogen"
+		},
+		{
+			"id": "lamp_he",
+			"kind": "lamp",
+			"gas": "He",
+			"at": [
+				15,
+				3
+			],
+			"label": "helium"
+		},
+		{
+			"id": "lamp_hg",
+			"kind": "lamp",
+			"gas": "Hg",
+			"at": [
+				18,
+				3
+			],
+			"label": "mercury"
+		},
+		{
+			"id": "lamp_ne",
+			"kind": "lamp",
+			"gas": "Ne",
+			"at": [
+				21,
+				3
+			],
+			"label": "neon"
+		}
+	]
+}

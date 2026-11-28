@@ -1,0 +1,415 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 42) on data/benches/lechatelier.json: Le Chatelier's principle on three equilibria, each tube held against one left as it is; the report's answers picked from choices, their truth read from the tubes.",
+	"title": "Experiment: Le Chatelier's principle",
+	"bench": "../benches/lechatelier.json",
+	"report": [
+		{
+			"label": "more iron(III): the equilibrium went",
+			"single": true,
+			"choices": [
+				{
+					"label": "toward the red complex",
+					"truth": "tube_iron.iron_thiocyanate.mol - tube_control.iron_thiocyanate.mol"
+				},
+				{
+					"label": "away from it",
+					"truth": "0 - (tube_iron.iron_thiocyanate.mol - tube_control.iron_thiocyanate.mol)"
+				}
+			],
+			"why": "More of a reactant: the equilibrium takes some of it away, making more of the complex. The tube is a deeper red than the one as it is, though both were diluted alike."
+		},
+		{
+			"label": "more thiocyanate: the equilibrium went",
+			"single": true,
+			"choices": [
+				{
+					"label": "toward the red complex",
+					"truth": "tube_scn.iron_thiocyanate.mol + tube_scn.iron_dithiocyanate.mol - tube_control.iron_thiocyanate.mol - tube_control.iron_dithiocyanate.mol"
+				},
+				{
+					"label": "away from it",
+					"truth": "0 - (tube_scn.iron_thiocyanate.mol + tube_scn.iron_dithiocyanate.mol - tube_control.iron_thiocyanate.mol - tube_control.iron_dithiocyanate.mol)"
+				}
+			],
+			"why": "The same with the other reactant: SCN- added is partly taken up as FeSCN2+ (and some Fe(SCN)2+)."
+		},
+		{
+			"label": "acid on chromate: the equilibrium went",
+			"single": true,
+			"choices": [
+				{
+					"label": "toward dichromate",
+					"truth": "tube_acid.dichromate_ion.mol - tube_yellow.dichromate_ion.mol"
+				},
+				{
+					"label": "toward chromate",
+					"truth": "0 - (tube_acid.dichromate_ion.mol - tube_yellow.dichromate_ion.mol)"
+				}
+			],
+			"why": "Hydrogen ions are a reactant of 2 CrO4 2- + 2 H+ <=> Cr2O7 2- + H2O: added, the yellow turns orange. A base would take them away and turn it back."
+		},
+		{
+			"label": "warmed cobalt: the equilibrium went",
+			"single": true,
+			"choices": [
+				{
+					"label": "toward the blue CoCl4 2-",
+					"truth": "tube_warm.cobalt_tetrachloro.mol - tube_cool.cobalt_tetrachloro.mol"
+				},
+				{
+					"label": "toward the pink Co(H2O)6 2+",
+					"truth": "0 - (tube_warm.cobalt_tetrachloro.mol - tube_cool.cobalt_tetrachloro.mol)"
+				}
+			],
+			"why": "Warming favours the way that takes in heat: the warm tube is bluer than the cool one, so pink to blue absorbs heat."
+		},
+		{
+			"label": "so pink to blue",
+			"single": true,
+			"choices": [
+				{
+					"label": "takes in heat (endothermic)",
+					"truth": "tube_warm.cobalt_tetrachloro.mol - tube_cool.cobalt_tetrachloro.mol"
+				},
+				{
+					"label": "gives out heat (exothermic)",
+					"truth": "0 - (tube_warm.cobalt_tetrachloro.mol - tube_cool.cobalt_tetrachloro.mol)"
+				}
+			],
+			"why": "Le Chatelier: a rise in temperature shifts an equilibrium the way that absorbs heat. Its enthalpy here, about +23 kJ/mol (ThermoChimie's for CoCl4 2-)."
+		}
+	],
+	"steps": [
+		{
+			"part": "Iron(III) thiocyanate",
+			"title": "Three tubes of the red",
+			"text": "Pick up the beaker of iron(III) thiocyanate, right-click the tube \"red: as it is\", type 5 and click \"pour\". The same into the tubes \"more iron(III)\" and \"more thiocyanate\".",
+			"why": "Fe3+ + SCN- <=> FeSCN2+: the red is the complex. One tube is kept as it is, to hold the others against.",
+			"checks": [
+				{
+					"text": "5 mL in each tube",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "tube_control",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							},
+							{
+								"quantity": {
+									"item": "tube_iron",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							},
+							{
+								"quantity": {
+									"item": "tube_scn",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:red",
+						"item:tube_control"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:red",
+						"item:tube_iron"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:red",
+						"item:tube_scn"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "More iron(III)",
+			"text": "Pick up the iron(III) nitrate, right-click the tube \"more iron(III)\", type 0.5 and click \"pour\". Hold it against the one as it is.",
+			"checks": [
+				{
+					"text": "iron(III) added",
+					"when": {
+						"quantity": {
+							"item": "tube_iron",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 5.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:iron",
+						"item:tube_iron"
+					]
+				},
+				{
+					"type": "0.5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "More thiocyanate",
+			"text": "Pick up the potassium thiocyanate, right-click the tube \"more thiocyanate\", type 0.5 and click \"pour\".",
+			"checks": [
+				{
+					"text": "thiocyanate added",
+					"when": {
+						"quantity": {
+							"item": "tube_scn",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 5.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:scn",
+						"item:tube_scn"
+					]
+				},
+				{
+					"type": "0.5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Chromate and dichromate",
+			"title": "Two tubes of chromate",
+			"text": "Pick up the potassium chromate, right-click the tube \"chromate: as it is\", type 5 and click \"pour\". The same into \"chromate: acid added\".",
+			"why": "2 CrO4 2- + 2 H+ <=> Cr2O7 2- + H2O: chromate is yellow, dichromate orange.",
+			"checks": [
+				{
+					"text": "5 mL in each",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "tube_yellow",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							},
+							{
+								"quantity": {
+									"item": "tube_acid",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:chromate",
+						"item:tube_yellow"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:chromate",
+						"item:tube_acid"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Acid",
+			"text": "Pick up the hydrochloric acid, right-click the tube \"chromate: acid added\", type 1 and click \"pour\".",
+			"checks": [
+				{
+					"text": "acid added",
+					"when": {
+						"quantity": {
+							"item": "tube_acid",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 5.8
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:tube_acid"
+					]
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Cobalt chloride",
+			"title": "Two tubes of the cobalt",
+			"text": "Pick up the cobalt chloride in acid, right-click the tube \"cobalt: at the room's 20 C\", type 5 and click \"pour\". The same into \"cobalt: warmed\".",
+			"why": "Co(H2O)6 2+ + 4 Cl- <=> CoCl4 2- + 6 H2O: the pink hydrated ion and the blue chloro complex, both there in so much chloride: a violet.",
+			"checks": [
+				{
+					"text": "5 mL in each",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "tube_cool",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							},
+							{
+								"quantity": {
+									"item": "tube_warm",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 4.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:cobalt",
+						"item:tube_cool"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:cobalt",
+						"item:tube_warm"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "One into the warm bath",
+			"text": "Pick up the tube \"cobalt: warmed\", then right-click the bath. In the menu, click \"stand it in\". Then click 10x on the clock.",
+			"checks": [
+				{
+					"text": "the tube in the bath",
+					"when": {
+						"item": "tube_warm",
+						"place": "in"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:tube_warm",
+						"item:bath"
+					]
+				},
+				{
+					"click": "panel:stand"
+				},
+				{
+					"click": "speed:10"
+				}
+			]
+		},
+		{
+			"title": "Until it is warm",
+			"text": "Watch the tube in the bath as it warms, and hold it against the other.",
+			"checks": [
+				{
+					"text": "the tube past 55 C",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "tube_warm",
+							"what": "celsius"
+						},
+						"compare": "above",
+						"value": 55
+					}
+				}
+			],
+			"play": null
+		}
+	]
+}

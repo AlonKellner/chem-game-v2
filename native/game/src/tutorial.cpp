@@ -379,6 +379,34 @@ std::unique_ptr<Tutorial> Tutorial::open(std::string_view tutorial_json, const L
 		return nullptr;
 	}
 	for (const json &j : doc.value("report", json::array())) {
+		if (j.is_object() && j.contains("choices")) {
+			// (Stage 85) {label, choices: [{label, truth}], single?, why?}: the choices whose truth is above zero, picked
+			TutorialReport item;
+			if (!j.contains("label") || !j["label"].is_string() || !j["choices"].is_array() || j["choices"].size() < 2 || j.value("predict", false)) {
+				why = "a report's choice is {\"label\", \"choices\": [{\"label\", \"truth\"}, ...] (two or more), \"single\"?, \"why\"?}";
+				return nullptr;
+			}
+			item.label = j["label"].get<std::string>();
+			item.single = j.value("single", false);
+			item.why = j.value("why", std::string());
+			for (const json &c : j["choices"]) {
+				if (!c.is_object() || !c.contains("label") || !c["label"].is_string() || !c.contains("truth") || !c["truth"].is_string()) {
+					why = "the report's \"" + item.label + "\": a choice is {\"label\", \"truth\"}";
+					return nullptr;
+				}
+				TutorialChoice choice{ c["label"].get<std::string>(), c["truth"].get<std::string>() };
+				double now = 0.0;
+				std::string why_not;
+				if (!evaluate(choice.truth, bench, now, why_not) && !(why_not == "a division by zero" || why_not.find("\" has none now") != std::string::npos ||
+																		 why_not.find(": not defined") != std::string::npos)) {
+					why = "the report's \"" + item.label + "\", \"" + choice.label + "\": " + why_not;
+					return nullptr;
+				}
+				item.choices.push_back(std::move(choice));
+			}
+			impl->report.push_back(std::move(item));
+			continue;
+		}
 		// (Stage 54) {label, unit, truth, ideal?, tolerance, relative?, why?}
 		if (!j.is_object() || !j.contains("label") || !j["label"].is_string() || !j.contains("truth") || !j["truth"].is_string() || !j.contains("tolerance") ||
 				!j["tolerance"].is_number() || !(j["tolerance"].get<double>() > 0.0)) {

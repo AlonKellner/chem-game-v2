@@ -1,0 +1,697 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 10) on data/benches/gravimetric.json: chloride by its silver chloride, filtered, washed, dried to constant mass and weighed.",
+	"title": "Experiment: chloride by weight",
+	"bench": "../benches/gravimetric.json",
+	"report": [
+		{
+			"label": "the chloride's concentration",
+			"unit": "mol/L",
+			"truth": "1000 * sample.chloride_ion.mol / sample.condensed_ml",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "[Cl-] = (the crucible with the precipitate, less the crucible) / 143.32 g/mol / 25.00 mL. The last two weighings agree: the precipitate was dry. Weighed wet it would read high by the water of its cake; unwashed, by the salts dried onto it."
+		}
+	],
+	"steps": [
+		{
+			"part": "The crucible",
+			"title": "The empty crucible weighed",
+			"text": "Pick up the crucible and click the balance: it stands on the pan. Right-click the balance and click \"+ mass\".",
+			"why": "The crucible's own mass, to take from its mass with the silver chloride in it: it was dried and cooled as the precipitate will be.",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "crucible"
+							},
+							{
+								"item": "scale",
+								"recorded": "reads_g"
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		},
+		{
+			"title": "Off the balance",
+			"text": "Pick up the crucible and click a free square.",
+			"checks": [
+				{
+					"text": "off the balance",
+					"when": {
+						"not": {
+							"item": "scale",
+							"under": "crucible"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"square:15,3"
+					]
+				}
+			]
+		},
+		{
+			"part": "The precipitate",
+			"title": "25.00 mL of the unknown",
+			"text": "Pick up the pipette, click the unknown (it draws to its mark), then click the beaker.",
+			"checks": [
+				{
+					"text": "the pipette on the beaker",
+					"when": {
+						"item": "pipette",
+						"on": "beaker"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:sample"
+					]
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:beaker"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Watch the pipette drain.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "The pipette away",
+			"text": "Pick up the pipette and click a free square.",
+			"checks": [
+				{
+					"text": "the pipette off the beaker",
+					"when": {
+						"not": {
+							"item": "pipette",
+							"on": "beaker"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:7,5"
+					]
+				}
+			]
+		},
+		{
+			"title": "Silver nitrate, in excess",
+			"text": "Pick up the silver nitrate, right-click the beaker, type 40 and click \"pour\": white silver chloride comes out.",
+			"why": "Ag+ + Cl- -> AgCl: 40 mL of 0.1 M is 4 mmol of silver, more than the chloride (at most 3.5 mmol), so all of it comes out. The nitric acid keeps carbonate and hydroxide from bringing silver out too.",
+			"checks": [
+				{
+					"text": "silver chloride in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "silver_chloride",
+						"above_g": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:silver",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "40"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Filtering",
+			"title": "The crucible on the suction flask",
+			"text": "Pick up the crucible and click the flask: it stands in the flask's neck, its frit drawn on by the pump.",
+			"checks": [
+				{
+					"text": "the crucible on the flask",
+					"when": {
+						"item": "crucible",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Pour it through",
+			"text": "Pick up the beaker, right-click the crucible, type 20 and click \"pour\". Click 10x on the clock.",
+			"checks": [
+				{
+					"text": "about 20 mL poured",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 52
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:crucible"
+					]
+				},
+				{
+					"type": "20"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "speed:10"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain into the flask.",
+			"checks": [
+				{
+					"text": "the crucible drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 2
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Again",
+			"text": "Pick up the beaker, right-click the crucible, type 20 and click \"pour\".",
+			"checks": [
+				{
+					"text": "about 40 mL poured",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 34
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:crucible"
+					]
+				},
+				{
+					"type": "20"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain into the flask.",
+			"checks": [
+				{
+					"text": "the crucible drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 2
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Again",
+			"text": "Pick up the beaker, right-click the crucible, type 20 and click \"pour\".",
+			"checks": [
+				{
+					"text": "about 60 mL poured",
+					"when": {
+						"item": "beaker",
+						"species": "water",
+						"below_g": 16
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:crucible"
+					]
+				},
+				{
+					"type": "20"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain into the flask.",
+			"checks": [
+				{
+					"text": "the crucible drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 2
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "The rest of the solid",
+			"text": "Pick up the beaker, right-click the crucible and click \"tip all of the solid\" (or \"pour it all\" first if any liquid is left).",
+			"checks": [
+				{
+					"text": "no silver chloride left in the beaker",
+					"when": {
+						"item": "beaker",
+						"species": "silver_chloride",
+						"below_g": 0.0002
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:crucible"
+					]
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:beaker",
+						"item:crucible"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain.",
+			"checks": [
+				{
+					"text": "the crucible drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 1
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Washed",
+			"text": "Pick up the wash water, right-click the crucible, type 10 and click \"pour\". Then again, once it has drained.",
+			"why": "What drained left a film of the solution in the cake and the frit: sodium nitrate and the silver nitrate's excess, which would dry onto the precipitate and weigh with it. Two washes take nearly all of it.",
+			"checks": [
+				{
+					"text": "washed once",
+					"when": {
+						"item": "water",
+						"species": "water",
+						"below_g": 391
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:crucible"
+					]
+				},
+				{
+					"type": "10"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain, then wash it once more.",
+			"checks": [
+				{
+					"text": "drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 1
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Washed again",
+			"text": "Pick up the wash water, right-click the crucible, type 10 and click \"pour\".",
+			"checks": [
+				{
+					"text": "washed twice",
+					"when": {
+						"item": "water",
+						"species": "water",
+						"below_g": 381
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:water",
+						"item:crucible"
+					]
+				},
+				{
+					"type": "10"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Until it has run through",
+			"text": "Watch the crucible drain. Its cake stays wet: the water of its pores and its frit's.",
+			"checks": [
+				{
+					"text": "drained",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 1
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"part": "Drying",
+			"title": "Into the oven",
+			"text": "Pick up the crucible and click the oven.",
+			"checks": [
+				{
+					"text": "the crucible in the oven",
+					"when": {
+						"item": "oven",
+						"under": "crucible"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"item:oven"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is dry",
+			"text": "Click 60x on the clock and watch the cake dry.",
+			"why": "At 110 C the water leaves the cake; weighed wet, the precipitate would read high by what it holds, half a gram.",
+			"checks": [
+				{
+					"text": "dry",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"species": "water",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Out, to cool",
+			"text": "Pick up the crucible and click a free square. Let it cool to the room's temperature.",
+			"why": "A warm crucible weighs light: the air it warms rises past the pan.",
+			"checks": [
+				{
+					"text": "out of the oven",
+					"when": {
+						"not": {
+							"item": "oven",
+							"under": "crucible"
+						}
+					}
+				},
+				{
+					"text": "cool",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"below_c": 22
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"square:15,3"
+					]
+				}
+			]
+		},
+		{
+			"part": "Weighing",
+			"title": "Weighed",
+			"text": "Pick up the crucible and click the balance. Right-click the balance and click \"+ mass\".",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "crucible"
+							},
+							{
+								"item": "scale",
+								"recorded": "reads_g",
+								"recorded_count": 2
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:1"
+				},
+				{
+					"drag": [
+						"item:crucible",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		},
+		{
+			"title": "Again, to constant mass",
+			"text": "Back into the oven for a few minutes, out to cool, and weigh it again: the same mass, within the balance's 0.2 mg, shows it was dry.",
+			"checks": [
+				{
+					"text": "in the oven again",
+					"when": {
+						"item": "oven",
+						"under": "crucible"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"item:oven"
+					]
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Warmed again",
+			"text": "Watch it warm in the oven.",
+			"checks": [
+				{
+					"text": "warmed",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"above_c": 60
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Out, to cool again",
+			"text": "Pick up the crucible and click a free square; let it cool.",
+			"checks": [
+				{
+					"text": "out of the oven",
+					"when": {
+						"not": {
+							"item": "oven",
+							"under": "crucible"
+						}
+					}
+				},
+				{
+					"text": "cool",
+					"wait": true,
+					"when": {
+						"item": "crucible",
+						"below_c": 22
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:crucible",
+						"square:15,3"
+					]
+				}
+			]
+		},
+		{
+			"title": "Weighed again",
+			"text": "Pick up the crucible and click the balance. Right-click the balance and click \"+ mass\".",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "crucible"
+							},
+							{
+								"item": "scale",
+								"recorded": "reads_g",
+								"recorded_count": 3
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:1"
+				},
+				{
+					"drag": [
+						"item:crucible",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		}
+	]
+}

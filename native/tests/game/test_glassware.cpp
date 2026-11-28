@@ -236,15 +236,27 @@ TEST_CASE("glassware: volumetric glassware is made to its standard's rows (Stage
 	CHECK(b.tip_bore < 0.15);
 	CHECK(b.tolerance_ml == 0.05);
 	CHECK(b.graduation_ml == 0.1);
-	// the bulb pipette (ISO 648): no longer than 530 mm, its bulb at most 24 mm across, its mark in the suction tube,
-	// whose inside there is at most 5.5 mm across
-	const Vessel &p = *find("pipette", 25);
-	CHECK(p.outlet);
-	CHECK(p.height <= 53.0);
-	CHECK(p.widest() <= 1.2 + 1e-9);
-	CHECK(2.0 * p.radius_inside(p.level(25.0)) <= 0.55);
-	CHECK(p.level(25.0) > 23.0 + 4.0); // over the bulb
-	CHECK(p.tip_bore > 0.03);
+	// the bulb pipettes (ISO 648-1977 Tables 1 to 4, class A; Stage 85: 5 and 10 mL beside the 25): no longer
+	// than its row, its bulb no wider, its mark in the suction tube, whose inside there is no wider than its row, at
+	// least 100 mm under the top; its delivery tube at least its row's; its tolerance its row's, its delivery time in its
+	// range
+	for (const auto &[ml, longest, bulb, inside, delivery, tolerance, fastest, slowest] :
+			{ std::tuple{ 5.0, 41.0, 1.2, 0.4, 14.5, 0.015, 15.0, 30.0 },
+					std::tuple{ 10.0, 45.0, 1.6, 0.45, 16.0, 0.020, 15.0, 40.0 }, std::tuple{ 25.0, 53.0, 2.4, 0.55, 22.0, 0.03, 25.0, 50.0 } }) {
+		CAPTURE(ml);
+		const Vessel &p = *find("pipette", ml);
+		CHECK(p.outlet);
+		CHECK(p.height <= longest);
+		CHECK(2.0 * p.widest() <= bulb + 1e-9);
+		const double mark = p.level(ml);
+		CHECK(2.0 * p.radius_inside(mark) <= inside);
+		CHECK(mark <= p.height - 10.0 + 1e-9);
+		CHECK(mark > delivery); // over the bulb, its delivery tube at least the row's under it
+		CHECK(p.tolerance_ml == tolerance);
+		CHECK(p.delivery_s >= fastest);
+		CHECK(p.delivery_s <= slowest);
+		CHECK(p.tip_bore > 0.01);
+	}
 	// volumetric flasks (ISO 1042): the mark in the neck's lower two thirds, its inside there 12-14 / 14-17 mm
 	for (const auto &[ml, lo, hi] : { std::tuple{ 100.0, 1.2, 1.4 }, std::tuple{ 250.0, 1.4, 1.7 } }) {
 		const Vessel &f = *find("volumetric_flask", ml);
@@ -302,7 +314,9 @@ TEST_CASE("glassware: every shape made at build time is the one glass::make make
 						 { built->marks_ml, made.marks_ml }, { built->marks_error, made.marks_error }, { built->tolerance_ml, made.tolerance_ml },
 						 { built->graduation_ml, made.graduation_ml }, { built->delivery_s, made.delivery_s }, { built->tip_bore, made.tip_bore }, { built->zero, made.zero },
 						 { built->stem, made.stem }, { built->cone_half_angle, made.cone_half_angle }, { built->paper_herzberg_s, made.paper_herzberg_s },
-						 { built->paper_height, made.paper_height }, { built->capacity_cached, made.capacity_cached } }) {
+						 { built->paper_height, made.paper_height }, { built->capacity_cached, made.capacity_cached }, { built->frit_area, made.frit_area },
+						 { built->frit_ml_min_cm2_bar, made.frit_ml_min_cm2_bar }, { built->suction_bar, made.suction_bar }, { built->holds_ml, made.holds_ml },
+						 { built->cake_porosity, made.cake_porosity } }) {
 				CHECK(std::memcmp(&a, &b, sizeof a) == 0);
 			}
 			CHECK(built->screw_cap == made.screw_cap);

@@ -15,7 +15,8 @@ namespace {
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
 			what == "fill" || what == "met" || what == "ph" || what == "us_cm" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
-			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended" || what == "plunger_ml" || what == "hand_n" || what == "locked";
+			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended" || what == "plunger_ml" || what == "hand_n" || what == "locked" ||
+			what == "flame_umol";
 }
 
 bool is_gas(const std::string &species) {
@@ -158,6 +159,16 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	}
 	if (q.what == "valve") {
 		return v->kind == "burner" ? std::optional<double>(100.0 * v->valve) : std::nullopt;
+	}
+	if (q.what == "flame_umol") { // (Stage 85) what a burner's flame holds of a flame test's drop, umol of every element in it
+		if (v->kind != "burner") {
+			return std::nullopt;
+		}
+		double all = 0.0;
+		for (const auto &[element, mol] : v->flame_load) {
+			all += mol * 1e6;
+		}
+		return all;
 	}
 	if (q.what == "absorbance" || q.what == "nm" || q.what == "holder" || v->kind == "spectrophotometer") { // (Stage 55) what it reads, what it is set to
 		if (v->kind != "spectrophotometer") {
@@ -310,7 +321,7 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 
 QuantityKind kind_of(const Quantity &q) {
 	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap" || q.what == "absorbance" || q.what == "nm" || q.what == "holder" || q.what == "hand_n" ||
-			q.what == "locked") {
+			q.what == "locked" || q.what == "flame_umol") {
 		return QuantityKind::Other;
 	}
 	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
@@ -387,6 +398,9 @@ std::string unit(const Quantity &q) {
 	if (q.what == "nm") {
 		return "nm";
 	}
+	if (q.what == "flame_umol") {
+		return "umol";
+	}
 	if (q.what == "us_cm") {
 		return "uS/cm";
 	}
@@ -448,6 +462,8 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "plunger's lock";
 	} else if (q.what == "tap") {
 		what = "tap";
+	} else if (q.what == "flame_umol") {
+		what = "in its flame";
 	} else if (q.what == "mark_off_ml") {
 		what = "from its mark";
 	} else if (q.what == "kpa") {
@@ -813,7 +829,7 @@ bool holds(const Cond &c, const CondContext &x) {
 		}
 	}
 	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
-		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to) || (c.stands_in && v.stands_in != *c.stands_in)) {
+		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to) || (c.stands_in && v.stands_in != *c.stands_in) || (c.probe_on && v.probe_on != *c.probe_on)) {
 		return false;
 	}
 	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst) || (c.slot && v.slot != *c.slot)) {

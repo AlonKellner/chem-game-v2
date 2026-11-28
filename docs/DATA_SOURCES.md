@@ -966,6 +966,7 @@ ISO 1042-1981 and ISO 4788:2005), 2026-11-25. Class A throughout.
 |---|---|---|---|
 | Burette, 50 mL | ±0.05 mL | divisions 0.1 mL; scale 500–600 mm (used: 550); at most 820 mm (750); zero line 50 mm from the top; lowest line 50 mm over the stopcock; jet 50 mm under it; delivery 60–100 s (80); outside 13 mm | ISO 385:2005 Tables 1–2; ISO 385/2-1984; a class A catalogue (ASTM) for the diameter |
 | Bulb pipette, 25 mL | ±0.03 mL | at most 530 mm (510, a maker's); bulb at most 24 mm (22); delivery tube 7 ± 1 mm, at least 220 mm (230); inside at the mark at most 5.5 mm (4.5); wall at least 1.0 mm; delivery 25–50 s (35) | ISO 648-1977 Tables 1–4 |
+| Bulb pipettes, 5 / 10 mL (Stage 85) | ±0.015 / ±0.020 mL | at most 410 / 450 mm (395 / 435); bulb at most 12 / 16 mm (12 / 15); delivery tube 6.5 ± 1 mm, at least 145 / 160 mm (150 / 165); inside at the mark at most 4 / 4.5 mm (3.5 / 4.0); wall at least 1.0 mm; the mark at least 100 mm under the top; delivery 15–30 / 15–40 s (22 / 27) | ISO 648-1977 Tables 1–4 (the same iTeh preview, read again 2026-11-28: printed pages 2–4). The 1 and 2 mL rows (±0.008 / ±0.010 mL) are not made: in one wall throughout, a delivery tube 5 mm across holds more than 1 mL |
 | Volumetric flask, 100 / 250 mL | ±0.10 / ±0.15 mL | neck inside at the mark 12–14 / 14–17 mm (13 / 15.5); height 170 / 220 mm; bulb about 60 / 80 mm; base 40 / 55 mm; the mark in the neck's lower two thirds | ISO 1042-1981 Tables 1–3 |
 | Measuring cylinder, 10 / 25 / 100 mL | ±0.1 / ±0.25 / ±0.5 mL | subdivisions 0.2 / 0.5 / 1 mL; at most 140 / 170 / 260 mm; the top at least 20 / 25 / 35 mm over the highest line (22 / 27 / 37); 100 mL outside 29 mm (DURAN) | ISO 4788:2005 Table 1 |
 
@@ -1470,8 +1471,8 @@ measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each com
 | Zn(OH)₃⁻ | −28.091 (with 3 H₂O, 3 H⁺) | 0 (MINTEQ's: none measured) | MINTEQ v4 line 766 (NIST 46.3) |
 | Zn(OH)₄²⁻ | −40.488 (4 H₂O, 4 H⁺) | 0 | MINTEQ v4 line 774; NBS's ΔfG° −858.52 would give −41.53 |
 | Al(OH)₄⁻ | −22.688 (4 H₂O, 4 H⁺) | 173.24 | MINTEQ v4 line 710 (NIST 46.3); NBS's row (−1502.5, 102.9) beside the model's −1501.1, 104.8 |
-| FeSCN²⁺ | **3.5085, calibrated** (2.981 by Davies) | −6.694 | Below, Connick and Coppel 1958 (JACS 80, 2961, p. 2963): Q₁ = 146 ± 5 at μ = 0.40 (perchlorate), 25 C, ΔH₁ −1600 cal. To μ = 0 by Davies (A 0.5091, Δz² −6) it is 2.981; with that, the model (Pitzer's, no pair for iron(III): Debye–Hückel alone) gives 43 at 0.40. **Calibrated**: the constant that gives 146 at 0.40 in the model's own activities (nitrate in place of perchlorate). At 1.00 Below et al. measured 123; the model gives about 45 (its iron(III) activity falls too fast: Open) |
-| Fe(SCN)₂⁺ | **5.6655, calibrated** | −11.0 | Calibrated to Lister and Rivington's Q₂ = 15.5 at μ = 0.5, 25 C (spectrophotometric; Below et al.'s Table I; Laurence's e.m.f. 20.5 at 0.5, Betts and Dainton's 20 at 1.28 beside it). Its heat Ozutsumi et al. 1992's ΔH₂ −11.0 kJ (p. 524) |
+| FeSCN²⁺ | **2.8909, calibrated** (2.981 by Davies; Stage 81's 3.5085) | −6.694 | Below, Connick and Coppel 1958 (JACS 80, 2961, pp. 2963, 2965): Q₁ = 146 ± 5 at μ = 0.40 and 123 at 1.00 (perchlorate), 25 C, ΔH₁ −1600 cal. To μ = 0 by Davies (A 0.5091, Δz² −6) it is 2.981. Stage 81 calibrated the constant alone at 0.40, iron(III) with no pair of its own (Debye–Hückel alone): 45 at 1.00. **Stage 85**: iron(III)'s pairs (with nitrate chromium(III) nitrate's, Pitzer and Mayorga 1973 Table VIII, its own not measured; with chloride Millero and Pierrot 2007's), and FeSCN²⁺'s with nitrate (Ca(NO₃)₂'s β1 and Cφ, β0 **calibrated** to 0.587, the one that gives Below et al.'s 0.84 between the two strengths); the constant then the one that gives 146 at 0.40: 123.0 at 1.00 (Below et al.'s at both, nitrate in place of perchlorate). Past 1.0 (a standard of 0.1–0.2 M iron(III) nitrate, μ 1.2–1.7) there is no measurement: the model takes up 84 % of the thiocyanate there (a real standard about 95 %), so experiment 43 is Benesi and Hildebrand's (iron at 2–20 mM, μ about 0.5) |
+| Fe(SCN)₂⁺ | **4.5923, calibrated** (Stage 81: 5.6655) | −11.0 | Calibrated (Stage 85: again, with iron(III)'s and FeSCN²⁺'s pairs) to Lister and Rivington's Q₂ = 15.5 at μ = 0.5, 25 C (spectrophotometric; Below et al.'s Table I; Laurence's e.m.f. 20.5 at 0.5, Betts and Dainton's 20 at 1.28 beside it). Its heat Ozutsumi et al. 1992's ΔH₂ −11.0 kJ (p. 524) |
 | CoCl₄²⁻ | **−13.256, calibrated** (ThermoChimie −2.09) | 22.57 | ThermoChimie, PHREEQC's sit.dat line 2971 (Blanc et al. 2006): −2.09 and 22.57 kJ, with which the model put all of the cobalt blue from 7 M HCl (its chloride's activity that far past Pitzer's range rises steeply). **Calibrated** to Bjerrum, Halonin and Skibsted 1975 (Acta Chem. Scand. A 29, 326), Table 1 p. 328, α₄ = 0.496 in 8.23 M HCl at 25.0 C (their HCl rows 5.13 to 12.13 M: 0.166 at 7.12 M, 0.765 at 9.17 M); the model gives 0.0085 and 0.986 there, its rise about three times steeper (Open). Molarity to molality by the model's own volume. CoCl⁺, CoCl₂ and CoCl₃⁻ (lines 2953 to 2965) are left out: with the model's Debye–Hückel alone for complexes and Pitzer and Mayorga's CoCl₂ pair (fitted as wholly dissociated) the four together did not settle in strong hydrochloric acid |
 | HCrO₄⁻ | 6.477 (MINTEQ 6.51) | 2.95 | NBS's rows, p. 2-197 (CrO₄²⁻ −881.15, 50.21; HCrO₄⁻ −878.2, 184.1); MINTEQ v4 line 4984 |
 | Cr₂O₇²⁻ (2 CrO₄²⁻ + 2 H⁺) | 14.51 (MINTEQ 14.56) | −13.83 | NBS's row (−1490.3, 261.9); MINTEQ v4 line 5000 |
@@ -1567,6 +1568,36 @@ burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
   bound as SrOH, its 460.7 nm line a trace and its flame crimson;
   Cu 0.5, its atoms barely excited at 2200 K, its green its CuOH's: their flames are their monohydroxides' colours,
   Gaydon's and Meyerriecks and Kosanke's), at another temperature by Boltzmann's factor for each band's photon, a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).
+
+## Filter crucible and drying oven (Stage 85)
+
+For experiment 10, chloride by weight (`docs/TDD_85_ANALYSIS.md`). **Design and calibrated**, not measured:
+- **The crucible**: a 30 mL sintered glass filter crucible, 40 mm across, 50 mm high, of the order makers list. Its frit
+  (porosity P16, pores 10–16 µm by ISO 4793's classes) passes 3 mL of water a minute through a cm² under a bar, the
+  order a maker's porosity-4 frit is given; on a suction flask, a water pump's 0.85 bar under it (suction is not
+  modelled as a pressure in the flask: the frit's flow is its law, Darcy's, under the pump's difference and the liquid's
+  own head). Drained, it holds 0.6 mL in its frit (3 mm of frit, a third of it pores) and its cake the water of its
+  pores, the cake half pores (a packed bed of fine grains, 0.4 to 0.6): a wet cake, which only drying takes.
+- **The oven**: a reservoir at 110 °C and 0.3 W/K to what stands in it (a crucible's convection in an oven's air): a wet
+  cake dries in about twenty minutes, the crucible near 86 °C while its water evaporates.
+
+## Discharge lamps (Stage 85)
+
+`data/lamps.json` (`docs/TDD_85_ANALYSIS.md`). Read 2026-11-28. Gate: `measured: a discharge lamp's lines are NIST's, at
+the relative intensities its sources observed`.
+- **Lines**: the NIST Atomic Spectra Database v5 (Kramida, Ralchenko, Reader and the NIST ASD Team), lines query 380 to
+  780 nm, air wavelengths, H I, He I, Hg I and Ne I, every line with an observed relative intensity ("Rel. Int."):
+  hydrogen's seven Balmer multiplets (Hα 656.279 at 500000, Hβ 486.135 at 180000, Hγ 434.0472 at 90000, Hδ 410.1734 at
+  70000, to H9 383.5397), helium's 19 of 1 % of its strongest or more (587.5621 and 388.8648 at 500), mercury's 15
+  (404.6565 and 435.8335 at 12000, 546.0750 at 6000), neon's 158 (692.94672 at 100000). Helium's fine-structure
+  components share one intensity (NIST's `*`): taken once. NIST's relative intensities are as their sources observed
+  them in discharges, in no one unit and not a radiometric calibration: a lamp's lines against each other only. The
+  Rydberg formula through the Balmer lines (air's index 1.000277) gives hydrogen's R within 2e-4 of 1.09678e7 m⁻¹.
+- **Calibrated**: a lamp's light, all its lines together: hydrogen's 240 times the room's white at 560 nm times a
+  nanometre, a pixel of path through its tube (as bright as a fresh drop's sodium flame, Stage 82); helium's 111,
+  mercury's 118 and neon's 220, so each one's brightest linear sRGB channel is hydrogen's. NIST's intensities for neon
+  give its blue-green lines (470–495 nm) a quarter of its light: its tube is drawn pink, not a neon glow's orange-red
+  (TDD 85, Open).
 
 ## Solution kinetics (Stage 87)
 

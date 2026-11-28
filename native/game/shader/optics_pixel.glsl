@@ -226,9 +226,10 @@ vec2 thing_at(vec4 form, vec4 rect, vec4 more, vec2 p) {
 		float inside = phase <= on ? min(phase, on - phase) : -min(phase - on, form.w - phase);
 		return vec2(min(across, inside), 0.0);
 	}
-	// a cone, its apex at the top's centre: its round section there, seen from the side
+	// a cone, its apex at the top's centre: its round section there, seen from the side; (Stage 85) a tube (form.w
+	// over a half: a discharge lamp's) as wide at every height
 	float from_axis = p.x - (rect.x + rect.z * 0.5);
-	float reach = rect.z * 0.5 * clamp((p.y - rect.y) / max(rect.w, 1.0e-3), 0.0, 1.0);
+	float reach = rect.z * 0.5 * (form.w > 0.5 ? 1.0 : clamp((p.y - rect.y) / max(rect.w, 1.0e-3), 0.0, 1.0));
 	float inside = min(reach - abs(from_axis), min(p.y - rect.y, rect.y + rect.w - p.y));
 	return vec2(inside, 2.0 * sqrt(max(reach * reach - from_axis * from_axis, 0.0)));
 }

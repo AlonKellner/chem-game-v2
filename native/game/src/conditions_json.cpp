@@ -145,6 +145,10 @@ bool CondReader::cond(const json &j, Cond &c) {
 			std::string id;
 			ok = item(v, "stands_in", id);
 			c.stands_in = id;
+		} else if (key == "probe_on") { // (Stage 85) a spectral viewer's probe on an item
+			std::string id;
+			ok = item(v, "probe_on", id);
+			c.probe_on = id;
 		} else if (key == "on" || key == "under" || key == "drains_to") {
 			std::string id;
 			ok = item(v, key.c_str(), id);

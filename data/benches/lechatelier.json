@@ -1,0 +1,29 @@
+{
+	"format": "chem-bench/2",
+	"note": "Le Chatelier's principle (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 42): three equilibria in test tubes, each beside an untouched one to compare it with. Fe3+ + SCN- <=> FeSCN2+ (red), more of either reactant added; 2 CrO4 2- + 2 H+ <=> Cr2O7 2- + H2O (yellow to orange), acid added; Co(H2O)6 2+ + 4 Cl- <=> CoCl4 2- + 6 H2O (pink to blue, absorbing heat), one tube warmed in a bath at 80 C.",
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "red", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [0, 8], "label": "iron(III) thiocyanate, at equilibrium",
+			"contents": {"water": {"g": 40}, "iron_iii_nitrate_aq": {"mol": 0.00008}, "potassium_thiocyanate_aq": {"mol": 0.00008}, "nitric_acid_aq": {"mol": 0.004}}},
+		{"id": "iron", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [3, 8], "label": "iron(III) nitrate, 0.1 M",
+			"contents": {"water": {"g": 25}, "iron_iii_nitrate_aq": {"mol": 0.0025}, "nitric_acid_aq": {"mol": 0.0025}}},
+		{"id": "scn", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [6, 8], "label": "potassium thiocyanate, 0.1 M",
+			"contents": {"water": {"g": 25}, "potassium_thiocyanate_aq": {"mol": 0.0025}}},
+		{"id": "chromate", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [9, 8], "label": "potassium chromate, 0.1 M",
+			"contents": {"water": {"g": 25}, "potassium_chromate_aq": {"mol": 0.0025}}},
+		{"id": "acid", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [12, 8], "label": "hydrochloric acid, 1 M",
+			"contents": {"water": {"g": 25}, "hydrochloric_acid_aq": {"mol": 0.025}}},
+		{"id": "cobalt", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [15, 8], "label": "cobalt(II) chloride in hydrochloric acid",
+			"contents": {"water": {"g": 25}, "cobalt_chloride_aq": {"mol": 0.00125}, "hydrochloric_acid_aq": {"mol": 0.25}}},
+		{"id": "bath", "kind": "vessel", "glassware": "beaker", "volume_ml": 250, "wall": "glass", "wall_g": 80, "at": [20, 7], "label": "a water bath, 80 C", "celsius": 80,
+			"contents": {"water": {"g": 150}}},
+		{"id": "tube_control", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [0, 0], "label": "red: as it is"},
+		{"id": "tube_iron", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [2, 0], "label": "red: more iron(III)"},
+		{"id": "tube_scn", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [4, 0], "label": "red: more thiocyanate"},
+		{"id": "tube_yellow", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [8, 0], "label": "chromate: as it is"},
+		{"id": "tube_acid", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [10, 0], "label": "chromate: acid added"},
+		{"id": "tube_cool", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [14, 0], "label": "cobalt: at the room's 20 C"},
+		{"id": "tube_warm", "kind": "vessel", "glassware": "test_tube", "volume_ml": 18, "wall": "glass", "wall_g": 25, "at": [16, 0], "label": "cobalt: warmed"}
+	]
+}

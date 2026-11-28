@@ -262,6 +262,12 @@ inline constexpr double MOST_IONIC_STRENGTH = 20.0;
 bool among_dissolved(const SpeciesTable &table, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellState &cell, std::span<const Term> terms);
 bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms);
+// (Stage 85) The most of `most` quanta of extent a reaction may take in its direction before its cell's solution passes
+// the activity model's range: no fast equilibrium carries a solution past it (water boiled off a drop of limewater left
+// its ions with a quantum of water, where Pitzer's sums diverge, ln gamma near -3.5e5, and the film's entropy was no
+// function of its state: diluted again, the world's entropy fell). Along an extent the ionic strength is
+// K (A + B x) / (L + D x), so the bound is exact. A solution past the range already is left to `stands`: `most`.
+int64_t within_range(const SpeciesTable &table, const CellMixtures &mixtures, std::span<const Term> terms, bool forward, int64_t most);
 
 // (Stage 87, GAME_SPEC §7) A solution law's activity factor, as its ln: prod_j gamma_j^n_j over its ordered species,
 // over gamma of the activated complex (a particle of their charge, sum_j n_j z_j, with Debye and Hückel's part of the
