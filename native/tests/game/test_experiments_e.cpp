@@ -5,6 +5,7 @@
 #include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
 
 #include "pupil.hpp"
 
@@ -162,5 +163,103 @@ TEST_CASE("experiment lechatelier: followed with its own gestures, free, it comp
 	Pupil p("data/benches/lechatelier.json", "data/tutorials/lechatelier.json", false);
 	pupil::follow_through(p, 1800);
 	completed(p);
+}
+
+
+TEST_CASE("experiment qualitative: followed with its own gestures, strict, the tests and the flame tell the unknown's ions, and the right choices are right (Stage 85)") {
+	Pupil p("data/benches/qualitative.json", "data/tutorials/qualitative.json");
+	CHECK(pupil::follow_through(p, 600) > 6);
+	completed(p);
+	// the choices that hold, picked: right; another: not
+	for (size_t k = 0; k < 2; ++k) {
+		const auto &choices = p.ui->tutorial()->report()[k].choices;
+		int holds = 0;
+		for (size_t i = 0; i < choices.size(); ++i) {
+			if (truth_of(p, choices[i].truth) > 0.0) {
+				p.click("report:" + std::to_string(k) + ":" + std::to_string(i));
+				++holds;
+				MESSAGE(p.ui->tutorial()->report()[k].label << ": " << choices[i].label);
+			}
+		}
+		CHECK(holds == 1);
+	}
+	p.click("report:check");
+	p.ui->frame(1.0 / 60.0);
+	CHECK(!p.drawn("not quite"));
+}
+
+TEST_CASE("experiment qualitative: played as a person plays it, strict, it completes (Stage 85)") {
+	Pupil p("data/benches/qualitative.json", "data/tutorials/qualitative.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment qualitative: followed with its own gestures, free, it completes (Stage 85)") {
+	Pupil p("data/benches/qualitative.json", "data/tutorials/qualitative.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment qualitative: each of the twelve salts answers its own tests and none of the others' (Stage 85)") {
+	const nlohmann::json bench = nlohmann::json::parse(pupil::read("data/benches/qualitative.json"));
+	nlohmann::json unknown;
+	for (const nlohmann::json &i : bench.at("items")) {
+		if (i.at("id") == "unknown") {
+			unknown = i;
+		}
+	}
+	for (const nlohmann::json &salt : unknown.at("one_of")) {
+		std::string name;
+		for (const auto &[k, v] : salt.items()) {
+			name = k == "water" ? name : k;
+		}
+		CAPTURE(name);
+		nlohmann::json b = bench;
+		for (nlohmann::json &i : b.at("items")) {
+			if (i.at("id") == "unknown") {
+				i.erase("one_of");
+				i["contents"] = salt;
+			}
+		}
+		std::string why;
+		auto l = lab::Lab::open(b.dump(), why);
+		REQUIRE_MESSAGE(l != nullptr, why);
+		const auto ok = [&](const std::string &c) { REQUIRE_MESSAGE(l->command(c, why), c << ": " << why); };
+		for (const auto &[tube, reagent] : { std::pair{ "tube_1", "silver" }, std::pair{ "tube_2", "barium" }, std::pair{ "tube_3", "acid" }, std::pair{ "tube_4", "base" } }) {
+			ok(std::string(R"({"do": "pour", "from": "unknown", "to": ")") + tube + R"(", "ml": 3})");
+			ok(std::string(R"({"do": "pour", "from": ")") + reagent + R"(", "to": ")" + tube + R"(", "ml": 1})");
+		}
+		ok(R"({"do": "valve", "burner": "burner", "to": 1})");
+		ok(R"({"do": "flame_test", "burner": "burner", "from": "unknown"})");
+		const auto g = [&](const char *tube, const char *species) {
+			double v = 0.0;
+			std::string w;
+			lab::evaluate(std::string(tube) + "." + species, l->view(), v, w);
+			return v;
+		};
+		const lab::ItemView burner = [&] {
+			for (const lab::ItemView &v : l->view().items) {
+				if (v.id == "burner") {
+					return v;
+				}
+			}
+			return lab::ItemView{};
+		}();
+		std::string flame;
+		for (const auto &[element, mol] : burner.flame_load) {
+			flame += element;
+		}
+		ok(R"({"do": "wait", "seconds": 5})");
+		const bool chloride = name.find("chloride") != std::string::npos, sulfate = name.find("sulfate") != std::string::npos, carbonate = name.find("carbonate") != std::string::npos;
+		CHECK((g("tube_1", "silver_chloride") > 0.001) == chloride); // 0.3 mmol of AgCl is 43 mg
+		CHECK((g("tube_2", "barium_sulfate") > 0.001) == sulfate);
+		CHECK((g("tube_3", "carbon_dioxide") + g("tube_3", "carbon_dioxide_aq") > 0.002) == carbonate); // (0.3 mmol of carbonate: 13 mg of CO2; the room's in a tube's air, micrograms)
+		CHECK((g("tube_4", "copper_hydroxide") > 0.001) == (name.find("copper") != std::string::npos));
+		CHECK((g("tube_4", "iron_iii_hydroxide") > 0.001) == (name.find("iron") != std::string::npos));
+		// the flame: the metal's atoms in it (sodium's from the salt, not from a reagent)
+		const std::string metal = name.substr(0, name.find('_'));
+		const std::string symbol = metal == "sodium" ? "Na" : metal == "lithium" ? "Li" : metal == "calcium" ? "Ca" : metal == "barium" ? "Ba" : metal == "copper" ? "Cu" : "Fe"; // (iron's held, not coloured)
+		CHECK(flame == symbol);
+	}
 }
 

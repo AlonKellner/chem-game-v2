@@ -6197,7 +6197,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			}
 			for (int e = 0; e < t.element_count(); ++e) {
 				const std::string symbol(t.element(e).symbol);
-				if (def.atoms[static_cast<size_t>(e)] > 0 && flame::shows(symbol)) {
+				// (Stage 85) each metal of its positive ions: every one held in the flame, those flame.json has lines for
+				// coloured (iron's flame keeps its own colour, and the flame test was still made)
+				const bool metal = def.charge > 0 && symbol != "H" && symbol != "C" && symbol != "N" && symbol != "O";
+				if (def.atoms[static_cast<size_t>(e)] > 0 && (metal || flame::shows(symbol))) {
 					const double mol = share * static_cast<double>(state.amount[s]) * MOL_PER_QUANTUM * def.atoms[static_cast<size_t>(e)];
 					auto at = std::find_if(flame.flame_load.begin(), flame.flame_load.end(), [&](const auto &x) { return x.first == symbol; });
 					if (at == flame.flame_load.end()) {
@@ -6205,7 +6208,7 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 					} else {
 						at->second += mol;
 					}
-					any = true;
+					any = any || flame::shows(symbol);
 				}
 			}
 		}

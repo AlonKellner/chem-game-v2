@@ -198,3 +198,18 @@ TEST_CASE("analysis: very soluble salts boiled down stop at the activity model's
 		}
 	}
 }
+
+TEST_CASE("scratch85c: FeSCN standards and mixtures") {
+	for (const auto &[fe, scn, hno3] : { std::tuple{ 0.05, 0.0002, 0.5 }, std::tuple{ 0.1, 0.0002, 0.5 }, std::tuple{ 0.2, 0.0002, 0.5 }, std::tuple{ 0.1, 0.0002, 0.1 }, std::tuple{ 0.2, 0.0002, 0.1 },
+				 std::tuple{ 0.001, 0.0002, 0.5 }, std::tuple{ 0.001, 0.0006, 0.5 }, std::tuple{ 0.001, 0.001, 0.5 }, std::tuple{ 0.001, 0.0002, 0.1 }, std::tuple{ 0.001, 0.001, 0.1 } }) {
+		const std::string bench = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+			{"id": "b", "at": [6, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 100}, "iron_iii_nitrate_aq": {"mol": )" +
+			std::to_string(fe * 0.1) + R"(}, "potassium_thiocyanate_aq": {"mol": )" + std::to_string(scn * 0.1) + R"(}, "nitric_acid_aq": {"mol": )" + std::to_string(hno3 * 0.1) + R"(}}}]})";
+		std::string why;
+		auto l = lab::Lab::open(bench, why);
+		REQUIRE_MESSAGE(l != nullptr, why);
+		const double c1 = of(*l, "b.iron_thiocyanate.mol"), c2 = of(*l, "b.iron_dithiocyanate.mol"), free_scn = of(*l, "b.thiocyanate_ion.mol"), free_fe = of(*l, "b.iron_iii_ion.mol"),
+					 ml = of(*l, "b.condensed_ml");
+		MESSAGE("Fe " << fe << " SCN " << scn << " HNO3 " << hno3 << ": FeSCN share of SCN " << (c1 + 2 * c2) / (scn * 0.1) << ", Q " << (c1 / ml * 1000) / ((free_fe / ml * 1000) * (free_scn / ml * 1000)) << ", Fe free share " << free_fe / (fe * 0.1));
+	}
+}

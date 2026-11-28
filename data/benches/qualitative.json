@@ -1,0 +1,278 @@
+{
+	"format": "chem-bench/2",
+	"note": "Qualitative analysis (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 12): an unknown, one of twelve salts drawn by the seed (sodium, lithium, calcium, barium, copper(II) or iron(III); chloride, sulfate, carbonate or nitrate), each 0.1 M. Its anion by acidified silver nitrate (white silver chloride), acidified barium chloride (white barium sulfate) and acid (carbonate's carbon dioxide); its cation by sodium hydroxide (blue copper(II) hydroxide, brown iron(III) hydroxide) and a flame test (sodium's yellow, lithium's crimson, calcium's orange-red, barium's green). A nitrate answers none of the anion's tests.",
+	"seed": 12,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "unknown",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				0,
+				8
+			],
+			"label": "unknown A: one salt, 0.1 M",
+			"one_of": [
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_sulfate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_carbonate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"copper_sulfate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"iron_iii_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"barium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"barium_nitrate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"calcium_nitrate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"lithium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"lithium_nitrate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"iron_iii_nitrate_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_nitrate_aq": {
+						"mol": 0.003
+					}
+				}
+			]
+		},
+		{
+			"id": "silver",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				3,
+				8
+			],
+			"label": "silver nitrate, 0.1 M, in 1 M nitric acid",
+			"contents": {
+				"water": {
+					"g": 25
+				},
+				"silver_nitrate_aq": {
+					"mol": 0.0025
+				},
+				"nitric_acid_aq": {
+					"mol": 0.025
+				}
+			}
+		},
+		{
+			"id": "barium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				6,
+				8
+			],
+			"label": "barium chloride, 0.1 M, in 1 M hydrochloric acid",
+			"contents": {
+				"water": {
+					"g": 25
+				},
+				"barium_chloride_aq": {
+					"mol": 0.0025
+				},
+				"hydrochloric_acid_aq": {
+					"mol": 0.025
+				}
+			}
+		},
+		{
+			"id": "acid",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				9,
+				8
+			],
+			"label": "hydrochloric acid, 2 M",
+			"contents": {
+				"water": {
+					"g": 25
+				},
+				"hydrochloric_acid_aq": {
+					"mol": 0.05
+				}
+			}
+		},
+		{
+			"id": "base",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				12,
+				8
+			],
+			"label": "sodium hydroxide, 1 M",
+			"contents": {
+				"water": {
+					"g": 25
+				},
+				"sodium_hydroxide_aq": {
+					"mol": 0.025
+				}
+			}
+		},
+		{
+			"id": "tube_1",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				0,
+				0
+			],
+			"label": "1: silver nitrate"
+		},
+		{
+			"id": "tube_2",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				2,
+				0
+			],
+			"label": "2: barium chloride"
+		},
+		{
+			"id": "tube_3",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				4,
+				0
+			],
+			"label": "3: acid"
+		},
+		{
+			"id": "tube_4",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				6,
+				0
+			],
+			"label": "4: sodium hydroxide"
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25,
+			"at": [
+				18,
+				9
+			]
+		}
+	]
+}
