@@ -1658,6 +1658,101 @@ TEST_CASE("experiment peroxide: followed with its own gestures, free, it complet
 	completed(p);
 }
 
+namespace {
+
+// (Stage 91) a spectrophotometer's clock times, as a student reads them off the plot: its absorbance log in runs (a gap of
+// over 2 s between readings starts another), each run's clock the time of its first reading above `above` less the time of
+// its first reading (the pour)
+std::vector<double> clock_times(const lab::LabView &v, const std::string &spec, double above) {
+	std::vector<double> times;
+	double start = -1.0, last = -10.0;
+	bool turned = false;
+	for (const lab::NoteEntry &e : v.notebook) {
+		if (e.quantity.item != spec || e.quantity.what != "absorbance") {
+			continue;
+		}
+		const double s = static_cast<double>(e.step) / 60.0;
+		if (s - last > 2.0) {
+			start = s;
+			turned = false;
+		}
+		last = s;
+		if (!turned && e.value > above) {
+			times.push_back(s - start);
+			turned = true;
+		}
+	}
+	return times;
+}
+
+} // namespace
+
+TEST_CASE("experiment iodine_clock: followed with its own gestures, strict, the clock first order in iodide and in persulfate, k and Ea the model's (Stage 91)") {
+	Pupil p("data/benches/iodine_clock.json", "data/tutorials/iodine_clock.json");
+	CHECK(pupil::follow_through(p, 7200) > 10);
+	completed(p);
+	const lab::LabView &v = p.ui->lab().view();
+	const std::vector<double> one = clock_times(v, "spec1", 0.003), two = clock_times(v, "spec2", 0.003);
+	REQUIRE(one.size() == 2);
+	REQUIRE(two.size() == 2);
+	const double a = one[0], b = two[0], c = one[1], d = two[1];
+	const double in_iodide = std::log(b / a) / std::log(2.0), in_persulfate = std::log(c / a) / std::log(2.0);
+	const double k = 0.0010 / (2.0 * a) / (0.020 * 0.050), ea = 8.314e-3 * std::log(a / d) / (1.0 / 298.15 - 1.0 / 308.15);
+	MESSAGE("clocks A " << a << ", B " << b << ", C " << c << ", D " << d << " s; orders " << in_iodide << ", " << in_persulfate << "; k " << k << " /M/s; Ea " << ea << " kJ/mol");
+	CHECK(in_iodide == doctest::Approx(1.0).epsilon(0.1));
+	CHECK(in_persulfate == doctest::Approx(1.0).epsilon(0.1));
+	CHECK(ea == doctest::Approx(51.39).epsilon(0.15));
+	report(p, { a, b, in_iodide, in_persulfate, k, ea });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 1"));
+}
+
+TEST_CASE("experiment iodine_clock: played as a person plays it, strict, it completes (Stage 91)") {
+	Pupil p("data/benches/iodine_clock.json", "data/tutorials/iodine_clock.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment iodine_clock: followed with its own gestures, free, it completes (Stage 91)") {
+	Pupil p("data/benches/iodine_clock.json", "data/tutorials/iodine_clock.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment redox_titration: followed with its own gestures, strict, permanganate takes five iron(II), thiosulfate two iodines (Stage 91)") {
+	Pupil p("data/benches/redox_titration.json", "data/tutorials/redox_titration.json");
+	CHECK(pupil::follow_through(p, 7200) > 20);
+	completed(p);
+	// what was run in: the flask's liquid less the pipette's
+	const double permanganate_ml = p.item("flask1").condensed_ml - *p.item("pipette1").mark_ml;
+	const double thiosulfate_ml = p.item("flask2").condensed_ml - *p.item("pipette2").mark_ml;
+	const double iron = 5.0 * 0.0200 * permanganate_ml / 25.0, iodine = 0.100 * thiosulfate_ml / (2.0 * 25.0);
+	MESSAGE("permanganate " << permanganate_ml << " mL: iron(II) " << iron << " M; thiosulfate " << thiosulfate_ml << " mL: iodine " << iodine << " M");
+	CHECK(permanganate_ml > 23.0);
+	CHECK(permanganate_ml < 27.0);
+	CHECK(thiosulfate_ml > 23.0);
+	CHECK(thiosulfate_ml < 27.0);
+	// at the end points: a pale pink, no iron(II) left; no iodine left, little thiosulfate past it
+	CHECK(p.grams("flask1", "permanganate_ion") / 118.936 < 5e-6);
+	CHECK(p.grams("flask1", "iron_ii_ion") / 55.845 < 1e-9);
+	CHECK(p.grams("flask2", "thiosulfate_ion") / 112.13 < 1e-5);
+	report(p, { 5.0, permanganate_ml, iron, thiosulfate_ml, iodine });
+	CHECK(p.drawn("yours is within it"));
+	CHECK(p.drawn("you predicted 5"));
+}
+
+TEST_CASE("experiment redox_titration: played as a person plays it, strict, it completes (Stage 91)") {
+	Pupil p("data/benches/redox_titration.json", "data/tutorials/redox_titration.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment redox_titration: followed with its own gestures, free, it completes (Stage 91)") {
+	Pupil p("data/benches/redox_titration.json", "data/tutorials/redox_titration.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+
 TEST_CASE("experiment molar_volume: played as a person plays it, strict, it completes (Stage 79)") {
 	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
 	pupil::play_as_person(p, 3600);
