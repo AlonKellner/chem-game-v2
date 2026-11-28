@@ -149,6 +149,9 @@ Violations check_Q1(const SpeciesTable &table, const CellState &cell, double kap
 // W1 (Stage 79): a piston stands within its stops, its hand's force within its most (none let go), and the energy
 // along its work edge this step is the hand's work, its force over its move (to a quantum): no other work comes.
 Violations check_W1(const SpeciesTable &table, const StepTrace &trace);
+// (Stage 88) W2: work between cells (LedgerEntry::work) is energy alone along a sealed vessel's column, to or from a
+// layer that stands at its pressure
+Violations check_W2(const SpeciesTable &table, const StepTrace &trace);
 
 // Every check, in the order above. A trace of the wrong shape (cell or species
 // counts that disagree) yields one "SHAPE" violation and nothing else.

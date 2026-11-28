@@ -182,7 +182,10 @@ struct SpeciesAmount {
 
 // One call of a primitive, as it was applied (GAME_SPEC §4.3: the ledger).
 struct LedgerEntry {
-	enum class Kind : uint8_t { Transfer, Transform };
+	// (Stage 88) Resize: a sealed vessel's cell `from` given a volume and a pressure over the room's, as the vessel was
+	// sized (World::press_layer, World::resize_column_top): no matter and no energy, but what its state is read with from
+	// there on (T1's replay)
+	enum class Kind : uint8_t { Transfer, Transform, Resize };
 	Kind kind = Kind::Transfer;
 	EdgeId edge; // Transfer
 	CellId from; // Transfer: the cell that gave; Transform: the cell
@@ -192,6 +195,10 @@ struct LedgerEntry {
 	std::vector<SpeciesAmount> delta;
 	Energy energy; // Transfer: the energy moved from -> to (signed)
 	int64_t extent = 0; // Transform: the extent applied (delta = nu * extent)
+	// (Stage 88) Transfer: its energy is work, not heat: what a sealed vessel's cell gives the one over it as it grows
+	// against the vessel's pressure (World::work). No heat's direction is asked of it (T1); W2's.
+	bool work = false;
+	double volume = 0.0, over = 0.0; // Resize: the cell's volume (m^3) and its pressure over the room's (Pa) from here on
 };
 
 // One gas's exchange along an edge in a step (Stage 50), as the simulation reckoned it: from the cell where its mole
@@ -215,6 +222,9 @@ struct StepTrace {
 	// (Stage 79) each cell's volume at the step's start where a piston moved one in the step (none: as `meta`): its
 	// state before is read with it
 	std::vector<double> volume_before;
+	// (Stage 88) and each cell's pressure over the room's at the step's start, where a sealed vessel was sized in the
+	// step (its layers' `over`; none: as `meta`)
+	std::vector<double> over_before;
 	bool thermal = false; // the world has temperatures: the thermal invariants apply
 	// One per cell, set by the simulation: nonzero when a rigid cell was left
 	// under-full this step, because the cell it draws from held no more gas,
@@ -249,6 +259,8 @@ const char *refusal_text(Refusal r);
 // The rigid cells that have no path, along open edges that let gas through,
 // to an elastic cell of matter: the sealed ones (GAME_SPEC §6, V3).
 std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges);
+// (Stage 88) The layers that stand at a sealed vessel's pressure: those whose column's top is sealed (V3).
+std::vector<CellId> pressed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges);
 
 class World {
 public:
@@ -271,6 +283,9 @@ public:
 		CellId add_layer_cell(std::string name);
 		EdgeId add_column_edge(CellId lower, CellId upper);
 		Builder &set_column(CellId top, double area, double whole = 0.0); // whole: the vessel's volume (0: its own now)
+		// (Stage 88) a sealed vessel's layer as it stood (a save's): its pressure over the room's and what it had taken
+		// of its vessel; kept only where its column's top is sealed
+		Builder &set_layer_pressure(CellId layer, double over, double volume);
 		// a column's shape (Stage 51): the inside's volume (m^3) at heights 0, rise, 2 rise, ... (m) over its floor
 		Builder &set_column_shape(CellId top, double rise, std::vector<double> volumes);
 		// an edge exactly as given: closed, a drain, any conductance (for a saved world)
@@ -427,6 +442,13 @@ public:
 	// simulation's own act within a step, as the column moves liquid between
 	// them (no more than the vessel's whole volume, more than nothing).
 	Refusal resize_column_top(CellId top, double volume);
+	// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel's layer set at its vessel's pressure over the room's,
+	// having taken `volume` of it: the simulation's own act as it sizes the vessel (Simulation::size_vessels). Refused
+	// (BadValue) for a cell that is no pressed layer, a volume under 0 or a pressure at or under none.
+	Refusal press_layer(CellId layer, double over, double volume);
+	// (Stage 88) Work between two cells of one sealed vessel, along its column's edge: energy from `from` to the
+	// other end, recorded as work (LedgerEntry::work). Refused (BadValue) along any other edge.
+	Refusal work(EdgeId edge, CellId from, Energy energy);
 	// (Stage 71) A column's vessel reshaped between steps (another standing in it: GAME_SPEC §6, a vessel in a vessel):
 	// its whole inside's volume and its volume under each height (its rise as built), as less the other displaces; its
 	// top the size its layers leave it, or none, the next step's overflow spilling what no longer fits. Refused
@@ -483,6 +505,8 @@ private:
 	std::vector<LedgerEntry> ledger_;
 	Snapshot before_;
 	std::vector<std::pair<int32_t, double>> moved_volumes_; // (Stage 79) the cells a piston moved this step, each one's volume at its start
+	std::vector<std::pair<int32_t, double>> moved_overs_; // (Stage 88) and the layers a sizing moved, each one's pressure over the room's at its start
+	void note_before(CellId cell); // a cell's volume and pressure as the step began, before its first move in it
 	uint64_t step_ = 0;
 	uint64_t topology_version_ = 0;
 	CellId spill_;

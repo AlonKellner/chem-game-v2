@@ -9,6 +9,11 @@
   over liquid, liquid alone (brim-full water warmed rises 4.5 bar a kelvin at 20 °C), or nought with a void that
   boiling fills (a cavity at the vapour pressure). Open cells unchanged to the bit. V2 at a sealed cell's own
   pressure; V3's roomless cell one filled with what does not give.
+- §6: **a vessel's one pressure**: a sealed vessel's layers stand at its pressure, each taking the volume it needs
+  (`pressed`, `over`; `Simulation::size_vessels`), the work of each one's change of volume booked between it and
+  the top as work (`World::work`, W2); a cell's resizing an entry of the step's ledger, replayed by T1. Water in a
+  layer boils where its vessel's pressure says (it boiled at 100 °C whatever the pressure): a sealed flask in a bath
+  at 150 °C comes to 6 bar with its layers' water liquid at 149 °C.
 - The `pressure` session re-recorded with the user's approval (2026-11-28): every printed result main's, line for
   line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved. Recorded again on
   Stage 82's tables after main was merged in: the same six of main's unchanged, the same twelve moved, the printed

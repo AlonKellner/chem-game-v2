@@ -45,7 +45,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.1 | Spec (§6) and data: water's compressibility (Kell 1975), its row verified | Done |
 | 88.2 | The compressible sealed model: `Sealed`, `fill_of`, `entropy`, `affinity`, `AffinityProbe::at`, V2, V3 | Done |
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
-| 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | |
+| 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
 | 88.5 | Invariants: a vessel at one pressure, work between cells, the state function's self-test | |
 | 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | |
 
@@ -72,6 +72,12 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
     affinity of a sealed cell of the same contents at that pressure; `dS = dQ / T` warmed at its pressure; at the
     room's pressure an open cell's state to the bit; water in it boiling from 120 °C at 2 atm and from 69 °C at
     0.3 atm.
+  - a sealed flask as a column, warmed on a bath at 95 °C for four minutes, every invariant on every step: its
+    layers marked with its seal, each at its top's pressure within 1e-3 as a step ends, its cells' volumes the whole
+    to 1e-12;
+  - the same in a bath at 150 °C for ten minutes: 5.97 bar at 149.5 °C, its layers' water at up to 149.5 °C, 9.6 of
+    its 11 mol still liquid in its layers and 0.006 mol as steam: a layer holds liquid past 100 °C where its
+    vessel's pressure says it may.
 - Stage 67's own (`test_expansion.cpp`: one potential as it is heated, the affinity the entropy's slope) pass on the
   new model unchanged.
 
@@ -88,6 +94,14 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   energy carried between two cells at one temperature leaves their entropy as it was to the first order, whatever
   the energy. What the exact enthalpy sets right is where the heat ends (the giver's and the taker's temperatures),
   and the entropy where they differ.
+- **T1 replays a step's ledger against each cell's state as the entry ran**, and read every cell at its volume and
+  pressure as the step ended. A layer's pressure now moves several times in a step: a fast equilibrium that ran at
+  one pressure was judged at another (a transform "against an affinity of 0.07 J/mol" in the first step), and heat
+  that ran between two layers a microkelvin apart, the same way. A cell's resizing is now an entry of the ledger
+  (`LedgerEntry::Kind::Resize`), and the replay reads each cell as it then was.
+- **A layer's starting pressure was cleared from the trace before it was written** (mine, in the same hour): the
+  first heat of a step was judged at the pressure the step ended with. Found by printing what conduction read.
+- **The pressure session did not move**: its flask has no layers while it is stoppered (a boiled flask is mixed).
 - **V3's self-test filled a sealed cell with water** to leave its gas no room: that state now has a pressure. It
   fills it with copper oxide; V2 reads a sealed cell's liquids at its own pressure.
 - **The NIST reprint misprints the density's `b`** (Jones and Harris 1992, eq. 1: 16.897850e-3; Kell's, and the

@@ -882,7 +882,9 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 				}
 				probe.energy -= enthalpy.quanta + flow(pushed);
 			} else {
-				probe.energy -= flow(pushed); // (its top pays the flow work; its layers give the liquid)
+				// (its layers give the liquid, at their pressure; its top takes the room it leaves as the vessel is sized,
+				// its gas's work on what stays, and what the liquid's enthalpy rose by between the two pressures)
+				probe.energy -= flow(pushed) - flow(P_ATMOSPHERE + world_.meta(giver.low).over) + std::llround((pushed - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM);
 				grown = volume;
 			}
 			pg = plan_piston(giver.top, probe, grown, dt);
@@ -925,8 +927,10 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 	if (!amounts.empty() && x != 0.0) {
 		const bool out = x > 0.0;
 		const Side &giver = out ? sa : sb, &taker = out ? sb : sa;
+		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
+		const Energy lifted{ enthalpy.quanta + std::llround(enthalpy_over(table, amounts, giver.kelvin, world_.meta(giver.low).over) / JOULE_PER_QUANTUM) };
 		for (const auto &[hop, from] : giver.up) {
-			const Refusal refused = transfer(hop, from, amounts, enthalpy);
+			const Refusal refused = transfer(hop, from, amounts, giver.low == giver.top ? enthalpy : lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return true;
@@ -1238,8 +1242,10 @@ void Simulation::run_join(EdgeId edge, double dt) {
 		}
 		const Energy energy = carried();
 		const Energy enthalpy = enthalpy_carried(table, amounts, kelvin);
+		// (Stage 88) up its layers at the enthalpy it has in them: the table's and what the vessel's pressure adds
+		const Energy lifted{ enthalpy.quanta + (up.empty() ? 0 : std::llround(enthalpy_over(table, amounts, kelvin, world_.meta(up.front().second).over) / JOULE_PER_QUANTUM)) };
 		for (const auto &[hop, from] : up) {
-			const Refusal refused = transfer(hop, from, amounts, enthalpy);
+			const Refusal refused = transfer(hop, from, amounts, lifted);
 			CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 			if (refused != Refusal::None) {
 				return;
@@ -2275,6 +2281,28 @@ void Simulation::settle() {
 			project(cell);
 		}
 	}
+	// (Stage 88) a sealed vessel sized to what its cells came to, and its cells at their equilibria at the pressure it
+	// came to, in turn until neither moves (a layer that boils takes room, and its vessel's pressure rises on it): the
+	// last word the equilibria's (P1); what the last sizing would still move, the next step's
+	find_columns();
+	for (const Column &col : columns_) {
+		if (!world_.meta(col.top).sealed || world_.meta(col.top).frozen) {
+			continue;
+		}
+		constexpr int ROUNDS = 4;
+		for (int round = 0; round < ROUNDS; ++round) {
+			if (!size_vessel(col)) {
+				break;
+			}
+			bool moved = false;
+			for (const CellId cell : col.cells) {
+				moved = (thermal(cell).defined && project(cell)) || moved;
+			}
+			if (!moved) {
+				break;
+			}
+		}
+	}
 }
 
 // The gas tree: the cells breadth first from the elastic ones along the open
@@ -2654,6 +2682,7 @@ void Simulation::advance() {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
 		move_pistons();
+		size_vessels(); // (Stage 88: a sealed vessel whose plunger moved, at its one pressure again)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;
@@ -2704,6 +2733,7 @@ void Simulation::step(StepTrace &trace) {
 		// (Stage 79) the pistons first: every other process this step at their volumes
 		process_ = Process::Work;
 		move_pistons();
+		size_vessels(); // (Stage 88: a sealed vessel whose plunger moved, at its one pressure again)
 		process_ = Process::Reaction;
 		react();
 		process_ = Process::Heat;

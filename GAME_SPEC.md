@@ -424,6 +424,27 @@ compressible, so that every state it can be in has one pressure.
     pulled on cavitates at its vapour pressure, by the boiling that is already there;
   - a pocket of gas squeezed small has the pressure that holds the liquid squeezed with it: no pocket is too small.
   A cell with no liquid is Stage 28's (its solids incompressible: with gas and no room, no pressure, V3).
+- **A vessel's one pressure.** A sealed vessel's layers (§6, the column) stand at its pressure, each taking the
+  volume it needs there, as an open vessel's stand at the room's: a layer is at a pressure, not at a volume. (A layer
+  held to a volume could not boil: full of liquid it has no room to give.)
+  - **A layer's state**: marked `pressed` with its top's seal (the world's, V3); its pressure over the room's
+    (`over`) and the volume it had taken of its vessel when the vessel was last sized. Its energy is
+    `E = U + P_atm V` as a sealed cell's; what stands in it at its pressure is its enthalpy there, `E + over × volume`,
+    and that gives its temperature, by the same potential. Its fast equilibria run at that pressure: water boils in a
+    layer where the vessel's pressure says (from 120 °C at 2 atm, from 69 °C at 0.3 atm; until this stage a layer
+    boiled at 100 °C whatever its vessel's pressure). At the room's pressure it is an open cell, to the bit.
+  - **Sized** (`Simulation::size_vessels`: after the pistons, as the column's last act, and in settling in turn with
+    the cells' equilibria until neither moves, the equilibria's the last word): since it was last sized each layer has
+    grown or shrunk at the pressure it stood at, and that work, `-over (V_now - V_taken)`, is booked between it and
+    the top; then the one pressure at which the whole is full is found (each cell, holding its energy in its volume
+    now, takes at `P` the volume `V'` with the work `-(P - P_atm)(V' - V_now)` in it; the sum of `V'` falls with `P`),
+    and each cell is set there. With no gas and more room than its liquids take, it is at next to no pressure, the
+    void in its top.
+  - **Work between its cells** is work, not heat: energy alone along the column's edges, marked so in the step's
+    ledger (`World::work`; W2), what one cell gives the other takes. A cell's resizing is in the ledger too, so a
+    replay of the step reads each cell at the volume and the pressure it had as each entry ran (T1).
+  - **What moves between its cells** (the column's turning, its gas rising, its solids sinking) carries its enthalpy
+    at the giver's state, as below; all of a layer goes with all its energy and what it had taken of the vessel.
 - **What crosses carries its enthalpy at the giver's state**: `h_i(T, P)`, a gas's the table's, a solid's
   `h_i0 + v_i p`, a liquid's or a solute's `h_i0 + v_i (p - κ p²/2) - T (v_i' (p - κ p²/2) - v_i κ' p²/2)`: what the
   potential gives. A liquid leaving a pressurised cell takes the work that pushed it out (`v p`, less what its
@@ -3469,6 +3490,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
 | W1 | A piston's work is its hand's alone (Stage 79; `chem/invariants.hpp`): each piston stands within its stops, its hand's force within its most (none when let go), and the energy along its work edge in the step is that force over its move, to a quantum. It fires on a hand past its most, a piston past its stops, a let-go hand with a force, and a quantum more along the edge than the work | exact | 79 |
+| W2 | Work between cells is a sealed vessel's own (Stage 88; `chem/invariants.hpp`): a ledger entry marked work moves energy alone, along a column's edge, to or from a layer that stands at its vessel's pressure | exact | 88 |
 | Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |
@@ -3483,7 +3505,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | P1 | Every cell is at its fast equilibria at the end of the step. For each reaction of the equilibrium law: nothing is left to go in the direction of its affinity (liquid absent: vapour at or below saturation), or the affinity is within what rounding leaves: R T Σ\|ν_i\| N (1/n_i + 1/n_gas) over the reaction's gases, n_i each one's quanta and n_gas the cell's (Stage 19: before, 2 N R T / n_gas, which a minor gas exceeds: the steam over a cold condenser drawing dry air), or N quanta of the reaction spend it (N = the table's species + 1, the quanta that moving gas rounds by) | tolerance | 5, 19 |
 | V1 | An open rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No rigid cell holds more solids and liquids than its volume, at its own temperature (Stage 67). In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8, 67 |
-| V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed); Stage 67: room at the temperature its energy holds, its liquids grown to it | exact | 4, 28, 67 |
+| V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed); Stage 67: room at the temperature its energy holds, its liquids grown to it; Stage 88: its liquids give, so only what does not (its solids) can leave its gas no room; and a layer is marked at a sealed vessel's pressure exactly when its column's top is sealed | exact | 4, 28, 67, 88 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |

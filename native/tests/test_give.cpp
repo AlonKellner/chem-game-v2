@@ -11,6 +11,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -406,4 +407,135 @@ TEST_CASE("give: water in a sealed vessel's layer boils where its vessel's press
 	CHECK_FALSE(boils(98.0, 1.0));
 	CHECK_FALSE(boils(66.0, 0.3));
 	CHECK(boils(72.0, 0.3)); // (69.1 C at 0.3 atm)
+}
+
+namespace {
+
+struct Flask {
+	CellId top;
+	std::vector<CellId> layers;
+	std::unique_ptr<Simulation> sim;
+};
+
+// a sealed flask of 250 mL as a column: 50 mL of water at `top_c` under its air in its top, 75 mL at `layer_c` in each
+// of two layers under it; each of its cells on a bath of `bath_c` through `watts_per_kelvin` (none: 0)
+Flask flask(double top_c, double layer_c, double bath_c, double watts_per_kelvin) {
+	const SpeciesTable &table = builtin_species();
+	Flask out;
+	World::Builder b(table);
+	out.top = b.add_rigid_cell("flask", 250.0 * ML);
+	CellId over = out.top;
+	for (int i = 0; i < 2; ++i) {
+		const CellId layer = b.add_layer_cell("flask layer " + std::to_string(i + 1));
+		b.add_column_edge(layer, over);
+		out.layers.push_back(layer);
+		over = layer;
+	}
+	b.set_column(out.top, 30e-4);
+	const double top_k = top_c + 273.15, layer_k = layer_c + 273.15;
+	const double air = P_ATMOSPHERE * (250.0 - 50.0 - 150.0 * expansion(table, layer_k) / expansion(table, top_k)) * ML / (GAS_CONSTANT * top_k);
+	b.set_amount(out.top, builtin::water, mol(water_mol(50.0, top_k))).set_amount(out.top, builtin::nitrogen, mol(0.79 * air)).set_amount(out.top, builtin::oxygen, mol(0.21 * air));
+	b.set_temperature(out.top, top_k);
+	for (const CellId layer : out.layers) {
+		b.set_amount(layer, builtin::water, mol(water_mol(75.0, layer_k))).set_temperature(layer, layer_k);
+	}
+	if (watts_per_kelvin > 0.0) { // (on each of its cells: its layers merge and split, and one emptied takes no heat)
+		const CellId bath = b.add_reservoir("bath", bath_c + 273.15);
+		b.add_edge(out.top, bath, PHASES_NONE, watts_per_kelvin);
+		for (const CellId layer : out.layers) {
+			b.add_edge(layer, bath, PHASES_NONE, watts_per_kelvin);
+		}
+	}
+	std::string why;
+	auto world = b.build(&why);
+	REQUIRE_MESSAGE(world.has_value(), why);
+	REQUIRE(world->meta(out.top).sealed);
+	out.sim = std::make_unique<Simulation>(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	out.sim->set_checking(false);
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("give: a sealed flask's layers stand at its pressure: marked with its seal, sized each step so the whole is full at one pressure, every invariant held as it is warmed (Stage 88)") {
+	const SpeciesTable &table = builtin_species();
+	Flask f = flask(60.0, 40.0, 95.0, 2.0);
+	const World &world = f.sim->world();
+	for (const CellId layer : f.layers) {
+		CHECK(world.meta(layer).pressed);
+	}
+	double hottest = 0.0, highest = 0.0;
+	for (int i = 0; i < 60 * 240; ++i) {
+		const StepTrace trace = f.sim->step();
+		const Violations v = check_all(table, trace, f.sim->equilibria());
+		REQUIRE_MESSAGE(v.empty(), "step " << i << ": " << v[0]);
+		const Thermal top = thermal_state(table, world.snapshot_cell(f.top), &world.meta(f.top));
+		REQUIRE(top.defined);
+		double volumes = world.meta(f.top).volume;
+		for (int c = 0; c < world.cell_count(); ++c) { // (its layers: those it began with and those it grew)
+			const CellId layer{ c };
+			const CellMeta &m = world.meta(layer);
+			if (!m.layer) {
+				continue;
+			}
+			REQUIRE(m.pressed);
+			volumes += m.volume;
+			const bool holds = world.snapshot_cell(layer).energy != 0;
+			if (holds) {
+				// at its vessel's pressure, to what the last equilibria moved after the last sizing
+				CAPTURE(i);
+				REQUIRE(P_ATMOSPHERE + m.over == doctest::Approx(top.pressure).epsilon(1e-3));
+				const Thermal t = thermal_state(table, world.snapshot_cell(layer), &m);
+				REQUIRE(t.defined);
+				hottest = std::max(hottest, t.temperature);
+			}
+		}
+		REQUIRE(volumes == doctest::Approx(250.0 * ML).epsilon(1e-12));
+		highest = std::max(highest, top.pressure);
+	}
+	MESSAGE("warmed for four minutes: " << highest / 1000.0 << " kPa at the most, its hottest layer " << hottest - 273.15 << " C");
+	CHECK(highest > 1.5 * P_ATMOSPHERE); // its air warmed and its water's vapour
+	CHECK(hottest > 273.15 + 80.0);
+}
+
+TEST_CASE("give: a sealed flask's layers hold liquid water far past 100 C where its pressure says they may: in a bath at 150 C it comes to 6 bar, its layers' water at 140 C and more, none boiled away, every invariant held (Stage 88)") {
+	// (until this stage a layer was an open cell at 1 atm whatever its vessel's pressure, and boiled at 100 C)
+	const SpeciesTable &table = builtin_species();
+	Flask f = flask(60.0, 40.0, 150.0, 2.0);
+	const World &world = f.sim->world();
+	const auto water = static_cast<size_t>(builtin::water.index), steam = static_cast<size_t>(builtin::steam.index);
+	double hottest = 0.0, liquid_then = 0.0;
+	for (int i = 0; i < 60 * 600; ++i) {
+		const StepTrace trace = f.sim->step();
+		const Violations v = check_all(table, trace, f.sim->equilibria());
+		REQUIRE_MESSAGE(v.empty(), "step " << i << ": " << v[0]);
+	}
+	const Thermal top = thermal_state(table, world.snapshot_cell(f.top), &world.meta(f.top));
+	REQUIRE(top.defined);
+	int64_t in_layers = 0, in_steam = world.snapshot_cell(f.top).amount[steam];
+	for (int c = 0; c < world.cell_count(); ++c) {
+		const CellMeta &m = world.meta(CellId{ c });
+		const CellState &x = world.snapshot_cell(CellId{ c });
+		if (!m.layer || x.amount[water] == 0) {
+			continue;
+		}
+		CHECK(m.pressed);
+		CHECK(P_ATMOSPHERE + m.over == doctest::Approx(top.pressure).epsilon(1e-3));
+		CHECK(x.amount[steam] == 0); // (what boils in a layer rises out of it; at this pressure none does)
+		const Thermal t = thermal_state(table, x, &m);
+		REQUIRE(t.defined);
+		in_layers += x.amount[water];
+		in_steam += x.amount[steam];
+		if (t.temperature > hottest) {
+			hottest = t.temperature;
+			liquid_then = static_cast<double>(x.amount[water]) * MOL_PER_QUANTUM;
+		}
+	}
+	MESSAGE("ten minutes in a bath at 150 C: " << top.pressure / 1e5 << " bar at " << top.temperature - 273.15 << " C; its hottest layer " << hottest - 273.15 << " C, holding " << liquid_then
+											   << " mol of water; " << static_cast<double>(in_layers) * MOL_PER_QUANTUM << " mol in its layers, " << static_cast<double>(in_steam) * MOL_PER_QUANTUM << " mol as steam");
+	CHECK(top.pressure > 5.5e5); // its water's vapour at 150 C (4.76 bar) and its air, warmed and squeezed
+	CHECK(top.pressure < 6.5e5);
+	CHECK(hottest > 273.15 + 140.0);
+	CHECK(static_cast<double>(in_layers) * MOL_PER_QUANTUM > 5.0); // (of its 11 mol: most of its water still liquid in its layers)
+	CHECK(static_cast<double>(in_steam) * MOL_PER_QUANTUM < 0.02);
 }

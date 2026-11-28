@@ -1185,6 +1185,28 @@ double molality(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;
 }
 
+AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double energy, double volume, double pressure) {
+	AtPressure out;
+	const MatterSums sums = matter_sums(table, cell);
+	const Volumes volumes = volumes_of(table, cell);
+	if (!sums.known || !volumes.defined || !(pressure > 0.0)) {
+		return out;
+	}
+	if (!(sums.capacity > 0.0)) { // nothing in it (a wall's ring holds no room): no volume at any pressure
+		out.defined = std::all_of(cell.amount.begin(), cell.amount.end(), [](int64_t a) { return a == 0; });
+		return out;
+	}
+	const Pressed model{ sums.formation, sums.capacity, gas_mol(table, cell), volumes.fixed, volumes.expanding, pressure - P_ATMOSPHERE };
+	Pressed::State state;
+	if (!model.solve(table, energy + (pressure - P_ATMOSPHERE) * volume, 0.0, state)) {
+		return out;
+	}
+	out.defined = true;
+	out.temperature = state.temperature;
+	out.volume = state.volume;
+	return out;
+}
+
 double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double over) {
 	if (over == 0.0) {
 		return 0.0;

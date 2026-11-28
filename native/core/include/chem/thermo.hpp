@@ -277,6 +277,16 @@ Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount
 // nothing. At the room's pressure, nought.
 double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double over);
 
+// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel's cell brought to a pressure, as the vessel is sized:
+// holding `energy` J (E = U + P_atm V) in `volume` m^3, it takes at `pressure` the volume V' with the work of getting
+// there, -(pressure - P_atm) (V' - volume), in it: the temperature that holds its enthalpy at that pressure,
+// energy + (pressure - P_atm) volume. Not defined without thermodynamic data or volumes, or at no pressure.
+struct AtPressure {
+	bool defined = false;
+	double temperature = 0.0, volume = 0.0; // K, m^3
+};
+AtPressure at_pressure(const SpeciesTable &table, const CellState &cell, double energy, double volume, double pressure);
+
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the
 // mixing terms of its gas and of its solution).
