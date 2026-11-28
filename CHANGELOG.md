@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.82.0 (2026-11-27, Stage 82)
+## 0.82.0 (2026-11-28, Stage 82; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 82, `docs/TDD_82_FLAMES.md`; `docs/CURRICULUM.md`, step E's third part): lithium's and strontium's ions
   (NBS, OBIGT, the CRC), their chlorides' and nitrates' Pitzer pairs (Pitzer and Mayorga).

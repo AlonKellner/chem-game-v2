@@ -51,7 +51,7 @@ and the spectral viewer all see them.
 | 82.3 | The flame test: `flame_test`, the load fading, save, load and digest; the screen's gesture | done |
 | 82.4 | The glow in the pass: `glow_add`, the scene's key; O1, O2; a sodium flame yellow, the viewer's 589 nm | done |
 | 82.5 | The free lab's solutions; pictures on the GPU (`data/plays/flames.json`): the lines' band cuts, light brighter than the display keeping its hue, each molecule's own light; sodium orange-yellow, lithium and strontium crimson, copper green | done |
-| 82.6 | Documents, `make gates`, the user's sign-off | |
+| 82.6 | Documents, `make gates`, the user's sign-off ("Approved, merge and proceed", 2026-11-28) | done |
 
 ## Tests
 
