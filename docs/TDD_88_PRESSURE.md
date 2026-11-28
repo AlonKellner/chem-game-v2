@@ -47,7 +47,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
 | 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
 | 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion; what moves in a vessel with its volume; hands at random on sealed layered syringes | Done |
-| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | The `pressure` session re-recorded with approval; docs done; `make gates` passed (2026-11-28: core, ASan and UBSan, ctest, the Godot suite, the goldens unchanged; the step's cost 1,265,059 instructions on the demo, +1.2 % against main's at 722b8cd); the user's sign-off to come |
+| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | The `pressure` session re-recorded with approval; docs done; `make gates` passed (2026-11-28: core, ASan and UBSan, ctest, the Godot suite, the goldens unchanged; the step's cost 1,265,059 instructions on the demo, +1.2 % against main's at 722b8cd). Signed off by the user (2026-11-28: "Approved, merge and proceed"). Main's Stage 87 merged in (the `pressure` session's record main's to the stoppering, Stage 88's after it), and `make gates` again on the merged tree: passed (core, ASan and UBSan, ctest's 988 entries, the Godot suite, the goldens unchanged; the step's cost 1,293,354 instructions on the demo, +1.3 % against main's at 15796da) |
 
 ## Tests
 
@@ -72,12 +72,14 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
     affinity of a sealed cell of the same contents at that pressure; `dS = dQ / T` warmed at its pressure; at the
     room's pressure an open cell's state to the bit; water in it boiling from 120 °C at 2 atm and from 69 °C at
     0.3 atm.
-  - a sealed flask as a column, warmed on a bath at 95 °C for four minutes, every invariant on every step: its
+  - a sealed flask as a column, warmed on a strong bath at 95 °C for a minute and a half (2.0 bar, its hottest layer 94.6 °C), every invariant on every step: its
     layers marked with its seal, each at its top's pressure within 1e-3 as a step ends, its cells' volumes the whole
     to 1e-12;
-  - the same in a bath at 150 °C for ten minutes: 5.97 bar at 149.5 °C, its layers' water at up to 149.5 °C, 9.6 of
-    its 11 mol still liquid in its layers and 0.006 mol as steam: a layer holds liquid past 100 °C where its
-    vessel's pressure says it may.
+  - the same in a strong bath at 150 °C for a minute and a half: 6.11 bar at 150.0 °C, its layers' water at up to
+    149.7 °C, its 11 mol liquid in its layers and under its air but 0.006 mol as steam: a layer holds liquid past
+    100 °C where its vessel's pressure says it may. (Both ran four and ten minutes on a weak bath until the stage's
+    close, 70 s and 330 s a run: past the gate's budget of 60 s an entry, `docs/WORKFLOW.md`; the stronger baths bring
+    the same ends in 31 s and 38 s.)
   - P2, W2 and V3's layer mark, each firing on a corrupted trace and none on a clean one.
 - `native/tests/game/test_pressure_lab.cpp`: a stoppered flask of two layered solutions warmed to 128 kPa, every
   invariant on every step, saved and loaded digest for digest.

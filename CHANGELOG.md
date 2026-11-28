@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.88.0 (2026-11-28, Stage 88, in progress)
+## 0.88.0 (2026-11-28, Stage 88; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 88, `docs/TDD_88_PRESSURE.md`; the first of the two stages the user asked for after Stage 79, "the proper
   mechanisms ... in a correct and consistent manner"): **liquids that give**: a sealed cell's liquids are

@@ -460,13 +460,13 @@ Flask flask(double top_c, double layer_c, double bath_c, double watts_per_kelvin
 
 TEST_CASE("give: a sealed flask's layers stand at its pressure: marked with its seal, sized each step so the whole is full at one pressure, every invariant held as it is warmed (Stage 88)") {
 	const SpeciesTable &table = builtin_species();
-	Flask f = flask(60.0, 40.0, 95.0, 2.0);
+	Flask f = flask(60.0, 40.0, 95.0, 10.0); // (a strong bath: its cells near it in a minute and a half, the gate's budget)
 	const World &world = f.sim->world();
 	for (const CellId layer : f.layers) {
 		CHECK(world.meta(layer).pressed);
 	}
 	double hottest = 0.0, highest = 0.0;
-	for (int i = 0; i < 60 * 240; ++i) {
+	for (int i = 0; i < 60 * 90; ++i) {
 		const StepTrace trace = f.sim->step();
 		const Violations v = check_all(table, trace, f.sim->equilibria());
 		REQUIRE_MESSAGE(v.empty(), "step " << i << ": " << v[0]);
@@ -494,7 +494,7 @@ TEST_CASE("give: a sealed flask's layers stand at its pressure: marked with its 
 		REQUIRE(volumes == doctest::Approx(250.0 * ML).epsilon(1e-12));
 		highest = std::max(highest, top.pressure);
 	}
-	MESSAGE("warmed for four minutes: " << highest / 1000.0 << " kPa at the most, its hottest layer " << hottest - 273.15 << " C");
+	MESSAGE("warmed for a minute and a half: " << highest / 1000.0 << " kPa at the most, its hottest layer " << hottest - 273.15 << " C");
 	CHECK(highest > 1.5 * P_ATMOSPHERE); // its air warmed and its water's vapour
 	CHECK(hottest > 273.15 + 80.0);
 }
@@ -502,11 +502,11 @@ TEST_CASE("give: a sealed flask's layers stand at its pressure: marked with its 
 TEST_CASE("give: a sealed flask's layers hold liquid water far past 100 C where its pressure says they may: in a bath at 150 C it comes to 6 bar, its layers' water at 140 C and more, none boiled away, every invariant held (Stage 88)") {
 	// (until this stage a layer was an open cell at 1 atm whatever its vessel's pressure, and boiled at 100 C)
 	const SpeciesTable &table = builtin_species();
-	Flask f = flask(60.0, 40.0, 150.0, 2.0);
+	Flask f = flask(60.0, 40.0, 150.0, 20.0); // (a strong bath, so that a minute and a half brings it there: the gate's budget)
 	const World &world = f.sim->world();
 	const auto water = static_cast<size_t>(builtin::water.index), steam = static_cast<size_t>(builtin::steam.index);
 	double hottest = 0.0, liquid_then = 0.0;
-	for (int i = 0; i < 60 * 600; ++i) {
+	for (int i = 0; i < 60 * 90; ++i) {
 		const StepTrace trace = f.sim->step();
 		const Violations v = check_all(table, trace, f.sim->equilibria());
 		REQUIRE_MESSAGE(v.empty(), "step " << i << ": " << v[0]);
@@ -532,7 +532,7 @@ TEST_CASE("give: a sealed flask's layers hold liquid water far past 100 C where 
 			liquid_then = static_cast<double>(x.amount[water]) * MOL_PER_QUANTUM;
 		}
 	}
-	MESSAGE("ten minutes in a bath at 150 C: " << top.pressure / 1e5 << " bar at " << top.temperature - 273.15 << " C; its hottest layer " << hottest - 273.15 << " C, holding " << liquid_then
+	MESSAGE("a minute and a half in a bath at 150 C: " << top.pressure / 1e5 << " bar at " << top.temperature - 273.15 << " C; its hottest layer " << hottest - 273.15 << " C, holding " << liquid_then
 											   << " mol of water; " << static_cast<double>(in_layers) * MOL_PER_QUANTUM << " mol in its layers, " << static_cast<double>(in_steam) * MOL_PER_QUANTUM << " mol as steam");
 	CHECK(top.pressure > 5.5e5); // its water's vapour at 150 C (4.76 bar) and its air, warmed and squeezed
 	CHECK(top.pressure < 6.5e5);
