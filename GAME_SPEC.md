@@ -1384,7 +1384,21 @@ revolution seen from the side.
   sequence each, coarse first: every 16th nanometre, then the 8ths between, down to each one) and
   averages them over time, so it settles to the disc's own uniform integral (`O19`); it starts again
   where the disc moves or what it looks through changes, as a pixel's history does.
-- **Exposure:** fixed, or adapted from a reduced-resolution luminance computed on the GPU.
+- **Exposure** (Stage 90, `docs/TDD_90_EXPOSURE.md`; the user's proposal, 2026-11-28): the eye adapting as a pupil
+  does. Each frame a meter on the GPU sums each pixel's light (a body's history, the wall's own where none is; its
+  luminance, in shares of the room's white) over 16 x 9 blocks of 120 x 120 pixels, a group's in shared memory and once
+  into its block; a one-thread step takes the brightest block's mean light B and moves the exposure toward
+  min(1 / B, 1), held between level / 64 and 8 level (the room's lights' level), in its logarithm, closing with a time
+  constant of 0.1 s and opening with 0.7 s (most of the way in 0.3 s and 2 s: the user's "pupil-like"). The screen
+  multiplies the pass's light by it before the gamut, the wall's too; where it has moved by more than half a per cent
+  every pixel is shown again at it, a settled one and a bare wall's too. It is exactly 1 in the room at its full light
+  with nothing brighter than its white (every colour judged so far shown as it was); a flame's block darkens the room
+  (a fresh sodium flame: about 0.78). A single bright pixel moves its block's mean by little: a glint does not close
+  the eye. The comparison of the picture with the truth (O4) reads the exposure back and shows the truth at it.
+- **The room's lights** (Stage 90): the top bar's "lights", a click a step, 100, 30, 10, 3 and 1 % and back. What the
+  room's light lights is the pass's own (shares of its white); what emits light of its own (a flame, a lamp, a hot
+  thing's glow, a screen) is the brighter against it by the level's inverse, so a dimmed room looks as it was until the
+  eye can open no wider (8 times), and a faint glow stands out. A view setting of the screen's, not the lab's.
 - **Light brighter than the display** (a channel past its brightest: a flame test's flame, a hot
   solid, a lamp) is scaled down by its brightest channel, keeping its hue and chroma, as a camera
   shows a flame (Stage 82, the user's choice: until then a colour past the white of OKLab's lightness
@@ -1514,7 +1528,9 @@ For each light:
    moving points. The history holds what the moving points add to the fixed estimate, so the
    pixel shows the fixed estimate now plus its history's average. If the same bodies still cover
    the pixel and the fixed estimate has moved by at most 4 on the eye metric since the history
-   began, the history is kept, aged by how far the estimate moved (half its weight per unit);
+   began (Stage 90: its colours as shown, at the display's exposure, and where one is brighter than
+   the display both scaled by the brighter's brightest channel: a light beyond the display told apart
+   by its amount, not by the one colour the display shows it as), the history is kept, aged by how far the estimate moved (half its weight per unit);
    otherwise it starts again. A body moved by a pixel, a reaction a step further on, keep their
    history; a jump, a pour, a body arriving or leaving start it again. (Stage 77) A pixel read by its own
    rays whose rays moved (its beam traced again: what lies in its vessel changed on rows they pass) starts
@@ -3516,6 +3532,13 @@ stand on.
       to Eriochrome Black T's blue; 320.7 mg/L as calcium carbonate against 319.6.
     - `spectra` (experiment 54): four discharge lamps through the spectral viewer; hydrogen's Balmer lines listed
       (389, 397, 410, 434, 486, 656 nm) and the Rydberg constant from two of them (1.0975e7 /m).
+    - `flames` (experiments 12 and C14; Stage 90, the user's request): the burner's flame shut and open, then seven
+      metals' flame tests by eye and through the spectral viewer, the flame cleared between them (sodium 589, lithium
+      671, potassium 766 nm, nearly hidden even with the room's lights at 10 %; calcium's, strontium's, barium's and
+      copper's monohydroxide bands, each peak noted), a sodium and potassium mixture (yellow, and 766 nm in the
+      viewer), two unknowns drawn by the seed, and a mole of sodium's photons, 203 kJ. The flame's load is checked
+      element by element (`flame_umol` with an element for its measure); a tutorial reads the room's lights
+      (`lights_at_most`, `lights_at_least`); the viewer's probe dropped in a lit flame rests on its burner.
   - `demo`, the demo's tutorial (§13.2), and `free_lab`, its bench with no tutorial.
 - **To come** *(PLANNED)*, each needing the simulation to grow first (`docs/EXPERIMENTS_ROADMAP.md`):
   the rest of acids, bases and pH (weak acids, indicators, a burette); the rest of precipitation and gas (a sodium carbonate, a cloudy suspension); boiling, bubbling and agitation (bubbles from a heated floor's film, collapsing in a cooler bulk); freezing and
@@ -3910,6 +3933,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | A discharge lamp's lines are NIST's relative intensities, not a radiometric calibration; a lamp and a drying oven are burners (Stage 85) | A lamp's lines against each other as their sources saw them; no lamp lights the room (its light is seen where it is, as a flame's); an oven is a reservoir with a conductance to what stands in it, drawn as its shelf, not a box around it |
 | A filter crucible's suction is its frit's flow law, not a pressure in its flask; its wet cake's porosity one value (Stage 85) | The flask is not evacuated; the cake holds half its bulk of water, whatever its grains; a funnel's paper residue is still scraped dry as drained (Stage 59) |
 | No test-tube rack (Stage 85) | Test tubes stand on the bench's squares by themselves |
+| The display's exposure is a display transform, metered over 16 x 9 blocks, its time constants a design (Stage 90) | A view moving carries the picture at the exposure it was shown at; a lamp's lines in eleven stretches of the spectrum, each read at one point a frame: a neon tube's 158 lines at the room's dimmest steps settle within 17 on the eye metric of the truth (TDD 90, Open) |
 | FeSCN2+'s pair with nitrate is calibrated to two quotients in perchlorate, nitrate in perchlorate's place (Stage 85) | Past an ionic strength of 1.0, and in a medium of iron(III) nitrate itself, the quotient is the model's alone: a textbook standard of 0.2 M iron(III) nitrate takes up 84 % of its thiocyanate, not about 95 % |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); light brighter than the display scaled down by its brightest channel (Stage 82); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a bright flame or a hot body is drawn at the display's brightest of its own colour, no brighter than a white wall |
 | What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |

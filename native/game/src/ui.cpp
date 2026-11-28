@@ -283,7 +283,7 @@ struct Ui::Impl {
 	}
 	// whether a name of the screen (Ui::locate) is of the room: what stands in it and its places, not a panel's
 	bool room_name(std::string_view what) const {
-		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "holder:", "screen:", "frame:", "lens:", "plunger:" };
+		static const char *const ROOMS[] = { "item:", "square:", "cabinet", "trash", "outbox", "slot:", "goal:", "port:", "sense:", "outlet:", "probe:", "flame:", "holder:", "screen:", "frame:", "lens:", "plunger:" };
 		for (const char *prefix : ROOMS) {
 			const std::string_view p(prefix);
 			if (what.substr(0, p.size()) != p) {
@@ -572,8 +572,8 @@ struct Ui::Impl {
 		for (auto n = view.notices.rbegin(); n != view.notices.rend(); ++n) {
 			if (hear[static_cast<size_t>(n->level)]) {
 				std::string line = when(n->step) + "  " + n->says;
-				if (line.size() > 56) {
-					line = line.substr(0, 54) + ".."; // short of the debug button
+				if (line.size() > 42) {
+					line = line.substr(0, 40) + ".."; // short of the lights' button (Stage 90)
 				}
 				text(1230, 40, line, level_colour(n->level), 15);
 				break;
@@ -2010,11 +2010,23 @@ struct Ui::Impl {
 
 	// ---- the debug panel (§13.6): the selected item from the inside
 	static Rect debug_button() { return Rect{ 1670, 14, 110, 36 }; }
+	// (Stage 90) the room's lights: a click dims them a step, from the last back to full
+	static Rect lights_button() { return Rect{ 1550, 14, 110, 36 }; }
+	static constexpr double LIGHT_LEVELS[] = { 1.0, 0.3, 0.1, 0.03, 0.01 };
+	double room_level = 1.0;
 	// step, export, up, down, close; and (Stage 46) the infrared view's switch, beside the panel's title
 	static Rect debug_rect(int k) { return k == 5 ? Rect{ DEBUG.x + 390, DEBUG.y + 12, 110, 30 } : Rect{ DEBUG.x + 20 + static_cast<float>(k) * 98, DEBUG.y + 56, 90, 30 }; }
 	static constexpr const char *DEBUG_BUTTONS[] = { "step", "export", "up", "down", "close", "infrared" };
 	static constexpr int DEBUG_BUTTON_COUNT = 6;
 	bool debug_press(float x, float y) {
+		if (lights_button().has(x, y)) {
+			size_t k = 0;
+			while (k < std::size(LIGHT_LEVELS) && LIGHT_LEVELS[k] != room_level) {
+				++k;
+			}
+			room_level = LIGHT_LEVELS[(k + 1) % std::size(LIGHT_LEVELS)];
+			return true;
+		}
 		if (debug_button().has(x, y)) {
 			debug_open = !debug_open;
 			notices_open = notices_open && !debug_open;
@@ -2137,6 +2149,7 @@ struct Ui::Impl {
 	}
 	void paint_debug() {
 		button(debug_button(), "debug", debug_open, 15);
+		button(lights_button(), text_of("lights %.0f%%", 100.0 * room_level), room_level < 1.0, 15); // (Stage 90)
 		if (!debug_open) {
 			return;
 		}
@@ -2162,6 +2175,7 @@ struct Ui::Impl {
 		screen.paused = paused;
 		screen.selected = selected >= 0 ? id(selected) : std::string();
 		screen.predicted = predictions_made(); // (Stage 55)
+		screen.lights = room_level; // (Stage 90)
 		if (notebook_open && notebook_tab == 1 && calc_result().ok) {
 			screen.calculated = KINDS[calc_kind]; // (Stage 58)
 		}
@@ -2735,8 +2749,29 @@ struct Ui::Impl {
 		r = Rect{ READOUT.x + 16, readout_top() + 90, 150, 30 };
 		return true;
 	}
+	// a lit burner's flame over its body `r`: from a short one, barely open, to a tall one, wide open
+	static Rect flame_rect(const Rect &r, double valve) {
+		const float flame = static_cast<float>(12.0 + 30.0 * valve);
+		return Rect{ r.cx() - 12, r.y - flame, 24, flame };
+	}
+	// (Stage 90) the burner whose lit flame is at (x, y), or -1
+	int flame_at(float x, float y) const {
+		for (int i = static_cast<int>(view.items.size()) - 1; i >= 0; --i) {
+			const ItemView &v = view.items[static_cast<size_t>(i)];
+			if (v.kind == "burner" && v.valve > 0.0 && v.place == "bench" && visible(i)) {
+				Rect f = flame_rect(drawn(i), v.valve);
+				f.x -= 4;
+				f.w += 8;
+				if (f.has(x, y)) {
+					return i;
+				}
+			}
+		}
+		return -1;
+	}
 	// letting go of a probe: on its own screen it reads that (a frame late); on the rest of its viewer it goes home;
-	// on an item or a part it is fixed there, at that place of it; on the room, there; anywhere else, home
+	// on an item or a part it is fixed there, at that place of it (Stage 90: on a lit burner's flame, on the burner, at
+	// that place over it); on the room, there; anywhere else, home
 	void drop_probing(int index, float x, float y) {
 		probing = -1;
 		probe_in_hand = false;
@@ -2750,7 +2785,7 @@ struct Ui::Impl {
 			c["at"] = { u, w };
 		} else if (Rect{ r.x - 6, r.y - 6, r.w + 12, r.h + 12 }.has(x, y)) {
 			// home
-		} else if (const int t = item_at(x, y, index); t >= 0) {
+		} else if (const int t = flame_at(x, y) >= 0 ? flame_at(x, y) : item_at(x, y, index); t >= 0) {
 			double u = 0, w = 0;
 			frame_of(t, x, y, u, w);
 			c["on"] = id(t);
@@ -6946,15 +6981,14 @@ struct Ui::Impl {
 					g = lamps::glow(v.lamp, std::exp(std::round(std::log(v.valve) / 0.05) * 0.05));
 					bodies[k].glow_add = &g;
 					std::vector<std::pair<double, double>> &cut = flame_spikes[v.id];
-					cut = lamps::spikes(v.lamp);
+					cut = lamps::spikes(v.lamp, 11); // (Stage 90: eleven, as near the pass's 24 cuts as a pixel through one tube allows: a dimmed room shows a neon tube's many lines the brighter)
 					bodies[k].glow_spikes = &cut;
 				}
 			} else if (v.kind == "burner") {
 				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
 					// its flame: from a sooty yellow, barely open, to a blue, wide open
-					const float flame = static_cast<float>(12.0 + 30.0 * v.valve);
-					const size_t k = thing(who, "flame", OpticsBody::Cone, Rect{ r.cx() - 12, r.y - flame, 24, flame }, 0.0f, nullptr, "flame_sooty", in_hand);
+					const size_t k = thing(who, "flame", OpticsBody::Cone, flame_rect(r, v.valve), 0.0f, nullptr, "flame_sooty", in_hand);
 					bodies[k].light_to = "flame_blue";
 					bodies[k].toward = v.valve;
 					bodies[k].kelvin = v.celsius + 273.15; // its flame's temperature (Stage 46)
@@ -7221,6 +7255,7 @@ struct Ui::Impl {
 		room.pixel_x0 = sx(0.0f);
 		room.pixel_y0 = sy(0.0f);
 		room.bench = WALL_RADIANCE;
+		room.level = room_level; // (Stage 90) the room's lights
 		room.elsewhere = DARK_RADIANCE;
 		room.kelvin = view.room_celsius + 273.15; // Stage 46: what the long-wave range sees the room by
 		room.range = infrared ? 1 : 0;
@@ -8763,6 +8798,10 @@ bool Ui::infrared() const {
 	return impl_->infrared;
 }
 
+double Ui::room_level() const {
+	return impl_->room_level;
+}
+
 void Ui::set_budget(double ms) {
 	impl_->budget_ms = ms > 0.0 ? ms : 0.0;
 }
@@ -8935,6 +8974,16 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 		m.probe_point(i, x, y);
 		return true;
 	}
+	if (after("flame:", rest)) { // (Stage 90) a lit burner's flame, its middle
+		const int i = index_of(rest);
+		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "burner" || !(m.view.items[static_cast<size_t>(i)].valve > 0.0) || !m.visible(i)) {
+			return false;
+		}
+		const Rect f = Impl::flame_rect(m.drawn(i), m.view.items[static_cast<size_t>(i)].valve);
+		x = f.cx();
+		y = f.y + 0.6f * f.h;
+		return true;
+	}
 	if (after("holder:", rest)) {
 		const int i = index_of(rest);
 		if (i < 0 || m.view.items[static_cast<size_t>(i)].kind != "viewer" || !m.visible(i)) {
@@ -8994,6 +9043,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "debug") {
 		return centre(Impl::debug_button());
+	}
+	if (what == "lights") { // (Stage 90)
+		return centre(Impl::lights_button());
 	}
 	if (after("debug:", rest)) {
 		for (int k = 0; k < Impl::DEBUG_BUTTON_COUNT; ++k) {

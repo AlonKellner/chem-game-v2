@@ -4507,6 +4507,19 @@ float eye(vec3 p, vec3 q) {
 	return sqrt(base * base + neutral * neutral);
 }
 
+// How far apart two of a pixel's colours (linear sRGB, multiples of the room's white) are to the eye (Stage 90): as
+// they are shown, at the display's exposure; and where either is brighter than the display, both scaled by the
+// brighter one's brightest channel, so that light beyond the display is still told apart by its amount. (The display
+// shows such a light at its brightest whatever its amount: a flame fading from 30 to 20 times the room's white was
+// no change at all to `gamut` alone, and its pixels kept the corrections their history found at 30 while their
+// estimate fell, until the corrections outweighed the light and showed it black: the user's black pixels in a
+// fading flame.)
+float apart(vec3 a, vec3 b) {
+	float e = display_exposure();
+	float m = max(1.0, e * max(max(max(a.x, a.y), max(a.z, b.x)), max(b.y, b.z)));
+	return eye(lab_of(a * (e / m)), lab_of(b * (e / m)));
+}
+
 // ---- one frame of the method
 
 // what a beam traced in a frame is counted as, of the rays' budget (points): a carried vessel's pixels take all
@@ -4587,7 +4600,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		// found is carried on in proportion to the light there is now, and it keeps its points. So a liquid that
 		// changes colour at every step (a reaction) starts again only the histories of pixels whose rays part (a
 		// rim shows more of the wall as its liquid darkens: that is found again), not every pixel of its vessel.
-		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && eye(lab_of(prox), lab_of(prox + d)) < 1.0;
+		plain = beam_held && beam_one_way && points >= SETTLED_POINTS && apart(prox, prox + d) < 1.0;
 		// (Stage 77) A pixel read by its own rays whose beam was traced again, its rays having moved (what lies in its
 		// vessel changed on rows they pass: a pile's surface sweeping slowly across it), starts again: what its
 		// corrections found was found along the rays it had, and kept by the drift rule (a small change of its
@@ -4595,7 +4608,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 		// for more: a slowly lowered pile left its old shape behind (the user's ghost, docs/TDD_77_GHOST.md).
 		bool rays_moved = both && !beam_held;
 		if (s.key.z == q.key.z && points > 0.0) {
-			float moved = eye(lab_of(prox), lab_of(now));
+			float moved = apart(prox, now);
 			drift = drift + moved;
 			keep = (drift <= DRIFT_MOST && !rays_moved) || plain;
 			if (keep && plain) {
@@ -4676,7 +4689,7 @@ PixelState step_pixel(Path q, PixelState s, vec2 p, int frame, float scale) {
 			took = float(corrections_taken);
 		}
 		if (points >= 1.0) {
-			float dev = eye(lab_of(prox + d), lab_of(est));
+			float dev = apart(prox + d, est);
 			float trial = dev * dev / (1.0 / took + 1.0 / points);
 			noise = frames >= 1.0 ? noise + (trial - noise) / min(frames + 1.0, 16.0) : trial;
 		}
@@ -4987,6 +5000,28 @@ bool in_panels(vec2 p) {
 	return false;
 }
 
+// The display's exposure (Stage 90, GAME_SPEC §12.2): the eye adapting as a pupil does, metered from the picture itself
+// (16 x 9 blocks, the brightest block's mean light), what the screen multiplies the pass's light by before it is brought
+// into the display's gamut. The pass's light is in shares of the room's white at its lights' level (what emits light of
+// its own the brighter against them as they are dimmed), so its picture of the room is the same at any level: 1 with
+// nothing brighter than the room's white, under 1 where something outshines it; the eye opens no wider than 8 times the
+// room's full light allows, nor closes past a 64th of it (between level / 64 and 8 level). The host keeps it
+// (`display_exposure`).
+const int METER_X = 16;
+const int METER_Y = 9;
+float meter_luminance(vec3 c) {
+	return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z;
+}
+// what the brightest block's mean light (shares of the room's white at its lights' level) and that level ask of it
+float exposure_target(float brightest, float level) {
+	return clamp(min(1.0 / max(brightest, 1.0e-6), 1.0), level / 64.0, 8.0 * level);
+}
+// a frame's step toward it, in its logarithm: closing in 0.1 s, opening in 0.7 s (most of the way in 0.3 s and 2 s)
+float exposure_step(float e, float target, float dt) {
+	float tau = target < e ? 0.1 : 0.7;
+	return exp(log(e) + (log(target) - log(e)) * (1.0 - exp(-max(dt, 0.0) / tau)));
+}
+
 vec4 wall_shown(vec2 p, float size) {
 	wall_base = 0; // (bare: the wall as drawn)
 	if (in_panels(p)) {
@@ -4996,7 +5031,7 @@ vec4 wall_shown(vec2 p, float size) {
 		return infrared_shown(1.0); // the room's own temperature (Stage 46)
 	}
 	int profile = wall_profile(p.y);
-	float v = encode1(wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size));
+	float v = encode1(min(display_exposure() * wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size), 1.0)); // (Stage 90: at the display's exposure)
 	return vec4(v, v, v, 1.0);
 }
 
@@ -5110,6 +5145,6 @@ vec4 shown(Path q, PixelState s) {
 		return infrared_shown((s.prox.x + s.hist.x + s.prox.y + s.hist.y + s.prox.z + s.hist.z) / 3.0);
 	}
 	// (and a sensor's display, what it shows through what is in front of it: Stage 46)
-	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z) + relay_light(q));
+	vec3 c = gamut(display_exposure() * (vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z) + relay_light(q))); // (Stage 90: its exposure)
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }

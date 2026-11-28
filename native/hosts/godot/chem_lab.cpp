@@ -299,7 +299,7 @@ void ChemLab::_process(double delta) {
 					const godot::PackedInt32Array parity = optics_parity(image->get_data());
 					if (parity.size() == 5) {
 						godot::UtilityFunctions::print("play: O4 ", shot_, ": ", parity[0], " pixels in bodies, the largest difference ", parity[1], " on the eye metric (at ", parity[3], ", ",
-								parity[4], "), ", parity[2], " visible");
+								parity[4], "), ", parity[2], " visible; at the exposure ", compute_.exposure()); // (Stage 90)
 					}
 					set_flat_visible(true);
 				}
@@ -477,6 +477,7 @@ godot::PackedInt32Array ChemLab::optics_parity(const godot::PackedByteArray &rgb
 	godot::PackedInt32Array out;
 	cg_optics_parity parity;
 	parity.size = sizeof parity;
+	parity.exposure = compute_.exposure(); // (Stage 90) the truth at the exposure the picture was shown at
 	if (ui_ == nullptr || rgba.size() != 1920 * 1080 * 4 || cg_ui_optics_compare(ui_, rgba.ptr(), 1920, 1080, &parity) != CG_OK) {
 		return out;
 	}

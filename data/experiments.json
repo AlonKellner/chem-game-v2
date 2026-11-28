@@ -304,6 +304,13 @@
 			"tutorial": "tutorials/spectra.json"
 		},
 		{
+			"id": "flames",
+			"title": "Flame tests and their spectra",
+			"summary": "Seven metals in a burner's flame, by eye and through the spectral viewer: sodium's yellow line, lithium's crimson, potassium nearly hidden even in a dimmed room, the alkaline earths' and copper's bands; sodium hiding potassium; two unknowns; a photon's energy.",
+			"bench": "benches/flames.json",
+			"tutorial": "tutorials/flames.json"
+		},
+		{
 			"id": "gravimetric",
 			"title": "Chloride by weight",
 			"summary": "An unknown chloride solution's silver chloride, brought out by silver nitrate, filtered into a weighed crucible, washed, dried in the oven to constant mass and weighed: its chloride's concentration.",
