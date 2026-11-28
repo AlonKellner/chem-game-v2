@@ -714,7 +714,9 @@ int precipitation() {
 		status |= clean ? 0 : 1;
 		// the base all taken, by the balance of protons: the solid, copper's hydroxo ion and what is free, less the
 		// hydrogen ions freed (Stage 63)
-		const double bound = 2.0 * hydroxide + mol(builtin::copper_hydroxide_ion) + mol(builtin::hydroxide_ion) - mol(builtin::hydrogen_ion) - mol(builtin::hydrogen_sulfate_ion);
+		// (Stage 92) and copper's hydroxo complexes in strong base (and any oxide: CuO + H2O is the hydroxide)
+		const double bound = 2.0 * hydroxide + mol(builtin::copper_hydroxide_ion) + 3.0 * mol(builtin::copper_trihydroxo) + 4.0 * mol(builtin::copper_tetrahydroxo) +
+				2.0 * mol(builtin::copper_oxide) + mol(builtin::hydroxide_ion) - mol(builtin::hydrogen_ion) - mol(builtin::hydrogen_sulfate_ion);
 		status |= std::abs(bound - base) < 1e-9 ? 0 : 1;
 		// the hydroxide the base's half up to the copper, within what copper's hydroxo ion holds of it where copper is left
 		status |= std::abs(hydroxide - made) < 0.02 * made + 2e-6 ? 0 : 1;

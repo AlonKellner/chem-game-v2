@@ -108,7 +108,7 @@
 		{
 			"title": "Full flame",
 			"text": "Right-click the burner to choose it, then drag its valve fully open. Then click 60x on the clock to hurry the wait.",
-			"why": "Under boiling water half of the hydroxide turns in about half an hour (Ea 127 kJ/mol). Once the water has boiled away and it is hotter, above 150 C, it takes seconds.",
+			"why": "Copper hydroxide is less stable than copper oxide and water, only slow to change. In the base left over it dissolves a little, as Cu(OH)4 2-, and black copper oxide grows from that: near boiling, in a few minutes (Stage 92). In plain water it would take hours at a boil; dry and above 150 C, seconds.",
 			"checks": [
 				{
 					"text": "the valve fully open",
@@ -132,8 +132,8 @@
 		},
 		{
 			"title": "It turns black",
-			"text": "Watch the beaker: the water boils away, and the pale blue powder darkens to black.",
-			"why": "Cu(OH)2 -> CuO + H2O: the water leaves as steam, and black copper oxide stays, the same oxide the demo makes from malachite.",
+			"text": "Watch the beaker: as it heats towards boiling, the pale blue powder darkens to black.",
+			"why": "Cu(OH)2 -> CuO + H2O, through the base left over: the hydroxide dissolves as Cu(OH)4 2- and black copper oxide grows from it, the same oxide the demo makes from malachite.",
 			"checks": [
 				{
 					"text": "copper oxide in the beaker",
@@ -148,7 +148,7 @@
 		{
 			"title": "Flame off",
 			"text": "Right-click the burner, then drag its valve shut. Wait for the beaker to cool below 40 C.",
-			"why": "Acid on a hot, dry beaker would spit as it boiled.",
+			"why": "Acid on a hot beaker would spit: let it cool first.",
 			"checks": [
 				{
 					"text": "the valve shut",
@@ -182,10 +182,14 @@
 			"why": "The acid first neutralises the base left over, then eats the oxide: CuO + H2SO4 -> CuSO4 + H2O. The copper is dissolved and blue again; the 0.01 mol went round a cycle and none of it was lost.",
 			"checks": [
 				{
-					"text": "about 20 mL of acid in the beaker",
+					"text": "the acid in: the base neutralised, pH below 7",
 					"when": {
-						"item": "beaker",
-						"liquid_above_ml": 15
+						"quantity": {
+							"item": "beaker",
+							"what": "ph"
+						},
+						"compare": "below",
+						"value": 7
 					}
 				},
 				{

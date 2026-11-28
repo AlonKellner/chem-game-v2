@@ -82,8 +82,10 @@ double mol(const CellState &c, SpeciesId s) {
 // the hydroxide a state holds bound and free, less the hydrogen ions freed (Stage 63): 2 Cu(OH)2 + CuOH+ + OH- -
 // H+ - HSO4-, the base put in less the acid's hydrogen, by its balance of protons
 double bound_hydroxide(const CellState &c) {
-	return 2.0 * mol(c, builtin::copper_hydroxide) + mol(c, builtin::copper_hydroxide_ion) +
-			mol(c, builtin::hydroxide_ion) - mol(c, builtin::hydrogen_ion) - mol(c, builtin::hydrogen_sulfate_ion);
+	// (Stage 92) and copper's hydroxo complexes, and any oxide (CuO + H2O is the hydroxide)
+	return 2.0 * mol(c, builtin::copper_hydroxide) + mol(c, builtin::copper_hydroxide_ion) + 3.0 * mol(c, builtin::copper_trihydroxo) +
+			4.0 * mol(c, builtin::copper_tetrahydroxo) + 2.0 * mol(c, builtin::copper_oxide) + mol(c, builtin::hydroxide_ion) -
+			mol(c, builtin::hydrogen_ion) - mol(c, builtin::hydrogen_sulfate_ion);
 }
 
 } // namespace
@@ -204,7 +206,11 @@ TEST_CASE("precipitation: a base into copper sulfate brings the hydroxide out in
 		CHECK(mol(end, builtin::copper_hydroxide) / made > (base < 0.1 ? 0.95 : 0.9999));
 		CHECK(mol(end, builtin::copper_hydroxide) / made < 1.0 + 1e-9);
 		if (base > 0.1) {
-			CHECK(copper_left < 1e-11); // Ksp 5e-20 over the base left
+			// Ksp 5e-20 over the base left: no free copper ion; (Stage 92) in strong base a little as its hydroxo complexes,
+			// Cu(OH)3- and Cu(OH)4 2- (MINTEQ v4)
+			const double complexed = mol(end, builtin::copper_trihydroxo) + mol(end, builtin::copper_tetrahydroxo);
+			CHECK(copper_left - complexed < 1e-11);
+			CHECK(complexed > 0.0);
 		}
 		// as grains of its own size (grain_um), not one lump
 		const double d = particle_diameter(table, end, builtin::copper_hydroxide);

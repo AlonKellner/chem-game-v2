@@ -326,7 +326,7 @@ TEST_CASE("experiment neutralisation: followed with its own gestures, free, it c
 
 TEST_CASE("experiment precipitate: followed with its own gestures, strict, the copper comes out, turns black and dissolves blue again (Stage 44)") {
 	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json");
-	CHECK(pupil::follow_through(p, 2400) > 10);
+	CHECK(pupil::follow_through(p, 4800) > 10);
 	completed(p);
 	CHECK(p.grams("beaker", "copper_hydroxide") < 1e-6);
 	CHECK(p.grams("beaker", "copper_oxide") < 0.02);
@@ -335,13 +335,13 @@ TEST_CASE("experiment precipitate: followed with its own gestures, strict, the c
 
 TEST_CASE("experiment precipitate: played as a person plays it, strict, it completes (Stage 44)") {
 	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json");
-	pupil::play_as_person(p, 2400);
+	pupil::play_as_person(p, 4800);
 	completed(p);
 }
 
 TEST_CASE("experiment precipitate: followed with its own gestures, free, it completes (Stage 44)") {
 	Pupil p("data/benches/precipitate.json", "data/tutorials/precipitate.json", false);
-	pupil::follow_through(p, 2400);
+	pupil::follow_through(p, 4800);
 	completed(p);
 }
 
