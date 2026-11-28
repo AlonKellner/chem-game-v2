@@ -1753,6 +1753,56 @@ TEST_CASE("experiment redox_titration: followed with its own gestures, free, it 
 	completed(p);
 }
 
+TEST_CASE("experiment hydrogen_volume: followed with its own gestures, strict, the hydrogen pushes the syringe out by about 49.5 mL: 24 L/mol and R (Stage 92)") {
+	Pupil p("data/benches/hydrogen_volume.json", "data/tutorials/hydrogen_volume.json");
+	CHECK(pupil::follow_through(p, 3600) > 4);
+	completed(p);
+	const double ml = p.item("s").plunger_ml;
+	// the hydrogen's own volume: the reading less water's vapour (2.34 kPa at 20 C); the plunger's friction (Stage 79)
+	// holds it a millilitre or two out after the warm gas cools
+	const double dry = ml * (101.325 - 2.34) / 101.325;
+	MESSAGE("collected " << ml << " mL: " << dry / 2.057 << " L/mol dry, R " << dry * 101.325 / (2.057 * 293.15));
+	CHECK(dry / 2.057 == doctest::Approx(24.06).epsilon(0.05));
+	report(p, { ml, dry / 2.057, dry * 101.325 / (2.057 * 293.15) });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment hydrogen_volume: played as a person plays it, strict, it completes (Stage 92)") {
+	Pupil p("data/benches/hydrogen_volume.json", "data/tutorials/hydrogen_volume.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment hydrogen_volume: followed with its own gestures, free, it completes (Stage 92)") {
+	Pupil p("data/benches/hydrogen_volume.json", "data/tutorials/hydrogen_volume.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment activity_series: followed with its own gestures, strict, three metals fizz and each puts the next out (Stage 92)") {
+	Pupil p("data/benches/activity_series.json", "data/tutorials/activity_series.json");
+	CHECK(pupil::follow_through(p, 3600) > 6);
+	completed(p);
+	CHECK(p.grams("a4", "copper_ion") < 1e-6); // copper in acid: nothing
+	CHECK(p.grams("d5", "zinc") < 1e-6); // copper in zinc sulfate: nothing
+	MESSAGE("tube 2's zinc dissolved " << p.grams("a2", "zinc_ion") << " g, tube 3's iron " << p.grams("a3", "iron_ii_ion") << " g; out: zinc "
+			<< p.grams("d1", "zinc") << ", iron " << p.grams("d2", "iron") << ", copper " << p.grams("d3", "copper") << ", silver " << p.grams("d4", "silver") << " g");
+	report(p, { 3.0 });
+	CHECK(p.drawn("you predicted 3"));
+}
+
+TEST_CASE("experiment activity_series: played as a person plays it, strict, it completes (Stage 92)") {
+	Pupil p("data/benches/activity_series.json", "data/tutorials/activity_series.json");
+	pupil::play_as_person(p, 3600);
+	completed(p);
+}
+
+TEST_CASE("experiment activity_series: followed with its own gestures, free, it completes (Stage 92)") {
+	Pupil p("data/benches/activity_series.json", "data/tutorials/activity_series.json", false);
+	pupil::follow_through(p, 3600);
+	completed(p);
+}
+
 TEST_CASE("experiment molar_volume: played as a person plays it, strict, it completes (Stage 79)") {
 	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
 	pupil::play_as_person(p, 3600);

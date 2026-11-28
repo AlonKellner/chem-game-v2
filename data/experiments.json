@@ -371,6 +371,20 @@
 			"summary": "The demo's bench with no steps: everything in Supplies, yours to try.",
 			"bench": "benches/lab.json",
 			"tutorial": null
+		},
+		{
+			"id": "hydrogen_volume",
+			"title": "Hydrogen's molar volume and R",
+			"summary": "A magnesium ribbon in hydrochloric acid gives hydrogen, collected in a gas syringe on the flask's mouth: its volume over its moles, about 24 litres a mole, and R = PV / nT. A guess first.",
+			"bench": "benches/hydrogen_volume.json",
+			"tutorial": "tutorials/hydrogen_volume.json"
+		},
+		{
+			"id": "activity_series",
+			"title": "The activity series of metals",
+			"summary": "Magnesium, zinc, iron and copper in acid, which fizz and how fast; then each metal in another's solution, which puts which out: the order of their reactivity. A guess first.",
+			"bench": "benches/activity_series.json",
+			"tutorial": "tutorials/activity_series.json"
 		}
 	]
 }

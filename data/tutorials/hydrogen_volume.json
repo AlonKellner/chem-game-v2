@@ -1,0 +1,195 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 92; docs/CURRICULUM.md, experiment 28) on data/benches/hydrogen_volume.json: magnesium in hydrochloric acid, Mg + 2 HCl -> MgCl2 + H2, its hydrogen collected in a gas syringe: its molar volume and the gas constant.",
+	"title": "Experiment: hydrogen's molar volume and R",
+	"bench": "../benches/hydrogen_volume.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "0.050 g of magnesium ribbon (24.31 g/mol) gives one hydrogen molecule for each atom: 2.057 mmol. How many millilitres of gas will push the syringe out? Type your guess, then click \"predict\".",
+			"why": "A mole of any gas takes the same room at the same temperature and pressure (Avogadro).",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "50"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "The gas",
+			"title": "The magnesium into the acid",
+			"text": "Pick up the dish of magnesium, then right-click the flask. In the menu, click \"tip in\".",
+			"checks": [
+				{
+					"text": "the magnesium in the flask",
+					"when": {
+						"item": "jar",
+						"species": "magnesium",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:jar",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:tip:magnesium"
+				}
+			]
+		},
+		{
+			"title": "The syringe on its mouth",
+			"text": "Quickly: pick up the syringe, right-click the flask, and click \"on its mouth\".",
+			"why": "Its nozzle in the flask's bung: the hydrogen the acid gives has nowhere to go but into the syringe, which it pushes out at the room's pressure.",
+			"checks": [
+				{
+					"text": "the syringe on the flask",
+					"when": {
+						"item": "s",
+						"place": "on"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:s",
+						"item:flask"
+					]
+				},
+				{
+					"click": "panel:attach"
+				}
+			]
+		},
+		{
+			"title": "Collect it",
+			"text": "Watch the plunger move out as the magnesium fizzes away, its hydrogen stirring the acid round it. Speed up time if you like.",
+			"why": "The air in the flask is pushed into the syringe by the hydrogen made under it: the syringe reads what was made.",
+			"checks": [
+				{
+					"text": "the magnesium gone",
+					"when": {
+						"item": "flask",
+						"species": "magnesium",
+						"below_g": 0.0002
+					}
+				}
+			]
+		},
+		{
+			"title": "Let it cool",
+			"text": "The reaction warmed the flask by several degrees, and its gas with it. Wait until the flask is back at the room's 20 C (speed up time if you like).",
+			"why": "Warm gas takes more room, and the water's vapour presses harder warm: read too soon and the volume reads high, by several millilitres.",
+			"checks": [
+				{
+					"text": "the flask under 20.5 C",
+					"wait": true,
+					"when": {
+						"item": "flask",
+						"below_c": 20.5
+					}
+				}
+			]
+		},
+		{
+			"title": "Read it",
+			"text": "Right-click the syringe and click \"+ mL\".",
+			"why": "Now the gas is at the room's temperature and pressure: its volume is what the moles take there.",
+			"checks": [
+				{
+					"text": "its volume recorded",
+					"when": {
+						"item": "s",
+						"recorded": "plunger_ml",
+						"recorded_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s"
+				},
+				{
+					"click": "record:s:plunger_ml"
+				}
+			]
+		}
+	],
+	"goal": [
+		{
+			"text": "every element, mass and energy unchanged",
+			"when": {
+				"conserved": true
+			}
+		}
+	],
+	"results": [
+		{
+			"label": "the gas collected",
+			"quantity": {
+				"item": "s",
+				"what": "plunger_ml"
+			},
+			"show": [
+				"now"
+			]
+		},
+		{
+			"label": "the flask",
+			"quantity": {
+				"item": "flask",
+				"what": "celsius"
+			},
+			"show": [
+				"most",
+				"now"
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the gas collected",
+			"unit": "mL",
+			"truth": "s.plunger_ml",
+			"ideal": 50.7,
+			"tolerance": 3,
+			"predict": true,
+			"why": "2.057 mmol x 24.06 L/mol at 20 C and 101.3 kPa is 49.5 mL of hydrogen; it takes up water's vapour from the wet flask (2.34 kPa at 20 C), 1.2 mL more; and the syringe's ground plunger, pushed out by the warm gas, holds a millilitre or two out as it cools."
+		},
+		{
+			"label": "the molar volume",
+			"unit": "L/mol",
+			"truth": "s.plunger_ml * (101.325 - 2.34) / 101.325 / 2.057",
+			"ideal": 24.06,
+			"tolerance": 1.2,
+			"why": "The hydrogen's own volume is the reading less its share of water's vapour, times (P - p_water) / P; over its moles. RT/P is 24.06 L/mol at 20 C and 101.3 kPa, the same for any gas."
+		},
+		{
+			"label": "R",
+			"unit": "J/(mol K)",
+			"truth": "s.plunger_ml * (101.325 - 2.34) / (2.057 * 293.15)",
+			"ideal": 8.314,
+			"tolerance": 0.4,
+			"why": "R = PV / nT with the hydrogen's own pressure, 101.325 - 2.34 kPa, times the volume in mL, over the mmol and 293.15 K (kPa mL / mmol K is J / mol K)."
+		}
+	]
+}

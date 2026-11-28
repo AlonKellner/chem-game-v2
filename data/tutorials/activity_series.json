@@ -1,0 +1,606 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §7, §13.7, Stage 92; docs/CURRICULUM.md, experiment 46) on data/benches/activity_series.json: metals in acid, then metals in each other's solutions: the activity series.",
+	"title": "Experiment: the activity series",
+	"bench": "../benches/activity_series.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Four metals go into hydrochloric acid: magnesium, zinc, iron and copper. A metal that fizzes gives off hydrogen as it dissolves. How many of the four will fizz?",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: In acid",
+			"title": "Acid in four tubes",
+			"text": "Pick up the hydrochloric acid, right-click tube 1, type 5 and click \"pour\". The same into tubes 2, 3 and 4.",
+			"checks": [
+				{
+					"text": "5 mL in a1",
+					"when": {
+						"quantity": {
+							"item": "a1",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in a2",
+					"when": {
+						"quantity": {
+							"item": "a2",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in a3",
+					"when": {
+						"quantity": {
+							"item": "a3",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in a4",
+					"when": {
+						"quantity": {
+							"item": "a4",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:a1"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:acid",
+						"item:a2"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:acid",
+						"item:a3"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:acid",
+						"item:a4"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "A metal in each",
+			"text": "Tip the magnesium ribbon into tube 1, the zinc into 2, the iron filings into 3 and the copper into 4: pick up each dish, right-click its tube, click \"tip in\".",
+			"checks": [
+				{
+					"text": "the magnesium in a1",
+					"when": {
+						"item": "m_a1",
+						"species": "magnesium",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "the zinc in a2",
+					"when": {
+						"item": "m_a2",
+						"species": "zinc",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "the iron in a3",
+					"when": {
+						"item": "m_a3",
+						"species": "iron",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "the copper in a4",
+					"when": {
+						"item": "m_a4",
+						"species": "copper",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:m_a1",
+						"item:a1"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"drag": [
+						"item:m_a2",
+						"item:a2"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"drag": [
+						"item:m_a3",
+						"item:a3"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"drag": [
+						"item:m_a4",
+						"item:a4"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Which fizz?",
+			"text": "Watch: magnesium fizzes hard and is soon gone; zinc fizzes slowly, iron more slowly still; copper does nothing. Wait for the magnesium to be gone.",
+			"why": "A metal more reactive than hydrogen gives its electrons to the acid's hydrogen ions: Mg + 2 H+ -> Mg2+ + H2. Magnesium's own hydrogen stirs the acid round it, so it goes as fast as the acid reaches it; zinc and iron are held back at their surfaces, where hydrogen forms only slowly; copper is less reactive than hydrogen.",
+			"checks": [
+				{
+					"text": "the magnesium gone",
+					"wait": true,
+					"when": {
+						"item": "a1",
+						"species": "magnesium",
+						"below_g": 0.0005
+					}
+				},
+				{
+					"text": "zinc in solution in tube 2",
+					"wait": true,
+					"when": {
+						"item": "a2",
+						"species": "zinc_ion",
+						"above_g": 5e-05
+					}
+				},
+				{
+					"text": "iron in solution in tube 3",
+					"wait": true,
+					"when": {
+						"item": "a3",
+						"species": "iron_ii_ion",
+						"above_g": 5e-05
+					}
+				}
+			]
+		},
+		{
+			"part": "2: Displacement",
+			"title": "Five solutions",
+			"text": "Pour 5 mL into each tube from 5 to 9: zinc sulfate into 5, iron(II) sulfate into 6, copper sulfate into 7, silver nitrate into 8, zinc sulfate into 9.",
+			"checks": [
+				{
+					"text": "5 mL in d1",
+					"when": {
+						"quantity": {
+							"item": "d1",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in d2",
+					"when": {
+						"quantity": {
+							"item": "d2",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in d3",
+					"when": {
+						"quantity": {
+							"item": "d3",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in d4",
+					"when": {
+						"quantity": {
+							"item": "d4",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				},
+				{
+					"text": "5 mL in d5",
+					"when": {
+						"quantity": {
+							"item": "d5",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 4.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:zinc_sulfate",
+						"item:d1"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:iron_sulfate",
+						"item:d2"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:copper_sulfate",
+						"item:d3"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:silver_nitrate",
+						"item:d4"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:zinc_sulfate",
+						"item:d5"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "A metal in each, shaken",
+			"text": "Tip magnesium into 5, zinc into 6, iron into 7, copper into 8 and copper into 9; right-click each tube and stir it (a shake).",
+			"why": "A metal puts out of solution the ions of any metal less reactive than itself; shaking brings the ions to its surface.",
+			"checks": [
+				{
+					"text": "the magnesium in d1, shaken",
+					"when": {
+						"all": [
+							{
+								"item": "m_d1",
+								"species": "magnesium",
+								"below_g": 0.001
+							},
+							{
+								"item": "d1",
+								"stirred": true
+							}
+						]
+					}
+				},
+				{
+					"text": "the zinc in d2, shaken",
+					"when": {
+						"all": [
+							{
+								"item": "m_d2",
+								"species": "zinc",
+								"below_g": 0.001
+							},
+							{
+								"item": "d2",
+								"stirred": true
+							}
+						]
+					}
+				},
+				{
+					"text": "the iron in d3, shaken",
+					"when": {
+						"all": [
+							{
+								"item": "m_d3",
+								"species": "iron",
+								"below_g": 0.001
+							},
+							{
+								"item": "d3",
+								"stirred": true
+							}
+						]
+					}
+				},
+				{
+					"text": "the copper in d4, shaken",
+					"when": {
+						"all": [
+							{
+								"item": "m_d4",
+								"species": "copper",
+								"below_g": 0.001
+							},
+							{
+								"item": "d4",
+								"stirred": true
+							}
+						]
+					}
+				},
+				{
+					"text": "the copper in d5, shaken",
+					"when": {
+						"all": [
+							{
+								"item": "m_d5",
+								"species": "copper",
+								"below_g": 0.001
+							},
+							{
+								"item": "d5",
+								"stirred": true
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:m_d1",
+						"item:d1"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:d1"
+				},
+				{
+					"click": "stir:d1"
+				},
+				{
+					"drag": [
+						"item:m_d2",
+						"item:d2"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:d2"
+				},
+				{
+					"click": "stir:d2"
+				},
+				{
+					"drag": [
+						"item:m_d3",
+						"item:d3"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:d3"
+				},
+				{
+					"click": "stir:d3"
+				},
+				{
+					"drag": [
+						"item:m_d4",
+						"item:d4"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:d4"
+				},
+				{
+					"click": "stir:d4"
+				},
+				{
+					"drag": [
+						"item:m_d5",
+						"item:d5"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				},
+				{
+					"click": "item:d5"
+				},
+				{
+					"click": "stir:d5"
+				}
+			]
+		},
+		{
+			"title": "What comes out",
+			"text": "Watch: in 5, grey zinc on the magnesium; in 6, dark iron on the zinc; in 7, red-brown copper on the iron and the blue fading; in 8, grey silver crystals on the copper and the solution turning blue; in 9, nothing.",
+			"checks": [
+				{
+					"text": "zinc out in tube 5",
+					"wait": true,
+					"when": {
+						"item": "d1",
+						"species": "zinc",
+						"above_g": 0.0005
+					}
+				},
+				{
+					"text": "iron out in tube 6",
+					"wait": true,
+					"when": {
+						"item": "d2",
+						"species": "iron",
+						"above_g": 0.0005
+					}
+				},
+				{
+					"text": "copper out in tube 7",
+					"wait": true,
+					"when": {
+						"item": "d3",
+						"species": "copper",
+						"above_g": 0.0005
+					}
+				},
+				{
+					"text": "silver out in tube 8",
+					"wait": true,
+					"when": {
+						"item": "d4",
+						"species": "silver",
+						"above_g": 0.0005
+					}
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "metals that fizz in acid",
+			"unit": "",
+			"truth": "3",
+			"tolerance": 0.5,
+			"predict": true,
+			"why": "Magnesium, zinc and iron are more reactive than hydrogen; copper is not."
+		},
+		{
+			"label": "the series, most reactive first",
+			"single": true,
+			"choices": [
+				{
+					"label": "Mg > Zn > Fe > Cu > Ag",
+					"truth": "1"
+				},
+				{
+					"label": "Zn > Mg > Fe > Cu > Ag",
+					"truth": "0"
+				},
+				{
+					"label": "Mg > Fe > Zn > Cu > Ag",
+					"truth": "0"
+				},
+				{
+					"label": "Mg > Zn > Fe > Ag > Cu",
+					"truth": "0"
+				}
+			],
+			"why": "Each metal put out the next: magnesium zinc (5), zinc iron (6), iron copper (7), copper silver (8); copper did nothing to zinc's ions (9)."
+		}
+	]
+}

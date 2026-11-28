@@ -309,3 +309,59 @@ TEST_CASE("measured: magnesium's own hydrogen stirs its acid as Roald measured i
 	CHECK(k < 2.0 * 0.20 / 6000.0);
 	CHECK(k > 10.0 * k_still);
 }
+
+namespace {
+
+// 35 g of water holding 0.77 g of fresh copper hydroxide (7.9 mmol, its 0.3 um grains) and `base` mol of excess
+// sodium hydroxide, held at `celsius`: the share of the copper that is oxide after `seconds`
+double blackened(double base, double celsius, double seconds) {
+	using namespace builtin;
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("beaker");
+	const CellId bath = b.add_reservoir("bath", celsius + 273.15);
+	b.add_edge(cell, bath, PHASES_NONE, 1e5);
+	bool ok = false;
+	b.set_amount(cell, water, amount_from_mol(35.0 / 18.015, ok));
+	b.set_amount(cell, copper_hydroxide, amount_from_mol(0.0079, ok));
+	b.set_particles(cell, copper_hydroxide, 14000000000000);
+	if (base > 0.0) {
+		b.set_amount(cell, sodium_ion, amount_from_mol(base, ok)).set_amount(cell, hydroxide_ion, amount_from_mol(base, ok));
+	}
+	b.set_temperature(cell, celsius + 273.15);
+	std::string why;
+	auto world = build_settled(b, builtin_reactions(), &why);
+	REQUIRE_MESSAGE(world.has_value(), why);
+	Simulation sim(std::move(*world), std::vector<Reaction>(builtin_reactions().begin(), builtin_reactions().end()));
+	StepTrace trace;
+	for (int step = 1; step <= static_cast<int>(seconds / STEP_SECONDS); ++step) {
+		sim.step(trace);
+		if (step % 3600 == 0) {
+			const Violations v = check_all(builtin_species(), trace, sim.equilibria());
+			REQUIRE_MESSAGE(v.empty(), v.front());
+		}
+	}
+	return static_cast<double>(sim.world().amount(cell, copper_oxide).quanta) * MOL_PER_QUANTUM / 0.0079;
+}
+
+} // namespace
+
+TEST_CASE("measured: copper's hydroxo complexes are MINTEQ's; copper hydroxide turns black in hot base in minutes, not in water or cold (Stage 92)") {
+	using namespace builtin;
+	const SpeciesTable &t = builtin_species();
+	const auto g = [&](SpeciesId s) { return t.species(s).hf - 298.15 * t.species(s).s0; };
+	const double rt10 = GAS_CONSTANT * 298.15 * std::log(10.0);
+	// MINTEQ v4 (minteq.v4.dat, lines 854 and 862): Cu2+ + 3 H2O = Cu(OH)3- + 3 H+, -26.879; + 4 H2O, -39.98
+	CHECK(-(g(copper_trihydroxo) + 3.0 * g(hydrogen_ion) - g(copper_ion) - 3.0 * g(water)) / rt10 == doctest::Approx(-26.879).epsilon(1e-6));
+	CHECK(-(g(copper_tetrahydroxo) + 4.0 * g(hydrogen_ion) - g(copper_ion) - 4.0 * g(water)) / rt10 == doctest::Approx(-39.98).epsilon(1e-6));
+	// the base route (Cudennec and Lecerf 2003: through Cu(OH)4 2-, "very fast" in base; no rate measured): calibrated
+	// to a class's copper cycle, the hydroxide black within about five minutes at 90 C in 0.1 M excess base; in water
+	// (the dry route alone, Fukuda's) and cold it hardly goes
+	const double hot = blackened(0.004, 90.0, 300.0), water_only = blackened(0.0, 90.0, 300.0), cold = blackened(0.004, 20.0, 300.0);
+	MESSAGE("oxide after 5 min: in 0.11 M base at 90 C " << hot << ", in water at 90 C " << water_only << ", in base at 20 C " << cold);
+	CHECK(hot > 0.95);
+	const double two = blackened(0.004, 90.0, 120.0);
+	CHECK(two > 0.5); // half black in under two minutes
+	CHECK(two < 0.9);
+	CHECK(water_only < 0.05);
+	CHECK(cold < 0.05);
+}
