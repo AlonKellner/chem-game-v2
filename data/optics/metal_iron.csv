@@ -1,0 +1,19 @@
+# Iron: its complex refractive index n + ik at room temperature against wavelength (Stage 92).
+# Johnson and Christy 1974, "Optical constants of transition metals: Ti, V, Cr, Mn, Fe, Co, Ni, and Pd", Phys. Rev. B 9, 5056 (doi 10.1103/PhysRevB.9.5056): vacuum-evaporated films, room temperature; as refractiveindex.info gives it (CC0: github.com/polyanskiy/refractiveindex.info-database, Fe_Johnson.yml, fetched 2026-11-28).
+# The points from the last at or under 380 nm to the first at or over 780 nm; nm, n, k.
+368.00,2.02,2.43
+381.00,2.12,2.5
+397.00,2.24,2.58
+413.00,2.35,2.65
+431.00,2.48,2.71
+451.00,2.59,2.77
+471.00,2.67,2.82
+496.00,2.74,2.88
+521.00,2.86,2.91
+549.00,2.95,2.93
+582.00,2.94,2.99
+617.00,2.88,3.05
+659.00,2.92,3.1
+704.00,2.86,3.19
+756.00,2.87,3.28
+821.00,2.94,3.39

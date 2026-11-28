@@ -634,8 +634,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 			}
 			if (s.phase == 's' && s.g > 0.0) {
+				// (Stage 92) a metal as fine grains (a spongy deposit) reflects less: its own factor under its size
+				const chem::optics::Fine *fine = kind == Kind::Reflect ? chem::optics::fine(id) : nullptr;
+				const double darker = fine != nullptr && s.size_um < fine->below_um ? fine->factor : 1.0;
 				for (size_t i = 0; i < reflectance.size(); ++i) {
-					reflectance[i] += s.g * (kind == Kind::Reflect ? chem::optics::spectrum(id)[i] : GREY);
+					reflectance[i] += s.g * (kind == Kind::Reflect ? darker * chem::optics::spectrum(id)[i] : GREY);
 				}
 				for (int i = 0; i < LWIR_ROW; ++i) {
 					lw[SOLID_ROW * LWIR_ROW + i] += static_cast<float>(s.g * lwir_reflectance(s.species)); // (by mass, below)

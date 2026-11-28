@@ -69,6 +69,11 @@
 		"permanganate_ion": {"kind": "absorb", "table": "permanganate.csv", "units": "L/mol/cm"},
 		"triiodide_ion": {"kind": "absorb", "table": "triiodide.csv", "units": "L/mol/cm"},
 		"iodine_aq": {"kind": "absorb", "table": "iodine_aq.csv", "units": "L/mol/cm"},
+		"copper": {"kind": "reflect", "nk": "metal_copper.csv", "fine": {"below_um": 100, "factor": 0.35}},
+		"silver": {"kind": "reflect", "nk": "metal_silver.csv", "fine": {"below_um": 100, "factor": 0.2}},
+		"zinc": {"kind": "reflect", "nk": "metal_zinc.csv", "fine": {"below_um": 100, "factor": 0.3}},
+		"iron": {"kind": "reflect", "nk": "metal_iron.csv", "fine": {"below_um": 100, "factor": 0.4}},
+		"magnesium": {"kind": "reflect", "nk": "metal_magnesium.csv", "fine": {"below_um": 100, "factor": 0.4}},
 		"hydrogen_chromate_ion": {"kind": "absorb", "table": "hydrogen_chromate.csv", "units": "L/mol/cm"},
 		"dichromate_ion": {"kind": "absorb", "bands": [{"centre_cm1": 28571, "fwhm_cm1": 6000, "peak": 3576}, {"centre_cm1": 22727, "fwhm_cm1": 3600, "peak": 250}]},
 		"copper_ammine_1": {"kind": "absorb", "table": "copper_ammine_1.csv", "units": "L/mol/cm"},
@@ -521,7 +526,7 @@
 			"copper_sulfate_trihydrate": 0.9,
 			"copper_sulfate_monohydrate": 0.9,
 			"copper_hydroxide": 0.9,
-			"ice": 0.97
+			"ice": 0.97, "copper": 0.0082, "silver": 0.0082, "zinc": 0.0242, "iron": 0.0335, "magnesium": 0.0376
 		},
 		"transmittance": {
 			"latex": 0.3,

@@ -227,14 +227,14 @@ TEST_CASE("redox: permanganate takes five iron(II) each, to the end point and no
 		std::string why;
 		auto world = build_settled(b, builtin_reactions(), &why);
 		REQUIRE_MESSAGE(world.has_value(), why);
-		const double left = mol_of(*world, cell, permanganate_ion), iron = mol_of(*world, cell, iron_ii_ion);
-		MESSAGE(mn << " mol permanganate: " << left << " left, iron(II) " << iron);
+		const double left = mol_of(*world, cell, permanganate_ion), ferrous = mol_of(*world, cell, iron_ii_ion);
+		MESSAGE(mn << " mol permanganate: " << left << " left, iron(II) " << ferrous);
 		if (mn < 0.002) {
 			CHECK(left < 1e-12);
-			CHECK(iron == doctest::Approx(0.01 - 5.0 * mn).epsilon(1e-6));
+			CHECK(ferrous == doctest::Approx(0.01 - 5.0 * mn).epsilon(1e-6));
 		} else {
 			CHECK(left == doctest::Approx(mn - 0.002).epsilon(1e-6));
-			CHECK(iron < 1e-12);
+			CHECK(ferrous < 1e-12);
 		}
 		CHECK(mol_of(*world, cell, manganese_ion) == doctest::Approx(std::min(mn, 0.002)).epsilon(1e-6));
 	}

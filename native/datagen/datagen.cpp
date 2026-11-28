@@ -940,6 +940,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	optics << "constexpr Spectrum NOTHING = {};\n\n";
 	std::vector<std::pair<int, std::string>> kinds; // species index -> its Kind
 	std::map<int, std::vector<double>> absorbs; // (Stage 63) each absorber's spectrum, for the formula units of its ions
+	std::vector<std::array<double, 3>> fines; // (Stage 92) species index, the grain under which it darkens, by how much
 	for (const auto &[name, m] : media.at("media").items()) {
 		int index = -1;
 		for (size_t i = 0; i < species.size(); ++i) {
@@ -956,6 +957,45 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		// L/mol/cm); or, with "units": "L/mol/cm", the molar absorptivity itself. A reflector's: its diffuse
 		// reflectance, a fraction (Stage 23).
 		std::vector<std::pair<double, double>> measured;
+		if (m.contains("nk")) {
+			// (Stage 92) a metal's: its measured n + ik (nm, n, k), its reflectance at normal incidence by Fresnel,
+			// R = ((n - 1)^2 + k^2) / ((n + 1)^2 + k^2), at each measured point
+			const std::string file = m.at("nk").get<std::string>();
+			std::ifstream in(data / "optics" / file);
+			if (!in || kind != "reflect" || m.contains("table")) {
+				fail(media_file, "\"" + name + "\": an n + k table is a reflector's, in data/optics, in place of a table");
+			}
+			std::string line;
+			while (std::getline(in, line)) {
+				if (line.empty() || line[0] == '#') {
+					continue;
+				}
+				std::vector<double> cells;
+				std::stringstream row(line);
+				std::string cell;
+				while (std::getline(row, cell, ',')) {
+					cells.push_back(std::stod(cell));
+				}
+				if (cells.size() != 3 || !(cells[1] > 0.0) || !(cells[2] >= 0.0) || (!measured.empty() && cells[0] <= measured.back().first)) {
+					fail(file, "is not a table of ascending wavelengths, each with n over 0 and k at least 0");
+				}
+				const double n = cells[1], k = cells[2];
+				measured.emplace_back(cells[0], ((n - 1.0) * (n - 1.0) + k * k) / ((n + 1.0) * (n + 1.0) + k * k));
+			}
+			if (measured.empty() || measured.front().first > 380.0 || measured.back().first < 780.0) {
+				fail(file, "does not run from 380 to 780 nm");
+			}
+		}
+		if (m.contains("fine")) {
+			// (Stage 92) a solid that darkens as fine grains (a metal's spongy deposit): under `below_um`, its
+			// reflectance times `factor`
+			const json &f = m.at("fine");
+			const double below = f.at("below_um").get<double>(), factor = f.at("factor").get<double>();
+			if (kind != "reflect" || !(below > 0.0) || !(factor > 0.0 && factor <= 1.0)) {
+				fail(media_file, "\"" + name + "\": a reflector's fine grains are under a size over 0, their factor over 0 and at most 1");
+			}
+			fines.push_back({ static_cast<double>(index), below, factor });
+		}
 		if (m.contains("table")) {
 			const std::string file = m.at("table").get<std::string>();
 			std::ifstream in(data / "optics" / file);
@@ -1399,7 +1439,13 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	for (const auto &[index, kind] : kinds) {
 		optics << "\t\tcase " << index << ":\n\t\t\treturn LINES_" << index << ";\n";
 	}
-	optics << "\t\tdefault:\n\t\t\treturn {};\n\t}\n}\n\n} // namespace chem::optics\n";
+	optics << "\t\tdefault:\n\t\t\treturn {};\n\t}\n}\n\nconst Fine *fine(SpeciesId species) {\n";
+	for (const auto &f : fines) {
+		char text[200];
+		std::snprintf(text, sizeof text, "\tif (species.index == %d) {\n\t\tstatic constexpr Fine F{ %.17g, %.17g };\n\t\treturn &F;\n\t}\n", static_cast<int>(f[0]), f[1], f[2]);
+		optics << text;
+	}
+	optics << "\treturn nullptr;\n}\n\n} // namespace chem::optics\n";
 	std::ofstream(out / "builtin_optics.cpp") << optics.str();
 
 	std::ofstream(out / "builtin_tables.cpp") << cpp.str();

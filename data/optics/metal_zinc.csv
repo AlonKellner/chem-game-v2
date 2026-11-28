@@ -1,0 +1,12 @@
+# Zinc: its complex refractive index n + ik at room temperature against wavelength (Stage 92).
+# Werner, Glantschnig and Ambrosch-Draxl 2009, "Optical constants and inelastic electron-scattering data for 17 elemental metals", J. Phys. Chem. Ref. Data 38, 1013 (doi 10.1063/1.3243762): from reflection electron energy-loss spectra, not an optical measurement; as refractiveindex.info gives it (CC0: github.com/polyanskiy/refractiveindex.info-database, Zn_Werner.yml, fetched 2026-11-28).
+# The points from the last at or under 380 nm to the first at or over 780 nm; nm, n, k.
+354.24,0.524,2.9907
+381.49,0.5508,3.2986
+413.28,0.6029,3.6376
+450.85,0.6794,4.0209
+495.94,0.7858,4.4636
+551.04,0.9322,4.985
+619.92,1.1356,5.6116
+708.48,1.4247,6.3811
+826.56,1.8489,7.3486

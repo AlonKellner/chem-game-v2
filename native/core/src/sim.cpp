@@ -575,6 +575,22 @@ void Simulation::react() {
 						world_.set_particles(cell, kinetics.in, static_cast<int64_t>(needed) + 1);
 					}
 				}
+				// (Stage 92) another solid it makes (copper put out of its solution on zinc) comes as grains no larger
+				// than its own, as a precipitate comes: a spongy deposit, not one lump
+				for (size_t t = 0; t < reaction.terms().size(); ++t) {
+					const Term &term = reaction.terms()[t];
+					const SpeciesDef &made = table.species(term.species);
+					if (term.species == kinetics.in || !(forward ? term.nu > 0 : term.nu < 0) || made.phase != Phase::Solid || made.wall ||
+							!(made.grain > 0.0) || !(made.molar_volume > 0.0)) {
+						continue;
+					}
+					const double volume = static_cast<double>(world_.amount(cell, term.species).quanta) * MOL_PER_QUANTUM * made.molar_volume;
+					const double needed = volume / (0.5235987755982988 * made.grain * made.grain * made.grain);
+					const int64_t now = world_.particles(cell, term.species);
+					if (needed > static_cast<double>(now) && needed < 1e15) {
+						world_.set_particles(cell, term.species, static_cast<int64_t>(needed) + 1);
+					}
+				}
 			} else if (grains > 0) {
 				for (size_t t = 0; t < reaction.terms().size(); ++t) {
 					const SpeciesDef &def = table.species(reaction.terms()[t].species);

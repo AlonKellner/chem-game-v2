@@ -185,6 +185,13 @@
 		{"id": "sodium_thiosulfate_aq", "retired": true, "formula": "Na2S2O3", "phase": "aq", "ions": {"Na+1": 2, "S2O3-2": 1}, "volume_cm3": 26.28, "thermo": {"hf_kj": -1128.74, "cp": -146.9432, "s0": 185.0}},
 		{"id": "potassium_persulfate_aq", "retired": true, "formula": "K2S2O8", "phase": "aq", "ions": {"K+1": 2, "S2O8-2": 1}, "volume_cm3": 97.12, "thermo": {"hf_kj": -1849.46, "cp": -88.04, "s0": 449.3}},
 		{"id": "potassium_permanganate_aq", "retired": true, "formula": "KMnO4", "phase": "aq", "ions": {"K+1": 1, "MnO4-1": 1}, "volume_cm3": 51.06, "thermo": {"hf_kj": -793.78, "cp": 0.7488, "s0": 293.7}},
-		{"id": "manganese_sulfate_aq", "retired": true, "formula": "MnSO4", "phase": "aq", "ions": {"Mn+2": 1, "SO4-2": 1}, "volume_cm3": -14.88, "thermo": {"hf_kj": -1130.02, "cp": -310.9544, "s0": -53.5}}
+		{"id": "manganese_sulfate_aq", "retired": true, "formula": "MnSO4", "phase": "aq", "ions": {"Mn+2": 1, "SO4-2": 1}, "volume_cm3": -14.88, "thermo": {"hf_kj": -1130.02, "cp": -310.9544, "s0": -53.5}},
+		{"id": "copper", "formula": "Cu", "phase": "s", "density": 8.96, "grain_um": 20, "thermo": {"hf_kj": 0, "cp": 24.435, "s0": 33.15}},
+		{"id": "zinc", "formula": "Zn", "phase": "s", "density": 7.133, "grain_um": 20, "thermo": {"hf_kj": 0, "cp": 25.4, "s0": 41.63}},
+		{"id": "magnesium", "formula": "Mg", "phase": "s", "density": 1.74, "grain_um": 20, "thermo": {"hf_kj": 0, "cp": 24.89, "s0": 32.68}},
+		{"id": "iron", "formula": "Fe", "phase": "s", "density": 7.874, "grain_um": 20, "thermo": {"hf_kj": 0, "cp": 25.1, "s0": 27.28}},
+		{"id": "silver", "formula": "Ag", "phase": "s", "density": 10.5, "grain_um": 20, "thermo": {"hf_kj": 0, "cp": 25.351, "s0": 42.55}},
+		{"id": "hydrogen", "formula": "H2", "phase": "g", "thermo": {"hf_kj": 0, "cp": 28.824, "s0": 130.684}, "air_diffusion": {"cm2_s": 0.779, "exponent": 1.75}},
+		{"id": "copper_nitrate_aq", "retired": true, "formula": "Cu(NO3)2", "phase": "aq", "ions": {"Cu+2": 1, "NO3-1": 2}, "volume_cm3": 58.48, "thermo": {"hf_kj": -336.72, "cp": 368.374, "s0": 221.18}}
 	]
 }

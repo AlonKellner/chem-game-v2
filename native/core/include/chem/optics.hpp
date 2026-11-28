@@ -39,6 +39,13 @@ enum class Kind : uint8_t {
 };
 Kind kind(SpeciesId species);
 const Spectrum &spectrum(SpeciesId species); // zeros for Kind::None
+// (Stage 92) A solid that darkens as fine grains (a metal's spongy deposit, data/optics/media.json "fine"): under
+// `below_um` its diffuse reflectance is `factor` of its spectrum's; null for one that does not.
+struct Fine {
+	double below_um;
+	double factor;
+};
+const Fine *fine(SpeciesId species);
 // A species' refractive index at 1 nm (GAME_SPEC §12.3): ones where none is
 // known; and its density in g/cm3 where its index carries one (glass: for a
 // wall's thickness), else 0.
