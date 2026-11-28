@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
+
+- §9 (Stage 91, `docs/TDD_91_REDOX.md`; `docs/CURRICULUM.md`, step F's second part: experiments 38 and 47): **redox in
+  solution**, electron transfers as reactions balanced in atoms and charge; fast: triiodide (Palmer et al.'s K 698),
+  iodine with thiosulfate, permanganate with iron(II) in acid (log K 62.8); slow, the solution law (§7): **persulfate
+  oxidising iodide** (Jette and King's k at their ionic strength, Ahmed et al.'s 51.39 kJ/mol), the iodine clock.
+- Manganese, MnO₄⁻, Mn²⁺, I₂(aq), I₃⁻, S₂O₃²⁻, S₄O₆²⁻, S₂O₈²⁻ (NBS's rows, OBIGT's heat capacities and volumes) and the
+  salts Na₂S₂O₃, K₂S₂O₈, KMnO₄, MnSO₄; §12: permanganate's purple (McBeath et al. 2020's measured spectrum), triiodide's
+  and iodine's yellow-brown (Pursell and Pursell 2016's). Starch is not modelled (no measured constant).
+- §13.7: the experiments `iodine_clock` (four clock times by two spectrophotometers: the orders in iodide and
+  persulfate, k and Ea) and `redox_titration` (iron(II) by permanganate, its own pink the end point; iodine by
+  thiosulfate, its yellow gone).
+
 ## 0.88.1 (2026-11-28, Stage 85, merged after Stages 87 and 88; signed off by the user: "Approved, merge and proceed")
 
 - §13.7 (Stage 85, `docs/TDD_85_ANALYSIS.md`; `docs/CURRICULUM.md`, step E's experiments): `gravimetric` (10), `qualitative`
