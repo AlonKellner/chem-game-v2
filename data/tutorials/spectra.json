@@ -93,7 +93,7 @@
 				{
 					"drag": [
 						"probe:viewer",
-						"item:lamp_h@0.5,0.4"
+						"item:lamp_h@0.5,0.35"
 					]
 				},
 				{
@@ -192,7 +192,7 @@
 				{
 					"drag": [
 						"probe:viewer",
-						"item:lamp_he@0.5,0.4"
+						"item:lamp_he@0.5,0.35"
 					]
 				},
 				{
@@ -241,7 +241,7 @@
 				{
 					"drag": [
 						"probe:viewer",
-						"item:lamp_hg@0.5,0.4"
+						"item:lamp_hg@0.5,0.35"
 					]
 				},
 				{
@@ -290,7 +290,7 @@
 				{
 					"drag": [
 						"probe:viewer",
-						"item:lamp_ne@0.5,0.4"
+						"item:lamp_ne@0.5,0.35"
 					]
 				},
 				{

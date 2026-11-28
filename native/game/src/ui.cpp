@@ -2600,6 +2600,9 @@ struct Ui::Impl {
 		} else if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
 			w = VIEWER_W;
 			h = VIEWER_H;
+		} else if (v.kind == "burner" && !v.lamp.empty()) {
+			w = 56; // (Stage 85) a discharge lamp: its base, and its tube over it, within its own rectangle
+			h = 26 + 64;
 		} else if (v.kind == "burner") {
 			w = 56;
 			h = 26;
@@ -6932,10 +6935,11 @@ struct Ui::Impl {
 			} else if (v.kind == "burner" && !v.lamp.empty()) {
 				// (Stage 85) a discharge lamp: its base, and over it (as a burner's flame) its tube of glowing gas, its lines at
 				// its power
-				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
+				const float base = 26.0f;
+				thing(who, "body", OpticsBody::Slab, Rect{ r.x, r.y + r.h - base, r.w, base }, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
-					const float wide = 10.0f, tall = 64.0f;
-					const size_t k = thing(who, "tube", OpticsBody::Cone, Rect{ r.cx() - wide * 0.5f, r.y - tall, wide, tall }, 0.0f, nullptr, nullptr, in_hand);
+					const float wide = 10.0f;
+					const size_t k = thing(who, "tube", OpticsBody::Cone, Rect{ r.cx() - wide * 0.5f, r.y, wide, r.h - base }, 0.0f, nullptr, nullptr, in_hand);
 					bodies[k].tube = true;
 					bodies[k].kelvin = 0.0; // (its gas no hotter than the room's for the long-wave: a discharge, not a flame)
 					std::array<double, 401> &g = flame_glows[v.id];
