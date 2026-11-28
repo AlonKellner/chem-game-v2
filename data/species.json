@@ -174,6 +174,17 @@
 		{"id": "crystal_violet_chloride_aq", "retired": true, "formula": "C25H30N3Cl", "phase": "aq", "ions": {"C25H30N3+1": 1, "Cl-1": 1}, "volume_cm3": 34.53, "thermo": {"hf_kj": -167.159, "cp": 93.17, "s0": 56.5}},
 		{"id": "hydrogen_peroxide_aq", "formula": "H2O2", "phase": "aq", "volume_cm3": 23.62, "thermo": {"hf_kj": -191.17, "cp": 89.1, "s0": 143.9}},
 		{"id": "iodide_ion", "formula": "I-1", "phase": "aq", "ions": {"I-1": 1}, "volume_cm3": 52.942, "thermo": {"hf_kj": -55.19, "cp": 74.05, "s0": 111.3}},
-		{"id": "potassium_iodide_aq", "retired": true, "formula": "KI", "phase": "aq", "ions": {"K+1": 1, "I-1": 1}, "volume_cm3": 45.262, "thermo": {"hf_kj": -307.57, "cp": -134.02, "s0": 213.8}}
+		{"id": "potassium_iodide_aq", "retired": true, "formula": "KI", "phase": "aq", "ions": {"K+1": 1, "I-1": 1}, "volume_cm3": 45.262, "thermo": {"hf_kj": -307.57, "cp": -134.02, "s0": 213.8}},
+		{"id": "iodine_aq", "formula": "I2", "phase": "aq", "volume_cm3": 51.45, "thermo": {"hf_kj": 22.6, "cp": 54.438, "s0": 137.2}},
+		{"id": "triiodide_ion", "formula": "I3-1", "phase": "aq", "ions": {"I3-1": 1}, "volume_cm3": 104.392, "thermo": {"hf_kj": -51.5, "cp": 128.488, "s0": 239.52}},
+		{"id": "thiosulfate_ion", "formula": "S2O3-2", "phase": "aq", "ions": {"S2O3-2": 1}, "volume_cm3": 61.98, "thermo": {"hf_kj": -648.5, "cp": 192.9568, "s0": 67.0}},
+		{"id": "tetrathionate_ion", "formula": "S4O6-2", "phase": "aq", "ions": {"S4O6-2": 1}, "volume_cm3": 89.98, "thermo": {"hf_kj": -1224.2, "cp": 322.2424, "s0": 257.3}},
+		{"id": "persulfate_ion", "formula": "S2O8-2", "phase": "aq", "ions": {"S2O8-2": 1}, "volume_cm3": 112.48, "thermo": {"hf_kj": -1344.7, "cp": 328.1, "s0": 244.3}},
+		{"id": "permanganate_ion", "formula": "MnO4-1", "phase": "aq", "ions": {"MnO4-1": 1}, "volume_cm3": 58.74, "thermo": {"hf_kj": -541.4, "cp": 208.8188, "s0": 191.2}},
+		{"id": "manganese_ion", "formula": "Mn+2", "phase": "aq", "ions": {"Mn+2": 1}, "volume_cm3": -50.58, "thermo": {"hf_kj": -220.75, "cp": -449.8544, "s0": -73.6}},
+		{"id": "sodium_thiosulfate_aq", "retired": true, "formula": "Na2S2O3", "phase": "aq", "ions": {"Na+1": 2, "S2O3-2": 1}, "volume_cm3": 26.28, "thermo": {"hf_kj": -1128.74, "cp": -146.9432, "s0": 185.0}},
+		{"id": "potassium_persulfate_aq", "retired": true, "formula": "K2S2O8", "phase": "aq", "ions": {"K+1": 2, "S2O8-2": 1}, "volume_cm3": 97.12, "thermo": {"hf_kj": -1849.46, "cp": -88.04, "s0": 449.3}},
+		{"id": "potassium_permanganate_aq", "retired": true, "formula": "KMnO4", "phase": "aq", "ions": {"K+1": 1, "MnO4-1": 1}, "volume_cm3": 51.06, "thermo": {"hf_kj": -793.78, "cp": 0.7488, "s0": 293.7}},
+		{"id": "manganese_sulfate_aq", "retired": true, "formula": "MnSO4", "phase": "aq", "ions": {"Mn+2": 1, "SO4-2": 1}, "volume_cm3": -14.88, "thermo": {"hf_kj": -1130.02, "cp": -310.9544, "s0": -53.5}}
 	]
 }

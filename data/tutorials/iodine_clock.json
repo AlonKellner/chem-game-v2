@@ -1,0 +1,759 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §7, §13.7, Stage 91; docs/CURRICULUM.md, experiment 38) on data/benches/iodine_clock.json: the persulfate iodine clock read by triiodide's absorbance at 430 nm. Four runs, two at a time: A; B with half the iodide; C with half the persulfate; D as A at 35 C. The clock time t: the rate [S2O3 2-]0 / 2t; the orders, k and Ea.",
+	"title": "Experiment: the iodine clock",
+	"bench": "../benches/iodine_clock.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Persulfate oxidises iodide to iodine, slowly; thiosulfate turns the iodine back into iodide as fast as it comes, so the solution stays colourless until the thiosulfate is spent, and then the iodine's yellow (as triiodide, I3-) comes all at once: a clock. Halve the iodide: the clock takes how much longer? Write the order in iodide you expect (1: twice as long; 2: four times).",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: Blank them",
+			"title": "Blank the first spectrophotometer",
+			"text": "Both spectrophotometers read at 430 nm, where triiodide absorbs and nothing else here does. Put the cuvette of water in the first one's well and blank it.",
+			"checks": [
+				{
+					"text": "the water in spec1's well",
+					"when": {
+						"item": "spec1",
+						"under": "c0"
+					}
+				},
+				{
+					"text": "spec1 reads 0.000",
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "absorbance"
+						},
+						"compare": "between",
+						"values": [
+							-0.0005,
+							0.0005
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"item:spec1"
+					]
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "blank:spec1"
+				}
+			]
+		},
+		{
+			"title": "Blank the second",
+			"text": "Take the water out of the first well and put it in the second one's, and blank it too.",
+			"checks": [
+				{
+					"text": "the water in spec2's well",
+					"when": {
+						"item": "spec2",
+						"under": "c0"
+					}
+				},
+				{
+					"text": "spec2 reads 0.000",
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "absorbance"
+						},
+						"compare": "between",
+						"values": [
+							-0.0005,
+							0.0005
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:16,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c0",
+						"item:spec2"
+					]
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "blank:spec2"
+				}
+			]
+		},
+		{
+			"part": "2: A and B at 25 C",
+			"title": "A and B in the wells, held at 25 C",
+			"text": "Set the water aside. Cuvette A in the first well, B in the second, each holder on at 25 C. A's tube and B's hold the same persulfate; B's cuvette half A's iodide, potassium nitrate in its place so both stand at the same ionic strength (two ions of like charge: salt speeds them).",
+			"checks": [
+				{
+					"text": "c1 in spec1's well",
+					"when": {
+						"item": "spec1",
+						"under": "c1"
+					}
+				},
+				{
+					"text": "c2 in spec2's well",
+					"when": {
+						"item": "spec2",
+						"under": "c2"
+					}
+				},
+				{
+					"text": "spec1's holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				},
+				{
+					"text": "spec2's holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:14,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c1",
+						"item:spec1"
+					]
+				},
+				{
+					"drag": [
+						"item:c2",
+						"item:spec2"
+					]
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "cell:spec1"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "cell:spec2"
+				}
+			]
+		},
+		{
+			"title": "Warming to 25 C",
+			"text": "The holders warm the cuvettes from the room's 20 C.",
+			"checks": [
+				{
+					"text": "c1 at 25 C",
+					"wait": true,
+					"when": {
+						"item": "c1",
+						"above_c": 24.7
+					}
+				},
+				{
+					"text": "c2 at 25 C",
+					"wait": true,
+					"when": {
+						"item": "c2",
+						"above_c": 24.7
+					}
+				}
+			]
+		},
+		{
+			"title": "Run A: pour, start the clock",
+			"text": "Pour t1 into c1, all of it, and stir. At once, click spec1, record its absorbance and log it every second: the first reading is the moment you mixed them, the clock's start.",
+			"checks": [
+				{
+					"text": "t1 poured into c1",
+					"when": {
+						"quantity": {
+							"item": "t1",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "c1 stirred",
+					"when": {
+						"item": "c1",
+						"stirred": true
+					}
+				},
+				{
+					"text": "spec1 logged",
+					"when": {
+						"item": "spec1",
+						"logging": "absorbance"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t1",
+						"item:c1"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:c1"
+				},
+				{
+					"click": "stir:c1"
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "record:spec1:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "Run B: pour, start the clock",
+			"text": "Pour t2 into c2, all of it, and stir. At once, click spec2, record its absorbance and log it every second: the first reading is the moment you mixed them, the clock's start.",
+			"checks": [
+				{
+					"text": "t2 poured into c2",
+					"when": {
+						"quantity": {
+							"item": "t2",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "c2 stirred",
+					"when": {
+						"item": "c2",
+						"stirred": true
+					}
+				},
+				{
+					"text": "spec2 logged",
+					"when": {
+						"item": "spec2",
+						"logging": "absorbance"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t2",
+						"item:c2"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:c2"
+				},
+				{
+					"click": "stir:c2"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "record:spec2:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The clocks",
+			"text": "Wait for both to turn: each absorbance stays at nought, then climbs. In the notebook, plot the absorbances against time: each clock time is where its line leaves nought, less the time of its first reading.",
+			"checks": [
+				{
+					"text": "spec1 above 0.05",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "spec2 above 0.05",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.05
+					}
+				}
+			]
+		},
+		{
+			"title": "Stop the logs",
+			"text": "Record each one's absorbance once more and stop its log (unlog): the next runs start new lines.",
+			"checks": [
+				{
+					"text": "spec1 not logged",
+					"when": {
+						"not": {
+							"item": "spec1",
+							"logging": "absorbance"
+						}
+					}
+				},
+				{
+					"text": "spec2 not logged",
+					"when": {
+						"not": {
+							"item": "spec2",
+							"logging": "absorbance"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "record:spec1:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:unlog"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "record:spec2:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:unlog"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"part": "3: C at 25 C, D at 35 C",
+			"title": "C and D in the wells",
+			"text": "Take A and B out. Cuvette C in the first well, its holder still at 25 C: C's tube holds half the persulfate (potassium nitrate making up the ionic strength). D, A again, in the second, its holder raised to 35 C: the activation energy.",
+			"checks": [
+				{
+					"text": "c3 in spec1's well",
+					"when": {
+						"item": "spec1",
+						"under": "c3"
+					}
+				},
+				{
+					"text": "c4 in spec2's well",
+					"when": {
+						"item": "spec2",
+						"under": "c4"
+					}
+				},
+				{
+					"text": "spec1's holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				},
+				{
+					"text": "spec2's holder at 35 C",
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							34.5,
+							35.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c1",
+						"square:12,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c2",
+						"square:10,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c3",
+						"item:spec1"
+					]
+				},
+				{
+					"drag": [
+						"item:c4",
+						"item:spec2"
+					]
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "cell:spec2:+"
+				},
+				{
+					"click": "cell:spec2:+"
+				}
+			]
+		},
+		{
+			"title": "Warming",
+			"text": "Wait for C at 25 C and D at 35 C.",
+			"checks": [
+				{
+					"text": "c3 at 25 C",
+					"wait": true,
+					"when": {
+						"item": "c3",
+						"above_c": 24.7
+					}
+				},
+				{
+					"text": "c4 at 35 C",
+					"wait": true,
+					"when": {
+						"item": "c4",
+						"above_c": 34.7
+					}
+				}
+			]
+		},
+		{
+			"title": "Run C: pour, start the clock",
+			"text": "Pour t3 into c3, all of it, and stir. At once, click spec1, record its absorbance and log it every second: the first reading is the moment you mixed them, the clock's start.",
+			"checks": [
+				{
+					"text": "t3 poured into c3",
+					"when": {
+						"quantity": {
+							"item": "t3",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "c3 stirred",
+					"when": {
+						"item": "c3",
+						"stirred": true
+					}
+				},
+				{
+					"text": "spec1 logged",
+					"when": {
+						"item": "spec1",
+						"logging": "absorbance"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t3",
+						"item:c3"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:c3"
+				},
+				{
+					"click": "stir:c3"
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "record:spec1:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "Run D: pour, start the clock",
+			"text": "Pour t4 into c4, all of it, and stir. At once, click spec2, record its absorbance and log it every second: the first reading is the moment you mixed them, the clock's start.",
+			"checks": [
+				{
+					"text": "t4 poured into c4",
+					"when": {
+						"quantity": {
+							"item": "t4",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "c4 stirred",
+					"when": {
+						"item": "c4",
+						"stirred": true
+					}
+				},
+				{
+					"text": "spec2 logged",
+					"when": {
+						"item": "spec2",
+						"logging": "absorbance"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t4",
+						"item:c4"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:c4"
+				},
+				{
+					"click": "stir:c4"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "record:spec2:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:1"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The clocks again",
+			"text": "Wait for both to turn.",
+			"checks": [
+				{
+					"text": "spec1 above 0.05",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "spec2 above 0.05",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "absorbance"
+						},
+						"compare": "above",
+						"value": 0.05
+					}
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "clock time A",
+			"unit": "s",
+			"truth": "131.7",
+			"tolerance": 0.1,
+			"relative": true,
+			"why": "Where spec1's first line leaves nought, less the time of its first reading. Until then each iodine persulfate made was taken back by thiosulfate."
+		},
+		{
+			"label": "clock time B",
+			"unit": "s",
+			"truth": "261.5",
+			"tolerance": 0.1,
+			"relative": true,
+			"why": "spec2's first line the same way."
+		},
+		{
+			"label": "the order in iodide",
+			"unit": "",
+			"truth": "1",
+			"tolerance": 0.15,
+			"predict": true,
+			"why": "The same thiosulfate is spent in each run, so the rate goes as 1/t: n = ln(t_B / t_A) / ln 2. Rate = k [S2O8 2-] [I-]."
+		},
+		{
+			"label": "the order in persulfate",
+			"unit": "",
+			"truth": "1",
+			"tolerance": 0.15,
+			"why": "C against A: ln(t_C / t_A) / ln 2."
+		},
+		{
+			"label": "k at 25 C",
+			"unit": "1/(M s)",
+			"truth": "0.00380",
+			"tolerance": 0.12,
+			"relative": true,
+			"why": "A's rate is [S2O3 2-]0 / 2 t_A (two thiosulfates an iodine), 0.0010 M / 2 t_A; k = rate / ([S2O8 2-] [I-]) = rate / (0.020 x 0.050). At an ionic strength of about 0.11: salt speeds two ions of like charge, so k is nearly twice what it is with no salt."
+		},
+		{
+			"label": "the activation energy",
+			"unit": "kJ/mol",
+			"truth": "50.6",
+			"tolerance": 0.15,
+			"relative": true,
+			"why": "Ea = R ln(t_A / t_D) / (1/298.15 - 1/308.15), in kJ/mol: 8.314e-3 x ln(t_A / t_D) / 1.088e-4."
+		}
+	]
+}

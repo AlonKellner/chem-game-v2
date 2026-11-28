@@ -1748,3 +1748,92 @@ the sources describe the violet fading to a colourless solution). Confidence med
   often quoted −98 is the liquid's). Its heat capacity and volume (design): the liquid's, Cp 89.1 (NBS) and about 23.6 cm³
   (34.01 g/mol over about 1.44 g/cm³). Diffusion: 1.43e-9 m²/s, van Stroe-Biezen, Everaerts, Janssen and Tacken 1993
   (Anal. Chim. Acta 273, 553), Table 2, in 0.1 M phosphate buffer at 25 C.
+
+## Redox in solution (Stage 91)
+
+Persulfate oxidising iodide by the solution law (the iodine clock's rate step), triiodide, iodine with thiosulfate and
+permanganate with iron(II) as fast equilibria, their species and three colours (`docs/TDD_91_REDOX.md`;
+`docs/CURRICULUM.md`, step F's second part). Read 2026-11-28. Gates (`native/tests/test_redox.cpp`): `measured: persulfate
+oxidises iodide at Jette and King's rate...`, `measured: triiodide's balance is Palmer, Ramette and Mesmer's...`,
+`measured: the new rows are NBS's...`, `measured: permanganate's absorption is McBeath, Wilkinson and Graham's...`.
+
+**Persulfate oxidising iodide**, S₂O₈²⁻ + 2 I⁻ → 2 SO₄²⁻ + I₂:
+
+| Quantity | Value | Source | Confidence |
+|---|---|---|---|
+| k at 25 C | **0.125 L/mol/min** (2.08e-3 /M/s) at 5 mM K₂S₂O₈ and 10 mM KI (ionic strength 0.025), extrapolated to the start | Jette and King 1929, JACS 51, 1034 (doi 10.1021/ja01379a008), p. 1042 and Table II (p. 1040); read in a scan of the primary | high |
+| Orders | first in persulfate, first in iodide | the same | high |
+| k at no salt | log k₀ −1.075 (units not printed in the quote; read as Jette and King's, L/mol/min: 1.40e-3 /M/s); the limiting law held to √I 0.16 | King and Jacobs 1931, JACS 53, 1704 (not read), as Burns's thesis (Oregon State 1966, pp. 8–9, open) quotes it | medium (secondary) |
+| Ea | **51.39 kJ/mol** at ionic strength 0.215 (25–40 C), falling to 20.25 at 1.05 | Ahmed, Uddin and Jafri 1979, Pakistan J. Sci. Ind. Res. 22, 128, Table 3; read in the primary (a scan) | medium-low |
+| Triiodide's own | k(I₃⁻) 0.0645 L/mol/min, about half iodide's | Jette and King 1929, pp. 1046–1047, eq. 14 | not modelled |
+
+- **Calibrated in the model's own activities**: k₀ 1.07e-3 /M/s at 25 C (the prefactor 1.07086e6 times e^(−Ea/RT)), so
+  that at Jette and King's solution the model's rate over [S₂O₈²⁻][I⁻] is their 2.08e-3. Its salt effect (two ions of
+  like charge, z‡ −3) is Brønsted and Bjerrum's through Pitzer's model; King and Jacobs' zero-salt k is 24 % above the
+  model's: part of the measured salt effect is persulfate's pairing with potassium (KS₂O₈⁻, K about 13 L/mol, Krishnam
+  Raju et al., Indian J. Chem. 16A, 211: a snippet only), which the model leaves out.
+- **Disagreement**: Ahmed et al.'s rates, fitted as first order in 0.2 M iodide, are some 25 times under Jette and King's
+  read as second order: only their activation energy is used. Howells (J. Chem. Soc. 1939, 463; 1941, 641; 1946, 203;
+  not read) measured the counter-ions' specific catalysis (K⁺ above Na⁺, as Burns quotes it): the model has none.
+- **A check**: the model's clock at 20 mM persulfate, 50 mM iodide and 0.5 mM thiosulfate, 25 C: iodine at 65.35 s
+  against t = [S₂O₃²⁻]₀ / (2k[S₂O₈²⁻][I⁻]), 64.67 s, the formula the Szeged practical handout states (its eq. 19). No
+  measured clock with stated concentrations, temperature and ionic strength was found open.
+
+**The fast equilibria** (no rate; each faster than a step):
+- **I₂ + I⁻ ⇌ I₃⁻**: K = **698** at 25 C (molal), ΔH about −17 kJ; Palmer, Ramette and Mesmer 1984 (J. Solution Chem. 13,
+  673, doi 10.1007/BF00650374), the abstract (OSTI 7032033); Bray and MacKay's 714, as Jette and King quote it. NBS's
+  rows give 680 from their enthalpies and entropies, 697 from their Gibbs energies: I₃⁻'s S° calibrated from 239.3 to
+  239.52 (within NBS's rounding) to give 698; ΔH −18.9 from NBS's rows.
+- **I₂ + 2 S₂O₃²⁻ → 2 I⁻ + S₄O₆²⁻**: 7.8e9 /M/s for I₂ + S₂O₃²⁻ at 25 C (Scheper and Margerum, Purdue thesis AAI9301377,
+  the abstract): a fast equilibrium. Its log K from NBS's rows 21.4 (their Gibbs energies 20.1; from the potentials
+  0.621 and 0.080 V, 18.3): thiosulfate's row is NBS's least certain (its S° to a unit; its enthalpy and Gibbs energy 3.7
+  kJ apart from its entropy). It runs to its end whichever is used.
+- **MnO₄⁻ + 5 Fe²⁺ + 8 H⁺ → Mn²⁺ + 5 Fe³⁺ + 4 H₂O**: log K 62.8 from the rows, 62.46 from E° 1.51 and 0.771 V (Bard,
+  Parsons and Jordan 1985, as LibreTexts' table gives them). No rate read; a titration's practice (Harvey, *Analytical
+  Chemistry 2.1*, §9.4: the first excess drop stays purple) treats it as instant. Permanganate's slow decomposition and its
+  reaction with Mn²⁺ (the end point fading) are not modelled.
+
+**The species** (NBS 1982, read off the scan of J. Phys. Chem. Ref. Data 11, Suppl. 2, srd.nist.gov; OBIGT's CHNOSZ
+`inorganic_aq.csv`, fetched 2026-11-28):
+
+| Species | ΔfH° kJ | S° J/K | Cp, V (conventional) | Sources |
+|---|---|---|---|---|
+| I₂(aq) | 22.6 | 137.2 | design: the solid's Cp 54.438 (NBS p. 2-52), about 51.45 cm³ | NBS p. 2-52 |
+| I₃⁻ | −51.5 | 239.3 → 239.52 | design: I⁻ + I₂ (OBIGT's row is a placeholder) | NBS p. 2-52 |
+| S₂O₃²⁻ | −648.5 | 67. | −57.3 cal, 28.5 cm³ | NBS p. 2-57; OBIGT (Shock and Helgeson 1988) |
+| S₄O₆²⁻ | −1224.2 | 257.3 | −26.4 cal, 56.5 cm³ (NBS's Cp −67.8 J beside it) | NBS p. 2-57; OBIGT (Shock et al. 1997) |
+| S₂O₈²⁻ | −1344.7 | 244.3 | −25 cal, 79 cm³ | NBS p. 2-57; OBIGT (Shock and Helgeson 1988) |
+| MnO₄⁻ | −541.4 | 191.2 | −1.8 cal, 42.0 cm³ (NBS's −82.0 J beside it) | NBS p. 2-191; OBIGT (Shock et al. 1997) |
+| Mn²⁺ | −220.75 | −73.6 | −4.1 cal, −17.1 cm³ (NBS's +50 J beside it) | NBS p. 2-191; OBIGT (Shock et al. 1997) |
+
+- On the model's footing, Cp − 216.35 z and V − 16.74 z (Stage 64's). OBIGT's heat capacities are used, not NBS's where
+  it prints one, as for Stage 76's and 81's ions (NBS's Mn²⁺ +50 J and OBIGT's −17.2 disagree; the iron ions beside them
+  are OBIGT's). OBIGT's are the revised HKF model's, partly correlations: confidence medium.
+- **The salts** Na₂S₂O₃, K₂S₂O₈, KMnO₄, MnSO₄: retired formula units, their ions' sums; NBS's (ai) rows agree within 0.2
+  kJ but Na₂S₂O₃'s (−1132.40, p. 2-307; its ions' sum −1128.74). **Manganese**: CIAAW's abridged 54.938.
+- **Pitzer's parameters** (Pitzer and Mayorga 1973, the LBL-1434 preprint, Table VI, as (4/3)β⁰, (4/3)β¹ and
+  (2^(5/2)/3)C^φ, converted): Na₂S₂O₃ 0.06615, 1.2758, 0.003739 (to 3.5 mol/kg); MnCl₂ 0.3272, 1.5503, −0.0205 (to 2.5). Not
+  found open: KMnO₄, K₂S₂O₈, MnSO₄ (Pitzer and Mayorga 1974 not read): their ions meet by Debye and Hückel's part alone.
+- **Diffusion** (the CRC Handbook, Vanýsek, *Ionic conductivity and diffusion at infinite dilution*): MnO₄⁻ 1.632e-9,
+  Mn²⁺ 0.712e-9, S₂O₃²⁻ 1.132e-9, S₂O₈²⁻ 1.145e-9 m²/s. None read for I₂, I₃⁻ and S₄O₆²⁻ (left at nought, as Stage 81's
+  complexes).
+
+**Their colours**:
+- **Permanganate**: McBeath, Wilkinson and Graham 2020 (Chemosphere 251, 126626, doi 10.1016/j.chemosphere.2020.126626),
+  the accepted manuscript (spiral.imperial.ac.uk): its figure of the direct method's spectra carries its data, nine
+  standards from 0.63 to 63.3 µM KMnO₄ in pH 7.2 phosphate buffer, 1 cm quartz, a Shimadzu UV-4201PC, 450–600 nm at 0.5
+  nm. Each half-nanometre's absorbance fitted against concentration (the slope ε, the intercept the cell's offset, about
+  0.003), three about each whole nanometre averaged: **3269 at 525 nm** (the paper's calibration line: 3340), 3152 at 545,
+  2462 at 507, 1794 at 565. Design: held at 450 nm's (339) below it; from 600 nm's (367) to nought at 640 nm. Often quoted
+  values near 2,400 at 525 nm were not traced to a measurement. Mn²⁺'s faint pink (ε under 0.1) left out.
+- **Triiodide and iodine**: Pursell and Pursell 2016 (J. Phys. Chem. A 120, 2144, doi 10.1021/acs.jpca.6b00982),
+  Supporting Information Figure 1, read off its vector drawing (the lines' own coordinates, calibrated against the axis'
+  ticks): I₃⁻ 20 µM nominal (20 µM I₂ in 20 mM KI), I₂ 800 µM (with 50 mM HIO₃), 1 cm, room temperature. Checks: I₃⁻
+  5907 at 400 nm against Chia 1958's 5990 at no iodide (UCRL-8311, Table IV, 25 C), 2314 at 430 against Pai, Li and
+  Stephens 2024's 2376 in 0.038 M iodide (ACS Omega, doi 10.1021/acsomega.4c09084, Table 4); I₂ 729 at 459 and 493 at 500
+  against the SI's Table S1, 725 and 491, and Pai et al.'s 540 at 430 (Table 3). Design: I₃⁻ past 480 nm (the drawn line
+  thinner there than its width) an exponential to the SI's 225 at 500 nm, nought past 650; I₂ past 650 nm falling as from
+  600 to 650. Their temperature coefficients (Pai et al.: −0.19 % a kelvin for I₂, +0.3 to +0.6 % for I₃⁻) left out.
+- **Starch with iodine**: not modelled. Its blue (about 615 nm for amylose, Pesek et al. 2022, Molecules 27, 8974) has no
+  measured formation constant or absorptivity: "reliable extinction coefficients for the amylose-iodine-iodide complex are
+  not known" (the same). The clock and the titration are read by triiodide's own colour.
