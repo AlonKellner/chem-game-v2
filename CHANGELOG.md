@@ -10,6 +10,8 @@
 - §13: `flame_test`: a loop's drop of a solution in a lit burner's flame, fading in 3 s; on the screen, a vessel of a
   solution carried onto a lit burner. The free lab's 0.1 M sodium, potassium, lithium and strontium chlorides and
   copper(II) sulfate.
+- §12: light brighter than the display is scaled down by its brightest channel, keeping its hue (the user's choice:
+  until then it was drawn white); a flame's narrow lines cut the pass's bands, so a pixel reads each every frame.
 - §20: the drop is the flame's display state, not matter.
 
 ## 0.81.0 (2026-11-27, Stage 81; signed off by the user: "Approved, merge and proceed")
