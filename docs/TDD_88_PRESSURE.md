@@ -47,7 +47,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
 | 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
 | 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion; what moves in a vessel with its volume; hands at random on sealed layered syringes | Done |
-| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | |
+| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | The `pressure` session re-recorded with approval; docs done; `make gates` and the sign-off to come |
 
 ## Tests
 
@@ -142,6 +142,14 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 
 ## Open
 
+- **Stage 79's pistons still keep their clearance** (`PISTON_CLEARANCE`, `plan_piston`'s reading of a state past the
+  model): a sealed cell full of liquid has a pressure now, but a plunger's own solve does not use it yet, and a pair
+  of syringes of pure liquid still stands. Stage 89's solve of joined vessels' pressures replaces that solve whole,
+  the clearance with it.
+- **A layer's heat capacity is its own at its pressure**, not against its cushion (a liquid's hardly differs: 0.7 %
+  for water; a layer holding gas, more).
+- **Solids give nothing** (about 1e-11 /Pa, a fiftieth of water's): a sealed cell of solids and gas with no room has
+  no pressure still (V3).
 - **An open syringe of layered liquids pushed home** (Stage 79's, with Stage 71's spill of a column; reached by no
   bench: nothing yet puts layered liquid in a syringe): its plunger's first steps left a layer holding liquid under
   emptied ones (L1; the same on main, at its 13th step). A column that spills now closes up (each layer under an
