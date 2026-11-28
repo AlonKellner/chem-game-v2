@@ -84,3 +84,82 @@ TEST_CASE("math: the values are pinned, bit for bit, on every platform (Stage 2)
 	CHECK(bits(chem::log(1e-300)) == 0xc085963447f87fb5ull);
 	CHECK(bits(chem::log(0.999999)) == 0xbeb0c6f82d74d230ull);
 }
+
+TEST_CASE("math: sin and cos agree with the C library within one unit in the last place, by every multiple of pi/2 too (Stage 95)") {
+	Rng rng(95);
+	int64_t worst_sin = 0, worst_cos = 0;
+	const auto take = [&](double x) {
+		const int64_t s = ulps(chem::sin(x), std::sin(x)), c = ulps(chem::cos(x), std::cos(x));
+		// (where the two results differ in sign, the bits' distance says nothing: none does)
+		REQUIRE((chem::sin(x) < 0) == (std::sin(x) < 0));
+		REQUIRE((chem::cos(x) < 0) == (std::cos(x) < 0));
+		worst_sin = s > worst_sin ? s : worst_sin;
+		worst_cos = c > worst_cos ? c : worst_cos;
+	};
+	for (int i = 0; i < 400000; ++i) {
+		take(i % 4 == 0 ? uniform(rng, -0.8, 0.8) : i % 4 == 1 ? uniform(rng, -7.0, 7.0) : i % 4 == 2 ? uniform(rng, -700.0, 700.0) : uniform(rng, -7.9e5, 7.9e5));
+	}
+	for (int k = -2000; k <= 2000; ++k) { // where the reduction cancels
+		for (int j = -3; j <= 3; ++j) {
+			double x = k * 1.5707963267948966;
+			for (int i = 0; i < (j < 0 ? -j : j); ++i) {
+				x = std::nextafter(x, j > 0 ? 1e300 : -1e300);
+			}
+			if (x != 0.0) {
+				take(x);
+			}
+		}
+	}
+	CHECK(worst_sin <= 1);
+	CHECK(worst_cos <= 1);
+	CHECK(chem::sin(0.0) == 0.0);
+	CHECK(chem::cos(0.0) == 1.0);
+	CHECK(chem::sin(1.5707963267948966) == 1.0);
+	CHECK(chem::cos(3.141592653589793) == -1.0);
+	CHECK(chem::sin(-0.3) == -chem::sin(0.3));
+	CHECK(chem::cos(-0.3) == chem::cos(0.3));
+	CHECK(std::isnan(chem::sin(1e6))); // beyond what the reduction holds
+	CHECK(std::isnan(chem::cos(-1e6)));
+	CHECK(std::isnan(chem::sin(std::numeric_limits<double>::quiet_NaN())));
+	CHECK(std::isnan(chem::cos(std::numeric_limits<double>::infinity())));
+}
+
+TEST_CASE("math: atan and atan2 agree with the C library within one unit in the last place (Stage 95)") {
+	Rng rng(96);
+	int64_t worst = 0, worst2 = 0;
+	for (int i = 0; i < 400000; ++i) {
+		const double x = std::exp(uniform(rng, -40.0, 40.0)) * (i % 2 == 0 ? 1.0 : -1.0);
+		const int64_t d = ulps(chem::atan(x), std::atan(x));
+		worst = d > worst ? d : worst;
+		const double y = std::exp(uniform(rng, -8.0, 8.0)) * (i % 3 == 0 ? 1.0 : -1.0), x2 = std::exp(uniform(rng, -8.0, 8.0)) * (i % 5 < 2 ? 1.0 : -1.0);
+		const int64_t d2 = ulps(chem::atan2(y, x2), std::atan2(y, x2));
+		worst2 = d2 > worst2 ? d2 : worst2;
+	}
+	CHECK(worst <= 1);
+	CHECK(worst2 <= 1);
+	CHECK(chem::atan(0.0) == 0.0);
+	CHECK(4.0 * chem::atan(1.0) == 3.141592653589793);
+	CHECK(chem::atan(1e300) == 1.5707963267948966);
+	CHECK(chem::atan(-1e300) == -1.5707963267948966);
+	CHECK(chem::atan2(0.0, 1.0) == 0.0);
+	CHECK(chem::atan2(0.0, -1.0) == 3.141592653589793);
+	CHECK(chem::atan2(1.0, 0.0) == 1.5707963267948966);
+	CHECK(chem::atan2(-1.0, 0.0) == -1.5707963267948966);
+	CHECK(chem::atan2(1.0, -1.0) == doctest::Approx(2.356194490192345).epsilon(1e-15));
+	CHECK(chem::atan2(-1.0, -1.0) == doctest::Approx(-2.356194490192345).epsilon(1e-15));
+	CHECK(std::isnan(chem::atan(std::numeric_limits<double>::quiet_NaN())));
+}
+
+TEST_CASE("math: the sine's, the cosine's and the arctangent's values are pinned, bit for bit (Stage 95)") {
+	const auto bits = [](double v) { return std::bit_cast<uint64_t>(v); };
+	// (this implementation's: within one unit in the last place of the true value; the replays rest on them)
+	CHECK(bits(chem::sin(1.0)) == 0x3feaed548f090ceeull);
+	CHECK(bits(chem::cos(1.0)) == 0x3fe14a280fb5068cull);
+	CHECK(bits(chem::sin(0.5)) == 0x3fdeaee8744b05f0ull);
+	CHECK(bits(chem::cos(2.5)) == 0xbfe9a2f7ef858b7dull);
+	CHECK(bits(chem::sin(100.0)) == 0xbfe03425b78c4db8ull);
+	CHECK(bits(chem::cos(-1234.5)) == 0xbfefa8f2ceb78372ull);
+	CHECK(bits(chem::atan(0.5)) == 0x3fddac670561bb4full);
+	CHECK(bits(chem::atan(3.0)) == 0x3ff3fc176b7a8560ull);
+	CHECK(bits(chem::atan2(1.0, -2.0)) == 0x40056c6e7397f5aeull);
+}

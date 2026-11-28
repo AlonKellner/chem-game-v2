@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## 0.95.0 (2026-11-28, Stage 95, in progress)
+
+- §6 (Stage 95, `docs/TDD_95_TUBES.md`; the user: "Tubing should be a vessel"): **a tube is a vessel**, in the
+  core. A path in space (straight runs and arcs); its contents slugs along it, each a sealed cell with its own
+  pressure in the closure; an interface between two moved by their pressures, each one's friction over its half
+  and the weight of each half over its rise; ends at vessels' ports; a liquid parting where its own weight takes
+  it under what it can stand (a barometer's void by no rule of its own). V4.
+- §3: the core's own sine, cosine and arctangent (a path's arcs).
+
 ## 0.94.0 (2026-11-28, Stage 94, in progress)
 
 - §6 (Stage 94, `docs/TDD_94_HEADS.md`; the first stage of the plan the user approved on 2026-11-28: tubing as a

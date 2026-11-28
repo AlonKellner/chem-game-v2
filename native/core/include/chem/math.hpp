@@ -18,4 +18,12 @@ double log(double x);
 double cbrt(double x);
 double pow(double x, double p);
 
+// (Stage 95) The sine and the cosine of |x| up to 8e5 rad (NaN beyond), the arctangent, and the angle of the point
+// (x, y) in (-pi, pi]: the fdlibm algorithms, under 1 ulp, the same everywhere. A path's arcs ask them
+// (chem/path.hpp).
+double sin(double x);
+double cos(double x);
+double atan(double x);
+double atan2(double y, double x);
+
 } // namespace chem

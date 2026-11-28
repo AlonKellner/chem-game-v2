@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.94.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.95.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -640,6 +640,63 @@ conduit's ports.
   a vessel with its port 4 cm up drains to 4.00 cm and stops; a 1 m column of water fills a closed flask until its
   air stands at `P_atm + ρ g Δh` (110.79 kPa), gravity having given 0.056 J and the entropy never falling; a
   syringe held 10 cm over a beaker draws 39.1 mL of a 40 mL pull, its air 0.98 kPa under the room's.
+
+**Tubes** *(Stage 95; `chem/path.hpp`, `src/closure.cpp`, `src/tube.cpp`; `docs/TDD_95_TUBES.md`; the user,
+2026-11-28: "Tubing should be a vessel, with layers and all the related simulated expectations from any other
+vessel ... movement along the tubing is by the pressure difference at the ends ... The weight of the tube contents
+and their orientation should affect the pressure at the ends, so situations like siphoning will work as
+expected")*. Rigid tubing, in the core: its picture is Stage 96's, its place on the bench Stage 97's.
+
+- **A path** (`chem/path.hpp`, pure): vertices in space, metres, z up over the bench's datum, joined by straight
+  runs; at an inner vertex the two runs are joined by an arc of the vertex's fillet radius, tangent to both (none:
+  a sharp corner). Lengths are along it from its first vertex. It gives the place, the tangent and the height at a
+  length, and of a stretch its mean height, its highest and lowest points and the angle it turns through. Its arcs
+  ask the sine, the cosine and the arctangent, which the core computes itself (`chem/math.hpp`, §3: fdlibm's, under
+  1 ulp, the same everywhere).
+- **A tube** is a path, a bore and a row of cells along it, joined in order by **run edges**, with an end edge at
+  each end to a vessel's cell at a port (Stage 94), or none (closed). Its contents are **slugs**: the cells of the
+  row that hold something, in order from its end a to its end b, each a sealed rigid cell whose volume is the span
+  of the bore it fills. The slugs fill the tube exactly (V4). A slug keeps its matter: where it lies is the volumes
+  before it, so a liquid's front moves as the liquid does and the step smears nothing along the tube.
+- **Each slug has its own pressure** (at the middle of its span), found with the vessels' in the closure: its
+  residual the room its span gives less the room its contents need there.
+- **An interface** between two slugs moves a volume `v` in the step, the root of
+  `P_k − P_k+1 = D_k(v) + D_k+1(v) + ρ_k g (z_i − z_k) + ρ_k+1 g (z_k+1 − z_i) + give·v`: each slug's friction over
+  the half of it next to the interface, the weight of each half over its rise (`z_i`, `z_k`: the heights of the
+  interface and of the slug's middle; a gas's weight left out, as at a port), and what the move itself takes off
+  the drive (the path's slope where the weights change), so a U-tube settles without passing level at any step's
+  length. Nothing crosses an interface but work.
+- **A slug's friction is its share of the law Stage 89 gives the whole tube.** With `F(s)` the loss in velocity
+  heads from the tube's inlet to a distance `s` along it (a piece's law, above, without its expansion:
+  `64 x + N12(a(x), c + t)`, `x = s / (D Re)`), a stretch from `s1` to `s2` takes `F(s2) − F(s1)` at its own
+  fluid's Reynolds number (from the inlet itself, all of `F(s2)`: the contraction is the inlet's), and the
+  expansion is the outlet's. The inlet is the end the stretch's own flow comes from. One fluid end to end is
+  Stage 89's conduit, to the sum. A turn adds its own loss (sourced and held to its source: `docs/DATA_SOURCES.md`).
+- **At an end**, by the pressures: outward, the end slug's matter crosses to the vessel (if all of it goes, the
+  rest of the step's flow is the next step's); inward and alike the end slug, what stands at the port joins it;
+  inward and unlike (air into water, hot into cold), it begins a new slug, which within the step has no length and
+  so stands at the interface's pressure, takes the room its contents need there, and is a slug like any other from
+  the step's end on.
+- **Sorted along the path**, at each step's boundary (`src/tube.cpp`): a slug that holds a gas and a liquid (it
+  boiled, or its vapour condensed) parts into two, the gas at its higher end; alike neighbours merge (the column's
+  measure of alike); an emptied slug is gone. Solids ride in their slug.
+- **A liquid parts where its own weight takes it under what it can stand**: where the pressure at a liquid slug's
+  highest point falls under its saturation pressure (nought, for a liquid with no vapour), its highest part is
+  split off as a slug of its own, whose pressure is then that point's: it boils by its own equilibrium, or stands
+  at nought with a void (Stage 88's third state). So a column closed at its top stands as high as the pressure at
+  its foot holds it, with no rule for barometers.
+- **Energy.** An interface's move is work between its two slugs (W2), each brought to its end pressure against
+  that pressure as any vessel in the closure; what friction takes stays as heat in the slug it was lost in; the
+  weight's part crosses from gravity's reservoir (Stage 94) to that slug: its mass times `g` times its centre's
+  fall (Z1). Heat and what is dissolved pass between neighbouring slugs by conduction and diffusion over the
+  bore's area (the column's rules).
+- **Traced** (§18): V4, a tube's slugs fill it; F1 for an interface (its row: the two pressures, the heights, the
+  give, the volume moved: down its drive and within its law); Z1 for a slug.
+- **What is left out, by intent**: inertia (a U-tube settles and does not swing); the lighter passing the heavier
+  within the bore (plug flow: right for water and air in bores under about 5 mm, where a bubble does not rise past
+  the water; wider bores are Stage 98's); dispersion along a slug beyond diffusion; a slug's state is read at its
+  middle's pressure (a liquid's volume differs by its compressibility times half its head: 2e-6 a metre of water).
+  One bore a tube.
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
@@ -3750,6 +3807,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | V1 | An open rigid cell is exactly full: gas + solids and liquids = its volume, within the volume of one quantum of each gas species plus 1e-9 of the cell's. Under-full only where the trace marks it starved | tolerance | 4 |
 | V2 | No rigid cell holds more solids and liquids than its volume, at its own temperature (Stage 67). In a world with a spill cell the excess liquid is there (Stage 8) | exact | 5, 8, 67 |
 | V3 | A rigid cell is marked sealed exactly when it has no path, along open gas edges, to an elastic cell, and a sealed one that holds gas leaves it room, so its pressure is defined (Stage 28; until then: no rigid cell is sealed); Stage 67: room at the temperature its energy holds, its liquids grown to it; Stage 88: its liquids give, so only what does not (its solids) can leave its gas no room; and a layer is marked at a sealed vessel's pressure exactly when its column's top is sealed | exact | 4, 28, 67, 88 |
+| V4 | A tube's slugs fill it (Stage 95; `chem/invariants.hpp`): as a step ends, the volumes of a tube's cells come to the volume of its bore along its path, each cell that holds nothing has none, and its cells that hold something are sealed | 1e-9 of the tube's volume | 95 |
 | X1 | A solid has particles exactly when it is there: count > 0 where its amount is > 0, 0 where it is 0; nothing else has particles | exact | 6 |
 | X2 | A cell that holds a dissolved species holds a liquid to hold it | exact | 6 |
 | D1 | Batching invariance: N steps give the same digest however grouped into frames, and whether or not they are checked and traced | exact | 7 |
