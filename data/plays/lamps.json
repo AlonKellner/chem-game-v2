@@ -1,0 +1,17 @@
+{"format": "chem-play/1", "note": "Stage 85: the discharge lamps of the experiment spectra, each lit in turn, and the spectral viewer's probe on hydrogen's tube; pictures (LAB_SHOTS).", "steps": [
+	{"to": "menu:experiments", "button": "click"},
+	{"to": "experiment:spectra", "button": "click"},
+	{"do": {"do": "valve", "burner": "lamp_h", "to": 1.0}},
+	{"do": {"do": "valve", "burner": "lamp_he", "to": 1.0}},
+	{"do": {"do": "valve", "burner": "lamp_hg", "to": 1.0}},
+	{"do": {"do": "valve", "burner": "lamp_ne", "to": 1.0}},
+	{"frames": 150, "mark": "settled", "shot": "lamps-all"},
+	{"frames": 10, "mark": "settled"},
+	{"do": {"do": "probe", "viewer": "viewer", "on": "lamp_h", "at": [0.5, 0.4]}},
+	{"to": "item:viewer", "button": "right", "frames": 10},
+	{"frames": 240, "mark": "reading", "shot": "lamps-hydrogen-viewer"},
+	{"frames": 10, "mark": "reading"},
+	{"do": {"do": "probe", "viewer": "viewer", "on": "lamp_hg", "at": [0.5, 0.4]}},
+	{"frames": 240, "mark": "reading", "shot": "lamps-mercury-viewer"},
+	{"frames": 10, "mark": "reading"}
+]}

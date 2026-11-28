@@ -34,13 +34,21 @@ The curriculum's step E, its experiments (`docs/CURRICULUM.md`: 10, 12, 42, 43, 
 | Phase | Topic | Status |
 |---|---|---|
 | 85.1 | A report's choices; an unknown from a list | done |
-| 85.2 | Experiments 44 (Ksp of calcium hydroxide, a common ion), 52 (water's hardness by EDTA), 43 (Kc of FeSCN²⁺; small pipettes), 42 (Le Chatelier); the activity model's range bounded (found by 44) | |
-| 85.3 | A wet cake, a porcelain crucible, a drying oven; experiment 10 (gravimetric sulfate or chloride) | |
-| 85.4 | Experiment 12 (qualitative analysis, flame tests); a test-tube rack | |
-| 85.5 | Discharge lamps (H, He, Hg, Ne); experiment 54 (atomic spectra, the Rydberg constant) | |
-| 85.6 | Documents, `make gates`, the user's sign-off | |
+| 85.2 | Experiments 44 (`ksp`), 52 (`hardness`), 42 (`lechatelier`); the activity model's range bounded (found by 44); the fast equilibria's rounds 256 to 1024 (found by 52); a drained pipette refills; 5 and 10 mL pipettes (ISO 648; the 1 and 2 mL rows not made: in one wall a delivery tube 5 mm across holds more than 1 mL) | done |
+| 85.3 | Iron(III)'s Pitzer pairs and FeSCN²⁺'s fitted to Below et al.'s two quotients (the user's choice: "Fix the activity"); experiment 43 (`kc`) by Benesi and Hildebrand in their medium (the user's choice, the standard past any measurement) | done |
+| 85.4 | A filter crucible (sintered glass, in place of porcelain: what chloride is weighed in as silver chloride), its wet cake, a drying oven; experiment 10 (`gravimetric`, chloride) | done |
+| 85.5 | Experiment 12 (`qualitative`): twelve salts, their tests, a flame test holding every metal; `flame_umol` | done |
+| 85.6 | Discharge lamps (H, He, Hg, Ne), the viewer's lines, `probe_on`; experiment 54 (`spectra`) | done |
+| 85.7 | Documents, `make gates`, the user's sign-off | |
 
 ## Open
+
+- **A test-tube rack** (the rest of T6) is not built: tubes stand on the bench by themselves.
+- **Experiment 51** (alum; the copper–ammonia salt with ethanol) waits for steps F and I (a metal dissolving with
+  hydrogen, ethanol as a second solvent).
+- **Iron(III) nitrate as the medium itself** (a textbook FeSCN²⁺ standard, 0.1–0.2 M): past Below et al.'s measurements,
+  the model takes up 84 % of the thiocyanate (about 95 % really); experiment 43 is Benesi and Hildebrand's in their
+  medium.
 
 - **Calcium chloride boiled down** loses its temperature (T3) near dryness, as it did before this stage (its water held
   at the range's edge, heated on); lithium chloride, held there too, keeps every invariant. A solution held at the
