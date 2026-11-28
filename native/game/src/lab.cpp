@@ -4763,7 +4763,27 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 					holds.push_back({ k == 0 ? item.cell : built[k - 1], &j.at("layers")[k] });
 				}
 			} else if (j.contains("contents")) {
+				if (j.contains("one_of")) {
+					why = "item \"" + item.id + "\": its contents, or one of a list (an unknown), not both";
+					return nullptr;
+				}
 				holds.push_back({ item.cell, &j.at("contents") });
+			} else if (j.contains("one_of")) {
+				// (Stage 85) an unknown drawn from a list: one of these contents, chosen once by the bench's seed
+				const json &list = j.at("one_of");
+				if (!list.is_array() || list.empty()) {
+					why = "item \"" + item.id + "\": \"one_of\" is a list of what it may hold";
+					return nullptr;
+				}
+				for (const json &c : list) {
+					if (!c.is_object()) {
+						why = "item \"" + item.id + "\": each of \"one_of\" is what it may hold, as \"contents\" is";
+						return nullptr;
+					}
+				}
+				const double u = 0.5 * (1.0 + instruments::share(impl->seed, item.id + ":one_of"));
+				const size_t pick = std::min(list.size() - 1, static_cast<size_t>(u * static_cast<double>(list.size())));
+				holds.push_back({ item.cell, &list.at(pick) });
 			}
 			std::map<int32_t, int64_t> own; // what its own cell holds, by species: its air is added to it (Stage 65)
 			for (const auto &[into, what] : holds) {

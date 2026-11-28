@@ -430,6 +430,7 @@ struct Ui::Impl {
 		bool done = false, within = false;
 		double truth = 0.0, yours = 0.0;
 		std::string why;
+		std::vector<bool> held; // (Stage 85) a choice item's: which of its choices hold
 	};
 	std::vector<std::string> answers;
 	// (Stage 55) the report's predictions: what is typed for each before the run, and what was made (kept as typed)
@@ -1763,6 +1764,26 @@ struct Ui::Impl {
 	}
 	static Rect report_field(int k) { return Rect{ READOUT.x + 300, TUTOR.y + TUTOR.h + 70 + static_cast<float>(k) * 96, 150, 30 }; }
 	Rect report_check() const { return Rect{ READOUT.x + 16, TUTOR.y + TUTOR.h + 70 + static_cast<float>(tutorial->report().size()) * 96, 120, 34 }; }
+	// (Stage 85) a choice's chip, under its item's label: in rows across the readout, each as wide as its label
+	Rect report_chip(int k, int i) const {
+		const std::vector<TutorialChoice> &choices = tutorial->report()[static_cast<size_t>(k)].choices;
+		const Rect f = report_field(k);
+		float x = READOUT.x + 16, y = f.y + 30;
+		for (int n = 0; n < static_cast<int>(choices.size()); ++n) {
+			const float w = 20.0f + 8.0f * static_cast<float>(choices[static_cast<size_t>(n)].label.size());
+			if (x + w > READOUT.x + READOUT.w - 16 && x > READOUT.x + 16) {
+				x = READOUT.x + 16;
+				y += 28;
+			}
+			if (n == i) {
+				return Rect{ x, y, w, 24 };
+			}
+			x += w + 6;
+		}
+		return Rect{};
+	}
+	// the chips picked of a choice item, as '1' and '0' in its answer
+	bool picked(size_t k, size_t i) const { return k < answers.size() && i < answers[k].size() && answers[k][i] == '1'; }
 	void check_report() {
 		const std::vector<TutorialReport> &items = tutorial->report();
 		answers.resize(items.size());
@@ -1770,6 +1791,28 @@ struct Ui::Impl {
 		for (size_t k = 0; k < items.size(); ++k) {
 			ReportCheck &c = report_checks[k];
 			c.done = true;
+			if (!items[k].choices.empty()) {
+				// (Stage 85) right where the picks are the choices that hold
+				bool any = false, all = true;
+				c.held.assign(items[k].choices.size(), false);
+				for (size_t i = 0; i < items[k].choices.size(); ++i) {
+					double v = 0.0;
+					std::string why_not;
+					if (!evaluate(items[k].choices[i].truth, view, v, why_not)) {
+						c.why = "its truth cannot be worked out: " + why_not;
+						all = false;
+						break;
+					}
+					c.held[i] = v > 0.0;
+					any = any || picked(k, i);
+					all = all && c.held[i] == picked(k, i);
+				}
+				c.within = c.why.empty() && any && all;
+				if (c.why.empty() && !any) {
+					c.why = "nothing to check: choose";
+				}
+				continue;
+			}
 			if (!evaluate(items[k].truth, view, c.truth, c.why)) {
 				c.why = "its truth cannot be worked out: " + c.why;
 				continue;
@@ -1790,6 +1833,24 @@ struct Ui::Impl {
 		}
 		answers.resize(tutorial->report().size());
 		for (int k = 0; k < static_cast<int>(answers.size()); ++k) {
+			const TutorialReport &item = tutorial->report()[static_cast<size_t>(k)];
+			if (!item.choices.empty()) {
+				// (Stage 85) a chip toggles; one only where the item is single
+				for (int i = 0; i < static_cast<int>(item.choices.size()); ++i) {
+					if (report_chip(k, i).has(x, y)) {
+						std::string &a = answers[static_cast<size_t>(k)];
+						a.resize(item.choices.size(), '0');
+						const bool was = a[static_cast<size_t>(i)] == '1';
+						if (item.single) {
+							a.assign(item.choices.size(), '0');
+						}
+						a[static_cast<size_t>(i)] = was ? '0' : '1';
+						report_focus = -1;
+						return true;
+					}
+				}
+				continue;
+			}
 			if (report_field(k).has(x, y)) {
 				report_focus = k;
 				return true;
@@ -1806,6 +1867,9 @@ struct Ui::Impl {
 			return false;
 		}
 		answers.resize(tutorial->report().size());
+		if (!tutorial->report()[static_cast<size_t>(report_focus)].choices.empty()) {
+			return false; // (Stage 85) chosen, not typed
+		}
 		std::string &a = answers[static_cast<size_t>(report_focus)];
 		if (key == Ui::KeyText && ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e') && a.size() < 16) {
 			a += static_cast<char>(codepoint);
@@ -1821,9 +1885,37 @@ struct Ui::Impl {
 	void paint_report() {
 		const std::vector<TutorialReport> &items = tutorial->report();
 		float y = TUTOR.y + TUTOR.h + 46;
-		text(READOUT.x + 16, y, "Your report: type each result, then check it", INK, 18);
+		text(READOUT.x + 16, y, "Your report: type or choose each result, then check it", INK, 18);
 		for (size_t k = 0; k < items.size(); ++k) {
 			const Rect f = report_field(static_cast<int>(k));
+			if (!items[k].choices.empty()) {
+				// (Stage 85) its chips: picked filled; once checked, those that hold outlined
+				text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
+				const bool checked = k < report_checks.size() && report_checks[k].done;
+				float bottom = f.y + 30;
+				for (size_t i = 0; i < items[k].choices.size(); ++i) {
+					const Rect r = report_chip(static_cast<int>(k), static_cast<int>(i));
+					const bool on = picked(k, i);
+					rect_fill(r, on ? rgba(70, 90, 120) : rgba(24, 24, 24));
+					const bool holds = checked && i < report_checks[k].held.size() && report_checks[k].held[i];
+					outline(r, holds ? GOOD : on ? GUIDE : GRID, holds ? 2.0f : 1.0f);
+					text(r.x + 10, r.y + 17, items[k].choices[i].label, on ? INK : DIM, 14);
+					bottom = std::max(bottom, r.y + r.h);
+				}
+				if (checked) {
+					const ReportCheck &c = report_checks[k];
+					std::string says = c.why;
+					if (says.empty()) {
+						std::string right;
+						for (size_t i = 0; i < items[k].choices.size() && i < c.held.size(); ++i) {
+							right += c.held[i] ? (right.empty() ? "" : ", ") + items[k].choices[i].label : std::string();
+						}
+						says = c.within ? "yours is right: " + right : "not quite: " + (right.empty() ? std::string("none of them") : right);
+					}
+					text(READOUT.x + 16, bottom + 18, says, c.within ? GOOD : WARN, 14);
+				}
+				continue;
+			}
 			text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
 			rect_fill(f, rgba(24, 24, 24));
 			outline(f, report_focus == static_cast<int>(k) ? GUIDE : GRID, report_focus == static_cast<int>(k) ? 2.0f : 1.0f);
@@ -6499,7 +6591,12 @@ struct Ui::Impl {
 			}
 			if (report_active()) {
 				for (size_t k = 0; k < tutorial->report().size(); ++k) {
-					buttons.push_back(report_field(static_cast<int>(k)));
+					if (tutorial->report()[k].choices.empty()) {
+						buttons.push_back(report_field(static_cast<int>(k)));
+					}
+					for (size_t i = 0; i < tutorial->report()[k].choices.size(); ++i) {
+						buttons.push_back(report_chip(static_cast<int>(k), static_cast<int>(i))); // (Stage 85)
+					}
 				}
 				buttons.push_back(report_check());
 			}
@@ -8963,7 +9060,15 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 			return centre(m.report_check());
 		}
 		const int k = std::atoi(std::string(rest).c_str());
-		return k >= 0 && k < static_cast<int>(m.tutorial->report().size()) && centre(Impl::report_field(k));
+		if (k < 0 || k >= static_cast<int>(m.tutorial->report().size())) {
+			return false;
+		}
+		if (const size_t colon = rest.find(':'); colon != std::string_view::npos) {
+			// (Stage 85) "report:K:I", a choice's chip
+			const int i = std::atoi(std::string(rest.substr(colon + 1)).c_str());
+			return i >= 0 && i < static_cast<int>(m.tutorial->report()[static_cast<size_t>(k)].choices.size()) && centre(m.report_chip(k, i));
+		}
+		return centre(Impl::report_field(k));
 	}
 	if (after("predict:", rest)) { // (Stage 55) a prediction's field, by its order among them; "make"
 		if (!m.predict_shown()) {
