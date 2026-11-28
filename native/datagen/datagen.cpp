@@ -472,6 +472,12 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 				}
 			}
 		}
+		// (Stage 79) a gas's viscosity (air's), by rising temperature
+		if (solutions_json.contains("gas_viscosity")) {
+			for (const json &v : solutions_json.at("gas_viscosity").at("rows")) {
+				solution.gas_viscosity.push_back(chem::ViscosityPoint{ v.at("celsius").get<double>() + 273.15, v.at("upa_s").get<double>() * 1e-6 });
+			}
+		}
 		// (Stage 65) a solution's conductivity: the ions' size and the solvent's dielectric constant
 		if (solutions_json.contains("conductivity")) {
 			const json &c = solutions_json.at("conductivity");
@@ -736,6 +742,15 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	if (solution.viscosity.empty()) {
 		cpp << "\t{},\n";
 	}
+	cpp << "};\n\nconstexpr ViscosityPoint GAS_VISCOSITY[] = {\n";
+	for (const chem::ViscosityPoint &v : solution.gas_viscosity) {
+		char point[80];
+		std::snprintf(point, sizeof point, "\t{ %.17g, %.17g },\n", v.kelvin, v.pascal_seconds);
+		cpp << point;
+	}
+	if (solution.gas_viscosity.empty()) {
+		cpp << "\t{},\n";
+	}
 	cpp << "};\n\nconstexpr SolventPoint SOLVENT[] = {\n";
 	for (const chem::SolventPoint &v : solution.solvent) {
 		char point[300];
@@ -765,7 +780,7 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 	char ion_size[80];
 	std::snprintf(ion_size, sizeof ion_size, "constexpr double ION_SIZE = %.17g;\n", solution.ion_size);
 	cpp << "};\n" << model << density_text << ion_size << "constexpr size_t ION_COUNT = " << ions.size() << ", PAIR_COUNT = " << solution.pairs.size() << ", VISCOSITY_COUNT = " << solution.viscosity.size() << ", SOLVENT_COUNT = " << solution.solvent.size()
-		<< ", DIELECTRIC_COUNT = " << solution.dielectric.size() << ";\n";
+		<< ", DIELECTRIC_COUNT = " << solution.dielectric.size() << ", GAS_VISCOSITY_COUNT = " << solution.gas_viscosity.size() << ";\n";
 	cpp << "\nconstexpr ReactionDef REACTIONS[] = {\n";
 	for (const ReactionRow &row : reactions) {
 		cpp << "\t{ " << quoted(row.id) << ", { { ";
@@ -805,7 +820,8 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 		<< "\t\tSolutionDef solution{ A_PHI, DEBYE_B, std::vector<IonDef>(IONS, IONS + ION_COUNT), std::vector<PairDef>(PAIRS, PAIRS + PAIR_COUNT),\n"
 		<< "\t\t\t\tstd::vector<ViscosityPoint>(VISCOSITY, VISCOSITY + VISCOSITY_COUNT), IONISATION_H, IONISATION_G, IONISATION_CP,\n"
 		<< "\t\t\t\tstd::vector<SolventPoint>(SOLVENT, SOLVENT + SOLVENT_COUNT), DENSITY, DENSITY_B, DENSITY_LOW, DENSITY_HIGH,\n"
-		<< "\t\t\t\tstd::vector<DielectricPoint>(DIELECTRIC, DIELECTRIC + DIELECTRIC_COUNT), ION_SIZE };\n"
+		<< "\t\t\t\tstd::vector<DielectricPoint>(DIELECTRIC, DIELECTRIC + DIELECTRIC_COUNT), ION_SIZE,\n"
+		<< "\t\t\t\tstd::vector<ViscosityPoint>(GAS_VISCOSITY, GAS_VISCOSITY + GAS_VISCOSITY_COUNT) };\n"
 		<< "\t\tstd::optional<SpeciesTable> made = SpeciesTable::make(std::vector<ElementDef>(std::begin(ELEMENTS), std::end(ELEMENTS)),\n"
 		<< "\t\t\t\tstd::vector<SpeciesDef>(std::begin(SPECIES), std::end(SPECIES)), &why, std::move(solution));\n"
 		<< "\t\tif (!made) {\n\t\t\tbroken(why);\n\t\t}\n"

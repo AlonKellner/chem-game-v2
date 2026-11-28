@@ -44,7 +44,10 @@ std::optional<double> reading(const LabView &view, const Quantity &q, bool &inst
 		return v->read_us_cm;
 	}
 	if (q.what == "liquid_ml" || q.what == "condensed_ml") {
-		return v->scale_ml ? std::nullopt : v->read_ml; // (a burette reads its scale, not its liquid)
+		return v->scale_ml || v->syringe ? std::nullopt : v->read_ml; // (a burette reads its scale, not its liquid; a syringe its plunger)
+	}
+	if (q.what == "plunger_ml") {
+		return v->read_ml; // (Stage 79) a syringe's scale at its plunger
 	}
 	if (q.what == "scale_ml") {
 		return v->read_ml;

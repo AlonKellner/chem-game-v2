@@ -234,6 +234,34 @@
 			"tutorial": "tutorials/conductivity.json"
 		},
 		{
+			"id": "syringes",
+			"title": "Syringes: what gives",
+			"summary": "Four syringes to push by their handles: one sealed with water, one with air, two of water joined by a tube and two of air. A liquid does not give; a gas gives and springs back; joined, a push carries over.",
+			"bench": "benches/syringes.json",
+			"tutorial": "tutorials/syringes.json"
+		},
+		{
+			"id": "boyle",
+			"title": "Boyle's law",
+			"summary": "A sealed syringe of air pushed in and locked at 80 and 60 mL, its pressure read at each: pressure times volume stands. A guess first.",
+			"bench": "benches/boyle.json",
+			"tutorial": "tutorials/boyle.json"
+		},
+		{
+			"id": "charles",
+			"title": "Charles's law and absolute zero",
+			"summary": "A sealed syringe of air, its plunger free, stood in ice water and then in hot water: the air contracts and expands, and the line of volume against temperature reaches nothing near -273 C. A guess first.",
+			"bench": "benches/charles.json",
+			"tutorial": "tutorials/charles.json"
+		},
+		{
+			"id": "molar_volume",
+			"title": "A gas's molar volume",
+			"summary": "Malachite in acid gives carbon dioxide, collected in a gas syringe on the flask's mouth: its volume over its moles, about 24 litres a mole. A guess first.",
+			"bench": "benches/molar_volume.json",
+			"tutorial": "tutorials/molar_volume.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

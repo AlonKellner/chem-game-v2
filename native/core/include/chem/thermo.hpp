@@ -99,6 +99,9 @@ double particle_diameter(const SpeciesTable &table, const CellState &cell, Speci
 // The solvent's viscosity at T, Pa s (GAME_SPEC §7): the table's, read between
 // its points in the logarithm and held beyond its ends. 0 with no table.
 double solvent_viscosity(const SpeciesTable &table, double temperature);
+// (Stage 79) a gas's viscosity at T, Pa s (air's at 1 atm, GAME_SPEC §6): the table's, read between its rows as the
+// solvent's is, held beyond them; 0 where none is known
+double gas_viscosity(const SpeciesTable &table, double temperature);
 
 // The solvent's properties at a temperature (Stage 47: saturated liquid water, data/solutions.json's solvent), read
 // between rows, held beyond the ends; all 0 where the table has none.

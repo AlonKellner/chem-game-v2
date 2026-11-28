@@ -15,7 +15,7 @@ namespace {
 bool fixed(const std::string &what) {
 	return what == "celsius" || what == "gas_ml" || what == "condensed_ml" || what == "liquid_ml" || what == "solid_ml" || what == "mass_g" || what == "kpa" || what == "valve" ||
 			what == "fill" || what == "met" || what == "ph" || what == "us_cm" || what == "bubbles_cm" || what == "reads_g" || what == "mark_off_ml" || what == "scale_ml" || what == "tap" ||
-			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended";
+			what == "absorbance" || what == "nm" || what == "holder" || what == "suspended" || what == "plunger_ml" || what == "hand_n" || what == "locked";
 }
 
 bool is_gas(const std::string &species) {
@@ -211,6 +211,15 @@ std::optional<double> measure(const LabView &view, const Quantity &q) {
 	if (q.what == "scale_ml") { // (Stage 52) a burette's reading from its zero line
 		return v->scale_ml;
 	}
+	if (q.what == "plunger_ml") { // (Stage 79) a syringe's scale at its plunger
+		return v->syringe ? std::optional<double>(v->plunger_ml) : std::nullopt;
+	}
+	if (q.what == "hand_n") { // (Stage 79) how hard a hand pushes or pulls its plunger, N (none on it: 0)
+		return v->syringe ? std::optional<double>(v->plunger_hand ? std::fabs(v->plunger_force_n) : 0.0) : std::nullopt;
+	}
+	if (q.what == "locked") { // (Stage 79) its plunger's lock: 1 on, 0 off
+		return v->syringe ? std::optional<double>(v->plunger_locked ? 1.0 : 0.0) : std::nullopt;
+	}
 	if (q.what == "tap") { // (Stage 52) a burette's or a pipette's stopcock, how far open, %
 		const glass::Vessel *g = v->kind == "vessel" && !v->glassware.empty() ? glass::find(v->glassware, v->nominal_ml) : nullptr;
 		return g != nullptr && g->outlet ? std::optional<double>(100.0 * v->cap) : std::nullopt;
@@ -284,6 +293,9 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 		if (item.scale_ml) {
 			out.push_back(Quantity{ item.id, "scale_ml", "g" });
 		}
+		if (item.syringe) {
+			out.push_back(Quantity{ item.id, "plunger_ml", "g" }); // Stage 79
+		}
 	}
 	if (item.kind == "balloon") {
 		out.push_back(Quantity{ item.id, "fill", "g" });
@@ -297,7 +309,8 @@ std::vector<Quantity> quantities_of(const ItemView &item) {
 }
 
 QuantityKind kind_of(const Quantity &q) {
-	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap" || q.what == "absorbance" || q.what == "nm" || q.what == "holder") {
+	if (q.what == "fill" || q.what == "valve" || q.what == "met" || q.what == "reads_g" || q.what == "tap" || q.what == "absorbance" || q.what == "nm" || q.what == "holder" || q.what == "hand_n" ||
+			q.what == "locked") {
 		return QuantityKind::Other;
 	}
 	return fixed(q.what) ? QuantityKind::Vessel : QuantityKind::Material;
@@ -335,7 +348,7 @@ std::vector<std::string> quantities_of_kind(const ItemView &item, QuantityKind k
 		}
 	}
 	if (kind == QuantityKind::Vessel) { // in the editor's order: the temperature, what it holds, then by phase
-		static const char *const ORDER[] = { "celsius", "kpa", "ph", "us_cm", "bubbles_cm", "scale_ml", "mark_off_ml", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
+		static const char *const ORDER[] = { "celsius", "kpa", "plunger_ml", "ph", "us_cm", "bubbles_cm", "scale_ml", "mark_off_ml", "mass_g", "liquid_ml", "solid_ml", "condensed_ml", "gas_ml" };
 		std::vector<std::string> ordered;
 		for (const char *w : ORDER) {
 			if (std::find(out.begin(), out.end(), w) != out.end()) {
@@ -386,6 +399,12 @@ std::string unit(const Quantity &q) {
 	if (q.what == "kpa") {
 		return "kPa";
 	}
+	if (q.what == "hand_n") {
+		return "N";
+	}
+	if (q.what == "locked") {
+		return "";
+	}
 	if (q.what == "bubbles_cm") {
 		return "cm";
 	}
@@ -421,6 +440,12 @@ std::string label(const LabView &, const Quantity &q) {
 		what = "solids held up";
 	} else if (q.what == "scale_ml") {
 		what = "burette reading";
+	} else if (q.what == "plunger_ml") {
+		what = "plunger";
+	} else if (q.what == "hand_n") {
+		what = "hand's force";
+	} else if (q.what == "locked") {
+		what = "plunger's lock";
 	} else if (q.what == "tap") {
 		what = "tap";
 	} else if (q.what == "mark_off_ml") {
@@ -476,6 +501,12 @@ std::string shown(const Quantity &q, double value) {
 	}
 	if (q.what == "kpa") {
 		return fmt("%.1f kPa", value);
+	}
+	if (q.what == "hand_n") { // (Stage 79)
+		return fmt("%.1f N", value);
+	}
+	if (q.what == "locked") {
+		return value > 0.5 ? std::string("locked") : std::string("free");
 	}
 	if (q.what == "ph") {
 		return fmt("pH %.2f", value);
@@ -782,7 +813,7 @@ bool holds(const Cond &c, const CondContext &x) {
 		}
 	}
 	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
-		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to)) {
+		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to) || (c.stands_in && v.stands_in != *c.stands_in)) {
 		return false;
 	}
 	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst) || (c.slot && v.slot != *c.slot)) {

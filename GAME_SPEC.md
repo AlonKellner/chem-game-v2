@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.81.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.81.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -397,6 +397,69 @@ is sealed; the world keeps the mark as its edges change (V3).
   come from nowhere.
 - **Nothing runs in or out but gas between cells sealed together:** a drain neither runs into nor
   out of a sealed cell (no gas could make way for the liquid), and a sealed cell does not overflow.
+
+**Pistons** *(Stage 79; `chem/world.hpp`'s `Piston`, `Simulation::move_pistons`; `docs/TDD_79_SYRINGE.md`; asked for by
+the user, 2026-11-27: "Holding the syringe handle should exert a force on it, the force of the player hand should be
+limited")*. A rigid cell, or a column's top (its whole), may have a plunger: a piston of an area `A` between two
+stops, its volume moved each step, first in the step, by the forces on it.
+
+- **Overdamped.** Its own mass stores nothing a step's friction does not take: it moves at the speed its forces give,
+  `c v = F + (P - P_atm) A - f sgn v` (outward positive; `c` its drag, `f` its friction, which holds it still while
+  the rest is within it), `P` its space's pressure after the step's move: implicit, so a stiff space (a liquid's) is
+  as stable as a soft one.
+- **The hand.** Held, it pulls the plunger toward a volume (where the player drags its handle), with what force that
+  takes, at most `F_most` (79.8 N: a thumb on a plunger, the lab's `instruments.json`); past it the plunger moves
+  only as its forces at `F_most` let it, or not at all. Let go, it is free: `F = 0`.
+- **Tightly joined vessels** (the user, 2026-11-27: "I want to be able to connect the syringe to any vessel, sealing it
+  with the connection then allowing me to interact with the plunger all the while ... a principle which will be
+  applied to all setups with tightly connected vessels"; "I prefer you would simulate each of the syringes
+  independently, simulating the exchange of liquid/gas between them"; asked, the exchange "solved within step"; "Does
+  the tube restrict the flow? It should": an ordinary 4 mm tube). Each vessel keeps its own contents, temperature and
+  pressure. A step's pistons and connections run in sub-steps (12; 48 where a liquid may cross outside a hydraulic
+  link, below, as its vessels give only by their gas): in each, every piston moves alone (below), then every
+  connection between two sealed vessels (an open edge that passes gas or liquid) lets across what runs from the
+  higher pressure to the lower, never past the two being one, each vessel's own, exactly; the exchange is done within
+  the step.
+  - **A hydraulic link** (the user, 2026-11-27: "pushing a plunger is harder than pulling on it ... which makes no
+    sense since in that setup pushing a syringe is almost equivalent pulling on the other"): two vessels joined at
+    their feet, both holding liquid there, each in no other such link (two syringes of water on a tube), are solved
+    together for the whole step, before the sub-steps. The unknown is the liquid `x` that crosses; given `x`, each
+    vessel's piston moves alone by its own sealed model on what it then holds, and `x` is the root of
+    `x = G (P_a − P_b) dt / μ` at their pressures after (unrestricted, `P_a = P_b`). A liquid does not give, so a push
+    on one is the other's pull at once: in sub-steps each plunger would move only against its own bubble before the
+    water crossed, a bubble's compression stiff and its expansion soft, and pushing harder than pulling.
+  - **Where a connection meets a vessel** (`Edge::foot`): at its foot (a syringe's nozzle) a vessel gives its lowest
+    liquid while it holds one; at its top (a flask's neck) its gas. A tube joins two nozzles; a syringe on a vessel
+    joins its nozzle to the vessel's top.
+  - **What a tube lets through** (`Edge::flow`, Hagen–Poiseuille's `G = π r⁴ / 8L` over its pieces in series: the
+    tubing, 4 mm by 30 cm, and the nozzles, 2 mm by 1 cm): a liquid `G ΔP / μ` (water's viscosity), a gas
+    `G (P_a² − P_b²) / (2 μ R T)` (air's, `solutions.json`); unrestricted, as far as levels the two.
+  - **What it carries**: a liquid its enthalpy and the flow work of the giver's pressure over the room's (the gas over
+    it pushing it out), the taker gaining what the tube dissipates; a gas its own enthalpy, in parcels of no more than
+    half what would level the two, each at the giver's state as it then is (a vessel emptied gives its later gas at
+    its lower pressure and temperature), and only down the true pressure.
+  - **A piston alone**: its vessel's pressure after the move by its own sealed model, the hand's work in it (a gas
+    over a liquid squeezed small is stiffened by the liquid's own expansion, which no estimate sees); where the forces
+    would take it past what its energy pays for (more room than it can fill), no further than the last that holds. A
+    move past where the sealed model holds is on the side its gas's ideal pressure in its room says: a bubble squeezed
+    too small above the pressure tried, a room its energy cannot fill below.
+  Each piece is the second law's: a move at the pressure after it, a run down the true pressure. Solids and liquids
+  are incompressible: the plungers stop where they would leave a vessel's gas less than a ten-thousandth of its
+  volume. Air between joined syringes gives as it compresses, so the far plunger, held by its friction, moves only
+  once the pressure difference beats it; water does not give, so a push must beat both frictions to move anything; a
+  tube holds back what crosses it, by its pressure drop.
+- **The hand's pace.** A hand moves a plunger at most 0.3 m/s (design: a person's pace), pushing only as hard as that
+  and what resists take.
+- **The energy.** The hand's work `F dx`, along the piston's edge from the lab's mains (Stage 32's reservoir of work),
+  is the only work: `E = U + P_atm V` holds the room's work on the plunger's back and the gas's on its face, and the
+  drag and friction are heat in the cell, so `F dx = (P_atm - P) dV + (c v + f) |dx|`. With `P` the pressure after
+  the move, the gas takes at least the reversible work of a compression and gives at most it on an expansion: its
+  entropy never falls (T2). A free plunger does no work; its cell's `E` stands.
+- **Traced** (§18, W1): each piston within its stops, its hand within its most (none let go), the energy along its
+  edge the hand's work over the step's moves, no more than its most over the way it went; a step's state before it read at its volume then (`StepTrace::volume_before`). Work
+  to or from a reservoir of work (`WORK_KELVIN`, the lab's mains) is no heat, either way (T1); a sealed cell's room for
+  its gas is held at its own temperature (V3), and a sealed group still running gas after its rounds is brought to
+  each cell's equilibria (P1).
 
 **Starved cells.** A rigid cell is left under-full, and flagged `starved` in the step's trace,
 when its parent holds less gas than it needs (it draws all there is), or when a fast reaction in
@@ -2032,6 +2095,24 @@ the calorimeter's).
 - Tall glassware stands on tall footprints (a burette 2 × 12, a pipette 2 × 11, a cylinder or a volumetric flask
   2 × 6 or 2 × 8).
 
+**A gas syringe** (Stage 79, `docs/TDD_79_SYRINGE.md`; asked for by the user, 2026-11-27): `gas_syringe`, a ground
+glass barrel of 100 mL over a 120 mm scale, its nozzle at its foot, its plunger a piston (§6, Pistons: 0.3 N of
+friction, 70 N s/m of drag; design). A bench sets where its plunger stands (`plunger_ml`) and whether its nozzle is
+capped (`capped`); its nozzle capped seals it (the cap control: `cap`, as a bottle's screw cap, while it is joined to
+nothing), put on a vessel's mouth (`attach`: their gas one space, neither open to the room) or joined to another
+syringe's by a tube (`tube`, `untube`: gas and liquid both pass). Its plunger is held by a hand toward a volume on its
+scale with at most a hand's force, 79.8 N (`plunger {item, ml}`), let go (`plunger {item, free}`), or locked where the
+hand leaves it, its lock's clamp holding it with up to 300 N (`plunger {item, lock}`). Read: its scale at its plunger
+(`plunger_ml`, by instruments to half a millilitre), its pressure (`kpa`; past next to no gas, the pressure its plunger
+stands at), the hand's force (`hand_n`), its lock (`locked`). On the screen its plunger is a rod of ground glass in its
+bore and its handle a bar across its top: **a physical control**, dragged along its barrel on the bench, the hand
+pulling the plunger toward the pointer while it is held, let go when the button is (not a slider in the readout:
+`plunger:<id>`, `plunger:<id>@<ml>`); while a hand works it a strict tutorial's clock runs. Its lock and its nozzle's
+cap are buttons in the readout; a syringe dropped on a vessel offers "on its mouth", on another syringe "tube to it";
+a tube hangs between two nozzles. Its gas faces its glass to its plunger's face, no higher (§6, the wall in rings). A
+bench may set itself out by commands before anyone acts (`setup`). A vessel standing in another is hit before it, and
+moves from one into another.
+
 **A filter funnel** (Stage 59, `docs/TDD_59_FILTERING.md`): `filter_funnel`, a 60° cone 75 mm across on a stem
 (ISO 4798's form) with a Whatman grade 1 paper folded in quarters; an outlet vessel with no stopcock, `attach`ed on a
 mouth it runs into it as it stands. Its paper drains by Darcy's law, every patch of the wetted cone in proportion to the
@@ -3139,6 +3220,18 @@ stand on.
     vessel) and logged: the water supercools to −9.7 °C, jumps back to 0 °C and holds while it freezes; the solution
     jumps back to about −2 °C and falls as its ice concentrates it. A guess first; its report: the solution's
     freezing point, and the cryoscopic constant from it (1.71 against an ideal 1.86).
+  - Stage 79's, with the gas syringe (`docs/TDD_79_SYRINGE.md`):
+    - `syringes` (asked for by the user): a sealed syringe of water (pushed at a hand's most it gives 0.09 mL, its
+      bubble's), one of air (pushed to 35 mL, let go it springs back to 59 of 60), two of water joined by a tube (one
+      pushed to 20 mL, the other out to 60, in step), two of air joined (the other out to about 80, behind while it
+      moves and a little off at rest).
+    - `boyle` (experiment 27): a capped syringe of 100 mL of air locked at 80 and 60 mL, each read once back at the
+      room's temperature: P V 10101 against 10132 kPa mL. A guess first.
+    - `charles` (experiment 27; asked for by the user: a cool bath and a hot bath): a capped syringe of 30 mL of air,
+      its plunger free, stood in ice water (28.1 mL at 1 °C) and then in hot water (35.1 mL at 70 °C): its line reaches
+      nothing at about −277 °C. A guess first.
+    - `molar_volume` (experiment 28): 0.50 g of malachite tipped into sulfuric acid, a free syringe put on the flask's
+      mouth: 53.4 mL of carbon dioxide, 23.6 L/mol against 24.1 (a little dissolves in the acid). A guess first.
   - `heating_curve`, *a heating curve and the heat of fusion* (Stage 71; experiment 26): two ice cubes stirred into
     warm water in a foam cup (40 to 20.0 °C: 334.6 J/g), then crushed ice from the freezer heated and stirred, logged:
     flat at 0 °C while it melts, flat at 100 °C while it boils. A guess first; its report: the heat of fusion.
@@ -3329,6 +3422,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | C2 | World mass is constant (follows from C1; summed independently, exactly, in 96 bits) | exact | 1 |
 | C3 | World energy is constant | exact | 1 |
 | C4 | World charge is constant | exact | 1 |
+| W1 | A piston's work is its hand's alone (Stage 79; `chem/invariants.hpp`): each piston stands within its stops, its hand's force within its most (none when let go), and the energy along its work edge in the step is that force over its move, to a quantum. It fires on a hand past its most, a piston past its stops, a let-go hand with a force, and a quantum more along the edge than the work | exact | 79 |
 | Q1 | A solution's conductivity lies between nought and Kohlrausch's limit (Stage 65; `chem/invariants.hpp`): no less than nought and no more than the sum of its ions' limiting conductivities, what no atmosphere lowers; nought in a cell with no ion (water's own ions are always there with water). It fires on a reading past the limit, below nought, and one in a cell with no ion | exact | 65 |
 | N1 | Electroneutrality (Stage 63; `chem/invariants.hpp`): no step changes a cell's charge. What moves between cells moves as neutral matter and every transform is balanced in charge, so a cell built neutral stays so. It fires on a lone ion carried from one cell to another, though the world's charge is constant | exact | 63 |
 | C5 | Ledger closure: the step's primitive calls sum to its state change | exact | 1 |

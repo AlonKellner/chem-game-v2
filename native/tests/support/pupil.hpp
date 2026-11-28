@@ -81,6 +81,19 @@ struct Pupil {
 		at(to, x1, y1);
 		ui->pointer(x0, y0, false);
 		ui->pointer(x0, y0, true);
+		if (what.rfind("plunger:", 0) == 0) {
+			// (Stage 79) a physical control: what the hand does with it takes the lab's time, so the hand moves it over a
+			// second and holds it there half a second more
+			for (int k = 1; k <= 60; ++k) {
+				ui->pointer(x0 + (x1 - x0) * static_cast<float>(k) / 60.0f, y0 + (y1 - y0) * static_cast<float>(k) / 60.0f, true);
+				ui->frame(1.0 / 60.0);
+			}
+			for (int k = 0; k < 30; ++k) {
+				ui->frame(1.0 / 60.0);
+			}
+			ui->pointer(x1, y1, false);
+			return;
+		}
 		ui->pointer((x0 + x1) / 2, (y0 + y1) / 2, true);
 		ui->pointer(x1, y1, true);
 		ui->pointer(x1, y1, false);

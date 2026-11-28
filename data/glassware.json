@@ -3,6 +3,7 @@
 	"note": "Each kind of vessel as its standard makes it (GAME_SPEC §12.3, A vessel's whole shape; docs/DATA_SOURCES.md, Glassware). sizes: the standard's row for a nominal capacity, mm. The rest is what the standard leaves open, calibrated within its words: shares of the outside diameter, or of the neck's, or of the wall; floor_per_wall: a floor as thick as this many walls. marks_ml: the spacing of the marks printed on it, marks_error: how far a mark may be from its volume, a share (Stage 50: read by instruments, GAME_SPEC §13, Readings).",
 	"seals_mm": 40,
 	"burst_kpa": 200,
+	"tubing": {"note": "(Stage 79) the tube that joins two syringes' nozzles (GAME_SPEC §6, Pistons): ordinary silicone tubing, its bore and length (design, the user's choice: 4 mm)", "bore_mm": 4, "length_mm": 300},
 	"kinds": [
 		{
 			"name": "beaker",
@@ -148,6 +149,19 @@
 			"pour_ml_s": 4,
 			"cap_bore_mm": 4,
 			"burst_kpa": 200
+		},
+		{
+			"name": "gas_syringe",
+			"standard": "a ground-glass gas syringe of 100 mL in 1 mL (design: its bore a 120 mm scale's for 100 mL, its body 37 mm across, its nozzle at its foot, its plunger ground to its barrel)",
+			"sizes": [
+				{"ml": 100, "diameter_mm": 37, "height_mm": 150, "scale_mm": 120, "nozzle_mm": 10, "nozzle_diameter_mm": 4, "nozzle_bore_mm": 2, "cone_mm": 2, "graduation_ml": 1, "marks_ml": 10}
+			],
+			"floor_per_wall": 1.0,
+			"pour_ml_s": 5,
+			"cap_bore_mm": 4,
+			"burst_kpa": 300,
+			"syringe": true,
+			"plunger": {"friction_n": 0.3, "drag_n_s_m": 20, "length_mm": 135, "handle_mm": 45, "clamp_n": 300}
 		}
 	]
 }

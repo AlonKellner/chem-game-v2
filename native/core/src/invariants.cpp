@@ -47,6 +47,18 @@ const CellMeta *meta_of(const StepTrace &trace, size_t cell) {
 	return cell < trace.meta.size() ? &trace.meta[cell] : nullptr;
 }
 
+// the cell's kind for a state of the trace: the step's start at its volume then (Stage 79: a piston moved it)
+const CellMeta *meta_of(const StepTrace &trace, const Snapshot &state, size_t cell) {
+	const CellMeta *meta = meta_of(trace, cell);
+	if (meta == nullptr || &state != &trace.before || cell >= trace.volume_before.size() || trace.volume_before[cell] == meta->volume) {
+		return meta;
+	}
+	thread_local CellMeta before;
+	before = *meta;
+	before.volume = trace.volume_before[cell];
+	return &before;
+}
+
 // A cell's temperature as the trace has it: a reservoir's fixed one, else
 // derived from the state. false when it has none.
 bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Snapshot &state, size_t cell, double &kelvin) {
@@ -54,7 +66,7 @@ bool temperature_of(const SpeciesTable &table, const StepTrace &trace, const Sna
 		kelvin = trace.meta[cell].reservoir_temperature;
 		return true;
 	}
-	const Thermal t = thermal_state(table, state.cells[cell], meta_of(trace, cell));
+	const Thermal t = thermal_state(table, state.cells[cell], meta_of(trace, state, cell));
 	kelvin = t.temperature;
 	return t.defined;
 }
@@ -88,18 +100,19 @@ const Thermo &thermo_of(const SpeciesTable &table, const StepTrace &trace, const
 	}
 	Kept &k = kept[cell];
 	const CellState &now = state.cells[cell];
-	if (k.table == &table && k.state == now && k.meta == trace.meta[cell]) {
+	const CellMeta &meta = *meta_of(trace, state, cell);
+	if (k.table == &table && k.state == now && k.meta == meta) {
 		return k.thermo;
 	}
 	Thermo t;
 	t.t_ok = temperature_of(table, trace, state, cell, t.kelvin);
 	if (t.t_ok && t.kelvin > 0.0 && finite(t.kelvin)) {
 		t.s_ok = true;
-		t.s = trace.meta[cell].reservoir ? static_cast<double>(now.energy) * JOULE_PER_QUANTUM / t.kelvin : entropy(table, now, t.kelvin, meta_of(trace, cell));
+		t.s = trace.meta[cell].reservoir ? static_cast<double>(now.energy) * JOULE_PER_QUANTUM / t.kelvin : entropy(table, now, t.kelvin, &meta);
 	}
 	k.table = &table;
 	k.state = now;
-	k.meta = trace.meta[cell];
+	k.meta = meta;
 	k.thermo = t;
 	return k.thermo;
 }
@@ -511,7 +524,9 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 			continue; // C5 reports it
 		}
 		const auto from = static_cast<size_t>(entry.from.index);
-		if (transfer && entry.delta.empty() && entry.energy.quanta != 0) {
+		const auto of_work = [&](size_t c) { return trace.meta[c].reservoir && trace.meta[c].reservoir_temperature >= WORK_KELVIN; };
+		if (transfer && entry.delta.empty() && entry.energy.quanta != 0 && !of_work(from) && !of_work(static_cast<size_t>(entry.to.index))) {
+			// (Stage 79: work to or from a reservoir of work, a piston's hand's, is no heat: either way)
 			const auto to = static_cast<size_t>(entry.to.index);
 			double t_from = 0.0, t_to = 0.0;
 			if (temperature_of(table, trace, replay, from, t_from) && temperature_of(table, trace, replay, to, t_to)) {
@@ -533,7 +548,12 @@ Violations check_T1(const SpeciesTable &table, const StepTrace &trace) {
 				gas_only = gas_only && table.has(d.species) && table.species(d.species).phase == Phase::Gas;
 			}
 			const auto to = static_cast<size_t>(entry.to.index);
-			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
+			// (Stage 79: gas shared within a space a piston moved this step runs as the push runs, not by the pressures a
+			// replay of the step's ledger reads at this entry: T2 holds it)
+			const bool pushed_space = trace.meta[from].piston.travel != 0.0 || trace.meta[to].piston.travel != 0.0;
+			if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed && pushed_space) {
+				// (as the push runs)
+			} else if (gas_only && trace.meta[from].sealed && trace.meta[to].sealed) {
 				// cells sealed together (Stage 28): from the higher pressure to the lower
 				const Thermal a = thermal_state(table, replay.cells[from], &trace.meta[from]), b = thermal_state(table, replay.cells[to], &trace.meta[to]);
 				if (a.defined && b.defined && !(a.pressure > b.pressure) && out.size() < MAX_MESSAGES) {
@@ -772,10 +792,11 @@ Violations check_V3(const SpeciesTable &table, const StepTrace &trace) {
 		for (size_t s = 0; s < trace.after.cells[c].amount.size(); ++s) {
 			gas = gas || (trace.after.cells[c].amount[s] > 0 && table.species(SpeciesId{ static_cast<int32_t>(s) }).phase == Phase::Gas);
 		}
-		// no room for its gas: at 25 C, or (Stage 67, its liquids grown) at any temperature that holds its energy, when
-		// open it would have one
+		// no room for its gas: (Stage 67, its liquids grown) at any temperature that holds its energy, when open it would
+		// have one; in a world without temperatures, at 25 C (Stage 79: a world with them is held at its own, not at
+		// 25 C: a syringe full of water at 20 C has room its water would not leave at 25 C)
 		const Fill fill = fill_of(table, trace.after.cells[c], T0);
-		const bool roomless = fill.defined && (!(fill.condensed < meta.volume) ||
+		const bool roomless = fill.defined && ((!trace.thermal && !(fill.condensed < meta.volume)) ||
 				(trace.thermal && !thermal_state(table, trace.after.cells[c], &meta).defined && thermal_state(table, trace.after.cells[c]).defined));
 		if (gas && roomless) {
 			out.push_back(text("V3: step %lld: sealed cell %lld leaves its gas no room: its pressure is not defined", static_cast<long long>(trace.step), static_cast<long long>(c)));
@@ -940,6 +961,49 @@ Violations check_E1(const SpeciesTable &table, const StepTrace &trace) {
 	return out;
 }
 
+// (Stage 79) a message of any arguments
+template <typename... Args>
+std::string words(const char *format, Args... args) {
+	char buffer[256];
+	std::snprintf(buffer, sizeof buffer, format, args...);
+	return buffer;
+}
+
+Violations check_W1(const SpeciesTable &, const StepTrace &trace) {
+	Violations out;
+	if (trace.meta.size() != trace.after.cells.size()) {
+		return out;
+	}
+	for (size_t c = 0; c < trace.meta.size() && out.size() < MAX_MESSAGES; ++c) {
+		const Piston &p = trace.meta[c].piston;
+		if (!(p.area > 0.0)) {
+			continue;
+		}
+		const double volume = trace.meta[c].column_volume > 0.0 ? trace.meta[c].column_volume : trace.meta[c].volume;
+		if (volume < p.least * (1.0 - 1e-12) || volume > p.most * (1.0 + 1e-12)) {
+			out.push_back(words("W1: step %lld: cell %lld's piston stands at %.9g m^3, past its stops (%.9g to %.9g)", static_cast<long long>(trace.step),
+					static_cast<long long>(c), volume, p.least, p.most));
+		}
+		if (std::fabs(p.force) > p.hand_most * (1.0 + 1e-12) || (!p.held && (p.force != 0.0 || p.worked != 0.0)) ||
+				std::fabs(p.worked) > p.hand_most * p.travel / p.area * (1.0 + 1e-9) + 1e-7) { // (its work in whole quanta, a move at a time)
+			out.push_back(words("W1: step %lld: cell %lld's hand pushes with %.9g N (%.9g J over %.9g m^3), more than it can (%.9g N%s)", static_cast<long long>(trace.step),
+					static_cast<long long>(c), p.force, p.worked, p.travel, p.hand_most, p.held ? "" : ", let go"));
+		}
+		int64_t along = 0;
+		for (const LedgerEntry &e : trace.ledger) {
+			if (e.kind == LedgerEntry::Kind::Transfer && e.edge == p.work) {
+				along += e.to.index == static_cast<int32_t>(c) ? e.energy.quanta : -e.energy.quanta;
+			}
+		}
+		const double work = p.worked / JOULE_PER_QUANTUM;
+		if (std::fabs(static_cast<double>(along) - work) > 0.5) {
+			out.push_back(words("W1: step %lld: cell %lld's piston took %lld quanta along its work edge, the hand's work %.6g", static_cast<long long>(trace.step),
+					static_cast<long long>(c), static_cast<long long>(along), work));
+		}
+	}
+	return out;
+}
+
 Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::span<const Reaction> equilibria) {
 	if (!well_formed(table, trace)) {
 		return Violations{ text("SHAPE: step %lld: the trace's cell or species counts disagree", static_cast<long long>(trace.step)) };
@@ -955,7 +1019,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}
