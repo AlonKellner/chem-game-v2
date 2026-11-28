@@ -13,7 +13,7 @@ completes, 37, 39 and 40. GAME_SPEC 0.87.0.
 | 87.2 | The solution law and catalysts in the core, tests green | Done |
 | 87.3 | Crystal violet, hydrogen peroxide, iodide: data and gates | Done |
 | 87.4 | The experiments `crystal_violet` (37, 39) and `peroxide` (40) | Done |
-| 87.5 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | gates passed; sign-off open |
+| 87.5 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | Done |
 
 ## 87.1 What there was
 

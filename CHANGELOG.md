@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.87.0 (2026-11-28, Stage 87; awaiting the user's sign-off)
+## 0.87.0 (2026-11-28, Stage 87; signed off by the user)
 
 - §7 (Stage 87, `docs/TDD_87_SOLUTION_KINETICS.md`; `docs/CURRICULUM.md`, step F's first part: experiments 37, 39 and
   40): **the solution law**, a reaction among dissolved species at `k(T) · Π m_j^{n_j}` in their molalities, times
