@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## Stage 93 (2026-11-28; GAME_SPEC stays 0.91.0: no behaviour of the game changes; awaiting the user's sign-off)
+## Stage 93 (2026-11-28; GAME_SPEC stays 0.91.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
 
 - The supplies' pictures (`docs/TDD_93_PICTURES_STORE.md`): kept by their keys in a store every worktree shares
   (`~/Library/Caches/chem-game-v2/pictures`), so no picture is captured twice anywhere; each missing one captured alone,

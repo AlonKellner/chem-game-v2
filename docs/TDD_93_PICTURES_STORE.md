@@ -13,7 +13,7 @@ user chose it. No behaviour of the game changes: GAME_SPEC stays 0.91.0.
 |---|---|---|
 | 93.1 | A bench's supplies and their keys; one supply captured alone (the screen, the C API, `chem_tool`) | Done |
 | 93.2 | The store and `tools/pictures.py`; `make pictures` building only `chem_tool` | Done |
-| 93.3 | Tests, docs, `make gates`; the user's sign-off | gates passed; sign-off open |
+| 93.3 | Tests, docs, `make gates`; the user's sign-off | Done |
 
 ## 93.1 What there was
 
