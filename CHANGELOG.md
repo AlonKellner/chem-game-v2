@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.81.1 (2026-11-27, Stage 79, merged after Stages 78, 80, 81, 84 and 86)
+## 0.81.1 (2026-11-28, Stage 79, merged after Stages 78, 80, 81, 84 and 86; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 79, `docs/TDD_79_SYRINGE.md`; `docs/CURRICULUM.md`, step G's first part: experiments 27 and 28): **pistons**:
   a rigid cell's (or a column's) volume moved each step by the forces on its plunger, overdamped (its gas's pressure
