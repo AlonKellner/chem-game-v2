@@ -53,6 +53,21 @@ double truth_of(Pupil &p, const std::string &expression) {
 	return v;
 }
 
+// each step's gestures played and the lab waited on, to the step titled `title` (not played)
+void follow_to(Pupil &p, const std::string &title) {
+	for (int guard = 0; guard < 100 && p.tutorial().state == TutorialView::Running && p.tutorial().title != title; ++guard) {
+		const int at = p.tutorial().step;
+		for (const lab::TutorialGesture &g : p.ui->tutorial()->gestures()) {
+			p.play(g);
+		}
+		for (int f = 0; f < 600 && p.tutorial().step == at; ++f) {
+			p.ui->frame(1.0 / 60.0);
+		}
+		REQUIRE_MESSAGE(p.tutorial().step != at, "stuck at " << p.tutorial().title);
+	}
+	REQUIRE(p.tutorial().title == title);
+}
+
 // the burette's readings, in the order recorded
 std::vector<double> burette_readings(Pupil &p) {
 	std::vector<double> out;
@@ -310,5 +325,48 @@ TEST_CASE("experiment kc: played as a person plays it, strict, it completes (Sta
 TEST_CASE("experiment kc: followed with its own gestures, free, it completes (Stage 85)") {
 	Pupil p("data/benches/kc.json", "data/tutorials/kc.json", false);
 	pupil::follow_through(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment spectra: followed with its own gestures, strict, the viewer lists hydrogen's Balmer lines and two of them give the Rydberg constant (Stage 85)") {
+	Pupil p("data/benches/spectra.json", "data/tutorials/spectra.json");
+	// to the step that writes the lines: the probe on hydrogen's tube, the viewer settled, its readout's lines read
+	follow_to(p, "Its lines in the notebook");
+	p.click("item:viewer");
+	for (int f = 0; f < 1800 && (f < 30 || !p.drawn("settled: every nanometre")); ++f) {
+		p.ui->frame(1.0 / 60.0);
+		p.ui->optics(); // (the probe reads in the optical pass)
+		p.ui->draw();
+	}
+	const std::string text = p.ui->draw().text;
+	const size_t at = text.find("lines at");
+	REQUIRE(at != std::string::npos);
+	const std::string lines = text.substr(at, text.find(" nm", at) - at);
+	MESSAGE(lines);
+	CHECK(lines.find("656") != std::string::npos);
+	CHECK(lines.find("486") != std::string::npos);
+	CHECK(lines.find("434") != std::string::npos);
+	CHECK(pupil::follow_through(p, 120) > 4);
+	completed(p);
+	// what a student works out: R from H-alpha and from H-beta, their mean
+	const double r = 0.5 * (1.0 / (656e-9 * (0.25 - 1.0 / 9.0)) + 1.0 / (486e-9 * (0.25 - 1.0 / 16.0)));
+	MESSAGE("R " << r << " /m");
+	report(p, { 656.0, 486.0, r });
+	p.click("report:3:2");
+	p.click("report:check");
+	p.ui->frame(1.0 / 60.0);
+	CHECK(!p.drawn("not quite"));
+	CHECK(!p.drawn("yours is off by"));
+}
+
+TEST_CASE("experiment spectra: played as a person plays it, strict, it completes (Stage 85)") {
+	Pupil p("data/benches/spectra.json", "data/tutorials/spectra.json");
+	pupil::play_as_person(p, 120);
+	completed(p);
+}
+
+TEST_CASE("experiment spectra: followed with its own gestures, free, it completes (Stage 85)") {
+	Pupil p("data/benches/spectra.json", "data/tutorials/spectra.json", false);
+	pupil::follow_through(p, 120);
 	completed(p);
 }

@@ -1535,3 +1535,19 @@ burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
   bound as SrOH, its 460.7 nm line a trace and its flame crimson;
   Cu 0.5, its atoms barely excited at 2200 K, its green its CuOH's: their flames are their monohydroxides' colours,
   Gaydon's and Meyerriecks and Kosanke's), at another temperature by Boltzmann's factor for each band's photon, a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).
+
+## Discharge lamps (Stage 85)
+
+`data/lamps.json` (`docs/TDD_85_ANALYSIS.md`). Read 2026-11-28. Gate: `measured: a discharge lamp's lines are NIST's, at
+the relative intensities its sources observed`.
+- **Lines**: the NIST Atomic Spectra Database v5 (Kramida, Ralchenko, Reader and the NIST ASD Team), lines query 380 to
+  780 nm, air wavelengths, H I, He I, Hg I and Ne I, every line with an observed relative intensity ("Rel. Int."):
+  hydrogen's seven Balmer multiplets (Hα 656.279 at 500000, Hβ 486.135 at 180000, Hγ 434.0472 at 90000, Hδ 410.1734 at
+  70000, to H9 383.5397), helium's 19 of 1 % of its strongest or more (587.5621 and 388.8648 at 500), mercury's 15
+  (404.6565 and 435.8335 at 12000, 546.0750 at 6000), neon's 158 (692.94672 at 100000). Helium's fine-structure
+  components share one intensity (NIST's `*`): taken once. NIST's relative intensities are as their sources observed
+  them in discharges, in no one unit and not a radiometric calibration: a lamp's lines against each other only. The
+  Rydberg formula through the Balmer lines (air's index 1.000277) gives hydrogen's R within 2e-4 of 1.09678e7 m⁻¹.
+- **Calibrated**: a lamp's light, all its lines together (240 times the room's white at 560 nm times a nanometre, a
+  pixel of path through its tube): as bright as a fresh drop's sodium flame (Stage 82), its colour over the bench at the
+  display's brightest.

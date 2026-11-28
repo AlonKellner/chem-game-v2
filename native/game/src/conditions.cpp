@@ -829,7 +829,7 @@ bool holds(const Cond &c, const CondContext &x) {
 		}
 	}
 	if ((c.place && v.place != *c.place) || (c.on && (v.place != "on" || id_at(x.view, v.on) != *c.on)) || (c.under && (v.place != "under" || id_at(x.view, v.under) != *c.under)) ||
-		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to) || (c.stands_in && v.stands_in != *c.stands_in)) {
+		(c.drains_to && id_at(x.view, v.drains_to) != *c.drains_to) || (c.stands_in && v.stands_in != *c.stands_in) || (c.probe_on && v.probe_on != *c.probe_on)) {
 		return false;
 	}
 	if ((c.submitted && v.submitted != *c.submitted) || (c.stirred && v.stirred != *c.stirred) || (c.burst && v.burst != *c.burst) || (c.slot && v.slot != *c.slot)) {

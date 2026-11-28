@@ -7538,7 +7538,7 @@ struct Ui::Impl {
 			if (valve_rect(showing, control)) {
 				const bool tuned = v.kind == "spectrophotometer";
 				const double open = v.kind == "burner" ? v.valve : tuned ? nm_share(v.nm) : v.cap;
-				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : tuned ? "nm" : has_outlet(v) ? "tap" : "cap", INK, 16);
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? (v.lamp.empty() ? "valve" : "power") : tuned ? "nm" : has_outlet(v) ? "tap" : "cap", INK, 16); // (Stage 85: a lamp's power)
 				rect_fill(control, BUTTON);
 				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
@@ -7639,6 +7639,26 @@ struct Ui::Impl {
 							DIM, 15);
 					if (p.read_count() > 0) {
 						row(text_of("peak %.0f nm: ", SPECTRUM_FIRST_NM + peak) + text_of("%.3g mW/(sr m2 nm)", 1000.0 * radiance_of(c[static_cast<size_t>(peak)], peak)), DIM, 15);
+						// (Stage 85) its lines: each nanometre that stands over its neighbours and three times over the light
+						// three nanometres to either side, the brightest six, in order of wavelength
+						std::vector<std::pair<double, int>> lines;
+						for (int k = 3; k + 3 < SPECTRUM_NM; ++k) {
+							const double here = c[static_cast<size_t>(k)];
+							if (here >= c[static_cast<size_t>(k - 1)] && here > c[static_cast<size_t>(k + 1)] && here > 3.0 * std::max(c[static_cast<size_t>(k - 3)], c[static_cast<size_t>(k + 3)]) &&
+									here > 0.01 * c[static_cast<size_t>(peak)]) {
+								lines.emplace_back(here, k);
+							}
+						}
+						std::sort(lines.rbegin(), lines.rend());
+						lines.resize(std::min<size_t>(lines.size(), 6));
+						std::sort(lines.begin(), lines.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
+						if (!lines.empty()) {
+							std::string says = "lines at";
+							for (size_t i = 0; i < lines.size(); ++i) {
+								says += text_of(i == 0 ? " %.0f" : ", %.0f", SPECTRUM_FIRST_NM + lines[i].second);
+							}
+							row(says + " nm", INK, 15);
+						}
 					}
 				}
 			} else if (v.kind == "balance") {

@@ -297,6 +297,13 @@
 			"tutorial": "tutorials/kc.json"
 		},
 		{
+			"id": "spectra",
+			"title": "Atomic spectra: hydrogen's lines",
+			"summary": "Four discharge lamps (hydrogen, helium, mercury, neon) through the spectral viewer: each gas's own lines, and from hydrogen's red and blue-green the Rydberg constant.",
+			"bench": "benches/spectra.json",
+			"tutorial": "tutorials/spectra.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",

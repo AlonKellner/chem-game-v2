@@ -1,0 +1,302 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 54) on data/benches/spectra.json: atomic spectra of four discharge lamps through the spectral viewer; hydrogen's Balmer lines and the Rydberg constant.",
+	"title": "Experiment: atomic spectra",
+	"bench": "../benches/spectra.json",
+	"report": [
+		{
+			"label": "hydrogen's red line, H-alpha",
+			"unit": "nm",
+			"truth": "656.28",
+			"tolerance": 1.0,
+			"why": "NIST: 656.279 nm in air (from n = 3 to 2). The viewer reads to the nanometre."
+		},
+		{
+			"label": "hydrogen's blue-green line, H-beta",
+			"unit": "nm",
+			"truth": "486.13",
+			"tolerance": 1.0,
+			"why": "NIST: 486.135 nm in air (from n = 4 to 2)."
+		},
+		{
+			"label": "the Rydberg constant",
+			"unit": "1/m",
+			"truth": "10967800",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "1/lambda = R (1/4 - 1/n^2): from H-alpha, R = 1 / (lambda (1/4 - 1/9)); from H-beta, R = 1 / (lambda (1/4 - 1/16)). Hydrogen's own R is 1.09678e7 /m (a little under the infinite-mass 1.09737e7: the nucleus moves too); wavelengths in air are 0.03 % short of those in vacuum."
+		},
+		{
+			"label": "the lamp with a green line at 546 nm",
+			"single": true,
+			"choices": [
+				{
+					"label": "hydrogen",
+					"truth": "0"
+				},
+				{
+					"label": "helium",
+					"truth": "0"
+				},
+				{
+					"label": "mercury",
+					"truth": "1"
+				},
+				{
+					"label": "neon",
+					"truth": "0"
+				}
+			],
+			"why": "Mercury's green 546.07 nm, beside its violet 404.66 and blue 435.83: the lines of a fluorescent tube's mercury."
+		}
+	],
+	"steps": [
+		{
+			"title": "The hydrogen lamp on",
+			"text": "Right-click the hydrogen lamp and drag its power up.",
+			"checks": [
+				{
+					"text": "the hydrogen lamp on",
+					"when": {
+						"quantity": {
+							"item": "lamp_h",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:lamp_h"
+				},
+				{
+					"click": "valve:lamp_h@1"
+				}
+			],
+			"part": "Hydrogen"
+		},
+		{
+			"title": "The probe on its tube",
+			"text": "Drag the viewer's probe from its holder onto the hydrogen lamp's glowing tube. Right-click the viewer: it lists the lines it sees. Hydrogen's red line is H-alpha, its blue-green H-beta: wait while the viewer reads every nanometre.",
+			"checks": [
+				{
+					"text": "the probe on the hydrogen lamp",
+					"when": {
+						"item": "viewer",
+						"probe_on": "lamp_h"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"probe:viewer",
+						"item:lamp_h@0.5,0.4"
+					]
+				},
+				{
+					"click": "item:viewer"
+				}
+			],
+			"why": "A hydrogen atom's electron falling to its second level gives Balmer's lines: from the third, H-alpha (656 nm), from the fourth H-beta (486), the fifth H-gamma (434), the sixth H-delta (410)."
+		},
+		{
+			"title": "Its lines in the notebook",
+			"text": "Right-click the viewer: when it has read every nanometre it lists the lines it sees. In the notebook write lambda = hydrogen's red line's wavelength (H-alpha), then lambda = its blue-green's (H-beta).",
+			"checks": [
+				{
+					"text": "two wavelengths written",
+					"when": {
+						"noted": "lambda",
+						"noted_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:viewer"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "lambda"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "656"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "486"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The helium lamp on",
+			"text": "Right-click the helium lamp and drag its power up.",
+			"checks": [
+				{
+					"text": "the helium lamp on",
+					"when": {
+						"quantity": {
+							"item": "lamp_he",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:lamp_he"
+				},
+				{
+					"click": "valve:lamp_he@1"
+				}
+			],
+			"part": "The others"
+		},
+		{
+			"title": "The probe on its tube",
+			"text": "Drag the viewer's probe from its holder onto the helium lamp's glowing tube. Right-click the viewer: it lists the lines it sees.",
+			"checks": [
+				{
+					"text": "the probe on the helium lamp",
+					"when": {
+						"item": "viewer",
+						"probe_on": "lamp_he"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"probe:viewer",
+						"item:lamp_he@0.5,0.4"
+					]
+				},
+				{
+					"click": "item:viewer"
+				}
+			]
+		},
+		{
+			"title": "The mercury lamp on",
+			"text": "Right-click the mercury lamp and drag its power up.",
+			"checks": [
+				{
+					"text": "the mercury lamp on",
+					"when": {
+						"quantity": {
+							"item": "lamp_hg",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:lamp_hg"
+				},
+				{
+					"click": "valve:lamp_hg@1"
+				}
+			]
+		},
+		{
+			"title": "The probe on its tube",
+			"text": "Drag the viewer's probe from its holder onto the mercury lamp's glowing tube. Right-click the viewer: it lists the lines it sees.",
+			"checks": [
+				{
+					"text": "the probe on the mercury lamp",
+					"when": {
+						"item": "viewer",
+						"probe_on": "lamp_hg"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"probe:viewer",
+						"item:lamp_hg@0.5,0.4"
+					]
+				},
+				{
+					"click": "item:viewer"
+				}
+			]
+		},
+		{
+			"title": "The neon lamp on",
+			"text": "Right-click the neon lamp and drag its power up.",
+			"checks": [
+				{
+					"text": "the neon lamp on",
+					"when": {
+						"quantity": {
+							"item": "lamp_ne",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:lamp_ne"
+				},
+				{
+					"click": "valve:lamp_ne@1"
+				}
+			]
+		},
+		{
+			"title": "The probe on its tube",
+			"text": "Drag the viewer's probe from its holder onto the neon lamp's glowing tube. Right-click the viewer: it lists the lines it sees.",
+			"checks": [
+				{
+					"text": "the probe on the neon lamp",
+					"when": {
+						"item": "viewer",
+						"probe_on": "lamp_ne"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"probe:viewer",
+						"item:lamp_ne@0.5,0.4"
+					]
+				},
+				{
+					"click": "item:viewer"
+				}
+			]
+		}
+	]
+}
