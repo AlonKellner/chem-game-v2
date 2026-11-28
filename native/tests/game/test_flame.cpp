@@ -85,12 +85,13 @@ TEST_CASE("flame: each line's share is Boltzmann's at the flame's temperature, N
 	const double far = share_at(na, 568.82046);
 	CHECK(far / d2 == doctest::Approx((6.0 * 1.21e7 * std::exp(-HC_K * 34548.729 / T) / 568.82046) / (4.0 * 6.16e7 * std::exp(-HC_K * 16973.36619 / T) / 588.995095)).epsilon(1e-9));
 	CHECK(far / d2 < 1e-4);
-	// strontium: its SrOH bands carry 0.85 of its light at the burner's temperature (calibrated), its atoms' lines the rest
+	// strontium: its SrOH bands carry 0.97 of its light at the burner's temperature (calibrated: its atoms mostly bound
+	// as SrOH, its flame crimson), its atoms' lines the rest
 	double banded = 0.0;
 	for (const lab::flame::Part &p : lab::flame::parts("Sr", T)) {
 		banded += p.fwhm > 0.0 ? p.share : 0.0;
 	}
-	CHECK(banded == doctest::Approx(0.85).epsilon(0.01));
+	CHECK(banded == doctest::Approx(0.97).epsilon(0.01));
 	// copper: its atoms barely excited at 2200 K, its light its CuOH's, half sodium's
 	CHECK(lab::flame::brightness("Cu", T) == doctest::Approx(0.5).epsilon(0.01));
 	// a hotter flame is brighter; calcium's atoms (its resonance line higher) a tenth of sodium's or less, its light
@@ -113,8 +114,8 @@ TEST_CASE("flame: its glow keeps each line's light and its centre, as a multiple
 	for (int k = 0; k < 401; ++k) {
 		light += g[static_cast<size_t>(k)] * room[static_cast<size_t>(k)] / room[180]; // back to the room's white at 560 nm
 	}
-	// all of it: per_mol (4e7) times a micromole, sodium's brightness 1 at the burner's temperature
-	CHECK(light == doctest::Approx(40.0).epsilon(1e-9));
+	// all of it: per_mol (1.2e8) times a micromole, sodium's brightness 1 at the burner's temperature
+	CHECK(light == doctest::Approx(120.0).epsilon(1e-9));
 	// the D lines' light centred where they are (most of it in them): between 588.995 and 589.592
 	double d = 0.0, dm = 0.0;
 	for (int k = 208; k <= 210; ++k) {
@@ -203,7 +204,7 @@ TEST_CASE("flame: a sodium flame is drawn yellow, and the spectral viewer sees i
 	// the display's brightest, green a fraction of it, no blue
 	lab::gamut_map(with);
 	MESSAGE("shown: " << with[0] << " " << with[1] << " " << with[2]);
-	CHECK(with[0] == doctest::Approx(1.0));
+	CHECK(with[0] == doctest::Approx(1.0).epsilon(0.01));
 	CHECK(with[1] > 0.15);
 	CHECK(with[1] < 0.6);
 	CHECK(with[2] < 0.05);

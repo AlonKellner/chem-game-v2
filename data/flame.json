@@ -452,8 +452,8 @@
 		]
 	},
 	"model": {
-		"note": "How the flame's light is made of what is in it (Stage 82). Calibrated, not measured, but where stated: per_mol, the light of a mole of sodium in the flame at its 1927 C (the lab burner's) as the sum of its lines, in multiples of the room's light at 560 nm times nanometres, per pixel of path (a drop of 0.1 M, 2 umol, then far outshines the flame's own blue, as a sodium flame does); every element's atoms by the same Boltzmann sum over their lines (g_k A_ki exp(-hc E_k/kT) / lambda over the ground level's g, the partition function taken as it: measured lines, an approximated partition); band_light, each molecule's bands' light against sodium's atoms at the burner's temperature (the alkaline earths' and copper's flames are their monohydroxides' colours: Gaydon, Meyerriecks and Kosanke; calcium's, strontium's and barium's 0.9, 0.85 and 0.8 of their light there, copper's half sodium's: its atoms are barely excited at 2200 K, its green its CuOH's), each band's light at another temperature by Boltzmann's factor for its photon; band_fwhm_nm, a band's width (their spectra's, a few nm); fade_s, how long a drop's metal lasts in the flame (the 1/e time of a loop's few seconds); drop_ml, what a loop carries.",
-		"per_mol": 40000000.0,
+		"note": "How the flame's light is made of what is in it (Stage 82). Calibrated, not measured, but where stated: per_mol, the light of a mole of sodium in the flame at its 1927 C (the lab burner's) as the sum of its lines, in multiples of the room's light at 560 nm times nanometres, per pixel of path (a drop of 0.1 M, 2 umol, then far outshines the flame's own blue, as a sodium flame does); every element's atoms by the same Boltzmann sum over their lines (g_k A_ki exp(-hc E_k/kT) / lambda over the ground level's g, the partition function taken as it: measured lines, an approximated partition); band_light, each molecule's bands' light against sodium's atoms at the burner's temperature (the alkaline earths' and copper's flames are their monohydroxides' colours: Gaydon, Meyerriecks and Kosanke; calcium's and barium's 0.9 and 0.8 of their light there, strontium's 0.97 (its atoms mostly bound as SrOH: its 460.7 nm line a trace, its flame crimson), copper's half sodium's: its atoms are barely excited at 2200 K, its green its CuOH's), each band's light at another temperature by Boltzmann's factor for its photon; band_fwhm_nm, a band's width (their spectra's, a few nm); fade_s, how long a drop's metal lasts in the flame (the 1/e time of a loop's few seconds); drop_ml, what a loop carries.",
+		"per_mol": 120000000.0,
 		"ground_g": {
 			"Na": 2,
 			"K": 2,
@@ -474,7 +474,7 @@
 		"drop_ml": 0.02,
 		"band_light": {
 			"Ca": 0.56,
-			"Sr": 1.09,
+			"Sr": 6.2,
 			"Ba": 4.3,
 			"Cu": 0.5
 		}

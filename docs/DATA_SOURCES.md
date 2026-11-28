@@ -1518,6 +1518,7 @@ burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
   4 nm FWHM (their spectra's widths).
 - **Calibrated** (not measured, to how a flame test looks): the light of a mole in the flame (`per_mol`: a fresh drop
   of 0.1 M, about 2 µmol, far outshines the burner's own blue, as a sodium flame does), each molecule's bands' light against
-  sodium's atoms at the burner's 2200 K (Ca 0.56, Sr 1.09, Ba 4.3: 0.9, 0.85 and 0.8 of their elements' light there;
+  sodium's atoms at the burner's 2200 K (Ca 0.56, Ba 4.3: 0.9 and 0.8 of their elements' light there; Sr 6.2, 0.97 of it, its atoms mostly
+  bound as SrOH, its 460.7 nm line a trace and its flame crimson;
   Cu 0.5, its atoms barely excited at 2200 K, its green its CuOH's: their flames are their monohydroxides' colours,
   Gaydon's and Meyerriecks and Kosanke's), at another temperature by Boltzmann's factor for each band's photon, a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).
