@@ -45,6 +45,11 @@ normal room, up to 8 with the room's lights dimmed), **pupil-like** (closing fas
 - The exposure play (`data/plays/exposure.json`: four lamps lit, the lights stepped down): 1.0, 0.93 at 30 %, 0.55 at
   10 %, 0.22 at 3 %; O4 0, 1, 0 and 114 pixels visibly off (the last in the neon tube: Open).
 
+- Its cost on the GPU (`make pass-cost`, the cost play, the M3 Pro, against Stage 85's build back to back): settled 7.90
+  ms a frame against 7.74, carried 7.53 against 7.07, poured 10.88 against 10.08, at rest 12.51 against 11.48, stirred
+  15.95 against 14.56, fast 13.03 against 12.22: the meter and the step, and the frames that show every pixel again,
+  0.2 to 1.4 ms a frame (2 to 9 %).
+
 ## Open
 
 - **A neon tube at the dimmest lights**: its 158 lines in eleven stretches, each read at one point a frame; a stretch
