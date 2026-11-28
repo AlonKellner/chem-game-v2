@@ -222,5 +222,5 @@ TEST_CASE("sources: each ion's data is its formula units' split exactly, the hyd
 		CHECK(cp == doctest::Approx(unit.cp).epsilon(1e-9));
 		CHECK(volume == doctest::Approx(unit.molar_volume).epsilon(1e-9));
 	}
-	CHECK(retired == 48); // (Stage 76: 23 more, the new metals' salts; Stage 81: KSCN, K2CrO4, K2Cr2O7, disodium EDTA, the dye's salt)
+	CHECK(retired == 50); // (Stage 76: 23 more, the new metals' salts; Stage 81: KSCN, K2CrO4, K2Cr2O7, disodium EDTA, the dye's salt; Stage 87: crystal violet's chloride, KI)
 }

@@ -1481,3 +1481,76 @@ measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each com
   610 nm (his table's 32,300 at 615); In³⁻ orange, 20,900 at 500 nm; MgIn⁻ wine red, 33,200 at 560 nm (its red tail
   an upper bound: 5–10 % free dye); CaIn⁻ red, 29,300 at 540 nm. H₂In⁻'s, red, not found (his pH 3.91 curve shows no
   band, the dye aggregated): **calibrated**, MgIn⁻'s.
+
+## Solution kinetics (Stage 87)
+
+Two reactions with the solution law (GAME_SPEC §7: a rate in molalities to their orders, Brønsted and Bjerrum's activity
+factor; `docs/TDD_87_SOLUTION_KINETICS.md`; `docs/CURRICULUM.md`, step F's first part), their species, iodine and a
+colour. Read 2026-11-27 and 2026-11-28. Gates: `measured: crystal violet fades at Begum et al.'s rate at 25 C...`,
+`measured: iodide catalyses hydrogen peroxide's decomposition at Liebhafsky's rate...`, `measured: crystal violet's
+absorption is the measured spectrum's shape...`, `measured: iodide's and hydrogen peroxide's rows are NBS's...`
+(`native/tests/test_solution_kinetics.cpp`).
+
+**Crystal violet fading**, CV⁺ + OH⁻ → CVOH (the carbinol, colourless):
+
+| Quantity | Value | Source | Confidence |
+|---|---|---|---|
+| k₂ at 25 C | **0.234 /M/s** (7.4 mM NaOH, ionic strength about 0.007) | Begum, Mollah, Rahman and Susan 2011, J. Bangladesh Chem. Soc. 24(2), 173–184 (doi 10.3329/jbcs.v24i2.9706), p. 177: k′ against [OH⁻], 25.0 ± 0.1 C, read at 592 nm; open full text. They state it agrees with Duynstee and Grunwald 1959 and Ritchie et al. 1975 (not read) | medium |
+| Orders | first in the dye, first in the hydroxide | Begum et al. 2011; Corsaro 1964 (J. Chem. Educ. 41, 48, not read; as Bae et al. 2022 tabulate it) | high |
+| Its temperature | 0.034, 0.118, 0.721 /M/s at 7.5, 21, 45 C (0.01–0.05 M NaOH, 1.985e-5 M dye): Ea **60.3 kJ/mol**, fitted here | Thompson and Ting 2004, J. Chem. Educ. 81, 1341 (not read), as Bae et al. 2022 (R. Soc. Open Sci. 9, 220494, open) tabulate them in Table 1 | medium (secondary) |
+| pK_R+ (CV⁺ + H₂O ⇌ CVOH + H⁺) | **9.39** | Ritchie 1986, Can. J. Chem. 64, 2239 (not read), as Horn's thesis (LMU Munich 2011, open; Horn and Mayr, Chem. Eur. J. 16, 7478) tabulates it in Table 2.1 | medium–high |
+
+- **Calibrated in the model's activities**: k₀ (the rate constant with no salt effect) is 0.2816 /M/s at 25 C, so that
+  at Begum's 7.4 mM hydroxide the model's rate over [CV⁺][OH⁻] is their 0.234. The model's ratios at 0.03 M hydroxide
+  against Thompson and Ting's: 45 C over 7.5 C 21.0 (theirs 21.2), 21 C over 7.5 C 3.27 (3.47).
+- **Disagreement**: near 25 C sources spread from 0.12 to 0.25 /M/s. Teaching labs at about 21 C cluster at 0.12–0.17
+  (Corsaro 0.160, Kazmierczak and Vander Griend 2017 0.170, Thompson and Ting 0.118), careful ones at 25 C at 0.20–0.23
+  (Ritchie's 0.201 and 0.205 seen only quoted). Part is temperature (8 % a kelvin at 60 kJ/mol), part the salt effect
+  (most do not state their ionic strength); the model at Thompson and Ting's 21 C and 0.03 M gives 0.144 against their
+  0.118 (+22 %). Turgeon and LaMer 1952 (JACS 74, 5988), the salt effect's measurement, and Ritchie et al. 1975 (JACS 97,
+  1163) were not read (paywalled); Langvad, Hagdahl and Sillén 1950 (Acta Chem. Scand. 4, 300, open) did not load.
+- **The carbinol's row** (design and measured): CV⁺'s own enthalpy, entropy and heat capacity nought (every reaction it
+  is in is among its own forms, as Stage 81's EDTA); the carbinol's enthalpy and heat capacity its parts' (the fading's
+  heat and its change of heat capacity nought: none read); its S°, 77.456 J/K mol, the one that gives pK_R+ 9.39 on the
+  model's water (−285.83 kJ, 69.95) and hydrogen ion (0, 0): log K 4.615 for CV⁺ + OH⁻ at the model's pKw 14.005.
+  Molar mass: C₂₅H₃₀N₃⁺ 372.53, the chloride 407.99 g/mol (PubChem CID 11057: 408.0).
+- **Not modelled**: the dye's own slow hydration in neutral water (Ritchie 1975: 1.94e-5 /s at 25 C, as Horn 2011
+  gives it; its equilibrium at pH 7 leaves nearly all of it violet).
+
+**Its colour**: PhotochemCAD 2.1a's crystal violet in water (R.-C. A. Fuh 1995, Cary 3, 1.0 nm bandwidth, 0.25 nm
+interval; OMLC's `omlc.org/spectra/PhotochemCAD/data/048-abs.txt`, fetched 2026-11-28), its shape: the file is scaled so
+that 509.5 nm reads Zollinger's 112,000 (OMLC's glycerol file gives that value at 590.2 nm: likely a transposition),
+which makes its maximum an
+impossible 363,310 near 590.5 nm; here scaled by 0.258934 so that 592 nm reads **93,587 L/mol/cm**, Begum et al. 2011
+(p. 175, in water). Its maximum 590–591 nm, its shoulder near 545 nm two thirds of it. Other values: 87,000 at 590 nm
+(Adams and Rosenstein 1914, JACS 36, 1452: not read, as Wikipedia attributes it); Sigma-Aldrich's specification
+81,600–100,000. Interpolated to whole nm; nought past 720 nm (added). The carbinol: colourless (no measured spectrum read;
+the sources describe the violet fading to a colourless solution). Confidence medium (±10 % on the scale).
+
+**Hydrogen peroxide's decomposition, catalysed by iodide**, 2 H₂O₂ → 2 H₂O + O₂(g):
+
+| Quantity | Value | Source | Confidence |
+|---|---|---|---|
+| k₁ at 25 C | **1.15 × 10⁻² /M/s**, the rate of oxygen k₁ [H₂O₂][I⁻] (H₂O₂ + I⁻ → H₂O + IO⁻ the slow step; IO⁻ + H₂O₂ → I⁻ + H₂O + O₂ fast, 3.33e9) | Liebhafsky 1932 (JACS 54, 1792, not read) as Levanov, Isaikina, Bogdanov and Ignatieva's teaching manual (Moscow State University 2018, `chem.msu.ru/rus/teaching/levanov-etal-kinetics-h2o2-i.pdf`, open) tabulates it, Table 1 step 1 | medium (secondary) |
+| Ea | **54 kJ/mol** | The same manual, Table 2 (Liebhafsky and Mohammad 1933, JACS 55, 3977, not read) | medium |
+| A check at 20 C | 2k₁ = 0.0283 /h ÷ 0.5 mM = 1.57e-2 /M/s, k₁ **7.86e-3** | Wong and Zhang 2008, Marine Chem. 111, 22 (abstract read): k[I⁻] = 0.00012 S + 0.0283 /h at 0.5 mM iodide, 20 C, its fresh-water intercept; the model gives 7.93e-3 (+1 %) | medium |
+| Its acid term | 0.175 /M²/s (I⁻ + H⁺ + H₂O₂): about 15 % of k₁ at pH 2, nothing at pH 7 | the manual's Table 1 | not modelled |
+| Uncatalysed | under 1 % a year, stabilised and acidified (k < 3.2e-10 /s) | Evonik's page on its stability | the model: none without iodide |
+
+- Copper and Koubek 1999 (Inorg. Chim. Acta 288, 229: 9.5e-3 at 23 C, 57 kJ/mol; the manual's Table 2) and Nyasulu and
+  Barlag 2008 (Chem. Educator 13, 227: 0.01104) agree within their temperatures. The model's activity factor here is
+  γ(I⁻) over the complex's (charge −1), near 1 in dilute solution: k₁ is taken as k₀.
+
+**The species**:
+- **I⁻(aq)**: NBS 1982 p. 2-52, ΔfH° −55.19 kJ, S° 111.3, Cp° −142.3 (on the model's footing, Cp − 216.35 z: 74.05).
+  Volume: Krumgalz, Pogorelsky and Pitzer 1996 (J. Phys. Chem. Ref. Data 25, 663, open), Table 4, 36.202 cm³/mol
+  (conventional; on the model's footing, V − 16.74 z: 52.942). Diffusion: 2.045e-9 m²/s (CRC Handbook, Vanýsek, *Ionic
+  conductivity and diffusion at infinite dilution*: λ° 76.8). CODATA 1989 gives −56.78 and 106.45: NBS's are used, as for
+  every ion here. **Iodine**: CIAAW's abridged 126.90.
+- **KI**: a retired formula unit, its ions' sum (−307.57, 213.8: NBS's KI(ai), p. 2-333). Pitzer's parameters: Pitzer and
+  Mayorga 1973 (LBL preprint of J. Phys. Chem. 77, 2300), Table I: KI 0.0746, 0.2517, −0.00414 (to 4.5 mol/kg); NaI
+  0.1195, 0.3439, 0.0018 (to 3.5).
+- **H₂O₂(aq)**: NBS 1982 p. 2-38 (the ao row), ΔfH° −191.17 kJ, S° 143.9; its decomposition −94.66 kJ a peroxide (the
+  often quoted −98 is the liquid's). Its heat capacity and volume (design): the liquid's, Cp 89.1 (NBS) and about 23.6 cm³
+  (34.01 g/mol over about 1.44 g/cm³). Diffusion: 1.43e-9 m²/s, van Stroe-Biezen, Everaerts, Janssen and Tacken 1993
+  (Anal. Chim. Acta 273, 553), Table 2, in 0.1 M phosphate buffer at 25 C.

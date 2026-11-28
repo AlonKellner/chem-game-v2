@@ -4,6 +4,7 @@
 #include "chem/builtin_ids.hpp"
 #include "tables.hpp"
 #include "chem/invariants.hpp"
+#include "chem/optics.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
 
@@ -217,4 +218,121 @@ TEST_CASE("solution kinetics: the primary salt effect is Brønsted and Bjerrum's
 	CHECK(ln_factor({ { builtin::copper_ion, 2.0 } }) / root == doctest::Approx(4.0 * slope).epsilon(0.03));
 	// a neutral species with an ion: no salt effect to first order
 	CHECK(std::abs(ln_factor({ { builtin::copper_ion, 1.0 }, { builtin::ammonia_aq, 1.0 } })) < 0.03 * slope * root);
+}
+
+namespace {
+
+// a kg of water at `celsius` with these dissolved amounts (mol), its rate constant for a solution law read from the
+// model: its rate over the product of its ordered species' molalities (each to the first order)
+double rate_constant(const Reaction &reaction, double celsius, std::initializer_list<std::pair<SpeciesId, double>> dissolved) {
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("beaker");
+	b.set_amount(cell, builtin::water, mol(55.508));
+	for (const auto &[species, n] : dissolved) {
+		b.set_amount(cell, species, mol(n));
+	}
+	b.set_temperature(cell, celsius + 273.15);
+	std::string why;
+	auto world = b.build(&why);
+	REQUIRE_MESSAGE(world.has_value(), why);
+	const CellState &state = world->snapshot_cell(cell);
+	const Kinetics &k = reaction.kinetics();
+	double product = 1.0;
+	for (int32_t o = 0; o < k.order_count; ++o) {
+		product *= molality(builtin_species(), state, k.orders[static_cast<size_t>(o)].species);
+	}
+	return solution_rate(builtin_species(), state, k, celsius + 273.15) / product;
+}
+
+const Reaction &shipped(int id) {
+	return builtin_reactions()[static_cast<size_t>(id)];
+}
+
+} // namespace
+
+TEST_CASE("measured: crystal violet fades at Begum et al.'s rate at 25 C, slower warm to cold as Thompson and Ting measured; its carbinol at Ritchie's constant (Stage 87)") {
+	using namespace builtin;
+	const Reaction &fading = shipped(reaction::crystal_violet_fading);
+	// Begum, Mollah, Rahman and Susan 2011, p. 177: k2 = 0.234 /M/s at 25.0 C from k' against [OH-] (7.4e-3 M NaOH, a
+	// trace of the dye, read at 592 nm)
+	const double k25 = rate_constant(fading, 25.0, { { crystal_violet_ion, 1e-5 }, { chloride_ion, 1e-5 }, { sodium_ion, 7.4e-3 }, { hydroxide_ion, 7.4e-3 } });
+	MESSAGE("k2 at 25 C, 7.4 mM hydroxide: " << k25 << " kg/mol/s (Begum et al. 0.234)");
+	CHECK(k25 == doctest::Approx(0.234).epsilon(0.005));
+	// Thompson and Ting 2004 (as Bae et al. 2022 tabulate them): 0.034, 0.118 and 0.721 at 7.5, 21 and 45 C, 0.01 to 0.05 M
+	// NaOH (here 0.03): the fitted activation energy's span, each ratio within 10 %
+	const auto k_at = [&](double celsius) { return rate_constant(fading, celsius, { { crystal_violet_ion, 2e-5 }, { chloride_ion, 2e-5 }, { sodium_ion, 0.03 }, { hydroxide_ion, 0.03 } }); };
+	const double cold = k_at(7.5), mid = k_at(21.0), warm = k_at(45.0);
+	MESSAGE("at 0.03 M hydroxide: " << cold << ", " << mid << ", " << warm << " kg/mol/s at 7.5, 21 and 45 C");
+	CHECK(warm / cold == doctest::Approx(0.721 / 0.034).epsilon(0.10));
+	CHECK(mid / cold == doctest::Approx(0.118 / 0.034).epsilon(0.10));
+	// the salt effect: oppositely charged, it slows as the hydroxide's strength rises
+	CHECK(k_at(25.0) < k25);
+	// the carbinol: CV+ + H2O -> CVOH + H+ at pK_R+ 9.39 (Ritchie 1986, as Horn 2011 tabulates it)
+	const SpeciesTable &t = builtin_species();
+	const auto g = [&](SpeciesId s) { return t.species(s).hf - 298.15 * t.species(s).s0; };
+	const double pk = (g(crystal_violet_carbinol) + g(hydrogen_ion) - g(crystal_violet_ion) - g(water)) / (GAS_CONSTANT * 298.15 * std::log(10.0));
+	CHECK(pk == doctest::Approx(9.39).epsilon(1e-4));
+}
+
+TEST_CASE("measured: iodide catalyses hydrogen peroxide's decomposition at Liebhafsky's rate, and at Wong and Zhang's at 20 C; with none it stands (Stage 87)") {
+	using namespace builtin;
+	const Reaction &decomposition = shipped(reaction::peroxide_decomposition);
+	// Liebhafsky 1932 (as Levanov et al.'s manual tabulates it, Table 1 step 1): k1 = 1.15e-2 /M/s at 25 C, the rate of
+	// O2 = k1 [H2O2] [I-]; Ea 54 kJ/mol (its Table 2)
+	const auto k_at = [&](double celsius) { return rate_constant(decomposition, celsius, { { hydrogen_peroxide_aq, 0.01 }, { potassium_ion, 5e-4 }, { iodide_ion, 5e-4 } }); };
+	const double k25 = k_at(25.0), k20 = k_at(20.0);
+	MESSAGE("k1: " << k25 << " kg/mol/s at 25 C, " << k20 << " at 20 C");
+	CHECK(k25 == doctest::Approx(1.15e-2).epsilon(0.01));
+	// Wong and Zhang 2008: in seawater, k[I-] = 0.00012 S + 0.0283 /h for the peroxide's loss at 0.5 mM iodide, 20 C;
+	// its fresh-water intercept is 2 k1 [I-]: k1 = 7.86e-3 /M/s
+	CHECK(k20 == doctest::Approx(0.0283 / 3600.0 / 5e-4 / 2.0).epsilon(0.03));
+	// no iodide: no rate at all (Evonik's under 1 % a year, stabilised, bounds the uncatalysed)
+	World::Builder b(builtin_species());
+	const CellId cell = b.add_cell("beaker");
+	b.set_amount(cell, water, mol(55.508)).set_amount(cell, hydrogen_peroxide_aq, mol(0.01));
+	b.set_temperature(cell, 298.15);
+	std::string why;
+	auto world = b.build(&why);
+	REQUIRE_MESSAGE(world.has_value(), why);
+	CHECK(solution_rate(builtin_species(), world->snapshot_cell(cell), decomposition.kinetics(), 298.15) == 0.0);
+}
+
+TEST_CASE("measured: crystal violet's absorption is the measured spectrum's shape at Begum et al.'s 93,587 at 592 nm (Stage 87)") {
+	using namespace builtin;
+	const auto at = [](SpeciesId s, int nm) { return optics::spectrum(s)[static_cast<size_t>(nm - 380)]; };
+	CHECK(at(crystal_violet_ion, 592) == doctest::Approx(93587.0).epsilon(1e-9));
+	// its maximum at 590 to 591 nm (PhotochemCAD's, Fuh 1995) and its shoulder near 545
+	int peak = 380;
+	for (int nm = 380; nm <= 780; ++nm) {
+		peak = at(crystal_violet_ion, nm) > at(crystal_violet_ion, peak) ? nm : peak;
+	}
+	CHECK(peak >= 589);
+	CHECK(peak <= 592);
+	CHECK(at(crystal_violet_ion, 545) / at(crystal_violet_ion, peak) == doctest::Approx(0.66).epsilon(0.05));
+	// the carbinol, and peroxide and iodide: colourless
+	for (const SpeciesId s : { crystal_violet_carbinol, hydrogen_peroxide_aq, iodide_ion }) {
+		CHECK(at(s, 590) == 0.0);
+	}
+}
+
+TEST_CASE("measured: iodide's and hydrogen peroxide's rows are NBS's, iodide's on the model's footing with Krumgalz's volume (Stage 87)") {
+	using namespace builtin;
+	const SpeciesTable &t = builtin_species();
+	// NBS 1982 (Wagman et al.), p. 2-52: I-(ao) dfH -55.19 kJ, S 111.3, Cp -142.3; the model's footing Cp - 216.35 z
+	const SpeciesDef &iodide = t.species(iodide_ion);
+	CHECK(iodide.hf == doctest::Approx(-55.19e3).epsilon(1e-12));
+	CHECK(iodide.s0 == doctest::Approx(111.3).epsilon(1e-12));
+	CHECK(iodide.cp == doctest::Approx(-142.3 + 216.35).epsilon(1e-12));
+	// Krumgalz, Pogorelsky and Pitzer 1996, Table 4: V(I-) 36.202 cm3/mol, conventional; the footing V - 16.74 z
+	CHECK(iodide.molar_volume == doctest::Approx((36.202 + 16.74) * 1e-6).epsilon(1e-12));
+	// p. 2-38: H2O2(ao) dfH -191.17 kJ, S 143.9; its decomposition 2 H2O2 -> 2 H2O + O2, -94.66 kJ a peroxide with the
+	// model's water and oxygen
+	const SpeciesDef &peroxide = t.species(hydrogen_peroxide_aq);
+	CHECK(peroxide.hf == doctest::Approx(-191.17e3).epsilon(1e-12));
+	CHECK(peroxide.s0 == doctest::Approx(143.9).epsilon(1e-12));
+	CHECK((t.species(water).hf + 0.5 * t.species(oxygen).hf - peroxide.hf) == doctest::Approx(-94.66e3).epsilon(1e-4));
+	// KI(ai), p. 2-333: -307.57, 213.8: its ions' sum
+	const SpeciesDef &salt = t.species(potassium_iodide_aq);
+	CHECK(salt.hf == doctest::Approx(-307.57e3).epsilon(1e-9));
+	CHECK(salt.s0 == doctest::Approx(213.8).epsilon(1e-9));
 }
