@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.82.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.87.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -668,6 +668,25 @@ gas also exchanges with the room's air by **diffusion** through its mouth.
     transport step, and nothing else (Stage 23; until then it multiplied every surface rate).
   - With this area the cube root of the amount moves linearly in time, so the step is exact: a
     solid that would dissolve many times over in a step is simply gone.
+- **Solution law** (`"law": "solution"`, Stage 87): a reaction among dissolved species, in moles of the reaction per
+  kg of the cell's solvent per second,
+  `r = k(T) · Π m_j^{n_j} · (Π γ_j^{n_j} / γ‡) · f(A)`, `orders` its list of species `j` with their orders `n_j`
+  (one to four, each ≥ 0), `m_j` each one's molality.
+  - **Activities** (Brønsted and Bjerrum's primary salt effect): each `γ_j` the activity model's (§10), and `γ‡` the
+    activated complex's, a particle of their charge `z‡ = Σ n_j z_j` with the model's Debye–Hückel part alone. Oppositely
+    charged reactants (crystal violet and hydroxide) slow as the ionic strength rises, like charges speed, a neutral
+    one with an ion hardly moves: in dilute solution `ln(k/k₀) = 2A z_A z_B √I`, the limiting law.
+  - An order may name any dissolved species: a reactant, a product, or one in none of the reaction's terms, a
+    **catalyst**. A catalyst changes the rate and never the equilibrium, which is the reaction's own (`f(A)`), and no
+    step moves it.
+  - Over a step `h` the extent is exact in its first reactant with an order, `in`, the others and the activities held:
+    order 1, `m(h) = m e^(−ν k′ h)`; order `n`, `m(h) = (m^(1−n) + (n−1) ν k′ h)^(1/(1−n))`, nought where that comes to
+    nothing (an order under 1 runs out in a finite time), `k′` the rate over `m_in^{n_in}`; backwards, the rate as it is
+    at the step's start. Then the limiter of §4.5 and the affinity's sign as every rated law: a reaction that could
+    finish many times over in a step simply finishes, and none passes its equilibrium.
+  - Per kg of solvent, so twice the solution goes the same way, molality for molality (M2).
+  - While a species with an order is absent its rate is nought, and nothing is probed.
+  - Inhibitors (a negative order) are not taken: such a rate grows without bound as its species runs out.
 - A reaction runs in a cell only where every species it names has thermodynamic data.
 
 **Demo subset:** malachite decomposition `Cu2CO3(OH)2(s) → 2 CuO(s) + CO2(g) + H2O(g)`, first
@@ -675,7 +694,8 @@ order in malachite; `CuO(s) + H2SO4(aq) → CuSO4(aq) + H2O(l)` at its surface, 
 acid, with transport in series.
 **Status:** Stage 3 implements the first-order law and the malachite decomposition, Stage 6 the
 surface law, stirring and the oxide's dissolution. Stage 23: transport in series with the surface
-step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`).
+step, the driver's order, and every rate measured (`docs/DATA_SOURCES.md`). Stage 87: the solution law, its salt
+effect and catalysts.
 
 ## 8. Phase change
 

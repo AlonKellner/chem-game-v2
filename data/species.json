@@ -168,6 +168,12 @@
 		{"id": "lithium_chloride_aq", "retired": true, "formula": "LiCl", "phase": "aq", "ions": {"Li+1": 1, "Cl-1": 1}, "volume_cm3": 16.92, "thermo": {"hf_kj": -445.649, "cp": -63.767, "s0": 69.9}},
 		{"id": "strontium_chloride_aq", "retired": true, "formula": "SrCl2", "phase": "aq", "ions": {"Sr+2": 1, "Cl-1": 2}, "volume_cm3": 18.17, "thermo": {"hf_kj": -880.118, "cp": -288.409, "s0": 80.4}},
 		{"id": "lithium_nitrate_aq", "retired": true, "formula": "LiNO3", "phase": "aq", "ions": {"Li+1": 1, "NO3-1": 1}, "volume_cm3": 28.13, "thermo": {"hf_kj": -483.49, "cp": -9.205, "s0": 159.8}},
-		{"id": "strontium_nitrate_aq", "retired": true, "formula": "Sr(NO3)2", "phase": "aq", "ions": {"Sr+2": 1, "NO3-1": 2}, "volume_cm3": 40.59, "thermo": {"hf_kj": -955.8, "cp": -179.285, "s0": 260.2}}
+		{"id": "strontium_nitrate_aq", "retired": true, "formula": "Sr(NO3)2", "phase": "aq", "ions": {"Sr+2": 1, "NO3-1": 2}, "volume_cm3": 40.59, "thermo": {"hf_kj": -955.8, "cp": -179.285, "s0": 260.2}},
+		{"id": "crystal_violet_ion", "formula": "C25H30N3+1", "phase": "aq", "ions": {"C25H30N3+1": 1}, "thermo": {"hf_kj": 0.0, "cp": 0.0, "s0": 0.0}},
+		{"id": "crystal_violet_carbinol", "formula": "C25H31N3O", "phase": "aq", "thermo": {"hf_kj": -229.994, "cp": 67.85, "s0": 77.456}},
+		{"id": "crystal_violet_chloride_aq", "retired": true, "formula": "C25H30N3Cl", "phase": "aq", "ions": {"C25H30N3+1": 1, "Cl-1": 1}, "volume_cm3": 34.53, "thermo": {"hf_kj": -167.159, "cp": 93.17, "s0": 56.5}},
+		{"id": "hydrogen_peroxide_aq", "formula": "H2O2", "phase": "aq", "volume_cm3": 23.62, "thermo": {"hf_kj": -191.17, "cp": 89.1, "s0": 143.9}},
+		{"id": "iodide_ion", "formula": "I-1", "phase": "aq", "ions": {"I-1": 1}, "volume_cm3": 52.942, "thermo": {"hf_kj": -55.19, "cp": 74.05, "s0": 111.3}},
+		{"id": "potassium_iodide_aq", "retired": true, "formula": "KI", "phase": "aq", "ions": {"K+1": 1, "I-1": 1}, "volume_cm3": 45.262, "thermo": {"hf_kj": -307.57, "cp": -134.02, "s0": 213.8}}
 	]
 }

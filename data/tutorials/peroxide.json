@@ -1,0 +1,300 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §7, §13.7, Stage 87; docs/CURRICULUM.md, experiment 40) on data/benches/peroxide.json: hydrogen peroxide decomposed by iodide, a catalyst, the oxygen collected in gas syringes and logged: the initial rate at two iodides gives the order in iodide; without iodide none comes.",
+	"title": "Experiment: hydrogen peroxide and a catalyst",
+	"bench": "../benches/peroxide.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Iodide speeds hydrogen peroxide's decomposition and is given back, a catalyst. Halve the iodide: how does the oxygen's rate change? Write the order in iodide you expect.",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: The runs",
+			"title": "The 0.5 M iodide into flask 1, its syringe on",
+			"text": "Pour all of t1 into f1 and put a syringe on its mouth at once: the oxygen pushes its plunger out at the room's pressure (it sticks a moment first, ground to its barrel).",
+			"checks": [
+				{
+					"text": "t1 poured into f1",
+					"when": {
+						"quantity": {
+							"item": "t1",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "s1 on f1",
+					"when": {
+						"item": "s1",
+						"place": "on"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t1",
+						"item:f1"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:s1",
+						"item:f1"
+					]
+				},
+				{
+					"click": "panel:attach"
+				}
+			]
+		},
+		{
+			"title": "The 0.25 M iodide into flask 2, its syringe on",
+			"text": "t2 into f2, a syringe on it: half the iodide, the same volume.",
+			"checks": [
+				{
+					"text": "t2 poured into f2",
+					"when": {
+						"quantity": {
+							"item": "t2",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "s2 on f2",
+					"when": {
+						"item": "s2",
+						"place": "on"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t2",
+						"item:f2"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:s2",
+						"item:f2"
+					]
+				},
+				{
+					"click": "panel:attach"
+				}
+			]
+		},
+		{
+			"title": "The water into flask 3, its syringe on",
+			"text": "t3 into f3, a syringe on it: no iodide at all, the peroxide alone.",
+			"checks": [
+				{
+					"text": "t3 poured into f3",
+					"when": {
+						"quantity": {
+							"item": "t3",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "s3 on f3",
+					"when": {
+						"item": "s3",
+						"place": "on"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t3",
+						"item:f3"
+					]
+				},
+				{
+					"type": "5"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:s3",
+						"item:f3"
+					]
+				},
+				{
+					"click": "panel:attach"
+				}
+			]
+		},
+		{
+			"title": "Log the three syringes",
+			"text": "Log each syringe's volume every 5 seconds.",
+			"checks": [
+				{
+					"text": "s1 logged",
+					"when": {
+						"item": "s1",
+						"logging": "plunger_ml"
+					}
+				},
+				{
+					"text": "s2 logged",
+					"when": {
+						"item": "s2",
+						"logging": "plunger_ml"
+					}
+				},
+				{
+					"text": "s3 logged",
+					"when": {
+						"item": "s3",
+						"logging": "plunger_ml"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:s1"
+				},
+				{
+					"click": "record:s1:plunger_ml"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:s2"
+				},
+				{
+					"click": "record:s2:plunger_ml"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:s3"
+				},
+				{
+					"click": "record:s3:plunger_ml"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The oxygen comes off",
+			"text": "Wait for the first syringe to hold 40 mL. In the notebook, plot each against time: each starts straight once its plunger moves, its slope the initial rate, and bends as the peroxide is used up. The third does not move.",
+			"checks": [
+				{
+					"text": "s1 over 40 mL",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "s1",
+							"what": "plunger_ml"
+						},
+						"compare": "above",
+						"value": 40
+					}
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the initial rate with the 0.5 M iodide",
+			"unit": "mL/s",
+			"truth": "0.30",
+			"tolerance": 0.15,
+			"relative": true,
+			"why": "In the notebook: s1's volume against time, fit over the minute from when its plunger first moves: the slope. The rate of oxygen is k1 [H2O2] [I-] for each kilogram of the solution: 0.0115 /M/s x 0.63 M x 0.146 M at 25 C, about 0.36 mL/s for its 14 g; at the room's 20 C less, and the reaction's heat warms it as it goes."
+		},
+		{
+			"label": "the initial rate with the 0.25 M iodide",
+			"unit": "mL/s",
+			"truth": "0.143",
+			"tolerance": 0.15,
+			"relative": true,
+			"why": "s2's the same way."
+		},
+		{
+			"label": "the order in iodide",
+			"unit": "",
+			"truth": "1",
+			"tolerance": 0.15,
+			"predict": true,
+			"why": "n = ln(rate 1 / rate 2) / ln 2. The slow step is H2O2 + I- -> H2O + IO-: half the iodide, half the rate. The iodide is given back by IO- + H2O2 -> H2O + O2 + I-: none of it is used."
+		},
+		{
+			"label": "the oxygen without iodide",
+			"unit": "mL",
+			"truth": "s3.plunger_ml",
+			"ideal": 0,
+			"tolerance": 1,
+			"why": "Without a catalyst dilute peroxide keeps for months: no oxygen comes."
+		}
+	]
+}

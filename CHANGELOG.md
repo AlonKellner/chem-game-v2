@@ -1,5 +1,18 @@
 # GAME_SPEC version history
 
+## 0.87.0 (2026-11-28, Stage 87; signed off by the user)
+
+- §7 (Stage 87, `docs/TDD_87_SOLUTION_KINETICS.md`; `docs/CURRICULUM.md`, step F's first part: experiments 37, 39 and
+  40): **the solution law**, a reaction among dissolved species at `k(T) · Π m_j^{n_j}` in their molalities, times
+  Brønsted and Bjerrum's activity factor (each species' activity coefficient over the activated complex's, the primary
+  salt effect: the limiting law in dilute solution) and the affinity factor; **catalysts**, any ordered species in
+  none of its terms (the rate changes, the equilibrium is the reaction's own); a step exact in its first reactant.
+- §9, §12: **crystal violet** fading in base (Begum et al.'s 0.234 /M/s at 25 C, Thompson and Ting's temperatures,
+  Ritchie's pK_R+ 9.39; its violet PhotochemCAD's, scaled to Begum's 93,587 at 592 nm); **hydrogen peroxide**
+  decomposed by **iodide**, a catalyst (Liebhafsky's 1.15e-2 /M/s, 54 kJ/mol); iodine, I⁻, KI, H₂O₂(aq).
+- §13.7: the experiments `crystal_violet` (a first-order decay by two spectrophotometers, the order in hydroxide at one
+  ionic strength, k₂) and `peroxide` (oxygen in gas syringes: the order in iodide, none without it).
+
 ## 0.82.0 (2026-11-28, Stage 82; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 82, `docs/TDD_82_FLAMES.md`; `docs/CURRICULUM.md`, step E's third part): lithium's and strontium's ions

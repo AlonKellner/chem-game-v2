@@ -983,6 +983,39 @@ bool stands(const SpeciesTable &table, const CellMixtures &mixtures, std::span<c
 	return among_dissolved(table, terms) && ionic_strength(table, mixtures) > MOST_IONIC_STRENGTH;
 }
 
+double rate_activity(const SpeciesTable &table, const CellState &cell, const Kinetics &kinetics) {
+	Mix mix = mix_of(table, cell);
+	if (!(mix.liquid > 0.0) || !(mix.dissolved > 0.0)) {
+		return 0.0;
+	}
+	const SolutionDef &model = table.solution();
+	double ln = 0.0, charge = 0.0;
+	for (int32_t o = 0; o < kinetics.order_count; ++o) {
+		const RateOrder &order = kinetics.orders[static_cast<size_t>(o)];
+		for (const IonCount &ion : table.species(order.species).ions) {
+			if (ion.count <= 0) {
+				break;
+			}
+			const auto j = static_cast<size_t>(ion.ion);
+			ln += order.order * static_cast<double>(ion.count) * mix.ln_gamma[j];
+			charge += order.order * static_cast<double>(ion.count) * static_cast<double>(model.ions[j].charge);
+		}
+	}
+	// the activated complex: a particle of their charge with no interactions of its own, Debye and Hückel's part of
+	// Pitzer's ln gamma, z^2 / 2 times df/dI
+	double ionic = 0.0;
+	for (size_t j = 0; j < model.ions.size(); ++j) {
+		const double z = static_cast<double>(model.ions[j].charge);
+		ionic += 0.5 * mix.particles[j] / mix.liquid * SOLVENT_MOL_PER_UNIT * z * z;
+	}
+	if (ionic > 0.0 && charge != 0.0) {
+		const double root = std::sqrt(ionic);
+		const double f_ionic = -model.a_phi * (4.0 / model.b * log(1.0 + model.b * root) + 2.0 * root / (1.0 + model.b * root));
+		ln -= 0.5 * charge * charge * f_ionic;
+	}
+	return ln;
+}
+
 double molality(const SpeciesTable &table, const CellState &cell, SpeciesId species) {
 	const Mix mix = mix_of(table, cell, false); // (Stage 75: the liquid's amount alone; the excess was worked out unread)
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;

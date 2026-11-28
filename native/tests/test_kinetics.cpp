@@ -254,7 +254,7 @@ TEST_CASE("kinetics: shifting every formation enthalpy by its elements changes n
 	}
 	std::vector<SpeciesDef> species(base.all_species().begin(), base.all_species().end());
 	const double per_atom[] = { 12345.0, -67890.0, 4321.0, -98765.0, 55555.0, -22222.0, 77777.0, -33333.0, 44444.0, -11111.0, 66666.0, -55555.0, 23456.0, 31415.0, -27182.0, 16180.0, -14142.0,
-		17320.0, -22360.0, 26457.0, -30000.0, 28284.0, -31623.0, 33166.0, -34641.0 }; // an element each (Na: Stage 43; Ni: Stage 47; Cl, K, P, Br: Stage 64; Ca, Mg, Ba, Ag, Fe, Zn, Al, Co: Stage 76; Hg: Stage 78; Cr: Stage 81; Li, Sr: Stage 82)
+		17320.0, -22360.0, 26457.0, -30000.0, 28284.0, -31623.0, 33166.0, -34641.0, 35355.0 }; // an element each (Na: Stage 43; Ni: Stage 47; Cl, K, P, Br: Stage 64; Ca, Mg, Ba, Ag, Fe, Zn, Al, Co: Stage 76; Hg: Stage 78; Cr: Stage 81; Li, Sr: Stage 82; I: Stage 87)
 	REQUIRE(std::size(per_atom) == static_cast<size_t>(base.element_count()));
 	for (SpeciesDef &def : species) {
 		for (int e = 0; e < base.element_count(); ++e) {

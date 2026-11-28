@@ -377,6 +377,44 @@ std::optional<Reaction> Reaction::make(const SpeciesTable &table, std::string_vi
 			return std::nullopt;
 		}
 	}
+	if (kinetics.law == Kinetics::Law::Solution) { // (Stage 87) its rate in dissolved species' molalities
+		const bool finite = kinetics.prefactor - kinetics.prefactor == 0.0 && kinetics.activation - kinetics.activation == 0.0;
+		if (!finite || !(kinetics.prefactor > 0.0) || kinetics.activation < 0.0) {
+			set_why(why, "reaction " + name + ": a prefactor is positive, an activation energy is not negative, both are finite");
+			return std::nullopt;
+		}
+		if (kinetics.order_count < 1 || kinetics.order_count > MAX_ORDERS) {
+			set_why(why, "reaction " + name + ": a solution's rate goes with one to " + std::to_string(MAX_ORDERS) + " species");
+			return std::nullopt;
+		}
+		bool in_ordered = false;
+		for (int32_t i = 0; i < kinetics.order_count; ++i) {
+			const RateOrder &o = kinetics.orders[static_cast<size_t>(i)];
+			if (!table.has(o.species) || table.species(o.species).phase != Phase::Aqueous || table.species(o.species).retired) {
+				set_why(why, "reaction " + name + ": a species its rate goes with is not a dissolved one (a formula unit is its ions)");
+				return std::nullopt;
+			}
+			if (!(o.order >= 0.0) || !(o.order - o.order == 0.0)) {
+				set_why(why, "reaction " + name + ": an order is not negative and is finite");
+				return std::nullopt;
+			}
+			for (int32_t j = 0; j < i; ++j) {
+				if (kinetics.orders[static_cast<size_t>(j)].species == o.species) {
+					set_why(why, "reaction " + name + ": a species its rate goes with is named twice");
+					return std::nullopt;
+				}
+			}
+			in_ordered = in_ordered || (o.species == kinetics.in && o.order > 0.0);
+		}
+		bool is_reactant = false;
+		for (const Term &t : terms) {
+			is_reactant = is_reactant || (t.species == kinetics.in && t.nu < 0);
+		}
+		if (!is_reactant || !in_ordered) {
+			set_why(why, "reaction " + name + ": the species a step is exact in is not one of its reactants with an order");
+			return std::nullopt;
+		}
+	}
 	Reaction r;
 	r.table_ = &table;
 	r.kinetics_ = kinetics;
