@@ -1,0 +1,181 @@
+{
+	"format": "chem-bench/2",
+	"note": "Hydrogen peroxide's decomposition with a catalyst (GAME_SPEC \u00a77, \u00a713, Stage 87; docs/CURRICULUM.md, experiment 40): three 250 mL conical flasks of 10 mL of 3 % hydrogen peroxide (8.82 mmol), three test tubes of 4 mL (0.5 M potassium iodide, 0.25 M, water), three 100 mL gas syringes, empty. Each tube poured into its flask and a syringe put on its mouth: iodide, given back as it works, turns the peroxide to water and oxygen (4.4 mmol, about 106 mL at 20 C: more than a syringe holds), at a rate first order in the peroxide and first in the iodide; the water alone gives none. The gas's initial rate at the two iodides gives the order in iodide.",
+	"readings": "instruments",
+	"seed": 40,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "f1",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				1,
+				8
+			],
+			"label": "10 mL of 3 % hydrogen peroxide",
+			"contents": {
+				"water": {
+					"g": 9.7
+				},
+				"hydrogen_peroxide_aq": {
+					"mol": 0.00882
+				}
+			}
+		},
+		{
+			"id": "f2",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				8,
+				8
+			],
+			"label": "10 mL of 3 % hydrogen peroxide",
+			"contents": {
+				"water": {
+					"g": 9.7
+				},
+				"hydrogen_peroxide_aq": {
+					"mol": 0.00882
+				}
+			}
+		},
+		{
+			"id": "f3",
+			"kind": "vessel",
+			"glassware": "conical_flask",
+			"volume_ml": 250,
+			"wall": "glass",
+			"wall_g": 100,
+			"at": [
+				15,
+				8
+			],
+			"label": "10 mL of 3 % hydrogen peroxide",
+			"contents": {
+				"water": {
+					"g": 9.7
+				},
+				"hydrogen_peroxide_aq": {
+					"mol": 0.00882
+				}
+			}
+		},
+		{
+			"id": "t1",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				4,
+				8
+			],
+			"label": "4 mL of 0.5 M potassium iodide",
+			"contents": {
+				"water": {
+					"g": 4.0
+				},
+				"potassium_iodide_aq": {
+					"mol": 0.002
+				}
+			}
+		},
+		{
+			"id": "t2",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				11,
+				8
+			],
+			"label": "4 mL of 0.25 M potassium iodide",
+			"contents": {
+				"water": {
+					"g": 4.0
+				},
+				"potassium_iodide_aq": {
+					"mol": 0.001
+				}
+			}
+		},
+		{
+			"id": "t3",
+			"kind": "vessel",
+			"glassware": "test_tube",
+			"volume_ml": 18,
+			"wall": "glass",
+			"wall_g": 25,
+			"at": [
+				18,
+				8
+			],
+			"label": "4 mL of water",
+			"contents": {
+				"water": {
+					"g": 4.0
+				}
+			}
+		},
+		{
+			"id": "s1",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"at": [
+				1,
+				1
+			],
+			"label": "a gas syringe, empty",
+			"plunger_ml": 0
+		},
+		{
+			"id": "s2",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"at": [
+				8,
+				1
+			],
+			"label": "a gas syringe, empty",
+			"plunger_ml": 0
+		},
+		{
+			"id": "s3",
+			"kind": "vessel",
+			"glassware": "gas_syringe",
+			"volume_ml": 100,
+			"wall": "glass",
+			"wall_g": 60,
+			"at": [
+				15,
+				1
+			],
+			"label": "a gas syringe, empty",
+			"plunger_ml": 0
+		}
+	]
+}

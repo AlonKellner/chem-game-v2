@@ -65,6 +65,7 @@
 		"magnesium_ebt": {"kind": "absorb", "table": "ebt_magnesium.csv", "units": "L/mol/cm"},
 		"calcium_ebt": {"kind": "absorb", "table": "ebt_calcium.csv", "units": "L/mol/cm"},
 		"chromate_ion": {"kind": "absorb", "table": "chromate.csv", "units": "L/mol/cm"},
+		"crystal_violet_ion": {"kind": "absorb", "table": "crystal_violet.csv", "units": "L/mol/cm"},
 		"hydrogen_chromate_ion": {"kind": "absorb", "table": "hydrogen_chromate.csv", "units": "L/mol/cm"},
 		"dichromate_ion": {"kind": "absorb", "bands": [{"centre_cm1": 28571, "fwhm_cm1": 6000, "peak": 3576}, {"centre_cm1": 22727, "fwhm_cm1": 3600, "peak": 250}]},
 		"copper_ammine_1": {"kind": "absorb", "table": "copper_ammine_1.csv", "units": "L/mol/cm"},

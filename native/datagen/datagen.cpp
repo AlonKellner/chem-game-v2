@@ -607,8 +607,32 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 					}
 					row.kinetics.dissolves_by_transport = true;
 				}
+			} else if (law == "solution") { // (Stage 87) its rate in dissolved species' molalities, each to its order
+				row.kinetics.law = chem::Kinetics::Law::Solution;
+				row.kinetics.prefactor = k.at("prefactor").get<double>();
+				row.kinetics.activation = k.at("activation_kj").get<double>() * 1000.0;
+				const json &orders = k.at("orders");
+				if (!orders.is_array() || orders.empty() || orders.size() > static_cast<size_t>(chem::MAX_ORDERS)) {
+					fail(reactions_file, "reaction " + row.id + ": a solution law's orders are a list of one to " + std::to_string(chem::MAX_ORDERS) + " species");
+				}
+				for (const json &o : orders) {
+					const auto found = by_key.find(o.at("species").get<std::string>());
+					if (found == by_key.end()) {
+						fail(reactions_file, "reaction " + row.id + ": an order names a species that is not in species.json");
+					}
+					const double order = o.at("order").get<double>();
+					row.kinetics.orders[static_cast<size_t>(row.kinetics.order_count++)] = chem::RateOrder{ chem::SpeciesId{ found->second }, order };
+					// a step is exact in the first reactant with an order
+					bool reactant = false;
+					for (const chem::Term &t : row.terms) {
+						reactant = reactant || (t.species.index == found->second && t.nu < 0);
+					}
+					if (reactant && order > 0.0 && row.kinetics.in.index < 0) {
+						row.kinetics.in = chem::SpeciesId{ found->second };
+					}
+				}
 			} else {
-				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface or equilibrium");
+				fail(reactions_file, "reaction " + row.id + ": a kinetics law is first_order, surface, solution or equilibrium");
 			}
 		}
 		if (r.contains("notice")) {
@@ -783,14 +807,23 @@ int run(const std::filesystem::path &data, const std::filesystem::path &out) {
 			cpp << "{ SpeciesId{ " << row.terms[i].species.index << " }, " << row.terms[i].nu << " }" << (i + 1 < row.terms.size() ? ", " : "");
 		}
 		char kinetics[560];
-		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g, %.17g }",
+		std::snprintf(kinetics, sizeof kinetics, ", Kinetics{ %s, SpeciesId{ %d }, %.17g, %.17g, SpeciesId{ %d }, %.17g, %.17g, %.17g, %s, %.17g, %.17g, %.17g, { {",
 				row.kinetics.law == chem::Kinetics::Law::FirstOrder ? "Kinetics::Law::FirstOrder"
 						: row.kinetics.law == chem::Kinetics::Law::Equilibrium ? "Kinetics::Law::Equilibrium"
-						: row.kinetics.law == chem::Kinetics::Law::Surface ? "Kinetics::Law::Surface" : "Kinetics::Law::None",
+						: row.kinetics.law == chem::Kinetics::Law::Surface	   ? "Kinetics::Law::Surface"
+						: row.kinetics.law == chem::Kinetics::Law::Solution	   ? "Kinetics::Law::Solution"
+																			   : "Kinetics::Law::None",
 				row.kinetics.in.index, row.kinetics.prefactor, row.kinetics.activation, row.kinetics.driver.index, row.kinetics.nucleation,
 				row.kinetics.nucleation_order, row.kinetics.driver_order, row.kinetics.dissolves_by_transport ? "true" : "false", row.kinetics.secondary,
 				row.kinetics.secondary_order, row.kinetics.nucleation_barrier);
-		cpp << " } }, " << row.terms.size() << kinetics << " },\n";
+		std::string orders; // (Stage 87) a solution law's
+		for (int32_t o = 0; o < row.kinetics.order_count; ++o) {
+			char one[96];
+			std::snprintf(one, sizeof one, "%s RateOrder{ SpeciesId{ %d }, %.17g }", o > 0 ? "," : "", row.kinetics.orders[static_cast<size_t>(o)].species.index,
+					row.kinetics.orders[static_cast<size_t>(o)].order);
+			orders += one;
+		}
+		cpp << " } }, " << row.terms.size() << kinetics << orders << " } }, " << row.kinetics.order_count << " } },\n";
 	}
 	cpp << "};\n\n"
 		<< "// The compiler's own proof, independent of the generator's: no build holds an\n"

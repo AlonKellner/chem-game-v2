@@ -1,0 +1,420 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §7, §13.7, Stage 87; docs/CURRICULUM.md, experiments 37 and 39) on data/benches/crystal_violet.json: crystal violet fading in base, read by absorbance at 590 nm. Hydroxide in a thousandfold excess makes the second-order fading first order in the dye: ln A falls linearly in time, its slope -k' = -k2 [OH-]. Two runs side by side at 0.030 and 0.015 M hydroxide, at one ionic strength, give the order in hydroxide and k2.",
+	"title": "Experiment: crystal violet, a first-order decay",
+	"bench": "../benches/crystal_violet.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "Crystal violet's cation takes a hydroxide ion onto its central carbon and loses its colour. Halve the hydroxide: how does the rate the violet fades at change? Write the order in hydroxide you expect (1: half as fast; 2: a quarter as fast).",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: Blank them",
+			"title": "Blank the first spectrophotometer",
+			"text": "Both spectrophotometers read at 590 nm, where the violet absorbs most. Put the cuvette of water in the first one's well and blank it: what the water and the glass absorb reads 0.",
+			"checks": [
+				{
+					"text": "the water in spec1's well",
+					"when": {
+						"item": "spec1",
+						"under": "c0"
+					}
+				},
+				{
+					"text": "spec1 reads 0.000",
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "absorbance"
+						},
+						"compare": "between",
+						"values": [
+							-0.0005,
+							0.0005
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"item:spec1"
+					]
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "blank:spec1"
+				}
+			]
+		},
+		{
+			"title": "Blank the second",
+			"text": "Take the water out of the first well and put it in the second one's, and blank it too.",
+			"checks": [
+				{
+					"text": "the water in spec2's well",
+					"when": {
+						"item": "spec2",
+						"under": "c0"
+					}
+				},
+				{
+					"text": "spec2 reads 0.000",
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "absorbance"
+						},
+						"compare": "between",
+						"values": [
+							-0.0005,
+							0.0005
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:16,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c0",
+						"item:spec2"
+					]
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "blank:spec2"
+				}
+			]
+		},
+		{
+			"title": "The dye in both wells, held at 25 C",
+			"text": "Set the water aside. A cuvette of crystal violet in each well, and each holder on at 25 C: the rate depends on the temperature, so both runs are held at one.",
+			"checks": [
+				{
+					"text": "c1 in spec1's well",
+					"when": {
+						"item": "spec1",
+						"under": "c1"
+					}
+				},
+				{
+					"text": "c2 in spec2's well",
+					"when": {
+						"item": "spec2",
+						"under": "c2"
+					}
+				},
+				{
+					"text": "spec1's holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				},
+				{
+					"text": "spec2's holder at 25 C",
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "holder"
+						},
+						"compare": "between",
+						"values": [
+							24.5,
+							25.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:14,4"
+					]
+				},
+				{
+					"drag": [
+						"item:c1",
+						"item:spec1"
+					]
+				},
+				{
+					"drag": [
+						"item:c2",
+						"item:spec2"
+					]
+				},
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "cell:spec1"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "cell:spec2"
+				}
+			]
+		},
+		{
+			"title": "Warming to 25 C",
+			"text": "The holders warm the dye from the room's 20 C.",
+			"checks": [
+				{
+					"text": "c1 at 25 C",
+					"wait": true,
+					"when": {
+						"item": "c1",
+						"above_c": 24.7
+					}
+				},
+				{
+					"text": "c2 at 25 C",
+					"wait": true,
+					"when": {
+						"item": "c2",
+						"above_c": 24.7
+					}
+				}
+			]
+		},
+		{
+			"part": "2: The runs",
+			"title": "The hydroxide in, stirred",
+			"text": "Pour each tube into its cuvette, all of it, and stir both: t1's 0.12 M hydroxide makes c1 0.030 M, t2's 0.06 M makes c2 0.015 M. t2 also holds 0.06 M sodium chloride, so both stand at the same ionic strength: ions slow a reaction between oppositely charged ions (the salt effect), the same in both.",
+			"checks": [
+				{
+					"text": "t1 poured into c1",
+					"when": {
+						"quantity": {
+							"item": "t1",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "t2 poured into c2",
+					"when": {
+						"quantity": {
+							"item": "t2",
+							"what": "liquid_ml"
+						},
+						"compare": "below",
+						"value": 0.05
+					}
+				},
+				{
+					"text": "c1 stirred",
+					"when": {
+						"item": "c1",
+						"stirred": true
+					}
+				},
+				{
+					"text": "c2 stirred",
+					"when": {
+						"item": "c2",
+						"stirred": true
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:t1",
+						"item:c1"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:t2",
+						"item:c2"
+					]
+				},
+				{
+					"type": "2"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:c1"
+				},
+				{
+					"click": "stir:c1"
+				},
+				{
+					"click": "item:c2"
+				},
+				{
+					"click": "stir:c2"
+				}
+			]
+		},
+		{
+			"title": "Log both absorbances",
+			"text": "Log each spectrophotometer's absorbance every 5 seconds: the notebook keeps them in time.",
+			"checks": [
+				{
+					"text": "spec1 logged",
+					"when": {
+						"item": "spec1",
+						"logging": "absorbance"
+					}
+				},
+				{
+					"text": "spec2 logged",
+					"when": {
+						"item": "spec2",
+						"logging": "absorbance"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec1"
+				},
+				{
+					"click": "record:spec1:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec2"
+				},
+				{
+					"click": "record:spec2:absorbance"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:log:5"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The violet fades",
+			"text": "Wait for both to read under 0.15. In the notebook, plot each log against time with y as ln: two straight lines, the steeper at the more hydroxide.",
+			"checks": [
+				{
+					"text": "spec1 under 0.15",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec1",
+							"what": "absorbance"
+						},
+						"compare": "below",
+						"value": 0.15
+					}
+				},
+				{
+					"text": "spec2 under 0.15",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "spec2",
+							"what": "absorbance"
+						},
+						"compare": "below",
+						"value": 0.15
+					}
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "k' at 0.030 M hydroxide",
+			"unit": "1/s",
+			"truth": "0.00592",
+			"tolerance": 0.1,
+			"relative": true,
+			"why": "In the notebook: spec1's absorbance against time, y as ln, fit: the slope is -k'. A first-order decay, A = A0 e^(-k' t), its half-life ln 2 / k'."
+		},
+		{
+			"label": "k' at 0.015 M hydroxide",
+			"unit": "1/s",
+			"truth": "0.00292",
+			"tolerance": 0.1,
+			"relative": true,
+			"why": "spec2's the same way."
+		},
+		{
+			"label": "the order in hydroxide",
+			"unit": "",
+			"truth": "1",
+			"tolerance": 0.15,
+			"predict": true,
+			"why": "n = ln(k' at 0.030 / k' at 0.015) / ln 2. The rate is k2 [CV+] [OH-]: half the hydroxide, half the rate. At one ionic strength the salt effect is the same in both runs; without the sodium chloride the weaker run would be a tenth faster than half, and the order would read low."
+		},
+		{
+			"label": "k2",
+			"unit": "1/(M s)",
+			"truth": "0.197",
+			"tolerance": 0.1,
+			"relative": true,
+			"why": "k2 = k' / [OH-], 0.00592 / 0.030. At 25 C and an ionic strength of 0.03; Begum et al. measured 0.234 at 0.007, where the salt effect slows it less."
+		}
+	]
+}

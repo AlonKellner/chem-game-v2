@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <span>
 #include <string>
@@ -210,8 +211,21 @@ struct Term {
 // cell is stirred, its crystals breed (Stage 66, secondary nucleation): secondary * (the
 // stirring's W per kg of liquid) * (kg of the crystals) * (S - 1)^secondary_order new particles
 // per second, fragments of one quantum each.
+//
+// Solution (Stage 87, GAME_SPEC §7): a reaction among dissolved species, its rate in their molalities to their orders,
+//
+//   rate = prefactor * e^(-activation / RT) * prod_j m_j^order_j * affinity factor   [mol/s per kg of solvent]
+//
+// over `orders`, which may name any dissolved species: a reactant, a product, or one in none of its terms, a catalyst
+// (it changes the rate and never the equilibrium, which is the reaction's own). `in` is its first reactant with an
+// order, in which a step is exact (the others held over it).
+struct RateOrder {
+	SpeciesId species;
+	double order = 0.0;
+};
+inline constexpr int32_t MAX_ORDERS = 4;
 struct Kinetics {
-	enum class Law : uint8_t { None, FirstOrder, Equilibrium, Surface };
+	enum class Law : uint8_t { None, FirstOrder, Equilibrium, Surface, Solution };
 	Law law = Law::None;
 	SpeciesId in;
 	double prefactor = 0.0; // FirstOrder: 1/s. Surface: mol/m^2/s
@@ -228,6 +242,9 @@ struct Kinetics {
 	// Surface (Stage 71): the primary nucleation's barrier, the classical form: where it is given, nucleation *
 	// (kg of solvent) * e^(-B / ln^2 S) a second in place of the power law (ice's supercooling)
 	double nucleation_barrier = 0.0;
+	// Solution (Stage 87): the species its rate goes with, each to its order
+	std::array<RateOrder, MAX_ORDERS> orders{};
+	int32_t order_count = 0;
 };
 
 constexpr Kinetics first_order(SpeciesId in, double prefactor, double activation) {
@@ -239,6 +256,16 @@ constexpr Kinetics equilibrium() {
 constexpr Kinetics surface(SpeciesId in, double prefactor, double activation, SpeciesId driver = {}, double nucleation = 0.0, double nucleation_order = 0.0,
 		double driver_order = 1.0) {
 	return Kinetics{ Kinetics::Law::Surface, in, prefactor, activation, driver, nucleation, nucleation_order, driver_order };
+}
+
+constexpr Kinetics solution(SpeciesId in, double prefactor, double activation, std::initializer_list<RateOrder> orders) {
+	Kinetics k{ Kinetics::Law::Solution, in, prefactor, activation, SpeciesId{}, 0.0, 0.0 };
+	for (const RateOrder &o : orders) {
+		if (k.order_count < MAX_ORDERS) {
+			k.orders[static_cast<size_t>(k.order_count++)] = o;
+		}
+	}
+	return k;
 }
 
 struct ReactionDef {

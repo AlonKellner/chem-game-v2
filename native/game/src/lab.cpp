@@ -7446,6 +7446,20 @@ std::string limit_of(const SpeciesTable &table, const World &world, CellId cell,
 		}
 		return text_of("fast: half of it goes in %.3g s", 0.6931471805599453 * tau);
 	}
+	if (k.law == Kinetics::Law::Solution) { // (Stage 87) in solution: what its rate goes with, and what catalyses it
+		std::string says = text_of("in solution, %.3g mol/kg/s: ", chem::solution_rate(table, state, k, kelvin) * f);
+		std::string catalysts;
+		for (int32_t o = 0; o < k.order_count; ++o) {
+			const RateOrder &order = k.orders[static_cast<size_t>(o)];
+			bool named_in_it = false;
+			for (const Term &t : terms) {
+				named_in_it = named_in_it || t.species == order.species;
+			}
+			says += (o > 0 ? ", " : "") + text_of("%.3g mol/kg of ", molality(table, state, order.species)) + named(table, order.species) + text_of(" (order %.2g)", order.order);
+			catalysts += named_in_it ? std::string() : (catalysts.empty() ? "" : ", ") + named(table, order.species);
+		}
+		return catalysts.empty() ? says : says + "; catalysed by " + catalysts;
+	}
 	// the surface law, using up its solid
 	const SpeciesDef &solid = table.species(k.in);
 	const auto in = static_cast<size_t>(k.in.index);
