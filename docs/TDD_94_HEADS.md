@@ -74,7 +74,7 @@ cannot make a new worktree; the branch was started there from `origin/main` at `
 | 94.3 | Heads in the closure: what stands at a port, the drive, the order by crossings; vessels open to the room | Done |
 | 94.4 | Gravity's reservoir and its work; Z1 and its self-test | Done |
 | 94.5 | The lab: the square's side, heights, a syringe stood in a vessel; save, load, digest | Done |
-| 94.6 | Docs; `make gates`; the user's sign-off | |
+| 94.6 | Docs; `make gates` (passed on the tree merged with main at Stage 90: 881 s, 1080 entries, 832 under the sanitizers); the user's sign-off | Gates passed; awaiting sign-off |
 
 ## Tests
 
@@ -93,6 +93,15 @@ cannot make a new worktree; the branch was started there from `origin/main` at `
   the room; two syringes of water on a tube stay as they are side by side, and nine squares apart the upper runs
   down into the lower.
 - Stage 89's tests, the lab's syringe tests and the gas-syringe experiments unchanged.
+
+## To try on the screen
+
+The experiment `charles` (its card switched to free) has a capped syringe of 30 mL of air and two beakers of
+water. Hold the syringe over the ice water and press "stand"; take its cap off; drag its handle out: it draws the
+water up (about 49 mL of a 50 mL pull); push it back and the water returns; set it on the bench again and it is
+open to the room. In the hot water the same pull draws less: the air in it takes up the water's vapour and grows.
+(Played headless on that bench with every invariant checked: 2760 steps, every element, the mass, the charge and
+the energy unchanged.)
 
 ## Found
 
