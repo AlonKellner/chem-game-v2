@@ -13,6 +13,6 @@
 		{"symbol": "Cl", "mass": "35.45"}, {"symbol": "K", "mass": "39.098"}, {"symbol": "P", "mass": "30.974"}, {"symbol": "Br", "mass": "79.904"},
 		{"symbol": "Ca", "mass": "40.078"}, {"symbol": "Mg", "mass": "24.305"}, {"symbol": "Ba", "mass": "137.33"}, {"symbol": "Ag", "mass": "107.87"},
 		{"symbol": "Fe", "mass": "55.845"}, {"symbol": "Zn", "mass": "65.38"}, {"symbol": "Al", "mass": "26.982"}, {"symbol": "Co", "mass": "58.933"},
-		{"symbol": "Hg", "mass": "200.59"}, {"symbol": "Cr", "mass": "51.996"}, {"symbol": "I", "mass": "126.90"}
+		{"symbol": "Hg", "mass": "200.59"}, {"symbol": "Cr", "mass": "51.996"}, {"symbol": "Li", "mass": "6.94"}, {"symbol": "Sr", "mass": "87.62"}, {"symbol": "I", "mass": "126.90"}
 	]
 }

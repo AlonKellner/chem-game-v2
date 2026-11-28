@@ -57,7 +57,7 @@ effect's limiting law.
 - **Hydrogen peroxide with iodide**, 2 H₂O₂ → 2 H₂O + O₂(g), first order in the peroxide and in the iodide, a
   catalyst: k₁ 1.15e-2 /M/s and Ea 54 kJ/mol (Liebhafsky, as Levanov et al.'s manual tabulates it), 7.93e-3 at 20 C
   against Wong and Zhang's 7.86e-3. None without iodide.
-- **Iodine** (element 24), I⁻, KI, H₂O₂(aq) (NBS rows; Krumgalz's volume; Pitzer and Mayorga's KI and NaI; the CRC's and
+- **Iodine** (element 26, after Stage 82's lithium and strontium), I⁻, KI, H₂O₂(aq) (NBS rows; Krumgalz's volume; Pitzer and Mayorga's KI and NaI; the CRC's and
   van Stroe-Biezen's diffusion), crystal violet's cation, chloride and carbinol.
 
 Gates: `measured: crystal violet fades at Begum et al.'s rate...`, `measured: iodide catalyses hydrogen peroxide's

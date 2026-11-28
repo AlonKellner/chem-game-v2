@@ -145,7 +145,12 @@
 		{"id": "chalk", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "calcium carbonate (chalk)", "contents": {"calcium_carbonate": {"g": 20, "particles": 1000000}}},
 		{"id": "salt", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "sodium chloride", "contents": {"sodium_chloride": {"g": 20, "particles": 1000000}}},
 		{"id": "acetate", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "sodium acetate, anhydrous", "contents": {"sodium_acetate": {"g": 20, "particles": 1000000}}},
-		{"id": "ammonium", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "ammonium chloride", "contents": {"ammonium_chloride": {"g": 20, "particles": 1000000}}}
+		{"id": "ammonium", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "ammonium chloride", "contents": {"ammonium_chloride": {"g": 20, "particles": 1000000}}},
+		{"id": "sodium_chloride", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "sodium chloride, 0.1 M", "contents": {"water": {"g": 25.0}, "sodium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "potassium_chloride", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "potassium chloride, 0.1 M", "contents": {"water": {"g": 25.0}, "potassium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "lithium_chloride", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "lithium chloride, 0.1 M", "contents": {"water": {"g": 25.0}, "lithium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "strontium_chloride", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "strontium chloride, 0.1 M", "contents": {"water": {"g": 25.0}, "strontium_chloride_aq": {"mol": 0.0025}}},
+		{"id": "copper_sulfate", "kind": "vessel", "volume_ml": 50, "wall": "glass", "glassware": "beaker", "wall_g": 40, "label": "copper(II) sulfate, 0.1 M", "contents": {"water": {"g": 25.0}, "copper_sulfate_aq": {"mol": 0.0025}}}
 	],
 	"goals": [
 		{

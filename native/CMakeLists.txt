@@ -129,6 +129,10 @@ configure_file(game/walls_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/walls_dat
 file(READ "${CHEM_DATA_DIR}/thermal.json" CHEM_THERMAL_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/thermal.json")
 configure_file(game/thermal_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/thermal_data.hpp" @ONLY)
+# A flame's lines and bands (data/flame.json, GAME_SPEC §12, Stage 82), embedded the same way.
+file(READ "${CHEM_DATA_DIR}/flame.json" CHEM_FLAME_JSON)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/flame.json")
+configure_file(game/flame_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/flame_data.hpp" @ONLY)
 # The instruments' resolutions and errors (data/instruments.json, GAME_SPEC §13, Readings; Stage 50), embedded the same way.
 file(READ "${CHEM_DATA_DIR}/instruments.json" CHEM_INSTRUMENTS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/instruments.json")
