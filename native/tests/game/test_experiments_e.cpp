@@ -263,3 +263,52 @@ TEST_CASE("experiment qualitative: each of the twelve salts answers its own test
 	}
 }
 
+
+TEST_CASE("experiment kc: followed with its own gestures, strict, Benesi and Hildebrand's line through 1/A against 1/[Fe] gives FeSCN2+'s constant (Stage 85)") {
+	Pupil p("data/benches/kc.json", "data/tutorials/kc.json");
+	CHECK(pupil::follow_through(p, 600) > 6);
+	completed(p);
+	// what a student works out: each mixture's iron written, its absorbance recorded; the least-squares line through
+	// (1/[Fe], 1/A), K = intercept / slope
+	std::vector<double> fe, a;
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.label == "Fe") {
+			fe.push_back(e.value);
+		} else if (e.quantity.what == "absorbance") {
+			a.push_back(e.value);
+		}
+	}
+	REQUIRE(fe.size() == 4);
+	REQUIRE(a.size() == 4);
+	double sx = 0.0, sy = 0.0, sxx = 0.0, sxy = 0.0;
+	for (size_t k = 0; k < 4; ++k) {
+		const double x = 1.0 / fe[k], y = 1.0 / a[k];
+		sx += x;
+		sy += y;
+		sxx += x * x;
+		sxy += x * y;
+		MESSAGE("[Fe] " << fe[k] << " M: A " << a[k]);
+	}
+	const double slope = (4.0 * sxy - sx * sy) / (4.0 * sxx - sx * sx), intercept = (sy - slope * sx) / 4.0, k = intercept / slope;
+	const double truth = truth_of(p, p.ui->tutorial()->report()[0].truth);
+	MESSAGE("K " << k << " L/mol against " << truth);
+	for (const char *m : { "m1", "m2", "m3", "m4" }) {
+		const std::string c(m);
+		MESSAGE(c << ": formal quotient " << truth_of(p, c + ".iron_thiocyanate.mol * " + c + ".condensed_ml / 1000 / ((" + c + ".iron_iii_ion.mol + " + c + ".iron_hydroxo_ion.mol) * " + c + ".thiocyanate_ion.mol)") << ", Fe(SCN)2+ " << truth_of(p, c + ".iron_dithiocyanate.mol") << ", FeSCN2+ " << truth_of(p, c + ".iron_thiocyanate.mol"));
+	}
+	CHECK(std::abs(k / truth - 1.0) < 0.12);
+	report(p, { k });
+	CHECK(p.drawn("yours is within it"));
+}
+
+TEST_CASE("experiment kc: played as a person plays it, strict, it completes (Stage 85)") {
+	Pupil p("data/benches/kc.json", "data/tutorials/kc.json");
+	pupil::play_as_person(p, 600);
+	completed(p);
+}
+
+TEST_CASE("experiment kc: followed with its own gestures, free, it completes (Stage 85)") {
+	Pupil p("data/benches/kc.json", "data/tutorials/kc.json", false);
+	pupil::follow_through(p, 600);
+	completed(p);
+}

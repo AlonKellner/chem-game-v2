@@ -133,6 +133,10 @@ configure_file(game/thermal_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/thermal
 file(READ "${CHEM_DATA_DIR}/flame.json" CHEM_FLAME_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/flame.json")
 configure_file(game/flame_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/flame_data.hpp" @ONLY)
+# Discharge lamps' lines (data/lamps.json, GAME_SPEC §12.5, Stage 85), embedded the same way.
+file(READ "${CHEM_DATA_DIR}/lamps.json" CHEM_LAMPS_JSON)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/lamps.json")
+configure_file(game/lamps_data.hpp.in "${CHEM_GEN_DIR}/lab_include/lab/lamps_data.hpp" @ONLY)
 # The instruments' resolutions and errors (data/instruments.json, GAME_SPEC §13, Readings; Stage 50), embedded the same way.
 file(READ "${CHEM_DATA_DIR}/instruments.json" CHEM_INSTRUMENTS_JSON)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CHEM_DATA_DIR}/instruments.json")

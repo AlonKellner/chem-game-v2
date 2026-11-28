@@ -3,6 +3,7 @@
 #include "lab/contents.hpp"
 #include "lab/control.hpp"
 #include "lab/flame.hpp"
+#include "lab/lamps.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
 #include "lab/notebook.hpp"
@@ -142,6 +143,7 @@ struct Item {
 	double valve = 0.0;
 	// (Stage 82) a burner: the metals in its flame (an element's symbol and its mol), each fading (lab/flame.hpp)
 	std::vector<std::pair<std::string, double>> flame_load;
+	std::string lamp; // (Stage 85) a discharge lamp's gas: a burner that heats nothing, its valve its power (lab/lamps.hpp)
 	int on = -1; // a bag or a condenser: the vessel whose mouth it is on
 	EdgeId joint; // its edge to that vessel
 	int holds = -1; // a vessel: what is on its mouth
@@ -358,6 +360,9 @@ void default_size(const std::string &kind, double volume_ml, bool condenser, int
 		h = 3;
 	} else if (kind == "burner") {
 		w = h = 3; // the burner and its valve beside it
+	} else if (kind == "lamp") {
+		w = 2; // (Stage 85) a discharge lamp: its tube upright on its base
+		h = 5;
 	} else if (kind == "stopper") {
 		w = h = 1;
 	} else if (kind == "balloon") {
@@ -3887,6 +3892,7 @@ struct Lab::Impl {
 		}
 		v.valve = item.valve;
 		v.flame_load = item.flame_load; // (Stage 82)
+		v.lamp = item.lamp; // (Stage 85)
 		v.capacity_ml = item.capacity * 1e6;
 		v.wall_mm = item.wall_mm;
 		v.floor_mm = item.floor_mm;
@@ -4597,6 +4603,22 @@ std::unique_ptr<Lab> Lab::open(std::string_view bench_json, std::string &why) {
 			if (!(item_kelvin > 0.0) || !(item_kelvin < 5000.0)) {
 				why = "item \"" + item.id + "\": its temperature is above absolute zero";
 				return nullptr;
+			}
+			if (kind == "lamp") {
+				// (Stage 85) a discharge lamp: a burner that heats nothing (at the room's temperature, no conductance), its
+				// valve its power, its light its gas's lines (lab/lamps.hpp)
+				const std::string gas = j.value("gas", std::string());
+				if (!lamps::has(gas)) {
+					why = "item \"" + item.id + "\": a lamp's gas is one data/lamps.json has lines for (H, He, Hg, Ne)";
+					return nullptr;
+				}
+				item.kind = Kind::Burner;
+				item.lamp = gas;
+				item.cell = b.add_reservoir(item.id, room_kelvin);
+				item.full = 0.0;
+				item.valve = j.value("on", false) ? 1.0 : 0.0;
+				impl->items.push_back(item);
+				continue;
 			}
 			if (kind == "burner") {
 				item.kind = Kind::Burner;
@@ -5880,6 +5902,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
+		if (!flame.lamp.empty()) {
+			why = "\"" + flame.id + "\" is a lamp: it heats nothing";
+			return false;
+		}
 		if (!on_bench(items[static_cast<size_t>(vessel)], why)) {
 			return false;
 		}
@@ -6176,6 +6202,10 @@ bool Lab::Impl::run(const json &c, std::string &why) {
 			return false;
 		}
 		Item &flame = items[static_cast<size_t>(burner)];
+		if (!flame.lamp.empty()) {
+			why = "\"" + flame.id + "\" is a lamp: a flame test is made in a burner's flame";
+			return false;
+		}
 		if (!(flame.valve > 0.0)) {
 			why = "the burner " + flame.id + " is not lit";
 			return false;
@@ -7893,6 +7923,7 @@ std::string Lab::digest() const {
 		hash.update_u64(m.seed);
 	}
 	for (const Item &item : m.items) { // (Stage 82) what is in a flame: a lab with none digests as before
+		hash.update(item.lamp.data(), item.lamp.size()); // (Stage 85) a lamp's gas (a burner's: none)
 		for (const auto &[el, mol] : item.flame_load) {
 			hash.update(el.data(), el.size());
 			hash.update_double(mol);
@@ -8217,6 +8248,9 @@ json Lab::Impl::save() const {
 				{ "wall_mm", bits(item.wall_mm) }, { "floor_mm", bits(item.floor_mm) }, { "glassware", item.glassware }, { "nominal_ml", bits(item.nominal_ml) } });
 		if (item.kind == Kind::Stopper) { // a lab without a stopper or a cap on saves as before (Stage 28)
 			list.back()["hold_n"] = bits(item.hold_n);
+		}
+		if (!item.lamp.empty()) { // (Stage 85)
+			list.back()["lamp"] = item.lamp;
 		}
 		if (!item.flame_load.empty()) { // (Stage 82) a flame with nothing in it saves as before
 			json load = json::array();
@@ -8592,6 +8626,13 @@ std::unique_ptr<Lab> Lab::load(std::string_view save_json, std::string &why) {
 			if (j.contains("hold_n") && !from_bits(j.at("hold_n"), item.hold_n)) {
 				why = "the save holds a number that is not one";
 				return nullptr;
+			}
+			if (j.contains("lamp")) { // (Stage 85)
+				item.lamp = j.at("lamp").is_string() ? j.at("lamp").get<std::string>() : std::string();
+				if (!lamps::has(item.lamp)) {
+					why = "the save holds a lamp of no gas the tables have";
+					return nullptr;
+				}
 			}
 			if (j.contains("flame_load")) { // (Stage 82)
 				for (const json &e : j.at("flame_load")) {

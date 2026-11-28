@@ -436,6 +436,9 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			put(at + FORM, 0, body.shape == OpticsBody::Screen || body.shape == OpticsBody::Sensor ? static_cast<int>(OpticsBody::Slab) : static_cast<int>(body.shape));
 			put(at + FORM, 1, 1.0);
 			put(at + FORM, 2, body.size);
+			if (body.shape == OpticsBody::Cone && body.tube) {
+				put(at + FORM, 3, 1.0); // (Stage 85) a tube
+			}
 			put(at + REFRACT, 1, layer_of(body));
 			put(at + SET, 0, found->second);
 			put(at + IDS, 0, tag(body.id != 0 ? body.id : fnv(made.data(), made.size())));

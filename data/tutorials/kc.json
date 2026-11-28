@@ -1,0 +1,370 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 43) on data/benches/kc.json: FeSCN2+'s equilibrium constant by Benesi and Hildebrand's double reciprocal.",
+	"title": "Experiment: the equilibrium constant of FeSCN2+",
+	"bench": "../benches/kc.json",
+	"report": [
+		{
+			"label": "Kc of FeSCN2+",
+			"unit": "L/mol",
+			"truth": "m3.iron_thiocyanate.mol * m3.condensed_ml / 1000 / ((m3.iron_iii_ion.mol + m3.iron_hydroxo_ion.mol) * m3.thiocyanate_ion.mol)",
+			"tolerance": 0.12,
+			"relative": true,
+			"why": "In the notebook: x the iron as 1/, y the absorbance as 1/, fit: K = intercept / slope (Benesi and Hildebrand). Iron(III) in excess, its own amount is what is free; what it lends to its hydrolysis (FeOH2+) is counted with it, as the method does. Below, Connick and Coppel measured 146 in this medium (0.40 ionic strength, 0.1 M acid)."
+		}
+	],
+	"steps": [
+		{
+			"part": "The spectrophotometer",
+			"title": "The spectrophotometer",
+			"text": "Pick up the spectrophotometer from Storage and click a free square.",
+			"checks": [
+				{
+					"text": "the spectrophotometer on the bench",
+					"when": {
+						"item": "spec",
+						"place": "bench"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:spec",
+						"square:3,13"
+					]
+				}
+			]
+		},
+		{
+			"title": "470 nm",
+			"text": "Right-click the spectrophotometer and drag its wavelength to 470 nm.",
+			"why": "FeSCN2+ absorbs strongly near 460 nm; iron(III) alone, the more of it the more, absorbs below 450: a little to the red of FeSCN2+'s peak, only the complex is read.",
+			"checks": [
+				{
+					"text": "set to 470 nm",
+					"when": {
+						"quantity": {
+							"item": "spec",
+							"what": "nm"
+						},
+						"compare": "between",
+						"values": [
+							469.5,
+							470.5
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "nm:spec@470"
+				}
+			]
+		},
+		{
+			"title": "The blank",
+			"text": "Pick up the blank and click the spectrophotometer, then right-click it and click \"blank\".",
+			"checks": [
+				{
+					"text": "it reads 0.000",
+					"when": {
+						"all": [
+							{
+								"item": "spec",
+								"under": "c0"
+							},
+							{
+								"quantity": {
+									"item": "spec",
+									"what": "absorbance"
+								},
+								"compare": "between",
+								"values": [
+									-0.0005,
+									0.0005
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"item:spec"
+					]
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "blank:spec"
+				}
+			]
+		},
+		{
+			"part": "The mixtures",
+			"title": "Mixture 1",
+			"text": "Put the cuvette back on a free square and mixture 1 in the spectrophotometer. In the notebook write Fe = 0.00100 (its iron(III), mol/L); then right-click the spectrophotometer and click \"+ absorbance\".",
+			"checks": [
+				{
+					"text": "mixture 1 in its well",
+					"when": {
+						"item": "spec",
+						"under": "m1"
+					}
+				},
+				{
+					"text": "Fe = 0.00100 written",
+					"when": {
+						"noted": "Fe",
+						"noted_value": 0.001
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:c0",
+						"square:9,12"
+					]
+				},
+				{
+					"drag": [
+						"item:m1",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Fe"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.00100"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Mixture 2",
+			"text": "Put the cuvette back on a free square and mixture 2 in the spectrophotometer. In the notebook write Fe = 0.00200 (its iron(III), mol/L); then right-click the spectrophotometer and click \"+ absorbance\".",
+			"checks": [
+				{
+					"text": "mixture 2 in its well",
+					"when": {
+						"item": "spec",
+						"under": "m2"
+					}
+				},
+				{
+					"text": "Fe = 0.00200 written",
+					"when": {
+						"noted": "Fe",
+						"noted_value": 0.002
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:m1",
+						"square:11,12"
+					]
+				},
+				{
+					"drag": [
+						"item:m2",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.00200"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Mixture 3",
+			"text": "Put the cuvette back on a free square and mixture 3 in the spectrophotometer. In the notebook write Fe = 0.00300 (its iron(III), mol/L); then right-click the spectrophotometer and click \"+ absorbance\".",
+			"checks": [
+				{
+					"text": "mixture 3 in its well",
+					"when": {
+						"item": "spec",
+						"under": "m3"
+					}
+				},
+				{
+					"text": "Fe = 0.00300 written",
+					"when": {
+						"noted": "Fe",
+						"noted_value": 0.003
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:m2",
+						"square:13,12"
+					]
+				},
+				{
+					"drag": [
+						"item:m3",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.00300"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		},
+		{
+			"title": "Mixture 4",
+			"text": "Put the cuvette back on a free square and mixture 4 in the spectrophotometer. In the notebook write Fe = 0.00500 (its iron(III), mol/L); then right-click the spectrophotometer and click \"+ absorbance\".",
+			"checks": [
+				{
+					"text": "mixture 4 in its well",
+					"when": {
+						"item": "spec",
+						"under": "m4"
+					}
+				},
+				{
+					"text": "Fe = 0.00500 written",
+					"when": {
+						"noted": "Fe",
+						"noted_value": 0.005
+					}
+				},
+				{
+					"text": "its absorbance recorded",
+					"when": {
+						"item": "spec",
+						"recorded": "absorbance",
+						"recorded_count": 4
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:m3",
+						"square:15,12"
+					]
+				},
+				{
+					"drag": [
+						"item:m4",
+						"item:spec"
+					]
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "0.00500"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "item:spec"
+				},
+				{
+					"click": "record:spec:absorbance"
+				}
+			]
+		}
+	]
+}

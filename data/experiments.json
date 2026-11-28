@@ -290,6 +290,13 @@
 			"tutorial": "tutorials/qualitative.json"
 		},
 		{
+			"id": "kc",
+			"title": "The equilibrium constant of FeSCN2+",
+			"summary": "Four mixtures of thiocyanate with iron(III) in excess, their absorbance at 447 nm: 1/A against 1/[Fe] is a line, and its intercept over its slope is the constant (Benesi and Hildebrand).",
+			"bench": "benches/kc.json",
+			"tutorial": "tutorials/kc.json"
+		},
+		{
 			"id": "complexes",
 			"title": "The complexes' colours, side by side",
 			"summary": "Copper's deep blue tetrammine beside copper sulfate, iron(III) thiocyanate's blood red, cobalt chloride pink and in strong hydrochloric acid blue, yellow chromate and orange dichromate, Eriochrome Black T blue at pH 10 and wine red with magnesium: a look at the colours.",
