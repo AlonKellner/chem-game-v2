@@ -219,6 +219,9 @@ private:
 	// (J) and of n_i Cp_i (J/K), its gas (mol), its volume, and its solids' and its liquids' (at 25 C) volumes (m^3);
 	// what a quantum of extent adds to the last two
 	bool sealed_ = false;
+	// (Stage 88) a sealed vessel's layer, at its vessel's pressure over the room's: its enthalpy there stands
+	bool pressed_ = false;
+	double over_ = 0.0;
 	double energy_ = 0.0, formation_ = 0.0, cp_ = 0.0, gas_mol_ = 0.0, volume_ = 0.0, fixed_ = 0.0, expanding_ = 0.0;
 	double fixed_step_ = 0.0, expanding_step_ = 0.0;
 };

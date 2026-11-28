@@ -68,6 +68,10 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   - what crosses at the giver's state (`enthalpy_over`): a mole of water at a bar takes `v p` at 4 °C, 6 % less at
     20 °C, 15 % less at 50 °C; and it is the slope of its cell's own enthalpy `E + p V` by its water at that
     temperature and pressure (3.3679 J/mol at 3 bar, 49.0768 at 30 bar, under air or alone: the two to the digit).
+  - a sealed vessel's layer at its pressure (88.4's model, pure): the temperature, entropy, volume and boiling's
+    affinity of a sealed cell of the same contents at that pressure; `dS = dQ / T` warmed at its pressure; at the
+    room's pressure an open cell's state to the bit; water in it boiling from 120 °C at 2 atm and from 69 °C at
+    0.3 atm.
 - Stage 67's own (`test_expansion.cpp`: one potential as it is heated, the affinity the entropy's slope) pass on the
   new model unchanged.
 

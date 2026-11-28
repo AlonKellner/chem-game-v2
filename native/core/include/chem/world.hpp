@@ -154,6 +154,13 @@ struct CellMeta {
 	// column_rise, ... over its floor (a conical flask narrows); none, a
 	// cylinder of column_area.
 	bool layer = false;
+	// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel's layer stands at its vessel's pressure and takes the
+	// volume it needs there (as an open vessel's stands at the room's). `pressed`: kept by the world with its top's
+	// seal (V3). `over`: that pressure over the room's, Pa, and its `volume`, what it had taken of its vessel when the
+	// vessel was last sized: the simulation's (Simulation::size_vessels). Its energy is E = U + P_atm V as a sealed
+	// cell's; at its pressure what stands is its enthalpy, E + over * volume.
+	bool pressed = false;
+	double over = 0.0;
 	double column_volume = 0.0, column_area = 0.0;
 	double column_rise = 0.0;
 	std::vector<double> column_shape;

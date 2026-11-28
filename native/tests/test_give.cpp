@@ -290,3 +290,120 @@ TEST_CASE("give: what crosses carries its enthalpy at the giver's state: water a
 		CHECK(slope - table_alone == doctest::Approx(carried - table_alone).epsilon(2e-3));
 	}
 }
+
+TEST_CASE("give: a sealed vessel's layer at its pressure is the sealed cell's own potential read at a pressure: the same temperature, entropy, volume and affinity as a sealed cell of the same contents at that pressure; at the room's, an open cell to the bit (Stage 88)") {
+	const SpeciesTable &table = builtin_species();
+	const Reaction *boil = nullptr;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.nu(builtin::water) == -1 && r.nu(builtin::steam) == 1) {
+			boil = &r;
+		}
+	}
+	REQUIRE(boil != nullptr);
+	struct Case {
+		const char *name;
+		double volume_ml, air_ml, steam_mol;
+	};
+	// water alone at 33 bar; water under air at 2.5 bar, with some vapour (its boiling's affinity finite)
+	for (const Case &c : { Case{ "water alone", 99.86, 0.0, 0.0 }, Case{ "water under air", 120.0, 50.0, 1e-4 } }) {
+		const double kelvin = 330.0;
+		const World world = vessel(100.0 + c.air_ml, water_mol(100.0, kelvin), P_ATMOSPHERE * c.air_ml * ML / (GAS_CONSTANT * kelvin), kelvin);
+		CellMeta sealed = world.meta(CellId{ 0 });
+		sealed.volume = c.volume_ml * ML;
+		CellState cell = world.snapshot_cell(CellId{ 0 });
+		cell.amount[static_cast<size_t>(builtin::steam.index)] += mol(c.steam_mol).quanta;
+		const Thermal ts = thermal_state(table, cell, &sealed);
+		REQUIRE(ts.defined);
+		// a layer of the same contents and energy, at that pressure, having taken that volume
+		CellMeta layer;
+		layer.layer = true;
+		layer.pressed = true;
+		layer.over = ts.pressure - P_ATMOSPHERE;
+		layer.volume = sealed.volume;
+		const Thermal tl = thermal_state(table, cell, &layer);
+		REQUIRE(tl.defined);
+		MESSAGE(std::string(c.name) << ": " << ts.pressure / 1e5 << " bar at " << ts.temperature - 273.15 << " C");
+		CHECK(tl.temperature == doctest::Approx(ts.temperature).epsilon(1e-10));
+		CHECK(tl.pressure == doctest::Approx(ts.pressure).epsilon(1e-12));
+		CHECK(entropy(table, cell, tl.temperature, &layer) == doctest::Approx(entropy(table, cell, ts.temperature, &sealed)).epsilon(1e-10));
+		const Fill fl = fill_of(table, cell, tl.temperature, &layer), fs = fill_of(table, cell, ts.temperature, &sealed);
+		CHECK(fl.condensed + fl.gas == doctest::Approx(sealed.volume).epsilon(1e-8));
+		CHECK(fl.condensed == doctest::Approx(fs.condensed).epsilon(1e-9));
+		double joule = 0.0;
+		REQUIRE(energy_at(table, cell, &layer, tl.temperature, joule));
+		CHECK(joule == doctest::Approx(static_cast<double>(cell.energy) * JOULE_PER_QUANTUM).epsilon(1e-9));
+		if (c.steam_mol > 0.0) {
+			bool ds = false, dl = false;
+			const double as = affinity(table, cell, boil->terms(), ts.temperature, ds, &sealed), al = affinity(table, cell, boil->terms(), tl.temperature, dl, &layer);
+			REQUIRE(ds);
+			REQUIRE(dl);
+			CHECK(al == doctest::Approx(as).epsilon(1e-9));
+			const AffinityProbe probe(table, cell, boil->terms(), &layer);
+			REQUIRE(probe.defined());
+			double a0 = 0.0;
+			REQUIRE(probe.at(0.0, a0));
+			CHECK(a0 == doctest::Approx(al).epsilon(1e-12));
+		}
+		// warmed at its pressure: dS = dQ / T (its enthalpy there is what stands), its heat capacity the slope
+		const double dj = 5.0;
+		CellState up = cell, down = cell;
+		bool ok = false;
+		up.energy += energy_from_joule(dj, ok).quanta;
+		down.energy -= energy_from_joule(dj, ok).quanta;
+		const Thermal tu = thermal_state(table, up, &layer), td = thermal_state(table, down, &layer);
+		CHECK((entropy(table, up, tu.temperature, &layer) - entropy(table, down, td.temperature, &layer)) * tl.temperature / (2.0 * dj) == doctest::Approx(1.0).epsilon(1e-6));
+		CHECK(2.0 * dj / (tu.temperature - td.temperature) == doctest::Approx(tl.heat_capacity).epsilon(1e-5));
+		// at the room's pressure it is an open cell's state, to the bit
+		layer.over = 0.0;
+		const Thermal open = thermal_state(table, cell), room = thermal_state(table, cell, &layer);
+		CHECK(room.temperature == open.temperature);
+		CHECK(room.heat_capacity == open.heat_capacity);
+		CHECK(entropy(table, cell, room.temperature, &layer) == entropy(table, cell, open.temperature));
+	}
+}
+
+TEST_CASE("give: water in a sealed vessel's layer boils where its vessel's pressure says: at 2 atm from 120 C, not from 100 C; at 0.3 atm from 69 C (Stage 88)") {
+	const SpeciesTable &table = builtin_species();
+	const Reaction *boil = nullptr;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.nu(builtin::water) == -1 && r.nu(builtin::steam) == 1) {
+			boil = &r;
+		}
+	}
+	REQUIRE(boil != nullptr);
+	// whether a little of a layer's water would turn to steam at `celsius`, the vessel at `atm`
+	const auto boils = [&](double celsius, double atm) {
+		const double kelvin = celsius + 273.15;
+		World::Builder b(table);
+		const CellId cell = b.add_cell("water");
+		b.set_amount(cell, builtin::water, mol(1.0)).set_temperature(cell, kelvin);
+		std::string why;
+		auto built = b.build(&why);
+		REQUIRE_MESSAGE(built.has_value(), why);
+		CellMeta layer;
+		layer.layer = true;
+		layer.pressed = true;
+		layer.over = (atm - 1.0) * P_ATMOSPHERE;
+		CellState state = built->snapshot_cell(cell);
+		// (its energy as a layer's at that pressure and temperature, nothing taken of its vessel yet)
+		double joule = 0.0;
+		REQUIRE(energy_at(table, state, &layer, kelvin, joule));
+		const Fill fill = fill_of(table, state, kelvin, &layer);
+		layer.volume = fill.condensed;
+		bool ok = false;
+		state.energy = energy_from_joule(joule, ok).quanta;
+		REQUIRE(thermal_state(table, state, &layer).temperature == doctest::Approx(kelvin).epsilon(1e-9));
+		const AffinityProbe probe(table, state, boil->terms(), &layer);
+		REQUIRE(probe.defined());
+		double a = 0.0;
+		REQUIRE(probe.at(1e6, a)); // a millionth of a mole of it as steam
+		return a > 0.0;
+	};
+	CHECK_FALSE(boils(110.0, 2.0));
+	CHECK_FALSE(boils(118.0, 2.0));
+	CHECK(boils(123.0, 2.0)); // (the steam tables: 120.2 C at 2 atm; the model's saturation within 2.5 % of them)
+	CHECK(boils(101.0, 1.0));
+	CHECK_FALSE(boils(98.0, 1.0));
+	CHECK_FALSE(boils(66.0, 0.3));
+	CHECK(boils(72.0, 0.3)); // (69.1 C at 0.3 atm)
+}
