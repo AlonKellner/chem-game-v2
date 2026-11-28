@@ -45,12 +45,13 @@ check_re_core := ^chem_
 check_re_lab := ^lab|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/chem_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
-	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure -R '$(check_re_$(AREA))'; fi
+	else tools/gate_queue.sh $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) $(ctest_load) --output-on-failure -R '$(check_re_$(AREA))'; fi
 
 # Between commits: core, then every ctest entry a change can affect (the result
-# cache, tools/gate_cache.py)
+# cache, tools/gate_cache.py). It and `make check`'s ctest wait their turn in the gates' queue
+# (tools/gate_queue.sh; one doctest filter, `TC=`, does not).
 quick: core
-	python3 -I tools/gate_cache.py ctest $(BUILD_CORE) --jobs $(CTEST_JOBS)
+	tools/gate_queue.sh python3 -I tools/gate_cache.py ctest $(BUILD_CORE) --jobs $(CTEST_JOBS)
 gate-clear-cache:
 	python3 -I tools/gate_cache.py clear
 

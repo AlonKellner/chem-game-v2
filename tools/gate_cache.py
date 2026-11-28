@@ -112,25 +112,40 @@ def sha_binary(path, memo={}):
     return memo[path]
 
 
-def git(*args):
-    return subprocess.run(["git", "-C", ROOT, *args], check=True, capture_output=True, text=True).stdout
+def git(*args, root=None):
+    return subprocess.run(["git", "-C", root or ROOT, *args], check=True, capture_output=True, text=True).stdout
 
 
-def fingerprint(paths):
-    """The content of repo paths: the index's blob ids, then every path whose
-    working-tree content differs from the index (or is untracked) by content."""
+def fingerprint(paths, root=None):
+    """The content of repo paths as the working tree has it: each file's blob id, the index's where the file is as
+    the index has it, the id git would give its content where it is edited or untracked; a deleted file left out.
+    So it is the same before and after the same content is staged and committed: a gate, then the commit, then the
+    next gate, and what passed is still known (it was not, 2026-11-28: the index's ids and the edited files' own
+    hashes were two spellings of one tree, and a commit that touched data/ ran every entry again)."""
+    root = root or ROOT
     h = hashlib.sha256()
     repo = [p for p in paths if not p.startswith("file:")]
     if repo:
-        h.update(git("ls-files", "-s", "--", *repo).encode())
-        changed = set(git("diff", "--name-only", "--", *repo).split("\n"))
-        changed |= set(git("ls-files", "-o", "--exclude-standard", "--", *repo).split("\n"))
-        for p in sorted(c for c in changed if c):
-            full = os.path.join(ROOT, p)
-            h.update(f"\n{p}:{sha_file(full) if os.path.isfile(full) else 'deleted'}".encode())
+        blobs = {}
+        for row in git("ls-files", "-s", "-z", "--", *repo, root=root).split("\0"):
+            if row:
+                meta, path = row.split("\t", 1)
+                if meta.split()[2] == "0":  # (not a side of a merge left unresolved: those are read as edits, below)
+                    blobs[path] = meta.split()[1]
+        changed = set(git("diff", "--name-only", "-z", "--", *repo, root=root).split("\0"))
+        changed |= set(git("ls-files", "-o", "--exclude-standard", "-z", "--", *repo, root=root).split("\0"))
+        there = sorted(c for c in changed if c and os.path.isfile(os.path.join(root, c)))
+        for c in changed:
+            blobs.pop(c, None)
+        for at in range(0, len(there), 200):
+            part = there[at:at + 200]
+            ids = git("hash-object", "--", *part, root=root).split()
+            blobs.update(zip(part, ids))
+        for path in sorted(blobs):
+            h.update(f"{blobs[path]}\t{path}\n".encode())
     for spec in sorted(p[5:] for p in paths if p.startswith("file:")):
-        for f in sorted(glob.glob(os.path.join(ROOT, spec))):
-            h.update(f"\n{os.path.relpath(f, ROOT)}:{sha_file(f)}".encode())
+        for f in sorted(glob.glob(os.path.join(root, spec))):
+            h.update(f"\n{os.path.relpath(f, root)}:{sha_file(f)}".encode())
         h.update(f"\n{spec}".encode())
     return h.hexdigest()
 

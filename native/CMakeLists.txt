@@ -454,6 +454,10 @@ if(CHEM_BUILD_TESTS)
     # the supplies' pictures from a store every tree shares, by key: none captured twice (Stage 93)
     add_test(NAME pictures_store COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/test_pictures.py $<TARGET_FILE:chem_tool>)
     add_test(NAME data_sources COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/check_sources.py)
+    # one gate at a time on the machine: the queue every worktree's heavy runs wait in (docs/WORKFLOW.md)
+    add_test(NAME gate_queue COMMAND bash ${CHEM_REPO_ROOT}/tools/test_gate_queue.sh)
+    # the result cache's key of the repo's data is its content's: the same edited, staged and committed
+    add_test(NAME gate_cache_fingerprint COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/test_gate_cache.py)
     add_test(NAME data_sources_self_test COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/check_sources.py --self-test)
     # the API file godot-cpp generates its bindings from describes the installed binary
     add_test(NAME godot_api_matches_binary
