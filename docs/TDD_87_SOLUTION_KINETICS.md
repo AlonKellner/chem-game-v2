@@ -13,7 +13,7 @@ completes, 37, 39 and 40. GAME_SPEC 0.87.0.
 | 87.2 | The solution law and catalysts in the core, tests green | Done |
 | 87.3 | Crystal violet, hydrogen peroxide, iodide: data and gates | Done |
 | 87.4 | The experiments `crystal_violet` (37, 39) and `peroxide` (40) | Done |
-| 87.5 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | open |
+| 87.5 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | gates passed; sign-off open |
 
 ## 87.1 What there was
 
@@ -77,10 +77,15 @@ decomposition at Liebhafsky's rate...`, `measured: crystal violet's absorption i
 
 Each has the three tests of `test_experiments.cpp` (strict with its gestures, as a person, free).
 
-## 87.5 The sessions
+## 87.5 The sessions and the gates
 
 Both sessions' digests move with the table (a new element and six species): every printed result unchanged against
-main's at c9ff920, line for line, but one line, the conservation table's new iodine row (`I 0 -> 0 quanta of atoms`).
+main's, line for line, but one line, the conservation table's new iodine row (`I 0 -> 0 quanta of atoms`): at c9ff920,
+and again after main's Stage 82 was merged in, at 722b8cd. Re-recorded with the user's approval.
+
+`make gates`: every gate passed (1,114 s of wall at a load from other sessions' tests). The step's cost on the demo:
+1,271,044 instructions a step against main's 1,246,660 at 722b8cd (`chem_tool bench`, both builds side by side):
++2.0 %, the table's six species more (the two reactions themselves are skipped while their species are absent).
 
 ## Open
 
