@@ -23,11 +23,36 @@ The first `make native` compiles godot-cpp (about 1100 files) with 4 jobs; later
 summary table gives each gate's seconds and result, the log directory, and each ctest run's summed
 seconds and its slowest entries (Stage 68: a slow new test is seen at its first gate).
 
+## One gate at a time
+
+A gate fills every core, and several sessions work on this machine, each in a worktree of its own. Three gates
+side by side took three times as long each (2026-11-28: a load of 60 to 77 on 12 cores; a commit gate of 9 minutes
+took 29), and tests that hold a time budget failed for the load alone. So a heavy run waits its turn
+(`tools/gate_queue.sh`): `gates.sh` at every level, `make quick` and `make check`'s ctest take a ticket in a queue
+every worktree shares (`~/Library/Caches/chem-game-v2/gate_queue`) and run in the order they asked, one at a time.
+A waiting run names what it waits behind and since when.
+
+- A ticket is a file named by the second it was taken and its process. A ticket whose process is gone is swept by
+  whoever looks next: a run that was killed holds nobody.
+- The wait is bounded: after an hour (`GATE_QUEUE_WAIT_S`) a run goes on beside what is there, saying so.
+- `GATE_QUEUE=0`: no queue, as before. A run started by a queued run (a gate's own ctest) asks no more
+  (`GATE_QUEUE_HELD`).
+- Not queued: builds (`make core`, `make native`; the build cache is shared), one doctest filter
+  (`make check TC=`), a single binary run by hand, the game.
+- It helps only once every worktree's branch has it: a branch without it runs beside the queue.
+- ctest `gate_queue` (`tools/test_gate_queue.sh`) holds it to this: the order, no overlap for runs asked at once,
+  a dead ticket, the command's status, the bound.
+
 ## The result cache
 
 `tools/gate_cache.py`: a ctest entry whose binary, arguments, environment (`CHEM_*`, `LAB_*`) and
 repo data (`data/`, `bench/`) hash the same as on a run where it passed is not run again. Lints
 always run. `make gate-clear-cache` empties it.
+
+- **The data's key is its content's** (2026-11-28): each file's blob id as the working tree has it, the same
+  edited, staged and committed (`fingerprint`; ctest `gate_cache_fingerprint`, `tools/test_gate_cache.py`). Before,
+  the index's ids and the edited files' own hashes were two spellings of one tree: the gate before a commit that
+  touched `data/` and the gate after it shared nothing, and the second ran all 1065 entries again.
 
 - **Two levels** (Stage 68, `GATE_LEVEL`): a pass at a merge gate (`make gates`) is kept as one, and as
   a commit pass; `make gates` takes only a merge-level pass, `make gate` either. A failure forgets the

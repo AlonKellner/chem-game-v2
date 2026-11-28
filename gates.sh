@@ -14,6 +14,8 @@
 #     what passed at a merge gate (Stage 68): run again after a failure, it runs
 #     what failed and what changed.
 #   SKIP_GODOT=1: every engine-free gate (no extension build, no Godot suite).
+#   One gate at a time on the machine: it takes a ticket and waits its turn behind any other worktree's heavy run
+#     (tools/gate_queue.sh; GATE_QUEUE=0: beside them, as before).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
 # Logs: $LOGDIR (printed).
 #
@@ -23,6 +25,9 @@
 #   SKIP_GODOT=1 make gate
 set -uo pipefail
 cd "$(dirname "$0")"
+if [ -z "${GATE_QUEUE_HELD:-}" ] && [ -x tools/gate_queue.sh ]; then
+	exec tools/gate_queue.sh env LEVEL="${LEVEL:-merge}" ./gates.sh "$@" # (back here with GATE_QUEUE_HELD, at its turn)
+fi
 LEVEL="${LEVEL:-merge}"
 LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/chem_gates.XXXXXX")
 declare -a NAMES SECS RESULTS
