@@ -1,5 +1,19 @@
 # GAME_SPEC version history
 
+## 0.91.2 (2026-11-28, Stage 90, merged after Stages 91 and 89; signed off by the user: "It looks good, approved, merge and proceed")
+
+- §12.2 (Stage 90, `docs/TDD_90_EXPOSURE.md`; the user's proposal and choices: the brightest block, darken and
+  brighten, pupil-like): the display's exposure, metered on the GPU over 16 x 9 blocks and adapted a frame at a time
+  (closing in 0.1 s, opening in 0.7 s), exactly 1 in the room at its full light; every pixel shown again as it moves;
+  O4 at the exposure read back.
+- §12.2: the room's lights (the top bar's "lights", 100 to 1 %): what emits light the brighter against them, the eye
+  opening up to 8 times. A lamp's lines in eleven stretches, every line in one.
+- §13.7: the experiment `flames` (the user's request): seven metals' flame tests by eye and through the spectral viewer,
+  potassium in a dimmed room, a sodium and potassium mixture, two unknowns, a photon's energy; a flame's load checked
+  element by element, a tutorial reading the room's lights, the probe dropped in a lit flame resting on its burner.
+- §12.3: a bright flame fading no longer shows black pixels (Stage 82's): a pixel's history measures a change at the
+  display's exposure and, beyond the display, by the light's amount.
+
 ## 0.91.1 (2026-11-28, Stage 89, merged after Stages 85, 91 and 93; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 89, `docs/TDD_89_FLOW.md`; the second of the two stages the user asked for after Stage 79; the user's

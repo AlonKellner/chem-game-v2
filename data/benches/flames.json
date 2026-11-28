@@ -1,0 +1,346 @@
+{
+	"format": "chem-bench/2",
+	"note": "Flames (GAME_SPEC §12, §13.7, Stage 90; docs/CURRICULUM.md, experiments 12 and C14): a lab burner (1927 C), the spectral viewer, and seven salts at 0.1 M for flame tests: sodium's and lithium's and potassium's atomic lines, calcium's, strontium's, barium's and copper's monohydroxides' bands (data/flame.json: NIST's lines, the bands' measured shapes); a mixture of sodium and potassium chlorides, whose yellow hides potassium from the eye but not from the viewer; two unknowns, each one of the seven drawn by the seed.",
+	"seed": 90,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "viewer",
+			"kind": "viewer",
+			"at": [
+				1,
+				1
+			]
+		},
+		{
+			"id": "burner",
+			"kind": "burner",
+			"celsius": 1927,
+			"conductance": 0.25,
+			"at": [
+				23,
+				12
+			]
+		},
+		{
+			"id": "sodium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				0,
+				9
+			],
+			"label": "sodium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"sodium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "lithium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				3,
+				9
+			],
+			"label": "lithium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"lithium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "potassium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				6,
+				9
+			],
+			"label": "potassium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"potassium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "calcium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				9,
+				9
+			],
+			"label": "calcium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"calcium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "strontium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				12,
+				9
+			],
+			"label": "strontium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"strontium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "barium",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				15,
+				9
+			],
+			"label": "barium chloride, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"barium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "copper",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				18,
+				9
+			],
+			"label": "copper(II) sulfate, 0.1 M",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"copper_sulfate_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "mixture",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				11,
+				2
+			],
+			"label": "sodium and potassium chlorides, 0.1 M each",
+			"contents": {
+				"water": {
+					"g": 30
+				},
+				"sodium_chloride_aq": {
+					"mol": 0.003
+				},
+				"potassium_chloride_aq": {
+					"mol": 0.003
+				}
+			}
+		},
+		{
+			"id": "unknown_x",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				15,
+				2
+			],
+			"label": "unknown X: one of the seven salts, 0.1 M",
+			"one_of": [
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"lithium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"potassium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"calcium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"strontium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"barium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"copper_sulfate_aq": {
+						"mol": 0.003
+					}
+				}
+			]
+		},
+		{
+			"id": "unknown_y",
+			"kind": "vessel",
+			"glassware": "beaker",
+			"volume_ml": 50,
+			"wall": "glass",
+			"wall_g": 40,
+			"at": [
+				19,
+				2
+			],
+			"label": "unknown Y: one of the seven salts, 0.1 M",
+			"one_of": [
+				{
+					"water": {
+						"g": 30
+					},
+					"sodium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"lithium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"potassium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"calcium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"strontium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"barium_chloride_aq": {
+						"mol": 0.003
+					}
+				},
+				{
+					"water": {
+						"g": 30
+					},
+					"copper_sulfate_aq": {
+						"mol": 0.003
+					}
+				}
+			]
+		}
+	]
+}

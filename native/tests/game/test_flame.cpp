@@ -281,6 +281,61 @@ TEST_CASE("flame: on the screen, a vessel of a solution carried onto a lit burne
 	CHECK(item(ui->lab(), "salt").row == at.row);
 }
 
+TEST_CASE("flame: a bright flame fading shows no black pixel: what a pixel's history found is let go as its light falls, light beyond the display measured by its amount (Stage 90)") {
+	// The user's black pixels in a very bright flame: the burner's flame after ten flame tests of salt, fading, its load
+	// to 5 % at a time as the screen makes it (ui.cpp), four frames at each. A pixel's history kept the corrections it
+	// found while the flame was brighter, its estimate fell, and they outweighed it: its red below nought, shown black.
+	// (A pixel of the flame may be below nought in a channel and be right: a sodium line is outside sRGB.)
+	lab::OpticsRoom room;
+	room.w = room.h = 1000;
+	room.bench = 0.7305;
+	room.elsewhere = 0.02;
+	for (const bool single : { false, true }) {
+		lab::OpticsFrames frames(286, 150, 52, 100, 16.0, 1, single);
+		std::array<double, 401> g{};
+		std::vector<std::pair<double, double>> cut;
+		int black = 0, frames_run = 0;
+		std::string first;
+		for (double ln = std::log(3e-5); ln > std::log(1e-7); ln -= 0.05) {
+			const double mol = std::exp(std::round(ln / 0.05) * 0.05);
+			g = lab::flame::glow({ { "Na", mol } }, 2200.15);
+			cut = lab::flame::spikes({ { "Na", mol } }, 2200.15);
+			lab::OpticsBody cone;
+			cone.shape = lab::OpticsBody::Cone;
+			cone.x = 300.0f;
+			cone.y = 200.0f;
+			cone.w = 24.0f;
+			cone.h = 42.0f;
+			cone.light = "flame_sooty";
+			cone.light_to = "flame_blue";
+			cone.toward = 1.0;
+			cone.kelvin = 2200.15;
+			cone.id = 5;
+			cone.glow_add = &g;
+			cone.glow_spikes = &cut;
+			lab::OpticsScene scene;
+			lab::optics_compose(scene, room, { cone });
+			for (int f = 0; f < 4; ++f, ++frames_run) {
+				frames.frame(scene);
+				for (int y = 150; y < 250; ++y) {
+					for (int x = 286; x < 338; ++x) {
+						double shown[4];
+						frames.shown(scene, x, y, shown);
+						// (every pixel here is the bench, shown at 0.87 of the display's white, or the flame over it)
+						if (!(std::max({ shown[0], shown[1], shown[2] }) > 0.5)) {
+							if (black++ == 0) {
+								first = std::to_string(mol) + " mol at (" + std::to_string(x) + ", " + std::to_string(y) + "): " + std::to_string(shown[0]) + " " + std::to_string(shown[1]) + " " + std::to_string(shown[2]);
+							}
+						}
+					}
+				}
+			}
+		}
+		MESSAGE((single ? "single" : "double") << ": " << frames_run << " frames, " << black << " pixels dark" << (black > 0 ? ", the first at " + first : std::string()));
+		CHECK(black == 0);
+	}
+}
+
 TEST_CASE("measured: a discharge lamp's lines are NIST's, at the relative intensities its sources observed (Stage 85)") {
 	const auto strongest = [](const std::string &gas) {
 		std::array<double, 2> best{};

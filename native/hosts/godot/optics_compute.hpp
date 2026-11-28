@@ -38,6 +38,9 @@ public:
 	void run(double budget, bool again = false);
 	// Every pixel's history starts again next frame (for timing the worst frame).
 	void restart();
+	// (Stage 90) the display's exposure the pixels are shown at, read back from the GPU (1 before any frame), for a
+	// comparison of the picture with the truth
+	float exposure() const;
 	// A view's change (Stage 42; GAME_SPEC §12.3): the pixels as they stand kept as the anchor (when the view starts
 	// to move); and what each pixel shows carried from the anchor's, made at the view `from`, to the view `now` (each
 	// (scale, x, y, 0)), tracing nothing; `rest`: its state too, as it starts again at the view now.
@@ -58,16 +61,18 @@ private:
 	// own rays; the beams' (Stage 29), over the rectangles of the bodies whose pixels are read by it; and, before
 	// that one, the corners' of those pixels (Stage 33)
 	// (and, Stage 42, a view's change: what the pixels show and hold carried from one view to another)
-	enum Pass : int { SCREEN = 0, BEAMS = 1, CORNERS = 2, RESAMPLE = 3, PASSES = 4 };
+	enum Pass : int { SCREEN = 0, BEAMS = 1, CORNERS = 2, RESAMPLE = 3, METER = 4, EXPOSE = 5, PASSES = 6 }; // (Stage 90: the meter and the exposure)
 	struct Params {
 		int32_t frame, parity;
 		float budget, pixels;
 		int32_t left, top, right, bottom;
 		int32_t kept, stamp; // where the rectangle's kept beams begin (the beams' pass); which run of the passes this is
 		float rays; // the rays' budget: points a frame
-		int32_t pad;
+		float dt; // (Stage 90) the frame's seconds, for the exposure's step
 		float view_now[4], view_from[4], room[4]; // (a view's change, Stage 42)
-		int32_t mode, pad3, pad4, pad5;
+		int32_t mode;
+		float level; // (Stage 90) the room's light level (1: its full light)
+		int32_t pad4, pad5;
 	};
 	godot::RID anchor_[4];
 	godot::RID whole_; // what the room showed at 1x, when last seen whole (Stage 42)
@@ -91,6 +96,9 @@ private:
 	void hold(Buffer &buffer, const float *data, int32_t floats);
 	Buffer scene_, rows_, lines_, lights_, wall_, shapes_, images_;
 	godot::RID asked_;
+	godot::RID exposure_; // (Stage 90) the display's exposure: e, as shown, a reshow flag, the target; the meter's 16 x 9 block sums
+	double last_frame_s_ = -1.0; // (Stage 90) when the last frame ran, for its seconds
+	float room_level_ = 1.0f;
 	godot::RID state_[4];
 	godot::RID shown_;
 	godot::Ref<godot::Texture2DRD> shown_texture_;

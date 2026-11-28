@@ -308,6 +308,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 	// what the wall's table is made from: the room and everything drawn on it
 	uint64_t wall_key = fnv(&room.x, 4 * sizeof(float));
 	wall_key = fnv(&room.bench, 2 * sizeof(double), wall_key);
+	wall_key = fnv(&room.level, sizeof room.level, wall_key); // (Stage 90: the room's lights: every pixel's history again)
 	for (const OpticsShape &sh : room.shapes) {
 		wall_key = fnv(&sh.x, 4 * sizeof(float), wall_key);
 		wall_key = fnv(&sh.radiance, sizeof(double), wall_key);
@@ -387,11 +388,11 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				}
 				for (int i = 0; i < ROW && (a != nullptr || b != nullptr) && !screen; ++i) {
 					const double from = a ? (*a)[static_cast<size_t>(i)] : 0.0, to = b ? (*b)[static_cast<size_t>(i)] : from;
-					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward));
+					base[GLOW_ROW * ROW + i] = static_cast<float>(body.strength * (from + (to - from) * body.toward) / room.level); // (Stage 90: against the room's lights)
 				}
 				// (Stage 82) and what the metals in a flame add, each nanometre's light (lab/flame.hpp)
 				for (int i = 0; i < ROW && body.glow_add != nullptr && !screen; ++i) {
-					base[GLOW_ROW * ROW + i] += static_cast<float>((*body.glow_add)[static_cast<size_t>(i)]);
+					base[GLOW_ROW * ROW + i] += static_cast<float>((*body.glow_add)[static_cast<size_t>(i)] / room.level);
 				}
 				found = shared.emplace(made, set).first;
 			}
@@ -930,6 +931,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			key = fnv(&sc.body->relay->lcd_w, 2 * sizeof(int), key);
 		}
 		key = fnv(&image_next, sizeof image_next, key);
+		key = fnv(&room.level, sizeof room.level, key); // (Stage 90: a screen's light against the room's lights)
 		if (key != scene.images_key || ((screens.empty() && relays.empty()) != scene.images.empty())) {
 			scene.images.assign(static_cast<size_t>(std::max(image_next, 1)) * 4, 0.0f);
 			scene.image_weights.clear();
@@ -948,7 +950,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				head[6] = static_cast<float>(scene.image_weights.size());
 				for (int c = 0; c < 3; ++c) {
 					for (int i = 0; i < ROW; ++i) {
-						scene.images[static_cast<size_t>(channels) * 4 + static_cast<size_t>(c * ROW + i)] = static_cast<float>(light[static_cast<size_t>(c)][static_cast<size_t>(i)]);
+						scene.images[static_cast<size_t>(channels) * 4 + static_cast<size_t>(c * ROW + i)] = static_cast<float>(light[static_cast<size_t>(c)][static_cast<size_t>(i)] / room.level);
 					}
 				}
 				// (what the panel drives its primaries to for each colour, worked out once a colour: a picture has few)
@@ -1089,7 +1091,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 		}
 	}
 
-	if (scene.lights.empty() || scene.lights_kelvin != room.kelvin) {
+	if (scene.lights.empty() || scene.lights_kelvin != room.kelvin || scene.lights_level != room.level) {
 		scene.lights.assign(static_cast<size_t>(LIGHTS * LIGHT_SIZE) * 4, 0.0f);
 		// the visible room's light; and (Stage 46) the long-wave room's, at the room's temperature
 		const chem::optics::EnergyTable lwir_light = chem::optics::lwir_energy_table(room.kelvin);
@@ -1119,7 +1121,8 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				const double part = hi > lo ? std::min(std::max((x - lo) / (hi - lo), 0.0), 1.0) : 0.0;
 				float *back = &at[4 * (static_cast<size_t>(LIGHT_ENTRIES) + static_cast<size_t>(i))];
 				back[0] = static_cast<float>((static_cast<double>(j) + part) / (LIGHT_ENTRIES - 1));
-				back[1] = static_cast<float>(light == 0 ? chem::optics::d65()[static_cast<size_t>(i)] / white_of().norm * ROOM_WHITE_CD_M2 / 683.002 : chem::optics::planck(nm, room.kelvin));
+				// (Stage 90: the room's white at its lights' level, so a hot thing's own light is brighter against them)
+				back[1] = static_cast<float>(light == 0 ? chem::optics::d65()[static_cast<size_t>(i)] / white_of().norm * ROOM_WHITE_CD_M2 * room.level / 683.002 : chem::optics::planck(nm, room.kelvin));
 			}
 		}
 		{
@@ -1133,6 +1136,7 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 			}
 		}
 		scene.lights_kelvin = room.kelvin;
+		scene.lights_level = room.level;
 		scene.revision = next_revision();
 	}
 	// the wall's table (GAME_SPEC §12.3): made again only when what is drawn on it changes

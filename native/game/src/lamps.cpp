@@ -104,11 +104,18 @@ std::vector<std::pair<double, double>> spikes(const std::string &gas, int most) 
 			merged.push_back(r);
 		}
 	}
-	std::sort(merged.begin(), merged.end(), [](const Run &a, const Run &b) { return a.light > b.light; });
-	if (merged.size() > static_cast<size_t>(std::max(most, 0))) {
-		merged.resize(static_cast<size_t>(std::max(most, 0)));
+	// (Stage 90) at most `most` runs, every line in one: the two nearest joined until they are so few (a neon tube's 158
+	// lines in eleven stretches, each read by a point of its own every frame; dropping the faint ones left them to the
+	// moving points alone, and a pixel could settle before they found them)
+	while (merged.size() > static_cast<size_t>(std::max(most, 1))) {
+		size_t at = 0;
+		for (size_t k = 1; k + 1 < merged.size(); ++k) {
+			at = merged[k + 1].from - merged[k].to < merged[at + 1].from - merged[at].to ? k : at;
+		}
+		merged[at].to = merged[at + 1].to;
+		merged[at].light += merged[at + 1].light;
+		merged.erase(merged.begin() + static_cast<std::ptrdiff_t>(at) + 1);
 	}
-	std::sort(merged.begin(), merged.end(), [](const Run &a, const Run &b) { return a.from < b.from; });
 	std::vector<std::pair<double, double>> out;
 	for (const Run &r : merged) {
 		out.emplace_back(r.from, r.to);

@@ -258,6 +258,8 @@ typedef struct cg_optics {
 	/* Stage 46: how many records the sensor displays' pixels have in a pool of their own (a host keeps
 	 * CG_OPTICS_RELAY_VECS vec4s for each, zero at first; the per-pixel source lays them out) */
 	int32_t relay_pool;
+	/* Stage 90: the room's lights, a share of their full light: the display's exposure opens no wider than 8 times it */
+	float room_level;
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames
@@ -284,6 +286,7 @@ typedef struct cg_optics_parity {
 	int64_t covered; /* pixels a body covers */
 	int64_t over; /* of them, those visibly different (above 8 on the eye metric) */
 	int32_t worst_x, worst_y; /* where the largest difference is */
+	float exposure; /* in (Stage 90): the display's exposure the picture was shown at; 0 or less: 1 */
 } cg_optics_parity;
 
 CG_API cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, int32_t height, cg_optics_parity *out);

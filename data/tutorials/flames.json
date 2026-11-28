@@ -1,0 +1,1009 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 90; docs/CURRICULUM.md, experiments 12 and C14) on data/benches/flames.json: the burner's flame with its air shut and open; flame tests of seven salts read by eye and by the spectral viewer (atomic lines: sodium, lithium, potassium; monohydroxide bands: calcium, strontium, barium, copper); potassium's faint lilac in a dimmed room; sodium hiding potassium; two unknowns; a photon's energy.",
+	"title": "Experiment: flame tests and their spectra",
+	"bench": "../benches/flames.json",
+	"report": [
+		{
+			"label": "sodium's yellow line",
+			"unit": "nm",
+			"truth": "589.3",
+			"tolerance": 1.0,
+			"why": "NIST: the D lines at 588.995 and 589.592 nm in air; the viewer reads to the nanometre."
+		},
+		{
+			"label": "lithium's red line",
+			"unit": "nm",
+			"truth": "670.78",
+			"tolerance": 1.0,
+			"why": "NIST: 670.776 and 670.791 nm, the 2p to 2s line's two components."
+		},
+		{
+			"label": "potassium's brighter red line",
+			"unit": "nm",
+			"truth": "766.49",
+			"tolerance": 1.0,
+			"why": "NIST: 766.490 nm (and 769.896 nm, its partner): 4p to 4s."
+		},
+		{
+			"label": "the energy of a mole of photons of sodium's line",
+			"unit": "kJ/mol",
+			"truth": "203.0",
+			"tolerance": 0.01,
+			"relative": true,
+			"why": "E = N_A h c / lambda = (6.022e23 /mol)(6.626e-34 J s)(2.998e8 m/s) / 589.3e-9 m = 203.0 kJ/mol, 2.10 eV a photon: the energy between sodium's 3p and 3s levels."
+		},
+		{
+			"label": "the crimson flame with bands at 606 and 682 nm",
+			"single": true,
+			"choices": [
+				{
+					"label": "lithium",
+					"truth": "0"
+				},
+				{
+					"label": "strontium",
+					"truth": "1"
+				},
+				{
+					"label": "calcium",
+					"truth": "0"
+				}
+			],
+			"why": "Strontium's SrOH bands; lithium's crimson is a single line at 671 nm."
+		},
+		{
+			"label": "the green flame brightest at 546 nm",
+			"single": true,
+			"choices": [
+				{
+					"label": "barium",
+					"truth": "0"
+				},
+				{
+					"label": "copper",
+					"truth": "1"
+				}
+			],
+			"why": "Copper's CuOH bands run from 505 to 546 nm; barium's BaOH are brightest at 513 and 524."
+		},
+		{
+			"label": "what the mixture holds",
+			"choices": [
+				{
+					"label": "sodium",
+					"truth": "mixture.sodium_ion.mol"
+				},
+				{
+					"label": "lithium",
+					"truth": "mixture.lithium_ion.mol"
+				},
+				{
+					"label": "potassium",
+					"truth": "mixture.potassium_ion.mol"
+				},
+				{
+					"label": "calcium",
+					"truth": "mixture.calcium_ion.mol"
+				}
+			],
+			"why": "Sodium and potassium: yellow to the eye, and potassium's 766 and 770 nm lines in the viewer."
+		},
+		{
+			"label": "unknown X",
+			"single": true,
+			"choices": [
+				{
+					"label": "sodium",
+					"truth": "unknown_x.sodium_ion.mol"
+				},
+				{
+					"label": "lithium",
+					"truth": "unknown_x.lithium_ion.mol"
+				},
+				{
+					"label": "potassium",
+					"truth": "unknown_x.potassium_ion.mol"
+				},
+				{
+					"label": "calcium",
+					"truth": "unknown_x.calcium_ion.mol"
+				},
+				{
+					"label": "strontium",
+					"truth": "unknown_x.strontium_ion.mol"
+				},
+				{
+					"label": "barium",
+					"truth": "unknown_x.barium_ion.mol"
+				},
+				{
+					"label": "copper",
+					"truth": "unknown_x.copper_ion.mol + unknown_x.copper_hydroxide_ion.mol"
+				}
+			],
+			"why": "Its colour and its lines against the seven you noted."
+		},
+		{
+			"label": "unknown Y",
+			"single": true,
+			"choices": [
+				{
+					"label": "sodium",
+					"truth": "unknown_y.sodium_ion.mol"
+				},
+				{
+					"label": "lithium",
+					"truth": "unknown_y.lithium_ion.mol"
+				},
+				{
+					"label": "potassium",
+					"truth": "unknown_y.potassium_ion.mol"
+				},
+				{
+					"label": "calcium",
+					"truth": "unknown_y.calcium_ion.mol"
+				},
+				{
+					"label": "strontium",
+					"truth": "unknown_y.strontium_ion.mol"
+				},
+				{
+					"label": "barium",
+					"truth": "unknown_y.barium_ion.mol"
+				},
+				{
+					"label": "copper",
+					"truth": "unknown_y.copper_ion.mol + unknown_y.copper_hydroxide_ion.mol"
+				}
+			],
+			"why": "Its colour and its lines against the seven you noted."
+		}
+	],
+	"steps": [
+		{
+			"part": "The burner",
+			"title": "A small flame",
+			"text": "Right-click the burner and open its valve only a little, under a third. A small, lazy flame: yellow, because its gas burns short of air and the soot in it glows.",
+			"checks": [
+				{
+					"text": "the valve a little open",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "valve"
+						},
+						"compare": "between",
+						"values": [
+							5,
+							30
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.2"
+				}
+			],
+			"why": "The yellow of a candle or a burner with its air shut is glowing soot: carbon specks at the flame's temperature, a smooth spectrum like a lamp filament's, no lines."
+		},
+		{
+			"title": "Wide open",
+			"text": "Drag the valve wide open. The flame turns blue: with air mixed in, the gas burns clean, and the blue comes from molecular fragments of the burning gas, not from any metal.",
+			"checks": [
+				{
+					"text": "the valve wide open",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 90
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "valve:burner@1"
+				}
+			],
+			"why": "A flame test needs this hot, nearly colourless flame (about 1900 C here), so that what colours it is only what the loop brings."
+		},
+		{
+			"title": "The probe in the flame",
+			"text": "Drag the spectral viewer's probe from its holder into the flame. Right-click the viewer: its screen shows the flame's light at every nanometre, and it lists any lines it finds.",
+			"checks": [
+				{
+					"text": "the probe in the flame",
+					"when": {
+						"item": "viewer",
+						"probe_on": "burner"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"probe:viewer",
+						"flame:burner"
+					]
+				},
+				{
+					"click": "item:viewer"
+				}
+			],
+			"why": "The burner's own light is weak and spread out. Each metal you put in it adds light at its own wavelengths, sharp lines from atoms and wider bands from molecules."
+		},
+		{
+			"title": "Sodium",
+			"text": "Pick up the sodium chloride and click the burner: a loop dipped in it is held in the flame. A blazing yellow. Look at the viewer's screen: nearly all of that light is in one place.",
+			"checks": [
+				{
+					"text": "sodium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Na"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:sodium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Sodium's atoms, excited in the flame, fall back from their first excited level and give out the D lines, 589.0 and 589.6 nm. They are so bright that a trace of sodium (from fingers, from dust, from glass) colours any flame yellow.",
+			"part": "The alkali metals"
+		},
+		{
+			"title": "Na's line in the notebook",
+			"text": "Right-click the viewer and read its lines. In the notebook, write the label Na and the wavelength of sodium's yellow line, in nanometres.",
+			"checks": [
+				{
+					"text": "a wavelength written as Na",
+					"when": {
+						"noted": "Na"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Na"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "589"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again: the sodium burns away in a few seconds. Each test starts from a clean flame, so that what you see is only what the loop brings (speed the clock up if you like).",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Lithium",
+			"text": "Pick up the lithium chloride and click the burner. A crimson flame. Read the viewer: one strong line, deep in the red.",
+			"checks": [
+				{
+					"text": "lithium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Li"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:lithium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Lithium's resonance line is at 670.8 nm. A weaker line at 610 nm sits beside it, and the eye sees the sum as crimson."
+		},
+		{
+			"title": "Li's line in the notebook",
+			"text": "In the notebook, write the label Li and the wavelength of lithium's red line.",
+			"checks": [
+				{
+					"text": "a wavelength written as Li",
+					"when": {
+						"noted": "Li"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Li"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "671"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "The lights down",
+			"text": "Potassium's colour is famously faint. Click \"lights\" in the top bar until the room is at 10 % or less: your eye opens up to the dimmer room as a pupil would, and whatever makes its own light stands out against it.",
+			"checks": [
+				{
+					"text": "the room's lights at 10 % or less",
+					"when": {
+						"lights_at_most": 0.1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "lights"
+				},
+				{
+					"click": "lights"
+				}
+			],
+			"why": "Against a dimmer room, everything that makes its own light looks brighter: that is why flame tests are watched in a darkened lab."
+		},
+		{
+			"title": "Potassium",
+			"text": "Pick up the potassium chloride and click the burner. Look closely: even in the dark the flame stays nearly its own blue, a hint of lilac at most. The viewer shows why: its brightest lines are deep red, at the very edge of what the eye can see.",
+			"checks": [
+				{
+					"text": "potassium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "K"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:potassium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Potassium's resonance lines are at 766.5 and 769.9 nm, where the eye is nearly blind; a weak violet pair at 404.4 and 404.7 nm is all it adds to the blue. A chemist looks through cobalt-blue glass, which stops the burner's and sodium's light and passes potassium's deep red: the viewer does the same job by wavelength."
+		},
+		{
+			"title": "K's line in the notebook",
+			"text": "In the notebook, write the label K and the wavelength of potassium's brighter red line.",
+			"checks": [
+				{
+					"text": "a wavelength written as K",
+					"when": {
+						"noted": "K"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "K"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "766"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The lights up",
+			"text": "Click \"lights\" in the top bar until the room is at its full light again.",
+			"checks": [
+				{
+					"text": "the room's lights full",
+					"when": {
+						"lights_at_least": 1.0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "lights"
+				},
+				{
+					"click": "lights"
+				},
+				{
+					"click": "lights"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Calcium",
+			"text": "Pick up the calcium chloride and click the burner. Brick red. The viewer shows wider humps instead of sharp lines.",
+			"checks": [
+				{
+					"text": "calcium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Ca"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:calcium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Calcium in a flame is mostly calcium monohydroxide, CaOH: a molecule's light comes in bands a few nanometres wide, here mostly orange-red at 622 nm with a green band at 555 nm. Calcium's own atomic line at 423 nm is weak. (A faint line at 766 nm may linger: the last trace of potassium, which the viewer still sees and the eye does not.)",
+			"part": "The alkaline earths and copper"
+		},
+		{
+			"title": "Ca's band in the notebook",
+			"text": "Right-click the viewer: it names the peak of what it sees. In the notebook, write the label Ca and the peak's wavelength.",
+			"checks": [
+				{
+					"text": "a wavelength written as Ca",
+					"when": {
+						"noted": "Ca"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Ca"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "625"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Strontium",
+			"text": "Pick up the strontium chloride and click the burner. A crimson as deep as lithium's, but the viewer sees something else: several bands, from orange to deep red.",
+			"checks": [
+				{
+					"text": "strontium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Sr"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:strontium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Strontium monohydroxide, SrOH, gives bands at 606, 659, 671 and 682 nm. To the eye strontium and lithium are both crimson; the spectrum tells them apart at once."
+		},
+		{
+			"title": "Sr's band in the notebook",
+			"text": "In the notebook, write the label Sr and the wavelength of the viewer's peak. Compare it with lithium's line.",
+			"checks": [
+				{
+					"text": "a wavelength written as Sr",
+					"when": {
+						"noted": "Sr"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Sr"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "682"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Barium",
+			"text": "Pick up the barium chloride and click the burner. A pale apple green.",
+			"checks": [
+				{
+					"text": "barium in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Ba"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:barium",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Barium monohydroxide's bands, 513 and 524 nm in the green and 488 nm in the blue-green, with barium's own atomic line at 553.5 nm standing sharp among them. Barium salts give green fireworks."
+		},
+		{
+			"title": "Ba's band in the notebook",
+			"text": "In the notebook, write the label Ba and the wavelength of the viewer's peak: barium's own atomic line, sharper than the bands around it.",
+			"checks": [
+				{
+					"text": "a wavelength written as Ba",
+					"when": {
+						"noted": "Ba"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Ba"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "554"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Copper",
+			"text": "Pick up the copper(II) sulfate and click the burner. A green again, but a different green: the viewer puts it at other wavelengths.",
+			"checks": [
+				{
+					"text": "copper in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "Cu"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:copper",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Copper's green comes from copper monohydroxide, CuOH: bands from 505 to 546 nm, brightest at 546. Copper's own atoms are barely excited at this temperature."
+		},
+		{
+			"title": "Cu's band in the notebook",
+			"text": "In the notebook, write the label Cu and the wavelength of the viewer's peak: a green of its own, not barium's.",
+			"checks": [
+				{
+					"text": "a wavelength written as Cu",
+					"when": {
+						"noted": "Cu"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "Cu"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "546"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "A mixture",
+			"text": "Pick up the mixture of sodium and potassium chlorides and click the burner. Yellow: just sodium, to the eye. Now read the viewer's lines.",
+			"checks": [
+				{
+					"text": "mixture in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol",
+							"measure": "K"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:mixture",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Sodium's yellow swamps potassium's faint lilac. A chemist looks through cobalt-blue glass, which absorbs the yellow; the spectral viewer does better and still lists potassium's lines at 766 and 770 nm beside sodium's 589.",
+			"part": "Telling them apart"
+		},
+		{
+			"title": "The mixture's lines in the notebook",
+			"text": "Right-click the viewer and read its lines. In the notebook, write the label mix and the longest wavelength it lists: a line the eye cannot see in that yellow.",
+			"checks": [
+				{
+					"text": "a wavelength written as mix",
+					"when": {
+						"noted": "mix"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "notebook"
+				},
+				{
+					"click": "notebook:write:label"
+				},
+				{
+					"type": "mix"
+				},
+				{
+					"click": "notebook:write:value"
+				},
+				{
+					"type": "766"
+				},
+				{
+					"click": "notebook:write"
+				},
+				{
+					"click": "notebook"
+				}
+			]
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again. A clean flame, before each unknown, so that what you see is only what it brings.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Unknown X",
+			"text": "Pick up unknown X and click the burner. Its colour, and the viewer's lines, say which of the seven it is: compare them with what you noted.",
+			"checks": [
+				{
+					"text": "unknown x in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:unknown_x",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Yellow and 589 nm: sodium. Crimson with one line at 671: lithium. Crimson with bands at 606 and 682: strontium. Brick red with a band at 622: calcium. Lilac with 766 and 770: potassium. Green at 513 and 524: barium. Green brightest at 546: copper."
+		},
+		{
+			"title": "The flame clears",
+			"text": "Wait until the flame is its own blue again.",
+			"checks": [
+				{
+					"text": "the flame its own blue again",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "below",
+						"value": 0.005
+					},
+					"wait": true
+				}
+			],
+			"play": []
+		},
+		{
+			"title": "Unknown Y",
+			"text": "Pick up unknown Y and click the burner, and name it the same way.",
+			"checks": [
+				{
+					"text": "unknown y in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "above",
+						"value": 0.3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:unknown_y",
+						"item:burner"
+					]
+				}
+			],
+			"why": "Two unknowns may be the same salt: each was drawn on its own."
+		}
+	]
+}

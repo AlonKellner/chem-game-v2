@@ -125,6 +125,24 @@ struct Reader : CondReader {
 				c.extra.push_back([kind](const CondContext &x) { return x.host != nullptr && static_cast<const TutorialScreen *>(x.host)->calculated == kind; });
 				return true;
 			}
+			if (key == "lights_at_most" || key == "lights_at_least") {
+				// (Stage 90) the room's lights, on the screen: dimmed to this share of their full light or less, or this or more
+				ok = value.is_number() && value.get<double>() > 0.0 && value.get<double>() <= 1.0;
+				if (!ok) {
+					r.why = "\"" + key + "\" is a share of the room's full light, over 0 and at most 1";
+					return true;
+				}
+				const double share = value.get<double>();
+				const bool most = key == "lights_at_most";
+				c.extra.push_back([share, most](const CondContext &x) {
+					if (x.host == nullptr) {
+						return false;
+					}
+					const double lights = static_cast<const TutorialScreen *>(x.host)->lights;
+					return most ? lights <= share + 1e-9 : lights >= share - 1e-9;
+				});
+				return true;
+			}
 			if (key != "editor") {
 				return false;
 			}
