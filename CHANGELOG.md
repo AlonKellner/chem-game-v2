@@ -1,5 +1,12 @@
 # GAME_SPEC version history
 
+## Stage 93 (2026-11-28; GAME_SPEC stays 0.91.0: no behaviour of the game changes; awaiting the user's sign-off)
+
+- The supplies' pictures (`docs/TDD_93_PICTURES_STORE.md`): kept by their keys in a store every worktree shares
+  (`~/Library/Caches/chem-game-v2/pictures`), so no picture is captured twice anywhere; each missing one captured alone,
+  side by side (`chem_tool capture --keys`, `--only`; `tools/pictures.py`, replacing `tools/merge_pictures.py`); `make
+  pictures` builds only `chem_tool`; a renderer unused for 30 days removed (ctest `pictures_store`).
+
 ## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 91, `docs/TDD_91_REDOX.md`; `docs/CURRICULUM.md`, step F's second part: experiments 38 and 47): **redox in

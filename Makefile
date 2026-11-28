@@ -70,18 +70,17 @@ native:
 		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
 
 # The supplies' pictures (Stage 61), built ahead: every bench of data/ opened, each supply it gives captured once
-# (of it alone in its box, by the renderer's own source on the CPU) and kept in the file, which is the cache
-# (gitignored): a supply whose picture is there is not captured again. (Stage 84) The benches side by side, each from
-# what the file holds into a file of its own (build/pictures), merged by key into it (tools/merge_pictures.py); only
-# the benches there are now are read back. (Stage 86) A picture's key holds the renderer's, and a file of another
-# renderer's is taken as none: a change to the renderer captures them all again, and the old ones are left behind.
+# (of it alone in its box, by the renderer's own source on the CPU). (Stage 86) A picture's key holds the renderer's.
+# (Stage 93) Kept in a store every worktree shares, by key (~/Library/Caches/chem-game-v2/pictures; PICTURES_STORE
+# over it): a tree captures only what no tree has, each missing picture alone, side by side, and its file (gitignored,
+# what the Godot host reads) is assembled from the store (tools/pictures.py). Only chem_tool is built for it.
 PICTURES_FILE ?= $(GODOT_PROJECT)/pictures/supplies.json
 PICTURE_BENCHES := $(wildcard data/benches/*.json)
-pictures: core
-	mkdir -p $(dir $(PICTURES_FILE)) build/pictures
-	@[ -s $(PICTURES_FILE) ] || echo '{"format": "chem-pictures/1", "pictures": []}' > $(PICTURES_FILE)
-	printf '%s\n' $(PICTURE_BENCHES) | xargs -P $(JOBS) -n 1 sh -c 'out=build/pictures/$$(basename "$$1"); cp $(PICTURES_FILE) "$$out" && $(BUILD_CORE)/chem_tool capture "$$out" "$$1" > /dev/null' _
-	python3 -I tools/merge_pictures.py $(PICTURES_FILE) $(addprefix build/pictures/,$(notdir $(PICTURE_BENCHES)))
+pictures:
+	$(CMAKE) -S native -B $(BUILD_CORE) $(call gen,$(BUILD_CORE)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCHEM_BUILD_EXTENSION=OFF -DCHEM_BUILD_TESTS=ON
+	$(CMAKE) --build $(BUILD_CORE) -j $(JOBS) --target chem_tool
+	python3 -I tools/pictures.py --tool $(BUILD_CORE)/chem_tool --out $(PICTURES_FILE) --jobs $(JOBS) $(PICTURE_BENCHES)
 
 # The Godot project reads only res://: the data is copied in (gitignored), and the
 # per-pixel source.
