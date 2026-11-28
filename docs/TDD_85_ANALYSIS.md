@@ -43,6 +43,10 @@ The curriculum's step E, its experiments (`docs/CURRICULUM.md`: 10, 12, 42, 43, 
 
 ## Open
 
+- **Neon's colour**: NIST's relative intensities, gathered from several sources, give neon's blue-green lines (470–495
+  nm) a quarter of its light, and its tube is drawn pink; a low-pressure neon glow is orange-red. A measured spectrum of a
+  neon lamp (radiometric) would give its lines their weights.
+
 - **A test-tube rack** (the rest of T6) is not built: tubes stand on the bench by themselves.
 - **Experiment 51** (alum; the copper–ammonia salt with ethanol) waits for steps F and I (a metal dissolving with
   hydrogen, ethanol as a second solvent).

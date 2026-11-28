@@ -6930,12 +6930,12 @@ struct Ui::Impl {
 				// (Stage 85) a drying oven: its box, no flame (what stands in it is drawn over it)
 				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 			} else if (v.kind == "burner" && !v.lamp.empty()) {
-				// (Stage 85) a discharge lamp: its base, and over it its tube of glowing gas, its lines at its power
-				const float base = std::max(8.0f, r.h * 0.2f);
-				thing(who, "body", OpticsBody::Slab, Rect{ r.x, r.y + r.h - base, r.w, base }, 3.0f, "burner_metal", nullptr, in_hand);
+				// (Stage 85) a discharge lamp: its base, and over it (as a burner's flame) its tube of glowing gas, its lines at
+				// its power
+				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
 				if (v.valve > 0.0) {
-					const float wide = std::max(4.0f, r.w * 0.25f);
-					const size_t k = thing(who, "tube", OpticsBody::Cone, Rect{ r.cx() - wide * 0.5f, r.y + 2.0f, wide, r.h - base - 2.0f }, 0.0f, nullptr, nullptr, in_hand);
+					const float wide = 10.0f, tall = 64.0f;
+					const size_t k = thing(who, "tube", OpticsBody::Cone, Rect{ r.cx() - wide * 0.5f, r.y - tall, wide, tall }, 0.0f, nullptr, nullptr, in_hand);
 					bodies[k].tube = true;
 					bodies[k].kelvin = 0.0; // (its gas no hotter than the room's for the long-wave: a discharge, not a flame)
 					std::array<double, 401> &g = flame_glows[v.id];

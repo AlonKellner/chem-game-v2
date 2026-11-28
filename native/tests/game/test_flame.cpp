@@ -314,13 +314,13 @@ TEST_CASE("measured: a discharge lamp's lines are NIST's, at the relative intens
 	CHECK(intensity("Hg", 435.834) == intensity("Hg", 404.656));
 	CHECK(intensity("Hg", 546.075) > 0.0);
 	CHECK(strongest("Ne") == doctest::Approx(692.947).epsilon(1e-5));
-	// a lamp's glow keeps its light: all its lines' together, its model's, at full power
+	// a lamp's glow keeps its light: all its lines' together, its model's (mercury's 118), at full power
 	const std::array<double, 401> g = lab::lamps::glow("Hg", 1.0);
 	const chem::optics::Spectrum &room = chem::optics::d65();
 	double light = 0.0;
 	for (size_t k = 0; k < 401; ++k) {
 		light += g[k] * room[k] / room[180];
 	}
-	CHECK(light == doctest::Approx(240.0).epsilon(1e-9));
+	CHECK(light == doctest::Approx(118.0).epsilon(1e-9));
 	CHECK(lab::lamps::glow("Hg", 0.5)[25] == doctest::Approx(0.5 * g[25]));
 }

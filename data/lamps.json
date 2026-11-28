@@ -808,7 +808,12 @@
 		]
 	},
 	"model": {
-		"note": "Calibrated: a lamp's light, all its lines together, in multiples of the room's light at 560 nm times nanometres, per pixel of path through its tube (as bright as a fresh sodium drop's flame: its colour over the bench, the display's brightest of its own).",
-		"light": 240.0
+		"note": "Calibrated: each lamp's light, all its lines together, in multiples of the room's light at 560 nm times nanometres, per pixel of path through its tube: hydrogen's as bright as a fresh sodium drop's flame (240), the others so the brightest of each one's linear sRGB channels is hydrogen's (each tube's colour as saturated over the bench).",
+		"light": {
+			"H": 240.0,
+			"He": 111.0,
+			"Hg": 118.0,
+			"Ne": 220.0
+		}
 	}
 }

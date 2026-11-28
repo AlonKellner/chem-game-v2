@@ -1593,9 +1593,11 @@ the relative intensities its sources observed`.
   components share one intensity (NIST's `*`): taken once. NIST's relative intensities are as their sources observed
   them in discharges, in no one unit and not a radiometric calibration: a lamp's lines against each other only. The
   Rydberg formula through the Balmer lines (air's index 1.000277) gives hydrogen's R within 2e-4 of 1.09678e7 m⁻¹.
-- **Calibrated**: a lamp's light, all its lines together (240 times the room's white at 560 nm times a nanometre, a
-  pixel of path through its tube): as bright as a fresh drop's sodium flame (Stage 82), its colour over the bench at the
-  display's brightest.
+- **Calibrated**: a lamp's light, all its lines together: hydrogen's 240 times the room's white at 560 nm times a
+  nanometre, a pixel of path through its tube (as bright as a fresh drop's sodium flame, Stage 82); helium's 111,
+  mercury's 118 and neon's 220, so each one's brightest linear sRGB channel is hydrogen's. NIST's intensities for neon
+  give its blue-green lines (470–495 nm) a quarter of its light: its tube is drawn pink, not a neon glow's orange-red
+  (TDD 85, Open).
 
 ## Solution kinetics (Stage 87)
 

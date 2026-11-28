@@ -18,7 +18,7 @@ namespace {
 struct Data {
 	std::vector<std::string> order;
 	std::map<std::string, std::vector<std::array<double, 2>>> lines;
-	double light = 0.0;
+	std::map<std::string, double> light;
 };
 
 const Data &data() {
@@ -31,7 +31,9 @@ const Data &data() {
 				o.lines[gas].push_back({ r.at(0).get<double>(), r.at(1).get<double>() });
 			}
 		}
-		o.light = j.at("model").at("light").get<double>();
+		for (const auto &[gas, l] : j.at("model").at("light").items()) {
+			o.light[gas] = l.get<double>();
+		}
 		return o;
 	}();
 	return d;
@@ -67,7 +69,7 @@ std::array<double, 401> glow(const std::string &gas, double power) {
 	const double white = room[180];
 	for (const auto &l : ls) {
 		// on the two nanometres about its centre, in shares that keep its whole and its centre (as a flame's lines)
-		const double energy = data().light * power * l[1] / sum, x = l[0] - 380.0;
+		const double energy = data().light.at(gas) * power * l[1] / sum, x = l[0] - 380.0;
 		const int k = static_cast<int>(std::floor(x));
 		const double f = x - k;
 		if (k >= 0 && k + 1 < 401) {
