@@ -110,6 +110,10 @@ SolventPoint solvent_at(const SpeciesTable &table, double temperature);
 // Stage 67 (GAME_SPEC §6): the solvent's density at T at one atmosphere, kg/m^3 (Kell's form, data/solutions.json's
 // density; beyond its range its value and slope at the end), and its first and second derivatives by T; 0 with none
 double solvent_density(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
+// Stage 88 (GAME_SPEC §6, Liquids that give): the solvent's isothermal compressibility at T at one atmosphere, 1/Pa
+// (Kell's form, data/solutions.json's compressibility; beyond its range its value and slope at the end), and its first
+// and second derivatives by T; 0 with none (a sealed cell's liquids then do not give)
+double compressibility(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
 // What a liquid's and a solute's volume at T is of the table's (at 25 C): rho(25 C) / rho(T), and its derivatives by
 // T (1/K, 1/K^2); 1 where the solvent's density is not known.
 double expansion(const SpeciesTable &table, double temperature, double *slope = nullptr, double *curve = nullptr);
@@ -263,6 +267,12 @@ double molality(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 // The enthalpy, in quanta, that these amounts carry at temperature T: what a
 // transfer of matter takes with it (GAME_SPEC §6).
 Energy enthalpy_carried(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature);
+
+// (Stage 88, GAME_SPEC §6, Liquids that give) What a pressure `over` the room's adds to the enthalpy these amounts
+// carry at T, in J: what crosses carries its enthalpy at the giver's state. A solid's v_i p, a liquid's or a solute's
+// v_i (p - k p^2 / 2) - T (v_i' (p - k p^2 / 2) - v_i k' p^2 / 2) (its potential's, less T times its slope), a gas's
+// nothing. At the room's pressure, nought.
+double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double over);
 
 // The entropy, in J/K, of the cell at temperature T > 0:
 // sum of n_i (S0_i + Cp_i ln(T / T0) - R ln a_i), a_i the activity above (the

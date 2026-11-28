@@ -815,7 +815,8 @@ Violations check_V2(const SpeciesTable &table, const StepTrace &trace) {
 		if (!meta.rigid) {
 			continue;
 		}
-		const Fill fill = fill_of(table, trace.after.cells[c], volume_kelvin(table, trace, c));
+		// (Stage 88) a sealed cell's liquids at its own pressure: squeezed, they fit; its solids alone can be too much
+		const Fill fill = fill_of(table, trace.after.cells[c], volume_kelvin(table, trace, c), meta.sealed ? &meta : nullptr);
 		if (fill.defined && fill.condensed > meta.volume * (1.0 + 1e-12)) {
 			char buffer[200];
 			std::snprintf(buffer, sizeof buffer, "V2: step %lld: rigid cell %lld of %.6g m^3 holds %.6g m^3 of solids and liquids", static_cast<long long>(trace.step),

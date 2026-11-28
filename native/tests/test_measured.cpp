@@ -450,6 +450,42 @@ TEST_CASE("measured: water's density is Kell's, within Lienhard's rows (Stage 67
 	CHECK(solvent_density(table, 373.15) == doctest::Approx(958.36).epsilon(2e-5));
 }
 
+TEST_CASE("measured: water's compressibility is Kell's, at Jones and Harris's value and within their fit (Stage 88)") {
+	// Kell 1975's isothermal compressibility of air-free water at 1 atm (data/solutions.json's compressibility), as
+	// Jones and Harris reprint it (J. Res. NIST 97 (1992) 335, eq. 2, 0 to 100 C); held to that paper's own words,
+	// "approximately 46.5 parts per million (ppm)/atmosphere at 20 C", and to its authors' fit of Kell's values on
+	// ITS-90 (eq. 7, 5 to 40 C, 1/kPa; its stated residual 4.6e-5 of the value)
+	const SpeciesTable &table = builtin_species();
+	CHECK(compressibility(table, 293.15) * 101325.0 * 1e6 == doctest::Approx(46.5).epsilon(1e-3));
+	const double fit[] = { 50.83101e-8, -3.68293e-9, 7.263725e-11, -6.597702e-13, 2.87767e-15 };
+	for (const double t : { 5.0, 10.0, 20.0, 25.0, 30.0, 40.0 }) {
+		CAPTURE(t);
+		double theirs = 0.0;
+		for (size_t k = 5; k-- > 0;) {
+			theirs = theirs * t + fit[k];
+		}
+		CHECK(compressibility(table, t + 273.15) == doctest::Approx(theirs * 1e-3).epsilon(2e-4));
+	}
+	// its least, near 46.5 C (its slope there nought), and its ends: beyond them its value and slope at the end
+	double slope = 0.0, curve = 0.0;
+	CHECK(compressibility(table, 46.5 + 273.15, &slope) == doctest::Approx(4.415e-10).epsilon(1e-3));
+	CHECK(std::fabs(slope) < 2e-14);
+	CHECK(compressibility(table, 273.15) == doctest::Approx(50.88496e-11).epsilon(1e-12));
+	const double end = compressibility(table, 373.15, &slope, &curve);
+	CHECK(compressibility(table, 383.15, nullptr, &curve) == doctest::Approx(end + 10.0 * slope).epsilon(1e-12));
+	CHECK(curve == 0.0);
+	// its slopes are its own: against a centred difference
+	for (const double kelvin : { 280.0, 298.15, 330.0, 370.0 }) {
+		CAPTURE(kelvin);
+		const double h = 1e-2;
+		compressibility(table, kelvin, &slope, &curve);
+		double up = 0.0, down = 0.0;
+		const double k_up = compressibility(table, kelvin + h, &up), k_down = compressibility(table, kelvin - h, &down);
+		CHECK(slope == doctest::Approx((k_up - k_down) / (2.0 * h)).epsilon(1e-6));
+		CHECK(curve == doctest::Approx((up - down) / (2.0 * h)).epsilon(1e-6));
+	}
+}
+
 TEST_CASE("measured: liquid mercury's index is Inagaki's and turns back Smith and Stromberg's share (Stage 78)") {
 	// Inagaki, Arakawa and Williams, Phys. Rev. B 23, 5246 (1981): ellipsometry of liquid mercury at room temperature,
 	// tabulated at round photon energies (data/optics/media.json's nk_table: the source's own points); its normal

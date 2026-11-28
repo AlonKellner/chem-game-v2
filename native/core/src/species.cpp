@@ -200,6 +200,23 @@ std::optional<SpeciesTable> SpeciesTable::make(std::vector<ElementDef> elements,
 			return std::nullopt;
 		}
 	}
+	// the solvent's compressibility (Stage 88): none, or finite with a range, positive at both its ends and between
+	if (std::any_of(solution.compressibility.begin(), solution.compressibility.end(), [](double c) { return c != 0.0; })) {
+		bool good = std::all_of(solution.compressibility.begin(), solution.compressibility.end(), [&](double c) { return finite(c); }) && finite(solution.compressibility_b) &&
+				finite(solution.compressibility_low) && finite(solution.compressibility_high) && solution.compressibility_low < solution.compressibility_high;
+		for (int i = 0; good && i <= 100; ++i) {
+			const double t = solution.compressibility_low + (solution.compressibility_high - solution.compressibility_low) * i / 100.0;
+			double n = 0.0;
+			for (size_t k = solution.compressibility.size(); k-- > 0;) {
+				n = n * t + solution.compressibility[k];
+			}
+			good = 1.0 + solution.compressibility_b * t > 0.0 && n > 0.0;
+		}
+		if (!good) {
+			set_why(why, "the solvent's compressibility is finite and positive over its range, a range from low to high");
+			return std::nullopt;
+		}
+	}
 	const auto ion_count = static_cast<int32_t>(solution.ions.size());
 	for (SpeciesDef &s : species) {
 		const std::string name(s.id);

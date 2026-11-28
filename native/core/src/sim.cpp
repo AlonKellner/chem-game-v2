@@ -869,7 +869,8 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 		enthalpy = enthalpy_carried(table, amounts, giver.kelvin);
 		// the giver, at the flow work of its own pressure after (found again with it: twice)
 		CellState g = world_.snapshot_cell(giver.top), t = world_.snapshot_cell(taker.top);
-		const auto flow = [&](double p) { return std::llround((p - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM); };
+		// (Stage 88) what its pressure adds to the enthalpy the liquid carries: its enthalpy at the giver's state
+		const auto flow = [&](double p) { return std::llround(enthalpy_over(table, amounts, giver.kelvin, p - P_ATMOSPHERE) / JOULE_PER_QUANTUM); };
 		PistonPlan pg = plan_piston(giver.top, g, 0.0, dt);
 		for (int it = 0; it < 2; ++it) {
 			pushed = pg.ok ? pg.pressure : P_ATMOSPHERE;
@@ -931,7 +932,7 @@ bool Simulation::solve_hydraulic(EdgeId edge, double dt) {
 				return true;
 			}
 		}
-		const Energy carried{ enthalpy.quanta + std::llround((pushed - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) };
+		const Energy carried{ enthalpy.quanta + std::llround(enthalpy_over(table, amounts, giver.kelvin, pushed - P_ATMOSPHERE) / JOULE_PER_QUANTUM) };
 		const Refusal refused = transfer(edge, giver.top, amounts, carried);
 		CHEM_ASSERT(refused == Refusal::None, refusal_text(refused));
 		thermal_valid_[static_cast<size_t>(giver.top.index)] = 0;
@@ -1188,7 +1189,8 @@ void Simulation::run_join(EdgeId edge, double dt) {
 			volume = now.defined ? was.condensed - now.condensed : 0.0;
 		};
 		const auto carried = [&]() {
-			return Energy{ enthalpy_carried(table, amounts, kelvin).quanta + std::llround((flow_pressure - P_ATMOSPHERE) * volume / JOULE_PER_QUANTUM) };
+			// (Stage 88) its enthalpy at the giver's state: the table's and what its pressure adds
+			return Energy{ enthalpy_carried(table, amounts, kelvin).quanta + std::llround(enthalpy_over(table, amounts, kelvin, flow_pressure - P_ATMOSPHERE) / JOULE_PER_QUANTUM) };
 		};
 		// the giver's pressure less the taker's, had the share f run: falling with f
 		const auto gap = [&](double f) {

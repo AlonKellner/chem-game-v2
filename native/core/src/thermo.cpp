@@ -59,11 +59,17 @@ bool is_sealed(const CellMeta *meta) {
 	return meta != nullptr && meta->sealed && meta->rigid && !meta->reservoir;
 }
 
-// A sealed cell's energy by its temperature (GAME_SPEC §6, Stage 67). Its solids and liquids incompressible but
-// growing with temperature, V_c(T) = fixed + expanding e(T): their Gibbs energy G0(T) + V_c(T) (P - P_atm), so
-// that at the room's pressure they are the table's, and E = U + P_atm V is
-// E = H(T) - n_gas R T + P_atm V_free(T) - T V_c'(T) (P - P_atm), P = n_gas R T / V_free,
-// its entropy's part S0(T) + the gas's - V_c'(T) (P - P_atm): one potential's, so dE = T dS (T2).
+// A sealed cell's energy by its temperature (GAME_SPEC §6, Stages 67 and 88). Its solids incompressible; its liquids
+// (and its solutes' apparent volumes) growing with temperature and giving to pressure: with p = P - P_atm, their
+// Gibbs energy G0(T) + V_s p + V_l(T) (p - k(T) p^2 / 2), V_l(T) = expanding e(T), k the solvent's compressibility: at
+// the room's pressure they are the table's. From that one potential (so dE = T dS - p dV, T2):
+//   their volume V_s + V_l (1 - k p), the room left its gas V_g = A + B p, A = volume - fixed - V_l, B = V_l k;
+//   its pressure the root of P V_g = n_gas R T that is not negative: its gas's over its liquid, P_atm - A / B full of
+//   liquid with no gas, nought with a void left (no gas and more room than its liquid takes at no pressure);
+//   E = U + P_atm V = H(T) - n_gas R T + P_atm V_g + V_l k p^2 / 2 - T V_l' (p - k p^2 / 2) + T V_l k' p^2 / 2;
+//   its entropy's part S0(T) + the gas's - V_l' (p - k p^2 / 2) + V_l k' p^2 / 2.
+// With no liquid that gives (none, or a table without a compressibility) it is Stage 67's: P = n_gas R T / A, none
+// where its solids and liquids leave no room.
 struct Sealed {
 	double formation = 0.0, capacity = 0.0; // J, J/K: sum of n_i Hf_i, of n_i Cp_i
 	double gas = 0.0; // mol
@@ -71,29 +77,46 @@ struct Sealed {
 
 	struct State {
 		double temperature = 0.0, energy = 0.0, slope = 0.0; // K, J, dE/dT (J/K)
-		double free = 0.0, pressure = 0.0; // m^3, Pa
+		double free = 0.0, pressure = 0.0; // m^3 (the room its gas has, at its pressure), Pa
 	};
 
-	// false where its solids and liquids leave its gas no room
+	// false where it has no pressure: no temperature, or nothing in it gives and its solids and liquids leave no room
 	bool at(const SpeciesTable &table, double temperature, State &out) const {
-		double de = 0.0, dde = 0.0;
-		const double e = expansion(table, temperature, &de, &dde);
 		out.temperature = temperature;
-		out.free = volume - fixed - expanding * e;
-		if (!(out.free > 0.0) || !(temperature > 0.0)) {
+		if (!(temperature > 0.0)) {
 			return false;
 		}
-		const double grows = expanding * de, bends = expanding * dde; // dV_c/dT, d2V_c/dT2
-		out.pressure = gas * GAS_CONSTANT * temperature / out.free;
-		const double over = out.pressure - P_ATMOSPHERE;
-		const double rises = out.pressure / temperature * (1.0 + temperature * grows / out.free); // dP/dT
-		out.energy = formation + capacity * (temperature - T0) - gas * GAS_CONSTANT * temperature + P_ATMOSPHERE * out.free - temperature * grows * over;
-		out.slope = capacity - gas * GAS_CONSTANT - P_ATMOSPHERE * grows - grows * over - temperature * bends * over - temperature * grows * rises;
+		double de = 0.0, dde = 0.0, dk = 0.0, ddk = 0.0;
+		const double e = expansion(table, temperature, &de, &dde);
+		const double k = expanding > 0.0 ? compressibility(table, temperature, &dk, &ddk) : 0.0;
+		const double liquid = expanding * e, grows = expanding * de, bends = expanding * dde; // V_l, dV_l/dT, d2V_l/dT2
+		const double a = volume - fixed - liquid, b = liquid * k, n = gas * GAS_CONSTANT * temperature;
+		if (b > 0.0) {
+			// B P^2 + (A - B P_atm) P - n R T = 0: its root that is not negative, in the form that loses no digits
+			const double c = a - b * P_ATMOSPHERE, root = std::sqrt(c * c + 4.0 * b * n);
+			out.pressure = c > 0.0 ? 2.0 * n / (c + root) : (root - c) / (2.0 * b);
+		} else {
+			if (!(a > 0.0)) {
+				return false;
+			}
+			out.pressure = n / a;
+		}
+		const double p = out.pressure - P_ATMOSPHERE, half = 0.5 * p * p, q = p - k * half; // q: what its liquids' potential rises by, per volume
+		out.free = std::max(a + b * p, 0.0);
+		// dV_g/dT at its pressure, and dP/dT at its volume: P' (V_g + P B) = n_gas R - P dV_g/dT
+		const double room_grows = -(grows * (1.0 - k * p) - liquid * dk * p), stiff = out.free + out.pressure * b;
+		const double rises = stiff > 0.0 ? (gas * GAS_CONSTANT - out.pressure * room_grows) / stiff : 0.0;
+		out.energy = formation + capacity * (temperature - T0) - n + P_ATMOSPHERE * out.free + b * half - temperature * grows * q + temperature * liquid * dk * half;
+		const double at_pressure = capacity - gas * GAS_CONSTANT + P_ATMOSPHERE * room_grows + (grows * k + 2.0 * liquid * dk) * half - grows * q - temperature * bends * q +
+				temperature * (2.0 * grows * dk + liquid * ddk) * half;
+		const double at_temperature = P_ATMOSPHERE * b + b * p - temperature * grows * (1.0 - k * p) + temperature * liquid * dk * p;
+		out.slope = at_pressure + at_temperature * rises;
 		return true;
 	}
 
 	// The temperature at which it holds `energy` J, from `guess` K (0: none), by Newton's steps: the linear model's
-	// (Stage 28's, nothing growing) first, then each by the slope, halved while it would leave the gas no room
+	// (Stage 28's, nothing growing) first, then each by the slope, halved while it would have no pressure; kept between
+	// the temperatures found to hold less and more (Stage 88: its energy bends where it fills, or a void opens)
 	bool solve(const SpeciesTable &table, double energy, double guess, State &out) const {
 		const double cv = capacity - gas * GAS_CONSTANT;
 		if (!(cv > 0.0)) {
@@ -106,11 +129,20 @@ struct Sealed {
 				return false;
 			}
 		}
+		double below = 0.0, above = 0.0; // temperatures that hold less, and more (0: none yet)
 		for (int i = 0; i < 64; ++i) {
 			if (!(out.slope > 0.0)) {
 				return false;
 			}
+			if (out.energy < energy) {
+				below = t;
+			} else if (out.energy > energy) {
+				above = t;
+			}
 			double step = (energy - out.energy) / out.slope;
+			if (below > 0.0 && above > 0.0 && !(t + step > below && t + step < above)) {
+				step = 0.5 * (below + above) - t; // (past what holds it: between them)
+			}
 			State next;
 			int halved = 0;
 			while (!at(table, t + step, next) && halved < 60) {
@@ -127,6 +159,17 @@ struct Sealed {
 			}
 		}
 		return std::fabs(energy - out.energy) <= 1e-9 * (std::fabs(energy) + 1.0);
+	}
+
+	// its pressure at a temperature alone (the potentials' and the entropy's): false where it has none
+	bool pressure_at(const SpeciesTable &table, double temperature, double &pressure, double &free) const {
+		State state;
+		if (!at(table, temperature, state)) {
+			return false;
+		}
+		pressure = state.pressure;
+		free = state.free;
+		return true;
 	}
 };
 
@@ -463,7 +506,20 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 		return out;
 	}
 	out.condensed = volumes.fixed + volumes.expanding * (volumes.expanding != 0.0 ? expansion(table, temperature) : 1.0);
-	out.gas = is_sealed(meta) ? meta->volume - out.condensed : gas_mol(table, cell) * GAS_CONSTANT * temperature / P_ATMOSPHERE;
+	if (is_sealed(meta)) {
+		// (Stage 88) at its own pressure: its liquids squeezed by it, its gas in the room they leave; with no pressure
+		// (nothing in it gives, and no room), as at the room's: its gas's room is then nought or less
+		const Sealed model{ 0.0, 0.0, gas_mol(table, cell), meta->volume, volumes.fixed, volumes.expanding };
+		double pressure = 0.0, free = 0.0;
+		if (model.pressure_at(table, temperature, pressure, free)) {
+			out.gas = free;
+			out.condensed = meta->volume - free;
+		} else {
+			out.gas = meta->volume - out.condensed;
+		}
+	} else {
+		out.gas = gas_mol(table, cell) * GAS_CONSTANT * temperature / P_ATMOSPHERE;
+	}
 	out.defined = true;
 	return out;
 }
@@ -471,17 +527,21 @@ Fill fill_of(const SpeciesTable &table, const CellState &cell, double temperatur
 namespace {
 
 // the rational form and its first two derivatives at t C
-void kell(const SolutionDef &s, double t, double &rho, double &slope, double &curve) {
+void rational(const std::array<double, 6> &numerator, double b, double t, double &value, double &slope, double &curve) {
 	double n = 0.0, dn = 0.0, ddn = 0.0;
-	for (size_t k = s.density.size(); k-- > 0;) {
+	for (size_t k = numerator.size(); k-- > 0;) {
 		ddn = ddn * t + 2.0 * dn;
 		dn = dn * t + n;
-		n = n * t + s.density[k];
+		n = n * t + numerator[k];
 	}
-	const double d = 1.0 + s.density_b * t;
-	rho = n / d;
-	slope = (dn - rho * s.density_b) / d;
-	curve = (ddn - 2.0 * slope * s.density_b) / d;
+	const double d = 1.0 + b * t;
+	value = n / d;
+	slope = (dn - value * b) / d;
+	curve = (ddn - 2.0 * slope * b) / d;
+}
+
+void kell(const SolutionDef &s, double t, double &rho, double &slope, double &curve) {
+	rational(s.density, s.density_b, t, rho, slope, curve);
 }
 
 } // namespace
@@ -505,6 +565,32 @@ double solvent_density(const SpeciesTable &table, double temperature, double *sl
 		*curve = dd;
 	}
 	return rho;
+}
+
+double compressibility(const SpeciesTable &table, double temperature, double *slope, double *curve) {
+	const SolutionDef &s = table.solution();
+	double k = 0.0, d = 0.0, dd = 0.0;
+	if (s.compressibility[0] != 0.0) {
+		const double t = temperature - 273.15;
+		const double end = t < s.compressibility_low ? s.compressibility_low : t > s.compressibility_high ? s.compressibility_high : t;
+		rational(s.compressibility, s.compressibility_b, end, k, d, dd);
+		if (end != t) { // beyond its range: its value and slope at the end, never under a tenth of the end's
+			const double least = 0.1 * k;
+			k += d * (t - end);
+			dd = 0.0;
+			if (k < least) {
+				k = least;
+				d = 0.0;
+			}
+		}
+	}
+	if (slope != nullptr) {
+		*slope = d;
+	}
+	if (curve != nullptr) {
+		*curve = dd;
+	}
+	return k;
 }
 
 double expansion(const SpeciesTable &table, double temperature, double *slope, double *curve) {
@@ -737,20 +823,37 @@ int64_t feasible_extent(const CellState &cell, std::span<const Term> terms, bool
 
 namespace {
 
-// a sealed cell's pressure over the standard's, at temperature T (its gas of `gas` quanta), in the room its solids and
-// liquids leave at T
+// a sealed cell's pressure over the standard's, at temperature T (its gas of `gas` quanta): its model's (Stage 88: its
+// liquids giving to it); INFINITE where it has none
 double sealed_ratio(const SpeciesTable &table, const CellState &cell, const CellMeta &meta, double temperature, double gas) {
-	const Fill fill = fill_of(table, cell, temperature, &meta);
-	if (!fill.defined || !(fill.gas > 0.0)) {
+	const Volumes volumes = volumes_of(table, cell);
+	if (!volumes.defined) {
 		return INFINITE;
 	}
-	return gas * MOL_PER_QUANTUM * GAS_CONSTANT * temperature / (fill.gas * P_STANDARD);
+	const Sealed model{ 0.0, 0.0, gas * MOL_PER_QUANTUM, meta.volume, volumes.fixed, volumes.expanding };
+	double pressure = 0.0, free = 0.0;
+	if (!model.pressure_at(table, temperature, pressure, free) || (gas > 0.0 && !(free > 0.0))) {
+		return INFINITE;
+	}
+	return pressure / P_STANDARD;
 }
 
-// what a sealed cell's pressure off the room's adds to its condensed species' chemical potentials, J/mol for each
-// m^3/mol of molar volume at T (G0 + V_c (P - P_atm), Stage 67); 0 open, or with no pressure
+// a sealed cell's pressure off the room's, Pa (0 open, or with no pressure): what its condensed species' potentials
+// rise by (Stages 67 and 88)
 double over_room(const CellMeta *meta, double ratio) {
 	return is_sealed(meta) && ratio < INFINITE ? ratio * P_STANDARD - P_ATMOSPHERE : 0.0;
+}
+
+// what a pressure `over` the room's adds to a condensed species' chemical potential, J/mol (Stage 88): a liquid's or a
+// solute's v_i(T) (p - k p^2 / 2), a solid's v_i p; a gas's and a wall's nothing
+double potential_over(const SpeciesTable &table, const SpeciesDef &def, double temperature, double over) {
+	if (over == 0.0 || def.phase == Phase::Gas || def.wall) {
+		return 0.0;
+	}
+	if (def.phase == Phase::Solid) {
+		return def.molar_volume * over;
+	}
+	return molar_volume_at(table, def, temperature) * (over - 0.5 * compressibility(table, temperature) * over * over);
 }
 
 } // namespace
@@ -988,6 +1091,27 @@ double molality(const SpeciesTable &table, const CellState &cell, SpeciesId spec
 	return mix.liquid > 0.0 ? static_cast<double>(cell.amount[static_cast<size_t>(species.index)]) / mix.liquid * SOLVENT_MOL_PER_UNIT : 0.0;
 }
 
+double enthalpy_over(const SpeciesTable &table, std::span<const SpeciesAmount> amounts, double temperature, double over) {
+	if (over == 0.0) {
+		return 0.0;
+	}
+	double fixed = 0.0, expanding = 0.0; // m^3, the table's (at 25 C)
+	for (const SpeciesAmount &a : amounts) {
+		const SpeciesDef &def = table.species(a.species);
+		if (def.wall || def.phase == Phase::Gas) {
+			continue;
+		}
+		(def.phase == Phase::Solid ? fixed : expanding) += static_cast<double>(a.amount.quanta) * MOL_PER_QUANTUM * def.molar_volume;
+	}
+	double joule = fixed * over;
+	if (expanding != 0.0) {
+		double grows = 0.0, dk = 0.0;
+		const double e = expansion(table, temperature, &grows), k = compressibility(table, temperature, &dk), half = 0.5 * over * over, q = over - k * half;
+		joule += expanding * (e * q - temperature * (grows * q - e * dk * half));
+	}
+	return joule;
+}
+
 double entropy(const SpeciesTable &table, const CellState &cell, double temperature, const CellMeta *meta) {
 	const double ln_t = log(temperature / T0);
 	Mix mix = mix_of(table, cell);
@@ -1008,10 +1132,10 @@ double entropy(const SpeciesTable &table, const CellState &cell, double temperat
 		total += static_cast<double>(cell.amount[s]) * MOL_PER_QUANTUM * molar;
 	}
 	const double over = over_room(meta, mix.pressure_ratio);
-	if (over != 0.0) { // - dV_c/dT (P - P_atm): its liquids' growth at a pressure off the room's (Stage 67)
-		double grows = 0.0;
-		expansion(table, temperature, &grows);
-		total -= volumes_of(table, cell).expanding * grows * over;
+	if (over != 0.0) { // - V_l' (p - k p^2 / 2) + V_l k' p^2 / 2: its liquids at a pressure off the room's (Stages 67 and 88)
+		double grows = 0.0, dk = 0.0;
+		const double e = expansion(table, temperature, &grows), k = compressibility(table, temperature, &dk), expanding = volumes_of(table, cell).expanding;
+		total -= expanding * (grows * (over - 0.5 * k * over * over) - e * dk * 0.5 * over * over);
 	}
 	return total;
 }
@@ -1045,9 +1169,7 @@ double affinity_in(const SpeciesTable &table, const CellState &cell, std::span<c
 		}
 		const SpeciesDef &def = table.species(t.species);
 		standard -= static_cast<double>(t.nu) * (def.hf + def.cp * (temperature - T0) - temperature * (def.s0 + def.cp * ln_t));
-		if (over != 0.0 && def.phase != Phase::Gas && !def.wall) {
-			standard -= static_cast<double>(t.nu) * molar_volume_at(table, def, temperature) * over; // its volume at the cell's pressure (Stage 67)
-		}
+		standard -= static_cast<double>(t.nu) * potential_over(table, def, temperature, over); // at the cell's pressure (Stages 67 and 88)
 		double ln = 0.0;
 		switch (log_activity(def, static_cast<double>(cell.amount[static_cast<size_t>(t.species.index)]), mix, ln)) {
 			case Presence::Present:
@@ -1271,9 +1393,7 @@ bool AffinityProbe::at(double extent, double &a) const {
 	for (size_t i = 0; i < count_; ++i) {
 		const Part &part = parts_[i];
 		standard -= part.nu * (part.hf + part.cp * (temperature - T0) - temperature * (part.s0 + part.cp * ln_t));
-		if (over != 0.0 && part.def->phase != Phase::Gas && !part.def->wall) {
-			standard -= part.nu * molar_volume_at(*table_, *part.def, temperature) * over; // its volume at the cell's pressure (Stage 67)
-		}
+		standard -= part.nu * potential_over(*table_, *part.def, temperature, over); // at the cell's pressure (Stages 67 and 88)
 		double ln = 0.0;
 		switch (log_activity(*part.def, part.quanta + part.nu * extent, mix, ln)) {
 			case Presence::Present:

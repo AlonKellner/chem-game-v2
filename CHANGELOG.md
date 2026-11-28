@@ -1,5 +1,17 @@
 # GAME_SPEC version history
 
+## 0.88.0 (2026-11-28, Stage 88, in progress)
+
+- §6 (Stage 88, `docs/TDD_88_PRESSURE.md`; the first of the two stages the user asked for after Stage 79, "the proper
+  mechanisms ... in a correct and consistent manner"): **liquids that give**: a sealed cell's liquids are
+  compressible (water's by Kell 1975, 4.59e-10 /Pa at 20 °C), their Gibbs energy `G0(T) + V_s p + V_l (p − κ p²/2)`,
+  the cell's volume, energy, entropy and every chemical potential from it. Every sealed state has one pressure: gas
+  over liquid, liquid alone (brim-full water warmed rises 4.5 bar a kelvin at 20 °C), or nought with a void that
+  boiling fills (a cavity at the vapour pressure). Open cells unchanged to the bit. V2 at a sealed cell's own
+  pressure; V3's roomless cell one filled with what does not give.
+- The `pressure` session re-recorded with the user's approval (2026-11-28): every printed result main's, line for
+  line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved.
+
 ## 0.81.1 (2026-11-28, Stage 79, merged after Stages 78, 80, 81, 84 and 86; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 79, `docs/TDD_79_SYRINGE.md`; `docs/CURRICULUM.md`, step G's first part: experiments 27 and 28): **pistons**:

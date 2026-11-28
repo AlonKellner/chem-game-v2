@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.81.1 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.88.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -398,6 +398,38 @@ is sealed; the world keeps the mark as its edges change (V3).
 - **Nothing runs in or out but gas between cells sealed together:** a drain neither runs into nor
   out of a sealed cell (no gas could make way for the liquid), and a sealed cell does not overflow.
 
+**Liquids that give** *(Stage 88; `docs/TDD_88_PRESSURE.md`; asked for by the user, 2026-11-27: "the proper
+mechanisms required to solve connected vessel compression, liquid and gas transfer, and related phenomenon in a
+correct and consistent manner which will make realistic and theoretical sense")*. A sealed cell's liquids are
+compressible, so that every state it can be in has one pressure.
+- **One potential.** With `p = P - P_atm`, a sealed cell's solids and liquids have the Gibbs energy
+  `G0(T) + V_s p + V_l(T) (p - κ(T) p²/2)`: `V_s` its solids' volume, `V_l(T) = V_liquids(25 °C) e(T)` its liquids'
+  and solutes' at the room's pressure (Stage 67), `κ(T)` the solvent's isothermal compressibility at 1 atm (water's by
+  Kell's correlation, 1975, the density's own source: 4.59e-10 /Pa at 20 °C, least at 46.5 °C;
+  `data/solutions.json`'s `compressibility`; beyond its range, its value and slope at its end). From it, and nothing
+  else: the liquids' volume `V_l (1 - κ p)`; the cell's energy
+  `E = H(T) - n_gas R T + P_atm V_g + V_l κ p²/2 - T V_l' (p - κ p²/2) + T V_l κ' p²/2`, `V_g` the volume its solids
+  and liquids leave at its pressure; its entropy's part `- V_l' (p - κ p²/2) + V_l κ' p²/2`; a liquid's or a solute's
+  chemical potential `v_i(T) (p - κ p²/2)`, a solid's `v_i p`. One potential's, so `dE = T dS - p dV` (T2).
+  At the room's pressure every term is nought: an open cell is unchanged, to the bit.
+- **Its pressure**, at a temperature: the root of `P (A + B (P - P_atm)) = n_gas R T`, `A = V - V_s - V_l` the room
+  its solids and liquids would leave at the room's pressure (negative: they would not fit there) and `B = V_l κ`
+  what a pascal squeezes out of them. A quadratic with one root that is not negative, whatever the cell holds:
+  - gas over liquid: its gas's, a little under `n R T / A` (the liquid gives a little);
+  - **full of liquid**, no gas: `P_atm - A / B`. Brim-full water warmed in a sealed vessel rises by `α / κ`,
+    4.5 bar a kelvin at 20 °C and 10 at 50 °C; a hand's 74 kPa on a syringe's 100 mL of water squeezes 0.0034 mL
+    out of it;
+  - **a void**: no gas and more room than its liquid takes at no pressure: `P = 0`, the room left empty. A vapour
+    it can make is then absent from an empty space, and its fast equilibrium (§8) fills the space with it: a liquid
+    pulled on cavitates at its vapour pressure, by the boiling that is already there;
+  - a pocket of gas squeezed small has the pressure that holds the liquid squeezed with it: no pocket is too small.
+  A cell with no liquid is Stage 28's (its solids incompressible: with gas and no room, no pressure, V3).
+- **What crosses carries its enthalpy at the giver's state**: `h_i(T, P)`, a gas's the table's, a solid's
+  `h_i0 + v_i p`, a liquid's or a solute's `h_i0 + v_i (p - κ p²/2) - T (v_i' (p - κ p²/2) - v_i κ' p²/2)`: what the
+  potential gives. A liquid leaving a pressurised cell takes the work that pushed it out (`v p`, less what its
+  expansion holds back, 6 % at 20 °C); run down a pressure through anything that holds it back, its entropy rises
+  by `v Δp / T`: a throttling, with no term of its own.
+
 **Pistons** *(Stage 79; `chem/world.hpp`'s `Piston`, `Simulation::move_pistons`; `docs/TDD_79_SYRINGE.md`; asked for by
 the user, 2026-11-27: "Holding the syringe handle should exert a force on it, the force of the player hand should be
 limited")*. A rigid cell, or a column's top (its whole), may have a plunger: a piston of an area `A` between two
@@ -434,8 +466,9 @@ stops, its volume moved each step, first in the step, by the forces on it.
   - **What a tube lets through** (`Edge::flow`, Hagen–Poiseuille's `G = π r⁴ / 8L` over its pieces in series: the
     tubing, 4 mm by 30 cm, and the nozzles, 2 mm by 1 cm): a liquid `G ΔP / μ` (water's viscosity), a gas
     `G (P_a² − P_b²) / (2 μ R T)` (air's, `solutions.json`); unrestricted, as far as levels the two.
-  - **What it carries**: a liquid its enthalpy and the flow work of the giver's pressure over the room's (the gas over
-    it pushing it out), the taker gaining what the tube dissipates; a gas its own enthalpy, in parcels of no more than
+  - **What it carries**: a liquid its enthalpy at the giver's state (Stage 88, Liquids that give: the table's and
+    what the giver's pressure adds, `enthalpy_over`; until then the flow work `v p` alone), the taker gaining what the
+    tube dissipates; a gas its own enthalpy, in parcels of no more than
     half what would level the two, each at the giver's state as it then is (a vessel emptied gives its later gas at
     its lower pressure and temperature), and only down the true pressure.
   - **A piston alone**: its vessel's pressure after the move by its own sealed model, the hand's work in it (a gas
