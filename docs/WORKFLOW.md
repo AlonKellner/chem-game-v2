@@ -110,8 +110,15 @@ them. The compiler's version is in the key (`/usr/bin/c++` is a shim).
 - **The Godot gate builds and runs only what needs the engine** (Stage 84): the extension (`make native PICTURES=0`),
   Godot's import and the GUT suite. The supplies' pictures are the native layer's (`chem_tool capture`, held by the
   native tests); the suite reads none. Capturing them was about 180 s of a new worktree's gate, now none.
-  `make native` still captures them for the game, bench by bench side by side (`tools/merge_pictures.py`). The rule
-  for what goes where is the repo's: native first, a thin Godot host.
+  `make native` still captures them for the game. The rule for what goes where is the repo's: native first, a thin
+  Godot host.
+- **The supplies' pictures are shared by every worktree** (Stage 93): kept by their keys (each holds the renderer's) in
+  `~/Library/Caches/chem-game-v2/pictures/RENDERER/KEY.json` (`PICTURES_STORE` over it), so a tree captures only what
+  no tree has: a branch that changed the renderer leaves its pictures there for main after the merge, and one taken
+  back finds the old ones. `make pictures` builds only `chem_tool`, lists every bench's supplies and their keys
+  (`chem_tool capture --keys`), captures each missing picture alone, side by side (`--only`), and assembles the tree's
+  file from the store (`tools/pictures.py`); a renderer unused for 30 days is removed. Cold: 68 s for 50 pictures at a
+  load of about 30; warm: under a second (ctest `pictures_store`).
 - **A cost is held by the work, not the clock** (Stage 74): a test that bounds what something costs compares the
   instructions the process retired (`proc_pid_rusage`, `ri_instructions`; `test_signals.cpp`'s `work_done`), as a
   share of the run it adds to. On a gate's crowded machine a thread moves between the performance cores and the

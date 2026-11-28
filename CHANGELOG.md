@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.91.1 (2026-11-28, Stage 89, in progress; merged after Stages 85 and 91)
+## 0.91.1 (2026-11-28, Stage 89, merged after Stages 85, 91 and 93; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 89, `docs/TDD_89_FLOW.md`; the second of the two stages the user asked for after Stage 79; the user's
   choice of flow law: the realistic one): **flow between vessels**. **A conduit** (`Edge::conduit`, replacing
@@ -32,6 +32,13 @@
   let into an emptier vessel is choked, cools what gives and warms what takes, and the entropy rises by the two
   gases' mixing; three times cheaper than the sub-steps on the lab's syringe tests.
 - No golden record moved (no session joins vessels by a conduit).
+
+## Stage 93 (2026-11-28; GAME_SPEC stays 0.91.0: no behaviour of the game changes; signed off by the user: "Approved, merge and proceed")
+
+- The supplies' pictures (`docs/TDD_93_PICTURES_STORE.md`): kept by their keys in a store every worktree shares
+  (`~/Library/Caches/chem-game-v2/pictures`), so no picture is captured twice anywhere; each missing one captured alone,
+  side by side (`chem_tool capture --keys`, `--only`; `tools/pictures.py`, replacing `tools/merge_pictures.py`); `make
+  pictures` builds only `chem_tool`; a renderer unused for 30 days removed (ctest `pictures_store`).
 
 ## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
 

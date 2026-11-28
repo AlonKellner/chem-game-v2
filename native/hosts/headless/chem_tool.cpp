@@ -21,6 +21,8 @@ int usage() {
 						 "             a session script played through the C API, every invariant checked\n"
 						 "  bench SESSION [--record FILE | --check FILE]   the same with the checks off, timed (its digests the same)\n"
 						 "  capture PICTURES BENCH...   the supplies' pictures built ahead (Stage 61), kept in PICTURES\n"
+						 "  capture --keys BENCH...     each bench's supplies and their pictures' keys (Stage 93)\n"
+						 "  capture --only ID OUT BENCH one supply's picture alone, into OUT (Stage 93)\n"
 						 "  study cooling         a flask cooling in a room, against Newton's law\n"
 						 "  study decomposition   malachite in a flask over a flame\n"
 						 "  study balloon         the same flask with a balloon on its mouth\n"

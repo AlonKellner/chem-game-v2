@@ -7,6 +7,8 @@
 #include "lab/renderer_key.hpp"
 #include "lab/ui.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <doctest/doctest.h>
 
 #include <algorithm>
@@ -558,4 +560,45 @@ TEST_CASE("supplies: a flask held over Supplies sees through its glass exactly w
 		CHECK(worst < 3.0 / 255.0);
 		CHECK(differ * 200 < over_boxes.size() / 5);
 	}
+}
+
+TEST_CASE("pictures: a bench's supplies listed with their pictures' keys, and one captured alone the same picture as all of them captured together (Stage 93)") {
+	const char *const TWO = R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+	{"id": "beaker", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80, "contents": {"water": {"g": 100}}},
+	{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "contents": {"water": {"g": 50}}}]})";
+	std::string why;
+	auto all = lab::Ui::open(TWO, why);
+	REQUIRE_MESSAGE(all != nullptr, why);
+	all->frame(1.0 / 60.0);
+	const nlohmann::json keys = nlohmann::json::parse(all->picture_keys());
+	CHECK(keys.at("format") == "chem-picture-keys/1");
+	CHECK(keys.at("renderer") == lab::RENDERER_KEY);
+	REQUIRE(keys.at("supplies").size() == 2);
+	CHECK(keys.at("supplies")[0].at("id") == "beaker");
+	CHECK(keys.at("supplies")[1].at("id") == "flask");
+	CHECK(keys.at("supplies")[0].at("key") != keys.at("supplies")[1].at("key"));
+	all->capture_pictures();
+	const nlohmann::json together = nlohmann::json::parse(all->pictures());
+	REQUIRE(together.at("pictures").size() == 2);
+	// the keys listed are the pictures' own
+	for (const nlohmann::json &p : together.at("pictures")) {
+		CHECK((p.at("key") == keys.at("supplies")[0].at("key") || p.at("key") == keys.at("supplies")[1].at("key")));
+	}
+	// each alone: that one picture, the same pixels, and nothing else
+	for (const nlohmann::json &s : keys.at("supplies")) {
+		auto one = lab::Ui::open(TWO, why);
+		REQUIRE(one != nullptr);
+		one->frame(1.0 / 60.0);
+		REQUIRE(one->capture_picture(s.at("id").get<std::string>()));
+		const nlohmann::json alone = nlohmann::json::parse(one->pictures());
+		REQUIRE(alone.at("pictures").size() == 1);
+		CHECK(alone.at("pictures")[0].at("key") == s.at("key"));
+		for (const nlohmann::json &p : together.at("pictures")) {
+			if (p.at("key") == s.at("key")) {
+				CHECK(p == alone.at("pictures")[0]);
+			}
+		}
+	}
+	// no supply of that id: none captured
+	CHECK_FALSE(all->capture_picture("no_such_supply"));
 }

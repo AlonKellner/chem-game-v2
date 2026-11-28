@@ -144,7 +144,7 @@ flask's air through its nozzle at the nozzle's pace).
 | 89.6 | F1 and its self-test; T1's exemption removed | Done |
 | 89.7 | Stage 79's machinery removed; the lab, the experiments and their tests measured again; a nozzle's size | Done: the glassware's own 2 mm nozzle kept (20 mL/s of water through two and the tube at a thumb's push: a second for the tutorial's 20 mL); the `syringes` tutorial's water pair held until its plunger gets there |
 | 89.8 | Sealed vessels joined with no conduit (Stage 28's `equalize`) | Left as they are, with reasons (Open) |
-| 89.9 | The step's cost; docs; `make gates`; the user's sign-off | `chem_tool study flow`; docs done; main's Stages 85 and 91 merged in (the spec 0.91.1); `make gates` passed (2026-11-28: core, ASan and UBSan, ctest's 1052 entries, the Godot suite, the goldens unchanged; the step's cost 1,344,641 instructions on the demo, +0.3 % against main's at ff5ac39); the user's sign-off to come |
+| 89.9 | The step's cost; docs; `make gates`; the user's sign-off | `chem_tool study flow`; docs done; main's Stages 85 and 91 merged in (the spec 0.91.1); `make gates` passed (2026-11-28: core, ASan and UBSan, ctest's 1052 entries, the Godot suite, the goldens unchanged; the step's cost 1,344,641 instructions on the demo, +0.3 % against main's at ff5ac39). Signed off by the user (2026-11-28: "Approved, merge and proceed"); main's Stage 93 merged in, `make gate` on the merged tree |
 
 ## Tests
 

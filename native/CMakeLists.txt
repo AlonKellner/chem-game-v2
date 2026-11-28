@@ -451,6 +451,8 @@ if(CHEM_BUILD_TESTS)
     # the Godot host's GDScript stays under budget
     add_test(NAME gdscript_budget COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/check_gdscript_budget.py)
     # every number in data/ has a known origin, measured ones held to their source by a test (CLAUDE.md)
+    # the supplies' pictures from a store every tree shares, by key: none captured twice (Stage 93)
+    add_test(NAME pictures_store COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/test_pictures.py $<TARGET_FILE:chem_tool>)
     add_test(NAME data_sources COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/check_sources.py)
     add_test(NAME data_sources_self_test COMMAND Python3::Interpreter -I ${CHEM_REPO_ROOT}/tools/check_sources.py --self-test)
     # the API file godot-cpp generates its bindings from describes the installed binary
