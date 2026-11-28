@@ -1,6 +1,6 @@
 # Chem Game v2: Game Specification
 
-Version 0.91.2 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
+Version 0.92.0 (history: `CHANGELOG.md`). This file is the single source of truth for the design.
 
 Every system is specified here in full. Each system section ends with a **Demo subset** (what the
 3-stage demo of §17 implements) and a **Status** line. A statement marked *(PLANNED, Stage N)* is
@@ -1899,8 +1899,10 @@ of every ray through its area, and its colour is their average (a box filter).
     radius. A vessel picked up sees the wall from a gap further.
   - **A ray is followed layer by layer:** from the eye straight in; at each layer, nearest first,
     the body its line meets there is traced through its own surfaces, and the ray goes on from
-    where it leaves as it leaves, aslant up and down as well as across; behind the last it goes on
-    to the room. A pixel looks through four bodies at most.
+    where it leaves as it leaves, aslant up and down as well as across, to the nearest body of
+    the layer it reaches next (Stage 83: beside the one it left, or behind it at a greater depth,
+    or the ones standing in it); behind the last it goes on to the room. A pixel looks through four
+    bodies at most.
   - **Each body is read where the rays cross it:** a vessel's liquid along the rays' own chords
     there, its haze, its heap of solid, what its surfaces turn away; a body that bends nothing (a
     balloon, a slab) where the ray crosses its layer's plane. What the bodies do is gathered from
@@ -1909,9 +1911,8 @@ of every ray through its area, and its colour is their average (a box filter).
     the solid's emissivity, as a multiple of the room's light there), seen where the solid is
     seen, through half a chord of its liquid: bent, absorbed and turned away by whatever is in
     front of it, as the wall's light is. Nothing is added to a pixel outside its history.
-  - **What it does not do** (§20): a ray is followed into the layers behind the one it left, not
-    into a neighbour on its own layer. A vessel standing inside another (Stage 71: a bath) is drawn on the layer
-    nearer the eye than the one it stands in: it is not seen through the other's front wall and liquid.
+  - **What it does not do** (§20): a ray heading away from the eye is followed into the layers behind
+    the one it left, not back into a nearer one (a ray turned back or sideways meets every body: Stage 78).
   - `O4`, `O5`, `O6`, `O7` and `O8` hold through every layer, against the same independent truth:
     its own tracer through every body of the one world.
 - **Everything that takes space is physical** (Stage 22, signed off by the user on 2026-11-21; the user, 2026-11-20: "If
@@ -2124,6 +2125,38 @@ showed one radiance, the room's faces' mean, and every liquid bent as water.
   follow every other body in the room (its signature of them), so a thing carried past it is seen moving in it.
 - **A flat thing with a gloss** (a burner's metal, a balance's pan): a surface may name an index; it then turns back
   `R` of the room in the mirror direction beside its diffuse share, `1 − R` (not yet built: TDD 78, open).
+
+**A ray's next body** (Stage 83, `docs/TDD_83_NEXT_BODY.md`; the user's word at Stage 71: "when a vessel is inside a
+vessel - rays should be rendered as entering the outer vessel, and then proceeding to hit any surface along the way
+and reacting accordingly, including the inner vessel. For example, a ray may enter the outer vessel, then enter the
+inner vessel, then exit the inner vessel, and then exit the outer vessel, and only then reach a wall"). Until Stage 83
+a ray left a body for the layer behind it, a neighbour on its own layer unseen, and a vessel standing in another was
+drawn on the layer nearer the eye, in front of the other's glass and liquid.
+- **A body has a depth of its own** (`OpticsBody::depth`: pixels away from the eye from its layer's plane; nought at
+  first): its axis stands at `-layer × gap + depth`, in both tracers, and a flat thing's plane with it.
+- **A body may stand in another** (`OpticsBody::within`: the index of the one it stands in). It is on that one's layer
+  at its depth (the lab's `stand`: a test tube in a beaker, in an ice bath). A body and every body standing in it, and
+  in those, are **a group** (four bodies at most), traced at once: at each step the ray meets the nearest surface of
+  any of them, each read in its own frame (its own turn, its own scale), the ray's way kept in the outermost one's.
+- **Where the ray is, is the innermost body it is in.** A body standing in another is inside it: within its outside
+  its glass and its core are its own, and around it is whatever of the other is there (its liquid, the air over its
+  liquid). So a surface between the two bends and turns light away by both their indices (a tube's glass from the
+  water around it, not from air), and what the ray goes through is taken by the medium it is in: a chord of the outer
+  one's liquid is the outer one's, of the inner one's the inner one's. What of the outer one lies within the inner
+  one (its liquid's level, crossing a tube that stands in it) is not met there; a ray that leaves the inner one comes
+  into what of the outer is at that place: its liquid, the air over it, or its sediment, where it ends.
+- **What each body of a group does is its own**: what its surfaces pass and turn away, what its glass and its medium
+  take in, its liquid's chord; each body the ray met is one of its four, in the order the ray first met them.
+- **A ray that leaves a group goes on to the nearest group of its layer that it reaches** (by its box, then by its own
+  surfaces), beside the one it left or behind it at a greater depth, as often as its four bodies allow; then to the
+  layers behind, as before. A ray turned back toward the eye or sideways meets the nearest of every group in the room
+  (Stage 78). Nothing in the search takes a body's axis as upright: a body's box holds it at any turn.
+- **A pixel's history follows what its rays can reach** (`O12`): a body's signature of the bodies its rays can reach
+  takes in those of its own layer whose rows it shares, so a bath's pixels are read again when what lies in the tube
+  standing in it has changed.
+- Held by `O9` (the pass's rays the truth's) on a test tube of copper sulfate solution standing in a beaker of water
+  seen through the beaker, a tube standing above its bath's liquid and two cylinders crossing at different depths;
+  by `O15` and `O16` on the same; and by `O29`, a closed form.
 
 ### 12.4 The long-wave range (Stage 46)
 
@@ -3743,6 +3776,7 @@ The Stage column is where an invariant is implemented; every row is implemented.
 | O26 | A camera's search finds every pixel's hottest and coldest (Stage 48): a step at a time (every second sensor pixel, each a 2 × 2 square of them, at 8 bands; then the 3 × 3 squares about the four hottest and coldest at 16; its centre's spot), the hottest and coldest within 0.05 K of brute force over every sensor pixel at 16 bands, a one-pixel hot stream too. It fires on the first pass alone, which misses the stream's own pixel | 0.05 K | 48 |
 | O27 | (Reserved for the stage of clear surfaces' branches, after Stage 78; built on branch `reflection-branches-wip`.) A reflection is a branch, fairly drawn: a pass ray with a given branch seed takes, at each surface, the branch the truth's Fresnel weights choose for the same uniform (the same events, reflected or through, in the same order); and over 4,096 seeds the share of rays turned back at a surface is its `R` within four binomial standard errors. It fires on a roulette that compares against `T` instead of `R`, and on a seed that changes from frame to frame inside a kept beam | exact (branches); 4 σ (shares) | — |
 | O28 | A mirror shows its image (Stage 78): a level surface of liquid mercury seen aslant shows the room's ruled cells at their mirrored places, each cell's edge where the truth's reflected ray puts it to a pixel, at the reflectance of mercury's measured index. It fires on a reflection read in the unmirrored direction | 1 px; tolerance (float32) | 78 |
+| O29 | A ray goes through what stands in a body (Stage 83): straight along a diameter of a test tube of copper sulfate solution standing at the axis of a beaker of water, a ray passes the product of the six surfaces' normal Fresnel transmittances by each pair of media there (air and glass, glass and water, water and glass, glass and solution, and back), and the tube's solution and the beaker's water each take their own chord, the inner diameter of each less what stands in it, in the pass's tracer and in the truth's. It fires on a body standing in another traced with air around it, and on a chord of the outer one's liquid counted inside the inner one | 1e-6 (pass), 1e-9 cm (chords) | 83 |
 | H1 | What lies in a vessel adds up (Stage 30; `lab/contents.hpp`): the inside under the liquid's surface, less the powder in the part of the pile under it and less the vortex, holds the liquid; the sediment's flat section and its pile hold the powder's bulk. At any turn, for any vessel | 1e-6 of the vessel | 30 |
 | B1 | A vessel's bubbles lie in its liquid: they end from its floor to its surface, their extinction and holdup are no less than nothing and the holdup under one, and the heat its steam bubbles take is no more than its floor took (Stage 45) | exact | 45 |
 | L1 | A vessel's column holds together: the layers in use are one run under its top (nothing under an empty layer), its top is no larger than the vessel, and the column holds no more than fits in it, each layer's at its temperature (Stage 47; 67) | exact | 47, 67 |
@@ -3880,7 +3914,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Sodium hydroxide and sodium sulfate exist only in solution, and take no room (Stage 43) | No solid NaOH to dissolve, no salt crystallising from a boiled-down solution: it stays dissolved at any strength; their volumes are left out (NaOH's is near zero) |
 | A dissolved species takes a constant volume, its apparent molar volume from densities at 20 °C (low confidence) | The acid's 35.7 cm³/mol is 1.8 mL in 50 mL of its solution; the true apparent volumes vary by a few cm³/mol over the range |
 | The hydrates lose their water in three first-order steps | Each step's activation energy is Cheng's (n-th order fits, abstract only), its prefactor put where the fastest rate falls at Yu's thermogravimetric peak (90, 120 and 256 °C at 10 °C/min); the two sources' own prefactors agree within a factor of 1.3 to 5 |
-| Ice (Stage 71): its growth into a supercooled liquid a mush of 100 µm grains, not dendrites; a floating solid drawn as a sediment on the floor and counted whole in its vessel; no sublimation; no hydrohalite; Pitzer's 25 °C parameters at 0 °C; a vessel standing in another drawn on the layer nearer the eye | A tube's recalescence takes seconds where a dendrite's takes less; a brim-full glass with ice spills 9 % of the ice's volume more than it would; ice and salt meet at −23 °C, not −21.1; sodium chloride's freezing points 3 % low at 1 mol/kg, 9 % at 4 |
+| Ice (Stage 71): its growth into a supercooled liquid a mush of 100 µm grains, not dendrites; a floating solid drawn as a sediment on the floor and counted whole in its vessel; no sublimation; no hydrohalite; Pitzer's 25 °C parameters at 0 °C | A tube's recalescence takes seconds where a dendrite's takes less; a brim-full glass with ice spills 9 % of the ice's volume more than it would; ice and salt meet at −23 °C, not −21.1; sodium chloride's freezing points 3 % low at 1 mol/kg, 9 % at 4 |
 | Particles of a solid are equal spheres, counted per cell | No size distribution; crystals do not move with a liquid that is poured off. Stage 66: a seed's fragments share its mass at once (a 2 mm seed and its first thousand 6 µm fragments are a thousand crystals of 0.2 mm), so a bred crop's area is overstated at first and the seed itself is not seen apart; the calibrated breeding rate takes it in |
 | A crystal nucleus is one quantum, about 6 µm | Real nuclei are a thousand times smaller |
 | Complete decanting | Real crystals keep a film of liquid |
@@ -3914,11 +3948,11 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | The display's exposure is a display transform, metered over 16 x 9 blocks, its time constants a design (Stage 90) | A view moving carries the picture at the exposure it was shown at; a lamp's lines in eleven stretches of the spectrum, each read at one point a frame: a neon tube's 158 lines at the room's dimmest steps settle within 17 on the eye metric of the truth (TDD 90, Open) |
 | FeSCN2+'s pair with nitrate is calibrated to two quotients in perchlorate, nitrate in perchlorate's place (Stage 85) | Past an ionic strength of 1.0, and in a medium of iron(III) nitrate itself, the quotient is the model's alone: a textbook standard of 0.2 M iron(III) nitrate takes up 84 % of its thiocyanate, not about 95 % |
 | A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); light brighter than the display scaled down by its brightest channel (Stage 82); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a bright flame or a hot body is drawn at the display's brightest of its own colour, no brighter than a white wall |
-| What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |
+| What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed to the nearest body of its own layer and into the layers behind it, not back into a nearer layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a body standing in another is traced inside it, but what its own surfaces turn away, its haze and its heap send toward the eye through all of the outer one's liquid and surfaces, the half behind it too (Stage 83: each body's light is gathered as one, the outer first); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a tube in a coloured bath shows its own glints a little darker than they are (the bath's back wall and liquid between); a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |
 | A solution's index is its liquids' by volume (water's; from Stage 78 a metal's own, complex); the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room is a cube with black cells along its edges (twice the screen's width, sixteen cells across a face), what glass reflects is its faces' mean as one radiance (a metal's reflection is traced to them, ruled: Stage 78), the ruling of its faces is not drawn off the screen, and the wall is 20 cm behind the vessels: all design, not measured | Rims are darker than the wall, as on a lit bench; how much is the room's own |
 | The screen is one world in pixels: the wall 284 px behind the bench's plane for every body (20 cm at a 250 mL vessel's scale), the hand's plane 120 px in front of it, both calibrated; a body's own scale gives only its lengths in centimetres | A small vessel sees the wall from nearer, in its own centimetres, than a large one; a vessel picked up magnifies a little more |
-| A vessel inside another is not built; where a ray at one end of the spectrum is turned back inside a prism and at the other is not, the piece of the spectrum between is read by chance rays alone (open: `docs/TDD_35_ONE.md`); a pixel stops asking for rays when its own estimate of its error is 2 on the eye metric (8 is visible), from its last sixteen batches: about one pixel in ten thousand, where rays are chaotic (a vessel's floor near its axis), stops visibly off the truth, on the CPU in double as in single precision, and on the GPU by a cause not found (open: `docs/TDD_35_ONE.md`, `docs/TDD_37_RIGHT.md`) | A few pixels of a prism's spectrum beside the slit's image stay dark or dim; none to eight pixels of a bench's picture, of 30,000 to 69,000, are tinted where the truth is grey |
+| Where a ray at one end of the spectrum is turned back inside a prism and at the other is not, the piece of the spectrum between is read by chance rays alone (open: `docs/TDD_35_ONE.md`); a pixel stops asking for rays when its own estimate of its error is 2 on the eye metric (8 is visible), from its last sixteen batches: about one pixel in ten thousand, where rays are chaotic (a vessel's floor near its axis), stops visibly off the truth, on the CPU in double as in single precision, and on the GPU by a cause not found (open: `docs/TDD_35_ONE.md`, `docs/TDD_37_RIGHT.md`) | A few pixels of a prism's spectrum beside the slit's image stay dark or dim; none to eight pixels of a bench's picture, of 30,000 to 69,000, are tinted where the truth is grey |
 | A vessel's glass is one thickness all round, the standard's least for a beaker of its capacity, and its floor glass all through, flat and square-cornered (calibrated: 2.6 mm at 250 mL); its lip, its flare and spout, the rounded corner of its floor and the curve of a liquid's surface against the glass are not modelled, and nothing is drawn in their place | Through an empty 250 mL vessel the wall behind is seen 1.15 times its size, as through a thin shell; a real beaker's rim distorts a little more |
 | The room's is the only light besides what glows; a hot solid's glow is seen through half a chord of the liquid it lies in | No lamp or glowing gas lights the scene yet (§12.2 is built for them); a glowing solid lights nothing else |
 | The spectral viewer's screen is an LED panel of three smooth primaries (Gaussians of 30 nm at 620, 530 and 450 nm, design), its pixels' subpixels side by side, each 0.8 of its third lit across and the pixel 0.9 lit down; its colour management is the panel's own, toward grey of a colour's luminance where its primaries cannot reach (Stage 42) | Its rainbow is each wavelength as the game shows a spike of it, seen through the pass within 3 on the eye metric (8 is visible); a real panel's primaries are narrower and its maker's colour management its own |
