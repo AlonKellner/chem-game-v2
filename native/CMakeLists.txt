@@ -98,13 +98,13 @@ target_include_directories(chem_datagen PRIVATE core/include datagen)
 target_include_directories(chem_datagen SYSTEM PRIVATE extern)
 chem_apply_flags(chem_datagen)
 add_custom_command(
-    OUTPUT "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/builtin_optics.cpp" "${CHEM_GEN_DIR}/include/chem/builtin_ids.hpp"
+    OUTPUT "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/builtin_optics.cpp" "${CHEM_GEN_DIR}/builtin_flow.cpp" "${CHEM_GEN_DIR}/include/chem/builtin_ids.hpp"
     COMMAND chem_datagen "${CHEM_DATA_DIR}" "${CHEM_GEN_DIR}"
-    DEPENDS chem_datagen "${CHEM_DATA_DIR}/elements.json" "${CHEM_DATA_DIR}/species.json" "${CHEM_DATA_DIR}/reactions.json" "${CHEM_DATA_DIR}/solutions.json"
+    DEPENDS chem_datagen "${CHEM_DATA_DIR}/elements.json" "${CHEM_DATA_DIR}/species.json" "${CHEM_DATA_DIR}/reactions.json" "${CHEM_DATA_DIR}/solutions.json" "${CHEM_DATA_DIR}/flow.json"
             "${CHEM_DATA_DIR}/optics/media.json" "${CHEM_DATA_DIR}/optics/cie_1931_2deg.csv" "${CHEM_DATA_DIR}/optics/d65.csv"
     COMMENT "Embedding the species and reactions (data/), every reaction balanced")
 
-add_library(chem_core STATIC ${CHEM_CORE_SOURCES} "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/builtin_optics.cpp")
+add_library(chem_core STATIC ${CHEM_CORE_SOURCES} "${CHEM_GEN_DIR}/builtin_tables.cpp" "${CHEM_GEN_DIR}/builtin_optics.cpp" "${CHEM_GEN_DIR}/builtin_flow.cpp")
 target_include_directories(chem_core PUBLIC core/include "${CHEM_GEN_DIR}/include")
 set_target_properties(chem_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # CHEM_ASSERT policy (core/include/chem/error.hpp): abort in Debug, report through

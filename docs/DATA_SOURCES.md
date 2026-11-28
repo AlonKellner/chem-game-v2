@@ -1078,6 +1078,83 @@ is theirs at the room's times `1 − κ(T) (P − P_atm)`; a solute's apparent v
 differs; not modelled), a solid not at all (about 1e-11 /Pa, a fiftieth of water's; not modelled). With it a sealed
 cell full of liquid has a pressure: warmed, it rises by α/κ (4.5 bar a kelvin at 20 °C).
 
+
+## Flow between vessels (Stage 89)
+
+What a conduit's flow law is made of (GAME_SPEC §6): `data/flow.json`, read 2026-11-28. Every number is a published
+correlation's own; none is fitted here. What the game adds is how they are put together (GAME_SPEC §6;
+`docs/TDD_89_FLOW.md`), and that is held to measurements below.
+
+**Churchill 1977, the friction factor**: S. W. Churchill, "Friction-factor equation spans all fluid-flow regimes",
+*Chem. Eng.* **84** (24) (1977) 91–92. Darcy's factor of a round pipe, `f = 8 ((8/Re)^12 + (A + B)^(-3/2))^(1/12)`,
+`A = (2.457 ln(1 / ((7/Re)^0.9 + 0.27 ε/D)))^16`, `B = (37530/Re)^16`. The paper itself was not reached; `A` and `B`
+as a search's summary of Engineers Edge's page of the equation gives them
+(https://engineersedge.com/calculators/churchill_friction_factor_15812.htm), which prints the outer exponent garbled
+("3.2" for 3/2) and without the leading 8 (Churchill's own `f` is a wall stress over `ρ u²`, an eighth of Darcy's).
+So the form is not taken on the print alone. Held to:
+- its laminar limit: `8 (8/Re)` is `64/Re`, Poiseuille's, which fixes the 8 and the 12th root;
+- its turbulent limit at a smooth wall, `f = 8 / (2.457 ln((Re/7)^0.9))²`: 0.01787 at Re 1e5, where Blasius gives
+  0.0178 and Prandtl's law 0.0180, which fixes the −3/2 (any other power is not a friction factor there);
+- the Princeton Superpipe's measurements, next.
+The game takes the wall as smooth (glass, silicone tubing): `ε = 0`, so 0.27 is not in the data.
+
+**The Princeton Superpipe's friction**: B. J. McKeon, M. V. Zagarola and A. J. Smits, "A new friction factor
+relationship for fully developed pipe flow", *J. Fluid Mech.* **538** (2005) 429–443: `1/√f = 1.920 log10(Re √f) −
+0.475 − 7.04 / (Re √f)^0.55`, which "predicts the friction factor to within 1.4 % of the Princeton data (0.6 % at
+high Reynolds number, 310e3 < Re < 30e6) and within 2.0 % of the Blasius relation at low Reynolds numbers
+(10e3 < Re < 90e3)". Read as quoted by D. D. Joseph and B. H. Yang, "Friction factor correlations for laminar,
+transition and turbulent flow in smooth pipes" (2008; their eq. 3.2, p. 4;
+https://dept.aem.umn.edu/~./faculty/joseph/PL-correlations/docs-ln/f_Re_smooth.pdf, the page rendered and read by
+eye). The measured table itself (McKeon, Swanson, Zagarola, Donnelly and Smits, *J. Fluid Mech.* **511** (2004) 41,
+table 1) was not reached. Churchill's formula is 1.2 % under the fit at Re 1e4 and 2.1 % under at 1e7.
+
+**Shah 1978, a tube's entrance**: R. K. Shah, "A correlation for laminar hydrodynamic entry length solutions for
+circular and noncircular ducts", *J. Fluids Eng.* **100** (1978) 177–179: the apparent (Fanning) friction of laminar
+flow developing from a uniform profile, `f_app Re = 3.44/√x + (K/(4x) + f Re − 3.44/√x) / (1 + C/x²)`,
+`x = L/(D Re)`, a round tube's `K = 1.25`, `f Re = 16`, `C = 0.000212`. The paper was not reached; the form and its
+numbers as a search's summary of a review's table of friction correlations gives them
+(https://nanoscalereslett.springeropen.com/articles/10.1186/s11671-017-1984-1/tables/6: 3.44/√ξ, 16, 0.3125/ξ which
+is 1.25/4, 2.12e-4/ξ²), and a second result gives the same 0.000212. Held to its limits: long, `4 f_app Re x` is
+`64 x + 1.25`, Poiseuille's drop and the 1.25 heads a flow takes developing; short, `13.76 √x`, a flat plate's
+boundary layer. And, through the law it is part of, to the measured discharge, below.
+
+**A sharp-edged contraction's loss**: half a velocity head of the narrower section from a wide vessel,
+`0.5 (1 − A_narrow/A_wide)` between two sections (Weisbach's; as Crane's Technical Paper 410 has it). A textbook
+value, taken as known; held to the measured discharge, whose high-Reynolds limit it sets (`Cd = 1/√(1.5 + f l/d)`:
+0.80 at l/d 2, where the measurements give 0.81). **An expansion's loss** is Borda and Carnot's,
+`(1 − A_narrow/A_wide)²` heads of the narrower section, from the momentum balance: theory, no data. **The choked
+rate** of a gas through the narrowest section, `A P √(γ M/(R T)) (2/(γ+1))^((γ+1)/(2(γ−1)))`, is the isentropic
+flow's: theory, `γ` from the species' own heat capacities.
+
+**The measured discharge of a short tube**: A. Lichtarowicz, R. K. Duggins and E. Markland, "Discharge coefficients
+for incompressible non-cavitating flow through long orifices", *J. Mech. Eng. Sci.* **7** (1965) 210–219: their own
+and earlier measurements of sharp-edged parallel bores, l/d up to 10 and Reynolds numbers to about 1e5, and a
+correlation of them: `Cdu = 0.827 − 0.0085 l/d` at high Reynolds number (2 ≤ l/d ≤ 10, "to 1.5 %") and
+`1/Cd = 1/Cdu + (20/Re)(1 + 2.25 l/d) − 0.005 (l/d) / (1 + 7.5 (log10(0.00015 Re))²)`, which "fits all but a few
+points to better than 0.02 in the range of l/d from 2 to 10 and of Re from 10 to 2 × 10^4". The paper was not
+reached (its abstract: https://scilit.com/publications/b586e198e3ae929aad4454fb2dadfd8d). The equations as a
+transcription of the paper's page gives them
+(https://raw.githubusercontent.com/thiemom/combaero/main/validation/cooling/extractions/lichtarowicz_1965_long_orifice.md,
+read by a fetch; its `Cd = Q / (A √(2 g h))` for a bore fed from a wide vessel); `Cdu`'s form also in a search's
+summary of a later paper on small orifices. **Its Reynolds number is read here as the hydraulic one,
+`d √(2 ΔP/ρ) / ν`** (on the ideal velocity, not the mean): the transcription says only "based on the orifice
+diameter", but `1/Cd` linear in `1/Re` is a viscous tube's law only on that reading (Poiseuille's is
+`1/Cd = 64 (l/d) / Re_h` exactly; on the mean velocity it would be `Cd ∝ √Re`). With it the game's law, no number
+of it fitted to this, is within 0.030 of the correlation at every one of 85 points (l/d 2, 3, 5, 7, 10; Re_h 10 to
+2e4), the worst where the flow turns turbulent (Re_h ≈ 3000, l/d 10: 0.706 for 0.677), within 0.012 above Re_h
+5000.
+
+**Confidence: good** for the turbulent friction (two limits and a measured fit within 2.1 %); **good** for a short
+tube's discharge between Re_h 100 and 2e4 (within 0.03 in `Cd` of a correlation of measurements stated to 0.02);
+**medium** below Re_h 100 (the correlation's own form is not creeping flow's there, and its Reynolds number is
+read, not quoted) and for pieces in series (each piece's law is held, their sum is not measured: the tube between
+two nozzles is taken as entered by a flow that develops again). Not held to anything: a gas near its choked rate
+between the mean-density law and the limit (the law is isothermal and has no acceleration term; it is cut at the
+choked rate, not blended into it).
+The tests: `measured: a smooth pipe's turbulent friction is the Princeton Superpipe's, within 2.5 % of McKeon,
+Zagarola and Smits's fit of it (Stage 89)`; `measured: a short sharp-edged tube's discharge is Lichtarowicz, Duggins
+and Markland's, within 0.03 of their correlation of the measurements (Stage 89)`.
+
 ## Ions as species (Stage 63)
 
 Dissolved matter as its ions (GAME_SPEC §9, §10): hydrogen, hydroxide, copper, sulfate, bisulfate, sodium, nickel
