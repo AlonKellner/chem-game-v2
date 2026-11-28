@@ -47,7 +47,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
 | 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
 | 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion; what moves in a vessel with its volume; hands at random on sealed layered syringes | Done |
-| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | The `pressure` session re-recorded with approval; docs done; `make gates` and the sign-off to come |
+| 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | The `pressure` session re-recorded with approval; docs done; `make gates` passed (2026-11-28: core, ASan and UBSan, ctest, the Godot suite, the goldens unchanged; the step's cost 1,265,059 instructions on the demo, +1.2 % against main's at 722b8cd); the user's sign-off to come |
 
 ## Tests
 
