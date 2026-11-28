@@ -1118,7 +1118,11 @@ revolution seen from the side.
   averages them over time, so it settles to the disc's own uniform integral (`O19`); it starts again
   where the disc moves or what it looks through changes, as a pixel's history does.
 - **Exposure:** fixed, or adapted from a reduced-resolution luminance computed on the GPU.
-- **Colours no display has** (a spectral line, a deep copper blue, anything brighter than white)
+- **Light brighter than the display** (a channel past its brightest: a flame test's flame, a hot
+  solid, a lamp) is scaled down by its brightest channel, keeping its hue and chroma, as a camera
+  shows a flame (Stage 82, the user's choice: until then a colour past the white of OKLab's lightness
+  1 was drawn white, so a sodium flame could not be yellow). Then:
+- **Colours no display has** (a spectral line, a deep copper blue)
   are brought into the display's gamut keeping their lightness and hue and giving up saturation:
   chroma reduced at constant lightness and hue in OKLCh, the method of CSS Color 4, onto the
   display's own gamut. Not clipped per channel, which shifts both lightness and hue. The user
@@ -1911,11 +1915,12 @@ A flame shows what is in it: the flame test (curriculum experiment 10). Data: `d
   D lines, potassium's red doublet, lithium's 670.8, calcium's 422.7, strontium's 460.7, barium's 553.5
   and copper's 510.6 nm come out the strongest of their elements at the burner's 2200 K.
 - **Molecular bands**: the alkaline earths' and copper's flames are their monohydroxides' colours (CaOH,
-  SrOH, BaOH, CuOH; Meyerriecks and Kosanke's bands, Gaussians of 4 nm), carrying a calibrated share of
-  the element's light (0.8 to 0.95).
-- **Brightness**: an element's light per mole is its Boltzmann sum against sodium's at the lab burner's
-  temperature, times `per_mol` (calibrated: a fresh drop of 0.1 M outshines the flame's own blue). A
-  hotter flame is brighter by its Boltzmann factors.
+  SrOH, BaOH, CuOH; Meyerriecks and Kosanke's bands, Gaussians of 4 nm), each molecule's light calibrated
+  against sodium's atoms at the lab burner's temperature (copper's atoms are barely excited there; its
+  green is its CuOH's), at another temperature by Boltzmann's factor for each band's photon.
+- **Brightness**: an element's light per mole is its atoms' Boltzmann sum against sodium's at the lab
+  burner's temperature and its bands', times `per_mol` (calibrated: a fresh drop of 0.1 M far outshines
+  the flame's own blue). A hotter flame is brighter by its Boltzmann factors.
 - **The flame test** (`flame_test`): a loop dipped in a vessel's solution carries a drop (0.02 mL) of it
   into a lit burner's flame: the drop's share of each shown element's atoms joins the flame's load, which
   fades by exp(−t / 3 s). The load is the burner's display state (saved; in the digest only when it holds
@@ -3557,7 +3562,7 @@ Full-model additions (§6): mechanical equilibrium at rest, booked work equals `
 | Haze is single scattering, with the return path taken as half a chord | A stirred suspension's colour is approximate; its opacity follows the particles' count and size |
 | A balloon is seen only by the light through it; a flame is drawn, not simulated | No sheen on the rubber; the burner is a hot reservoir with no chemistry |
 | A flame test's drop is the burner's display state, not matter (Stage 82): its atoms' lines and their molecules' bands by a Boltzmann sum and calibrated shares, the partition function a ground level's g | The drop is not taken from the vessel (0.02 mL, under the hand's resolution); no self-absorption (a strong sodium flame's lines do not reverse); a chloride's own bands (CuCl's blue) and the continuum (potassium's lilac) are not modelled; a solid's grains on the loop are not taken (a solution only) |
-| A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a body past about 1200 K is drawn at the display's white |
+| A colour outside sRGB keeps its lightness and hue and loses chroma (OKLCh, onto sRGB, not the display's own gamut); light brighter than the display scaled down by its brightest channel (Stage 82); exposure is fixed | Deep copper blue is drawn as a less saturated blue of the same lightness; a bright flame or a hot body is drawn at the display's brightest of its own colour, no brighter than a white wall |
 | What a vessel's clear surfaces reflect shows the room in front, one radiance, not traced (a metal's is traced, Stage 78); a ray bent by one body is followed into the bodies of the layers behind it, not into a neighbour on its own layer (a ray turned back toward the eye or sideways meets every body, Stage 78: a flat thing as a box as deep as it is wide); a pixel's rays are its corners' and its middle's at four wavelengths, a ray between them the cubic through them, and what that leaves out comes by the mean of a few traced rays a frame; a ray is followed through sixteen surfaces and four turnings back in one body, then goes straight on | A glass rim shows no reflected image of the bench; a ray leaving a vessel aslant toward its neighbour sees the wall instead; a pixel on a rim, a liquid's surface or a fold is grainy for some frames after what it looks through moves, and right once it rests (`O4`); light held in the glass of a rim is not followed to its end (1 to 2% of the pixels read by rays differ visibly from rays followed without limit) |
 | A solution's index is its liquids' by volume (water's; from Stage 78 a metal's own, complex); the solutes' share (about 0.01 for 1 mol/L of copper sulfate) is not modelled; a heap of solid, the balloon and anything up and down (a liquid's surface, a vessel's floor) bend nothing | A strong solution bends as water does; a pool in a balloon is seen straight |
 | The room is a cube with black cells along its edges (twice the screen's width, sixteen cells across a face), what glass reflects is its faces' mean as one radiance (a metal's reflection is traced to them, ruled: Stage 78), the ruling of its faces is not drawn off the screen, and the wall is 20 cm behind the vessels: all design, not measured | Rims are darker than the wall, as on a lit bench; how much is the room's own |

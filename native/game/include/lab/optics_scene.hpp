@@ -291,6 +291,8 @@ struct OpticsBody {
 	// (Stage 82) a flame's: the light its metals add at each nanometre from 380, a multiple of the room's light per pixel of
 	// path (lab/flame.hpp); none: its own alone
 	const std::array<double, 401> *glow_add = nullptr;
+	// (Stage 82) where that light spikes, [from, to] nm: the pass cuts its bands there (lab/flame.hpp, spikes)
+	const std::vector<std::pair<double, double>> *glow_spikes = nullptr;
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;

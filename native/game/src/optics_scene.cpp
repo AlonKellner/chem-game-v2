@@ -447,6 +447,21 @@ void optics_compose(OpticsScene &scene, const OpticsRoom &room, const std::vecto
 				h_sig = fnv(&body.image_hash, sizeof body.image_hash, h_sig); // a new picture is a new colour
 			}
 			put(at + IDS, 1, tag(h_sig));
+			if (body.glow_spikes != nullptr && !body.glow_spikes->empty()) {
+				// (Stage 82) a flame's narrow lines, as lines of no depth: the pass cuts its bands about them (each its
+				// own point, every frame), and they absorb nothing
+				const int first = line_count;
+				for (const auto &[from, to] : *body.glow_spikes) {
+					if (line_count < MAX_LINES) {
+						const size_t o = static_cast<size_t>(line_count++) * 4;
+						lines[o] = static_cast<float>(0.5 * (from + to));
+						lines[o + 1] = static_cast<float>((to - from) / 3.0); // the cuts at 1.5 widths each side: [from, to]
+						lines[o + 2] = 0.0f;
+					}
+				}
+				put(at + IDS, 2, first);
+				put(at + IDS, 3, line_count - first);
+			}
 			continue;
 		}
 		const ItemView &v = *body.item;

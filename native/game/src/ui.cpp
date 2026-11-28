@@ -294,6 +294,7 @@ struct Ui::Impl {
 	std::map<std::string, Picture> balances; // each balance's display as it last showed (Stage 50)
 	std::map<std::string, Picture> spectro_shows; // each spectrophotometer's two displays, "<id>:a" and "<id>:nm" (Stage 55)
 	std::map<std::string, std::array<double, 401>> flame_glows; // (Stage 82) each lit burner's metals' light, by its id
+	std::map<std::string, std::vector<std::pair<double, double>>> flame_spikes; // (Stage 82) and where it spikes
 	// a thermal camera's (Stage 48): its search, what it last read, the span it shows, what its screen is given
 	struct CameraState {
 		ThermalSearch search;
@@ -6693,6 +6694,9 @@ struct Ui::Impl {
 						std::array<double, 401> &g = flame_glows[v.id];
 						g = flame::glow(load, v.celsius + 273.15);
 						bodies[k].glow_add = &g;
+						std::vector<std::pair<double, double>> &cut = flame_spikes[v.id];
+						cut = flame::spikes(load, v.celsius + 273.15);
+						bodies[k].glow_spikes = &cut;
 					}
 				}
 			} else if (is_part_kind(v.kind) && (v.place == "bench" || (v.place == "trash" && i == trash_top()))) {

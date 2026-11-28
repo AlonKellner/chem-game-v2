@@ -28,6 +28,10 @@ bool shows(const std::string &element);
 // the room's light there per pixel of path; each line's light put on the two nanometres about its centre in shares
 // that keep its whole and its centre (a row read straight between its nanometres integrates to it exactly)
 std::array<double, NM> glow(const std::vector<std::pair<std::string, double>> &elements_mol, double kelvin);
+// Where the glow spikes (GAME_SPEC §12.5): the nanometres [from, to] each of its narrow lines' light lies across (its two
+// bins and the slopes the pass reads between them), those that overlap merged, at most `most`, the brightest; the
+// pass cuts its bands there, so each spike is read by a point of its own every frame and none is missed.
+std::vector<std::pair<double, double>> spikes(const std::vector<std::pair<std::string, double>> &elements_mol, double kelvin, int most = 8);
 // how long a drop's metal lasts in a flame (s, its 1/e time) and what a loop carries of a solution (mL)
 double fade_s();
 double drop_ml();
