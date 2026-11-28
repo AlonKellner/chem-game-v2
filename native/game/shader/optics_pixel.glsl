@@ -4987,6 +4987,25 @@ bool in_panels(vec2 p) {
 	return false;
 }
 
+// The display's exposure (Stage 90, GAME_SPEC §12.2): the eye adapting as a pupil does, metered from the picture itself
+// (16 x 9 blocks, the brightest block's mean light), what the screen multiplies the room's light by before it is
+// brought into the display's gamut. 1 in the room at its full light with nothing brighter than its white; under 1 where
+// something outshines that; over 1 (up to 8) where the room's lights are dimmed. The host keeps it (`display_exposure`).
+const int METER_X = 16;
+const int METER_Y = 9;
+float meter_luminance(vec3 c) {
+	return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z;
+}
+// what the brightest block's mean light (shares of the room's white at full light) and the room's light level ask of it
+float exposure_target(float brightest, float level) {
+	return clamp(min(1.0 / max(brightest, 1.0e-6), 1.0 / max(level, 1.0e-6)), 1.0 / 64.0, 8.0);
+}
+// a frame's step toward it, in its logarithm: closing in 0.1 s, opening in 0.7 s (most of the way in 0.3 s and 2 s)
+float exposure_step(float e, float target, float dt) {
+	float tau = target < e ? 0.1 : 0.7;
+	return exp(log(e) + (log(target) - log(e)) * (1.0 - exp(-max(dt, 0.0) / tau)));
+}
+
 vec4 wall_shown(vec2 p, float size) {
 	wall_base = 0; // (bare: the wall as drawn)
 	if (in_panels(p)) {
@@ -4996,7 +5015,7 @@ vec4 wall_shown(vec2 p, float size) {
 		return infrared_shown(1.0); // the room's own temperature (Stage 46)
 	}
 	int profile = wall_profile(p.y);
-	float v = encode1(wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size));
+	float v = encode1(min(display_exposure() * wall_span(profile, p.x - 0.5 * size, p.x + 0.5 * size), 1.0)); // (Stage 90: at the display's exposure)
 	return vec4(v, v, v, 1.0);
 }
 
@@ -5110,6 +5129,6 @@ vec4 shown(Path q, PixelState s) {
 		return infrared_shown((s.prox.x + s.hist.x + s.prox.y + s.hist.y + s.prox.z + s.hist.z) / 3.0);
 	}
 	// (and a sensor's display, what it shows through what is in front of it: Stage 46)
-	vec3 c = gamut(vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z) + relay_light(q));
+	vec3 c = gamut(display_exposure() * (vec3(s.prox.x + s.hist.x, s.prox.y + s.hist.y, s.prox.z + s.hist.z) + relay_light(q))); // (Stage 90: its exposure)
 	return vec4(encode1(c.x), encode1(c.y), encode1(c.z), 1.0);
 }

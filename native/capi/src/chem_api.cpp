@@ -515,7 +515,14 @@ cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, in
 		return fail(CG_ERR_INVALID_ARGUMENT, "cg_ui_optics_compare: null argument, no picture, or the size is not set");
 	}
 	try {
-		const lab::OpticsParity parity = lab::optics_compare(ui->ui->optics(), rgba, width, height);
+		lab::OpticsParity parity;
+		if (out->exposure > 0.0f && out->exposure != 1.0f) {
+			lab::OpticsScene shown = ui->ui->optics(); // (Stage 90) the truth at the exposure the picture was shown at
+			shown.exposure = out->exposure;
+			parity = lab::optics_compare(shown, rgba, width, height);
+		} else {
+			parity = lab::optics_compare(ui->ui->optics(), rgba, width, height);
+		}
 		out->worst = static_cast<int32_t>(std::ceil(parity.worst));
 		out->covered = parity.covered;
 		out->over = parity.over;

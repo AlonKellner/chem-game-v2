@@ -71,6 +71,10 @@ inline vec4 scene_vec(int i) {
 	const float *v = &current->table[static_cast<size_t>(i) * 4];
 	return vec4(v[0], v[1], v[2], v[3]);
 }
+// (Stage 90) the display's exposure the scene is shown at (the host's: 1 for a scene that sets none)
+inline real display_exposure() {
+	return static_cast<real>(current->exposure);
+}
 inline real row_value(int i) {
 	return current->rows[static_cast<size_t>(i)];
 }

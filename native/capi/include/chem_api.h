@@ -284,6 +284,7 @@ typedef struct cg_optics_parity {
 	int64_t covered; /* pixels a body covers */
 	int64_t over; /* of them, those visibly different (above 8 on the eye metric) */
 	int32_t worst_x, worst_y; /* where the largest difference is */
+	float exposure; /* in (Stage 90): the display's exposure the picture was shown at; 0 or less: 1 */
 } cg_optics_parity;
 
 CG_API cg_status cg_ui_optics_compare(cg_ui *ui, const uint8_t *rgba, int32_t width, int32_t height, cg_optics_parity *out);

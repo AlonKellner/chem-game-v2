@@ -163,6 +163,9 @@ inline constexpr double SCREEN_FILL_X = 0.8, SCREEN_FILL_Y = 0.9;
 } // namespace optics_layout
 
 struct OpticsScene {
+	// (Stage 90) the display's exposure it is shown at: what the screen multiplies its light by before the gamut (1: as
+	// the room is at its full light; the host meters and adapts it, a test sets it)
+	float exposure = 1.0f;
 	std::vector<float> table; // SIZE_VECS * 4
 	std::vector<float> rows; // ROWS_PER_SET * ROW a set, as many sets as there are; then their long-wave rows (Stage 46)
 	std::vector<float> lines; // MAX_LINES * 4
@@ -645,6 +648,13 @@ struct OpticsParity {
 };
 inline constexpr double OPTICS_PARITY_COVER = 0.02;
 OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h);
+// (Stage 90) The display's exposure, the per-pixel source's own: what the brightest of the 16 x 9 blocks' mean light (in
+// shares of the room's white at its full light) and the room's light level ask of it, between 1/64 and 8, and one
+// frame's step toward it (closing in 0.1 s, opening in 0.7 s). `optics_meter`: the blocks' mean light of a picture in
+// linear light (a 1920 x 1080 rgb array, row by row), the brightest.
+double optics_exposure_target(double brightest, double level);
+double optics_exposure_step(double exposure, double target, double dt);
+double optics_meter(const std::vector<double> &linear_rgb, int w, int h);
 
 // ---- invariants (GAME_SPEC §18): "" or the failure, starting with its id
 
