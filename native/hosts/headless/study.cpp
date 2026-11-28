@@ -2,6 +2,7 @@
 // form (GAME_SPEC §2, principle 7: each system validated in isolation). The
 // studies drive the core directly; the game itself is played through the C API.
 #include "chem/builtin_ids.hpp"
+#include "chem/conduit.hpp"
 #include "chem/invariants.hpp"
 #include "chem/sim.hpp"
 #include "chem/thermo.hpp"
@@ -975,6 +976,144 @@ int precipitates_study() {
 // Stage 66 (curriculum 35): a seed in a supersaturated solution. 100 g of water held at 25 C with copper sulfate 5 %
 // over its saturation, clear; a 10 mg crystal of the pentahydrate dropped in, the beaker still or stirred (0.01 W,
 // the lab's stirrer). What comes out of the solution, in how many crystals, and how far from saturation it is left.
+// Stage 89 (GAME_SPEC §6, Flow between vessels): a conduit's law against what it is held to, and two syringes of water
+// on a tube closed together through a thumb's push.
+int flow_study() {
+	const SpeciesTable &table = builtin_species();
+	const double pi = 3.14159265358979323846;
+	std::printf("a smooth pipe's friction (Churchill 1977) against McKeon, Zagarola and Smits's fit of the Princeton Superpipe:\n");
+	std::printf("        Re   Churchill      the fit   difference\n");
+	for (const double re : { 1e4, 3e4, 1e5, 3e5, 1e6, 1e7, 3.5e7 }) {
+		double f = 0.02;
+		for (int i = 0; i < 200; ++i) {
+			const double x = re * std::sqrt(f), root = 1.920 * std::log10(x) - 0.475 - 7.04 / std::pow(x, 0.55);
+			f = 1.0 / (root * root);
+		}
+		std::printf("  %8.3g   %9.5f   %9.5f   %+8.2f %%\n", re, friction_factor(re), f, 100.0 * (friction_factor(re) / f - 1.0));
+	}
+	std::printf("\na short sharp-edged tube's discharge coefficient against Lichtarowicz, Duggins and Markland's correlation of the measurements (stated to 0.02):\n");
+	std::printf("     Re_h    l/d 2: ours theirs    l/d 5: ours theirs   l/d 10: ours theirs\n");
+	const double bore = 2e-3, density = 998.2, viscosity = 1.002e-3, area = 0.25 * pi * bore * bore;
+	double worst = 0.0;
+	for (const double re : { 10.0, 30.0, 100.0, 300.0, 1000.0, 2000.0, 3000.0, 5000.0, 10000.0, 20000.0 }) {
+		std::printf("  %7.0f", re);
+		for (const double ld : { 2.0, 5.0, 10.0 }) {
+			Conduit c;
+			c.pieces[0] = Piece{ bore, ld * bore };
+			c.count = 1;
+			const double ideal = re * viscosity / (density * bore), drop = 0.5 * density * ideal * ideal;
+			const double ours = liquid_rate(c, 101325.0 + drop, 101325.0, density, viscosity) / (density * area * ideal);
+			const double ultimate = 0.827 - 0.0085 * ld, dip = std::log10(0.00015 * re);
+			const double theirs = 1.0 / (1.0 / ultimate + 20.0 / re * (1.0 + 2.25 * ld) - 0.005 * ld / (1.0 + 7.5 * dip * dip));
+			worst = std::max(worst, std::fabs(ours - theirs));
+			std::printf("        %6.3f  %6.3f", ours, theirs);
+		}
+		std::printf("\n");
+	}
+	std::printf("  the worst of these: %.3f\n", worst);
+	Conduit nozzle, joined;
+	nozzle.pieces[0] = Piece{ 2e-3, 10e-3 };
+	nozzle.count = 1;
+	joined.pieces[0] = Piece{ 2e-3, 10e-3 };
+	joined.pieces[1] = Piece{ 4e-3, 300e-3 };
+	joined.pieces[2] = Piece{ 2e-3, 10e-3 };
+	joined.count = 3;
+	const double water_mu = solvent_viscosity(table, 293.15), water_rho = solvent_density(table, 293.15), air_mu = gas_viscosity(table, 293.15), air_molar = 0.028964, air_gamma = 1.4;
+	std::printf("\nwhat a syringe's nozzle (2 mm by 1 cm) lets through at 20 C, and two of them on 30 cm of 4 mm tube; Poiseuille's for the nozzle beside it:\n");
+	std::printf("   drop, kPa   water, mL/s: nozzle   joined   Poiseuille's     air, mL/s at the giver's pressure: nozzle   joined\n");
+	for (const double kpa : { 0.01, 0.1, 1.0, 10.0, 74.0, 200.0 }) {
+		const double from = 101325.0 + 1000.0 * kpa, air_rho = air_molar * from / (GAS_CONSTANT * 293.15);
+		std::printf("   %9.2f   %19.3f %8.3f %14.1f   %41.1f %8.1f\n", kpa, 1e6 * liquid_rate(nozzle, from, 101325.0, water_rho, water_mu) / water_rho,
+				1e6 * liquid_rate(joined, from, 101325.0, water_rho, water_mu) / water_rho, 1e6 * pi * 16e-12 * 1000.0 * kpa / (128.0 * water_mu * 10e-3),
+				1e6 * gas_rate(nozzle, from, 101325.0, 293.15, air_molar, air_gamma, air_mu) / air_rho, 1e6 * gas_rate(joined, from, 101325.0, 293.15, air_molar, air_gamma, air_mu) / air_rho);
+	}
+	// two syringes of 50 mL of water with a bubble each, nozzle to nozzle on the tube; one pushed by a thumb to 20 mL
+	bool ok = false;
+	World::Builder b(table);
+	const CellId mains = b.add_reservoir("mains", WORK_KELVIN);
+	const CellId room = b.add_reservoir("room", T0);
+	const double ml = 1e-6, bubble = P_ATMOSPHERE * 0.5 * ml / (GAS_CONSTANT * T0), bore_area = 100.0 * ml / 0.12;
+	CellId cells[2];
+	EdgeId work[2];
+	for (int i = 0; i < 2; ++i) {
+		cells[i] = b.add_rigid_cell(i == 0 ? "one" : "two", 50.5 * ml);
+		b.set_amount(cells[i], builtin::nitrogen, amount_from_mol(bubble, ok));
+		b.set_amount(cells[i], builtin::water, amount_from_mol(50.0 * ml / molar_volume_at(table, table.species(builtin::water), T0), ok));
+		b.set_temperature(cells[i], T0);
+		b.add_edge(cells[i], room, PHASES_NONE, 5.0);
+		work[i] = b.add_edge(mains, cells[i], PHASES_NONE, 0.0);
+	}
+	const EdgeId tube = b.add_edge(cells[0], cells[1], PHASES_GAS | phase_bit(Phase::Liquid) | phase_bit(Phase::Aqueous), 0.0);
+	std::string why;
+	auto world = b.build(&why);
+	if (!world) {
+		std::fprintf(stderr, "chem_tool: %s\n", why.c_str());
+		return 1;
+	}
+	std::vector<Reaction> fast;
+	for (const Reaction &r : builtin_reactions()) {
+		if (r.kinetics().law == Kinetics::Law::Equilibrium) {
+			fast.push_back(r);
+		}
+	}
+	Simulation sim(std::move(*world), fast);
+	sim.set_checking(false);
+	const auto plunger = [&](int i, double held_ml) {
+		Piston p;
+		p.area = bore_area;
+		p.friction = 1.0;
+		p.drag = 70.0;
+		p.least = 0.5 * ml;
+		p.most = 100.0 * ml;
+		p.hand_most = 79.8;
+		p.work = work[i];
+		p.held = held_ml > 0.0;
+		p.target = held_ml * ml;
+		return sim.world().set_piston(cells[i], p) == Refusal::None;
+	};
+	if (sim.world().set_conduit(tube, joined, 3) != Refusal::None || !plunger(0, 0.0) || !plunger(1, 0.0)) {
+		std::fprintf(stderr, "chem_tool: the syringes could not be set up\n");
+		return 1;
+	}
+	std::printf("\ntwo syringes of 50 mL of water, a bubble each, nozzle to nozzle on the tube; one pushed to 20 mL with all a thumb has (79.8 N):\n");
+	std::printf("    time, s   one, mL   two, mL   one, kPa   two, kPa   crossing, mL/s   its law's at those pressures   the hand, N\n");
+	int failures = 0;
+	double entropy = 0.0, began[2] = { 0.0, 0.0 };
+	for (int i = 0; i < 60 * 4; ++i) {
+		if (i == 30) { // (the plungers at rest on their water first)
+			began[0] = sim.world().piston_volume(cells[0]) / ml;
+			began[1] = sim.world().piston_volume(cells[1]) / ml;
+			if (!plunger(0, 20.0)) {
+				return 1;
+			}
+		}
+		const StepTrace trace = sim.step();
+		const Violations v = check_all(table, trace, sim.equilibria());
+		failures += static_cast<int>(v.size());
+		if (!v.empty() && failures < 5) {
+			std::fprintf(stderr, "chem_tool: %s\n", v[0].c_str());
+		}
+		entropy += entropy_change(table, trace);
+		if (i % 12 == 5 && i < 60 * 3) {
+			const World &w = sim.world();
+			const Thermal a = thermal_state(table, w.snapshot_cell(cells[0]), &w.meta(cells[0])), c = thermal_state(table, w.snapshot_cell(cells[1]), &w.meta(cells[1]));
+			double crossed = 0.0;
+			for (const Crossed &x : trace.crossed) {
+				crossed += (x.from == cells[0] ? 1.0 : -1.0) * x.kg;
+			}
+			const double law = a.pressure > c.pressure ? liquid_rate(joined, a.pressure, c.pressure, water_rho, solvent_viscosity(table, a.temperature))
+													   : -liquid_rate(joined, c.pressure, a.pressure, water_rho, solvent_viscosity(table, c.temperature), true);
+			std::printf("    %7.2f   %7.3f   %7.3f   %8.2f   %8.2f   %14.3f   %28.3f   %11.2f\n", (i + 1) / 60.0, w.piston_volume(cells[0]) / ml, w.piston_volume(cells[1]) / ml, a.pressure / 1000.0, c.pressure / 1000.0,
+					1e6 * crossed / water_rho * 60.0, 1e6 * law / water_rho, w.meta(cells[0]).piston.force);
+		}
+	}
+	const World &w = sim.world();
+	std::printf("  at rest: one %.4f mL, two %.4f mL (%.4f mL in, %.4f mL out); the world's entropy rose by %.4g J/K; %llu solves left short, %llu by the nested solve\n", w.piston_volume(cells[0]) / ml,
+			w.piston_volume(cells[1]) / ml, began[0] - w.piston_volume(cells[0]) / ml, w.piston_volume(cells[1]) / ml - began[1], entropy, static_cast<unsigned long long>(sim.closure_misses()), static_cast<unsigned long long>(sim.closure_nested()));
+	std::printf("  %s\n", failures == 0 ? "every invariant held on every step" : "INVARIANTS FAILED");
+	return failures == 0 && sim.closure_misses() == 0 ? 0 : 1;
+}
+
 int seed() {
 	bool ok = false;
 	const SpeciesTable &table = builtin_species();
@@ -1195,9 +1334,12 @@ int run_study(const char *name) {
 	if (std::strcmp(name, "seed") == 0) {
 		return seed();
 	}
+	if (std::strcmp(name, "flow") == 0) {
+		return flow_study();
+	}
 	if (std::strcmp(name, "ice") == 0) {
 		return ice_study();
 	}
-	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, conductivity, precipitates, ice, spectrum, frames, tilt, vortex)\n", name);
+	std::fprintf(stderr, "chem_tool study: unknown study \"%s\" (cooling, decomposition, balloon, distillation, dissolution, crystals, solution_heat, neutralisation, precipitation, seed, flow, conductivity, precipitates, ice, spectrum, frames, tilt, vortex)\n", name);
 	return 2;
 }
