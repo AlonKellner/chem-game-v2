@@ -737,7 +737,9 @@ TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its
 		{ "silver_nitrate", "bottle" }, { "barium_chloride", "bottle" }, { "calcium_chloride", "bottle" }, { "magnesium_sulfate", "bottle" }, { "iron_iii_chloride", "bottle" },
 		{ "iron_ii_sulfate", "bottle" }, { "zinc_sulfate", "bottle" }, { "aluminium_chloride", "bottle" }, { "cobalt_chloride", "bottle" }, { "limewater", "bottle" },
 		{ "chalk", "beaker" }, { "thiocyanate", "bottle" }, { "chromate", "bottle" }, { "dichromate", "bottle" }, { "ammonia_strong", "bottle" },
-		{ "hydrochloric_strong", "bottle" }, { "hydroxide_strong", "bottle" }, { "edta", "bottle" }, { "buffer_10", "bottle" }, { "eriochrome", "beaker" } };
+		{ "hydrochloric_strong", "bottle" }, { "hydroxide_strong", "bottle" }, { "edta", "bottle" }, { "buffer_10", "bottle" }, { "eriochrome", "beaker" },
+		// (Stage 82) the flame tests' solutions
+		{ "sodium_chloride", "beaker" }, { "potassium_chloride", "beaker" }, { "lithium_chloride", "beaker" }, { "strontium_chloride", "beaker" }, { "copper_sulfate", "beaker" } };
 	int vessels = 0;
 	for (const char *bench : { "data/benches/demo.json", "data/benches/lab.json" }) {
 		std::string why;
@@ -763,7 +765,7 @@ TEST_CASE("lab: every vessel of every bench is its glassware: the cell holds its
 			++vessels;
 		}
 	}
-	CHECK(vessels == 43); // (Stage 64: and the free lab's thirteen reagents; Stage 76: eleven more; Stage 81: nine more, the complexes' reagents, EDTA, its buffer and indicator)
+	CHECK(vessels == 48); // (Stage 64: and the free lab's thirteen reagents; Stage 76: eleven more; Stage 81: nine more, the complexes' reagents, EDTA, its buffer and indicator; Stage 82: five, the flame tests' solutions)
 	// glassware no standard makes, or a wall given beside it, is refused with the reason
 	std::string why;
 	CHECK(lab::Lab::open(R"({"format": "chem-bench/1", "room": {"celsius": 20}, "items": [

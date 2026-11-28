@@ -247,7 +247,7 @@ TEST_CASE("colour: the eye metric weighs lightness most and a grey shown as a co
 	CHECK(lab::eye_difference({ 50, 4, 0 }, grey) == doctest::Approx(lab::eye_difference(grey, { 50, 4, 0 })).epsilon(0.05));
 }
 
-TEST_CASE("colour: a colour no display has keeps its lightness and hue (Stage 10)") {
+TEST_CASE("colour: a colour no display has keeps its lightness and hue; one brighter than it, its hue and chroma (Stage 10, Stage 82)") {
 	// in gamut: unchanged
 	double inside[3] = { 0.2, 0.5, 0.7 };
 	lab::gamut_map(inside);
@@ -265,10 +265,18 @@ TEST_CASE("colour: a colour no display has keeps its lightness and hue (Stage 10
 	CHECK(cyan[0] < cyan[2]);
 	const double y_after = 0.2126 * cyan[0] + 0.7152 * cyan[1] + 0.0722 * cyan[2];
 	CHECK(y_after == doctest::Approx(y_before).epsilon(0.08));
-	// brighter than white is white
+	// brighter than the display: scaled down by its brightest channel, its hue and chroma kept (Stage 82, the user's
+	// choice; until then it was white): a bluish white stays bluish, a flame's orange orange
 	double bright[3] = { 1.5, 1.4, 1.6 };
 	lab::gamut_map(bright);
-	CHECK(bright[1] == 1.0);
+	CHECK(bright[2] == doctest::Approx(1.0));
+	CHECK(bright[0] == doctest::Approx(1.5 / 1.6));
+	CHECK(bright[1] == doctest::Approx(1.4 / 1.6));
+	double flame[3] = { 8.0, 2.0, 0.4 };
+	lab::gamut_map(flame);
+	CHECK(flame[0] == doctest::Approx(1.0));
+	CHECK(flame[1] == doctest::Approx(0.25));
+	CHECK(flame[2] == doctest::Approx(0.05));
 }
 
 TEST_CASE("O3: random spectra of every shape are shown within the eye's threshold, settled and right after a change (Stage 10)") {

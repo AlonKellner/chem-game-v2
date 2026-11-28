@@ -4242,8 +4242,8 @@ Cuts add_cut(Cuts c, float u) {
 
 // the lines of one layer's liquid
 Cuts line_cuts(Cuts c, Layer l, int layers, int k) {
-	if (k >= layers || l.depth_cm <= 0.0) {
-		return c;
+	if (k >= layers || (l.depth_cm <= 0.0 && !(l.glowing > 0.0))) {
+		return c; // (Stage 82: a flame's narrow lines, of no depth, cut where it glows)
 	}
 	vec4 ids = scene_vec(HEADER_VECS + body_of(l.body) * BODY_VECS + 4);
 	int first = int(ids.z);
@@ -4395,9 +4395,15 @@ vec3 clip01(vec3 c) {
 	return vec3(clamp(c.x, 0.0, 1.0), clamp(c.y, 0.0, 1.0), clamp(c.z, 0.0, 1.0));
 }
 
-// a colour no display has keeps its lightness and hue: OKLCh's chroma lowered until clipping what is
-// left is within a just-noticeable difference (CSS Color 4), sixteen halvings; linear sRGB in and out
+// a colour no display has: brighter than its brightest, scaled down by its brightest channel to it (its hue and
+// chroma kept, as a camera shows a flame: Stage 82, the user's choice); then, outside its colours, its lightness and
+// hue kept: OKLCh's chroma lowered until clipping what is left is within a just-noticeable difference (CSS Color
+// 4), sixteen halvings; linear sRGB in and out
 vec3 gamut(vec3 c) {
+	float brightest = max(c.x, max(c.y, c.z));
+	if (brightest > 1.0) {
+		c = c / brightest;
+	}
 	float e = 0.000001;
 	if (c.x >= -e && c.x <= 1.0 + e && c.y >= -e && c.y <= 1.0 + e && c.z >= -e && c.z <= 1.0 + e) {
 		return clip01(c);

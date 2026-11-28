@@ -2,6 +2,7 @@
 
 #include "chem/builtin_ids.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -119,6 +120,14 @@ bool in_gamut(const double rgb[3]) {
 } // namespace
 
 void gamut_map(double rgb[3]) {
+	// (Stage 82, the user's choice) brighter than the display's brightest: scaled down by its brightest channel, its
+	// hue and chroma kept, as a camera shows a flame
+	const double brightest = std::max(rgb[0], std::max(rgb[1], rgb[2]));
+	if (brightest > 1.0) {
+		for (int c = 0; c < 3; ++c) {
+			rgb[c] /= brightest;
+		}
+	}
 	// CSS Color 4: keep OKLab's lightness and hue, lower the chroma until clipping what is left is
 	// within a just-noticeable difference (0.02 in OKLab); a fixed sixteen halvings, as the shader does
 	if (in_gamut(rgb)) {

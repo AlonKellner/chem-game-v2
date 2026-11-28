@@ -1493,3 +1493,44 @@ measured; water's part its molar volume, 18.069 cm³). Gate: `measured: each com
   610 nm (his table's 32,300 at 615); In³⁻ orange, 20,900 at 500 nm; MgIn⁻ wine red, 33,200 at 560 nm (its red tail
   an upper bound: 5–10 % free dye); CaIn⁻ red, 29,300 at 540 nm. H₂In⁻'s, red, not found (his pH 3.91 curve shows no
   band, the dye aggregated): **calibrated**, MgIn⁻'s.
+
+## Lithium and strontium (Stage 82)
+
+For flame tests (`docs/TDD_82_FLAMES.md`). Read 2026-11-27. Gate: `measured: lithium's and strontium's ions are NBS's and
+OBIGT's, their salts' pairs Pitzer and Mayorga's`.
+- **Elements**: CIAAW's abridged weights, Li 6.94, Sr 87.62.
+- **Ions**: NBS 1982, the ao rows: Li⁺ p. 2-290, ΔfH° −278.49, ΔfG° −293.31, S° 13.4 (Cp° 68.6); Sr²⁺ p. 2-276, −545.80,
+  −559.48, −32.6 (no Cp°). Cp° and V° from OBIGT (`inorganic_aq.csv` lines 2 and 9, Shock and Helgeson 1988): Li⁺ 14.2
+  cal, −0.87 cm³; Sr²⁺ −10.05 cal, −17.41 cm³; on the model's footing (Cp − 216.35 z, V − 16.74 z). NBS's and OBIGT's
+  Li⁺ Cp° differ (68.6 against 59.41 J), and Sr²⁺'s ΔfG° by 4.4 kJ: NBS's enthalpy and entropy, OBIGT's Cp° and V°,
+  as for Stage 76's ions.
+- **Diffusion at 25 C**: the CRC Handbook (Vanýsek): Li⁺ 1.029e-9, Sr²⁺ 0.791e-9 m²/s (their conductances' Nernst–
+  Einstein values; PHREEQC's −dw 1.03e-9 and 0.794e-9).
+- **Pitzer pairs**: Pitzer and Mayorga 1973 (as pytzer and pitzer.dat transcribe it): LiCl Table I β⁽⁰⁾ 0.1494, β⁽¹⁾
+  0.3074, C^φ 0.00359 (to 6 m); LiNO₃ 0.1420, 0.2780, −0.00551 (to 6 m); SrCl₂ Table VI unscaled 0.28575, 1.66725,
+  −0.0013046 (to 4 m); Sr(NO₃)₂ 0.134625, 1.380, −0.019925 (to 2 m).
+
+## Flame emission (Stage 82)
+
+`data/flame.json` (`docs/TDD_82_FLAMES.md`). Read 2026-11-27. Gate: `measured: a flame's lines are NIST's at the
+burner's temperature, its molecules' bands Meyerriecks and Kosanke's`.
+- **Atomic lines**: the NIST Atomic Spectra Database v5 (Kramida, Ralchenko, Reader and the NIST ASD Team), lines
+  query 380 to 780 nm, air wavelengths, the neutral atom (I), E1 transitions with a transition probability: each line's
+  λ, A_ki, g_k and E_k, for Na, K, Li, Ca, Sr, Ba and Cu (six to nine lines each, the strongest at flame temperatures).
+  A line's light in a flame at T is in proportion to g_k A_ki exp(−hc E_k / kT) / λ over the ground level's g (NIST's
+  levels: 2S1/2 for the alkalis and copper, 1S0 for the alkaline earths), the partition function taken as its ground
+  level's g: at 2200 K the excited levels hold under 1 % of an atom's population but barium's (its 5d ³D levels at
+  9034 cm⁻¹, 4 %), and the partition function is common to an element's lines, so it moves no line's share within an
+  element, only an element's brightness against another's, by at most 4 %. At the lab
+  burner's 2200 K the strongest lines are sodium's D lines (588.995, 589.592), potassium's 766.49 and 769.90, lithium's
+  670.78, calcium's 422.67, strontium's 460.73, barium's 553.55, copper's 510.55 nm: the lines of the flame tests.
+- **Molecular bands**: Meyerriecks and Kosanke, "Color values and spectra of the principal emitters in colored flames",
+  J. Pyrotechnics 18 (2003), Table 2: CaOH, SrOH, BaOH and CuOH, each band's peak and relative intensity (salt
+  solutions in a propane flame); the peaks CaOH 625, SrOH 682, BaOH 513, CuOH 546 nm. Each band drawn as a Gaussian of
+  4 nm FWHM (their spectra's widths).
+- **Calibrated** (not measured, to how a flame test looks): the light of a mole in the flame (`per_mol`: a fresh drop
+  of 0.1 M, about 2 µmol, far outshines the burner's own blue, as a sodium flame does), each molecule's bands' light against
+  sodium's atoms at the burner's 2200 K (Ca 0.56, Ba 4.3: 0.9 and 0.8 of their elements' light there; Sr 6.2, 0.97 of it, its atoms mostly
+  bound as SrOH, its 460.7 nm line a trace and its flame crimson;
+  Cu 0.5, its atoms barely excited at 2200 K, its green its CuOH's: their flames are their monohydroxides' colours,
+  Gaydon's and Meyerriecks and Kosanke's), at another temperature by Boltzmann's factor for each band's photon, a loop's drop (0.02 mL) and its metal's life in the flame (a 1/e time of 3 s).
