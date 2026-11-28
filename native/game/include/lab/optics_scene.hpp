@@ -171,6 +171,7 @@ struct OpticsScene {
 	std::vector<float> lines; // MAX_LINES * 4
 	std::vector<float> lights; // LIGHTS * LIGHT_SIZE * 4
 	double lights_kelvin = 0.0; // the room's temperature the long-wave light was made at
+	double lights_level = 1.0; // (Stage 90) the room's lights' level the visible light's table was made at
 	uint64_t revision = 0; // changes when any of them does: to a number no scene has had (Stage 47), as every revision here
 	// The wall's table (GAME_SPEC §12.3): large, and seldom changed, so it has its own revision.
 	std::vector<float> wall; // vec4s: optics_layout's wall table
@@ -311,6 +312,9 @@ struct OpticsShape {
 // The room: what is behind the bodies. The backdrop reflects evenly, so it is
 // one number: its radiance as a share of the room's white; and what is drawn on it.
 struct OpticsRoom {
+	// (Stage 90) the room's lights, a share of their full light: what is lit by them is the pass's own (a share of the
+	// room's white), what emits light of its own brighter against them by its inverse; the display's exposure opens on it
+	double level = 1.0;
 	float x = 0, y = 0, w = 0, h = 0; // the bench's rectangle
 	double bench = 0.73; // its radiance
 	double elsewhere = 0.02;
@@ -649,8 +653,8 @@ struct OpticsParity {
 inline constexpr double OPTICS_PARITY_COVER = 0.02;
 OpticsParity optics_compare(const OpticsScene &scene, const uint8_t *rgba, int w, int h);
 // (Stage 90) The display's exposure, the per-pixel source's own: what the brightest of the 16 x 9 blocks' mean light (in
-// shares of the room's white at its full light) and the room's light level ask of it, between 1/64 and 8, and one
-// frame's step toward it (closing in 0.1 s, opening in 0.7 s). `optics_meter`: the blocks' mean light of a picture in
+// shares of the room's white at its lights' level) and that level ask of it, min(1 / brightest, 1) between level / 64
+// and 8 level, and one frame's step toward it (closing in 0.1 s, opening in 0.7 s). `optics_meter`: the blocks' mean light of a picture in
 // linear light (a 1920 x 1080 rgb array, row by row), the brightest.
 double optics_exposure_target(double brightest, double level);
 double optics_exposure_step(double exposure, double target, double dt);

@@ -101,6 +101,8 @@ public:
 	// temperature a colour (the debug panel's "infrared"); off as opened.
 	void set_infrared(bool on);
 	bool infrared() const;
+	// (Stage 90) the room's lights, a share of their full light (the top bar's "lights")
+	double room_level() const;
 	// The supplies' pictures (GAME_SPEC §13.1, Stage 61): each supply's box is a picture captured once, by the
 	// renderer's own source on the CPU, of it alone in its box as the room lights it, kept by what is drawn of it.
 	// A host gives back what it kept (`add_pictures`: those built ahead for the benches of data/, then its own), and

@@ -258,6 +258,8 @@ typedef struct cg_optics {
 	/* Stage 46: how many records the sensor displays' pixels have in a pool of their own (a host keeps
 	 * CG_OPTICS_RELAY_VECS vec4s for each, zero at first; the per-pixel source lays them out) */
 	int32_t relay_pool;
+	/* Stage 90: the room's lights, a share of their full light: the display's exposure opens no wider than 8 times it */
+	float room_level;
 } cg_optics;
 
 /* A host whose pass traces its rays live keeps each pixel's beams between frames

@@ -403,6 +403,7 @@ void fill_optics(const lab::OpticsScene &scene, cg_optics *out) {
 	out->room[2] = room.x + room.w;
 	out->room[3] = room.y + room.h;
 	out->relay_pool = scene.relay_pool;
+	out->room_level = static_cast<float>(scene.lights_level); // (Stage 90) the room's lights the scene was made at
 	out->vec_count = static_cast<int32_t>(scene.table.size() / 4);
 	out->table = scene.table.data();
 	out->revision = scene.revision;

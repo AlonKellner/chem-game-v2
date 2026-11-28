@@ -4988,17 +4988,20 @@ bool in_panels(vec2 p) {
 }
 
 // The display's exposure (Stage 90, GAME_SPEC §12.2): the eye adapting as a pupil does, metered from the picture itself
-// (16 x 9 blocks, the brightest block's mean light), what the screen multiplies the room's light by before it is
-// brought into the display's gamut. 1 in the room at its full light with nothing brighter than its white; under 1 where
-// something outshines that; over 1 (up to 8) where the room's lights are dimmed. The host keeps it (`display_exposure`).
+// (16 x 9 blocks, the brightest block's mean light), what the screen multiplies the pass's light by before it is brought
+// into the display's gamut. The pass's light is in shares of the room's white at its lights' level (what emits light of
+// its own the brighter against them as they are dimmed), so its picture of the room is the same at any level: 1 with
+// nothing brighter than the room's white, under 1 where something outshines it; the eye opens no wider than 8 times the
+// room's full light allows, nor closes past a 64th of it (between level / 64 and 8 level). The host keeps it
+// (`display_exposure`).
 const int METER_X = 16;
 const int METER_Y = 9;
 float meter_luminance(vec3 c) {
 	return 0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z;
 }
-// what the brightest block's mean light (shares of the room's white at full light) and the room's light level ask of it
+// what the brightest block's mean light (shares of the room's white at its lights' level) and that level ask of it
 float exposure_target(float brightest, float level) {
-	return clamp(min(1.0 / max(brightest, 1.0e-6), 1.0 / max(level, 1.0e-6)), 1.0 / 64.0, 8.0);
+	return clamp(min(1.0 / max(brightest, 1.0e-6), 1.0), level / 64.0, 8.0 * level);
 }
 // a frame's step toward it, in its logarithm: closing in 0.1 s, opening in 0.7 s (most of the way in 0.3 s and 2 s)
 float exposure_step(float e, float target, float dt) {

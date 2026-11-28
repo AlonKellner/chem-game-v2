@@ -3,24 +3,28 @@
 // its white, over 1 (to 8) in a dimmed room; closing fast and opening slowly; the picture and the truth shown at it.
 #include "lab/flame.hpp"
 #include "lab/optics_scene.hpp"
+#include "lab/ui.hpp"
 
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <string>
 #include <vector>
 
-TEST_CASE("exposure: the room at its full light asks for 1, a light brighter than its white for less, a dimmed room for more, within 1/64 and 8 (Stage 90)") {
+TEST_CASE("exposure: the room asks for 1 at any level the eye can open to, a light brighter than its white for less; a room too dim, all the eye can (Stage 90)") {
 	// the room as it is: its brightest block no brighter than its white
 	CHECK(lab::optics_exposure_target(0.73, 1.0) == doctest::Approx(1.0));
 	CHECK(lab::optics_exposure_target(1.0, 1.0) == doctest::Approx(1.0));
 	// a block twice the room's white: half
 	CHECK(lab::optics_exposure_target(2.0, 1.0) == doctest::Approx(0.5));
-	// the room's lights at a quarter: its picture brought back up, four times, as far as nothing outshines it
-	CHECK(lab::optics_exposure_target(0.73 * 0.25, 0.25) == doctest::Approx(4.0));
-	CHECK(lab::optics_exposure_target(0.5, 0.25) == doctest::Approx(2.0)); // (a glow in it: only so far)
-	// its bounds
+	// the room's lights at a quarter: the pass's light is in shares of its white there, so the room's picture is as it
+	// was (the eye open four times wider), and what emits is the brighter against it
+	CHECK(lab::optics_exposure_target(0.73, 0.25) == doctest::Approx(1.0));
+	CHECK(lab::optics_exposure_target(4.0, 0.25) == doctest::Approx(0.25)); // (a glow four times the room's white)
+	// at a hundredth the eye opens no wider than eight times: the room shown at 0.08 of its white, dim
+	CHECK(lab::optics_exposure_target(0.73, 0.01) == doctest::Approx(0.08));
+	// its least: a sixty-fourth of the room's full light
 	CHECK(lab::optics_exposure_target(1000.0, 1.0) == doctest::Approx(1.0 / 64.0));
-	CHECK(lab::optics_exposure_target(0.001, 0.01) == doctest::Approx(8.0));
 }
 
 TEST_CASE("exposure: it closes on a flare in a few tenths of a second and opens again over seconds, in its logarithm (Stage 90)") {
@@ -105,4 +109,64 @@ TEST_CASE("exposure: the picture and its truth at an exposure: the bench darker 
 	CHECK(flame1[0] == doctest::Approx(1.0).epsilon(0.01));
 	CHECK(flame_half[0] == doctest::Approx(1.0).epsilon(0.01));
 	CHECK(flame_half[2] <= flame1[2] + 1e-9);
+}
+
+TEST_CASE("exposure: the room's lights dimmed: what is lit by them the same in the pass's terms, what emits light of its own the brighter against them (Stage 90)") {
+	const std::array<double, 401> sodium = lab::flame::glow({ { "Na", 2e-7 } }, 2200.15);
+	lab::OpticsBody cone;
+	cone.shape = lab::OpticsBody::Cone;
+	cone.x = 300.0f;
+	cone.y = 200.0f;
+	cone.w = 24.0f;
+	cone.h = 42.0f;
+	cone.light = "flame_sooty";
+	cone.light_to = "flame_blue";
+	cone.toward = 1.0;
+	cone.kelvin = 2200.15;
+	cone.id = 5;
+	cone.glow_add = &sodium;
+	lab::OpticsRoom room;
+	room.w = room.h = 1000;
+	room.bench = 0.7305;
+	room.elsewhere = 0.02;
+	double bench[2][3], flame[2][3];
+	for (int k = 0; k < 2; ++k) {
+		room.level = k == 0 ? 1.0 : 0.1;
+		lab::OpticsScene scene;
+		lab::optics_compose(scene, room, { cone });
+		CHECK(scene.lights_level == doctest::Approx(room.level));
+		lab::optics_truth(scene, 600, 600, bench[k]);
+		lab::optics_truth(scene, 312, 230, flame[k]);
+	}
+	MESSAGE("the bench " << bench[0][1] << " and " << bench[1][1] << "; the flame's light over it " << flame[0][1] - bench[0][1] << " and " << flame[1][1] - bench[1][1]);
+	// the bench in the pass's terms (shares of the room's white): the same at a tenth of the lights
+	CHECK(bench[1][1] == doctest::Approx(bench[0][1]).epsilon(1e-6));
+	// the flame's own light over it: ten times against the dimmed room
+	CHECK((flame[1][1] - bench[1][1]) / (flame[0][1] - bench[0][1]) == doctest::Approx(10.0).epsilon(0.02));
+}
+
+TEST_CASE("exposure: the top bar's lights dim the room a step a click, from the last back to full, and the scene is made at them (Stage 90)") {
+	std::string why;
+	auto ui = lab::Ui::open(R"({"format": "chem-bench/2", "room": {"celsius": 20, "air_mol": 1000}, "items": [
+		{"id": "beaker", "at": [6, 7], "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "beaker", "wall_g": 80}]})",
+			why);
+	REQUIRE_MESSAGE(ui != nullptr, why);
+	const auto click = [&] {
+		float x = 0, y = 0;
+		REQUIRE(ui->locate("lights", x, y));
+		ui->pointer(x, y, false);
+		ui->pointer(x, y, true);
+		ui->pointer(x, y, false);
+		ui->frame(1.0 / 60.0);
+	};
+	ui->frame(1.0 / 60.0);
+	CHECK(ui->room_level() == doctest::Approx(1.0));
+	CHECK(ui->draw().text.find("lights 100%") != std::string::npos);
+	for (const double level : { 0.3, 0.1, 0.03, 0.01, 1.0 }) {
+		click();
+		CHECK(ui->room_level() == doctest::Approx(level));
+	}
+	click();
+	CHECK(ui->draw().text.find("lights 30%") != std::string::npos);
+	CHECK(ui->optics().lights_level == doctest::Approx(0.3));
 }

@@ -572,8 +572,8 @@ struct Ui::Impl {
 		for (auto n = view.notices.rbegin(); n != view.notices.rend(); ++n) {
 			if (hear[static_cast<size_t>(n->level)]) {
 				std::string line = when(n->step) + "  " + n->says;
-				if (line.size() > 56) {
-					line = line.substr(0, 54) + ".."; // short of the debug button
+				if (line.size() > 42) {
+					line = line.substr(0, 40) + ".."; // short of the lights' button (Stage 90)
 				}
 				text(1230, 40, line, level_colour(n->level), 15);
 				break;
@@ -2010,11 +2010,23 @@ struct Ui::Impl {
 
 	// ---- the debug panel (§13.6): the selected item from the inside
 	static Rect debug_button() { return Rect{ 1670, 14, 110, 36 }; }
+	// (Stage 90) the room's lights: a click dims them a step, from the last back to full
+	static Rect lights_button() { return Rect{ 1550, 14, 110, 36 }; }
+	static constexpr double LIGHT_LEVELS[] = { 1.0, 0.3, 0.1, 0.03, 0.01 };
+	double room_level = 1.0;
 	// step, export, up, down, close; and (Stage 46) the infrared view's switch, beside the panel's title
 	static Rect debug_rect(int k) { return k == 5 ? Rect{ DEBUG.x + 390, DEBUG.y + 12, 110, 30 } : Rect{ DEBUG.x + 20 + static_cast<float>(k) * 98, DEBUG.y + 56, 90, 30 }; }
 	static constexpr const char *DEBUG_BUTTONS[] = { "step", "export", "up", "down", "close", "infrared" };
 	static constexpr int DEBUG_BUTTON_COUNT = 6;
 	bool debug_press(float x, float y) {
+		if (lights_button().has(x, y)) {
+			size_t k = 0;
+			while (k < std::size(LIGHT_LEVELS) && LIGHT_LEVELS[k] != room_level) {
+				++k;
+			}
+			room_level = LIGHT_LEVELS[(k + 1) % std::size(LIGHT_LEVELS)];
+			return true;
+		}
 		if (debug_button().has(x, y)) {
 			debug_open = !debug_open;
 			notices_open = notices_open && !debug_open;
@@ -2137,6 +2149,7 @@ struct Ui::Impl {
 	}
 	void paint_debug() {
 		button(debug_button(), "debug", debug_open, 15);
+		button(lights_button(), text_of("lights %.0f%%", 100.0 * room_level), room_level < 1.0, 15); // (Stage 90)
 		if (!debug_open) {
 			return;
 		}
@@ -6946,7 +6959,7 @@ struct Ui::Impl {
 					g = lamps::glow(v.lamp, std::exp(std::round(std::log(v.valve) / 0.05) * 0.05));
 					bodies[k].glow_add = &g;
 					std::vector<std::pair<double, double>> &cut = flame_spikes[v.id];
-					cut = lamps::spikes(v.lamp);
+					cut = lamps::spikes(v.lamp, 11); // (Stage 90: eleven, as near the pass's 24 cuts as a pixel through one tube allows: a dimmed room shows a neon tube's many lines the brighter)
 					bodies[k].glow_spikes = &cut;
 				}
 			} else if (v.kind == "burner") {
@@ -7221,6 +7234,7 @@ struct Ui::Impl {
 		room.pixel_x0 = sx(0.0f);
 		room.pixel_y0 = sy(0.0f);
 		room.bench = WALL_RADIANCE;
+		room.level = room_level; // (Stage 90) the room's lights
 		room.elsewhere = DARK_RADIANCE;
 		room.kelvin = view.room_celsius + 273.15; // Stage 46: what the long-wave range sees the room by
 		room.range = infrared ? 1 : 0;
@@ -8744,6 +8758,10 @@ bool Ui::infrared() const {
 	return impl_->infrared;
 }
 
+double Ui::room_level() const {
+	return impl_->room_level;
+}
+
 void Ui::set_budget(double ms) {
 	impl_->budget_ms = ms > 0.0 ? ms : 0.0;
 }
@@ -8975,6 +8993,9 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 	}
 	if (what == "debug") {
 		return centre(Impl::debug_button());
+	}
+	if (what == "lights") { // (Stage 90)
+		return centre(Impl::lights_button());
 	}
 	if (after("debug:", rest)) {
 		for (int k = 0; k < Impl::DEBUG_BUTTON_COUNT; ++k) {
