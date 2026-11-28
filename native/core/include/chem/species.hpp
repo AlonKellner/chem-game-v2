@@ -120,6 +120,11 @@ struct SolutionDef {
 	// (Stage 79) a gas's viscosity (air's, at 1 atm) by rising temperature: what a tube's flow of gas goes as (GAME_SPEC
 	// §6, Pistons); empty: none known
 	std::vector<ViscosityPoint> gas_viscosity;
+	// (Stage 88) the solvent's isothermal compressibility at 1 atm (Kell's form): (a0 + a1 t + ... + a5 t^5) / (1 + b t)
+	// 1/Pa, t in C, from `low` to `high` C, beyond them its value and slope at the end; all zero: none known (a sealed
+	// cell's liquids do not give: GAME_SPEC §6, Liquids that give)
+	std::array<double, 6> compressibility{};
+	double compressibility_b = 0.0, compressibility_low = 0.0, compressibility_high = 0.0;
 };
 
 struct SpeciesDef {

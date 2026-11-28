@@ -117,6 +117,34 @@ std::vector<CellId> sealed_cells(std::span<const CellMeta> meta, std::span<const
 	return sealed;
 }
 
+std::vector<CellId> pressed_cells(std::span<const CellMeta> meta, std::span<const Edge> edges) {
+	const size_t n = meta.size();
+	std::vector<int32_t> above(n, -1);
+	for (const Edge &e : edges) {
+		if (e.open && e.column && e.a.index >= 0 && e.b.index >= 0 && static_cast<size_t>(e.a.index) < n && static_cast<size_t>(e.b.index) < n) {
+			above[static_cast<size_t>(e.a.index)] = e.b.index; // (a column's edge: a layer `a` under `b`)
+		}
+	}
+	std::vector<uint8_t> sealed(n, 0);
+	for (const CellId c : sealed_cells(meta, edges)) {
+		sealed[static_cast<size_t>(c.index)] = 1;
+	}
+	std::vector<CellId> out;
+	for (size_t c = 0; c < n; ++c) {
+		if (!meta[c].layer || meta[c].frozen) {
+			continue;
+		}
+		size_t at = c, hops = 0;
+		while (meta[at].layer && above[at] >= 0 && hops++ < n) {
+			at = static_cast<size_t>(above[at]);
+		}
+		if (!meta[at].layer && sealed[at] && !meta[at].frozen) {
+			out.push_back(CellId{ static_cast<int32_t>(c) });
+		}
+	}
+	return out;
+}
+
 CellId World::Builder::add_cell(std::string name) {
 	names_.push_back(std::move(name));
 	meta_.push_back(CellMeta{});
@@ -166,6 +194,15 @@ World::Builder &World::Builder::set_column(CellId top, double area, double whole
 		CellMeta &m = meta_[static_cast<size_t>(top.index)];
 		m.column_volume = whole > 0.0 ? whole : m.volume;
 		m.column_area = area;
+	}
+	return *this;
+}
+
+World::Builder &World::Builder::set_layer_pressure(CellId layer, double over, double volume, double cushion) {
+	if (layer.index >= 0 && static_cast<size_t>(layer.index) < meta_.size() && meta_[static_cast<size_t>(layer.index)].layer && volume >= 0.0 && cushion >= 0.0 && P_ATMOSPHERE + over > 0.0) {
+		meta_[static_cast<size_t>(layer.index)].over = over;
+		meta_[static_cast<size_t>(layer.index)].volume = volume;
+		meta_[static_cast<size_t>(layer.index)].cushion = cushion;
 	}
 	return *this;
 }
@@ -464,6 +501,12 @@ Refusal World::resize_column_top(CellId top, double volume) {
 		return Refusal::BadValue;
 	}
 	if (m.volume != volume) {
+		if (m.sealed) {
+			note_before(top); // (Stage 88: a sealed vessel's top: its state before is read in its volume then)
+			LedgerEntry entry{ LedgerEntry::Kind::Resize, EdgeId{}, top, CellId{}, {}, Energy{}, 0 };
+			entry.volume = volume;
+			ledger_.push_back(std::move(entry));
+		}
 		m.volume = volume;
 		touch(static_cast<size_t>(top.index));
 	}
@@ -550,9 +593,7 @@ Refusal World::move_piston(CellId cell, double volume, double force, double pres
 	if (!(m.piston.area > 0.0) || !(volume > 0.0) || !(volume - volume == 0.0)) {
 		return Refusal::BadValue;
 	}
-	if (std::none_of(moved_volumes_.begin(), moved_volumes_.end(), [&](const auto &x) { return x.first == cell.index; })) {
-		moved_volumes_.emplace_back(cell.index, m.volume);
-	}
+	note_before(cell);
 	m.piston.force = force;
 	m.piston.pressure = pressure;
 	m.piston.moved += volume - piston_volume(cell);
@@ -885,6 +926,19 @@ CellId World::add_layer_under(CellId lower, Refusal *why) {
 	e.column = true;
 	edges_.push_back(e);
 	++topology_version_;
+	// (Stage 88) under a sealed vessel's top it stands at the vessel's pressure, as the cell over it does
+	refresh_sealed();
+	CellMeta &mine = meta_[static_cast<size_t>(made.index)];
+	if (mine.pressed) {
+		const CellMeta &up = meta_[static_cast<size_t>(lower.index)];
+		if (up.layer) {
+			mine.over = up.over;
+		} else {
+			const Thermal t = thermal_state(*table_, cells_[static_cast<size_t>(lower.index)], &up);
+			mine.over = t.defined && t.pressure > 0.0 ? t.pressure - P_ATMOSPHERE : 0.0;
+		}
+		touch(static_cast<size_t>(made.index));
+	}
 	if (why != nullptr) {
 		*why = Refusal::None;
 	}
@@ -1155,11 +1209,77 @@ void World::refresh_sealed() {
 	for (const CellId c : sealed_cells(meta_, edges_)) {
 		meta_[static_cast<size_t>(c.index)].sealed = true;
 	}
+	// (Stage 88) a sealed vessel's layers stand at its pressure: marked with its seal; one no longer so is at the room's
+	// again, its energy read as an open cell's (as a sealed cell's is when it is opened)
+	std::vector<uint8_t> pressed(meta_.size(), 0);
+	for (const CellId c : pressed_cells(meta_, edges_)) {
+		pressed[static_cast<size_t>(c.index)] = 1;
+	}
+	for (size_t c = 0; c < meta_.size(); ++c) {
+		if (meta_[c].layer) {
+			meta_[c].pressed = pressed[c] != 0;
+			if (!meta_[c].pressed) {
+				meta_[c].over = 0.0;
+				meta_[c].volume = 0.0;
+				meta_[c].cushion = 0.0;
+			}
+		}
+	}
 	for (size_t c = 0; c < meta_.size() && c < revision_.size(); ++c) {
-		if (meta_[c].sealed != was[c].sealed) {
+		if (meta_[c].sealed != was[c].sealed || meta_[c].pressed != was[c].pressed || meta_[c].over != was[c].over || meta_[c].volume != was[c].volume || meta_[c].cushion != was[c].cushion) {
 			touch(c);
 		}
 	}
+}
+
+void World::note_before(CellId cell) {
+	if (std::none_of(moved_volumes_.begin(), moved_volumes_.end(), [&](const auto &x) { return x.first == cell.index; })) {
+		moved_volumes_.emplace_back(cell.index, meta_[static_cast<size_t>(cell.index)].volume);
+		moved_overs_.emplace_back(cell.index, std::make_pair(meta_[static_cast<size_t>(cell.index)].over, meta_[static_cast<size_t>(cell.index)].cushion));
+	}
+}
+
+Refusal World::press_layer(CellId layer, double over, double volume, double cushion) {
+	if (!known(layer)) {
+		return Refusal::UnknownCell;
+	}
+	CellMeta &m = meta_[static_cast<size_t>(layer.index)];
+	if (!m.layer || !m.pressed || !(volume >= 0.0) || !(volume - volume == 0.0) || !(P_ATMOSPHERE + over > 0.0) || !(over - over == 0.0) || !(cushion >= 0.0) || !(cushion - cushion == 0.0)) {
+		return Refusal::BadValue;
+	}
+	if (m.over != over || m.volume != volume || m.cushion != cushion) {
+		note_before(layer); // (cleared as a step begins: what is noted between steps is not a step's)
+		m.over = over;
+		m.volume = volume;
+		m.cushion = cushion;
+		touch(static_cast<size_t>(layer.index));
+		LedgerEntry entry{ LedgerEntry::Kind::Resize, EdgeId{}, layer, CellId{}, {}, Energy{}, 0 };
+		entry.volume = volume;
+		entry.over = over;
+		entry.cushion = cushion;
+		ledger_.push_back(std::move(entry));
+	}
+	return Refusal::None;
+}
+
+Refusal World::work(EdgeId edge, CellId from, Energy energy) {
+	if (edge.index < 0 || static_cast<size_t>(edge.index) >= edges_.size()) {
+		return Refusal::UnknownEdge;
+	}
+	const Edge &e = edges_[static_cast<size_t>(edge.index)];
+	if (!e.column || !known(e.a) || !known(e.b)) {
+		return Refusal::BadValue;
+	}
+	const CellMeta &a = meta_[static_cast<size_t>(e.a.index)], &b = meta_[static_cast<size_t>(e.b.index)];
+	if (!a.pressed || !(b.pressed || b.sealed)) {
+		return Refusal::BadValue; // (a layer `a` under `b`, a layer or the top, of a sealed vessel)
+	}
+	const size_t before = ledger_.size();
+	const Refusal refused = transfer(edge, from, {}, energy);
+	if (refused == Refusal::None && ledger_.size() == before + 1) {
+		ledger_.back().work = true;
+	}
+	return refused;
 }
 
 // (Stage 75) one counter for every world of the process: a revision names one write, wherever it was made
@@ -1193,12 +1313,14 @@ void World::resume_step() {
 void World::skip_step() {
 	resumed_ = false;
 	moved_volumes_.clear();
+	moved_overs_.clear();
 	ledger_.clear();
 	++step_;
 }
 
 void World::rebase() {
 	moved_volumes_.clear();
+	moved_overs_.clear();
 	before_.cells = cells_;
 }
 
@@ -1227,6 +1349,21 @@ void World::close_step(StepTrace &trace) {
 			trace.volume_before[static_cast<size_t>(c)] = v;
 		}
 		moved_volumes_.clear();
+	}
+	trace.over_before.clear();
+	trace.cushion_before.clear();
+	if (!moved_overs_.empty()) {
+		trace.over_before.resize(meta_.size());
+		trace.cushion_before.resize(meta_.size());
+		for (size_t c = 0; c < meta_.size(); ++c) {
+			trace.over_before[c] = meta_[c].over;
+			trace.cushion_before[c] = meta_[c].cushion;
+		}
+		for (const auto &[c, v] : moved_overs_) {
+			trace.over_before[static_cast<size_t>(c)] = v.first;
+			trace.cushion_before[static_cast<size_t>(c)] = v.second;
+		}
+		moved_overs_.clear();
 	}
 	trace.thermal = thermal_;
 	trace.starved.clear();

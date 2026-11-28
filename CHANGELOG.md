@@ -1,5 +1,30 @@
 # GAME_SPEC version history
 
+## 0.88.0 (2026-11-28, Stage 88; signed off by the user: "Approved, merge and proceed")
+
+- §6 (Stage 88, `docs/TDD_88_PRESSURE.md`; the first of the two stages the user asked for after Stage 79, "the proper
+  mechanisms ... in a correct and consistent manner"): **liquids that give**: a sealed cell's liquids are
+  compressible (water's by Kell 1975, 4.59e-10 /Pa at 20 °C), their Gibbs energy `G0(T) + V_s p + V_l (p − κ p²/2)`,
+  the cell's volume, energy, entropy and every chemical potential from it. Every sealed state has one pressure: gas
+  over liquid, liquid alone (brim-full water warmed rises 4.5 bar a kelvin at 20 °C), or nought with a void that
+  boiling fills (a cavity at the vapour pressure). Open cells unchanged to the bit. V2 at a sealed cell's own
+  pressure; V3's roomless cell one filled with what does not give.
+- §6: **a vessel's one pressure**: a sealed vessel's layers stand at its pressure, each taking the volume it needs
+  (`pressed`, `over`; `Simulation::size_vessels`), the work of each one's change of volume booked between it and
+  the top as work (`World::work`, W2); a cell's resizing an entry of the step's ledger, replayed by T1. Water in a
+  layer boils where its vessel's pressure says (it boiled at 100 °C whatever the pressure): a sealed flask in a bath
+  at 150 °C comes to 6 bar with its layers' water liquid at 149 °C. A layer feels its vessel as it grows (its
+  **cushion**: its share of the vessel's free volume, a pressure law stiffer than any gas's own compression), so its
+  boiling takes no more room than its vessel has; what moves between a vessel's cells takes its volume with it; P2
+  (a sealed vessel at one pressure). A capped syringe of layered solutions, which failed T2 at its first step on
+  main, holds every invariant under hands jerked at random.
+- The column's diffusion trims what it moves to what is neutral before reckoning its energy (it carried the energy
+  of ions it did not move); a column that spills closes up (L1).
+- The `pressure` session re-recorded with the user's approval (2026-11-28): every printed result main's, line for
+  line; its six digests while the flask is open unchanged, the twelve after it is stoppered moved. Recorded again on
+  Stage 82's tables after main was merged in: the same six of main's unchanged, the same twelve moved, the printed
+  results the same but for lithium's and strontium's totals (nought).
+
 ## 0.87.0 (2026-11-28, Stage 87; signed off by the user)
 
 - §7 (Stage 87, `docs/TDD_87_SOLUTION_KINETICS.md`; `docs/CURRICULUM.md`, step F's first part: experiments 37, 39 and

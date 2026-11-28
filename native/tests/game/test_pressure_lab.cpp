@@ -180,3 +180,45 @@ TEST_CASE("pressure: a timer rigs a bottle's cap on, and a save holds the stoppe
 	CHECK(again->digest() == l->digest());
 	CHECK(item(*again, "flask").pressure_kpa == doctest::Approx(item(*l, "flask").pressure_kpa));
 }
+
+TEST_CASE("pressure: a stoppered flask of two layered solutions warmed: its layers stand at its pressure past an atmosphere, each still its own, and a save holds them, continuing digest for digest (Stage 88)") {
+	// green nickel sulfate solution over the denser blue copper sulfate (the layers bench's), in a flask; stoppered and
+	// warmed gently from below, its air and its vapour press on both layers
+	static const char *LAYERED = R"({
+	"format": "chem-bench/2",
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "flask", "kind": "vessel", "volume_ml": 250, "wall": "glass", "glassware": "conical_flask", "wall_g": 100, "at": [2, 6],
+			"layers": [{"water": {"g": 60.0}, "nickel_sulfate_aq": {"mol": 0.048}}, {"water": {"g": 60.0}, "copper_sulfate_aq": {"mol": 0.084}}]},
+		{"id": "stopper", "kind": "stopper", "wall": "latex", "wall_g": 8, "hold_n": 30, "loss": 0.1},
+		{"id": "burner", "kind": "burner", "celsius": 1927, "conductance": 0.25}
+	]
+})";
+	std::string why;
+	auto l = lab::Lab::open(LAYERED, why);
+	REQUIRE_MESSAGE(l != nullptr, why);
+	l->set_checking(true);
+	ok(*l, R"({"do": "attach", "item": "stopper", "to": "flask"})");
+	ok(*l, R"({"do": "heat", "burner": "burner", "vessel": "flask"})");
+	ok(*l, R"({"do": "valve", "burner": "burner", "to": 0.15})");
+	ok(*l, R"({"do": "wait", "seconds": 90})");
+	REQUIRE_FALSE(l->failed());
+	const lab::ItemView warm = item(*l, "flask");
+	MESSAGE("stoppered and warmed for 90 s: " << warm.pressure_kpa << " kPa, " << warm.layers.size() << " layers");
+	CHECK(warm.sealed);
+	CHECK(warm.pressure_kpa > 104.0);
+	CHECK(warm.layers.size() >= 2);
+	const std::string saved = l->save();
+	CHECK(saved.find("\"over\"") != std::string::npos); // (its layers' pressure is in the save)
+	auto again = lab::Lab::load(saved, why);
+	REQUIRE_MESSAGE(again != nullptr, why);
+	again->set_checking(true);
+	CHECK(again->digest() == l->digest());
+	ok(*l, R"({"do": "wait", "seconds": 30})");
+	ok(*again, R"({"do": "wait", "seconds": 30})");
+	CHECK_FALSE(l->failed());
+	CHECK_FALSE(again->failed());
+	CHECK(again->digest() == l->digest());
+	CHECK(item(*again, "flask").pressure_kpa == doctest::Approx(item(*l, "flask").pressure_kpa).epsilon(1e-12));
+}
