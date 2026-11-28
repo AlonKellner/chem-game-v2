@@ -3,6 +3,8 @@
 #include "chem/thermo.hpp"
 
 #include <cstdio>
+#include <string>
+#include <cstdlib>
 
 namespace chem {
 
@@ -1035,6 +1037,50 @@ std::string words(const char *format, Args... args) {
 	return buffer;
 }
 
+// (Stage 88, GAME_SPEC §6, Liquids that give) A sealed vessel is at one pressure: each of its layers that holds
+// anything stands, as the step ends, at its top's pressure, within what the step's last equilibria moved after its
+// last sizing (a hundredth of it, or 200 Pa: a void just filled by its liquid's vapour, at a few kPa, closes by tens
+// of pascals a round).
+Violations check_P2(const SpeciesTable &table, const StepTrace &trace) {
+	Violations out;
+	if (!trace.thermal || trace.meta.size() != trace.after.cells.size()) {
+		return out;
+	}
+	const size_t n = trace.meta.size();
+	std::vector<int32_t> above(n, -1);
+	for (const Edge &e : trace.edges) {
+		if (e.open && e.column && cell_in(trace, e.a) && cell_in(trace, e.b)) {
+			above[static_cast<size_t>(e.a.index)] = e.b.index;
+		}
+	}
+	for (size_t c = 0; c < n && out.size() < MAX_MESSAGES; ++c) {
+		const CellMeta &meta = trace.meta[c];
+		const CellState &cell = trace.after.cells[c];
+		if (!meta.layer || !meta.pressed || meta.frozen || std::all_of(cell.amount.begin(), cell.amount.end(), [](int64_t a) { return a == 0; })) {
+			continue;
+		}
+		size_t top = c, hops = 0;
+		while (trace.meta[top].layer && above[top] >= 0 && hops++ < n) {
+			top = static_cast<size_t>(above[top]);
+		}
+		if (trace.meta[top].layer || !trace.meta[top].sealed) {
+			continue; // V3's
+		}
+		const Thermal t = thermal_state(table, trace.after.cells[top], &trace.meta[top]);
+		if (!t.defined) {
+			continue; // T3's
+		}
+		const double mine = P_ATMOSPHERE + meta.over;
+		if (std::fabs(mine - t.pressure) > std::max(0.01 * t.pressure, 200.0)) {
+			char buffer[200];
+			std::snprintf(buffer, sizeof buffer, "P2: step %lld: layer %lld stands at %.9g Pa, its sealed vessel's top (cell %lld) at %.9g Pa", static_cast<long long>(trace.step),
+					static_cast<long long>(c), mine, static_cast<long long>(top), t.pressure);
+			out.push_back(buffer);
+		}
+	}
+	return out;
+}
+
 // (Stage 88, GAME_SPEC §6, Liquids that give) Work between cells is a sealed vessel's own: an entry marked work moves
 // energy alone, along a column's edge, from or to a layer that stands at its vessel's pressure.
 Violations check_W2(const SpeciesTable &, const StepTrace &trace) {
@@ -1105,7 +1151,7 @@ Violations check_all(const SpeciesTable &table, const StepTrace &trace, std::spa
 			out.insert(out.end(), v.begin(), v.end());
 		}
 	}
-	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2 }) {
+	for (const auto check : { check_C5, check_C6, check_C7, check_C8, check_T1, check_T2, check_T3, check_X1, check_X2, check_S1, check_V1, check_V3, check_L1, check_E1, check_N1, check_W1, check_W2, check_P2 }) {
 		Violations v = check(table, trace);
 		out.insert(out.end(), v.begin(), v.end());
 	}

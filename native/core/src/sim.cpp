@@ -2274,24 +2274,27 @@ void Simulation::settle() {
 	}
 	settle_cells();
 	// a column's layers (Stage 47), on no gas path: each at its fast equilibria too (a layer that boils makes steam
-	// in it, which the column takes up at the next step)
+	// in it, which the column takes up at the next step). (Stage 88) A sealed vessel's stand at its pressure: theirs
+	// follow its sizing, below
 	for (size_t c = 0; c < cells; ++c) {
 		const CellId cell{ static_cast<int32_t>(c) };
-		if (world_.meta(cell).layer && !world_.meta(cell).frozen && thermal(cell).defined) {
+		if (world_.meta(cell).layer && !world_.meta(cell).pressed && !world_.meta(cell).frozen && thermal(cell).defined) {
 			project(cell);
 		}
 	}
-	// (Stage 88) a sealed vessel sized to what its cells came to, and its cells at their equilibria at the pressure it
-	// came to, in turn until neither moves (a layer that boils takes room, and its vessel's pressure rises on it): the
-	// last word the equilibria's (P1); what the last sizing would still move, the next step's
+	// (Stage 88) a sealed vessel sized to what its top came to, then its cells at their equilibria at that pressure,
+	// in turn until neither moves (a layer that boils takes room, and its vessel's pressure rises on it): sized first,
+	// so that a layer's equilibria never run at a pressure its top has left (a void its top's vapour has since filled:
+	// at next to no pressure a layer's water would boil without end); the last word the equilibria's (P1), what the
+	// last sizing would still move the next step's
 	find_columns();
 	for (const Column &col : columns_) {
-		if (!world_.meta(col.top).sealed || world_.meta(col.top).frozen) {
+		if (!world_.meta(col.top).sealed || world_.meta(col.top).frozen || col.cells.size() < 2) {
 			continue;
 		}
 		constexpr int ROUNDS = 4;
 		for (int round = 0; round < ROUNDS; ++round) {
-			if (!size_vessel(col)) {
+			if (!size_vessel(col) && round > 0) {
 				break;
 			}
 			bool moved = false;
@@ -2359,8 +2362,10 @@ void Simulation::build_tree() {
 			const size_t at = sealed_order_[head];
 			for (size_t i = 0; i < edges.size(); ++i) {
 				const Edge &e = edges[i];
-				// (Stage 79: a tube that holds back its flow runs its own, in the pistons' process: not at once here)
-				if (!e.open || (e.phases & PHASES_GAS) == 0 || e.flow > 0.0 || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
+				// (Stage 79: a tube that holds back its flow runs its own, in the pistons' process: not at once here.
+				// Stage 88: nor is a column's edge a gas path here, as it is none from the open air: a sealed vessel's
+				// layers stand at its pressure, sized and settled with it)
+				if (!e.open || (e.phases & PHASES_GAS) == 0 || e.flow > 0.0 || e.column || (static_cast<size_t>(e.a.index) != at && static_cast<size_t>(e.b.index) != at)) {
 					continue;
 				}
 				const auto other = static_cast<size_t>(static_cast<size_t>(e.a.index) == at ? e.b.index : e.a.index);

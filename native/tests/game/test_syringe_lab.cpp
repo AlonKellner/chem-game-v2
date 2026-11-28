@@ -297,9 +297,15 @@ namespace {
 
 // hands at random on a bench's syringes, several jerked every step (to an end or anywhere, let go, locked, capped, the
 // bench's own moves): instant reversals of the force on the plungers, every invariant held on every step
+void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps);
+
 void random_hands(const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
+	random_hands_on(bench_file(bench), bench, ids, moves, seed, steps);
+}
+
+void random_hands_on(const std::string &json, const char *bench, const std::vector<std::string> &ids, const std::vector<std::string> &moves, unsigned seed, int steps) {
 	std::string why;
-	auto l = lab::Lab::open(bench_file(bench), why);
+	auto l = lab::Lab::open(json, why);
 	REQUIRE_MESSAGE(l != nullptr, why);
 	l->set_checking(true);
 	std::mt19937 rng(seed);

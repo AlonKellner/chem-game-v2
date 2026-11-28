@@ -804,7 +804,7 @@ bool Simulation::size_vessel(const Column &col) {
 		same = kept[i] == world_.revision(col.cells[i]);
 	}
 	if (same) {
-		return false; // as it was when it was last sized
+		return false;
 	}
 	constexpr double LEAST = 1.0; // Pa
 	const double whole = top.column_volume;

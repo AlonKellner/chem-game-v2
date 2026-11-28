@@ -46,7 +46,7 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
 | 88.2 | The compressible sealed model: `Sealed`, `fill_of`, `entropy`, `affinity`, `AffinityProbe::at`, V2, V3 | Done |
 | 88.3 | Enthalpy at the giver's state (`enthalpy_over`); Stage 79's joins use it | Done |
 | 88.4 | A vessel's one pressure: its layers at it (isobaric), the vessel sized each step, work between its cells | Done |
-| 88.5 | Invariants: a vessel at one pressure, work between cells, the state function's self-test | |
+| 88.5 | Invariants: a vessel at one pressure (P2), work between cells (W2), their self-tests; a layer's cushion (Open) | P2, W2 and their self-tests done; the cushion next |
 | 88.6 | Goldens (evidence, the user's approval), docs, `make gates`, the user's sign-off | |
 
 ## Tests
@@ -109,6 +109,19 @@ Open cells are at `p = 0`: every new term nought, their states unchanged to the 
   the same way before use: against the paper's own stated value and its authors' independent fit.
 
 ## Open
+
+- **A layer's boiling at its vessel's pressure has no limit but its own heat** (found by hands jerked at random on a
+  capped syringe of two layered solutions with no air: T2, the world's entropy down 1.5e-4 J/K in a step). A layer
+  is at a pressure, and its equilibria are solved at that pressure: a layer a little over saturation in a vessel
+  with a microlitre of vapour space made half a millimole of steam in a round (a litre of it, at that pressure, in a
+  50 mL vessel); the next sizing found 76 bar, the steam condensed in the warmer top, and heat had been carried from
+  the colder layers to it. So wherever a vessel's gas space cannot take what its layers would boil: a stoppered
+  flask at its vapour pressure, too. **The fix, designed and next**: a layer feels its vessel's gas space as it
+  grows. Each layer holds its share of the vessel's free volume as it was last sized (its cushion `c`), and stands
+  at `P0 (c / (c - dV))^(5/3)` as it grows by `dV`: stiffer than any gas's own compression both ways, so the work it
+  books is on the second law's side; a large cushion is this stage's layer at a pressure, a void is free until it
+  is filled and then a wall, and none at all is a rigid cell. The stress is parked until then
+  (`syringe lab: hands jerked at random on a sealed syringe of two layered solutions`).
 
 - **A sealed vessel's layers boil by the room's pressure** (until 88.4; so since Stages 28 and 47): a layer is an
   open cell at 1 atm whatever its vessel's pressure, and boils at 100 °C in a flask at 2 atm. Benign so far (a hot

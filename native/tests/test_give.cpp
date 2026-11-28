@@ -10,6 +10,7 @@
 
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
@@ -538,4 +539,51 @@ TEST_CASE("give: a sealed flask's layers hold liquid water far past 100 C where 
 	CHECK(hottest > 273.15 + 140.0);
 	CHECK(static_cast<double>(in_layers) * MOL_PER_QUANTUM > 5.0); // (of its 11 mol: most of its water still liquid in its layers)
 	CHECK(static_cast<double>(in_steam) * MOL_PER_QUANTUM < 0.02);
+}
+
+TEST_CASE("invariants: a sealed vessel's layer off its top's pressure (P2), work marked along no column's edge or carrying matter (W2), a layer's mark that disagrees with its top's seal (V3): each fires on a corrupted trace, none on a clean one (Stage 88)") {
+	const SpeciesTable &table = builtin_species();
+	Flask f = flask(60.0, 40.0, 150.0, 2.0);
+	StepTrace clean;
+	bool worked = false;
+	for (int i = 0; i < 600 && !worked; ++i) {
+		clean = f.sim->step();
+		REQUIRE(check_all(table, clean, f.sim->equilibria()).empty());
+		worked = std::any_of(clean.ledger.begin(), clean.ledger.end(), [](const LedgerEntry &e) { return e.work; });
+	}
+	REQUIRE(worked); // (a step in which its layers gave its top work)
+	const auto has = [](const Violations &v, const char *name) {
+		return std::any_of(v.begin(), v.end(), [&](const std::string &m) { return m.rfind(name, 0) == 0; });
+	};
+	size_t layer = clean.meta.size();
+	for (size_t c = 0; c < clean.meta.size(); ++c) {
+		if (clean.meta[c].layer && clean.meta[c].pressed && clean.after.cells[c].energy != 0) {
+			layer = c;
+		}
+	}
+	REQUIRE(layer < clean.meta.size());
+	{
+		StepTrace t = clean; // a layer at a pressure a twentieth over its vessel's
+		t.meta[layer].over += 0.05 * (P_ATMOSPHERE + t.meta[layer].over);
+		CHECK(has(check_P2(table, t), "P2"));
+	}
+	{
+		StepTrace t = clean; // heat between the flask and its bath called work
+		bool marked = false;
+		for (LedgerEntry &e : t.ledger) {
+			if (!marked && e.kind == LedgerEntry::Kind::Transfer && !e.work && e.delta.empty() && e.energy.quanta != 0 && !t.edges[static_cast<size_t>(e.edge.index)].column) {
+				e.work = true;
+				marked = true;
+			}
+		}
+		REQUIRE(marked);
+		CHECK(has(check_W2(table, t), "W2"));
+	}
+	{
+		StepTrace t = clean; // a layer not marked at its sealed vessel's pressure
+		t.meta[layer].pressed = false;
+		CHECK(has(check_V3(table, t), "V3"));
+	}
+	CHECK(check_P2(table, clean).empty());
+	CHECK(check_W2(table, clean).empty());
 }
