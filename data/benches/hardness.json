@@ -1,0 +1,21 @@
+{
+	"format": "chem-bench/2",
+	"note": "Water's hardness by EDTA (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 52): a sample of hard water (calcium and magnesium, each drawn by the seed: an unknown), 25.00 mL pipetted into a flask, an ammonia buffer of pH 10 and Eriochrome Black T, titrated with 0.0100 M disodium EDTA from wine red to blue. The hardness as calcium carbonate: mg/L = c V x 100.09 g/mol / 25.00 mL.",
+	"readings": "instruments",
+	"seed": 52,
+	"grid": [28, 15],
+	"room": {"celsius": 20, "air_mol": 1000},
+	"items": [
+		{"id": "sample", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [0, 7], "label": "a sample of hard water",
+			"contents": {"water": {"g": 400}, "calcium_chloride_aq": {"mol": [0.0006, 0.0012]}, "magnesium_sulfate_aq": {"mol": [0.0002, 0.0005]}}},
+		{"id": "pipette", "kind": "vessel", "glassware": "pipette", "volume_ml": 25, "wall": "glass", "wall_g": 20, "at": [6, 0], "label": "25 mL pipette"},
+		{"id": "flask", "kind": "vessel", "glassware": "conical_flask", "volume_ml": 250, "wall": "glass", "wall_g": 100, "at": [10, 7], "label": "titration flask"},
+		{"id": "buffer", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [14, 7], "label": "ammonia buffer, pH 10",
+			"contents": {"water": {"g": 240.0}, "ammonia_aq": {"mol": 0.25}, "ammonium_chloride_aq": {"mol": 0.045}}},
+		{"id": "eriochrome", "kind": "vessel", "glassware": "beaker", "volume_ml": 50, "wall": "glass", "wall_g": 40, "at": [18, 8], "label": "Eriochrome Black T, 0.002 M",
+			"contents": {"water": {"g": 50.0}, "eriochrome_black_t_aq": {"mol": 0.0001}}},
+		{"id": "edta", "kind": "vessel", "glassware": "bottle", "volume_ml": 500, "wall": "glass", "wall_g": 300, "at": [21, 7], "label": "EDTA (disodium), 0.0100 M",
+			"contents": {"water": {"g": 498.5}, "disodium_edta_aq": {"mol": 0.005}}},
+		{"id": "burette", "kind": "vessel", "glassware": "burette", "volume_ml": 50, "wall": "glass", "wall_g": 60, "at": [25, 0], "label": "50 mL burette"}
+	]
+}

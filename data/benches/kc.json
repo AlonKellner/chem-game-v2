@@ -1,0 +1,165 @@
+{
+	"format": "chem-bench/2",
+	"note": "The equilibrium constant of FeSCN2+ by Benesi and Hildebrand's method (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 43): four mixtures in Below, Connick and Coppel's own medium (0.10 M acid, the ionic strength held at 0.40, by sodium nitrate here where they used perchlorate), each 0.100 mM thiocyanate with iron(III) in ten- to fifty-fold excess (1.00, 2.00, 3.00 and 5.00 mM), 3.5 mL in each cuvette, and a blank of the medium. With iron in excess, [Fe3+] is its own amount, and 1/A = 1/(eps l S) + 1/(eps l K S [Fe]): 1/A against 1/[Fe] is a line, K its intercept over its slope.",
+	"readings": "instruments",
+	"seed": 43,
+	"grid": [
+		28,
+		15
+	],
+	"room": {
+		"celsius": 20,
+		"air_mol": 1000
+	},
+	"items": [
+		{
+			"id": "spec",
+			"kind": "spectrophotometer",
+			"nm": 600
+		},
+		{
+			"id": "c0",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"at": [
+				9,
+				7
+			],
+			"label": "blank: 0.10 M nitric acid, 0.30 M sodium nitrate",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"nitric_acid_aq": {
+					"mol": 0.00035
+				},
+				"sodium_nitrate_aq": {
+					"mol": 0.00105
+				}
+			}
+		},
+		{
+			"id": "m1",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"at": [
+				11,
+				7
+			],
+			"label": "mixture 1: 0.100 mM thiocyanate, 1 mM iron(III)",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"nitric_acid_aq": {
+					"mol": 0.00035
+				},
+				"sodium_nitrate_aq": {
+					"mol": 0.00102865
+				},
+				"iron_iii_nitrate_aq": {
+					"mol": 3.5e-06
+				},
+				"potassium_thiocyanate_aq": {
+					"mol": 3.5e-07
+				}
+			}
+		},
+		{
+			"id": "m2",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"at": [
+				13,
+				7
+			],
+			"label": "mixture 2: 0.100 mM thiocyanate, 2 mM iron(III)",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"nitric_acid_aq": {
+					"mol": 0.00035
+				},
+				"sodium_nitrate_aq": {
+					"mol": 0.00100765
+				},
+				"iron_iii_nitrate_aq": {
+					"mol": 7e-06
+				},
+				"potassium_thiocyanate_aq": {
+					"mol": 3.5e-07
+				}
+			}
+		},
+		{
+			"id": "m3",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"at": [
+				15,
+				7
+			],
+			"label": "mixture 3: 0.100 mM thiocyanate, 3 mM iron(III)",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"nitric_acid_aq": {
+					"mol": 0.00035
+				},
+				"sodium_nitrate_aq": {
+					"mol": 0.00098665
+				},
+				"iron_iii_nitrate_aq": {
+					"mol": 1.05e-05
+				},
+				"potassium_thiocyanate_aq": {
+					"mol": 3.5e-07
+				}
+			}
+		},
+		{
+			"id": "m4",
+			"kind": "vessel",
+			"glassware": "cuvette",
+			"volume_ml": 5,
+			"wall": "glass",
+			"wall_g": 4,
+			"at": [
+				17,
+				7
+			],
+			"label": "mixture 4: 0.100 mM thiocyanate, 5 mM iron(III)",
+			"contents": {
+				"water": {
+					"g": 3.5
+				},
+				"nitric_acid_aq": {
+					"mol": 0.00035
+				},
+				"sodium_nitrate_aq": {
+					"mol": 0.00094465
+				},
+				"iron_iii_nitrate_aq": {
+					"mol": 1.75e-05
+				},
+				"potassium_thiocyanate_aq": {
+					"mol": 3.5e-07
+				}
+			}
+		}
+	]
+}

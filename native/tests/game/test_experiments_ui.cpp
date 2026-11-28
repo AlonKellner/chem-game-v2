@@ -189,14 +189,14 @@ TEST_CASE("experiments' list: typing filters its rows live, a backspace and Esca
 	p.click("menu:experiments");
 	float x = 0, y = 0;
 	// the field takes the keys while the list is open
-	p.type("mercury");
-	CHECK(left_by("mercury") == std::set<std::string>{ "mercury" });
-	CHECK(in_sight(p) == left_by("mercury"));
-	CHECK(p.drawn("mercury_"));
+	p.type("liquid mercury"); // (Stage 85: "mercury" alone finds the discharge lamps' spectra too)
+	CHECK(left_by("liquid mercury") == std::set<std::string>{ "mercury" });
+	CHECK(in_sight(p) == left_by("liquid mercury"));
+	CHECK(p.drawn("liquid mercury_"));
 	CHECK(p.drawn("1 of " + std::to_string(n)));
 	CHECK_FALSE(p.ui->locate("experiments:bar", x, y)); // (every row left in sight)
 	// a backspace a character, Escape the whole query: every row again
-	for (int i = 0; i < 7; ++i) {
+	for (int i = 0; i < 14; ++i) {
 		key(p, lab::Ui::KeyBackspace);
 	}
 	CHECK(p.drawn(std::to_string(n) + " of " + std::to_string(n)));

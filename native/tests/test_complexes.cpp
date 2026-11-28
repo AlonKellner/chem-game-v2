@@ -82,10 +82,12 @@ TEST_CASE("measured: each complex's constant is its source's at 25 C (Stage 81)"
 		{ "Zn(OH)4 2-", { { zinc_ion, -1 }, { water, -4 }, { zinc_tetrahydroxo, 1 }, { hydrogen_ion, 4 } }, -40.488, 0.001, NAN },
 		{ "Al(OH)4-", { { aluminium_ion, -1 }, { water, -4 }, { aluminium_tetrahydroxo, 1 }, { hydrogen_ion, 4 } }, -22.688, 0.001, 173.24 },
 		// iron(III) thiocyanate: calibrated in the model's own activities to Below, Connick and Coppel 1958's Q1 = 146 at
-		// 0.40 ionic strength (3.5085; by Davies's equation the constant at nought would be 2.981) and Lister and
-		// Rivington's Q2 = 15.5 at 0.5 (the next test holds them); their heats Below et al.'s and Ozutsumi et al.'s
-		{ "FeSCN 2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -1 }, { iron_thiocyanate, 1 } }, 3.5085, 0.001, -6.694 },
-		{ "Fe(SCN)2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -2 }, { iron_dithiocyanate, 1 } }, 5.6655, 0.001, -11.0 },
+		// 0.40 ionic strength and 123 at 1.00 (Stage 85: iron(III)'s pairs, chromium(III) nitrate's and Millero and
+		// Pierrot's chloride, and FeSCN2+'s with nitrate fitted to the two: 2.891 at nought, by Davies's equation 2.981)
+		// and Lister and Rivington's Q2 = 15.5 at 0.5 (the next test holds them); their heats Below et al.'s and Ozutsumi
+		// et al.'s
+		{ "FeSCN 2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -1 }, { iron_thiocyanate, 1 } }, 2.8909, 0.001, -6.694 },
+		{ "Fe(SCN)2+", { { iron_iii_ion, -1 }, { thiocyanate_ion, -2 }, { iron_dithiocyanate, 1 } }, 4.5923, 0.001, -11.0 },
 		// cobalt's tetrachloro: calibrated in the model's own activities to Bjerrum, Halonin and Skibsted 1975's alpha4
 		// = 0.496 in 8.23 M HCl (ThermoChimie's -2.09 at nought, sit.dat 2971, with the model's activities that far
 		// past Pitzer's range, put all of it blue); its heat ThermoChimie's
@@ -141,6 +143,14 @@ TEST_CASE("measured: iron(III) thiocyanate at Below, Connick and Coppel's and Li
 		const double L = litres(e), q = (mol_of(e, iron_thiocyanate) / L) / ((mol_of(e, iron_iii_ion) / L) * (mol_of(e, thiocyanate_ion) / L));
 		MESSAGE("FeSCN2+ quotient at 0.40 ionic strength: " << q << " (Below et al.: 146)");
 		CHECK(q == doctest::Approx(146.0).epsilon(0.02));
+	}
+	// (Stage 85) and at 1.00, with iron(III)'s own pairs (chromium(III) nitrate's, iron(III) chloride's): Below et al.'s 123
+	{
+		const double fe = 0.002, scn = 0.0001, h = 0.1, na = 1.00 - 6.0 * fe - h - scn;
+		const CellState e = testing::settled(Cell().put(iron_iii_nitrate_aq, fe).put(potassium_thiocyanate_aq, scn).put(nitric_acid_aq, h).put(sodium_nitrate_aq, na).state, T0);
+		const double L = litres(e), q = (mol_of(e, iron_thiocyanate) / L) / ((mol_of(e, iron_iii_ion) / L) * (mol_of(e, thiocyanate_ion) / L));
+		MESSAGE("FeSCN2+ quotient at 1.00 ionic strength: " << q << " (Below et al.: 123)");
+		CHECK(q == doctest::Approx(123.0).epsilon(0.02));
 	}
 	// Lister and Rivington (Below et al.'s Table I): Q2 = 15.5 at 0.5
 	{

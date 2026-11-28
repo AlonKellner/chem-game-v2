@@ -1,6 +1,7 @@
 #include "lab/ui.hpp"
 
 #include "lab/flame.hpp"
+#include "lab/lamps.hpp"
 #include "lab/contents.hpp"
 #include "lab/glassware.hpp"
 #include "lab/instruments.hpp"
@@ -447,6 +448,7 @@ struct Ui::Impl {
 		bool done = false, within = false;
 		double truth = 0.0, yours = 0.0;
 		std::string why;
+		std::vector<bool> held; // (Stage 85) a choice item's: which of its choices hold
 	};
 	std::vector<std::string> answers;
 	// (Stage 55) the report's predictions: what is typed for each before the run, and what was made (kept as typed)
@@ -1781,6 +1783,26 @@ struct Ui::Impl {
 	}
 	static Rect report_field(int k) { return Rect{ READOUT.x + 300, TUTOR.y + TUTOR.h + 70 + static_cast<float>(k) * 96, 150, 30 }; }
 	Rect report_check() const { return Rect{ READOUT.x + 16, TUTOR.y + TUTOR.h + 70 + static_cast<float>(tutorial->report().size()) * 96, 120, 34 }; }
+	// (Stage 85) a choice's chip, under its item's label: in rows across the readout, each as wide as its label
+	Rect report_chip(int k, int i) const {
+		const std::vector<TutorialChoice> &choices = tutorial->report()[static_cast<size_t>(k)].choices;
+		const Rect f = report_field(k);
+		float x = READOUT.x + 16, y = f.y + 30;
+		for (int n = 0; n < static_cast<int>(choices.size()); ++n) {
+			const float w = 20.0f + 8.0f * static_cast<float>(choices[static_cast<size_t>(n)].label.size());
+			if (x + w > READOUT.x + READOUT.w - 16 && x > READOUT.x + 16) {
+				x = READOUT.x + 16;
+				y += 28;
+			}
+			if (n == i) {
+				return Rect{ x, y, w, 24 };
+			}
+			x += w + 6;
+		}
+		return Rect{};
+	}
+	// the chips picked of a choice item, as '1' and '0' in its answer
+	bool picked(size_t k, size_t i) const { return k < answers.size() && i < answers[k].size() && answers[k][i] == '1'; }
 	void check_report() {
 		const std::vector<TutorialReport> &items = tutorial->report();
 		answers.resize(items.size());
@@ -1788,6 +1810,28 @@ struct Ui::Impl {
 		for (size_t k = 0; k < items.size(); ++k) {
 			ReportCheck &c = report_checks[k];
 			c.done = true;
+			if (!items[k].choices.empty()) {
+				// (Stage 85) right where the picks are the choices that hold
+				bool any = false, all = true;
+				c.held.assign(items[k].choices.size(), false);
+				for (size_t i = 0; i < items[k].choices.size(); ++i) {
+					double v = 0.0;
+					std::string why_not;
+					if (!evaluate(items[k].choices[i].truth, view, v, why_not)) {
+						c.why = "its truth cannot be worked out: " + why_not;
+						all = false;
+						break;
+					}
+					c.held[i] = v > 0.0;
+					any = any || picked(k, i);
+					all = all && c.held[i] == picked(k, i);
+				}
+				c.within = c.why.empty() && any && all;
+				if (c.why.empty() && !any) {
+					c.why = "nothing to check: choose";
+				}
+				continue;
+			}
 			if (!evaluate(items[k].truth, view, c.truth, c.why)) {
 				c.why = "its truth cannot be worked out: " + c.why;
 				continue;
@@ -1808,6 +1852,24 @@ struct Ui::Impl {
 		}
 		answers.resize(tutorial->report().size());
 		for (int k = 0; k < static_cast<int>(answers.size()); ++k) {
+			const TutorialReport &item = tutorial->report()[static_cast<size_t>(k)];
+			if (!item.choices.empty()) {
+				// (Stage 85) a chip toggles; one only where the item is single
+				for (int i = 0; i < static_cast<int>(item.choices.size()); ++i) {
+					if (report_chip(k, i).has(x, y)) {
+						std::string &a = answers[static_cast<size_t>(k)];
+						a.resize(item.choices.size(), '0');
+						const bool was = a[static_cast<size_t>(i)] == '1';
+						if (item.single) {
+							a.assign(item.choices.size(), '0');
+						}
+						a[static_cast<size_t>(i)] = was ? '0' : '1';
+						report_focus = -1;
+						return true;
+					}
+				}
+				continue;
+			}
 			if (report_field(k).has(x, y)) {
 				report_focus = k;
 				return true;
@@ -1824,6 +1886,9 @@ struct Ui::Impl {
 			return false;
 		}
 		answers.resize(tutorial->report().size());
+		if (!tutorial->report()[static_cast<size_t>(report_focus)].choices.empty()) {
+			return false; // (Stage 85) chosen, not typed
+		}
 		std::string &a = answers[static_cast<size_t>(report_focus)];
 		if (key == Ui::KeyText && ((codepoint >= '0' && codepoint <= '9') || codepoint == '.' || codepoint == '-' || codepoint == 'e') && a.size() < 16) {
 			a += static_cast<char>(codepoint);
@@ -1839,9 +1904,37 @@ struct Ui::Impl {
 	void paint_report() {
 		const std::vector<TutorialReport> &items = tutorial->report();
 		float y = TUTOR.y + TUTOR.h + 46;
-		text(READOUT.x + 16, y, "Your report: type each result, then check it", INK, 18);
+		text(READOUT.x + 16, y, "Your report: type or choose each result, then check it", INK, 18);
 		for (size_t k = 0; k < items.size(); ++k) {
 			const Rect f = report_field(static_cast<int>(k));
+			if (!items[k].choices.empty()) {
+				// (Stage 85) its chips: picked filled; once checked, those that hold outlined
+				text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
+				const bool checked = k < report_checks.size() && report_checks[k].done;
+				float bottom = f.y + 30;
+				for (size_t i = 0; i < items[k].choices.size(); ++i) {
+					const Rect r = report_chip(static_cast<int>(k), static_cast<int>(i));
+					const bool on = picked(k, i);
+					rect_fill(r, on ? rgba(70, 90, 120) : rgba(24, 24, 24));
+					const bool holds = checked && i < report_checks[k].held.size() && report_checks[k].held[i];
+					outline(r, holds ? GOOD : on ? GUIDE : GRID, holds ? 2.0f : 1.0f);
+					text(r.x + 10, r.y + 17, items[k].choices[i].label, on ? INK : DIM, 14);
+					bottom = std::max(bottom, r.y + r.h);
+				}
+				if (checked) {
+					const ReportCheck &c = report_checks[k];
+					std::string says = c.why;
+					if (says.empty()) {
+						std::string right;
+						for (size_t i = 0; i < items[k].choices.size() && i < c.held.size(); ++i) {
+							right += c.held[i] ? (right.empty() ? "" : ", ") + items[k].choices[i].label : std::string();
+						}
+						says = c.within ? "yours is right: " + right : "not quite: " + (right.empty() ? std::string("none of them") : right);
+					}
+					text(READOUT.x + 16, bottom + 18, says, c.within ? GOOD : WARN, 14);
+				}
+				continue;
+			}
 			text(READOUT.x + 16, f.y + 21, items[k].label, INK, 15);
 			rect_fill(f, rgba(24, 24, 24));
 			outline(f, report_focus == static_cast<int>(k) ? GUIDE : GRID, report_focus == static_cast<int>(k) ? 2.0f : 1.0f);
@@ -2507,6 +2600,9 @@ struct Ui::Impl {
 		} else if (v.kind == "viewer") { // its case and screen, and its probe's holder beside them (Stage 42)
 			w = VIEWER_W;
 			h = VIEWER_H;
+		} else if (v.kind == "burner" && !v.lamp.empty()) {
+			w = 56; // (Stage 85) a discharge lamp: its base, and its tube over it, within its own rectangle
+			h = 26 + 64;
 		} else if (v.kind == "burner") {
 			w = 56;
 			h = 26;
@@ -3659,8 +3755,10 @@ struct Ui::Impl {
 				}
 			} else if (has_outlet(v) && t.kind == "vessel" && !residue_only(v)) {
 				// (Stage 52) a pipette, empty, draws to its mark from what it is dipped into; full, or a burette, stands on
-				// the vessel, its tip in the mouth, and drains into it
-				if (v.glassware == "pipette" && !(v.condensed_ml > 1e-6)) {
+				// the vessel, its tip in the mouth, and drains into it. (Stage 85) Empty is no more than its tolerance: what
+				// stays in a drained tip, a few hundredths of a microlitre, is not a pipette to drain again
+				const glass::Vessel *made = v.glassware == "pipette" ? glass::find(v.glassware, v.nominal_ml) : nullptr;
+				if (made != nullptr && !(v.condensed_ml > made->tolerance_ml)) {
 					act({ { "do", "fill" }, { "item", v.id }, { "from", t.id } });
 				} else {
 					act({ { "do", "attach" }, { "item", v.id }, { "to", t.id } });
@@ -3669,6 +3767,11 @@ struct Ui::Impl {
 				act({ { "do", "weigh" }, { "balance", t.id }, { "vessel", v.id }, { "onto", true } }); // set on its pan (Stage 50)
 			} else if (t.kind == "spectrophotometer" && v.kind == "vessel" && t.place == "bench") {
 				act({ { "do", "insert" }, { "spectrophotometer", t.id }, { "cuvette", v.id }, { "onto", true } }); // into its well (Stage 55)
+			} else if (t.kind == "burner" && t.oven && v.kind == "vessel") {
+				// (Stage 85) a vessel onto a drying oven: into it, warmed at its temperature
+				act({ { "do", "heat" }, { "burner", t.id }, { "vessel", v.id } });
+			} else if (t.kind == "burner" && !t.lamp.empty()) {
+				message = "\"" + t.id + "\" is a lamp: it takes nothing";
 			} else if (t.kind == "burner" && v.kind == "vessel" && v.liquid_ml > 0.0) {
 				// (Stage 82) a vessel of a solution onto a burner: a loop dipped in it, held in the flame (a lit one's)
 				act({ { "do", "flame_test" }, { "burner", t.id }, { "from", v.id } });
@@ -6517,7 +6620,12 @@ struct Ui::Impl {
 			}
 			if (report_active()) {
 				for (size_t k = 0; k < tutorial->report().size(); ++k) {
-					buttons.push_back(report_field(static_cast<int>(k)));
+					if (tutorial->report()[k].choices.empty()) {
+						buttons.push_back(report_field(static_cast<int>(k)));
+					}
+					for (size_t i = 0; i < tutorial->report()[k].choices.size(); ++i) {
+						buttons.push_back(report_chip(static_cast<int>(k), static_cast<int>(i))); // (Stage 85)
+					}
 				}
 				buttons.push_back(report_check());
 			}
@@ -6820,6 +6928,26 @@ struct Ui::Impl {
 					bodies[k].image_w = shows.w;
 					bodies[k].image_h = shows.h;
 					bodies[k].image_hash = shows.hash;
+				}
+			} else if (v.kind == "burner" && v.oven) {
+				// (Stage 85) a drying oven: its box, no flame (what stands in it is drawn over it)
+				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
+			} else if (v.kind == "burner" && !v.lamp.empty()) {
+				// (Stage 85) a discharge lamp: its base, and over it (as a burner's flame) its tube of glowing gas, its lines at
+				// its power
+				const float base = 26.0f;
+				thing(who, "body", OpticsBody::Slab, Rect{ r.x, r.y + r.h - base, r.w, base }, 3.0f, "burner_metal", nullptr, in_hand);
+				if (v.valve > 0.0) {
+					const float wide = 10.0f;
+					const size_t k = thing(who, "tube", OpticsBody::Cone, Rect{ r.cx() - wide * 0.5f, r.y, wide, r.h - base }, 0.0f, nullptr, nullptr, in_hand);
+					bodies[k].tube = true;
+					bodies[k].kelvin = 0.0; // (its gas no hotter than the room's for the long-wave: a discharge, not a flame)
+					std::array<double, 401> &g = flame_glows[v.id];
+					g = lamps::glow(v.lamp, std::exp(std::round(std::log(v.valve) / 0.05) * 0.05));
+					bodies[k].glow_add = &g;
+					std::vector<std::pair<double, double>> &cut = flame_spikes[v.id];
+					cut = lamps::spikes(v.lamp);
+					bodies[k].glow_spikes = &cut;
 				}
 			} else if (v.kind == "burner") {
 				thing(who, "body", OpticsBody::Slab, r, 3.0f, "burner_metal", nullptr, in_hand);
@@ -7440,7 +7568,7 @@ struct Ui::Impl {
 			if (valve_rect(showing, control)) {
 				const bool tuned = v.kind == "spectrophotometer";
 				const double open = v.kind == "burner" ? v.valve : tuned ? nm_share(v.nm) : v.cap;
-				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? "valve" : tuned ? "nm" : has_outlet(v) ? "tap" : "cap", INK, 16);
+				text(READOUT.x + 16, control.y + 15, v.kind == "burner" ? (v.lamp.empty() ? "valve" : "power") : tuned ? "nm" : has_outlet(v) ? "tap" : "cap", INK, 16); // (Stage 85: a lamp's power)
 				rect_fill(control, BUTTON);
 				const float knob = control.x + control.w * static_cast<float>(open);
 				rect_fill(Rect{ control.x, control.y, knob - control.x, control.h }, BUTTON_ON);
@@ -7541,6 +7669,26 @@ struct Ui::Impl {
 							DIM, 15);
 					if (p.read_count() > 0) {
 						row(text_of("peak %.0f nm: ", SPECTRUM_FIRST_NM + peak) + text_of("%.3g mW/(sr m2 nm)", 1000.0 * radiance_of(c[static_cast<size_t>(peak)], peak)), DIM, 15);
+						// (Stage 85) its lines: each nanometre that stands over its neighbours and three times over the light
+						// three nanometres to either side, the brightest six, in order of wavelength
+						std::vector<std::pair<double, int>> lines;
+						for (int k = 3; k + 3 < SPECTRUM_NM; ++k) {
+							const double here = c[static_cast<size_t>(k)];
+							if (here >= c[static_cast<size_t>(k - 1)] && here > c[static_cast<size_t>(k + 1)] && here > 3.0 * std::max(c[static_cast<size_t>(k - 3)], c[static_cast<size_t>(k + 3)]) &&
+									here > 0.01 * c[static_cast<size_t>(peak)]) {
+								lines.emplace_back(here, k);
+							}
+						}
+						std::sort(lines.rbegin(), lines.rend());
+						lines.resize(std::min<size_t>(lines.size(), 6));
+						std::sort(lines.begin(), lines.end(), [](const auto &a, const auto &b) { return a.second < b.second; });
+						if (!lines.empty()) {
+							std::string says = "lines at";
+							for (size_t i = 0; i < lines.size(); ++i) {
+								says += text_of(i == 0 ? " %.0f" : ", %.0f", SPECTRUM_FIRST_NM + lines[i].second);
+							}
+							row(says + " nm", INK, 15);
+						}
 					}
 				}
 			} else if (v.kind == "balance") {
@@ -8981,7 +9129,15 @@ bool Ui::Impl::locate(std::string_view what, float &x, float &y) const {
 			return centre(m.report_check());
 		}
 		const int k = std::atoi(std::string(rest).c_str());
-		return k >= 0 && k < static_cast<int>(m.tutorial->report().size()) && centre(Impl::report_field(k));
+		if (k < 0 || k >= static_cast<int>(m.tutorial->report().size())) {
+			return false;
+		}
+		if (const size_t colon = rest.find(':'); colon != std::string_view::npos) {
+			// (Stage 85) "report:K:I", a choice's chip
+			const int i = std::atoi(std::string(rest.substr(colon + 1)).c_str());
+			return i >= 0 && i < static_cast<int>(m.tutorial->report()[static_cast<size_t>(k)].choices.size()) && centre(m.report_chip(k, i));
+		}
+		return centre(Impl::report_field(k));
 	}
 	if (after("predict:", rest)) { // (Stage 55) a prediction's field, by its order among them; "make"
 		if (!m.predict_shown()) {

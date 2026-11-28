@@ -293,6 +293,8 @@ struct OpticsBody {
 	const std::array<double, 401> *glow_add = nullptr;
 	// (Stage 82) where that light spikes, [from, to] nm: the pass cuts its bands there (lab/flame.hpp, spikes)
 	const std::vector<std::pair<double, double>> *glow_spikes = nullptr;
+	// (Stage 85) a Cone as wide at every height: a discharge lamp's tube of glowing gas
+	bool tube = false;
 };
 inline constexpr int OPTICS_LAYERS = 6;
 inline constexpr double PRISM_SIDE_CM = 5.0;

@@ -1,0 +1,770 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 44) on data/benches/ksp.json: calcium hydroxide's solubility product, in water and with a common ion. Ca(OH)2(s) <=> Ca2+ + 2 OH-; Ksp = [Ca2+][OH-]^2; each filtrate's hydroxide titrated with 0.0500 M HCl.",
+	"title": "Experiment: the solubility product of calcium hydroxide",
+	"bench": "../benches/ksp.json",
+	"report": [
+		{
+			"label": "[OH-] in water",
+			"unit": "mol/L",
+			"truth": "1000 * filtrate_a.hydroxide_ion.mol / filtrate_a.condensed_ml",
+			"tolerance": 0.02,
+			"relative": true,
+			"why": "[OH-] = c V / 25.00 mL: the acid's 0.0500 M times the burette's difference, over the pipette's 25.00 mL."
+		},
+		{
+			"label": "Ksp from water",
+			"unit": "",
+			"truth": "(1000 * filtrate_a.calcium_ion.mol / filtrate_a.condensed_ml) * (1000 * filtrate_a.hydroxide_ion.mol / filtrate_a.condensed_ml) * (1000 * filtrate_a.hydroxide_ion.mol / filtrate_a.condensed_ml)",
+			"tolerance": 0.07,
+			"relative": true,
+			"why": "In water each Ca2+ came with two OH-: [Ca2+] = [OH-] / 2, so Ksp = [OH-]^3 / 2. A table's Ksp (about 5e-6 at 25 C) is the product of activities; the product of concentrations is several times it, as the ions' atmospheres hold them in the solution."
+		},
+		{
+			"label": "[OH-] in 0.100 M calcium chloride",
+			"unit": "mol/L",
+			"truth": "1000 * filtrate_b.hydroxide_ion.mol / filtrate_b.condensed_ml",
+			"tolerance": 0.02,
+			"relative": true,
+			"why": "The same titration of filtrate B."
+		},
+		{
+			"label": "the common ion",
+			"single": true,
+			"choices": [
+				{
+					"label": "less dissolves",
+					"truth": "filtrate_a.hydroxide_ion.mol / filtrate_a.condensed_ml - filtrate_b.hydroxide_ion.mol / filtrate_b.condensed_ml"
+				},
+				{
+					"label": "more dissolves",
+					"truth": "filtrate_b.hydroxide_ion.mol / filtrate_b.condensed_ml - filtrate_a.hydroxide_ion.mol / filtrate_a.condensed_ml"
+				}
+			],
+			"why": "Le Chatelier: the calcium already in the solution pushes Ca(OH)2(s) <=> Ca2+ + 2 OH- back toward the solid. Less dissolves, though not as much less as [Ca2+][OH-]^2 held to water's would say: the chloride's ions also lower each ion's activity."
+		}
+	],
+	"steps": [
+		{
+			"part": "Filtering",
+			"title": "Funnel A on its beaker",
+			"text": "Pick up filter funnel A and click the beaker \"filtrate A\".",
+			"why": "Only the clear solution is titrated: a grain of the solid would take acid too and read as dissolved.",
+			"checks": [
+				{
+					"text": "funnel A on its beaker",
+					"when": {
+						"item": "funnel_a",
+						"on": "filtrate_a"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel_a",
+						"item:filtrate_a"
+					]
+				}
+			]
+		},
+		{
+			"title": "The solution in water through it",
+			"text": "Pick up the bottle \"calcium hydroxide in water\", right-click funnel A, type 60 and click \"pour\".",
+			"checks": [
+				{
+					"text": "about 60 mL poured into funnel A",
+					"when": {
+						"item": "lime",
+						"species": "water",
+						"below_g": 195
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:lime",
+						"item:funnel_a"
+					]
+				},
+				{
+					"type": "60"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Funnel B on its beaker",
+			"text": "Pick up filter funnel B and click the beaker \"filtrate B\".",
+			"checks": [
+				{
+					"text": "funnel B on its beaker",
+					"when": {
+						"item": "funnel_b",
+						"on": "filtrate_b"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel_b",
+						"item:filtrate_b"
+					]
+				}
+			]
+		},
+		{
+			"title": "The solution in calcium chloride through it",
+			"text": "Pick up the bottle \"calcium hydroxide in 0.100 M calcium chloride\", right-click funnel B, type 60 and click \"pour\". Then click 60x on the clock.",
+			"checks": [
+				{
+					"text": "about 60 mL poured into funnel B",
+					"when": {
+						"item": "lime_chloride",
+						"species": "water",
+						"below_g": 195
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:lime_chloride",
+						"item:funnel_b"
+					]
+				},
+				{
+					"type": "60"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"title": "Until both have run through",
+			"text": "Watch the beakers fill with the clear filtrates.",
+			"checks": [
+				{
+					"text": "filtrate A, 30 mL or more",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "filtrate_a",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 30
+					}
+				},
+				{
+					"text": "filtrate B, 30 mL or more",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "filtrate_b",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 30
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "The funnels away",
+			"text": "Pick up funnel A and click a free square; then funnel B.",
+			"checks": [
+				{
+					"text": "funnel A off its beaker",
+					"when": {
+						"not": {
+							"item": "funnel_a",
+							"on": "filtrate_a"
+						}
+					}
+				},
+				{
+					"text": "funnel B off its beaker",
+					"when": {
+						"not": {
+							"item": "funnel_b",
+							"on": "filtrate_b"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel_a",
+						"square:9,3"
+					]
+				},
+				{
+					"drag": [
+						"item:funnel_b",
+						"square:13,3"
+					]
+				}
+			]
+		},
+		{
+			"part": "Pipetting",
+			"title": "25.00 mL of filtrate A",
+			"text": "Click 1x on the clock. Pick up the pipette and click filtrate A: it draws to its mark. Then click flask A: it stands in the flask and drains.",
+			"why": "A pipette delivers its 25.00 mL within 0.03 mL: the volume every result is divided by.",
+			"checks": [
+				{
+					"text": "the pipette on flask A",
+					"when": {
+						"item": "pipette",
+						"on": "flask_a"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "speed:1"
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:filtrate_a"
+					]
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask_a"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Watch the pipette drain.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "25.00 mL of filtrate B",
+			"text": "Pick up the pipette, click filtrate B, then click flask B.",
+			"checks": [
+				{
+					"text": "the pipette on flask B",
+					"when": {
+						"item": "pipette",
+						"on": "flask_b"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"item:filtrate_b"
+					]
+				},
+				{
+					"drag": [
+						"item:pipette",
+						"item:flask_b"
+					]
+				}
+			]
+		},
+		{
+			"title": "Until it is empty",
+			"text": "Watch the pipette drain.",
+			"checks": [
+				{
+					"text": "the pipette empty",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "pipette",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 0.0005
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "The pipette away",
+			"text": "Pick up the pipette and click a free square.",
+			"checks": [
+				{
+					"text": "the pipette off flask B",
+					"when": {
+						"not": {
+							"item": "pipette",
+							"on": "flask_b"
+						}
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:pipette",
+						"square:7,5"
+					]
+				}
+			]
+		},
+		{
+			"title": "Phenolphthalein in both",
+			"text": "Pick up the phenolphthalein, right-click flask A, type 0.15 and click \"pour\". Then the same into flask B.",
+			"why": "Phenolphthalein is pink above pH 9: the hydroxide holds the flasks pink until the acid has taken it all.",
+			"checks": [
+				{
+					"text": "flask A pink",
+					"when": {
+						"item": "flask_a",
+						"species": "phenolphthalein_dianion",
+						"above_g": 3e-05
+					}
+				},
+				{
+					"text": "flask B pink",
+					"when": {
+						"item": "flask_b",
+						"species": "phenolphthalein_dianion",
+						"above_g": 3e-05
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:phenolphthalein",
+						"item:flask_a"
+					]
+				},
+				{
+					"type": "0.15"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:phenolphthalein",
+						"item:flask_b"
+					]
+				},
+				{
+					"type": "0.15"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "Titrating A",
+			"title": "Fill the burette",
+			"text": "Pick up the acid, right-click the burette, type 55 and click \"pour\". Then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				},
+				{
+					"text": "its first reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:burette"
+					]
+				},
+				{
+					"type": "55"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		},
+		{
+			"title": "The burette over flask A",
+			"text": "Pick up the burette and click flask A.",
+			"checks": [
+				{
+					"text": "the burette on flask A",
+					"when": {
+						"item": "burette",
+						"on": "flask_a"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burette",
+						"item:flask_a"
+					]
+				}
+			]
+		},
+		{
+			"title": "Most of it, fast",
+			"text": "Right-click the burette and drag its tap to about 30 %.",
+			"why": "About 20 mL will be needed: the first 15 can run in fast.",
+			"checks": [
+				{
+					"text": "the tap open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							20,
+							40
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@0.3"
+				}
+			]
+		},
+		{
+			"title": "To 15 mL",
+			"text": "Watch the burette until it reads 15 mL.",
+			"checks": [
+				{
+					"text": "15 mL run in",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "scale_ml"
+						},
+						"compare": "above",
+						"value": 15
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Then drop by drop",
+			"text": "Drag the burette's tap nearly shut, to about 4 %.",
+			"checks": [
+				{
+					"text": "the tap nearly shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							2,
+							6
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0.04"
+				}
+			]
+		},
+		{
+			"title": "Until the pink is gone",
+			"text": "Watch flask A until it turns colourless.",
+			"checks": [
+				{
+					"text": "flask A colourless",
+					"wait": true,
+					"when": {
+						"item": "flask_a",
+						"species": "phenolphthalein_dianion",
+						"below_g": 2e-06
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it, and read it",
+			"text": "Drag the tap shut, then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				},
+				{
+					"text": "its reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml",
+						"recorded_count": 2
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		},
+		{
+			"part": "Titrating B",
+			"title": "Fill it again",
+			"text": "Pick up the burette and click a free square. Pick up the acid, right-click the burette, type 30 and click \"pour\". Then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the burette filled",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 45
+					}
+				},
+				{
+					"text": "its first reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml",
+						"recorded_count": 3
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burette",
+						"square:24,0"
+					]
+				},
+				{
+					"drag": [
+						"item:acid",
+						"item:burette"
+					]
+				},
+				{
+					"type": "30"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		},
+		{
+			"title": "The burette over flask B",
+			"text": "Pick up the burette and click flask B, then drag its tap to about 30 %.",
+			"checks": [
+				{
+					"text": "the burette on flask B",
+					"when": {
+						"item": "burette",
+						"on": "flask_b"
+					}
+				},
+				{
+					"text": "the tap open",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							20,
+							40
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burette",
+						"item:flask_b"
+					]
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "cap:burette@0.3"
+				}
+			]
+		},
+		{
+			"title": "To 10 mL more",
+			"text": "Watch the burette until it reads 10 mL more than it did.",
+			"checks": [
+				{
+					"text": "10 mL run in",
+					"wait": true,
+					"when": {
+						"quantity": {
+							"item": "flask_b",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 35.2
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Then drop by drop",
+			"text": "Drag the burette's tap nearly shut, to about 4 %.",
+			"checks": [
+				{
+					"text": "the tap nearly shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "between",
+						"values": [
+							2,
+							6
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0.04"
+				}
+			]
+		},
+		{
+			"title": "Until the pink is gone",
+			"text": "Watch flask B until it turns colourless.",
+			"checks": [
+				{
+					"text": "flask B colourless",
+					"wait": true,
+					"when": {
+						"item": "flask_b",
+						"species": "phenolphthalein_dianion",
+						"below_g": 2e-06
+					}
+				}
+			],
+			"play": null
+		},
+		{
+			"title": "Shut it, and read it",
+			"text": "Drag the tap shut, then right-click the burette and click \"+ mL\".",
+			"checks": [
+				{
+					"text": "the tap shut",
+					"when": {
+						"quantity": {
+							"item": "burette",
+							"what": "tap"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				},
+				{
+					"text": "its reading recorded",
+					"when": {
+						"item": "burette",
+						"recorded": "scale_ml",
+						"recorded_count": 4
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "cap:burette@0"
+				},
+				{
+					"click": "item:burette"
+				},
+				{
+					"click": "record:burette:scale_ml"
+				}
+			]
+		}
+	]
+}

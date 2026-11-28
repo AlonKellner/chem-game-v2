@@ -13,6 +13,22 @@
   persulfate, k and Ea) and `redox_titration` (iron(II) by permanganate, its own pink the end point; iodine by
   thiosulfate, its yellow gone).
 
+## 0.88.1 (2026-11-28, Stage 85, merged after Stages 87 and 88; signed off by the user: "Approved, merge and proceed")
+
+- §13.7 (Stage 85, `docs/TDD_85_ANALYSIS.md`; `docs/CURRICULUM.md`, step E's experiments): `gravimetric` (10), `qualitative`
+  (12), `lechatelier` (42), `kc` (43, Benesi and Hildebrand's), `ksp` (44), `hardness` (52) and `spectra` (54);
+  experiment 51 moved after steps F and I (the user's scope).
+- §13.2: a report's answer may be choices (the ions present, a shift's direction), checked against the lab; an unknown
+  drawn by the seed from a list (`one_of`); the conditions `probe_on` and a burner's `flame_umol`.
+- §12.6: discharge lamps (H, He, Hg, Ne: NIST's lines and relative intensities), a tube of glowing gas, its power; the
+  spectral viewer lists the lines it sees.
+- §13: a sintered glass filter crucible (its frit under a pump's suction, a wet cake); a drying oven; bulb pipettes of
+  5 and 10 mL (ISO 648); a drained pipette draws again; a flame test holds every metal, those with lines coloured.
+- §9: iron(III)'s Pitzer pairs and FeSCN2+'s with nitrate, fitted to Below, Connick and Coppel's 146 at 0.40 and 123 at
+  1.00 (log K 3.509 to 2.891). §8: no fast equilibrium carries a solution past the activity model's range (a filter
+  funnel's first drop of limewater, dried in an empty beaker's air, had lowered the world's entropy); the fast
+  equilibria's rounds 256 to 1024 (a hardness titration's flask).
+
 ## 0.88.0 (2026-11-28, Stage 88; signed off by the user: "Approved, merge and proceed")
 
 - §6 (Stage 88, `docs/TDD_88_PRESSURE.md`; the first of the two stages the user asked for after Stage 79, "the proper

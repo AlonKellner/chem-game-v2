@@ -262,6 +262,55 @@
 			"tutorial": "tutorials/molar_volume.json"
 		},
 		{
+			"id": "ksp",
+			"title": "The solubility product of calcium hydroxide",
+			"summary": "Calcium hydroxide over its solid in water and in 0.100 M calcium chloride, each filtered, 25 mL of each titrated with 0.0500 M hydrochloric acid to phenolphthalein's colourless: its solubility product, and how a common ion holds it back.",
+			"bench": "benches/ksp.json",
+			"tutorial": "tutorials/ksp.json"
+		},
+		{
+			"id": "hardness",
+			"title": "Water's hardness by EDTA",
+			"summary": "A sample of hard water, 25 mL pipetted, buffered at pH 10 with Eriochrome Black T, titrated with 0.0100 M EDTA from wine red to blue: its calcium and magnesium as milligrams of calcium carbonate a litre.",
+			"bench": "benches/hardness.json",
+			"tutorial": "tutorials/hardness.json"
+		},
+		{
+			"id": "lechatelier",
+			"title": "Le Chatelier's principle",
+			"summary": "Iron(III) thiocyanate with more of either reactant, chromate with acid, cobalt chloride in hydrochloric acid warmed: each tube against one left as it is, and which way each equilibrium went.",
+			"bench": "benches/lechatelier.json",
+			"tutorial": "tutorials/lechatelier.json"
+		},
+		{
+			"id": "qualitative",
+			"title": "What is in it? Ions and flames",
+			"summary": "An unknown salt, one of twelve: its anion by silver nitrate, barium chloride and acid, its cation by sodium hydroxide and a flame test.",
+			"bench": "benches/qualitative.json",
+			"tutorial": "tutorials/qualitative.json"
+		},
+		{
+			"id": "kc",
+			"title": "The equilibrium constant of FeSCN2+",
+			"summary": "Four mixtures of thiocyanate with iron(III) in excess, their absorbance at 447 nm: 1/A against 1/[Fe] is a line, and its intercept over its slope is the constant (Benesi and Hildebrand).",
+			"bench": "benches/kc.json",
+			"tutorial": "tutorials/kc.json"
+		},
+		{
+			"id": "spectra",
+			"title": "Atomic spectra: hydrogen's lines",
+			"summary": "Four discharge lamps (hydrogen, helium, mercury, neon) through the spectral viewer: each gas's own lines, and from hydrogen's red and blue-green the Rydberg constant.",
+			"bench": "benches/spectra.json",
+			"tutorial": "tutorials/spectra.json"
+		},
+		{
+			"id": "gravimetric",
+			"title": "Chloride by weight",
+			"summary": "An unknown chloride solution's silver chloride, brought out by silver nitrate, filtered into a weighed crucible, washed, dried in the oven to constant mass and weighed: its chloride's concentration.",
+			"bench": "benches/gravimetric.json",
+			"tutorial": "tutorials/gravimetric.json"
+		},
+		{
 			"id": "crystal_violet",
 			"title": "Crystal violet: a first-order decay",
 			"summary": "Measured and written down: crystal violet fading in a thousandfold excess of hydroxide, read by two spectrophotometers at 590 nm; ln A falls in a straight line, its slope k', at 0.030 and 0.015 M hydroxide held at one ionic strength: the order in hydroxide, and k2. A guess first.",

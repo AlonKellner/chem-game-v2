@@ -1,0 +1,340 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §13.7, Stage 85; docs/CURRICULUM.md, experiment 12) on data/benches/qualitative.json: an unknown salt's ions by their tests and the flame.",
+	"title": "Experiment: what is in it?",
+	"bench": "../benches/qualitative.json",
+	"report": [
+		{
+			"label": "its cation",
+			"single": true,
+			"choices": [
+				{
+					"label": "Na+",
+					"truth": "unknown.sodium_ion.mol"
+				},
+				{
+					"label": "Li+",
+					"truth": "unknown.lithium_ion.mol"
+				},
+				{
+					"label": "Ca2+",
+					"truth": "unknown.calcium_ion.mol"
+				},
+				{
+					"label": "Ba2+",
+					"truth": "unknown.barium_ion.mol"
+				},
+				{
+					"label": "Cu2+",
+					"truth": "unknown.copper_ion.mol + unknown.copper_hydroxide_ion.mol"
+				},
+				{
+					"label": "Fe3+",
+					"truth": "unknown.iron_iii_ion.mol + unknown.iron_hydroxo_ion.mol"
+				}
+			],
+			"why": "Sodium hydroxide tells copper (blue) and iron(III) (rust brown); the flame the rest: sodium yellow, lithium crimson, calcium orange-red, barium green."
+		},
+		{
+			"label": "its anion",
+			"single": true,
+			"choices": [
+				{
+					"label": "Cl-",
+					"truth": "unknown.chloride_ion.mol"
+				},
+				{
+					"label": "SO4 2-",
+					"truth": "unknown.sulfate_ion.mol + unknown.hydrogen_sulfate_ion.mol"
+				},
+				{
+					"label": "CO3 2-",
+					"truth": "unknown.carbonate_ion.mol + unknown.bicarbonate_ion.mol"
+				},
+				{
+					"label": "NO3-",
+					"truth": "unknown.nitrate_ion.mol"
+				}
+			],
+			"why": "White in tube 1 is chloride, white in tube 2 sulfate, bubbles in tube 3 carbonate; a nitrate answers none of them."
+		}
+	],
+	"steps": [
+		{
+			"part": "Samples",
+			"title": "Four samples of the unknown",
+			"text": "Pick up the unknown, right-click tube 1, type 3 and click \"pour\". The same into tubes 2, 3 and 4.",
+			"why": "Each test takes its own sample: what one test adds would spoil the next.",
+			"checks": [
+				{
+					"text": "3 mL in each tube",
+					"when": {
+						"all": [
+							{
+								"quantity": {
+									"item": "tube_1",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 2.5
+							},
+							{
+								"quantity": {
+									"item": "tube_2",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 2.5
+							},
+							{
+								"quantity": {
+									"item": "tube_3",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 2.5
+							},
+							{
+								"quantity": {
+									"item": "tube_4",
+									"what": "condensed_ml"
+								},
+								"compare": "above",
+								"value": 2.5
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:unknown",
+						"item:tube_1"
+					]
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:unknown",
+						"item:tube_2"
+					]
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:unknown",
+						"item:tube_3"
+					]
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"drag": [
+						"item:unknown",
+						"item:tube_4"
+					]
+				},
+				{
+					"type": "3"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "The anion",
+			"title": "Chloride: silver nitrate",
+			"text": "Pick up the silver nitrate, right-click tube 1, type 1 and click \"pour\". A white solid means chloride: silver chloride.",
+			"why": "The nitric acid in it keeps carbonate and hydroxide from bringing silver out as well: only the halides stay solid in acid.",
+			"checks": [
+				{
+					"text": "silver nitrate in tube 1",
+					"when": {
+						"quantity": {
+							"item": "tube_1",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 3.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:silver",
+						"item:tube_1"
+					]
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Sulfate: barium chloride",
+			"text": "Pick up the barium chloride, right-click tube 2, type 1 and click \"pour\". A white solid means sulfate: barium sulfate.",
+			"why": "In acid, barium carbonate does not form: only the sulfate comes out.",
+			"checks": [
+				{
+					"text": "barium chloride in tube 2",
+					"when": {
+						"quantity": {
+							"item": "tube_2",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 3.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:barium",
+						"item:tube_2"
+					]
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Carbonate: acid",
+			"text": "Pick up the hydrochloric acid, right-click tube 3, type 1 and click \"pour\". Bubbles mean carbonate: its carbon dioxide.",
+			"checks": [
+				{
+					"text": "acid in tube 3",
+					"when": {
+						"quantity": {
+							"item": "tube_3",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 3.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:tube_3"
+					]
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "The cation",
+			"title": "Sodium hydroxide",
+			"text": "Pick up the sodium hydroxide, right-click tube 4, type 1 and click \"pour\". Blue: copper(II) hydroxide. Rust brown: iron(III) hydroxide. Nothing, or a little white: look to the flame.",
+			"checks": [
+				{
+					"text": "sodium hydroxide in tube 4",
+					"when": {
+						"quantity": {
+							"item": "tube_4",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 3.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:tube_4"
+					]
+				},
+				{
+					"type": "1"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "Light the burner",
+			"text": "Right-click the burner and drag its valve open.",
+			"checks": [
+				{
+					"text": "the burner lit",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "valve"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@1"
+				}
+			]
+		},
+		{
+			"title": "The flame test",
+			"text": "Pick up the unknown and click the burner: a loop dipped in it is held in the flame. Watch the flame's colour. You can do it again: its colour lasts a few seconds.",
+			"why": "Each metal's atoms, heated in the flame, give out light at their own lines: sodium's yellow at 589 nm, lithium's crimson at 671, calcium's and barium's the bands of their hydroxides, orange-red and green.",
+			"checks": [
+				{
+					"text": "the unknown in the flame",
+					"when": {
+						"quantity": {
+							"item": "burner",
+							"what": "flame_umol"
+						},
+						"compare": "above",
+						"value": 0.05
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:unknown",
+						"item:burner"
+					]
+				}
+			]
+		}
+	]
+}
