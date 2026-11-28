@@ -1,5 +1,14 @@
 # GAME_SPEC version history
 
+## 0.91.1 (2026-11-28, Stage 90, merged after Stage 91)
+
+- §12.2 (Stage 90, `docs/TDD_90_EXPOSURE.md`; the user's proposal and choices: the brightest block, darken and
+  brighten, pupil-like): the display's exposure, metered on the GPU over 16 x 9 blocks and adapted a frame at a time
+  (closing in 0.1 s, opening in 0.7 s), exactly 1 in the room at its full light; every pixel shown again as it moves;
+  O4 at the exposure read back.
+- §12.2: the room's lights (the top bar's "lights", 100 to 1 %): what emits light the brighter against them, the eye
+  opening up to 8 times. A lamp's lines in eleven stretches, every line in one.
+
 ## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 91, `docs/TDD_91_REDOX.md`; `docs/CURRICULUM.md`, step F's second part: experiments 38 and 47): **redox in
