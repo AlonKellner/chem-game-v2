@@ -1,0 +1,494 @@
+{
+	"format": "chem-tutorial/1",
+	"note": "An experiment (GAME_SPEC §7, §9, §13.7, Stage 92; docs/CURRICULUM.md, experiment 11) on data/benches/copper_cycle.json: the copper cycle from copper nitrate, four compounds and back to the metal, and the percent recovery.",
+	"title": "Experiment: the copper cycle",
+	"bench": "../benches/copper_cycle.json",
+	"steps": [
+		{
+			"part": "Predict",
+			"title": "Your guess",
+			"text": "The copper goes through four compounds and back to the metal. What share of the 0.500 g of copper do you expect to get back, in per cent?",
+			"checks": [
+				{
+					"text": "a prediction made",
+					"when": {
+						"predicted": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "predict:0"
+				},
+				{
+					"type": "95"
+				},
+				{
+					"click": "predict:make"
+				}
+			]
+		},
+		{
+			"part": "1: Hydroxide",
+			"title": "Base in excess",
+			"text": "Pick up the sodium hydroxide, right-click the beaker, type 10 and click \"pour\"; right-click the beaker and stir it.",
+			"why": "Cu2+ + 2 OH- -> Cu(OH)2, pale blue. 10 mL of 2 M base is about 20 mmol of hydroxide, for 15.7 mmol needed: the rest stays, and helps the next step.",
+			"checks": [
+				{
+					"text": "10 mL of base in",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 34
+					}
+				},
+				{
+					"text": "the beaker stirred",
+					"when": {
+						"item": "beaker",
+						"stirred": true
+					}
+				},
+				{
+					"text": "blue copper hydroxide",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_hydroxide",
+						"above_g": 0.7
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:base",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "10"
+				},
+				{
+					"click": "panel:pour"
+				},
+				{
+					"click": "item:beaker"
+				},
+				{
+					"click": "stir:beaker"
+				},
+				{
+					"click": "speed:60"
+				}
+			]
+		},
+		{
+			"part": "2: Oxide",
+			"title": "Heat it",
+			"text": "Pick up the burner and click the beaker, so it stands under it; right-click the burner and open its valve about two thirds.",
+			"checks": [
+				{
+					"text": "the burner under the beaker",
+					"when": {
+						"item": "burner",
+						"under": "beaker"
+					}
+				},
+				{
+					"text": "the valve open",
+					"when": {
+						"item": "burner",
+						"valve_at_least": 0.5
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:burner",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0.65"
+				}
+			]
+		},
+		{
+			"title": "It turns black",
+			"text": "Watch the blue turn black as it nears 90 C: copper oxide.",
+			"why": "Copper oxide is a little more stable than the hydroxide. In the hot base the hydroxide dissolves as Cu(OH)4 2-, and black copper oxide grows from it: Cu(OH)2 -> CuO + H2O. In water, or cold, it would take months.",
+			"checks": [
+				{
+					"text": "black copper oxide",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_oxide",
+						"above_g": 0.6
+					}
+				}
+			]
+		},
+		{
+			"title": "Burner off",
+			"text": "Close the burner's valve.",
+			"checks": [
+				{
+					"text": "the burner off",
+					"when": {
+						"item": "burner",
+						"valve_at_most": 0
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:burner"
+				},
+				{
+					"click": "valve:burner@0"
+				}
+			]
+		},
+		{
+			"part": "3: Sulfate",
+			"title": "Sulfuric acid",
+			"text": "Pour 11 mL of the sulfuric acid into the beaker, still stirred, and wait for the black to dissolve.",
+			"why": "CuO + H2SO4 -> CuSO4 + H2O, blue again. 16.5 mmol of acid: it neutralises the leftover base, dissolves the oxide, and a little is left over.",
+			"checks": [
+				{
+					"text": "the acid in",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 40
+					}
+				},
+				{
+					"text": "the oxide dissolved",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_oxide",
+						"below_g": 0.002
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:acid",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "11"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "4: Copper",
+			"title": "Magnesium",
+			"text": "Pick up the dish of magnesium, right-click the beaker and click \"tip in\". It fizzes, and red-brown copper comes out as the blue fades.",
+			"why": "Mg + Cu2+ -> Mg2+ + Cu: magnesium is more reactive than copper. The leftover acid takes some of it as hydrogen, so it goes in excess.",
+			"checks": [
+				{
+					"text": "the magnesium in",
+					"when": {
+						"item": "mg",
+						"species": "magnesium",
+						"below_g": 0.001
+					}
+				},
+				{
+					"text": "no copper left in solution",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "copper_ion",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:mg",
+						"item:beaker"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "The leftover magnesium",
+			"text": "Pour 10 mL of the hydrochloric acid in and wait for the fizzing to stop: the magnesium left over dissolves, the copper does not.",
+			"why": "Mg + 2 HCl -> MgCl2 + H2; copper is less reactive than hydrogen.",
+			"checks": [
+				{
+					"text": "the hydrochloric acid in",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "condensed_ml"
+						},
+						"compare": "above",
+						"value": 50
+					}
+				},
+				{
+					"text": "no magnesium left",
+					"wait": true,
+					"when": {
+						"item": "beaker",
+						"species": "magnesium",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:hcl",
+						"item:beaker"
+					]
+				},
+				{
+					"type": "10"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"part": "5: Weighing",
+			"title": "The funnel on the flask",
+			"text": "Pick up the funnel and click the flask: it stands in its neck.",
+			"checks": [
+				{
+					"text": "the funnel on the flask",
+					"when": {
+						"item": "funnel",
+						"on": "flask"
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:flask"
+					]
+				}
+			]
+		},
+		{
+			"title": "Pour it through",
+			"text": "Pick up the beaker, right-click the funnel, type 80 and click \"pour\".",
+			"checks": [
+				{
+					"text": "the liquid poured",
+					"when": {
+						"quantity": {
+							"item": "beaker",
+							"what": "condensed_ml"
+						},
+						"compare": "below",
+						"value": 1
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"type": "80"
+				},
+				{
+					"click": "panel:pour"
+				}
+			]
+		},
+		{
+			"title": "The rest of the copper",
+			"text": "Pick up the beaker again, right-click the funnel and click \"tip in\": the copper left in it.",
+			"checks": [
+				{
+					"text": "the copper on the paper",
+					"when": {
+						"item": "beaker",
+						"species": "copper",
+						"below_g": 0.001
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:beaker",
+						"item:funnel"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Until it has drained",
+			"text": "Wait for the funnel to drain.",
+			"checks": [
+				{
+					"text": "the funnel drained",
+					"wait": true,
+					"when": {
+						"item": "funnel",
+						"species": "water",
+						"below_g": 0.05
+					}
+				}
+			]
+		},
+		{
+			"title": "The dish on the balance",
+			"text": "Pick up the dish and click the balance; right-click the balance and tare it.",
+			"checks": [
+				{
+					"text": "the dish on the balance, tared",
+					"when": {
+						"all": [
+							{
+								"item": "scale",
+								"under": "dish"
+							},
+							{
+								"quantity": {
+									"item": "scale",
+									"what": "reads_g"
+								},
+								"compare": "between",
+								"values": [
+									-0.0002,
+									0.0002
+								]
+							}
+						]
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:dish",
+						"item:scale"
+					]
+				},
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "tare:scale"
+				}
+			]
+		},
+		{
+			"title": "The copper into the dish",
+			"text": "Pick up the funnel, right-click the dish and click \"tip in\": the copper scraped off the paper.",
+			"checks": [
+				{
+					"text": "the copper in the dish",
+					"when": {
+						"item": "funnel",
+						"species": "copper",
+						"below_g": 0.0005
+					}
+				}
+			],
+			"play": [
+				{
+					"drag": [
+						"item:funnel",
+						"item:dish"
+					]
+				},
+				{
+					"click": "panel:tip:solid"
+				}
+			]
+		},
+		{
+			"title": "Let it cool",
+			"text": "The copper came off the paper warm, and warms the air in the dish: wait until the dish is back at the room's temperature.",
+			"why": "Warm air in and over the dish is lighter than the room's: it buoys the load, and the balance reads low (here by some 10 mg). Never weigh anything warm.",
+			"checks": [
+				{
+					"text": "the dish under 20.5 C",
+					"wait": true,
+					"when": {
+						"item": "dish",
+						"below_c": 20.5
+					}
+				}
+			]
+		},
+		{
+			"title": "Its mass",
+			"text": "Right-click the balance and write down what it reads.",
+			"checks": [
+				{
+					"text": "its mass recorded",
+					"when": {
+						"item": "scale",
+						"recorded": "reads_g"
+					}
+				}
+			],
+			"play": [
+				{
+					"click": "item:scale"
+				},
+				{
+					"click": "record:scale:reads_g"
+				}
+			]
+		}
+	],
+	"report": [
+		{
+			"label": "the copper recovered",
+			"unit": "g",
+			"truth": "0.4991",
+			"tolerance": 0.005,
+			"why": "What the balance reads, the dish tared: the copper scraped off the paper."
+		},
+		{
+			"label": "the percent recovery",
+			"unit": "%",
+			"truth": "99.82",
+			"tolerance": 1.5,
+			"predict": true,
+			"why": "100 x the copper recovered / 0.500 g. What is lost: on the paper, and copper never put out of the solution."
+		}
+	]
+}

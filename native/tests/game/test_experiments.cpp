@@ -1803,6 +1803,34 @@ TEST_CASE("experiment activity_series: followed with its own gestures, free, it 
 	completed(p);
 }
 
+TEST_CASE("experiment copper_cycle: followed with its own gestures, strict, the copper back as the metal, nearly all of it (Stage 92)") {
+	Pupil p("data/benches/copper_cycle.json", "data/tutorials/copper_cycle.json");
+	CHECK(pupil::follow_through(p, 7200) > 12);
+	completed(p);
+	double reads = 0.0; // what the balance read, as the notebook has it
+	for (const lab::NoteEntry &e : p.ui->lab().view().notebook) {
+		if (e.quantity.item == "scale" && e.quantity.what == "reads_g") {
+			reads = e.value;
+		}
+	}
+	MESSAGE("copper recovered: the balance reads " << reads << " g (truth " << p.grams("dish", "copper") << " g of copper), " << 100.0 * reads / 0.500 << " %");
+	CHECK(p.grams("dish", "copper") > 0.45);
+	CHECK(p.grams("flask", "copper_ion") < 0.005);
+	report(p, { reads, 100.0 * reads / 0.500 });
+}
+
+TEST_CASE("experiment copper_cycle: played as a person plays it, strict, it completes (Stage 92)") {
+	Pupil p("data/benches/copper_cycle.json", "data/tutorials/copper_cycle.json");
+	pupil::play_as_person(p, 7200);
+	completed(p);
+}
+
+TEST_CASE("experiment copper_cycle: followed with its own gestures, free, it completes (Stage 92)") {
+	Pupil p("data/benches/copper_cycle.json", "data/tutorials/copper_cycle.json", false);
+	pupil::follow_through(p, 7200);
+	completed(p);
+}
+
 TEST_CASE("experiment molar_volume: played as a person plays it, strict, it completes (Stage 79)") {
 	Pupil p("data/benches/molar_volume.json", "data/tutorials/molar_volume.json");
 	pupil::play_as_person(p, 3600);

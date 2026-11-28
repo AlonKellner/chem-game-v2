@@ -385,6 +385,13 @@
 			"summary": "Magnesium, zinc, iron and copper in acid, which fizz and how fast; then each metal in another's solution, which puts which out: the order of their reactivity. A guess first.",
 			"bench": "benches/activity_series.json",
 			"tutorial": "tutorials/activity_series.json"
+		},
+		{
+			"id": "copper_cycle",
+			"title": "The copper cycle",
+			"summary": "Copper from copper nitrate through blue hydroxide, black oxide in hot base and blue sulfate, and back to the metal by magnesium, filtered and weighed: the percent recovered. A guess first.",
+			"bench": "benches/copper_cycle.json",
+			"tutorial": "tutorials/copper_cycle.json"
 		}
 	]
 }
