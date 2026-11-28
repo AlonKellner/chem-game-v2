@@ -12,7 +12,7 @@ GAME_SPEC 0.91.0.
 | 91.1 | Spec (§7, §9); the sources read and their rows verified | Done |
 | 91.2 | Manganese, iodine's forms, the sulfur oxyanions: data and gates | Done |
 | 91.3 | The experiments `iodine_clock` (38) and `redox_titration` (47) | Done |
-| 91.4 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | gates passed; sign-off open |
+| 91.4 | The sessions' digests (the user's approval), docs, `make gates`; the user's sign-off | Done |
 
 ## 91.1 What there was
 

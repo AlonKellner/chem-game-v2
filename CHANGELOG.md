@@ -1,6 +1,6 @@
 # GAME_SPEC version history
 
-## 0.91.0 (2026-11-28, Stage 91; awaiting the user's sign-off)
+## 0.91.0 (2026-11-28, Stage 91; signed off by the user: "Approved, merge and proceed")
 
 - §9 (Stage 91, `docs/TDD_91_REDOX.md`; `docs/CURRICULUM.md`, step F's second part: experiments 38 and 47): **redox in
   solution**, electron transfers as reactions balanced in atoms and charge; fast: triiodide (Palmer et al.'s K 698),
